@@ -1,0 +1,17 @@
+[package]
+name = "dalek-ff-group"
+version = "0.1.0"
+description = "ff/group bindings around curve25519-dalek"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+rand_core = "0.6"
+
+subtle = "2.4"
+
+ff = "0.10"
+group = "0.10"
+
+curve25519-dalek =  "3.2"

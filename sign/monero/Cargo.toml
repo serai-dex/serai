@@ -1,0 +1,34 @@
+[package]
+name = "monero-sign"
+version = "0.1.0"
+description = "Implementation of Monero transaction signing in Rust"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+lazy_static = "1"
+thiserror = "1"
+
+rand_core = "0.6"
+
+hex = "0.4"
+
+digest = "0.9"
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+blake2 = "0.9"
+
+curve25519-dalek = { version = "3.2", features = ["std", "simd_backend"] }
+
+ff = { version = "0.10", optional = true }
+group = { version = "0.10", optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", optional = true }
+frost = { path = "../frost", optional = true }
+
+monero = "0.16.0" # Locked to this specific patch version due to a bug we compensate for
+
+[features]
+multisig = ["ff", "group", "dalek-ff-group", "frost"]
+
+[dev-dependencies]
+rand = "0.8"

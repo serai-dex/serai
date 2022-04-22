@@ -1,0 +1,23 @@
+[package]
+name = "frost"
+version = "0.1.0"
+description = "Implementation of FROST over ff/group"
+license = "MIT"
+authors = ["kayabaNerve (Luke Parker) <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+digest = "0.9"
+blake2 = "0.9"
+
+rand_core = "0.6"
+
+ff = "0.10"
+group = "0.10"
+
+thiserror = "1"
+
+[dev-dependencies]
+hex = "0.4"
+rand = "0.8"
+jubjub = "0.7"

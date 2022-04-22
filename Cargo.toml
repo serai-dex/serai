@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+  "sign/frost",
+  "sign/dalek-ff-group",
+  "sign/monero",
+]
