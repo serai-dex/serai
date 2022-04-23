@@ -59,6 +59,12 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
 
   /// Hash the message as needed to calculate the binding factor
   /// H3 from the IETF draft
+  // This doesn't actually need to be part of Curve as it does nothing with the curve
+  // This also solely relates to FROST and with a proper Algorithm/HRAM, all projects using
+  // aggregatable signatures over this curve will work without issue, albeit potentially with
+  // incompatibilities between FROST implementations
+  // It is kept here as Curve + HRAM is effectively a ciphersuite according to the IETF draft
+  // and moving it to Schnorr would force all of them into being ciphersuite-specific
   fn hash_msg(msg: &[u8]) -> Vec<u8>;
 
   /// Field element from hash, used in key generation and to calculate the binding factor
