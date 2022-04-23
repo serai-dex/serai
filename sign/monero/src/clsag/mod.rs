@@ -61,8 +61,8 @@ pub(crate) fn validate_sign_args(
 pub(crate) fn sign_core(
   rand_source: [u8; 64],
   image: EdwardsPoint,
-  msg: &[u8; 32],
   ssr: &SemiSignableRing,
+  msg: &[u8; 32],
   A: EdwardsPoint,
   AH: EdwardsPoint
 ) -> (Clsag, Scalar, Scalar, Scalar, Scalar, EdwardsPoint) {
@@ -197,7 +197,8 @@ pub fn sign<R: RngCore + CryptoRng>(
   let (mut clsag, c, mu_C, z, mu_P, C_out) = sign_core(
     rand_source,
     image,
-    &msg, &ssr,
+    &ssr,
+    &msg,
     &a * &ED25519_BASEPOINT_TABLE, a * hash_to_point(&ssr.ring[ssr.i][0])
   );
   clsag.s[i as usize] = Key { key: (a - (c * ((mu_C * z) + (mu_P * private_key)))).to_bytes() };
@@ -232,7 +233,7 @@ pub fn verify(
   unsafe {
     success = c_verify_clsag(
       serialized.len(), serialized.as_ptr(), image_bytes.as_ptr(),
-      msg.as_ptr(), ring.len() as u8, ring_bytes.as_ptr(), pseudo_out_bytes.as_ptr()
+      ring.len() as u8, ring_bytes.as_ptr(), msg.as_ptr(), pseudo_out_bytes.as_ptr()
     );
   }
 

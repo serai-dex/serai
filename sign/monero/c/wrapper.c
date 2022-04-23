@@ -11,7 +11,7 @@ extern "C" {
     ge_p3_tobytes(point, &e_p3);
   }
 
-  bool c_verify_clsag(uint s_len, uint8_t* s, uint8_t* I, uint8_t* m, uint8_t k_len, uint8_t* k, uint8_t* p) {
+  bool c_verify_clsag(uint s_len, uint8_t* s, uint8_t* I, uint8_t k_len, uint8_t* k, uint8_t* m, uint8_t* p) {
     rct::clsag clsag;
     std::stringstream ss;
     std::string str;

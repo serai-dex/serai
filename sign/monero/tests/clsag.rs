@@ -126,7 +126,7 @@ fn test_multisig() -> Result<(), SignError> {
           .enumerate()
           .map(|(idx, value)| if idx == i { None } else { value.to_owned() })
           .collect::<Vec<Option<Vec<u8>>>>(),
-        b"Hello World"
+        &vec![]
       ).unwrap()
     );
   }

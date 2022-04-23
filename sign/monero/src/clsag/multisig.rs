@@ -40,8 +40,8 @@ pub struct Multisig {
   AH: dfg::EdwardsPoint,
 
   image: EdwardsPoint,
-  msg: [u8; 32],
   ssr: SemiSignableRing,
+  msg: [u8; 32],
 
   interim: Option<ClsagSignInterim>
 }
@@ -62,8 +62,8 @@ impl Multisig {
         AH: dfg::EdwardsPoint::identity(),
 
         image,
-        msg,
         ssr,
+        msg,
 
         interim: None
       }
@@ -78,10 +78,10 @@ impl Algorithm<Ed25519> for Multisig {
     let mut context = self.image.compress().to_bytes().to_vec();
     for pair in &self.ssr.ring {
       context.extend(&pair[0].compress().to_bytes());
+      context.extend(&pair[1].compress().to_bytes());
     }
     context.extend(&u8::try_from(self.ssr.i).unwrap().to_le_bytes());
-    context.extend(&self.ssr.randomness.to_bytes());
-    context.extend(&self.ssr.amount.to_le_bytes());
+    context.extend(&self.msg);
     context
   }
 
@@ -155,7 +155,7 @@ impl Algorithm<Ed25519> for Multisig {
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
     let rand_source = Keccak::v512()
-      .chain("Clsag_randomness")
+      .chain("clsag_randomness")
       .chain(&self.b)
       .finalize()
       .as_slice()
@@ -166,8 +166,8 @@ impl Algorithm<Ed25519> for Multisig {
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       rand_source,
       self.image,
-      &self.msg,
       &self.ssr,
+      &self.msg,
       nonce_sum.0,
       self.AH.0
     );
@@ -191,7 +191,7 @@ impl Algorithm<Ed25519> for Multisig {
 
     let mut clsag = interim.clsag.clone();
     clsag.s[self.ssr.i] = Key { key: s.to_bytes() };
-    if verify(&clsag, self.image, &self.msg, &self.ssr.ring, interim.C_out).is_ok() {
+    if verify(&clsag, self.image, &self.ssr.ring, &self.msg, interim.C_out).is_ok() {
       return Some((clsag, interim.C_out));
     }
     return None;

@@ -24,7 +24,7 @@ extern "C" {
   fn c_hash_to_point(point: *const u8);
   pub(crate) fn c_verify_clsag(
     serialized_len: usize, serialized: *const u8, I: *const u8,
-    msg: *const u8, ring_size: u8, ring: *const u8, pseudo_out: *const u8
+    ring_size: u8, ring: *const u8, msg: *const u8, pseudo_out: *const u8
   ) -> bool;
 }
 

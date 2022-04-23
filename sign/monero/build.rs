@@ -29,6 +29,20 @@ fn main() {
         panic!("make failed to build Monero. Please check your dependencies");
     }
 
+    if !Command::new("touch").arg("monero")
+      .current_dir(&Path::new("c/.build")).status().unwrap().success() {
+        panic!("failed to create a file to label Monero as built");
+    }
+  }
+
+ println!("cargo:rerun-if-env-changed=OUT_DIR");
+ if !Path::new(
+    &format!(
+      "c/monero/src/crypto/{}cncrypto.{}",
+      &env::consts::DLL_PREFIX,
+      &env::consts::DLL_EXTENSION
+    )
+  ).exists() {
     if !Command::new("cp").args(&[
       &format!(
         "c/monero/src/crypto/{}cncrypto.{}",
@@ -73,26 +87,21 @@ fn main() {
       panic!("Failed to cp ringct");
     }
 
-    if !Command::new("touch").arg("monero")
-      .current_dir(&Path::new("c/.build")).status().unwrap().success() {
-        panic!("failed to create a file to label Monero as built");
+    println!("cargo:rerun-if-changed=c/wrapper.c");
+    if !Command::new("g++").args(&[
+      "-O3", "-Wall", "-shared", "-std=c++14", "-fPIC",
+      "-Imonero/contrib/epee/include", "-Imonero/src",
+      "wrapper.c", "-o", &format!(
+        "{}/{}wrapper.{}",
+        out_dir,
+        &env::consts::DLL_PREFIX,
+        &env::consts::DLL_EXTENSION
+      ),
+      &format!("-L{}", out_dir),
+      "-ldevice", "-lringct_basic", "-lringct"
+    ]).current_dir(&Path::new("c")).status().unwrap().success() {
+      panic!("g++ failed to build the wrapper");
     }
-  }
-
-  println!("cargo:rerun-if-changed=c/wrapper.c");
-  if !Command::new("g++").args(&[
-    "-O3", "-Wall", "-shared", "-std=c++14", "-fPIC",
-    "-Imonero/contrib/epee/include", "-Imonero/src",
-    "wrapper.c", "-o", &format!(
-      "{}/{}wrapper.{}",
-      out_dir,
-      &env::consts::DLL_PREFIX,
-      &env::consts::DLL_EXTENSION
-    ),
-    &format!("-L{}", out_dir),
-    "-ldevice", "-lringct_basic", "-lringct"
-  ]).current_dir(&Path::new("c")).status().unwrap().success() {
-    panic!("g++ failed to build the wrapper");
   }
 
   println!("cargo:rustc-link-search={}", out_dir);
