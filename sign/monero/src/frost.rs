@@ -2,8 +2,7 @@ use core::convert::TryInto;
 
 use rand_core::{RngCore, CryptoRng};
 
-use digest::Digest;
-use blake2::Blake2b;
+use blake2::{Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE as DTable,
@@ -49,6 +48,14 @@ impl Curve for Ed25519 {
     EdwardsPoint(DPoint::vartime_multiscalar_mul(scalars, points))
   }
 
+  fn hash_msg(msg: &[u8]) -> Vec<u8> {
+    Blake2b512::digest(msg)
+  }
+
+  fn hash_to_F(data: &[u8]) -> Self::F {
+    dfg::Scalar::from_hash(Blake2b512::new().chain(data))
+  }
+
   fn F_len() -> usize {
     32
   }
@@ -61,17 +68,11 @@ impl Curve for Ed25519 {
     let scalar = Self::F::from_repr(
       slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?
     );
-    if scalar.is_some() {
+    if scalar.is_some().unwrap_u8() == 1 {
       Ok(scalar.unwrap())
     } else {
-      Err(CurveError::InvalidScalar(hex::encode(slice)))
+      Err(CurveError::InvalidScalar)
     }
-  }
-
-  fn F_from_le_slice_unreduced(slice: &[u8]) -> Self::F {
-    let mut wide: [u8; 64] = [0; 64];
-    wide[..slice.len()].copy_from_slice(slice);
-    dfg::Scalar::from_bytes_mod_order_wide(&wide)
   }
 
   fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
@@ -83,11 +84,11 @@ impl Curve for Ed25519 {
       let point = point.unwrap();
       // Ban torsioned points
       if !point.is_torsion_free() {
-        Err(CurveError::InvalidPoint(hex::encode(slice)))?
+        Err(CurveError::InvalidPoint)?
       }
       Ok(point)
     } else {
-      Err(CurveError::InvalidPoint(hex::encode(slice)))?
+      Err(CurveError::InvalidPoint)
     }
   }
 
@@ -97,10 +98,6 @@ impl Curve for Ed25519 {
 
   fn G_to_bytes(g: &Self::G) -> Vec<u8> {
     g.compress().to_bytes().to_vec()
-  }
-
-  fn F_from_bytes_wide(bytes: [u8; 64]) -> Self::F {
-    dfg::Scalar::from_bytes_mod_order_wide(&bytes)
   }
 }
 
@@ -124,7 +121,7 @@ impl DLEqProof {
     let R2 = r * H;
 
     let c = DScalar::from_hash(
-      Blake2b::new()
+      Blake2b512::new()
         .chain(R1.compress().to_bytes())
         .chain(R2.compress().to_bytes())
         .chain((secret * &DTable).compress().to_bytes())
@@ -148,7 +145,7 @@ impl DLEqProof {
     let R2 = (s * H) - (c * alt);
 
     let expected_c = DScalar::from_hash(
-      Blake2b::new()
+      Blake2b512::new()
         .chain(R1.compress().to_bytes())
         .chain(R2.compress().to_bytes())
         .chain(primary.compress().to_bytes())

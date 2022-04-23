@@ -1,19 +1,28 @@
 use core::convert::TryInto;
 
-use group::{Group, GroupEncoding};
+use digest::Digest;
+use ff::PrimeField;
+use group::GroupEncoding;
 
-use jubjub::{Fr, SubgroupPoint};
-use frost::{CurveError, Curve, multiexp_vartime};
+use sha2::{Sha256, Sha512};
+
+use k256::{
+  elliptic_curve::{generic_array::GenericArray, bigint::{ArrayEncoding, U512}, ops::Reduce},
+  Scalar,
+  ProjectivePoint
+};
+
+use frost::{CurveError, Curve, multiexp_vartime, algorithm::Hram};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Jubjub;
-impl Curve for Jubjub {
-  type F = Fr;
-  type G = SubgroupPoint;
-  type T = SubgroupPoint;
+pub struct Secp256k1;
+impl Curve for Secp256k1 {
+  type F = Scalar;
+  type G = ProjectivePoint;
+  type T = ProjectivePoint;
 
   fn id() -> String {
-    "Jubjub".to_string()
+    "secp256k1".to_string()
   }
 
   fn id_len() -> u8 {
@@ -21,15 +30,28 @@ impl Curve for Jubjub {
   }
 
   fn generator() -> Self::G {
-    Self::G::generator()
+    Self::G::GENERATOR
   }
 
   fn generator_table() -> Self::T {
-    Self::G::generator()
+    Self::G::GENERATOR
   }
 
   fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G {
-    multiexp_vartime::<Jubjub>(scalars, points)
+    multiexp_vartime::<Secp256k1>(scalars, points)
+  }
+
+  // The IETF draft doesn't specify a secp256k1 ciphersuite
+  // This test just uses the simplest ciphersuite which would still be viable to deploy
+  fn hash_msg(msg: &[u8]) -> Vec<u8> {
+    (&Sha256::digest(msg)).to_vec()
+  }
+
+  // Use wide reduction for security
+  fn hash_to_F(data: &[u8]) -> Self::F {
+    Scalar::from_uint_reduced(
+      U512::from_be_byte_array(Sha512::new().chain_update("rho").chain_update(data).finalize())
+    )
   }
 
   fn F_len() -> usize {
@@ -37,46 +59,54 @@ impl Curve for Jubjub {
   }
 
   fn G_len() -> usize {
-    32
+    33
   }
 
   fn F_from_le_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
-    let scalar = Self::F::from_bytes(
-      &slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?
-    );
-    if scalar.is_some().into() {
-      Ok(scalar.unwrap())
-    } else {
-      Err(CurveError::InvalidScalar(hex::encode(slice)))
+    let mut bytes: [u8; 32] = slice.try_into().map_err(
+      |_| CurveError::InvalidLength(32, slice.len())
+    )?;
+    bytes.reverse();
+    let scalar = Scalar::from_repr(bytes.into());
+    if scalar.is_none().unwrap_u8() == 1 {
+      Err(CurveError::InvalidScalar)?;
     }
-  }
-
-  fn F_from_le_slice_unreduced(slice: &[u8]) -> Self::F {
-    let mut wide: [u8; 64] = [0; 64];
-    wide[..slice.len()].copy_from_slice(slice);
-    Self::F::from_bytes_wide(&wide)
+    Ok(scalar.unwrap())
   }
 
   fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
-    let point = Self::G::from_bytes(
-      &slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?
-    );
-    if point.is_some().into() {
-      Ok(point.unwrap())
-    } else {
-      Err(CurveError::InvalidPoint(hex::encode(slice)))?
+    let point = ProjectivePoint::from_bytes(GenericArray::from_slice(slice));
+    if point.is_none().unwrap_u8() == 1 {
+      Err(CurveError::InvalidScalar)?;
     }
+    Ok(point.unwrap())
   }
 
   fn F_to_le_bytes(f: &Self::F) -> Vec<u8> {
-    f.to_bytes().to_vec()
+    let mut res: [u8; 32] = f.to_bytes().into();
+    res.reverse();
+    res.to_vec()
   }
 
   fn G_to_bytes(g: &Self::G) -> Vec<u8> {
-    g.to_bytes().to_vec()
+    (&g.to_bytes()).to_vec()
   }
+}
 
-  fn F_from_bytes_wide(bytes: [u8; 64]) -> Self::F {
-    Self::F::from_bytes_wide(&bytes)
+#[allow(non_snake_case)]
+#[derive(Clone)]
+pub struct TestHram {}
+impl Hram<Secp256k1> for TestHram {
+  #[allow(non_snake_case)]
+  fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
+    Scalar::from_uint_reduced(
+      U512::from_be_byte_array(
+        Sha512::new()
+          .chain_update(Secp256k1::G_to_bytes(R))
+          .chain_update(Secp256k1::G_to_bytes(A))
+          .chain_update(m)
+          .finalize()
+      )
+    )
   }
 }

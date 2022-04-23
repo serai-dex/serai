@@ -6,7 +6,7 @@ use core::{
 
 use rand_core::RngCore;
 
-use subtle::{Choice, CtOption, ConditionallySelectable};
+use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
 
 pub use curve25519_dalek as dalek;
 
@@ -100,6 +100,10 @@ impl<'a> MulAssign<&'a Scalar> for Scalar {
   fn mul_assign(&mut self, other: &'a Scalar) { self.0 *= other.0 }
 }
 
+impl ConstantTimeEq for Scalar {
+  fn ct_eq(&self, _: &Self) -> Choice { unimplemented!() }
+}
+
 impl ConditionallySelectable for Scalar {
   fn conditional_select(_: &Self, _: &Self, _: Choice) -> Self { unimplemented!() }
 }
@@ -117,7 +121,7 @@ impl Field for Scalar {
   fn double(&self) -> Self { *self + self }
   fn invert(&self) -> CtOption<Self> { CtOption::new(Self(self.0.invert()), Choice::from(1 as u8)) }
   fn sqrt(&self) -> CtOption<Self> { unimplemented!() }
-  fn is_zero(&self) -> bool { self.0 == DScalar::zero() }
+  fn is_zero(&self) -> Choice { Choice::from(if self.0 == DScalar::zero() { 1 } else { 0 }) }
   fn cube(&self) -> Self { *self * self * self }
   fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
 }
@@ -130,11 +134,14 @@ impl PrimeField for Scalar {
   type Repr = [u8; 32];
   const NUM_BITS: u32 = 253;
   const CAPACITY: u32 = 252;
-  fn from_repr(bytes: [u8; 32]) -> Option<Self> { DScalar::from_canonical_bytes(bytes).map(|x| Scalar(x)) }
+  fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
+    let scalar = DScalar::from_canonical_bytes(bytes).map(|x| Scalar(x));
+    CtOption::new(scalar.unwrap_or(Scalar::zero()), Choice::from(if scalar.is_some() { 1 } else { 0 }))
+  }
   fn to_repr(&self) -> [u8; 32] { self.0.to_bytes() }
 
   const S: u32 = 0;
-  fn is_odd(&self) -> bool { unimplemented!() }
+  fn is_odd(&self) -> Choice { unimplemented!() }
   fn multiplicative_generator() -> Self { unimplemented!() }
   fn root_of_unity() -> Self { unimplemented!() }
 }

@@ -1,7 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
-use digest::Digest;
-use blake2::Blake2b;
+use blake2::{Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -11,7 +10,7 @@ use curve25519_dalek::{
 
 use dalek_ff_group as dfg;
 use group::Group;
-use frost::{Curve, FrostError, algorithm::Algorithm};
+use frost::{Curve, FrostError, algorithm::Algorithm, sign::ParamsView};
 
 use monero::util::ringct::{Key, Clsag};
 
@@ -94,11 +93,11 @@ impl Algorithm<Ed25519> for Multisig {
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     rng: &mut R,
-    group_key: &dfg::EdwardsPoint,
+    view: &ParamsView<Ed25519>,
     nonces: &[dfg::Scalar; 2]
   ) -> Vec<u8> {
     #[allow(non_snake_case)]
-    let H = hash_to_point(&group_key.0);
+    let H = hash_to_point(&view.group_key().0);
     let h0 = nonces[0].0 * H;
     let h1 = nonces[1].0 * H;
     // 32 + 32 + 64 + 64
@@ -112,6 +111,7 @@ impl Algorithm<Ed25519> for Multisig {
 
   fn process_addendum(
     &mut self,
+    _: &ParamsView<Ed25519>,
     l: usize,
     commitments: &[dfg::EdwardsPoint; 2],
     p: &dfg::Scalar,
@@ -147,19 +147,32 @@ impl Algorithm<Ed25519> for Multisig {
 
   fn sign_share(
     &mut self,
-    _: dfg::EdwardsPoint,
-    secret: dfg::Scalar,
-    nonce: dfg::Scalar,
+    view: &ParamsView<Ed25519>,
     nonce_sum: dfg::EdwardsPoint,
-    _: &[u8],
+    nonce: dfg::Scalar,
+    _: &[u8]
   ) -> dfg::Scalar {
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
-    let rand_source = Blake2b::new().chain("Clsag_randomness").chain(&self.b).finalize().as_slice().try_into().unwrap();
-    #[allow(non_snake_case)]
-    let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(rand_source, self.image, &self.msg, &self.ssr, nonce_sum.0, self.AH.0);
+    let rand_source = Keccak::v512()
+      .chain("Clsag_randomness")
+      .chain(&self.b)
+      .finalize()
+      .as_slice()
+      .try_into()
+      .unwrap();
 
-    let share = dfg::Scalar(nonce.0 - (c * (mu_P * secret.0)));
+    #[allow(non_snake_case)]
+    let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
+      rand_source,
+      self.image,
+      &self.msg,
+      &self.ssr,
+      nonce_sum.0,
+      self.AH.0
+    );
+
+    let share = dfg::Scalar(nonce.0 - (c * (mu_P * view.secret_share().0)));
 
     self.interim = Some(ClsagSignInterim { c, mu_C, z, mu_P, clsag, C_out });
     share

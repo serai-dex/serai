@@ -2,18 +2,11 @@ use core::{convert::{TryFrom, TryInto}, cmp::min, fmt};
 use std::rc::Rc;
 
 use rand_core::{RngCore, CryptoRng};
-use blake2::{Digest, Blake2b};
 
 use ff::{Field, PrimeField};
 use group::Group;
 
 use crate::{Curve, MultisigParams, MultisigKeys, FrostError, algorithm::Algorithm};
-
-// Matches ZCash's FROST Jubjub implementation
-const BINDING_DST: &'static [u8; 9] = b"FROST_rho";
-// Doesn't match ZCash except for their desire for messages to be hashed in advance before used
-// here and domain separated
-const BINDING_MESSAGE_DST: &'static [u8; 17] = b"FROST_rho_message";
 
 /// Calculate the lagrange coefficient
 pub fn lagrange<F: PrimeField>(
@@ -198,7 +191,18 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   #[allow(non_snake_case)]
   let mut B = Vec::with_capacity(multisig_params.n + 1);
   B.push(None);
-  let mut b: Vec<u8> = vec![];
+
+  // Commitments + a presumed 32-byte hash of the message
+  let mut b: Vec<u8> = Vec::with_capacity((multisig_params.n * 2 * C::G_len()) + 32);
+
+  // If the offset functionality provided by this library is in use, include it in the binding
+  // factor
+  if params.keys.offset.is_some() {
+    b.extend(&C::F_to_le_bytes(&params.keys.offset.unwrap()));
+  }
+  // Also include any context the algorithm may want to specify
+  b.extend(&params.algorithm.context());
+
   for l in 1 ..= multisig_params.n {
     if l == multisig_params.i {
       if commitments[l].is_some() {
@@ -206,8 +210,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
       }
 
       B.push(Some(our_preprocess.commitments));
-      // Slightly more robust
-      b.extend(&u64::try_from(l).unwrap().to_le_bytes());
+      b.extend(&u16::try_from(l).unwrap().to_le_bytes());
       b.extend(&our_preprocess.serialized[0 .. commit_len]);
       continue;
     }
@@ -237,46 +240,26 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     let E = C::G_from_slice(&commitments[C::G_len() .. commitments_len])
       .map_err(|_| FrostError::InvalidCommitment(l))?;
     B.push(Some([D, E]));
-    b.extend(&u64::try_from(l).unwrap().to_le_bytes());
+    b.extend(&u16::try_from(l).unwrap().to_le_bytes());
     b.extend(&commitments[0 .. commit_len]);
   }
 
-  let offset = if params.keys.offset.is_some() {
-    C::F_to_le_bytes(&params.keys.offset.unwrap())
-  } else {
-    vec![]
-  };
-  let context = params.algorithm.context();
-  let mut p = Vec::with_capacity(multisig_params.t);
-  let mut pi = C::F::zero();
-  for l in &params.view.included {
-    p.push(
-      C::F_from_bytes_wide(
-        Blake2b::new()
-          .chain(BINDING_DST)
-          .chain(u64::try_from(*l).unwrap().to_le_bytes())
-          .chain(Blake2b::new().chain(BINDING_MESSAGE_DST).chain(msg).finalize())
-          .chain(&offset)
-          .chain(&context)
-          .chain(&b)
-          .finalize()
-          .as_slice()
-          .try_into()
-          .expect("couldn't convert a 64-byte hash to a 64-byte array")
-      )
-    );
+  b.extend(&C::hash_msg(&msg));
+  let b = C::hash_to_F(&b);
 
-    let view = &params.view;
+  let view = &params.view;
+  for l in &params.view.included {
     params.algorithm.process_addendum(
       view,
       *l,
       B[*l].as_ref().unwrap(),
-      &p[p.len() - 1],
+      &b,
       if *l == multisig_params.i {
-        pi = p[p.len() - 1];
         &our_preprocess.serialized[commitments_len .. our_preprocess.serialized.len()]
       } else {
-        &commitments[*l].as_ref().unwrap()[commitments_len .. commitments[*l].as_ref().unwrap().len()]
+        &commitments[*l].as_ref().unwrap()[
+          commitments_len .. commitments[*l].as_ref().unwrap().len()
+        ]
       }
     )?;
   }
@@ -288,7 +271,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   for i in 0 .. params.view.included.len() {
     let commitments = B[params.view.included[i]].unwrap();
     #[allow(non_snake_case)]
-    let this_R = commitments[0] + (commitments[1] * p[i]);
+    let this_R = commitments[0] + (commitments[1] * b);
     Ris.push(this_R);
     R += this_R;
   }
@@ -297,7 +280,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   let share = params.algorithm.sign_share(
     view,
     R,
-    our_preprocess.nonces[0] + (our_preprocess.nonces[1] * pi),
+    our_preprocess.nonces[0] + (our_preprocess.nonces[1] * b),
     msg
   );
   Ok((Package { Ris, R, share }, C::F_to_le_bytes(&share)))

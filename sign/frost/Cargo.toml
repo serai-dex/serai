@@ -7,17 +7,16 @@ authors = ["kayabaNerve (Luke Parker) <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-digest = "0.9"
-blake2 = "0.9"
+digest = "0.10"
 
 rand_core = "0.6"
 
-ff = "0.10"
-group = "0.10"
+ff = "0.11"
+group = "0.11"
 
 thiserror = "1"
 
 [dev-dependencies]
-hex = "0.4"
 rand = "0.8"
-jubjub = "0.7"
+sha2 = "0.10"
+k256 = { version = "0.10", features = ["arithmetic"] }

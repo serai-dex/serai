@@ -14,11 +14,10 @@ pub mod sign;
 pub enum CurveError {
   #[error("invalid length for data (expected {0}, got {0})")]
   InvalidLength(usize, usize),
-  // Push towards hex encoding in error messages
-  #[error("invalid scalar ({0})")]
-  InvalidScalar(String),
-  #[error("invalid point ({0})")]
-  InvalidPoint(String),
+  #[error("invalid scalar")]
+  InvalidScalar,
+  #[error("invalid point")]
+  InvalidPoint,
 }
 
 /// Unified trait to manage a field/group
@@ -58,6 +57,16 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // This could also be written as -> Option<C::G> with None for not implemented
   fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G;
 
+  /// Hash the message as needed to calculate the binding factor
+  /// H3 from the IETF draft
+  fn hash_msg(msg: &[u8]) -> Vec<u8>;
+
+  /// Field element from hash, used in key generation and to calculate the binding factor
+  /// H1 from the IETF draft
+  /// Key generation uses it as if it's H2 to generate a challenge for a Proof of Knowledge
+  #[allow(non_snake_case)]
+  fn hash_to_F(data: &[u8]) -> Self::F;
+
   // The following methods would optimally be F:: and G:: yet developers can't control F/G
   // They can control a trait they pass into this library
 
@@ -82,10 +91,6 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   #[allow(non_snake_case)]
   fn F_from_le_slice(slice: &[u8]) -> Result<Self::F, CurveError>;
 
-  /// Field element from slice. Must support reducing the input into a valid field element
-  #[allow(non_snake_case)]
-  fn F_from_le_slice_unreduced(slice: &[u8]) -> Self::F;
-
   /// Group element from slice. Should be canonical
   #[allow(non_snake_case)]
   fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError>;
@@ -97,10 +102,6 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// Obtain a vector of the byte encoding of G
   #[allow(non_snake_case)]
   fn G_to_bytes(g: &Self::G) -> Vec<u8>;
-
-  /// Takes 64-bytes and returns a scalar reduced mod n
-  #[allow(non_snake_case)]
-  fn F_from_bytes_wide(bytes: [u8; 64]) -> Self::F;
 }
 
 /// Parameters for a multisig

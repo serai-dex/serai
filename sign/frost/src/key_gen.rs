@@ -1,12 +1,23 @@
-use core::{convert::{TryFrom, TryInto}, cmp::min, fmt};
+use core::{convert::TryFrom, cmp::min, fmt};
 
 use rand_core::{RngCore, CryptoRng};
-use blake2::{Digest, Blake2b};
 
 use ff::{Field, PrimeField};
 use group::Group;
 
 use crate::{Curve, MultisigParams, MultisigKeys, FrostError};
+
+#[allow(non_snake_case)]
+fn challenge<C: Curve>(l: usize, context: &str, R: &[u8], Am: &[u8]) -> C::F {
+  let mut c = Vec::with_capacity(8 + context.len() + R.len() + Am.len());
+  c.extend(&u64::try_from(l).unwrap().to_le_bytes());
+  c.extend(context.as_bytes());
+  c.extend(R);  // R
+  c.extend(Am); // A of the first commitment, which is what we're proving we have the private key
+                // for
+                // m of the rest of the commitments, authenticating them
+  C::hash_to_F(&c)
+}
 
 // Implements steps 1 through 3 of round 1 of FROST DKG. Returns the coefficients, commitments, and
 // the serialized commitments to be broadcasted over an authenticated channel to all parties
@@ -44,19 +55,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   let k = C::F::random(rng);
   #[allow(non_snake_case)]
   let R = C::generator_table() * k;
-  let c = C::F_from_bytes_wide(
-    Blake2b::new()
-      .chain(&u64::try_from(params.i).unwrap().to_le_bytes())
-      .chain(context.as_bytes())
-      .chain(&C::G_to_bytes(&R)) // R
-      .chain(&serialized)        // A of the first commitment, which is what we're proving we have
-                                 // the private key for
-                                 // m of the rest of the commitments, authenticating them
-      .finalize()
-      .as_slice()
-      .try_into()
-      .expect("couldn't convert a 64-byte hash to a 64-byte array")
-  );
+  let c = challenge::<C>(params.i, context, &C::G_to_bytes(&R), &serialized);
   let s = k + (coefficients[0] * c);
 
   serialized.extend(&C::G_to_bytes(&R));
@@ -155,17 +154,11 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
     );
     points.push(C::generator());
 
-    let c = C::F_from_bytes_wide(
-      Blake2b::new()
-        // Bounded by n which is already checked to be within the u64 range
-        .chain(&u64::try_from(l).unwrap().to_le_bytes())
-        .chain(context.as_bytes())
-        .chain(&serialized[l][commitments_len .. commitments_len + C::G_len()])
-        .chain(&serialized[l][0 .. commitments_len])
-        .finalize()
-        .as_slice()
-        .try_into()
-        .expect("couldn't convert a 64-byte hash to a 64-byte array")
+    let c = challenge::<C>(
+      l,
+      context,
+      &serialized[l][commitments_len .. commitments_len + C::G_len()],
+      &serialized[l][0 .. commitments_len]
     );
 
     if first {
@@ -195,17 +188,11 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
         &serialized[l][commitments_len + C::G_len() .. serialized[l].len()]
       ).map_err(|_| FrostError::InvalidProofOfKnowledge(l))?;
 
-      let c = C::F_from_bytes_wide(
-        Blake2b::new()
-          // Bounded by n which is already checked to be within the u64 range
-          .chain(&u64::try_from(l).unwrap().to_le_bytes())
-          .chain(context.as_bytes())
-          .chain(&serialized[l][commitments_len .. commitments_len + C::G_len()])
-          .chain(&serialized[l][0 .. commitments_len])
-          .finalize()
-          .as_slice()
-          .try_into()
-          .expect("couldn't convert a 64-byte hash to a 64-byte array")
+      let c = challenge::<C>(
+        l,
+        context,
+        &serialized[l][commitments_len .. commitments_len + C::G_len()],
+        &serialized[l][0 .. commitments_len]
       );
 
       if R != ((C::generator_table() * s) + (commitments[l][0] * (C::F::zero() - &c))) {
@@ -389,6 +376,7 @@ impl fmt::Display for State {
 }
 
 /// State machine which manages key generation
+#[allow(non_snake_case)]
 pub struct StateMachine<C: Curve> {
   params: MultisigParams,
   context: String,
@@ -396,7 +384,7 @@ pub struct StateMachine<C: Curve> {
   coefficients: Option<Vec<C::F>>,
   our_commitments: Option<Vec<C::G>>,
   secret: Option<C::F>,
-  commitments: Option<Vec<Vec<C::G>>>,
+  commitments: Option<Vec<Vec<C::G>>>
 }
 
 impl<C: Curve> StateMachine<C> {
@@ -410,7 +398,7 @@ impl<C: Curve> StateMachine<C> {
       coefficients: None,
       our_commitments: None,
       secret: None,
-      commitments: None,
+      commitments: None
     }
   }
 

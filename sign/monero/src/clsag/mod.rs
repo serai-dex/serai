@@ -1,7 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
-use digest::Digest;
-use blake2::Blake2b;
+use blake2::{Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -82,10 +81,10 @@ pub(crate) fn sign_core(
   let z;
 
   let mut next_rand = rand_source;
-  next_rand = Blake2b::digest(&next_rand).as_slice().try_into().unwrap();
+  next_rand = Blake2b512::digest(&next_rand).as_slice().try_into().unwrap();
   {
     let a = Scalar::from_bytes_mod_order_wide(&next_rand);
-    next_rand = Blake2b::digest(&next_rand).as_slice().try_into().unwrap();
+    next_rand = Blake2b512::digest(&next_rand).as_slice().try_into().unwrap();
     C_out = commitment(&a, ssr.amount);
 
     for member in &ssr.ring {
@@ -149,7 +148,7 @@ pub(crate) fn sign_core(
   s.resize(n, Scalar::zero());
   while j != i {
     s[j] = Scalar::from_bytes_mod_order_wide(&next_rand);
-    next_rand = Blake2b::digest(&next_rand).as_slice().try_into().unwrap();
+    next_rand = Blake2b512::digest(&next_rand).as_slice().try_into().unwrap();
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 

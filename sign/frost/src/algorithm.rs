@@ -1,13 +1,13 @@
 use core::{marker::PhantomData, fmt::Debug};
 
 use rand_core::{RngCore, CryptoRng};
-use digest::Digest;
 
 use group::Group;
 
 use crate::{Curve, FrostError, sign};
 
-pub trait Algorithm<C: Curve>: Clone + Debug {
+/// Algorithm to use FROST with
+pub trait Algorithm<C: Curve>: Clone {
   /// The resulting type of the signatures this algorithm will produce
   type Signature: Clone + Debug;
 
@@ -59,40 +59,24 @@ pub trait Algorithm<C: Curve>: Clone + Debug {
   ) -> bool;
 }
 
-pub trait Hram: PartialEq + Eq + Copy + Clone + Debug {
+pub trait Hram<C: Curve>: Clone {
+  /// HRAM function to generate a challenge
+  /// H2 from the IETF draft despite having a different argument set (not pre-formatted)
   #[allow(non_snake_case)]
-  fn hram<C: Curve>(R: &C::G, A: &C::G, m: &[u8]) -> C::F;
+  fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Blake2bHram {}
-impl Hram for Blake2bHram {
-  #[allow(non_snake_case)]
-  fn hram<C: Curve>(R: &C::G, A: &C::G, m: &[u8]) -> C::F {
-    C::F_from_bytes_wide(
-      blake2::Blake2b::new()
-        .chain(C::G_to_bytes(R))
-        .chain(C::G_to_bytes(A))
-        .chain(m)
-        .finalize()
-        .as_slice()
-        .try_into()
-        .expect("couldn't convert a 64-byte hash to a 64-byte array")
-    )
-  }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Schnorr<C: Curve, H: Hram> {
+#[derive(Clone)]
+pub struct Schnorr<C: Curve, H: Hram<C>> {
   c: Option<C::F>,
-  hram: PhantomData<H>,
+  _hram: PhantomData<H>,
 }
 
-impl<C: Curve, H: Hram> Schnorr<C, H> {
+impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
   pub fn new() -> Schnorr<C, H> {
     Schnorr {
       c: None,
-      hram: PhantomData
+      _hram: PhantomData
     }
   }
 }
@@ -104,7 +88,8 @@ pub struct SchnorrSignature<C: Curve> {
   pub s: C::F,
 }
 
-impl<C: Curve, H: Hram> Algorithm<C> for Schnorr<C, H> {
+/// Implementation of Schnorr signatures for use with FROST
+impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   type Signature = SchnorrSignature<C>;
 
   fn context(&self) -> Vec<u8> {
@@ -141,7 +126,7 @@ impl<C: Curve, H: Hram> Algorithm<C> for Schnorr<C, H> {
     nonce: C::F,
     msg: &[u8],
   ) -> C::F {
-    let c = H::hram::<C>(&nonce_sum, &params.group_key(), msg);
+    let c = H::hram(&nonce_sum, &params.group_key(), msg);
     self.c = Some(c);
 
     nonce + (params.secret_share() * c)

@@ -2,16 +2,19 @@ use std::rc::Rc;
 
 use rand::{RngCore, rngs::OsRng};
 
+use digest::Digest;
+use sha2::Sha256;
+
 use frost::{
   Curve,
   MultisigParams, MultisigKeys,
   key_gen,
-  algorithm::{Algorithm, Schnorr, Blake2bHram, SchnorrSignature},
+  algorithm::{Algorithm, Schnorr, SchnorrSignature},
   sign
 };
 
 mod common;
-use common::Jubjub;
+use common::{Secp256k1, TestHram};
 
 const PARTICIPANTS: usize = 8;
 
@@ -81,7 +84,7 @@ fn key_gen_and_sign() {
       ).unwrap()
     );
     machines.push(
-      key_gen::StateMachine::<Jubjub>::new(
+      key_gen::StateMachine::<Secp256k1>::new(
         params[i - 1],
         "FF/Group Rust key_gen test".to_string()
       )
@@ -114,7 +117,7 @@ fn key_gen_and_sign() {
 
     let these_keys = machines[i - 1].complete(our_secret_shares).unwrap();
     assert_eq!(
-      MultisigKeys::<Jubjub>::deserialize(&these_keys.serialize()).unwrap(),
+      MultisigKeys::<Secp256k1>::deserialize(&these_keys.serialize()).unwrap(),
       these_keys
     );
     keys.push(Rc::new(these_keys.clone()));
@@ -130,14 +133,14 @@ fn key_gen_and_sign() {
     assert_eq!(group_key.unwrap(), these_keys.group_key());
   }
 
-  sign(Schnorr::<Jubjub, Blake2bHram>::new(), keys.clone());
+  sign(Schnorr::<Secp256k1, TestHram>::new(), keys.clone());
 
   let mut randomization = [0; 64];
   (&mut OsRng).fill_bytes(&mut randomization);
   sign(
-    Schnorr::<Jubjub, Blake2bHram>::new(),
+    Schnorr::<Secp256k1, TestHram>::new(),
     keys.iter().map(
-      |keys| Rc::new(keys.offset(Jubjub::F_from_bytes_wide(randomization)))
+      |keys| Rc::new(keys.offset(Secp256k1::hash_to_F(&Sha256::digest(&randomization))))
     ).collect()
   );
 }
