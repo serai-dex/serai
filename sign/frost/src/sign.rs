@@ -241,6 +241,11 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     b.extend(&commitments[0 .. commit_len]);
   }
 
+  let offset = if params.keys.offset.is_some() {
+    C::F_to_le_bytes(&params.keys.offset.unwrap())
+  } else {
+    vec![]
+  };
   let context = params.algorithm.context();
   let mut p = Vec::with_capacity(multisig_params.t);
   let mut pi = C::F::zero();
@@ -251,6 +256,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
           .chain(BINDING_DST)
           .chain(u64::try_from(*l).unwrap().to_le_bytes())
           .chain(Blake2b::new().chain(BINDING_MESSAGE_DST).chain(msg).finalize())
+          .chain(&offset)
           .chain(&context)
           .chain(&b)
           .finalize()
