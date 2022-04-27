@@ -38,7 +38,8 @@ fn main() {
  println!("cargo:rerun-if-env-changed=OUT_DIR");
  if !Path::new(
     &format!(
-      "c/monero/src/crypto/{}cncrypto.{}",
+      "{}/{}cncrypto.{}",
+      out_dir,
       &env::consts::DLL_PREFIX,
       &env::consts::DLL_EXTENSION
     )

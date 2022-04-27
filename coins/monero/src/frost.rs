@@ -2,7 +2,7 @@ use core::convert::TryInto;
 
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{Digest, Blake2b512};
+use blake2::{digest::Update, Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE as DTable,
@@ -49,7 +49,7 @@ impl Curve for Ed25519 {
   }
 
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
-    Blake2b512::digest(msg)
+    Blake2b512::digest(msg).to_vec()
   }
 
   fn hash_to_F(data: &[u8]) -> Self::F {
@@ -120,13 +120,13 @@ impl DLEqProof {
     let R1 =  &DTable * &r;
     let R2 = r * H;
 
-    let c = DScalar::from_hash(
+    let c = dfg::Scalar::from_hash(
       Blake2b512::new()
         .chain(R1.compress().to_bytes())
         .chain(R2.compress().to_bytes())
         .chain((secret * &DTable).compress().to_bytes())
         .chain(alt.compress().to_bytes())
-    );
+    ).0;
     let s = r + (c * secret);
 
     DLEqProof { s, c }
@@ -144,13 +144,13 @@ impl DLEqProof {
     let R1 = (&s * &DTable) - (c * primary);
     let R2 = (s * H) - (c * alt);
 
-    let expected_c = DScalar::from_hash(
+    let expected_c = dfg::Scalar::from_hash(
       Blake2b512::new()
         .chain(R1.compress().to_bytes())
         .chain(R2.compress().to_bytes())
         .chain(primary.compress().to_bytes())
         .chain(alt.compress().to_bytes())
-    );
+    ).0;
 
     // Take the opportunity to ensure a lack of torsion in key images/randomness commitments
     if (!primary.is_torsion_free()) || (!alt.is_torsion_free()) || (c != expected_c) {

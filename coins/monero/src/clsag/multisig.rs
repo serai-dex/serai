@@ -1,6 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{Digest, Blake2b512};
+use blake2::{digest::Update, Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -154,7 +154,7 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> dfg::Scalar {
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
-    let rand_source = Keccak::v512()
+    let rand_source = Blake2b512::new()
       .chain("clsag_randomness")
       .chain(&self.b)
       .finalize()
@@ -191,7 +191,7 @@ impl Algorithm<Ed25519> for Multisig {
 
     let mut clsag = interim.clsag.clone();
     clsag.s[self.ssr.i] = Key { key: s.to_bytes() };
-    if verify(&clsag, self.image, &self.ssr.ring, &self.msg, interim.C_out).is_ok() {
+    if verify(&clsag, self.image, &self.msg, &self.ssr.ring, interim.C_out).is_ok() {
       return Some((clsag, interim.C_out));
     }
     return None;
