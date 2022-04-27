@@ -43,48 +43,24 @@ fn main() {
       &env::consts::DLL_EXTENSION
     )
   ).exists() {
-    if !Command::new("cp").args(&[
-      &format!(
-        "c/monero/src/crypto/{}cncrypto.{}",
-        &env::consts::DLL_PREFIX,
-        &env::consts::DLL_EXTENSION
-      ),
-      out_dir
-    ]).status().unwrap().success() {
-      panic!("Failed to cp cncrypto");
-    }
-
-    if !Command::new("cp").args(&[
-      &format!(
-        "c/monero/src/device/{}device.{}",
-        &env::consts::DLL_PREFIX,
-        &env::consts::DLL_EXTENSION
-      ),
-      out_dir
-    ]).status().unwrap().success() {
-      panic!("Failed to cp device");
-    }
-
-    if !Command::new("cp").args(&[
-      &format!(
-        "c/monero/src/ringct/{}ringct_basic.{}",
-        &env::consts::DLL_PREFIX,
-        &env::consts::DLL_EXTENSION
-      ),
-      out_dir
-    ]).status().unwrap().success() {
-      panic!("Failed to cp ringct_basic");
-    }
-
-    if !Command::new("cp").args(&[
-      &format!(
-        "c/monero/src/ringct/{}ringct.{}",
-        &env::consts::DLL_PREFIX,
-        &env::consts::DLL_EXTENSION
-      ),
-      out_dir
-    ]).status().unwrap().success() {
-      panic!("Failed to cp ringct");
+    for (folder, lib) in [
+      ("crypto", "cncrypto"),
+      ("device", "device"),
+      ("ringct", "ringct_basic"),
+      ("ringct", "ringct")
+    ] {
+      if !Command::new("cp").args(&[
+        &format!(
+          "c/monero/src/{}/{}{}.{}",
+          folder,
+          &env::consts::DLL_PREFIX,
+          lib,
+          &env::consts::DLL_EXTENSION
+        ),
+        out_dir
+      ]).status().unwrap().success() {
+        panic!("Failed to cp {}", lib);
+      }
     }
 
     println!("cargo:rerun-if-changed=c/wrapper.c");
