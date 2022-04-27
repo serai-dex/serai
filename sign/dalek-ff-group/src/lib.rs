@@ -5,6 +5,7 @@ use core::{
 };
 
 use rand_core::RngCore;
+use digest::{consts::U64, Digest};
 
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
 
@@ -144,6 +145,14 @@ impl PrimeField for Scalar {
   fn is_odd(&self) -> Choice { unimplemented!() }
   fn multiplicative_generator() -> Self { unimplemented!() }
   fn root_of_unity() -> Self { unimplemented!() }
+}
+
+impl Scalar {
+  pub fn from_hash<D: Digest<OutputSize = U64>>(hash: D) -> Scalar {
+    let mut output = [0u8; 64];
+    output.copy_from_slice(&hash.finalize());
+    Scalar(DScalar::from_bytes_mod_order_wide(&output))
+  }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

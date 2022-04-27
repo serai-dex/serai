@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 rand_core = "0.6"
+digest = "0.10"
 
 subtle = "2.4"
 

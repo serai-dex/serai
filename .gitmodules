@@ -1,3 +1,3 @@
-[submodule "sign/monero/c/monero"]
-	path = sign/monero/c/monero
+[submodule "coins/monero/c/monero"]
+	path = coins/monero/c/monero
 	url = https://github.com/monero-project/monero
