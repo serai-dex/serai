@@ -2,13 +2,13 @@
 
 use rand::rngs::OsRng;
 
-use monero_serai::{SignError, key_image};
+use monero_serai::{frost::MultisigError, key_image};
 
 mod frost;
 use crate::frost::generate_keys;
 
 #[test]
-fn test() -> Result<(), SignError> {
+fn test() -> Result<(), MultisigError> {
   let (keys, group_private) = generate_keys(3, 5);
   let image = key_image::generate(&group_private);
 

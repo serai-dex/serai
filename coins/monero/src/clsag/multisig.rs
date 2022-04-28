@@ -15,19 +15,16 @@ use frost::{Curve, FrostError, algorithm::Algorithm, sign::ParamsView};
 use monero::util::ringct::{Key, Clsag};
 
 use crate::{
-  SignError,
   hash_to_point,
-  frost::{Ed25519, DLEqProof},
-  clsag::{SemiSignableRing, validate_sign_args, sign_core, verify}
+  frost::{MultisigError, Ed25519, DLEqProof},
+  clsag::{SignableInput, sign_core, verify}
 };
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 struct ClsagSignInterim {
   c: Scalar,
-  mu_C: Scalar,
-  z: Scalar,
-  mu_P: Scalar,
+  s: Scalar,
 
   clsag: Clsag,
   C_out: EdwardsPoint
@@ -39,31 +36,24 @@ pub struct Multisig {
   b: Vec<u8>,
   AH: dfg::EdwardsPoint,
 
-  image: EdwardsPoint,
-  ssr: SemiSignableRing,
   msg: [u8; 32],
+  input: SignableInput,
 
   interim: Option<ClsagSignInterim>
 }
 
 impl Multisig {
   pub fn new(
-    image: EdwardsPoint,
     msg: [u8; 32],
-    ring: Vec<[EdwardsPoint; 2]>,
-    i: u8,
-    randomness: &Scalar,
-    amount: u64
-  ) -> Result<Multisig, SignError> {
-    let ssr = validate_sign_args(ring, i, None, randomness, amount)?;
+    input: SignableInput
+  ) -> Result<Multisig, MultisigError> {
     Ok(
       Multisig {
         b: vec![],
         AH: dfg::EdwardsPoint::identity(),
 
-        image,
-        ssr,
         msg,
+        input,
 
         interim: None
       }
@@ -75,13 +65,9 @@ impl Algorithm<Ed25519> for Multisig {
   type Signature = (Clsag, EdwardsPoint);
 
   fn context(&self) -> Vec<u8> {
-    let mut context = self.image.compress().to_bytes().to_vec();
-    for pair in &self.ssr.ring {
-      context.extend(&pair[0].compress().to_bytes());
-      context.extend(&pair[1].compress().to_bytes());
-    }
-    context.extend(&u8::try_from(self.ssr.i).unwrap().to_le_bytes());
+    let mut context = vec![];
     context.extend(&self.msg);
+    context.extend(&self.input.context());
     context
   }
 
@@ -122,7 +108,7 @@ impl Algorithm<Ed25519> for Multisig {
       Err(FrostError::InvalidCommitmentQuantity(l, 6, serialized.len() / 32))?;
     }
 
-    let alt = &hash_to_point(&self.ssr.ring[self.ssr.i][0]);
+    let alt = &hash_to_point(&self.input.ring[self.input.i][0]);
 
     let h0 = <Ed25519 as Curve>::G_from_slice(&serialized[0 .. 32]).map_err(|_| FrostError::InvalidCommitment(l))?;
     DLEqProof::deserialize(&serialized[64 .. 128]).ok_or(FrostError::InvalidCommitment(l))?.verify(
@@ -154,7 +140,7 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> dfg::Scalar {
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
-    let rand_source = Blake2b512::new()
+    let mut rand_source = Blake2b512::new()
       .chain("clsag_randomness")
       .chain(&self.b)
       .finalize()
@@ -162,19 +148,22 @@ impl Algorithm<Ed25519> for Multisig {
       .try_into()
       .unwrap();
 
+    let mask = Scalar::from_bytes_mod_order_wide(&rand_source);
+    rand_source = Blake2b512::digest(&rand_source).as_slice().try_into().unwrap();
+
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       rand_source,
-      self.image,
-      &self.ssr,
       &self.msg,
+      &self.input,
+      mask,
       nonce_sum.0,
       self.AH.0
     );
+    self.interim = Some(ClsagSignInterim { c: c * mu_P, s: c * mu_C * z, clsag, C_out });
 
-    let share = dfg::Scalar(nonce.0 - (c * (mu_P * view.secret_share().0)));
+    let share = dfg::Scalar(nonce.0 - (c * mu_P * view.secret_share().0));
 
-    self.interim = Some(ClsagSignInterim { c, mu_C, z, mu_P, clsag, C_out });
     share
   }
 
@@ -186,12 +175,9 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> Option<Self::Signature> {
     let interim = self.interim.as_ref().unwrap();
 
-    // Subtract the randomness's presence, which is done once and not fractionalized among shares
-    let s = sum.0 - (interim.c * (interim.mu_C * interim.z));
-
     let mut clsag = interim.clsag.clone();
-    clsag.s[self.ssr.i] = Key { key: s.to_bytes() };
-    if verify(&clsag, self.image, &self.msg, &self.ssr.ring, interim.C_out).is_ok() {
+    clsag.s[self.input.i] = Key { key: (sum.0 - interim.s).to_bytes() };
+    if verify(&clsag, &self.msg, self.input.image, &self.input.ring, interim.C_out) {
       return Some((clsag, interim.C_out));
     }
     return None;
@@ -205,7 +191,7 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> bool {
     let interim = self.interim.as_ref().unwrap();
     return (&share.0 * &ED25519_BASEPOINT_TABLE) == (
-      nonce.0 - (interim.c * (interim.mu_P * verification_share.0))
+      nonce.0 - (interim.c * verification_share.0)
     );
   }
 }

@@ -195,8 +195,8 @@ pub fn sign<R: RngCore + CryptoRng>(
 // Uses Monero's C verification function to ensure compatibility with Monero
 pub fn verify(
   clsag: &Clsag,
-  image: EdwardsPoint,
   msg: &[u8; 32],
+  image: EdwardsPoint,
   ring: &[[EdwardsPoint; 2]],
   pseudo_out: EdwardsPoint
 ) -> bool {

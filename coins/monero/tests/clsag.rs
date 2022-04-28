@@ -2,7 +2,7 @@ use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_serai::{random_scalar, Commitment, key_image, clsag, transaction::SignableInput};
+use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, clsag, transaction::SignableInput};
 
 #[cfg(feature = "multisig")]
 use ::frost::sign;
@@ -56,12 +56,12 @@ fn test_single() {
     )],
     Scalar::zero()
   ).unwrap().swap_remove(0);
-  assert!(clsag::verify(&clsag, image, &msg, &ring, pseudo_out));
+  assert!(clsag::verify(&clsag, &msg, image, &ring, pseudo_out));
 }
 
 #[cfg(feature = "multisig")]
 #[test]
-fn test_multisig() -> Result<(), SignError> {
+fn test_multisig() -> Result<(), MultisigError> {
   let (keys, group_private) = generate_keys(THRESHOLD, PARTICIPANTS);
   let t = keys[0].params().t();
 
@@ -88,19 +88,18 @@ fn test_multisig() -> Result<(), SignError> {
   let mut ring = vec![];
   for i in 0 .. RING_LEN {
     let dest;
-    let a;
+    let mask;
     let amount;
     if i != u64::from(RING_INDEX) {
       dest = random_scalar(&mut OsRng);
-      a = random_scalar(&mut OsRng);
+      mask = random_scalar(&mut OsRng);
       amount = OsRng.next_u64();
     } else {
       dest = group_private.0;
-      a = randomness;
+      mask = randomness;
       amount = AMOUNT;
     }
-    let mask = commitment(&a, amount);
-    ring.push([&dest * &ED25519_BASEPOINT_TABLE, mask]);
+    ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
   }
 
   let mut machines = vec![];
@@ -110,7 +109,10 @@ fn test_multisig() -> Result<(), SignError> {
     machines.push(
       sign::StateMachine::new(
         sign::Params::new(
-          clsag::Multisig::new(image, msg, ring.clone(), RING_INDEX, &randomness, AMOUNT).unwrap(),
+          clsag::Multisig::new(
+            msg,
+            SignableInput::new(image, vec![], ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
+          ).unwrap(),
           keys[i - 1].clone(),
           &(1 ..= t).collect::<Vec<usize>>()
         ).unwrap()

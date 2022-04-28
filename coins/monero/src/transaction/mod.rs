@@ -156,6 +156,19 @@ impl SignableInput {
 
     Ok(SignableInput { image, mixins, ring, i, commitment })
   }
+
+  #[cfg(feature = "multisig")]
+  pub fn context(&self) -> Vec<u8> {
+    let mut context = self.image.compress().to_bytes().to_vec();
+    for pair in &self.ring {
+      // Doesn't include mixins[i] as CLSAG doesn't care and won't be affected by it
+      context.extend(&pair[0].compress().to_bytes());
+      context.extend(&pair[1].compress().to_bytes());
+    }
+    context.extend(&u8::try_from(self.i).unwrap().to_le_bytes());
+    // Doesn't include commitment as the above ring + index includes the commitment
+    context
+  }
 }
 
 #[allow(non_snake_case)]
