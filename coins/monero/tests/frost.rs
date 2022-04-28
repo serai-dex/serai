@@ -13,7 +13,7 @@ use frost::{
   sign::lagrange
 };
 
-use monero_sign::frost::Ed25519;
+use monero_serai::frost::Ed25519;
 
 pub fn generate_keys(t: usize, n: usize) -> (Vec<Rc<MultisigKeys<Ed25519>>>, Scalar) {
   let mut params = vec![];

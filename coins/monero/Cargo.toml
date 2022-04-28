@@ -1,5 +1,5 @@
 [package]
-name = "monero-sign"
+name = "monero-serai"
 version = "0.1.0"
 description = "Implementation of Monero transaction signing in Rust"
 license = "MIT"

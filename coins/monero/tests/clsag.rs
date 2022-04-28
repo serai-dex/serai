@@ -2,7 +2,7 @@ use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_sign::{SignError, random_scalar, commitment, key_image, clsag};
+use monero_serai::{SignError, random_scalar, commitment, key_image, clsag};
 
 #[cfg(feature = "multisig")]
 use ::frost::sign;
@@ -31,7 +31,7 @@ fn test_single() -> Result<(), SignError> {
     let dest = random_scalar(&mut OsRng);
     let a = random_scalar(&mut OsRng);
     let amount;
-    if i == RING_INDEX.into() {
+    if i == u64::from(RING_INDEX) {
       secrets = [dest, a];
       amount = AMOUNT;
     } else {
@@ -87,7 +87,7 @@ fn test_multisig() -> Result<(), SignError> {
     let dest;
     let a;
     let amount;
-    if i != RING_INDEX.into() {
+    if i != u64::from(RING_INDEX) {
       dest = random_scalar(&mut OsRng);
       a = random_scalar(&mut OsRng);
       amount = OsRng.next_u64();

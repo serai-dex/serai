@@ -2,7 +2,7 @@
 
 use rand::rngs::OsRng;
 
-use monero_sign::{SignError, key_image};
+use monero_serai::{SignError, key_image};
 
 mod frost;
 use crate::frost::generate_keys;
