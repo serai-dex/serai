@@ -1,6 +1,5 @@
 use rand_core::{RngCore, CryptoRng};
-
-use blake2::{Digest, Blake2b512};
+use ff::Field;
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -29,8 +28,8 @@ mod multisig;
 pub use multisig::Multisig;
 
 #[allow(non_snake_case)]
-pub(crate) fn sign_core(
-  rand_source: [u8; 64],
+pub(crate) fn sign_core<R: RngCore + CryptoRng>(
+  rng: &mut R,
   msg: &[u8; 32],
   input: &SignableInput,
   mask: Scalar,
@@ -51,8 +50,6 @@ pub(crate) fn sign_core(
 
   let z;
 
-  let mut next_rand = rand_source;
-  next_rand = Blake2b512::digest(&next_rand).as_slice().try_into().unwrap();
   {
     C_out = Commitment::new(mask, input.commitment.amount).calculate();
 
@@ -116,8 +113,7 @@ pub(crate) fn sign_core(
   let mut s = vec![];
   s.resize(n, Scalar::zero());
   while i != r {
-    s[i] = Scalar::from_bytes_mod_order_wide(&next_rand);
-    next_rand = Blake2b512::digest(&next_rand).as_slice().try_into().unwrap();
+    s[i] = dalek_ff_group::Scalar::random(&mut *rng).0;
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 
@@ -176,7 +172,7 @@ pub fn sign<R: RngCore + CryptoRng>(
     let mut rand_source = [0; 64];
     rng.fill_bytes(&mut rand_source);
     let (mut clsag, c, mu_C, z, mu_P, C_out) = sign_core(
-      rand_source,
+      rng,
       &msg,
       &inputs[i].1,
       mask,

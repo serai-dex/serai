@@ -1,6 +1,7 @@
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha12Rng;
 
-use blake2::{digest::Update, Digest, Blake2b512};
+use blake2::{Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -8,8 +9,9 @@ use curve25519_dalek::{
   edwards::EdwardsPoint
 };
 
-use dalek_ff_group as dfg;
+use ff::Field;
 use group::Group;
+use dalek_ff_group as dfg;
 use frost::{Curve, FrostError, algorithm::Algorithm, sign::ParamsView};
 
 use monero::util::ringct::{Key, Clsag};
@@ -33,6 +35,7 @@ struct ClsagSignInterim {
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct Multisig {
+  seed: [u8; 32],
   b: Vec<u8>,
   AH: dfg::EdwardsPoint,
 
@@ -43,12 +46,17 @@ pub struct Multisig {
 }
 
 impl Multisig {
-  pub fn new(
+  pub fn new<R: RngCore + CryptoRng + SeedableRng>(
+    rng: &mut R,
     msg: [u8; 32],
     input: SignableInput
   ) -> Result<Multisig, MultisigError> {
+    let mut seed = [0; 32];
+    rng.fill_bytes(&mut seed);
+
     Ok(
       Multisig {
+        seed,
         b: vec![],
         AH: dfg::EdwardsPoint::identity(),
 
@@ -66,6 +74,7 @@ impl Algorithm<Ed25519> for Multisig {
 
   fn context(&self) -> Vec<u8> {
     let mut context = vec![];
+    context.extend(&self.seed);
     context.extend(&self.msg);
     context.extend(&self.input.context());
     context
@@ -140,20 +149,16 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> dfg::Scalar {
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
-    let mut rand_source = Blake2b512::new()
-      .chain("clsag_randomness")
-      .chain(&self.b)
-      .finalize()
-      .as_slice()
-      .try_into()
-      .unwrap();
-
-    let mask = Scalar::from_bytes_mod_order_wide(&rand_source);
-    rand_source = Blake2b512::digest(&rand_source).as_slice().try_into().unwrap();
+    // Uses a parent seed (part of context) as well just to enable further privacy options
+    let mut seed = b"CLSAG_randomness".to_vec();
+    seed.extend(&self.context());
+    seed.extend(&self.b);
+    let mut rng = ChaCha12Rng::from_seed(Blake2b512::digest(seed)[0 .. 32].try_into().unwrap());
+    let mask = dfg::Scalar::random(&mut rng).0;
 
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
-      rand_source,
+      &mut rng,
       &self.msg,
       &self.input,
       mask,

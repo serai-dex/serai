@@ -1,4 +1,5 @@
-use rand::{RngCore, rngs::OsRng};
+use rand::{RngCore, SeedableRng, rngs::OsRng};
+use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
@@ -110,6 +111,7 @@ fn test_multisig() -> Result<(), MultisigError> {
       sign::StateMachine::new(
         sign::Params::new(
           clsag::Multisig::new(
+            &mut ChaCha12Rng::seed_from_u64(1),
             msg,
             SignableInput::new(image, vec![], ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
           ).unwrap(),
