@@ -63,22 +63,22 @@ fn main() {
         panic!("Failed to cp {}", lib);
       }
     }
+  }
 
-    println!("cargo:rerun-if-changed=c/wrapper.c");
-    if !Command::new("g++").args(&[
-      "-O3", "-Wall", "-shared", "-std=c++14", "-fPIC",
-      "-Imonero/contrib/epee/include", "-Imonero/src",
-      "wrapper.c", "-o", &format!(
-        "{}/{}wrapper.{}",
-        out_dir,
-        &env::consts::DLL_PREFIX,
-        &env::consts::DLL_EXTENSION
-      ),
-      &format!("-L{}", out_dir),
-      "-ldevice", "-lringct_basic", "-lringct"
-    ]).current_dir(&Path::new("c")).status().unwrap().success() {
-      panic!("g++ failed to build the wrapper");
-    }
+  println!("cargo:rerun-if-changed=c/wrapper.c");
+  if !Command::new("g++").args(&[
+    "-O3", "-Wall", "-shared", "-std=c++14", "-fPIC",
+    "-Imonero/contrib/epee/include", "-Imonero/src",
+    "wrapper.c", "-o", &format!(
+      "{}/{}wrapper.{}",
+      out_dir,
+      &env::consts::DLL_PREFIX,
+      &env::consts::DLL_EXTENSION
+    ),
+    &format!("-L{}", out_dir),
+    "-ldevice", "-lringct_basic", "-lringct"
+  ]).current_dir(&Path::new("c")).status().unwrap().success() {
+    panic!("g++ failed to build the wrapper");
   }
 
   println!("cargo:rustc-link-search={}", out_dir);
