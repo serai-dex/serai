@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -11,41 +10,27 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY}
 };
 
-use monero::util::key;
+use monero::util::key::H;
 
 #[cfg(feature = "multisig")]
 pub mod frost;
 
 pub mod key_image;
+pub mod bulletproofs;
 pub mod clsag;
+
+pub mod rpc;
+pub mod transaction;
 
 #[link(name = "wrapper")]
 extern "C" {
+  pub(crate) fn free(ptr: *const u8);
   fn c_hash_to_point(point: *const u8);
+  pub(crate) fn c_gen_bp(len: u8, a: *const u64, m: *const [u8; 32]) -> *const u8;
   pub(crate) fn c_verify_clsag(
     serialized_len: usize, serialized: *const u8, I: *const u8,
     ring_size: u8, ring: *const u8, msg: *const u8, pseudo_out: *const u8
   ) -> bool;
-}
-
-#[derive(Error, Debug)]
-pub enum SignError {
-  #[error("internal error ({0})")]
-  InternalError(String),
-  #[error("invalid discrete log equality proof")]
-  InvalidDLEqProof,
-  #[error("invalid key image {0}")]
-  InvalidKeyImage(usize),
-  #[error("invalid ring member (member {0}, ring size {1})")]
-  InvalidRingMember(u8, u8),
-  #[error("invalid secret for ring (index {0})")]
-  InvalidSecret(u8),
-  #[error("invalid commitment {0}")]
-  InvalidCommitment(usize),
-  #[error("invalid share {0}")]
-  InvalidShare(usize),
-  #[error("invalid signature")]
-  InvalidSignature
 }
 
 // Allows using a modern rand as dalek's is notoriously dated
@@ -56,21 +41,40 @@ pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
 }
 
 lazy_static! {
-  static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&key::H.point.decompress().unwrap());
+  static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H.point.decompress().unwrap());
 }
 
-// aG + bH
-pub fn commitment(randomness: &Scalar, amount: u64) -> EdwardsPoint {
-  (randomness * &ED25519_BASEPOINT_TABLE) + (&Scalar::from(amount) * &*H_TABLE)
+#[allow(non_snake_case)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct Commitment {
+  pub mask: Scalar,
+  pub amount: u64
+}
+
+impl Commitment {
+  pub fn zero() -> Commitment {
+    Commitment { mask: Scalar::one(), amount: 0}
+  }
+
+  pub fn new(mask: Scalar, amount: u64) -> Commitment {
+    Commitment { mask, amount }
+  }
+
+  pub fn calculate(&self) -> EdwardsPoint {
+    (&self.mask * &ED25519_BASEPOINT_TABLE) + (&Scalar::from(self.amount) * &*H_TABLE)
+  }
+}
+
+pub fn hash(data: &[u8]) -> [u8; 32] {
+  let mut keccak = Keccak::v256();
+  keccak.update(data);
+  let mut res = [0; 32];
+  keccak.finalize(&mut res);
+  res
 }
 
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {
-  let mut keccak = Keccak::v256();
-  keccak.update(data);
-
-  let mut res = [0; 32];
-  keccak.finalize(&mut res);
-  Scalar::from_bytes_mod_order(res)
+  Scalar::from_bytes_mod_order(hash(&data))
 }
 
 pub fn hash_to_point(point: &EdwardsPoint) -> EdwardsPoint {

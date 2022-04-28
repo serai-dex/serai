@@ -1,6 +1,7 @@
 use core::convert::TryInto;
 
 use rand_core::{RngCore, CryptoRng};
+use thiserror::Error;
 
 use blake2::{digest::Update, Digest, Blake2b512};
 
@@ -19,7 +20,17 @@ use group::Group;
 use dalek_ff_group as dfg;
 use frost::{CurveError, Curve};
 
-use crate::{SignError, random_scalar};
+use crate::random_scalar;
+
+#[derive(Error, Debug)]
+pub enum MultisigError {
+  #[error("internal error ({0})")]
+  InternalError(String),
+  #[error("invalid discrete log equality proof")]
+  InvalidDLEqProof,
+  #[error("invalid key image {0}")]
+  InvalidKeyImage(usize)
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Ed25519;
@@ -137,7 +148,7 @@ impl DLEqProof {
     H: &DPoint,
     primary: &DPoint,
     alt: &DPoint
-  ) -> Result<(), SignError> {
+) -> Result<(), MultisigError> {
     let s = self.s;
     let c = self.c;
 
@@ -154,7 +165,7 @@ impl DLEqProof {
 
     // Take the opportunity to ensure a lack of torsion in key images/randomness commitments
     if (!primary.is_torsion_free()) || (!alt.is_torsion_free()) || (c != expected_c) {
-      Err(SignError::InvalidDLEqProof)?;
+      Err(MultisigError::InvalidDLEqProof)?;
     }
 
     Ok(())

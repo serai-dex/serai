@@ -2,7 +2,7 @@ use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_serai::{SignError, random_scalar, commitment, key_image, clsag};
+use monero_serai::{random_scalar, Commitment, key_image, clsag, transaction::SignableInput};
 
 #[cfg(feature = "multisig")]
 use ::frost::sign;
@@ -22,38 +22,41 @@ const RING_LEN: u64 = 11;
 const AMOUNT: u64 = 1337;
 
 #[test]
-fn test_single() -> Result<(), SignError> {
+fn test_single() {
   let msg = [1; 32];
 
   let mut secrets = [Scalar::zero(), Scalar::zero()];
   let mut ring = vec![];
   for i in 0 .. RING_LEN {
     let dest = random_scalar(&mut OsRng);
-    let a = random_scalar(&mut OsRng);
+    let mask = random_scalar(&mut OsRng);
     let amount;
     if i == u64::from(RING_INDEX) {
-      secrets = [dest, a];
+      secrets = [dest, mask];
       amount = AMOUNT;
     } else {
       amount = OsRng.next_u64();
     }
-    let mask = commitment(&a, amount);
-    ring.push([&dest * &ED25519_BASEPOINT_TABLE, mask]);
+    ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
   }
 
-  let image = key_image::single(&secrets[0]);
+  let image = key_image::generate(&secrets[0]);
   let (clsag, pseudo_out) = clsag::sign(
     &mut OsRng,
-    image,
     msg,
-    ring.clone(),
-    RING_INDEX,
-    &secrets[0],
-    &secrets[1],
-    AMOUNT
-  )?;
-  clsag::verify(&clsag, image, &msg, &ring, pseudo_out)?;
-  Ok(())
+    &vec![(
+      secrets[0],
+      SignableInput::new(
+        image,
+        [0; RING_LEN as usize].to_vec(),
+        ring.clone(),
+        RING_INDEX,
+        Commitment::new(secrets[1], AMOUNT)
+      ).unwrap()
+    )],
+    Scalar::zero()
+  ).unwrap().swap_remove(0);
+  assert!(clsag::verify(&clsag, image, &msg, &ring, pseudo_out));
 }
 
 #[cfg(feature = "multisig")]

@@ -4,7 +4,7 @@ use curve25519_dalek::edwards::EdwardsPoint;
 use dalek_ff_group::Scalar;
 use frost::{MultisigKeys, sign::lagrange};
 
-use crate::{SignError, hash_to_point, frost::{Ed25519, DLEqProof}};
+use crate::{hash_to_point, frost::{MultisigError, Ed25519, DLEqProof}};
 
 #[derive(Clone)]
 #[allow(non_snake_case)]
@@ -45,7 +45,7 @@ impl Package {
   pub fn resolve(
     self,
     shares: Vec<Option<(EdwardsPoint, Package)>>
-  ) -> Result<EdwardsPoint, SignError> {
+  ) -> Result<EdwardsPoint, MultisigError> {
     let mut included = vec![self.i];
     for i in 1 .. shares.len() {
       if shares[i].is_some() {
@@ -64,7 +64,7 @@ impl Package {
 
       // Verify their proof
       let share = shares.image;
-      shares.proof.verify(&self.H, &other, &share).map_err(|_| SignError::InvalidKeyImage(i))?;
+      shares.proof.verify(&self.H, &other, &share).map_err(|_| MultisigError::InvalidKeyImage(i))?;
 
       // Add their share to the image
       image += share;

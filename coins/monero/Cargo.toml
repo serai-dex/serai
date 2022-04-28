@@ -22,10 +22,19 @@ group = { version = "0.11", optional = true }
 dalek-ff-group = { path = "../../sign/dalek-ff-group", optional = true }
 frost = { path = "../../sign/frost", optional = true }
 
-monero = "0.16.0" # Locked to this specific patch version due to a bug we compensate for
+# Locked to this specific patch version due to a bug we compensate for
+monero = { version = "0.16.0", features = ["experimental"] }
+
+hex = "0.4.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+monero-epee-bin-serde = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
 
 [features]
 multisig = ["ff", "group", "dalek-ff-group", "frost"]
 
 [dev-dependencies]
 rand = "0.8"
+
+tokio = { version = "1.17.0", features = ["full"] }

@@ -11,6 +11,6 @@ mod multisig;
 #[cfg(feature = "multisig")]
 pub use crate::key_image::multisig::{Package, multisig};
 
-pub fn single(secret: &Scalar) -> EdwardsPoint {
+pub fn generate(secret: &Scalar) -> EdwardsPoint {
   secret * hash_to_point(&(secret * &ED25519_BASEPOINT_TABLE))
 }

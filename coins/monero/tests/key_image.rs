@@ -10,7 +10,7 @@ use crate::frost::generate_keys;
 #[test]
 fn test() -> Result<(), SignError> {
   let (keys, group_private) = generate_keys(3, 5);
-  let image = key_image::single(&group_private);
+  let image = key_image::generate(&group_private);
 
   let mut packages = vec![];
   packages.resize(5 + 1, None);

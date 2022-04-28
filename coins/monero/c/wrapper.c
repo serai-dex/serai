@@ -1,5 +1,6 @@
 #include "device/device_default.hpp"
 
+#include "ringct/bulletproofs.h"
 #include "ringct/rctSigs.h"
 
 extern "C" {
@@ -9,6 +10,27 @@ extern "C" {
     memcpy(key_point.bytes, point, 32);
     rct::hash_to_p3(e_p3, key_point);
     ge_p3_tobytes(point, &e_p3);
+  }
+
+  uint8_t* c_gen_bp(uint8_t len, uint64_t* a, uint8_t* m) {
+    rct::keyV masks;
+    std::vector<uint64_t> amounts;
+    masks.resize(len);
+    amounts.resize(len);
+    for (uint8_t i = 0; i < len; i++) {
+      memcpy(masks[i].bytes, m + (i * 32), 32);
+      amounts[i] = a[i];
+    }
+    rct::Bulletproof bp = rct::bulletproof_PROVE(amounts, masks);
+
+    std::stringstream ss;
+    binary_archive<true> ba(ss);
+    ::serialization::serialize(ba, bp);
+    uint8_t* res = (uint8_t*) calloc(2 + ss.str().size(), 1); // malloc would also work
+    memcpy(res + 2, ss.str().data(), ss.str().size());
+    res[0] = ss.str().size() >> 8;
+    res[1] = ss.str().size() & 255;
+    return res;
   }
 
   bool c_verify_clsag(uint s_len, uint8_t* s, uint8_t* I, uint8_t k_len, uint8_t* k, uint8_t* m, uint8_t* p) {
