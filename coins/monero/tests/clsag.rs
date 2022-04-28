@@ -3,7 +3,7 @@ use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, clsag, transaction::SignableInput};
+use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, clsag};
 
 #[cfg(feature = "multisig")]
 use ::frost::sign;
@@ -47,9 +47,8 @@ fn test_single() {
     msg,
     &vec![(
       secrets[0],
-      SignableInput::new(
+      clsag::Input::new(
         image,
-        [0; RING_LEN as usize].to_vec(),
         ring.clone(),
         RING_INDEX,
         Commitment::new(secrets[1], AMOUNT)
@@ -113,7 +112,7 @@ fn test_multisig() -> Result<(), MultisigError> {
           clsag::Multisig::new(
             &mut ChaCha12Rng::seed_from_u64(1),
             msg,
-            SignableInput::new(image, vec![], ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
+            clsag::Input::new(image, ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
           ).unwrap(),
           keys[i - 1].clone(),
           &(1 ..= t).collect::<Vec<usize>>()

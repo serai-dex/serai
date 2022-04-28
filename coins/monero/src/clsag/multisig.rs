@@ -19,7 +19,7 @@ use monero::util::ringct::{Key, Clsag};
 use crate::{
   hash_to_point,
   frost::{MultisigError, Ed25519, DLEqProof},
-  clsag::{SignableInput, sign_core, verify}
+  clsag::{Input, sign_core, verify}
 };
 
 #[allow(non_snake_case)]
@@ -40,7 +40,7 @@ pub struct Multisig {
   AH: dfg::EdwardsPoint,
 
   msg: [u8; 32],
-  input: SignableInput,
+  input: Input,
 
   interim: Option<ClsagSignInterim>
 }
@@ -49,7 +49,7 @@ impl Multisig {
   pub fn new<R: RngCore + CryptoRng + SeedableRng>(
     rng: &mut R,
     msg: [u8; 32],
-    input: SignableInput
+    input: Input
   ) -> Result<Multisig, MultisigError> {
     let mut seed = [0; 32];
     rng.fill_bytes(&mut seed);

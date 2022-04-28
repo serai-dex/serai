@@ -35,12 +35,6 @@ mod mixins;
 
 #[derive(Error, Debug)]
 pub enum TransactionError {
-  #[error("internal error ({0})")]
-  InternalError(String),
-  #[error("invalid ring member (member {0}, ring size {1})")]
-  InvalidRingMember(u8, u8),
-  #[error("invalid commitment")]
-  InvalidCommitment,
   #[error("no inputs")]
   NoInputs,
   #[error("too many outputs")]
@@ -51,6 +45,8 @@ pub enum TransactionError {
   InvalidAddress,
   #[error("rpc error ({0})")]
   RpcError(RpcError),
+  #[error("clsag error ({0})")]
+  ClsagError(clsag::Error),
   #[error("invalid transaction ({0})")]
   InvalidTransaction(RpcError)
 }
@@ -120,55 +116,6 @@ pub fn scan_tx(tx: &Transaction, view: Scalar, spend: EdwardsPoint) -> Vec<Spend
     }
   }
   res
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SignableInput {
-  pub(crate) image: EdwardsPoint,
-  mixins: Vec<u64>,
-  // Ring, the index we're signing for, and the actual commitment behind it
-  pub(crate) ring: Vec<[EdwardsPoint; 2]>,
-  pub(crate) i: usize,
-  pub(crate) commitment: Commitment
-}
-
-impl SignableInput {
-  pub fn new(
-    image: EdwardsPoint,
-    mixins: Vec<u64>,
-    ring: Vec<[EdwardsPoint; 2]>,
-    i: u8,
-    commitment: Commitment
-  ) -> Result<SignableInput, TransactionError> {
-    let n = ring.len();
-    if n > u8::MAX.into() {
-      Err(TransactionError::InternalError("max ring size in this library is u8 max".to_string()))?;
-    }
-    if i >= (n as u8) {
-      Err(TransactionError::InvalidRingMember(i, n as u8))?;
-    }
-    let i: usize = i.into();
-
-    // Validate the commitment matches
-    if ring[i][1] != commitment.calculate() {
-      Err(TransactionError::InvalidCommitment)?;
-    }
-
-    Ok(SignableInput { image, mixins, ring, i, commitment })
-  }
-
-  #[cfg(feature = "multisig")]
-  pub fn context(&self) -> Vec<u8> {
-    let mut context = self.image.compress().to_bytes().to_vec();
-    for pair in &self.ring {
-      // Doesn't include mixins[i] as CLSAG doesn't care and won't be affected by it
-      context.extend(&pair[0].compress().to_bytes());
-      context.extend(&pair[1].compress().to_bytes());
-    }
-    context.extend(&u8::try_from(self.i).unwrap().to_le_bytes());
-    // Doesn't include commitment as the above ring + index includes the commitment
-    context
-  }
 }
 
 #[allow(non_snake_case)]
@@ -269,29 +216,30 @@ pub async fn send<R: RngCore + CryptoRng>(
   ));
 
   // Handle inputs
+  let mut mixins = Vec::with_capacity(inputs.len());
   let mut signable = Vec::with_capacity(inputs.len());
-  for input in inputs {
-    let (m, mixins) = mixins::select(
+  for (i, input) in inputs.iter().enumerate() {
+    let (m, mix) = mixins::select(
       rpc.get_o_indexes(input.tx).await.map_err(|e| TransactionError::RpcError(e))?[input.o]
     );
+    mixins.push(mix);
     signable.push((
       spend + input.key_offset,
-      SignableInput::new(
+      clsag::Input::new(
         key_image::generate(&(spend + input.key_offset)),
-        mixins.clone(),
-        rpc.get_ring(&mixins).await.map_err(|e| TransactionError::RpcError(e))?,
+        rpc.get_ring(&mixins[i]).await.map_err(|e| TransactionError::RpcError(e))?,
         m,
         input.commitment
-      )?
+    ).map_err(|e| TransactionError::ClsagError(e))?
     ));
   }
 
   let prefix = TransactionPrefix {
     version: VarInt(2),
     unlock_time: VarInt(0),
-    inputs: signable.iter().map(|input| TxIn::ToKey {
+    inputs: signable.iter().enumerate().map(|(i, input)| TxIn::ToKey {
       amount: VarInt(0),
-      key_offsets: mixins::offset(&input.1.mixins).iter().map(|x| VarInt(*x)).collect(),
+      key_offsets: mixins::offset(&mixins[i]).iter().map(|x| VarInt(*x)).collect(),
       k_image: KeyImage {
         image: Hash(input.1.image.compress().to_bytes())
       }

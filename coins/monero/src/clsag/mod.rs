@@ -1,6 +1,8 @@
 use rand_core::{RngCore, CryptoRng};
 use ff::Field;
 
+use thiserror::Error;
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   scalar::Scalar,
@@ -15,7 +17,6 @@ use monero::{
 
 use crate::{
   Commitment,
-  transaction::SignableInput,
   c_verify_clsag,
   random_scalar,
   hash_to_scalar,
@@ -27,11 +28,68 @@ mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::Multisig;
 
+#[derive(Error, Debug)]
+pub enum Error {
+  #[error("internal error ({0})")]
+  InternalError(String),
+  #[error("invalid ring member (member {0}, ring size {1})")]
+  InvalidRingMember(u8, u8),
+  #[error("invalid commitment")]
+  InvalidCommitment
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Input {
+  pub image: EdwardsPoint,
+  // Ring, the index we're signing for, and the actual commitment behind it
+  pub ring: Vec<[EdwardsPoint; 2]>,
+  pub i: usize,
+  pub commitment: Commitment
+}
+
+impl Input {
+  pub fn new(
+    image: EdwardsPoint,
+    ring: Vec<[EdwardsPoint; 2]>,
+    i: u8,
+    commitment: Commitment
+) -> Result<Input, Error> {
+    let n = ring.len();
+    if n > u8::MAX.into() {
+      Err(Error::InternalError("max ring size in this library is u8 max".to_string()))?;
+    }
+    if i >= (n as u8) {
+      Err(Error::InvalidRingMember(i, n as u8))?;
+    }
+    let i: usize = i.into();
+
+    // Validate the commitment matches
+    if ring[i][1] != commitment.calculate() {
+      Err(Error::InvalidCommitment)?;
+    }
+
+    Ok(Input { image, ring, i, commitment })
+  }
+
+  #[cfg(feature = "multisig")]
+  pub fn context(&self) -> Vec<u8> {
+    let mut context = self.image.compress().to_bytes().to_vec();
+    for pair in &self.ring {
+      // Doesn't include mixins[i] as CLSAG doesn't care and won't be affected by it
+      context.extend(&pair[0].compress().to_bytes());
+      context.extend(&pair[1].compress().to_bytes());
+    }
+    context.extend(&u8::try_from(self.i).unwrap().to_le_bytes());
+    // Doesn't include commitment as the above ring + index includes the commitment
+    context
+  }
+}
+
 #[allow(non_snake_case)]
 pub(crate) fn sign_core<R: RngCore + CryptoRng>(
   rng: &mut R,
   msg: &[u8; 32],
-  input: &SignableInput,
+  input: &Input,
   mask: Scalar,
   A: EdwardsPoint,
   AH: EdwardsPoint
@@ -148,7 +206,7 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
 pub fn sign<R: RngCore + CryptoRng>(
   rng: &mut R,
   msg: [u8; 32],
-  inputs: &[(Scalar, SignableInput)],
+  inputs: &[(Scalar, Input)],
   sum_outputs: Scalar
 ) -> Option<Vec<(Clsag, EdwardsPoint)>> {
   if inputs.len() == 0 {
