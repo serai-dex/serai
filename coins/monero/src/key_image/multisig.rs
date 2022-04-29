@@ -1,34 +1,17 @@
 use rand_core::{RngCore, CryptoRng};
 
-use curve25519_dalek::edwards::EdwardsPoint;
-use dalek_ff_group::Scalar;
-use frost::{MultisigKeys, sign::lagrange};
+use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
+use frost::sign::ParamsView;
 
 use crate::{hash_to_point, frost::{MultisigError, Ed25519, DLEqProof}};
 
-#[derive(Clone)]
 #[allow(non_snake_case)]
-pub struct Package {
-  // Don't serialize
-  H: EdwardsPoint,
-  i: usize,
-
-  // Serialize
-  image: EdwardsPoint,
-  proof: DLEqProof
-}
-
-#[allow(non_snake_case)]
-pub fn multisig<R: RngCore + CryptoRng>(
+pub fn generate_share<R: RngCore + CryptoRng>(
   rng: &mut R,
-  keys: &MultisigKeys<Ed25519>,
-  included: &[usize]
-) -> Package {
-  let i = keys.params().i();
-  let secret = (keys.secret_share() * lagrange::<Scalar>(i, included)).0;
-
-  let H = hash_to_point(&keys.group_key().0);
-  let image = secret * H;
+  view: &ParamsView<Ed25519>
+) -> (Vec<u8>, Vec<u8>) {
+  let H = hash_to_point(&view.group_key().0);
+  let image = view.secret_share().0 * H;
   // Includes a proof. Since:
   // sum(lagranged_secrets) = group_private
   // group_private * G = output_key
@@ -37,39 +20,32 @@ pub fn multisig<R: RngCore + CryptoRng>(
   // lagranged_secret * G is known. lagranged_secret * H is being sent
   // Any discrete log equality proof confirms the same secret was used,
   // forming a valid key_image share
-  Package { H, i, image, proof: DLEqProof::prove(rng, &secret, &H, &image) }
+  (
+    image.compress().to_bytes().to_vec(),
+    DLEqProof::prove(rng, &view.secret_share().0, &H, &image).serialize()
+  )
 }
 
-#[allow(non_snake_case)]
-impl Package {
-  pub fn resolve(
-    self,
-    shares: Vec<Option<(EdwardsPoint, Package)>>
-  ) -> Result<EdwardsPoint, MultisigError> {
-    let mut included = vec![self.i];
-    for i in 1 .. shares.len() {
-      if shares[i].is_some() {
-        included.push(i);
-      }
-    }
-
-    let mut image = self.image;
-    for i in 0 .. shares.len() {
-      if shares[i].is_none() {
-        continue;
-      }
-
-      let (other, shares) = shares[i].as_ref().unwrap();
-      let other = other * lagrange::<Scalar>(i, &included).0;
-
-      // Verify their proof
-      let share = shares.image;
-      shares.proof.verify(&self.H, &other, &share).map_err(|_| MultisigError::InvalidKeyImage(i))?;
-
-      // Add their share to the image
-      image += share;
-    }
-
-    Ok(image)
+pub fn verify_share(
+  view: &ParamsView<Ed25519>,
+  l: usize,
+  share: &[u8]
+) -> Result<(EdwardsPoint, Vec<u8>), MultisigError> {
+  if share.len() < 96 {
+    Err(MultisigError::InvalidDLEqProof(l))?;
   }
+  let image = CompressedEdwardsY(
+    share[0 .. 32].try_into().unwrap()
+  ).decompress().ok_or(MultisigError::InvalidKeyImage(l))?;
+  let proof = DLEqProof::deserialize(
+    &share[(share.len() - 64) .. share.len()]
+  ).ok_or(MultisigError::InvalidDLEqProof(l))?;
+  proof.verify(
+    l,
+    &hash_to_point(&view.group_key().0),
+    &view.verification_share(l),
+    &image
+  ).map_err(|_| MultisigError::InvalidKeyImage(l))?;
+
+  Ok((image, share[32 .. (share.len() - 64)].to_vec()))
 }

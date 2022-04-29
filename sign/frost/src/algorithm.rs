@@ -16,7 +16,6 @@ pub trait Algorithm<C: Curve>: Clone {
 
   /// Generate an addendum to FROST"s preprocessing stage
   fn preprocess_addendum<R: RngCore + CryptoRng>(
-    &mut self,
     rng: &mut R,
     params: &sign::ParamsView<C>,
     nonces: &[C::F; 2],
@@ -100,7 +99,6 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   }
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
-    &mut self,
     _: &mut R,
     _: &sign::ParamsView<C>,
     _: &[C::F; 2],

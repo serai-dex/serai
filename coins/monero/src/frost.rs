@@ -26,8 +26,8 @@ use crate::random_scalar;
 pub enum MultisigError {
   #[error("internal error ({0})")]
   InternalError(String),
-  #[error("invalid discrete log equality proof")]
-  InvalidDLEqProof,
+  #[error("invalid discrete log equality proof {0}")]
+  InvalidDLEqProof(usize),
   #[error("invalid key image {0}")]
   InvalidKeyImage(usize)
 }
@@ -145,6 +145,7 @@ impl DLEqProof {
 
   pub fn verify(
     &self,
+    l: usize,
     H: &DPoint,
     primary: &DPoint,
     alt: &DPoint
@@ -165,7 +166,7 @@ impl DLEqProof {
 
     // Take the opportunity to ensure a lack of torsion in key images/randomness commitments
     if (!primary.is_torsion_free()) || (!alt.is_torsion_free()) || (c != expected_c) {
-      Err(MultisigError::InvalidDLEqProof)?;
+      Err(MultisigError::InvalidDLEqProof(l))?;
     }
 
     Ok(())

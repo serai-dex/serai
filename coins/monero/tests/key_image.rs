@@ -2,10 +2,14 @@
 
 use rand::{RngCore, rngs::OsRng};
 
+use curve25519_dalek::{traits::Identity, edwards::EdwardsPoint};
+
 use monero_serai::{frost::MultisigError, key_image};
 
+use ::frost::sign;
+
 mod frost;
-use crate::frost::{THRESHOLD, PARTICIPANTS, generate_keys};
+use crate::frost::{THRESHOLD, PARTICIPANTS, DummyAlgorithm, generate_keys};
 
 #[test]
 fn test() -> Result<(), MultisigError> {
@@ -18,23 +22,33 @@ fn test() -> Result<(), MultisigError> {
   }
   included.sort();
 
-  let mut packages = vec![];
-  packages.resize(PARTICIPANTS + 1, None);
-  for i in &included {
-    let i = *i;
-    packages[i] = Some(
-      (
-        keys[0].verification_shares()[i].0,
-        key_image::multisig(&mut OsRng, &keys[i - 1], &included)
-      )
-    );
+  let mut views = vec![];
+  let mut shares = vec![];
+  for i in 1 ..= PARTICIPANTS {
+    if included.contains(&i) {
+      // If they were included, include their view
+      views.push(sign::Params::new(DummyAlgorithm, keys[i - 1].clone(), &included).unwrap().view());
+      let share = key_image::generate_share(&mut OsRng, &views[i - 1]);
+      let mut serialized = share.0;
+      serialized.extend(b"abc");
+      serialized.extend(&share.1);
+      shares.push(serialized);
+    } else {
+      // If they weren't included, include dummy data
+      // Uses the view of someone actually included as Params::new verifies inclusion
+      views.push(sign::Params::new(DummyAlgorithm, keys[included[0] - 1].clone(), &included).unwrap().view());
+      shares.push(vec![]);
+    }
   }
 
-  for i in included {
-    let mut packages = packages.clone();
-    packages.push(None);
-    let package = packages.swap_remove(i).unwrap().1;
-    assert_eq!(image, package.resolve(packages).unwrap());
+  for i in &included {
+    let mut multi_image = EdwardsPoint::identity();
+    for l in &included {
+      let share = key_image::verify_share(&views[i - 1], *l, &shares[l - 1]).unwrap();
+      assert_eq!(share.1, b"abc");
+      multi_image += share.0;
+    }
+    assert_eq!(image, multi_image);
   }
 
   Ok(())

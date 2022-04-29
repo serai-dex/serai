@@ -1,5 +1,4 @@
-use rand::{RngCore, SeedableRng, rngs::OsRng};
-use rand_chacha::ChaCha12Rng;
+use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
@@ -8,7 +7,7 @@ use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, c
 #[cfg(feature = "multisig")]
 mod frost;
 #[cfg(feature = "multisig")]
-use crate::frost::{THRESHOLD, PARTICIPANTS, generate_keys, sign};
+use crate::frost::{generate_keys, sign};
 
 const RING_INDEX: u8 = 3;
 const RING_LEN: u64 = 11;
@@ -57,24 +56,9 @@ fn test_multisig() -> Result<(), MultisigError> {
   let (keys, group_private) = generate_keys();
   let t = keys[0].params().t();
 
-  let mut images = vec![];
-  images.resize(PARTICIPANTS + 1, None);
-  let included = (1 ..= THRESHOLD).collect::<Vec<usize>>();
-  for i in &included {
-    let i = *i;
-    images[i] = Some(
-      (
-        keys[0].verification_shares()[i].0,
-        key_image::multisig(&mut OsRng, &keys[i - 1], &included)
-      )
-    );
-  }
-
   let msg = [1; 32];
 
-  images.push(None);
-  let ki_used = images.swap_remove(1).unwrap().1;
-  let image = ki_used.resolve(images).unwrap();
+  let image = key_image::generate(&group_private.0);
 
   let randomness = random_scalar(&mut OsRng);
   let mut ring = vec![];
@@ -95,14 +79,13 @@ fn test_multisig() -> Result<(), MultisigError> {
   }
 
   let mut algorithms = Vec::with_capacity(t);
-  for _ in 1 ..= t {
+  for i in 1 ..= t {
     algorithms.push(
       clsag::Multisig::new(
-        &mut ChaCha12Rng::seed_from_u64(1),
-        msg,
         clsag::Input::new(image, ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
       ).unwrap()
     );
+    algorithms[i - 1].set_msg(msg);
   }
 
   let mut signatures = sign(algorithms, keys);

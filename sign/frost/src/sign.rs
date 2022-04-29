@@ -70,7 +70,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
     algorithm: A,
     keys: Rc<MultisigKeys<C>>,
     included: &[usize],
-) -> Result<Params<C, A>, FrostError> {
+  ) -> Result<Params<C, A>, FrostError> {
     let mut included = included.to_vec();
     (&mut included).sort_unstable();
 
@@ -126,6 +126,10 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn multisig_params(&self) -> MultisigParams {
     self.keys.params
   }
+
+  pub fn view(&self) -> ParamsView<C> {
+    self.view.clone()
+  }
 }
 
 struct PreprocessPackage<C: Curve> {
@@ -146,7 +150,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   serialized.extend(&C::G_to_bytes(&commitments[1]));
 
   serialized.extend(
-    &params.algorithm.preprocess_addendum(
+    &A::preprocess_addendum(
       rng,
       &params.view,
       &nonces

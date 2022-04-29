@@ -35,50 +35,44 @@ struct ClsagSignInterim {
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct Multisig {
-  seed: [u8; 32],
   b: Vec<u8>,
-  AH: dfg::EdwardsPoint,
+  AH0: dfg::EdwardsPoint,
+  AH1: dfg::EdwardsPoint,
 
-  msg: [u8; 32],
   input: Input,
 
+  msg: Option<[u8; 32]>,
   interim: Option<ClsagSignInterim>
 }
 
 impl Multisig {
-  pub fn new<R: RngCore + CryptoRng + SeedableRng>(
-    rng: &mut R,
-    msg: [u8; 32],
+  pub fn new(
     input: Input
   ) -> Result<Multisig, MultisigError> {
-    let mut seed = [0; 32];
-    rng.fill_bytes(&mut seed);
-
     Ok(
       Multisig {
-        seed,
         b: vec![],
-        AH: dfg::EdwardsPoint::identity(),
+        AH0: dfg::EdwardsPoint::identity(),
+        AH1: dfg::EdwardsPoint::identity(),
 
-        msg,
         input,
 
+        msg: None,
         interim: None
       }
     )
+  }
+
+  pub fn set_msg(
+    &mut self,
+    msg: [u8; 32]
+  ) {
+    self.msg = Some(msg);
   }
 }
 
 impl Algorithm<Ed25519> for Multisig {
   type Signature = (Clsag, EdwardsPoint);
-
-  fn context(&self) -> Vec<u8> {
-    let mut context = vec![];
-    context.extend(&self.seed);
-    context.extend(&self.msg);
-    context.extend(&self.input.context());
-    context
-  }
 
   // We arguably don't have to commit to at all thanks to xG and yG being committed to, both of
   // those being proven to have the same scalar as xH and yH, yet it doesn't hurt
@@ -95,8 +89,7 @@ impl Algorithm<Ed25519> for Multisig {
     let H = hash_to_point(&view.group_key().0);
     let h0 = nonces[0].0 * H;
     let h1 = nonces[1].0 * H;
-    // 32 + 32 + 64 + 64
-    let mut serialized = Vec::with_capacity(192);
+    let mut serialized = Vec::with_capacity(32 + 32 + 64 + 64);
     serialized.extend(h0.compress().to_bytes());
     serialized.extend(h1.compress().to_bytes());
     serialized.extend(&DLEqProof::prove(rng, &nonces[0].0, &H, &h0).serialize());
@@ -109,7 +102,6 @@ impl Algorithm<Ed25519> for Multisig {
     _: &ParamsView<Ed25519>,
     l: usize,
     commitments: &[dfg::EdwardsPoint; 2],
-    p: &dfg::Scalar,
     serialized: &[u8]
   ) -> Result<(), FrostError> {
     if serialized.len() != 192 {
@@ -121,6 +113,7 @@ impl Algorithm<Ed25519> for Multisig {
 
     let h0 = <Ed25519 as Curve>::G_from_slice(&serialized[0 .. 32]).map_err(|_| FrostError::InvalidCommitment(l))?;
     DLEqProof::deserialize(&serialized[64 .. 128]).ok_or(FrostError::InvalidCommitment(l))?.verify(
+      l,
       &alt,
       &commitments[0],
       &h0
@@ -128,6 +121,7 @@ impl Algorithm<Ed25519> for Multisig {
 
     let h1 = <Ed25519 as Curve>::G_from_slice(&serialized[32 .. 64]).map_err(|_| FrostError::InvalidCommitment(l))?;
     DLEqProof::deserialize(&serialized[128 .. 192]).ok_or(FrostError::InvalidCommitment(l))?.verify(
+      l,
       &alt,
       &commitments[1],
       &h1
@@ -135,9 +129,24 @@ impl Algorithm<Ed25519> for Multisig {
 
     self.b.extend(&l.to_le_bytes());
     self.b.extend(&serialized[0 .. 64]);
-    self.AH += h0 + (h1 * p);
+    self.AH0 += h0;
+    self.AH1 += h1;
 
     Ok(())
+  }
+
+  fn context(&self) -> Vec<u8> {
+    let mut context = vec![];
+    context.extend(&self.msg.unwrap());
+    context.extend(&self.input.context());
+    context
+  }
+
+  fn process_binding(
+    &mut self,
+    p: &dfg::Scalar,
+  ) {
+    self.AH0 += self.AH1 * p;
   }
 
   fn sign_share(
@@ -149,7 +158,9 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> dfg::Scalar {
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
-    // Uses a parent seed (part of context) as well just to enable further privacy options
+    // Uses the context as well to prevent passive observers of messages from being able to break
+    // privacy, as the context includes the index of the output in the ring, which can only be
+    // known if you have the view key and know which of the wallet's TXOs is being spent
     let mut seed = b"CLSAG_randomness".to_vec();
     seed.extend(&self.context());
     seed.extend(&self.b);
@@ -159,11 +170,11 @@ impl Algorithm<Ed25519> for Multisig {
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       &mut rng,
-      &self.msg,
+      &self.msg.unwrap(),
       &self.input,
       mask,
       nonce_sum.0,
-      self.AH.0
+      self.AH0.0
     );
     self.interim = Some(ClsagSignInterim { c: c * mu_P, s: c * mu_C * z, clsag, C_out });
 
@@ -182,7 +193,7 @@ impl Algorithm<Ed25519> for Multisig {
 
     let mut clsag = interim.clsag.clone();
     clsag.s[self.input.i] = Key { key: (sum.0 - interim.s).to_bytes() };
-    if verify(&clsag, &self.msg, self.input.image, &self.input.ring, interim.C_out) {
+    if verify(&clsag, &self.msg.unwrap(), self.input.image, &self.input.ring, interim.C_out) {
       return Some((clsag, interim.C_out));
     }
     return None;

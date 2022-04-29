@@ -71,13 +71,17 @@ impl Input {
 
   #[cfg(feature = "multisig")]
   pub fn context(&self) -> Vec<u8> {
+    // image is extraneous in practice as the image should be in the msg AND the addendum when TX
+    // signing. This just ensures CLSAG guarantees its integrity, even when others won't
     let mut context = self.image.compress().to_bytes().to_vec();
+    // Ring index
+    context.extend(&u8::try_from(self.i).unwrap().to_le_bytes());
+    // Ring
     for pair in &self.ring {
-      // Doesn't include mixins[i] as CLSAG doesn't care and won't be affected by it
+      // Doesn't include key offsets as CLSAG doesn't care and won't be affected by it
       context.extend(&pair[0].compress().to_bytes());
       context.extend(&pair[1].compress().to_bytes());
     }
-    context.extend(&u8::try_from(self.i).unwrap().to_le_bytes());
     // Doesn't include commitment as the above ring + index includes the commitment
     context
   }
