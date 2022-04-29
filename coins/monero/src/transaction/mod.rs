@@ -365,7 +365,7 @@ pub async fn send<R: RngCore + CryptoRng>(
   payments: &[(Address, u64)],
   change: Address,
   fee_per_byte: u64
-) -> Result<Hash, TransactionError> {
+) -> Result<Transaction, TransactionError> {
   let (_, mask_sum, mut tx) = prepare_outputs(
     &mut Preparation::Leader(rng),
     inputs,
@@ -386,7 +386,5 @@ pub async fn send<R: RngCore + CryptoRng>(
   prunable.Clsags = clsags.iter().map(|clsag| clsag.0.clone()).collect();
   prunable.pseudo_outs = clsags.iter().map(|clsag| Key { key: clsag.1.compress().to_bytes() }).collect();
   tx.rct_signatures.p = Some(prunable);
-
-  rpc.publish_transaction(&tx).await.map_err(|e| TransactionError::InvalidTransaction(e))?;
-  Ok(tx.hash())
+  Ok(tx)
 }

@@ -22,9 +22,6 @@ pub mod clsag;
 pub mod rpc;
 pub mod transaction;
 
-#[cfg(test)]
-mod tests;
-
 #[link(name = "wrapper")]
 extern "C" {
   pub(crate) fn free(ptr: *const u8);

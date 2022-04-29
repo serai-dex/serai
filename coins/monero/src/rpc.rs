@@ -21,9 +21,9 @@ use serde_json::json;
 use reqwest;
 
 #[derive(Deserialize, Debug)]
-struct EmptyResponse {}
+pub struct EmptyResponse {}
 #[derive(Deserialize, Debug)]
-struct JsonRpcResponse<T> {
+pub struct JsonRpcResponse<T> {
   result: T
 }
 
@@ -58,7 +58,7 @@ impl Rpc {
     Rpc(daemon)
   }
 
-  async fn rpc_call<
+  pub async fn rpc_call<
     Params: Serialize + Debug,
     Response: DeserializeOwned + Debug
   >(&self, method: &str, params: Option<Params>) -> Result<Response, RpcError> {
@@ -71,7 +71,7 @@ impl Rpc {
     self.call_tail(method, builder).await
   }
 
-  async fn bin_call<
+  pub async fn bin_call<
     Response: DeserializeOwned + Debug
   >(&self, method: &str, params: Vec<u8>) -> Result<Response, RpcError> {
     let client = reqwest::Client::new();
@@ -234,20 +234,6 @@ impl Rpc {
       Err(RpcError::InvalidTransaction)?;
     }
 
-    Ok(())
-  }
-
-  #[cfg(test)]
-  pub async fn mine_block(&self, address: String) -> Result<(), RpcError> {
-    let _: EmptyResponse = self.rpc_call("json_rpc", Some(json!({
-      "jsonrpc": "2.0",
-      "id": (),
-      "method": "generateblocks",
-      "params": {
-        "wallet_address": address,
-        "amount_of_blocks": 10
-      },
-    }))).await?;
     Ok(())
   }
 }
