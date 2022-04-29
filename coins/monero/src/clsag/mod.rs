@@ -1,6 +1,4 @@
 use rand_core::{RngCore, CryptoRng};
-use ff::Field;
-
 use thiserror::Error;
 
 use curve25519_dalek::{
@@ -171,7 +169,7 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
   let mut s = vec![];
   s.resize(n, Scalar::zero());
   while i != r {
-    s[i] = dalek_ff_group::Scalar::random(&mut *rng).0;
+    s[i] = random_scalar(&mut *rng);
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 

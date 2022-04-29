@@ -9,7 +9,6 @@ use curve25519_dalek::{
   edwards::EdwardsPoint
 };
 
-use ff::Field;
 use group::Group;
 use dalek_ff_group as dfg;
 use frost::{Curve, FrostError, algorithm::Algorithm, sign::ParamsView};
@@ -17,6 +16,7 @@ use frost::{Curve, FrostError, algorithm::Algorithm, sign::ParamsView};
 use monero::util::ringct::{Key, Clsag};
 
 use crate::{
+  random_scalar,
   hash_to_point,
   frost::{MultisigError, Ed25519, DLEqProof},
   clsag::{Input, sign_core, verify}
@@ -154,7 +154,7 @@ impl Algorithm<Ed25519> for Multisig {
     seed.extend(&self.context());
     seed.extend(&self.b);
     let mut rng = ChaCha12Rng::from_seed(Blake2b512::digest(seed)[0 .. 32].try_into().unwrap());
-    let mask = dfg::Scalar::random(&mut rng).0;
+    let mask = random_scalar(&mut rng);
 
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(

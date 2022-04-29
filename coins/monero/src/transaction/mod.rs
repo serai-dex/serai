@@ -1,5 +1,8 @@
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha12Rng;
 use thiserror::Error;
+
+use blake2::{Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -18,7 +21,7 @@ use monero::{
   },
   util::{
     key::PublicKey,
-    ringct::{Key, CtKey, EcdhInfo, RctType, RctSigBase, RctSigPrunable, RctSig},
+    ringct::{Key, CtKey, EcdhInfo, Bulletproof, RctType, RctSigBase, RctSigPrunable, RctSig},
     address::Address
   }
 };
@@ -33,8 +36,15 @@ use crate::{
 
 mod mixins;
 
+#[cfg(feature = "multisig")]
+mod multisig;
+#[cfg(feature = "multisig")]
+pub use multisig::Multisig;
+
 #[derive(Error, Debug)]
 pub enum TransactionError {
+  #[error("invalid preparation ({0})")]
+  InvalidPreparation(String),
   #[error("no inputs")]
   NoInputs,
   #[error("too many outputs")]
@@ -59,7 +69,7 @@ pub struct SpendableOutput {
   pub commitment: Commitment
 }
 
-pub fn scan_tx(tx: &Transaction, view: Scalar, spend: EdwardsPoint) -> Vec<SpendableOutput> {
+pub fn scan(tx: &Transaction, view: Scalar, spend: EdwardsPoint) -> Vec<SpendableOutput> {
   let mut pubkeys = vec![];
   if tx.tx_pubkey().is_some() {
     pubkeys.push(tx.tx_pubkey().unwrap());
@@ -150,7 +160,11 @@ struct Output {
 }
 
 impl Output {
-  pub fn new<R: RngCore + CryptoRng>(rng: &mut R, output: (Address, u64), o: usize) -> Result<Output, TransactionError> {
+  pub fn new<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    output: (Address, u64),
+    o: usize
+  ) -> Result<Output, TransactionError> {
     let r = random_scalar(rng);
     let shared_key = shared_key(
       r,
@@ -171,6 +185,178 @@ impl Output {
   }
 }
 
+enum Preparation<'a, R: RngCore + CryptoRng> {
+  Leader(&'a mut R),
+  Follower([u8; 32], Bulletproof)
+}
+
+fn prepare_outputs<'a, R: RngCore + CryptoRng>(
+  prep: &mut Preparation<'a, R>,
+  inputs: &[SpendableOutput],
+  payments: &[(Address, u64)],
+  change: Address,
+  fee_per_byte: u64
+) -> Result<(Vec<u8>, Scalar, Transaction), TransactionError> {
+  let fee = fee_per_byte * 2000; // TODO
+
+  // TODO TX MAX SIZE
+
+  // Make sure we have enough funds
+  let in_amount = inputs.iter().map(|input| input.commitment.amount).sum();
+  let out_amount = fee + payments.iter().map(|payment| payment.1).sum::<u64>();
+  if in_amount < out_amount {
+    Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
+  }
+
+  // Add the change output
+  let mut payments = payments.to_vec();
+  payments.push((change, in_amount - out_amount));
+
+  // Grab the prep
+  let mut entropy = [0; 32];
+  let mut bp = None;
+  match prep {
+    Preparation::Leader(ref mut rng) => {
+      // The Leader generates the entropy for the one time keys and the bulletproof
+      rng.fill_bytes(&mut entropy);
+    },
+    Preparation::Follower(e, b) => {
+      entropy = e.clone();
+      bp = Some(b.clone());
+    }
+  }
+
+  let mut seed = b"StealthAddress_randomness".to_vec();
+  // Leader selected entropy to prevent de-anonymization via recalculation of randomness
+  seed.extend(&entropy);
+  // This output can only be spent once. Therefore, it forces all one time keys used here to be
+  // unique, even if the leader reuses entropy. While another transaction could use a different
+  // input ordering to swap which 0 is, that input set can't contain this input without being a
+  // double spend
+  seed.extend(&inputs[0].tx.0);
+  seed.extend(&inputs[0].o.to_le_bytes());
+  let mut rng = ChaCha12Rng::from_seed(Blake2b512::digest(seed)[0 .. 32].try_into().unwrap());
+
+  let mut outputs = Vec::with_capacity(payments.len());
+  let mut commitments = Vec::with_capacity(payments.len());
+  for o in 0 .. payments.len() {
+    outputs.push(Output::new(&mut rng, payments[o], o)?);
+    commitments.push(Commitment::new(outputs[o].mask, payments[o].1));
+  }
+
+  if bp.is_none() {
+    // Generate the bulletproof if leader
+    bp = Some(bulletproofs::generate(&commitments)?);
+  } else {
+    // Verify the bulletproof if follower
+    if !bulletproofs::verify(
+      bp.as_ref().unwrap(),
+      &commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()
+    ) {
+      Err(TransactionError::InvalidPreparation("invalid bulletproof".to_string()))?;
+    }
+  }
+
+  // Create the TX extra
+  let mut extra = ExtraField(vec![
+    SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
+  ]);
+  extra.0.push(SubField::AdditionalPublickKey(
+    outputs[1 .. outputs.len()].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
+  ));
+
+  // Format it for monero-rs
+  let mut mrs_outputs = Vec::with_capacity(outputs.len());
+  let mut out_pk = Vec::with_capacity(outputs.len());
+  let mut ecdh_info = Vec::with_capacity(outputs.len());
+  for o in 0 .. outputs.len() {
+    mrs_outputs.push(TxOut {
+      amount: VarInt(0),
+      target: TxOutTarget::ToKey { key: PublicKey { point: outputs[o].dest.compress() } }
+    });
+    out_pk.push(CtKey {
+      mask: Key { key: commitments[o].calculate().compress().to_bytes() }
+    });
+    ecdh_info.push(EcdhInfo::Bulletproof { amount: outputs[o].amount });
+  }
+
+  Ok((
+    match prep {
+      // Encode the prep
+      Preparation::Leader(..) => {
+        let mut prep = entropy.to_vec();
+        bp.as_ref().unwrap().consensus_encode(&mut prep).expect("Couldn't encode bulletproof");
+        prep
+      },
+      Preparation::Follower(..) => {
+        vec![]
+      }
+    },
+    outputs.iter().map(|output| output.mask).sum(),
+    Transaction {
+      prefix: TransactionPrefix {
+        version: VarInt(2),
+        unlock_time: VarInt(0),
+        inputs: vec![],
+        outputs: mrs_outputs,
+        extra
+      },
+      signatures: vec![],
+      rct_signatures: RctSig {
+        sig: Some(RctSigBase {
+          rct_type: RctType::Clsag,
+          txn_fee: VarInt(fee),
+          pseudo_outs: vec![],
+          ecdh_info,
+          out_pk
+        }),
+        p: Some(RctSigPrunable {
+          range_sigs: vec![],
+          bulletproofs: vec![bp.unwrap()],
+          MGs: vec![],
+          Clsags: vec![],
+          pseudo_outs: vec![]
+        })
+      }
+    }
+  ))
+}
+
+async fn prepare_inputs(
+  rpc: &Rpc,
+  spend: &Scalar,
+  inputs: &[SpendableOutput],
+  tx: &mut Transaction
+) -> Result<Vec<(Scalar, clsag::Input)>, TransactionError> {
+  let mut mixins = Vec::with_capacity(inputs.len());
+  let mut signable = Vec::with_capacity(inputs.len());
+  for (i, input) in inputs.iter().enumerate() {
+    // Select mixins
+    let (m, mix) = mixins::select(
+      rpc.get_o_indexes(input.tx).await.map_err(|e| TransactionError::RpcError(e))?[input.o]
+    );
+    mixins.push(mix);
+
+    signable.push((
+      spend + input.key_offset,
+      clsag::Input::new(
+        key_image::generate(&(spend + input.key_offset)),
+        rpc.get_ring(&mixins[i]).await.map_err(|e| TransactionError::RpcError(e))?,
+        m,
+        input.commitment
+      ).map_err(|e| TransactionError::ClsagError(e))?
+    ));
+
+    tx.prefix.inputs.push(TxIn::ToKey {
+      amount: VarInt(0),
+      key_offsets: mixins::offset(&mixins[i]).iter().map(|x| VarInt(*x)).collect(),
+      k_image: KeyImage { image: Hash(signable[i].1.image.compress().to_bytes()) }
+    });
+  }
+
+  Ok(signable)
+}
+
 pub async fn send<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
@@ -180,112 +366,23 @@ pub async fn send<R: RngCore + CryptoRng>(
   change: Address,
   fee_per_byte: u64
 ) -> Result<Hash, TransactionError> {
-  let fee = fee_per_byte * 2000; // TODO
-
-  // TODO TX MAX SIZE
-
-  let mut in_amount = 0;
-  for input in inputs {
-    in_amount += input.commitment.amount;
-  }
-  let mut out_amount = fee;
-  for payment in payments {
-    out_amount += payment.1
-  }
-  if in_amount < out_amount {
-    Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
-  }
-
-  // Handle outputs
-  let mut payments = payments.to_vec();
-  payments.push((change, in_amount - out_amount));
-  let mut outputs = Vec::with_capacity(payments.len());
-  for o in 0 .. payments.len() {
-    outputs.push(Output::new(&mut *rng, payments[o], o)?);
-  }
-
-  let bp = bulletproofs::generate(
-    outputs.iter().enumerate().map(|(o, output)| Commitment::new(output.mask, payments[o].1)).collect()
+  let (_, mask_sum, mut tx) = prepare_outputs(
+    &mut Preparation::Leader(rng),
+    inputs,
+    payments,
+    change,
+    fee_per_byte
   )?;
 
-  let mut extra = ExtraField(vec![
-    SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
-  ]);
-  extra.0.push(SubField::AdditionalPublickKey(
-    outputs[1 .. outputs.len()].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
-  ));
-
-  // Handle inputs
-  let mut mixins = Vec::with_capacity(inputs.len());
-  let mut signable = Vec::with_capacity(inputs.len());
-  for (i, input) in inputs.iter().enumerate() {
-    let (m, mix) = mixins::select(
-      rpc.get_o_indexes(input.tx).await.map_err(|e| TransactionError::RpcError(e))?[input.o]
-    );
-    mixins.push(mix);
-    signable.push((
-      spend + input.key_offset,
-      clsag::Input::new(
-        key_image::generate(&(spend + input.key_offset)),
-        rpc.get_ring(&mixins[i]).await.map_err(|e| TransactionError::RpcError(e))?,
-        m,
-        input.commitment
-    ).map_err(|e| TransactionError::ClsagError(e))?
-    ));
-  }
-
-  let prefix = TransactionPrefix {
-    version: VarInt(2),
-    unlock_time: VarInt(0),
-    inputs: signable.iter().enumerate().map(|(i, input)| TxIn::ToKey {
-      amount: VarInt(0),
-      key_offsets: mixins::offset(&mixins[i]).iter().map(|x| VarInt(*x)).collect(),
-      k_image: KeyImage {
-        image: Hash(input.1.image.compress().to_bytes())
-      }
-    }).collect(),
-    outputs: outputs.iter().map(|output| TxOut {
-      amount: VarInt(0),
-      target: TxOutTarget::ToKey { key: PublicKey { point: output.dest.compress() } }
-    }).collect(),
-    extra
-  };
-
-  let base = RctSigBase {
-    rct_type: RctType::Clsag,
-    txn_fee: VarInt(fee),
-    pseudo_outs: vec![],
-    ecdh_info: outputs.iter().map(|output| EcdhInfo::Bulletproof { amount: output.amount }).collect(),
-    out_pk: outputs.iter().enumerate().map(|(o, output)| CtKey {
-      mask: Key {
-        key: Commitment::new(output.mask, payments[o].1).calculate().compress().to_bytes()
-      }
-    }).collect()
-  };
-
-  let mut prunable = RctSigPrunable {
-    range_sigs: vec![],
-    bulletproofs: vec![bp],
-    MGs: vec![],
-    Clsags: vec![],
-    pseudo_outs: vec![]
-  };
-
-  let mut tx = Transaction {
-    prefix,
-    signatures: vec![],
-    rct_signatures: RctSig {
-      sig: Some(base),
-      p: Some(prunable.clone())
-    }
-  };
+  let signable = prepare_inputs(rpc, spend, inputs, &mut tx).await?;
 
   let clsags = clsag::sign(
     rng,
     tx.signature_hash().expect("Couldn't get the signature hash").0,
     &signable,
-    outputs.iter().map(|output| output.mask).sum()
+    mask_sum
   ).ok_or(TransactionError::NoInputs)?;
+  let mut prunable = tx.rct_signatures.p.unwrap();
   prunable.Clsags = clsags.iter().map(|clsag| clsag.0.clone()).collect();
   prunable.pseudo_outs = clsags.iter().map(|clsag| Key { key: clsag.1.compress().to_bytes() }).collect();
   tx.rct_signatures.p = Some(prunable);

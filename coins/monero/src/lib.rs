@@ -22,11 +22,18 @@ pub mod clsag;
 pub mod rpc;
 pub mod transaction;
 
+#[cfg(test)]
+mod tests;
+
 #[link(name = "wrapper")]
 extern "C" {
   pub(crate) fn free(ptr: *const u8);
   fn c_hash_to_point(point: *const u8);
-  pub(crate) fn c_gen_bp(len: u8, a: *const u64, m: *const [u8; 32]) -> *const u8;
+  pub(crate) fn c_generate_bp(len: u8, amounts: *const u64, masks: *const [u8; 32]) -> *const u8;
+  pub(crate) fn c_verify_bp(
+    serialized_len: usize, serialized: *const u8,
+    commitments_len: u8, commitments: *const [u8; 32]
+  ) -> bool;
   pub(crate) fn c_verify_clsag(
     serialized_len: usize, serialized: *const u8, I: *const u8,
     ring_size: u8, ring: *const u8, msg: *const u8, pseudo_out: *const u8

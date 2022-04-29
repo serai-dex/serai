@@ -12,7 +12,7 @@ extern "C" {
     ge_p3_tobytes(point, &e_p3);
   }
 
-  uint8_t* c_gen_bp(uint8_t len, uint64_t* a, uint8_t* m) {
+  uint8_t* c_generate_bp(uint8_t len, uint64_t* a, uint8_t* m) {
     rct::keyV masks;
     std::vector<uint64_t> amounts;
     masks.resize(len);
@@ -31,6 +31,26 @@ extern "C" {
     res[0] = ss.str().size() >> 8;
     res[1] = ss.str().size() & 255;
     return res;
+  }
+
+  bool c_verify_bp(uint s_len, uint8_t* s, uint8_t c_len, uint8_t* c) {
+    rct::Bulletproof bp;
+    std::stringstream ss;
+    std::string str;
+    str.assign((char*) s, (size_t) s_len);
+    ss << str;
+    binary_archive<false> ba(ss);
+    ::serialization::serialize(ba, bp);
+    if (!ss.good()) {
+      return false;
+    }
+
+    bp.V.resize(c_len);
+    for (uint8_t i = 0; i < c_len; i++) {
+      memcpy(bp.V[i].bytes, &c[i * 32], 32);
+    }
+
+    try { return rct::bulletproof_VERIFY(bp); } catch(...) { return false; }
   }
 
   bool c_verify_clsag(uint s_len, uint8_t* s, uint8_t* I, uint8_t k_len, uint8_t* k, uint8_t* m, uint8_t* p) {
@@ -59,6 +79,6 @@ extern "C" {
     rct::key pseudo_out;
     memcpy(pseudo_out.bytes, p, 32);
 
-    return verRctCLSAGSimple(msg, clsag, keys, pseudo_out);
+    try { return verRctCLSAGSimple(msg, clsag, keys, pseudo_out); } catch(...) { return false; }
   }
 }
