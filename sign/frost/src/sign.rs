@@ -138,7 +138,7 @@ struct PreprocessPackage<C: Curve> {
 // a simpler UX
 fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
-  params: &Params<C, A>,
+  params: &mut Params<C, A>,
 ) -> PreprocessPackage<C> {
   let nonces = [C::F::random(&mut *rng), C::F::random(&mut *rng)];
   let commitments = [C::generator_table() * nonces[0], C::generator_table() * nonces[1]];
@@ -146,7 +146,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   serialized.extend(&C::G_to_bytes(&commitments[1]));
 
   serialized.extend(
-    &A::preprocess_addendum(
+    &params.algorithm.preprocess_addendum(
       rng,
       &params.view,
       &nonces
@@ -187,22 +187,18 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   }
 
   let commitments_len = C::G_len() * 2;
+  // Allow algorithms to commit to more data than just the included nonces
+  // Not IETF draft compliant yet it doesn't prevent a compliant Schnorr algorithm from being used
+  // with this library, which does ship one
   let commit_len = commitments_len + A::addendum_commit_len();
   #[allow(non_snake_case)]
   let mut B = Vec::with_capacity(multisig_params.n + 1);
   B.push(None);
 
   // Commitments + a presumed 32-byte hash of the message
-  let mut b: Vec<u8> = Vec::with_capacity((multisig_params.n * 2 * C::G_len()) + 32);
+  let mut b: Vec<u8> = Vec::with_capacity((multisig_params.t * 2 * C::G_len()) + 32);
 
-  // If the offset functionality provided by this library is in use, include it in the binding
-  // factor
-  if params.keys.offset.is_some() {
-    b.extend(&C::F_to_le_bytes(&params.keys.offset.unwrap()));
-  }
-  // Also include any context the algorithm may want to specify
-  b.extend(&params.algorithm.context());
-
+  // Parse the commitments and prepare the binding factor
   for l in 1 ..= multisig_params.n {
     if l == multisig_params.i {
       if commitments[l].is_some() {
@@ -244,16 +240,13 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     b.extend(&commitments[0 .. commit_len]);
   }
 
-  b.extend(&C::hash_msg(&msg));
-  let b = C::hash_to_F(&b);
-
+  // Process the commitments and addendums
   let view = &params.view;
   for l in &params.view.included {
     params.algorithm.process_addendum(
       view,
       *l,
       B[*l].as_ref().unwrap(),
-      &b,
       if *l == multisig_params.i {
         &our_preprocess.serialized[commitments_len .. our_preprocess.serialized.len()]
       } else {
@@ -263,6 +256,34 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
       }
     )?;
   }
+
+  // Finish the binding factor
+  b.extend(&C::hash_msg(&msg));
+
+  // If the following are used with certain lengths, it is possible to craft distinct
+  // commitments/messages/contexts with the same binding factor. While we can't length prefix the
+  // commitments, unfortunately, we can tag and length prefix the following
+
+  // If the offset functionality provided by this library is in use, include it in the binding
+  // factor. Not compliant with the IETF spec which doesn't have a concept of offsets
+  if params.keys.offset.is_some() {
+    b.extend(b"offset");
+    b.extend(u64::try_from(C::F_len()).unwrap().to_le_bytes());
+    b.extend(&C::F_to_le_bytes(&params.keys.offset.unwrap()));
+  }
+
+  // Also include any context the algorithm may want to specify. Again not compliant with the IETF
+  // spec which doesn't considered there may be signatures other than Schnorr being generated with
+  // FROST
+  let context = params.algorithm.context();
+  if context.len() != 0 {
+    b.extend(b"context");
+    b.extend(u64::try_from(context.len()).unwrap().to_le_bytes());
+    b.extend(&context);
+  }
+
+  let b = C::hash_to_F(&b);
+  params.algorithm.process_binding(&b);
 
   #[allow(non_snake_case)]
   let mut Ris = vec![];
@@ -405,7 +426,7 @@ impl<C: Curve, A: Algorithm<C>> StateMachine<C, A> {
     if self.state != State::Fresh {
       Err(FrostError::InvalidSignTransition(State::Fresh, self.state))?;
     }
-    let preprocess = preprocess::<R, C, A>(rng, &self.params);
+    let preprocess = preprocess::<R, C, A>(rng, &mut self.params);
     let serialized = preprocess.serialized.clone();
     self.preprocess = Some(preprocess);
     self.state = State::Preprocessed;

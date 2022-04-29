@@ -11,14 +11,12 @@ pub trait Algorithm<C: Curve>: Clone {
   /// The resulting type of the signatures this algorithm will produce
   type Signature: Clone + Debug;
 
-  /// Context for this algorithm to be hashed into b, and therefore committed to
-  fn context(&self) -> Vec<u8>;
-
   /// The amount of bytes from each participant's addendum to commit to
   fn addendum_commit_len() -> usize;
 
   /// Generate an addendum to FROST"s preprocessing stage
   fn preprocess_addendum<R: RngCore + CryptoRng>(
+    &mut self,
     rng: &mut R,
     params: &sign::ParamsView<C>,
     nonces: &[C::F; 2],
@@ -30,9 +28,14 @@ pub trait Algorithm<C: Curve>: Clone {
     params: &sign::ParamsView<C>,
     l: usize,
     commitments: &[C::G; 2],
-    p: &C::F,
     serialized: &[u8],
   ) -> Result<(), FrostError>;
+
+  /// Context for this algorithm to be hashed into b, and therefore committed to
+  fn context(&self) -> Vec<u8>;
+
+  /// Process the binding factor generated from all the committed to data
+  fn process_binding(&mut self, p: &C::F);
 
   /// Sign a share with the given secret/nonce
   /// The secret will already have been its lagrange coefficient applied so it is the necessary
@@ -92,15 +95,12 @@ pub struct SchnorrSignature<C: Curve> {
 impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   type Signature = SchnorrSignature<C>;
 
-  fn context(&self) -> Vec<u8> {
-    vec![]
-  }
-
   fn addendum_commit_len() -> usize {
     0
   }
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
+    &mut self,
     _: &mut R,
     _: &sign::ParamsView<C>,
     _: &[C::F; 2],
@@ -113,11 +113,16 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     _: &sign::ParamsView<C>,
     _: usize,
     _: &[C::G; 2],
-    _: &C::F,
     _: &[u8],
   ) -> Result<(), FrostError> {
     Ok(())
   }
+
+  fn context(&self) -> Vec<u8> {
+    vec![]
+  }
+
+  fn process_binding(&mut self, _: &C::F) {}
 
   fn sign_share(
     &mut self,
