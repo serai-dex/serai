@@ -1,20 +1,25 @@
 #![cfg(feature = "multisig")]
 
-use rand::rngs::OsRng;
+use rand::{RngCore, rngs::OsRng};
 
 use monero_serai::{frost::MultisigError, key_image};
 
 mod frost;
-use crate::frost::generate_keys;
+use crate::frost::{THRESHOLD, PARTICIPANTS, generate_keys};
 
 #[test]
 fn test() -> Result<(), MultisigError> {
-  let (keys, group_private) = generate_keys(3, 5);
+  let (keys, group_private) = generate_keys();
   let image = key_image::generate(&group_private);
 
+  let mut included = (1 ..= PARTICIPANTS).into_iter().collect::<Vec<usize>>();
+  while included.len() > THRESHOLD {
+    included.swap_remove((OsRng.next_u64() as usize) % included.len());
+  }
+  included.sort();
+
   let mut packages = vec![];
-  packages.resize(5 + 1, None);
-  let included = vec![1, 3, 4];
+  packages.resize(PARTICIPANTS + 1, None);
   for i in &included {
     let i = *i;
     packages[i] = Some(

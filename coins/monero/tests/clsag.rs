@@ -6,17 +6,9 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, clsag};
 
 #[cfg(feature = "multisig")]
-use ::frost::sign;
-
-#[cfg(feature = "multisig")]
 mod frost;
 #[cfg(feature = "multisig")]
-use crate::frost::generate_keys;
-
-#[cfg(feature = "multisig")]
-const THRESHOLD: usize = 5;
-#[cfg(feature = "multisig")]
-const PARTICIPANTS: usize = 8;
+use crate::frost::{THRESHOLD, PARTICIPANTS, generate_keys, sign};
 
 const RING_INDEX: u8 = 3;
 const RING_LEN: u64 = 11;
@@ -62,7 +54,7 @@ fn test_single() {
 #[cfg(feature = "multisig")]
 #[test]
 fn test_multisig() -> Result<(), MultisigError> {
-  let (keys, group_private) = generate_keys(THRESHOLD, PARTICIPANTS);
+  let (keys, group_private) = generate_keys();
   let t = keys[0].params().t();
 
   let mut images = vec![];
@@ -102,59 +94,26 @@ fn test_multisig() -> Result<(), MultisigError> {
     ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
   }
 
-  let mut machines = vec![];
-  let mut commitments = Vec::with_capacity(PARTICIPANTS + 1);
-  commitments.resize(PARTICIPANTS + 1, None);
-  for i in 1 ..= t {
-    machines.push(
-      sign::StateMachine::new(
-        sign::Params::new(
-          clsag::Multisig::new(
-            &mut ChaCha12Rng::seed_from_u64(1),
-            msg,
-            clsag::Input::new(image, ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
-          ).unwrap(),
-          keys[i - 1].clone(),
-          &(1 ..= t).collect::<Vec<usize>>()
-        ).unwrap()
-      )
-    );
-    commitments[i] = Some(machines[i - 1].preprocess(&mut OsRng).unwrap());
-  }
-
-  let mut shares = Vec::with_capacity(PARTICIPANTS + 1);
-  shares.resize(PARTICIPANTS + 1, None);
-  for i in 1 ..= t {
-    shares[i] = Some(
-      machines[i - 1].sign(
-        &commitments
-          .iter()
-          .enumerate()
-          .map(|(idx, value)| if idx == i { None } else { value.to_owned() })
-          .collect::<Vec<Option<Vec<u8>>>>(),
-        &vec![]
+  let mut algorithms = Vec::with_capacity(t);
+  for _ in 1 ..= t {
+    algorithms.push(
+      clsag::Multisig::new(
+        &mut ChaCha12Rng::seed_from_u64(1),
+        msg,
+        clsag::Input::new(image, ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
       ).unwrap()
     );
   }
 
-  let mut signature = None;
-  for i in 1 ..= t {
-    // Multisig does call verify to ensure integrity upon complete, before checking individual key
-    // shares. For FROST Schnorr, it's cheaper. For CLSAG, it may be more expensive? Yet it ensures
-    // we have usable signatures, not just signatures we think are usable
-    let sig = machines[i - 1].complete(
-      &shares
-        .iter()
-        .enumerate()
-        .map(|(idx, value)| if idx == i { None } else { value.to_owned() })
-        .collect::<Vec<Option<Vec<u8>>>>()
-    ).unwrap();
-    if signature.is_none() {
-      signature = Some(sig.clone());
-    }
-    // Check the commitment out and the non-decoy s scalar are identical to every other signature
-    assert_eq!(sig.1, signature.as_ref().unwrap().1);
-    assert_eq!(sig.0.s[RING_INDEX as usize], signature.as_ref().unwrap().0.s[RING_INDEX as usize]);
+  let mut signatures = sign(algorithms, keys);
+  let signature = signatures.swap_remove(0);
+  for s in 0 .. (t - 1) {
+    // Verify the commitments and the non-decoy s scalar are identical to every other signature
+    // FROST will already have called verify on the produced signature, before checking individual
+    // key shares. For FROST Schnorr, it's cheaper. For CLSAG, it may be more expensive? Yet it
+    // ensures we have usable signatures, not just signatures we think are usable
+    assert_eq!(signatures[s].1, signature.1);
+    assert_eq!(signatures[s].0.s[RING_INDEX as usize], signature.0.s[RING_INDEX as usize]);
   }
 
   Ok(())
