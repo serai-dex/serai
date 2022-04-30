@@ -92,7 +92,7 @@ fn test_multisig() -> Result<(), MultisigError> {
   for i in 1 ..= t {
     machines.push(
       sign::AlgorithmMachine::new(
-        clsag::InputMultisig::new(
+        clsag::Multisig::new(
           clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
           TransactionData
         ).unwrap(),

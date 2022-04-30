@@ -24,7 +24,7 @@ use crate::{
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::{TransactionData, Multisig, InputMultisig};
+pub use multisig::{TransactionData, Multisig};
 
 #[derive(Error, Debug)]
 pub enum Error {
