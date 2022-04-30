@@ -2,11 +2,10 @@
 
 use std::rc::Rc;
 
-use rand_core::{RngCore, CryptoRng};
 use rand::rngs::OsRng;
 
 use ff::Field;
-use dalek_ff_group::{ED25519_BASEPOINT_TABLE, Scalar, EdwardsPoint};
+use dalek_ff_group::{ED25519_BASEPOINT_TABLE, Scalar};
 
 pub use frost::{
   FrostError, MultisigParams, MultisigKeys,
@@ -15,50 +14,8 @@ pub use frost::{
 
 use monero_serai::frost::Ed25519;
 
-pub const THRESHOLD: usize = 5;
-pub const PARTICIPANTS: usize = 8;
-
-#[derive(Clone)]
-pub struct DummyAlgorithm;
-impl Algorithm<Ed25519> for DummyAlgorithm {
-  type Signature = ();
-
-  fn addendum_commit_len() -> usize { unimplemented!() }
-
-  fn preprocess_addendum<R: RngCore + CryptoRng>(
-    _: &mut R,
-    _: &sign::ParamsView<Ed25519>,
-    _: &[Scalar; 2],
-  ) -> Vec<u8> { unimplemented!() }
-
-  fn process_addendum(
-    &mut self,
-    _: &sign::ParamsView<Ed25519>,
-    _: usize,
-    _: &[EdwardsPoint; 2],
-    _: &[u8],
-  ) -> Result<(), FrostError> { unimplemented!() }
-
-  fn context(&self) -> Vec<u8> { unimplemented!() }
-
-  fn sign_share(
-    &mut self,
-    _: &sign::ParamsView<Ed25519>,
-    _: EdwardsPoint,
-    _: Scalar,
-    _: Scalar,
-    _: &[u8],
-  ) -> Scalar { unimplemented!() }
-
-  fn verify(&self, _: EdwardsPoint, _: EdwardsPoint, _: Scalar) -> Option<Self::Signature> { unimplemented!() }
-
-  fn verify_share(
-    &self,
-    _: EdwardsPoint,
-    _: EdwardsPoint,
-    _: Scalar,
-  ) -> bool { unimplemented!() }
-}
+pub const THRESHOLD: usize = 3;
+pub const PARTICIPANTS: usize = 5;
 
 pub fn generate_keys() -> (Vec<Rc<MultisigKeys<Ed25519>>>, Scalar) {
   let mut params = vec![];

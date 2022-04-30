@@ -4,15 +4,13 @@ use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{traits::Identity, edwards::EdwardsPoint};
 
-use monero_serai::{frost::MultisigError, key_image};
-
-use ::frost::sign;
+use monero_serai::key_image;
 
 mod frost;
-use crate::frost::{THRESHOLD, PARTICIPANTS, DummyAlgorithm, generate_keys};
+use crate::frost::{THRESHOLD, PARTICIPANTS, generate_keys};
 
 #[test]
-fn test() -> Result<(), MultisigError> {
+fn test() {
   let (keys, group_private) = generate_keys();
   let image = key_image::generate(&group_private);
 
@@ -27,16 +25,16 @@ fn test() -> Result<(), MultisigError> {
   for i in 1 ..= PARTICIPANTS {
     if included.contains(&i) {
       // If they were included, include their view
-      views.push(sign::Params::new(DummyAlgorithm, keys[i - 1].clone(), &included).unwrap().view());
+      views.push(keys[i - 1].view(&included).unwrap());
       let share = key_image::generate_share(&mut OsRng, &views[i - 1]);
-      let mut serialized = share.0;
+      let mut serialized = share.0.compress().to_bytes().to_vec();
       serialized.extend(b"abc");
       serialized.extend(&share.1);
       shares.push(serialized);
     } else {
-      // If they weren't included, include dummy data
+      // If they weren't included, include dummy data to fill the Vec
       // Uses the view of someone actually included as Params::new verifies inclusion
-      views.push(sign::Params::new(DummyAlgorithm, keys[included[0] - 1].clone(), &included).unwrap().view());
+      views.push(keys[included[0] - 1].view(&included).unwrap());
       shares.push(vec![]);
     }
   }
@@ -50,6 +48,4 @@ fn test() -> Result<(), MultisigError> {
     }
     assert_eq!(image, multi_image);
   }
-
-  Ok(())
 }

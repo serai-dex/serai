@@ -1,4 +1,5 @@
 use core::fmt::Debug;
+use std::{rc::Rc, cell::RefCell};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -14,7 +15,7 @@ use curve25519_dalek::{
 
 use group::Group;
 use dalek_ff_group as dfg;
-use frost::{Curve, FrostError, algorithm::Algorithm, sign::ParamsView};
+use frost::{Curve, FrostError, algorithm::Algorithm, MultisigView};
 
 use monero::util::ringct::{Key, Clsag};
 
@@ -24,11 +25,6 @@ use crate::{
   key_image,
   clsag::{Input, sign_core, verify}
 };
-
-pub trait TransactionData: Clone + Debug {
-  fn msg(&self) -> [u8; 32];
-  fn mask_sum(&self) -> Scalar;
-}
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
@@ -42,23 +38,26 @@ struct ClsagSignInterim {
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-pub struct Multisig<D: TransactionData> {
+pub struct Multisig {
   entropy: Vec<u8>,
   AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
   input: Input,
 
   image: EdwardsPoint,
-  data: D,
+
+  msg: Rc<RefCell<[u8; 32]>>,
+  mask_sum: Rc<RefCell<Scalar>>,
 
   interim: Option<ClsagSignInterim>
 }
 
-impl<D: TransactionData> Multisig<D> {
+impl Multisig {
   pub fn new(
     input: Input,
-    data: D
-  ) -> Result<Multisig<D>, MultisigError> {
+    msg: Rc<RefCell<[u8; 32]>>,
+    mask_sum: Rc<RefCell<Scalar>>,
+  ) -> Result<Multisig, MultisigError> {
     Ok(
       Multisig {
         entropy: vec![],
@@ -67,38 +66,45 @@ impl<D: TransactionData> Multisig<D> {
         input,
 
         image: EdwardsPoint::identity(),
-        data,
+
+        msg,
+        mask_sum,
 
         interim: None
       }
     )
   }
+
+  pub fn serialized_len() -> usize {
+    3 * (32 + 64)
+  }
 }
 
-impl<D: TransactionData> Algorithm<Ed25519> for Multisig<D> {
+impl Algorithm<Ed25519> for Multisig {
   type Signature = (Clsag, EdwardsPoint);
 
   // We arguably don't have to commit to the nonces at all thanks to xG and yG being committed to,
   // both of those being proven to have the same scalar as xH and yH, yet it doesn't hurt
-  // As for the image, that should be committed to by the msg from TransactionData, yet putting it
-  // here as well ensures the security bounds of this
+  // As for the image, that should be committed to by the msg, yet putting it here as well ensures
+  // the security bounds of this
   fn addendum_commit_len() -> usize {
     3 * 32
   }
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     rng: &mut R,
-    view: &ParamsView<Ed25519>,
+    view: &MultisigView<Ed25519>,
     nonces: &[dfg::Scalar; 2]
   ) -> Vec<u8> {
-    let (mut serialized, proof) = key_image::generate_share(rng, view);
+    let (share, proof) = key_image::generate_share(rng, view);
 
     #[allow(non_snake_case)]
     let H = hash_to_point(&view.group_key().0);
     #[allow(non_snake_case)]
     let nH = (nonces[0].0 * H, nonces[1].0 * H);
 
-    serialized.reserve_exact(3 * (32 + 64));
+    let mut serialized = Vec::with_capacity(Multisig::serialized_len());
+    serialized.extend(share.compress().to_bytes());
     serialized.extend(nH.0.compress().to_bytes());
     serialized.extend(nH.1.compress().to_bytes());
     serialized.extend(&DLEqProof::prove(rng, &nonces[0].0, &H, &nH.0).serialize());
@@ -109,12 +115,12 @@ impl<D: TransactionData> Algorithm<Ed25519> for Multisig<D> {
 
   fn process_addendum(
     &mut self,
-    view: &ParamsView<Ed25519>,
+    view: &MultisigView<Ed25519>,
     l: usize,
     commitments: &[dfg::EdwardsPoint; 2],
     serialized: &[u8]
   ) -> Result<(), FrostError> {
-    if serialized.len() != (3 * (32 + 64)) {
+    if serialized.len() != Multisig::serialized_len() {
       // Not an optimal error but...
       Err(FrostError::InvalidCommitmentQuantity(l, 9, serialized.len() / 32))?;
     }
@@ -122,7 +128,7 @@ impl<D: TransactionData> Algorithm<Ed25519> for Multisig<D> {
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
     self.entropy.extend(&l.to_le_bytes());
-    self.entropy.extend(&serialized[0 .. (3 * 32)]);
+    self.entropy.extend(&serialized[0 .. Multisig::addendum_commit_len()]);
 
     let (share, serialized) = key_image::verify_share(view, l, serialized).map_err(|_| FrostError::InvalidShare(l))?;
     self.image += share;
@@ -154,19 +160,16 @@ impl<D: TransactionData> Algorithm<Ed25519> for Multisig<D> {
   }
 
   fn context(&self) -> Vec<u8> {
-    let mut context = vec![];
-    // This should be redundant as the image should be in the addendum if using Multisig and in msg
-    // if signing a Transaction, yet this ensures CLSAG takes responsibility for its own security
-    // boundaries
-    context.extend(&self.image.compress().to_bytes());
-    context.extend(&self.data.msg());
+    let mut context = Vec::with_capacity(32 + 32 + 1 + (2 * 11 * 32));
+    context.extend(&*self.msg.borrow());
+    context.extend(&self.mask_sum.borrow().to_bytes());
     context.extend(&self.input.context());
     context
   }
 
   fn sign_share(
     &mut self,
-    view: &ParamsView<Ed25519>,
+    view: &MultisigView<Ed25519>,
     nonce_sum: dfg::EdwardsPoint,
     b: dfg::Scalar,
     nonce: dfg::Scalar,
@@ -186,10 +189,10 @@ impl<D: TransactionData> Algorithm<Ed25519> for Multisig<D> {
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       &mut rng,
-      &self.data.msg(),
+      &self.msg.borrow(),
       &self.input,
       &self.image,
-      self.data.mask_sum(),
+      *self.mask_sum.borrow(),
       nonce_sum.0,
       self.AH.0.0
     );
@@ -210,7 +213,7 @@ impl<D: TransactionData> Algorithm<Ed25519> for Multisig<D> {
 
     let mut clsag = interim.clsag.clone();
     clsag.s[self.input.i] = Key { key: (sum.0 - interim.s).to_bytes() };
-    if verify(&clsag, &self.data.msg(), self.image, &self.input.ring, interim.C_out) {
+    if verify(&clsag, &self.msg.borrow(), self.image, &self.input.ring, interim.C_out) {
       return Some((clsag, interim.C_out));
     }
     return None;

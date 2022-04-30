@@ -4,7 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::Group;
 
-use crate::{Curve, FrostError, sign};
+use crate::{Curve, FrostError, MultisigView};
 
 /// Algorithm to use FROST with
 pub trait Algorithm<C: Curve>: Clone {
@@ -17,14 +17,14 @@ pub trait Algorithm<C: Curve>: Clone {
   /// Generate an addendum to FROST"s preprocessing stage
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     rng: &mut R,
-    params: &sign::ParamsView<C>,
+    params: &MultisigView<C>,
     nonces: &[C::F; 2],
   ) -> Vec<u8>;
 
   /// Proccess the addendum for the specified participant. Guaranteed to be ordered
   fn process_addendum(
     &mut self,
-    params: &sign::ParamsView<C>,
+    params: &MultisigView<C>,
     l: usize,
     commitments: &[C::G; 2],
     serialized: &[u8],
@@ -39,7 +39,7 @@ pub trait Algorithm<C: Curve>: Clone {
   /// The nonce will already have been processed into the combined form d + (e * p)
   fn sign_share(
     &mut self,
-    params: &sign::ParamsView<C>,
+    params: &MultisigView<C>,
     nonce_sum: C::G,
     b: C::F,
     nonce: C::F,
@@ -98,7 +98,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     _: &mut R,
-    _: &sign::ParamsView<C>,
+    _: &MultisigView<C>,
     _: &[C::F; 2],
   ) -> Vec<u8> {
     vec![]
@@ -106,7 +106,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
 
   fn process_addendum(
     &mut self,
-    _: &sign::ParamsView<C>,
+    _: &MultisigView<C>,
     _: usize,
     _: &[C::G; 2],
     _: &[u8],
@@ -120,7 +120,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
 
   fn sign_share(
     &mut self,
-    params: &sign::ParamsView<C>,
+    params: &MultisigView<C>,
     nonce_sum: C::G,
     _: C::F,
     nonce: C::F,

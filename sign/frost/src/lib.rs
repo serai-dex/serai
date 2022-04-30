@@ -1,6 +1,6 @@
 use core::{ops::Mul, fmt::Debug};
 
-use ff::PrimeField;
+use ff::{Field, PrimeField};
 use group::{Group, GroupOps, ScalarMul};
 
 use thiserror::Error;
@@ -8,6 +8,7 @@ use thiserror::Error;
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
+use sign::lagrange;
 
 /// Set of errors for curve-related operations, namely encoding and decoding
 #[derive(Error, Debug)]
@@ -190,6 +191,33 @@ pub enum FrostError {
   InternalError(String),
 }
 
+// View of keys passable to algorithm implementations
+#[derive(Clone)]
+pub struct MultisigView<C: Curve> {
+  group_key: C::G,
+  included: Vec<usize>,
+  secret_share: C::F,
+  verification_shares: Vec<C::G>,
+}
+
+impl<C: Curve> MultisigView<C> {
+  pub fn group_key(&self) -> C::G {
+    self.group_key
+  }
+
+  pub fn included(&self) -> Vec<usize> {
+    self.included.clone()
+  }
+
+  pub fn secret_share(&self) -> C::F {
+    self.secret_share
+  }
+
+  pub fn verification_share(&self, l: usize) -> C::G {
+    self.verification_shares[l]
+  }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct MultisigKeys<C: Curve> {
   /// Multisig Parameters
@@ -227,6 +255,30 @@ impl<C: Curve> MultisigKeys<C> {
 
   pub fn verification_shares(&self) -> Vec<C::G> {
     self.verification_shares.clone()
+  }
+
+  pub fn view(&self, included: &[usize]) -> Result<MultisigView<C>, FrostError> {
+    if (included.len() < self.params.t) || (self.params.n < included.len()) {
+      Err(FrostError::InvalidSigningSet("invalid amount of participants included".to_string()))?;
+    }
+
+    let secret_share = self.secret_share * lagrange::<C::F>(self.params.i, &included);
+    let (offset, offset_share) = if self.offset.is_some() {
+      let offset = self.offset.unwrap();
+      (offset, offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap())
+    } else {
+      (C::F::zero(), C::F::zero())
+    };
+
+    Ok(MultisigView {
+      group_key: self.group_key + (C::generator_table() * offset),
+      secret_share: secret_share + offset_share,
+      verification_shares: self.verification_shares.clone().iter().enumerate().map(
+        |(l, share)| (*share * lagrange::<C::F>(l, &included)) +
+                       (C::generator_table() * offset_share)
+      ).collect(),
+      included: included.to_vec(),
+    })
   }
 
   pub fn serialized_len(n: usize) -> usize {

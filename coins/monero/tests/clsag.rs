@@ -1,3 +1,5 @@
+use std::{rc::Rc, cell::RefCell};
+
 use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
@@ -51,20 +53,6 @@ fn test_single() {
 }
 
 #[cfg(feature = "multisig")]
-#[derive(Clone, Debug)]
-struct TransactionData;
-#[cfg(feature = "multisig")]
-impl clsag::TransactionData for TransactionData {
-  fn msg(&self) -> [u8; 32] {
-    [1; 32]
-  }
-
-  fn mask_sum(&self) -> Scalar {
-    Scalar::from(21u64)
-  }
-}
-
-#[cfg(feature = "multisig")]
 #[test]
 fn test_multisig() -> Result<(), MultisigError> {
   let (keys, group_private) = generate_keys();
@@ -94,7 +82,8 @@ fn test_multisig() -> Result<(), MultisigError> {
       sign::AlgorithmMachine::new(
         clsag::Multisig::new(
           clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
-          TransactionData
+          Rc::new(RefCell::new([1; 32])),
+          Rc::new(RefCell::new(Scalar::from(42u64)))
         ).unwrap(),
         keys[i - 1].clone(),
         &(1 ..= THRESHOLD).collect::<Vec<usize>>()

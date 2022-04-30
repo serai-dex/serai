@@ -1,4 +1,4 @@
-use core::{convert::{TryFrom, TryInto}, cmp::min, fmt};
+use core::{convert::TryFrom, cmp::min, fmt};
 use std::rc::Rc;
 
 use rand_core::{RngCore, CryptoRng};
@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 use ff::{Field, PrimeField};
 use group::Group;
 
-use crate::{Curve, MultisigParams, MultisigKeys, FrostError, algorithm::Algorithm};
+use crate::{Curve, FrostError, MultisigParams, MultisigKeys, MultisigView, algorithm::Algorithm};
 
 /// Calculate the lagrange coefficient
 pub fn lagrange<F: PrimeField>(
@@ -30,39 +30,12 @@ pub fn lagrange<F: PrimeField>(
   num * denom.invert().unwrap()
 }
 
-// View of params passable to algorithm implementations
-#[derive(Clone)]
-pub struct ParamsView<C: Curve> {
-  group_key: C::G,
-  included: Vec<usize>,
-  secret_share: C::F,
-  verification_shares: Vec<C::G>,
-}
-
-impl<C: Curve> ParamsView<C> {
-  pub fn group_key(&self) -> C::G {
-    self.group_key
-  }
-
-  pub fn included(&self) -> Vec<usize> {
-    self.included.clone()
-  }
-
-  pub fn secret_share(&self) -> C::F {
-    self.secret_share
-  }
-
-  pub fn verification_share(&self, l: usize) -> C::G {
-    self.verification_shares[l]
-  }
-}
-
 /// Pairing of an Algorithm with a MultisigKeys instance and this specific signing set
 #[derive(Clone)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
   algorithm: A,
   keys: Rc<MultisigKeys<C>>,
-  view: ParamsView<C>,
+  view: MultisigView<C>,
 }
 
 // Currently public to enable more complex operations as desired, yet solely used in testing
@@ -75,7 +48,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
     let mut included = included.to_vec();
     (&mut included).sort_unstable();
 
-    // included < threshold
+    // Included < threshold
     if included.len() < keys.params.t {
       Err(FrostError::InvalidSigningSet("not enough signers".to_string()))?;
     }
@@ -98,37 +71,15 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
       Err(FrostError::InvalidSigningSet("signing despite not being included".to_string()))?;
     }
 
-    let secret_share = keys.secret_share * lagrange::<C::F>(keys.params.i, &included);
-    let (offset, offset_share) = if keys.offset.is_some() {
-      let offset = keys.offset.unwrap();
-      (offset, offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap())
-    } else {
-      (C::F::zero(), C::F::zero())
-    };
-
-    Ok(
-      Params {
-        algorithm,
-        // Out of order arguments to prevent additional cloning
-        view: ParamsView {
-          group_key: keys.group_key + (C::generator_table() * offset),
-          secret_share: secret_share + offset_share,
-          verification_shares: keys.verification_shares.clone().iter().enumerate().map(
-            |(l, share)| (*share * lagrange::<C::F>(l, &included)) +
-                           (C::generator_table() * offset_share)
-          ).collect(),
-          included: included,
-        },
-        keys
-      }
-    )
+    // Out of order arguments to prevent additional cloning
+    Ok(Params { algorithm, view: keys.view(&included).unwrap(), keys })
   }
 
   pub fn multisig_params(&self) -> MultisigParams {
     self.keys.params
   }
 
-  pub fn view(&self) -> ParamsView<C> {
+  pub fn view(&self) -> MultisigView<C> {
     self.view.clone()
   }
 }

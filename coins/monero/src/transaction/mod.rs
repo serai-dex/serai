@@ -26,6 +26,9 @@ use monero::{
   }
 };
 
+#[cfg(feature = "multisig")]
+use frost::FrostError;
+
 use crate::{
   Commitment,
   random_scalar,
@@ -33,13 +36,12 @@ use crate::{
   key_image, bulletproofs, clsag,
   rpc::{Rpc, RpcError}
 };
+#[cfg(feature = "multisig")]
+use crate::frost::MultisigError;
 
 mod mixins;
-
 #[cfg(feature = "multisig")]
 mod multisig;
-#[cfg(feature = "multisig")]
-pub use multisig::Multisig;
 
 #[derive(Error, Debug)]
 pub enum TransactionError {
@@ -60,10 +62,16 @@ pub enum TransactionError {
   #[error("clsag error ({0})")]
   ClsagError(clsag::Error),
   #[error("invalid transaction ({0})")]
-  InvalidTransaction(RpcError)
+  InvalidTransaction(RpcError),
+  #[cfg(feature = "multisig")]
+  #[error("frost error {0}")]
+  FrostError(FrostError),
+  #[cfg(feature = "multisig")]
+  #[error("multisig error {0}")]
+  MultisigError(MultisigError)
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SpendableOutput {
   pub tx: Hash,
   pub o: usize,
@@ -192,157 +200,23 @@ enum Preparation<'a, R: RngCore + CryptoRng> {
   Follower([u8; 32], Bulletproof)
 }
 
-fn prepare_outputs<'a, R: RngCore + CryptoRng>(
-  prep: &mut Preparation<'a, R>,
-  inputs: &[SpendableOutput],
-  payments: &[(Address, u64)],
-  change: Address,
-  fee_per_byte: u64
-) -> Result<(Vec<u8>, Scalar, Transaction), TransactionError> {
-  let fee = fee_per_byte * 2000; // TODO
-
-  // TODO TX MAX SIZE
-
-  // Make sure we have enough funds
-  let in_amount = inputs.iter().map(|input| input.commitment.amount).sum();
-  let out_amount = fee + payments.iter().map(|payment| payment.1).sum::<u64>();
-  if in_amount < out_amount {
-    Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
-  }
-
-  // Add the change output
-  let mut payments = payments.to_vec();
-  payments.push((change, in_amount - out_amount));
-
-  // Grab the prep
-  let mut entropy = [0; 32];
-  let mut bp = None;
-  match prep {
-    Preparation::Leader(ref mut rng) => {
-      // The Leader generates the entropy for the one time keys and the bulletproof
-      rng.fill_bytes(&mut entropy);
-    },
-    Preparation::Follower(e, b) => {
-      entropy = e.clone();
-      bp = Some(b.clone());
-    }
-  }
-
-  let mut seed = b"StealthAddress_randomness".to_vec();
-  // Leader selected entropy to prevent de-anonymization via recalculation of randomness
-  seed.extend(&entropy);
-  // This output can only be spent once. Therefore, it forces all one time keys used here to be
-  // unique, even if the leader reuses entropy. While another transaction could use a different
-  // input ordering to swap which 0 is, that input set can't contain this input without being a
-  // double spend
-  seed.extend(&inputs[0].tx.0);
-  seed.extend(&inputs[0].o.to_le_bytes());
-  let mut rng = ChaCha12Rng::from_seed(Blake2b512::digest(seed)[0 .. 32].try_into().unwrap());
-
-  let mut outputs = Vec::with_capacity(payments.len());
-  let mut commitments = Vec::with_capacity(payments.len());
-  for o in 0 .. payments.len() {
-    outputs.push(Output::new(&mut rng, payments[o], o)?);
-    commitments.push(Commitment::new(outputs[o].mask, payments[o].1));
-  }
-
-  if bp.is_none() {
-    // Generate the bulletproof if leader
-    bp = Some(bulletproofs::generate(&commitments)?);
-  } else {
-    // Verify the bulletproof if follower
-    if !bulletproofs::verify(
-      bp.as_ref().unwrap(),
-      &commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()
-    ) {
-      Err(TransactionError::InvalidPreparation("invalid bulletproof".to_string()))?;
-    }
-  }
-
-  // Create the TX extra
-  let mut extra = ExtraField(vec![
-    SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
-  ]);
-  extra.0.push(SubField::AdditionalPublickKey(
-    outputs[1 .. outputs.len()].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
-  ));
-
-  // Format it for monero-rs
-  let mut mrs_outputs = Vec::with_capacity(outputs.len());
-  let mut out_pk = Vec::with_capacity(outputs.len());
-  let mut ecdh_info = Vec::with_capacity(outputs.len());
-  for o in 0 .. outputs.len() {
-    mrs_outputs.push(TxOut {
-      amount: VarInt(0),
-      target: TxOutTarget::ToKey { key: PublicKey { point: outputs[o].dest.compress() } }
-    });
-    out_pk.push(CtKey {
-      mask: Key { key: commitments[o].calculate().compress().to_bytes() }
-    });
-    ecdh_info.push(EcdhInfo::Bulletproof { amount: outputs[o].amount });
-  }
-
-  Ok((
-    match prep {
-      // Encode the prep
-      Preparation::Leader(..) => {
-        let mut prep = entropy.to_vec();
-        bp.as_ref().unwrap().consensus_encode(&mut prep).expect("Couldn't encode bulletproof");
-        prep
-      },
-      Preparation::Follower(..) => {
-        vec![]
-      }
-    },
-    outputs.iter().map(|output| output.mask).sum(),
-    Transaction {
-      prefix: TransactionPrefix {
-        version: VarInt(2),
-        unlock_time: VarInt(0),
-        inputs: vec![],
-        outputs: mrs_outputs,
-        extra
-      },
-      signatures: vec![],
-      rct_signatures: RctSig {
-        sig: Some(RctSigBase {
-          rct_type: RctType::Clsag,
-          txn_fee: VarInt(fee),
-          pseudo_outs: vec![],
-          ecdh_info,
-          out_pk
-        }),
-        p: Some(RctSigPrunable {
-          range_sigs: vec![],
-          bulletproofs: vec![bp.unwrap()],
-          MGs: vec![],
-          Clsags: vec![],
-          pseudo_outs: vec![]
-        })
-      }
-    }
-  ))
-}
-
 async fn prepare_inputs(
   rpc: &Rpc,
   spend: &Scalar,
   inputs: &[SpendableOutput],
   tx: &mut Transaction
 ) -> Result<Vec<(Scalar, clsag::Input, EdwardsPoint)>, TransactionError> {
-  let mut mixins = Vec::with_capacity(inputs.len());
   let mut signable = Vec::with_capacity(inputs.len());
   for (i, input) in inputs.iter().enumerate() {
     // Select mixins
-    let (m, mix) = mixins::select(
+    let (m, mixins) = mixins::select(
       rpc.get_o_indexes(input.tx).await.map_err(|e| TransactionError::RpcError(e))?[input.o]
     );
-    mixins.push(mix);
 
     signable.push((
       spend + input.key_offset,
       clsag::Input::new(
-        rpc.get_ring(&mixins[i]).await.map_err(|e| TransactionError::RpcError(e))?,
+        rpc.get_ring(&mixins).await.map_err(|e| TransactionError::RpcError(e))?,
         m,
         input.commitment
       ).map_err(|e| TransactionError::ClsagError(e))?,
@@ -351,7 +225,7 @@ async fn prepare_inputs(
 
     tx.prefix.inputs.push(TxIn::ToKey {
       amount: VarInt(0),
-      key_offsets: mixins::offset(&mixins[i]).iter().map(|x| VarInt(*x)).collect(),
+      key_offsets: mixins::offset(&mixins).iter().map(|x| VarInt(*x)).collect(),
       k_image: KeyImage { image: Hash(signable[i].2.compress().to_bytes()) }
     });
   }
@@ -390,19 +264,142 @@ impl SignableTransaction {
     )
   }
 
+  fn prepare_outputs<'a, R: RngCore + CryptoRng>(
+    &self,
+    prep: &mut Preparation<'a, R>
+  ) -> Result<(Vec<u8>, Scalar, Transaction), TransactionError> {
+    let fee = self.fee_per_byte * 2000; // TODO
+
+    // TODO TX MAX SIZE
+
+    // Make sure we have enough funds
+    let in_amount = self.inputs.iter().map(|input| input.commitment.amount).sum();
+    let out_amount = fee + self.payments.iter().map(|payment| payment.1).sum::<u64>();
+    if in_amount < out_amount {
+      Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
+    }
+
+    // Add the change output
+    let mut payments = self.payments.clone();
+    payments.push((self.change, in_amount - out_amount));
+
+    // Grab the prep
+    let mut entropy = [0; 32];
+    let mut bp = None;
+    match prep {
+      Preparation::Leader(ref mut rng) => {
+        // The Leader generates the entropy for the one time keys and the bulletproof
+        rng.fill_bytes(&mut entropy);
+      },
+      Preparation::Follower(e, b) => {
+        entropy = e.clone();
+        bp = Some(b.clone());
+      }
+    }
+
+    let mut seed = b"StealthAddress_randomness".to_vec();
+    // Leader selected entropy to prevent de-anonymization via recalculation of randomness
+    seed.extend(&entropy);
+    // This output can only be spent once. Therefore, it forces all one time keys used here to be
+    // unique, even if the leader reuses entropy. While another transaction could use a different
+    // input ordering to swap which 0 is, that input set can't contain this input without being a
+    // double spend
+    seed.extend(&self.inputs[0].tx.0);
+    seed.extend(&self.inputs[0].o.to_le_bytes());
+    let mut rng = ChaCha12Rng::from_seed(Blake2b512::digest(seed)[0 .. 32].try_into().unwrap());
+
+    let mut outputs = Vec::with_capacity(payments.len());
+    let mut commitments = Vec::with_capacity(payments.len());
+    for o in 0 .. payments.len() {
+      outputs.push(Output::new(&mut rng, payments[o], o)?);
+      commitments.push(Commitment::new(outputs[o].mask, payments[o].1));
+    }
+
+    if bp.is_none() {
+      // Generate the bulletproof if leader
+      bp = Some(bulletproofs::generate(&commitments)?);
+    } else {
+      // Verify the bulletproof if follower
+      if !bulletproofs::verify(
+        bp.as_ref().unwrap(),
+        &commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()
+      ) {
+        Err(TransactionError::InvalidPreparation("invalid bulletproof".to_string()))?;
+      }
+    }
+
+    // Create the TX extra
+    let mut extra = ExtraField(vec![
+      SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
+    ]);
+    extra.0.push(SubField::AdditionalPublickKey(
+      outputs[1 .. outputs.len()].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
+    ));
+
+    // Format it for monero-rs
+    let mut mrs_outputs = Vec::with_capacity(outputs.len());
+    let mut out_pk = Vec::with_capacity(outputs.len());
+    let mut ecdh_info = Vec::with_capacity(outputs.len());
+    for o in 0 .. outputs.len() {
+      mrs_outputs.push(TxOut {
+        amount: VarInt(0),
+        target: TxOutTarget::ToKey { key: PublicKey { point: outputs[o].dest.compress() } }
+      });
+      out_pk.push(CtKey {
+        mask: Key { key: commitments[o].calculate().compress().to_bytes() }
+      });
+      ecdh_info.push(EcdhInfo::Bulletproof { amount: outputs[o].amount });
+    }
+
+    Ok((
+      match prep {
+        // Encode the prep
+        Preparation::Leader(..) => {
+          let mut prep = entropy.to_vec();
+          bp.as_ref().unwrap().consensus_encode(&mut prep).expect("Couldn't encode bulletproof");
+          prep
+        },
+        Preparation::Follower(..) => {
+          vec![]
+        }
+      },
+      outputs.iter().map(|output| output.mask).sum(),
+      Transaction {
+        prefix: TransactionPrefix {
+          version: VarInt(2),
+          unlock_time: VarInt(0),
+          inputs: vec![],
+          outputs: mrs_outputs,
+          extra
+        },
+        signatures: vec![],
+        rct_signatures: RctSig {
+          sig: Some(RctSigBase {
+            rct_type: RctType::Clsag,
+            txn_fee: VarInt(fee),
+            pseudo_outs: vec![],
+            ecdh_info,
+            out_pk
+          }),
+          p: Some(RctSigPrunable {
+            range_sigs: vec![],
+            bulletproofs: vec![bp.unwrap()],
+            MGs: vec![],
+            Clsags: vec![],
+            pseudo_outs: vec![]
+          })
+        }
+      }
+    ))
+  }
+
   pub async fn sign<R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
     rpc: &Rpc,
     spend: &Scalar
   ) -> Result<Transaction, TransactionError> {
-    let (_, mask_sum, mut tx) = prepare_outputs(
-      &mut Preparation::Leader(rng),
-      &self.inputs,
-      &self.payments,
-      self.change,
-      self.fee_per_byte
-    )?;
+    let (_, mask_sum, mut tx) = self.prepare_outputs(&mut Preparation::Leader(rng))?;
 
     let signable = prepare_inputs(rpc, spend, &self.inputs, &mut tx).await?;
 

@@ -1,15 +1,15 @@
 use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
-use frost::sign::ParamsView;
+use frost::MultisigView;
 
 use crate::{hash_to_point, frost::{MultisigError, Ed25519, DLEqProof}};
 
 #[allow(non_snake_case)]
 pub fn generate_share<R: RngCore + CryptoRng>(
   rng: &mut R,
-  view: &ParamsView<Ed25519>
-) -> (Vec<u8>, Vec<u8>) {
+  view: &MultisigView<Ed25519>
+) -> (EdwardsPoint, Vec<u8>) {
   let H = hash_to_point(&view.group_key().0);
   let image = view.secret_share().0 * H;
   // Includes a proof. Since:
@@ -20,14 +20,11 @@ pub fn generate_share<R: RngCore + CryptoRng>(
   // lagranged_secret * G is known. lagranged_secret * H is being sent
   // Any discrete log equality proof confirms the same secret was used,
   // forming a valid key_image share
-  (
-    image.compress().to_bytes().to_vec(),
-    DLEqProof::prove(rng, &view.secret_share().0, &H, &image).serialize()
-  )
+  (image, DLEqProof::prove(rng, &view.secret_share().0, &H, &image).serialize())
 }
 
 pub fn verify_share(
-  view: &ParamsView<Ed25519>,
+  view: &MultisigView<Ed25519>,
   l: usize,
   share: &[u8]
 ) -> Result<(EdwardsPoint, Vec<u8>), MultisigError> {
