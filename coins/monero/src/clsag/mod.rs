@@ -24,7 +24,7 @@ use crate::{
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::Multisig;
+pub use multisig::{Msg, Multisig, InputMultisig};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -38,16 +38,14 @@ pub enum Error {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Input {
-  pub image: EdwardsPoint,
   // Ring, the index we're signing for, and the actual commitment behind it
   pub ring: Vec<[EdwardsPoint; 2]>,
   pub i: usize,
-  pub commitment: Commitment
+  pub commitment: Commitment,
 }
 
 impl Input {
   pub fn new(
-    image: EdwardsPoint,
     ring: Vec<[EdwardsPoint; 2]>,
     i: u8,
     commitment: Commitment
@@ -66,16 +64,13 @@ impl Input {
       Err(Error::InvalidCommitment)?;
     }
 
-    Ok(Input { image, ring, i, commitment })
+    Ok(Input { ring, i, commitment })
   }
 
   #[cfg(feature = "multisig")]
   pub fn context(&self) -> Vec<u8> {
-    // image is extraneous in practice as the image should be in the msg AND the addendum when TX
-    // signing. This just ensures CLSAG guarantees its integrity, even when others won't
-    let mut context = self.image.compress().to_bytes().to_vec();
     // Ring index
-    context.extend(&u8::try_from(self.i).unwrap().to_le_bytes());
+    let mut context = u8::try_from(self.i).unwrap().to_le_bytes().to_vec();
     // Ring
     for pair in &self.ring {
       // Doesn't include key offsets as CLSAG doesn't care and won't be affected by it
@@ -92,6 +87,7 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
   rng: &mut R,
   msg: &[u8; 32],
   input: &Input,
+  image: &EdwardsPoint,
   mask: Scalar,
   A: EdwardsPoint,
   AH: EdwardsPoint
@@ -126,7 +122,7 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
   let mut D = H * z;
 
   // Doesn't use a constant time table as dalek takes longer to generate those then they save
-  let images_precomp = VartimeEdwardsPrecomputation::new(&[input.image, D]);
+  let images_precomp = VartimeEdwardsPrecomputation::new([image, &D]);
   D = Scalar::from(8 as u8).invert() * D;
 
   let mut to_hash = vec![];
@@ -145,7 +141,7 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
     to_hash.extend(C_non_zero[i].compress().to_bytes());
   }
 
-  to_hash.extend(input.image.compress().to_bytes());
+  to_hash.extend(image.compress().to_bytes());
   let D_bytes = D.compress().to_bytes();
   to_hash.extend(D_bytes);
   to_hash.extend(C_out.compress().to_bytes());
@@ -208,7 +204,7 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
 pub fn sign<R: RngCore + CryptoRng>(
   rng: &mut R,
   msg: [u8; 32],
-  inputs: &[(Scalar, Input)],
+  inputs: &[(Scalar, Input, EdwardsPoint)],
   sum_outputs: Scalar
 ) -> Option<Vec<(Clsag, EdwardsPoint)>> {
   if inputs.len() == 0 {
@@ -235,6 +231,7 @@ pub fn sign<R: RngCore + CryptoRng>(
       rng,
       &msg,
       &inputs[i].1,
+      &inputs[i].2,
       mask,
       &nonce * &ED25519_BASEPOINT_TABLE, nonce * hash_to_point(&inputs[i].1.ring[inputs[i].1.i][0])
     );

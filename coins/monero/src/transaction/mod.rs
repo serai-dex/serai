@@ -327,7 +327,7 @@ async fn prepare_inputs(
   spend: &Scalar,
   inputs: &[SpendableOutput],
   tx: &mut Transaction
-) -> Result<Vec<(Scalar, clsag::Input)>, TransactionError> {
+) -> Result<Vec<(Scalar, clsag::Input, EdwardsPoint)>, TransactionError> {
   let mut mixins = Vec::with_capacity(inputs.len());
   let mut signable = Vec::with_capacity(inputs.len());
   for (i, input) in inputs.iter().enumerate() {
@@ -340,51 +340,71 @@ async fn prepare_inputs(
     signable.push((
       spend + input.key_offset,
       clsag::Input::new(
-        key_image::generate(&(spend + input.key_offset)),
         rpc.get_ring(&mixins[i]).await.map_err(|e| TransactionError::RpcError(e))?,
         m,
         input.commitment
-      ).map_err(|e| TransactionError::ClsagError(e))?
+      ).map_err(|e| TransactionError::ClsagError(e))?,
+      key_image::generate(&(spend + input.key_offset))
     ));
 
     tx.prefix.inputs.push(TxIn::ToKey {
       amount: VarInt(0),
       key_offsets: mixins::offset(&mixins[i]).iter().map(|x| VarInt(*x)).collect(),
-      k_image: KeyImage { image: Hash(signable[i].1.image.compress().to_bytes()) }
+      k_image: KeyImage { image: Hash(signable[i].2.compress().to_bytes()) }
     });
   }
 
   Ok(signable)
 }
 
-pub async fn send<R: RngCore + CryptoRng>(
-  rng: &mut R,
-  rpc: &Rpc,
-  spend: &Scalar,
-  inputs: &[SpendableOutput],
-  payments: &[(Address, u64)],
+pub struct SignableTransaction {
+  inputs: Vec<SpendableOutput>,
+  payments: Vec<(Address, u64)>,
   change: Address,
   fee_per_byte: u64
-) -> Result<Transaction, TransactionError> {
-  let (_, mask_sum, mut tx) = prepare_outputs(
-    &mut Preparation::Leader(rng),
-    inputs,
-    payments,
-    change,
-    fee_per_byte
-  )?;
+}
 
-  let signable = prepare_inputs(rpc, spend, inputs, &mut tx).await?;
+impl SignableTransaction {
+  pub fn new(
+    inputs: Vec<SpendableOutput>,
+    payments: Vec<(Address, u64)>,
+    change: Address,
+    fee_per_byte: u64
+  ) -> SignableTransaction {
+    SignableTransaction {
+      inputs,
+      payments,
+      change,
+      fee_per_byte
+    }
+  }
 
-  let clsags = clsag::sign(
-    rng,
-    tx.signature_hash().expect("Couldn't get the signature hash").0,
-    &signable,
-    mask_sum
-  ).ok_or(TransactionError::NoInputs)?;
-  let mut prunable = tx.rct_signatures.p.unwrap();
-  prunable.Clsags = clsags.iter().map(|clsag| clsag.0.clone()).collect();
-  prunable.pseudo_outs = clsags.iter().map(|clsag| Key { key: clsag.1.compress().to_bytes() }).collect();
-  tx.rct_signatures.p = Some(prunable);
-  Ok(tx)
+  pub async fn sign<R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    rpc: &Rpc,
+    spend: &Scalar
+  ) -> Result<Transaction, TransactionError> {
+    let (_, mask_sum, mut tx) = prepare_outputs(
+      &mut Preparation::Leader(rng),
+      &self.inputs,
+      &self.payments,
+      self.change,
+      self.fee_per_byte
+    )?;
+
+    let signable = prepare_inputs(rpc, spend, &self.inputs, &mut tx).await?;
+
+    let clsags = clsag::sign(
+      rng,
+      tx.signature_hash().expect("Couldn't get the signature hash").0,
+      &signable,
+      mask_sum
+    ).ok_or(TransactionError::NoInputs)?;
+    let mut prunable = tx.rct_signatures.p.unwrap();
+    prunable.Clsags = clsags.iter().map(|clsag| clsag.0.clone()).collect();
+    prunable.pseudo_outs = clsags.iter().map(|clsag| Key { key: clsag.1.compress().to_bytes() }).collect();
+    tx.rct_signatures.p = Some(prunable);
+    Ok(tx)
+  }
 }

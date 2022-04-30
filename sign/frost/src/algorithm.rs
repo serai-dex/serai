@@ -33,9 +33,6 @@ pub trait Algorithm<C: Curve>: Clone {
   /// Context for this algorithm to be hashed into b, and therefore committed to
   fn context(&self) -> Vec<u8>;
 
-  /// Process the binding factor generated from all the committed to data
-  fn process_binding(&mut self, p: &C::F);
-
   /// Sign a share with the given secret/nonce
   /// The secret will already have been its lagrange coefficient applied so it is the necessary
   /// key share
@@ -44,6 +41,7 @@ pub trait Algorithm<C: Curve>: Clone {
     &mut self,
     params: &sign::ParamsView<C>,
     nonce_sum: C::G,
+    b: C::F,
     nonce: C::F,
     msg: &[u8],
   ) -> C::F;
@@ -120,12 +118,11 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     vec![]
   }
 
-  fn process_binding(&mut self, _: &C::F) {}
-
   fn sign_share(
     &mut self,
     params: &sign::ParamsView<C>,
     nonce_sum: C::G,
+    _: C::F,
     nonce: C::F,
     msg: &[u8],
   ) -> C::F {

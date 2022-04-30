@@ -287,7 +287,6 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   }
 
   let b = C::hash_to_F(&b);
-  params.algorithm.process_binding(&b);
 
   #[allow(non_snake_case)]
   let mut Ris = vec![];
@@ -305,6 +304,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   let share = params.algorithm.sign_share(
     view,
     R,
+    b,
     our_preprocess.nonces[0] + (our_preprocess.nonces[1] * b),
     msg
   );

@@ -41,12 +41,11 @@ impl Algorithm<Ed25519> for DummyAlgorithm {
 
   fn context(&self) -> Vec<u8> { unimplemented!() }
 
-  fn process_binding(&mut self, _: &Scalar) { unimplemented!() }
-
   fn sign_share(
     &mut self,
     _: &sign::ParamsView<Ed25519>,
     _: EdwardsPoint,
+    _: Scalar,
     _: Scalar,
     _: &[u8],
   ) -> Scalar { unimplemented!() }

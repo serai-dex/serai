@@ -32,16 +32,15 @@ pub fn verify_share(
   share: &[u8]
 ) -> Result<(EdwardsPoint, Vec<u8>), MultisigError> {
   if share.len() < 96 {
-    Err(MultisigError::InvalidDLEqProof(l))?;
+    Err(MultisigError::InvalidDLEqProof)?;
   }
   let image = CompressedEdwardsY(
     share[0 .. 32].try_into().unwrap()
   ).decompress().ok_or(MultisigError::InvalidKeyImage(l))?;
   let proof = DLEqProof::deserialize(
     &share[(share.len() - 64) .. share.len()]
-  ).ok_or(MultisigError::InvalidDLEqProof(l))?;
+  ).ok_or(MultisigError::InvalidDLEqProof)?;
   proof.verify(
-    l,
     &hash_to_point(&view.group_key().0),
     &view.verification_share(l),
     &image

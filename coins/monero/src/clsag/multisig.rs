@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
@@ -5,6 +7,7 @@ use blake2::{Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
+  traits::Identity,
   scalar::Scalar,
   edwards::EdwardsPoint
 };
@@ -19,8 +22,13 @@ use crate::{
   random_scalar,
   hash_to_point,
   frost::{MultisigError, Ed25519, DLEqProof},
+  key_image,
   clsag::{Input, sign_core, verify}
 };
+
+pub trait Msg: Clone + Debug {
+  fn msg(&self, image: EdwardsPoint) -> [u8; 32];
+}
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
@@ -34,44 +42,43 @@ struct ClsagSignInterim {
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-pub struct Multisig {
+pub struct Multisig<M: Msg> {
   b: Vec<u8>,
-  AH0: dfg::EdwardsPoint,
-  AH1: dfg::EdwardsPoint,
+  AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
   input: Input,
 
-  msg: Option<[u8; 32]>,
+  image: Option<EdwardsPoint>,
+  msg: M,
+
   interim: Option<ClsagSignInterim>
 }
 
-impl Multisig {
+impl<M: Msg> Multisig<M> {
   pub fn new(
-    input: Input
-  ) -> Result<Multisig, MultisigError> {
+    input: Input,
+    msg: M
+  ) -> Result<Multisig<M>, MultisigError> {
     Ok(
       Multisig {
         b: vec![],
-        AH0: dfg::EdwardsPoint::identity(),
-        AH1: dfg::EdwardsPoint::identity(),
+        AH: (dfg::EdwardsPoint::identity(), dfg::EdwardsPoint::identity()),
 
         input,
 
-        msg: None,
+        image: None,
+        msg,
         interim: None
       }
     )
   }
 
-  pub fn set_msg(
-    &mut self,
-    msg: [u8; 32]
-  ) {
-    self.msg = Some(msg);
+  pub fn set_image(&mut self, image: EdwardsPoint) {
+    self.image = Some(image);
   }
 }
 
-impl Algorithm<Ed25519> for Multisig {
+impl<M: Msg> Algorithm<Ed25519> for Multisig<M> {
   type Signature = (Clsag, EdwardsPoint);
 
   // We arguably don't have to commit to at all thanks to xG and yG being committed to, both of
@@ -113,7 +120,6 @@ impl Algorithm<Ed25519> for Multisig {
 
     let h0 = <Ed25519 as Curve>::G_from_slice(&serialized[0 .. 32]).map_err(|_| FrostError::InvalidCommitment(l))?;
     DLEqProof::deserialize(&serialized[64 .. 128]).ok_or(FrostError::InvalidCommitment(l))?.verify(
-      l,
       &alt,
       &commitments[0],
       &h0
@@ -121,7 +127,6 @@ impl Algorithm<Ed25519> for Multisig {
 
     let h1 = <Ed25519 as Curve>::G_from_slice(&serialized[32 .. 64]).map_err(|_| FrostError::InvalidCommitment(l))?;
     DLEqProof::deserialize(&serialized[128 .. 192]).ok_or(FrostError::InvalidCommitment(l))?.verify(
-      l,
       &alt,
       &commitments[1],
       &h1
@@ -129,33 +134,34 @@ impl Algorithm<Ed25519> for Multisig {
 
     self.b.extend(&l.to_le_bytes());
     self.b.extend(&serialized[0 .. 64]);
-    self.AH0 += h0;
-    self.AH1 += h1;
+    self.AH.0 += h0;
+    self.AH.1 += h1;
 
     Ok(())
   }
 
   fn context(&self) -> Vec<u8> {
     let mut context = vec![];
-    context.extend(&self.msg.unwrap());
+    // This should be redundant as the image should be in the addendum if using InputMultisig and
+    // in msg if signing a Transaction, yet this ensures CLSAG takes responsibility for its own
+    // security boundaries
+    context.extend(&self.image.unwrap().compress().to_bytes());
+    context.extend(&self.msg.msg(self.image.unwrap()));
     context.extend(&self.input.context());
     context
-  }
-
-  fn process_binding(
-    &mut self,
-    p: &dfg::Scalar,
-  ) {
-    self.AH0 += self.AH1 * p;
   }
 
   fn sign_share(
     &mut self,
     view: &ParamsView<Ed25519>,
     nonce_sum: dfg::EdwardsPoint,
+    b: dfg::Scalar,
     nonce: dfg::Scalar,
     _: &[u8]
   ) -> dfg::Scalar {
+    // Apply the binding factor to the H variant of the nonce
+    self.AH.0 += self.AH.1 * b;
+
     // Use everyone's commitments to derive a random source all signers can agree upon
     // Cannot be manipulated to effect and all signers must, and will, know this
     // Uses the context as well to prevent passive observers of messages from being able to break
@@ -170,11 +176,12 @@ impl Algorithm<Ed25519> for Multisig {
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       &mut rng,
-      &self.msg.unwrap(),
+      &self.msg.msg(self.image.unwrap()),
       &self.input,
+      &self.image.unwrap(),
       mask,
       nonce_sum.0,
-      self.AH0.0
+      self.AH.0.0
     );
     self.interim = Some(ClsagSignInterim { c: c * mu_P, s: c * mu_C * z, clsag, C_out });
 
@@ -193,7 +200,7 @@ impl Algorithm<Ed25519> for Multisig {
 
     let mut clsag = interim.clsag.clone();
     clsag.s[self.input.i] = Key { key: (sum.0 - interim.s).to_bytes() };
-    if verify(&clsag, &self.msg.unwrap(), self.input.image, &self.input.ring, interim.C_out) {
+    if verify(&clsag, &self.msg.msg(self.image.unwrap()), self.image.unwrap(), &self.input.ring, interim.C_out) {
       return Some((clsag, interim.C_out));
     }
     return None;
@@ -209,5 +216,89 @@ impl Algorithm<Ed25519> for Multisig {
     return (&share.0 * &ED25519_BASEPOINT_TABLE) == (
       nonce.0 - (interim.c * verification_share.0)
     );
+  }
+}
+
+#[allow(non_snake_case)]
+#[derive(Clone, Debug)]
+pub struct InputMultisig<M: Msg>(EdwardsPoint, Multisig<M>);
+
+impl<M: Msg> InputMultisig<M> {
+  pub fn new(
+    input: Input,
+    msg: M
+  ) -> Result<InputMultisig<M>, MultisigError> {
+    Ok(InputMultisig(EdwardsPoint::identity(), Multisig::new(input, msg)?))
+  }
+
+  pub fn image(&self) -> EdwardsPoint {
+    self.0
+  }
+}
+
+impl<M: Msg> Algorithm<Ed25519> for InputMultisig<M> {
+  type Signature = (Clsag, EdwardsPoint);
+
+  fn addendum_commit_len() -> usize {
+    32 + Multisig::<M>::addendum_commit_len()
+  }
+
+  fn preprocess_addendum<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    view: &ParamsView<Ed25519>,
+    nonces: &[dfg::Scalar; 2]
+  ) -> Vec<u8> {
+    let (mut serialized, end) = key_image::generate_share(rng, view);
+    serialized.extend(Multisig::<M>::preprocess_addendum(rng, view, nonces));
+    serialized.extend(end);
+    serialized
+  }
+
+  fn process_addendum(
+    &mut self,
+    view: &ParamsView<Ed25519>,
+    l: usize,
+    commitments: &[dfg::EdwardsPoint; 2],
+    serialized: &[u8]
+  ) -> Result<(), FrostError> {
+    let (image, serialized) = key_image::verify_share(view, l, serialized).map_err(|_| FrostError::InvalidShare(l))?;
+    self.0 += image;
+    if l == *view.included().last().unwrap() {
+      self.1.set_image(self.0);
+    }
+    self.1.process_addendum(view, l, commitments, &serialized)
+  }
+
+  fn context(&self) -> Vec<u8> {
+    self.1.context()
+  }
+
+  fn sign_share(
+    &mut self,
+    view: &ParamsView<Ed25519>,
+    nonce_sum: dfg::EdwardsPoint,
+    b: dfg::Scalar,
+    nonce: dfg::Scalar,
+    msg: &[u8]
+  ) -> dfg::Scalar {
+    self.1.sign_share(view, nonce_sum, b, nonce, msg)
+  }
+
+  fn verify(
+    &self,
+    group_key: dfg::EdwardsPoint,
+    nonce: dfg::EdwardsPoint,
+    sum: dfg::Scalar
+  ) -> Option<Self::Signature> {
+    self.1.verify(group_key, nonce, sum)
+  }
+
+  fn verify_share(
+    &self,
+    verification_share: dfg::EdwardsPoint,
+    nonce: dfg::EdwardsPoint,
+    share: dfg::Scalar,
+  ) -> bool {
+    self.1.verify_share(verification_share, nonce, share)
   }
 }

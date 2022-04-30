@@ -9,7 +9,7 @@ use monero::{
 
 use monero_serai::{
   random_scalar,
-  transaction,
+  transaction::{self, SignableTransaction},
   rpc::Rpc
 };
 
@@ -48,9 +48,9 @@ pub async fn send() {
     output = transaction::scan(&tx, view, spend_pub).swap_remove(0);
     // Test creating a zero change output and a non-zero change output
     amount = output.commitment.amount - fee - u64::try_from(i).unwrap();
-    let tx = transaction::send(
-      &mut OsRng, &rpc, &spend, &vec![output], &vec![(addr, amount)], addr, fee_per_byte
-    ).await.unwrap();
+    let tx = SignableTransaction::new(
+      vec![output], vec![(addr, amount)], addr, fee_per_byte
+    ).sign(&mut OsRng, &rpc, &spend).await.unwrap();
     rpc.publish_transaction(&tx).await.unwrap();
   }
 }

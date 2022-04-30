@@ -1,6 +1,6 @@
 use rand::{RngCore, rngs::OsRng};
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, clsag};
 
@@ -39,15 +39,25 @@ fn test_single() {
     &vec![(
       secrets[0],
       clsag::Input::new(
-        image,
         ring.clone(),
         RING_INDEX,
         Commitment::new(secrets[1], AMOUNT)
-      ).unwrap()
+      ).unwrap(),
+      image
     )],
     Scalar::zero()
   ).unwrap().swap_remove(0);
   assert!(clsag::verify(&clsag, &msg, image, &ring, pseudo_out));
+}
+
+#[cfg(feature = "multisig")]
+#[derive(Clone, Debug)]
+struct Msg([u8; 32]);
+#[cfg(feature = "multisig")]
+impl clsag::Msg for Msg {
+  fn msg(&self, _: EdwardsPoint) -> [u8; 32] {
+    self.0
+  }
 }
 
 #[cfg(feature = "multisig")]
@@ -57,8 +67,6 @@ fn test_multisig() -> Result<(), MultisigError> {
   let t = keys[0].params().t();
 
   let msg = [1; 32];
-
-  let image = key_image::generate(&group_private.0);
 
   let randomness = random_scalar(&mut OsRng);
   let mut ring = vec![];
@@ -79,13 +87,13 @@ fn test_multisig() -> Result<(), MultisigError> {
   }
 
   let mut algorithms = Vec::with_capacity(t);
-  for i in 1 ..= t {
+  for _ in 1 ..= t {
     algorithms.push(
-      clsag::Multisig::new(
-        clsag::Input::new(image, ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap()
+      clsag::InputMultisig::new(
+        clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
+        Msg(msg)
       ).unwrap()
     );
-    algorithms[i - 1].set_msg(msg);
   }
 
   let mut signatures = sign(algorithms, keys);
