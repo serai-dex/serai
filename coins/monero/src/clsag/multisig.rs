@@ -19,15 +19,15 @@ use frost::{Curve, FrostError, algorithm::Algorithm, sign::ParamsView};
 use monero::util::ringct::{Key, Clsag};
 
 use crate::{
-  random_scalar,
   hash_to_point,
   frost::{MultisigError, Ed25519, DLEqProof},
   key_image,
   clsag::{Input, sign_core, verify}
 };
 
-pub trait Msg: Clone + Debug {
-  fn msg(&self, image: EdwardsPoint) -> [u8; 32];
+pub trait TransactionData: Clone + Debug {
+  fn msg(&self) -> [u8; 32];
+  fn mask_sum(&self) -> Scalar;
 }
 
 #[allow(non_snake_case)]
@@ -42,23 +42,23 @@ struct ClsagSignInterim {
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-pub struct Multisig<M: Msg> {
+pub struct Multisig<D: TransactionData> {
   b: Vec<u8>,
   AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
   input: Input,
 
   image: Option<EdwardsPoint>,
-  msg: M,
+  data: D,
 
   interim: Option<ClsagSignInterim>
 }
 
-impl<M: Msg> Multisig<M> {
+impl<D: TransactionData> Multisig<D> {
   pub fn new(
     input: Input,
-    msg: M
-  ) -> Result<Multisig<M>, MultisigError> {
+    data: D
+  ) -> Result<Multisig<D>, MultisigError> {
     Ok(
       Multisig {
         b: vec![],
@@ -67,7 +67,7 @@ impl<M: Msg> Multisig<M> {
         input,
 
         image: None,
-        msg,
+        data,
         interim: None
       }
     )
@@ -78,7 +78,7 @@ impl<M: Msg> Multisig<M> {
   }
 }
 
-impl<M: Msg> Algorithm<Ed25519> for Multisig<M> {
+impl<D: TransactionData> Algorithm<Ed25519> for Multisig<D> {
   type Signature = (Clsag, EdwardsPoint);
 
   // We arguably don't have to commit to at all thanks to xG and yG being committed to, both of
@@ -146,7 +146,7 @@ impl<M: Msg> Algorithm<Ed25519> for Multisig<M> {
     // in msg if signing a Transaction, yet this ensures CLSAG takes responsibility for its own
     // security boundaries
     context.extend(&self.image.unwrap().compress().to_bytes());
-    context.extend(&self.msg.msg(self.image.unwrap()));
+    context.extend(&self.data.msg());
     context.extend(&self.input.context());
     context
   }
@@ -171,15 +171,14 @@ impl<M: Msg> Algorithm<Ed25519> for Multisig<M> {
     seed.extend(&self.context());
     seed.extend(&self.b);
     let mut rng = ChaCha12Rng::from_seed(Blake2b512::digest(seed)[0 .. 32].try_into().unwrap());
-    let mask = random_scalar(&mut rng);
 
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       &mut rng,
-      &self.msg.msg(self.image.unwrap()),
+      &self.data.msg(),
       &self.input,
       &self.image.unwrap(),
-      mask,
+      self.data.mask_sum(),
       nonce_sum.0,
       self.AH.0.0
     );
@@ -200,7 +199,7 @@ impl<M: Msg> Algorithm<Ed25519> for Multisig<M> {
 
     let mut clsag = interim.clsag.clone();
     clsag.s[self.input.i] = Key { key: (sum.0 - interim.s).to_bytes() };
-    if verify(&clsag, &self.msg.msg(self.image.unwrap()), self.image.unwrap(), &self.input.ring, interim.C_out) {
+    if verify(&clsag, &self.data.msg(), self.image.unwrap(), &self.input.ring, interim.C_out) {
       return Some((clsag, interim.C_out));
     }
     return None;
@@ -221,13 +220,13 @@ impl<M: Msg> Algorithm<Ed25519> for Multisig<M> {
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-pub struct InputMultisig<M: Msg>(EdwardsPoint, Multisig<M>);
+pub struct InputMultisig<D: TransactionData>(EdwardsPoint, Multisig<D>);
 
-impl<M: Msg> InputMultisig<M> {
+impl<D: TransactionData> InputMultisig<D> {
   pub fn new(
     input: Input,
-    msg: M
-  ) -> Result<InputMultisig<M>, MultisigError> {
+    msg: D
+  ) -> Result<InputMultisig<D>, MultisigError> {
     Ok(InputMultisig(EdwardsPoint::identity(), Multisig::new(input, msg)?))
   }
 
@@ -236,11 +235,11 @@ impl<M: Msg> InputMultisig<M> {
   }
 }
 
-impl<M: Msg> Algorithm<Ed25519> for InputMultisig<M> {
+impl<D: TransactionData> Algorithm<Ed25519> for InputMultisig<D> {
   type Signature = (Clsag, EdwardsPoint);
 
   fn addendum_commit_len() -> usize {
-    32 + Multisig::<M>::addendum_commit_len()
+    32 + Multisig::<D>::addendum_commit_len()
   }
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
@@ -249,7 +248,7 @@ impl<M: Msg> Algorithm<Ed25519> for InputMultisig<M> {
     nonces: &[dfg::Scalar; 2]
   ) -> Vec<u8> {
     let (mut serialized, end) = key_image::generate_share(rng, view);
-    serialized.extend(Multisig::<M>::preprocess_addendum(rng, view, nonces));
+    serialized.extend(Multisig::<D>::preprocess_addendum(rng, view, nonces));
     serialized.extend(end);
     serialized
   }

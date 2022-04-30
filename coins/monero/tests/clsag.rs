@@ -1,6 +1,6 @@
 use rand::{RngCore, rngs::OsRng};
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, clsag};
 
@@ -52,11 +52,15 @@ fn test_single() {
 
 #[cfg(feature = "multisig")]
 #[derive(Clone, Debug)]
-struct Msg([u8; 32]);
+struct TransactionData;
 #[cfg(feature = "multisig")]
-impl clsag::Msg for Msg {
-  fn msg(&self, _: EdwardsPoint) -> [u8; 32] {
-    self.0
+impl clsag::TransactionData for TransactionData {
+  fn msg(&self) -> [u8; 32] {
+    [1; 32]
+  }
+
+  fn mask_sum(&self) -> Scalar {
+    Scalar::from(21u64)
   }
 }
 
@@ -65,8 +69,6 @@ impl clsag::Msg for Msg {
 fn test_multisig() -> Result<(), MultisigError> {
   let (keys, group_private) = generate_keys();
   let t = keys[0].params().t();
-
-  let msg = [1; 32];
 
   let randomness = random_scalar(&mut OsRng);
   let mut ring = vec![];
@@ -92,7 +94,7 @@ fn test_multisig() -> Result<(), MultisigError> {
       sign::AlgorithmMachine::new(
         clsag::InputMultisig::new(
           clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
-          Msg(msg)
+          TransactionData
         ).unwrap(),
         keys[i - 1].clone(),
         &(1 ..= THRESHOLD).collect::<Vec<usize>>()

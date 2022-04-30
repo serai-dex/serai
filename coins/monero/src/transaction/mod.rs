@@ -47,6 +47,8 @@ pub enum TransactionError {
   InvalidPreparation(String),
   #[error("no inputs")]
   NoInputs,
+  #[error("no outputs")]
+  NoOutputs,
   #[error("too many outputs")]
   TooManyOutputs,
   #[error("not enough funds (in {0}, out {1})")]
@@ -370,13 +372,22 @@ impl SignableTransaction {
     payments: Vec<(Address, u64)>,
     change: Address,
     fee_per_byte: u64
-  ) -> SignableTransaction {
-    SignableTransaction {
-      inputs,
-      payments,
-      change,
-      fee_per_byte
+  ) -> Result<SignableTransaction, TransactionError> {
+    if inputs.len() == 0 {
+      Err(TransactionError::NoInputs)?;
     }
+    if payments.len() == 0 {
+      Err(TransactionError::NoOutputs)?;
+    }
+
+    Ok(
+      SignableTransaction {
+        inputs,
+        payments,
+        change,
+        fee_per_byte
+      }
+    )
   }
 
   pub async fn sign<R: RngCore + CryptoRng>(
@@ -400,7 +411,7 @@ impl SignableTransaction {
       tx.signature_hash().expect("Couldn't get the signature hash").0,
       &signable,
       mask_sum
-    ).ok_or(TransactionError::NoInputs)?;
+    ).unwrap(); // None if no inputs which new checks for
     let mut prunable = tx.rct_signatures.p.unwrap();
     prunable.Clsags = clsags.iter().map(|clsag| clsag.0.clone()).collect();
     prunable.pseudo_outs = clsags.iter().map(|clsag| Key { key: clsag.1.compress().to_bytes() }).collect();

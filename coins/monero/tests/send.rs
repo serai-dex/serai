@@ -50,7 +50,7 @@ pub async fn send() {
     amount = output.commitment.amount - fee - u64::try_from(i).unwrap();
     let tx = SignableTransaction::new(
       vec![output], vec![(addr, amount)], addr, fee_per_byte
-    ).sign(&mut OsRng, &rpc, &spend).await.unwrap();
+    ).unwrap().sign(&mut OsRng, &rpc, &spend).await.unwrap();
     rpc.publish_transaction(&tx).await.unwrap();
   }
 }
