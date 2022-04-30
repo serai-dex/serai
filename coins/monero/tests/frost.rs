@@ -8,7 +8,7 @@ use rand::rngs::OsRng;
 use ff::Field;
 use dalek_ff_group::{ED25519_BASEPOINT_TABLE, Scalar, EdwardsPoint};
 
-use frost::{
+pub use frost::{
   FrostError, MultisigParams, MultisigKeys,
   key_gen, algorithm::Algorithm, sign::{self, lagrange}
 };
@@ -113,26 +113,16 @@ pub fn generate_keys() -> (Vec<Rc<MultisigKeys<Ed25519>>>, Scalar) {
 }
 
 #[allow(dead_code)] // Currently has some false positive
-pub fn sign<S, A: Algorithm<Ed25519, Signature = S>>(
-  algorithms: Vec<A>,
+pub fn sign<S, M: sign::StateMachine<Signature = S>>(
+  machines: &mut Vec<M>,
   keys: Vec<Rc<MultisigKeys<Ed25519>>>
 ) -> Vec<S> {
-  assert!(algorithms.len() >= THRESHOLD);
-  assert!(keys.len() >= algorithms.len());
+  assert!(machines.len() >= THRESHOLD);
+  assert!(keys.len() >= machines.len());
 
-  let mut machines = vec![];
   let mut commitments = Vec::with_capacity(PARTICIPANTS + 1);
   commitments.resize(PARTICIPANTS + 1, None);
   for i in 1 ..= THRESHOLD {
-    machines.push(
-      sign::StateMachine::new(
-        sign::Params::new(
-          algorithms[i - 1].clone(),
-          keys[i - 1].clone(),
-          &(1 ..= THRESHOLD).collect::<Vec<usize>>()
-        ).unwrap()
-      )
-    );
     commitments[i] = Some(machines[i - 1].preprocess(&mut OsRng).unwrap());
   }
 

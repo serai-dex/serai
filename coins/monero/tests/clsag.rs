@@ -7,7 +7,7 @@ use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, c
 #[cfg(feature = "multisig")]
 mod frost;
 #[cfg(feature = "multisig")]
-use crate::frost::{generate_keys, sign};
+use crate::frost::{THRESHOLD, generate_keys, sign};
 
 const RING_INDEX: u8 = 3;
 const RING_LEN: u64 = 11;
@@ -86,17 +86,21 @@ fn test_multisig() -> Result<(), MultisigError> {
     ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
   }
 
-  let mut algorithms = Vec::with_capacity(t);
-  for _ in 1 ..= t {
-    algorithms.push(
-      clsag::InputMultisig::new(
-        clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
-        Msg(msg)
+  let mut machines = Vec::with_capacity(t);
+  for i in 1 ..= t {
+    machines.push(
+      sign::AlgorithmMachine::new(
+        clsag::InputMultisig::new(
+          clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
+          Msg(msg)
+        ).unwrap(),
+        keys[i - 1].clone(),
+        &(1 ..= THRESHOLD).collect::<Vec<usize>>()
       ).unwrap()
     );
   }
 
-  let mut signatures = sign(algorithms, keys);
+  let mut signatures = sign(&mut machines, keys);
   let signature = signatures.swap_remove(0);
   for s in 0 .. (t - 1) {
     // Verify the commitments and the non-decoy s scalar are identical to every other signature

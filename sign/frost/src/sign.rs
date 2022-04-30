@@ -65,6 +65,7 @@ pub struct Params<C: Curve, A: Algorithm<C>> {
   view: ParamsView<C>,
 }
 
+// Currently public to enable more complex operations as desired, yet solely used in testing
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
     algorithm: A,
@@ -400,30 +401,70 @@ impl fmt::Display for State {
   }
 }
 
-/// State machine which manages signing
+pub trait StateMachine {
+  type Signature;
+
+  /// Perform the preprocessing round required in order to sign
+  /// Returns a byte vector which must be transmitted to all parties selected for this signing
+  /// process, over an authenticated channel
+  fn preprocess<R: RngCore + CryptoRng>(
+    &mut self,
+    rng: &mut R
+  ) -> Result<Vec<u8>, FrostError>;
+
+  /// Sign a message
+  /// Takes in the participant's commitments, which are expected to be in a Vec where participant
+  /// index = Vec index. None is expected at index 0 to allow for this. None is also expected at
+  /// index i which is locally handled. Returns a byte vector representing a share of the signature
+  /// for every other participant to receive, over an authenticated channel
+  fn sign(
+    &mut self,
+    commitments: &[Option<Vec<u8>>],
+    msg: &[u8],
+  ) -> Result<Vec<u8>, FrostError>;
+
+  /// Complete signing
+  /// Takes in everyone elses' shares submitted to us as a Vec, expecting participant index =
+  /// Vec index with None at index 0 and index i. Returns a byte vector representing the serialized
+  /// signature
+  fn complete(&mut self, shares: &[Option<Vec<u8>>]) -> Result<Self::Signature, FrostError>;
+
+  fn multisig_params(&self) -> MultisigParams;
+
+  fn state(&self) -> State;
+}
+
+/// State machine which manages signing for an arbitrary signature algorithm
 #[allow(non_snake_case)]
-pub struct StateMachine<C: Curve, A: Algorithm<C>> {
+pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
   state: State,
   preprocess: Option<PreprocessPackage<C>>,
   sign: Option<Package<C>>,
 }
 
-impl<C: Curve, A: Algorithm<C>> StateMachine<C, A> {
+impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a key for the specified curve in the specified multisig
-  pub fn new(params: Params<C, A>) -> StateMachine<C, A> {
-    StateMachine {
-      params,
-      state: State::Fresh,
-      preprocess: None,
-      sign: None,
-    }
+  pub fn new(
+    algorithm: A,
+    keys: Rc<MultisigKeys<C>>,
+    included: &[usize],
+  ) -> Result<AlgorithmMachine<C, A>, FrostError> {
+    Ok(
+      AlgorithmMachine {
+        params: Params::new(algorithm, keys, included)?,
+        state: State::Fresh,
+        preprocess: None,
+        sign: None,
+      }
+    )
   }
+}
 
-  /// Perform the preprocessing round required in order to sign
-  /// Returns a byte vector which must be transmitted to all parties selected for this signing
-  /// process, over an authenticated channel
-  pub fn preprocess<R: RngCore + CryptoRng>(
+impl<C: Curve, A: Algorithm<C>> StateMachine for AlgorithmMachine<C, A> {
+  type Signature = A::Signature;
+
+  fn preprocess<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R
   ) -> Result<Vec<u8>, FrostError> {
@@ -437,12 +478,7 @@ impl<C: Curve, A: Algorithm<C>> StateMachine<C, A> {
     Ok(serialized)
   }
 
-  /// Sign a message
-  /// Takes in the participant's commitments, which are expected to be in a Vec where participant
-  /// index = Vec index. None is expected at index 0 to allow for this. None is also expected at
-  /// index i which is locally handled. Returns a byte vector representing a share of the signature
-  /// for every other participant to receive, over an authenticated channel
-  pub fn sign(
+  fn sign(
     &mut self,
     commitments: &[Option<Vec<u8>>],
     msg: &[u8],
@@ -463,11 +499,7 @@ impl<C: Curve, A: Algorithm<C>> StateMachine<C, A> {
     Ok(serialized)
   }
 
-  /// Complete signing
-  /// Takes in everyone elses' shares submitted to us as a Vec, expecting participant index =
-  /// Vec index with None at index 0 and index i. Returns a byte vector representing the serialized
-  /// signature
-  pub fn complete(&mut self, shares: &[Option<Vec<u8>>]) -> Result<A::Signature, FrostError> {
+  fn complete(&mut self, shares: &[Option<Vec<u8>>]) -> Result<A::Signature, FrostError> {
     if self.state != State::Signed {
       Err(FrostError::InvalidSignTransition(State::Signed, self.state))?;
     }
@@ -482,11 +514,11 @@ impl<C: Curve, A: Algorithm<C>> StateMachine<C, A> {
     Ok(signature)
   }
 
-  pub fn multisig_params(&self) -> MultisigParams {
+  fn multisig_params(&self) -> MultisigParams {
     self.params.multisig_params().clone()
   }
 
-  pub fn state(&self) -> State {
+  fn state(&self) -> State {
     self.state
   }
 }

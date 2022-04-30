@@ -10,7 +10,7 @@ use frost::{
   MultisigParams, MultisigKeys,
   key_gen,
   algorithm::{Algorithm, Schnorr, SchnorrSignature},
-  sign
+  sign::{StateMachine, AlgorithmMachine}
 };
 
 mod common;
@@ -28,13 +28,11 @@ fn sign<C: Curve, A: Algorithm<C, Signature = SchnorrSignature<C>>>(
   commitments.resize(PARTICIPANTS + 1, None);
   for i in 1 ..= t {
     machines.push(
-      sign::StateMachine::new(
-        sign::Params::new(
-          algorithm.clone(),
-          keys[i - 1].clone(),
-          &(1 ..= t).collect::<Vec<usize>>()
-        ).unwrap()
-      )
+      AlgorithmMachine::new(
+        algorithm.clone(),
+        keys[i - 1].clone(),
+        &(1 ..= t).collect::<Vec<usize>>()
+      ).unwrap()
     );
     commitments[i] = Some(machines[i - 1].preprocess(&mut OsRng).unwrap());
   }
