@@ -1,4 +1,4 @@
-// TOOD
+// TODO
 pub(crate) fn select(o: u64) -> (u8, Vec<u64>) {
   let mut mixins: Vec<u64> = (o .. o + 11).into_iter().collect();
   mixins.sort();

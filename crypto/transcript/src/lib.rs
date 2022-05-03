@@ -16,7 +16,11 @@ pub trait Transcript {
   fn new(label: &'static [u8]) -> Self;
   fn append_message(&mut self, label: &'static [u8], message: &[u8]);
   fn challenge(&mut self, label: &'static [u8], len: usize) -> Vec<u8>;
-  fn seeded_rng(&self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> Self::SeededRng;
+  fn seeded_rng(
+    &self,
+    label: &'static [u8],
+    additional_entropy: Option<[u8; 32]>
+  ) -> Self::SeededRng;
 }
 
 #[derive(Clone, Debug)]
@@ -40,15 +44,28 @@ impl<D: Digest> Transcript for DigestTranscript<D> {
     self.0.extend(label);
 
     let mut challenge = Vec::with_capacity(len);
-    challenge.extend(&D::new().chain_update(&self.0).chain_update(&0u64.to_le_bytes()).finalize());
+    challenge.extend(
+      &D::new()
+        .chain_update(&self.0)
+        .chain_update(&0u64.to_le_bytes()).finalize()
+    );
     for i in 0 .. (len / challenge.len()) {
-      challenge.extend(&D::new().chain_update(&self.0).chain_update(&u64::try_from(i).unwrap().to_le_bytes()).finalize());
+      challenge.extend(
+        &D::new()
+          .chain_update(&self.0)
+          .chain_update(&u64::try_from(i).unwrap().to_le_bytes())
+          .finalize()
+      );
     }
     challenge.truncate(len);
     challenge
   }
 
-  fn seeded_rng(&self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> Self::SeededRng {
+  fn seeded_rng(
+    &self,
+    label: &'static [u8],
+    additional_entropy: Option<[u8; 32]>
+  ) -> Self::SeededRng {
     let mut transcript = DigestTranscript::<D>(self.0.clone(), PhantomData);
     if additional_entropy.is_some() {
       transcript.append_message(b"additional_entropy", &additional_entropy.unwrap());

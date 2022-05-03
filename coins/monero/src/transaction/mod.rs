@@ -24,13 +24,10 @@ use monero::{
   }
 };
 
-use transcript::Transcript as TranscriptTrait;
-
 #[cfg(feature = "multisig")]
 use frost::FrostError;
 
 use crate::{
-  Transcript,
   Commitment,
   random_scalar,
   hash, hash_to_scalar,
@@ -46,8 +43,6 @@ mod multisig;
 
 #[derive(Error, Debug)]
 pub enum TransactionError {
-  #[error("invalid preparation ({0})")]
-  InvalidPreparation(String),
   #[error("no inputs")]
   NoInputs,
   #[error("no outputs")]
@@ -196,17 +191,14 @@ impl Output {
   }
 }
 
-enum Preparation<'a, R: RngCore + CryptoRng> {
-  Leader(&'a mut R),
-  Follower([u8; 32], Bulletproof)
-}
-
 async fn prepare_inputs(
   rpc: &Rpc,
   spend: &Scalar,
   inputs: &[SpendableOutput],
   tx: &mut Transaction
 ) -> Result<Vec<(Scalar, clsag::Input, EdwardsPoint)>, TransactionError> {
+  // TODO sort inputs
+
   let mut signable = Vec::with_capacity(inputs.len());
   for (i, input) in inputs.iter().enumerate() {
     // Select mixins
@@ -238,7 +230,10 @@ pub struct SignableTransaction {
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
   change: Address,
-  fee_per_byte: u64
+  fee_per_byte: u64,
+
+  fee: u64,
+  outputs: Vec<Output>
 }
 
 impl SignableTransaction {
@@ -260,25 +255,25 @@ impl SignableTransaction {
         inputs,
         payments,
         change,
-        fee_per_byte
+        fee_per_byte,
+
+        fee: 0,
+        outputs: vec![]
       }
     )
   }
 
-  // This could be refactored so prep, a multisig-required variable, is used only by multisig
-  // Not shimmed by the single signer API as well
-  // This would enable moving Transcript as a whole to the multisig feature
-  fn prepare_outputs<'a, R: RngCore + CryptoRng>(
-    &self,
-    prep: &mut Preparation<'a, R>
-  ) -> Result<(Vec<u8>, Scalar, Transaction), TransactionError> {
-    let fee = self.fee_per_byte * 2000; // TODO
+  fn prepare_outputs<R: RngCore + CryptoRng>(
+    &mut self,
+    rng: &mut R
+  ) -> Result<(Vec<Commitment>, Scalar), TransactionError> {
+    self.fee = self.fee_per_byte * 2000; // TODO
 
     // TODO TX MAX SIZE
 
     // Make sure we have enough funds
     let in_amount = self.inputs.iter().map(|input| input.commitment.amount).sum();
-    let out_amount = fee + self.payments.iter().map(|payment| payment.1).sum::<u64>();
+    let out_amount = self.fee + self.payments.iter().map(|payment| payment.1).sum::<u64>();
     if in_amount < out_amount {
       Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
     }
@@ -287,122 +282,83 @@ impl SignableTransaction {
     let mut payments = self.payments.clone();
     payments.push((self.change, in_amount - out_amount));
 
-    // Grab the prep
-    let mut entropy = [0; 32];
-    let mut bp = None;
-    match prep {
-      Preparation::Leader(ref mut rng) => {
-        // The Leader generates the entropy for the one time keys and the bulletproof
-        // This prevents de-anonymization via recalculation of the randomness which is deterministic
-        rng.fill_bytes(&mut entropy);
-      },
-      Preparation::Follower(e, b) => {
-        entropy = e.clone();
-        bp = Some(b.clone());
-      }
-    }
+    // TODO randomly sort outputs
 
-    let mut transcript = Transcript::new(b"StealthAddress");
-    // This output can only be spent once. Therefore, it forces all one time keys used here to be
-    // unique, even if the leader reuses entropy. While another transaction could use a different
-    // input ordering to swap which 0 is, that input set can't contain this input without being a
-    // double spend
-    transcript.append_message(b"hash", &self.inputs[0].tx.0);
-    transcript.append_message(b"index", &u64::try_from(self.inputs[0].o).unwrap().to_le_bytes());
-    let mut rng = transcript.seeded_rng(b"tx_keys", Some(entropy));
-
-    let mut outputs = Vec::with_capacity(payments.len());
+    self.outputs.clear();
+    self.outputs = Vec::with_capacity(payments.len());
     let mut commitments = Vec::with_capacity(payments.len());
     for o in 0 .. payments.len() {
-      outputs.push(Output::new(&mut rng, payments[o], o)?);
-      commitments.push(Commitment::new(outputs[o].mask, payments[o].1));
+      self.outputs.push(Output::new(rng, payments[o], o)?);
+      commitments.push(Commitment::new(self.outputs[o].mask, payments[o].1));
     }
 
-    if bp.is_none() {
-      // Generate the bulletproof if leader
-      bp = Some(bulletproofs::generate(&commitments)?);
-    } else {
-      // Verify the bulletproof if follower
-      if !bulletproofs::verify(
-        bp.as_ref().unwrap(),
-        &commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()
-      ) {
-        Err(TransactionError::InvalidPreparation("invalid bulletproof".to_string()))?;
-      }
-    }
+    Ok((commitments, self.outputs.iter().map(|output| output.mask).sum()))
+  }
 
+  fn prepare_transaction(
+    &self,
+    commitments: &[Commitment],
+    bp: Bulletproof
+  ) -> Transaction {
     // Create the TX extra
     let mut extra = ExtraField(vec![
-      SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
+      SubField::TxPublicKey(PublicKey { point: self.outputs[0].R.compress() })
     ]);
     extra.0.push(SubField::AdditionalPublickKey(
-      outputs[1 .. outputs.len()].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
+      self.outputs[1 .. self.outputs.len()].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
     ));
 
     // Format it for monero-rs
-    let mut mrs_outputs = Vec::with_capacity(outputs.len());
-    let mut out_pk = Vec::with_capacity(outputs.len());
-    let mut ecdh_info = Vec::with_capacity(outputs.len());
-    for o in 0 .. outputs.len() {
+    let mut mrs_outputs = Vec::with_capacity(self.outputs.len());
+    let mut out_pk = Vec::with_capacity(self.outputs.len());
+    let mut ecdh_info = Vec::with_capacity(self.outputs.len());
+    for o in 0 .. self.outputs.len() {
       mrs_outputs.push(TxOut {
         amount: VarInt(0),
-        target: TxOutTarget::ToKey { key: PublicKey { point: outputs[o].dest.compress() } }
+        target: TxOutTarget::ToKey { key: PublicKey { point: self.outputs[o].dest.compress() } }
       });
       out_pk.push(CtKey {
         mask: Key { key: commitments[o].calculate().compress().to_bytes() }
       });
-      ecdh_info.push(EcdhInfo::Bulletproof { amount: outputs[o].amount });
+      ecdh_info.push(EcdhInfo::Bulletproof { amount: self.outputs[o].amount });
     }
 
-    Ok((
-      match prep {
-        // Encode the prep
-        Preparation::Leader(..) => {
-          let mut prep = entropy.to_vec();
-          bp.as_ref().unwrap().consensus_encode(&mut prep).expect("Couldn't encode bulletproof");
-          prep
-        },
-        Preparation::Follower(..) => {
-          vec![]
-        }
+    Transaction {
+      prefix: TransactionPrefix {
+        version: VarInt(2),
+        unlock_time: VarInt(0),
+        inputs: vec![],
+        outputs: mrs_outputs,
+        extra
       },
-      outputs.iter().map(|output| output.mask).sum(),
-      Transaction {
-        prefix: TransactionPrefix {
-          version: VarInt(2),
-          unlock_time: VarInt(0),
-          inputs: vec![],
-          outputs: mrs_outputs,
-          extra
-        },
-        signatures: vec![],
-        rct_signatures: RctSig {
-          sig: Some(RctSigBase {
-            rct_type: RctType::Clsag,
-            txn_fee: VarInt(fee),
-            pseudo_outs: vec![],
-            ecdh_info,
-            out_pk
-          }),
-          p: Some(RctSigPrunable {
-            range_sigs: vec![],
-            bulletproofs: vec![bp.unwrap()],
-            MGs: vec![],
-            Clsags: vec![],
-            pseudo_outs: vec![]
-          })
-        }
+      signatures: vec![],
+      rct_signatures: RctSig {
+        sig: Some(RctSigBase {
+          rct_type: RctType::Clsag,
+          txn_fee: VarInt(self.fee),
+          pseudo_outs: vec![],
+          ecdh_info,
+          out_pk
+        }),
+        p: Some(RctSigPrunable {
+          range_sigs: vec![],
+          bulletproofs: vec![bp],
+          MGs: vec![],
+          Clsags: vec![],
+          pseudo_outs: vec![]
+        })
       }
-    ))
+    }
   }
 
   pub async fn sign<R: RngCore + CryptoRng>(
-    &self,
+    &mut self,
     rng: &mut R,
     rpc: &Rpc,
     spend: &Scalar
   ) -> Result<Transaction, TransactionError> {
-    let (_, mask_sum, mut tx) = self.prepare_outputs(&mut Preparation::Leader(rng))?;
+    let (commitments, mask_sum) = self.prepare_outputs(rng)?;
+    let mut tx = self.prepare_transaction(&commitments, bulletproofs::generate(&commitments)?);
 
     let signable = prepare_inputs(rpc, spend, &self.inputs, &mut tx).await?;
 

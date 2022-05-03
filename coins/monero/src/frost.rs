@@ -16,10 +16,13 @@ use curve25519_dalek::{
 use ff::PrimeField;
 use group::Group;
 
-use dalek_ff_group as dfg;
+use transcript::DigestTranscript;
 use frost::{CurveError, Curve};
+use dalek_ff_group as dfg;
 
 use crate::random_scalar;
+
+pub(crate) type Transcript = DigestTranscript::<blake2::Blake2b512>;
 
 #[derive(Error, Debug)]
 pub enum MultisigError {

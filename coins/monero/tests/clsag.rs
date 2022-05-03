@@ -1,10 +1,13 @@
+#[cfg(feature = "multisig")]
 use std::{rc::Rc, cell::RefCell};
 
 use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_serai::{random_scalar, Commitment, frost::MultisigError, key_image, clsag};
+use monero_serai::{random_scalar, Commitment, key_image, clsag};
+#[cfg(feature = "multisig")]
+use monero_serai::frost::MultisigError;
 
 #[cfg(feature = "multisig")]
 mod frost;

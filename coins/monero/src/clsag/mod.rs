@@ -113,8 +113,8 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
   let mut to_hash = vec![];
   to_hash.reserve_exact(((2 * n) + 4) * 32);
   const PREFIX: &str = "CLSAG_";
-  const AGG_0: &str =  "CLSAG_agg_0";
-  const ROUND: &str =        "round";
+  const AGG_0:  &str = "CLSAG_agg_0";
+  const ROUND:  &str =       "round";
   to_hash.extend(AGG_0.bytes());
   to_hash.extend([0; 32 - AGG_0.len()]);
 

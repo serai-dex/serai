@@ -14,14 +14,13 @@ use monero::util::ringct::{Key, Clsag};
 
 use group::Group;
 
-use dalek_ff_group as dfg;
 use transcript::Transcript as TranscriptTrait;
 use frost::{Curve, FrostError, algorithm::Algorithm, MultisigView};
+use dalek_ff_group as dfg;
 
 use crate::{
-  Transcript,
   hash_to_point,
-  frost::{MultisigError, Ed25519, DLEqProof},
+  frost::{Transcript, MultisigError, Ed25519, DLEqProof},
   key_image,
   clsag::{Input, sign_core, verify}
 };

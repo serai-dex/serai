@@ -12,8 +12,6 @@ use curve25519_dalek::{
 
 use monero::util::key::H;
 
-use transcript::DigestTranscript;
-
 #[cfg(feature = "multisig")]
 pub mod frost;
 
@@ -39,18 +37,9 @@ extern "C" {
   ) -> bool;
 }
 
-// Allows using a modern rand as dalek's is notoriously dated
-pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
-  let mut r = [0; 64];
-  rng.fill_bytes(&mut r);
-  Scalar::from_bytes_mod_order_wide(&r)
-}
-
 lazy_static! {
   static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H.point.decompress().unwrap());
 }
-
-pub(crate) type Transcript = DigestTranscript::<blake2::Blake2b512>;
 
 #[allow(non_snake_case)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -73,6 +62,13 @@ impl Commitment {
   }
 }
 
+// Allows using a modern rand as dalek's is notoriously dated
+pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
+  let mut r = [0; 64];
+  rng.fill_bytes(&mut r);
+  Scalar::from_bytes_mod_order_wide(&r)
+}
+
 pub fn hash(data: &[u8]) -> [u8; 32] {
   let mut keccak = Keccak::v256();
   keccak.update(data);
@@ -87,8 +83,6 @@ pub fn hash_to_scalar(data: &[u8]) -> Scalar {
 
 pub fn hash_to_point(point: &EdwardsPoint) -> EdwardsPoint {
   let mut bytes = point.compress().to_bytes();
-  unsafe {
-    c_hash_to_point(bytes.as_mut_ptr());
-  }
+  unsafe { c_hash_to_point(bytes.as_mut_ptr()); }
   CompressedEdwardsY::from_slice(&bytes).decompress().unwrap()
 }

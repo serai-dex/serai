@@ -17,12 +17,11 @@ blake2 = "0.10"
 
 curve25519-dalek = { version = "3.2", features = ["std", "simd_backend"] }
 
-transcript = { path = "../../crypto/transcript" }
-
 ff = { version = "0.11", optional = true }
 group = { version = "0.11", optional = true }
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
+transcript = { path = "../../crypto/transcript", optional = true }
 frost = { path = "../../crypto/frost", optional = true }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
 
 # Locked to this specific patch version due to a bug we compensate for
 monero = { version = "0.16.0", features = ["experimental"] }
@@ -34,7 +33,7 @@ monero-epee-bin-serde = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 
 [features]
-multisig = ["ff", "group", "dalek-ff-group", "frost"]
+multisig = ["ff", "group", "transcript", "frost", "dalek-ff-group"]
 
 [dev-dependencies]
 rand = "0.8"

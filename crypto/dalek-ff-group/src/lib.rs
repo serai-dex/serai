@@ -120,7 +120,9 @@ impl Field for Scalar {
   fn one() -> Self { Self(DScalar::one()) }
   fn square(&self) -> Self { *self * self }
   fn double(&self) -> Self { *self + self }
-  fn invert(&self) -> CtOption<Self> { CtOption::new(Self(self.0.invert()), Choice::from(1 as u8)) }
+  fn invert(&self) -> CtOption<Self> {
+    CtOption::new(Self(self.0.invert()), Choice::from(1 as u8))
+  }
   fn sqrt(&self) -> CtOption<Self> { unimplemented!() }
   fn is_zero(&self) -> Choice { Choice::from(if self.0 == DScalar::zero() { 1 } else { 0 }) }
   fn cube(&self) -> Self { *self * self * self }
@@ -137,7 +139,10 @@ impl PrimeField for Scalar {
   const CAPACITY: u32 = 252;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes).map(|x| Scalar(x));
-    CtOption::new(scalar.unwrap_or(Scalar::zero()), Choice::from(if scalar.is_some() { 1 } else { 0 }))
+    CtOption::new(
+      scalar.unwrap_or(Scalar::zero()),
+      Choice::from(if scalar.is_some() { 1 } else { 0 })
+    )
   }
   fn to_repr(&self) -> [u8; 32] { self.0.to_bytes() }
 
@@ -285,7 +290,9 @@ impl EdwardsPoint {
 }
 
 pub struct EdwardsBasepointTable(pub DTable);
-pub const ED25519_BASEPOINT_TABLE: EdwardsBasepointTable = EdwardsBasepointTable(constants::ED25519_BASEPOINT_TABLE);
+pub const ED25519_BASEPOINT_TABLE: EdwardsBasepointTable = EdwardsBasepointTable(
+  constants::ED25519_BASEPOINT_TABLE
+);
 
 impl Deref for EdwardsBasepointTable {
     type Target = DTable;

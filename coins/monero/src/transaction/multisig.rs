@@ -6,7 +6,7 @@ use curve25519_dalek::{scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwards
 
 use monero::{
   Hash, VarInt,
-  consensus::deserialize,
+  consensus::{Encodable, deserialize},
   util::ringct::Key,
   blockdata::transaction::{KeyImage, TxIn, Transaction}
 };
@@ -15,12 +15,10 @@ use transcript::Transcript as TranscriptTrait;
 use frost::{FrostError, MultisigKeys, MultisigParams, sign::{State, StateMachine, AlgorithmMachine}};
 
 use crate::{
-  Transcript,
-  frost::Ed25519,
-  key_image,
-  clsag,
+  frost::{Transcript, Ed25519},
+  key_image, bulletproofs, clsag,
   rpc::Rpc,
-  transaction::{TransactionError, Preparation, SignableTransaction, mixins}
+  transaction::{TransactionError, SignableTransaction, mixins}
 };
 
 pub struct TransactionMachine {
@@ -36,7 +34,7 @@ pub struct TransactionMachine {
 
 impl SignableTransaction {
   pub async fn multisig<R: RngCore + CryptoRng>(
-    self,
+    mut self,
     rng: &mut R,
     rpc: &Rpc,
     keys: Rc<MultisigKeys<Ed25519>>,
@@ -83,7 +81,7 @@ impl SignableTransaction {
     }
 
     // Verify these outputs by a dummy prep
-    self.prepare_outputs(&mut Preparation::Leader(rng))?;
+    self.prepare_outputs(rng)?;
 
     Ok(TransactionMachine {
       leader: keys.params().i() == included[0],
@@ -96,6 +94,18 @@ impl SignableTransaction {
       clsags
     })
   }
+}
+
+// Seeded RNG so multisig participants agree on one time keys to use, preventing burning attacks
+fn outputs_rng(tx: &SignableTransaction, entropy: [u8; 32]) -> <Transcript as TranscriptTrait>::SeededRng {
+  let mut transcript = Transcript::new(b"StealthAddress");
+  // This output can only be spent once. Therefore, it forces all one time keys used here to be
+  // unique, even if the entropy is reused. While another transaction could use a different input
+  // ordering to swap which 0 is, that input set can't contain this input without being a double
+  // spend
+  transcript.append_message(b"hash", &tx.inputs[0].tx.0);
+  transcript.append_message(b"index", &u64::try_from(tx.inputs[0].o).unwrap().to_le_bytes());
+  transcript.seeded_rng(b"tx_keys", Some(entropy))
 }
 
 impl StateMachine for TransactionMachine {
@@ -116,11 +126,20 @@ impl StateMachine for TransactionMachine {
     }
 
     if self.leader {
-      let (prep, mask_sum, tx) = self.signable.prepare_outputs(&mut Preparation::Leader(rng)).unwrap();
-      self.mask_sum.replace(mask_sum);
-      self.tx = Some(tx);
+      let mut entropy = [0; 32];
+      rng.fill_bytes(&mut entropy);
+      serialized.extend(&entropy);
 
-      serialized.extend(&prep);
+      let mut rng = outputs_rng(&self.signable, entropy);
+      // Safe to unwrap thanks to the dummy prepare
+      let (commitments, mask_sum) = self.signable.prepare_outputs(&mut rng).unwrap();
+      self.mask_sum.replace(mask_sum);
+
+      let bp = bulletproofs::generate(&commitments).unwrap();
+      bp.consensus_encode(&mut serialized).unwrap();
+
+      let tx = self.signable.prepare_transaction(&commitments, bp);
+      self.tx = Some(tx);
     }
 
     Ok(serialized)
@@ -150,14 +169,21 @@ impl StateMachine for TransactionMachine {
         }
         let prep = prep.as_ref().unwrap();
 
-        // Handle the prep with a seeded RNG type to make rustc happy
-        let (_, mask_sum, tx_inner) = self.signable.prepare_outputs::<<Transcript as TranscriptTrait>::SeededRng>(
-          &mut Preparation::Follower(
-            prep[clsag_lens .. (clsag_lens + 32)].try_into().map_err(|_| FrostError::InvalidCommitment(l))?,
-            deserialize(&prep[(clsag_lens + 32) .. prep.len()]).map_err(|_| FrostError::InvalidCommitment(l))?
-          )
-        ).map_err(|_| FrostError::InvalidShare(l))?; // Not invalid outputs due to doing a dummy prep as leader
+        let mut rng = outputs_rng(
+          &self.signable,
+          prep[clsag_lens .. (clsag_lens + 32)].try_into().map_err(|_| FrostError::InvalidShare(l))?
+        );
+        // Not invalid outputs due to doing a dummy prep as leader
+        let (commitments, mask_sum) = self.signable.prepare_outputs(&mut rng).map_err(|_| FrostError::InvalidShare(l))?;
         self.mask_sum.replace(mask_sum);
+
+        // Verify the provided bulletproofs if not leader
+        let bp = deserialize(&prep[(clsag_lens + 32) .. prep.len()]).map_err(|_| FrostError::InvalidShare(l))?;
+        if !bulletproofs::verify(&bp, &commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()) {
+          Err(FrostError::InvalidShare(l))?;
+        }
+
+        let tx_inner = self.signable.prepare_transaction(&commitments, bp);
         tx = Some(tx_inner);
         break;
       }
@@ -187,6 +213,8 @@ impl StateMachine for TransactionMachine {
         _ => panic!("Signing for an input which isn't ToKey")
       };
     }
+
+    // TODO sort inputs
 
     let mut tx = tx.unwrap();
     tx.prefix.inputs = self.inputs.clone();

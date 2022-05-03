@@ -54,8 +54,8 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   fn generator_table() -> Self::T;
 
   /// Multiexponentation function, presumably Straus or Pippenger
-  /// This library does provide an implementation of Straus which should increase key generation
-  /// performance by around 4x, also named multiexp_vartime, with the same API. However, if a more
+  /// This library does forward an implementation of Straus which should increase key generation
+  /// performance by around 4x, also named multiexp_vartime, with a similar API. However, if a more
   /// performant implementation is available, that should be used instead
   // This could also be written as -> Option<C::G> with None for not implemented
   fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G;
