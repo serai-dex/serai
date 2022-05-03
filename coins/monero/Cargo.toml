@@ -20,8 +20,8 @@ curve25519-dalek = { version = "3.2", features = ["std", "simd_backend"] }
 
 ff = { version = "0.11", optional = true }
 group = { version = "0.11", optional = true }
-dalek-ff-group = { path = "../../sign/dalek-ff-group", optional = true }
-frost = { path = "../../sign/frost", optional = true }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
+frost = { path = "../../crypto/frost", optional = true }
 
 # Locked to this specific patch version due to a bug we compensate for
 monero = { version = "0.16.0", features = ["experimental"] }
