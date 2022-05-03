@@ -5,6 +5,8 @@ use thiserror::Error;
 use ff::{Field, PrimeField};
 use group::{Group, GroupOps, ScalarMul};
 
+pub use multiexp::multiexp_vartime;
+
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
@@ -371,69 +373,4 @@ impl<C: Curve> MultisigKeys<C> {
       }
     )
   }
-}
-
-/*
-An implementation of Straus, which should be more efficient than Pippenger for the expected amount
-of points
-
-Completing key generation from the round 2 messages takes:
-- Naive
-    Completed 33-of-50 in 2.66s
-    Completed 5-of-8 in 11.05ms
-
-- crate Straus
-    Completed 33-of-50 in 730-833ms (extremely notable effects from taking variable time)
-    Completed 5-of-8 in 2.8ms
-
-- dalek VartimeMultiscalarMul
-    Completed 33-of-50 in 266ms
-    Completed 5-of-8 in 1.6ms
-
-This does show this algorithm isn't appropriately tuned (and potentially isn't even the right
-choice), at least with that quantity. Unfortunately, we can't use dalek's multiexp implementation
-everywhere, and this does work
-*/
-pub fn multiexp_vartime<C: Curve>(scalars: &[C::F], points: &[C::G]) -> C::G {
-  let mut tables = vec![];
-  // dalek uses 8 in their impl, along with a carry scheme where values are [-8, 8)
-  // Moving to a similar system here did save a marginal amount, yet not one significant enough for
-  // its pain (as some fields do have scalars which can have their top bit set, a scenario dalek
-  // assumes is never true)
-  tables.resize(points.len(), Vec::with_capacity(15));
-  for p in 0 .. points.len() {
-    let mut accum = C::G::identity();
-    tables[p].push(accum);
-    for _ in 0 .. 15 {
-      accum += points[p];
-      tables[p].push(accum);
-    }
-  }
-
-  let mut nibbles = vec![];
-  nibbles.resize(scalars.len(), vec![]);
-  for s in 0 .. scalars.len() {
-    let bytes = C::F_to_le_bytes(&scalars[s]);
-    nibbles[s].resize(C::F_len() * 2, 0);
-    for i in 0 .. bytes.len() {
-      nibbles[s][i * 2] = bytes[i] & 0b1111;
-      nibbles[s][(i * 2) + 1] = (bytes[i] >> 4) & 0b1111;
-    }
-  }
-
-  let mut res = C::G::identity();
-  for b in (0 .. (C::F_len() * 2)).rev() {
-    for _ in 0 .. 4 {
-      res = res.double();
-    }
-
-    for s in 0 .. scalars.len() {
-      // This creates a 250% performance increase on key gen, which uses a bunch of very low
-      // scalars. This is why this function is now committed to being vartime
-      if nibbles[s][b] != 0 {
-        res += tables[s][nibbles[s][b] as usize];
-      }
-    }
-  }
-  res
 }

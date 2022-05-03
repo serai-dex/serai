@@ -17,6 +17,8 @@ group = "0.11"
 blake2 = "0.10"
 transcript = { path = "../transcript" }
 
+multiexp = { path = "../multiexp" }
+
 [dev-dependencies]
 rand = "0.8"
 sha2 = "0.10"

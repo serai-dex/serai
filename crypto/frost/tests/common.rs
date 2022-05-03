@@ -37,7 +37,7 @@ impl Curve for Secp256k1 {
   }
 
   fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G {
-    multiexp_vartime::<Secp256k1>(scalars, points)
+    multiexp_vartime(scalars, points, false)
   }
 
   // The IETF draft doesn't specify a secp256k1 ciphersuite

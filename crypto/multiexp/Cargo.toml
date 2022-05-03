@@ -1,0 +1,11 @@
+[package]
+name = "multiexp"
+version = "0.1.0"
+description = "Multiexponentation algorithms for ff/group"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+ff = "0.11"
+group = "0.11"
