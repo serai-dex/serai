@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+  "crypto/transcript",
   "crypto/frost",
   "crypto/dalek-ff-group",
   "coins/monero",

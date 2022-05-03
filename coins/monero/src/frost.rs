@@ -1,7 +1,7 @@
 use core::convert::TryInto;
 
-use rand_core::{RngCore, CryptoRng};
 use thiserror::Error;
+use rand_core::{RngCore, CryptoRng};
 
 use blake2::{digest::Update, Digest, Blake2b512};
 
@@ -12,7 +12,6 @@ use curve25519_dalek::{
   edwards::EdwardsPoint as DPoint
 };
 
-use dalek_ff_group::EdwardsPoint;
 
 use ff::PrimeField;
 use group::Group;
@@ -56,7 +55,7 @@ impl Curve for Ed25519 {
   }
 
   fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G {
-    EdwardsPoint(DPoint::vartime_multiscalar_mul(scalars, points))
+    dfg::EdwardsPoint(DPoint::vartime_multiscalar_mul(scalars, points))
   }
 
   fn hash_msg(msg: &[u8]) -> Vec<u8> {

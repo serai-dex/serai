@@ -4,15 +4,15 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::Group;
 
+use transcript::{Transcript, DigestTranscript};
+
 use crate::{Curve, FrostError, MultisigView};
 
 /// Algorithm to use FROST with
 pub trait Algorithm<C: Curve>: Clone {
+  type Transcript: Transcript + Clone + Debug;
   /// The resulting type of the signatures this algorithm will produce
   type Signature: Clone + Debug;
-
-  /// The amount of bytes from each participant's addendum to commit to
-  fn addendum_commit_len() -> usize;
 
   /// Generate an addendum to FROST"s preprocessing stage
   fn preprocess_addendum<R: RngCore + CryptoRng>(
@@ -30,8 +30,8 @@ pub trait Algorithm<C: Curve>: Clone {
     serialized: &[u8],
   ) -> Result<(), FrostError>;
 
-  /// Context for this algorithm to be hashed into b, and therefore committed to
-  fn context(&self) -> Vec<u8>;
+  /// Transcript for this algorithm to be used to create the binding factor
+  fn transcript(&self) -> Option<Self::Transcript>;
 
   /// Sign a share with the given secret/nonce
   /// The secret will already have been its lagrange coefficient applied so it is the necessary
@@ -90,11 +90,10 @@ pub struct SchnorrSignature<C: Curve> {
 
 /// Implementation of Schnorr signatures for use with FROST
 impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
+  // Specify a firm type which either won't matter as it won't be used or will be used (offset) and
+  // is accordingly solid
+  type Transcript = DigestTranscript::<blake2::Blake2b512>;
   type Signature = SchnorrSignature<C>;
-
-  fn addendum_commit_len() -> usize {
-    0
-  }
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     _: &mut R,
@@ -114,8 +113,8 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     Ok(())
   }
 
-  fn context(&self) -> Vec<u8> {
-    vec![]
+  fn transcript(&self) -> Option<DigestTranscript::<blake2::Blake2b512>> {
+    None
   }
 
   fn sign_share(

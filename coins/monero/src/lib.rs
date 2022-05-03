@@ -12,6 +12,8 @@ use curve25519_dalek::{
 
 use monero::util::key::H;
 
+use transcript::DigestTranscript;
+
 #[cfg(feature = "multisig")]
 pub mod frost;
 
@@ -47,6 +49,8 @@ pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
 lazy_static! {
   static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H.point.decompress().unwrap());
 }
+
+pub(crate) type Transcript = DigestTranscript::<blake2::Blake2b512>;
 
 #[allow(non_snake_case)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

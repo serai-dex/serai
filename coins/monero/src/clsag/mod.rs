@@ -1,5 +1,5 @@
-use rand_core::{RngCore, CryptoRng};
 use thiserror::Error;
+use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -40,8 +40,8 @@ pub enum Error {
 pub struct Input {
   // Ring, the index we're signing for, and the actual commitment behind it
   pub ring: Vec<[EdwardsPoint; 2]>,
-  pub i: usize,
-  pub commitment: Commitment,
+  pub i: u8,
+  pub commitment: Commitment
 }
 
 impl Input {
@@ -49,7 +49,7 @@ impl Input {
     ring: Vec<[EdwardsPoint; 2]>,
     i: u8,
     commitment: Commitment
-) -> Result<Input, Error> {
+  ) -> Result<Input, Error> {
     let n = ring.len();
     if n > u8::MAX.into() {
       Err(Error::InternalError("max ring size in this library is u8 max".to_string()))?;
@@ -57,28 +57,13 @@ impl Input {
     if i >= (n as u8) {
       Err(Error::InvalidRingMember(i, n as u8))?;
     }
-    let i: usize = i.into();
 
     // Validate the commitment matches
-    if ring[i][1] != commitment.calculate() {
+    if ring[usize::from(i)][1] != commitment.calculate() {
       Err(Error::InvalidCommitment)?;
     }
 
     Ok(Input { ring, i, commitment })
-  }
-
-  #[cfg(feature = "multisig")]
-  pub fn context(&self) -> Vec<u8> {
-    // Ring index
-    let mut context = u8::try_from(self.i).unwrap().to_le_bytes().to_vec();
-    // Ring
-    for pair in &self.ring {
-      // Doesn't include key offsets as CLSAG doesn't care and won't be affected by it
-      context.extend(&pair[0].compress().to_bytes());
-      context.extend(&pair[1].compress().to_bytes());
-    }
-    // Doesn't include commitment as the above ring + index includes the commitment
-    context
   }
 }
 
@@ -233,7 +218,7 @@ pub fn sign<R: RngCore + CryptoRng>(
       &inputs[i].1,
       &inputs[i].2,
       mask,
-      &nonce * &ED25519_BASEPOINT_TABLE, nonce * hash_to_point(&inputs[i].1.ring[inputs[i].1.i][0])
+      &nonce * &ED25519_BASEPOINT_TABLE, nonce * hash_to_point(&inputs[i].1.ring[usize::from(inputs[i].1.i)][0])
     );
     clsag.s[inputs[i].1.i as usize] = Key {
       key: (nonce - (c * ((mu_C * z) + (mu_P * inputs[i].0)))).to_bytes()

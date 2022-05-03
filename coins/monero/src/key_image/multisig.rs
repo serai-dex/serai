@@ -1,6 +1,7 @@
 use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
+
 use frost::MultisigView;
 
 use crate::{hash_to_point, frost::{MultisigError, Ed25519, DLEqProof}};

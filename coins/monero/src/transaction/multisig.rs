@@ -1,11 +1,8 @@
 use std::{rc::Rc, cell::RefCell};
 
 use rand_core::{RngCore, CryptoRng};
-use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwardsY}};
-
-use frost::{FrostError, MultisigKeys, MultisigParams, sign::{State, StateMachine, AlgorithmMachine}};
 
 use monero::{
   Hash, VarInt,
@@ -14,7 +11,11 @@ use monero::{
   blockdata::transaction::{KeyImage, TxIn, Transaction}
 };
 
+use transcript::Transcript as TranscriptTrait;
+use frost::{FrostError, MultisigKeys, MultisigParams, sign::{State, StateMachine, AlgorithmMachine}};
+
 use crate::{
+  Transcript,
   frost::Ed25519,
   key_image,
   clsag,
@@ -150,7 +151,7 @@ impl StateMachine for TransactionMachine {
         let prep = prep.as_ref().unwrap();
 
         // Handle the prep with a seeded RNG type to make rustc happy
-        let (_, mask_sum, tx_inner) = self.signable.prepare_outputs::<ChaCha12Rng>(
+        let (_, mask_sum, tx_inner) = self.signable.prepare_outputs::<<Transcript as TranscriptTrait>::SeededRng>(
           &mut Preparation::Follower(
             prep[clsag_lens .. (clsag_lens + 32)].try_into().map_err(|_| FrostError::InvalidCommitment(l))?,
             deserialize(&prep[(clsag_lens + 32) .. prep.len()]).map_err(|_| FrostError::InvalidCommitment(l))?

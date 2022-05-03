@@ -3,18 +3,19 @@ name = "frost"
 version = "0.1.0"
 description = "Implementation of FROST over ff/group"
 license = "MIT"
-authors = ["kayabaNerve (Luke Parker) <lukeparker5132@gmail.com>"]
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-digest = "0.10"
+thiserror = "1"
 
 rand_core = "0.6"
 
 ff = "0.11"
 group = "0.11"
 
-thiserror = "1"
+blake2 = "0.10"
+transcript = { path = "../transcript" }
 
 [dev-dependencies]
 rand = "0.8"

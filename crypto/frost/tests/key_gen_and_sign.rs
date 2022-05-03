@@ -2,8 +2,7 @@ use std::rc::Rc;
 
 use rand::{RngCore, rngs::OsRng};
 
-use digest::Digest;
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 use frost::{
   Curve,

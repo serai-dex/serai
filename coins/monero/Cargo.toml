@@ -11,12 +11,13 @@ lazy_static = "1"
 thiserror = "1"
 
 rand_core = "0.6"
-rand_chacha = { version = "0.3", optional = true }
 
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 blake2 = "0.10"
 
 curve25519-dalek = { version = "3.2", features = ["std", "simd_backend"] }
+
+transcript = { path = "../../crypto/transcript" }
 
 ff = { version = "0.11", optional = true }
 group = { version = "0.11", optional = true }
@@ -33,7 +34,7 @@ monero-epee-bin-serde = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 
 [features]
-multisig = ["ff", "group", "dalek-ff-group", "frost", "rand_chacha"]
+multisig = ["ff", "group", "dalek-ff-group", "frost"]
 
 [dev-dependencies]
 rand = "0.8"

@@ -1,9 +1,9 @@
 use core::{ops::Mul, fmt::Debug};
 
+use thiserror::Error;
+
 use ff::{Field, PrimeField};
 use group::{Group, GroupOps, ScalarMul};
-
-use thiserror::Error;
 
 pub mod key_gen;
 pub mod algorithm;

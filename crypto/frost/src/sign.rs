@@ -6,6 +6,8 @@ use rand_core::{RngCore, CryptoRng};
 use ff::{Field, PrimeField};
 use group::Group;
 
+use transcript::Transcript;
+
 use crate::{Curve, FrostError, MultisigParams, MultisigKeys, MultisigView, algorithm::Algorithm};
 
 /// Calculate the lagrange coefficient
@@ -142,17 +144,13 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
    Err(FrostError::NonEmptyParticipantZero)?;
   }
 
-  let commitments_len = C::G_len() * 2;
-  // Allow algorithms to commit to more data than just the included nonces
-  // Not IETF draft compliant yet it doesn't prevent a compliant Schnorr algorithm from being used
-  // with this library, which does ship one
-  let commit_len = commitments_len + A::addendum_commit_len();
   #[allow(non_snake_case)]
   let mut B = Vec::with_capacity(multisig_params.n + 1);
   B.push(None);
 
   // Commitments + a presumed 32-byte hash of the message
-  let mut b: Vec<u8> = Vec::with_capacity((multisig_params.t * 2 * C::G_len()) + 32);
+  let commitments_len = 2 * C::G_len();
+  let mut b: Vec<u8> = Vec::with_capacity((multisig_params.t * commitments_len) + 32);
 
   // Parse the commitments and prepare the binding factor
   for l in 1 ..= multisig_params.n {
@@ -163,7 +161,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
 
       B.push(Some(our_preprocess.commitments));
       b.extend(&u16::try_from(l).unwrap().to_le_bytes());
-      b.extend(&our_preprocess.serialized[0 .. commit_len]);
+      b.extend(&our_preprocess.serialized[0 .. (C::G_len() * 2)]);
       continue;
     }
 
@@ -193,7 +191,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
       .map_err(|_| FrostError::InvalidCommitment(l))?;
     B.push(Some([D, E]));
     b.extend(&u16::try_from(l).unwrap().to_le_bytes());
-    b.extend(&commitments[0 .. commit_len]);
+    b.extend(&commitments[0 .. commitments_len]);
   }
 
   // Process the commitments and addendums
@@ -216,26 +214,27 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   // Finish the binding factor
   b.extend(&C::hash_msg(&msg));
 
-  // If the following are used with certain lengths, it is possible to craft distinct
-  // commitments/messages/contexts with the same binding factor. While we can't length prefix the
-  // commitments, unfortunately, we can tag and length prefix the following
+  // Let the algorithm provide a transcript of its variables
+  // While Merlin, which may or may not be the transcript used here, wants application level
+  // transcripts passed around to proof systems, this maintains a desired level of abstraction and
+  // works without issue
+  let mut transcript = params.algorithm.transcript();
 
-  // If the offset functionality provided by this library is in use, include it in the binding
-  // factor. Not compliant with the IETF spec which doesn't have a concept of offsets
+  // If the offset functionality provided by this library is in use, include it in the transcript.
+  // Not compliant with the IETF spec which doesn't have a concept of offsets, nor does it use
+  // transcripts
   if params.keys.offset.is_some() {
-    b.extend(b"offset");
-    b.extend(u64::try_from(C::F_len()).unwrap().to_le_bytes());
-    b.extend(&C::F_to_le_bytes(&params.keys.offset.unwrap()));
+    let mut offset_transcript = transcript.unwrap_or(A::Transcript::new(b"FROST_offset"));
+    offset_transcript.append_message(b"offset", &C::F_to_le_bytes(&params.keys.offset.unwrap()));
+    transcript = Some(offset_transcript);
   }
 
-  // Also include any context the algorithm may want to specify. Again not compliant with the IETF
-  // spec which doesn't considered there may be signatures other than Schnorr being generated with
-  // FROST
-  let context = params.algorithm.context();
-  if context.len() != 0 {
-    b.extend(b"context");
-    b.extend(u64::try_from(context.len()).unwrap().to_le_bytes());
-    b.extend(&context);
+  // If a transcript was defined, move the commitments used for the binding factor into it
+  // Then, obtain its sum and use that as the binding factor
+  if transcript.is_some() {
+    let mut transcript = transcript.unwrap();
+    transcript.append_message(b"commitments", &b);
+    b = transcript.challenge(b"binding", 64);
   }
 
   let b = C::hash_to_F(&b);

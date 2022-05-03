@@ -1,8 +1,6 @@
-use rand_core::{RngCore, CryptoRng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
 use thiserror::Error;
 
-use blake2::{Digest, Blake2b512};
+use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -26,10 +24,13 @@ use monero::{
   }
 };
 
+use transcript::Transcript as TranscriptTrait;
+
 #[cfg(feature = "multisig")]
 use frost::FrostError;
 
 use crate::{
+  Transcript,
   Commitment,
   random_scalar,
   hash, hash_to_scalar,
@@ -264,6 +265,9 @@ impl SignableTransaction {
     )
   }
 
+  // This could be refactored so prep, a multisig-required variable, is used only by multisig
+  // Not shimmed by the single signer API as well
+  // This would enable moving Transcript as a whole to the multisig feature
   fn prepare_outputs<'a, R: RngCore + CryptoRng>(
     &self,
     prep: &mut Preparation<'a, R>
@@ -289,6 +293,7 @@ impl SignableTransaction {
     match prep {
       Preparation::Leader(ref mut rng) => {
         // The Leader generates the entropy for the one time keys and the bulletproof
+        // This prevents de-anonymization via recalculation of the randomness which is deterministic
         rng.fill_bytes(&mut entropy);
       },
       Preparation::Follower(e, b) => {
@@ -297,16 +302,14 @@ impl SignableTransaction {
       }
     }
 
-    let mut seed = b"StealthAddress_randomness".to_vec();
-    // Leader selected entropy to prevent de-anonymization via recalculation of randomness
-    seed.extend(&entropy);
+    let mut transcript = Transcript::new(b"StealthAddress");
     // This output can only be spent once. Therefore, it forces all one time keys used here to be
     // unique, even if the leader reuses entropy. While another transaction could use a different
     // input ordering to swap which 0 is, that input set can't contain this input without being a
     // double spend
-    seed.extend(&self.inputs[0].tx.0);
-    seed.extend(&self.inputs[0].o.to_le_bytes());
-    let mut rng = ChaCha12Rng::from_seed(Blake2b512::digest(seed)[0 .. 32].try_into().unwrap());
+    transcript.append_message(b"hash", &self.inputs[0].tx.0);
+    transcript.append_message(b"index", &u64::try_from(self.inputs[0].o).unwrap().to_le_bytes());
+    let mut rng = transcript.seeded_rng(b"tx_keys", Some(entropy));
 
     let mut outputs = Vec::with_capacity(payments.len());
     let mut commitments = Vec::with_capacity(payments.len());

@@ -1,10 +1,9 @@
 use core::convert::TryInto;
 
-use digest::Digest;
 use ff::PrimeField;
 use group::GroupEncoding;
 
-use sha2::{Sha256, Sha512};
+use sha2::{Digest, Sha256, Sha512};
 
 use k256::{
   elliptic_curve::{generic_array::GenericArray, bigint::{ArrayEncoding, U512}, ops::Reduce},
