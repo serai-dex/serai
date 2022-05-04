@@ -60,6 +60,7 @@ pub async fn send_multisig() {
         &mut OsRng,
         &rpc,
         keys[i - 1].clone(),
+        rpc.get_height().await.unwrap() - 10,
         &(1 ..= THRESHOLD).collect::<Vec<usize>>()
       ).await.unwrap()
     );

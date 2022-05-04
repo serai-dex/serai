@@ -11,6 +11,7 @@ lazy_static = "1"
 thiserror = "1"
 
 rand_core = "0.6"
+rand_distr = "0.4"
 
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 blake2 = "0.10"

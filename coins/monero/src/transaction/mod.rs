@@ -207,7 +207,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   let mixins = mixins::select(
     rng,
     rpc,
-    rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))?,
+    rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))? - 10,
     inputs
   ).await.map_err(|e| TransactionError::RpcError(e))?;
 

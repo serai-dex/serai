@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
+use lazy_static::lazy_static;
+
 use rand_core::{RngCore, CryptoRng};
+use rand_distr::{Distribution, Gamma};
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
@@ -8,22 +11,48 @@ use monero::VarInt;
 
 use crate::{transaction::SpendableOutput, rpc::{RpcError, Rpc}};
 
+const LOCK_WINDOW: usize = 10;
+const RECENT_WINDOW: usize = 15;
+const BLOCK_TIME: usize = 120;
+const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
+const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
+
 const MIXINS: usize = 11;
+
+lazy_static! {
+  static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
+}
 
 async fn select_single<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
   height: usize,
+  distribution: &[u64],
   high: u64,
+  per_second: f64,
   used: &mut HashSet<u64>
 ) -> Result<(u64, [EdwardsPoint; 2]), RpcError> {
   let mut o;
   let mut output = None;
   while {
-    o = rng.next_u64() % u64::try_from(high).unwrap();
-    used.contains(&o) || {
-      output = rpc.get_outputs(&[o], height).await?[0];
-      output.is_none()
+    let mut age = GAMMA.sample(rng).exp();
+    if age > TIP_APPLICATION {
+      age -= TIP_APPLICATION;
+    } else {
+      age = (rng.next_u64() % u64::try_from(RECENT_WINDOW * BLOCK_TIME).unwrap()) as f64;
+    }
+
+    o = (age * per_second) as u64;
+    (o >= high) || {
+      o = high - 1 - o;
+      let i = distribution.partition_point(|s| *s < o);
+      let prev = if i == 0 { 0 } else { i - 1 };
+      let n = distribution[i] - distribution[prev];
+      o = distribution[prev] + (rng.next_u64() % n);
+      (n == 0) || used.contains(&o) || {
+        output = rpc.get_outputs(&[o], height).await?[0];
+        output.is_none()
+      }
     }
   } {}
   used.insert(o);
@@ -55,11 +84,13 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
     ));
   }
 
-  let high = rpc.get_high_output(height - 1).await?;
-  let high_f = high as f64;
-  if (high_f as u64) != high {
-    panic!("Transaction output index exceeds f64");
-  }
+  let distribution = rpc.get_output_distribution(height).await?;
+  let high = distribution[distribution.len() - 1];
+  let per_second = {
+    let blocks = distribution.len().min(BLOCKS_PER_YEAR);
+    let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
+    (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
+  };
 
   let mut used = HashSet::<u64>::new();
   for o in &outputs {
@@ -70,7 +101,7 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
   for (i, o) in outputs.iter().enumerate() {
     let mut mixins = Vec::with_capacity(MIXINS);
     for _ in 0 .. MIXINS {
-      mixins.push(select_single(rng, rpc, height, high, &mut used).await?);
+      mixins.push(select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?);
     }
     mixins.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -85,7 +116,7 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
         // it'd increase the amount of mixins required to create this transaction and some banned
         // outputs may be the best options
         used.remove(&mixins[m].0);
-        mixins[m] = select_single(rng, rpc, height, high, &mut used).await?;
+        mixins[m] = select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?;
       }
       mixins.sort_by(|a, b| a.0.cmp(&b.0));
     }

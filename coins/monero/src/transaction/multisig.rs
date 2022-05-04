@@ -38,6 +38,7 @@ impl SignableTransaction {
     rng: &mut R,
     rpc: &Rpc,
     keys: Rc<MultisigKeys<Ed25519>>,
+    height: usize,
     included: &[usize]
   ) -> Result<TransactionMachine, TransactionError> {
     let mut our_images = vec![];
@@ -75,7 +76,7 @@ impl SignableTransaction {
     let mixins = mixins::select(
       &mut transcript.seeded_rng(b"mixins", None),
       rpc,
-      rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))?,
+      height,
       &self.inputs
     ).await.map_err(|e| TransactionError::RpcError(e))?;
 

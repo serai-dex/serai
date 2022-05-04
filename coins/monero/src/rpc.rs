@@ -8,7 +8,6 @@ use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use monero::{
   Hash,
-  cryptonote::hash::Hashable,
   blockdata::{
     transaction::{TxIn, Transaction},
     block::Block
@@ -237,13 +236,30 @@ impl Rpc {
     ).collect()
   }
 
-  pub async fn get_high_output(&self, height: usize) -> Result<u64, RpcError> {
-    let block = self.get_block(height).await?;
-    Ok(
-      *self.get_o_indexes(
-        *block.tx_hashes.last().unwrap_or(&block.miner_tx.hash())
-      ).await?.last().ok_or(RpcError::InvalidTransaction)?
-    )
+  pub async fn get_output_distribution(&self, height: usize) -> Result<Vec<u64>, RpcError> {
+    #[allow(dead_code)]
+    #[derive(Deserialize, Debug)]
+    pub struct Distribution {
+      distribution: Vec<u64>
+    }
+
+    #[allow(dead_code)]
+    #[derive(Deserialize, Debug)]
+    struct Distributions {
+      distributions: Vec<Distribution>
+    }
+
+    let mut distributions: JsonRpcResponse<Distributions> = self.rpc_call("json_rpc", Some(json!({
+      "method": "get_output_distribution",
+      "params": {
+        "binary": false,
+        "amounts": [0],
+        "cumulative": true,
+        "to_height": height
+      }
+    }))).await?;
+
+    Ok(distributions.result.distributions.swap_remove(0).distribution)
   }
 
   pub async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
