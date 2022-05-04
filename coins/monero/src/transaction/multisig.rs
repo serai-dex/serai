@@ -25,11 +25,11 @@ pub struct TransactionMachine {
   leader: bool,
   signable: SignableTransaction,
   our_images: Vec<EdwardsPoint>,
-  inputs: Vec<TxIn>,
-  tx: Option<Transaction>,
   mask_sum: Rc<RefCell<Scalar>>,
   msg: Rc<RefCell<[u8; 32]>>,
-  clsags: Vec<AlgorithmMachine<Ed25519, clsag::Multisig>>
+  clsags: Vec<AlgorithmMachine<Ed25519, clsag::Multisig>>,
+  inputs: Vec<TxIn>,
+  tx: Option<Transaction>,
 }
 
 impl SignableTransaction {
@@ -41,28 +41,58 @@ impl SignableTransaction {
     included: &[usize]
   ) -> Result<TransactionMachine, TransactionError> {
     let mut our_images = vec![];
-    let mut inputs = vec![];
+
     let mask_sum = Rc::new(RefCell::new(Scalar::zero()));
     let msg = Rc::new(RefCell::new([0; 32]));
     let mut clsags = vec![];
-    for input in &self.inputs {
-      // Select mixins
-      let (m, mixins) = mixins::select(
-        rpc.get_o_indexes(input.tx).await.map_err(|e| TransactionError::RpcError(e))?[input.o]
-      );
 
+    let mut inputs = vec![];
+
+    // Create a RNG out of the input shared keys, which either requires the view key or being every
+    // sender, and the payments (address and amount), which a passive adversary may be able to know
+    // The use of input shared keys technically makes this one time given a competent wallet which
+    // can withstand the burning attack
+    // The lack of dedicated entropy here is frustrating. We can probably provide entropy inclusion
+    // if we move CLSAG ring to a Rc RefCell like msg and mask? TODO
+    let mut transcript = Transcript::new(b"InputMixins");
+    let mut shared_keys = Vec::with_capacity(self.inputs.len() * 32);
+    for input in &self.inputs {
+      shared_keys.extend(&input.key_offset.to_bytes());
+    }
+    transcript.append_message(b"input_shared_keys", &shared_keys);
+    let mut payments = Vec::with_capacity(self.payments.len() * ((2 * 32) + 8));
+    for payment in &self.payments {
+      // Network byte and spend/view key
+      // Doesn't use the full address as monero-rs may provide a payment ID which adds bytes
+      // By simply cutting this short, we get the relevant data without length differences nor the
+      // need to prefix
+      payments.extend(&payment.0.as_bytes()[0 .. 65]);
+      payments.extend(payment.1.to_le_bytes());
+    }
+    transcript.append_message(b"payments", &payments);
+
+    // Select mixins
+    let mixins = mixins::select(
+      &mut transcript.seeded_rng(b"mixins", None),
+      rpc,
+      rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))?,
+      &self.inputs
+    ).await.map_err(|e| TransactionError::RpcError(e))?;
+
+    for (i, input) in self.inputs.iter().enumerate() {
       let keys = keys.offset(dalek_ff_group::Scalar(input.key_offset));
       let (image, _) = key_image::generate_share(
         rng,
         &keys.view(included).map_err(|e| TransactionError::FrostError(e))?
       );
       our_images.push(image);
+
       clsags.push(
         AlgorithmMachine::new(
           clsag::Multisig::new(
             clsag::Input::new(
-              rpc.get_ring(&mixins).await.map_err(|e| TransactionError::RpcError(e))?,
-              m,
+              mixins[i].2.clone(),
+              mixins[i].1,
               input.commitment
             ).map_err(|e| TransactionError::ClsagError(e))?,
             msg.clone(),
@@ -75,7 +105,7 @@ impl SignableTransaction {
 
       inputs.push(TxIn::ToKey {
         amount: VarInt(0),
-        key_offsets: mixins::offset(&mixins).iter().map(|x| VarInt(*x)).collect(),
+        key_offsets: mixins[i].0.clone(),
         k_image: KeyImage { image: Hash([0; 32]) }
       });
     }
@@ -87,11 +117,11 @@ impl SignableTransaction {
       leader: keys.params().i() == included[0],
       signable: self,
       our_images,
-      inputs,
-      tx: None,
       mask_sum,
       msg,
-      clsags
+      clsags,
+      inputs,
+      tx: None
     })
   }
 }

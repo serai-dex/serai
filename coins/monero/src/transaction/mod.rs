@@ -71,6 +71,7 @@ pub enum TransactionError {
 pub struct SpendableOutput {
   pub tx: Hash,
   pub o: usize,
+  pub key: EdwardsPoint,
   pub key_offset: Scalar,
   pub commitment: Commitment
 }
@@ -126,7 +127,7 @@ pub fn scan(tx: &Transaction, view: Scalar, spend: EdwardsPoint) -> Vec<Spendabl
           }
         }
 
-        res.push(SpendableOutput { tx: tx.hash(), o, key_offset, commitment });
+        res.push(SpendableOutput { tx: tx.hash(), o, key: output_key, key_offset, commitment });
         break;
       }
     }
@@ -191,26 +192,31 @@ impl Output {
   }
 }
 
-async fn prepare_inputs(
+async fn prepare_inputs<R: RngCore + CryptoRng>(
+  rng: &mut R,
   rpc: &Rpc,
-  spend: &Scalar,
   inputs: &[SpendableOutput],
+  spend: &Scalar,
   tx: &mut Transaction
 ) -> Result<Vec<(Scalar, clsag::Input, EdwardsPoint)>, TransactionError> {
   // TODO sort inputs
 
   let mut signable = Vec::with_capacity(inputs.len());
-  for (i, input) in inputs.iter().enumerate() {
-    // Select mixins
-    let (m, mixins) = mixins::select(
-      rpc.get_o_indexes(input.tx).await.map_err(|e| TransactionError::RpcError(e))?[input.o]
-    );
 
+  // Select mixins
+  let mixins = mixins::select(
+    rng,
+    rpc,
+    rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))?,
+    inputs
+  ).await.map_err(|e| TransactionError::RpcError(e))?;
+
+  for (i, input) in inputs.iter().enumerate() {
     signable.push((
       spend + input.key_offset,
       clsag::Input::new(
-        rpc.get_ring(&mixins).await.map_err(|e| TransactionError::RpcError(e))?,
-        m,
+        mixins[i].2.clone(),
+        mixins[i].1,
         input.commitment
       ).map_err(|e| TransactionError::ClsagError(e))?,
       key_image::generate(&(spend + input.key_offset))
@@ -218,7 +224,7 @@ async fn prepare_inputs(
 
     tx.prefix.inputs.push(TxIn::ToKey {
       amount: VarInt(0),
-      key_offsets: mixins::offset(&mixins).iter().map(|x| VarInt(*x)).collect(),
+      key_offsets: mixins[i].0.clone(),
       k_image: KeyImage { image: Hash(signable[i].2.compress().to_bytes()) }
     });
   }
@@ -360,7 +366,7 @@ impl SignableTransaction {
     let (commitments, mask_sum) = self.prepare_outputs(rng)?;
     let mut tx = self.prepare_transaction(&commitments, bulletproofs::generate(&commitments)?);
 
-    let signable = prepare_inputs(rpc, spend, &self.inputs, &mut tx).await?;
+    let signable = prepare_inputs(rng, rpc, &self.inputs, spend, &mut tx).await?;
 
     let clsags = clsag::sign(
       rng,
