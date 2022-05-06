@@ -12,6 +12,7 @@ thiserror = "1"
 
 rand_core = "0.6"
 rand_distr = "0.4"
+rand_chacha = { version = "0.3", optional = true }
 
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 blake2 = "0.10"
@@ -34,7 +35,7 @@ monero-epee-bin-serde = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 
 [features]
-multisig = ["ff", "group", "transcript", "frost", "dalek-ff-group"]
+multisig = ["ff", "group", "rand_chacha", "transcript", "frost", "dalek-ff-group"]
 
 [dev-dependencies]
 rand = "0.8"

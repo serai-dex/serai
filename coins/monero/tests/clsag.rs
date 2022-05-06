@@ -7,7 +7,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use monero_serai::{random_scalar, Commitment, key_image, clsag};
 #[cfg(feature = "multisig")]
-use monero_serai::frost::MultisigError;
+use monero_serai::frost::{MultisigError, Transcript};
 
 #[cfg(feature = "multisig")]
 mod frost;
@@ -84,6 +84,7 @@ fn test_multisig() -> Result<(), MultisigError> {
     machines.push(
       sign::AlgorithmMachine::new(
         clsag::Multisig::new(
+          Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
           clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
           Rc::new(RefCell::new([1; 32])),
           Rc::new(RefCell::new(Scalar::from(42u64)))

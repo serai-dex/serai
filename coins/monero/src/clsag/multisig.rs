@@ -1,7 +1,8 @@
 use core::fmt::Debug;
 use std::{rc::Rc, cell::RefCell};
 
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -27,7 +28,7 @@ use crate::{
 
 impl Input {
   fn transcript<T: TranscriptTrait>(&self, transcript: &mut T) {
-    // Doesn't dom-sep as this is considered part of the larger input signing proof
+    // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
     // Ring index
     transcript.append_message(b"ring_index", &[self.i]);
@@ -61,11 +62,12 @@ struct ClsagSignInterim {
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct Multisig {
-  commitments_H: Vec<u8>,
-  image: EdwardsPoint,
-  AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
-
+  transcript: Transcript,
   input: Input,
+
+  image: EdwardsPoint,
+  commitments_H: Vec<u8>,
+  AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
   msg: Rc<RefCell<[u8; 32]>>,
   mask: Rc<RefCell<Scalar>>,
@@ -75,17 +77,19 @@ pub struct Multisig {
 
 impl Multisig {
   pub fn new(
+    transcript: Transcript,
     input: Input,
     msg: Rc<RefCell<[u8; 32]>>,
     mask: Rc<RefCell<Scalar>>,
   ) -> Result<Multisig, MultisigError> {
     Ok(
       Multisig {
-        commitments_H: vec![],
-        image: EdwardsPoint::identity(),
-        AH: (dfg::EdwardsPoint::identity(), dfg::EdwardsPoint::identity()),
-
+        transcript,
         input,
+
+        image: EdwardsPoint::identity(),
+        commitments_H: vec![],
+        AH: (dfg::EdwardsPoint::identity(), dfg::EdwardsPoint::identity()),
 
         msg,
         mask,
@@ -138,14 +142,28 @@ impl Algorithm<Ed25519> for Multisig {
       Err(FrostError::InvalidCommitmentQuantity(l, 9, serialized.len() / 32))?;
     }
 
+    if self.commitments_H.len() == 0 {
+      self.transcript.domain_separate(b"CLSAG");
+      self.input.transcript(&mut self.transcript);
+      self.transcript.append_message(b"message", &*self.msg.borrow());
+      self.transcript.append_message(b"mask", &self.mask.borrow().to_bytes());
+    }
+
     let (share, serialized) = key_image::verify_share(view, l, serialized).map_err(|_| FrostError::InvalidShare(l))?;
+    // Given the fact there's only ever one possible value for this, this may technically not need
+    // to be committed to. If signing a TX, it'll be double committed to thanks to the message
+    // It doesn't hurt to have though and ensures security boundaries are well formed
+    self.transcript.append_message(b"image_share", &share.compress().to_bytes());
     self.image += share;
 
     let alt = &hash_to_point(&self.input.ring[usize::from(self.input.i)][0]);
 
     // Uses the same format FROST does for the expected commitments (nonce * G where this is nonce * H)
-    self.commitments_H.extend(&u64::try_from(l).unwrap().to_le_bytes());
-    self.commitments_H.extend(&serialized[0 .. 64]);
+    // Given this is guaranteed to match commitments, which FROST commits to, this also technically
+    // doesn't need to be committed to if a canonical serialization is guaranteed
+    // It, again, doesn't hurt to include and ensures security boundaries are well formed
+    self.transcript.append_message(b"participant", &u64::try_from(l).unwrap().to_le_bytes());
+    self.transcript.append_message(b"commitments_H", &serialized[0 .. 64]);
 
     #[allow(non_snake_case)]
     let H = (
@@ -171,21 +189,8 @@ impl Algorithm<Ed25519> for Multisig {
     Ok(())
   }
 
-  fn transcript(&self) -> Option<Self::Transcript> {
-    let mut transcript = Self::Transcript::new(b"Monero Multisig");
-    self.input.transcript(&mut transcript);
-    transcript.append_message(b"dom-sep", b"CLSAG");
-    // Given the fact there's only ever one possible value for this, this may technically not need
-    // to be committed to. If signing a TX, it's be double committed to thanks to the message
-    // It doesn't hurt to have though and ensures security boundaries are well formed
-    transcript.append_message(b"image", &self.image.compress().to_bytes());
-    // Given this is guaranteed to match commitments, which FROST commits to, this also technically
-    // doesn't need to be committed to if a canonical serialization is guaranteed
-    // It, again, doesn't hurt to include and ensures security boundaries are well formed
-    transcript.append_message(b"commitments_H", &self.commitments_H);
-    transcript.append_message(b"message", &*self.msg.borrow());
-    transcript.append_message(b"mask", &self.mask.borrow().to_bytes());
-    Some(transcript)
+  fn transcript(&mut self) -> &mut Self::Transcript {
+    &mut self.transcript
   }
 
   fn sign_share(
@@ -203,8 +208,8 @@ impl Algorithm<Ed25519> for Multisig {
     // The transcript contains private data, preventing passive adversaries from recreating this
     // process even if they have access to commitments (specifically, the ring index being signed
     // for, along with the mask which should not only require knowing the shared keys yet also the
-    // input commitment mask)
-    let mut rng = self.transcript().unwrap().seeded_rng(b"decoy_responses", None);
+    // input commitment masks)
+    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"decoy_responses", None));
 
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(

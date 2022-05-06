@@ -5,34 +5,30 @@ mod merlin;
 #[cfg(features = "merlin")]
 pub use merlin::MerlinTranscript;
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
-
 use digest::Digest;
 
 pub trait Transcript {
-  type SeededRng: RngCore + CryptoRng;
-
-  fn new(label: &'static [u8]) -> Self;
+  fn domain_separate(&mut self, label: &[u8]);
   fn append_message(&mut self, label: &'static [u8], message: &[u8]);
-  fn challenge(&mut self, label: &'static [u8], len: usize) -> Vec<u8>;
-  fn seeded_rng(
-    &self,
-    label: &'static [u8],
-    additional_entropy: Option<[u8; 32]>
-  ) -> Self::SeededRng;
-
-  // TODO: Consider a domain_separate function
+  fn challenge(&mut self, label: &'static [u8]) -> Vec<u8>;
+  fn rng_seed(&mut self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> [u8; 32];
 }
 
 #[derive(Clone, Debug)]
 pub struct DigestTranscript<D: Digest>(Vec<u8>, PhantomData<D>);
-impl<D: Digest> Transcript for DigestTranscript<D> {
-  // Uses ChaCha12 as even ChaCha8 should be secure yet 12 is considered a sane middleground
-  type SeededRng = ChaCha12Rng;
 
-  fn new(label: &'static [u8]) -> Self {
-    DigestTranscript(label.to_vec(), PhantomData)
+impl<D: Digest> DigestTranscript<D> {
+  pub fn new(label: Vec<u8>) -> Self {
+    DigestTranscript(label, PhantomData)
+  }
+}
+
+impl<D: Digest> Transcript for DigestTranscript<D> {
+  // It may be beneficial for each domain to be a nested transcript which is itself length prefixed
+  // This would go further than Merlin though and require an accurate end_domain function which has
+  // frustrations not worth bothering with when this shouldn't actually be meaningful
+  fn domain_separate(&mut self, label: &[u8]) {
+    self.append_message(b"domain", label);
   }
 
   fn append_message(&mut self, label: &'static [u8], message: &[u8]) {
@@ -42,40 +38,18 @@ impl<D: Digest> Transcript for DigestTranscript<D> {
     self.0.extend(message);
   }
 
-  fn challenge(&mut self, label: &'static [u8], len: usize) -> Vec<u8> {
+  fn challenge(&mut self, label: &'static [u8]) -> Vec<u8> {
     self.0.extend(label);
-
-    let mut challenge = Vec::with_capacity(len);
-    challenge.extend(
-      &D::new()
-        .chain_update(&self.0)
-        .chain_update(&0u64.to_le_bytes()).finalize()
-    );
-    for i in 0 .. (len / challenge.len()) {
-      challenge.extend(
-        &D::new()
-          .chain_update(&self.0)
-          .chain_update(&u64::try_from(i).unwrap().to_le_bytes())
-          .finalize()
-      );
-    }
-    challenge.truncate(len);
-    challenge
+    D::new().chain_update(&self.0).finalize().to_vec()
   }
 
-  fn seeded_rng(
-    &self,
-    label: &'static [u8],
-    additional_entropy: Option<[u8; 32]>
-  ) -> Self::SeededRng {
-    let mut transcript = DigestTranscript::<D>(self.0.clone(), PhantomData);
+  fn rng_seed(&mut self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> [u8; 32] {
     if additional_entropy.is_some() {
-      transcript.append_message(b"additional_entropy", &additional_entropy.unwrap());
+      self.append_message(b"additional_entropy", &additional_entropy.unwrap());
     }
-    transcript.0.extend(label);
 
     let mut seed = [0; 32];
-    seed.copy_from_slice(&D::digest(&transcript.0)[0 .. 32]);
-    ChaCha12Rng::from_seed(seed)
+    seed.copy_from_slice(&self.challenge(label)[0 .. 32]);
+    seed
   }
 }

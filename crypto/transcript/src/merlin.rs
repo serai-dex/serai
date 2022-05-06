@@ -1,42 +1,42 @@
 use core::{marker::PhantomData, fmt::{Debug, Formatter}};
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
-
 use digest::Digest;
 
 #[derive(Clone)]
-pub struct MerlinTranscript(merlin::Transcript);
+pub struct MerlinTranscript(pub merlin::Transcript);
 // Merlin doesn't implement Debug so provide a stub which won't panic
 impl Debug for MerlinTranscript {
   fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), std::fmt::Error> { Ok(()) }
 }
 
 impl Transcript for MerlinTranscript {
-  type SeededRng = ChaCha12Rng;
-
-  fn new(label: &'static [u8]) -> Self {
-    MerlinTranscript(merlin::Transcript::new(label))
+  fn domain_separate(&mut self, label: &[u8]) {
+    self.append_message(b"dom-sep", label);
   }
 
   fn append_message(&mut self, label: &'static [u8], message: &[u8]) {
     self.0.append_message(label, message);
   }
 
-  fn challenge(&mut self, label: &'static [u8], len: usize) -> Vec<u8> {
+  fn challenge(&mut self, label: &'static [u8]) -> Vec<u8> {
     let mut challenge = vec![];
-    challenge.resize(len, 0);
+    // Uses a challenge length of 64 bytes to support wide reduction on generated scalars
+    // From a security level standpoint, this should just be 32 bytes
+    // From a Merlin standpoint, this should be variable per call
+    // From a practical standpoint, this is a demo file not planned to be used and anything using
+    // this wrapper is fine without any settings it uses
+    challenge.resize(64, 0);
     self.0.challenge_bytes(label, &mut challenge);
     challenge
   }
 
-  fn seeded_rng(&self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> ChaCha12Rng {
-    let mut transcript = self.0.clone();
+  fn rng_seed(&mut self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> [u8; 32] {
     if additional_entropy.is_some() {
       transcript.append_message(b"additional_entropy", &additional_entropy.unwrap());
     }
+
     let mut seed = [0; 32];
     transcript.challenge_bytes(label, &mut seed);
-    ChaCha12Rng::from_seed(seed)
+    seed
   }
 }

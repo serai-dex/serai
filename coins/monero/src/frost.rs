@@ -22,7 +22,7 @@ use dalek_ff_group as dfg;
 
 use crate::random_scalar;
 
-pub(crate) type Transcript = DigestTranscript::<blake2::Blake2b512>;
+pub type Transcript = DigestTranscript::<blake2::Blake2b512>;
 
 #[derive(Error, Debug)]
 pub enum MultisigError {

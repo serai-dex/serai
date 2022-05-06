@@ -1,6 +1,7 @@
 use std::{rc::Rc, cell::RefCell};
 
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwardsY}};
 
@@ -24,6 +25,8 @@ use crate::{
 pub struct TransactionMachine {
   leader: bool,
   signable: SignableTransaction,
+  transcript: Transcript,
+
   our_images: Vec<EdwardsPoint>,
   mask_sum: Rc<RefCell<Scalar>>,
   msg: Rc<RefCell<[u8; 32]>>,
@@ -35,6 +38,7 @@ pub struct TransactionMachine {
 impl SignableTransaction {
   pub async fn multisig<R: RngCore + CryptoRng>(
     mut self,
+    label: Vec<u8>,
     rng: &mut R,
     rpc: &Rpc,
     keys: Rc<MultisigKeys<Ed25519>>,
@@ -51,25 +55,30 @@ impl SignableTransaction {
 
     // Create a RNG out of the input shared keys, which either requires the view key or being every
     // sender, and the payments (address and amount), which a passive adversary may be able to know
-    // The use of input shared keys technically makes this one time given a competent wallet which
-    // can withstand the burning attack (and has a static spend key? TODO visit bounds)
+    // depending on how these transactions are coordinated
+
     // The lack of dedicated entropy here is frustrating. We can probably provide entropy inclusion
     // if we move CLSAG ring to a Rc RefCell like msg and mask? TODO
-    // For the above TODO, also consider FROST's TODO of a global transcript instance
-    let mut transcript = Transcript::new(b"Input Mixins");
-    // Does dom-sep despite not being a proof because it's a unique section (and we have no dom-sep yet)
-    transcript.append_message("dom-sep", "inputs_outputs");
+    let mut transcript = Transcript::new(label);
     for input in &self.inputs {
+      // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
+      // transcript (such as the one used to create one time keys) to be unique
+      transcript.append_message(b"input_hash", &input.tx.0);
+      transcript.append_message(b"input_output_index", &u64::try_from(input.o).unwrap().to_le_bytes());
+      // Not including this, with a doxxed list of payments, would allow brute forcing the inputs
+      // to determine RNG seeds and therefore the true spends
       transcript.append_message(b"input_shared_key", &input.key_offset.to_bytes());
     }
     for payment in &self.payments {
       transcript.append_message(b"payment_address", &payment.0.as_bytes());
       transcript.append_message(b"payment_amount", &payment.1.to_le_bytes());
     }
+    // Not only is this an output, but this locks to the base keys to be complete with the above key offsets
+    transcript.append_message(b"change", &self.change.as_bytes());
 
     // Select mixins
     let mixins = mixins::select(
-      &mut transcript.seeded_rng(b"mixins", None),
+      &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"mixins", None)),
       rpc,
       height,
       &self.inputs
@@ -86,6 +95,7 @@ impl SignableTransaction {
       clsags.push(
         AlgorithmMachine::new(
           clsag::Multisig::new(
+            transcript.clone(),
             clsag::Input::new(
               mixins[i].2.clone(),
               mixins[i].1,
@@ -112,6 +122,7 @@ impl SignableTransaction {
     Ok(TransactionMachine {
       leader: keys.params().i() == included[0],
       signable: self,
+      transcript,
       our_images,
       mask_sum,
       msg,
@@ -120,19 +131,6 @@ impl SignableTransaction {
       tx: None
     })
   }
-}
-
-// Seeded RNG so multisig participants agree on one time keys to use, preventing burning attacks
-fn outputs_rng(tx: &SignableTransaction, entropy: [u8; 32]) -> <Transcript as TranscriptTrait>::SeededRng {
-  let mut transcript = Transcript::new(b"Stealth Addresses");
-  // This output can only be spent once. Therefore, it forces all one time keys used here to be
-  // unique, even if the entropy is reused. While another transaction could use a different input
-  // ordering to swap which 0 is, that input set can't contain this input without being a double
-  // spend
-  transcript.append_message(b"dom-sep", b"input_0");
-  transcript.append_message(b"hash", &tx.inputs[0].tx.0);
-  transcript.append_message(b"index", &u64::try_from(tx.inputs[0].o).unwrap().to_le_bytes());
-  transcript.seeded_rng(b"tx_keys", Some(entropy))
 }
 
 impl StateMachine for TransactionMachine {
@@ -157,7 +155,7 @@ impl StateMachine for TransactionMachine {
       rng.fill_bytes(&mut entropy);
       serialized.extend(&entropy);
 
-      let mut rng = outputs_rng(&self.signable, entropy);
+      let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys", Some(entropy)));
       // Safe to unwrap thanks to the dummy prepare
       let (commitments, mask_sum) = self.signable.prepare_outputs(&mut rng).unwrap();
       self.mask_sum.replace(mask_sum);
@@ -196,9 +194,11 @@ impl StateMachine for TransactionMachine {
         }
         let prep = prep.as_ref().unwrap();
 
-        let mut rng = outputs_rng(
-          &self.signable,
-          prep[clsag_lens .. (clsag_lens + 32)].try_into().map_err(|_| FrostError::InvalidShare(l))?
+        let mut rng = ChaCha12Rng::from_seed(
+          self.transcript.rng_seed(
+            b"tx_keys",
+            Some(prep[clsag_lens .. (clsag_lens + 32)].try_into().map_err(|_| FrostError::InvalidShare(l))?)
+          )
         );
         // Not invalid outputs due to doing a dummy prep as leader
         let (commitments, mask_sum) = self.signable.prepare_outputs(&mut rng).map_err(|_| FrostError::InvalidShare(l))?;

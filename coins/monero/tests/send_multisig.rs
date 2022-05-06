@@ -32,7 +32,7 @@ pub async fn send_multisig() {
   let t = keys[0].params().t();
 
   // Generate an address
-  let view = Scalar::from_hash(Blake2b512::new().chain("Serai DEX")).0;
+  let view = Scalar::from_hash(Blake2b512::new().chain("Monero Serai Transaction Test")).0;
   let spend = keys[0].group_key().0;
   let addr = Address::standard(
     Network::Mainnet,
@@ -57,6 +57,7 @@ pub async fn send_multisig() {
       SignableTransaction::new(
         vec![output.clone()], vec![(addr, amount)], addr, fee_per_byte
       ).unwrap().multisig(
+        b"Monero Serai Test Transaction".to_vec(),
         &mut OsRng,
         &rpc,
         keys[i - 1].clone(),

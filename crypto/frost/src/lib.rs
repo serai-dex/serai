@@ -93,14 +93,14 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   #[allow(non_snake_case)]
   fn G_len() -> usize;
 
-  /// Field element from slice. Should be canonical
+  /// Field element from slice. Preferred to be canonical yet does not have to be
   // Required due to the lack of standardized encoding functions provided by ff/group
   // While they do technically exist, their usage of Self::Repr breaks all potential library usage
   // without helper functions like this
   #[allow(non_snake_case)]
   fn F_from_le_slice(slice: &[u8]) -> Result<Self::F, CurveError>;
 
-  /// Group element from slice. Should be canonical
+  /// Group element from slice. Must require canonicity or risks differing binding factors
   #[allow(non_snake_case)]
   fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError>;
 

@@ -4,7 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::Group;
 
-use transcript::{Transcript, DigestTranscript};
+use transcript::Transcript;
 
 use crate::{Curve, FrostError, MultisigView};
 
@@ -13,6 +13,8 @@ pub trait Algorithm<C: Curve>: Clone {
   type Transcript: Transcript + Clone + Debug;
   /// The resulting type of the signatures this algorithm will produce
   type Signature: Clone + Debug;
+
+  fn transcript(&mut self) -> &mut Self::Transcript;
 
   /// Generate an addendum to FROST"s preprocessing stage
   fn preprocess_addendum<R: RngCore + CryptoRng>(
@@ -30,9 +32,6 @@ pub trait Algorithm<C: Curve>: Clone {
     serialized: &[u8],
   ) -> Result<(), FrostError>;
 
-  /// Transcript for this algorithm to be used to create the binding factor
-  fn transcript(&self) -> Option<Self::Transcript>;
-
   /// Sign a share with the given secret/nonce
   /// The secret will already have been its lagrange coefficient applied so it is the necessary
   /// key share
@@ -41,7 +40,7 @@ pub trait Algorithm<C: Curve>: Clone {
     &mut self,
     params: &MultisigView<C>,
     nonce_sum: C::G,
-    b: C::F,
+    binding: C::F,
     nonce: C::F,
     msg: &[u8],
   ) -> C::F;
@@ -59,6 +58,26 @@ pub trait Algorithm<C: Curve>: Clone {
   ) -> bool;
 }
 
+// Transcript which will create an IETF compliant serialization for the binding factor
+#[derive(Clone, Debug)]
+pub struct IetfTranscript(Vec<u8>);
+impl Transcript for IetfTranscript {
+  fn domain_separate(&mut self, _: &[u8]) {}
+
+  fn append_message(&mut self, _: &'static [u8], message: &[u8]) {
+    self.0.extend(message);
+  }
+
+  fn challenge(&mut self, _: &'static [u8]) -> Vec<u8> {
+    self.0.clone()
+  }
+
+  fn rng_seed(&mut self, _: &'static [u8], _: Option<[u8; 32]>) -> [u8; 32] {
+    unimplemented!()
+  }
+}
+
+
 pub trait Hram<C: Curve>: Clone {
   /// HRAM function to generate a challenge
   /// H2 from the IETF draft despite having a different argument set (not pre-formatted)
@@ -68,6 +87,7 @@ pub trait Hram<C: Curve>: Clone {
 
 #[derive(Clone)]
 pub struct Schnorr<C: Curve, H: Hram<C>> {
+  transcript: IetfTranscript,
   c: Option<C::F>,
   _hram: PhantomData<H>,
 }
@@ -75,6 +95,7 @@ pub struct Schnorr<C: Curve, H: Hram<C>> {
 impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
   pub fn new() -> Schnorr<C, H> {
     Schnorr {
+      transcript: IetfTranscript(vec![]),
       c: None,
       _hram: PhantomData
     }
@@ -90,10 +111,12 @@ pub struct SchnorrSignature<C: Curve> {
 
 /// Implementation of Schnorr signatures for use with FROST
 impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
-  // Specify a firm type which either won't matter as it won't be used or will be used (offset) and
-  // is accordingly solid
-  type Transcript = DigestTranscript::<blake2::Blake2b512>;
+  type Transcript = IetfTranscript;
   type Signature = SchnorrSignature<C>;
+
+  fn transcript(&mut self) -> &mut Self::Transcript {
+    &mut self.transcript
+  }
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     _: &mut R,
@@ -111,10 +134,6 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     _: &[u8],
   ) -> Result<(), FrostError> {
     Ok(())
-  }
-
-  fn transcript(&self) -> Option<DigestTranscript::<blake2::Blake2b512>> {
-    None
   }
 
   fn sign_share(

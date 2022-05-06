@@ -144,13 +144,21 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
    Err(FrostError::NonEmptyParticipantZero)?;
   }
 
+  // Domain separate FROST
+  {
+    let transcript = params.algorithm.transcript();
+    transcript.domain_separate(b"FROST");
+    if params.keys.offset.is_some() {
+      transcript.append_message(b"offset", &C::F_to_le_bytes(&params.keys.offset.unwrap()));
+    }
+  }
+
   #[allow(non_snake_case)]
   let mut B = Vec::with_capacity(multisig_params.n + 1);
   B.push(None);
 
   // Commitments + a presumed 32-byte hash of the message
   let commitments_len = 2 * C::G_len();
-  let mut b: Vec<u8> = Vec::with_capacity((multisig_params.t * commitments_len) + 32);
 
   // Parse the commitments and prepare the binding factor
   for l in 1 ..= multisig_params.n {
@@ -160,8 +168,14 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
       }
 
       B.push(Some(our_preprocess.commitments));
-      b.extend(&u16::try_from(l).unwrap().to_le_bytes());
-      b.extend(&our_preprocess.serialized[0 .. (C::G_len() * 2)]);
+      {
+        let transcript = params.algorithm.transcript();
+        transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_le_bytes());
+        transcript.append_message(
+          b"commitments",
+          &our_preprocess.serialized[0 .. (C::G_len() * 2)]
+        );
+      }
       continue;
     }
 
@@ -190,9 +204,19 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     let E = C::G_from_slice(&commitments[C::G_len() .. commitments_len])
       .map_err(|_| FrostError::InvalidCommitment(l))?;
     B.push(Some([D, E]));
-    b.extend(&u16::try_from(l).unwrap().to_le_bytes());
-    b.extend(&commitments[0 .. commitments_len]);
+    {
+      let transcript = params.algorithm.transcript();
+      transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_le_bytes());
+      transcript.append_message(b"commitments", &commitments[0 .. commitments_len]);
+    }
   }
+
+  // Add the message to the binding factor
+  let binding = {
+    let transcript = params.algorithm.transcript();
+    transcript.append_message(b"message", &C::hash_msg(&msg));
+    C::hash_to_F(&transcript.challenge(b"binding"))
+  };
 
   // Process the commitments and addendums
   let view = &params.view;
@@ -211,45 +235,6 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     )?;
   }
 
-  // Finish the binding factor
-  b.extend(&C::hash_msg(&msg));
-
-  // Let the algorithm provide a transcript of its variables
-  // While Merlin, which may or may not be the transcript used here, wants application level
-  // transcripts passed around to proof systems, this maintains a desired level of abstraction and
-  // works without issue
-  // Not to mention, mandating a global transcript would conflict with the IETF draft UNLESS an
-  // IetfTranscript was declared which ignores field names and solely does their values, with a
-  // fresh instantiation per sign round. That could likely be made to align without issue
-  // TODO: Consider Option<Transcript>?
-  let mut transcript = params.algorithm.transcript();
-  if params.keys.offset.is_some() && transcript.is_none() {
-    transcript = Some(A::Transcript::new(b"FROST Offset"));
-  }
-  if transcript.is_some() {
-    // https://github.com/rust-lang/rust/issues/91345
-    transcript = transcript.map(|mut t| { t.append_message(b"dom-sep", b"FROST"); t });
-  }
-
-  // If the offset functionality provided by this library is in use, include it in the transcript.
-  // Not compliant with the IETF spec which doesn't have a concept of offsets, nor does it use
-  // transcripts
-  if params.keys.offset.is_some() {
-    transcript = transcript.map(
-      |mut t| { t.append_message(b"offset", &C::F_to_le_bytes(&params.keys.offset.unwrap())); t }
-    );
-  }
-
-  // If a transcript was defined, move the commitments used for the binding factor into it
-  // Then, obtain its sum and use that as the binding factor
-  if transcript.is_some() {
-    let mut transcript = transcript.unwrap();
-    transcript.append_message(b"commitments", &b);
-    b = transcript.challenge(b"binding", 64);
-  }
-
-  let b = C::hash_to_F(&b);
-
   #[allow(non_snake_case)]
   let mut Ris = vec![];
   #[allow(non_snake_case)]
@@ -257,7 +242,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   for i in 0 .. params.view.included.len() {
     let commitments = B[params.view.included[i]].unwrap();
     #[allow(non_snake_case)]
-    let this_R = commitments[0] + (commitments[1] * b);
+    let this_R = commitments[0] + (commitments[1] * binding);
     Ris.push(this_R);
     R += this_R;
   }
@@ -266,8 +251,8 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   let share = params.algorithm.sign_share(
     view,
     R,
-    b,
-    our_preprocess.nonces[0] + (our_preprocess.nonces[1] * b),
+    binding,
+    our_preprocess.nonces[0] + (our_preprocess.nonces[1] * binding),
     msg
   );
   Ok((Package { Ris, R, share }, C::F_to_le_bytes(&share)))
