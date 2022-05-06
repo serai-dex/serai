@@ -37,7 +37,7 @@ use crate::{
 #[cfg(feature = "multisig")]
 use crate::frost::MultisigError;
 
-mod mixins;
+mod decoys;
 #[cfg(feature = "multisig")]
 mod multisig;
 
@@ -203,8 +203,8 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 
   let mut signable = Vec::with_capacity(inputs.len());
 
-  // Select mixins
-  let mixins = mixins::select(
+  // Select decoys
+  let decoys = decoys::select(
     rng,
     rpc,
     rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))? - 10,
@@ -215,8 +215,8 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
     signable.push((
       spend + input.key_offset,
       clsag::Input::new(
-        mixins[i].2.clone(),
-        mixins[i].1,
+        decoys[i].2.clone(),
+        decoys[i].1,
         input.commitment
       ).map_err(|e| TransactionError::ClsagError(e))?,
       key_image::generate(&(spend + input.key_offset))
@@ -224,7 +224,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 
     tx.prefix.inputs.push(TxIn::ToKey {
       amount: VarInt(0),
-      key_offsets: mixins[i].0.clone(),
+      key_offsets: decoys[i].0.clone(),
       k_image: KeyImage { image: Hash(signable[i].2.compress().to_bytes()) }
     });
   }

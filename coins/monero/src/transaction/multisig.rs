@@ -19,7 +19,7 @@ use crate::{
   frost::{Transcript, Ed25519},
   key_image, bulletproofs, clsag,
   rpc::Rpc,
-  transaction::{TransactionError, SignableTransaction, mixins}
+  transaction::{TransactionError, SignableTransaction, decoys}
 };
 
 pub struct TransactionMachine {
@@ -78,9 +78,9 @@ impl SignableTransaction {
     // Not only is this an output, but this locks to the base keys to be complete with the above key offsets
     transcript.append_message(b"change", &self.change.as_bytes());
 
-    // Select mixins
-    let mixins = mixins::select(
-      &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"mixins", None)),
+    // Select decoys
+    let decoys = decoys::select(
+      &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys", None)),
       rpc,
       height,
       &self.inputs
@@ -99,8 +99,8 @@ impl SignableTransaction {
           clsag::Multisig::new(
             transcript.clone(),
             clsag::Input::new(
-              mixins[i].2.clone(),
-              mixins[i].1,
+              decoys[i].2.clone(),
+              decoys[i].1,
               input.commitment
             ).map_err(|e| TransactionError::ClsagError(e))?,
             msg.clone(),
@@ -113,7 +113,7 @@ impl SignableTransaction {
 
       inputs.push(TxIn::ToKey {
         amount: VarInt(0),
-        key_offsets: mixins[i].0.clone(),
+        key_offsets: decoys[i].0.clone(),
         k_image: KeyImage { image: Hash([0; 32]) }
       });
     }

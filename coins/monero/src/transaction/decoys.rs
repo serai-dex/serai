@@ -17,7 +17,7 @@ const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
-const MIXINS: usize = 11;
+const DECOYS: usize = 11;
 
 lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
@@ -60,11 +60,11 @@ async fn select_single<R: RngCore + CryptoRng>(
 }
 
 // Uses VarInt as this is solely used for key_offsets which is serialized by monero-rs
-fn offset(mixins: &[u64]) -> Vec<VarInt> {
-  let mut res = vec![VarInt(mixins[0])];
-  res.resize(mixins.len(), VarInt(0));
-  for m in (1 .. mixins.len()).rev() {
-    res[m] = VarInt(mixins[m] - mixins[m - 1]);
+fn offset(decoys: &[u64]) -> Vec<VarInt> {
+  let mut res = vec![VarInt(decoys[0])];
+  res.resize(decoys.len(), VarInt(0));
+  for m in (1 .. decoys.len()).rev() {
+    res[m] = VarInt(decoys[m] - decoys[m - 1]);
   }
   res
 }
@@ -99,44 +99,44 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
 
   let mut res = Vec::with_capacity(inputs.len());
   for (i, o) in outputs.iter().enumerate() {
-    let mut mixins = Vec::with_capacity(MIXINS);
-    for _ in 0 .. MIXINS {
-      mixins.push(select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?);
+    let mut decoys = Vec::with_capacity(DECOYS);
+    for _ in 0 .. DECOYS {
+      decoys.push(select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?);
     }
-    mixins.sort_by(|a, b| a.0.cmp(&b.0));
+    decoys.sort_by(|a, b| a.0.cmp(&b.0));
 
     // Make sure the TX passes the sanity check that the median output is within the last 40%
     // This actually checks the median is within the last third, a slightly more aggressive boundary,
     // as the height used in this calculation will be slightly under the height this is sanity
     // checked against
-    while mixins[MIXINS / 2].0 < (high * 2 / 3) {
+    while decoys[DECOYS / 2].0 < (high * 2 / 3) {
       // If it's not, update the bottom half with new values to ensure the median only moves up
-      for m in 0 .. MIXINS / 2 {
+      for m in 0 .. DECOYS / 2 {
         // We could not remove this, saving CPU time and removing low values as possibilities, yet
-        // it'd increase the amount of mixins required to create this transaction and some banned
+        // it'd increase the amount of decoys required to create this transaction and some banned
         // outputs may be the best options
-        used.remove(&mixins[m].0);
-        mixins[m] = select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?;
+        used.remove(&decoys[m].0);
+        decoys[m] = select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?;
       }
-      mixins.sort_by(|a, b| a.0.cmp(&b.0));
+      decoys.sort_by(|a, b| a.0.cmp(&b.0));
     }
 
     // Replace the closest selected decoy with the actual
     let mut replace = 0;
     let mut distance = u64::MAX;
-    for m in 0 .. mixins.len() {
-      let diff = mixins[m].0.abs_diff(o.0);
+    for m in 0 .. decoys.len() {
+      let diff = decoys[m].0.abs_diff(o.0);
       if diff < distance {
         replace = m;
         distance = diff;
       }
     }
 
-    mixins[replace] = outputs[i];
+    decoys[replace] = outputs[i];
     res.push((
-      offset(&mixins.iter().map(|output| output.0).collect::<Vec<_>>()),
+      offset(&decoys.iter().map(|output| output.0).collect::<Vec<_>>()),
       u8::try_from(replace).unwrap(),
-      mixins.iter().map(|output| output.1).collect()
+      decoys.iter().map(|output| output.1).collect()
     ));
   }
 
