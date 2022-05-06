@@ -69,12 +69,25 @@ fn offset(decoys: &[u64]) -> Vec<VarInt> {
   res
 }
 
+#[derive(Clone, Debug)]
+pub struct Decoys {
+  pub i: u8,
+  pub offsets: Vec<VarInt>,
+  pub ring: Vec<[EdwardsPoint; 2]>
+}
+
+impl Decoys {
+  pub fn len(&self) -> usize {
+    self.offsets.len()
+  }
+}
+
 pub(crate) async fn select<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
   height: usize,
   inputs: &[SpendableOutput]
-) -> Result<Vec<(Vec<VarInt>, u8, Vec<[EdwardsPoint; 2]>)>, RpcError> {
+) -> Result<Vec<Decoys>, RpcError> {
   // Convert the inputs in question to the raw output data
   let mut outputs = Vec::with_capacity(inputs.len());
   for input in inputs {
@@ -133,11 +146,11 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
     }
 
     decoys[replace] = outputs[i];
-    res.push((
-      offset(&decoys.iter().map(|output| output.0).collect::<Vec<_>>()),
-      u8::try_from(replace).unwrap(),
-      decoys.iter().map(|output| output.1).collect()
-    ));
+    res.push(Decoys {
+      i: u8::try_from(replace).unwrap(),
+      offsets: offset(&decoys.iter().map(|output| output.0).collect::<Vec<_>>()),
+      ring: decoys.iter().map(|output| output.1).collect()
+    });
   }
 
   Ok(res)

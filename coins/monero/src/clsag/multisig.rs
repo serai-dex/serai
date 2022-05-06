@@ -31,13 +31,14 @@ impl Input {
     // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
     // Ring index
-    transcript.append_message(b"ring_index", &[self.i]);
+    transcript.append_message(b"ring_index", &[self.decoys.i]);
 
     // Ring
     let mut ring = vec![];
-    for pair in &self.ring {
+    for pair in &self.decoys.ring {
       // Doesn't include global output indexes as CLSAG doesn't care and won't be affected by it
-      // They're just a mutable reference to this data
+      // They're just a unreliable reference to this data which will be included in the message
+      // if in use
       ring.extend(&pair[0].compress().to_bytes());
       ring.extend(&pair[1].compress().to_bytes());
     }
@@ -49,9 +50,24 @@ impl Input {
   }
 }
 
+// pub to enable testing
+// While we could move the CLSAG test inside this crate, that'd require duplicating the FROST test
+// helper, and isn't worth doing right now when this is harmless enough (semver? TODO)
+#[derive(Clone, Debug)]
+pub struct Details {
+  input: Input,
+  mask: Scalar
+}
+
+impl Details {
+  pub fn new(input: Input, mask: Scalar) -> Details {
+    Details { input, mask }
+  }
+}
+
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-struct ClsagSignInterim {
+struct Interim {
   c: Scalar,
   s: Scalar,
 
@@ -63,36 +79,33 @@ struct ClsagSignInterim {
 #[derive(Clone, Debug)]
 pub struct Multisig {
   transcript: Transcript,
-  input: Input,
 
   image: EdwardsPoint,
   commitments_H: Vec<u8>,
   AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
-  msg: Rc<RefCell<[u8; 32]>>,
-  mask: Rc<RefCell<Scalar>>,
+  details: Rc<RefCell<Option<Details>>>,
+  msg: Rc<RefCell<Option<[u8; 32]>>>,
 
-  interim: Option<ClsagSignInterim>
+  interim: Option<Interim>
 }
 
 impl Multisig {
   pub fn new(
     transcript: Transcript,
-    input: Input,
-    msg: Rc<RefCell<[u8; 32]>>,
-    mask: Rc<RefCell<Scalar>>,
+    details: Rc<RefCell<Option<Details>>>,
+    msg: Rc<RefCell<Option<[u8; 32]>>>,
   ) -> Result<Multisig, MultisigError> {
     Ok(
       Multisig {
         transcript,
-        input,
 
         image: EdwardsPoint::identity(),
         commitments_H: vec![],
         AH: (dfg::EdwardsPoint::identity(), dfg::EdwardsPoint::identity()),
 
+        details,
         msg,
-        mask,
 
         interim: None
       }
@@ -101,6 +114,18 @@ impl Multisig {
 
   pub fn serialized_len() -> usize {
     3 * (32 + 64)
+  }
+
+  fn input(&self) -> Input {
+    self.details.borrow().as_ref().unwrap().input.clone()
+  }
+
+  fn mask(&self) -> Scalar {
+    self.details.borrow().as_ref().unwrap().mask
+  }
+
+  fn msg(&self) -> [u8; 32] {
+    *self.msg.borrow().as_ref().unwrap()
   }
 }
 
@@ -144,9 +169,9 @@ impl Algorithm<Ed25519> for Multisig {
 
     if self.commitments_H.len() == 0 {
       self.transcript.domain_separate(b"CLSAG");
-      self.input.transcript(&mut self.transcript);
-      self.transcript.append_message(b"message", &*self.msg.borrow());
-      self.transcript.append_message(b"mask", &self.mask.borrow().to_bytes());
+      self.input().transcript(&mut self.transcript);
+      self.transcript.append_message(b"mask", &self.mask().to_bytes());
+      self.transcript.append_message(b"message", &self.msg());
     }
 
     let (share, serialized) = key_image::verify_share(view, l, serialized).map_err(|_| FrostError::InvalidShare(l))?;
@@ -156,7 +181,7 @@ impl Algorithm<Ed25519> for Multisig {
     self.transcript.append_message(b"image_share", &share.compress().to_bytes());
     self.image += share;
 
-    let alt = &hash_to_point(&self.input.ring[usize::from(self.input.i)][0]);
+    let alt = &hash_to_point(&view.group_key().0);
 
     // Uses the same format FROST does for the expected commitments (nonce * G where this is nonce * H)
     // Given this is guaranteed to match commitments, which FROST commits to, this also technically
@@ -214,14 +239,14 @@ impl Algorithm<Ed25519> for Multisig {
     #[allow(non_snake_case)]
     let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       &mut rng,
-      &self.msg.borrow(),
-      &self.input,
       &self.image,
-      *self.mask.borrow(),
+      &self.input(),
+      self.mask(),
+      &self.msg(),
       nonce_sum.0,
       self.AH.0.0
     );
-    self.interim = Some(ClsagSignInterim { c: c * mu_P, s: c * mu_C * z, clsag, C_out });
+    self.interim = Some(Interim { c: c * mu_P, s: c * mu_C * z, clsag, C_out });
 
     let share = dfg::Scalar(nonce.0 - (c * mu_P * view.secret_share().0));
 
@@ -237,8 +262,8 @@ impl Algorithm<Ed25519> for Multisig {
     let interim = self.interim.as_ref().unwrap();
 
     let mut clsag = interim.clsag.clone();
-    clsag.s[usize::from(self.input.i)] = Key { key: (sum.0 - interim.s).to_bytes() };
-    if verify(&clsag, &self.msg.borrow(), self.image, &self.input.ring, interim.C_out) {
+    clsag.s[usize::from(self.input().decoys.i)] = Key { key: (sum.0 - interim.s).to_bytes() };
+    if verify(&clsag, self.image, &self.input().decoys.ring, interim.C_out, &self.msg()) {
       return Some((clsag, interim.C_out));
     }
     return None;

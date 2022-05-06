@@ -5,7 +5,9 @@ use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_serai::{random_scalar, Commitment, key_image, clsag};
+use monero::VarInt;
+
+use monero_serai::{random_scalar, Commitment, transaction::decoys::Decoys, key_image, clsag};
 #[cfg(feature = "multisig")]
 use monero_serai::frost::{MultisigError, Transcript};
 
@@ -40,19 +42,22 @@ fn test_single() {
   let image = key_image::generate(&secrets[0]);
   let (clsag, pseudo_out) = clsag::sign(
     &mut OsRng,
-    msg,
     &vec![(
       secrets[0],
+      image,
       clsag::Input::new(
-        ring.clone(),
-        RING_INDEX,
-        Commitment::new(secrets[1], AMOUNT)
-      ).unwrap(),
-      image
+        Commitment::new(secrets[1], AMOUNT),
+        Decoys {
+          i: RING_INDEX,
+          offsets: (1 ..= RING_LEN).into_iter().map(|o| VarInt(o)).collect(),
+          ring: ring.clone()
+        }
+      ).unwrap()
     )],
-    Scalar::zero()
+    random_scalar(&mut OsRng),
+    msg
   ).unwrap().swap_remove(0);
-  assert!(clsag::verify(&clsag, &msg, image, &ring, pseudo_out));
+  assert!(clsag::verify(&clsag, image, &ring, pseudo_out, &msg));
 }
 
 #[cfg(feature = "multisig")]
@@ -79,15 +84,27 @@ fn test_multisig() -> Result<(), MultisigError> {
     ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
   }
 
+  let mask_sum = random_scalar(&mut OsRng);
   let mut machines = Vec::with_capacity(t);
   for i in 1 ..= t {
     machines.push(
       sign::AlgorithmMachine::new(
         clsag::Multisig::new(
           Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
-          clsag::Input::new(ring.clone(), RING_INDEX, Commitment::new(randomness, AMOUNT)).unwrap(),
-          Rc::new(RefCell::new([1; 32])),
-          Rc::new(RefCell::new(Scalar::from(42u64)))
+          Rc::new(RefCell::new(Some(
+            clsag::Details::new(
+              clsag::Input::new(
+                Commitment::new(randomness, AMOUNT),
+                Decoys {
+                  i: RING_INDEX,
+                  offsets: (1 ..= RING_LEN).into_iter().map(|o| VarInt(o)).collect(),
+                  ring: ring.clone()
+                }
+              ).unwrap(),
+              mask_sum
+            )
+          ))),
+          Rc::new(RefCell::new(Some([1; 32])))
         ).unwrap(),
         keys[i - 1].clone(),
         &(1 ..= THRESHOLD).collect::<Vec<usize>>()

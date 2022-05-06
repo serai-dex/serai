@@ -37,7 +37,8 @@ use crate::{
 #[cfg(feature = "multisig")]
 use crate::frost::MultisigError;
 
-mod decoys;
+pub mod decoys;
+
 #[cfg(feature = "multisig")]
 mod multisig;
 
@@ -198,7 +199,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   inputs: &[SpendableOutput],
   spend: &Scalar,
   tx: &mut Transaction
-) -> Result<Vec<(Scalar, clsag::Input, EdwardsPoint)>, TransactionError> {
+) -> Result<Vec<(Scalar, EdwardsPoint, clsag::Input)>, TransactionError> {
   // TODO sort inputs
 
   let mut signable = Vec::with_capacity(inputs.len());
@@ -214,18 +215,17 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
       spend + input.key_offset,
+      key_image::generate(&(spend + input.key_offset)),
       clsag::Input::new(
-        decoys[i].2.clone(),
-        decoys[i].1,
-        input.commitment
-      ).map_err(|e| TransactionError::ClsagError(e))?,
-      key_image::generate(&(spend + input.key_offset))
+        input.commitment,
+        decoys[i].clone()
+      ).map_err(|e| TransactionError::ClsagError(e))?
     ));
 
     tx.prefix.inputs.push(TxIn::ToKey {
       amount: VarInt(0),
-      key_offsets: decoys[i].0.clone(),
-      k_image: KeyImage { image: Hash(signable[i].2.compress().to_bytes()) }
+      key_offsets: decoys[i].offsets.clone(),
+      k_image: KeyImage { image: Hash(signable[i].1.compress().to_bytes()) }
     });
   }
 
@@ -370,9 +370,9 @@ impl SignableTransaction {
 
     let clsags = clsag::sign(
       rng,
-      tx.signature_hash().expect("Couldn't get the signature hash").0,
       &signable,
-      mask_sum
+      mask_sum,
+      tx.signature_hash().expect("Couldn't get the signature hash").0
     ).unwrap(); // None if no inputs which new checks for
     let mut prunable = tx.rct_signatures.p.unwrap();
     prunable.Clsags = clsags.iter().map(|clsag| clsag.0.clone()).collect();

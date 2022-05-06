@@ -60,8 +60,8 @@ pub async fn send_multisig() {
         b"Monero Serai Test Transaction".to_vec(),
         &mut OsRng,
         &rpc,
-        keys[i - 1].clone(),
         rpc.get_height().await.unwrap() - 10,
+        keys[i - 1].clone(),
         &(1 ..= THRESHOLD).collect::<Vec<usize>>()
       ).await.unwrap()
     );

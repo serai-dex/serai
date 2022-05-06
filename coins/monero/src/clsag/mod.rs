@@ -8,23 +8,21 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, VartimeEdwardsPrecomputation}
 };
 
-use monero::{
-  consensus::Encodable,
-  util::ringct::{Key, Clsag}
-};
+use monero::{consensus::Encodable, util::ringct::{Key, Clsag}};
 
 use crate::{
   Commitment,
-  c_verify_clsag,
+  transaction::decoys::Decoys,
   random_scalar,
   hash_to_scalar,
-  hash_to_point
+  hash_to_point,
+  c_verify_clsag
 };
 
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::Multisig;
+pub use multisig::{Details, Multisig};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -36,49 +34,48 @@ pub enum Error {
   InvalidCommitment
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub struct Input {
-  // Ring, the index we're signing for, and the actual commitment behind it
-  pub ring: Vec<[EdwardsPoint; 2]>,
-  pub i: u8,
-  pub commitment: Commitment
+  // The actual commitment for the true spend
+  pub commitment: Commitment,
+  // True spend index, offsets, and ring
+  pub decoys: Decoys
 }
 
 impl Input {
   pub fn new(
-    ring: Vec<[EdwardsPoint; 2]>,
-    i: u8,
-    commitment: Commitment
+    commitment: Commitment,
+    decoys: Decoys
   ) -> Result<Input, Error> {
-    let n = ring.len();
+    let n = decoys.len();
     if n > u8::MAX.into() {
       Err(Error::InternalError("max ring size in this library is u8 max".to_string()))?;
     }
-    if i >= (n as u8) {
-      Err(Error::InvalidRingMember(i, n as u8))?;
+    if decoys.i >= (n as u8) {
+      Err(Error::InvalidRingMember(decoys.i, n as u8))?;
     }
 
     // Validate the commitment matches
-    if ring[usize::from(i)][1] != commitment.calculate() {
+    if decoys.ring[usize::from(decoys.i)][1] != commitment.calculate() {
       Err(Error::InvalidCommitment)?;
     }
 
-    Ok(Input { ring, i, commitment })
+    Ok(Input { commitment, decoys })
   }
 }
 
 #[allow(non_snake_case)]
 pub(crate) fn sign_core<R: RngCore + CryptoRng>(
   rng: &mut R,
-  msg: &[u8; 32],
-  input: &Input,
   image: &EdwardsPoint,
+  input: &Input,
   mask: Scalar,
+  msg: &[u8; 32],
   A: EdwardsPoint,
   AH: EdwardsPoint
 ) -> (Clsag, Scalar, Scalar, Scalar, Scalar, EdwardsPoint) {
-  let n = input.ring.len();
-  let r: usize = input.i.into();
+  let n = input.decoys.len();
+  let r: usize = input.decoys.i.into();
 
   let C_out;
 
@@ -94,7 +91,7 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
   {
     C_out = Commitment::new(mask, input.commitment.amount).calculate();
 
-    for member in &input.ring {
+    for member in &input.decoys.ring {
       P.push(member[0]);
       C_non_zero.push(member[1]);
       C.push(C_non_zero[C_non_zero.len() - 1] - C_out);
@@ -188,9 +185,9 @@ pub(crate) fn sign_core<R: RngCore + CryptoRng>(
 #[allow(non_snake_case)]
 pub fn sign<R: RngCore + CryptoRng>(
   rng: &mut R,
-  msg: [u8; 32],
-  inputs: &[(Scalar, Input, EdwardsPoint)],
-  sum_outputs: Scalar
+  inputs: &[(Scalar, EdwardsPoint, Input)],
+  sum_outputs: Scalar,
+  msg: [u8; 32]
 ) -> Option<Vec<(Clsag, EdwardsPoint)>> {
   if inputs.len() == 0 {
     return None;
@@ -214,13 +211,14 @@ pub fn sign<R: RngCore + CryptoRng>(
     rng.fill_bytes(&mut rand_source);
     let (mut clsag, c, mu_C, z, mu_P, C_out) = sign_core(
       rng,
-      &msg,
       &inputs[i].1,
       &inputs[i].2,
       mask,
-      &nonce * &ED25519_BASEPOINT_TABLE, nonce * hash_to_point(&inputs[i].1.ring[usize::from(inputs[i].1.i)][0])
+      &msg,
+      &nonce * &ED25519_BASEPOINT_TABLE,
+      nonce * hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0])
     );
-    clsag.s[inputs[i].1.i as usize] = Key {
+    clsag.s[inputs[i].2.decoys.i as usize] = Key {
       key: (nonce - (c * ((mu_C * z) + (mu_P * inputs[i].0)))).to_bytes()
     };
 
@@ -233,10 +231,10 @@ pub fn sign<R: RngCore + CryptoRng>(
 // Uses Monero's C verification function to ensure compatibility with Monero
 pub fn verify(
   clsag: &Clsag,
-  msg: &[u8; 32],
   image: EdwardsPoint,
   ring: &[[EdwardsPoint; 2]],
-  pseudo_out: EdwardsPoint
+  pseudo_out: EdwardsPoint,
+  msg: &[u8; 32]
 ) -> bool {
   // Workaround for the fact monero-rs doesn't include the length of clsag.s in clsag encoding
   // despite it being part of clsag encoding. Reason for the patch version pin
@@ -256,7 +254,7 @@ pub fn verify(
   unsafe {
     c_verify_clsag(
       serialized.len(), serialized.as_ptr(), image_bytes.as_ptr(),
-      ring.len() as u8, ring_bytes.as_ptr(), msg.as_ptr(), pseudo_out_bytes.as_ptr()
+      ring.len() as u8, ring_bytes.as_ptr(), pseudo_out_bytes.as_ptr(), msg.as_ptr()
     )
   }
 }
