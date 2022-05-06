@@ -14,10 +14,10 @@ rand_core = "0.6"
 rand_distr = "0.4"
 rand_chacha = { version = "0.3", optional = true }
 
-tiny-keccak = { version = "2.0", features = ["keccak"] }
+tiny-keccak = { version = "2", features = ["keccak"] }
 blake2 = "0.10"
 
-curve25519-dalek = { version = "3.2", features = ["std", "simd_backend"] }
+curve25519-dalek = { version = "3", features = ["std", "simd_backend"] }
 
 ff = { version = "0.11", optional = true }
 group = { version = "0.11", optional = true }
@@ -28,7 +28,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
 # Locked to this specific patch version due to a bug we compensate for
 monero = { version = "0.16.0", features = ["experimental"] }
 
-hex = "0.4.3"
+hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 monero-epee-bin-serde = "1.0"
@@ -40,4 +40,4 @@ multisig = ["ff", "group", "rand_chacha", "transcript", "frost", "dalek-ff-group
 [dev-dependencies]
 rand = "0.8"
 
-tokio = { version = "1.17.0", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
