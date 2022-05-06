@@ -61,11 +61,9 @@ impl Curve for Secp256k1 {
     33
   }
 
-  fn F_from_le_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
-    let mut bytes: [u8; 32] = slice.try_into().map_err(
-      |_| CurveError::InvalidLength(32, slice.len())
-    )?;
-    bytes.reverse();
+  fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
+    let bytes: [u8; 32] = slice.try_into()
+      .map_err(|_| CurveError::InvalidLength(32, slice.len()))?;
     let scalar = Scalar::from_repr(bytes.into());
     if scalar.is_none().unwrap_u8() == 1 {
       Err(CurveError::InvalidScalar)?;
@@ -81,10 +79,8 @@ impl Curve for Secp256k1 {
     Ok(point.unwrap())
   }
 
-  fn F_to_le_bytes(f: &Self::F) -> Vec<u8> {
-    let mut res: [u8; 32] = f.to_bytes().into();
-    res.reverse();
-    res.to_vec()
+  fn F_to_bytes(f: &Self::F) -> Vec<u8> {
+    (&f.to_bytes()).to_vec()
   }
 
   fn G_to_bytes(g: &Self::G) -> Vec<u8> {

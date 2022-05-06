@@ -162,7 +162,7 @@ impl Algorithm<Ed25519> for Multisig {
     // Given this is guaranteed to match commitments, which FROST commits to, this also technically
     // doesn't need to be committed to if a canonical serialization is guaranteed
     // It, again, doesn't hurt to include and ensures security boundaries are well formed
-    self.transcript.append_message(b"participant", &u64::try_from(l).unwrap().to_le_bytes());
+    self.transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_be_bytes());
     self.transcript.append_message(b"commitments_H", &serialized[0 .. 64]);
 
     #[allow(non_snake_case)]

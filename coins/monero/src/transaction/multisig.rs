@@ -64,6 +64,8 @@ impl SignableTransaction {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
       // transcript (such as the one used to create one time keys) to be unique
       transcript.append_message(b"input_hash", &input.tx.0);
+      // TODO: Should this be u8, u16, or u32? Right now, outputs are solely up to 16, but what
+      // about the future?
       transcript.append_message(b"input_output_index", &u64::try_from(input.o).unwrap().to_le_bytes());
       // Not including this, with a doxxed list of payments, would allow brute forcing the inputs
       // to determine RNG seeds and therefore the true spends

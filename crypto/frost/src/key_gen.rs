@@ -9,8 +9,8 @@ use crate::{Curve, MultisigParams, MultisigKeys, FrostError};
 
 #[allow(non_snake_case)]
 fn challenge<C: Curve>(l: usize, context: &str, R: &[u8], Am: &[u8]) -> C::F {
-  let mut c = Vec::with_capacity(8 + context.len() + R.len() + Am.len());
-  c.extend(&u64::try_from(l).unwrap().to_le_bytes());
+  let mut c = Vec::with_capacity(2 + context.len() + R.len() + Am.len());
+  c.extend(&u16::try_from(l).unwrap().to_be_bytes());
   c.extend(context.as_bytes());
   c.extend(R);  // R
   c.extend(Am); // A of the first commitment, which is what we're proving we have the private key
@@ -59,7 +59,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   let s = k + (coefficients[0] * c);
 
   serialized.extend(&C::G_to_bytes(&R));
-  serialized.extend(&C::F_to_le_bytes(&s));
+  serialized.extend(&C::F_to_bytes(&s));
 
   // Step 4: Broadcast
   (coefficients, commitments, serialized)
@@ -148,7 +148,7 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
     );
 
     scalars.push(
-      -C::F_from_le_slice(
+      -C::F_from_slice(
         &serialized[l][commitments_len + C::G_len() .. serialized[l].len()]
       ).map_err(|_| FrostError::InvalidProofOfKnowledge(l))? * u
     );
@@ -184,7 +184,7 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
         &serialized[l][commitments_len .. commitments_len + C::G_len()]
       ).map_err(|_| FrostError::InvalidProofOfKnowledge(l))?;
 
-      let s = C::F_from_le_slice(
+      let s = C::F_from_slice(
         &serialized[l][commitments_len + C::G_len() .. serialized[l].len()]
       ).map_err(|_| FrostError::InvalidProofOfKnowledge(l))?;
 
@@ -248,7 +248,7 @@ fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
       continue
     }
 
-    res.push(C::F_to_le_bytes(&polynomial(&coefficients, i)));
+    res.push(C::F_to_bytes(&polynomial(&coefficients, i)));
   }
 
   // Calculate our own share
@@ -298,7 +298,7 @@ fn complete_r2<C: Curve>(
       shares.push(C::F::zero());
       continue;
     }
-    shares.push(C::F_from_le_slice(&serialized[i]).map_err(|_| FrostError::InvalidShare(i))?);
+    shares.push(C::F_from_slice(&serialized[i]).map_err(|_| FrostError::InvalidShare(i))?);
   }
 
 

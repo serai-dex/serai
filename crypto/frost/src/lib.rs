@@ -98,7 +98,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // While they do technically exist, their usage of Self::Repr breaks all potential library usage
   // without helper functions like this
   #[allow(non_snake_case)]
-  fn F_from_le_slice(slice: &[u8]) -> Result<Self::F, CurveError>;
+  fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError>;
 
   /// Group element from slice. Must require canonicity or risks differing binding factors
   #[allow(non_snake_case)]
@@ -106,7 +106,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
 
   /// Obtain a vector of the byte encoding of F
   #[allow(non_snake_case)]
-  fn F_to_le_bytes(f: &Self::F) -> Vec<u8>;
+  fn F_to_bytes(f: &Self::F) -> Vec<u8>;
 
   /// Obtain a vector of the byte encoding of G
   #[allow(non_snake_case)]
@@ -135,8 +135,8 @@ impl MultisigParams {
       Err(FrostError::ZeroParameter(t, n))?;
     }
 
-    if u64::try_from(n).is_err() {
-      Err(FrostError::TooManyParticipants(n, u64::MAX))?;
+    if u16::try_from(n).is_err() {
+      Err(FrostError::TooManyParticipants(n, u16::MAX))?;
     }
 
     // When t == n, this shouldn't be used (MuSig2 and other variants of MuSig exist for a reason),
@@ -161,7 +161,7 @@ pub enum FrostError {
   #[error("a parameter was 0 (required {0}, participants {1})")]
   ZeroParameter(usize, usize),
   #[error("too many participants (max {1}, got {0})")]
-  TooManyParticipants(usize, u64),
+  TooManyParticipants(usize, u16),
   #[error("invalid amount of required participants (max {1}, got {0})")]
   InvalidRequiredQuantity(usize, usize),
   #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
@@ -296,7 +296,7 @@ impl<C: Curve> MultisigKeys<C> {
     serialized.extend(&(self.params.n as u64).to_le_bytes());
     serialized.extend(&(self.params.t as u64).to_le_bytes());
     serialized.extend(&(self.params.i as u64).to_le_bytes());
-    serialized.extend(&C::F_to_le_bytes(&self.secret_share));
+    serialized.extend(&C::F_to_bytes(&self.secret_share));
     serialized.extend(&C::G_to_bytes(&self.group_key));
     for i in 1 ..= self.params.n {
       serialized.extend(&C::G_to_bytes(&self.verification_shares[i]));
@@ -345,7 +345,7 @@ impl<C: Curve> MultisigKeys<C> {
       .map_err(|_| FrostError::InternalError("parameter doesn't fit into usize".to_string()))?;
     cursor += 8;
 
-    let secret_share = C::F_from_le_slice(&serialized[cursor .. (cursor + C::F_len())])
+    let secret_share = C::F_from_slice(&serialized[cursor .. (cursor + C::F_len())])
       .map_err(|_| FrostError::InternalError("invalid secret share".to_string()))?;
     cursor += C::F_len();
     let group_key = C::G_from_slice(&serialized[cursor .. (cursor + C::G_len())])

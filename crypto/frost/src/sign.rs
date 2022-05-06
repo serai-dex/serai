@@ -149,7 +149,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     let transcript = params.algorithm.transcript();
     transcript.domain_separate(b"FROST");
     if params.keys.offset.is_some() {
-      transcript.append_message(b"offset", &C::F_to_le_bytes(&params.keys.offset.unwrap()));
+      transcript.append_message(b"offset", &C::F_to_bytes(&params.keys.offset.unwrap()));
     }
   }
 
@@ -170,7 +170,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
       B.push(Some(our_preprocess.commitments));
       {
         let transcript = params.algorithm.transcript();
-        transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_le_bytes());
+        transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_be_bytes());
         transcript.append_message(
           b"commitments",
           &our_preprocess.serialized[0 .. (C::G_len() * 2)]
@@ -206,7 +206,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     B.push(Some([D, E]));
     {
       let transcript = params.algorithm.transcript();
-      transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_le_bytes());
+      transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_be_bytes());
       transcript.append_message(b"commitments", &commitments[0 .. commitments_len]);
     }
   }
@@ -255,7 +255,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     our_preprocess.nonces[0] + (our_preprocess.nonces[1] * binding),
     msg
   );
-  Ok((Package { Ris, R, share }, C::F_to_le_bytes(&share)))
+  Ok((Package { Ris, R, share }, C::F_to_bytes(&share)))
 }
 
 // This doesn't check the signing set is as expected and unexpected changes can cause false blames
@@ -291,7 +291,7 @@ fn complete<C: Curve, A: Algorithm<C>>(
       Err(FrostError::InvalidShare(l))?;
     }
 
-    let part = C::F_from_le_slice(serialized[l].as_ref().unwrap())
+    let part = C::F_from_slice(serialized[l].as_ref().unwrap())
       .map_err(|_| FrostError::InvalidShare(l))?;
     sum += part;
     responses.push(Some(part));

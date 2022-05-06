@@ -77,15 +77,14 @@ impl Curve for Ed25519 {
     32
   }
 
-  fn F_from_le_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
+  fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
     let scalar = Self::F::from_repr(
       slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?
     );
-    if scalar.is_some().unwrap_u8() == 1 {
-      Ok(scalar.unwrap())
-    } else {
-      Err(CurveError::InvalidScalar)
+    if scalar.is_some().unwrap_u8() == 0 {
+      Err(CurveError::InvalidScalar)?;
     }
+    Ok(scalar.unwrap())
   }
 
   fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
@@ -105,7 +104,7 @@ impl Curve for Ed25519 {
     }
   }
 
-  fn F_to_le_bytes(f: &Self::F) -> Vec<u8> {
+  fn F_to_bytes(f: &Self::F) -> Vec<u8> {
     f.to_repr().to_vec()
   }
 
