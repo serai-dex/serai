@@ -21,6 +21,8 @@ pub trait Transcript {
     label: &'static [u8],
     additional_entropy: Option<[u8; 32]>
   ) -> Self::SeededRng;
+
+  // TODO: Consider a domain_separate function
 }
 
 #[derive(Clone, Debug)]

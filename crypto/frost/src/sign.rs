@@ -218,15 +218,26 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   // While Merlin, which may or may not be the transcript used here, wants application level
   // transcripts passed around to proof systems, this maintains a desired level of abstraction and
   // works without issue
+  // Not to mention, mandating a global transcript would conflict with the IETF draft UNLESS an
+  // IetfTranscript was declared which ignores field names and solely does their values, with a
+  // fresh instantiation per sign round. That could likely be made to align without issue
+  // TODO: Consider Option<Transcript>?
   let mut transcript = params.algorithm.transcript();
+  if params.keys.offset.is_some() && transcript.is_none() {
+    transcript = Some(A::Transcript::new(b"FROST Offset"));
+  }
+  if transcript.is_some() {
+    // https://github.com/rust-lang/rust/issues/91345
+    transcript = transcript.map(|mut t| { t.append_message(b"dom-sep", b"FROST"); t });
+  }
 
   // If the offset functionality provided by this library is in use, include it in the transcript.
   // Not compliant with the IETF spec which doesn't have a concept of offsets, nor does it use
   // transcripts
   if params.keys.offset.is_some() {
-    let mut offset_transcript = transcript.unwrap_or(A::Transcript::new(b"FROST_offset"));
-    offset_transcript.append_message(b"offset", &C::F_to_le_bytes(&params.keys.offset.unwrap()));
-    transcript = Some(offset_transcript);
+    transcript = transcript.map(
+      |mut t| { t.append_message(b"offset", &C::F_to_le_bytes(&params.keys.offset.unwrap())); t }
+    );
   }
 
   // If a transcript was defined, move the commitments used for the binding factor into it

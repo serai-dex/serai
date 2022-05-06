@@ -52,25 +52,20 @@ impl SignableTransaction {
     // Create a RNG out of the input shared keys, which either requires the view key or being every
     // sender, and the payments (address and amount), which a passive adversary may be able to know
     // The use of input shared keys technically makes this one time given a competent wallet which
-    // can withstand the burning attack
+    // can withstand the burning attack (and has a static spend key? TODO visit bounds)
     // The lack of dedicated entropy here is frustrating. We can probably provide entropy inclusion
     // if we move CLSAG ring to a Rc RefCell like msg and mask? TODO
-    let mut transcript = Transcript::new(b"InputMixins");
-    let mut shared_keys = Vec::with_capacity(self.inputs.len() * 32);
+    // For the above TODO, also consider FROST's TODO of a global transcript instance
+    let mut transcript = Transcript::new(b"Input Mixins");
+    // Does dom-sep despite not being a proof because it's a unique section (and we have no dom-sep yet)
+    transcript.append_message("dom-sep", "inputs_outputs");
     for input in &self.inputs {
-      shared_keys.extend(&input.key_offset.to_bytes());
+      transcript.append_message(b"input_shared_key", &input.key_offset.to_bytes());
     }
-    transcript.append_message(b"input_shared_keys", &shared_keys);
-    let mut payments = Vec::with_capacity(self.payments.len() * ((2 * 32) + 8));
     for payment in &self.payments {
-      // Network byte and spend/view key
-      // Doesn't use the full address as monero-rs may provide a payment ID which adds bytes
-      // By simply cutting this short, we get the relevant data without length differences nor the
-      // need to prefix
-      payments.extend(&payment.0.as_bytes()[0 .. 65]);
-      payments.extend(payment.1.to_le_bytes());
+      transcript.append_message(b"payment_address", &payment.0.as_bytes());
+      transcript.append_message(b"payment_amount", &payment.1.to_le_bytes());
     }
-    transcript.append_message(b"payments", &payments);
 
     // Select mixins
     let mixins = mixins::select(
@@ -129,11 +124,12 @@ impl SignableTransaction {
 
 // Seeded RNG so multisig participants agree on one time keys to use, preventing burning attacks
 fn outputs_rng(tx: &SignableTransaction, entropy: [u8; 32]) -> <Transcript as TranscriptTrait>::SeededRng {
-  let mut transcript = Transcript::new(b"StealthAddress");
+  let mut transcript = Transcript::new(b"Stealth Addresses");
   // This output can only be spent once. Therefore, it forces all one time keys used here to be
   // unique, even if the entropy is reused. While another transaction could use a different input
   // ordering to swap which 0 is, that input set can't contain this input without being a double
   // spend
+  transcript.append_message(b"dom-sep", b"input_0");
   transcript.append_message(b"hash", &tx.inputs[0].tx.0);
   transcript.append_message(b"index", &u64::try_from(tx.inputs[0].o).unwrap().to_le_bytes());
   transcript.seeded_rng(b"tx_keys", Some(entropy))

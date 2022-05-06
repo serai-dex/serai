@@ -26,7 +26,9 @@ use crate::{
 };
 
 impl Input {
-  pub fn transcript<T: TranscriptTrait>(&self, transcript: &mut T) {
+  fn transcript<T: TranscriptTrait>(&self, transcript: &mut T) {
+    // Doesn't dom-sep as this is considered part of the larger input signing proof
+
     // Ring index
     transcript.append_message(b"ring_index", &[self.i]);
 
@@ -170,8 +172,9 @@ impl Algorithm<Ed25519> for Multisig {
   }
 
   fn transcript(&self) -> Option<Self::Transcript> {
-    let mut transcript = Self::Transcript::new(b"CLSAG");
+    let mut transcript = Self::Transcript::new(b"Monero Multisig");
     self.input.transcript(&mut transcript);
+    transcript.append_message(b"dom-sep", b"CLSAG");
     // Given the fact there's only ever one possible value for this, this may technically not need
     // to be committed to. If signing a TX, it's be double committed to thanks to the message
     // It doesn't hurt to have though and ensures security boundaries are well formed
