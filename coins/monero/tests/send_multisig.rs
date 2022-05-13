@@ -13,17 +13,17 @@ use monero::{
   util::{key::PublicKey, address::Address}
 };
 
-use monero_serai::{transaction::{self, SignableTransaction}, rpc::Rpc};
+use monero_serai::transaction::{self, SignableTransaction};
 
 mod rpc;
-use crate::rpc::mine_block;
+use crate::rpc::{rpc, mine_block};
 
 mod frost;
 use crate::frost::{THRESHOLD, generate_keys, sign};
 
 #[tokio::test]
 pub async fn send_multisig() {
-  let rpc = Rpc::new("http://127.0.0.1:18081".to_string());
+  let rpc = rpc().await;
 
   let fee_per_byte = 50000000;
   let fee = fee_per_byte * 2000;
@@ -43,7 +43,7 @@ pub async fn send_multisig() {
   // Mine blocks to that address
   let start = rpc.get_height().await.unwrap();
   for _ in 0 .. 7 {
-    mine_block(&rpc, addr.to_string()).await.unwrap();
+    mine_block(&rpc, &addr.to_string()).await.unwrap();
   }
 
   // Get the input TX

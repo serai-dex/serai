@@ -12,6 +12,7 @@ use monero::VarInt;
 use crate::{transaction::SpendableOutput, rpc::{RpcError, Rpc}};
 
 const LOCK_WINDOW: usize = 10;
+const MATURITY: u64 = 60;
 const RECENT_WINDOW: usize = 15;
 const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
@@ -32,8 +33,15 @@ async fn select_single<R: RngCore + CryptoRng>(
   per_second: f64,
   used: &mut HashSet<u64>
 ) -> Result<(u64, [EdwardsPoint; 2]), RpcError> {
+  // Panic if not enough decoys are available
+  // TODO: Simply create a TX with less than the target amount
+  if (high - MATURITY) < u64::try_from(DECOYS).unwrap() {
+    panic!("Not enough decoys available");
+  }
+
   let mut o;
   let mut output = None;
+  // Use a gamma distribution
   while {
     let mut age = GAMMA.sample(rng).exp();
     if age > TIP_APPLICATION {
@@ -48,13 +56,18 @@ async fn select_single<R: RngCore + CryptoRng>(
       let i = distribution.partition_point(|s| *s < o);
       let prev = if i == 0 { 0 } else { i - 1 };
       let n = distribution[i] - distribution[prev];
-      o = distribution[prev] + (rng.next_u64() % n);
+      o = distribution[prev] + (rng.next_u64() % n.max(1));
       (n == 0) || used.contains(&o) || {
         output = rpc.get_outputs(&[o], height).await?[0];
+        if output.is_none() {
+          used.insert(o);
+        }
         output.is_none()
       }
     }
   } {}
+
+  // Insert the selected output
   used.insert(o);
   Ok((o, output.unwrap()))
 }
@@ -112,26 +125,47 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
 
   let mut res = Vec::with_capacity(inputs.len());
   for (i, o) in outputs.iter().enumerate() {
+    // If there's only the target amount of decoys available, remove the index of the output we're spending
+    // So we don't infinite loop while ignoring it
+    // TODO: If we're spending 2 outputs of a possible 11 outputs, this will still fail
+    used.remove(&o.0);
+
     let mut decoys = Vec::with_capacity(DECOYS);
+    // Select the full amount of ring members in decoys, instead of just the actual decoys, in order
+    // to increase sample size
     for _ in 0 .. DECOYS {
       decoys.push(select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?);
     }
     decoys.sort_by(|a, b| a.0.cmp(&b.0));
 
+    // Add back this output
+    used.insert(o.0);
+
     // Make sure the TX passes the sanity check that the median output is within the last 40%
     // This actually checks the median is within the last third, a slightly more aggressive boundary,
     // as the height used in this calculation will be slightly under the height this is sanity
     // checked against
-    while decoys[DECOYS / 2].0 < (high * 2 / 3) {
-      // If it's not, update the bottom half with new values to ensure the median only moves up
-      for m in 0 .. DECOYS / 2 {
-        // We could not remove this, saving CPU time and removing low values as possibilities, yet
-        // it'd increase the amount of decoys required to create this transaction and some banned
-        // outputs may be the best options
-        used.remove(&decoys[m].0);
-        decoys[m] = select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?;
+    let target_median = high * 2 / 3;
+
+    // Sanity checks are only run when 1000 outputs are available
+    // We run this check whenever it's possible to satisfy
+    // This means we need the middle possible decoy to be above the target_median
+    // TODO: This will break if timelocks are used other than maturity on very small chains/chains
+    // of any size which use timelocks extremely frequently, as it'll try to satisfy an impossible
+    // condition
+    // Reduce target_median by each timelocked output found?
+    if (high - MATURITY) >= target_median {
+      while decoys[DECOYS / 2].0 < target_median {
+        // If it's not, update the bottom half with new values to ensure the median only moves up
+        for m in 0 .. DECOYS / 2 {
+          // We could not remove this, saving CPU time and removing low values as possibilities, yet
+          // it'd increase the amount of decoys required to create this transaction and some banned
+          // outputs may be the best options
+          used.remove(&decoys[m].0);
+          decoys[m] = select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?;
+        }
+        decoys.sort_by(|a, b| a.0.cmp(&b.0));
       }
-      decoys.sort_by(|a, b| a.0.cmp(&b.0));
     }
 
     // Replace the closest selected decoy with the actual

@@ -7,18 +7,14 @@ use monero::{
   util::{key::PublicKey, address::Address}
 };
 
-use monero_serai::{
-  random_scalar,
-  transaction::{self, SignableTransaction},
-  rpc::Rpc
-};
+use monero_serai::{random_scalar, transaction::{self, SignableTransaction}};
 
 mod rpc;
-use crate::rpc::mine_block;
+use crate::rpc::{rpc, mine_block};
 
 #[tokio::test]
 pub async fn send() {
-  let rpc = Rpc::new("http://127.0.0.1:18081".to_string());
+  let rpc = rpc().await;
 
   // Generate an address
   let view = random_scalar(&mut OsRng);
@@ -40,7 +36,7 @@ pub async fn send() {
   for i in 0 .. 2 {
     let start = rpc.get_height().await.unwrap();
     for _ in 0 .. 7 {
-      mine_block(&rpc, addr.to_string()).await.unwrap();
+      mine_block(&rpc, &addr.to_string()).await.unwrap();
     }
 
     // Test both a miner output and a normal output
