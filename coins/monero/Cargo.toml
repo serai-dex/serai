@@ -17,7 +17,7 @@ rand_chacha = { version = "0.3", optional = true }
 tiny-keccak = { version = "2", features = ["keccak"] }
 blake2 = "0.10"
 
-curve25519-dalek = { version = "3", features = ["std", "simd_backend"] }
+curve25519-dalek = { version = "3", features = ["std"] }
 
 ff = { version = "0.11", optional = true }
 group = { version = "0.11", optional = true }
