@@ -239,7 +239,10 @@ pub struct MultisigKeys<C: Curve> {
 impl<C: Curve> MultisigKeys<C> {
   pub fn offset(&self, offset: C::F) -> MultisigKeys<C> {
     let mut res = self.clone();
-    res.offset = Some(offset);
+    // Carry any existing offset
+    // Enables schemes like Monero's subaddresses which have a per-subaddress offset and then a
+    // one-time-key offset
+    res.offset = Some(offset + res.offset.unwrap_or(C::F::zero()));
     res
   }
 
