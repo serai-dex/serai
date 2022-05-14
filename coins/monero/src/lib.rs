@@ -24,13 +24,7 @@ pub mod transaction;
 
 #[link(name = "wrapper")]
 extern "C" {
-  pub(crate) fn free(ptr: *const u8);
   fn c_hash_to_point(point: *const u8);
-  pub(crate) fn c_generate_bp(len: u8, amounts: *const u64, masks: *const [u8; 32]) -> *const u8;
-  pub(crate) fn c_verify_bp(
-    serialized_len: usize, serialized: *const u8,
-    commitments_len: u8, commitments: *const [u8; 32]
-  ) -> bool;
 }
 
 lazy_static! {

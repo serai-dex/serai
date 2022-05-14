@@ -2,7 +2,19 @@ use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use monero::{consensus::{Encodable, deserialize}, util::ringct::Bulletproof};
 
-use crate::{Commitment, transaction::TransactionError, free, c_generate_bp, c_verify_bp};
+use crate::{Commitment, transaction::TransactionError};
+
+#[link(name = "wrapper")]
+extern "C" {
+  fn free(ptr: *const u8);
+  fn c_generate_bp(len: u8, amounts: *const u64, masks: *const [u8; 32]) -> *const u8;
+  fn c_verify_bp(
+    serialized_len: usize,
+    serialized: *const u8,
+    commitments_len: u8,
+    commitments: *const [u8; 32]
+  ) -> bool;
+}
 
 pub fn generate(outputs: &[Commitment]) -> Result<Bulletproof, TransactionError> {
   if outputs.len() > 16 {
