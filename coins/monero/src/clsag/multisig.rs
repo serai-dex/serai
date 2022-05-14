@@ -260,7 +260,6 @@ impl Algorithm<Ed25519> for Multisig {
     sum: dfg::Scalar
   ) -> Option<Self::Signature> {
     let interim = self.interim.as_ref().unwrap();
-
     let mut clsag = interim.clsag.clone();
     clsag.s[usize::from(self.input().decoys.i)] = Key { key: (sum.0 - interim.c).to_bytes() };
     if verify(&clsag, &self.input().decoys.ring, &self.image, &interim.pseudo_out, &self.msg()).is_ok() {

@@ -10,7 +10,7 @@ mod frost;
 use crate::frost::{THRESHOLD, PARTICIPANTS, generate_keys};
 
 #[test]
-fn test() {
+fn key_image() {
   let (keys, group_private) = generate_keys();
   let image = key_image::generate(&group_private);
 

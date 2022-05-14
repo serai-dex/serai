@@ -16,50 +16,54 @@ mod frost;
 #[cfg(feature = "multisig")]
 use crate::frost::{THRESHOLD, generate_keys, sign};
 
-const RING_INDEX: u8 = 3;
 const RING_LEN: u64 = 11;
 const AMOUNT: u64 = 1337;
 
+#[cfg(feature = "multisig")]
+const RING_INDEX: u8 = 3;
+
 #[test]
 fn clsag() {
-  let msg = [1; 32];
+  for real in 0 .. RING_LEN {
+    let msg = [1; 32];
 
-  let mut secrets = [Scalar::zero(), Scalar::zero()];
-  let mut ring = vec![];
-  for i in 0 .. RING_LEN {
-    let dest = random_scalar(&mut OsRng);
-    let mask = random_scalar(&mut OsRng);
-    let amount;
-    if i == u64::from(RING_INDEX) {
-      secrets = [dest, mask];
-      amount = AMOUNT;
-    } else {
-      amount = OsRng.next_u64();
+    let mut secrets = [Scalar::zero(), Scalar::zero()];
+    let mut ring = vec![];
+    for i in 0 .. RING_LEN {
+      let dest = random_scalar(&mut OsRng);
+      let mask = random_scalar(&mut OsRng);
+      let amount;
+      if i == u64::from(real) {
+        secrets = [dest, mask];
+        amount = AMOUNT;
+      } else {
+        amount = OsRng.next_u64();
+      }
+      ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
-    ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
-  }
 
-  let image = key_image::generate(&secrets[0]);
-  let (clsag, pseudo_out) = clsag::sign(
-    &mut OsRng,
-    &vec![(
-      secrets[0],
-      image,
-      clsag::Input::new(
-        Commitment::new(secrets[1], AMOUNT),
-        Decoys {
-          i: RING_INDEX,
-          offsets: (1 ..= RING_LEN).into_iter().map(|o| VarInt(o)).collect(),
-          ring: ring.clone()
-        }
-      ).unwrap()
-    )],
-    random_scalar(&mut OsRng),
-    msg
-  ).unwrap().swap_remove(0);
-  clsag::verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
-  #[cfg(feature = "experimental")]
-  clsag::rust_verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
+    let image = key_image::generate(&secrets[0]);
+    let (clsag, pseudo_out) = clsag::sign(
+      &mut OsRng,
+      &vec![(
+        secrets[0],
+        image,
+        clsag::Input::new(
+          Commitment::new(secrets[1], AMOUNT),
+          Decoys {
+            i: u8::try_from(real).unwrap(),
+            offsets: (1 ..= RING_LEN).into_iter().map(|o| VarInt(o)).collect(),
+            ring: ring.clone()
+          }
+        ).unwrap()
+      )],
+      random_scalar(&mut OsRng),
+      msg
+    ).unwrap().swap_remove(0);
+    clsag::verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
+    #[cfg(feature = "experimental")]
+    clsag::rust_verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
+  }
 }
 
 #[cfg(feature = "multisig")]

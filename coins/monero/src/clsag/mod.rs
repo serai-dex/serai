@@ -140,36 +140,32 @@ fn core(
   to_hash.extend(pseudo_out.compress().to_bytes());
   to_hash.extend(msg);
 
-  let mut c;
-  let mut c1 = Scalar::zero();
-
+  let start;
   let end;
-  let mut i;
-
+  let mut c;
   match A_c1 {
     Mode::Sign(r, A, AH) => {
+      start = r + 1;
+      end = r + n;
       to_hash.extend(A.compress().to_bytes());
       to_hash.extend(AH.compress().to_bytes());
       c = hash_to_scalar(&to_hash);
-
-      end = r;
-      i = (end + 1) % n;
-      if i == 0 {
-        c1 = c;
-      }
     },
 
     #[cfg(feature = "experimental")]
     Mode::Verify(c1) => {
-      end = 0;
-      i = 0;
+      start = 0;
+      end = n;
       c = c1;
     }
   }
 
-  let mut first = true;
-  while (i != end) || first {
-    first = false;
+  let mut c1 = None;
+  for i in (start .. end).map(|i| i % n) {
+    if i == 0 {
+      c1 = Some(c);
+    }
+
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 
@@ -182,14 +178,9 @@ fn core(
     to_hash.extend(L.compress().to_bytes());
     to_hash.extend(R.compress().to_bytes());
     c = hash_to_scalar(&to_hash);
-
-    i = (i + 1) % n;
-    if i == 0 {
-      c1 = c;
-    }
   }
 
-  ((D_bytes, c * mu_P, c * mu_C), c1)
+  ((D_bytes, c * mu_P, c * mu_C), c1.unwrap_or(c))
 }
 
 pub(crate) fn sign_core<R: RngCore + CryptoRng>(
