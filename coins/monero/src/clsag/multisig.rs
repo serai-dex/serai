@@ -68,11 +68,11 @@ impl Details {
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 struct Interim {
+  p: Scalar,
   c: Scalar,
-  s: Scalar,
 
   clsag: Clsag,
-  C_out: EdwardsPoint
+  pseudo_out: EdwardsPoint
 }
 
 #[allow(non_snake_case)]
@@ -237,7 +237,7 @@ impl Algorithm<Ed25519> for Multisig {
     let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"decoy_responses", None));
 
     #[allow(non_snake_case)]
-    let (clsag, c, mu_C, z, mu_P, C_out) = sign_core(
+    let (clsag, pseudo_out, p, c) = sign_core(
       &mut rng,
       &self.image,
       &self.input(),
@@ -246,9 +246,9 @@ impl Algorithm<Ed25519> for Multisig {
       nonce_sum.0,
       self.AH.0.0
     );
-    self.interim = Some(Interim { c: c * mu_P, s: c * mu_C * z, clsag, C_out });
+    self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
-    let share = dfg::Scalar(nonce.0 - (c * mu_P * view.secret_share().0));
+    let share = dfg::Scalar(nonce.0 - (p * view.secret_share().0));
 
     share
   }
@@ -262,9 +262,9 @@ impl Algorithm<Ed25519> for Multisig {
     let interim = self.interim.as_ref().unwrap();
 
     let mut clsag = interim.clsag.clone();
-    clsag.s[usize::from(self.input().decoys.i)] = Key { key: (sum.0 - interim.s).to_bytes() };
-    if verify(&clsag, self.image, &self.input().decoys.ring, interim.C_out, &self.msg()) {
-      return Some((clsag, interim.C_out));
+    clsag.s[usize::from(self.input().decoys.i)] = Key { key: (sum.0 - interim.c).to_bytes() };
+    if verify(&clsag, &self.input().decoys.ring, &self.image, &interim.pseudo_out, &self.msg()).is_ok() {
+      return Some((clsag, interim.pseudo_out));
     }
     return None;
   }
@@ -277,7 +277,7 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> bool {
     let interim = self.interim.as_ref().unwrap();
     return (&share.0 * &ED25519_BASEPOINT_TABLE) == (
-      nonce.0 - (interim.c * verification_share.0)
+      nonce.0 - (interim.p * verification_share.0)
     );
   }
 }

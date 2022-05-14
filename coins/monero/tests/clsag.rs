@@ -21,7 +21,7 @@ const RING_LEN: u64 = 11;
 const AMOUNT: u64 = 1337;
 
 #[test]
-fn test_single() {
+fn clsag() {
   let msg = [1; 32];
 
   let mut secrets = [Scalar::zero(), Scalar::zero()];
@@ -57,12 +57,14 @@ fn test_single() {
     random_scalar(&mut OsRng),
     msg
   ).unwrap().swap_remove(0);
-  assert!(clsag::verify(&clsag, image, &ring, pseudo_out, &msg));
+  clsag::verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
+  #[cfg(feature = "experimental")]
+  clsag::rust_verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
 }
 
 #[cfg(feature = "multisig")]
 #[test]
-fn test_multisig() -> Result<(), MultisigError> {
+fn clsag_multisig() -> Result<(), MultisigError> {
   let (keys, group_private) = generate_keys();
   let t = keys[0].params().t();
 

@@ -53,7 +53,7 @@ extern "C" {
     try { return rct::bulletproof_VERIFY(bp); } catch(...) { return false; }
   }
 
-  bool c_verify_clsag(uint s_len, uint8_t* s, uint8_t* I, uint8_t k_len, uint8_t* k, uint8_t* p, uint8_t* m) {
+  bool c_verify_clsag(uint s_len, uint8_t* s, uint8_t k_len, uint8_t* k, uint8_t* I, uint8_t* p, uint8_t* m) {
     rct::clsag clsag;
     std::stringstream ss;
     std::string str;
@@ -64,7 +64,6 @@ extern "C" {
     if (!ss.good()) {
       return false;
     }
-    memcpy(clsag.I.bytes, I, 32);
 
     rct::ctkeyV keys;
     keys.resize(k_len);
@@ -72,6 +71,8 @@ extern "C" {
       memcpy(keys[i].dest.bytes, &k[(i * 2) * 32], 32);
       memcpy(keys[i].mask.bytes, &k[((i * 2) + 1) * 32], 32);
     }
+
+    memcpy(clsag.I.bytes, I, 32);
 
     rct::key pseudo_out;
     memcpy(pseudo_out.bytes, p, 32);

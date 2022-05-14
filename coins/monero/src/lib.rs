@@ -31,10 +31,6 @@ extern "C" {
     serialized_len: usize, serialized: *const u8,
     commitments_len: u8, commitments: *const [u8; 32]
   ) -> bool;
-  pub(crate) fn c_verify_clsag(
-    serialized_len: usize, serialized: *const u8, I: *const u8,
-    ring_size: u8, ring: *const u8, msg: *const u8, pseudo_out: *const u8
-  ) -> bool;
 }
 
 lazy_static! {
