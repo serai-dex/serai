@@ -24,52 +24,61 @@ lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
 }
 
-async fn select_single<R: RngCore + CryptoRng>(
+async fn select_n<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
   height: usize,
   distribution: &[u64],
   high: u64,
   per_second: f64,
-  used: &mut HashSet<u64>
-) -> Result<(u64, [EdwardsPoint; 2]), RpcError> {
+  used: &mut HashSet<u64>,
+  count: usize
+) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   // Panic if not enough decoys are available
   // TODO: Simply create a TX with less than the target amount
   if (high - MATURITY) < u64::try_from(DECOYS).unwrap() {
     panic!("Not enough decoys available");
   }
 
-  let mut o;
-  let mut output = None;
-  // Use a gamma distribution
-  while {
-    let mut age = GAMMA.sample(rng).exp();
-    if age > TIP_APPLICATION {
-      age -= TIP_APPLICATION;
-    } else {
-      age = (rng.next_u64() % u64::try_from(RECENT_WINDOW * BLOCK_TIME).unwrap()) as f64;
-    }
+  let mut confirmed = Vec::with_capacity(count);
+  while confirmed.len() != count {
+    let remaining = count - confirmed.len();
+    let mut candidates = Vec::with_capacity(remaining);
+    while candidates.len() != remaining {
+      // Use a gamma distribution
+      let mut age = GAMMA.sample(rng).exp();
+      if age > TIP_APPLICATION {
+        age -= TIP_APPLICATION;
+      } else {
+        // f64 does not have try_from available, which is why these are written with `as`
+        age = (rng.next_u64() % u64::try_from(RECENT_WINDOW * BLOCK_TIME).unwrap()) as f64;
+      }
 
-    o = (age * per_second) as u64;
-    (o >= high) || {
-      o = high - 1 - o;
-      let i = distribution.partition_point(|s| *s < o);
-      let prev = if i == 0 { 0 } else { i - 1 };
-      let n = distribution[i] - distribution[prev];
-      o = distribution[prev] + (rng.next_u64() % n.max(1));
-      (n == 0) || used.contains(&o) || {
-        output = rpc.get_outputs(&[o], height).await?[0];
-        if output.is_none() {
-          used.insert(o);
+      let o = (age * per_second) as u64;
+      if o < high {
+        let i = distribution.partition_point(|s| *s < (high - 1 - o));
+        let prev = i.saturating_sub(1);
+        let n = distribution[i] - distribution[prev];
+        if n != 0 {
+          let o = distribution[prev] + (rng.next_u64() % n);
+          if !used.contains(&o) {
+            // It will either actually be used, or is unusable and this prevents trying it again
+            used.insert(o);
+            candidates.push(o);
+          }
         }
-        output.is_none()
       }
     }
-  } {}
 
-  // Insert the selected output
-  used.insert(o);
-  Ok((o, output.unwrap()))
+    let outputs = rpc.get_outputs(&candidates, height).await?;
+    for i in 0 .. outputs.len() {
+      if let Some(output) = outputs[i] {
+        confirmed.push((candidates[i], output));
+      }
+    }
+  }
+
+  Ok(confirmed)
 }
 
 // Uses VarInt as this is solely used for key_offsets which is serialized by monero-rs
@@ -130,12 +139,9 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
     // TODO: If we're spending 2 outputs of a possible 11 outputs, this will still fail
     used.remove(&o.0);
 
-    let mut decoys = Vec::with_capacity(DECOYS);
     // Select the full amount of ring members in decoys, instead of just the actual decoys, in order
     // to increase sample size
-    for _ in 0 .. DECOYS {
-      decoys.push(select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?);
-    }
+    let mut decoys = select_n(rng, rpc, height, &distribution, high, per_second, &mut used, DECOYS).await?;
     decoys.sort_by(|a, b| a.0.cmp(&b.0));
 
     // Add back this output
@@ -162,8 +168,12 @@ pub(crate) async fn select<R: RngCore + CryptoRng>(
           // it'd increase the amount of decoys required to create this transaction and some banned
           // outputs may be the best options
           used.remove(&decoys[m].0);
-          decoys[m] = select_single(rng, rpc, height, &distribution, high, per_second, &mut used).await?;
         }
+
+        decoys.splice(
+          0 .. DECOYS / 2,
+          select_n(rng, rpc, height, &distribution, high, per_second, &mut used, DECOYS / 2).await?
+        );
         decoys.sort_by(|a, b| a.0.cmp(&b.0));
       }
     }
