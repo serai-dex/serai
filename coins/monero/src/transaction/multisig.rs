@@ -141,7 +141,8 @@ impl StateMachine for TransactionMachine {
     let mut serialized = vec![];
     for (i, clsag) in self.clsags.iter_mut().enumerate() {
       let preprocess = clsag.preprocess(rng)?;
-      self.our_images[i] += CompressedEdwardsY(preprocess[0 .. 32].try_into().unwrap()).decompress().unwrap();
+      // First 64 bytes are FROST's commitments
+      self.our_images[i] += CompressedEdwardsY(preprocess[64 .. 96].try_into().unwrap()).decompress().unwrap();
       serialized.extend(&preprocess);
     }
 

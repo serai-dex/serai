@@ -125,8 +125,8 @@ pub struct DLEqProof {
 impl DLEqProof {
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
-    secret: &DScalar,
-    H: &DPoint
+    H: &DPoint,
+    secret: &DScalar
   ) -> DLEqProof {
     let r = random_scalar(rng);
     let rG = &DTable * &r;

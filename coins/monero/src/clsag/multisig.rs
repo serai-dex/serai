@@ -143,12 +143,12 @@ impl Algorithm<Ed25519> for Multisig {
 
     let mut serialized = Vec::with_capacity(Multisig::serialized_len());
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
-    serialized.extend(DLEqProof::prove(rng, &view.secret_share().0, &self.H).serialize());
+    serialized.extend(DLEqProof::prove(rng, &self.H, &view.secret_share().0).serialize());
 
     serialized.extend((nonces[0].0 * self.H).compress().to_bytes());
-    serialized.extend(&DLEqProof::prove(rng, &nonces[0].0, &self.H).serialize());
+    serialized.extend(&DLEqProof::prove(rng, &self.H, &nonces[0].0).serialize());
     serialized.extend((nonces[1].0 * self.H).compress().to_bytes());
-    serialized.extend(&DLEqProof::prove(rng, &nonces[1].0, &self.H).serialize());
+    serialized.extend(&DLEqProof::prove(rng, &self.H, &nonces[1].0).serialize());
     serialized
   }
 
