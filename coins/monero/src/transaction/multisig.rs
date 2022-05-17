@@ -3,7 +3,7 @@ use std::{rc::Rc, cell::RefCell};
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
-use curve25519_dalek::{scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwardsY}};
+use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwardsY}};
 
 use monero::{
   Hash, VarInt,
@@ -17,7 +17,7 @@ use frost::{FrostError, MultisigKeys, MultisigParams, sign::{State, StateMachine
 
 use crate::{
   frost::{Transcript, Ed25519},
-  random_scalar, key_image, bulletproofs, clsag,
+  random_scalar, bulletproofs, clsag,
   rpc::Rpc,
   transaction::{TransactionError, SignableTransaction, decoys::{self, Decoys}}
 };
@@ -49,6 +49,7 @@ impl SignableTransaction {
     included: &[usize]
   ) -> Result<TransactionMachine, TransactionError> {
     let mut our_images = vec![];
+    our_images.resize(self.inputs.len(), EdwardsPoint::identity());
     let mut inputs = vec![];
     inputs.resize(self.inputs.len(), Rc::new(RefCell::new(None)));
     let msg = Rc::new(RefCell::new(None));
@@ -91,13 +92,6 @@ impl SignableTransaction {
     ).await.map_err(|e| TransactionError::RpcError(e))?;
 
     for (i, input) in self.inputs.iter().enumerate() {
-      let keys = keys.offset(dalek_ff_group::Scalar(input.key_offset));
-      let (image, _) = key_image::generate_share(
-        rng,
-        &keys.view(included).map_err(|e| TransactionError::FrostError(e))?
-      );
-      our_images.push(image);
-
       clsags.push(
         AlgorithmMachine::new(
           clsag::Multisig::new(
@@ -105,7 +99,7 @@ impl SignableTransaction {
             inputs[i].clone(),
             msg.clone()
           ).map_err(|e| TransactionError::MultisigError(e))?,
-          Rc::new(keys),
+          Rc::new(keys.offset(dalek_ff_group::Scalar(input.key_offset))),
           included
         ).map_err(|e| TransactionError::FrostError(e))?
       );
@@ -145,8 +139,10 @@ impl StateMachine for TransactionMachine {
 
     // Iterate over each CLSAG calling preprocess
     let mut serialized = vec![];
-    for clsag in self.clsags.iter_mut() {
-      serialized.extend(&clsag.preprocess(rng)?);
+    for (i, clsag) in self.clsags.iter_mut().enumerate() {
+      let preprocess = clsag.preprocess(rng)?;
+      self.our_images[i] += CompressedEdwardsY(preprocess[0 .. 32].try_into().unwrap()).decompress().unwrap();
+      serialized.extend(&preprocess);
     }
 
     if self.leader {

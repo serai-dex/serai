@@ -16,13 +16,12 @@ use monero::util::ringct::{Key, Clsag};
 use group::Group;
 
 use transcript::Transcript as TranscriptTrait;
-use frost::{Curve, FrostError, algorithm::Algorithm, MultisigView};
+use frost::{FrostError, algorithm::Algorithm, MultisigView};
 use dalek_ff_group as dfg;
 
 use crate::{
   hash_to_point,
-  frost::{Transcript, MultisigError, Ed25519, DLEqProof},
-  key_image,
+  frost::{Transcript, MultisigError, Ed25519, DLEqProof, read_dleq},
   clsag::{Input, sign_core, verify}
 };
 
@@ -80,8 +79,9 @@ struct Interim {
 pub struct Multisig {
   transcript: Transcript,
 
+  H: EdwardsPoint,
+  // Merged here as CLSAG needs it, passing it would be a mess, yet having it beforehand requires a round
   image: EdwardsPoint,
-  commitments_H: Vec<u8>,
   AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
   details: Rc<RefCell<Option<Details>>>,
@@ -100,8 +100,8 @@ impl Multisig {
       Multisig {
         transcript,
 
+        H: EdwardsPoint::identity(),
         image: EdwardsPoint::identity(),
-        commitments_H: vec![],
         AH: (dfg::EdwardsPoint::identity(), dfg::EdwardsPoint::identity()),
 
         details,
@@ -134,24 +134,21 @@ impl Algorithm<Ed25519> for Multisig {
   type Signature = (Clsag, EdwardsPoint);
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
+    &mut self,
     rng: &mut R,
     view: &MultisigView<Ed25519>,
     nonces: &[dfg::Scalar; 2]
   ) -> Vec<u8> {
-    let (share, proof) = key_image::generate_share(rng, view);
-
-    #[allow(non_snake_case)]
-    let H = hash_to_point(&view.group_key().0);
-    #[allow(non_snake_case)]
-    let nH = (nonces[0].0 * H, nonces[1].0 * H);
+    self.H = hash_to_point(&view.group_key().0);
 
     let mut serialized = Vec::with_capacity(Multisig::serialized_len());
-    serialized.extend(share.compress().to_bytes());
-    serialized.extend(nH.0.compress().to_bytes());
-    serialized.extend(nH.1.compress().to_bytes());
-    serialized.extend(&DLEqProof::prove(rng, &nonces[0].0, &H, &nH.0).serialize());
-    serialized.extend(&DLEqProof::prove(rng, &nonces[1].0, &H, &nH.1).serialize());
-    serialized.extend(proof);
+    serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
+    serialized.extend(DLEqProof::prove(rng, &view.secret_share().0, &self.H).serialize());
+
+    serialized.extend((nonces[0].0 * self.H).compress().to_bytes());
+    serialized.extend(&DLEqProof::prove(rng, &nonces[0].0, &self.H).serialize());
+    serialized.extend((nonces[1].0 * self.H).compress().to_bytes());
+    serialized.extend(&DLEqProof::prove(rng, &nonces[1].0, &self.H).serialize());
     serialized
   }
 
@@ -167,49 +164,36 @@ impl Algorithm<Ed25519> for Multisig {
       Err(FrostError::InvalidCommitmentQuantity(l, 9, serialized.len() / 32))?;
     }
 
-    if self.commitments_H.len() == 0 {
+    if self.AH.0.is_identity().into() {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
       self.transcript.append_message(b"mask", &self.mask().to_bytes());
       self.transcript.append_message(b"message", &self.msg());
     }
 
-    let (share, serialized) = key_image::verify_share(view, l, serialized).map_err(|_| FrostError::InvalidShare(l))?;
+    let share = read_dleq(
+      serialized,
+      0,
+      &self.H,
+      l,
+      &view.verification_share(l).0
+    ).map_err(|_| FrostError::InvalidCommitment(l))?.0;
     // Given the fact there's only ever one possible value for this, this may technically not need
     // to be committed to. If signing a TX, it'll be double committed to thanks to the message
     // It doesn't hurt to have though and ensures security boundaries are well formed
     self.transcript.append_message(b"image_share", &share.compress().to_bytes());
     self.image += share;
 
-    let alt = &hash_to_point(&view.group_key().0);
-
     // Uses the same format FROST does for the expected commitments (nonce * G where this is nonce * H)
     // Given this is guaranteed to match commitments, which FROST commits to, this also technically
     // doesn't need to be committed to if a canonical serialization is guaranteed
     // It, again, doesn't hurt to include and ensures security boundaries are well formed
     self.transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_be_bytes());
-    self.transcript.append_message(b"commitments_H", &serialized[0 .. 64]);
 
-    #[allow(non_snake_case)]
-    let H = (
-      <Ed25519 as Curve>::G_from_slice(&serialized[0 .. 32]).map_err(|_| FrostError::InvalidCommitment(l))?,
-      <Ed25519 as Curve>::G_from_slice(&serialized[32 .. 64]).map_err(|_| FrostError::InvalidCommitment(l))?
-    );
-
-    DLEqProof::deserialize(&serialized[64 .. 128]).ok_or(FrostError::InvalidCommitment(l))?.verify(
-      &alt,
-      &commitments[0],
-      &H.0
-    ).map_err(|_| FrostError::InvalidCommitment(l))?;
-
-    DLEqProof::deserialize(&serialized[128 .. 192]).ok_or(FrostError::InvalidCommitment(l))?.verify(
-      &alt,
-      &commitments[1],
-      &H.1
-    ).map_err(|_| FrostError::InvalidCommitment(l))?;
-
-    self.AH.0 += H.0;
-    self.AH.1 += H.1;
+    self.transcript.append_message(b"commitment_D_H", &serialized[0 .. 32]);
+    self.AH.0 += read_dleq(serialized, 96, &self.H, l, &commitments[0]).map_err(|_| FrostError::InvalidCommitment(l))?;
+    self.transcript.append_message(b"commitment_E_H", &serialized[0 .. 32]);
+    self.AH.1 += read_dleq(serialized, 192, &self.H, l, &commitments[1]).map_err(|_| FrostError::InvalidCommitment(l))?;
 
     Ok(())
   }

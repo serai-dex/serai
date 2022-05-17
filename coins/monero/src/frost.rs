@@ -12,7 +12,6 @@ use curve25519_dalek::{
   edwards::EdwardsPoint as DPoint
 };
 
-
 use ff::PrimeField;
 use group::Group;
 
@@ -29,7 +28,7 @@ pub enum MultisigError {
   #[error("internal error ({0})")]
   InternalError(String),
   #[error("invalid discrete log equality proof")]
-  InvalidDLEqProof,
+  InvalidDLEqProof(usize),
   #[error("invalid key image {0}")]
   InvalidKeyImage(usize)
 }
@@ -88,15 +87,17 @@ impl Curve for Ed25519 {
   }
 
   fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
-    let point = dfg::CompressedEdwardsY::new(
-      slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?
-    ).decompress();
+    let bytes = slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?;
+    let point = dfg::CompressedEdwardsY::new(bytes).decompress();
 
-    if point.is_some() {
-      let point = point.unwrap();
+    if let Some(point) = point {
       // Ban torsioned points
       if !point.is_torsion_free() {
-        Err(CurveError::InvalidPoint)?
+        Err(CurveError::InvalidPoint)?;
+      }
+      // Ban point which weren't canonically encoded
+      if point.compress().to_bytes() != bytes {
+        Err(CurveError::InvalidPoint)?;
       }
       Ok(point)
     } else {
@@ -113,7 +114,7 @@ impl Curve for Ed25519 {
   }
 }
 
-// Used to prove legitimacy in several locations
+// Used to prove legitimacy of key images and nonces which both involve other basepoints
 #[derive(Clone)]
 pub struct DLEqProof {
   s: DScalar,
@@ -125,19 +126,23 @@ impl DLEqProof {
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     secret: &DScalar,
-    H: &DPoint,
-    alt: &DPoint
+    H: &DPoint
   ) -> DLEqProof {
     let r = random_scalar(rng);
-    let R1 =  &DTable * &r;
-    let R2 = r * H;
+    let rG = &DTable * &r;
+    let rH = r * H;
 
+    // TODO: Should this use a transcript?
     let c = dfg::Scalar::from_hash(
       Blake2b512::new()
-        .chain(R1.compress().to_bytes())
-        .chain(R2.compress().to_bytes())
+        // Doesn't include G which is constant, does include H which isn't
+        .chain(H.compress().to_bytes())
         .chain((secret * &DTable).compress().to_bytes())
-        .chain(alt.compress().to_bytes())
+        // We can frequently save a scalar mul if we accept this as an arg, yet it opens room for
+        // ambiguity not worth having
+        .chain((secret * H).compress().to_bytes())
+        .chain(rG.compress().to_bytes())
+        .chain(rH.compress().to_bytes())
     ).0;
     let s = r + (c * secret);
 
@@ -147,26 +152,28 @@ impl DLEqProof {
   pub fn verify(
     &self,
     H: &DPoint,
-    primary: &DPoint,
-    alt: &DPoint
-) -> Result<(), MultisigError> {
+    l: usize,
+    sG: &DPoint,
+    sH: &DPoint
+  ) -> Result<(), MultisigError> {
     let s = self.s;
     let c = self.c;
 
-    let R1 = (&s * &DTable) - (c * primary);
-    let R2 = (s * H) - (c * alt);
+    let rG = (&s * &DTable) - (c * sG);
+    let rH = (s * H) - (c * sH);
 
     let expected_c = dfg::Scalar::from_hash(
       Blake2b512::new()
-        .chain(R1.compress().to_bytes())
-        .chain(R2.compress().to_bytes())
-        .chain(primary.compress().to_bytes())
-        .chain(alt.compress().to_bytes())
+        .chain(H.compress().to_bytes())
+        .chain(sG.compress().to_bytes())
+        .chain(sH.compress().to_bytes())
+        .chain(rG.compress().to_bytes())
+        .chain(rH.compress().to_bytes())
     ).0;
 
-    // Take the opportunity to ensure a lack of torsion in key images/randomness commitments
-    if (!primary.is_torsion_free()) || (!alt.is_torsion_free()) || (c != expected_c) {
-      Err(MultisigError::InvalidDLEqProof)?;
+    // Take the opportunity to ensure a lack of torsion in key images/nonce commitments
+    if c != expected_c {
+      Err(MultisigError::InvalidDLEqProof(l))?;
     }
 
     Ok(())
@@ -195,4 +202,30 @@ impl DLEqProof {
       }
     )
   }
+}
+
+#[allow(non_snake_case)]
+pub fn read_dleq(
+  serialized: &[u8],
+  start: usize,
+  H: &DPoint,
+  l: usize,
+  sG: &DPoint
+) -> Result<dfg::EdwardsPoint, MultisigError> {
+  // Not using G_from_slice here would enable non-canonical points and break blame
+  let other = <Ed25519 as Curve>::G_from_slice(
+    &serialized[(start + 0) .. (start + 32)]
+  ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
+
+  let proof = DLEqProof::deserialize(
+    &serialized[(start + 32) .. (start + 96)]
+  ).ok_or(MultisigError::InvalidDLEqProof(l))?;
+  proof.verify(
+    H,
+    l,
+    sG,
+    &other
+  ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
+
+  Ok(other)
 }

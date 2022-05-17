@@ -13,7 +13,7 @@ pub use curve25519_dalek as dalek;
 
 use dalek::{
   constants,
-  traits::Identity,
+  traits::{Identity, IsIdentity},
   scalar::Scalar as DScalar,
   edwards::{
     EdwardsPoint as DPoint,
@@ -248,7 +248,7 @@ impl Group for EdwardsPoint {
   fn random(mut _rng: impl RngCore) -> Self { unimplemented!() }
   fn identity() -> Self { Self(DPoint::identity()) }
   fn generator() -> Self { ED25519_BASEPOINT_POINT }
-  fn is_identity(&self) -> Choice { unimplemented!() }
+  fn is_identity(&self) -> Choice { (self.0.is_identity() as u8).into() }
   fn double(&self) -> Self { *self + self }
 }
 

@@ -104,7 +104,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   serialized.extend(&C::G_to_bytes(&commitments[1]));
 
   serialized.extend(
-    &A::preprocess_addendum(
+    &params.algorithm.preprocess_addendum(
       rng,
       &params.view,
       &nonces

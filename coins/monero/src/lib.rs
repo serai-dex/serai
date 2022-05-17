@@ -15,7 +15,6 @@ use monero::util::key::H;
 #[cfg(feature = "multisig")]
 pub mod frost;
 
-pub mod key_image;
 pub mod bulletproofs;
 pub mod clsag;
 
@@ -75,4 +74,8 @@ pub fn hash_to_point(point: &EdwardsPoint) -> EdwardsPoint {
   let mut bytes = point.compress().to_bytes();
   unsafe { c_hash_to_point(bytes.as_mut_ptr()); }
   CompressedEdwardsY::from_slice(&bytes).decompress().unwrap()
+}
+
+pub fn generate_key_image(secret: &Scalar) -> EdwardsPoint {
+  secret * hash_to_point(&(secret * &ED25519_BASEPOINT_TABLE))
 }

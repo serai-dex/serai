@@ -31,7 +31,7 @@ use crate::{
   Commitment,
   random_scalar,
   hash, hash_to_scalar,
-  key_image, bulletproofs, clsag,
+  generate_key_image, bulletproofs, clsag,
   rpc::{Rpc, RpcError}
 };
 #[cfg(feature = "multisig")]
@@ -215,7 +215,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
       spend + input.key_offset,
-      key_image::generate(&(spend + input.key_offset)),
+      generate_key_image(&(spend + input.key_offset)),
       clsag::Input::new(
         input.commitment,
         decoys[i].clone()

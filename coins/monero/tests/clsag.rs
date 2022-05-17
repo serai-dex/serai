@@ -7,7 +7,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use monero::VarInt;
 
-use monero_serai::{random_scalar, Commitment, transaction::decoys::Decoys, key_image, clsag};
+use monero_serai::{Commitment, random_scalar, generate_key_image, transaction::decoys::Decoys, clsag};
 #[cfg(feature = "multisig")]
 use monero_serai::frost::{MultisigError, Transcript};
 
@@ -42,7 +42,7 @@ fn clsag() {
       ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
 
-    let image = key_image::generate(&secrets[0]);
+    let image = generate_key_image(&secrets[0]);
     let (clsag, pseudo_out) = clsag::sign(
       &mut OsRng,
       &vec![(
