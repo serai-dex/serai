@@ -29,10 +29,9 @@ pub struct TransactionMachine {
 
   decoys: Vec<Decoys>,
 
-  our_images: Vec<EdwardsPoint>,
+  images: Vec<EdwardsPoint>,
   output_masks: Option<Scalar>,
   inputs: Vec<Rc<RefCell<Option<clsag::Details>>>>,
-  msg: Rc<RefCell<Option<[u8; 32]>>>,
   clsags: Vec<AlgorithmMachine<Ed25519, clsag::Multisig>>,
 
   tx: Option<Transaction>
@@ -45,14 +44,16 @@ impl SignableTransaction {
     rng: &mut R,
     rpc: &Rpc,
     height: usize,
-    keys: Rc<MultisigKeys<Ed25519>>,
+    keys: MultisigKeys<Ed25519>,
     included: &[usize]
   ) -> Result<TransactionMachine, TransactionError> {
-    let mut our_images = vec![];
-    our_images.resize(self.inputs.len(), EdwardsPoint::identity());
+    let mut images = vec![];
+    images.resize(self.inputs.len(), EdwardsPoint::identity());
     let mut inputs = vec![];
-    inputs.resize(self.inputs.len(), Rc::new(RefCell::new(None)));
-    let msg = Rc::new(RefCell::new(None));
+    for _ in 0 .. self.inputs.len() {
+      // Doesn't resize as that will use a single Rc for the entire Vec
+      inputs.push(Rc::new(RefCell::new(None)));
+    }
     let mut clsags = vec![];
 
     // Create a RNG out of the input shared keys, which either requires the view key or being every
@@ -96,8 +97,7 @@ impl SignableTransaction {
         AlgorithmMachine::new(
           clsag::Multisig::new(
             transcript.clone(),
-            inputs[i].clone(),
-            msg.clone()
+            inputs[i].clone()
           ).map_err(|e| TransactionError::MultisigError(e))?,
           Rc::new(keys.offset(dalek_ff_group::Scalar(input.key_offset))),
           included
@@ -115,10 +115,9 @@ impl SignableTransaction {
 
       decoys,
 
-      our_images,
+      images,
       output_masks: None,
       inputs,
-      msg,
       clsags,
 
       tx: None
@@ -142,7 +141,7 @@ impl StateMachine for TransactionMachine {
     for (i, clsag) in self.clsags.iter_mut().enumerate() {
       let preprocess = clsag.preprocess(rng)?;
       // First 64 bytes are FROST's commitments
-      self.our_images[i] += CompressedEdwardsY(preprocess[64 .. 96].try_into().unwrap()).decompress().unwrap();
+      self.images[i] += CompressedEdwardsY(preprocess[64 .. 96].try_into().unwrap()).decompress().unwrap();
       serialized.extend(&preprocess);
     }
 
@@ -209,63 +208,79 @@ impl StateMachine for TransactionMachine {
     }
 
     let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks", None));
-    let mut sum_pseudo_outs = Scalar::zero();
     for c in 0 .. self.clsags.len() {
       // Calculate the key images in order to update the TX
       // Multisig will parse/calculate/validate this as needed, yet doing so here as well provides
       // the easiest API overall
-      let mut image = self.our_images[c];
       for (l, serialized) in commitments.iter().enumerate().filter(|(_, s)| s.is_some()) {
-        image += CompressedEdwardsY(
+        self.images[c] += CompressedEdwardsY(
           serialized.as_ref().unwrap()[((c * clsag_len) + 64) .. ((c * clsag_len) + 96)]
             .try_into().map_err(|_| FrostError::InvalidCommitment(l))?
         ).decompress().ok_or(FrostError::InvalidCommitment(l))?;
       }
+    }
 
-      // TODO sort inputs
+    let mut commitments = (0 .. self.inputs.len()).map(|c| commitments.iter().map(
+      |commitments| commitments.clone().map(
+        |commitments| commitments[(c * clsag_len) .. ((c * clsag_len) + clsag_len)].to_vec()
+      )
+    ).collect::<Vec<_>>()).collect::<Vec<_>>();
+
+    let mut sorted = Vec::with_capacity(self.decoys.len());
+    while self.decoys.len() != 0 {
+      sorted.push((
+        self.signable.inputs.swap_remove(0),
+        self.decoys.swap_remove(0),
+        self.images.swap_remove(0),
+        self.inputs.swap_remove(0),
+        self.clsags.swap_remove(0),
+        commitments.swap_remove(0)
+      ));
+    }
+    sorted.sort_by(|x, y| x.2.compress().to_bytes().cmp(&y.2.compress().to_bytes()).reverse());
+
+    let mut sum_pseudo_outs = Scalar::zero();
+    while sorted.len() != 0 {
+      let value = sorted.remove(0);
 
       let mut mask = random_scalar(&mut rng);
-      if c == (self.clsags.len() - 1) {
+      if sorted.len() == 0 {
         mask = self.output_masks.unwrap() - sum_pseudo_outs;
       } else {
         sum_pseudo_outs += mask;
       }
 
-      self.inputs[c].replace(
+      tx.prefix.inputs.push(
+        TxIn::ToKey {
+          amount: VarInt(0),
+          key_offsets: value.1.offsets.clone(),
+          k_image: KeyImage { image: Hash(value.2.compress().to_bytes()) }
+        }
+      );
+
+      value.3.replace(
         Some(
           clsag::Details::new(
             clsag::Input::new(
-              self.signable.inputs[c].commitment,
-              self.decoys[c].clone()
+              value.0.commitment,
+              value.1
             ).map_err(|_| panic!("Signing an input which isn't present in the ring we created for it"))?,
             mask
           )
         )
       );
 
-      tx.prefix.inputs.push(
-        TxIn::ToKey {
-          amount: VarInt(0),
-          key_offsets: self.decoys[c].offsets.clone(),
-          k_image: KeyImage { image: Hash(image.compress().to_bytes()) }
-        }
-      );
+      self.clsags.push(value.4);
+      commitments.push(value.5);
     }
 
-    self.msg.replace(Some(tx.signature_hash().unwrap().0));
+    let msg = tx.signature_hash().unwrap().0;
     self.tx = Some(tx);
 
     // Iterate over each CLSAG calling sign
     let mut serialized = Vec::with_capacity(self.clsags.len() * 32);
     for (c, clsag) in self.clsags.iter_mut().enumerate() {
-      serialized.extend(&clsag.sign(
-        &commitments.iter().map(
-          |commitments| commitments.clone().map(
-            |commitments| commitments[(c * clsag_len) .. ((c * clsag_len) + clsag_len)].to_vec()
-          )
-        ).collect::<Vec<_>>(),
-        &vec![]
-      )?);
+      serialized.extend(&clsag.sign(&commitments[c], &msg)?);
     }
 
     Ok(serialized)

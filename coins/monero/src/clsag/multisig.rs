@@ -85,16 +85,15 @@ pub struct Multisig {
   AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
   details: Rc<RefCell<Option<Details>>>,
-  msg: Rc<RefCell<Option<[u8; 32]>>>,
 
+  msg: Option<[u8; 32]>,
   interim: Option<Interim>
 }
 
 impl Multisig {
   pub fn new(
     transcript: Transcript,
-    details: Rc<RefCell<Option<Details>>>,
-    msg: Rc<RefCell<Option<[u8; 32]>>>,
+    details: Rc<RefCell<Option<Details>>>
   ) -> Result<Multisig, MultisigError> {
     Ok(
       Multisig {
@@ -105,8 +104,8 @@ impl Multisig {
         AH: (dfg::EdwardsPoint::identity(), dfg::EdwardsPoint::identity()),
 
         details,
-        msg,
 
+        msg: None,
         interim: None
       }
     )
@@ -122,10 +121,6 @@ impl Multisig {
 
   fn mask(&self) -> Scalar {
     self.details.borrow().as_ref().unwrap().mask
-  }
-
-  fn msg(&self) -> [u8; 32] {
-    *self.msg.borrow().as_ref().unwrap()
   }
 }
 
@@ -168,7 +163,6 @@ impl Algorithm<Ed25519> for Multisig {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
       self.transcript.append_message(b"mask", &self.mask().to_bytes());
-      self.transcript.append_message(b"message", &self.msg());
     }
 
     let share = read_dleq(
@@ -208,7 +202,7 @@ impl Algorithm<Ed25519> for Multisig {
     nonce_sum: dfg::EdwardsPoint,
     b: dfg::Scalar,
     nonce: dfg::Scalar,
-    _: &[u8]
+    msg: &[u8]
   ) -> dfg::Scalar {
     // Apply the binding factor to the H variant of the nonce
     self.AH.0 += self.AH.1 * b;
@@ -220,13 +214,15 @@ impl Algorithm<Ed25519> for Multisig {
     // input commitment masks)
     let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"decoy_responses", None));
 
+    self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
+
     #[allow(non_snake_case)]
     let (clsag, pseudo_out, p, c) = sign_core(
       &mut rng,
       &self.image,
       &self.input(),
       self.mask(),
-      &self.msg(),
+      &self.msg.as_ref().unwrap(),
       nonce_sum.0,
       self.AH.0.0
     );
@@ -246,7 +242,13 @@ impl Algorithm<Ed25519> for Multisig {
     let interim = self.interim.as_ref().unwrap();
     let mut clsag = interim.clsag.clone();
     clsag.s[usize::from(self.input().decoys.i)] = Key { key: (sum.0 - interim.c).to_bytes() };
-    if verify(&clsag, &self.input().decoys.ring, &self.image, &interim.pseudo_out, &self.msg()).is_ok() {
+    if verify(
+      &clsag,
+      &self.input().decoys.ring,
+      &self.image,
+      &interim.pseudo_out,
+      &self.msg.as_ref().unwrap()
+    ).is_ok() {
       return Some((clsag, interim.pseudo_out));
     }
     return None;

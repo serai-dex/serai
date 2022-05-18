@@ -109,16 +109,15 @@ fn clsag_multisig() -> Result<(), MultisigError> {
               ).unwrap(),
               mask_sum
             )
-          ))),
-          Rc::new(RefCell::new(Some([1; 32])))
+          )))
         ).unwrap(),
-        keys[i - 1].clone(),
+        Rc::new(keys[i - 1].clone()),
         &(1 ..= THRESHOLD).collect::<Vec<usize>>()
       ).unwrap()
     );
   }
 
-  let mut signatures = sign(&mut machines, keys);
+  let mut signatures = sign(&mut machines, &[1; 32]);
   let signature = signatures.swap_remove(0);
   for s in 0 .. (t - 1) {
     // Verify the commitments and the non-decoy s scalar are identical to every other signature

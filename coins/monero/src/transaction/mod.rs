@@ -95,11 +95,9 @@ pub fn scan(tx: &Transaction, view: Scalar, spend: EdwardsPoint) -> Vec<Spendabl
 
   let mut res = vec![];
   for o in 0 .. tx.prefix.outputs.len() {
-    let output_key = match tx.prefix.outputs[o].target {
-      TxOutTarget::ToScript { .. } => None,
-      TxOutTarget::ToScriptHash { .. } => None,
-      TxOutTarget::ToKey { key } => key.point.decompress()
-    };
+    let output_key = if let TxOutTarget::ToKey { key } = tx.prefix.outputs[o].target {
+      key.point.decompress()
+    } else { None };
     if output_key.is_none() {
       continue;
     }
@@ -160,6 +158,7 @@ fn amount_encryption(amount: u64, key: Scalar) -> Hash8 {
 }
 
 #[allow(non_snake_case)]
+#[derive(Clone, Debug)]
 struct Output {
   R: EdwardsPoint,
   dest: EdwardsPoint,
@@ -200,8 +199,6 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   spend: &Scalar,
   tx: &mut Transaction
 ) -> Result<Vec<(Scalar, EdwardsPoint, clsag::Input)>, TransactionError> {
-  // TODO sort inputs
-
   let mut signable = Vec::with_capacity(inputs.len());
 
   // Select decoys
@@ -229,9 +226,20 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
     });
   }
 
+  signable.sort_by(|x, y| x.1.compress().to_bytes().cmp(&y.1.compress().to_bytes()).reverse());
+  tx.prefix.inputs.sort_by(|x, y| if let (
+    TxIn::ToKey{ k_image: x, ..},
+    TxIn::ToKey{ k_image: y, ..}
+  ) = (x, y) {
+    x.image.cmp(&y.image).reverse()
+  } else {
+    panic!("TxIn wasn't ToKey")
+  });
+
   Ok(signable)
 }
 
+#[derive(Clone, Debug)]
 pub struct SignableTransaction {
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
