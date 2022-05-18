@@ -79,11 +79,11 @@ pub struct SpendableOutput {
 
 pub fn scan(tx: &Transaction, view: Scalar, spend: EdwardsPoint) -> Vec<SpendableOutput> {
   let mut pubkeys = vec![];
-  if tx.tx_pubkey().is_some() {
-    pubkeys.push(tx.tx_pubkey().unwrap());
+  if let Some(key) = tx.tx_pubkey() {
+    pubkeys.push(key);
   }
-  if tx.tx_additional_pubkeys().is_some() {
-    pubkeys.extend(&tx.tx_additional_pubkeys().unwrap());
+  if let Some(keys) = tx.tx_additional_pubkeys() {
+    pubkeys.extend(&keys);
   }
   let pubkeys: Vec<EdwardsPoint> = pubkeys.iter().map(|key| key.point.decompress()).filter_map(|key| key).collect();
 

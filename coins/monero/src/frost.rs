@@ -60,6 +60,9 @@ impl Curve for Ed25519 {
     dfg::EdwardsPoint(DPoint::vartime_multiscalar_mul(scalars, points))
   }
 
+  // This, as used by CLSAG, will already be a keccak256 hash
+  // The only necessity is for this to be unique, which means skipping a hash here should be fine accordingly
+  // TODO: Decide
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
     Blake2b512::digest(msg).to_vec()
   }

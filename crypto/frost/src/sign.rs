@@ -148,8 +148,8 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   {
     let transcript = params.algorithm.transcript();
     transcript.domain_separate(b"FROST");
-    if params.keys.offset.is_some() {
-      transcript.append_message(b"offset", &C::F_to_bytes(&params.keys.offset.unwrap()));
+    if let Some(offset) = params.keys.offset {
+      transcript.append_message(b"offset", &C::F_to_bytes(&offset));
     }
   }
 
@@ -301,8 +301,8 @@ fn complete<C: Curve, A: Algorithm<C>>(
   // For the success route, which should be much more frequent, this should be faster
   // It also acts as an integrity check of this library's signing function
   let res = sign_params.algorithm.verify(sign_params.view.group_key, sign.R, sum);
-  if res.is_some() {
-    return Ok(res.unwrap());
+  if let Some(res) = res {
+    return Ok(res);
   }
 
   // Find out who misbehaved

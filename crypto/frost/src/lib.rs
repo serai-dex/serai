@@ -268,12 +268,8 @@ impl<C: Curve> MultisigKeys<C> {
     }
 
     let secret_share = self.secret_share * lagrange::<C::F>(self.params.i, &included);
-    let (offset, offset_share) = if self.offset.is_some() {
-      let offset = self.offset.unwrap();
-      (offset, offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap())
-    } else {
-      (C::F::zero(), C::F::zero())
-    };
+    let offset = self.offset.unwrap_or(C::F::zero());
+    let offset_share = offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap();
 
     Ok(MultisigView {
       group_key: self.group_key + (C::generator_table() * offset),
