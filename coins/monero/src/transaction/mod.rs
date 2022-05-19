@@ -94,15 +94,11 @@ pub fn scan(tx: &Transaction, view: Scalar, spend: EdwardsPoint) -> Vec<Spendabl
   let rct_sig = rct_sig.unwrap();
 
   let mut res = vec![];
-  for o in 0 .. tx.prefix.outputs.len() {
-    let output_key = if let TxOutTarget::ToKey { key } = tx.prefix.outputs[o].target {
-      key.point.decompress()
-    } else { None };
-    if output_key.is_none() {
-      continue;
-    }
-    let output_key = output_key.unwrap();
-
+  for (o, output_key) in tx.prefix.outputs.iter().enumerate().filter_map(
+    |(o, output)| if let TxOutTarget::ToKey { key } = output.target {
+      key.point.decompress().map(|output_key| (o, output_key))
+    } else { None }
+  ) {
     // TODO: This may be replaceable by pubkeys[o]
     for pubkey in &pubkeys {
       // Hs(8Ra || o)

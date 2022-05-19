@@ -207,7 +207,6 @@ impl StateMachine for TransactionMachine {
       tx = self.signable.prepare_transaction(&commitments, bp);
     }
 
-    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks", None));
     for c in 0 .. self.clsags.len() {
       // Calculate the key images in order to update the TX
       // Multisig will parse/calculate/validate this as needed, yet doing so here as well provides
@@ -239,6 +238,7 @@ impl StateMachine for TransactionMachine {
     }
     sorted.sort_by(|x, y| x.2.compress().to_bytes().cmp(&y.2.compress().to_bytes()).reverse());
 
+    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks", None));
     let mut sum_pseudo_outs = Scalar::zero();
     while sorted.len() != 0 {
       let value = sorted.remove(0);
