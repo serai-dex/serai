@@ -106,7 +106,7 @@ impl SignableTransaction {
     }
 
     // Verify these outputs by a dummy prep
-    self.prepare_outputs(rng)?;
+    self.prepare_outputs(rng, None)?;
 
     Ok(TransactionMachine {
       leader: keys.params().i() == included[0],
@@ -152,7 +152,7 @@ impl StateMachine for TransactionMachine {
 
       let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys", Some(entropy)));
       // Safe to unwrap thanks to the dummy prepare
-      let (commitments, output_masks) = self.signable.prepare_outputs(&mut rng).unwrap();
+      let (commitments, output_masks) = self.signable.prepare_outputs(&mut rng, None).unwrap();
       self.output_masks = Some(output_masks);
 
       let bp = bulletproofs::generate(&commitments).unwrap();
@@ -194,7 +194,8 @@ impl StateMachine for TransactionMachine {
             b"tx_keys",
             Some(prep[clsag_lens .. (clsag_lens + 32)].try_into().map_err(|_| FrostError::InvalidShare(l))?)
           )
-        )
+        ),
+        None
       ).map_err(|_| FrostError::InvalidShare(l))?;
       self.output_masks.replace(output_masks);
 

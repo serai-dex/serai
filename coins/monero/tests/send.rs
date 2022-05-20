@@ -84,7 +84,12 @@ pub async fn send_core(test: usize, multisig: bool) {
         tx = Some(rpc.get_block_transactions(start).await.unwrap().swap_remove(0));
       }
 
-      let output = transaction::scan(tx.as_ref().unwrap(), view, spend_pub).swap_remove(0);
+      // Grab the largest output available
+      let output = {
+        let mut outputs = transaction::scan(tx.as_ref().unwrap(), view, spend_pub);
+        outputs.sort_by(|x, y| x.commitment.amount.cmp(&y.commitment.amount).reverse());
+        outputs.swap_remove(0)
+      };
       // Test creating a zero change output and a non-zero change output
       amount = output.commitment.amount - u64::try_from(i).unwrap();
       outputs.push(output);
