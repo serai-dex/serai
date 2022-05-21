@@ -15,10 +15,8 @@ use monero::{
   network::Network,
   util::{key::PublicKey, address::Address}
 };
-#[cfg(feature = "multisig")]
-use monero::cryptonote::hash::Hashable;
 
-use monero_serai::{random_scalar, transaction::{self, SignableTransaction}};
+use monero_serai::{random_scalar, wallet::SignableTransaction};
 
 mod rpc;
 use crate::rpc::{rpc, mine_block};
@@ -32,8 +30,24 @@ lazy_static! {
   static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
 }
 
-pub async fn send_core(test: usize, multisig: bool) {
-  let _guard = SEQUENTIAL.lock().unwrap();
+macro_rules! async_sequential {
+  ($(async fn $name: ident() $body: block)*) => {
+    $(
+      #[tokio::test]
+      async fn $name() {
+        let guard = SEQUENTIAL.lock().unwrap();
+        let local = tokio::task::LocalSet::new();
+        local.run_until(async move {
+          if let Err(_) = tokio::task::spawn_local(async move { $body }).await {
+            drop(guard);
+          }
+        }).await;
+      }
+    )*
+  };
+}
+
+async fn send_core(test: usize, multisig: bool) {
   let rpc = rpc().await;
 
   // Generate an address
@@ -86,7 +100,7 @@ pub async fn send_core(test: usize, multisig: bool) {
 
       // Grab the largest output available
       let output = {
-        let mut outputs = transaction::scan(tx.as_ref().unwrap(), view, spend_pub);
+        let mut outputs = tx.as_ref().unwrap().scan(view, spend_pub);
         outputs.sort_by(|x, y| x.commitment.amount.cmp(&y.commitment.amount).reverse());
         outputs.swap_remove(0)
       };
@@ -102,7 +116,7 @@ pub async fn send_core(test: usize, multisig: bool) {
 
       for i in (start + 1) .. (start + 9) {
         let tx = rpc.get_block_transactions(i).await.unwrap().swap_remove(0);
-        let output = transaction::scan(&tx, view, spend_pub).swap_remove(0);
+        let output = tx.scan(view, spend_pub).swap_remove(0);
         amount += output.commitment.amount;
         outputs.push(output);
       }
@@ -144,24 +158,23 @@ pub async fn send_core(test: usize, multisig: bool) {
   }
 }
 
-#[tokio::test]
-pub async fn send_single_input() {
-  send_core(0, false).await;
-}
+async_sequential! {
+  async fn send_single_input() {
+    send_core(0, false).await;
+  }
 
-#[tokio::test]
-pub async fn send_multiple_inputs() {
-  send_core(1, false).await;
-}
-
-#[cfg(feature = "multisig")]
-#[tokio::test]
-pub async fn multisig_send_single_input() {
-  send_core(0, true).await;
+  async fn send_multiple_inputs() {
+    send_core(1, false).await;
+  }
 }
 
 #[cfg(feature = "multisig")]
-#[tokio::test]
-pub async fn multisig_send_multiple_inputs() {
-  send_core(1, true).await;
+async_sequential! {
+  async fn multisig_send_single_input() {
+    send_core(0, true).await;
+  }
+
+  async fn multisig_send_multiple_inputs() {
+    send_core(1, true).await;
+  }
 }

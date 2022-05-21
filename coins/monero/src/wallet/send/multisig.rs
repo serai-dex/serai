@@ -5,21 +5,15 @@ use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwardsY}};
 
-use monero::{
-  Hash, VarInt,
-  consensus::{Encodable, deserialize},
-  util::ringct::Key,
-  blockdata::transaction::{KeyImage, TxIn, Transaction}
-};
-
 use transcript::Transcript as TranscriptTrait;
 use frost::{FrostError, MultisigKeys, MultisigParams, sign::{State, StateMachine, AlgorithmMachine}};
 
 use crate::{
   frost::{Transcript, Ed25519},
-  random_scalar, bulletproofs, clsag,
+  random_scalar, bulletproofs::Bulletproofs, clsag::{ClsagInput, ClsagDetails, ClsagMultisig},
   rpc::Rpc,
-  transaction::{TransactionError, SignableTransaction, decoys::{self, Decoys}}
+  transaction::{Input, RctPrunable, Transaction},
+  wallet::{TransactionError, SignableTransaction, Decoys}
 };
 
 pub struct TransactionMachine {
@@ -31,8 +25,8 @@ pub struct TransactionMachine {
 
   images: Vec<EdwardsPoint>,
   output_masks: Option<Scalar>,
-  inputs: Vec<Rc<RefCell<Option<clsag::Details>>>>,
-  clsags: Vec<AlgorithmMachine<Ed25519, clsag::Multisig>>,
+  inputs: Vec<Rc<RefCell<Option<ClsagDetails>>>>,
+  clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>,
 
   tx: Option<Transaction>
 }
@@ -68,7 +62,7 @@ impl SignableTransaction {
     for input in &self.inputs {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
       // transcript (such as the one used to create one time keys) to be unique
-      transcript.append_message(b"input_hash", &input.tx.0);
+      transcript.append_message(b"input_hash", &input.tx);
       transcript.append_message(b"input_output_index", &u16::try_from(input.o).unwrap().to_le_bytes());
       // Not including this, with a doxxed list of payments, would allow brute forcing the inputs
       // to determine RNG seeds and therefore the true spends
@@ -85,7 +79,7 @@ impl SignableTransaction {
     // to be async which isn't feasible. This should be suitably competent though
     // While this inability means we can immediately create the input, moving it out of the
     // Rc RefCell, keeping it within an Rc RefCell keeps our options flexible
-    let decoys = decoys::select(
+    let decoys = Decoys::select(
       &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys", None)),
       rpc,
       height,
@@ -95,7 +89,7 @@ impl SignableTransaction {
     for (i, input) in self.inputs.iter().enumerate() {
       clsags.push(
         AlgorithmMachine::new(
-          clsag::Multisig::new(
+          ClsagMultisig::new(
             transcript.clone(),
             inputs[i].clone()
           ).map_err(|e| TransactionError::MultisigError(e))?,
@@ -155,8 +149,8 @@ impl StateMachine for TransactionMachine {
       let (commitments, output_masks) = self.signable.prepare_outputs(&mut rng, None).unwrap();
       self.output_masks = Some(output_masks);
 
-      let bp = bulletproofs::generate(&commitments).unwrap();
-      bp.consensus_encode(&mut serialized).unwrap();
+      let bp = Bulletproofs::new(&commitments).unwrap();
+      bp.serialize(&mut serialized).unwrap();
 
       let tx = self.signable.prepare_transaction(&commitments, bp);
       self.tx = Some(tx);
@@ -175,7 +169,7 @@ impl StateMachine for TransactionMachine {
     }
 
     // FROST commitments, image, commitments, and their proofs
-    let clsag_len = 64 + clsag::Multisig::serialized_len();
+    let clsag_len = 64 + ClsagMultisig::serialized_len();
     let clsag_lens = clsag_len * self.clsags.len();
 
     // Split out the prep and update the TX
@@ -200,8 +194,10 @@ impl StateMachine for TransactionMachine {
       self.output_masks.replace(output_masks);
 
       // Verify the provided bulletproofs if not leader
-      let bp = deserialize(&prep[(clsag_lens + 32) .. prep.len()]).map_err(|_| FrostError::InvalidShare(l))?;
-      if !bulletproofs::verify(&bp, &commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()) {
+      let bp = Bulletproofs::deserialize(
+        &mut std::io::Cursor::new(&prep[(clsag_lens + 32) .. prep.len()])
+      ).map_err(|_| FrostError::InvalidShare(l))?;
+      if !bp.verify(&commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()) {
         Err(FrostError::InvalidShare(l))?;
       }
 
@@ -252,17 +248,17 @@ impl StateMachine for TransactionMachine {
       }
 
       tx.prefix.inputs.push(
-        TxIn::ToKey {
-          amount: VarInt(0),
+        Input::ToKey {
+          amount: 0,
           key_offsets: value.1.offsets.clone(),
-          k_image: KeyImage { image: Hash(value.2.compress().to_bytes()) }
+          key_image: value.2
         }
       );
 
       value.3.replace(
         Some(
-          clsag::Details::new(
-            clsag::Input::new(
+          ClsagDetails::new(
+            ClsagInput::new(
               value.0.commitment,
               value.1
             ).map_err(|_| panic!("Signing an input which isn't present in the ring we created for it"))?,
@@ -275,7 +271,7 @@ impl StateMachine for TransactionMachine {
       commitments.push(value.5);
     }
 
-    let msg = tx.signature_hash().unwrap().0;
+    let msg = tx.signature_hash();
     self.tx = Some(tx);
 
     // Iterate over each CLSAG calling sign
@@ -293,16 +289,18 @@ impl StateMachine for TransactionMachine {
     }
 
     let mut tx = self.tx.take().unwrap();
-    let mut prunable = tx.rct_signatures.p.unwrap();
-    for (c, clsag) in self.clsags.iter_mut().enumerate() {
-      let (clsag, pseudo_out) = clsag.complete(&shares.iter().map(
-        |share| share.clone().map(|share| share[(c * 32) .. ((c * 32) + 32)].to_vec())
-      ).collect::<Vec<_>>())?;
-      prunable.Clsags.push(clsag);
-      prunable.pseudo_outs.push(Key { key: pseudo_out.compress().to_bytes() });
+    match tx.rct_signatures.prunable {
+      RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
+      RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
+        for (c, clsag) in self.clsags.iter_mut().enumerate() {
+          let (clsag, pseudo_out) = clsag.complete(&shares.iter().map(
+            |share| share.clone().map(|share| share[(c * 32) .. ((c * 32) + 32)].to_vec())
+          ).collect::<Vec<_>>())?;
+          clsags.push(clsag);
+          pseudo_outs.push(pseudo_out);
+        }
+      }
     }
-    tx.rct_signatures.p = Some(prunable);
-
     Ok(tx)
   }
 

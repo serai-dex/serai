@@ -7,9 +7,7 @@ use rand_distr::{Distribution, Gamma};
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use monero::VarInt;
-
-use crate::{transaction::SpendableOutput, rpc::{RpcError, Rpc}};
+use crate::{wallet::SpendableOutput, rpc::{RpcError, Rpc}};
 
 const LOCK_WINDOW: usize = 10;
 const MATURITY: u64 = 60;
@@ -81,12 +79,11 @@ async fn select_n<R: RngCore + CryptoRng>(
   Ok(confirmed)
 }
 
-// Uses VarInt as this is solely used for key_offsets which is serialized by monero-rs
-fn offset(decoys: &[u64]) -> Vec<VarInt> {
-  let mut res = vec![VarInt(decoys[0])];
-  res.resize(decoys.len(), VarInt(0));
+fn offset(decoys: &[u64]) -> Vec<u64> {
+  let mut res = vec![decoys[0]];
+  res.resize(decoys.len(), 0);
   for m in (1 .. decoys.len()).rev() {
-    res[m] = VarInt(decoys[m] - decoys[m - 1]);
+    res[m] = decoys[m] - decoys[m - 1];
   }
   res
 }
@@ -94,7 +91,7 @@ fn offset(decoys: &[u64]) -> Vec<VarInt> {
 #[derive(Clone, Debug)]
 pub struct Decoys {
   pub i: u8,
-  pub offsets: Vec<VarInt>,
+  pub offsets: Vec<u64>,
   pub ring: Vec<[EdwardsPoint; 2]>
 }
 

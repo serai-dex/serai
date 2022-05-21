@@ -10,26 +10,25 @@ use curve25519_dalek::{
   traits::VartimePrecomputedMultiscalarMul,
   edwards::{EdwardsPoint, VartimeEdwardsPrecomputation}
 };
-#[cfg(feature = "experimental")]
-use curve25519_dalek::edwards::CompressedEdwardsY;
-
-use monero::{consensus::Encodable, util::ringct::{Key, Clsag}};
 
 use crate::{
   Commitment,
-  transaction::decoys::Decoys,
-  random_scalar,
-  hash_to_scalar,
-  hash_to_point
+  wallet::decoys::Decoys,
+  random_scalar, hash_to_scalar, hash_to_point,
+  serialize::*
 };
 
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::{Details, Multisig};
+pub use multisig::{ClsagDetails, ClsagMultisig};
+
+lazy_static! {
+  static ref INV_EIGHT: Scalar = Scalar::from(8 as u8).invert();
+}
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum ClsagError {
   #[error("internal error ({0})")]
   InternalError(String),
   #[error("invalid ring member (member {0}, ring size {1})")]
@@ -45,36 +44,32 @@ pub enum Error {
 }
 
 #[derive(Clone, Debug)]
-pub struct Input {
+pub struct ClsagInput {
   // The actual commitment for the true spend
   pub commitment: Commitment,
   // True spend index, offsets, and ring
   pub decoys: Decoys
 }
 
-lazy_static! {
-  static ref INV_EIGHT: Scalar = Scalar::from(8 as u8).invert();
-}
-
-impl Input {
+impl ClsagInput {
   pub fn new(
     commitment: Commitment,
     decoys: Decoys
-  ) -> Result<Input, Error> {
+  ) -> Result<ClsagInput, ClsagError> {
     let n = decoys.len();
     if n > u8::MAX.into() {
-      Err(Error::InternalError("max ring size in this library is u8 max".to_string()))?;
+      Err(ClsagError::InternalError("max ring size in this library is u8 max".to_string()))?;
     }
     if decoys.i >= (n as u8) {
-      Err(Error::InvalidRingMember(decoys.i, n as u8))?;
+      Err(ClsagError::InvalidRingMember(decoys.i, n as u8))?;
     }
 
     // Validate the commitment matches
     if decoys.ring[usize::from(decoys.i)][1] != commitment.calculate() {
-      Err(Error::InvalidCommitment)?;
+      Err(ClsagError::InvalidCommitment)?;
     }
 
-    Ok(Input { commitment, decoys })
+    Ok(ClsagInput { commitment, decoys })
   }
 }
 
@@ -84,6 +79,8 @@ enum Mode {
   Verify(Scalar)
 }
 
+// Core of the CLSAG algorithm, applicable to both sign and verify with minimal differences
+// Said differences are covered via the above Mode
 fn core(
   ring: &[[EdwardsPoint; 2]],
   I: &EdwardsPoint,
@@ -91,55 +88,55 @@ fn core(
   msg: &[u8; 32],
   D: &EdwardsPoint,
   s: &[Scalar],
-  // Use a Result as Either for sign/verify
   A_c1: Mode
-) -> (([u8; 32], Scalar, Scalar), Scalar) {
+) -> ((EdwardsPoint, Scalar, Scalar), Scalar) {
   let n = ring.len();
 
-  // Doesn't use a constant time table as dalek takes longer to generate those then they save
   let images_precomp = VartimeEdwardsPrecomputation::new([I, D]);
   let D = D * *INV_EIGHT;
 
+  // Generate the transcript
+  // Instead of generating multiple, a single transcript is created and then edited as needed
   let mut to_hash = vec![];
   to_hash.reserve_exact(((2 * n) + 5) * 32);
-  const PREFIX: &str = "CLSAG_";
-  const AGG_0:  &str = "CLSAG_agg_0";
-  const ROUND:  &str =       "round";
-  to_hash.extend(AGG_0.bytes());
+  const PREFIX: &[u8] = "CLSAG_".as_bytes();
+  const AGG_0:  &[u8] = "CLSAG_agg_0".as_bytes();
+  const ROUND:  &[u8] =       "round".as_bytes();
+  to_hash.extend(AGG_0);
   to_hash.extend([0; 32 - AGG_0.len()]);
 
-  let mut P = vec![];
-  P.reserve_exact(n);
-  let mut C = vec![];
-  C.reserve_exact(n);
+  let mut P = Vec::with_capacity(n);
   for member in ring {
     P.push(member[0]);
-    C.push(member[1] - pseudo_out);
-  }
-
-  for member in ring {
     to_hash.extend(member[0].compress().to_bytes());
   }
 
+  let mut C = Vec::with_capacity(n);
   for member in ring {
+    C.push(member[1] - pseudo_out);
     to_hash.extend(member[1].compress().to_bytes());
   }
 
   to_hash.extend(I.compress().to_bytes());
-  let D_bytes = D.compress().to_bytes();
-  to_hash.extend(D_bytes);
+  to_hash.extend(D.compress().to_bytes());
   to_hash.extend(pseudo_out.compress().to_bytes());
+  // mu_P with agg_0
   let mu_P = hash_to_scalar(&to_hash);
+  // mu_C with agg_1
   to_hash[AGG_0.len() - 1] = '1' as u8;
   let mu_C = hash_to_scalar(&to_hash);
 
+  // Truncate it for the round transcript, altering the DST as needed
   to_hash.truncate(((2 * n) + 1) * 32);
   for i in 0 .. ROUND.len() {
-    to_hash[PREFIX.len() + i] = ROUND.as_bytes()[i] as u8;
+    to_hash[PREFIX.len() + i] = ROUND[i] as u8;
   }
+  // Unfortunately, it's I D pseudo_out instead of pseudo_out I D, meaning this needs to be
+  // truncated just to add it back
   to_hash.extend(pseudo_out.compress().to_bytes());
   to_hash.extend(msg);
 
+  // Configure the loop based on if we're signing or verifying
   let start;
   let end;
   let mut c;
@@ -160,6 +157,7 @@ fn core(
     }
   }
 
+  // Perform the core loop
   let mut c1 = None;
   for i in (start .. end).map(|i| i % n) {
     if i == 0 {
@@ -180,158 +178,166 @@ fn core(
     c = hash_to_scalar(&to_hash);
   }
 
-  ((D_bytes, c * mu_P, c * mu_C), c1.unwrap_or(c))
+  // This first tuple is needed to continue signing, the latter is the c to be tested/worked with
+  ((D, c * mu_P, c * mu_C), c1.unwrap_or(c))
 }
 
-pub(crate) fn sign_core<R: RngCore + CryptoRng>(
-  rng: &mut R,
-  I: &EdwardsPoint,
-  input: &Input,
-  mask: Scalar,
-  msg: &[u8; 32],
-  A: EdwardsPoint,
-  AH: EdwardsPoint
-) -> (Clsag, EdwardsPoint, Scalar, Scalar) {
-  let r: usize = input.decoys.i.into();
-
-  let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
-  let z = input.commitment.mask - mask;
-
-  let H = hash_to_point(&input.decoys.ring[r][0]);
-  let D = H * z;
-  let mut s = Vec::with_capacity(input.decoys.ring.len());
-  for _ in 0 .. input.decoys.ring.len() {
-    s.push(random_scalar(rng));
-  }
-  let ((D_bytes, p, c), c1) = core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, Mode::Sign(r, A, AH));
-
-  (
-    Clsag {
-      D: Key { key: D_bytes },
-      s: s.iter().map(|s| Key { key: s.to_bytes() }).collect(),
-      c1: Key { key: c1.to_bytes() }
-    },
-    pseudo_out,
-    p,
-    c * z
-  )
+#[derive(Clone, Debug)]
+pub struct Clsag {
+  pub D: EdwardsPoint,
+  pub s: Vec<Scalar>,
+  pub c1: Scalar
 }
 
-pub fn sign<R: RngCore + CryptoRng>(
-  rng: &mut R,
-  inputs: &[(Scalar, EdwardsPoint, Input)],
-  sum_outputs: Scalar,
-  msg: [u8; 32]
-) -> Option<Vec<(Clsag, EdwardsPoint)>> {
-  if inputs.len() == 0 {
-    return None;
-  }
+impl Clsag {
+  // Sign core is the extension of core as needed for signing, yet is shared between single signer
+  // and multisig, hence why it's still core
+  pub(crate) fn sign_core<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    I: &EdwardsPoint,
+    input: &ClsagInput,
+    mask: Scalar,
+    msg: &[u8; 32],
+    A: EdwardsPoint,
+    AH: EdwardsPoint
+  ) -> (Clsag, EdwardsPoint, Scalar, Scalar) {
+    let r: usize = input.decoys.i.into();
 
-  let nonce = random_scalar(rng);
-  let mut rand_source = [0; 64];
-  rng.fill_bytes(&mut rand_source);
+    let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
+    let z = input.commitment.mask - mask;
 
-  let mut res = Vec::with_capacity(inputs.len());
-  let mut sum_pseudo_outs = Scalar::zero();
-  for i in 0 .. inputs.len() {
-    let mut mask = random_scalar(rng);
-    if i == (inputs.len() - 1) {
-      mask = sum_outputs - sum_pseudo_outs;
-    } else {
-      sum_pseudo_outs += mask;
+    let H = hash_to_point(&input.decoys.ring[r][0]);
+    let D = H * z;
+    let mut s = Vec::with_capacity(input.decoys.ring.len());
+    for _ in 0 .. input.decoys.ring.len() {
+      s.push(random_scalar(rng));
     }
+    let ((D, p, c), c1) = core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, Mode::Sign(r, A, AH));
 
+    (
+      Clsag { D, s, c1 },
+      pseudo_out,
+      p,
+      c * z
+    )
+  }
+
+  // Single signer CLSAG
+  pub fn sign<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    inputs: &[(Scalar, EdwardsPoint, ClsagInput)],
+    sum_outputs: Scalar,
+    msg: [u8; 32]
+  ) -> Vec<(Clsag, EdwardsPoint)> {
+    let nonce = random_scalar(rng);
     let mut rand_source = [0; 64];
     rng.fill_bytes(&mut rand_source);
-    let (mut clsag, pseudo_out, p, c) = sign_core(
-      rng,
-      &inputs[i].1,
-      &inputs[i].2,
-      mask,
-      &msg,
-      &nonce * &ED25519_BASEPOINT_TABLE,
-      nonce * hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0])
+
+    let mut res = Vec::with_capacity(inputs.len());
+    let mut sum_pseudo_outs = Scalar::zero();
+    for i in 0 .. inputs.len() {
+      let mut mask = random_scalar(rng);
+      if i == (inputs.len() - 1) {
+        mask = sum_outputs - sum_pseudo_outs;
+      } else {
+        sum_pseudo_outs += mask;
+      }
+
+      let mut rand_source = [0; 64];
+      rng.fill_bytes(&mut rand_source);
+      let (mut clsag, pseudo_out, p, c) = Clsag::sign_core(
+        rng,
+        &inputs[i].1,
+        &inputs[i].2,
+        mask,
+        &msg,
+        &nonce * &ED25519_BASEPOINT_TABLE,
+        nonce * hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0])
+      );
+      clsag.s[inputs[i].2.decoys.i as usize] = nonce - ((p * inputs[i].0) + c);
+
+      res.push((clsag, pseudo_out));
+    }
+
+    res
+  }
+
+  // Not extensively tested nor guaranteed to have expected parity with Monero
+  #[cfg(feature = "experimental")]
+  pub fn rust_verify(
+    &self,
+    ring: &[[EdwardsPoint; 2]],
+    I: &EdwardsPoint,
+    pseudo_out: &EdwardsPoint,
+    msg: &[u8; 32]
+  ) -> Result<(), ClsagError> {
+    let (_, c1) = core(
+      ring,
+      I,
+      pseudo_out,
+      msg,
+      &self.D.mul_by_cofactor(),
+      &self.s,
+      Mode::Verify(self.c1)
     );
-    clsag.s[inputs[i].2.decoys.i as usize] = Key {
-      key: (nonce - ((p * inputs[i].0) + c)).to_bytes()
-    };
-
-    res.push((clsag, pseudo_out));
+    if c1 != self.c1 {
+      Err(ClsagError::InvalidC1)?;
+    }
+    Ok(())
   }
 
-  Some(res)
-}
-
-// Not extensively tested nor guaranteed to have expected parity with Monero
-#[cfg(feature = "experimental")]
-pub fn rust_verify(
-  clsag: &Clsag,
-  ring: &[[EdwardsPoint; 2]],
-  I: &EdwardsPoint,
-  pseudo_out: &EdwardsPoint,
-  msg: &[u8; 32]
-) -> Result<(), Error> {
-  let c1 = Scalar::from_canonical_bytes(clsag.c1.key).ok_or(Error::InvalidC1)?;
-  let (_, c1_calculated) = core(
-    ring,
-    I,
-    pseudo_out,
-    msg,
-    &CompressedEdwardsY(clsag.D.key).decompress().ok_or(Error::InvalidD)?.mul_by_cofactor(),
-    &clsag.s.iter().map(|s| Scalar::from_canonical_bytes(s.key).ok_or(Error::InvalidS)).collect::<Result<Vec<_>, _>>()?,
-    Mode::Verify(c1)
-  );
-  if c1_calculated != c1 {
-    Err(Error::InvalidC1)?;
-  }
-  Ok(())
-}
-
-// Uses Monero's C verification function to ensure compatibility with Monero
-#[link(name = "wrapper")]
-extern "C" {
-  pub(crate) fn c_verify_clsag(
-    serialized_len: usize,
-    serialized: *const u8,
-    ring_size: u8,
-    ring: *const u8,
-    I: *const u8,
-    pseudo_out: *const u8,
-    msg: *const u8
-  ) -> bool;
-}
-
-pub fn verify(
-  clsag: &Clsag,
-  ring: &[[EdwardsPoint; 2]],
-  I: &EdwardsPoint,
-  pseudo_out: &EdwardsPoint,
-  msg: &[u8; 32]
-) -> Result<(), Error> {
-  // Workaround for the fact monero-rs doesn't include the length of clsag.s in clsag encoding
-  // despite it being part of clsag encoding. Reason for the patch version pin
-  let mut serialized = vec![clsag.s.len() as u8];
-  clsag.consensus_encode(&mut serialized).unwrap();
-
-  let I_bytes = I.compress().to_bytes();
-
-  let mut ring_bytes = vec![];
-  for member in ring {
-    ring_bytes.extend(&member[0].compress().to_bytes());
-    ring_bytes.extend(&member[1].compress().to_bytes());
+  pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+    write_raw_vec(write_scalar, &self.s, w)?;
+    w.write_all(&self.c1.to_bytes())?;
+    write_point(&self.D, w)
   }
 
-  let pseudo_out_bytes = pseudo_out.compress().to_bytes();
+  pub fn verify(
+    &self,
+    ring: &[[EdwardsPoint; 2]],
+    I: &EdwardsPoint,
+    pseudo_out: &EdwardsPoint,
+    msg: &[u8; 32]
+  ) -> Result<(), ClsagError> {
+    // Serialize it to pass the struct to Monero without extensive FFI
+    let mut serialized = Vec::with_capacity(1 + ((self.s.len() + 2) * 32));
+    write_varint(&self.s.len().try_into().unwrap(), &mut serialized).unwrap();
+    self.serialize(&mut serialized).unwrap();
 
-  unsafe {
-    if c_verify_clsag(
-      serialized.len(), serialized.as_ptr(),
-      ring.len() as u8, ring_bytes.as_ptr(),
-      I_bytes.as_ptr(), pseudo_out_bytes.as_ptr(), msg.as_ptr()
-    ) {
-      Ok(())
-    } else {
-      Err(Error::InvalidC1)
+    let I_bytes = I.compress().to_bytes();
+
+    let mut ring_bytes = vec![];
+    for member in ring {
+      ring_bytes.extend(&member[0].compress().to_bytes());
+      ring_bytes.extend(&member[1].compress().to_bytes());
+    }
+
+    let pseudo_out_bytes = pseudo_out.compress().to_bytes();
+
+    unsafe {
+      // Uses Monero's C verification function to ensure compatibility with Monero
+      #[link(name = "wrapper")]
+      extern "C" {
+        pub(crate) fn c_verify_clsag(
+          serialized_len: usize,
+          serialized: *const u8,
+          ring_size: u8,
+          ring: *const u8,
+          I: *const u8,
+          pseudo_out: *const u8,
+          msg: *const u8
+        ) -> bool;
+      }
+
+      if c_verify_clsag(
+        serialized.len(), serialized.as_ptr(),
+        ring.len() as u8, ring_bytes.as_ptr(),
+        I_bytes.as_ptr(), pseudo_out_bytes.as_ptr(), msg.as_ptr()
+      ) {
+        Ok(())
+      } else {
+        Err(ClsagError::InvalidC1)
+      }
     }
   }
 }

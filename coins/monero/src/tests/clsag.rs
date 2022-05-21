@@ -5,11 +5,14 @@ use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero::VarInt;
-
-use monero_serai::{Commitment, random_scalar, generate_key_image, transaction::decoys::Decoys, clsag};
+use monero_serai::{
+  Commitment,
+  random_scalar, generate_key_image,
+  wallet::decoys::Decoys,
+  clsag::{ClsagInput, Clsag}
+};
 #[cfg(feature = "multisig")]
-use monero_serai::frost::{MultisigError, Transcript};
+use monero_serai::{frost::{MultisigError, Transcript}, clsag::{ClsagDetails, ClsagMultisig}};
 
 #[cfg(feature = "multisig")]
 mod frost;
@@ -43,16 +46,16 @@ fn clsag() {
     }
 
     let image = generate_key_image(&secrets[0]);
-    let (clsag, pseudo_out) = clsag::sign(
+    let (clsag, pseudo_out) = Clsag::sign(
       &mut OsRng,
       &vec![(
         secrets[0],
         image,
-        clsag::Input::new(
+        ClsagInput::new(
           Commitment::new(secrets[1], AMOUNT),
           Decoys {
             i: u8::try_from(real).unwrap(),
-            offsets: (1 ..= RING_LEN).into_iter().map(|o| VarInt(o)).collect(),
+            offsets: (1 ..= RING_LEN).into_iter().collect(),
             ring: ring.clone()
           }
         ).unwrap()
@@ -60,9 +63,9 @@ fn clsag() {
       random_scalar(&mut OsRng),
       msg
     ).unwrap().swap_remove(0);
-    clsag::verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
+    clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
     #[cfg(feature = "experimental")]
-    clsag::rust_verify(&clsag, &ring, &image, &pseudo_out, &msg).unwrap();
+    clsag.rust_verify(&ring, &image, &pseudo_out, &msg).unwrap();
   }
 }
 
@@ -98,12 +101,12 @@ fn clsag_multisig() -> Result<(), MultisigError> {
         clsag::Multisig::new(
           Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
           Rc::new(RefCell::new(Some(
-            clsag::Details::new(
-              clsag::Input::new(
+            ClsagDetails::new(
+              ClsagInput::new(
                 Commitment::new(randomness, AMOUNT),
                 Decoys {
                   i: RING_INDEX,
-                  offsets: (1 ..= RING_LEN).into_iter().map(|o| VarInt(o)).collect(),
+                  offsets: (1 ..= RING_LEN).into_iter().collect(),
                   ring: ring.clone()
                 }
               ).unwrap(),

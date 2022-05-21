@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-
 use rand_core::{RngCore, CryptoRng};
 
 use tiny_keccak::{Hasher, Keccak};
@@ -10,24 +9,27 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY}
 };
 
-use monero::util::key::H;
-
 #[cfg(feature = "multisig")]
 pub mod frost;
+
+mod serialize;
 
 pub mod bulletproofs;
 pub mod clsag;
 
 pub mod rpc;
 pub mod transaction;
+pub mod wallet;
 
-#[link(name = "wrapper")]
-extern "C" {
-  fn c_hash_to_point(point: *const u8);
-}
+
+#[cfg(test)]
+mod tests;
 
 lazy_static! {
-  static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H.point.decompress().unwrap());
+  static ref H: EdwardsPoint = CompressedEdwardsY(
+    hex::decode("8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94").unwrap().try_into().unwrap()
+  ).decompress().unwrap();
+  static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&*H);
 }
 
 #[allow(non_snake_case)]
@@ -72,7 +74,14 @@ pub fn hash_to_scalar(data: &[u8]) -> Scalar {
 
 pub fn hash_to_point(point: &EdwardsPoint) -> EdwardsPoint {
   let mut bytes = point.compress().to_bytes();
-  unsafe { c_hash_to_point(bytes.as_mut_ptr()); }
+  unsafe {
+    #[link(name = "wrapper")]
+    extern "C" {
+      fn c_hash_to_point(point: *const u8);
+    }
+
+    c_hash_to_point(bytes.as_mut_ptr());
+  }
   CompressedEdwardsY::from_slice(&bytes).decompress().unwrap()
 }
 
