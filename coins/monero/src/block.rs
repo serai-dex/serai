@@ -3,6 +3,7 @@ use crate::{
   transaction::Transaction
 };
 
+#[derive(Clone, Debug)]
 pub struct BlockHeader {
   pub major_version: u64,
   pub minor_version: u64,
@@ -33,6 +34,7 @@ impl BlockHeader {
   }
 }
 
+#[derive(Clone, Debug)]
 pub struct Block {
   pub header: BlockHeader,
   pub miner_tx: Transaction,

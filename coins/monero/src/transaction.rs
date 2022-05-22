@@ -6,6 +6,7 @@ use crate::{
   bulletproofs::Bulletproofs, clsag::Clsag,
 };
 
+#[derive(Clone, Debug)]
 pub enum Input {
   Gen(u64),
 
@@ -51,6 +52,7 @@ impl Input {
 }
 
 // Doesn't bother moving to an enum for the unused Script classes
+#[derive(Clone, Debug)]
 pub struct Output {
   pub amount: u64,
   pub key: EdwardsPoint,
@@ -86,6 +88,7 @@ impl Output {
   }
 }
 
+#[derive(Clone, Debug)]
 pub struct TransactionPrefix {
   pub version: u64,
   pub unlock_time: u64,
@@ -121,6 +124,7 @@ impl TransactionPrefix {
   }
 }
 
+#[derive(Clone, Debug)]
 pub struct RctBase {
   pub fee: u64,
   pub ecdh_info: Vec<[u8; 8]>,
@@ -153,6 +157,7 @@ impl RctBase {
   }
 }
 
+#[derive(Clone, Debug)]
 pub enum RctPrunable {
   Null,
   Clsag {
@@ -209,6 +214,7 @@ impl RctPrunable {
   }
 }
 
+#[derive(Clone, Debug)]
 pub struct RctSignatures {
   pub base: RctBase,
   pub prunable: RctPrunable
@@ -226,6 +232,7 @@ impl RctSignatures {
   }
 }
 
+#[derive(Clone, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
   pub rct_signatures: RctSignatures
