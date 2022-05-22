@@ -17,10 +17,11 @@ mod serialize;
 pub mod bulletproofs;
 pub mod clsag;
 
-pub mod rpc;
 pub mod transaction;
-pub mod wallet;
+pub mod block;
 
+pub mod rpc;
+pub mod wallet;
 
 #[cfg(test)]
 mod tests;

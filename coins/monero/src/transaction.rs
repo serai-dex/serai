@@ -20,7 +20,7 @@ impl Input {
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       Input::Gen(height) => {
-        w.write_all(&[0])?;
+        w.write_all(&[255])?;
         write_varint(height, w)
       },
 
@@ -34,17 +34,17 @@ impl Input {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Input> {
-    let mut variant = [0; 1];
+    let mut variant = [0];
     r.read_exact(&mut variant)?;
     Ok(
       match variant[0] {
-        0 => Input::Gen(read_varint(r)?),
+        255 => Input::Gen(read_varint(r)?),
         2 => Input::ToKey {
           amount: read_varint(r)?,
           key_offsets: read_vec(read_varint, r)?,
           key_image: read_point(r)?
         },
-        _ => Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown/unused output type"))?
+        _ => Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown/unused input type"))?
       }
     )
   }
@@ -70,7 +70,7 @@ impl Output {
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Output> {
     let amount = read_varint(r)?;
-    let mut tag = [0; 1];
+    let mut tag = [0];
     r.read_exact(&mut tag)?;
     if (tag[0] != 2) && (tag[0] != 3) {
       Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown/unused output type"))?;

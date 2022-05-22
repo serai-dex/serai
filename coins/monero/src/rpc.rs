@@ -9,7 +9,7 @@ use serde_json::json;
 
 use reqwest;
 
-use crate::transaction::{Input, Transaction};
+use crate::{transaction::{Input, Transaction}, block::Block};
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -97,7 +97,11 @@ impl Rpc {
     Ok(self.rpc_call::<Option<()>, HeightResponse>("get_height", None).await?.height)
   }
 
-  pub async fn get_transactions(&self, hashes: Vec<[u8; 32]>) -> Result<Vec<Transaction>, RpcError> {
+  pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
+    if hashes.len() == 0 {
+      return Ok(vec![]);
+    }
+
     #[derive(Deserialize, Debug)]
     struct TransactionResponse {
       as_hex: String,
@@ -135,38 +139,31 @@ impl Rpc {
     )
   }
 
-  /*
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
-      json: String
+      blob: String
     }
 
     let block: JsonRpcResponse<BlockResponse> = self.rpc_call("json_rpc", Some(json!({
       "method": "get_block",
       "params": {
-        "height": height
+        "height": dbg!(height)
       }
     }))).await?;
 
     Ok(
-      deserialize(
-        &rpc_hex(&block.result.blob)?
+      Block::deserialize(
+        &mut std::io::Cursor::new(rpc_hex(&block.result.blob)?)
       ).expect("Monero returned a block we couldn't deserialize")
     )
   }
-  */
 
   pub async fn get_block_transactions(&self, height: usize) -> Result<Vec<Transaction>, RpcError> {
-    /*
     let block = self.get_block(height).await?;
     let mut res = vec![block.miner_tx];
-    if block.tx_hashes.len() != 0 {
-      res.extend(self.get_transactions(block.tx_hashes.iter().map(|hash| hash.0).collect()).await?);
-    }
+    res.extend(self.get_transactions(&block.txs).await?);
     Ok(res)
-    */
-    Ok(vec![])
   }
 
   pub async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
@@ -220,10 +217,10 @@ impl Rpc {
     }))).await?;
 
     let txs = self.get_transactions(
-      outs.outs.iter().map(|out|
+      &outs.outs.iter().map(|out|
         rpc_hex(&out.txid).expect("Monero returned an invalidly encoded hash")
           .try_into().expect("Monero returned an invalid sized hash")
-      ).collect()
+      ).collect::<Vec<_>>()
     ).await?;
     // TODO: Support time based lock times. These shouldn't be needed, and it may be painful to
     // get the median time for the given height, yet we do need to in order to be complete
