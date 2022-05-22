@@ -292,6 +292,16 @@ impl Clsag {
     write_point(&self.D, w)
   }
 
+  pub fn deserialize<R: std::io::Read>(decoys: usize, r: &mut R) -> std::io::Result<Clsag> {
+    Ok(
+      Clsag {
+        s: read_raw_vec(read_scalar, decoys, r)?,
+        c1: read_scalar(r)?,
+        D: read_point(r)?
+      }
+    )
+  }
+
   pub fn verify(
     &self,
     ring: &[[EdwardsPoint; 2]],

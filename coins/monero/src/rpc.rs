@@ -9,7 +9,7 @@ use serde_json::json;
 
 use reqwest;
 
-use crate::transaction::Transaction;
+use crate::transaction::{Input, Transaction};
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -115,24 +115,24 @@ impl Rpc {
       Err(RpcError::TransactionsNotFound(txs.txs.len(), hashes.len()))?;
     }
 
-    /*
     Ok(
+      // Ignores transactions we fail to parse
       txs.txs.iter().filter_map(
-        |tx| rpc_hex(if tx.as_hex.len() != 0 { &tx.as_hex } else { &tx.pruned_as_hex }).ok()
-          .and_then(|mut bytes| Transaction::deserialize(&mut bytes).ok())
+        |res| rpc_hex(if res.as_hex.len() != 0 { &res.as_hex } else { &res.pruned_as_hex }).ok()
+          .and_then(|bytes| Transaction::deserialize(&mut std::io::Cursor::new(bytes)).ok())
           // https://github.com/monero-project/monero/issues/8311
           .filter(
-            if tx.as_hex.len() == 0 {
-              match res[res.len() - 1].prefix.inputs[0] {
-                Input::Gen { .. } => true,
+            |tx| if res.as_hex.len() == 0 {
+              match tx.prefix.inputs.get(0) {
+                Some(Input::Gen { .. }) => true,
                 _ => false
               }
+            } else {
+              true
             }
           )
-      )
+      ).collect()
     )
-    */
-    Ok(vec![])
   }
 
   /*

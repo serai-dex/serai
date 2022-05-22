@@ -32,6 +32,22 @@ impl Input {
       }
     }
   }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Input> {
+    let mut variant = [0; 1];
+    r.read_exact(&mut variant)?;
+    Ok(
+      match variant[0] {
+        0 => Input::Gen(read_varint(r)?),
+        2 => Input::ToKey {
+          amount: read_varint(r)?,
+          key_offsets: read_vec(read_varint, r)?,
+          key_image: read_point(r)?
+        },
+        _ => Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown/unused output type"))?
+      }
+    )
+  }
 }
 
 // Doesn't bother moving to an enum for the unused Script classes
@@ -50,6 +66,23 @@ impl Output {
       w.write_all(&[tag])?;
     }
     Ok(())
+  }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Output> {
+    let amount = read_varint(r)?;
+    let mut tag = [0; 1];
+    r.read_exact(&mut tag)?;
+    if (tag[0] != 2) && (tag[0] != 3) {
+      Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown/unused output type"))?;
+    }
+
+    Ok(
+      Output {
+        amount,
+        key: read_point(r)?,
+        tag: if tag[0] == 3 { r.read_exact(&mut tag)?; Some(tag[0]) } else { None }
+      }
+    )
   }
 }
 
@@ -70,6 +103,22 @@ impl TransactionPrefix {
     write_varint(&self.extra.len().try_into().unwrap(), w)?;
     w.write_all(&self.extra)
   }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<TransactionPrefix> {
+    let mut prefix = TransactionPrefix {
+      version: read_varint(r)?,
+      unlock_time: read_varint(r)?,
+      inputs: read_vec(Input::deserialize, r)?,
+      outputs: read_vec(Output::deserialize, r)?,
+      extra: vec![]
+    };
+
+    let len = read_varint(r)?;
+    prefix.extra.resize(len.try_into().unwrap(), 0);
+    r.read_exact(&mut prefix.extra)?;
+
+    Ok(prefix)
+  }
 }
 
 pub struct RctBase {
@@ -86,6 +135,21 @@ impl RctBase {
       w.write_all(ecdh)?;
     }
     write_raw_vec(write_point, &self.commitments, w)
+  }
+
+  pub fn deserialize<R: std::io::Read>(outputs: usize, r: &mut R) -> std::io::Result<(RctBase, u8)> {
+    let mut rct_type = [0];
+    r.read_exact(&mut rct_type)?;
+    Ok((
+      RctBase {
+        fee: read_varint(r)?,
+        ecdh_info: (0 .. outputs).map(
+          |_| { let mut ecdh = [0; 8]; r.read_exact(&mut ecdh).map(|_| ecdh) }
+        ).collect::<Result<_, _>>()?,
+        commitments: read_raw_vec(read_point, outputs, r)?
+      },
+      rct_type[0]
+    ))
   }
 }
 
@@ -106,13 +170,6 @@ impl RctPrunable {
     }
   }
 
-  pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
-    match self {
-      RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
-      RctPrunable::Clsag { bulletproofs, .. } => bulletproofs.iter().map(|bp| bp.signature_serialize(w)).collect(),
-    }
-  }
-
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       RctPrunable::Null => Ok(()),
@@ -121,6 +178,33 @@ impl RctPrunable {
         write_raw_vec(Clsag::serialize, &clsags, w)?;
         write_raw_vec(write_point, &pseudo_outs, w)
       }
+    }
+  }
+
+  pub fn deserialize<R: std::io::Read>(
+    rct_type: u8,
+    decoys: &[usize],
+    outputs: usize,
+    r: &mut R
+  ) -> std::io::Result<RctPrunable> {
+    Ok(
+      match rct_type {
+        0 => RctPrunable::Null,
+        5 => RctPrunable::Clsag {
+          // TODO: Can the amount of outputs be calculated from the BPs for any validly formed TX?
+          bulletproofs: read_vec(Bulletproofs::deserialize, r)?,
+          clsags: (0 .. decoys.len()).map(|o| Clsag::deserialize(decoys[o], r)).collect::<Result<_, _>>()?,
+          pseudo_outs: read_raw_vec(read_point, outputs, r)?
+        },
+        _ => Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown RCT type"))?
+      }
+    )
+  }
+
+  pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+    match self {
+      RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
+      RctPrunable::Clsag { bulletproofs, .. } => bulletproofs.iter().map(|bp| bp.signature_serialize(w)).collect(),
     }
   }
 }
@@ -135,6 +219,11 @@ impl RctSignatures {
     self.base.serialize(w, self.prunable.rct_type())?;
     self.prunable.serialize(w)
   }
+
+  pub fn deserialize<R: std::io::Read>(decoys: Vec<usize>, outputs: usize, r: &mut R) -> std::io::Result<RctSignatures> {
+    let base = RctBase::deserialize(outputs, r)?;
+    Ok(RctSignatures { base: base.0, prunable: RctPrunable::deserialize(base.1, &decoys, outputs, r)? })
+  }
 }
 
 pub struct Transaction {
@@ -146,6 +235,23 @@ impl Transaction {
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     self.prefix.serialize(w)?;
     self.rct_signatures.serialize(w)
+  }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Transaction> {
+    let prefix = TransactionPrefix::deserialize(r)?;
+    Ok(
+      Transaction {
+        rct_signatures: RctSignatures::deserialize(
+          prefix.inputs.iter().map(|input| match input {
+            Input::Gen(_) => 0,
+            Input::ToKey { key_offsets, .. } => key_offsets.len()
+          }).collect(),
+          prefix.outputs.len(),
+          r
+        )?,
+        prefix
+      }
+    )
   }
 
   pub fn hash(&self) -> [u8; 32] {

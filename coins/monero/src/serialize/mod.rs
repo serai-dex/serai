@@ -85,8 +85,7 @@ pub fn read_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
   ).decompress().filter(|point| point.is_torsion_free()).ok_or(io::Error::new(io::ErrorKind::Other, "invalid point"))
 }
 
-pub fn read_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(r: &mut R, f: F) -> io::Result<Vec<T>> {
-  let len = read_varint(r)?;
+pub fn read_raw_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(f: F, len: usize, r: &mut R) -> io::Result<Vec<T>> {
   let mut res = Vec::with_capacity(
     len.try_into().map_err(|_| io::Error::new(io::ErrorKind::Other, "length exceeds usize"))?
   );
@@ -94,4 +93,8 @@ pub fn read_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(r: &mut R, f: F)
     res.push(f(r)?);
   }
   Ok(res)
+}
+
+pub fn read_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(f: F, r: &mut R) -> io::Result<Vec<T>> {
+  read_raw_vec(f, read_varint(r)?.try_into().unwrap(), r)
 }

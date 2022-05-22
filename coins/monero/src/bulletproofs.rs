@@ -104,8 +104,8 @@ impl Bulletproofs {
       T2: read_point(r)?,
       taux: read_scalar(r)?,
       mu: read_scalar(r)?,
-      L: read_vec(r, read_point)?,
-      R: read_vec(r, read_point)?,
+      L: read_vec(read_point, r)?,
+      R: read_vec(read_point, r)?,
       a: read_scalar(r)?,
       b: read_scalar(r)?,
       t: read_scalar(r)?
