@@ -24,7 +24,7 @@ use crate::{
   generate_key_image, bulletproofs::Bulletproofs, clsag::{ClsagError, ClsagInput, Clsag},
   rpc::{Rpc, RpcError},
   transaction::*,
-  wallet::{uniqueness, shared_key, commitment_mask, amount_encryption, SpendableOutput, Decoys}
+  wallet::{SpendableOutput, Decoys, key_image_sort, uniqueness, shared_key, commitment_mask, amount_encryption}
 };
 #[cfg(feature = "multisig")]
 use crate::frost::MultisigError;
@@ -185,7 +185,7 @@ impl SignableTransaction {
   fn prepare_outputs<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    uniqueness: Option<[u8; 32]>
+    uniqueness: [u8; 32]
   ) -> Result<(Vec<Commitment>, Scalar), TransactionError> {
     self.fee = self.fee_per_byte * 2000; // TODO
 
@@ -203,20 +203,7 @@ impl SignableTransaction {
     for payment in &self.payments {
       temp_outputs.push((None, (payment.0, payment.1)));
     }
-    // Ideally, the change output would always have uniqueness, as we control this wallet software
-    // Unfortunately, if this is used with multisig, doing so would add an extra round due to the
-    // fact Bulletproofs use a leader protocol reliant on this shared key before the first round of
-    // communication. Making the change output unique would require Bulletproofs not be a leader
-    // protocol, using a seeded random
-    // There is a vector where the multisig participants leak the output key they're about to send
-    // to, and someone could use that key, forcing some funds to be burnt accordingly if they win
-    // the race. Any multisig wallet, with this current setup, must only keep change keys in context
-    // accordingly, preferably as soon as they are proposed, even before they appear as confirmed
-    // Using another source of uniqueness would also be possible, yet it'd make scanning a tri-key
-    // system (currently dual for the simpler API, yet would be dual even with a more complex API
-    // under this decision)
-    // TODO after https://github.com/serai-dex/serai/issues/2
-    temp_outputs.push((uniqueness, (self.change, in_amount - out_amount)));
+    temp_outputs.push((Some(uniqueness), (self.change, in_amount - out_amount)));
 
     // Shuffle the outputs
     temp_outputs.shuffle(rng);
@@ -293,22 +280,20 @@ impl SignableTransaction {
     for input in &self.inputs {
       images.push(generate_key_image(&(spend + input.key_offset)));
     }
-    images.sort_by(|x, y| x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse());
+    images.sort_by(key_image_sort);
 
     let (commitments, mask_sum) = self.prepare_outputs(
       rng,
-      Some(
-        uniqueness(
-          &images.iter().map(|image| Input::ToKey {
-            amount: 0,
-            key_offsets: vec![],
-            key_image: *image
-          }).collect::<Vec<_>>()
-        )
+      uniqueness(
+        &images.iter().map(|image| Input::ToKey {
+          amount: 0,
+          key_offsets: vec![],
+          key_image: *image
+        }).collect::<Vec<_>>()
       )
     )?;
 
-    let mut tx = self.prepare_transaction(&commitments, Bulletproofs::new(&commitments)?);
+    let mut tx = self.prepare_transaction(&commitments, Bulletproofs::new(rng, &commitments)?);
 
     let signable = prepare_inputs(rng, rpc, &self.inputs, spend, &mut tx).await?;
 

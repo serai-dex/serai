@@ -65,11 +65,11 @@ fn main() {
     }
   }
 
-  println!("cargo:rerun-if-changed=c/wrapper.c");
+  println!("cargo:rerun-if-changed=c/wrapper.cpp");
   if !Command::new("g++").args(&[
     "-O3", "-Wall", "-shared", "-std=c++14", "-fPIC",
     "-Imonero/contrib/epee/include", "-Imonero/src",
-    "wrapper.c", "-o", &format!(
+    "wrapper.cpp", "-o", &format!(
       "{}/{}wrapper.{}",
       out_dir,
       &env::consts::DLL_PREFIX,

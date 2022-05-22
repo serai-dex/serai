@@ -15,6 +15,10 @@ pub(crate) use decoys::Decoys;
 mod send;
 pub use send::{TransactionError, SignableTransaction};
 
+fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> std::cmp::Ordering {
+  x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
+}
+
 // https://github.com/monero-project/research-lab/issues/103
 pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
   let mut u = b"domain_separator".to_vec();

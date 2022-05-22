@@ -24,8 +24,6 @@ pub struct SpendableOutput {
   pub commitment: Commitment
 }
 
-// TODO: Enable disabling one of the shared key derivations and solely using one
-// Change outputs currently always use unique derivations, so that must also be corrected
 impl Transaction {
   pub fn scan(
     &self,

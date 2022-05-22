@@ -13,15 +13,17 @@ use crate::{
   random_scalar, bulletproofs::Bulletproofs, clsag::{ClsagInput, ClsagDetails, ClsagMultisig},
   rpc::Rpc,
   transaction::{Input, RctPrunable, Transaction},
-  wallet::{TransactionError, SignableTransaction, Decoys}
+  wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness}
 };
 
 pub struct TransactionMachine {
-  leader: bool,
   signable: SignableTransaction,
+  i: usize,
   transcript: Transcript,
 
   decoys: Vec<Decoys>,
+
+  our_preprocess: Vec<u8>,
 
   images: Vec<EdwardsPoint>,
   output_masks: Option<Scalar>,
@@ -55,6 +57,10 @@ impl SignableTransaction {
     // depending on how these transactions are coordinated
 
     let mut transcript = Transcript::new(label);
+    // Include the height we're using for our data
+    // The data itself will be included, making this unnecessary, yet a lot of this is technically
+    // unnecessary. Anything which further increases security at almost no cost should be followed
+    transcript.append_message(b"height", &u64::try_from(height).unwrap().to_le_bytes());
     // Also include the spend_key as below only the key offset is included, so this confirms the sum product
     // Useful as confirming the sum product confirms the key image, further guaranteeing the one time
     // properties noted below
@@ -76,10 +82,12 @@ impl SignableTransaction {
 
     // Select decoys
     // Ideally, this would be done post entropy, instead of now, yet doing so would require sign
-    // to be async which isn't feasible. This should be suitably competent though
+    // to be async which isn't preferable. This should be suitably competent though
     // While this inability means we can immediately create the input, moving it out of the
     // Rc RefCell, keeping it within an Rc RefCell keeps our options flexible
     let decoys = Decoys::select(
+      // Using a seeded RNG with a specific height, committed to above, should make these decoys
+      // committed to. They'll also be committed to later via the TX message as a whole
       &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys", None)),
       rpc,
       height,
@@ -100,14 +108,16 @@ impl SignableTransaction {
     }
 
     // Verify these outputs by a dummy prep
-    self.prepare_outputs(rng, None)?;
+    self.prepare_outputs(rng, [0; 32])?;
 
     Ok(TransactionMachine {
-      leader: keys.params().i() == included[0],
       signable: self,
+      i: keys.params().i(),
       transcript,
 
       decoys,
+
+      our_preprocess: vec![],
 
       images,
       output_masks: None,
@@ -135,26 +145,19 @@ impl StateMachine for TransactionMachine {
     for (i, clsag) in self.clsags.iter_mut().enumerate() {
       let preprocess = clsag.preprocess(rng)?;
       // First 64 bytes are FROST's commitments
-      self.images[i] += CompressedEdwardsY(preprocess[64 .. 96].try_into().unwrap()).decompress().unwrap();
+      self.images[i] = CompressedEdwardsY(preprocess[64 .. 96].try_into().unwrap()).decompress().unwrap();
       serialized.extend(&preprocess);
     }
+    self.our_preprocess = serialized.clone();
 
-    if self.leader {
-      let mut entropy = [0; 32];
-      rng.fill_bytes(&mut entropy);
-      serialized.extend(&entropy);
-
-      let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys", Some(entropy)));
-      // Safe to unwrap thanks to the dummy prepare
-      let (commitments, output_masks) = self.signable.prepare_outputs(&mut rng, None).unwrap();
-      self.output_masks = Some(output_masks);
-
-      let bp = Bulletproofs::new(&commitments).unwrap();
-      bp.serialize(&mut serialized).unwrap();
-
-      let tx = self.signable.prepare_transaction(&commitments, bp);
-      self.tx = Some(tx);
-    }
+    // We could add further entropy here, and previous versions of this library did so
+    // As of right now, the multisig's key, the inputs being spent, and the FROST data itself
+    // will be used for RNG seeds. In order to recreate these RNG seeds, breaking privacy,
+    // counterparties must have knowledge of the multisig, either the view key or access to the
+    // coordination layer, and then access to the actual FROST signing process
+    // If the commitments are sent in plain text, then entropy here also would be, making it not
+    // increase privacy. If they're not sent in plain text, or are otherwise inaccessible, they
+    // already offer sufficient entropy. That's why further entropy is not included
 
     Ok(serialized)
   }
@@ -162,52 +165,35 @@ impl StateMachine for TransactionMachine {
   fn sign(
     &mut self,
     commitments: &[Option<Vec<u8>>],
+    // Drop FROST's 'msg' since we calculate the actual message in this function
     _: &[u8]
   ) -> Result<Vec<u8>, FrostError> {
     if self.state() != State::Preprocessed {
       Err(FrostError::InvalidSignTransition(State::Preprocessed, self.state()))?;
     }
 
-    // FROST commitments, image, commitments, and their proofs
-    let clsag_len = 64 + ClsagMultisig::serialized_len();
-    let clsag_lens = clsag_len * self.clsags.len();
-
-    // Split out the prep and update the TX
-    let mut tx;
-    if self.leader {
-      tx = self.tx.take().unwrap();
-    } else {
-      let (l, prep) = commitments.iter().enumerate().filter(|(_, prep)| prep.is_some()).next()
-        .ok_or(FrostError::InternalError("no participants".to_string()))?;
-      let prep = prep.as_ref().unwrap();
-
-      // Not invalid outputs due to doing a dummy prep as leader
-      let (commitments, output_masks) = self.signable.prepare_outputs(
-        &mut ChaCha12Rng::from_seed(
-          self.transcript.rng_seed(
-            b"tx_keys",
-            Some(prep[clsag_lens .. (clsag_lens + 32)].try_into().map_err(|_| FrostError::InvalidShare(l))?)
-          )
-        ),
-        None
-      ).map_err(|_| FrostError::InvalidShare(l))?;
-      self.output_masks.replace(output_masks);
-
-      // Verify the provided bulletproofs if not leader
-      let bp = Bulletproofs::deserialize(
-        &mut std::io::Cursor::new(&prep[(clsag_lens + 32) .. prep.len()])
-      ).map_err(|_| FrostError::InvalidShare(l))?;
-      if !bp.verify(&commitments.iter().map(|c| c.calculate()).collect::<Vec<EdwardsPoint>>()) {
-        Err(FrostError::InvalidShare(l))?;
+    // Add all commitments to the transcript for their entropy
+    // While each CLSAG will do this as they need to for security, they have their own transcripts
+    // cloned from this TX's initial premise's transcript. For our TX transcript to have the CLSAG
+    // data for entropy, it'll have to be added ourselves
+    for c in 0 .. commitments.len() {
+      self.transcript.append_message(b"participant", &u16::try_from(c).unwrap().to_le_bytes());
+      if c == self.i {
+        self.transcript.append_message(b"preprocess", &self.our_preprocess);
+      } else if let Some(commitments) = commitments[c].as_ref() {
+        self.transcript.append_message(b"preprocess", commitments);
       }
-
-      tx = self.signable.prepare_transaction(&commitments, bp);
     }
 
+    // FROST commitments, image, H commitments, and their proofs
+    let clsag_len = 64 + ClsagMultisig::serialized_len();
+
     for c in 0 .. self.clsags.len() {
-      // Calculate the key images in order to update the TX
+      // Calculate the key images
       // Multisig will parse/calculate/validate this as needed, yet doing so here as well provides
-      // the easiest API overall
+      // the easiest API overall, as this is where the TX is (which needs the key images in its
+      // message), along with where the outputs are determined (where our change output needs these
+      // to be unique)
       for (l, serialized) in commitments.iter().enumerate().filter(|(_, s)| s.is_some()) {
         self.images[c] += CompressedEdwardsY(
           serialized.as_ref().unwrap()[((c * clsag_len) + 64) .. ((c * clsag_len) + 96)]
@@ -215,6 +201,34 @@ impl StateMachine for TransactionMachine {
         ).decompress().ok_or(FrostError::InvalidCommitment(l))?;
       }
     }
+
+    // Create the actual transaction
+    let mut tx = {
+      // Calculate uniqueness
+      let mut images = self.images.clone();
+      images.sort_by(key_image_sort);
+
+      // Not invalid outputs due to already doing a dummy prep
+      let (commitments, output_masks) = self.signable.prepare_outputs(
+        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys", None)),
+        uniqueness(
+          &images.iter().map(|image| Input::ToKey {
+            amount: 0,
+            key_offsets: vec![],
+            key_image: *image
+          }).collect::<Vec<_>>()
+        )
+      ).expect("Couldn't prepare outputs despite already doing a dummy prep");
+      self.output_masks = Some(output_masks);
+
+      self.signable.prepare_transaction(
+        &commitments,
+        Bulletproofs::new(
+          &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs", None)),
+          &commitments
+        ).unwrap()
+      )
+    };
 
     let mut commitments = (0 .. self.inputs.len()).map(|c| commitments.iter().map(
       |commitments| commitments.clone().map(

@@ -1,9 +1,37 @@
+#include <mutex>
+
 #include "device/device_default.hpp"
 
 #include "ringct/bulletproofs.h"
 #include "ringct/rctSigs.h"
 
+std::mutex rng_mutex;
+char rng_entropy[64];
+void rng(uint8_t* seed) {
+  memcpy(rng_entropy, seed, 32);
+  memset(&rng_entropy[32], 0, 32);
+}
+
 extern "C" {
+  void generate_random_bytes_not_thread_safe(size_t n, uint8_t* value) {
+    size_t written = 0;
+    while (written != n) {
+      uint8_t hash[32];
+      crypto::cn_fast_hash(rng_entropy, 64, (char*) hash);
+      // Step the RNG by setting the latter half to the most recent result
+      // Does not leak the RNG, even if the values are leaked (which they are expected to be) due to
+      // the first half remaining constant and undisclosed
+      memcpy(&rng_entropy[32], hash, 32);
+
+      size_t next = n - written;
+      if (next > 32) {
+        next = 32;
+      }
+      memcpy(&value[written], hash, next);
+      written += next;
+    }
+  }
+
   void c_hash_to_point(uint8_t* point) {
     rct::key key_point;
     ge_p3 e_p3;
@@ -12,7 +40,10 @@ extern "C" {
     ge_p3_tobytes(point, &e_p3);
   }
 
-  uint8_t* c_generate_bp(uint8_t len, uint64_t* a, uint8_t* m) {
+  uint8_t* c_generate_bp(uint8_t* seed, uint8_t len, uint64_t* a, uint8_t* m) {
+    std::lock_guard<std::mutex> guard(rng_mutex);
+    rng(seed);
+
     rct::keyV masks;
     std::vector<uint64_t> amounts;
     masks.resize(len);
@@ -21,6 +52,7 @@ extern "C" {
       memcpy(masks[i].bytes, m + (i * 32), 32);
       amounts[i] = a[i];
     }
+
     rct::Bulletproof bp = rct::bulletproof_PROVE(amounts, masks);
 
     std::stringstream ss;
@@ -33,7 +65,14 @@ extern "C" {
     return res;
   }
 
-  bool c_verify_bp(uint s_len, uint8_t* s, uint8_t c_len, uint8_t* c) {
+  bool c_verify_bp(uint8_t* seed, uint s_len, uint8_t* s, uint8_t c_len, uint8_t* c) {
+    // BPs are batch verified which use RNG based challenges to ensure individual integrity
+    // That's why this must also have control over RNG, to prevent interrupting multisig signing
+    // while not using known seeds. Considering this doesn't actually define a batch,
+    // and it's only verifying a single BP, it'd probably be fine, but...
+    std::lock_guard<std::mutex> guard(rng_mutex);
+    rng(seed);
+
     rct::Bulletproof bp;
     std::stringstream ss;
     std::string str;
