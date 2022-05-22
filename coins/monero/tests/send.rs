@@ -38,8 +38,9 @@ macro_rules! async_sequential {
         let guard = SEQUENTIAL.lock().unwrap();
         let local = tokio::task::LocalSet::new();
         local.run_until(async move {
-          if let Err(_) = tokio::task::spawn_local(async move { $body }).await {
+          if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
             drop(guard);
+            Err(err).unwrap()
           }
         }).await;
       }
