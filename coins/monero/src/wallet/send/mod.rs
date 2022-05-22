@@ -289,14 +289,20 @@ impl SignableTransaction {
     rpc: &Rpc,
     spend: &Scalar
   ) -> Result<Transaction, TransactionError> {
+    let mut images = Vec::with_capacity(self.inputs.len());
+    for input in &self.inputs {
+      images.push(generate_key_image(&(spend + input.key_offset)));
+    }
+    images.sort_by(|x, y| x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse());
+
     let (commitments, mask_sum) = self.prepare_outputs(
       rng,
       Some(
         uniqueness(
-          &self.inputs.iter().map(|input| Input::ToKey {
+          &images.iter().map(|image| Input::ToKey {
             amount: 0,
             key_offsets: vec![],
-            key_image: generate_key_image(&(spend + input.key_offset))
+            key_image: *image
           }).collect::<Vec<_>>()
         )
       )
