@@ -1,23 +1,21 @@
 #[cfg(feature = "multisig")]
-use std::{rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc};
 
 use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_serai::{
+use crate::{
   Commitment,
   random_scalar, generate_key_image,
-  wallet::decoys::Decoys,
+  wallet::Decoys,
   clsag::{ClsagInput, Clsag}
 };
 #[cfg(feature = "multisig")]
-use monero_serai::{frost::{MultisigError, Transcript}, clsag::{ClsagDetails, ClsagMultisig}};
+use crate::{frost::{MultisigError, Transcript}, clsag::{ClsagDetails, ClsagMultisig}};
 
 #[cfg(feature = "multisig")]
-mod frost;
-#[cfg(feature = "multisig")]
-use crate::frost::{THRESHOLD, generate_keys, sign};
+use crate::tests::frost::{THRESHOLD, generate_keys, sign};
 
 const RING_LEN: u64 = 11;
 const AMOUNT: u64 = 1337;
@@ -62,7 +60,7 @@ fn clsag() {
       )],
       random_scalar(&mut OsRng),
       msg
-    ).unwrap().swap_remove(0);
+    ).swap_remove(0);
     clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
     #[cfg(feature = "experimental")]
     clsag.rust_verify(&ring, &image, &pseudo_out, &msg).unwrap();
@@ -98,7 +96,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
   for i in 1 ..= t {
     machines.push(
       sign::AlgorithmMachine::new(
-        clsag::Multisig::new(
+        ClsagMultisig::new(
           Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
           Rc::new(RefCell::new(Some(
             ClsagDetails::new(
