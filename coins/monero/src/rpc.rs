@@ -148,7 +148,7 @@ impl Rpc {
     let block: JsonRpcResponse<BlockResponse> = self.rpc_call("json_rpc", Some(json!({
       "method": "get_block",
       "params": {
-        "height": dbg!(height)
+        "height": height
       }
     }))).await?;
 
