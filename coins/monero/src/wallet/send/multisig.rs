@@ -10,9 +10,9 @@ use frost::{FrostError, MultisigKeys, MultisigParams, sign::{State, StateMachine
 
 use crate::{
   frost::{Transcript, Ed25519},
-  random_scalar, bulletproofs::Bulletproofs, clsag::{ClsagInput, ClsagDetails, ClsagMultisig},
+  random_scalar, ringct::{clsag::{ClsagInput, ClsagDetails, ClsagMultisig}, bulletproofs::Bulletproofs, RctPrunable},
+  transaction::{Input, Transaction},
   rpc::Rpc,
-  transaction::{Input, RctPrunable, Transaction},
   wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness}
 };
 

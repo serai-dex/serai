@@ -14,13 +14,13 @@ use curve25519_dalek::{
 use group::Group;
 
 use transcript::Transcript as TranscriptTrait;
-use frost::{FrostError, algorithm::Algorithm, MultisigView};
+use frost::{FrostError, MultisigView, algorithm::Algorithm};
 use dalek_ff_group as dfg;
 
 use crate::{
   hash_to_point,
   frost::{Transcript, MultisigError, Ed25519, DLEqProof, read_dleq},
-  clsag::{ClsagInput, Clsag}
+  ringct::clsag::{ClsagInput, Clsag}
 };
 
 impl ClsagInput {

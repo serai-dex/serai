@@ -9,10 +9,10 @@ use crate::{
   Commitment,
   random_scalar, generate_key_image,
   wallet::Decoys,
-  clsag::{ClsagInput, Clsag}
+  ringct::clsag::{ClsagInput, Clsag}
 };
 #[cfg(feature = "multisig")]
-use crate::{frost::{MultisigError, Transcript}, clsag::{ClsagDetails, ClsagMultisig}};
+use crate::{frost::{MultisigError, Transcript}, ringct::clsag::{ClsagDetails, ClsagMultisig}};
 
 #[cfg(feature = "multisig")]
 use crate::tests::frost::{THRESHOLD, generate_keys, sign};

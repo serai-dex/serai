@@ -21,9 +21,14 @@ use frost::FrostError;
 use crate::{
   Commitment,
   random_scalar,
-  generate_key_image, bulletproofs::Bulletproofs, clsag::{ClsagError, ClsagInput, Clsag},
+  generate_key_image,
+  ringct::{
+    clsag::{ClsagError, ClsagInput, Clsag},
+    bulletproofs::Bulletproofs,
+    RctBase, RctPrunable, RctSignatures
+  },
+  transaction::{Input, Output, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
-  transaction::*,
   wallet::{SpendableOutput, Decoys, key_image_sort, uniqueness, shared_key, commitment_mask, amount_encryption}
 };
 #[cfg(feature = "multisig")]

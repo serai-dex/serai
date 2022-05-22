@@ -14,8 +14,7 @@ pub mod frost;
 
 mod serialize;
 
-pub mod bulletproofs;
-pub mod clsag;
+pub mod ringct;
 
 pub mod transaction;
 pub mod block;
