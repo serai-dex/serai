@@ -28,8 +28,10 @@ pub enum RpcError {
   TransactionsNotFound(usize, usize),
   #[error("invalid point ({0})")]
   InvalidPoint(String),
-  #[error("invalid transaction")]
-  InvalidTransaction
+  #[error("pruned transaction")]
+  PrunedTransaction,
+  #[error("invalid transaction ({0:?})")]
+  InvalidTransaction([u8; 32])
 }
 
 pub struct Rpc(String);
@@ -119,24 +121,23 @@ impl Rpc {
       Err(RpcError::TransactionsNotFound(txs.txs.len(), hashes.len()))?;
     }
 
-    Ok(
-      // Ignores transactions we fail to parse
-      txs.txs.iter().filter_map(
-        |res| rpc_hex(if res.as_hex.len() != 0 { &res.as_hex } else { &res.pruned_as_hex }).ok()
-          .and_then(|bytes| Transaction::deserialize(&mut std::io::Cursor::new(bytes)).ok())
-          // https://github.com/monero-project/monero/issues/8311
-          .filter(
-            |tx| if res.as_hex.len() == 0 {
-              match tx.prefix.inputs.get(0) {
-                Some(Input::Gen { .. }) => true,
-                _ => false
-              }
-            } else {
-              true
-            }
-          )
-      ).collect()
-    )
+    txs.txs.iter().enumerate().map(|(i, res)| {
+      let tx = Transaction::deserialize(
+        &mut std::io::Cursor::new(
+          rpc_hex(if res.as_hex.len() != 0 { &res.as_hex } else { &res.pruned_as_hex }).unwrap()
+        )
+      ).map_err(|_| RpcError::InvalidTransaction(hashes[i]))?;
+
+      // https://github.com/monero-project/monero/issues/8311
+      if res.as_hex.len() == 0 {
+        match tx.prefix.inputs.get(0) {
+          Some(Input::Gen { .. }) => (),
+          _ => Err(RpcError::PrunedTransaction)?
+        }
+      }
+
+      Ok(tx)
+    }).collect::<Result<_, _>>()
   }
 
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {
@@ -283,7 +284,7 @@ impl Rpc {
     }))).await?;
 
     if res.status != "OK" {
-      Err(RpcError::InvalidTransaction)?;
+      Err(RpcError::InvalidTransaction(tx.hash()))?;
     }
 
     Ok(())
