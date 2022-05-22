@@ -1,24 +1,15 @@
-use std::{fmt::Debug, str::FromStr};
+use std::fmt::Debug;
 
 use thiserror::Error;
 
-use hex::ToHex;
-
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
-
-use monero::{
-  Hash,
-  blockdata::{
-    transaction::{TxIn, Transaction},
-    block::Block
-  },
-  consensus::encode::{serialize, deserialize}
-};
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
 use reqwest;
+
+use crate::{transaction::{Input, Transaction}, block::Block};
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -106,7 +97,11 @@ impl Rpc {
     Ok(self.rpc_call::<Option<()>, HeightResponse>("get_height", None).await?.height)
   }
 
-  pub async fn get_transactions(&self, hashes: Vec<Hash>) -> Result<Vec<Transaction>, RpcError> {
+  pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
+    if hashes.len() == 0 {
+      return Ok(vec![]);
+    }
+
     #[derive(Deserialize, Debug)]
     struct TransactionResponse {
       as_hex: String,
@@ -118,29 +113,30 @@ impl Rpc {
     }
 
     let txs: TransactionsResponse = self.rpc_call("get_transactions", Some(json!({
-      "txs_hashes": hashes.iter().map(|hash| hash.encode_hex()).collect::<Vec<String>>()
+      "txs_hashes": hashes.iter().map(|hash| hex::encode(&hash)).collect::<Vec<String>>()
     }))).await?;
     if txs.txs.len() != hashes.len() {
       Err(RpcError::TransactionsNotFound(txs.txs.len(), hashes.len()))?;
     }
 
-    let mut res: Vec<Transaction> = Vec::with_capacity(txs.txs.len());
-    for tx in txs.txs {
-      res.push(
-        deserialize(
-          &rpc_hex(if tx.as_hex.len() != 0 { &tx.as_hex } else { &tx.pruned_as_hex })?
-        ).map_err(|_| RpcError::InvalidTransaction)?
-      );
-
-      if tx.as_hex.len() == 0 {
-        match res[res.len() - 1].prefix.inputs[0] {
-          TxIn::Gen { .. } => 0,
-          _ => Err(RpcError::TransactionsNotFound(hashes.len() - 1, hashes.len()))?
-        };
-      }
-    }
-
-    Ok(res)
+    Ok(
+      // Ignores transactions we fail to parse
+      txs.txs.iter().filter_map(
+        |res| rpc_hex(if res.as_hex.len() != 0 { &res.as_hex } else { &res.pruned_as_hex }).ok()
+          .and_then(|bytes| Transaction::deserialize(&mut std::io::Cursor::new(bytes)).ok())
+          // https://github.com/monero-project/monero/issues/8311
+          .filter(
+            |tx| if res.as_hex.len() == 0 {
+              match tx.prefix.inputs.get(0) {
+                Some(Input::Gen { .. }) => true,
+                _ => false
+              }
+            } else {
+              true
+            }
+          )
+      ).collect()
+    )
   }
 
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {
@@ -157,8 +153,8 @@ impl Rpc {
     }))).await?;
 
     Ok(
-      deserialize(
-        &rpc_hex(&block.result.blob)?
+      Block::deserialize(
+        &mut std::io::Cursor::new(rpc_hex(&block.result.blob)?)
       ).expect("Monero returned a block we couldn't deserialize")
     )
   }
@@ -166,13 +162,11 @@ impl Rpc {
   pub async fn get_block_transactions(&self, height: usize) -> Result<Vec<Transaction>, RpcError> {
     let block = self.get_block(height).await?;
     let mut res = vec![block.miner_tx];
-    if block.tx_hashes.len() != 0 {
-      res.extend(self.get_transactions(block.tx_hashes).await?);
-    }
+    res.extend(self.get_transactions(&block.txs).await?);
     Ok(res)
   }
 
-  pub async fn get_o_indexes(&self, hash: Hash) -> Result<Vec<u64>, RpcError> {
+  pub async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
     #[derive(Serialize, Debug)]
     struct Request {
       txid: [u8; 32]
@@ -190,8 +184,8 @@ impl Rpc {
 
     let indexes: OIndexes = self.bin_call("get_o_indexes.bin", monero_epee_bin_serde::to_bytes(
       &Request {
-        txid: hash.0
-      }).expect("Couldn't serialize a request")
+        txid: hash
+      }).unwrap()
     ).await?;
 
     Ok(indexes.o_indexes)
@@ -223,13 +217,16 @@ impl Rpc {
     }))).await?;
 
     let txs = self.get_transactions(
-      outs.outs.iter().map(|out| Hash::from_str(&out.txid).expect("Monero returned an invalid hash")).collect()
+      &outs.outs.iter().map(|out|
+        rpc_hex(&out.txid).expect("Monero returned an invalidly encoded hash")
+          .try_into().expect("Monero returned an invalid sized hash")
+      ).collect::<Vec<_>>()
     ).await?;
     // TODO: Support time based lock times. These shouldn't be needed, and it may be painful to
     // get the median time for the given height, yet we do need to in order to be complete
     outs.outs.iter().enumerate().map(
       |(i, out)| Ok(
-        if txs[i].prefix.unlock_time.0 <= u64::try_from(height).unwrap() {
+        if txs[i].prefix.unlock_time <= u64::try_from(height).unwrap() {
           Some([rpc_point(&out.key)?, rpc_point(&out.mask)?])
         } else { None }
       )
@@ -279,8 +276,10 @@ impl Rpc {
       reason: String
     }
 
+    let mut buf = Vec::with_capacity(2048);
+    tx.serialize(&mut buf).unwrap();
     let res: SendRawResponse = self.rpc_call("send_raw_transaction", Some(json!({
-      "tx_as_hex": hex::encode(&serialize(tx))
+      "tx_as_hex": hex::encode(&buf)
     }))).await?;
 
     if res.status != "OK" {

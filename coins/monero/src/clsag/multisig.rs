@@ -11,8 +11,6 @@ use curve25519_dalek::{
   edwards::EdwardsPoint
 };
 
-use monero::util::ringct::{Key, Clsag};
-
 use group::Group;
 
 use transcript::Transcript as TranscriptTrait;
@@ -22,10 +20,10 @@ use dalek_ff_group as dfg;
 use crate::{
   hash_to_point,
   frost::{Transcript, MultisigError, Ed25519, DLEqProof, read_dleq},
-  clsag::{Input, sign_core, verify}
+  clsag::{ClsagInput, Clsag}
 };
 
-impl Input {
+impl ClsagInput {
   fn transcript<T: TranscriptTrait>(&self, transcript: &mut T) {
     // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
@@ -53,14 +51,14 @@ impl Input {
 // While we could move the CLSAG test inside this crate, that'd require duplicating the FROST test
 // helper, and isn't worth doing right now when this is harmless enough (semver? TODO)
 #[derive(Clone, Debug)]
-pub struct Details {
-  input: Input,
+pub struct ClsagDetails {
+  input: ClsagInput,
   mask: Scalar
 }
 
-impl Details {
-  pub fn new(input: Input, mask: Scalar) -> Details {
-    Details { input, mask }
+impl ClsagDetails {
+  pub fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
+    ClsagDetails { input, mask }
   }
 }
 
@@ -76,7 +74,7 @@ struct Interim {
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-pub struct Multisig {
+pub struct ClsagMultisig {
   transcript: Transcript,
 
   H: EdwardsPoint,
@@ -84,19 +82,19 @@ pub struct Multisig {
   image: EdwardsPoint,
   AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
-  details: Rc<RefCell<Option<Details>>>,
+  details: Rc<RefCell<Option<ClsagDetails>>>,
 
   msg: Option<[u8; 32]>,
   interim: Option<Interim>
 }
 
-impl Multisig {
+impl ClsagMultisig {
   pub fn new(
     transcript: Transcript,
-    details: Rc<RefCell<Option<Details>>>
-  ) -> Result<Multisig, MultisigError> {
+    details: Rc<RefCell<Option<ClsagDetails>>>
+  ) -> Result<ClsagMultisig, MultisigError> {
     Ok(
-      Multisig {
+      ClsagMultisig {
         transcript,
 
         H: EdwardsPoint::identity(),
@@ -115,7 +113,7 @@ impl Multisig {
     3 * (32 + 64)
   }
 
-  fn input(&self) -> Input {
+  fn input(&self) -> ClsagInput {
     self.details.borrow().as_ref().unwrap().input.clone()
   }
 
@@ -124,7 +122,7 @@ impl Multisig {
   }
 }
 
-impl Algorithm<Ed25519> for Multisig {
+impl Algorithm<Ed25519> for ClsagMultisig {
   type Transcript = Transcript;
   type Signature = (Clsag, EdwardsPoint);
 
@@ -136,7 +134,7 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> Vec<u8> {
     self.H = hash_to_point(&view.group_key().0);
 
-    let mut serialized = Vec::with_capacity(Multisig::serialized_len());
+    let mut serialized = Vec::with_capacity(ClsagMultisig::serialized_len());
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
     serialized.extend(DLEqProof::prove(rng, &self.H, &view.secret_share().0).serialize());
 
@@ -154,7 +152,7 @@ impl Algorithm<Ed25519> for Multisig {
     commitments: &[dfg::EdwardsPoint; 2],
     serialized: &[u8]
   ) -> Result<(), FrostError> {
-    if serialized.len() != Multisig::serialized_len() {
+    if serialized.len() != ClsagMultisig::serialized_len() {
       // Not an optimal error but...
       Err(FrostError::InvalidCommitmentQuantity(l, 9, serialized.len() / 32))?;
     }
@@ -217,7 +215,7 @@ impl Algorithm<Ed25519> for Multisig {
     self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
 
     #[allow(non_snake_case)]
-    let (clsag, pseudo_out, p, c) = sign_core(
+    let (clsag, pseudo_out, p, c) = Clsag::sign_core(
       &mut rng,
       &self.image,
       &self.input(),
@@ -241,9 +239,8 @@ impl Algorithm<Ed25519> for Multisig {
   ) -> Option<Self::Signature> {
     let interim = self.interim.as_ref().unwrap();
     let mut clsag = interim.clsag.clone();
-    clsag.s[usize::from(self.input().decoys.i)] = Key { key: (sum.0 - interim.c).to_bytes() };
-    if verify(
-      &clsag,
+    clsag.s[usize::from(self.input().decoys.i)] = sum.0 - interim.c;
+    if clsag.verify(
       &self.input().decoys.ring,
       &self.image,
       &interim.pseudo_out,
