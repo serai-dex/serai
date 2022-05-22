@@ -5,11 +5,15 @@
 #include "ringct/bulletproofs.h"
 #include "ringct/rctSigs.h"
 
+typedef std::lock_guard<std::mutex> lock;
 std::mutex rng_mutex;
-char rng_entropy[64];
+
+uint8_t rng_entropy[64];
 void rng(uint8_t* seed) {
+  // Set the first half to the seed
   memcpy(rng_entropy, seed, 32);
-  memset(&rng_entropy[32], 0, 32);
+  // Set the second half to the hash of a DST to ensure a lack of collisions
+  crypto::cn_fast_hash("RNG_entropy_seed", 16, (char*) &rng_entropy[32]);
 }
 
 extern "C" {
@@ -41,7 +45,7 @@ extern "C" {
   }
 
   uint8_t* c_generate_bp(uint8_t* seed, uint8_t len, uint64_t* a, uint8_t* m) {
-    std::lock_guard<std::mutex> guard(rng_mutex);
+    lock guard(rng_mutex);
     rng(seed);
 
     rct::keyV masks;
@@ -70,7 +74,7 @@ extern "C" {
     // That's why this must also have control over RNG, to prevent interrupting multisig signing
     // while not using known seeds. Considering this doesn't actually define a batch,
     // and it's only verifying a single BP, it'd probably be fine, but...
-    std::lock_guard<std::mutex> guard(rng_mutex);
+    lock guard(rng_mutex);
     rng(seed);
 
     rct::Bulletproof bp;
