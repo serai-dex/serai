@@ -144,10 +144,11 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
    Err(FrostError::NonEmptyParticipantZero)?;
   }
 
-  // Domain separate FROST
   {
     let transcript = params.algorithm.transcript();
+    // Domain separate FROST
     transcript.domain_separate(b"FROST");
+    // Include the offset, if one exists
     if let Some(offset) = params.keys.offset {
       transcript.append_message(b"offset", &C::F_to_bytes(&offset));
     }

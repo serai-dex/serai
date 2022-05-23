@@ -15,7 +15,7 @@ use curve25519_dalek::{
 use ff::PrimeField;
 use group::Group;
 
-use transcript::DigestTranscript;
+use transcript::{Transcript as TranscriptTrait, DigestTranscript};
 use frost::{CurveError, Curve};
 use dalek_ff_group as dfg;
 
@@ -98,7 +98,7 @@ impl Curve for Ed25519 {
       if !point.is_torsion_free() {
         Err(CurveError::InvalidPoint)?;
       }
-      // Ban point which weren't canonically encoded
+      // Ban points which weren't canonically encoded
       if point.compress().to_bytes() != bytes {
         Err(CurveError::InvalidPoint)?;
       }
@@ -126,6 +126,27 @@ pub struct DLEqProof {
 
 #[allow(non_snake_case)]
 impl DLEqProof {
+  fn challenge(H: &DPoint, xG: &DPoint, xH: &DPoint, rG: &DPoint, rH: &DPoint) -> DScalar {
+    // Doesn't take in a larger transcript object due to the usage of this
+    // Every prover would immediately write their own DLEq proof, when they can only do so in
+    // the proper order if they want to reach consensus
+    // It'd be a poor API to have CLSAG define a new transcript solely to pass here, just to try to
+    // merge later in some form, when it should instead just merge xH (as it does)
+    let mut transcript = Transcript::new(b"DLEq Proof".to_vec());
+    // Bit redundant, keeps things consistent
+    transcript.domain_separate(b"DLEq");
+    // Doesn't include G which is constant, does include H which isn't, even though H manipulation
+    // shouldn't be possible in practice as it's independently calculated as a product of known data
+    transcript.append_message(b"H", &H.compress().to_bytes());
+    transcript.append_message(b"xG", &xG.compress().to_bytes());
+    transcript.append_message(b"xH", &xH.compress().to_bytes());
+    transcript.append_message(b"rG", &rG.compress().to_bytes());
+    transcript.append_message(b"rH", &rH.compress().to_bytes());
+    DScalar::from_bytes_mod_order_wide(
+      &transcript.challenge(b"challenge").try_into().expect("Blake2b512 output wasn't 64 bytes")
+    )
+  }
+
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     H: &DPoint,
@@ -135,18 +156,10 @@ impl DLEqProof {
     let rG = &DTable * &r;
     let rH = r * H;
 
-    // TODO: Should this use a transcript?
-    let c = dfg::Scalar::from_hash(
-      Blake2b512::new()
-        // Doesn't include G which is constant, does include H which isn't
-        .chain(H.compress().to_bytes())
-        .chain((secret * &DTable).compress().to_bytes())
-        // We can frequently save a scalar mul if we accept this as an arg, yet it opens room for
-        // ambiguity not worth having
-        .chain((secret * H).compress().to_bytes())
-        .chain(rG.compress().to_bytes())
-        .chain(rH.compress().to_bytes())
-    ).0;
+    // We can frequently (always?) save a scalar mul if we accept xH as an arg, yet it opens room
+    // for incorrect data to be passed, and therefore faults, making it not worth having
+    // We could also return xH but... it's really micro-optimizing
+    let c = DLEqProof::challenge(H, &(secret * &DTable), &(secret * H), &rG, &rH);
     let s = r + (c * secret);
 
     DLEqProof { s, c }
@@ -156,26 +169,16 @@ impl DLEqProof {
     &self,
     H: &DPoint,
     l: usize,
-    sG: &DPoint,
-    sH: &DPoint
+    xG: &DPoint,
+    xH: &DPoint
   ) -> Result<(), MultisigError> {
     let s = self.s;
     let c = self.c;
 
-    let rG = (&s * &DTable) - (c * sG);
-    let rH = (s * H) - (c * sH);
+    let rG = (&s * &DTable) - (c * xG);
+    let rH = (s * H) - (c * xH);
 
-    let expected_c = dfg::Scalar::from_hash(
-      Blake2b512::new()
-        .chain(H.compress().to_bytes())
-        .chain(sG.compress().to_bytes())
-        .chain(sH.compress().to_bytes())
-        .chain(rG.compress().to_bytes())
-        .chain(rH.compress().to_bytes())
-    ).0;
-
-    // Take the opportunity to ensure a lack of torsion in key images/nonce commitments
-    if c != expected_c {
+    if c != DLEqProof::challenge(H, &xG, &xH, &rG, &rH) {
       Err(MultisigError::InvalidDLEqProof(l))?;
     }
 
@@ -198,11 +201,10 @@ impl DLEqProof {
       return None;
     }
 
-    Some(
-      DLEqProof {
-        s: DScalar::from_bytes_mod_order(serialized[0 .. 32].try_into().unwrap()),
-        c: DScalar::from_bytes_mod_order(serialized[32 .. 64].try_into().unwrap())
-      }
+    DScalar::from_canonical_bytes(serialized[0 .. 32].try_into().unwrap()).and_then(
+      |s| DScalar::from_canonical_bytes(serialized[32 .. 64].try_into().unwrap()).and_then(
+        |c| Some(DLEqProof { s, c })
+      )
     )
   }
 }
@@ -213,22 +215,16 @@ pub fn read_dleq(
   start: usize,
   H: &DPoint,
   l: usize,
-  sG: &DPoint
+  xG: &DPoint
 ) -> Result<dfg::EdwardsPoint, MultisigError> {
   // Not using G_from_slice here would enable non-canonical points and break blame
   let other = <Ed25519 as Curve>::G_from_slice(
     &serialized[(start + 0) .. (start + 32)]
   ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
 
-  let proof = DLEqProof::deserialize(
-    &serialized[(start + 32) .. (start + 96)]
-  ).ok_or(MultisigError::InvalidDLEqProof(l))?;
-  proof.verify(
-    H,
-    l,
-    sG,
-    &other
-  ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
+  DLEqProof::deserialize(&serialized[(start + 32) .. (start + 96)])
+    .ok_or(MultisigError::InvalidDLEqProof(l))?
+    .verify(H, l, xG, &other).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
 
   Ok(other)
 }

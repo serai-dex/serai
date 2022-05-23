@@ -57,6 +57,7 @@ impl SignableTransaction {
     // depending on how these transactions are coordinated
 
     let mut transcript = Transcript::new(label);
+    transcript.domain_separate(b"monero_transaction");
     // Include the height we're using for our data
     // The data itself will be included, making this unnecessary, yet a lot of this is technically
     // unnecessary. Anything which further increases security at almost no cost should be followed
