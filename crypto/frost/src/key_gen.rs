@@ -4,9 +4,12 @@ use std::collections::HashMap;
 use rand_core::{RngCore, CryptoRng};
 
 use ff::{Field, PrimeField};
-use group::Group;
 
-use crate::{Curve, MultisigParams, MultisigKeys, FrostError, validate_map};
+use crate::{
+  Curve, MultisigParams, MultisigKeys, FrostError,
+  schnorr::{self, SchnorrSignature},
+  validate_map
+};
 
 #[allow(non_snake_case)]
 fn challenge<C: Curve>(l: u16, context: &str, R: &[u8], Am: &[u8]) -> C::F {
@@ -42,18 +45,23 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   }
 
   // Step 2: Provide a proof of knowledge
-  // This can be deterministic as the PoK is a singleton never opened up to cooperative discussion
-  // There's also no reason to spend the time and effort to make this deterministic besides a
-  // general obsession with canonicity and determinism
   let r = C::F::random(rng);
-  #[allow(non_snake_case)]
-  let R = C::generator_table() * r;
-  let s = r + (
-    coefficients[0] * challenge::<C>(params.i(), context, &C::G_to_bytes(&R), &serialized)
+  serialized.extend(
+    schnorr::sign::<C>(
+      coefficients[0],
+      // This could be deterministic as the PoK is a singleton never opened up to cooperative
+      // discussion
+      // There's no reason to spend the time and effort to make this deterministic besides a
+      // general obsession with canonicity and determinism though
+      r,
+      challenge::<C>(
+        params.i(),
+        context,
+        &C::G_to_bytes(&(C::generator_table() * r)),
+        &serialized
+      )
+    ).serialize()
   );
-
-  serialized.extend(&C::G_to_bytes(&R));
-  serialized.extend(&C::F_to_bytes(&s));
 
   // Step 4: Broadcast
   (coefficients, serialized)
@@ -88,9 +96,7 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
     &serialized[&l][commitments_len + C::G_len() ..]
   ).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
 
-  let mut first = true;
-  let mut scalars = Vec::with_capacity((usize::from(params.n()) - 1) * 3);
-  let mut points = Vec::with_capacity((usize::from(params.n()) - 1) * 3);
+  let mut signatures = Vec::with_capacity(usize::from(params.n() - 1));
   for l in 1 ..= params.n() {
     let mut these_commitments = vec![];
     for c in 0 .. usize::from(params.t()) {
@@ -100,54 +106,29 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
         ).map_err(|_| FrostError::InvalidCommitment(l.try_into().unwrap()))?
       );
     }
-    commitments.insert(l, these_commitments);
 
     // Don't bother validating our own proof of knowledge
-    if l == params.i() {
-      continue;
+    if l != params.i() {
+      // Step 5: Validate each proof of knowledge
+      // This is solely the prep step for the latter batch verification
+      signatures.push((
+        l,
+        these_commitments[0],
+        challenge::<C>(l, context, R_bytes(l), Am(l)),
+        SchnorrSignature::<C> { R: R(l)?, s: s(l)? }
+      ));
     }
 
-    // Step 5: Validate each proof of knowledge (prep)
-    let mut u = C::F::one();
-    if !first {
-      u = C::F::random(&mut *rng);
-    }
-
-    // uR
-    scalars.push(u);
-    points.push(R(l)?);
-
-    // -usG
-    scalars.push(-s(l)? * u);
-    points.push(C::generator());
-
-    // ucA
-    let c = challenge::<C>(l, context, R_bytes(l), Am(l));
-    scalars.push(if first { first = false; c } else { c * u});
-    points.push(commitments[&l][0]);
+    commitments.insert(l, these_commitments);
   }
 
-  // Step 5: Implementation
-  // Uses batch verification to optimize the success case dramatically
-  // On failure, the cost is now this + blame, yet that should happen infrequently
-  // s = r + ca
-  // sG == R + cA
-  // R + cA - sG == 0
-  if C::multiexp_vartime(&scalars, &points) != C::G::identity() {
-    for l in 1 ..= params.n() {
-      if l == params.i() {
-        continue;
-      }
-
-      if (C::generator_table() * s(l)?) != (
-        R(l)? + (commitments[&l][0] * challenge::<C>(l, context, R_bytes(l), Am(l)))
-      ) {
-        Err(FrostError::InvalidProofOfKnowledge(l))?;
-      }
+  schnorr::batch_verify(rng, &signatures).map_err(
+    |l| if l == 0 {
+      FrostError::InternalError("batch validation is broken".to_string())
+    } else {
+      FrostError::InvalidProofOfKnowledge(l)
     }
-
-    Err(FrostError::InternalError("batch validation is broken".to_string()))?;
-  }
+  )?;
 
   Ok(commitments)
 }

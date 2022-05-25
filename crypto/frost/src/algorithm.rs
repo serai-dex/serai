@@ -2,11 +2,10 @@ use core::{marker::PhantomData, fmt::Debug};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::Group;
-
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, MultisigView};
+use crate::{Curve, FrostError, MultisigView, schnorr};
+pub use schnorr::SchnorrSignature;
 
 /// Algorithm to use FROST with
 pub trait Algorithm<C: Curve>: Clone {
@@ -103,13 +102,6 @@ impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
   }
 }
 
-#[allow(non_snake_case)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct SchnorrSignature<C: Curve> {
-  pub R: C::G,
-  pub s: C::F,
-}
-
 /// Implementation of Schnorr signatures for use with FROST
 impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   type Transcript = IetfTranscript;
@@ -148,13 +140,13 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   ) -> C::F {
     let c = H::hram(&nonce_sum, &params.group_key(), msg);
     self.c = Some(c);
-
-    nonce + (params.secret_share() * c)
+    schnorr::sign::<C>(params.secret_share(), nonce, c).s
   }
 
   fn verify(&self, group_key: C::G, nonce: C::G, sum: C::F) -> Option<Self::Signature> {
-    if (C::generator_table() * sum) + (C::G::identity() - (group_key * self.c.unwrap())) == nonce {
-      Some(SchnorrSignature { R: nonce, s: sum })
+    let sig = SchnorrSignature { R: nonce, s: sum };
+    if schnorr::verify::<C>(group_key, self.c.unwrap(), &sig) {
+      Some(sig)
     } else {
       None
     }
@@ -166,6 +158,10 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     nonce: C::G,
     share: C::F,
   ) -> bool {
-    (C::generator_table() * share) == (nonce + (verification_share * self.c.unwrap()))
+    schnorr::verify::<C>(
+      verification_share,
+      self.c.unwrap(),
+      &SchnorrSignature { R: nonce, s: share}
+    )
   }
 }

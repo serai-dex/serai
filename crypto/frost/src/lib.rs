@@ -8,6 +8,8 @@ use group::{Group, GroupOps, ScalarMul};
 
 pub use multiexp::multiexp_vartime;
 
+mod schnorr;
+
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
