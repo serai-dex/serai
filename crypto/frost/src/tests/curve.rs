@@ -22,6 +22,8 @@ pub fn test_curve<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   // TODO: Test the Curve functions themselves
 
   // Test Schnorr signatures work as expected
+  // This is a bit unnecessary, as they should for any valid curve, yet this provides tests with
+  // meaning, which the above tests won't have
   sign::<_, C>(rng);
   verify::<_, C>(rng);
   batch_verify::<_, C>(rng);

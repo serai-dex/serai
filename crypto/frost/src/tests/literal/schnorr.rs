@@ -4,7 +4,7 @@ use rand::rngs::OsRng;
 
 use crate::{
   Curve, schnorr, algorithm::{Hram, Schnorr},
-  tests::{key_gen, algorithm_machines, sign as sign_test, actual::secp256k1::{Secp256k1, TestHram}}
+  tests::{key_gen, algorithm_machines, sign as sign_test, literal::secp256k1::{Secp256k1, TestHram}}
 };
 
 const MESSAGE: &[u8] = b"Hello World";
