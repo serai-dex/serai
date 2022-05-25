@@ -1,5 +1,5 @@
 #[cfg(feature = "multisig")]
-use std::{cell::RefCell, rc::Rc, collections::HashMap};
+use std::{cell::RefCell, rc::Rc};
 
 use rand::{RngCore, rngs::OsRng};
 
@@ -12,10 +12,10 @@ use crate::{
   ringct::clsag::{ClsagInput, Clsag}
 };
 #[cfg(feature = "multisig")]
-use crate::{frost::{MultisigError, Transcript}, ringct::clsag::{ClsagDetails, ClsagMultisig}};
+use crate::{frost::{Ed25519, MultisigError, Transcript}, ringct::clsag::{ClsagDetails, ClsagMultisig}};
 
 #[cfg(feature = "multisig")]
-use crate::tests::frost::{THRESHOLD, generate_keys, sign};
+use frost::tests::{key_gen, algorithm_machines, sign};
 
 const RING_LEN: u64 = 11;
 const AMOUNT: u64 = 1337;
@@ -70,7 +70,7 @@ fn clsag() {
 #[cfg(feature = "multisig")]
 #[test]
 fn clsag_multisig() -> Result<(), MultisigError> {
-  let (keys, group_private) = generate_keys();
+  let keys = key_gen::<_, Ed25519>(&mut OsRng);
 
   let randomness = random_scalar(&mut OsRng);
   let mut ring = vec![];
@@ -79,55 +79,42 @@ fn clsag_multisig() -> Result<(), MultisigError> {
     let mask;
     let amount;
     if i != u64::from(RING_INDEX) {
-      dest = random_scalar(&mut OsRng);
+      dest = &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE;
       mask = random_scalar(&mut OsRng);
       amount = OsRng.next_u64();
     } else {
-      dest = group_private.0;
+      dest = keys[&1].group_key().0;
       mask = randomness;
       amount = AMOUNT;
     }
-    ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
+    ring.push([dest, Commitment::new(mask, amount).calculate()]);
   }
 
   let mask_sum = random_scalar(&mut OsRng);
-  let mut machines = HashMap::new();
-  for i in 1 ..= THRESHOLD {
-    machines.insert(
-      i,
-      sign::AlgorithmMachine::new(
-        ClsagMultisig::new(
-          Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
-          Rc::new(RefCell::new(Some(
-            ClsagDetails::new(
-              ClsagInput::new(
-                Commitment::new(randomness, AMOUNT),
-                Decoys {
-                  i: RING_INDEX,
-                  offsets: (1 ..= RING_LEN).into_iter().collect(),
-                  ring: ring.clone()
-                }
-              ).unwrap(),
-              mask_sum
-            )
-          )))
-        ).unwrap(),
-        Rc::new(keys[&i].clone()),
-        &(1 ..= THRESHOLD).collect::<Vec<_>>()
-      ).unwrap()
-    );
-  }
-
-  let mut signatures = sign(&mut machines, &[1; 32]);
-  let signature = signatures.swap_remove(0);
-  for s in 0 .. usize::from(THRESHOLD - 1) {
-    // Verify the commitments and the non-decoy s scalar are identical to every other signature
-    // FROST will already have called verify on the produced signature, before checking individual
-    // key shares. For FROST Schnorr, it's cheaper. For CLSAG, it may be more expensive? Yet it
-    // ensures we have usable signatures, not just signatures we think are usable
-    assert_eq!(signatures[s].1, signature.1);
-    assert_eq!(signatures[s].0.s[RING_INDEX as usize], signature.0.s[RING_INDEX as usize]);
-  }
+  sign(
+    &mut OsRng,
+    algorithm_machines(
+      &mut OsRng,
+      ClsagMultisig::new(
+        Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
+        Rc::new(RefCell::new(Some(
+          ClsagDetails::new(
+            ClsagInput::new(
+              Commitment::new(randomness, AMOUNT),
+              Decoys {
+                i: RING_INDEX,
+                offsets: (1 ..= RING_LEN).into_iter().collect(),
+                ring: ring.clone()
+              }
+            ).unwrap(),
+            mask_sum
+          )
+        )))
+      ).unwrap(),
+      &keys
+    ),
+    &[1; 32]
+  );
 
   Ok(())
 }
