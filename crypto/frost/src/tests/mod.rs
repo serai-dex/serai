@@ -1,21 +1,29 @@
 use std::{rc::Rc, collections::HashMap};
 
-use rand::rngs::OsRng;
+use rand_core::{RngCore, CryptoRng};
 
-use frost::{
+use crate::{
   Curve,
   MultisigParams, MultisigKeys,
   key_gen,
-  algorithm::{Algorithm, Schnorr, SchnorrSignature},
+  algorithm::Algorithm,
   sign::{StateMachine, AlgorithmMachine}
 };
 
-mod common;
-use common::{Secp256k1, TestHram};
+// Internal tests
+mod schnorr;
 
-const PARTICIPANTS: u16 = 8;
+// Test suites for public usage
+pub mod curve;
 
-fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
+// Literal test definitions to run during `cargo test`
+#[cfg(test)]
+mod literal;
+
+pub const PARTICIPANTS: u16 = 5;
+pub const THRESHOLD: u16 = ((PARTICIPANTS / 3) * 2) + 1;
+
+pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
   map: &HashMap<K, V>,
   without: &K
 ) -> HashMap<K, V> {
@@ -24,7 +32,9 @@ fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
   res
 }
 
-fn key_gen<C: Curve>() -> HashMap<u16, Rc<MultisigKeys<C>>> {
+pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
+  rng: &mut R
+) -> HashMap<u16, Rc<MultisigKeys<C>>> {
   let mut params = HashMap::new();
   let mut machines = HashMap::new();
 
@@ -33,7 +43,7 @@ fn key_gen<C: Curve>() -> HashMap<u16, Rc<MultisigKeys<C>>> {
     params.insert(
       i,
       MultisigParams::new(
-        ((PARTICIPANTS / 3) * 2) + 1,
+        THRESHOLD,
         PARTICIPANTS,
         i
       ).unwrap()
@@ -47,7 +57,7 @@ fn key_gen<C: Curve>() -> HashMap<u16, Rc<MultisigKeys<C>>> {
     );
     commitments.insert(
       i,
-      machines.get_mut(&i).unwrap().generate_coefficients(&mut OsRng).unwrap()
+      machines.get_mut(&i).unwrap().generate_coefficients(rng).unwrap()
     );
   }
 
@@ -55,7 +65,7 @@ fn key_gen<C: Curve>() -> HashMap<u16, Rc<MultisigKeys<C>>> {
   for (l, machine) in machines.iter_mut() {
     secret_shares.insert(
       *l,
-      machine.generate_secret_shares(&mut OsRng, clone_without(&commitments, l)).unwrap()
+      machine.generate_secret_shares(rng, clone_without(&commitments, l)).unwrap()
     );
   }
 
@@ -72,55 +82,69 @@ fn key_gen<C: Curve>() -> HashMap<u16, Rc<MultisigKeys<C>>> {
     }
     let these_keys = machine.complete(our_secret_shares).unwrap();
 
-    // Test serialization
-    assert_eq!(
-      MultisigKeys::<C>::deserialize(&these_keys.serialize()).unwrap(),
-      these_keys
-    );
-
+    // Verify the verification_shares are agreed upon
     if verification_shares.is_none() {
       verification_shares = Some(these_keys.verification_shares());
     }
     assert_eq!(verification_shares.as_ref().unwrap(), &these_keys.verification_shares());
 
+    // Verify the group keys are agreed upon
     if group_key.is_none() {
       group_key = Some(these_keys.group_key());
     }
     assert_eq!(group_key.unwrap(), these_keys.group_key());
 
-    keys.insert(*i, Rc::new(these_keys.clone()));
+    keys.insert(*i, Rc::new(these_keys));
   }
 
   keys
 }
 
-fn sign<C: Curve, A: Algorithm<C, Signature = SchnorrSignature<C>>>(
+pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
+  rng: &mut R,
   algorithm: A,
-  keys: &HashMap<u16, Rc<MultisigKeys<C>>>
-) {
-  let t = keys[&1].params().t();
-  let mut machines = HashMap::new();
+  keys: &HashMap<u16, Rc<MultisigKeys<C>>>,
+) -> HashMap<u16, AlgorithmMachine<C, A>> {
+  let mut included = vec![];
+  while included.len() < usize::from(keys[&1].params().t()) {
+    let n = u16::try_from((rng.next_u64() % u64::try_from(keys.len()).unwrap()) + 1).unwrap();
+    if included.contains(&n) {
+      continue;
+    }
+    included.push(n);
+  }
+
+  keys.iter().filter_map(
+    |(i, keys)| if included.contains(&i) {
+      Some((
+        *i,
+        AlgorithmMachine::new(
+          algorithm.clone(),
+          keys.clone(),
+          &included.clone()
+        ).unwrap()
+      ))
+    } else {
+      None
+    }
+  ).collect()
+}
+
+pub fn sign<R: RngCore + CryptoRng, M: StateMachine>(
+  rng: &mut R,
+  mut machines: HashMap<u16, M>,
+  msg: &[u8]
+) -> M::Signature {
   let mut commitments = HashMap::new();
-  for i in 1 ..= t {
-    machines.insert(
-      i,
-      AlgorithmMachine::new(
-        algorithm.clone(),
-        keys[&i].clone(),
-        &(1 ..= t).collect::<Vec<_>>()
-      ).unwrap()
-    );
-    commitments.insert(
-      i,
-      machines.get_mut(&i).unwrap().preprocess(&mut OsRng).unwrap()
-    );
+  for (i, machine) in machines.iter_mut() {
+    commitments.insert(*i, machine.preprocess(rng).unwrap());
   }
 
   let mut shares = HashMap::new();
   for (i, machine) in machines.iter_mut() {
     shares.insert(
       *i,
-      machine.sign(clone_without(&commitments, i), b"Hello World").unwrap()
+      machine.sign(clone_without(&commitments, i), msg).unwrap()
     );
   }
 
@@ -128,20 +152,9 @@ fn sign<C: Curve, A: Algorithm<C, Signature = SchnorrSignature<C>>>(
   for (i, machine) in machines.iter_mut() {
     let sig = machine.complete(clone_without(&shares, i)).unwrap();
     if signature.is_none() {
-      signature = Some(sig);
+      signature = Some(sig.clone());
     }
-    assert_eq!(sig, signature.unwrap());
+    assert_eq!(&sig, signature.as_ref().unwrap());
   }
-}
-
-#[test]
-fn key_gen_and_sign() {
-  let mut keys = key_gen::<Secp256k1>();
-
-  sign(Schnorr::<Secp256k1, TestHram>::new(), &keys);
-
-  for i in 1 ..= u16::try_from(PARTICIPANTS).unwrap() {
-    keys.insert(i, Rc::new(keys[&i].offset(Secp256k1::hash_to_F(b"offset"))));
-  }
-  sign(Schnorr::<Secp256k1, TestHram>::new(), &keys);
+  signature.unwrap()
 }

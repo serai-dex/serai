@@ -1,5 +1,7 @@
 use core::convert::TryInto;
 
+use rand::rngs::OsRng;
+
 use ff::PrimeField;
 use group::GroupEncoding;
 
@@ -11,7 +13,7 @@ use k256::{
   ProjectivePoint
 };
 
-use frost::{CurveError, Curve, multiexp_vartime, algorithm::Hram};
+use crate::{CurveError, Curve, multiexp_vartime, algorithm::Hram, tests::curve::test_curve};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Secp256k1;
@@ -104,4 +106,9 @@ impl Hram<Secp256k1> for TestHram {
       )
     )
   }
+}
+
+#[test]
+fn secp256k1_curve() {
+  test_curve::<_, Secp256k1>(&mut OsRng);
 }

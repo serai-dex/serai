@@ -14,6 +14,8 @@ pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
 
+pub mod tests;
+
 /// Set of errors for curve-related operations, namely encoding and decoding
 #[derive(Error, Debug)]
 pub enum CurveError {
