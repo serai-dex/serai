@@ -1,36 +1,20 @@
-use core::{convert::TryFrom, cmp::min, fmt};
-use std::rc::Rc;
+use core::fmt;
+use std::{rc::Rc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ff::{Field, PrimeField};
+use ff::Field;
 use group::Group;
 
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, MultisigParams, MultisigKeys, MultisigView, algorithm::Algorithm};
-
-/// Calculate the lagrange coefficient
-pub fn lagrange<F: PrimeField>(
-  i: usize,
-  included: &[usize],
-) -> F {
-  let mut num = F::one();
-  let mut denom = F::one();
-  for l in included {
-    if i == *l {
-      continue;
-    }
-
-    let share = F::from(u64::try_from(*l).unwrap());
-    num *= share;
-    denom *= share - F::from(u64::try_from(i).unwrap());
-  }
-
-  // Safe as this will only be 0 if we're part of the above loop
-  // (which we have an if case to avoid)
-  num * denom.invert().unwrap()
-}
+use crate::{
+  Curve,
+  FrostError,
+  MultisigParams, MultisigKeys, MultisigView,
+  algorithm::Algorithm,
+  validate_map
+};
 
 /// Pairing of an Algorithm with a MultisigKeys instance and this specific signing set
 #[derive(Clone)]
@@ -45,13 +29,13 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
     algorithm: A,
     keys: Rc<MultisigKeys<C>>,
-    included: &[usize],
+    included: &[u16],
   ) -> Result<Params<C, A>, FrostError> {
     let mut included = included.to_vec();
     (&mut included).sort_unstable();
 
     // Included < threshold
-    if included.len() < keys.params.t {
+    if included.len() < usize::from(keys.params.t) {
       Err(FrostError::InvalidSigningSet("not enough signers".to_string()))?;
     }
     // Invalid index
@@ -65,7 +49,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
     // Same signer included multiple times
     for i in 0 .. included.len() - 1 {
       if included[i] == included[i + 1] {
-        Err(FrostError::DuplicatedIndex(included[i]))?;
+        Err(FrostError::DuplicatedIndex(included[i].into()))?;
       }
     }
     // Not included
@@ -88,7 +72,6 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
 
 struct PreprocessPackage<C: Curve> {
   nonces: [C::F; 2],
-  commitments: [C::G; 2],
   serialized: Vec<u8>,
 }
 
@@ -111,14 +94,14 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
     )
   );
 
-  PreprocessPackage { nonces, commitments, serialized }
+  PreprocessPackage { nonces, serialized }
 }
 
 #[allow(non_snake_case)]
 struct Package<C: Curve> {
-  Ris: Vec<C::G>,
+  Ris: HashMap<u16, C::G>,
   R: C::G,
-  share: C::F
+  share: Vec<u8>
 }
 
 // Has every signer perform the role of the signature aggregator
@@ -127,22 +110,15 @@ struct Package<C: Curve> {
 fn sign_with_share<C: Curve, A: Algorithm<C>>(
   params: &mut Params<C, A>,
   our_preprocess: PreprocessPackage<C>,
-  commitments: &[Option<Vec<u8>>],
+  mut commitments: HashMap<u16, Vec<u8>>,
   msg: &[u8],
 ) -> Result<(Package<C>, Vec<u8>), FrostError> {
   let multisig_params = params.multisig_params();
-  if commitments.len() != (multisig_params.n + 1) {
-    Err(
-      FrostError::InvalidParticipantQuantity(
-        multisig_params.n,
-        commitments.len() - min(1, commitments.len())
-      )
-    )?;
-  }
-
-  if commitments[0].is_some() {
-   Err(FrostError::NonEmptyParticipantZero)?;
-  }
+  validate_map(
+    &mut commitments,
+    &params.view.included,
+    (multisig_params.i, our_preprocess.serialized)
+  )?;
 
   {
     let transcript = params.algorithm.transcript();
@@ -155,108 +131,66 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   }
 
   #[allow(non_snake_case)]
-  let mut B = Vec::with_capacity(multisig_params.n + 1);
-  B.push(None);
+  let mut B = HashMap::<u16, _>::with_capacity(params.view.included.len());
 
-  // Commitments + a presumed 32-byte hash of the message
-  let commitments_len = 2 * C::G_len();
-
-  // Parse the commitments and prepare the binding factor
-  for l in 1 ..= multisig_params.n {
-    if l == multisig_params.i {
-      if commitments[l].is_some() {
-        Err(FrostError::DuplicatedIndex(l))?;
-      }
-
-      B.push(Some(our_preprocess.commitments));
-      {
-        let transcript = params.algorithm.transcript();
-        transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_be_bytes());
-        transcript.append_message(
-          b"commitments",
-          &our_preprocess.serialized[0 .. (C::G_len() * 2)]
-        );
-      }
-      continue;
-    }
-
-    let included = params.view.included.contains(&l);
-    if commitments[l].is_some() && (!included) {
-      Err(FrostError::InvalidCommitmentQuantity(l, 0, commitments.len() / C::G_len()))?;
-    }
-
-    if commitments[l].is_none() {
-      if included {
-        Err(FrostError::InvalidCommitmentQuantity(l, 2, 0))?;
-      }
-      B.push(None);
-      continue;
-    }
-
-    let commitments = commitments[l].as_ref().unwrap();
-    if commitments.len() < commitments_len {
-      Err(FrostError::InvalidCommitmentQuantity(l, 2, commitments.len() / C::G_len()))?;
-    }
-
-    #[allow(non_snake_case)]
-    let D = C::G_from_slice(&commitments[0 .. C::G_len()])
-      .map_err(|_| FrostError::InvalidCommitment(l))?;
-    #[allow(non_snake_case)]
-    let E = C::G_from_slice(&commitments[C::G_len() .. commitments_len])
-      .map_err(|_| FrostError::InvalidCommitment(l))?;
-    B.push(Some([D, E]));
-    {
-      let transcript = params.algorithm.transcript();
-      transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_be_bytes());
-      transcript.append_message(b"commitments", &commitments[0 .. commitments_len]);
-    }
-  }
-
-  // Add the message to the binding factor
+  // Get the binding factor
+  let mut addendums = HashMap::new();
   let binding = {
     let transcript = params.algorithm.transcript();
+    // Parse the commitments
+    for l in &params.view.included {
+      transcript.append_message(b"participant", &l.to_be_bytes());
+
+      let commitments = commitments.remove(l).unwrap();
+      let mut read_commitment = |c, label| {
+        let commitment = &commitments[c .. c + C::G_len()];
+        transcript.append_message(label, commitment);
+        C::G_from_slice(commitment).map_err(|_| FrostError::InvalidCommitment(*l))
+      };
+
+      #[allow(non_snake_case)]
+      let mut read_D_E = || Ok(
+        [read_commitment(0, b"commitment_D")?, read_commitment(C::G_len(), b"commitment_E")?]
+      );
+
+      B.insert(*l, read_D_E()?);
+      addendums.insert(*l, commitments[(C::G_len() * 2) ..].to_vec());
+    }
+
+    // Append the message to the transcript
     transcript.append_message(b"message", &C::hash_msg(&msg));
+
+    // Calculate the binding factor
     C::hash_to_F(&transcript.challenge(b"binding"))
   };
 
-  // Process the commitments and addendums
-  let view = &params.view;
+  // Process the addendums
   for l in &params.view.included {
-    params.algorithm.process_addendum(
-      view,
-      *l,
-      B[*l].as_ref().unwrap(),
-      if *l == multisig_params.i {
-        &our_preprocess.serialized[commitments_len .. our_preprocess.serialized.len()]
-      } else {
-        &commitments[*l].as_ref().unwrap()[
-          commitments_len .. commitments[*l].as_ref().unwrap().len()
-        ]
-      }
-    )?;
+    params.algorithm.process_addendum(&params.view, *l, &B[l], &addendums[l])?;
   }
 
   #[allow(non_snake_case)]
-  let mut Ris = vec![];
+  let mut Ris = HashMap::with_capacity(params.view.included.len());
   #[allow(non_snake_case)]
   let mut R = C::G::identity();
-  for i in 0 .. params.view.included.len() {
-    let commitments = B[params.view.included[i]].unwrap();
+  for l in &params.view.included {
     #[allow(non_snake_case)]
-    let this_R = commitments[0] + (commitments[1] * binding);
-    Ris.push(this_R);
+    let this_R = B[l][0] + (B[l][1] * binding);
+    Ris.insert(*l, this_R);
     R += this_R;
   }
 
-  let view = &params.view;
-  let share = params.algorithm.sign_share(
-    view,
-    R,
-    binding,
-    our_preprocess.nonces[0] + (our_preprocess.nonces[1] * binding),
-    msg
+  let share = C::F_to_bytes(
+    &params.algorithm.sign_share(
+      &params.view,
+      R,
+      binding,
+      our_preprocess.nonces[0] + (our_preprocess.nonces[1] * binding),
+      msg
+    )
   );
-  Ok((Package { Ris, R, share }, C::F_to_bytes(&share)))
+
+  Ok((Package { Ris, R, share: share.clone() }, share))
 }
 
 // This doesn't check the signing set is as expected and unexpected changes can cause false blames
@@ -265,37 +199,17 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
 fn complete<C: Curve, A: Algorithm<C>>(
   sign_params: &Params<C, A>,
   sign: Package<C>,
-  serialized: &[Option<Vec<u8>>],
+  mut shares: HashMap<u16, Vec<u8>>,
 ) -> Result<A::Signature, FrostError> {
   let params = sign_params.multisig_params();
-  if serialized.len() != (params.n + 1) {
-    Err(
-      FrostError::InvalidParticipantQuantity(params.n, serialized.len() - min(1, serialized.len()))
-    )?;
-  }
+  validate_map(&mut shares, &sign_params.view.included, (params.i(), sign.share))?;
 
-  if serialized[0].is_some() {
-    Err(FrostError::NonEmptyParticipantZero)?;
-  }
-
-  let mut responses = Vec::with_capacity(params.t);
-  let mut sum = sign.share;
-  for i in 0 .. sign_params.view.included.len() {
-    let l = sign_params.view.included[i];
-    if l == params.i {
-      responses.push(None);
-      continue;
-    }
-
-    // Make sure they actually provided a share
-    if serialized[l].is_none() {
-      Err(FrostError::InvalidShare(l))?;
-    }
-
-    let part = C::F_from_slice(serialized[l].as_ref().unwrap())
-      .map_err(|_| FrostError::InvalidShare(l))?;
+  let mut responses = HashMap::new();
+  let mut sum = C::F::zero();
+  for l in &sign_params.view.included {
+    let part = C::F_from_slice(&shares[l]).map_err(|_| FrostError::InvalidShare(*l))?;
     sum += part;
-    responses.push(Some(part));
+    responses.insert(*l, part);
   }
 
   // Perform signature validation instead of individual share validation
@@ -307,21 +221,13 @@ fn complete<C: Curve, A: Algorithm<C>>(
   }
 
   // Find out who misbehaved
-  for i in 0 .. sign_params.view.included.len() {
-    match responses[i] {
-      Some(part) => {
-        let l = sign_params.view.included[i];
-        if !sign_params.algorithm.verify_share(
-          sign_params.view.verification_share(l),
-          sign.Ris[i],
-          part
-        ) {
-          Err(FrostError::InvalidShare(l))?;
-        }
-      },
-
-      // Happens when l == i
-      None => {}
+  for l in &sign_params.view.included {
+    if !sign_params.algorithm.verify_share(
+      sign_params.view.verification_share(*l),
+      sign.Ris[l],
+      responses[l]
+    ) {
+      Err(FrostError::InvalidShare(*l))?;
     }
   }
 
@@ -366,7 +272,7 @@ pub trait StateMachine {
   /// for every other participant to receive, over an authenticated channel
   fn sign(
     &mut self,
-    commitments: &[Option<Vec<u8>>],
+    commitments: HashMap<u16, Vec<u8>>,
     msg: &[u8],
   ) -> Result<Vec<u8>, FrostError>;
 
@@ -374,7 +280,7 @@ pub trait StateMachine {
   /// Takes in everyone elses' shares submitted to us as a Vec, expecting participant index =
   /// Vec index with None at index 0 and index i. Returns a byte vector representing the serialized
   /// signature
-  fn complete(&mut self, shares: &[Option<Vec<u8>>]) -> Result<Self::Signature, FrostError>;
+  fn complete(&mut self, shares: HashMap<u16, Vec<u8>>) -> Result<Self::Signature, FrostError>;
 
   fn multisig_params(&self) -> MultisigParams;
 
@@ -395,7 +301,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   pub fn new(
     algorithm: A,
     keys: Rc<MultisigKeys<C>>,
-    included: &[usize],
+    included: &[u16],
   ) -> Result<AlgorithmMachine<C, A>, FrostError> {
     Ok(
       AlgorithmMachine {
@@ -427,7 +333,7 @@ impl<C: Curve, A: Algorithm<C>> StateMachine for AlgorithmMachine<C, A> {
 
   fn sign(
     &mut self,
-    commitments: &[Option<Vec<u8>>],
+    commitments: HashMap<u16, Vec<u8>>,
     msg: &[u8],
   ) -> Result<Vec<u8>, FrostError> {
     if self.state != State::Preprocessed {
@@ -446,7 +352,7 @@ impl<C: Curve, A: Algorithm<C>> StateMachine for AlgorithmMachine<C, A> {
     Ok(serialized)
   }
 
-  fn complete(&mut self, shares: &[Option<Vec<u8>>]) -> Result<A::Signature, FrostError> {
+  fn complete(&mut self, shares: HashMap<u16, Vec<u8>>) -> Result<A::Signature, FrostError> {
     if self.state != State::Signed {
       Err(FrostError::InvalidSignTransition(State::Signed, self.state))?;
     }

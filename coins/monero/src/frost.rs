@@ -28,9 +28,9 @@ pub enum MultisigError {
   #[error("internal error ({0})")]
   InternalError(String),
   #[error("invalid discrete log equality proof")]
-  InvalidDLEqProof(usize),
+  InvalidDLEqProof(u16),
   #[error("invalid key image {0}")]
-  InvalidKeyImage(usize)
+  InvalidKeyImage(u16)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -168,7 +168,7 @@ impl DLEqProof {
   pub fn verify(
     &self,
     H: &DPoint,
-    l: usize,
+    l: u16,
     xG: &DPoint,
     xH: &DPoint
   ) -> Result<(), MultisigError> {
@@ -214,7 +214,7 @@ pub fn read_dleq(
   serialized: &[u8],
   start: usize,
   H: &DPoint,
-  l: usize,
+  l: u16,
   xG: &DPoint
 ) -> Result<dfg::EdwardsPoint, MultisigError> {
   // Not using G_from_slice here would enable non-canonical points and break blame

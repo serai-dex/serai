@@ -148,13 +148,13 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn process_addendum(
     &mut self,
     view: &MultisigView<Ed25519>,
-    l: usize,
+    l: u16,
     commitments: &[dfg::EdwardsPoint; 2],
     serialized: &[u8]
   ) -> Result<(), FrostError> {
     if serialized.len() != ClsagMultisig::serialized_len() {
       // Not an optimal error but...
-      Err(FrostError::InvalidCommitmentQuantity(l, 9, serialized.len() / 32))?;
+      Err(FrostError::InvalidCommitment(l))?;
     }
 
     if self.AH.0.is_identity().into() {
@@ -163,29 +163,28 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       self.transcript.append_message(b"mask", &self.mask().to_bytes());
     }
 
-    let share = read_dleq(
+    // Uses the same format FROST does for the expected commitments (nonce * G where this is nonce * H)
+    // The following technically shouldn't need to be committed to, as we've committed to equivalents,
+    // yet it doesn't hurt and may resolve some unknown issues
+    self.transcript.append_message(b"participant", &l.to_be_bytes());
+
+    let mut cursor = 0;
+    self.transcript.append_message(b"image_share", &serialized[cursor .. (cursor + 32)]);
+    self.image += read_dleq(
       serialized,
-      0,
+      cursor,
       &self.H,
       l,
       &view.verification_share(l).0
     ).map_err(|_| FrostError::InvalidCommitment(l))?.0;
-    // Given the fact there's only ever one possible value for this, this may technically not need
-    // to be committed to. If signing a TX, it'll be double committed to thanks to the message
-    // It doesn't hurt to have though and ensures security boundaries are well formed
-    self.transcript.append_message(b"image_share", &share.compress().to_bytes());
-    self.image += share;
+    cursor += 96;
 
-    // Uses the same format FROST does for the expected commitments (nonce * G where this is nonce * H)
-    // Given this is guaranteed to match commitments, which FROST commits to, this also technically
-    // doesn't need to be committed to if a canonical serialization is guaranteed
-    // It, again, doesn't hurt to include and ensures security boundaries are well formed
-    self.transcript.append_message(b"participant", &u16::try_from(l).unwrap().to_be_bytes());
+    self.transcript.append_message(b"commitment_D_H", &serialized[cursor .. (cursor + 32)]);
+    self.AH.0 += read_dleq(serialized, cursor, &self.H, l, &commitments[0]).map_err(|_| FrostError::InvalidCommitment(l))?;
+    cursor += 96;
 
-    self.transcript.append_message(b"commitment_D_H", &serialized[0 .. 32]);
-    self.AH.0 += read_dleq(serialized, 96, &self.H, l, &commitments[0]).map_err(|_| FrostError::InvalidCommitment(l))?;
-    self.transcript.append_message(b"commitment_E_H", &serialized[0 .. 32]);
-    self.AH.1 += read_dleq(serialized, 192, &self.H, l, &commitments[1]).map_err(|_| FrostError::InvalidCommitment(l))?;
+    self.transcript.append_message(b"commitment_E_H", &serialized[cursor .. (cursor + 32)]);
+    self.AH.1 += read_dleq(serialized, cursor, &self.H, l, &commitments[1]).map_err(|_| FrostError::InvalidCommitment(l))?;
 
     Ok(())
   }

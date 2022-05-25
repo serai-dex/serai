@@ -1,5 +1,5 @@
 #[cfg(feature = "multisig")]
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
 use rand::{RngCore, rngs::OsRng};
 
@@ -71,7 +71,6 @@ fn clsag() {
 #[test]
 fn clsag_multisig() -> Result<(), MultisigError> {
   let (keys, group_private) = generate_keys();
-  let t = keys[0].params().t();
 
   let randomness = random_scalar(&mut OsRng);
   let mut ring = vec![];
@@ -92,9 +91,10 @@ fn clsag_multisig() -> Result<(), MultisigError> {
   }
 
   let mask_sum = random_scalar(&mut OsRng);
-  let mut machines = Vec::with_capacity(t);
-  for i in 1 ..= t {
-    machines.push(
+  let mut machines = HashMap::new();
+  for i in 1 ..= THRESHOLD {
+    machines.insert(
+      i,
       sign::AlgorithmMachine::new(
         ClsagMultisig::new(
           Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
@@ -112,15 +112,15 @@ fn clsag_multisig() -> Result<(), MultisigError> {
             )
           )))
         ).unwrap(),
-        Rc::new(keys[i - 1].clone()),
-        &(1 ..= THRESHOLD).collect::<Vec<usize>>()
+        Rc::new(keys[&i].clone()),
+        &(1 ..= THRESHOLD).collect::<Vec<_>>()
       ).unwrap()
     );
   }
 
   let mut signatures = sign(&mut machines, &[1; 32]);
   let signature = signatures.swap_remove(0);
-  for s in 0 .. (t - 1) {
+  for s in 0 .. usize::from(THRESHOLD - 1) {
     // Verify the commitments and the non-decoy s scalar are identical to every other signature
     // FROST will already have called verify on the produced signature, before checking individual
     // key shares. For FROST Schnorr, it's cheaper. For CLSAG, it may be more expensive? Yet it

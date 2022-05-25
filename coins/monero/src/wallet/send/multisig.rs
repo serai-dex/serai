@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -18,7 +18,8 @@ use crate::{
 
 pub struct TransactionMachine {
   signable: SignableTransaction,
-  i: usize,
+  i: u16,
+  included: Vec<u16>,
   transcript: Transcript,
 
   decoys: Vec<Decoys>,
@@ -41,7 +42,7 @@ impl SignableTransaction {
     rpc: &Rpc,
     height: usize,
     keys: MultisigKeys<Ed25519>,
-    included: &[usize]
+    mut included: Vec<u16>
   ) -> Result<TransactionMachine, TransactionError> {
     let mut images = vec![];
     images.resize(self.inputs.len(), EdwardsPoint::identity());
@@ -95,6 +96,9 @@ impl SignableTransaction {
       &self.inputs
     ).await.map_err(|e| TransactionError::RpcError(e))?;
 
+    // Sort included before cloning it around
+    included.sort_unstable();
+
     for (i, input) in self.inputs.iter().enumerate() {
       clsags.push(
         AlgorithmMachine::new(
@@ -103,7 +107,7 @@ impl SignableTransaction {
             inputs[i].clone()
           ).map_err(|e| TransactionError::MultisigError(e))?,
           Rc::new(keys.offset(dalek_ff_group::Scalar(input.key_offset))),
-          included
+          &included
         ).map_err(|e| TransactionError::FrostError(e))?
       );
     }
@@ -114,6 +118,7 @@ impl SignableTransaction {
     Ok(TransactionMachine {
       signable: self,
       i: keys.params().i(),
+      included,
       transcript,
 
       decoys,
@@ -142,12 +147,9 @@ impl StateMachine for TransactionMachine {
     }
 
     // Iterate over each CLSAG calling preprocess
-    let mut serialized = vec![];
-    for (i, clsag) in self.clsags.iter_mut().enumerate() {
-      let preprocess = clsag.preprocess(rng)?;
-      // First 64 bytes are FROST's commitments
-      self.images[i] = CompressedEdwardsY(preprocess[64 .. 96].try_into().unwrap()).decompress().unwrap();
-      serialized.extend(&preprocess);
+    let mut serialized = Vec::with_capacity(self.clsags.len() * (64 + ClsagMultisig::serialized_len()));
+    for clsag in self.clsags.iter_mut() {
+      serialized.extend(&clsag.preprocess(rng)?);
     }
     self.our_preprocess = serialized.clone();
 
@@ -165,7 +167,7 @@ impl StateMachine for TransactionMachine {
 
   fn sign(
     &mut self,
-    commitments: &[Option<Vec<u8>>],
+    mut commitments: HashMap<u16, Vec<u8>>,
     // Drop FROST's 'msg' since we calculate the actual message in this function
     _: &[u8]
   ) -> Result<Vec<u8>, FrostError> {
@@ -177,17 +179,21 @@ impl StateMachine for TransactionMachine {
     // While each CLSAG will do this as they need to for security, they have their own transcripts
     // cloned from this TX's initial premise's transcript. For our TX transcript to have the CLSAG
     // data for entropy, it'll have to be added ourselves
-    for c in 0 .. commitments.len() {
-      self.transcript.append_message(b"participant", &u16::try_from(c).unwrap().to_le_bytes());
-      if c == self.i {
-        self.transcript.append_message(b"preprocess", &self.our_preprocess);
-      } else if let Some(commitments) = commitments[c].as_ref() {
-        self.transcript.append_message(b"preprocess", commitments);
+    commitments.insert(self.i, self.our_preprocess.clone());
+    for l in &self.included {
+      self.transcript.append_message(b"participant", &(*l).to_be_bytes());
+      // FROST itself will error if this is None, so let it
+      if let Some(preprocess) = commitments.get(l) {
+        self.transcript.append_message(b"preprocess", preprocess);
       }
     }
 
     // FROST commitments, image, H commitments, and their proofs
     let clsag_len = 64 + ClsagMultisig::serialized_len();
+
+    let mut commitments = (0 .. self.clsags.len()).map(|c| commitments.iter().map(
+      |(l, commitments)| (*l, commitments[(c * clsag_len) .. ((c + 1) * clsag_len)].to_vec())
+    ).collect::<HashMap<_, _>>()).collect::<Vec<_>>();
 
     for c in 0 .. self.clsags.len() {
       // Calculate the key images
@@ -195,11 +201,10 @@ impl StateMachine for TransactionMachine {
       // the easiest API overall, as this is where the TX is (which needs the key images in its
       // message), along with where the outputs are determined (where our change output needs these
       // to be unique)
-      for (l, serialized) in commitments.iter().enumerate().filter(|(_, s)| s.is_some()) {
+      for (l, preprocess) in &commitments[c] {
         self.images[c] += CompressedEdwardsY(
-          serialized.as_ref().unwrap()[((c * clsag_len) + 64) .. ((c * clsag_len) + 96)]
-            .try_into().map_err(|_| FrostError::InvalidCommitment(l))?
-        ).decompress().ok_or(FrostError::InvalidCommitment(l))?;
+          preprocess[64 .. 96].try_into().map_err(|_| FrostError::InvalidCommitment(*l))?
+        ).decompress().ok_or(FrostError::InvalidCommitment(*l))?;
       }
     }
 
@@ -230,12 +235,6 @@ impl StateMachine for TransactionMachine {
         ).unwrap()
       )
     };
-
-    let mut commitments = (0 .. self.inputs.len()).map(|c| commitments.iter().map(
-      |commitments| commitments.clone().map(
-        |commitments| commitments[(c * clsag_len) .. ((c * clsag_len) + clsag_len)].to_vec()
-      )
-    ).collect::<Vec<_>>()).collect::<Vec<_>>();
 
     let mut sorted = Vec::with_capacity(self.decoys.len());
     while self.decoys.len() != 0 {
@@ -291,14 +290,14 @@ impl StateMachine for TransactionMachine {
 
     // Iterate over each CLSAG calling sign
     let mut serialized = Vec::with_capacity(self.clsags.len() * 32);
-    for (c, clsag) in self.clsags.iter_mut().enumerate() {
-      serialized.extend(&clsag.sign(&commitments[c], &msg)?);
+    for clsag in self.clsags.iter_mut() {
+      serialized.extend(&clsag.sign(commitments.remove(0), &msg)?);
     }
 
     Ok(serialized)
   }
 
-  fn complete(&mut self, shares: &[Option<Vec<u8>>]) -> Result<Transaction, FrostError> {
+  fn complete(&mut self, shares: HashMap<u16, Vec<u8>>) -> Result<Transaction, FrostError> {
     if self.state() != State::Signed {
       Err(FrostError::InvalidSignTransition(State::Signed, self.state()))?;
     }
@@ -308,9 +307,9 @@ impl StateMachine for TransactionMachine {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
         for (c, clsag) in self.clsags.iter_mut().enumerate() {
-          let (clsag, pseudo_out) = clsag.complete(&shares.iter().map(
-            |share| share.clone().map(|share| share[(c * 32) .. ((c * 32) + 32)].to_vec())
-          ).collect::<Vec<_>>())?;
+          let (clsag, pseudo_out) = clsag.complete(shares.iter().map(
+            |(l, shares)| (*l, shares[(c * 32) .. ((c + 1) * 32)].to_vec())
+          ).collect::<HashMap<_, _>>())?;
           clsags.push(clsag);
           pseudo_outs.push(pseudo_out);
         }

@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{sync::Mutex, collections::HashMap};
 
 use lazy_static::lazy_static;
 
@@ -60,8 +60,6 @@ async fn send_core(test: usize, multisig: bool) {
 
   #[cfg(feature = "multisig")]
   let (keys, _) = generate_keys();
-  #[cfg(feature = "multisig")]
-  let t = keys[0].params().t();
 
   if multisig {
     #[cfg(not(feature = "multisig"))]
@@ -69,7 +67,7 @@ async fn send_core(test: usize, multisig: bool) {
     #[cfg(feature = "multisig")]
     {
       view = Scalar::from_hash(Blake2b512::new().chain("Monero Serai Transaction Test")).0;
-      spend_pub = keys[0].group_key().0;
+      spend_pub = keys[&1].group_key().0;
     }
   }
 
@@ -132,23 +130,24 @@ async fn send_core(test: usize, multisig: bool) {
     } else {
       #[cfg(feature = "multisig")]
       {
-        let mut machines = Vec::with_capacity(t);
-        for i in 1 ..= t {
-          machines.push(
+        let mut machines = HashMap::new();
+        for i in 1 ..= THRESHOLD {
+          machines.insert(
+            i,
             signable.clone().multisig(
               b"Monero Serai Test Transaction".to_vec(),
               &mut OsRng,
               &rpc,
               rpc.get_height().await.unwrap() - 10,
-              keys[i - 1].clone(),
-              &(1 ..= THRESHOLD).collect::<Vec<usize>>()
+              keys[&i].clone(),
+              (1 ..= THRESHOLD).collect::<Vec<_>>()
             ).await.unwrap()
           );
         }
 
         let mut txs = sign(&mut machines, &vec![]);
-        for s in 0 .. (t - 1) {
-          assert_eq!(txs[s].hash(), txs[0].hash());
+        for s in 1 .. THRESHOLD {
+          assert_eq!(txs[usize::from(s)].hash(), txs[0].hash());
         }
         tx = Some(txs.swap_remove(0));
       }

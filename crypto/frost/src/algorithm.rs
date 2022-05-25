@@ -28,7 +28,7 @@ pub trait Algorithm<C: Curve>: Clone {
   fn process_addendum(
     &mut self,
     params: &MultisigView<C>,
-    l: usize,
+    l: u16,
     commitments: &[C::G; 2],
     serialized: &[u8],
   ) -> Result<(), FrostError>;
@@ -131,7 +131,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   fn process_addendum(
     &mut self,
     _: &MultisigView<C>,
-    _: usize,
+    _: u16,
     _: &[C::G; 2],
     _: &[u8],
   ) -> Result<(), FrostError> {
