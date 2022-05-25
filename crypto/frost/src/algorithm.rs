@@ -12,7 +12,7 @@ use crate::{Curve, FrostError, MultisigView};
 pub trait Algorithm<C: Curve>: Clone {
   type Transcript: Transcript + Clone + Debug;
   /// The resulting type of the signatures this algorithm will produce
-  type Signature: Clone + Debug;
+  type Signature: Clone + PartialEq + Debug;
 
   fn transcript(&mut self) -> &mut Self::Transcript;
 

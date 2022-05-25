@@ -17,6 +17,12 @@ pub trait Transcript {
 #[derive(Clone, Debug)]
 pub struct DigestTranscript<D: Digest>(Vec<u8>, PhantomData<D>);
 
+impl<D: Digest> PartialEq for DigestTranscript<D> {
+  fn eq(&self, other: &DigestTranscript<D>) -> bool {
+    self.0 == other.0
+  }
+}
+
 impl<D: Digest> DigestTranscript<D> {
   pub fn new(label: Vec<u8>) -> Self {
     DigestTranscript(label, PhantomData)

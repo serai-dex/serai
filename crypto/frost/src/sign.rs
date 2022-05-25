@@ -255,7 +255,7 @@ impl fmt::Display for State {
 }
 
 pub trait StateMachine {
-  type Signature;
+  type Signature: Clone + PartialEq + fmt::Debug;
 
   /// Perform the preprocessing round required in order to sign
   /// Returns a byte vector which must be transmitted to all parties selected for this signing

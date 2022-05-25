@@ -8,7 +8,7 @@ use crate::{
   ringct::{clsag::Clsag, bulletproofs::Bulletproofs}
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct RctBase {
   pub fee: u64,
   pub ecdh_info: Vec<[u8; 8]>,
@@ -51,7 +51,7 @@ impl RctBase {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum RctPrunable {
   Null,
   Clsag {
@@ -107,7 +107,7 @@ impl RctPrunable {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct RctSignatures {
   pub base: RctBase,
   pub prunable: RctPrunable

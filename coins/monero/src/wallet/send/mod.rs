@@ -38,7 +38,7 @@ use crate::frost::MultisigError;
 mod multisig;
 
 #[allow(non_snake_case)]
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 struct SendOutput {
   R: EdwardsPoint,
   dest: EdwardsPoint,
@@ -149,7 +149,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   Ok(signable)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SignableTransaction {
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,

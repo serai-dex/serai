@@ -6,7 +6,7 @@ use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use crate::{Commitment, wallet::TransactionError, serialize::*};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Bulletproofs {
   pub A: EdwardsPoint,
   pub S: EdwardsPoint,

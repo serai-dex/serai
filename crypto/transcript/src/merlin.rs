@@ -2,7 +2,7 @@ use core::{marker::PhantomData, fmt::{Debug, Formatter}};
 
 use digest::Digest;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct MerlinTranscript(pub merlin::Transcript);
 // Merlin doesn't implement Debug so provide a stub which won't panic
 impl Debug for MerlinTranscript {

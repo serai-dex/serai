@@ -2,7 +2,7 @@ use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{hash, serialize::*, ringct::{RctPrunable, RctSignatures}};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Input {
   Gen(u64),
 
@@ -48,7 +48,7 @@ impl Input {
 }
 
 // Doesn't bother moving to an enum for the unused Script classes
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Output {
   pub amount: u64,
   pub key: EdwardsPoint,
@@ -84,7 +84,7 @@ impl Output {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TransactionPrefix {
   pub version: u64,
   pub unlock_time: u64,
@@ -120,7 +120,7 @@ impl TransactionPrefix {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
   pub rct_signatures: RctSignatures

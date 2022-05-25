@@ -15,7 +15,7 @@ use crate::{
   wallet::{uniqueness, shared_key, amount_decryption, commitment_mask}
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SpendableOutput {
   pub tx: [u8; 32],
   pub o: usize,

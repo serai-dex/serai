@@ -88,7 +88,7 @@ fn offset(decoys: &[u64]) -> Vec<u64> {
   res
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Decoys {
   pub i: u8,
   pub offsets: Vec<u64>,

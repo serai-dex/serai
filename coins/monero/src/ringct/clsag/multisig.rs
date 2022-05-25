@@ -47,10 +47,7 @@ impl ClsagInput {
   }
 }
 
-// pub to enable testing
-// While we could move the CLSAG test inside this crate, that'd require duplicating the FROST test
-// helper, and isn't worth doing right now when this is harmless enough (semver? TODO)
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ClsagDetails {
   input: ClsagInput,
   mask: Scalar
@@ -63,7 +60,7 @@ impl ClsagDetails {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 struct Interim {
   p: Scalar,
   c: Scalar,
@@ -73,7 +70,7 @@ struct Interim {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ClsagMultisig {
   transcript: Transcript,
 

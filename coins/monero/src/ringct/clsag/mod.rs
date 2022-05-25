@@ -43,7 +43,7 @@ pub enum ClsagError {
   InvalidC1
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
   pub commitment: Commitment,
@@ -182,7 +182,7 @@ fn core(
   ((D, c * mu_P, c * mu_C), c1.unwrap_or(c))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Clsag {
   pub D: EdwardsPoint,
   pub s: Vec<Scalar>,
