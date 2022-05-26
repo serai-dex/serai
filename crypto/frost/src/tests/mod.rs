@@ -65,6 +65,8 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
   for (l, machine) in machines.iter_mut() {
     secret_shares.insert(
       *l,
+      // clone_without isn't necessary, as this machine's own data will be inserted without
+      // conflict, yet using it ensures the machine's own data is actually inserted as expected
       machine.generate_secret_shares(rng, clone_without(&commitments, l)).unwrap()
     );
   }
