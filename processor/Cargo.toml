@@ -1,0 +1,17 @@
+[package]
+name = "serai-processor"
+version = "0.1.0"
+description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+thiserror = "1"
+
+monero = { version = "0.16", features = ["experimental"] }
+monero-serai = { path = "../coins/monero", features = ["multisig"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
