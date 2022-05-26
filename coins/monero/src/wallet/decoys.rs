@@ -110,7 +110,7 @@ impl Decoys {
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
       outputs.push((
-        rpc.get_o_indexes(input.tx).await?[input.o],
+        rpc.get_o_indexes(input.tx).await?[usize::from(input.o)],
         [input.key, input.commitment.calculate()]
       ));
     }

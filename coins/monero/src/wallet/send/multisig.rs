@@ -71,7 +71,7 @@ impl SignableTransaction {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
       // transcript (such as the one used to create one time keys) to be unique
       transcript.append_message(b"input_hash", &input.tx);
-      transcript.append_message(b"input_output_index", &u16::try_from(input.o).unwrap().to_le_bytes());
+      transcript.append_message(b"input_output_index", &[input.o]);
       // Not including this, with a doxxed list of payments, would allow brute forcing the inputs
       // to determine RNG seeds and therefore the true spends
       transcript.append_message(b"input_shared_key", &input.key_offset.to_bytes());

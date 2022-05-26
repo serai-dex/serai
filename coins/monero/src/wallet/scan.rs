@@ -10,7 +10,7 @@ use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
 
 use crate::{
   Commitment,
-  serialize::write_varint,
+  serialize::{write_varint, read_32, read_scalar, read_point},
   transaction::Transaction,
   wallet::{uniqueness, shared_key, amount_decryption, commitment_mask}
 };
@@ -18,10 +18,38 @@ use crate::{
 #[derive(Clone, PartialEq, Debug)]
 pub struct SpendableOutput {
   pub tx: [u8; 32],
-  pub o: usize,
+  pub o: u8,
   pub key: EdwardsPoint,
   pub key_offset: Scalar,
   pub commitment: Commitment
+}
+
+impl SpendableOutput {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(32 + 1 + 32 + 32 + 40);
+    res.extend(&self.tx);
+    res.push(self.o);
+    res.extend(self.key.compress().to_bytes());
+    res.extend(self.key_offset.to_bytes());
+    res.extend(self.commitment.mask.to_bytes());
+    res.extend(self.commitment.amount.to_le_bytes());
+    res
+  }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
+    Ok(
+      SpendableOutput {
+        tx: read_32(r)?,
+        o: { let mut o = [0; 1]; r.read_exact(&mut o)?; o[0] },
+        key: read_point(r)?,
+        key_offset: read_scalar(r)?,
+        commitment: Commitment::new(
+          read_scalar(r)?,
+          { let mut amount = [0; 8]; r.read_exact(&mut amount)?; u64::from_le_bytes(amount) }
+        )
+      }
+    )
+  }
 }
 
 impl Transaction {
@@ -88,7 +116,13 @@ impl Transaction {
           }
 
           if commitment.amount != 0 {
-            res.push(SpendableOutput { tx: self.hash(), o, key: output.key, key_offset, commitment });
+            res.push(SpendableOutput {
+              tx: self.hash(),
+              o: o.try_into().unwrap(),
+              key: output.key,
+              key_offset,
+              commitment
+            });
           }
           // Break to prevent public keys from being included multiple times, triggering multiple
           // inclusions of the same output
