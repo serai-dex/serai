@@ -62,7 +62,7 @@ pub fn generate_keys() -> (HashMap<u16, MultisigKeys<Ed25519>>, Scalar) {
       }
       our_secret_shares.insert(*l, shares[&i].clone());
     }
-    keys.insert(*i, machine.complete(our_secret_shares).unwrap().clone());
+    keys.insert(*i, machine.complete(&mut OsRng, our_secret_shares).unwrap().clone());
   }
 
   let mut group_private = Scalar::zero();

@@ -5,6 +5,8 @@ use rand_core::{RngCore, CryptoRng};
 
 use ff::{Field, PrimeField};
 
+use multiexp::{multiexp_vartime, BatchVerifier};
+
 use crate::{
   Curve, MultisigParams, MultisigKeys, FrostError,
   schnorr::{self, SchnorrSignature},
@@ -122,13 +124,7 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
     commitments.insert(l, these_commitments);
   }
 
-  schnorr::batch_verify(rng, &signatures).map_err(
-    |l| if l == 0 {
-      FrostError::InternalError("batch validation is broken".to_string())
-    } else {
-      FrostError::InvalidProofOfKnowledge(l)
-    }
-  )?;
+  schnorr::batch_verify(rng, &signatures).map_err(|l| FrostError::InvalidProofOfKnowledge(l))?;
 
   Ok(commitments)
 }
@@ -192,7 +188,8 @@ fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
 /// issue, yet simply confirming protocol completion without issue is enough to confirm the same
 /// key was generated as long as a lack of duplicated commitments was also confirmed when they were
 /// broadcasted initially
-fn complete_r2<C: Curve>(
+fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
+  rng: &mut R,
   params: MultisigParams,
   share: C::F,
   commitments: HashMap<u16, Vec<C::G>>,
@@ -211,6 +208,7 @@ fn complete_r2<C: Curve>(
     shares.insert(l, C::F_from_slice(&share).map_err(|_| FrostError::InvalidShare(params.i()))?);
   }
 
+  let mut batch = BatchVerifier::new(shares.len(), C::little_endian());
   for (l, share) in &shares {
     if *l == params.i() {
       continue;
@@ -218,16 +216,18 @@ fn complete_r2<C: Curve>(
 
     let i_scalar = C::F::from(params.i.into());
     let mut exp = C::F::one();
-    let mut exps = Vec::with_capacity(usize::from(params.t()));
-    for _ in 0 .. params.t() {
-      exps.push(exp);
+    let mut values = Vec::with_capacity(usize::from(params.t()) + 1);
+    for lt in 0 .. params.t() {
+      values.push((exp, commitments[&l][usize::from(lt)]));
       exp *= i_scalar;
     }
+    values.push((-*share, C::generator()));
 
-    // Doesn't use multiexp_vartime with -shares[l] due to not being able to push to commitments
-    if C::multiexp_vartime(&exps, &commitments[&l]) != (C::generator_table() * *share) {
-      Err(FrostError::InvalidCommitment(*l))?;
-    }
+    batch.queue(rng, *l, values);
+  }
+
+  if !batch.verify() {
+    Err(FrostError::InvalidCommitment(batch.blame_vartime().unwrap()))?;
   }
 
   // TODO: Clear the original share
@@ -239,19 +239,18 @@ fn complete_r2<C: Curve>(
 
   let mut verification_shares = HashMap::new();
   for l in 1 ..= params.n() {
-    let mut exps = vec![];
-    let mut cs = vec![];
+    let mut values = vec![];
     for i in 1 ..= params.n() {
       for j in 0 .. params.t() {
         let mut exp = C::F::one();
         for _ in 0 .. j {
           exp *= C::F::from(u64::try_from(l).unwrap());
         }
-        exps.push(exp);
-        cs.push(commitments[&i][usize::from(j)]);
+        values.push((exp, commitments[&i][usize::from(j)]));
       }
     }
-    verification_shares.insert(l, C::multiexp_vartime(&exps, &cs));
+    // Doesn't do a unified multiexp due to needing individual verification shares
+    verification_shares.insert(l, multiexp_vartime(values, C::little_endian()));
   }
   debug_assert_eq!(C::generator_table() * secret_share, verification_shares[&params.i()]);
 
@@ -362,8 +361,9 @@ impl<C: Curve> StateMachine<C> {
   /// group's public key, while setting a valid secret share inside the machine. > t participants
   /// must report completion without issue before this key can be considered usable, yet you should
   /// wait for all participants to report as such
-  pub fn complete(
+  pub fn complete<R: RngCore + CryptoRng>(
     &mut self,
+    rng: &mut R,
     shares: HashMap<u16, Vec<u8>>,
   ) -> Result<MultisigKeys<C>, FrostError> {
     if self.state != State::GeneratedSecretShares {
@@ -371,6 +371,7 @@ impl<C: Curve> StateMachine<C> {
     }
 
     let keys = complete_r2(
+      rng,
       self.params,
       self.secret.take().unwrap(),
       self.commitments.take().unwrap(),

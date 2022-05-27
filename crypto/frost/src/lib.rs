@@ -4,9 +4,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use ff::{Field, PrimeField};
-use group::{Group, GroupOps, ScalarMul};
-
-pub use multiexp::multiexp_vartime;
+use group::{Group, GroupOps};
 
 mod schnorr;
 
@@ -38,7 +36,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
   type F: PrimeField;
   /// Group element type
-  type G: Group + GroupOps + ScalarMul<Self::F>;
+  type G: Group<Scalar = Self::F> + GroupOps;
   /// Precomputed table type
   type T: Mul<Self::F, Output = Self::G>;
 
@@ -57,12 +55,8 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// If there isn't a precomputed table available, the generator itself should be used
   fn generator_table() -> Self::T;
 
-  /// Multiexponentation function, presumably Straus or Pippenger
-  /// This library does forward an implementation of Straus which should increase key generation
-  /// performance by around 4x, also named multiexp_vartime, with a similar API. However, if a more
-  /// performant implementation is available, that should be used instead
-  // This could also be written as -> Option<C::G> with None for not implemented
-  fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G;
+  /// If little endian is used for the scalar field's Repr
+  fn little_endian() -> bool;
 
   /// Hash the message as needed to calculate the binding factor
   /// H3 from the IETF draft

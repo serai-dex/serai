@@ -13,7 +13,7 @@ use k256::{
   ProjectivePoint
 };
 
-use crate::{CurveError, Curve, multiexp_vartime, algorithm::Hram, tests::curve::test_curve};
+use crate::{CurveError, Curve, algorithm::Hram, tests::curve::test_curve};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Secp256k1;
@@ -38,8 +38,8 @@ impl Curve for Secp256k1 {
     Self::G::GENERATOR
   }
 
-  fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G {
-    multiexp_vartime(scalars, points, false)
+  fn little_endian() -> bool {
+    false
   }
 
   // The IETF draft doesn't specify a secp256k1 ciphersuite

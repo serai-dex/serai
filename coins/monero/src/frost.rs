@@ -7,7 +7,6 @@ use blake2::{digest::Update, Digest, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE as DTable,
-  traits::VartimeMultiscalarMul,
   scalar::Scalar as DScalar,
   edwards::EdwardsPoint as DPoint
 };
@@ -56,8 +55,8 @@ impl Curve for Ed25519 {
     &dfg::ED25519_BASEPOINT_TABLE
   }
 
-  fn multiexp_vartime(scalars: &[Self::F], points: &[Self::G]) -> Self::G {
-    dfg::EdwardsPoint(DPoint::vartime_multiscalar_mul(scalars, points))
+  fn little_endian() -> bool {
+    true
   }
 
   // This, as used by CLSAG, will already be a keccak256 hash

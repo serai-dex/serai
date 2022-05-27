@@ -1,43 +1,52 @@
-use ff::PrimeField;
-use group::{Group, GroupEncoding, ScalarMul};
+use group::{ff::PrimeField, Group};
 
-// An implementation of Straus, with a extremely minimal API that lets us add other algorithms in
-// the future. Takes in a list of scalars and points with a boolean for if the scalars are little
-// endian encoded or not
-pub fn multiexp_vartime<F: PrimeField, G: Group + GroupEncoding + ScalarMul<F>>(
-  scalars: &[F],
-  points: &[G],
-  little: bool
-) -> G {
+#[cfg(feature = "batch")]
+use group::ff::Field;
+#[cfg(feature = "batch")]
+use rand_core::{RngCore, CryptoRng};
+
+fn prep<
+  G: Group,
+  I: IntoIterator<Item = (G::Scalar, G)>
+>(pairs: I, little: bool) -> (Vec<Vec<u8>>, Vec<[G; 16]>) {
+  let mut nibbles = vec![];
   let mut tables = vec![];
-  // dalek uses 8 in their impl, along with a carry scheme where values are [-8, 8)
-  // Moving to a similar system here did save a marginal amount, yet not one significant enough for
-  // its pain (as some fields do have scalars which can have their top bit set, a scenario dalek
-  // assumes is never true)
-  tables.resize(points.len(), [G::identity(); 16]);
-  for p in 0 .. points.len() {
+  for pair in pairs.into_iter() {
+    let p = nibbles.len();
+    nibbles.push(vec![]);
+    {
+      let mut repr = pair.0.to_repr();
+      let bytes = repr.as_mut();
+      if !little {
+        bytes.reverse();
+      }
+
+      nibbles[p].resize(bytes.len() * 2, 0);
+      for i in 0 .. bytes.len() {
+        nibbles[p][i * 2] = bytes[i] & 0b1111;
+        nibbles[p][(i * 2) + 1] = (bytes[i] >> 4) & 0b1111;
+      }
+    }
+
+    tables.push([G::identity(); 16]);
     let mut accum = G::identity();
     for i in 1 .. 16 {
-      accum += points[p];
+      accum += pair.1;
       tables[p][i] = accum;
     }
   }
 
-  let mut nibbles = vec![];
-  nibbles.resize(scalars.len(), vec![]);
-  for s in 0 .. scalars.len() {
-    let mut repr = scalars[s].to_repr();
-    let bytes = repr.as_mut();
-    if !little {
-      bytes.reverse();
-    }
+  (nibbles, tables)
+}
 
-    nibbles[s].resize(bytes.len() * 2, 0);
-    for i in 0 .. bytes.len() {
-      nibbles[s][i * 2] = bytes[i] & 0b1111;
-      nibbles[s][(i * 2) + 1] = (bytes[i] >> 4) & 0b1111;
-    }
-  }
+// An implementation of Straus, with a extremely minimal API that lets us add other algorithms in
+// the future. Takes in an iterator of scalars and points with a boolean for if the scalars are
+// little endian encoded in their Reprs or not
+pub fn multiexp<
+  G: Group,
+  I: IntoIterator<Item = (G::Scalar, G)>
+>(pairs: I, little: bool) -> G {
+  let (nibbles, tables) = prep(pairs, little);
 
   let mut res = G::identity();
   for b in (0 .. nibbles[0].len()).rev() {
@@ -45,11 +54,79 @@ pub fn multiexp_vartime<F: PrimeField, G: Group + GroupEncoding + ScalarMul<F>>(
       res = res.double();
     }
 
-    for s in 0 .. scalars.len() {
+    for s in 0 .. tables.len() {
+      res += tables[s][nibbles[s][b] as usize];
+    }
+  }
+  res
+}
+
+pub fn multiexp_vartime<
+  G: Group,
+  I: IntoIterator<Item = (G::Scalar, G)>
+>(pairs: I, little: bool) -> G {
+  let (nibbles, tables) = prep(pairs, little);
+
+  let mut res = G::identity();
+  for b in (0 .. nibbles[0].len()).rev() {
+    for _ in 0 .. 4 {
+      res = res.double();
+    }
+
+    for s in 0 .. tables.len() {
       if nibbles[s][b] != 0 {
         res += tables[s][nibbles[s][b] as usize];
       }
     }
   }
   res
+}
+
+#[cfg(feature = "batch")]
+pub struct BatchVerifier<Id: Copy, G: Group>(Vec<(Id, Vec<(G::Scalar, G)>)>, bool);
+
+#[cfg(feature = "batch")]
+impl<Id: Copy, G: Group> BatchVerifier<Id, G> {
+  pub fn new(capacity: usize, endian: bool) -> BatchVerifier<Id, G> {
+    BatchVerifier(Vec::with_capacity(capacity), endian)
+  }
+
+  pub fn queue<
+    R: RngCore + CryptoRng,
+    I: IntoIterator<Item = (G::Scalar, G)>
+  >(&mut self, rng: &mut R, id: Id, pairs: I) {
+    // Define a unique scalar factor for this set of variables so individual items can't overlap
+    let u = if self.0.len() == 0 {
+      G::Scalar::one()
+    } else {
+      G::Scalar::random(rng)
+    };
+    self.0.push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
+  }
+
+  pub fn verify(&self) -> bool {
+    multiexp(
+      self.0.iter().flat_map(|sets| sets.1.iter()).cloned(),
+      self.1
+    ).is_identity().into()
+  }
+
+  pub fn verify_vartime(&self) -> bool {
+    multiexp_vartime(
+      self.0.iter().flat_map(|sets| sets.1.iter()).cloned(),
+      self.1
+    ).is_identity().into()
+  }
+
+  // Solely has a vartime variant as there shouldn't be any reason for this to not be vartime, yet
+  // we should explicitly label vartime software as vartime
+  // TODO: Binary search, or at least randomly sort
+  pub fn blame_vartime(&self) -> Option<Id> {
+    for value in &self.0 {
+      if !bool::from(multiexp_vartime(value.1.clone(), self.1).is_identity()) {
+        return Some(value.0);
+      }
+    }
+    None
+  }
 }

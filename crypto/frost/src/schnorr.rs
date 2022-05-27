@@ -3,6 +3,8 @@ use rand_core::{RngCore, CryptoRng};
 use ff::Field;
 use group::Group;
 
+use multiexp::BatchVerifier;
+
 use crate::Curve;
 
 #[allow(non_snake_case)]
@@ -44,39 +46,25 @@ pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
   rng: &mut R,
   triplets: &[(u16, C::G, C::F, SchnorrSignature<C>)]
 ) -> Result<(), u16> {
-  let mut first = true;
-  let mut scalars = Vec::with_capacity(triplets.len() * 3);
-  let mut points = Vec::with_capacity(triplets.len() * 3);
+  let mut values = [(C::F::one(), C::G::generator()); 3];
+  let mut batch = BatchVerifier::new(triplets.len() * 3, C::little_endian());
   for triple in triplets {
-    let mut u = C::F::one();
-    if !first {
-      u = C::F::random(&mut *rng);
-    }
+    // R
+    values[0].1 = triple.3.R;
+    // cA
+    values[1] = (triple.2, triple.1);
+    // -sG
+    values[2].0 = -triple.3.s;
 
-    // uR
-    scalars.push(u);
-    points.push(triple.3.R);
-
-    // -usG
-    scalars.push(-triple.3.s * u);
-    points.push(C::generator());
-
-    // ucA
-    scalars.push(if first { first = false; triple.2 } else { triple.2 * u});
-    points.push(triple.1);
+    batch.queue(rng, triple.0, values);
   }
 
   // s = r + ca
   // sG == R + cA
   // R + cA - sG == 0
-  if C::multiexp_vartime(&scalars, &points) == C::G::identity() {
+  if batch.verify_vartime() {
     Ok(())
   } else {
-    for triple in triplets {
-      if !verify::<C>(triple.1, triple.2, &triple.3) {
-        Err(triple.0)?;
-      }
-    }
-    Err(0)
+    Err(batch.blame_vartime().unwrap())
   }
 }

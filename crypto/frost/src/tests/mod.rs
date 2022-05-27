@@ -82,7 +82,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
       }
       our_secret_shares.insert(*l, shares[&i].clone());
     }
-    let these_keys = machine.complete(our_secret_shares).unwrap();
+    let these_keys = machine.complete(rng, our_secret_shares).unwrap();
 
     // Verify the verification_shares are agreed upon
     if verification_shares.is_none() {
