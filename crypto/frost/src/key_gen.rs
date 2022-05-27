@@ -225,10 +225,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
 
     batch.queue(rng, *l, values);
   }
-
-  if !batch.verify() {
-    Err(FrostError::InvalidCommitment(batch.blame_vartime().unwrap()))?;
-  }
+  batch.verify_with_vartime_blame().map_err(|l| FrostError::InvalidCommitment(l))?;
 
   // TODO: Clear the original share
 

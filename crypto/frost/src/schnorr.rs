@@ -47,8 +47,12 @@ pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
   triplets: &[(u16, C::G, C::F, SchnorrSignature<C>)]
 ) -> Result<(), u16> {
   let mut values = [(C::F::one(), C::G::generator()); 3];
-  let mut batch = BatchVerifier::new(triplets.len() * 3, C::little_endian());
+  let mut batch = BatchVerifier::new(triplets.len(), C::little_endian());
   for triple in triplets {
+    // s = r + ca
+    // sG == R + cA
+    // R + cA - sG == 0
+
     // R
     values[0].1 = triple.3.R;
     // cA
@@ -59,12 +63,5 @@ pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
     batch.queue(rng, triple.0, values);
   }
 
-  // s = r + ca
-  // sG == R + cA
-  // R + cA - sG == 0
-  if batch.verify_vartime() {
-    Ok(())
-  } else {
-    Err(batch.blame_vartime().unwrap())
-  }
+  batch.verify_vartime_with_vartime_blame()
 }

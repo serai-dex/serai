@@ -31,18 +31,18 @@ pub(crate) fn verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 }
 
 pub(crate) fn batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
-  // Create 3 signatures
+  // Create 5 signatures
   let mut keys = vec![];
   let mut challenges = vec![];
   let mut sigs = vec![];
-  for i in 0 .. 3 {
+  for i in 0 .. 5 {
     keys.push(C::F::random(&mut *rng));
     challenges.push(C::F::random(&mut *rng));
     sigs.push(schnorr::sign::<C>(keys[i], C::F::random(&mut *rng), challenges[i]));
   }
 
   // Batch verify
-  let mut triplets = (0 .. 3).map(
+  let triplets = (0 .. 5).map(
     |i| (u16::try_from(i + 1).unwrap(), C::generator_table() * keys[i], challenges[i], sigs[i])
   ).collect::<Vec<_>>();
   schnorr::batch_verify(rng, &triplets).unwrap();
@@ -59,14 +59,15 @@ pub(crate) fn batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
       assert!(false);
     }
   }
-  // Sanity
-  schnorr::batch_verify(rng, &triplets).unwrap();
 
   // Make sure a completely invalid signature fails when included
-  triplets[0].3.s = C::F::random(&mut *rng);
-  if let Err(blame) = schnorr::batch_verify(rng, &triplets) {
-    assert_eq!(blame, 1);
-  } else {
-    assert!(false);
+  for i in 0 .. 5 {
+    let mut triplets = triplets.clone();
+    triplets[i].3.s = C::F::random(&mut *rng);
+    if let Err(blame) = schnorr::batch_verify(rng, &triplets) {
+      assert_eq!(blame, u16::try_from(i + 1).unwrap());
+    } else {
+      assert!(false);
+    }
   }
 }

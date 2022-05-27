@@ -106,27 +106,51 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> {
 
   pub fn verify(&self) -> bool {
     multiexp(
-      self.0.iter().flat_map(|sets| sets.1.iter()).cloned(),
+      self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned(),
       self.1
     ).is_identity().into()
   }
 
   pub fn verify_vartime(&self) -> bool {
     multiexp_vartime(
-      self.0.iter().flat_map(|sets| sets.1.iter()).cloned(),
+      self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned(),
       self.1
     ).is_identity().into()
   }
 
-  // Solely has a vartime variant as there shouldn't be any reason for this to not be vartime, yet
-  // we should explicitly label vartime software as vartime
-  // TODO: Binary search, or at least randomly sort
+  // A constant time variant may be beneficial for robust protocols
   pub fn blame_vartime(&self) -> Option<Id> {
-    for value in &self.0 {
-      if !bool::from(multiexp_vartime(value.1.clone(), self.1).is_identity()) {
-        return Some(value.0);
+    let mut slice = self.0.as_slice();
+    while slice.len() > 1 {
+      let split = slice.len() / 2;
+      if multiexp_vartime(
+        slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned(),
+        self.1
+      ).is_identity().into() {
+        slice = &slice[split ..];
+      } else {
+        slice = &slice[.. split];
       }
     }
-    None
+
+    slice.get(0).filter(
+      |(_, value)| !bool::from(multiexp_vartime(value.clone(), self.1).is_identity())
+    ).map(|(id, _)| *id)
+  }
+
+  pub fn verify_with_vartime_blame(&self) -> Result<(), Id> {
+    if self.verify() {
+      Ok(())
+    } else {
+      Err(self.blame_vartime().unwrap())
+    }
+  }
+
+  pub fn verify_vartime_with_vartime_blame(&self) -> Result<(), Id> {
+    if self.verify_vartime() {
+      Ok(())
+    } else {
+      Err(self.blame_vartime().unwrap())
+    }
   }
 }
