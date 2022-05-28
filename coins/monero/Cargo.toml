@@ -22,9 +22,10 @@ curve25519-dalek = { version = "3", features = ["std"] }
 
 ff = { version = "0.11", optional = true }
 group = { version = "0.11", optional = true }
+
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
 transcript = { path = "../../crypto/transcript", optional = true }
 frost = { path = "../../crypto/frost", optional = true }
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
 
 monero = { version = "0.16", features = ["experimental"] }
 

@@ -1,7 +1,15 @@
+use std::marker::Send;
+
 use async_trait::async_trait;
 use thiserror::Error;
+use rand_core::{RngCore, CryptoRng};
 
-pub mod coins;
+use blake2::{digest::{Digest, Update}, Blake2b512};
+
+use frost::{Curve, MultisigKeys};
+
+mod coins;
+mod wallet;
 
 #[cfg(test)]
 mod tests;
@@ -16,7 +24,7 @@ trait Output: Sized {
   fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 enum CoinError {
   #[error("failed to connect to coin daemon")]
   ConnectionError
@@ -24,17 +32,47 @@ enum CoinError {
 
 #[async_trait]
 trait Coin {
-  type Output: Output;
-  type Address;
+  type Curve: Curve;
 
+  type Output: Output;
+  type SignableTransaction;
+
+  type Address: Send;
+
+  fn id() -> &'static [u8];
   async fn confirmations() -> usize;
   async fn max_inputs() -> usize;
   async fn max_outputs() -> usize;
 
   async fn get_height(&self) -> Result<usize, CoinError>;
-  async fn get_outputs_in_block(&self, height: usize) -> Result<Vec<Self::Output>, CoinError>;
-  async fn send(
+  async fn get_outputs_in_block(
     &self,
+    height: usize,
+    key: <Self::Curve as Curve>::G
+  ) -> Result<Vec<Self::Output>, CoinError>;
+
+  async fn prepare_send<R: RngCore + CryptoRng>(
+    &self,
+    keys: MultisigKeys<Self::Curve>,
+    label: Vec<u8>,
+    height: usize,
+    inputs: Vec<Self::Output>,
     payments: &[(Self::Address, u64)]
-  ) -> Result<Vec<<Self::Output as Output>::Id>, CoinError>;
+  ) -> Result<Self::SignableTransaction, CoinError>;
+
+  async fn attempt_send<R: RngCore + CryptoRng + Send>(
+    &self,
+    rng: &mut R,
+    transaction: Self::SignableTransaction,
+    included: &[u16]
+  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+}
+
+// Generate a view key for a given chain in a globally consistent manner regardless of the current
+// group key
+// Takes an index, k, for more modern privacy protocols which use multiple view keys
+// Doesn't run Curve::hash_to_F, instead returning the hash object, due to hash_to_F being a FROST
+// definition instead of a wide reduction from a hash object
+fn view_key<C: Coin>(k: u64) -> Blake2b512 {
+  Blake2b512::new().chain(b"Serai DEX View Key").chain(C::id()).chain(k.to_le_bytes())
 }

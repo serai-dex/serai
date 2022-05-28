@@ -8,9 +8,15 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1"
+rand_core = "0.6"
 thiserror = "1"
 
 curve25519-dalek = { version = "3", features = ["std"] }
+blake2 = "0.10"
+
+dalek-ff-group = { path = "../crypto/dalek-ff-group" }
+frost = { path = "../crypto/frost" }
+
 monero = { version = "0.16", features = ["experimental"] }
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
