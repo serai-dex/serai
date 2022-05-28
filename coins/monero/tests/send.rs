@@ -113,6 +113,15 @@ async fn send_core(test: usize, multisig: bool) {
         continue;
       }
 
+      // We actually need 80 decoys for this transaction, so mine until then
+      // 80 + 60 (miner TX maturity) + 10 (lock blocks)
+      // It is possible for this to be lower, by noting maturity is sufficient regardless of lock
+      // blocks, yet that's not currently implemented
+      // TODO, if we care
+      while rpc.get_height().await.unwrap() < 160 {
+        mine_block(&rpc, &addr.to_string()).await.unwrap();
+      }
+
       for i in (start + 1) .. (start + 9) {
         let tx = rpc.get_block_transactions(i).await.unwrap().swap_remove(0);
         let output = tx.scan(view, spend_pub).swap_remove(0);

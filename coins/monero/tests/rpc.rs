@@ -25,10 +25,8 @@ pub async fn rpc() -> Rpc {
     PublicKey { point: (&random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE).compress() }
   ).to_string();
 
-  // Mine enough blocks decoy selection doesn't fail
-  for _ in 0 .. 1 {
-    mine_block(&rpc, &addr).await.unwrap();
-  }
+  // Mine 10 blocks so we have 10 decoys so decoy selection doesn't fail
+  mine_block(&rpc, &addr).await.unwrap();
 
   rpc
 }

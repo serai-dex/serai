@@ -16,7 +16,8 @@ const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
-const DECOYS: usize = 11;
+const RING_LEN: usize = 11;
+const DECOYS: usize = RING_LEN - 1;
 
 lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
@@ -32,12 +33,6 @@ async fn select_n<R: RngCore + CryptoRng>(
   used: &mut HashSet<u64>,
   count: usize
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
-  // Panic if not enough decoys are available
-  // TODO: Simply create a TX with less than the target amount
-  if (high - MATURITY) < u64::try_from(DECOYS).unwrap() {
-    panic!("Not enough decoys available");
-  }
-
   let mut confirmed = Vec::with_capacity(count);
   while confirmed.len() != count {
     let remaining = count - confirmed.len();
@@ -79,11 +74,11 @@ async fn select_n<R: RngCore + CryptoRng>(
   Ok(confirmed)
 }
 
-fn offset(decoys: &[u64]) -> Vec<u64> {
-  let mut res = vec![decoys[0]];
-  res.resize(decoys.len(), 0);
-  for m in (1 .. decoys.len()).rev() {
-    res[m] = decoys[m] - decoys[m - 1];
+fn offset(ring: &[u64]) -> Vec<u64> {
+  let mut res = vec![ring[0]];
+  res.resize(ring.len(), 0);
+  for m in (1 .. ring.len()).rev() {
+    res[m] = ring[m] - ring[m - 1];
   }
   res
 }
@@ -128,68 +123,76 @@ impl Decoys {
       used.insert(o.0);
     }
 
+    // Panic if not enough decoys are available
+    // TODO: Simply create a TX with less than the target amount, or at least return an error
+    if (high - MATURITY) < u64::try_from(inputs.len() * RING_LEN).unwrap() {
+      panic!("Not enough decoys available");
+    }
+
+    // Select all decoys for this transaction, assuming we generate a sane transaction
+    // We should almost never naturally generate an insane transaction, hence why this doesn't bother
+    // with an overage
+    let mut decoys = select_n(
+      rng,
+      rpc,
+      height,
+      &distribution,
+      high,
+      per_second,
+      &mut used,
+      inputs.len() * DECOYS
+    ).await?;
+
     let mut res = Vec::with_capacity(inputs.len());
-    for (i, o) in outputs.iter().enumerate() {
-      // If there's only the target amount of decoys available, remove the index of the output we're spending
-      // So we don't infinite loop while ignoring it
-      // TODO: If we're spending 2 outputs of a possible 11 outputs, this will still fail
-      used.remove(&o.0);
+    for o in outputs {
+      // Grab the decoys for this specific output
+      let mut ring = decoys.drain((decoys.len() - DECOYS) ..).collect::<Vec<_>>();
+      ring.push(o);
+      ring.sort_by(|a, b| a.0.cmp(&b.0));
 
-      // Select the full amount of ring members in decoys, instead of just the actual decoys, in order
-      // to increase sample size
-      let mut decoys = select_n(rng, rpc, height, &distribution, high, per_second, &mut used, DECOYS).await?;
-      decoys.sort_by(|a, b| a.0.cmp(&b.0));
-
-      // Add back this output
-      used.insert(o.0);
-
-      // Make sure the TX passes the sanity check that the median output is within the last 40%
-      // This actually checks the median is within the last third, a slightly more aggressive boundary,
-      // as the height used in this calculation will be slightly under the height this is sanity
-      // checked against
-      let target_median = high * 2 / 3;
-
-      // Sanity checks are only run when 1000 outputs are available
-      // We run this check whenever it's possible to satisfy
-      // This means we need the middle possible decoy to be above the target_median
-      // TODO: This will break if timelocks are used other than maturity on very small chains/chains
-      // of any size which use timelocks extremely frequently, as it'll try to satisfy an impossible
-      // condition
-      // Reduce target_median by each timelocked output found?
-      if (high - MATURITY) >= target_median {
-        while decoys[DECOYS / 2].0 < target_median {
+      // Sanity checks are only run when 1000 outputs are available in Monero
+      // We run this check whenever the highest output index, which we acknowledge, is > 500
+      // This means we assume (for presumably test blockchains) the height being used has not had
+      // 500 outputs since while itself not being a sufficiently mature blockchain
+      // Considering Monero's p2p layer doesn't actually check transaction sanity, it should be
+      // fine for us to not have perfectly matching rules, especially since this code will infinite
+      // loop if it can't determine sanity, which is possible with sufficient inputs on sufficiently
+      // small chains
+      if high > 500 {
+        // Make sure the TX passes the sanity check that the median output is within the last 40%
+        // This actually checks the median is within the last third, a slightly more aggressive
+        // boundary, as the height used in this calculation will be slightly under the height this is
+        // sanity checked against
+        let target_median = high * 2 / 3;
+        while ring[RING_LEN / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
-          for m in 0 .. DECOYS / 2 {
-            // We could not remove this, saving CPU time and removing low values as possibilities, yet
-            // it'd increase the amount of decoys required to create this transaction and some banned
-            // outputs may be the best options
-            used.remove(&decoys[m].0);
+          for removed in ring.drain(0 .. (RING_LEN / 2)).collect::<Vec<_>>() {
+            // If we removed the real spend, add it back
+            if removed.0 == o.0 {
+              ring.push(o);
+            } else {
+              // We could not remove this, saving CPU time and removing low values as possibilities, yet
+              // it'd increase the amount of decoys required to create this transaction and some removed
+              // outputs may be the best option (as we drop the first half, not just the bottom n)
+              used.remove(&removed.0);
+            }
           }
 
-          decoys.splice(
-            0 .. DECOYS / 2,
-            select_n(rng, rpc, height, &distribution, high, per_second, &mut used, DECOYS / 2).await?
+          // Select new outputs until we have a full sized ring again
+          ring.extend(
+            select_n(rng, rpc, height, &distribution, high, per_second, &mut used, RING_LEN - ring.len()).await?
           );
-          decoys.sort_by(|a, b| a.0.cmp(&b.0));
+          ring.sort_by(|a, b| a.0.cmp(&b.0));
         }
+
+        // The other sanity check rule is about duplicates, yet we already enforce unique ring members
       }
 
-      // Replace the closest selected decoy with the actual
-      let mut replace = 0;
-      let mut distance = u64::MAX;
-      for m in 0 .. decoys.len() {
-        let diff = decoys[m].0.abs_diff(o.0);
-        if diff < distance {
-          replace = m;
-          distance = diff;
-        }
-      }
-
-      decoys[replace] = outputs[i];
       res.push(Decoys {
-        i: u8::try_from(replace).unwrap(),
-        offsets: offset(&decoys.iter().map(|output| output.0).collect::<Vec<_>>()),
-        ring: decoys.iter().map(|output| output.1).collect()
+        // Binary searches for the real spend since we don't know where it sorted to
+        i: u8::try_from(ring.partition_point(|x| x.0 < o.0)).unwrap(),
+        offsets: offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),
+        ring: ring.iter().map(|output| output.1).collect()
       });
     }
 
