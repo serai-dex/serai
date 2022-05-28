@@ -15,7 +15,7 @@ pub mod sign;
 pub mod tests;
 
 /// Set of errors for curve-related operations, namely encoding and decoding
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum CurveError {
   #[error("invalid length for data (expected {0}, got {0})")]
   InvalidLength(usize, usize),
@@ -150,7 +150,7 @@ impl MultisigParams {
   pub fn i(&self) -> u16 { self.i }
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum FrostError {
   #[error("a parameter was 0 (required {0}, participants {1})")]
   ZeroParameter(u16, u16),

@@ -22,7 +22,7 @@ use crate::random_scalar;
 
 pub type Transcript = DigestTranscript::<blake2::Blake2b512>;
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum MultisigError {
   #[error("internal error ({0})")]
   InternalError(String),

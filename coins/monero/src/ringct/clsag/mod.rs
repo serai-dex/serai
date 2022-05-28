@@ -27,7 +27,7 @@ lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8 as u8).invert();
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum ClsagError {
   #[error("internal error ({0})")]
   InternalError(String),

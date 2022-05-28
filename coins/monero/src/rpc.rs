@@ -18,14 +18,14 @@ pub struct JsonRpcResponse<T> {
   result: T
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum RpcError {
   #[error("internal error ({0})")]
   InternalError(String),
   #[error("connection error")]
   ConnectionError,
-  #[error("transaction not found (expected {1}, got {0})")]
-  TransactionsNotFound(usize, usize),
+  #[error("transactions not found")]
+  TransactionsNotFound(Vec<[u8; 32]>),
   #[error("invalid point ({0})")]
   InvalidPoint(String),
   #[error("pruned transaction")]
@@ -99,45 +99,67 @@ impl Rpc {
     Ok(self.rpc_call::<Option<()>, HeightResponse>("get_height", None).await?.height)
   }
 
-  pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
+  async fn get_transactions_core(
+    &self,
+    hashes: &[[u8; 32]]
+  ) -> Result<(Vec<Result<Transaction, RpcError>>, Vec<[u8; 32]>), RpcError> {
     if hashes.len() == 0 {
-      return Ok(vec![]);
+      return Ok((vec![], vec![]));
     }
 
     #[derive(Deserialize, Debug)]
     struct TransactionResponse {
+      tx_hash: String,
       as_hex: String,
       pruned_as_hex: String
     }
     #[derive(Deserialize, Debug)]
     struct TransactionsResponse {
+      #[serde(default)]
+      missed_tx: Vec<String>,
       txs: Vec<TransactionResponse>
     }
 
     let txs: TransactionsResponse = self.rpc_call("get_transactions", Some(json!({
-      "txs_hashes": hashes.iter().map(|hash| hex::encode(&hash)).collect::<Vec<String>>()
+      "txs_hashes": hashes.iter().map(|hash| hex::encode(&hash)).collect::<Vec<_>>()
     }))).await?;
-    if txs.txs.len() != hashes.len() {
-      Err(RpcError::TransactionsNotFound(txs.txs.len(), hashes.len()))?;
-    }
 
-    txs.txs.iter().enumerate().map(|(i, res)| {
-      let tx = Transaction::deserialize(
-        &mut std::io::Cursor::new(
-          rpc_hex(if res.as_hex.len() != 0 { &res.as_hex } else { &res.pruned_as_hex }).unwrap()
-        )
-      ).map_err(|_| RpcError::InvalidTransaction(hashes[i]))?;
+    Ok((
+      txs.txs.iter().map(|res| {
+        let tx = Transaction::deserialize(
+          &mut std::io::Cursor::new(
+            rpc_hex(if res.as_hex.len() != 0 { &res.as_hex } else { &res.pruned_as_hex }).unwrap()
+          )
+        ).map_err(|_| RpcError::InvalidTransaction(hex::decode(&res.tx_hash).unwrap().try_into().unwrap()))?;
 
-      // https://github.com/monero-project/monero/issues/8311
-      if res.as_hex.len() == 0 {
-        match tx.prefix.inputs.get(0) {
-          Some(Input::Gen { .. }) => (),
-          _ => Err(RpcError::PrunedTransaction)?
+        // https://github.com/monero-project/monero/issues/8311
+        if res.as_hex.len() == 0 {
+          match tx.prefix.inputs.get(0) {
+            Some(Input::Gen { .. }) => (),
+            _ => Err(RpcError::PrunedTransaction)?
+          }
         }
-      }
 
-      Ok(tx)
-    }).collect::<Result<_, _>>()
+        Ok(tx)
+      }).collect(),
+
+      txs.missed_tx.iter().map(|hash| hex::decode(&hash).unwrap().try_into().unwrap()).collect()
+    ))
+  }
+
+  pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
+    let (txs, missed) = self.get_transactions_core(hashes).await?;
+    if missed.len() != 0 {
+      Err(RpcError::TransactionsNotFound(missed))?;
+    }
+    // This will clone several KB and is accordingly inefficient
+    // TODO: Optimize
+    txs.iter().cloned().collect::<Result<_, _>>()
+  }
+
+  pub async fn get_transactions_possible(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
+    let (txs, _) = self.get_transactions_core(hashes).await?;
+    Ok(txs.iter().cloned().filter_map(|tx| tx.ok()).collect())
   }
 
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {
@@ -160,11 +182,29 @@ impl Rpc {
     )
   }
 
-  pub async fn get_block_transactions(&self, height: usize) -> Result<Vec<Transaction>, RpcError> {
+  async fn get_block_transactions_core(
+    &self,
+    height: usize,
+    possible: bool
+  ) -> Result<Vec<Transaction>, RpcError> {
     let block = self.get_block(height).await?;
     let mut res = vec![block.miner_tx];
-    res.extend(self.get_transactions(&block.txs).await?);
+    res.extend(
+      if possible {
+        self.get_transactions_possible(&block.txs).await?
+      } else {
+        self.get_transactions(&block.txs).await?
+      }
+    );
     Ok(res)
+  }
+
+  pub async fn get_block_transactions(&self, height: usize) -> Result<Vec<Transaction>, RpcError> {
+    self.get_block_transactions_core(height, false).await
+  }
+
+  pub async fn get_block_transactions_possible(&self, height: usize) -> Result<Vec<Transaction>, RpcError> {
+    self.get_block_transactions_core(height, true).await
   }
 
   pub async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {

@@ -76,7 +76,7 @@ impl SendOutput {
 }
 
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum TransactionError {
   #[error("no inputs")]
   NoInputs,
