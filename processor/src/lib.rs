@@ -32,7 +32,7 @@ trait Coin {
   async fn max_outputs() -> usize;
 
   async fn get_height(&self) -> Result<usize, CoinError>;
-  async fn get_outputs_in_block(&self) -> Result<Vec<Self::Output>, CoinError>;
+  async fn get_outputs_in_block(&self, height: usize) -> Result<Vec<Self::Output>, CoinError>;
   async fn send(
     &self,
     payments: &[(Self::Address, u64)]

@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 
+use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::EdwardsPoint};
+
 use monero::util::address::Address;
 use monero_serai::{/*transaction::Output, */ rpc::Rpc, wallet::SpendableOutput};
 
@@ -28,11 +30,25 @@ impl OutputTrait for Output {
   }
 }
 
-pub struct Monero(Rpc);
+impl From<SpendableOutput> for Output {
+  fn from(output: SpendableOutput) -> Output {
+    Output(output)
+  }
+}
+
+pub struct Monero {
+  rpc: Rpc,
+  view: Scalar,
+  spend: EdwardsPoint
+}
 
 impl Monero {
   pub fn new(url: String) -> Monero {
-    Monero(Rpc::new(url))
+    Monero {
+      rpc: Rpc::new(url),
+      view: Scalar::zero(),
+      spend: EdwardsPoint::identity()
+    }
   }
 }
 
@@ -46,11 +62,14 @@ impl Coin for Monero {
   async fn max_outputs() -> usize { 16 }
 
   async fn get_height(&self) -> Result<usize, CoinError> {
-    self.0.get_height().await.map_err(|_| CoinError::ConnectionError)
+    self.rpc.get_height().await.map_err(|_| CoinError::ConnectionError)
   }
 
-  async fn get_outputs_in_block(&self) -> Result<Vec<Self::Output>, CoinError> {
-    todo!()
+  async fn get_outputs_in_block(&self, height: usize) -> Result<Vec<Self::Output>, CoinError> {
+    Ok(
+      self.rpc.get_block_transactions_possible(height).await.map_err(|_| CoinError::ConnectionError)?
+        .iter().flat_map(|tx| tx.scan(self.view, self.spend)).map(Output::from).collect()
+    )
   }
 
   async fn send(

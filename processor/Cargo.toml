@@ -10,6 +10,7 @@ edition = "2021"
 async-trait = "0.1"
 thiserror = "1"
 
+curve25519-dalek = { version = "3", features = ["std"] }
 monero = { version = "0.16", features = ["experimental"] }
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
