@@ -58,7 +58,13 @@ impl Coin for Monero {
   type Address = Address;
 
   async fn confirmations() -> usize { 10 }
-  async fn max_inputs() -> usize { 16 } // TODO
+  // Testnet TX bb4d188a4c571f2f0de70dca9d475abc19078c10ffa8def26dd4f63ce1bcfd79 uses 146 inputs
+  // while using less than 100kb of space, albeit with just 2 outputs (though outputs share a BP)
+  // The TX size limit is half the contextual median block weight, where said weight is >= 300,000
+  // This means any TX which fits into 150kb will be accepted by Monero
+  // 128, even with 16 outputs, should fit into 100kb. Further efficiency by 192 may be viable
+  // TODO: Get hard numbers and tune
+  async fn max_inputs() -> usize { 128 }
   async fn max_outputs() -> usize { 16 }
 
   async fn get_height(&self) -> Result<usize, CoinError> {
