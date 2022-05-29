@@ -48,11 +48,13 @@ impl Curve for Secp256k1 {
     (&Sha256::digest(msg)).to_vec()
   }
 
+  fn hash_binding_factor(binding: &[u8]) -> Self::F {
+    Self::hash_to_F(&[b"rho", binding].concat())
+  }
+
   // Use wide reduction for security
   fn hash_to_F(data: &[u8]) -> Self::F {
-    Scalar::from_uint_reduced(
-      U512::from_be_byte_array(Sha512::new().chain_update("rho").chain_update(data).finalize())
-    )
+    Scalar::from_uint_reduced(U512::from_be_byte_array(Sha512::digest(data)))
   }
 
   fn F_len() -> usize {

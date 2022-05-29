@@ -58,24 +58,28 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// If little endian is used for the scalar field's Repr
   fn little_endian() -> bool;
 
-  /// Hash the message as needed to calculate the binding factor
-  /// H3 from the IETF draft
+  /// Hash the message for the binding factor. H3 from the IETF draft
   // This doesn't actually need to be part of Curve as it does nothing with the curve
   // This also solely relates to FROST and with a proper Algorithm/HRAM, all projects using
-  // aggregatable signatures over this curve will work without issue, albeit potentially with
-  // incompatibilities between FROST implementations
-  // It is kept here as Curve + HRAM is effectively a ciphersuite according to the IETF draft
+  // aggregatable signatures over this curve will work without issue
+  // It is kept here as Curve + H{1, 2, 3} is effectively a ciphersuite according to the IETF draft
   // and moving it to Schnorr would force all of them into being ciphersuite-specific
+  // H2 is left to the Schnorr Algorithm as H2 is the H used in HRAM, which Schnorr further
+  // modularizes
   fn hash_msg(msg: &[u8]) -> Vec<u8>;
 
-  /// Field element from hash, used in key generation and to calculate the binding factor
-  /// H1 from the IETF draft
-  /// Key generation uses it as if it's H2 to generate a challenge for a Proof of Knowledge
-  #[allow(non_snake_case)]
-  fn hash_to_F(data: &[u8]) -> Self::F;
+  /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft
+  fn hash_binding_factor(binding: &[u8]) -> Self::F;
 
   // The following methods would optimally be F:: and G:: yet developers can't control F/G
   // They can control a trait they pass into this library
+
+  /// Field element from hash. Used during key gen and by other crates under Serai as a general
+  /// utility
+  // Not parameterized by Digest as it's fine for it to use its own hash function as relevant to
+  // hash_msg and hash_binding_factor
+  #[allow(non_snake_case)]
+  fn hash_to_F(data: &[u8]) -> Self::F;
 
   /// Constant size of a serialized field element
   // The alternative way to grab this would be either serializing a junk element and getting its

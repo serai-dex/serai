@@ -59,11 +59,15 @@ impl Curve for Ed25519 {
     true
   }
 
-  // This, as used by CLSAG, will already be a keccak256 hash
-  // The only necessity is for this to be unique, which means skipping a hash here should be fine accordingly
-  // TODO: Decide
+  // This will already be a keccak256 hash in the case of CLSAG signing, making it fine to simply
+  // return as-is, yet this ensures it's fixed size (a security requirement) and unique regardless
+  // of how it's called/what it's called with
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
     Blake2b512::digest(msg).to_vec()
+  }
+
+  fn hash_binding_factor(binding: &[u8]) -> Self::F {
+    Self::hash_to_F(&[b"rho", binding].concat())
   }
 
   fn hash_to_F(data: &[u8]) -> Self::F {

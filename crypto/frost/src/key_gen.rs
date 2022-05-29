@@ -14,15 +14,10 @@ use crate::{
 };
 
 #[allow(non_snake_case)]
-fn challenge<C: Curve>(l: u16, context: &str, R: &[u8], Am: &[u8]) -> C::F {
-  let mut c = Vec::with_capacity(2 + context.len() + R.len() + Am.len());
-  c.extend(l.to_be_bytes());
-  c.extend(context.as_bytes());
-  c.extend(R);  // R
-  c.extend(Am); // A of the first commitment, which is what we're proving we have the private key
-                // for
-                // m of the rest of the commitments, authenticating them
-  C::hash_to_F(&c)
+fn challenge<C: Curve>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
+  const DST: &'static [u8] = b"FROST Schnorr Proof of Knowledge";
+  // Uses hash_msg to get a fixed size value out of the context string
+  C::hash_to_F(&[DST, &C::hash_msg(context.as_bytes()), &l.to_be_bytes(), R, Am].concat())
 }
 
 // Implements steps 1 through 3 of round 1 of FROST DKG. Returns the coefficients, commitments, and
@@ -57,8 +52,8 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
       // general obsession with canonicity and determinism though
       r,
       challenge::<C>(
-        params.i(),
         context,
+        params.i(),
         &C::G_to_bytes(&(C::generator_table() * r)),
         &serialized
       )
@@ -116,7 +111,7 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
       signatures.push((
         l,
         these_commitments[0],
-        challenge::<C>(l, context, R_bytes(l), Am(l)),
+        challenge::<C>(context, l, R_bytes(l), Am(l)),
         SchnorrSignature::<C> { R: R(l)?, s: s(l)? }
       ));
     }
