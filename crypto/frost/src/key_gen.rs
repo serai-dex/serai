@@ -1,4 +1,4 @@
-use core::{convert::TryFrom, fmt};
+use core::fmt;
 use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
@@ -230,19 +230,17 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   }
 
   let mut verification_shares = HashMap::new();
-  for l in 1 ..= params.n() {
+  for i in 1 ..= params.n() {
+    let i_scalar = C::F::from(i.into());
     let mut values = vec![];
-    for i in 1 ..= params.n() {
-      for j in 0 .. params.t() {
-        let mut exp = C::F::one();
-        for _ in 0 .. j {
-          exp *= C::F::from(u64::try_from(l).unwrap());
-        }
-        values.push((exp, commitments[&i][usize::from(j)]));
-      }
-    }
-    // Doesn't do a unified multiexp due to needing individual verification shares
-    verification_shares.insert(l, multiexp_vartime(values, C::little_endian()));
+    (0 .. params.t()).into_iter().fold(C::F::one(), |exp, j| {
+      values.push((
+        exp,
+        (1 ..= params.n()).into_iter().map(|l| commitments[&l][usize::from(j)]).sum()
+      ));
+      exp * i_scalar
+    });
+    verification_shares.insert(i, multiexp_vartime(values, C::little_endian()));
   }
   debug_assert_eq!(C::generator_table() * secret_share, verification_shares[&params.i()]);
 
