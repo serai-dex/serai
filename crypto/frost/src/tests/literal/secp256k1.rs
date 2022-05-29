@@ -44,6 +44,10 @@ impl Curve for Secp256k1 {
 
   // The IETF draft doesn't specify a secp256k1 ciphersuite
   // This test just uses the simplest ciphersuite which would still be viable to deploy
+  // The comparable P-256 curve uses hash_to_field from the Hash To Curve IETF draft with a context
+  // string and further DST for H1 ("rho") and H3 ("digest"). It's not currently worth it to add
+  // that weight, yet if secp256k1 is ever officially acknowledged (not just a testing curve), it
+  // must be properly implemented.
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
     (&Sha256::digest(msg)).to_vec()
   }
