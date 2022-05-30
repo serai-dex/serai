@@ -55,7 +55,7 @@ pub fn multiexp<
     }
 
     for s in 0 .. tables.len() {
-      res += tables[s][nibbles[s][b] as usize];
+      res += tables[s][usize::from(nibbles[s][b])];
     }
   }
   res
@@ -75,7 +75,7 @@ pub fn multiexp_vartime<
 
     for s in 0 .. tables.len() {
       if nibbles[s][b] != 0 {
-        res += tables[s][nibbles[s][b] as usize];
+        res += tables[s][usize::from(nibbles[s][b])];
       }
     }
   }

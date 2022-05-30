@@ -24,7 +24,7 @@ mod multisig;
 pub use multisig::{ClsagDetails, ClsagMultisig};
 
 lazy_static! {
-  static ref INV_EIGHT: Scalar = Scalar::from(8 as u8).invert();
+  static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();
 }
 
 #[derive(Clone, Error, Debug)]
@@ -60,8 +60,9 @@ impl ClsagInput {
     if n > u8::MAX.into() {
       Err(ClsagError::InternalError("max ring size in this library is u8 max".to_string()))?;
     }
-    if decoys.i >= (n as u8) {
-      Err(ClsagError::InvalidRingMember(decoys.i, n as u8))?;
+    let n = u8::try_from(n).unwrap();
+    if decoys.i >= n {
+      Err(ClsagError::InvalidRingMember(decoys.i, n))?;
     }
 
     // Validate the commitment matches
@@ -123,13 +124,13 @@ fn core(
   // mu_P with agg_0
   let mu_P = hash_to_scalar(&to_hash);
   // mu_C with agg_1
-  to_hash[AGG_0.len() - 1] = '1' as u8;
+  to_hash[AGG_0.len() - 1] = b'1';
   let mu_C = hash_to_scalar(&to_hash);
 
   // Truncate it for the round transcript, altering the DST as needed
   to_hash.truncate(((2 * n) + 1) * 32);
   for i in 0 .. ROUND.len() {
-    to_hash[PREFIX.len() + i] = ROUND[i] as u8;
+    to_hash[PREFIX.len() + i] = ROUND[i];
   }
   // Unfortunately, it's I D pseudo_out instead of pseudo_out I D, meaning this needs to be
   // truncated just to add it back
@@ -254,7 +255,7 @@ impl Clsag {
         &nonce * &ED25519_BASEPOINT_TABLE,
         nonce * hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0])
       );
-      clsag.s[inputs[i].2.decoys.i as usize] = nonce - ((p * inputs[i].0) + c);
+      clsag.s[usize::from(inputs[i].2.decoys.i)] = nonce - ((p * inputs[i].0) + c);
 
       res.push((clsag, pseudo_out));
     }
@@ -341,7 +342,8 @@ impl Clsag {
 
       if c_verify_clsag(
         serialized.len(), serialized.as_ptr(),
-        ring.len() as u8, ring_bytes.as_ptr(),
+        u8::try_from(ring.len()).map_err(|_| ClsagError::InternalError("too large ring".to_string()))?,
+        ring_bytes.as_ptr(),
         I_bytes.as_ptr(), pseudo_out_bytes.as_ptr(), msg.as_ptr()
       ) {
         Ok(())

@@ -41,11 +41,18 @@ impl Bulletproofs {
         fn c_generate_bp(seed: *const u8, len: u8, amounts: *const u64, masks: *const [u8; 32]) -> *const u8;
       }
 
-      let ptr = c_generate_bp(seed.as_ptr(), outputs.len() as u8, amounts.as_ptr(), masks.as_ptr());
-      let len = ((ptr.read() as usize) << 8) + (ptr.add(1).read() as usize);
+      let ptr = c_generate_bp(
+        seed.as_ptr(),
+        u8::try_from(outputs.len()).unwrap(),
+        amounts.as_ptr(),
+        masks.as_ptr()
+      );
+
+      let mut len = 6 * 32;
+      len += (2 * (1 + (usize::from(ptr.add(len).read()) * 32))) + (3 * 32);
       res = Bulletproofs::deserialize(
         // Wrap in a cursor to provide a mutable Reader
-        &mut std::io::Cursor::new(std::slice::from_raw_parts(ptr.add(2), len))
+        &mut std::io::Cursor::new(std::slice::from_raw_parts(ptr, len))
       ).expect("Couldn't deserialize Bulletproofs from Monero");
       free(ptr);
     };
@@ -64,7 +71,7 @@ impl Bulletproofs {
     let mut serialized = Vec::with_capacity((9 + (2 * self.L.len())) * 32);
     self.serialize(&mut serialized).unwrap();
     let commitments: Vec<[u8; 32]> = commitments.iter().map(
-      |commitment| (commitment * Scalar::from(8 as u8).invert()).compress().to_bytes()
+      |commitment| (commitment * Scalar::from(8u8).invert()).compress().to_bytes()
     ).collect();
 
     unsafe {
@@ -79,7 +86,13 @@ impl Bulletproofs {
         ) -> bool;
       }
 
-      c_verify_bp(seed.as_ptr(), serialized.len(), serialized.as_ptr(), commitments.len() as u8, commitments.as_ptr())
+      c_verify_bp(
+        seed.as_ptr(),
+        serialized.len(),
+        serialized.as_ptr(),
+        u8::try_from(commitments.len()).unwrap(),
+        commitments.as_ptr()
+      )
     }
   }
 

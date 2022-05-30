@@ -44,7 +44,7 @@ impl Curve for Ed25519 {
   }
 
   fn id_len() -> u8 {
-    Self::id().len() as u8
+    u8::try_from(Self::id().len()).unwrap()
   }
 
   fn generator() -> Self::G {

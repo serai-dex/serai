@@ -200,7 +200,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   // Step 2. Verify each share
   let mut shares = HashMap::new();
   for (l, share) in serialized {
-    shares.insert(l, C::F_from_slice(&share).map_err(|_| FrostError::InvalidShare(params.i()))?);
+    shares.insert(l, C::F_from_slice(&share).map_err(|_| FrostError::InvalidShare(l))?);
   }
 
   // Calculate the exponent for a given participant and apply it to a series of commitments
@@ -240,6 +240,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   // Stripe commitments per t and sum them in advance. Calculating verification shares relies on
   // these sums so preprocessing them is a massive speedup
   // If these weren't just sums, yet the tables used in multiexp, this would be further optimized
+  // As of right now, each multiexp will regenerate them
   let mut stripes = Vec::with_capacity(usize::from(params.t()));
   for t in 0 .. usize::from(params.t()) {
     stripes.push(commitments.values().map(|commitments| commitments[t]).sum());

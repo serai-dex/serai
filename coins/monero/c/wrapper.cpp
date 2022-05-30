@@ -62,10 +62,8 @@ extern "C" {
     std::stringstream ss;
     binary_archive<true> ba(ss);
     ::serialization::serialize(ba, bp);
-    uint8_t* res = (uint8_t*) calloc(2 + ss.str().size(), 1); // malloc would also work
-    memcpy(res + 2, ss.str().data(), ss.str().size());
-    res[0] = ss.str().size() >> 8;
-    res[1] = ss.str().size() & 255;
+    uint8_t* res = (uint8_t*) calloc(ss.str().size(), 1); // malloc would also work
+    memcpy(res, ss.str().data(), ss.str().size());
     return res;
   }
 

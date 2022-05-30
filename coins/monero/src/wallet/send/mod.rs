@@ -237,7 +237,7 @@ impl SignableTransaction {
       PublicKey { point: self.outputs[0].R.compress() }
     ).consensus_encode(&mut extra).unwrap();
     SubField::AdditionalPublickKey(
-      self.outputs[1 .. self.outputs.len()].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
+      self.outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
     ).consensus_encode(&mut extra).unwrap();
 
     // Format it for monero-rs

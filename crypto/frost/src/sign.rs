@@ -143,7 +143,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
 
       let commitments = commitments.remove(l).unwrap();
       let mut read_commitment = |c, label| {
-        let commitment = &commitments[c .. c + C::G_len()];
+        let commitment = &commitments[c .. (c + C::G_len())];
         transcript.append_message(label, commitment);
         C::G_from_slice(commitment).map_err(|_| FrostError::InvalidCommitment(*l))
       };
