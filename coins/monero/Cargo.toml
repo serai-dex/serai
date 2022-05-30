@@ -27,7 +27,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
 transcript = { path = "../../crypto/transcript", optional = true }
 frost = { path = "../../crypto/frost", optional = true }
 
-monero = { version = "0.16", features = ["experimental"] }
+monero = "0.16"
 
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
