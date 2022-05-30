@@ -8,8 +8,11 @@ use rand::rngs::OsRng;
 use blake2::{digest::Update, Digest, Blake2b512};
 
 use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
+
 #[cfg(feature = "multisig")]
 use dalek_ff_group::Scalar;
+#[cfg(feature = "multisig")]
+use frost::tests::{THRESHOLD, key_gen, sign};
 
 use monero::{
   network::Network,
@@ -22,9 +25,7 @@ mod rpc;
 use crate::rpc::{rpc, mine_block};
 
 #[cfg(feature = "multisig")]
-mod frost;
-#[cfg(feature = "multisig")]
-use crate::frost::{THRESHOLD, generate_keys, sign};
+use monero_serai::frost::Ed25519;
 
 lazy_static! {
   static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
@@ -59,7 +60,7 @@ async fn send_core(test: usize, multisig: bool) {
   let mut spend_pub = &spend * &ED25519_BASEPOINT_TABLE;
 
   #[cfg(feature = "multisig")]
-  let (keys, _) = generate_keys();
+  let keys = key_gen::<_, Ed25519>(&mut OsRng);
 
   if multisig {
     #[cfg(not(feature = "multisig"))]
@@ -148,17 +149,13 @@ async fn send_core(test: usize, multisig: bool) {
               &mut OsRng,
               &rpc,
               rpc.get_height().await.unwrap() - 10,
-              keys[&i].clone(),
+              (*keys[&i]).clone(),
               (1 ..= THRESHOLD).collect::<Vec<_>>()
             ).await.unwrap()
           );
         }
 
-        let mut txs = sign(&mut machines, &vec![]);
-        for s in 1 .. THRESHOLD {
-          assert_eq!(txs[usize::from(s)].hash(), txs[0].hash());
-        }
-        tx = Some(txs.swap_remove(0));
+        tx = Some(sign(&mut OsRng, machines, &vec![]));
       }
     }
 

@@ -2,9 +2,12 @@ use std::{rc::Rc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
+use ff::Field;
+
 use crate::{
   Curve,
   MultisigParams, MultisigKeys,
+  lagrange,
   key_gen,
   algorithm::Algorithm,
   sign::{StateMachine, AlgorithmMachine}
@@ -100,6 +103,19 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
   }
 
   keys
+}
+
+pub fn recover<C: Curve>(keys: &HashMap<u16, MultisigKeys<C>>) -> C::F {
+  let first = keys.values().next().expect("no keys provided");
+  assert!(keys.len() >= first.params().t().into(), "not enough keys provided");
+  let included = keys.keys().cloned().collect::<Vec<_>>();
+
+  let group_private = keys.iter().fold(
+    C::F::zero(),
+    |accum, (i, keys)| accum + (keys.secret_share() * lagrange::<C::F>(*i, &included))
+  );
+  assert_eq!(C::generator_table() * group_private, first.group_key(), "failed to recover keys");
+  group_private
 }
 
 pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
