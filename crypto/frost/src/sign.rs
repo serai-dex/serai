@@ -4,7 +4,6 @@ use std::{rc::Rc, collections::HashMap};
 use rand_core::{RngCore, CryptoRng};
 
 use ff::Field;
-use group::Group;
 
 use transcript::Transcript;
 
@@ -99,7 +98,8 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
 
 #[allow(non_snake_case)]
 struct Package<C: Curve> {
-  Ris: HashMap<u16, C::G>,
+  B: HashMap<u16, [C::G; 2]>,
+  binding: C::F,
   R: C::G,
   share: Vec<u8>
 }
@@ -170,16 +170,9 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   }
 
   #[allow(non_snake_case)]
-  let mut Ris = HashMap::with_capacity(params.view.included.len());
-  #[allow(non_snake_case)]
-  let mut R = C::G::identity();
-  for l in &params.view.included {
-    #[allow(non_snake_case)]
-    let this_R = B[l][0] + (B[l][1] * binding);
-    Ris.insert(*l, this_R);
-    R += this_R;
-  }
-
+  let R = {
+    B.values().map(|B| B[0]).sum::<C::G>() + (B.values().map(|B| B[1]).sum::<C::G>() * binding)
+  };
   let share = C::F_to_bytes(
     &params.algorithm.sign_share(
       &params.view,
@@ -190,7 +183,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     )
   );
 
-  Ok((Package { Ris, R, share: share.clone() }, share))
+  Ok((Package { B, binding, R, share: share.clone() }, share))
 }
 
 // This doesn't check the signing set is as expected and unexpected changes can cause false blames
@@ -220,11 +213,12 @@ fn complete<C: Curve, A: Algorithm<C>>(
     return Ok(res);
   }
 
-  // Find out who misbehaved
+  // Find out who misbehaved. It may be beneficial to randomly sort this to have detection be
+  // within n / 2 on average, and not gameable to n, though that should be minor
   for l in &sign_params.view.included {
     if !sign_params.algorithm.verify_share(
       sign_params.view.verification_share(*l),
-      sign.Ris[l],
+      sign.B[l][0] + (sign.B[l][1] * sign.binding),
       responses[l]
     ) {
       Err(FrostError::InvalidShare(*l))?;

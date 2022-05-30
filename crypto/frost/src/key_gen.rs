@@ -186,7 +186,7 @@ fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
 fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: MultisigParams,
-  share: C::F,
+  mut secret_share: C::F,
   commitments: HashMap<u16, Vec<C::G>>,
   // Vec to preserve ownership
   mut serialized: HashMap<u16, Vec<u8>>,
@@ -194,7 +194,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   validate_map(
     &mut serialized,
     &(1 ..= params.n()).into_iter().collect::<Vec<_>>(),
-    (params.i(), C::F_to_bytes(&share))
+    (params.i(), C::F_to_bytes(&secret_share))
   )?;
 
   // Step 2. Verify each share
@@ -203,52 +203,66 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
     shares.insert(l, C::F_from_slice(&share).map_err(|_| FrostError::InvalidShare(params.i()))?);
   }
 
+  // Calculate the exponent for a given participant and apply it to a series of commitments
+  // Initially used with the actual commitments to verify the secret share, later used with stripes
+  // to generate the verification shares
+  let exponential = |i: u16, values: &[_]| {
+    let i = C::F::from(i.into());
+    let mut res = Vec::with_capacity(params.t().into());
+    (0 .. usize::from(params.t())).into_iter().fold(
+      C::F::one(),
+      |exp, l| {
+        res.push((exp, values[l]));
+        exp * i
+      }
+    );
+    res
+  };
+
   let mut batch = BatchVerifier::new(shares.len(), C::little_endian());
   for (l, share) in &shares {
     if *l == params.i() {
       continue;
     }
 
-    let i_scalar = C::F::from(params.i.into());
-    let mut exp = C::F::one();
-    let mut values = Vec::with_capacity(usize::from(params.t()) + 1);
-    for lt in 0 .. params.t() {
-      values.push((exp, commitments[&l][usize::from(lt)]));
-      exp *= i_scalar;
-    }
-    values.push((-*share, C::generator()));
+    secret_share += share;
 
+    // This can be insecurely linearized from n * t to just n using the below sums for a given
+    // stripe. Doing so uses naive addition which is subject to malleability. The only way to
+    // ensure that malleability isn't present is to use this n * t algorithm, which runs
+    // per sender and not as an aggregate of all senders, which also enables blame
+    let mut values = exponential(params.i, &commitments[l]);
+    values.push((-*share, C::generator()));
     batch.queue(rng, *l, values);
   }
   batch.verify_with_vartime_blame().map_err(|l| FrostError::InvalidCommitment(l))?;
 
-  // TODO: Clear the original share
-
-  let mut secret_share = C::F::zero();
-  for (_, share) in shares {
-    secret_share += share;
+  // Stripe commitments per t and sum them in advance. Calculating verification shares relies on
+  // these sums so preprocessing them is a massive speedup
+  // If these weren't just sums, yet the tables used in multiexp, this would be further optimized
+  let mut stripes = Vec::with_capacity(usize::from(params.t()));
+  for t in 0 .. usize::from(params.t()) {
+    stripes.push(commitments.values().map(|commitments| commitments[t]).sum());
   }
 
+  // Calculate each user's verification share
   let mut verification_shares = HashMap::new();
   for i in 1 ..= params.n() {
-    let i_scalar = C::F::from(i.into());
-    let mut values = vec![];
-    (0 .. params.t()).into_iter().fold(C::F::one(), |exp, j| {
-      values.push((
-        exp,
-        (1 ..= params.n()).into_iter().map(|l| commitments[&l][usize::from(j)]).sum()
-      ));
-      exp * i_scalar
-    });
-    verification_shares.insert(i, multiexp_vartime(values, C::little_endian()));
+    verification_shares.insert(i, multiexp_vartime(exponential(i, &stripes), C::little_endian()));
   }
   debug_assert_eq!(C::generator_table() * secret_share, verification_shares[&params.i()]);
 
-  let group_key = commitments.iter().map(|(_, commitments)| commitments[0]).sum();
-
   // TODO: Clear serialized and shares
 
-  Ok(MultisigKeys { params, secret_share, group_key, verification_shares, offset: None } )
+  Ok(
+    MultisigKeys {
+      params,
+      secret_share,
+      group_key: stripes[0],
+      verification_shares,
+      offset: None
+    }
+  )
 }
 
 /// State of a Key Generation machine
