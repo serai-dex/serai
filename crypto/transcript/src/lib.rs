@@ -11,7 +11,7 @@ pub trait Transcript {
   fn domain_separate(&mut self, label: &[u8]);
   fn append_message(&mut self, label: &'static [u8], message: &[u8]);
   fn challenge(&mut self, label: &'static [u8]) -> Vec<u8>;
-  fn rng_seed(&mut self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> [u8; 32];
+  fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32];
 }
 
 #[derive(Clone, Debug)]
@@ -49,11 +49,7 @@ impl<D: Digest> Transcript for DigestTranscript<D> {
     D::new().chain_update(&self.0).finalize().to_vec()
   }
 
-  fn rng_seed(&mut self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> [u8; 32] {
-    if additional_entropy.is_some() {
-      self.append_message(b"additional_entropy", &additional_entropy.unwrap());
-    }
-
+  fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {
     let mut seed = [0; 32];
     seed.copy_from_slice(&self.challenge(label)[0 .. 32]);
     seed

@@ -1,7 +1,7 @@
 [package]
 name = "monero-serai"
 version = "0.1.0"
-description = "Implementation of Monero transaction signing in Rust"
+description = "A modern Monero wallet library"
 license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"

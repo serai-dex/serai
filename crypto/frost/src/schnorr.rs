@@ -1,7 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
 use ff::Field;
-use group::Group;
 
 use multiexp::BatchVerifier;
 
@@ -46,7 +45,7 @@ pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
   rng: &mut R,
   triplets: &[(u16, C::G, C::F, SchnorrSignature<C>)]
 ) -> Result<(), u16> {
-  let mut values = [(C::F::one(), C::G::generator()); 3];
+  let mut values = [(C::F::one(), C::generator()); 3];
   let mut batch = BatchVerifier::new(triplets.len(), C::little_endian());
   for triple in triplets {
     // s = r + ca

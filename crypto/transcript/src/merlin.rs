@@ -30,11 +30,7 @@ impl Transcript for MerlinTranscript {
     challenge
   }
 
-  fn rng_seed(&mut self, label: &'static [u8], additional_entropy: Option<[u8; 32]>) -> [u8; 32] {
-    if additional_entropy.is_some() {
-      transcript.append_message(b"additional_entropy", &additional_entropy.unwrap());
-    }
-
+  fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {
     let mut seed = [0; 32];
     transcript.challenge_bytes(label, &mut seed);
     seed

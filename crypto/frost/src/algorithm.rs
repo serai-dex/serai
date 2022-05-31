@@ -73,7 +73,7 @@ impl Transcript for IetfTranscript {
     self.0.clone()
   }
 
-  fn rng_seed(&mut self, _: &'static [u8], _: Option<[u8; 32]>) -> [u8; 32] {
+  fn rng_seed(&mut self, _: &'static [u8]) -> [u8; 32] {
     unimplemented!()
   }
 }

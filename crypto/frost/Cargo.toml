@@ -14,7 +14,6 @@ rand_core = "0.6"
 ff = "0.11"
 group = "0.11"
 
-blake2 = "0.10"
 transcript = { path = "../transcript" }
 
 multiexp = { path = "../multiexp", features = ["batch"] }
