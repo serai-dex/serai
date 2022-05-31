@@ -206,7 +206,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     // process even if they have access to commitments (specifically, the ring index being signed
     // for, along with the mask which should not only require knowing the shared keys yet also the
     // input commitment masks)
-    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"decoy_responses", None));
+    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"decoy_responses"));
 
     self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
 

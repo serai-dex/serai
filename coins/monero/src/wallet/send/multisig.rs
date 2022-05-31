@@ -90,7 +90,7 @@ impl SignableTransaction {
     let decoys = Decoys::select(
       // Using a seeded RNG with a specific height, committed to above, should make these decoys
       // committed to. They'll also be committed to later via the TX message as a whole
-      &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys", None)),
+      &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys")),
       rpc,
       height,
       &self.inputs
@@ -216,7 +216,7 @@ impl StateMachine for TransactionMachine {
 
       // Not invalid outputs due to already doing a dummy prep
       let (commitments, output_masks) = self.signable.prepare_outputs(
-        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys", None)),
+        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys")),
         uniqueness(
           &images.iter().map(|image| Input::ToKey {
             amount: 0,
@@ -230,7 +230,7 @@ impl StateMachine for TransactionMachine {
       self.signable.prepare_transaction(
         &commitments,
         Bulletproofs::new(
-          &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs", None)),
+          &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs")),
           &commitments
         ).unwrap()
       )
@@ -249,7 +249,7 @@ impl StateMachine for TransactionMachine {
     }
     sorted.sort_by(|x, y| x.2.compress().to_bytes().cmp(&y.2.compress().to_bytes()).reverse());
 
-    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks", None));
+    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks"));
     let mut sum_pseudo_outs = Scalar::zero();
     while sorted.len() != 0 {
       let value = sorted.remove(0);
