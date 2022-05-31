@@ -229,6 +229,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn verify(
     &self,
+    _: u16,
     _: dfg::EdwardsPoint,
     _: dfg::EdwardsPoint,
     sum: dfg::Scalar

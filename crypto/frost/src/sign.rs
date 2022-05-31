@@ -217,6 +217,7 @@ fn complete<C: Curve, A: Algorithm<C>>(
   // within n / 2 on average, and not gameable to n, though that should be minor
   for l in &sign_params.view.included {
     if !sign_params.algorithm.verify_share(
+      *l,
       sign_params.view.verification_share(*l),
       sign.B[l][0] + (sign.B[l][1] * sign.binding),
       responses[l]

@@ -1,0 +1,30 @@
+[package]
+name = "firo"
+version = "0.1.0"
+description = "A modern Firo wallet library"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+lazy_static = "1"
+thiserror = "1"
+
+rand_core = "0.6"
+rand_chacha = { version = "0.3", optional = true }
+
+sha2 = "0.10"
+
+ff = "0.11"
+group = "0.11"
+k256 = { version = "0.10", features = ["arithmetic"] }
+
+blake2 = { version = "0.10", optional = true }
+transcript = { path = "../../crypto/transcript", optional = true }
+frost = { path = "../../crypto/frost", optional = true }
+
+[dev-dependencies]
+rand = "0.8"
+
+[features]
+multisig = ["blake2", "transcript", "frost", "rand_chacha"]

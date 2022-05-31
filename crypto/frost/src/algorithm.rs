@@ -52,6 +52,7 @@ pub trait Algorithm<C: Curve>: Clone {
   /// verification fails
   fn verify_share(
     &self,
+    l: u16,
     verification_share: C::G,
     nonce: C::G,
     share: C::F,
@@ -154,6 +155,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
 
   fn verify_share(
     &self,
+    _: u16,
     verification_share: C::G,
     nonce: C::G,
     share: C::F,
