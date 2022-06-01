@@ -14,7 +14,7 @@ mod wallet;
 #[cfg(test)]
 mod tests;
 
-trait Output: Sized {
+pub trait Output: Sized {
   type Id;
 
   fn id(&self) -> Self::Id;
@@ -25,31 +25,33 @@ trait Output: Sized {
 }
 
 #[derive(Clone, Error, Debug)]
-enum CoinError {
+pub enum CoinError {
   #[error("failed to connect to coin daemon")]
   ConnectionError
 }
 
 #[async_trait]
-trait Coin {
+pub trait Coin {
   type Curve: Curve;
 
   type Output: Output;
+  type Block;
   type SignableTransaction;
 
   type Address: Send;
 
   fn id() -> &'static [u8];
-  async fn confirmations() -> usize;
-  async fn max_inputs() -> usize;
-  async fn max_outputs() -> usize;
+  fn confirmations() -> usize;
+  fn max_inputs() -> usize;
+  fn max_outputs() -> usize;
 
   async fn get_height(&self) -> Result<usize, CoinError>;
-  async fn get_outputs_in_block(
+  async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError>;
+  async fn get_outputs(
     &self,
-    height: usize,
+    block: &Self::Block,
     key: <Self::Curve as Curve>::G
-  ) -> Result<Vec<Self::Output>, CoinError>;
+  ) -> Vec<Self::Output>;
 
   async fn prepare_send<R: RngCore + CryptoRng>(
     &self,
@@ -73,6 +75,6 @@ trait Coin {
 // Takes an index, k, for more modern privacy protocols which use multiple view keys
 // Doesn't run Curve::hash_to_F, instead returning the hash object, due to hash_to_F being a FROST
 // definition instead of a wide reduction from a hash object
-fn view_key<C: Coin>(k: u64) -> Blake2b512 {
+pub fn view_key<C: Coin>(k: u64) -> Blake2b512 {
   Blake2b512::new().chain(b"Serai DEX View Key").chain(C::id()).chain(k.to_le_bytes())
 }

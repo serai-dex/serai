@@ -21,4 +21,5 @@ monero = { version = "0.16", features = ["experimental"] }
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 [dev-dependencies]
+rand = "0.8"
 tokio = { version = "1", features = ["full"] }
