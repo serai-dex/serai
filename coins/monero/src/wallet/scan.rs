@@ -58,6 +58,12 @@ impl Transaction {
     view: Scalar,
     spend: EdwardsPoint
   ) -> Vec<SpendableOutput> {
+    // Ignore transactions which utilize a timelock. Almost no transactions on Monero do,
+    // and they're not worth the effort to track given their complexities
+    if self.prefix.unlock_time != 0 {
+      return vec![];
+    }
+
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
     extra.extend(&self.prefix.extra);
