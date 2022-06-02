@@ -11,7 +11,7 @@ use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
 use crate::{
   Commitment,
   serialize::{write_varint, read_32, read_scalar, read_point},
-  transaction::Transaction,
+  transaction::{Timelock, Transaction},
   wallet::{uniqueness, shared_key, amount_decryption, commitment_mask}
 };
 
@@ -57,13 +57,7 @@ impl Transaction {
     &self,
     view: Scalar,
     spend: EdwardsPoint
-  ) -> Vec<SpendableOutput> {
-    // Ignore transactions which utilize a timelock. Almost no transactions on Monero do,
-    // and they're not worth the effort to track given their complexities
-    if self.prefix.unlock_time != 0 {
-      return vec![];
-    }
-
+  ) -> (Vec<SpendableOutput>, Timelock) {
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
     extra.extend(&self.prefix.extra);
@@ -81,7 +75,7 @@ impl Transaction {
 
       pubkeys = m_pubkeys.iter().map(|key| key.point.decompress()).filter_map(|key| key).collect();
     } else {
-      return vec![];
+      return (vec![], self.prefix.timelock);
     };
 
     let mut res = vec![];
@@ -136,6 +130,7 @@ impl Transaction {
         }
       }
     }
-    res
+
+    (res, self.prefix.timelock)
   }
 }

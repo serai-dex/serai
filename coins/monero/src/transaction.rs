@@ -84,10 +84,40 @@ impl Output {
   }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Timelock {
+  None,
+  Block(usize),
+  Time(u64)
+}
+
+impl Timelock {
+  fn from_raw(raw: u64) -> Timelock {
+    if raw == 0 {
+      Timelock::None
+    } else if raw < 500_000_000 {
+      Timelock::Block(usize::try_from(raw).unwrap())
+    } else {
+      Timelock::Time(raw)
+    }
+  }
+
+  fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+    write_varint(
+      &match self {
+        Timelock::None => 0,
+        Timelock::Block(block) => (*block).try_into().unwrap(),
+        Timelock::Time(time) => *time
+      },
+      w
+    )
+  }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct TransactionPrefix {
   pub version: u64,
-  pub unlock_time: u64,
+  pub timelock: Timelock,
   pub inputs: Vec<Input>,
   pub outputs: Vec<Output>,
   pub extra: Vec<u8>
@@ -96,7 +126,7 @@ pub struct TransactionPrefix {
 impl TransactionPrefix {
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.version, w)?;
-    write_varint(&self.unlock_time, w)?;
+    self.timelock.serialize(w)?;
     write_vec(Input::serialize, &self.inputs, w)?;
     write_vec(Output::serialize, &self.outputs, w)?;
     write_varint(&self.extra.len().try_into().unwrap(), w)?;
@@ -106,7 +136,7 @@ impl TransactionPrefix {
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<TransactionPrefix> {
     let mut prefix = TransactionPrefix {
       version: read_varint(r)?,
-      unlock_time: read_varint(r)?,
+      timelock: Timelock::from_raw(read_varint(r)?),
       inputs: read_vec(Input::deserialize, r)?,
       outputs: read_vec(Output::deserialize, r)?,
       extra: vec![]

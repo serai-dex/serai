@@ -9,7 +9,7 @@ use frost::MultisigKeys;
 use monero::util::address::Address;
 use monero_serai::{
   frost::Ed25519,
-  transaction::Transaction,
+  transaction::{Timelock, Transaction},
   rpc::Rpc,
   wallet::{SpendableOutput, SignableTransaction}
 };
@@ -90,7 +90,18 @@ impl Coin for Monero {
   }
 
   async fn get_outputs(&self, block: &Self::Block, key: dfg::EdwardsPoint) -> Vec<Self::Output> {
-    block.iter().flat_map(|tx| tx.scan(self.view, key.0)).map(Output::from).collect()
+    block
+      .iter()
+      .flat_map(|tx| {
+        let (outputs, timelock) = tx.scan(self.view, key.0);
+        if timelock == Timelock::None {
+          outputs
+        } else {
+          vec![]
+        }
+      })
+      .map(Output::from)
+      .collect()
   }
 
   async fn prepare_send<R: RngCore + CryptoRng>(

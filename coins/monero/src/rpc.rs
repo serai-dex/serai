@@ -9,7 +9,7 @@ use serde_json::json;
 
 use reqwest;
 
-use crate::{transaction::{Input, Transaction}, block::Block};
+use crate::{transaction::{Input, Timelock, Transaction}, block::Block};
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -267,9 +267,12 @@ impl Rpc {
     // get the median time for the given height, yet we do need to in order to be complete
     outs.outs.iter().enumerate().map(
       |(i, out)| Ok(
-        if txs[i].prefix.unlock_time <= u64::try_from(height).unwrap() {
-          Some([rpc_point(&out.key)?, rpc_point(&out.mask)?])
-        } else { None }
+        Some([rpc_point(&out.key)?, rpc_point(&out.mask)?]).filter(|_| {
+          match txs[i].prefix.timelock {
+            Timelock::Block(t_height) => (t_height <= height),
+            _ => false
+          }
+        })
       )
     ).collect()
   }

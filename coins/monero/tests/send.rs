@@ -100,7 +100,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       // Grab the largest output available
       let output = {
-        let mut outputs = tx.as_ref().unwrap().scan(view, spend_pub);
+        let mut outputs = tx.as_ref().unwrap().scan(view, spend_pub).0;
         outputs.sort_by(|x, y| x.commitment.amount.cmp(&y.commitment.amount).reverse());
         outputs.swap_remove(0)
       };
@@ -125,7 +125,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       for i in (start + 1) .. (start + 9) {
         let tx = rpc.get_block_transactions(i).await.unwrap().swap_remove(0);
-        let output = tx.scan(view, spend_pub).swap_remove(0);
+        let output = tx.scan(view, spend_pub).0.swap_remove(0);
         amount += output.commitment.amount;
         outputs.push(output);
       }

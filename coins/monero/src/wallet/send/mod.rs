@@ -27,7 +27,7 @@ use crate::{
     bulletproofs::Bulletproofs,
     RctBase, RctPrunable, RctSignatures
   },
-  transaction::{Input, Output, TransactionPrefix, Transaction},
+  transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{SpendableOutput, Decoys, key_image_sort, uniqueness, shared_key, commitment_mask, amount_encryption}
 };
@@ -255,7 +255,7 @@ impl SignableTransaction {
     Transaction {
       prefix: TransactionPrefix {
         version: 2,
-        unlock_time: 0,
+        timelock: Timelock::None,
         inputs: vec![],
         outputs: tx_outputs,
         extra
