@@ -13,11 +13,9 @@ use crate::{
   sign::{StateMachine, AlgorithmMachine}
 };
 
-// Internal tests
-mod schnorr;
-
 // Test suites for public usage
 pub mod curve;
+pub mod schnorr;
 pub mod vectors;
 
 // Literal test definitions to run during `cargo test`
@@ -56,7 +54,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
       i,
       key_gen::StateMachine::<C>::new(
         params[&i],
-        "FROST test key_gen".to_string()
+        "FROST Test key_gen".to_string()
       )
     );
     commitments.insert(

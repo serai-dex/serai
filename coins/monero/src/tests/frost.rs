@@ -3,13 +3,22 @@ use rand::rngs::OsRng;
 use sha2::Sha512;
 
 use dalek_ff_group as dfg;
-use frost::{Curve, algorithm::Hram, tests::{curve::test_curve, vectors::{Vectors, vectors}}};
+use frost::{
+  Curve,
+  algorithm::Hram,
+  tests::{curve::test_curve, schnorr::test_schnorr, vectors::{Vectors, vectors}}
+};
 
 use crate::frost::{Ed25519, Ed25519Internal};
 
 #[test]
-fn frost_ed25519() {
+fn frost_ed25519_curve() {
   test_curve::<_, Ed25519>(&mut OsRng);
+}
+
+#[test]
+fn frost_ed25519_schnorr() {
+  test_schnorr::<_, Ed25519>(&mut OsRng);
 }
 
 // Not spec-compliant, as this shouldn't use wide reduction

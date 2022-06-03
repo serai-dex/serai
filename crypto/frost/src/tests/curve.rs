@@ -1,9 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
-use crate::{
-  Curve, MultisigKeys,
-  tests::{schnorr::{sign, verify, batch_verify}, key_gen}
-};
+use crate::{Curve, MultisigKeys, tests::key_gen};
 
 // Test generation of FROST keys
 fn key_generation<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
@@ -20,13 +17,6 @@ fn keys_serialization<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 
 pub fn test_curve<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   // TODO: Test the Curve functions themselves
-
-  // Test Schnorr signatures work as expected
-  // This is a bit unnecessary, as they should for any valid curve, yet this provides tests with
-  // meaning, which the above tests won't have
-  sign::<_, C>(rng);
-  verify::<_, C>(rng);
-  batch_verify::<_, C>(rng);
 
   // Test FROST key generation and serialization of MultisigKeys works as expected
   key_generation::<_, C>(rng);

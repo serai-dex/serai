@@ -12,7 +12,7 @@ use p256::{elliptic_curve::bigint::{Encoding, U384}, Scalar, ProjectivePoint};
 use crate::{
   CurveError, Curve,
   algorithm::Hram,
-  tests::{curve::test_curve, vectors::{Vectors, vectors}}
+  tests::{curve::test_curve, schnorr::test_schnorr, vectors::{Vectors, vectors}}
 };
 
 const CONTEXT_STRING: &[u8] = b"FROST-P256-SHA256-v5";
@@ -179,8 +179,13 @@ fn p256_curve() {
   test_curve::<_, P256>(&mut OsRng);
 }
 
+#[test]
+fn p256_schnorr() {
+  test_schnorr::<_, P256>(&mut OsRng);
+}
+
 #[derive(Clone)]
-pub struct IetfP256Hram {}
+pub struct IetfP256Hram;
 impl Hram<P256> for IetfP256Hram {
   #[allow(non_snake_case)]
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
