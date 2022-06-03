@@ -18,6 +18,7 @@ mod schnorr;
 
 // Test suites for public usage
 pub mod curve;
+pub mod vectors;
 
 // Literal test definitions to run during `cargo test`
 #[cfg(test)]

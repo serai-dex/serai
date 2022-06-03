@@ -1,2 +1,2 @@
-mod secp256k1;
+mod p256;
 mod schnorr;

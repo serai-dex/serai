@@ -10,6 +10,7 @@ edition = "2021"
 thiserror = "1"
 
 rand_core = "0.6"
+hex = "0.4"
 
 ff = "0.11"
 group = "0.11"
@@ -21,4 +22,4 @@ multiexp = { path = "../multiexp", features = ["batch"] }
 [dev-dependencies]
 rand = "0.8"
 sha2 = "0.10"
-k256 = { version = "0.10", features = ["arithmetic"] }
+p256 = { version = "0.10", features = ["arithmetic"] }

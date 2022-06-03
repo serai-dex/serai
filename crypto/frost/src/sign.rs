@@ -69,9 +69,9 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   }
 }
 
-struct PreprocessPackage<C: Curve> {
-  nonces: [C::F; 2],
-  serialized: Vec<u8>,
+pub(crate) struct PreprocessPackage<C: Curve> {
+  pub(crate) nonces: [C::F; 2],
+  pub(crate) serialized: Vec<u8>,
 }
 
 // This library unifies the preprocessing step with signing due to security concerns and to provide
@@ -305,6 +305,16 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
         sign: None,
       }
     )
+  }
+
+  pub(crate) fn unsafe_override_preprocess(&mut self, preprocess: PreprocessPackage<C>) {
+    if self.state != State::Fresh {
+      // This would be unacceptable, yet this is pub(crate) and explicitly labelled unsafe
+      // It's solely used in a testing environment, which is how it's justified
+      Err::<(), _>(FrostError::InvalidSignTransition(State::Fresh, self.state)).unwrap();
+    }
+    self.preprocess = Some(preprocess);
+    self.state = State::Preprocessed;
   }
 }
 

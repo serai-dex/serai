@@ -40,12 +40,11 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// Precomputed table type
   type T: Mul<Self::F, Output = Self::G>;
 
-  /// ID for this curve
-  fn id() -> String;
   /// Byte length of the curve ID
-  // While curve.id().len() is trivial, this bounds it to u8 and lets us ignore the possibility it
-  // contains Unicode, therefore having a String length which is different from its byte length
+  // While C::id().len() is trivial, this bounds it to u8 for any proper Curve implementation
   fn id_len() -> u8;
+  /// ID for this curve
+  fn id() -> &'static [u8];
 
   /// Generator for the group
   // While group does provide this in its API, Jubjub users will want to use a custom basepoint
@@ -79,7 +78,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // Not parameterized by Digest as it's fine for it to use its own hash function as relevant to
   // hash_msg and hash_binding_factor
   #[allow(non_snake_case)]
-  fn hash_to_F(data: &[u8]) -> Self::F;
+  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
 
   /// Constant size of a serialized field element
   // The alternative way to grab this would be either serializing a junk element and getting its
@@ -255,6 +254,10 @@ pub struct MultisigKeys<C: Curve> {
 }
 
 impl<C: Curve> MultisigKeys<C> {
+  /// Offset the keys by a given scalar to allow for account and privacy schemes
+  /// This offset is ephemeral and will not be included when these keys are serialized
+  /// Keys offset multiple times will form a new offset of their sum
+  /// Not IETF compliant
   pub fn offset(&self, offset: C::F) -> MultisigKeys<C> {
     let mut res = self.clone();
     // Carry any existing offset
@@ -311,7 +314,7 @@ impl<C: Curve> MultisigKeys<C> {
       1 + usize::from(C::id_len()) + MultisigKeys::<C>::serialized_len(self.params.n)
     );
     serialized.push(C::id_len());
-    serialized.extend(C::id().as_bytes());
+    serialized.extend(C::id());
     serialized.extend(&self.params.t.to_be_bytes());
     serialized.extend(&self.params.n.to_be_bytes());
     serialized.extend(&self.params.i.to_be_bytes());
@@ -336,8 +339,7 @@ impl<C: Curve> MultisigKeys<C> {
       Err(FrostError::InternalError("ID wasn't included".to_string()))?;
     }
 
-    let id = &serialized[cursor .. (cursor + id_len)];
-    if C::id().as_bytes() != id {
+    if C::id() != &serialized[cursor .. (cursor + id_len)] {
       Err(
         FrostError::InternalError(
           "curve is distinct between serialization and deserialization".to_string()

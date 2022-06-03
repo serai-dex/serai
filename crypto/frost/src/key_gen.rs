@@ -16,8 +16,13 @@ use crate::{
 #[allow(non_snake_case)]
 fn challenge<C: Curve>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
   const DST: &'static [u8] = b"FROST Schnorr Proof of Knowledge";
+
   // Uses hash_msg to get a fixed size value out of the context string
-  C::hash_to_F(&[DST, &C::hash_msg(context.as_bytes()), &l.to_be_bytes(), R, Am].concat())
+  let mut transcript = C::hash_msg(context.as_bytes());
+  transcript.extend(l.to_be_bytes());
+  transcript.extend(R);
+  transcript.extend(Am);
+  C::hash_to_F(DST, &transcript)
 }
 
 // Implements steps 1 through 3 of round 1 of FROST DKG. Returns the coefficients, commitments, and

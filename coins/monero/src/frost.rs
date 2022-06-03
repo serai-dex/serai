@@ -39,12 +39,12 @@ impl Curve for Ed25519 {
   type G = dfg::EdwardsPoint;
   type T = &'static dfg::EdwardsBasepointTable;
 
-  fn id() -> String {
-    "Ed25519".to_string()
-  }
-
   fn id_len() -> u8 {
     u8::try_from(Self::id().len()).unwrap()
+  }
+
+  fn id() -> &'static [u8] {
+    b"Ed25519"
   }
 
   fn generator() -> Self::G {
@@ -67,11 +67,11 @@ impl Curve for Ed25519 {
   }
 
   fn hash_binding_factor(binding: &[u8]) -> Self::F {
-    Self::hash_to_F(&[b"rho", binding].concat())
+    Self::hash_to_F(b"rho", binding)
   }
 
-  fn hash_to_F(data: &[u8]) -> Self::F {
-    dfg::Scalar::from_hash(Blake2b512::new().chain(data))
+  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
+    dfg::Scalar::from_hash(Blake2b512::new().chain(dst).chain(msg))
   }
 
   fn F_len() -> usize {
