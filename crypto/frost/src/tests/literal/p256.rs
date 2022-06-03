@@ -1,9 +1,9 @@
 use core::convert::TryInto;
 
-use rand::rngs::OsRng;
+use rand::{RngCore, CryptoRng, rngs::OsRng};
 
 use ff::{Field, PrimeField};
-use group::GroupEncoding;
+use group::{Group, GroupEncoding};
 
 use sha2::{digest::Update, Digest, Sha256};
 
@@ -102,6 +102,13 @@ impl Curve for P256 {
     false
   }
 
+  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
+    let mut seed = vec![0; 32];
+    rng.fill_bytes(&mut seed);
+    seed.extend(&secret.to_repr());
+    Self::hash_to_F(&[CONTEXT_STRING, b"nonce"].concat(), &seed)
+  }
+
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
     (&Sha256::new()
       .chain(CONTEXT_STRING)
@@ -151,7 +158,7 @@ impl Curve for P256 {
       .map_err(|_| CurveError::InvalidLength(33, slice.len()))?;
 
     let point = ProjectivePoint::from_bytes(&bytes.into());
-    if point.is_none().into() {
+    if point.is_none().into() || point.unwrap().is_identity().into() {
       Err(CurveError::InvalidPoint)?;
     }
 

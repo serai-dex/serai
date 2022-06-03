@@ -11,7 +11,7 @@ use curve25519_dalek::{
   edwards::EdwardsPoint as DPoint
 };
 
-use ff::PrimeField;
+use ff::{Field, PrimeField};
 use group::Group;
 
 use transcript::{Transcript as TranscriptTrait, DigestTranscript};
@@ -57,6 +57,10 @@ impl Curve for Ed25519 {
 
   fn little_endian() -> bool {
     true
+  }
+
+  fn random_nonce<R: RngCore + CryptoRng>(_secret: Self::F, rng: &mut R) -> Self::F {
+    dfg::Scalar::random(rng)
   }
 
   // This will already be a keccak256 hash in the case of CLSAG signing, making it fine to simply

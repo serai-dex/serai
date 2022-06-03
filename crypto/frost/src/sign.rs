@@ -80,7 +80,10 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   params: &mut Params<C, A>,
 ) -> PreprocessPackage<C> {
-  let nonces = [C::F::random(&mut *rng), C::F::random(&mut *rng)];
+  let nonces = [
+    C::random_nonce(params.view().secret_share(), &mut *rng),
+    C::random_nonce(params.view().secret_share(), &mut *rng)
+  ];
   let commitments = [C::generator_table() * nonces[0], C::generator_table() * nonces[1]];
   let mut serialized = C::G_to_bytes(&commitments[0]);
   serialized.extend(&C::G_to_bytes(&commitments[1]));

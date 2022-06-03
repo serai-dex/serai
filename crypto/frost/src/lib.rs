@@ -3,6 +3,8 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
+use rand_core::{RngCore, CryptoRng};
+
 use ff::{Field, PrimeField};
 use group::{Group, GroupOps};
 
@@ -32,7 +34,7 @@ pub enum CurveError {
 // It uses GenericArray which will hopefully be deprecated as Rust evolves and doesn't offer enough
 // advantages in the modern day to be worth the hassle -- Kayaba
 pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
-  /// Field element type
+  /// Scalar field element type
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
   type F: PrimeField;
   /// Group element type
@@ -57,6 +59,9 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// If little endian is used for the scalar field's Repr
   fn little_endian() -> bool;
 
+  /// Securely generate a random nonce. H4 from the IETF draft
+  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F;
+
   /// Hash the message for the binding factor. H3 from the IETF draft
   // This doesn't actually need to be part of Curve as it does nothing with the curve
   // This also solely relates to FROST and with a proper Algorithm/HRAM, all projects using
@@ -80,7 +85,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   #[allow(non_snake_case)]
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
 
-  /// Constant size of a serialized field element
+  /// Constant size of a serialized scalar field element
   // The alternative way to grab this would be either serializing a junk element and getting its
   // length or doing a naive division of its BITS property by 8 and assuming a lack of padding
   #[allow(non_snake_case)]
