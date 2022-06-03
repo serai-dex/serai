@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use transcript::{Transcript, DigestTranscript};
 use frost::{Curve, MultisigKeys};
 
 use crate::{CoinError, Coin};
@@ -21,17 +22,14 @@ impl<C: Curve> WalletKeys<C> {
   // potential ETH group key. While this shouldn't be an issue, as this isn't a private
   // system, there are potentially other benefits to binding this to a specific group key
   // It's no longer possible to influence group key gen to key cancel without breaking the hash
-  // function, although that degree of influence means key gen is broken already
+  // function as well, although that degree of influence means key gen is broken already
   fn bind(&self, chain: &[u8]) -> MultisigKeys<C> {
-    self.keys.offset(
-      C::hash_to_F(
-        &[
-          b"Serai Processor Wallet",
-          chain,
-          &C::G_to_bytes(&self.keys.group_key())
-        ].concat()
-      )
-    )
+    const DST: &[u8] = b"Serai Processor Wallet Chain Bind";
+    let mut transcript = DigestTranscript::<blake2::Blake2b512>::new(DST);
+    transcript.append_message(b"chain", chain);
+    transcript.append_message(b"curve", C::id());
+    transcript.append_message(b"group_key", &C::G_to_bytes(&self.keys.group_key()));
+    self.keys.offset(C::hash_to_F(DST, &transcript.challenge(b"offset")))
   }
 }
 

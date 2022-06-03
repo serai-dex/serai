@@ -8,7 +8,7 @@ pub use merlin::MerlinTranscript;
 use digest::Digest;
 
 pub trait Transcript {
-  fn domain_separate(&mut self, label: &[u8]);
+  fn domain_separate(&mut self, label: &'static [u8]);
   fn append_message(&mut self, label: &'static [u8], message: &[u8]);
   fn challenge(&mut self, label: &'static [u8]) -> Vec<u8>;
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32];
@@ -24,15 +24,12 @@ impl<D: Digest> PartialEq for DigestTranscript<D> {
 }
 
 impl<D: Digest> DigestTranscript<D> {
-  pub fn new(label: Vec<u8>) -> Self {
-    DigestTranscript(label, PhantomData)
+  pub fn new(label: &'static [u8]) -> Self {
+    DigestTranscript(label.to_vec(), PhantomData)
   }
 }
 
 impl<D: Digest> Transcript for DigestTranscript<D> {
-  // It may be beneficial for each domain to be a nested transcript which is itself length prefixed
-  // This would go further than Merlin though and require an accurate end_domain function which has
-  // frustrations not worth bothering with when this shouldn't actually be meaningful
   fn domain_separate(&mut self, label: &[u8]) {
     self.append_message(b"domain", label);
   }

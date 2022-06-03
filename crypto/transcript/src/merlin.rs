@@ -10,7 +10,7 @@ impl Debug for MerlinTranscript {
 }
 
 impl Transcript for MerlinTranscript {
-  fn domain_separate(&mut self, label: &[u8]) {
+  fn domain_separate(&mut self, label: &'static [u8]) {
     self.append_message(b"dom-sep", label);
   }
 

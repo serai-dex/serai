@@ -37,7 +37,7 @@ pub struct TransactionMachine {
 impl SignableTransaction {
   pub async fn multisig<R: RngCore + CryptoRng>(
     mut self,
-    label: Vec<u8>,
+    mut transcript: Transcript,
     rng: &mut R,
     rpc: &Rpc,
     height: usize,
@@ -56,8 +56,9 @@ impl SignableTransaction {
     // Create a RNG out of the input shared keys, which either requires the view key or being every
     // sender, and the payments (address and amount), which a passive adversary may be able to know
     // depending on how these transactions are coordinated
+    // Being every sender would already let you note rings which happen to use your transactions
+    // multiple times, already breaking privacy there
 
-    let mut transcript = Transcript::new(label);
     transcript.domain_separate(b"monero_transaction");
     // Include the height we're using for our data
     // The data itself will be included, making this unnecessary, yet a lot of this is technically

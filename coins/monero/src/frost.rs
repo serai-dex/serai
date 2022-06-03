@@ -135,7 +135,7 @@ impl DLEqProof {
     // the proper order if they want to reach consensus
     // It'd be a poor API to have CLSAG define a new transcript solely to pass here, just to try to
     // merge later in some form, when it should instead just merge xH (as it does)
-    let mut transcript = Transcript::new(b"DLEq Proof".to_vec());
+    let mut transcript = Transcript::new(b"DLEq Proof");
     // Bit redundant, keeps things consistent
     transcript.domain_separate(b"DLEq");
     // Doesn't include G which is constant, does include H which isn't, even though H manipulation

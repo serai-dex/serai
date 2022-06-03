@@ -96,7 +96,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
     algorithm_machines(
       &mut OsRng,
       ClsagMultisig::new(
-        Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
+        Transcript::new(b"Monero Serai CLSAG Test"),
         Rc::new(RefCell::new(Some(
           ClsagDetails::new(
             ClsagInput::new(
