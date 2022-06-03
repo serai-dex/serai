@@ -312,9 +312,9 @@ impl<C: Curve> MultisigKeys<C> {
     );
     serialized.push(C::id_len());
     serialized.extend(C::id().as_bytes());
-    serialized.extend(&self.params.n.to_le_bytes());
-    serialized.extend(&self.params.t.to_le_bytes());
-    serialized.extend(&self.params.i.to_le_bytes());
+    serialized.extend(&self.params.t.to_be_bytes());
+    serialized.extend(&self.params.n.to_be_bytes());
+    serialized.extend(&self.params.i.to_be_bytes());
     serialized.extend(&C::F_to_bytes(&self.secret_share));
     serialized.extend(&C::G_to_bytes(&self.group_key));
     for l in 1 ..= self.params.n.into() {
@@ -346,19 +346,20 @@ impl<C: Curve> MultisigKeys<C> {
     }
     cursor += id_len;
 
-    if serialized.len() < (cursor + 8) {
-      Err(FrostError::InternalError("participant quantity wasn't included".to_string()))?;
+    if serialized.len() < (cursor + 4) {
+      Err(FrostError::InternalError("participant quantities weren't included".to_string()))?;
     }
 
-    let n = u16::from_le_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
+    let t = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
+    cursor += 2;
+
+    let n = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
     cursor += 2;
     if serialized.len() != MultisigKeys::<C>::serialized_len(n) {
       Err(FrostError::InternalError("incorrect serialization length".to_string()))?;
     }
 
-    let t = u16::from_le_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
-    cursor += 2;
-    let i = u16::from_le_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
+    let i = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
     cursor += 2;
 
     let secret_share = C::F_from_slice(&serialized[cursor .. (cursor + C::F_len())])
