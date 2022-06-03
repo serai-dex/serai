@@ -13,7 +13,7 @@ pub use curve25519_dalek as dalek;
 
 use dalek::{
   constants,
-  traits::{Identity, IsIdentity},
+  traits::Identity,
   scalar::Scalar as DScalar,
   edwards::{
     EdwardsPoint as DPoint,
@@ -102,11 +102,13 @@ impl<'a> MulAssign<&'a Scalar> for Scalar {
 }
 
 impl ConstantTimeEq for Scalar {
-  fn ct_eq(&self, _: &Self) -> Choice { unimplemented!() }
+  fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
 }
 
 impl ConditionallySelectable for Scalar {
-  fn conditional_select(_: &Self, _: &Self, _: Choice) -> Self { unimplemented!() }
+  fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+    Scalar(DScalar::conditional_select(a, b, choice))
+  }
 }
 
 impl Field for Scalar {
@@ -124,7 +126,7 @@ impl Field for Scalar {
     CtOption::new(Self(self.0.invert()), Choice::from(1 as u8))
   }
   fn sqrt(&self) -> CtOption<Self> { unimplemented!() }
-  fn is_zero(&self) -> Choice { Choice::from(if self.0 == DScalar::zero() { 1 } else { 0 }) }
+  fn is_zero(&self) -> Choice { self.0.ct_eq(&DScalar::zero()) }
   fn cube(&self) -> Self { *self * self * self }
   fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
 }
@@ -146,9 +148,9 @@ impl PrimeField for Scalar {
   }
   fn to_repr(&self) -> [u8; 32] { self.0.to_bytes() }
 
-  const S: u32 = 0;
+  const S: u32 = 2;
   fn is_odd(&self) -> Choice { unimplemented!() }
-  fn multiplicative_generator() -> Self { unimplemented!() }
+  fn multiplicative_generator() -> Self { 2u64.into() }
   fn root_of_unity() -> Self { unimplemented!() }
 }
 
@@ -245,10 +247,10 @@ impl<'a> MulAssign<&'a Scalar> for EdwardsPoint {
 
 impl Group for EdwardsPoint {
   type Scalar = Scalar;
-  fn random(mut _rng: impl RngCore) -> Self { unimplemented!() }
+  fn random(rng: impl RngCore) -> Self { &ED25519_BASEPOINT_TABLE * Scalar::random(rng) }
   fn identity() -> Self { Self(DPoint::identity()) }
   fn generator() -> Self { ED25519_BASEPOINT_POINT }
-  fn is_identity(&self) -> Choice { (self.0.is_identity() as u8).into() }
+  fn is_identity(&self) -> Choice { self.0.ct_eq(&DPoint::identity()) }
   fn double(&self) -> Self { *self + self }
 }
 
