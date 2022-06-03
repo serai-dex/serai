@@ -179,7 +179,6 @@ fn p256_curve() {
   test_curve::<_, P256>(&mut OsRng);
 }
 
-#[allow(non_snake_case)]
 #[derive(Clone)]
 pub struct IetfP256Hram {}
 impl Hram<P256> for IetfP256Hram {
@@ -217,7 +216,6 @@ fn p256_vectors() {
           "486e2ee25a3fbc8e6399d748b077a2755fde99fa85cc24fa647ea4ebf5811a15"
         ]
       ],
-      binding: "cf7ffe4b8ad6edb6237efaa8cbfb2dfb2fd08d163b6ad9063720f14779a9e143",
       sig_shares: &[
         "9e4d8865faf8c7b3193a3b35eda3d9e12118447114b1e7d5b4809ea28067f8a9",
         "b7d094eab6305ae74daeed1acd31abba9ab81f638d38b72c132cb25a5dfae1fc"

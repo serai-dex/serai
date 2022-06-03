@@ -16,7 +16,6 @@ pub struct Vectors {
   pub msg: &'static str,
   pub included: &'static [u16],
   pub nonces: &'static [[&'static str; 2]],
-  pub binding: &'static str,
   pub sig_shares: &'static [&'static str],
   pub sig: String
 }

@@ -1,9 +1,10 @@
-use core::convert::TryInto;
+use core::{convert::TryInto, fmt::{Formatter, Debug}};
+use std::marker::PhantomData;
 
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::Update, Digest, Blake2b512};
+use blake2::{digest::{generic_array::typenum::U64, Digest}, Blake2b512};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE as DTable,
@@ -11,7 +12,7 @@ use curve25519_dalek::{
   edwards::EdwardsPoint as DPoint
 };
 
-use ff::{Field, PrimeField};
+use ff::PrimeField;
 use group::Group;
 
 use transcript::{Transcript as TranscriptTrait, DigestTranscript};
@@ -32,9 +33,26 @@ pub enum MultisigError {
   InvalidKeyImage(u16)
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Ed25519;
-impl Curve for Ed25519 {
+// Accept a parameterized hash function in order to check against the FROST vectors while still
+// allowing Blake2b to be used with wide reduction in practice
+pub struct Ed25519Internal<D: Digest<OutputSize = U64>, const WIDE: bool> {
+  _digest: PhantomData<D>
+}
+
+// Removed requirements for D to have all of these
+impl<D: Digest<OutputSize = U64>, const WIDE: bool> Clone for Ed25519Internal<D, WIDE> {
+  fn clone(&self) -> Self { *self }
+}
+impl<D: Digest<OutputSize = U64>, const WIDE: bool> Copy for Ed25519Internal<D, WIDE> {}
+impl<D: Digest<OutputSize = U64>, const WIDE: bool> PartialEq for Ed25519Internal<D, WIDE> {
+  fn eq(&self, _: &Self) -> bool { true }
+}
+impl<D: Digest<OutputSize = U64>, const WIDE: bool> Eq for Ed25519Internal<D, WIDE> {}
+impl<D: Digest<OutputSize = U64>, const WIDE: bool> Debug for Ed25519Internal<D, WIDE> {
+  fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), core::fmt::Error> { Ok(()) }
+}
+
+impl<D: Digest<OutputSize = U64>, const WIDE: bool> Curve for Ed25519Internal<D, WIDE> {
   type F = dfg::Scalar;
   type G = dfg::EdwardsPoint;
   type T = &'static dfg::EdwardsBasepointTable;
@@ -44,7 +62,7 @@ impl Curve for Ed25519 {
   }
 
   fn id() -> &'static [u8] {
-    b"Ed25519"
+    b"edwards25519"
   }
 
   fn generator() -> Self::G {
@@ -59,15 +77,15 @@ impl Curve for Ed25519 {
     true
   }
 
-  fn random_nonce<R: RngCore + CryptoRng>(_secret: Self::F, rng: &mut R) -> Self::F {
-    dfg::Scalar::random(rng)
+  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
+    let mut seed = vec![0; 32];
+    rng.fill_bytes(&mut seed);
+    seed.extend(&secret.to_bytes());
+    Self::hash_to_F(b"nonce", &seed)
   }
 
-  // This will already be a keccak256 hash in the case of CLSAG signing, making it fine to simply
-  // return as-is, yet this ensures it's fixed size (a security requirement) and unique regardless
-  // of how it's called/what it's called with
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
-    Blake2b512::digest(msg).to_vec()
+    D::digest(msg).to_vec()
   }
 
   fn hash_binding_factor(binding: &[u8]) -> Self::F {
@@ -75,7 +93,12 @@ impl Curve for Ed25519 {
   }
 
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-    dfg::Scalar::from_hash(Blake2b512::new().chain(dst).chain(msg))
+    let digest = D::new().chain_update(dst).chain_update(msg);
+    if WIDE {
+      dfg::Scalar::from_hash(digest)
+    } else {
+      dfg::Scalar::from_bytes_mod_order(digest.finalize()[32 ..].try_into().unwrap())
+    }
   }
 
   fn F_len() -> usize {
@@ -101,8 +124,8 @@ impl Curve for Ed25519 {
     let point = dfg::CompressedEdwardsY::new(bytes).decompress();
 
     if let Some(point) = point {
-      // Ban torsioned points
-      if !point.is_torsion_free() {
+      // Ban identity and torsioned points
+      if point.is_identity().into() || (!bool::from(point.is_torsion_free())) {
         Err(CurveError::InvalidPoint)?;
       }
       // Ban points which weren't canonically encoded
@@ -123,6 +146,8 @@ impl Curve for Ed25519 {
     g.compress().to_bytes().to_vec()
   }
 }
+
+pub type Ed25519 = Ed25519Internal<Blake2b512, true>;
 
 // Used to prove legitimacy of key images and nonces which both involve other basepoints
 #[derive(Clone)]
@@ -225,6 +250,7 @@ pub fn read_dleq(
   xG: &DPoint
 ) -> Result<dfg::EdwardsPoint, MultisigError> {
   // Not using G_from_slice here would enable non-canonical points and break blame
+  // This does also ban identity points, yet those should never be a concern
   let other = <Ed25519 as Curve>::G_from_slice(
     &serialized[(start + 0) .. (start + 32)]
   ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;

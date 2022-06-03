@@ -40,4 +40,5 @@ experimental = []
 multisig = ["ff", "group", "rand_chacha", "transcript", "frost", "dalek-ff-group"]
 
 [dev-dependencies]
+sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
