@@ -28,7 +28,7 @@ pub(crate) fn sign<C: Curve>(
   challenge: C::F
 ) -> SchnorrSignature<C> {
   SchnorrSignature {
-    R: C::generator_table() * nonce,
+    R: C::GENERATOR_TABLE * nonce,
     s: nonce + (private_key * challenge)
   }
 }
@@ -38,15 +38,15 @@ pub(crate) fn verify<C: Curve>(
   challenge: C::F,
   signature: &SchnorrSignature<C>
 ) -> bool {
-  (C::generator_table() * signature.s) == (signature.R + (public_key * challenge))
+  (C::GENERATOR_TABLE * signature.s) == (signature.R + (public_key * challenge))
 }
 
 pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
   rng: &mut R,
   triplets: &[(u16, C::G, C::F, SchnorrSignature<C>)]
 ) -> Result<(), u16> {
-  let mut values = [(C::F::one(), C::generator()); 3];
-  let mut batch = BatchVerifier::new(triplets.len(), C::little_endian());
+  let mut values = [(C::F::one(), C::GENERATOR); 3];
+  let mut batch = BatchVerifier::new(triplets.len(), C::LITTLE_ENDIAN);
   for triple in triplets {
     // s = r + ca
     // sG == R + cA

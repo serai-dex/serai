@@ -42,22 +42,19 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// Precomputed table type
   type T: Mul<Self::F, Output = Self::G>;
 
-  /// Byte length of the curve ID
-  // While C::id().len() is trivial, this bounds it to u8 for any proper Curve implementation
-  fn id_len() -> u8;
   /// ID for this curve
-  fn id() -> &'static [u8];
+  const ID: &'static [u8];
 
   /// Generator for the group
-  // While group does provide this in its API, Jubjub users will want to use a custom basepoint
-  fn generator() -> Self::G;
+  // While group does provide this in its API, privacy coins will want to use a custom basepoint
+  const GENERATOR: Self::G;
 
   /// Table for the generator for the group
   /// If there isn't a precomputed table available, the generator itself should be used
-  fn generator_table() -> Self::T;
+  const GENERATOR_TABLE: Self::T;
 
   /// If little endian is used for the scalar field's Repr
-  fn little_endian() -> bool;
+  const LITTLE_ENDIAN: bool;
 
   /// Securely generate a random nonce. H4 from the IETF draft
   fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F;
@@ -298,12 +295,12 @@ impl<C: Curve> MultisigKeys<C> {
     let offset_share = offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap();
 
     Ok(MultisigView {
-      group_key: self.group_key + (C::generator_table() * offset),
+      group_key: self.group_key + (C::GENERATOR_TABLE * offset),
       secret_share: secret_share + offset_share,
       verification_shares: self.verification_shares.iter().map(
         |(l, share)| (
           *l,
-          (*share * lagrange::<C::F>(*l, &included)) + (C::generator_table() * offset_share)
+          (*share * lagrange::<C::F>(*l, &included)) + (C::GENERATOR_TABLE * offset_share)
         )
       ).collect(),
       included: included.to_vec(),
@@ -311,15 +308,13 @@ impl<C: Curve> MultisigKeys<C> {
   }
 
   pub fn serialized_len(n: u16) -> usize {
-    1 + usize::from(C::id_len()) + (3 * 2) + C::F_len() + C::G_len() + (usize::from(n) * C::G_len())
+    8 + C::ID.len() + (3 * 2) + C::F_len() + C::G_len() + (usize::from(n) * C::G_len())
   }
 
   pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = Vec::with_capacity(
-      1 + usize::from(C::id_len()) + MultisigKeys::<C>::serialized_len(self.params.n)
-    );
-    serialized.push(C::id_len());
-    serialized.extend(C::id());
+    let mut serialized = Vec::with_capacity(MultisigKeys::<C>::serialized_len(self.params.n));
+    serialized.extend(u64::try_from(C::ID.len()).unwrap().to_be_bytes());
+    serialized.extend(C::ID);
     serialized.extend(&self.params.t.to_be_bytes());
     serialized.extend(&self.params.n.to_be_bytes());
     serialized.extend(&self.params.i.to_be_bytes());
@@ -328,33 +323,27 @@ impl<C: Curve> MultisigKeys<C> {
     for l in 1 ..= self.params.n.into() {
       serialized.extend(&C::G_to_bytes(&self.verification_shares[&l]));
     }
-
     serialized
   }
 
   pub fn deserialize(serialized: &[u8]) -> Result<MultisigKeys<C>, FrostError> {
-    if serialized.len() < 1 {
-      Err(FrostError::InternalError("MultisigKeys serialization is empty".to_string()))?;
+    let mut start = u64::try_from(C::ID.len()).unwrap().to_be_bytes().to_vec();
+    start.extend(C::ID);
+    let mut cursor = start.len();
+
+    if serialized.len() < (cursor + 4) {
+      Err(
+        FrostError::InternalError(
+          "MultisigKeys serialization is missing its curve/participant quantities".to_string()
+        )
+      )?;
     }
-
-    let id_len: usize = serialized[0].into();
-    let mut cursor = 1;
-
-    if serialized.len() < (cursor + id_len) {
-      Err(FrostError::InternalError("ID wasn't included".to_string()))?;
-    }
-
-    if C::id() != &serialized[cursor .. (cursor + id_len)] {
+    if &start != &serialized[.. cursor] {
       Err(
         FrostError::InternalError(
           "curve is distinct between serialization and deserialization".to_string()
         )
       )?;
-    }
-    cursor += id_len;
-
-    if serialized.len() < (cursor + 4) {
-      Err(FrostError::InternalError("participant quantities weren't included".to_string()))?;
     }
 
     let t = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());

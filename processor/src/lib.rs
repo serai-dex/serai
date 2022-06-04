@@ -4,8 +4,6 @@ use async_trait::async_trait;
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::{Digest, Update}, Blake2b512};
-
 use frost::{Curve, MultisigKeys};
 
 mod coins;
@@ -40,10 +38,10 @@ pub trait Coin {
 
   type Address: Send;
 
-  fn id() -> &'static [u8];
-  fn confirmations() -> usize;
-  fn max_inputs() -> usize;
-  fn max_outputs() -> usize;
+  const ID: &'static [u8];
+  const CONFIRMATIONS: usize;
+  const MAX_INPUTS: usize;
+  const MAX_OUTPUTS: usize;
 
   async fn get_height(&self) -> Result<usize, CoinError>;
   async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError>;
@@ -70,11 +68,9 @@ pub trait Coin {
   ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
 }
 
-// Generate a view key for a given chain in a globally consistent manner regardless of the current
-// group key
+// Generate a static view key for a given chain in a globally consistent manner
+// Doesn't consider the current group key to increase the simplicity of verifying Serai's status
 // Takes an index, k, for more modern privacy protocols which use multiple view keys
-// Doesn't run Curve::hash_to_F, instead returning the hash object, due to hash_to_F being a FROST
-// definition instead of a wide reduction from a hash object
-pub fn view_key<C: Coin>(k: u64) -> Blake2b512 {
-  Blake2b512::new().chain(b"Serai DEX View Key").chain(C::id()).chain(k.to_le_bytes())
+pub fn view_key<C: Coin>(k: u64) -> <C::Curve as Curve>::F {
+  C::Curve::hash_to_F(b"Serai DEX View Key", &[C::ID, &k.to_le_bytes()].concat())
 }

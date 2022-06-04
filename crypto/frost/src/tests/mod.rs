@@ -113,7 +113,7 @@ pub fn recover<C: Curve>(keys: &HashMap<u16, MultisigKeys<C>>) -> C::F {
     C::F::zero(),
     |accum, (i, keys)| accum + (keys.secret_share() * lagrange::<C::F>(*i, &included))
   );
-  assert_eq!(C::generator_table() * group_private, first.group_key(), "failed to recover keys");
+  assert_eq!(C::GENERATOR_TABLE * group_private, first.group_key(), "failed to recover keys");
   group_private
 }
 

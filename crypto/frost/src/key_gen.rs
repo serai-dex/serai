@@ -41,7 +41,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
     // Step 1: Generate t random values to form a polynomial with
     coefficients.push(C::F::random(&mut *rng));
     // Step 3: Generate public commitments
-    commitments.push(C::generator_table() * coefficients[i]);
+    commitments.push(C::GENERATOR_TABLE * coefficients[i]);
     // Serialize them for publication
     serialized.extend(&C::G_to_bytes(&commitments[i]));
   }
@@ -59,7 +59,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
       challenge::<C>(
         context,
         params.i(),
-        &C::G_to_bytes(&(C::generator_table() * r)),
+        &C::G_to_bytes(&(C::GENERATOR_TABLE * r)),
         &serialized
       )
     ).serialize()
@@ -224,7 +224,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
     res
   };
 
-  let mut batch = BatchVerifier::new(shares.len(), C::little_endian());
+  let mut batch = BatchVerifier::new(shares.len(), C::LITTLE_ENDIAN);
   for (l, share) in &shares {
     if *l == params.i() {
       continue;
@@ -237,7 +237,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
     // ensure that malleability isn't present is to use this n * t algorithm, which runs
     // per sender and not as an aggregate of all senders, which also enables blame
     let mut values = exponential(params.i, &commitments[l]);
-    values.push((-*share, C::generator()));
+    values.push((-*share, C::GENERATOR));
     batch.queue(rng, *l, values);
   }
   batch.verify_with_vartime_blame().map_err(|l| FrostError::InvalidCommitment(l))?;
@@ -254,9 +254,9 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   // Calculate each user's verification share
   let mut verification_shares = HashMap::new();
   for i in 1 ..= params.n() {
-    verification_shares.insert(i, multiexp_vartime(exponential(i, &stripes), C::little_endian()));
+    verification_shares.insert(i, multiexp_vartime(exponential(i, &stripes), C::LITTLE_ENDIAN));
   }
-  debug_assert_eq!(C::generator_table() * secret_share, verification_shares[&params.i()]);
+  debug_assert_eq!(C::GENERATOR_TABLE * secret_share, verification_shares[&params.i()]);
 
   // TODO: Clear serialized and shares
 

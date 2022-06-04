@@ -26,14 +26,14 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, Multisi
     |secret| C::F_from_slice(&hex::decode(secret).unwrap()).unwrap()
   ).collect::<Vec<_>>();
   let verification_shares = shares.iter().map(
-    |secret| C::generator() * secret
+    |secret| C::GENERATOR * secret
   ).collect::<Vec<_>>();
 
   let mut keys = HashMap::new();
   for i in 1 ..= u16::try_from(shares.len()).unwrap() {
     let mut serialized = vec![];
-    serialized.push(C::id_len());
-    serialized.extend(C::id());
+    serialized.extend(u64::try_from(C::ID.len()).unwrap().to_be_bytes());
+    serialized.extend(C::ID);
     serialized.extend(vectors.threshold.to_be_bytes());
     serialized.extend(u16::try_from(shares.len()).unwrap().to_be_bytes());
     serialized.extend(i.to_be_bytes());
@@ -59,7 +59,7 @@ pub fn vectors<C: Curve, H: Hram<C>>(vectors: Vectors) {
   let keys = vectors_to_multisig_keys::<C>(&vectors);
   let group_key = C::G_from_slice(&hex::decode(vectors.group_key).unwrap()).unwrap();
   assert_eq!(
-    C::generator() * C::F_from_slice(&hex::decode(vectors.group_secret).unwrap()).unwrap(),
+    C::GENERATOR * C::F_from_slice(&hex::decode(vectors.group_secret).unwrap()).unwrap(),
     group_key
   );
   assert_eq!(
@@ -87,8 +87,8 @@ pub fn vectors<C: Curve, H: Hram<C>>(vectors: Vectors) {
       C::F_from_slice(&hex::decode(vectors.nonces[c][1]).unwrap()).unwrap()
     ];
 
-    let mut serialized = C::G_to_bytes(&(C::generator() * nonces[0]));
-    serialized.extend(&C::G_to_bytes(&(C::generator() * nonces[1])));
+    let mut serialized = C::G_to_bytes(&(C::GENERATOR * nonces[0]));
+    serialized.extend(&C::G_to_bytes(&(C::GENERATOR * nonces[1])));
 
     machine.unsafe_override_preprocess(
       PreprocessPackage { nonces, serialized: serialized.clone() }

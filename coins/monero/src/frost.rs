@@ -57,25 +57,12 @@ impl<D: Digest<OutputSize = U64>, const WIDE: bool> Curve for Ed25519Internal<D,
   type G = dfg::EdwardsPoint;
   type T = &'static dfg::EdwardsBasepointTable;
 
-  fn id_len() -> u8 {
-    u8::try_from(Self::id().len()).unwrap()
-  }
+  const ID: &'static [u8] = b"edwards25519";
 
-  fn id() -> &'static [u8] {
-    b"edwards25519"
-  }
+  const GENERATOR: Self::G = dfg::ED25519_BASEPOINT_POINT;
+  const GENERATOR_TABLE: Self::T = &dfg::ED25519_BASEPOINT_TABLE;
 
-  fn generator() -> Self::G {
-    Self::G::generator()
-  }
-
-  fn generator_table() -> Self::T {
-    &dfg::ED25519_BASEPOINT_TABLE
-  }
-
-  fn little_endian() -> bool {
-    true
-  }
+  const LITTLE_ENDIAN: bool = true;
 
   fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
     let mut seed = vec![0; 32];

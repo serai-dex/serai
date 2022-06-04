@@ -82,25 +82,12 @@ impl Curve for P256 {
   type G = ProjectivePoint;
   type T = ProjectivePoint;
 
-  fn id_len() -> u8 {
-    u8::try_from(Self::id().len()).unwrap()
-  }
+  const ID: &'static [u8] = b"P-256";
 
-  fn id() -> &'static [u8] {
-    b"P-256"
-  }
+  const GENERATOR: Self::G = Self::G::GENERATOR;
+  const GENERATOR_TABLE: Self::G = Self::G::GENERATOR;
 
-  fn generator() -> Self::G {
-    Self::G::GENERATOR
-  }
-
-  fn generator_table() -> Self::T {
-    Self::G::GENERATOR
-  }
-
-  fn little_endian() -> bool {
-    false
-  }
+  const LITTLE_ENDIAN: bool = false;
 
   fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
     let mut seed = vec![0; 32];

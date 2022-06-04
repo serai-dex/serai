@@ -84,7 +84,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
     C::random_nonce(params.view().secret_share(), &mut *rng),
     C::random_nonce(params.view().secret_share(), &mut *rng)
   ];
-  let commitments = [C::generator_table() * nonces[0], C::generator_table() * nonces[1]];
+  let commitments = [C::GENERATOR_TABLE * nonces[0], C::GENERATOR_TABLE * nonces[1]];
   let mut serialized = C::G_to_bytes(&commitments[0]);
   serialized.extend(&C::G_to_bytes(&commitments[1]));
 

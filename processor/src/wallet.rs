@@ -16,7 +16,7 @@ impl<C: Curve> WalletKeys<C> {
   }
 
   // Bind this key to a specific network by applying an additive offset
-  // While it would be fine to just C::id(), including the group key creates distinct
+  // While it would be fine to just C::ID, including the group key creates distinct
   // offsets instead of static offsets. Under a statically offset system, a BTC key could
   // have X subtracted to find the potential group key, and then have Y added to find the
   // potential ETH group key. While this shouldn't be an issue, as this isn't a private
@@ -27,7 +27,7 @@ impl<C: Curve> WalletKeys<C> {
     const DST: &[u8] = b"Serai Processor Wallet Chain Bind";
     let mut transcript = DigestTranscript::<blake2::Blake2b512>::new(DST);
     transcript.append_message(b"chain", chain);
-    transcript.append_message(b"curve", C::id());
+    transcript.append_message(b"curve", C::ID);
     transcript.append_message(b"group_key", &C::G_to_bytes(&self.keys.group_key()));
     self.keys.offset(C::hash_to_F(DST, &transcript.challenge(b"offset")))
   }
@@ -73,11 +73,11 @@ impl<C: Coin> Wallet<C> {
 
   pub fn add_keys(&mut self, keys: &WalletKeys<C::Curve>) {
     // Doesn't use +1 as this is height, not block index, and poll moves by block index
-    self.pending.push((self.acknowledged_height(keys.creation_height), keys.bind(C::id())));
+    self.pending.push((self.acknowledged_height(keys.creation_height), keys.bind(C::ID)));
   }
 
   pub async fn poll(&mut self) -> Result<(), CoinError> {
-    let confirmed_height = self.coin.get_height().await? - C::confirmations();
+    let confirmed_height = self.coin.get_height().await? - C::CONFIRMATIONS;
     for height in self.scanned_height() .. confirmed_height {
       // If any keys activated at this height, shift them over
       {
@@ -114,7 +114,7 @@ impl<C: Coin> Wallet<C> {
 
     let acknowledged_height = self.acknowledged_height(canonical);
 
-    // TODO: Log schedule outputs when max_outputs is low
+    // TODO: Log schedule outputs when MAX_OUTPUTS is low
     // Payments is the first set of TXs in the schedule
     // As each payment re-appears, let mut payments = schedule[payment] where the only input is
     // the source payment
@@ -129,7 +129,7 @@ impl<C: Coin> Wallet<C> {
 
       while outputs.len() != 0 {
         // Select the maximum amount of outputs possible
-        let mut inputs = &outputs[0 .. C::max_inputs().min(outputs.len())];
+        let mut inputs = &outputs[0 .. C::MAX_INPUTS.min(outputs.len())];
 
         // Calculate their sum value, minus the fee needed to spend them
         let mut sum = inputs.iter().map(|input| input.amount()).sum::<u64>();
