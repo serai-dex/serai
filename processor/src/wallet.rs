@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{sync::Arc, collections::HashMap};
 
 use transcript::{Transcript, DigestTranscript};
 use frost::{Curve, MultisigKeys};
 
-use crate::{CoinError, Coin};
+use crate::{CoinError, Output, Coin};
 
 pub struct WalletKeys<C: Curve> {
   keys: MultisigKeys<C>,
@@ -43,9 +43,8 @@ pub struct CoinDb {
 pub struct Wallet<C: Coin> {
   db: CoinDb,
   coin: C,
-  keys: Vec<MultisigKeys<C::Curve>>,
-  pending: Vec<(usize, MultisigKeys<C::Curve>)>,
-  outputs: Vec<C::Output>
+  keys: Vec<(Arc<MultisigKeys<C::Curve>>, Vec<C::Output>)>,
+  pending: Vec<(usize, MultisigKeys<C::Curve>)>
 }
 
 impl<C: Coin> Wallet<C> {
@@ -59,8 +58,7 @@ impl<C: Coin> Wallet<C> {
       coin,
 
       keys: vec![],
-      pending: vec![],
-      outputs: vec![]
+      pending: vec![]
     }
   }
 
@@ -80,21 +78,107 @@ impl<C: Coin> Wallet<C> {
 
   pub async fn poll(&mut self) -> Result<(), CoinError> {
     let confirmed_height = self.coin.get_height().await? - C::confirmations();
-    for h in self.scanned_height() .. confirmed_height {
-      let mut k = 0;
-      while k < self.pending.len() {
-        if h == self.pending[k].0 {
-          self.keys.push(self.pending.swap_remove(k).1);
-        } else {
-          k += 1;
+    for height in self.scanned_height() .. confirmed_height {
+      // If any keys activated at this height, shift them over
+      {
+        let mut k = 0;
+        while k < self.pending.len() {
+          if height >= self.pending[k].0 {
+            self.keys.push((Arc::new(self.pending.swap_remove(k).1), vec![]));
+          } else {
+            k += 1;
+          }
         }
       }
 
-      let block = self.coin.get_block(h).await?;
-      for keys in &self.keys {
-        let outputs = self.coin.get_outputs(&block, keys.group_key());
+      let block = self.coin.get_block(height).await?;
+      for (keys, outputs) in self.keys.iter_mut() {
+        outputs.extend(
+          self.coin.get_outputs(&block, keys.group_key()).await.iter().cloned().filter(
+            |_output| true // !self.db.handled.contains_key(output.id()) // TODO
+          )
+        );
       }
     }
     Ok(())
+  }
+
+  pub async fn prepare_sends(
+    &mut self,
+    canonical: usize,
+    payments: Vec<(C::Address, u64)>
+  ) -> Result<Vec<C::SignableTransaction>, CoinError> {
+    if payments.len() == 0 {
+      return Ok(vec![]);
+    }
+
+    let acknowledged_height = self.acknowledged_height(canonical);
+
+    // TODO: Log schedule outputs when max_outputs is low
+    // Payments is the first set of TXs in the schedule
+    // As each payment re-appears, let mut payments = schedule[payment] where the only input is
+    // the source payment
+    // let (mut payments, schedule) = payments;
+    let mut payments = payments;
+    payments.sort_by(|a, b| a.1.cmp(&b.1).reverse());
+
+    let mut txs = vec![];
+    for (keys, outputs) in self.keys.iter_mut() {
+      // Select the highest value outputs to minimize the amount of inputs needed
+      outputs.sort_by(|a, b| a.amount().cmp(&b.amount()).reverse());
+
+      while outputs.len() != 0 {
+        // Select the maximum amount of outputs possible
+        let mut inputs = &outputs[0 .. C::max_inputs().min(outputs.len())];
+
+        // Calculate their sum value, minus the fee needed to spend them
+        let mut sum = inputs.iter().map(|input| input.amount()).sum::<u64>();
+        // sum -= C::MAX_FEE; // TODO
+
+        // Grab the payments this will successfully fund
+        let mut these_payments = vec![];
+        for payment in &payments {
+          if sum > payment.1 {
+            these_payments.push(payment);
+            sum -= payment.1;
+          }
+          // Doesn't break in this else case as a smaller payment may still fit
+        }
+
+        // Move to the next set of keys if none of these outputs remain significant
+        if these_payments.len() == 0 {
+          break;
+        }
+
+        // Drop any uneeded outputs
+        while sum > inputs[inputs.len() - 1].amount() {
+          sum -= inputs[inputs.len() - 1].amount();
+          inputs = &inputs[.. (inputs.len() - 1)];
+        }
+
+        // We now have a minimal effective outputs/payments set
+        // Take ownership while removing these candidates from the provided list
+        let inputs = outputs.drain(.. inputs.len()).collect();
+        let payments = payments.drain(.. these_payments.len()).collect::<Vec<_>>();
+
+        let tx = self.coin.prepare_send(
+          keys.clone(),
+          format!(
+            "Serai Processor Wallet Send (height {}, index {})",
+            canonical,
+            txs.len()
+          ).as_bytes().to_vec(),
+          acknowledged_height,
+          inputs,
+          &payments
+        ).await?;
+        // self.db.save_tx(tx) // TODO
+        txs.push(tx);
+      }
+    }
+
+    // TODO: Remaining payments?
+
+    Ok(txs)
   }
 }

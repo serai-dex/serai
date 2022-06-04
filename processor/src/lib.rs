@@ -1,4 +1,4 @@
-use std::marker::Send;
+use std::{marker::Send, sync::Arc};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -14,7 +14,7 @@ mod wallet;
 #[cfg(test)]
 mod tests;
 
-pub trait Output: Sized {
+pub trait Output: Sized + Clone {
   type Id;
 
   fn id(&self) -> Self::Id;
@@ -53,9 +53,9 @@ pub trait Coin {
     key: <Self::Curve as Curve>::G
   ) -> Vec<Self::Output>;
 
-  async fn prepare_send<R: RngCore + CryptoRng>(
+  async fn prepare_send(
     &self,
-    keys: MultisigKeys<Self::Curve>,
+    keys: Arc<MultisigKeys<Self::Curve>>,
     label: Vec<u8>,
     height: usize,
     inputs: Vec<Self::Output>,

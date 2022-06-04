@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use rand_core::{RngCore, CryptoRng};
 
@@ -16,6 +18,7 @@ use monero_serai::{
 
 use crate::{Output as OutputTrait, CoinError, Coin, view_key};
 
+#[derive(Clone)]
 pub struct Output(SpendableOutput);
 impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
@@ -104,9 +107,9 @@ impl Coin for Monero {
       .collect()
   }
 
-  async fn prepare_send<R: RngCore + CryptoRng>(
+  async fn prepare_send(
     &self,
-    _keys: MultisigKeys<Ed25519>,
+    _keys: Arc<MultisigKeys<Ed25519>>,
     _label: Vec<u8>,
     _height: usize,
     _inputs: Vec<Output>,
