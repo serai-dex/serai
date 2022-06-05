@@ -15,6 +15,10 @@ hex = "0.4"
 ff = "0.11"
 group = "0.11"
 
+sha2 = { version = "0.10", optional = true }
+p256 = { version = "0.10", optional = true }
+k256 = { version = "0.10", optional = true }
+
 transcript = { path = "../transcript" }
 
 multiexp = { path = "../multiexp", features = ["batch"] }
@@ -23,3 +27,7 @@ multiexp = { path = "../multiexp", features = ["batch"] }
 rand = "0.8"
 sha2 = "0.10"
 p256 = { version = "0.10", features = ["arithmetic"] }
+
+[features]
+p256 = ["sha2", "dep:p256"]
+k256 = ["sha2", "dep:k256"]
