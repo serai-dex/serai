@@ -37,11 +37,11 @@ pub struct TransactionMachine {
 impl SignableTransaction {
   pub async fn multisig<R: RngCore + CryptoRng>(
     mut self,
-    mut transcript: Transcript,
     rng: &mut R,
     rpc: &Rpc,
-    height: usize,
     keys: MultisigKeys<Ed25519>,
+    mut transcript: Transcript,
+    height: usize,
     mut included: Vec<u16>
   ) -> Result<TransactionMachine, TransactionError> {
     let mut images = vec![];

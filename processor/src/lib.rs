@@ -6,6 +6,8 @@ use rand_core::{RngCore, CryptoRng};
 
 use frost::{Curve, MultisigKeys};
 
+pub(crate) use monero_serai::frost::Transcript;
+
 mod coins;
 mod wallet;
 
@@ -54,7 +56,7 @@ pub trait Coin {
   async fn prepare_send(
     &self,
     keys: Arc<MultisigKeys<Self::Curve>>,
-    label: Vec<u8>,
+    transcript: Transcript,
     height: usize,
     inputs: Vec<Self::Output>,
     payments: &[(Self::Address, u64)]

@@ -3,20 +3,24 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use rand_core::{RngCore, CryptoRng};
 
-use curve25519_dalek::{scalar::Scalar, edwards::CompressedEdwardsY};
+use curve25519_dalek::{
+  constants::ED25519_BASEPOINT_TABLE,
+  scalar::Scalar,
+  edwards::CompressedEdwardsY
+};
 
 use dalek_ff_group as dfg;
 use frost::MultisigKeys;
 
-use monero::util::address::Address;
+use monero::{PublicKey, network::Network, util::address::Address};
 use monero_serai::{
   frost::Ed25519,
   transaction::{Timelock, Transaction},
   rpc::Rpc,
-  wallet::{SpendableOutput, SignableTransaction}
+  wallet::{SpendableOutput, SignableTransaction as MSignableTransaction}
 };
 
-use crate::{Output as OutputTrait, CoinError, Coin, view_key};
+use crate::{Transcript, Output as OutputTrait, CoinError, Coin, view_key};
 
 #[derive(Clone)]
 pub struct Output(SpendableOutput);
@@ -49,16 +53,26 @@ impl From<SpendableOutput> for Output {
   }
 }
 
+pub struct SignableTransaction(
+  Arc<MultisigKeys<Ed25519>>,
+  Transcript,
+  usize,
+  MSignableTransaction
+);
+
 pub struct Monero {
   rpc: Rpc,
-  view: Scalar
+  view: Scalar,
+  view_pub: CompressedEdwardsY
 }
 
 impl Monero {
   pub fn new(url: String) -> Monero {
+    let view = view_key::<Monero>(0).0;
     Monero {
       rpc: Rpc::new(url),
-      view: *view_key::<Monero>(0)
+      view,
+      view_pub: (&view * &ED25519_BASEPOINT_TABLE).compress()
     }
   }
 }
@@ -109,21 +123,55 @@ impl Coin for Monero {
 
   async fn prepare_send(
     &self,
-    _keys: Arc<MultisigKeys<Ed25519>>,
-    _label: Vec<u8>,
-    _height: usize,
-    _inputs: Vec<Output>,
-    _payments: &[(Address, u64)]
+    keys: Arc<MultisigKeys<Ed25519>>,
+    transcript: Transcript,
+    height: usize,
+    mut inputs: Vec<Output>,
+    payments: &[(Address, u64)]
   ) -> Result<SignableTransaction, CoinError> {
-    todo!()
+    let spend = keys.group_key().0.compress();
+    Ok(
+      SignableTransaction(
+        keys,
+        transcript,
+        height,
+        MSignableTransaction::new(
+          inputs.drain(..).map(|input| input.0).collect(),
+          payments.to_vec(),
+          Address::standard(
+            Network::Mainnet,
+            PublicKey { point: spend },
+            PublicKey { point: self.view_pub }
+          ),
+          100000000
+        ).map_err(|_| CoinError::ConnectionError)?
+      )
+    )
   }
 
   async fn attempt_send<R: RngCore + CryptoRng + std::marker::Send>(
     &self,
-    _rng: &mut R,
-    _transaction: SignableTransaction,
-    _included: &[u16]
+    rng: &mut R,
+    transaction: SignableTransaction,
+    included: &[u16]
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
-    todo!()
+    let attempt = transaction.3.clone().multisig(
+      rng,
+      &self.rpc,
+      (*transaction.0).clone(),
+      transaction.1.clone(),
+      transaction.2,
+      included.to_vec()
+    ).await.map_err(|_| CoinError::ConnectionError)?;
+
+    /*
+    let tx = None;
+    self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
+    Ok(
+      tx.hash().to_vec(),
+      tx.outputs.iter().map(|output| output.key.compress().to_bytes().collect())
+    )
+    */
+    Ok((vec![], vec![]))
   }
 }

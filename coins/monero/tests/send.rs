@@ -145,11 +145,11 @@ async fn send_core(test: usize, multisig: bool) {
           machines.insert(
             i,
             signable.clone().multisig(
-              Transcript::new(b"Monero Serai Test Transaction"),
               &mut OsRng,
               &rpc,
-              rpc.get_height().await.unwrap() - 10,
               (*keys[&i]).clone(),
+              Transcript::new(b"Monero Serai Test Transaction"),
+              rpc.get_height().await.unwrap() - 10,
               (1 ..= THRESHOLD).collect::<Vec<_>>()
             ).await.unwrap()
           );

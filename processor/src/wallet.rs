@@ -1,9 +1,10 @@
 use std::{sync::Arc, collections::HashMap};
 
-use transcript::{Transcript, DigestTranscript};
+use transcript::Transcript as TranscriptTrait;
+
 use frost::{Curve, MultisigKeys};
 
-use crate::{CoinError, Output, Coin};
+use crate::{Transcript, CoinError, Output, Coin};
 
 pub struct WalletKeys<C: Curve> {
   keys: MultisigKeys<C>,
@@ -25,7 +26,7 @@ impl<C: Curve> WalletKeys<C> {
   // function as well, although that degree of influence means key gen is broken already
   fn bind(&self, chain: &[u8]) -> MultisigKeys<C> {
     const DST: &[u8] = b"Serai Processor Wallet Chain Bind";
-    let mut transcript = DigestTranscript::<blake2::Blake2b512>::new(DST);
+    let mut transcript = Transcript::new(DST);
     transcript.append_message(b"chain", chain);
     transcript.append_message(b"curve", C::ID);
     transcript.append_message(b"group_key", &C::G_to_bytes(&self.keys.group_key()));
@@ -223,13 +224,22 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         let inputs = outputs.drain(.. inputs.len()).collect();
         let payments = payments.drain(.. these_payments.len()).collect::<Vec<_>>();
 
+        let mut transcript = Transcript::new(b"Serai Processor Wallet Send");
+        transcript.append_message(
+          b"canonical_height",
+          &u64::try_from(canonical).unwrap().to_le_bytes()
+        );
+        transcript.append_message(
+          b"acknowledged_height",
+          &u64::try_from(acknowledged_height).unwrap().to_le_bytes()
+        );
+        transcript.append_message(
+          b"index",
+          &u64::try_from(txs.len()).unwrap().to_le_bytes()
+        );
         let tx = self.coin.prepare_send(
           keys.clone(),
-          format!(
-            "Serai Processor Wallet Send (height {}, index {})",
-            canonical,
-            txs.len()
-          ).as_bytes().to_vec(),
+          transcript,
           acknowledged_height,
           inputs,
           &payments

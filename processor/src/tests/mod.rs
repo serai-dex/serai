@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use rand::rngs::OsRng;
 
@@ -11,6 +11,6 @@ async fn test() {
   let mut keys = frost::tests::key_gen::<_, <Monero as Coin>::Curve>(&mut OsRng);
   let mut wallet = Wallet::new(MemCoinDb::new(), monero);
   wallet.acknowledge_height(0, 0);
-  wallet.add_keys(&WalletKeys::new(Rc::try_unwrap(keys.remove(&1).take().unwrap()).unwrap(), 0));
+  wallet.add_keys(&WalletKeys::new(Arc::try_unwrap(keys.remove(&1).take().unwrap()).unwrap(), 0));
   dbg!(0);
 }
