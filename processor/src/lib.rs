@@ -13,7 +13,7 @@ mod wallet;
 mod tests;
 
 pub trait Output: Sized + Clone {
-  type Id;
+  type Id: AsRef<[u8]>;
 
   fn id(&self) -> Self::Id;
   fn amount(&self) -> u64;

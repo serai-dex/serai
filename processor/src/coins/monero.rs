@@ -24,10 +24,10 @@ impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
   // While the Monero library offers a variant which allows senders to ensure their TXs have unique
   // output keys, Serai can still be targeted using the classic burning bug
-  type Id = CompressedEdwardsY;
+  type Id = [u8; 32];
 
   fn id(&self) -> Self::Id {
-    self.0.key.compress()
+    self.0.key.compress().to_bytes()
   }
 
   fn amount(&self) -> u64 {
