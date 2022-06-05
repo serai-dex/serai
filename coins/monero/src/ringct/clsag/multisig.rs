@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use std::{rc::Rc, cell::RefCell};
+use std::sync::{Arc, RwLock};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -47,7 +47,7 @@ impl ClsagInput {
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct ClsagDetails {
   input: ClsagInput,
   mask: Scalar
@@ -70,7 +70,7 @@ struct Interim {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct ClsagMultisig {
   transcript: Transcript,
 
@@ -79,7 +79,7 @@ pub struct ClsagMultisig {
   image: EdwardsPoint,
   AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
-  details: Rc<RefCell<Option<ClsagDetails>>>,
+  details: Arc<RwLock<Option<ClsagDetails>>>,
 
   msg: Option<[u8; 32]>,
   interim: Option<Interim>
@@ -88,7 +88,7 @@ pub struct ClsagMultisig {
 impl ClsagMultisig {
   pub fn new(
     transcript: Transcript,
-    details: Rc<RefCell<Option<ClsagDetails>>>
+    details: Arc<RwLock<Option<ClsagDetails>>>
   ) -> Result<ClsagMultisig, MultisigError> {
     Ok(
       ClsagMultisig {
@@ -111,11 +111,11 @@ impl ClsagMultisig {
   }
 
   fn input(&self) -> ClsagInput {
-    self.details.borrow().as_ref().unwrap().input.clone()
+    (*self.details.read().unwrap()).as_ref().unwrap().input.clone()
   }
 
   fn mask(&self) -> Scalar {
-    self.details.borrow().as_ref().unwrap().mask
+    (*self.details.read().unwrap()).as_ref().unwrap().mask
   }
 }
 

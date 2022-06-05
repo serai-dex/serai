@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{rc::Rc, collections::HashMap};
+use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -19,7 +19,7 @@ use crate::{
 #[derive(Clone)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
   algorithm: A,
-  keys: Rc<MultisigKeys<C>>,
+  keys: Arc<MultisigKeys<C>>,
   view: MultisigView<C>,
 }
 
@@ -27,7 +27,7 @@ pub struct Params<C: Curve, A: Algorithm<C>> {
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
     algorithm: A,
-    keys: Rc<MultisigKeys<C>>,
+    keys: Arc<MultisigKeys<C>>,
     included: &[u16],
   ) -> Result<Params<C, A>, FrostError> {
     let mut included = included.to_vec();
@@ -297,7 +297,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a key for the specified curve in the specified multisig
   pub fn new(
     algorithm: A,
-    keys: Rc<MultisigKeys<C>>,
+    keys: Arc<MultisigKeys<C>>,
     included: &[u16],
   ) -> Result<AlgorithmMachine<C, A>, FrostError> {
     Ok(

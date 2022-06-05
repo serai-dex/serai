@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, collections::HashMap};
+use std::{sync::{Arc, RwLock}, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -28,7 +28,7 @@ pub struct TransactionMachine {
 
   images: Vec<EdwardsPoint>,
   output_masks: Option<Scalar>,
-  inputs: Vec<Rc<RefCell<Option<ClsagDetails>>>>,
+  inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
   clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>,
 
   tx: Option<Transaction>
@@ -49,7 +49,7 @@ impl SignableTransaction {
     let mut inputs = vec![];
     for _ in 0 .. self.inputs.len() {
       // Doesn't resize as that will use a single Rc for the entire Vec
-      inputs.push(Rc::new(RefCell::new(None)));
+      inputs.push(Arc::new(RwLock::new(None)));
     }
     let mut clsags = vec![];
 
@@ -87,7 +87,7 @@ impl SignableTransaction {
     // Ideally, this would be done post entropy, instead of now, yet doing so would require sign
     // to be async which isn't preferable. This should be suitably competent though
     // While this inability means we can immediately create the input, moving it out of the
-    // Rc RefCell, keeping it within an Rc RefCell keeps our options flexible
+    // Arc RwLock, keeping it within an Arc RwLock keeps our options flexible
     let decoys = Decoys::select(
       // Using a seeded RNG with a specific height, committed to above, should make these decoys
       // committed to. They'll also be committed to later via the TX message as a whole
@@ -107,7 +107,7 @@ impl SignableTransaction {
             transcript.clone(),
             inputs[i].clone()
           ).map_err(|e| TransactionError::MultisigError(e))?,
-          Rc::new(keys.offset(dalek_ff_group::Scalar(input.key_offset))),
+          Arc::new(keys.offset(dalek_ff_group::Scalar(input.key_offset))),
           &included
         ).map_err(|e| TransactionError::FrostError(e))?
       );
@@ -270,15 +270,13 @@ impl StateMachine for TransactionMachine {
         }
       );
 
-      value.3.replace(
-        Some(
-          ClsagDetails::new(
-            ClsagInput::new(
-              value.0.commitment,
-              value.1
-            ).map_err(|_| panic!("Signing an input which isn't present in the ring we created for it"))?,
-            mask
-          )
+      *value.3.write().unwrap() = Some(
+        ClsagDetails::new(
+          ClsagInput::new(
+            value.0.commitment,
+            value.1
+          ).map_err(|_| panic!("Signing an input which isn't present in the ring we created for it"))?,
+          mask
         )
       );
 

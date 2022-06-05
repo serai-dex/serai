@@ -1,5 +1,5 @@
 #[cfg(feature = "multisig")]
-use std::{cell::RefCell, rc::Rc};
+use std::sync::{Arc, RwLock};
 
 use rand::{RngCore, rngs::OsRng};
 
@@ -97,7 +97,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
       &mut OsRng,
       ClsagMultisig::new(
         Transcript::new(b"Monero Serai CLSAG Test"),
-        Rc::new(RefCell::new(Some(
+        Arc::new(RwLock::new(Some(
           ClsagDetails::new(
             ClsagInput::new(
               Commitment::new(randomness, AMOUNT),

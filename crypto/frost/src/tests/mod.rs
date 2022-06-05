@@ -1,4 +1,4 @@
-use std::{rc::Rc, collections::HashMap};
+use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -36,7 +36,7 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 
 pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R
-) -> HashMap<u16, Rc<MultisigKeys<C>>> {
+) -> HashMap<u16, Arc<MultisigKeys<C>>> {
   let mut params = HashMap::new();
   let mut machines = HashMap::new();
 
@@ -98,7 +98,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
     }
     assert_eq!(group_key.unwrap(), these_keys.group_key());
 
-    keys.insert(*i, Rc::new(these_keys));
+    keys.insert(*i, Arc::new(these_keys));
   }
 
   keys
@@ -120,7 +120,7 @@ pub fn recover<C: Curve>(keys: &HashMap<u16, MultisigKeys<C>>) -> C::F {
 pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   algorithm: A,
-  keys: &HashMap<u16, Rc<MultisigKeys<C>>>,
+  keys: &HashMap<u16, Arc<MultisigKeys<C>>>,
 ) -> HashMap<u16, AlgorithmMachine<C, A>> {
   let mut included = vec![];
   while included.len() < usize::from(keys[&1].params().t()) {

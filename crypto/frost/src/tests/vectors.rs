@@ -1,4 +1,4 @@
-use std::{rc::Rc, collections::HashMap};
+use std::{sync::Arc, collections::HashMap};
 
 use crate::{
   Curve, MultisigKeys,
@@ -73,7 +73,7 @@ pub fn vectors<C: Curve, H: Hram<C>>(vectors: Vectors) {
       *i,
       AlgorithmMachine::new(
         Schnorr::<C, H>::new(),
-        Rc::new(keys[i].clone()),
+        Arc::new(keys[i].clone()),
         vectors.included.clone()
       ).unwrap()
     ));
