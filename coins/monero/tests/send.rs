@@ -1,4 +1,6 @@
-use std::{sync::Mutex, collections::HashMap};
+use std::sync::Mutex;
+#[cfg(feature = "multisig")]
+use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 
