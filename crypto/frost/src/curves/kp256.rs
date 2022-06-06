@@ -10,7 +10,7 @@ use group::{Group, GroupEncoding};
 use elliptic_curve::{bigint::{Encoding, U384}, hash2curve::{Expander, ExpandMsg, ExpandMsgXmd}};
 
 use crate::{CurveError, Curve};
-#[cfg(any(test, feature = "p256"))]
+#[cfg(feature = "p256")]
 use crate::algorithm::Hram;
 
 #[allow(non_snake_case)]
@@ -25,9 +25,9 @@ pub(crate) trait KP256Instance<G> {
   const GENERATOR: G;
 }
 
-#[cfg(any(test, feature = "p256"))]
+#[cfg(feature = "p256")]
 pub type P256 = KP256<p256::ProjectivePoint>;
-#[cfg(any(test, feature = "p256"))]
+#[cfg(feature = "p256")]
 impl KP256Instance<p256::ProjectivePoint> for P256 {
   const CONTEXT: &'static [u8] = b"FROST-P256-SHA256-v5";
   const ID: &'static [u8] = b"P-256";
@@ -139,10 +139,10 @@ impl<G: Group + GroupEncoding> Curve for KP256<G> where
   }
 }
 
-#[cfg(any(test, feature = "p256"))]
+#[cfg(feature = "p256")]
 #[derive(Clone)]
 pub struct IetfP256Hram;
-#[cfg(any(test, feature = "p256"))]
+#[cfg(feature = "p256")]
 impl Hram<P256> for IetfP256Hram {
   #[allow(non_snake_case)]
   fn hram(R: &p256::ProjectivePoint, A: &p256::ProjectivePoint, m: &[u8]) -> p256::Scalar {

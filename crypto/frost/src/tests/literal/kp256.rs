@@ -1,26 +1,27 @@
 use rand::rngs::OsRng;
 
-use crate::{
-  curves::kp256::{P256, IetfP256Hram},
-  tests::{curve::test_curve, schnorr::test_schnorr, vectors::{Vectors, vectors}}
-};
-
+#[cfg(feature = "k256")]
+use crate::tests::{curve::test_curve, schnorr::test_schnorr};
 #[cfg(feature = "k256")]
 use crate::curves::kp256::K256;
 
+#[cfg(feature = "p256")]
+use crate::tests::vectors::{Vectors, test_with_vectors};
+#[cfg(feature = "p256")]
+use crate::curves::kp256::{P256, IetfP256Hram};
+
+#[cfg(feature = "k256")]
 #[test]
-fn p256_curve() {
-  test_curve::<_, P256>(&mut OsRng);
+fn k256_not_ietf() {
+  test_curve::<_, K256>(&mut OsRng);
+  test_schnorr::<_, K256>(&mut OsRng);
 }
 
-#[test]
-fn p256_schnorr() {
-  test_schnorr::<_, P256>(&mut OsRng);
-}
-
+#[cfg(feature = "p256")]
 #[test]
 fn p256_vectors() {
-  vectors::<P256, IetfP256Hram>(
+  test_with_vectors::<_, P256, IetfP256Hram>(
+    &mut OsRng,
     Vectors {
       threshold: 2,
       shares: &[
@@ -51,16 +52,4 @@ fn p256_vectors() {
         "561e1d51b129229966e92850bad5859bfee96926fad3007cd3f38639e1ffb554"
     }
   );
-}
-
-#[cfg(feature = "k256")]
-#[test]
-fn k256_curve() {
-  test_curve::<_, K256>(&mut OsRng);
-}
-
-#[cfg(feature = "k256")]
-#[test]
-fn k256_schnorr() {
-  test_schnorr::<_, K256>(&mut OsRng);
 }

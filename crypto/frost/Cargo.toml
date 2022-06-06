@@ -30,12 +30,13 @@ multiexp = { path = "../multiexp", features = ["batch"] }
 rand = "0.8"
 
 sha2 = "0.10"
-elliptic-curve = { version = "0.12", features = ["hash2curve"] }
-p256 = { version = "0.11", features = ["arithmetic", "hash2curve"] }
+dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
-curves = []
-kp256 = ["elliptic-curve"]
-p256 = ["curves", "kp256", "sha2", "dep:p256"]
-k256 = ["curves", "kp256", "sha2", "dep:k256"]
-ed25519 = ["curves", "sha2", "dalek-ff-group"]
+curves = ["sha2"] # All officially denoted curves use the SHA2 family of hashes
+kp256 = ["elliptic-curve", "curves"]
+p256 = ["dep:p256", "kp256"]
+k256 = ["dep:k256", "kp256"]
+dalek = ["curves", "dalek-ff-group"]
+ed25519 = ["dalek"]
+ristretto = ["dalek"]
