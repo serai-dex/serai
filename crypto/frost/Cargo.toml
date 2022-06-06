@@ -12,12 +12,15 @@ thiserror = "1"
 rand_core = "0.6"
 hex = "0.4"
 
-ff = "0.11"
-group = "0.11"
-
 sha2 = { version = "0.10", optional = true }
-p256 = { version = "0.10", optional = true }
-k256 = { version = "0.10", optional = true }
+
+ff = "0.12"
+group = "0.12"
+
+elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true }
+p256 = { version = "0.11", features = ["arithmetic", "hash2curve"], optional = true }
+k256 = { version = "0.11", features = ["arithmetic", "hash2curve"], optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", optional = true }
 
 transcript = { path = "../transcript" }
 
@@ -25,9 +28,14 @@ multiexp = { path = "../multiexp", features = ["batch"] }
 
 [dev-dependencies]
 rand = "0.8"
+
 sha2 = "0.10"
-p256 = { version = "0.10", features = ["arithmetic"] }
+elliptic-curve = { version = "0.12", features = ["hash2curve"] }
+p256 = { version = "0.11", features = ["arithmetic", "hash2curve"] }
 
 [features]
-p256 = ["sha2", "dep:p256"]
-k256 = ["sha2", "dep:k256"]
+curves = []
+kp256 = ["elliptic-curve"]
+p256 = ["curves", "kp256", "sha2", "dep:p256"]
+k256 = ["curves", "kp256", "sha2", "dep:k256"]
+ed25519 = ["curves", "sha2", "dalek-ff-group"]

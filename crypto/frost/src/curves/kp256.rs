@@ -2,28 +2,27 @@ use core::{marker::PhantomData, convert::TryInto};
 
 use rand_core::{RngCore, CryptoRng};
 
+use sha2::{digest::Update, Digest, Sha256};
+
 use ff::{Field, PrimeField};
 use group::{Group, GroupEncoding};
 
-use sha2::{digest::Update, Digest, Sha256};
+use elliptic_curve::{bigint::{Encoding, U384}, hash2curve::{Expander, ExpandMsg, ExpandMsgXmd}};
 
-#[cfg(feature = "k256")]
-use k256::elliptic_curve::bigint::{Encoding, U384};
-#[cfg(all(not(feature = "k256"), any(test, feature = "p256")))]
-use p256::elliptic_curve::bigint::{Encoding, U384};
-
-use crate::{CurveError, Curve, curves::expand_message_xmd_sha256};
+use crate::{CurveError, Curve};
+#[cfg(any(test, feature = "p256"))]
+use crate::algorithm::Hram;
 
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct KP256<P: Group> {
-  _P: PhantomData<P>
+pub struct KP256<G: Group> {
+  _G: PhantomData<G>
 }
 
-pub(crate) trait KP256Instance<P> {
+pub(crate) trait KP256Instance<G> {
   const CONTEXT: &'static [u8];
   const ID: &'static [u8];
-  const GENERATOR: P;
+  const GENERATOR: G;
 }
 
 #[cfg(any(test, feature = "p256"))]
@@ -44,19 +43,19 @@ impl KP256Instance<k256::ProjectivePoint> for K256 {
   const GENERATOR: k256::ProjectivePoint = k256::ProjectivePoint::GENERATOR;
 }
 
-impl<P: Group + GroupEncoding> Curve for KP256<P> where
-  KP256<P>: KP256Instance<P>,
-  P::Scalar: PrimeField,
-  <P::Scalar as PrimeField>::Repr: From<[u8; 32]> + AsRef<[u8]>,
-  P::Repr: From<[u8; 33]> + AsRef<[u8]> {
-  type F = P::Scalar;
-  type G = P;
-  type T = P;
+impl<G: Group + GroupEncoding> Curve for KP256<G> where
+  KP256<G>: KP256Instance<G>,
+  G::Scalar: PrimeField,
+  <G::Scalar as PrimeField>::Repr: From<[u8; 32]> + AsRef<[u8]>,
+  G::Repr: From<[u8; 33]> + AsRef<[u8]> {
+  type F = G::Scalar;
+  type G = G;
+  type T = G;
 
-  const ID: &'static [u8] = <Self as KP256Instance<P>>::ID;
+  const ID: &'static [u8] = <Self as KP256Instance<G>>::ID;
 
-  const GENERATOR: Self::G = <Self as KP256Instance<P>>::GENERATOR;
-  const GENERATOR_TABLE: Self::G = <Self as KP256Instance<P>>::GENERATOR;
+  const GENERATOR: Self::G = <Self as KP256Instance<G>>::GENERATOR;
+  const GENERATOR_TABLE: Self::G = <Self as KP256Instance<G>>::GENERATOR;
 
   const LITTLE_ENDIAN: bool = false;
 
@@ -81,13 +80,21 @@ impl<P: Group + GroupEncoding> Curve for KP256<P> where
   }
 
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
+    let mut dst = dst;
+    let oversize = Sha256::digest([b"H2C-OVERSIZE-DST-", dst].concat());
+    if dst.len() > 255 {
+      dst = &oversize;
+    }
+
     let mut modulus = vec![0; 16];
     modulus.extend((Self::F::zero() - Self::F::one()).to_repr().as_ref());
     let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
     Self::F_from_slice(
-      &U384::from_be_slice(
-        &expand_message_xmd_sha256(dst, msg, 48).unwrap()
-      ).reduce(&modulus).unwrap().to_be_bytes()[16 ..]
+      &U384::from_be_slice(&{
+        let mut bytes = [0; 48];
+        ExpandMsgXmd::<Sha256>::expand_message(&[msg], dst, 48).unwrap().fill_bytes(&mut bytes);
+        bytes
+      }).reduce(&modulus).unwrap().to_be_bytes()[16 ..]
     ).unwrap()
   }
 
@@ -129,5 +136,19 @@ impl<P: Group + GroupEncoding> Curve for KP256<P> where
 
   fn G_to_bytes(g: &Self::G) -> Vec<u8> {
     g.to_bytes().as_ref().to_vec()
+  }
+}
+
+#[cfg(any(test, feature = "p256"))]
+#[derive(Clone)]
+pub struct IetfP256Hram;
+#[cfg(any(test, feature = "p256"))]
+impl Hram<P256> for IetfP256Hram {
+  #[allow(non_snake_case)]
+  fn hram(R: &p256::ProjectivePoint, A: &p256::ProjectivePoint, m: &[u8]) -> p256::Scalar {
+    P256::hash_to_F(
+      &[P256::CONTEXT, b"chal"].concat(),
+      &[&P256::G_to_bytes(R), &P256::G_to_bytes(A), m].concat()
+    )
   }
 }

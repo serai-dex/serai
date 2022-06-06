@@ -1,48 +1,23 @@
 use rand::rngs::OsRng;
 
-use sha2::Sha512;
-
-use dalek_ff_group as dfg;
-use frost::{
-  Curve,
-  algorithm::Hram,
+use crate::{
+  curves::ed25519::{Ed25519, IetfEd25519Hram},
   tests::{curve::test_curve, schnorr::test_schnorr, vectors::{Vectors, vectors}}
 };
 
-use crate::frost::{Ed25519, Ed25519Internal};
-
 #[test]
-fn frost_ed25519_curve() {
+fn ed25519_curve() {
   test_curve::<_, Ed25519>(&mut OsRng);
 }
 
 #[test]
-fn frost_ed25519_schnorr() {
+fn ed25519_schnorr() {
   test_schnorr::<_, Ed25519>(&mut OsRng);
 }
 
-// Not spec-compliant, as this shouldn't use wide reduction
-// Is vectors compliant, which is why the below tests pass
-// See https://github.com/cfrg/draft-irtf-cfrg-frost/issues/204
-//type TestEd25519 = Ed25519Internal<Sha512, false>;
-// If this is kept, we can remove WIDE
-type TestEd25519 = Ed25519Internal<Sha512, true>;
-
-#[derive(Copy, Clone)]
-struct IetfEd25519Hram {}
-impl Hram<TestEd25519> for IetfEd25519Hram {
-  #[allow(non_snake_case)]
-  fn hram(R: &dfg::EdwardsPoint, A: &dfg::EdwardsPoint, m: &[u8]) -> dfg::Scalar {
-    TestEd25519::hash_to_F(
-      b"",
-      &[&R.compress().to_bytes(), &A.compress().to_bytes(), m].concat()
-    )
-  }
-}
-
 #[test]
-fn frost_ed25519_vectors() {
-  vectors::<TestEd25519, IetfEd25519Hram>(
+fn ed25519_vectors() {
+  vectors::<Ed25519, IetfEd25519Hram>(
     Vectors {
       threshold: 2,
       shares: &[

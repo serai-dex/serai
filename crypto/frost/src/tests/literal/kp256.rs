@@ -1,9 +1,7 @@
 use rand::rngs::OsRng;
 
 use crate::{
-  Curve,
-  curves::kp256::{KP256Instance, P256},
-  algorithm::Hram,
+  curves::kp256::{P256, IetfP256Hram},
   tests::{curve::test_curve, schnorr::test_schnorr, vectors::{Vectors, vectors}}
 };
 
@@ -18,18 +16,6 @@ fn p256_curve() {
 #[test]
 fn p256_schnorr() {
   test_schnorr::<_, P256>(&mut OsRng);
-}
-
-#[derive(Clone)]
-pub struct IetfP256Hram;
-impl Hram<P256> for IetfP256Hram {
-  #[allow(non_snake_case)]
-  fn hram(R: &p256::ProjectivePoint, A: &p256::ProjectivePoint, m: &[u8]) -> p256::Scalar {
-    P256::hash_to_F(
-      &[P256::CONTEXT, b"chal"].concat(),
-      &[&P256::G_to_bytes(R), &P256::G_to_bytes(A), m].concat()
-    )
-  }
 }
 
 #[test]

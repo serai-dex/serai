@@ -22,8 +22,7 @@ use dalek::{
   }
 };
 
-use ff::{Field, PrimeField};
-use group::Group;
+use group::{ff::{Field, PrimeField}, Group};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Scalar(pub DScalar);

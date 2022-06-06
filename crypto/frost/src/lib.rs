@@ -13,7 +13,7 @@ mod schnorr;
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
-#[cfg(any(test, feature = "p256", feature = "k256"))]
+#[cfg(any(test, feature = "curves"))]
 pub mod curves;
 
 pub mod tests;
