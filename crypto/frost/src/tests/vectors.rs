@@ -1,10 +1,12 @@
 use std::{sync::Arc, collections::HashMap};
 
+use rand_core::{RngCore, CryptoRng};
+
 use crate::{
   Curve, MultisigKeys,
   algorithm::{Schnorr, Hram},
   sign::{PreprocessPackage, StateMachine, AlgorithmMachine},
-  tests::recover
+  tests::{curve::test_curve, schnorr::test_schnorr, recover}
 };
 
 pub struct Vectors {
@@ -55,7 +57,16 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, Multisi
   keys
 }
 
-pub fn vectors<C: Curve, H: Hram<C>>(vectors: Vectors) {
+pub fn test_with_vectors<
+  R: RngCore + CryptoRng,
+  C: Curve,
+  H: Hram<C>
+>(rng: &mut R, vectors: Vectors) {
+  // Do basic tests before trying the vectors
+  test_curve::<_, C>(&mut *rng);
+  test_schnorr::<_, C>(rng);
+
+  // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
   let group_key = C::G_from_slice(&hex::decode(vectors.group_key).unwrap()).unwrap();
   assert_eq!(

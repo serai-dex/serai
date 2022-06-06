@@ -12,7 +12,6 @@ digest = "0.10"
 
 subtle = "2.4"
 
-ff = "0.11"
-group = "0.11"
+group = "0.12"
 
 curve25519-dalek =  "3.2"

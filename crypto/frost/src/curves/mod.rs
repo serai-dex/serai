@@ -1,4 +1,5 @@
 #[cfg(any(test, feature = "dalek"))]
-mod dalek;
+pub mod dalek;
+
 #[cfg(feature = "kp256")]
-mod kp256;
+pub mod kp256;
