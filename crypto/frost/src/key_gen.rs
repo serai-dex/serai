@@ -254,7 +254,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   // Calculate each user's verification share
   let mut verification_shares = HashMap::new();
   for i in 1 ..= params.n() {
-    verification_shares.insert(i, multiexp_vartime(exponential(i, &stripes), C::LITTLE_ENDIAN));
+    verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes), C::LITTLE_ENDIAN));
   }
   debug_assert_eq!(C::GENERATOR_TABLE * secret_share, verification_shares[&params.i()]);
 
