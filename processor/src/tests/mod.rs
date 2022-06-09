@@ -6,6 +6,8 @@ use rand::rngs::OsRng;
 
 use group::Group;
 
+use frost::Curve;
+
 use crate::{
   NetworkError, Network,
   Coin, coins::monero::Monero,
@@ -55,19 +57,17 @@ impl Network for LocalNetwork {
   }
 }
 
-#[tokio::test]
-async fn test() {
-  let monero = Monero::new("http://127.0.0.1:18081".to_string());
+async fn test_send<C: Coin + Clone>(coin: C) {
   // Mine a block so there's a confirmed height
-  monero.mine_block(monero.address(dalek_ff_group::EdwardsPoint::generator())).await;
-  let height = monero.get_height().await.unwrap();
+  coin.mine_block(coin.address(<C::Curve as Curve>::G::generator())).await;
+  let height = coin.get_height().await.unwrap();
 
   let mut networks = LocalNetwork::new(3);
 
-  let mut keys = frost::tests::key_gen::<_, <Monero as Coin>::Curve>(&mut OsRng);
+  let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
   let mut wallets = vec![];
   for i in 1 ..= 3 {
-    let mut wallet = Wallet::new(MemCoinDb::new(), monero.clone());
+    let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_height(0, height);
     wallet.add_keys(
       &WalletKeys::new(Arc::try_unwrap(keys.remove(&i).take().unwrap()).unwrap(), 0)
@@ -76,8 +76,8 @@ async fn test() {
   }
 
   // Get the chain to a height where blocks have sufficient confirmations
-  while (height + Monero::CONFIRMATIONS) > monero.get_height().await.unwrap() {
-    monero.mine_block(monero.address(dalek_ff_group::EdwardsPoint::generator())).await;
+  while (height + C::CONFIRMATIONS) > coin.get_height().await.unwrap() {
+    coin.mine_block(coin.address(<C::Curve as Curve>::G::generator())).await;
   }
 
   for wallet in wallets.iter_mut() {
@@ -85,23 +85,29 @@ async fn test() {
     wallet.poll().await.unwrap();
   }
 
-  monero.test_send(wallets[0].address()).await;
+  coin.test_send(wallets[0].address()).await;
 
   let mut futures = vec![];
   for (i, network) in networks.iter_mut().enumerate() {
     let wallet = &mut wallets[i];
     wallet.poll().await.unwrap();
 
-    let height = monero.get_height().await.unwrap();
+    let height = coin.get_height().await.unwrap();
     wallet.acknowledge_height(1, height - 10);
     let signable = wallet.prepare_sends(
       1,
       vec![(wallet.address(), 10000000000)]
     ).await.unwrap().1.swap_remove(0);
-    futures.push(monero.attempt_send(network, signable, &[1, 2, 3]));
+    futures.push(coin.attempt_send(network, signable, &[1, 2, 3]));
   }
+
   println!(
     "{:?}",
     hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0)
   );
+}
+
+#[tokio::test]
+async fn monero() {
+  test_send(Monero::new("http://127.0.0.1:18081".to_string())).await;
 }
