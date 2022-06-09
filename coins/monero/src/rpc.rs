@@ -34,6 +34,7 @@ pub enum RpcError {
   InvalidTransaction([u8; 32])
 }
 
+#[derive(Clone, Debug)]
 pub struct Rpc(String);
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {

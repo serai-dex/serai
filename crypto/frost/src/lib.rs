@@ -268,6 +268,7 @@ impl<C: Curve> MultisigKeys<C> {
     // Enables schemes like Monero's subaddresses which have a per-subaddress offset and then a
     // one-time-key offset
     res.offset = Some(offset + res.offset.unwrap_or(C::F::zero()));
+    res.group_key += C::GENERATOR_TABLE * offset;
     res
   }
 
@@ -275,7 +276,7 @@ impl<C: Curve> MultisigKeys<C> {
     self.params
   }
 
-  pub fn secret_share(&self) -> C::F {
+  fn secret_share(&self) -> C::F {
     self.secret_share
   }
 
@@ -283,7 +284,7 @@ impl<C: Curve> MultisigKeys<C> {
     self.group_key
   }
 
-  pub fn verification_shares(&self) -> HashMap<u16, C::G> {
+  fn verification_shares(&self) -> HashMap<u16, C::G> {
     self.verification_shares.clone()
   }
 
@@ -297,7 +298,7 @@ impl<C: Curve> MultisigKeys<C> {
     let offset_share = offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap();
 
     Ok(MultisigView {
-      group_key: self.group_key + (C::GENERATOR_TABLE * offset),
+      group_key: self.group_key,
       secret_share: secret_share + offset_share,
       verification_shares: self.verification_shares.iter().map(
         |(l, share)| (

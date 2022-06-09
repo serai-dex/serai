@@ -1,10 +1,9 @@
-use std::{marker::Send, sync::Arc};
+use std::{marker::Send, sync::Arc, collections::HashMap};
 
 use async_trait::async_trait;
 use thiserror::Error;
-use rand_core::{RngCore, CryptoRng};
 
-use frost::{Curve, MultisigKeys};
+use frost::{Curve, FrostError, MultisigKeys};
 
 pub(crate) use monero_serai::frost::Transcript;
 
@@ -14,6 +13,30 @@ mod wallet;
 #[cfg(test)]
 mod tests;
 
+#[derive(Clone, Error, Debug)]
+pub enum CoinError {
+  #[error("failed to connect to coin daemon")]
+  ConnectionError
+}
+
+#[derive(Clone, Error, Debug)]
+pub enum NetworkError {}
+
+#[derive(Clone, Error, Debug)]
+pub enum SignError {
+  #[error("coin had an error {0}")]
+  CoinError(CoinError),
+  #[error("network had an error {0}")]
+  NetworkError(NetworkError),
+  #[error("FROST had an error {0}")]
+  FrostError(FrostError)
+}
+
+#[async_trait]
+pub trait Network: Send {
+  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError>;
+}
+
 pub trait Output: Sized + Clone {
   type Id: AsRef<[u8]>;
 
@@ -22,12 +45,6 @@ pub trait Output: Sized + Clone {
 
   fn serialize(&self) -> Vec<u8>;
   fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
-}
-
-#[derive(Clone, Error, Debug)]
-pub enum CoinError {
-  #[error("failed to connect to coin daemon")]
-  ConnectionError
 }
 
 #[async_trait]
@@ -43,7 +60,10 @@ pub trait Coin {
   const ID: &'static [u8];
   const CONFIRMATIONS: usize;
   const MAX_INPUTS: usize;
-  const MAX_OUTPUTS: usize;
+  const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
+
+  // Doesn't have to take self, enables some level of caching which is pleasant
+  fn address(&self, key: <Self::Curve as Curve>::G) -> Self::Address;
 
   async fn get_height(&self) -> Result<usize, CoinError>;
   async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError>;
@@ -62,12 +82,18 @@ pub trait Coin {
     payments: &[(Self::Address, u64)]
   ) -> Result<Self::SignableTransaction, CoinError>;
 
-  async fn attempt_send<R: RngCore + CryptoRng + Send>(
+  async fn attempt_send<N: Network>(
     &self,
-    rng: &mut R,
+    network: &mut N,
     transaction: Self::SignableTransaction,
     included: &[u16]
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), SignError>;
+
+  #[cfg(test)]
+  async fn mine_block(&self, address: Self::Address);
+
+  #[cfg(test)]
+  async fn test_send(&self, key: Self::Address);
 }
 
 // Generate a static view key for a given chain in a globally consistent manner

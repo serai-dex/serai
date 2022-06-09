@@ -121,6 +121,9 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   pub fn scanned_height(&self) -> usize { self.db.scanned_height() }
   pub fn acknowledge_height(&mut self, canonical: usize, height: usize) {
     self.db.acknowledge_height(canonical, height);
+    if height > self.db.scanned_height() {
+      self.db.scanned_to_height(height);
+    }
   }
   pub fn acknowledged_height(&self, canonical: usize) -> usize {
     self.db.acknowledged_height(canonical)
@@ -131,17 +134,25 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     self.pending.push((self.acknowledged_height(keys.creation_height), keys.bind(C::ID)));
   }
 
+  pub fn address(&self) -> C::Address {
+    self.coin.address(self.keys[self.keys.len() - 1].0.group_key())
+  }
+
   pub async fn poll(&mut self) -> Result<(), CoinError> {
-    let confirmed_height = self.coin.get_height().await? - C::CONFIRMATIONS;
-    for height in self.scanned_height() .. confirmed_height {
+    if self.coin.get_height().await? < C::CONFIRMATIONS {
+      return Ok(());
+    }
+    let confirmed_block = self.coin.get_height().await? - C::CONFIRMATIONS;
+
+    for b in self.scanned_height() ..= confirmed_block {
       // If any keys activated at this height, shift them over
       {
         let mut k = 0;
         while k < self.pending.len() {
           // TODO
-          //if height < self.pending[k].0 {
-          //} else if height == self.pending[k].0 {
-          if height <= self.pending[k].0 {
+          //if b < self.pending[k].0 {
+          //} else if b == self.pending[k].0 {
+          if b <= self.pending[k].0 {
             self.keys.push((Arc::new(self.pending.swap_remove(k).1), vec![]));
           } else {
             k += 1;
@@ -149,7 +160,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         }
       }
 
-      let block = self.coin.get_block(height).await?;
+      let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
         outputs.extend(
           self.coin.get_outputs(&block, keys.group_key()).await.iter().cloned().filter(
@@ -157,7 +168,11 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           )
         );
       }
+
+      // Blocks are zero-indexed while heights aren't
+      self.db.scanned_to_height(b + 1);
     }
+
     Ok(())
   }
 
