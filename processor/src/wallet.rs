@@ -207,20 +207,23 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
       while outputs.len() != 0 {
         // Select the maximum amount of outputs possible
-        let mut inputs = &outputs[0 .. C::MAX_INPUTS.min(outputs.len())];
+        let mut input_bound = C::MAX_INPUTS.min(outputs.len());
 
         // Calculate their sum value, minus the fee needed to spend them
-        let mut sum = inputs.iter().map(|input| input.amount()).sum::<u64>();
+        let mut sum = outputs[0 .. input_bound].iter().map(|input| input.amount()).sum::<u64>();
         // sum -= C::MAX_FEE; // TODO
 
         // Grab the payments this will successfully fund
         let mut these_payments = vec![];
-        for payment in &payments {
-          if sum > payment.1 {
-            these_payments.push(payment);
-            sum -= payment.1;
+        let mut p = 0;
+        while p < payments.len() {
+          if sum >= payments[p].1 {
+            sum -= payments[p].1;
+            these_payments.push(payments.remove(p));
+          } else {
+            // Doesn't break in this else case as a smaller payment may still fit
+            p += 1;
           }
-          // Doesn't break in this else case as a smaller payment may still fit
         }
 
         // Move to the next set of keys if none of these outputs remain significant
@@ -228,16 +231,17 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           break;
         }
 
-        // Drop any uneeded outputs
-        while sum > inputs[inputs.len() - 1].amount() {
-          sum -= inputs[inputs.len() - 1].amount();
-          inputs = &inputs[.. (inputs.len() - 1)];
+        // Drop any uneeded inputs
+        while sum > outputs[input_bound - 1].amount() {
+          sum -= outputs[input_bound - 1].amount();
+          input_bound -= 1;
         }
+
+        // TODO: Replace any high value inputs with low value inputs, if we can
 
         // We now have a minimal effective outputs/payments set
         // Take ownership while removing these candidates from the provided list
-        let inputs = outputs.drain(.. inputs.len()).collect();
-        let payments = payments.drain(.. these_payments.len()).collect::<Vec<_>>();
+        let inputs = outputs.drain(.. input_bound).collect();
 
         let mut transcript = Transcript::new(b"Serai Processor Wallet Send");
         transcript.append_message(
@@ -257,7 +261,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           transcript,
           acknowledged_height,
           inputs,
-          &payments
+          &these_payments
         ).await?;
         // self.db.save_tx(tx) // TODO
         txs.push(tx);
