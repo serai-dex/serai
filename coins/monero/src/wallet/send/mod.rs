@@ -87,6 +87,8 @@ pub enum TransactionError {
   NotEnoughFunds(u64, u64),
   #[error("invalid address")]
   InvalidAddress,
+  #[error("wrong spend private key")]
+  WrongPrivateKey,
   #[error("rpc error ({0})")]
   RpcError(RpcError),
   #[error("clsag error ({0})")]
@@ -282,7 +284,12 @@ impl SignableTransaction {
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
-      images.push(generate_key_image(&(spend + input.key_offset)));
+      let offset = spend + input.key_offset;
+      if (&offset * &ED25519_BASEPOINT_TABLE) != input.key {
+        Err(TransactionError::WrongPrivateKey)?;
+      }
+
+      images.push(generate_key_image(&offset));
     }
     images.sort_by(key_image_sort);
 

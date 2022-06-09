@@ -83,6 +83,31 @@ impl SignableTransaction {
     }
     transcript.append_message(b"change", &self.change.as_bytes());
 
+    // Sort included before cloning it around
+    included.sort_unstable();
+
+    for (i, input) in self.inputs.iter().enumerate() {
+      // Check this the right set of keys
+      let offset = keys.offset(dalek_ff_group::Scalar(input.key_offset));
+      if offset.group_key().0 != input.key {
+        Err(TransactionError::WrongPrivateKey)?;
+      }
+
+      clsags.push(
+        AlgorithmMachine::new(
+          ClsagMultisig::new(
+            transcript.clone(),
+            inputs[i].clone()
+          ).map_err(|e| TransactionError::MultisigError(e))?,
+          Arc::new(offset),
+          &included
+        ).map_err(|e| TransactionError::FrostError(e))?
+      );
+    }
+
+    // Verify these outputs by a dummy prep
+    self.prepare_outputs(rng, [0; 32])?;
+
     // Select decoys
     // Ideally, this would be done post entropy, instead of now, yet doing so would require sign
     // to be async which isn't preferable. This should be suitably competent though
@@ -96,25 +121,6 @@ impl SignableTransaction {
       height,
       &self.inputs
     ).await.map_err(|e| TransactionError::RpcError(e))?;
-
-    // Sort included before cloning it around
-    included.sort_unstable();
-
-    for (i, input) in self.inputs.iter().enumerate() {
-      clsags.push(
-        AlgorithmMachine::new(
-          ClsagMultisig::new(
-            transcript.clone(),
-            inputs[i].clone()
-          ).map_err(|e| TransactionError::MultisigError(e))?,
-          Arc::new(keys.offset(dalek_ff_group::Scalar(input.key_offset))),
-          &included
-        ).map_err(|e| TransactionError::FrostError(e))?
-      );
-    }
-
-    // Verify these outputs by a dummy prep
-    self.prepare_outputs(rng, [0; 32])?;
 
     Ok(TransactionMachine {
       signable: self,
