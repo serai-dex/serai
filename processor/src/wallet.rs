@@ -100,6 +100,101 @@ impl CoinDb for MemCoinDb {
   }
 }
 
+fn select_inputs<C: Coin>(inputs: &mut Vec<C::Output>) -> (Vec<C::Output>, u64) {
+  // Sort to ensure determinism. Inefficient, yet produces the most legible code to be optimized
+  // later
+  inputs.sort_by(|a, b| a.amount().cmp(&b.amount()));
+
+  // Select the maximum amount of outputs possible
+  let res = inputs.split_off(inputs.len() - C::MAX_INPUTS.min(inputs.len()));
+  // Calculate their sum value, minus the fee needed to spend them
+  let sum = res.iter().map(|input| input.amount()).sum();
+  // sum -= C::MAX_FEE; // TODO
+  (res, sum)
+}
+
+fn select_outputs<C: Coin>(
+  payments: &mut Vec<(C::Address, u64)>,
+  value: &mut u64
+) -> Vec<(C::Address, u64)> {
+  // Prioritize large payments which will most efficiently use large inputs
+  payments.sort_by(|a, b| a.1.cmp(&b.1));
+
+  // Grab the payments this will successfully fund
+  let mut outputs = vec![];
+  let mut p = payments.len();
+  while p != 0 {
+    p -= 1;
+    if *value >= payments[p].1 {
+      *value -= payments[p].1;
+      // Swap remove will either pop the tail or insert an element that wouldn't fit, making it
+      // always safe to move past
+      outputs.push(payments.swap_remove(p));
+    }
+    // Doesn't break in this else case as a smaller payment may still fit
+  }
+
+  outputs
+}
+
+// Optimizes on the expectation selected/inputs are sorted from lowest value to highest
+fn refine_inputs<C: Coin>(
+  selected: &mut Vec<C::Output>,
+  inputs: &mut Vec<C::Output>,
+  mut remaining: u64
+) {
+  // Drop unused inputs
+  let mut s = 0;
+  while remaining > selected[s].amount() {
+    remaining -= selected[s].amount();
+    s += 1;
+  }
+  // Add them back to the inputs pool
+  inputs.extend(selected.drain(.. s));
+
+  // Replace large inputs with smaller ones
+  for s in (0 .. selected.len()).rev() {
+    for i in 0 .. inputs.len() {
+      // Doesn't break due to inputs no longer being sorted
+      // This could be made faster if we prioritized small input usage over transaction size/fees
+      // TODO: Consider. This would implicitly consolidate inputs which would be advantageous
+      if selected[s].amount() < inputs[i].amount() {
+        continue;
+      }
+
+      // If we can successfully replace this input, do so
+      let diff = selected[s].amount() - inputs[i].amount();
+      if remaining > diff {
+        remaining -= diff;
+
+        let old = selected[s].clone();
+        selected[s] = inputs[i].clone();
+        inputs[i] = old;
+      }
+    }
+  }
+}
+
+fn select_inputs_outputs<C: Coin>(
+  inputs: &mut Vec<C::Output>,
+  outputs: &mut Vec<(C::Address, u64)>
+) -> (Vec<C::Output>, Vec<(C::Address, u64)>) {
+  if inputs.len() == 0 {
+    return (vec![], vec![]);
+  }
+
+  let (mut selected, mut value) = select_inputs::<C>(inputs);
+
+  let outputs = select_outputs::<C>(outputs, &mut value);
+  if outputs.len() == 0 {
+    inputs.extend(selected);
+    return (vec![], vec![]);
+  }
+
+  refine_inputs::<C>(&mut selected, inputs, value);
+  (selected, outputs)
+}
+
 pub struct Wallet<D: CoinDb, C: Coin> {
   db: D,
   coin: C,
@@ -196,53 +291,20 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     // Payments is the first set of TXs in the schedule
     // As each payment re-appears, let mut payments = schedule[payment] where the only input is
     // the source payment
-    // let (mut payments, schedule) = payments;
+    // let (mut payments, schedule) = schedule(payments);
     let mut payments = payments;
-    payments.sort_by(|a, b| a.1.cmp(&b.1).reverse());
 
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
-      // Select the highest value outputs to minimize the amount of inputs needed
-      outputs.sort_by(|a, b| a.amount().cmp(&b.amount()).reverse());
-
       while outputs.len() != 0 {
-        // Select the maximum amount of outputs possible
-        let mut input_bound = C::MAX_INPUTS.min(outputs.len());
-
-        // Calculate their sum value, minus the fee needed to spend them
-        let mut sum = outputs[0 .. input_bound].iter().map(|input| input.amount()).sum::<u64>();
-        // sum -= C::MAX_FEE; // TODO
-
-        // Grab the payments this will successfully fund
-        let mut these_payments = vec![];
-        let mut p = 0;
-        while p < payments.len() {
-          if sum >= payments[p].1 {
-            sum -= payments[p].1;
-            these_payments.push(payments.remove(p));
-          } else {
-            // Doesn't break in this else case as a smaller payment may still fit
-            p += 1;
-          }
-        }
-
-        // Move to the next set of keys if none of these outputs remain significant
-        if these_payments.len() == 0 {
+        let (inputs, outputs) = select_inputs_outputs::<C>(outputs, &mut payments);
+        // If we can no longer process any payments, move to the next set of keys
+        if outputs.len() == 0 {
+          debug_assert_eq!(inputs.len(), 0);
           break;
         }
 
-        // Drop any uneeded inputs
-        while sum > outputs[input_bound - 1].amount() {
-          sum -= outputs[input_bound - 1].amount();
-          input_bound -= 1;
-        }
-
-        // TODO: Replace any high value inputs with low value inputs, if we can
-
-        // We now have a minimal effective outputs/payments set
-        // Take ownership while removing these candidates from the provided list
-        let inputs = outputs.drain(.. input_bound).collect();
-
+        // Create the transcript for this transaction
         let mut transcript = Transcript::new(b"Serai Processor Wallet Send");
         transcript.append_message(
           b"canonical_height",
@@ -256,12 +318,13 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           b"index",
           &u64::try_from(txs.len()).unwrap().to_le_bytes()
         );
+
         let tx = self.coin.prepare_send(
           keys.clone(),
           transcript,
           acknowledged_height,
           inputs,
-          &these_payments
+          &outputs
         ).await?;
         // self.db.save_tx(tx) // TODO
         txs.push(tx);
