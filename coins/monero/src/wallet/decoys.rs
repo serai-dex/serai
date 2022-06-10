@@ -33,11 +33,18 @@ async fn select_n<R: RngCore + CryptoRng>(
   used: &mut HashSet<u64>,
   count: usize
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
+  let mut iters = 0;
   let mut confirmed = Vec::with_capacity(count);
   while confirmed.len() != count {
     let remaining = count - confirmed.len();
     let mut candidates = Vec::with_capacity(remaining);
     while candidates.len() != remaining {
+      iters += 1;
+      // This is cheap and on fresh chains, thousands of rounds may be needed
+      if iters == 10000 {
+        Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
+      }
+
       // Use a gamma distribution
       let mut age = GAMMA.sample(rng).exp();
       if age > TIP_APPLICATION {
@@ -126,7 +133,7 @@ impl Decoys {
     // Panic if not enough decoys are available
     // TODO: Simply create a TX with less than the target amount, or at least return an error
     if (high - MATURITY) < u64::try_from(inputs.len() * RING_LEN).unwrap() {
-      panic!("Not enough decoys available");
+      Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
     }
 
     // Select all decoys for this transaction, assuming we generate a sane transaction
@@ -161,8 +168,8 @@ impl Decoys {
       if high > 500 {
         // Make sure the TX passes the sanity check that the median output is within the last 40%
         // This actually checks the median is within the last third, a slightly more aggressive
-        // boundary, as the height used in this calculation will be slightly under the height this is
-        // sanity checked against
+        // boundary, as the height used in this calculation will be slightly under the height this
+        // is sanity checked against
         let target_median = high * 2 / 3;
         while ring[RING_LEN / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
