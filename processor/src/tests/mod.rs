@@ -88,8 +88,7 @@ async fn test_send<C: Coin + Clone>(coin: C) {
   coin.test_send(wallets[0].address()).await;
 
   let mut futures = vec![];
-  for (i, network) in networks.iter_mut().enumerate() {
-    let wallet = &mut wallets[i];
+  for (network, wallet) in networks.iter_mut().zip(wallets.iter_mut()) {
     wallet.poll().await.unwrap();
 
     let height = coin.get_height().await.unwrap();
@@ -98,7 +97,7 @@ async fn test_send<C: Coin + Clone>(coin: C) {
       1,
       vec![(wallet.address(), 10000000000)]
     ).await.unwrap().1.swap_remove(0);
-    futures.push(coin.attempt_send(network, signable, &[1, 2, 3]));
+    futures.push(wallet.attempt_send(network, signable, &[1, 2, 3]));
   }
 
   println!(

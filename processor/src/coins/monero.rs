@@ -6,23 +6,17 @@ use rand_core::OsRng;
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use dalek_ff_group as dfg;
-use frost::{MultisigKeys, sign::StateMachine};
+use frost::MultisigKeys;
 
 use monero::{PublicKey, network::Network, util::address::Address};
 use monero_serai::{
   frost::Ed25519,
   transaction::{Timelock, Transaction},
   rpc::Rpc,
-  wallet::{SpendableOutput, SignableTransaction as MSignableTransaction}
+  wallet::{SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine}
 };
 
-use crate::{
-  Transcript,
-  CoinError, SignError,
-  Network as NetworkTrait,
-  Output as OutputTrait, Coin,
-  view_key
-};
+use crate::{Transcript, CoinError, Output as OutputTrait, Coin, view_key};
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -85,9 +79,12 @@ impl Monero {
 impl Coin for Monero {
   type Curve = Ed25519;
 
-  type Output = Output;
+  type Transaction = Transaction;
   type Block = Vec<Transaction>;
+
+  type Output = Output;
   type SignableTransaction = SignableTransaction;
+  type TransactionMachine = TransactionMachine;
 
   type Address = Address;
 
@@ -153,32 +150,26 @@ impl Coin for Monero {
     )
   }
 
-  async fn attempt_send<N: NetworkTrait>(
+  async fn attempt_send(
     &self,
-    network: &mut N,
     transaction: SignableTransaction,
     included: &[u16]
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), SignError> {
-    let mut attempt = transaction.3.clone().multisig(
+  ) -> Result<Self::TransactionMachine, CoinError> {
+    transaction.3.clone().multisig(
       &mut OsRng,
       &self.rpc,
       (*transaction.0).clone(),
       transaction.1.clone(),
       transaction.2,
       included.to_vec()
-    ).await.map_err(|_| SignError::CoinError(CoinError::ConnectionError))?;
+    ).await.map_err(|_| CoinError::ConnectionError)
+  }
 
-    let commitments = network.round(
-      attempt.preprocess(&mut OsRng).unwrap()
-    ).await.map_err(|e| SignError::NetworkError(e))?;
-    let shares = network.round(
-      attempt.sign(commitments, b"").map_err(|e| SignError::FrostError(e))?
-    ).await.map_err(|e| SignError::NetworkError(e))?;
-    let tx = attempt.complete(shares).map_err(|e| SignError::FrostError(e))?;
-
-    self.rpc.publish_transaction(
-      &tx
-    ).await.map_err(|_| SignError::CoinError(CoinError::ConnectionError))?;
+  async fn publish_transaction(
+    &self,
+    tx: &Self::Transaction
+  ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
+    self.rpc.publish_transaction(&tx).await.map_err(|_| CoinError::ConnectionError)?;
 
     Ok((
       tx.hash().to_vec(),

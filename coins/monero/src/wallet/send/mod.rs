@@ -36,6 +36,8 @@ use crate::frost::MultisigError;
 
 #[cfg(feature = "multisig")]
 mod multisig;
+#[cfg(feature = "multisig")]
+pub use multisig::TransactionMachine;
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Debug)]

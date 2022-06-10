@@ -14,6 +14,8 @@ pub(crate) use decoys::Decoys;
 
 mod send;
 pub use send::{TransactionError, SignableTransaction};
+#[cfg(feature = "multisig")]
+pub use send::TransactionMachine;
 
 fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> std::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()

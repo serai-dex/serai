@@ -3,7 +3,7 @@ use std::{marker::Send, sync::Arc, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{Curve, FrostError, MultisigKeys};
+use frost::{Curve, FrostError, MultisigKeys, sign::StateMachine};
 
 pub(crate) use monero_serai::frost::Transcript;
 
@@ -51,9 +51,12 @@ pub trait Output: Sized + Clone {
 pub trait Coin {
   type Curve: Curve;
 
-  type Output: Output;
+  type Transaction;
   type Block;
+
+  type Output: Output;
   type SignableTransaction;
+  type TransactionMachine: StateMachine<Signature = Self::Transaction>;
 
   type Address: Send;
 
@@ -82,12 +85,16 @@ pub trait Coin {
     payments: &[(Self::Address, u64)]
   ) -> Result<Self::SignableTransaction, CoinError>;
 
-  async fn attempt_send<N: Network>(
+  async fn attempt_send(
     &self,
-    network: &mut N,
     transaction: Self::SignableTransaction,
     included: &[u16]
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), SignError>;
+  ) -> Result<Self::TransactionMachine, CoinError>;
+
+  async fn publish_transaction(
+    &self,
+    tx: &Self::Transaction
+  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
 
   #[cfg(test)]
   async fn mine_block(&self, address: Self::Address);
