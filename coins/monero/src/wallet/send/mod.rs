@@ -11,7 +11,7 @@ use curve25519_dalek::{
 
 use monero::{
   consensus::Encodable,
-  util::{key::PublicKey, address::Address},
+  util::{key::PublicKey, address::{AddressType, Address}},
   blockdata::transaction::SubField
 };
 
@@ -61,13 +61,15 @@ impl SendOutput {
       o
     );
 
+    let spend = output.0.public_spend.point.decompress().ok_or(TransactionError::InvalidAddress)?;
     Ok(
       SendOutput {
-        R: &r * &ED25519_BASEPOINT_TABLE,
-        dest: (
-          (&shared_key * &ED25519_BASEPOINT_TABLE) +
-          output.0.public_spend.point.decompress().ok_or(TransactionError::InvalidAddress)?
-        ),
+        R: match output.0.addr_type {
+          AddressType::Standard => Ok(&r * &ED25519_BASEPOINT_TABLE),
+          AddressType::SubAddress => Ok(&r * spend),
+          AddressType::Integrated(_) => Err(TransactionError::InvalidAddress)
+        }?,
+        dest: (&shared_key * &ED25519_BASEPOINT_TABLE) + spend,
         mask: commitment_mask(shared_key),
         amount: amount_encryption(output.1, shared_key)
       }
@@ -233,6 +235,7 @@ impl SignableTransaction {
     bp: Bulletproofs
   ) -> Transaction {
     // Create the TX extra
+    // TODO: Review this for canonicity with Monero
     let mut extra = vec![];
     SubField::TxPublicKey(
       PublicKey { point: self.outputs[0].R.compress() }
