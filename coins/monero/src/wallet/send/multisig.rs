@@ -175,11 +175,18 @@ impl StateMachine for TransactionMachine {
   fn sign(
     &mut self,
     mut commitments: HashMap<u16, Vec<u8>>,
-    // Drop FROST's 'msg' since we calculate the actual message in this function
-    _: &[u8]
+    msg: &[u8]
   ) -> Result<Vec<u8>, FrostError> {
     if self.state() != State::Preprocessed {
       Err(FrostError::InvalidSignTransition(State::Preprocessed, self.state()))?;
+    }
+
+    if msg.len() != 0 {
+      Err(
+        FrostError::InternalError(
+          "message was passed to the TransactionMachine when it generates its own".to_string()
+        )
+      )?;
     }
 
     // Add all commitments to the transcript for their entropy
