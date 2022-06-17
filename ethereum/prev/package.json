@@ -9,6 +9,7 @@
     "hardhat": "^2.9.9"
   },
   "dependencies": {
+    "bigi": "^1.4.2",
     "secp256k1": "^4.0.3"
   }
 }
