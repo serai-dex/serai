@@ -3,7 +3,9 @@ name = "multiexp"
 version = "0.1.0"
 description = "Multiexponentation algorithms for ff/group"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["multiexp", "ff", "group"]
 edition = "2021"
 
 [dependencies]
