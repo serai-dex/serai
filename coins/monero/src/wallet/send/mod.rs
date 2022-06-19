@@ -220,8 +220,11 @@ impl SignableTransaction {
     }
     let mut outputs = payments.len() + (if change { 1 } else { 0 });
 
+    // Calculate the extra length.
+    // Type, length, value, with 1 field for the first key and 1 field for the rest
+    let extra = (outputs * (2 + 32)) - (outputs.saturating_sub(2) * 2);
+
     // Calculate the fee.
-    let extra = 0;
     let mut fee = fee_rate.calculate(Transaction::fee_weight(inputs.len(), outputs, extra));
 
     // Make sure we have enough funds
