@@ -35,9 +35,8 @@ pub struct TransactionMachine {
 }
 
 impl SignableTransaction {
-  pub async fn multisig<R: RngCore + CryptoRng>(
-    mut self,
-    rng: &mut R,
+  pub async fn multisig(
+    self,
     rpc: &Rpc,
     keys: MultisigKeys<Ed25519>,
     mut transcript: Transcript,
@@ -80,8 +79,8 @@ impl SignableTransaction {
     for payment in &self.payments {
       transcript.append_message(b"payment_address", &payment.0.as_bytes());
       transcript.append_message(b"payment_amount", &payment.1.to_le_bytes());
+      transcript.append_message(b"payment_unique", &(if payment.2 { [1] } else { [0] }));
     }
-    transcript.append_message(b"change", &self.change.as_bytes());
 
     // Sort included before cloning it around
     included.sort_unstable();
@@ -104,9 +103,6 @@ impl SignableTransaction {
         ).map_err(|e| TransactionError::FrostError(e))?
       );
     }
-
-    // Verify these outputs by a dummy prep
-    self.prepare_outputs(rng, [0; 32])?;
 
     // Select decoys
     // Ideally, this would be done post entropy, instead of now, yet doing so would require sign
@@ -228,7 +224,6 @@ impl StateMachine for TransactionMachine {
       let mut images = self.images.clone();
       images.sort_by(key_image_sort);
 
-      // Not invalid outputs due to already doing a dummy prep
       let (commitments, output_masks) = self.signable.prepare_outputs(
         &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys")),
         uniqueness(
@@ -238,7 +233,7 @@ impl StateMachine for TransactionMachine {
             key_image: *image
           }).collect::<Vec<_>>()
         )
-      ).expect("Couldn't prepare outputs despite already doing a dummy prep");
+      );
       self.output_masks = Some(output_masks);
 
       self.signable.prepare_transaction(

@@ -80,9 +80,7 @@ async fn send_core(test: usize, multisig: bool) {
     PublicKey { point: (&view * &ED25519_BASEPOINT_TABLE).compress() }
   );
 
-  // TODO
-  let fee_per_byte = 50000000;
-  let fee = fee_per_byte * 2000;
+  let fee = rpc.get_fee().await.unwrap();
 
   let start = rpc.get_height().await.unwrap();
   for _ in 0 .. 7 {
@@ -134,7 +132,7 @@ async fn send_core(test: usize, multisig: bool) {
     }
 
     let mut signable = SignableTransaction::new(
-      outputs, vec![(addr, amount - fee)], addr, fee_per_byte
+      outputs, vec![(addr, amount - 10000000000)], Some(addr), fee
     ).unwrap();
 
     if !multisig {
@@ -147,7 +145,6 @@ async fn send_core(test: usize, multisig: bool) {
           machines.insert(
             i,
             signable.clone().multisig(
-              &mut OsRng,
               &rpc,
               (*keys[&i]).clone(),
               Transcript::new(b"Monero Serai Test Transaction"),

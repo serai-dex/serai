@@ -7,7 +7,7 @@ use rand_distr::{Distribution, Gamma};
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use crate::{wallet::SpendableOutput, rpc::{RpcError, Rpc}};
+use crate::{transaction::RING_LEN, wallet::SpendableOutput, rpc::{RpcError, Rpc}};
 
 const LOCK_WINDOW: usize = 10;
 const MATURITY: u64 = 60;
@@ -16,7 +16,6 @@ const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
-const RING_LEN: usize = 11;
 const DECOYS: usize = RING_LEN - 1;
 
 lazy_static! {
