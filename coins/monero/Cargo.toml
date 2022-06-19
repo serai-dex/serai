@@ -24,7 +24,7 @@ group = { version = "0.12", optional = true }
 
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
 transcript = { path = "../../crypto/transcript", optional = true }
-frost = { path = "../../crypto/frost", features = ["ed25519"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["ed25519"], optional = true }
 
 monero = "0.16"
 

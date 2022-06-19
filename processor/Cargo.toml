@@ -20,7 +20,7 @@ blake2 = "0.10"
 
 transcript = { path = "../crypto/transcript" }
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
-frost = { path = "../crypto/frost" }
+frost = { package = "modular-frost", path = "../crypto/frost" }
 
 monero = { version = "0.16", features = ["experimental"] }
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
