@@ -4,8 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use sha2::{Digest, Sha512};
 
-use ff::PrimeField;
-use group::Group;
+use group::{ff::PrimeField, Group};
 
 use dalek_ff_group::Scalar;
 

@@ -3,7 +3,7 @@ use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ff::Field;
+use group::ff::Field;
 
 use transcript::Transcript;
 

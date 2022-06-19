@@ -1,7 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
-use ff::Field;
-use group::Group;
+use group::{ff::Field, Group};
 
 use crate::{Curve, MultisigKeys, tests::key_gen};
 

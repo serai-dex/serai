@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ff::Field;
+use group::ff::Field;
 
 use crate::{
   Curve, MultisigKeys, schnorr::{self, SchnorrSignature}, algorithm::{Hram, Schnorr},

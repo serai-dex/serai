@@ -1,6 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
-use ff::Field;
+use group::ff::Field;
 
 use multiexp::BatchVerifier;
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
-use ff::{Field, PrimeField};
+use group::ff::{Field, PrimeField};
 
 use multiexp::{multiexp_vartime, BatchVerifier};
 

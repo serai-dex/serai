@@ -5,8 +5,7 @@ use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
-use ff::{Field, PrimeField};
-use group::{Group, GroupOps};
+use group::{ff::{Field, PrimeField}, Group, GroupOps};
 
 mod schnorr;
 

@@ -4,8 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use sha2::{digest::Update, Digest, Sha256};
 
-use ff::{Field, PrimeField};
-use group::{Group, GroupEncoding};
+use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
 
 use elliptic_curve::{bigint::{Encoding, U384}, hash2curve::{Expander, ExpandMsg, ExpandMsgXmd}};
 
