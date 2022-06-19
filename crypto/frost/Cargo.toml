@@ -21,11 +21,11 @@ group = "0.12"
 elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true }
 p256 = { version = "0.11", features = ["arithmetic", "hash2curve"], optional = true }
 k256 = { version = "0.11", features = ["arithmetic", "hash2curve"], optional = true }
-dalek-ff-group = { path = "../dalek-ff-group", optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.1", optional = true }
 
-transcript = { package = "transcript-trait", path = "../transcript" }
+transcript = { package = "transcript-trait", path = "../transcript", version = "0.1" }
 
-multiexp = { path = "../multiexp", features = ["batch"] }
+multiexp = { path = "../multiexp", version = "0.1", features = ["batch"] }
 
 [dev-dependencies]
 rand = "0.8"
