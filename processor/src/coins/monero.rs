@@ -13,7 +13,7 @@ use monero_serai::{
   frost::Ed25519,
   transaction::{Timelock, Transaction},
   rpc::Rpc,
-  wallet::{SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine}
+  wallet::{Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine}
 };
 
 use crate::{Transcript, CoinError, Output as OutputTrait, Coin, view_key};
@@ -59,7 +59,7 @@ pub struct SignableTransaction(
 
 #[derive(Clone, Debug)]
 pub struct Monero {
-  rpc: Rpc,
+  pub(crate) rpc: Rpc,
   view: Scalar,
   view_pub: PublicKey
 }
@@ -79,6 +79,7 @@ impl Monero {
 impl Coin for Monero {
   type Curve = Ed25519;
 
+  type Fee = Fee;
   type Transaction = Transaction;
   type Block = Vec<Transaction>;
 
@@ -132,7 +133,8 @@ impl Coin for Monero {
     transcript: Transcript,
     height: usize,
     mut inputs: Vec<Output>,
-    payments: &[(Address, u64)]
+    payments: &[(Address, u64)],
+    fee: Fee
   ) -> Result<SignableTransaction, CoinError> {
     let spend = keys.group_key();
     Ok(
@@ -143,8 +145,8 @@ impl Coin for Monero {
         MSignableTransaction::new(
           inputs.drain(..).map(|input| input.0).collect(),
           payments.to_vec(),
-          self.address(spend),
-          100000000 // TODO
+          Some(self.address(spend)),
+          fee
         ).map_err(|_| CoinError::ConnectionError)?
       )
     )
@@ -156,7 +158,6 @@ impl Coin for Monero {
     included: &[u16]
   ) -> Result<Self::TransactionMachine, CoinError> {
     transaction.3.clone().multisig(
-      &mut OsRng,
       &self.rpc,
       (*transaction.0).clone(),
       transaction.1.clone(),
@@ -213,8 +214,8 @@ impl Coin for Monero {
     let tx = MSignableTransaction::new(
       outputs,
       vec![(address, amount - fee)],
-      temp,
-      fee / 2000
+      Some(temp),
+      self.rpc.get_fee().await.unwrap()
     ).unwrap().sign(&mut OsRng, &self.rpc, &Scalar::one()).await.unwrap();
     self.rpc.publish_transaction(&tx).await.unwrap();
     self.mine_block(temp).await;

@@ -281,7 +281,8 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   pub async fn prepare_sends(
     &mut self,
     canonical: usize,
-    payments: Vec<(C::Address, u64)>
+    payments: Vec<(C::Address, u64)>,
+    fee: C::Fee
   ) -> Result<(Vec<(C::Address, u64)>, Vec<C::SignableTransaction>), CoinError> {
     if payments.len() == 0 {
       return Ok((vec![], vec![]));
@@ -326,7 +327,8 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           transcript,
           acknowledged_height,
           inputs,
-          &outputs
+          &outputs,
+          fee
         ).await?;
         // self.db.save_tx(tx) // TODO
         txs.push(tx);
@@ -340,11 +342,11 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     &mut self,
     network: &mut N,
     prepared: C::SignableTransaction,
-    included: &[u16]
+    included: Vec<u16>
   ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
     let mut attempt = self.coin.attempt_send(
       prepared,
-      included
+      &included
     ).await.map_err(|e| SignError::CoinError(e))?;
 
     let commitments = network.round(

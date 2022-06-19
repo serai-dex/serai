@@ -51,6 +51,7 @@ pub trait Output: Sized + Clone {
 pub trait Coin {
   type Curve: Curve;
 
+  type Fee: Copy;
   type Transaction;
   type Block;
 
@@ -82,7 +83,8 @@ pub trait Coin {
     transcript: Transcript,
     height: usize,
     inputs: Vec<Self::Output>,
-    payments: &[(Self::Address, u64)]
+    payments: &[(Self::Address, u64)],
+    fee: Self::Fee
   ) -> Result<Self::SignableTransaction, CoinError>;
 
   async fn attempt_send(

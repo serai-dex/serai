@@ -57,16 +57,17 @@ impl Network for LocalNetwork {
   }
 }
 
-async fn test_send<C: Coin + Clone>(coin: C) {
+async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   // Mine a block so there's a confirmed height
   coin.mine_block(coin.address(<C::Curve as Curve>::G::generator())).await;
   let height = coin.get_height().await.unwrap();
 
-  let mut networks = LocalNetwork::new(3);
-
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
+  let threshold = keys[&1].params().t();
+  let mut networks = LocalNetwork::new(threshold);
+
   let mut wallets = vec![];
-  for i in 1 ..= 3 {
+  for i in 1 ..= threshold {
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_height(0, height);
     wallet.add_keys(
@@ -95,9 +96,12 @@ async fn test_send<C: Coin + Clone>(coin: C) {
     wallet.acknowledge_height(1, height - 10);
     let signable = wallet.prepare_sends(
       1,
-      vec![(wallet.address(), 10000000000)]
+      vec![(wallet.address(), 10000000000)],
+      fee
     ).await.unwrap().1.swap_remove(0);
-    futures.push(wallet.attempt_send(network, signable, &[1, 2, 3]));
+    futures.push(
+      wallet.attempt_send(network, signable, (1 ..= threshold).into_iter().collect::<Vec<_>>())
+    );
   }
 
   println!(
@@ -108,5 +112,7 @@ async fn test_send<C: Coin + Clone>(coin: C) {
 
 #[tokio::test]
 async fn monero() {
-  test_send(Monero::new("http://127.0.0.1:18081".to_string())).await;
+  let monero = Monero::new("http://127.0.0.1:18081".to_string());
+  let fee = monero.rpc.get_fee().await.unwrap();
+  test_send(monero, fee).await;
 }
