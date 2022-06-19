@@ -81,7 +81,7 @@ macro_rules! dalek_curve {
         let scalar = Self::F::from_repr(
           slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?
         );
-        if scalar.is_some().unwrap_u8() == 0 {
+        if !bool::from(scalar.is_some()) {
           Err(CurveError::InvalidScalar)?;
         }
         Ok(scalar.unwrap())
@@ -89,25 +89,21 @@ macro_rules! dalek_curve {
 
       fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
         let bytes = slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?;
-        let point = $Compressed::new(bytes).decompress();
+        let point = $Compressed::new(bytes).decompress().ok_or(CurveError::InvalidPoint)?;
 
-        if let Some(point) = point {
-          // Ban identity
-          if point.is_identity().into() {
-            Err(CurveError::InvalidPoint)?;
-          }
-          // Ban torsioned points to meet the prime order group requirement
-          if $torsioned(point) {
-            Err(CurveError::InvalidPoint)?;
-          }
-          // Ban points which weren't canonically encoded
-          if point.compress().to_bytes() != bytes {
-            Err(CurveError::InvalidPoint)?;
-          }
-          Ok(point)
-        } else {
-          Err(CurveError::InvalidPoint)
+        // Ban identity
+        if point.is_identity().into() {
+          Err(CurveError::InvalidPoint)?;
         }
+        // Ban torsioned points to meet the prime order group requirement
+        if $torsioned(point) {
+          Err(CurveError::InvalidPoint)?;
+        }
+        // Ban points which weren't canonically encoded
+        if point.compress().to_bytes() != bytes {
+          Err(CurveError::InvalidPoint)?;
+        }
+        Ok(point)
       }
 
       fn F_to_bytes(f: &Self::F) -> Vec<u8> {
