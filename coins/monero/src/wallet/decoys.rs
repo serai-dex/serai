@@ -20,7 +20,7 @@ const DECOYS: usize = RING_LEN - 1;
 
 lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
-  static ref DISTRIBUTION: Mutex<Vec<u64>> = Mutex::new(vec![]);
+  static ref DISTRIBUTION: Mutex<Vec<u64>> = Mutex::new(Vec::with_capacity(3000000));
 }
 
 async fn select_n<R: RngCore + CryptoRng>(
