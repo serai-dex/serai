@@ -233,7 +233,8 @@ impl Rpc {
     Ok(indexes.o_indexes)
   }
 
-  pub async fn get_output_distribution(&self, height: usize) -> Result<Vec<u64>, RpcError> {
+  // from and to are inclusive
+  pub async fn get_output_distribution(&self, from: usize, to: usize) -> Result<Vec<u64>, RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
     pub struct Distribution {
@@ -252,7 +253,8 @@ impl Rpc {
         "binary": false,
         "amounts": [0],
         "cumulative": true,
-        "to_height": height
+        "from_height": from,
+        "to_height": to
       }
     }))).await?;
 

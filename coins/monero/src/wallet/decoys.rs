@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{sync::Mutex, collections::HashSet};
 
 use lazy_static::lazy_static;
 
@@ -20,13 +20,14 @@ const DECOYS: usize = RING_LEN - 1;
 
 lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
+  static ref DISTRIBUTION: Mutex<Vec<u64>> = Mutex::new(vec![]);
 }
 
 async fn select_n<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
   height: usize,
-  distribution: &[u64],
+  distribution: &Vec<u64>,
   high: u64,
   per_second: f64,
   used: &mut HashSet<u64>,
@@ -107,6 +108,8 @@ impl Decoys {
     height: usize,
     inputs: &[SpendableOutput]
   ) -> Result<Vec<Decoys>, RpcError> {
+    let mut distribution = DISTRIBUTION.lock().unwrap();
+
     // Convert the inputs in question to the raw output data
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
@@ -116,7 +119,14 @@ impl Decoys {
       ));
     }
 
-    let distribution = rpc.get_output_distribution(height).await?;
+    if distribution.len() <= height {
+      let from = distribution.len();
+      distribution.extend(rpc.get_output_distribution(from, height).await?);
+    }
+    // If asked to use an older height than previously asked, truncate to ensure accuracy
+    // Should never happen, yet risks desyncing if it did
+    distribution.truncate(height + 1); // height is inclusive, and 0 is a valid height
+
     let high = distribution[distribution.len() - 1];
     let per_second = {
       let blocks = distribution.len().min(BLOCKS_PER_YEAR);
@@ -129,8 +139,7 @@ impl Decoys {
       used.insert(o.0);
     }
 
-    // Panic if not enough decoys are available
-    // TODO: Simply create a TX with less than the target amount, or at least return an error
+    // TODO: Simply create a TX with less than the target amount
     if (high - MATURITY) < u64::try_from(inputs.len() * RING_LEN).unwrap() {
       Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
     }
@@ -166,10 +175,7 @@ impl Decoys {
       // small chains
       if high > 500 {
         // Make sure the TX passes the sanity check that the median output is within the last 40%
-        // This actually checks the median is within the last third, a slightly more aggressive
-        // boundary, as the height used in this calculation will be slightly under the height this
-        // is sanity checked against
-        let target_median = high * 2 / 3;
+        let target_median = high * 3 / 5;
         while ring[RING_LEN / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
           for removed in ring.drain(0 .. (RING_LEN / 2)).collect::<Vec<_>>() {
