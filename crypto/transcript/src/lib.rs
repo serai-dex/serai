@@ -1,11 +1,11 @@
-use core::{marker::PhantomData, fmt::Debug};
+use core::fmt::Debug;
 
 #[cfg(features = "merlin")]
 mod merlin;
 #[cfg(features = "merlin")]
 pub use merlin::MerlinTranscript;
 
-use digest::Digest;
+use digest::{typenum::type_operators::IsGreaterOrEqual, consts::U256, Digest};
 
 pub trait Transcript {
   fn domain_separate(&mut self, label: &'static [u8]);
@@ -35,9 +35,9 @@ impl DigestTranscriptMember {
 }
 
 #[derive(Clone, Debug)]
-pub struct DigestTranscript<D: Clone + Digest>(D, PhantomData<D>);
+pub struct DigestTranscript<D: Clone + Digest>(D) where D::OutputSize: IsGreaterOrEqual<U256>;
 
-impl<D: Clone + Digest> DigestTranscript<D> {
+impl<D: Clone + Digest> DigestTranscript<D> where D::OutputSize: IsGreaterOrEqual<U256> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
     self.0.update(&[kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
@@ -46,13 +46,14 @@ impl<D: Clone + Digest> DigestTranscript<D> {
   }
 
   pub fn new(name: &'static [u8]) -> Self {
-    let mut res = DigestTranscript(D::new(), PhantomData);
+    let mut res = DigestTranscript(D::new());
     res.append(DigestTranscriptMember::Name, name);
     res
   }
 }
 
-impl<D: Digest + Clone> Transcript for DigestTranscript<D> {
+impl<D: Digest + Clone> Transcript for DigestTranscript<D>
+  where D::OutputSize: IsGreaterOrEqual<U256> {
   fn domain_separate(&mut self, label: &[u8]) {
     self.append(DigestTranscriptMember::Domain, label);
   }
