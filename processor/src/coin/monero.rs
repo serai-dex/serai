@@ -15,7 +15,7 @@ use monero_serai::{
   wallet::{Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine}
 };
 
-use crate::{CoinError, Output as OutputTrait, Coin, view_key};
+use crate::{coin::{CoinError, Output as OutputTrait, Coin}, view_key};
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);

@@ -6,7 +6,7 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use frost::{curve::Curve, MultisigKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
 
-use crate::{CoinError, SignError, Output, Coin, Network};
+use crate::{coin::{CoinError, Output, Coin}, SignError, Network};
 
 pub struct WalletKeys<C: Curve> {
   keys: MultisigKeys<C>,

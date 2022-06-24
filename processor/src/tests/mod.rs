@@ -8,11 +8,7 @@ use group::Group;
 
 use frost::curve::Curve;
 
-use crate::{
-  NetworkError, Network,
-  Coin, coins::monero::Monero,
-  wallet::{WalletKeys, MemCoinDb, Wallet}
-};
+use crate::{NetworkError, Network, coin::{Coin, Monero}, wallet::{WalletKeys, MemCoinDb, Wallet}};
 
 #[derive(Clone)]
 struct LocalNetwork {
