@@ -14,6 +14,26 @@ pub trait Transcript {
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32];
 }
 
+enum DigestTranscriptMember {
+  Name,
+  Domain,
+  Label,
+  Value,
+  Challenge
+}
+
+impl DigestTranscriptMember {
+  fn as_u8(&self) -> u8 {
+    match self {
+      DigestTranscriptMember::Name => 0,
+      DigestTranscriptMember::Domain => 1,
+      DigestTranscriptMember::Label => 2,
+      DigestTranscriptMember::Value => 3,
+      DigestTranscriptMember::Challenge => 4
+    }
+  }
+}
+
 #[derive(Clone, Debug)]
 pub struct DigestTranscript<D: Digest>(Vec<u8>, PhantomData<D>);
 
@@ -24,25 +44,32 @@ impl<D: Digest> PartialEq for DigestTranscript<D> {
 }
 
 impl<D: Digest> DigestTranscript<D> {
-  pub fn new(label: &'static [u8]) -> Self {
-    DigestTranscript(label.to_vec(), PhantomData)
+  fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
+    self.0.push(kind.as_u8());
+    // Assumes messages don't exceed 16 exabytes
+    self.0.extend(u64::try_from(value.len()).unwrap().to_le_bytes());
+    self.0.extend(value);
+  }
+
+  pub fn new(name: &'static [u8]) -> Self {
+    let mut res = DigestTranscript(vec![], PhantomData);
+    res.append(DigestTranscriptMember::Name, name);
+    res
   }
 }
 
 impl<D: Digest> Transcript for DigestTranscript<D> {
   fn domain_separate(&mut self, label: &[u8]) {
-    self.append_message(b"domain", label);
+    self.append(DigestTranscriptMember::Domain, label);
   }
 
   fn append_message(&mut self, label: &'static [u8], message: &[u8]) {
-    self.0.extend(label);
-    // Assumes messages don't exceed 16 exabytes
-    self.0.extend(u64::try_from(message.len()).unwrap().to_le_bytes());
-    self.0.extend(message);
+    self.append(DigestTranscriptMember::Label, label);
+    self.append(DigestTranscriptMember::Value, message);
   }
 
   fn challenge(&mut self, label: &'static [u8]) -> Vec<u8> {
-    self.0.extend(label);
+    self.append(DigestTranscriptMember::Challenge, label);
     D::new().chain_update(&self.0).finalize().to_vec()
   }
 
