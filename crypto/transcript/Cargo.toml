@@ -11,7 +11,9 @@ edition = "2021"
 [dependencies]
 digest = "0.10"
 
+blake2 = { version = "0.10", optional = true }
 merlin = { version = "3", optional = true }
 
 [features]
+recommended = ["blake2"]
 merlin = ["dep:merlin"]

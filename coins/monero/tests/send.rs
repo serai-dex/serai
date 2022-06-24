@@ -27,7 +27,9 @@ mod rpc;
 use crate::rpc::{rpc, mine_block};
 
 #[cfg(feature = "multisig")]
-use monero_serai::frost::{Transcript, Ed25519};
+use transcript::RecommendedTranscript;
+#[cfg(feature = "multisig")]
+use monero_serai::frost::Ed25519;
 
 lazy_static! {
   static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
@@ -147,7 +149,7 @@ async fn send_core(test: usize, multisig: bool) {
             signable.clone().multisig(
               &rpc,
               (*keys[&i]).clone(),
-              Transcript::new(b"Monero Serai Test Transaction"),
+              RecommendedTranscript::new(b"Monero Serai Test Transaction"),
               rpc.get_height().await.unwrap() - 10,
               (1 ..= THRESHOLD).collect::<Vec<_>>()
             ).await.unwrap()

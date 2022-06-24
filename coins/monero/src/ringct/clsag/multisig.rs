@@ -13,18 +13,18 @@ use curve25519_dalek::{
 
 use group::Group;
 
-use transcript::Transcript as TranscriptTrait;
+use transcript::{Transcript, RecommendedTranscript};
 use frost::{FrostError, MultisigView, algorithm::Algorithm};
 use dalek_ff_group as dfg;
 
 use crate::{
   hash_to_point,
-  frost::{Transcript, MultisigError, Ed25519, DLEqProof, read_dleq},
+  frost::{MultisigError, Ed25519, DLEqProof, read_dleq},
   ringct::clsag::{ClsagInput, Clsag}
 };
 
 impl ClsagInput {
-  fn transcript<T: TranscriptTrait>(&self, transcript: &mut T) {
+  fn transcript<T: Transcript>(&self, transcript: &mut T) {
     // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
     // Ring index
@@ -72,7 +72,7 @@ struct Interim {
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct ClsagMultisig {
-  transcript: Transcript,
+  transcript: RecommendedTranscript,
 
   H: EdwardsPoint,
   // Merged here as CLSAG needs it, passing it would be a mess, yet having it beforehand requires a round
@@ -87,7 +87,7 @@ pub struct ClsagMultisig {
 
 impl ClsagMultisig {
   pub fn new(
-    transcript: Transcript,
+    transcript: RecommendedTranscript,
     details: Arc<RwLock<Option<ClsagDetails>>>
   ) -> Result<ClsagMultisig, MultisigError> {
     Ok(
@@ -120,7 +120,7 @@ impl ClsagMultisig {
 }
 
 impl Algorithm<Ed25519> for ClsagMultisig {
-  type Transcript = Transcript;
+  type Transcript = RecommendedTranscript;
   type Signature = (Clsag, EdwardsPoint);
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(

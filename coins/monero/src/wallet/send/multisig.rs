@@ -5,7 +5,7 @@ use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwardsY}};
 
-use transcript::Transcript as TranscriptTrait;
+use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   FrostError, MultisigKeys,
   sign::{
@@ -15,7 +15,7 @@ use frost::{
 };
 
 use crate::{
-  frost::{Transcript, Ed25519},
+  frost::Ed25519,
   random_scalar, ringct::{clsag::{ClsagInput, ClsagDetails, ClsagMultisig}, bulletproofs::Bulletproofs, RctPrunable},
   transaction::{Input, Transaction},
   rpc::Rpc,
@@ -26,7 +26,7 @@ pub struct TransactionMachine {
   signable: SignableTransaction,
   i: u16,
   included: Vec<u16>,
-  transcript: Transcript,
+  transcript: RecommendedTranscript,
 
   decoys: Vec<Decoys>,
 
@@ -38,7 +38,7 @@ pub struct TransactionSignMachine {
   signable: SignableTransaction,
   i: u16,
   included: Vec<u16>,
-  transcript: Transcript,
+  transcript: RecommendedTranscript,
 
   decoys: Vec<Decoys>,
 
@@ -58,7 +58,7 @@ impl SignableTransaction {
     self,
     rpc: &Rpc,
     keys: MultisigKeys<Ed25519>,
-    mut transcript: Transcript,
+    mut transcript: RecommendedTranscript,
     height: usize,
     mut included: Vec<u16>
   ) -> Result<TransactionMachine, TransactionError> {

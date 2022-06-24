@@ -74,3 +74,6 @@ impl<D: Digest + Clone> Transcript for DigestTranscript<D>
     seed
   }
 }
+
+#[cfg(feature = "recommended")]
+pub type RecommendedTranscript = DigestTranscript<blake2::Blake2b512>;

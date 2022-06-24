@@ -9,14 +9,12 @@ use curve25519_dalek::{
   edwards::EdwardsPoint as DPoint
 };
 
-use transcript::{Transcript as TranscriptTrait, DigestTranscript};
-use frost::Curve;
+use transcript::{Transcript, RecommendedTranscript};
+use frost::curves::Curve;
 pub use frost::curves::dalek::Ed25519;
 use dalek_ff_group as dfg;
 
 use crate::random_scalar;
-
-pub type Transcript = DigestTranscript::<blake2::Blake2b512>;
 
 #[derive(Clone, Error, Debug)]
 pub enum MultisigError {
@@ -43,7 +41,7 @@ impl DLEqProof {
     // the proper order if they want to reach consensus
     // It'd be a poor API to have CLSAG define a new transcript solely to pass here, just to try to
     // merge later in some form, when it should instead just merge xH (as it does)
-    let mut transcript = Transcript::new(b"DLEq Proof");
+    let mut transcript = RecommendedTranscript::new(b"DLEq Proof");
     // Bit redundant, keeps things consistent
     transcript.domain_separate(b"DLEq");
     // Doesn't include G which is constant, does include H which isn't, even though H manipulation

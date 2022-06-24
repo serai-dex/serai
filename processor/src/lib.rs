@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use frost::{Curve, FrostError, MultisigKeys, sign::PreprocessMachine};
 
-pub(crate) use monero_serai::frost::Transcript;
+use transcript::RecommendedTranscript;
 
 mod coins;
 mod wallet;
@@ -80,7 +80,7 @@ pub trait Coin {
   async fn prepare_send(
     &self,
     keys: Arc<MultisigKeys<Self::Curve>>,
-    transcript: Transcript,
+    transcript: RecommendedTranscript,
     height: usize,
     inputs: Vec<Self::Output>,
     payments: &[(Self::Address, u64)],

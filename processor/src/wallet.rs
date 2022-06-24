@@ -2,11 +2,11 @@ use std::{sync::Arc, collections::HashMap};
 
 use rand_core::OsRng;
 
-use transcript::Transcript as TranscriptTrait;
+use transcript::{Transcript, RecommendedTranscript};
 
 use frost::{Curve, MultisigKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
 
-use crate::{Transcript, CoinError, SignError, Output, Coin, Network};
+use crate::{CoinError, SignError, Output, Coin, Network};
 
 pub struct WalletKeys<C: Curve> {
   keys: MultisigKeys<C>,
@@ -28,7 +28,7 @@ impl<C: Curve> WalletKeys<C> {
   // function as well, although that degree of influence means key gen is broken already
   fn bind(&self, chain: &[u8]) -> MultisigKeys<C> {
     const DST: &[u8] = b"Serai Processor Wallet Chain Bind";
-    let mut transcript = Transcript::new(DST);
+    let mut transcript = RecommendedTranscript::new(DST);
     transcript.append_message(b"chain", chain);
     transcript.append_message(b"curve", C::ID);
     transcript.append_message(b"group_key", &C::G_to_bytes(&self.keys.group_key()));
@@ -308,7 +308,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         }
 
         // Create the transcript for this transaction
-        let mut transcript = Transcript::new(b"Serai Processor Wallet Send");
+        let mut transcript = RecommendedTranscript::new(b"Serai Processor Wallet Send");
         transcript.append_message(
           b"canonical_height",
           &u64::try_from(canonical).unwrap().to_le_bytes()

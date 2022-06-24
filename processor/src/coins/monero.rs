@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use dalek_ff_group as dfg;
+use transcript::RecommendedTranscript;
 use frost::MultisigKeys;
 
 use monero::{PublicKey, network::Network, util::address::Address};
@@ -15,7 +16,7 @@ use monero_serai::{
   wallet::{Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine}
 };
 
-use crate::{Transcript, CoinError, Output as OutputTrait, Coin, view_key};
+use crate::{CoinError, Output as OutputTrait, Coin, view_key};
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -51,7 +52,7 @@ impl From<SpendableOutput> for Output {
 #[derive(Debug)]
 pub struct SignableTransaction(
   Arc<MultisigKeys<Ed25519>>,
-  Transcript,
+  RecommendedTranscript,
   usize,
   MSignableTransaction
 );
@@ -129,7 +130,7 @@ impl Coin for Monero {
   async fn prepare_send(
     &self,
     keys: Arc<MultisigKeys<Ed25519>>,
-    transcript: Transcript,
+    transcript: RecommendedTranscript,
     height: usize,
     mut inputs: Vec<Output>,
     payments: &[(Address, u64)],
