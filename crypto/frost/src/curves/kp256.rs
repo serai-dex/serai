@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, convert::TryInto};
+use core::convert::TryInto;
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -8,146 +8,145 @@ use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
 
 use elliptic_curve::{bigint::{Encoding, U384}, hash2curve::{Expander, ExpandMsg, ExpandMsgXmd}};
 
-use crate::{CurveError, Curve};
-#[cfg(feature = "p256")]
-use crate::algorithm::Hram;
+use crate::{curves::{CurveError, Curve}, algorithm::Hram};
 
-#[allow(non_snake_case)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct KP256<G: Group> {
-  _G: PhantomData<G>
-}
+macro_rules! kp_curve {
+  (
+    $lib:   ident,
+    $Curve: ident,
+    $Hram:  ident,
 
-pub(crate) trait KP256Instance<G> {
-  const CONTEXT: &'static [u8];
-  const ID: &'static [u8];
-  const GENERATOR: G;
-}
+    $ID:      literal,
+    $CONTEXT: literal
+  ) => {
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct $Curve;
+    impl Curve for $Curve {
+      type F = $lib::Scalar;
+      type G = $lib::ProjectivePoint;
+      type T = $lib::ProjectivePoint;
 
-#[cfg(feature = "p256")]
-pub type P256 = KP256<p256::ProjectivePoint>;
-#[cfg(feature = "p256")]
-impl KP256Instance<p256::ProjectivePoint> for P256 {
-  const CONTEXT: &'static [u8] = b"FROST-P256-SHA256-v5";
-  const ID: &'static [u8] = b"P-256";
-  const GENERATOR: p256::ProjectivePoint = p256::ProjectivePoint::GENERATOR;
-}
+      const ID: &'static [u8] = $ID;
 
-#[cfg(feature = "k256")]
-pub type K256 = KP256<k256::ProjectivePoint>;
-#[cfg(feature = "k256")]
-impl KP256Instance<k256::ProjectivePoint> for K256 {
-  const CONTEXT: &'static [u8] = b"FROST-secp256k1-SHA256-v5";
-  const ID: &'static [u8] = b"secp256k1";
-  const GENERATOR: k256::ProjectivePoint = k256::ProjectivePoint::GENERATOR;
-}
+      const GENERATOR: Self::G = $lib::ProjectivePoint::GENERATOR;
+      const GENERATOR_TABLE: Self::G = $lib::ProjectivePoint::GENERATOR;
 
-impl<G: Group + GroupEncoding> Curve for KP256<G> where
-  KP256<G>: KP256Instance<G>,
-  G::Scalar: PrimeField,
-  <G::Scalar as PrimeField>::Repr: From<[u8; 32]> + AsRef<[u8]>,
-  G::Repr: From<[u8; 33]> + AsRef<[u8]> {
-  type F = G::Scalar;
-  type G = G;
-  type T = G;
+      const LITTLE_ENDIAN: bool = false;
 
-  const ID: &'static [u8] = <Self as KP256Instance<G>>::ID;
+      fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
+        let mut seed = vec![0; 32];
+        rng.fill_bytes(&mut seed);
+        seed.extend(secret.to_bytes());
+        Self::hash_to_F(&[$CONTEXT as &[u8], b"nonce"].concat(), &seed)
+      }
 
-  const GENERATOR: Self::G = <Self as KP256Instance<G>>::GENERATOR;
-  const GENERATOR_TABLE: Self::G = <Self as KP256Instance<G>>::GENERATOR;
+      fn hash_msg(msg: &[u8]) -> Vec<u8> {
+        (&Sha256::new()
+          .chain($CONTEXT)
+          .chain(b"digest")
+          .chain(msg)
+          .finalize()
+        ).to_vec()
+      }
 
-  const LITTLE_ENDIAN: bool = false;
+      fn hash_binding_factor(binding: &[u8]) -> Self::F {
+        Self::hash_to_F(&[$CONTEXT as &[u8], b"rho"].concat(), binding)
+      }
 
-  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
-    let mut seed = vec![0; 32];
-    rng.fill_bytes(&mut seed);
-    seed.extend(secret.to_repr().as_ref());
-    Self::hash_to_F(&[Self::CONTEXT, b"nonce"].concat(), &seed)
-  }
+      fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
+        let mut dst = dst;
+        let oversize = Sha256::digest([b"H2C-OVERSIZE-DST-", dst].concat());
+        if dst.len() > 255 {
+          dst = &oversize;
+        }
 
-  fn hash_msg(msg: &[u8]) -> Vec<u8> {
-    (&Sha256::new()
-      .chain(Self::CONTEXT)
-      .chain(b"digest")
-      .chain(msg)
-      .finalize()
-    ).to_vec()
-  }
+        // While one of these two libraries does support directly hashing to the Scalar field, the
+        // other doesn't. While that's probably an oversight, this is a universally working method
+        let mut modulus = vec![0; 16];
+        modulus.extend((Self::F::zero() - Self::F::one()).to_bytes());
+        let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
+        Self::F_from_slice(
+          &U384::from_be_slice(&{
+            let mut bytes = [0; 48];
+            ExpandMsgXmd::<Sha256>::expand_message(
+              &[msg],
+              dst,
+              48
+            ).unwrap().fill_bytes(&mut bytes);
+            bytes
+          }).reduce(&modulus).unwrap().to_be_bytes()[16 ..]
+        ).unwrap()
+      }
 
-  fn hash_binding_factor(binding: &[u8]) -> Self::F {
-    Self::hash_to_F(&[Self::CONTEXT, b"rho"].concat(), binding)
-  }
+      fn F_len() -> usize {
+        32
+      }
 
-  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-    let mut dst = dst;
-    let oversize = Sha256::digest([b"H2C-OVERSIZE-DST-", dst].concat());
-    if dst.len() > 255 {
-      dst = &oversize;
+      fn G_len() -> usize {
+        33
+      }
+
+      fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
+        let bytes: [u8; 32] = slice.try_into()
+          .map_err(|_| CurveError::InvalidLength(32, slice.len()))?;
+
+        let scalar = Self::F::from_repr(bytes.into());
+        if scalar.is_none().into() {
+          Err(CurveError::InvalidScalar)?;
+        }
+
+        Ok(scalar.unwrap())
+      }
+
+      fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
+        let bytes: [u8; 33] = slice.try_into()
+          .map_err(|_| CurveError::InvalidLength(33, slice.len()))?;
+
+        let point = Self::G::from_bytes(&bytes.into());
+        if point.is_none().into() || point.unwrap().is_identity().into() {
+          Err(CurveError::InvalidPoint)?;
+        }
+
+        Ok(point.unwrap())
+      }
+
+      fn F_to_bytes(f: &Self::F) -> Vec<u8> {
+        f.to_bytes().to_vec()
+      }
+
+      fn G_to_bytes(g: &Self::G) -> Vec<u8> {
+        g.to_bytes().to_vec()
+      }
     }
 
-    let mut modulus = vec![0; 16];
-    modulus.extend((Self::F::zero() - Self::F::one()).to_repr().as_ref());
-    let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
-    Self::F_from_slice(
-      &U384::from_be_slice(&{
-        let mut bytes = [0; 48];
-        ExpandMsgXmd::<Sha256>::expand_message(&[msg], dst, 48).unwrap().fill_bytes(&mut bytes);
-        bytes
-      }).reduce(&modulus).unwrap().to_be_bytes()[16 ..]
-    ).unwrap()
-  }
-
-  fn F_len() -> usize {
-    32
-  }
-
-  fn G_len() -> usize {
-    33
-  }
-
-  fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
-    let bytes: [u8; 32] = slice.try_into()
-      .map_err(|_| CurveError::InvalidLength(32, slice.len()))?;
-
-    let scalar = Self::F::from_repr(bytes.into());
-    if scalar.is_none().into() {
-      Err(CurveError::InvalidScalar)?;
+    #[derive(Clone)]
+    pub struct $Hram;
+    impl Hram<$Curve> for $Hram {
+      #[allow(non_snake_case)]
+      fn hram(R: &$lib::ProjectivePoint, A: &$lib::ProjectivePoint, m: &[u8]) -> $lib::Scalar {
+        $Curve::hash_to_F(
+          &[$CONTEXT as &[u8], b"chal"].concat(),
+          &[&$Curve::G_to_bytes(R), &$Curve::G_to_bytes(A), m].concat()
+        )
+      }
     }
-
-    Ok(scalar.unwrap())
-  }
-
-  fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
-    let bytes: [u8; 33] = slice.try_into()
-      .map_err(|_| CurveError::InvalidLength(33, slice.len()))?;
-
-    let point = Self::G::from_bytes(&bytes.into());
-    if point.is_none().into() || point.unwrap().is_identity().into() {
-      Err(CurveError::InvalidPoint)?;
-    }
-
-    Ok(point.unwrap())
-  }
-
-  fn F_to_bytes(f: &Self::F) -> Vec<u8> {
-    f.to_repr().as_ref().to_vec()
-  }
-
-  fn G_to_bytes(g: &Self::G) -> Vec<u8> {
-    g.to_bytes().as_ref().to_vec()
   }
 }
 
 #[cfg(feature = "p256")]
-#[derive(Clone)]
-pub struct IetfP256Hram;
-#[cfg(feature = "p256")]
-impl Hram<P256> for IetfP256Hram {
-  #[allow(non_snake_case)]
-  fn hram(R: &p256::ProjectivePoint, A: &p256::ProjectivePoint, m: &[u8]) -> p256::Scalar {
-    P256::hash_to_F(
-      &[P256::CONTEXT, b"chal"].concat(),
-      &[&P256::G_to_bytes(R), &P256::G_to_bytes(A), m].concat()
-    )
-  }
-}
+kp_curve!(
+  p256,
+  P256,
+  IetfP256Hram,
+  b"P-256",
+  b"FROST-P256-SHA256-v5"
+);
+
+#[cfg(feature = "secp256k1")]
+kp_curve!(
+  k256,
+  Secp256k1,
+  NonIetfSecp256k1Hram,
+  b"secp256k1",
+  b"FROST-secp256k1-SHA256-v5"
+);

@@ -36,8 +36,8 @@ dalek-ff-group = { path = "../dalek-ff-group" }
 [features]
 curves = ["sha2"] # All officially denoted curves use the SHA2 family of hashes
 kp256 = ["elliptic-curve", "curves"]
-p256 = ["dep:p256", "kp256"]
-k256 = ["dep:k256", "kp256"]
+p256 = ["kp256", "dep:p256"]
+secp256k1 = ["kp256", "k256"]
 dalek = ["curves", "dalek-ff-group"]
 ed25519 = ["dalek"]
 ristretto = ["dalek"]

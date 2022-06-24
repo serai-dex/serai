@@ -1,20 +1,20 @@
 use rand::rngs::OsRng;
 
-#[cfg(feature = "k256")]
+#[cfg(feature = "secp256k1")]
 use crate::tests::{curve::test_curve, schnorr::test_schnorr};
-#[cfg(feature = "k256")]
-use crate::curves::kp256::K256;
+#[cfg(feature = "secp256k1")]
+use crate::curves::kp256::Secp256k1;
 
 #[cfg(feature = "p256")]
 use crate::tests::vectors::{Vectors, test_with_vectors};
 #[cfg(feature = "p256")]
 use crate::curves::kp256::{P256, IetfP256Hram};
 
-#[cfg(feature = "k256")]
+#[cfg(feature = "secp256k1")]
 #[test]
-fn k256_not_ietf() {
-  test_curve::<_, K256>(&mut OsRng);
-  test_schnorr::<_, K256>(&mut OsRng);
+fn secp256k1_non_ietf() {
+  test_curve::<_, Secp256k1>(&mut OsRng);
+  test_schnorr::<_, Secp256k1>(&mut OsRng);
 }
 
 #[cfg(feature = "p256")]
