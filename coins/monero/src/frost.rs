@@ -10,8 +10,7 @@ use curve25519_dalek::{
 };
 
 use transcript::{Transcript, RecommendedTranscript};
-use frost::curves::Curve;
-pub use frost::curves::dalek::Ed25519;
+use frost::curve::{Curve, Ed25519};
 use dalek_ff_group as dfg;
 
 use crate::random_scalar;

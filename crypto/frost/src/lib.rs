@@ -1,121 +1,19 @@
-use core::{ops::Mul, fmt::Debug};
+use core::fmt::Debug;
 use std::collections::HashMap;
 
 use thiserror::Error;
 
-use rand_core::{RngCore, CryptoRng};
-
-use group::{ff::{Field, PrimeField}, Group, GroupOps};
+use group::ff::{Field, PrimeField};
 
 mod schnorr;
 
+pub mod curve;
+use curve::Curve;
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
-#[cfg(any(test, feature = "curves"))]
-pub mod curves;
 
 pub mod tests;
-
-/// Set of errors for curve-related operations, namely encoding and decoding
-#[derive(Clone, Error, Debug)]
-pub enum CurveError {
-  #[error("invalid length for data (expected {0}, got {0})")]
-  InvalidLength(usize, usize),
-  #[error("invalid scalar")]
-  InvalidScalar,
-  #[error("invalid point")]
-  InvalidPoint,
-}
-
-/// Unified trait to manage a field/group
-// This should be moved into its own crate if the need for generic cryptography over ff/group
-// continues, which is the exact reason ff/group exists (to provide a generic interface)
-// elliptic-curve exists, yet it doesn't really serve the same role, nor does it use &[u8]/Vec<u8>
-// It uses GenericArray which will hopefully be deprecated as Rust evolves and doesn't offer enough
-// advantages in the modern day to be worth the hassle -- Kayaba
-pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
-  /// Scalar field element type
-  // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
-  type F: PrimeField;
-  /// Group element type
-  type G: Group<Scalar = Self::F> + GroupOps;
-  /// Precomputed table type
-  type T: Mul<Self::F, Output = Self::G>;
-
-  /// ID for this curve
-  const ID: &'static [u8];
-
-  /// Generator for the group
-  // While group does provide this in its API, privacy coins will want to use a custom basepoint
-  const GENERATOR: Self::G;
-
-  /// Table for the generator for the group
-  /// If there isn't a precomputed table available, the generator itself should be used
-  const GENERATOR_TABLE: Self::T;
-
-  /// If little endian is used for the scalar field's Repr
-  const LITTLE_ENDIAN: bool;
-
-  /// Securely generate a random nonce. H4 from the IETF draft
-  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F;
-
-  /// Hash the message for the binding factor. H3 from the IETF draft
-  // This doesn't actually need to be part of Curve as it does nothing with the curve
-  // This also solely relates to FROST and with a proper Algorithm/HRAM, all projects using
-  // aggregatable signatures over this curve will work without issue
-  // It is kept here as Curve + H{1, 2, 3} is effectively a ciphersuite according to the IETF draft
-  // and moving it to Schnorr would force all of them into being ciphersuite-specific
-  // H2 is left to the Schnorr Algorithm as H2 is the H used in HRAM, which Schnorr further
-  // modularizes
-  fn hash_msg(msg: &[u8]) -> Vec<u8>;
-
-  /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft
-  fn hash_binding_factor(binding: &[u8]) -> Self::F;
-
-  // The following methods would optimally be F:: and G:: yet developers can't control F/G
-  // They can control a trait they pass into this library
-
-  /// Field element from hash. Used during key gen and by other crates under Serai as a general
-  /// utility
-  // Not parameterized by Digest as it's fine for it to use its own hash function as relevant to
-  // hash_msg and hash_binding_factor
-  #[allow(non_snake_case)]
-  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
-
-  /// Constant size of a serialized scalar field element
-  // The alternative way to grab this would be either serializing a junk element and getting its
-  // length or doing a naive division of its BITS property by 8 and assuming a lack of padding
-  #[allow(non_snake_case)]
-  fn F_len() -> usize;
-
-  /// Constant size of a serialized group element
-  // We could grab the serialization as described above yet a naive developer may use a
-  // non-constant size encoding, proving yet another reason to force this to be a provided constant
-  // A naive developer could still provide a constant for a variable length encoding, yet at least
-  // that is on them
-  #[allow(non_snake_case)]
-  fn G_len() -> usize;
-
-  /// Field element from slice. Preferred to be canonical yet does not have to be
-  // Required due to the lack of standardized encoding functions provided by ff/group
-  // While they do technically exist, their usage of Self::Repr breaks all potential library usage
-  // without helper functions like this
-  #[allow(non_snake_case)]
-  fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError>;
-
-  /// Group element from slice. Must require canonicity or risks differing binding factors
-  #[allow(non_snake_case)]
-  fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError>;
-
-  /// Obtain a vector of the byte encoding of F
-  #[allow(non_snake_case)]
-  fn F_to_bytes(f: &Self::F) -> Vec<u8>;
-
-  /// Obtain a vector of the byte encoding of G
-  #[allow(non_snake_case)]
-  fn G_to_bytes(g: &Self::G) -> Vec<u8>;
-}
 
 /// Parameters for a multisig
 // These fields can not be made public as they should be static

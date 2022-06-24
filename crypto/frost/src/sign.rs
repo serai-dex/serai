@@ -8,7 +8,7 @@ use group::ff::Field;
 use transcript::Transcript;
 
 use crate::{
-  Curve,
+  curve::Curve,
   FrostError,
   MultisigParams, MultisigKeys, MultisigView,
   algorithm::Algorithm,

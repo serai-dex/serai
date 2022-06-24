@@ -4,7 +4,7 @@ use rand_core::OsRng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use frost::{Curve, MultisigKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
+use frost::{curve::Curve, MultisigKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
 
 use crate::{CoinError, SignError, Output, Coin, Network};
 

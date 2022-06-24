@@ -3,12 +3,12 @@ use rand::rngs::OsRng;
 #[cfg(feature = "secp256k1")]
 use crate::tests::{curve::test_curve, schnorr::test_schnorr};
 #[cfg(feature = "secp256k1")]
-use crate::curves::kp256::Secp256k1;
+use crate::curve::Secp256k1;
 
 #[cfg(feature = "p256")]
 use crate::tests::vectors::{Vectors, test_with_vectors};
 #[cfg(feature = "p256")]
-use crate::curves::kp256::{P256, IetfP256Hram};
+use crate::curve::{P256, IetfP256Hram};
 
 #[cfg(feature = "secp256k1")]
 #[test]

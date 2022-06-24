@@ -14,7 +14,9 @@ use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
 #[cfg(feature = "multisig")]
 use dalek_ff_group::Scalar;
 #[cfg(feature = "multisig")]
-use frost::tests::{THRESHOLD, key_gen, sign};
+use transcript::RecommendedTranscript;
+#[cfg(feature = "multisig")]
+use frost::{curve::Ed25519, tests::{THRESHOLD, key_gen, sign}};
 
 use monero::{
   network::Network,
@@ -25,11 +27,6 @@ use monero_serai::{random_scalar, wallet::SignableTransaction};
 
 mod rpc;
 use crate::rpc::{rpc, mine_block};
-
-#[cfg(feature = "multisig")]
-use transcript::RecommendedTranscript;
-#[cfg(feature = "multisig")]
-use monero_serai::frost::Ed25519;
 
 lazy_static! {
   static ref SEQUENTIAL: Mutex<()> = Mutex::new(());

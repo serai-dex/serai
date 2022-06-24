@@ -3,9 +3,8 @@ use std::{marker::Send, sync::Arc, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{Curve, FrostError, MultisigKeys, sign::PreprocessMachine};
-
 use transcript::RecommendedTranscript;
+use frost::{curve::Curve, FrostError, MultisigKeys, sign::PreprocessMachine};
 
 mod coins;
 mod wallet;

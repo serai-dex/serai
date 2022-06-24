@@ -6,11 +6,10 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use dalek_ff_group as dfg;
 use transcript::RecommendedTranscript;
-use frost::MultisigKeys;
+use frost::{curve::Ed25519, MultisigKeys};
 
 use monero::{PublicKey, network::Network, util::address::Address};
 use monero_serai::{
-  frost::Ed25519,
   transaction::{Timelock, Transaction},
   rpc::Rpc,
   wallet::{Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine}

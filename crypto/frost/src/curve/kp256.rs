@@ -8,7 +8,7 @@ use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
 
 use elliptic_curve::{bigint::{Encoding, U384}, hash2curve::{Expander, ExpandMsg, ExpandMsgXmd}};
 
-use crate::{curves::{CurveError, Curve}, algorithm::Hram};
+use crate::{curve::{CurveError, Curve}, algorithm::Hram};
 
 macro_rules! kp_curve {
   (

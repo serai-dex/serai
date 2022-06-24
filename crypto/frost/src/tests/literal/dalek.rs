@@ -1,11 +1,11 @@
 use rand::rngs::OsRng;
 
-use crate::{curves::dalek, tests::vectors::{Vectors, test_with_vectors}};
+use crate::{curve, tests::vectors::{Vectors, test_with_vectors}};
 
 #[cfg(any(test, feature = "ristretto"))]
 #[test]
 fn ristretto_vectors() {
-  test_with_vectors::<_, dalek::Ristretto, dalek::IetfRistrettoHram>(
+  test_with_vectors::<_, curve::Ristretto, curve::IetfRistrettoHram>(
     &mut OsRng,
     Vectors {
       threshold: 2,
@@ -42,7 +42,7 @@ fn ristretto_vectors() {
 #[cfg(feature = "ed25519")]
 #[test]
 fn ed25519_vectors() {
-  test_with_vectors::<_, dalek::Ed25519, dalek::IetfEd25519Hram>(
+  test_with_vectors::<_, curve::Ed25519, curve::IetfEd25519Hram>(
     &mut OsRng,
     Vectors {
       threshold: 2,

@@ -6,7 +6,7 @@ use rand::rngs::OsRng;
 
 use group::Group;
 
-use frost::Curve;
+use frost::curve::Curve;
 
 use crate::{
   NetworkError, Network,

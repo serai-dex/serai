@@ -7,7 +7,8 @@ use group::ff::{Field, PrimeField};
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
-  Curve, MultisigParams, MultisigKeys, FrostError,
+  curve::Curve,
+  FrostError, MultisigParams, MultisigKeys,
   schnorr::{self, SchnorrSignature},
   validate_map
 };

@@ -7,6 +7,8 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 #[cfg(feature = "multisig")]
 use transcript::RecommendedTranscript;
+#[cfg(feature = "multisig")]
+use frost::curve::Ed25519;
 
 use crate::{
   Commitment,
@@ -15,7 +17,7 @@ use crate::{
   ringct::clsag::{ClsagInput, Clsag}
 };
 #[cfg(feature = "multisig")]
-use crate::{frost::{Ed25519, MultisigError}, ringct::clsag::{ClsagDetails, ClsagMultisig}};
+use crate::{frost::MultisigError, ringct::clsag::{ClsagDetails, ClsagMultisig}};
 
 #[cfg(feature = "multisig")]
 use frost::tests::{key_gen, algorithm_machines, sign};

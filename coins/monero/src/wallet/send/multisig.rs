@@ -7,6 +7,7 @@ use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::{EdwardsPoint,
 
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
+  curve::Ed25519,
   FrostError, MultisigKeys,
   sign::{
     PreprocessMachine, SignMachine, SignatureMachine,
@@ -15,7 +16,6 @@ use frost::{
 };
 
 use crate::{
-  frost::Ed25519,
   random_scalar, ringct::{clsag::{ClsagInput, ClsagDetails, ClsagMultisig}, bulletproofs::Bulletproofs, RctPrunable},
   transaction::{Input, Transaction},
   rpc::Rpc,

@@ -8,7 +8,7 @@ use group::{ff::PrimeField, Group};
 
 use dalek_ff_group::Scalar;
 
-use crate::{CurveError, Curve, algorithm::Hram};
+use crate::{curve::{CurveError, Curve}, algorithm::Hram};
 
 macro_rules! dalek_curve {
   (
@@ -125,22 +125,6 @@ macro_rules! dalek_curve {
   }
 }
 
-#[cfg(feature = "ed25519")]
-dalek_curve!(
-  Ed25519,
-  IetfEd25519Hram,
-  EdwardsPoint,
-  CompressedEdwardsY,
-  EdwardsBasepointTable,
-  ED25519_BASEPOINT_POINT,
-  ED25519_BASEPOINT_TABLE,
-  |point: EdwardsPoint| !bool::from(point.is_torsion_free()),
-  b"edwards25519",
-  b"",
-  b"",
-  b"",
-);
-
 #[cfg(any(test, feature = "ristretto"))]
 dalek_curve!(
   Ristretto,
@@ -155,4 +139,20 @@ dalek_curve!(
   b"FROST-RISTRETTO255-SHA512-v5",
   b"chal",
   b"digest",
+);
+
+#[cfg(feature = "ed25519")]
+dalek_curve!(
+  Ed25519,
+  IetfEd25519Hram,
+  EdwardsPoint,
+  CompressedEdwardsY,
+  EdwardsBasepointTable,
+  ED25519_BASEPOINT_POINT,
+  ED25519_BASEPOINT_TABLE,
+  |point: EdwardsPoint| !bool::from(point.is_torsion_free()),
+  b"edwards25519",
+  b"",
+  b"",
+  b"",
 );
