@@ -27,7 +27,6 @@ async fn select_n<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
   height: usize,
-  distribution: &Vec<u64>,
   high: u64,
   per_second: f64,
   used: &mut HashSet<u64>,
@@ -56,6 +55,7 @@ async fn select_n<R: RngCore + CryptoRng>(
 
       let o = (age * per_second) as u64;
       if o < high {
+        let distribution = DISTRIBUTION.lock().unwrap();
         let i = distribution.partition_point(|s| *s < (high - 1 - o));
         let prev = i.saturating_sub(1);
         let n = distribution[i] - distribution[prev];
@@ -108,8 +108,6 @@ impl Decoys {
     height: usize,
     inputs: &[SpendableOutput]
   ) -> Result<Vec<Decoys>, RpcError> {
-    let mut distribution = DISTRIBUTION.lock().unwrap();
-
     // Convert the inputs in question to the raw output data
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
@@ -119,19 +117,29 @@ impl Decoys {
       ));
     }
 
-    if distribution.len() <= height {
-      let from = distribution.len();
-      distribution.extend(rpc.get_output_distribution(from, height).await?);
+    let distribution_len = {
+      let distribution = DISTRIBUTION.lock().unwrap();
+      distribution.len()
+    };
+    if distribution_len <= height {
+      let extension = rpc.get_output_distribution(distribution_len, height).await?;
+      DISTRIBUTION.lock().unwrap().extend(extension);
     }
-    // If asked to use an older height than previously asked, truncate to ensure accuracy
-    // Should never happen, yet risks desyncing if it did
-    distribution.truncate(height + 1); // height is inclusive, and 0 is a valid height
 
-    let high = distribution[distribution.len() - 1];
-    let per_second = {
-      let blocks = distribution.len().min(BLOCKS_PER_YEAR);
-      let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
-      (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
+    let high;
+    let per_second;
+    {
+      let mut distribution = DISTRIBUTION.lock().unwrap();
+      // If asked to use an older height than previously asked, truncate to ensure accuracy
+      // Should never happen, yet risks desyncing if it did
+      distribution.truncate(height + 1); // height is inclusive, and 0 is a valid height
+
+      high = distribution[distribution.len() - 1];
+      per_second = {
+        let blocks = distribution.len().min(BLOCKS_PER_YEAR);
+        let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
+        (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
+      };
     };
 
     let mut used = HashSet::<u64>::new();
@@ -151,7 +159,6 @@ impl Decoys {
       rng,
       rpc,
       height,
-      &distribution,
       high,
       per_second,
       &mut used,
@@ -192,7 +199,7 @@ impl Decoys {
 
           // Select new outputs until we have a full sized ring again
           ring.extend(
-            select_n(rng, rpc, height, &distribution, high, per_second, &mut used, RING_LEN - ring.len()).await?
+            select_n(rng, rpc, height, high, per_second, &mut used, RING_LEN - ring.len()).await?
           );
           ring.sort_by(|a, b| a.0.cmp(&b.0));
         }
