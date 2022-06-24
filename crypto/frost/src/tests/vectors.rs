@@ -5,7 +5,7 @@ use rand_core::{RngCore, CryptoRng};
 use crate::{
   Curve, MultisigKeys,
   algorithm::{Schnorr, Hram},
-  sign::{PreprocessPackage, StateMachine, AlgorithmMachine},
+  sign::{PreprocessPackage, SignMachine, SignatureMachine, AlgorithmMachine},
   tests::{curve::test_curve, schnorr::test_schnorr, recover}
 };
 
@@ -92,33 +92,40 @@ pub fn test_with_vectors<
 
   let mut commitments = HashMap::new();
   let mut c = 0;
-  for (i, machine) in machines.iter_mut() {
+  let mut machines = machines.drain(..).map(|(i, machine)| {
     let nonces = [
       C::F_from_slice(&hex::decode(vectors.nonces[c][0]).unwrap()).unwrap(),
       C::F_from_slice(&hex::decode(vectors.nonces[c][1]).unwrap()).unwrap()
     ];
+    c += 1;
 
     let mut serialized = C::G_to_bytes(&(C::GENERATOR * nonces[0]));
     serialized.extend(&C::G_to_bytes(&(C::GENERATOR * nonces[1])));
 
-    machine.unsafe_override_preprocess(
+    let (machine, serialized) = machine.unsafe_override_preprocess(
       PreprocessPackage { nonces, serialized: serialized.clone() }
     );
 
-    commitments.insert(*i, serialized);
-    c += 1;
-  }
+    commitments.insert(i, serialized);
+    (i, machine)
+  }).collect::<Vec<_>>();
 
   let mut shares = HashMap::new();
   c = 0;
-  for (i, machine) in machines.iter_mut() {
-    let share = machine.sign(commitments.clone(), &hex::decode(vectors.msg).unwrap()).unwrap();
-    assert_eq!(share, hex::decode(vectors.sig_shares[c]).unwrap());
-    shares.insert(*i, share);
-    c += 1;
-  }
+  let mut machines = machines.drain(..).map(|(i, machine)| {
+    let (machine, share) = machine.sign(
+      commitments.clone(),
+      &hex::decode(vectors.msg).unwrap()
+    ).unwrap();
 
-  for (_, machine) in machines.iter_mut() {
+    assert_eq!(share, hex::decode(vectors.sig_shares[c]).unwrap());
+    c += 1;
+
+    shares.insert(i, share);
+    (i, machine)
+  }).collect::<HashMap<_, _>>();
+
+  for (_, machine) in machines.drain() {
     let sig = machine.complete(shares.clone()).unwrap();
     let mut serialized = C::G_to_bytes(&sig.R);
     serialized.extend(C::F_to_bytes(&sig.s));

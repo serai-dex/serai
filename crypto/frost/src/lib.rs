@@ -181,11 +181,6 @@ pub enum FrostError {
   InvalidProofOfKnowledge(u16),
   #[error("invalid share (participant {0})")]
   InvalidShare(u16),
-  #[error("invalid key generation state machine transition (expected {0}, was {1})")]
-  InvalidKeyGenTransition(key_gen::State, key_gen::State),
-
-  #[error("invalid sign state machine transition (expected {0}, was {1})")]
-  InvalidSignTransition(sign::State, sign::State),
 
   #[error("internal error ({0})")]
   InternalError(String),

@@ -1,5 +1,4 @@
-use core::fmt;
-use std::collections::HashMap;
+use std::{marker::PhantomData, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -271,100 +270,76 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   )
 }
 
-/// State of a Key Generation machine
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum State {
-  Fresh,
-  GeneratedCoefficients,
-  GeneratedSecretShares,
-  Complete,
-}
-
-impl fmt::Display for State {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{:?}", self)
-  }
-}
-
-/// State machine which manages key generation
-#[allow(non_snake_case)]
-pub struct StateMachine<C: Curve> {
+pub struct KeyGenMachine<C: Curve> {
   params: MultisigParams,
   context: String,
-  state: State,
-  coefficients: Option<Vec<C::F>>,
-  our_commitments: Option<Vec<u8>>,
-  secret: Option<C::F>,
-  commitments: Option<HashMap<u16, Vec<C::G>>>
+  _curve: PhantomData<C>,
 }
 
-impl<C: Curve> StateMachine<C> {
+pub struct SecretShareMachine<C: Curve> {
+  params: MultisigParams,
+  context: String,
+  coefficients: Vec<C::F>,
+  our_commitments: Vec<u8>,
+}
+
+pub struct KeyMachine<C: Curve> {
+  params: MultisigParams,
+  secret: C::F,
+  commitments: HashMap<u16, Vec<C::G>>,
+}
+
+impl<C: Curve> KeyGenMachine<C> {
   /// Creates a new machine to generate a key for the specified curve in the specified multisig
   // The context string must be unique among multisigs
-  pub fn new(params: MultisigParams, context: String) -> StateMachine<C> {
-    StateMachine {
-      params,
-      context,
-      state: State::Fresh,
-      coefficients: None,
-      our_commitments: None,
-      secret: None,
-      commitments: None
-    }
+  pub fn new(params: MultisigParams, context: String) -> KeyGenMachine<C> {
+    KeyGenMachine { params, context, _curve: PhantomData }
   }
 
   /// Start generating a key according to the FROST DKG spec
   /// Returns a serialized list of commitments to be sent to all parties over an authenticated
   /// channel. If any party submits multiple sets of commitments, they MUST be treated as malicious
   pub fn generate_coefficients<R: RngCore + CryptoRng>(
-    &mut self,
+    self,
     rng: &mut R
-  ) -> Result<Vec<u8>, FrostError> {
-    if self.state != State::Fresh {
-      Err(FrostError::InvalidKeyGenTransition(State::Fresh, self.state))?;
-    }
-
-    let (coefficients, serialized) = generate_key_r1::<R, C>(
-      rng,
-      &self.params,
-      &self.context,
-    );
-
-    self.coefficients = Some(coefficients);
-    self.our_commitments = Some(serialized.clone());
-    self.state = State::GeneratedCoefficients;
-    Ok(serialized)
+  ) -> (SecretShareMachine<C>, Vec<u8>) {
+    let (coefficients, serialized) = generate_key_r1::<R, C>(rng, &self.params, &self.context);
+    (
+      SecretShareMachine {
+        params: self.params,
+        context: self.context,
+        coefficients,
+        our_commitments: serialized.clone()
+      },
+      serialized,
+    )
   }
+}
 
+impl<C: Curve> SecretShareMachine<C> {
   /// Continue generating a key
   /// Takes in everyone else's commitments, which are expected to be in a Vec where participant
   /// index = Vec index. An empty vector is expected at index 0 to allow for this. An empty vector
   /// is also expected at index i which is locally handled. Returns a byte vector representing a
   /// secret share for each other participant which should be encrypted before sending
   pub fn generate_secret_shares<R: RngCore + CryptoRng>(
-    &mut self,
+    self,
     rng: &mut R,
     commitments: HashMap<u16, Vec<u8>>,
-  ) -> Result<HashMap<u16, Vec<u8>>, FrostError> {
-    if self.state != State::GeneratedCoefficients {
-      Err(FrostError::InvalidKeyGenTransition(State::GeneratedCoefficients, self.state))?;
-    }
-
+  ) -> Result<(KeyMachine<C>, HashMap<u16, Vec<u8>>), FrostError> {
     let (secret, commitments, shares) = generate_key_r2::<R, C>(
       rng,
       &self.params,
       &self.context,
-      self.coefficients.take().unwrap(),
-      self.our_commitments.take().unwrap(),
+      self.coefficients,
+      self.our_commitments,
       commitments,
     )?;
-
-    self.secret = Some(secret);
-    self.commitments = Some(commitments);
-    self.state = State::GeneratedSecretShares;
-    Ok(shares)
+    Ok((KeyMachine { params: self.params, secret, commitments }, shares))
   }
+}
 
+impl<C: Curve> KeyMachine<C> {
   /// Complete key generation
   /// Takes in everyone elses' shares submitted to us as a Vec, expecting participant index =
   /// Vec index with an empty vector at index 0 and index i. Returns a byte vector representing the
@@ -372,31 +347,10 @@ impl<C: Curve> StateMachine<C> {
   /// must report completion without issue before this key can be considered usable, yet you should
   /// wait for all participants to report as such
   pub fn complete<R: RngCore + CryptoRng>(
-    &mut self,
+    self,
     rng: &mut R,
     shares: HashMap<u16, Vec<u8>>,
   ) -> Result<MultisigKeys<C>, FrostError> {
-    if self.state != State::GeneratedSecretShares {
-      Err(FrostError::InvalidKeyGenTransition(State::GeneratedSecretShares, self.state))?;
-    }
-
-    let keys = complete_r2(
-      rng,
-      self.params,
-      self.secret.take().unwrap(),
-      self.commitments.take().unwrap(),
-      shares,
-    )?;
-
-    self.state = State::Complete;
-    Ok(keys)
-  }
-
-  pub fn params(&self) -> MultisigParams {
-    self.params.clone()
-  }
-
-  pub fn state(&self) -> State {
-    self.state
+    complete_r2(rng, self.params, self.secret, self.commitments, shares)
   }
 }

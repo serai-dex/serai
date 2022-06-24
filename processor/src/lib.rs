@@ -3,7 +3,7 @@ use std::{marker::Send, sync::Arc, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{Curve, FrostError, MultisigKeys, sign::StateMachine};
+use frost::{Curve, FrostError, MultisigKeys, sign::PreprocessMachine};
 
 pub(crate) use monero_serai::frost::Transcript;
 
@@ -57,7 +57,7 @@ pub trait Coin {
 
   type Output: Output;
   type SignableTransaction;
-  type TransactionMachine: StateMachine<Signature = Self::Transaction>;
+  type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
 
   type Address: Send;
 

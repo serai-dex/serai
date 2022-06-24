@@ -4,7 +4,7 @@ use rand_core::OsRng;
 
 use transcript::Transcript as TranscriptTrait;
 
-use frost::{Curve, MultisigKeys, sign::StateMachine};
+use frost::{Curve, MultisigKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
 
 use crate::{Transcript, CoinError, SignError, Output, Coin, Network};
 
@@ -344,17 +344,17 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     prepared: C::SignableTransaction,
     included: Vec<u16>
   ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
-    let mut attempt = self.coin.attempt_send(
+    let attempt = self.coin.attempt_send(
       prepared,
       &included
     ).await.map_err(|e| SignError::CoinError(e))?;
 
-    let commitments = network.round(
-      attempt.preprocess(&mut OsRng).unwrap()
-    ).await.map_err(|e| SignError::NetworkError(e))?;
-    let shares = network.round(
-      attempt.sign(commitments, b"").map_err(|e| SignError::FrostError(e))?
-    ).await.map_err(|e| SignError::NetworkError(e))?;
+    let (attempt, commitments) = attempt.preprocess(&mut OsRng);
+    let commitments = network.round(commitments).await.map_err(|e| SignError::NetworkError(e))?;
+
+    let (attempt, share) = attempt.sign(commitments, b"").map_err(|e| SignError::FrostError(e))?;
+    let shares = network.round(share).await.map_err(|e| SignError::NetworkError(e))?;
+
     let tx = attempt.complete(shares).map_err(|e| SignError::FrostError(e))?;
 
     self.coin.publish_transaction(&tx).await.map_err(|e| SignError::CoinError(e))
