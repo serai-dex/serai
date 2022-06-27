@@ -18,7 +18,7 @@ serde_json = "1.0"
 curve25519-dalek = { version = "3", features = ["std"] }
 blake2 = "0.10"
 
-transcript = { package = "transcript-trait", path = "../crypto/transcript", features = ["recommended"] }
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
 frost = { package = "modular-frost", path = "../crypto/frost" }
 
