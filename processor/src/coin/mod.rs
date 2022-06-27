@@ -6,6 +6,7 @@ use thiserror::Error;
 use transcript::RecommendedTranscript;
 use frost::{curve::Curve, MultisigKeys, sign::PreprocessMachine};
 
+pub mod ethereum;
 pub mod monero;
 pub use self::monero::Monero;
 
