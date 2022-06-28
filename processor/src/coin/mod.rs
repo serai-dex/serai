@@ -77,7 +77,7 @@ pub trait Coin {
   ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
 
   #[cfg(test)]
-  async fn mine_block(&self, address: Self::Address);
+  async fn mine_block(&self);
 
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address);

@@ -12,7 +12,7 @@ use crate::{
   Commitment,
   serialize::{write_varint, read_32, read_scalar, read_point},
   transaction::{Timelock, Transaction},
-  wallet::{uniqueness, shared_key, amount_decryption, commitment_mask}
+  wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask}
 };
 
 #[derive(Clone, PartialEq, Debug)]
@@ -55,8 +55,8 @@ impl SpendableOutput {
 impl Transaction {
   pub fn scan(
     &self,
-    view: Scalar,
-    spend: EdwardsPoint
+    view: ViewPair,
+    guaranteed: bool
   ) -> (Vec<SpendableOutput>, Timelock) {
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
@@ -82,52 +82,53 @@ impl Transaction {
     for (o, output) in self.prefix.outputs.iter().enumerate() {
       // TODO: This may be replaceable by pubkeys[o]
       for pubkey in &pubkeys {
+        let key_offset = shared_key(
+          Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
+          view.view,
+          pubkey,
+          o
+        );
+        // P - shared == spend
+        if (output.key - (&key_offset * &ED25519_BASEPOINT_TABLE)) != view.spend {
+          continue;
+        }
+
+        // Since we've found an output to us, get its amount
         let mut commitment = Commitment::zero();
 
-        // P - shared == spend
-        let matches = |shared_key| (output.key - (&shared_key * &ED25519_BASEPOINT_TABLE)) == spend;
-        let test = |shared_key| Some(shared_key).filter(|shared_key| matches(*shared_key));
+        // Miner transaction
+        if output.amount != 0 {
+          commitment.amount = output.amount;
+        // Regular transaction
+        } else {
+          let amount = match self.rct_signatures.base.ecdh_info.get(o) {
+            Some(amount) => amount_decryption(*amount, key_offset),
+            // This should never happen, yet it may be possible with miner transactions?
+            // Using get just decreases the possibility of a panic and lets us move on in that case
+            None => break
+          };
 
-        // Get the traditional shared key and unique shared key, testing if either matches for this output
-        let traditional = test(shared_key(None, view, pubkey, o));
-        let unique = test(shared_key(Some(uniqueness(&self.prefix.inputs)), view, pubkey, o));
-
-        // If either matches, grab it and decode the amount
-        if let Some(key_offset) = traditional.or(unique) {
-          // Miner transaction
-          if output.amount != 0 {
-            commitment.amount = output.amount;
-          // Regular transaction
-          } else {
-            let amount = match self.rct_signatures.base.ecdh_info.get(o) {
-              Some(amount) => amount_decryption(*amount, key_offset),
-              // This should never happen, yet it may be possible with miner transactions?
-              // Using get just decreases the possibility of a panic and lets us move on in that case
-              None => continue
-            };
-
-            // Rebuild the commitment to verify it
-            commitment = Commitment::new(commitment_mask(key_offset), amount);
-            // If this is a malicious commitment, move to the next output
-            // Any other R value will calculate to a different spend key and are therefore ignorable
-            if Some(&commitment.calculate()) != self.rct_signatures.base.commitments.get(o) {
-              break;
-            }
+          // Rebuild the commitment to verify it
+          commitment = Commitment::new(commitment_mask(key_offset), amount);
+          // If this is a malicious commitment, move to the next output
+          // Any other R value will calculate to a different spend key and are therefore ignorable
+          if Some(&commitment.calculate()) != self.rct_signatures.base.commitments.get(o) {
+            break;
           }
-
-          if commitment.amount != 0 {
-            res.push(SpendableOutput {
-              tx: self.hash(),
-              o: o.try_into().unwrap(),
-              key: output.key,
-              key_offset,
-              commitment
-            });
-          }
-          // Break to prevent public keys from being included multiple times, triggering multiple
-          // inclusions of the same output
-          break;
         }
+
+        if commitment.amount != 0 {
+          res.push(SpendableOutput {
+            tx: self.hash(),
+            o: o.try_into().unwrap(),
+            key: output.key,
+            key_offset,
+            commitment
+          });
+        }
+        // Break to prevent public keys from being included multiple times, triggering multiple
+        // inclusions of the same output
+        break;
       }
     }
 

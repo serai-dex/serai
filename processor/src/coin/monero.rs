@@ -2,17 +2,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
+use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;
 use transcript::RecommendedTranscript;
 use frost::{curve::Ed25519, MultisigKeys};
 
-use monero::{PublicKey, network::Network, util::address::Address};
 use monero_serai::{
   transaction::{Timelock, Transaction},
   rpc::Rpc,
-  wallet::{Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine}
+  wallet::{
+    ViewPair, address::{Network, AddressType, Address},
+    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine
+  }
 };
 
 use crate::{coin::{CoinError, Output as OutputTrait, Coin}, view_key};
@@ -59,18 +61,28 @@ pub struct SignableTransaction(
 #[derive(Clone, Debug)]
 pub struct Monero {
   pub(crate) rpc: Rpc,
-  view: Scalar,
-  view_pub: PublicKey
+  view: Scalar
 }
 
 impl Monero {
   pub fn new(url: String) -> Monero {
     let view = view_key::<Monero>(0).0;
-    Monero {
-      rpc: Rpc::new(url),
-      view,
-      view_pub: PublicKey { point: (&view * &ED25519_BASEPOINT_TABLE).compress() }
-    }
+    Monero { rpc: Rpc::new(url), view }
+  }
+
+  fn view_pair(&self, spend: dfg::EdwardsPoint) -> ViewPair {
+    ViewPair { spend: spend.0, view: self.view }
+  }
+
+  #[cfg(test)]
+  fn empty_view_pair(&self) -> ViewPair {
+    use group::Group;
+    self.view_pair(dfg::EdwardsPoint::generator())
+  }
+
+  #[cfg(test)]
+  fn empty_address(&self) -> Address {
+    self.empty_view_pair().address(Network::Mainnet, AddressType::Standard, false)
   }
 }
 
@@ -100,7 +112,7 @@ impl Coin for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    Address::standard(Network::Mainnet, PublicKey { point: key.compress().0 }, self.view_pub)
+    self.view_pair(key).address(Network::Mainnet, AddressType::Standard, true)
   }
 
   async fn get_height(&self) -> Result<usize, CoinError> {
@@ -115,7 +127,7 @@ impl Coin for Monero {
     block
       .iter()
       .flat_map(|tx| {
-        let (outputs, timelock) = tx.scan(self.view, key.0);
+        let (outputs, timelock) = tx.scan(self.view_pair(key), true);
         if timelock == Timelock::None {
           outputs
         } else {
@@ -178,13 +190,13 @@ impl Coin for Monero {
   }
 
   #[cfg(test)]
-  async fn mine_block(&self, address: Self::Address) {
+  async fn mine_block(&self) {
     #[derive(serde::Deserialize, Debug)]
     struct EmptyResponse {}
     let _: EmptyResponse = self.rpc.rpc_call("json_rpc", Some(serde_json::json!({
       "method": "generateblocks",
       "params": {
-        "wallet_address": address.to_string(),
+        "wallet_address": self.empty_address().to_string(),
         "amount_of_blocks": 10
       },
     }))).await.unwrap();
@@ -192,31 +204,28 @@ impl Coin for Monero {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
-    use group::Group;
-
     use rand::rngs::OsRng;
 
     let height = self.get_height().await.unwrap();
 
-    let temp = self.address(dfg::EdwardsPoint::generator());
-    self.mine_block(temp).await;
+    self.mine_block().await;
     for _ in 0 .. 7 {
-      self.mine_block(temp).await;
+      self.mine_block().await;
     }
 
     let outputs = self.rpc
       .get_block_transactions_possible(height).await.unwrap()
-      .swap_remove(0).scan(self.view, dfg::EdwardsPoint::generator().0).0;
+      .swap_remove(0).scan(self.empty_view_pair(), false).0;
 
     let amount = outputs[0].commitment.amount;
     let fee = 1000000000; // TODO
     let tx = MSignableTransaction::new(
       outputs,
       vec![(address, amount - fee)],
-      Some(temp),
+      Some(self.empty_address()),
       self.rpc.get_fee().await.unwrap()
     ).unwrap().sign(&mut OsRng, &self.rpc, &Scalar::one()).await.unwrap();
     self.rpc.publish_transaction(&tx).await.unwrap();
-    self.mine_block(temp).await;
+    self.mine_block().await;
   }
 }

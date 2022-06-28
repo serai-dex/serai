@@ -18,12 +18,7 @@ use transcript::RecommendedTranscript;
 #[cfg(feature = "multisig")]
 use frost::{curve::Ed25519, tests::{THRESHOLD, key_gen, sign}};
 
-use monero::{
-  network::Network,
-  util::{key::PublicKey, address::Address}
-};
-
-use monero_serai::{random_scalar, wallet::SignableTransaction};
+use monero_serai::{random_scalar, wallet::{ViewPair, address::{Network, AddressType}, SignableTransaction}};
 
 mod rpc;
 use crate::rpc::{rpc, mine_block};
@@ -73,11 +68,8 @@ async fn send_core(test: usize, multisig: bool) {
     }
   }
 
-  let addr = Address::standard(
-    Network::Mainnet,
-    PublicKey { point: spend_pub.compress() },
-    PublicKey { point: (&view * &ED25519_BASEPOINT_TABLE).compress() }
-  );
+  let view_pair = ViewPair { view, spend: spend_pub };
+  let addr = view_pair.address(Network::Mainnet, AddressType::Standard, false);
 
   let fee = rpc.get_fee().await.unwrap();
 
@@ -99,7 +91,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       // Grab the largest output available
       let output = {
-        let mut outputs = tx.as_ref().unwrap().scan(view, spend_pub).0;
+        let mut outputs = tx.as_ref().unwrap().scan(view_pair, false).0;
         outputs.sort_by(|x, y| x.commitment.amount.cmp(&y.commitment.amount).reverse());
         outputs.swap_remove(0)
       };
@@ -124,7 +116,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       for i in (start + 1) .. (start + 9) {
         let tx = rpc.get_block_transactions(i).await.unwrap().swap_remove(0);
-        let output = tx.scan(view, spend_pub).0.swap_remove(0);
+        let output = tx.scan(view_pair, false).0.swap_remove(0);
         amount += output.commitment.amount;
         outputs.push(output);
       }

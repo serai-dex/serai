@@ -9,11 +9,7 @@ use curve25519_dalek::{
   edwards::EdwardsPoint
 };
 
-use monero::{
-  consensus::Encodable,
-  util::{key::PublicKey, address::{AddressType, Address}},
-  blockdata::transaction::SubField
-};
+use monero::{consensus::Encodable, PublicKey, blockdata::transaction::SubField};
 
 #[cfg(feature = "multisig")]
 use frost::FrostError;
@@ -29,7 +25,10 @@ use crate::{
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
-  wallet::{SpendableOutput, Decoys, key_image_sort, uniqueness, shared_key, commitment_mask, amount_encryption}
+  wallet::{
+    address::{AddressType, Address}, SpendableOutput, Decoys,
+    key_image_sort, uniqueness, shared_key, commitment_mask, amount_encryption
+  }
 };
 #[cfg(feature = "multisig")]
 use crate::frost::MultisigError;
@@ -52,23 +51,23 @@ impl SendOutput {
   fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     unique: [u8; 32],
-    output: (Address, u64, bool),
+    output: (Address, u64),
     o: usize
   ) -> SendOutput {
     let r = random_scalar(rng);
     let shared_key = shared_key(
-      Some(unique).filter(|_| output.2),
+      Some(unique).filter(|_| output.0.meta.guaranteed),
       r,
-      &output.0.public_view.point.decompress().expect("SendOutput::new requires valid addresses"),
+      &output.0.view,
       o
     );
 
-    let spend = output.0.public_spend.point.decompress().expect("SendOutput::new requires valid addresses");
+    let spend = output.0.spend;
     SendOutput {
-      R: match output.0.addr_type {
+      R: match output.0.meta.kind {
         AddressType::Standard => &r * &ED25519_BASEPOINT_TABLE,
-        AddressType::SubAddress => &r * spend,
-        AddressType::Integrated(_) => panic!("SendOutput::new doesn't support Integrated addresses")
+        AddressType::Integrated(_) => unimplemented!("SendOutput::new doesn't support Integrated addresses"),
+        AddressType::Subaddress => &r * spend
       },
       dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + spend),
       commitment: Commitment::new(commitment_mask(shared_key), output.1),
@@ -169,7 +168,7 @@ impl Fee {
 #[derive(Clone, PartialEq, Debug)]
 pub struct SignableTransaction {
   inputs: Vec<SpendableOutput>,
-  payments: Vec<(Address, u64, bool)>,
+  payments: Vec<(Address, u64)>,
   outputs: Vec<SendOutput>,
   fee: u64
 }
@@ -177,23 +176,16 @@ pub struct SignableTransaction {
 impl SignableTransaction {
   pub fn new(
     inputs: Vec<SpendableOutput>,
-    payments: Vec<(Address, u64)>,
+    mut payments: Vec<(Address, u64)>,
     change_address: Option<Address>,
     fee_rate: Fee
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure all addresses are valid
     let test = |addr: Address| {
-      if !(
-        addr.public_view.point.decompress().is_some() &&
-        addr.public_spend.point.decompress().is_some()
-      ) {
-        Err(TransactionError::InvalidAddress)?;
-      }
-
-      match addr.addr_type {
+      match addr.meta.kind {
         AddressType::Standard => Ok(()),
         AddressType::Integrated(..) => Err(TransactionError::InvalidAddress),
-        AddressType::SubAddress => Ok(())
+        AddressType::Subaddress => Ok(())
       }
     };
 
@@ -250,11 +242,8 @@ impl SignableTransaction {
       Err(TransactionError::TooManyOutputs)?;
     }
 
-    let mut payments = payments.iter().map(|(address, amount)| (*address, *amount, false)).collect::<Vec<_>>();
     if change {
-      // Always use a unique key image for the change output
-      // TODO: Make this a config option
-      payments.push((change_address.unwrap(), in_amount - out_amount, true));
+      payments.push((change_address.unwrap(), in_amount - out_amount));
     }
 
     Ok(

@@ -4,10 +4,6 @@ use async_trait::async_trait;
 
 use rand::rngs::OsRng;
 
-use group::Group;
-
-use frost::curve::Curve;
-
 use crate::{NetworkError, Network, coin::{Coin, Monero}, wallet::{WalletKeys, MemCoinDb, Wallet}};
 
 #[derive(Clone)]
@@ -55,7 +51,7 @@ impl Network for LocalNetwork {
 
 async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   // Mine a block so there's a confirmed height
-  coin.mine_block(coin.address(<C::Curve as Curve>::G::generator())).await;
+  coin.mine_block().await;
   let height = coin.get_height().await.unwrap();
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
@@ -74,7 +70,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   // Get the chain to a height where blocks have sufficient confirmations
   while (height + C::CONFIRMATIONS) > coin.get_height().await.unwrap() {
-    coin.mine_block(coin.address(<C::Curve as Curve>::G::generator())).await;
+    coin.mine_block().await;
   }
 
   for wallet in wallets.iter_mut() {

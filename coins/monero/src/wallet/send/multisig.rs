@@ -94,9 +94,8 @@ impl SignableTransaction {
       transcript.append_message(b"input_shared_key", &input.key_offset.to_bytes());
     }
     for payment in &self.payments {
-      transcript.append_message(b"payment_address", &payment.0.as_bytes());
+      transcript.append_message(b"payment_address", &payment.0.to_string().as_bytes());
       transcript.append_message(b"payment_amount", &payment.1.to_le_bytes());
-      transcript.append_message(b"payment_unique", &(if payment.2 { [1] } else { [0] }));
     }
 
     // Sort included before cloning it around
