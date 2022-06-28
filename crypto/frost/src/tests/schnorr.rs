@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::ff::Field;
+use group::{ff::Field, GroupEncoding};
 
 use crate::{
   Curve, FrostKeys, schnorr::{self, SchnorrSignature}, algorithm::{Hram, Schnorr},
@@ -96,7 +96,7 @@ pub struct TestHram<C: Curve> {
 impl<C: Curve> Hram<C> for TestHram<C> {
   #[allow(non_snake_case)]
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F {
-    C::hash_to_F(b"challenge", &[&C::G_to_bytes(R), &C::G_to_bytes(A), m].concat())
+    C::hash_to_F(b"challenge", &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat())
   }
 }
 

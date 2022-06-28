@@ -226,6 +226,11 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     // FROST commitments, image, H commitments, and their proofs
     let clsag_len = 64 + ClsagMultisig::serialized_len();
+    for (l, commitments) in &commitments {
+      if commitments.len() != (self.clsags.len() * clsag_len) {
+        Err(FrostError::InvalidCommitment(*l))?;
+      }
+    }
 
     // Convert the unified commitments to a Vec of the individual commitments
     let mut commitments = (0 .. self.clsags.len()).map(|_| commitments.iter_mut().map(

@@ -2,12 +2,12 @@ use std::{marker::PhantomData, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::ff::{Field, PrimeField};
+use group::{ff::{Field, PrimeField}, GroupEncoding};
 
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
-  curve::Curve,
+  curve::{Curve, F_from_slice, G_from_slice},
   FrostError, FrostParams, FrostKeys,
   schnorr::{self, SchnorrSignature},
   validate_map
@@ -43,7 +43,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
     // Step 3: Generate public commitments
     commitments.push(C::GENERATOR_TABLE * coefficients[i]);
     // Serialize them for publication
-    serialized.extend(&C::G_to_bytes(&commitments[i]));
+    serialized.extend(commitments[i].to_bytes().as_ref());
   }
 
   // Step 2: Provide a proof of knowledge
@@ -59,7 +59,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
       challenge::<C>(
         context,
         params.i(),
-        &C::G_to_bytes(&(C::GENERATOR_TABLE * r)),
+        (C::GENERATOR_TABLE * r).to_bytes().as_ref(),
         &serialized
       )
     ).serialize()
@@ -90,11 +90,11 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
   #[allow(non_snake_case)]
   let R_bytes = |l| &serialized[&l][commitments_len .. commitments_len + C::G_len()];
   #[allow(non_snake_case)]
-  let R = |l| C::G_from_slice(R_bytes(l)).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
+  let R = |l| G_from_slice::<C::G>(R_bytes(l)).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
   #[allow(non_snake_case)]
   let Am = |l| &serialized[&l][0 .. commitments_len];
 
-  let s = |l| C::F_from_slice(
+  let s = |l| F_from_slice::<C::F>(
     &serialized[&l][commitments_len + C::G_len() ..]
   ).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
 
@@ -103,7 +103,7 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
     let mut these_commitments = vec![];
     for c in 0 .. usize::from(params.t()) {
       these_commitments.push(
-        C::G_from_slice(
+        G_from_slice::<C::G>(
           &serialized[&l][(c * C::G_len()) .. ((c + 1) * C::G_len())]
         ).map_err(|_| FrostError::InvalidCommitment(l.try_into().unwrap()))?
       );
@@ -166,7 +166,7 @@ fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
       continue;
     }
 
-    res.insert(l, C::F_to_bytes(&polynomial(&coefficients, l)));
+    res.insert(l, polynomial(&coefficients, l).to_repr().as_ref().to_vec());
   }
 
   // Calculate our own share
@@ -199,13 +199,13 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   validate_map(
     &mut serialized,
     &(1 ..= params.n()).into_iter().collect::<Vec<_>>(),
-    (params.i(), C::F_to_bytes(&secret_share))
+    (params.i(), secret_share.to_repr().as_ref().to_vec())
   )?;
 
   // Step 2. Verify each share
   let mut shares = HashMap::new();
   for (l, share) in serialized {
-    shares.insert(l, C::F_from_slice(&share).map_err(|_| FrostError::InvalidShare(l))?);
+    shares.insert(l, F_from_slice::<C::F>(&share).map_err(|_| FrostError::InvalidShare(l))?);
   }
 
   // Calculate the exponent for a given participant and apply it to a series of commitments

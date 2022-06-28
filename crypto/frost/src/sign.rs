@@ -3,12 +3,12 @@ use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::ff::Field;
+use group::{ff::{Field, PrimeField}, GroupEncoding};
 
 use transcript::Transcript;
 
 use crate::{
-  curve::Curve,
+  curve::{Curve, F_from_slice, G_from_slice},
   FrostError,
   FrostParams, FrostKeys, FrostView,
   algorithm::Algorithm,
@@ -85,8 +85,8 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
     C::random_nonce(params.view().secret_share(), &mut *rng)
   ];
   let commitments = [C::GENERATOR_TABLE * nonces[0], C::GENERATOR_TABLE * nonces[1]];
-  let mut serialized = C::G_to_bytes(&commitments[0]);
-  serialized.extend(&C::G_to_bytes(&commitments[1]));
+  let mut serialized = commitments[0].to_bytes().as_ref().to_vec();
+  serialized.extend(commitments[1].to_bytes().as_ref());
 
   serialized.extend(
     &params.algorithm.preprocess_addendum(
@@ -129,7 +129,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     transcript.domain_separate(b"FROST");
     // Include the offset, if one exists
     if let Some(offset) = params.keys.offset {
-      transcript.append_message(b"offset", &C::F_to_bytes(&offset));
+      transcript.append_message(b"offset", offset.to_repr().as_ref());
     }
   }
 
@@ -148,7 +148,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
       let mut read_commitment = |c, label| {
         let commitment = &commitments[c .. (c + C::G_len())];
         transcript.append_message(label, commitment);
-        C::G_from_slice(commitment).map_err(|_| FrostError::InvalidCommitment(*l))
+        G_from_slice::<C::G>(commitment).map_err(|_| FrostError::InvalidCommitment(*l))
       };
 
       #[allow(non_snake_case)]
@@ -176,15 +176,13 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   let R = {
     B.values().map(|B| B[0]).sum::<C::G>() + (B.values().map(|B| B[1]).sum::<C::G>() * binding)
   };
-  let share = C::F_to_bytes(
-    &params.algorithm.sign_share(
-      &params.view,
-      R,
-      binding,
-      our_preprocess.nonces[0] + (our_preprocess.nonces[1] * binding),
-      msg
-    )
-  );
+  let share = params.algorithm.sign_share(
+    &params.view,
+    R,
+    binding,
+    our_preprocess.nonces[0] + (our_preprocess.nonces[1] * binding),
+    msg
+  ).to_repr().as_ref().to_vec();
 
   Ok((Package { B, binding, R, share: share.clone() }, share))
 }
@@ -203,7 +201,7 @@ fn complete<C: Curve, A: Algorithm<C>>(
   let mut responses = HashMap::new();
   let mut sum = C::F::zero();
   for l in &sign_params.view.included {
-    let part = C::F_from_slice(&shares[l]).map_err(|_| FrostError::InvalidShare(*l))?;
+    let part = F_from_slice::<C::F>(&shares[l]).map_err(|_| FrostError::InvalidShare(*l))?;
     sum += part;
     responses.insert(*l, part);
   }

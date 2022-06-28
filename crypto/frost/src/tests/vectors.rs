@@ -2,8 +2,10 @@ use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
+use group::{ff::PrimeField, GroupEncoding};
+
 use crate::{
-  Curve, FrostKeys,
+  curve::{Curve, F_from_slice, G_from_slice}, FrostKeys,
   algorithm::{Schnorr, Hram},
   sign::{PreprocessPackage, SignMachine, SignatureMachine, AlgorithmMachine},
   tests::{curve::test_curve, schnorr::test_schnorr, recover}
@@ -25,7 +27,7 @@ pub struct Vectors {
 // Load these vectors into FrostKeys using a custom serialization it'll deserialize
 fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKeys<C>> {
   let shares = vectors.shares.iter().map(
-    |secret| C::F_from_slice(&hex::decode(secret).unwrap()).unwrap()
+    |secret| F_from_slice::<C::F>(&hex::decode(secret).unwrap()).unwrap()
   ).collect::<Vec<_>>();
   let verification_shares = shares.iter().map(
     |secret| C::GENERATOR * secret
@@ -39,10 +41,10 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
     serialized.extend(vectors.threshold.to_be_bytes());
     serialized.extend(u16::try_from(shares.len()).unwrap().to_be_bytes());
     serialized.extend(i.to_be_bytes());
-    serialized.extend(C::F_to_bytes(&shares[usize::from(i) - 1]));
+    serialized.extend(shares[usize::from(i) - 1].to_repr().as_ref());
     serialized.extend(&hex::decode(vectors.group_key).unwrap());
     for share in &verification_shares {
-      serialized.extend(&C::G_to_bytes(share));
+      serialized.extend(share.to_bytes().as_ref());
     }
 
     let these_keys = FrostKeys::<C>::deserialize(&serialized).unwrap();
@@ -50,7 +52,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     assert_eq!(these_keys.params().i(), i);
     assert_eq!(these_keys.secret_share(), shares[usize::from(i - 1)]);
-    assert_eq!(&hex::encode(&C::G_to_bytes(&these_keys.group_key())), vectors.group_key);
+    assert_eq!(&hex::encode(these_keys.group_key().to_bytes().as_ref()), vectors.group_key);
     keys.insert(i, these_keys);
   }
 
@@ -68,14 +70,14 @@ pub fn test_with_vectors<
 
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
-  let group_key = C::G_from_slice(&hex::decode(vectors.group_key).unwrap()).unwrap();
+  let group_key = G_from_slice::<C::G>(&hex::decode(vectors.group_key).unwrap()).unwrap();
   assert_eq!(
-    C::GENERATOR * C::F_from_slice(&hex::decode(vectors.group_secret).unwrap()).unwrap(),
+    C::GENERATOR * F_from_slice::<C::F>(&hex::decode(vectors.group_secret).unwrap()).unwrap(),
     group_key
   );
   assert_eq!(
     recover(&keys),
-    C::F_from_slice(&hex::decode(vectors.group_secret).unwrap()).unwrap()
+    F_from_slice::<C::F>(&hex::decode(vectors.group_secret).unwrap()).unwrap()
   );
 
   let mut machines = vec![];
@@ -94,13 +96,13 @@ pub fn test_with_vectors<
   let mut c = 0;
   let mut machines = machines.drain(..).map(|(i, machine)| {
     let nonces = [
-      C::F_from_slice(&hex::decode(vectors.nonces[c][0]).unwrap()).unwrap(),
-      C::F_from_slice(&hex::decode(vectors.nonces[c][1]).unwrap()).unwrap()
+      F_from_slice::<C::F>(&hex::decode(vectors.nonces[c][0]).unwrap()).unwrap(),
+      F_from_slice::<C::F>(&hex::decode(vectors.nonces[c][1]).unwrap()).unwrap()
     ];
     c += 1;
 
-    let mut serialized = C::G_to_bytes(&(C::GENERATOR * nonces[0]));
-    serialized.extend(&C::G_to_bytes(&(C::GENERATOR * nonces[1])));
+    let mut serialized = (C::GENERATOR * nonces[0]).to_bytes().as_ref().to_vec();
+    serialized.extend((C::GENERATOR * nonces[1]).to_bytes().as_ref());
 
     let (machine, serialized) = machine.unsafe_override_preprocess(
       PreprocessPackage { nonces, serialized: serialized.clone() }
@@ -127,8 +129,8 @@ pub fn test_with_vectors<
 
   for (_, machine) in machines.drain() {
     let sig = machine.complete(shares.clone()).unwrap();
-    let mut serialized = C::G_to_bytes(&sig.R);
-    serialized.extend(C::F_to_bytes(&sig.s));
+    let mut serialized = sig.R.to_bytes().as_ref().to_vec();
+    serialized.extend(sig.s.to_repr().as_ref());
     assert_eq!(hex::encode(serialized), vectors.sig);
   }
 }

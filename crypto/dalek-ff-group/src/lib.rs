@@ -27,7 +27,7 @@ use dalek::{
   }
 };
 
-use group::{ff::{Field, PrimeField}, Group};
+use group::{ff::{Field, PrimeField}, Group, GroupEncoding, prime::PrimeGroup};
 
 macro_rules! deref_borrow {
   ($Source: ident, $Target: ident) => {
@@ -192,6 +192,7 @@ macro_rules! dalek_group {
   (
     $Point: ident,
     $DPoint: ident,
+    $torsion_free: expr,
 
     $Table: ident,
     $DTable: ident,
@@ -224,6 +225,29 @@ macro_rules! dalek_group {
       fn is_identity(&self) -> Choice { self.0.ct_eq(&$DPoint::identity()) }
       fn double(&self) -> Self { *self + self }
     }
+
+    impl GroupEncoding for $Point {
+      type Repr = [u8; 32];
+
+      fn from_bytes(bytes: &Self::Repr) -> CtOption<Self> {
+        if let Some(point) = $DCompressed(*bytes).decompress() {
+          if $torsion_free(point) {
+            return CtOption::new($Point(point), Choice::from(1));
+          }
+        }
+        CtOption::new($Point::identity(), Choice::from(0))
+      }
+
+      fn from_bytes_unchecked(bytes: &Self::Repr) -> CtOption<Self> {
+        $Point::from_bytes(bytes)
+      }
+
+      fn to_bytes(&self) -> Self::Repr {
+        self.0.compress().to_bytes()
+      }
+    }
+
+    impl PrimeGroup for $Point {}
 
     pub struct $Compressed(pub $DCompressed);
     deref_borrow!($Compressed, $DCompressed);
@@ -261,6 +285,7 @@ macro_rules! dalek_group {
 dalek_group!(
   EdwardsPoint,
   DEdwardsPoint,
+  |point: DEdwardsPoint| point.is_torsion_free(),
 
   EdwardsBasepointTable,
   DEdwardsBasepointTable,
@@ -272,15 +297,10 @@ dalek_group!(
   ED25519_BASEPOINT_TABLE
 );
 
-impl EdwardsPoint {
-  pub fn is_torsion_free(&self) -> bool {
-    self.0.is_torsion_free()
-  }
-}
-
 dalek_group!(
   RistrettoPoint,
   DRistrettoPoint,
+  |_| true,
 
   RistrettoBasepointTable,
   DRistrettoBasepointTable,

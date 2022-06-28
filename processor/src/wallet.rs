@@ -2,8 +2,9 @@ use std::{sync::Arc, collections::HashMap};
 
 use rand_core::OsRng;
 
-use transcript::{Transcript, RecommendedTranscript};
+use group::GroupEncoding;
 
+use transcript::{Transcript, RecommendedTranscript};
 use frost::{curve::Curve, FrostKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
 
 use crate::{coin::{CoinError, Output, Coin}, SignError, Network};
@@ -31,7 +32,7 @@ impl<C: Curve> WalletKeys<C> {
     let mut transcript = RecommendedTranscript::new(DST);
     transcript.append_message(b"chain", chain);
     transcript.append_message(b"curve", C::ID);
-    transcript.append_message(b"group_key", &C::G_to_bytes(&self.keys.group_key()));
+    transcript.append_message(b"group_key", self.keys.group_key().to_bytes().as_ref());
     self.keys.offset(C::hash_to_F(DST, &transcript.challenge(b"offset")))
   }
 }

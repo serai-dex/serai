@@ -3,12 +3,12 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use group::ff::{Field, PrimeField};
+use group::{ff::{Field, PrimeField}, GroupEncoding};
 
 mod schnorr;
 
 pub mod curve;
-use curve::Curve;
+use curve::{Curve, F_from_slice, G_from_slice};
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
@@ -213,10 +213,10 @@ impl<C: Curve> FrostKeys<C> {
     serialized.extend(&self.params.t.to_be_bytes());
     serialized.extend(&self.params.n.to_be_bytes());
     serialized.extend(&self.params.i.to_be_bytes());
-    serialized.extend(&C::F_to_bytes(&self.secret_share));
-    serialized.extend(&C::G_to_bytes(&self.group_key));
+    serialized.extend(self.secret_share.to_repr().as_ref());
+    serialized.extend(self.group_key.to_bytes().as_ref());
     for l in 1 ..= self.params.n.into() {
-      serialized.extend(&C::G_to_bytes(&self.verification_shares[&l]));
+      serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
     }
     serialized
   }
@@ -253,10 +253,10 @@ impl<C: Curve> FrostKeys<C> {
     let i = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
     cursor += 2;
 
-    let secret_share = C::F_from_slice(&serialized[cursor .. (cursor + C::F_len())])
+    let secret_share = F_from_slice::<C::F>(&serialized[cursor .. (cursor + C::F_len())])
       .map_err(|_| FrostError::InternalError("invalid secret share".to_string()))?;
     cursor += C::F_len();
-    let group_key = C::G_from_slice(&serialized[cursor .. (cursor + C::G_len())])
+    let group_key = G_from_slice::<C::G>(&serialized[cursor .. (cursor + C::G_len())])
       .map_err(|_| FrostError::InternalError("invalid group key".to_string()))?;
     cursor += C::G_len();
 
@@ -264,7 +264,7 @@ impl<C: Curve> FrostKeys<C> {
     for l in 1 ..= n {
       verification_shares.insert(
         l,
-        C::G_from_slice(&serialized[cursor .. (cursor + C::G_len())])
+        G_from_slice::<C::G>(&serialized[cursor .. (cursor + C::G_len())])
           .map_err(|_| FrostError::InternalError("invalid verification share".to_string()))?
       );
       cursor += C::G_len();

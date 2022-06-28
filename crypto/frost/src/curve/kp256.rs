@@ -1,14 +1,12 @@
-use core::convert::TryInto;
-
 use rand_core::{RngCore, CryptoRng};
 
 use sha2::{digest::Update, Digest, Sha256};
 
-use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
+use group::{ff::Field, GroupEncoding};
 
 use elliptic_curve::{bigint::{Encoding, U384}, hash2curve::{Expander, ExpandMsg, ExpandMsgXmd}};
 
-use crate::{curve::{CurveError, Curve}, algorithm::Hram};
+use crate::{curve::{Curve, F_from_slice}, algorithm::Hram};
 
 macro_rules! kp_curve {
   (
@@ -65,7 +63,7 @@ macro_rules! kp_curve {
         let mut modulus = vec![0; 16];
         modulus.extend((Self::F::zero() - Self::F::one()).to_bytes());
         let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
-        Self::F_from_slice(
+        F_from_slice::<Self::F>(
           &U384::from_be_slice(&{
             let mut bytes = [0; 48];
             ExpandMsgXmd::<Sha256>::expand_message(
@@ -85,38 +83,6 @@ macro_rules! kp_curve {
       fn G_len() -> usize {
         33
       }
-
-      fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
-        let bytes: [u8; 32] = slice.try_into()
-          .map_err(|_| CurveError::InvalidLength(32, slice.len()))?;
-
-        let scalar = Self::F::from_repr(bytes.into());
-        if scalar.is_none().into() {
-          Err(CurveError::InvalidScalar)?;
-        }
-
-        Ok(scalar.unwrap())
-      }
-
-      fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
-        let bytes: [u8; 33] = slice.try_into()
-          .map_err(|_| CurveError::InvalidLength(33, slice.len()))?;
-
-        let point = Self::G::from_bytes(&bytes.into());
-        if point.is_none().into() || point.unwrap().is_identity().into() {
-          Err(CurveError::InvalidPoint)?;
-        }
-
-        Ok(point.unwrap())
-      }
-
-      fn F_to_bytes(f: &Self::F) -> Vec<u8> {
-        f.to_bytes().to_vec()
-      }
-
-      fn G_to_bytes(g: &Self::G) -> Vec<u8> {
-        g.to_bytes().to_vec()
-      }
     }
 
     #[derive(Clone)]
@@ -126,7 +92,7 @@ macro_rules! kp_curve {
       fn hram(R: &$lib::ProjectivePoint, A: &$lib::ProjectivePoint, m: &[u8]) -> $lib::Scalar {
         $Curve::hash_to_F(
           &[$CONTEXT as &[u8], b"chal"].concat(),
-          &[&$Curve::G_to_bytes(R), &$Curve::G_to_bytes(A), m].concat()
+          &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat()
         )
       }
     }

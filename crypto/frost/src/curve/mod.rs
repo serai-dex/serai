@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::PrimeField, Group, GroupOps};
+use group::{ff::PrimeField, Group, GroupOps, prime::PrimeGroup};
 
 #[cfg(any(test, feature = "dalek"))]
 mod dalek;
@@ -42,7 +42,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
   type F: PrimeField;
   /// Group element type
-  type G: Group<Scalar = Self::F> + GroupOps;
+  type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup;
   /// Precomputed table type
   type T: Mul<Self::F, Output = Self::G>;
 
@@ -99,23 +99,31 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // that is on them
   #[allow(non_snake_case)]
   fn G_len() -> usize;
+}
 
-  /// Field element from slice. Preferred to be canonical yet does not have to be
-  // Required due to the lack of standardized encoding functions provided by ff/group
-  // While they do technically exist, their usage of Self::Repr breaks all potential library usage
-  // without helper functions like this
-  #[allow(non_snake_case)]
-  fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError>;
+/// Field element from slice
+#[allow(non_snake_case)]
+pub(crate) fn F_from_slice<F: PrimeField>(slice: &[u8]) -> Result<F, CurveError> {
+  let mut encoding = F::Repr::default();
+  encoding.as_mut().copy_from_slice(slice);
 
-  /// Group element from slice. Must require canonicity or risks differing binding factors
-  #[allow(non_snake_case)]
-  fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError>;
+  let point = Option::<F>::from(F::from_repr(encoding)).ok_or(CurveError::InvalidScalar)?;
+  if point.to_repr().as_ref() != slice {
+    Err(CurveError::InvalidScalar)?;
+  }
+  Ok(point)
+}
 
-  /// Obtain a vector of the byte encoding of F
-  #[allow(non_snake_case)]
-  fn F_to_bytes(f: &Self::F) -> Vec<u8>;
+/// Group element from slice
+#[allow(non_snake_case)]
+pub(crate) fn G_from_slice<G: PrimeGroup>(slice: &[u8]) -> Result<G, CurveError> {
+  let mut encoding = G::Repr::default();
+  encoding.as_mut().copy_from_slice(slice);
 
-  /// Obtain a vector of the byte encoding of G
-  #[allow(non_snake_case)]
-  fn G_to_bytes(g: &Self::G) -> Vec<u8>;
+  let point = Option::<G>::from(G::from_bytes(&encoding)).ok_or(CurveError::InvalidPoint)?;
+  // Ban the identity, per the FROST spec, and non-canonical points
+  if (point.is_identity().into()) || (point.to_bytes().as_ref() != slice) {
+    Err(CurveError::InvalidPoint)?;
+  }
+  Ok(point)
 }

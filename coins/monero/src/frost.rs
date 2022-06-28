@@ -3,6 +3,8 @@ use core::convert::TryInto;
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
+use group::GroupEncoding;
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE as DTable,
   scalar::Scalar as DScalar,
@@ -10,7 +12,6 @@ use curve25519_dalek::{
 };
 
 use transcript::{Transcript, RecommendedTranscript};
-use frost::curve::{Curve, Ed25519};
 use dalek_ff_group as dfg;
 
 use crate::random_scalar;
@@ -118,18 +119,26 @@ impl DLEqProof {
 }
 
 #[allow(non_snake_case)]
-pub fn read_dleq(
+pub(crate) fn read_dleq(
   serialized: &[u8],
   start: usize,
   H: &DPoint,
   l: u16,
   xG: &DPoint
 ) -> Result<dfg::EdwardsPoint, MultisigError> {
-  // Not using G_from_slice here would enable non-canonical points and break blame
-  // This does also ban identity points, yet those should never be a concern
-  let other = <Ed25519 as Curve>::G_from_slice(
-    &serialized[(start + 0) .. (start + 32)]
-  ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
+  if serialized.len() < start + 96 {
+    Err(MultisigError::InvalidDLEqProof(l))?;
+  }
+
+  let bytes = (&serialized[(start + 0) .. (start + 32)]).try_into().unwrap();
+  // dfg ensures the point is torsion free
+  let other = Option::<dfg::EdwardsPoint>::from(
+    dfg::EdwardsPoint::from_bytes(&bytes)).ok_or(MultisigError::InvalidDLEqProof(l)
+  )?;
+  // Ensure this is a canonical point
+  if other.to_bytes() != bytes {
+    Err(MultisigError::InvalidDLEqProof(l))?;
+  }
 
   DLEqProof::deserialize(&serialized[(start + 32) .. (start + 96)])
     .ok_or(MultisigError::InvalidDLEqProof(l))?
