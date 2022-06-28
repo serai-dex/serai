@@ -6,7 +6,7 @@ use group::ff::Field;
 
 use crate::{
   Curve,
-  MultisigParams, MultisigKeys,
+  FrostParams, FrostKeys,
   lagrange,
   key_gen::KeyGenMachine,
   algorithm::Algorithm,
@@ -36,12 +36,12 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 
 pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R
-) -> HashMap<u16, Arc<MultisigKeys<C>>> {
+) -> HashMap<u16, Arc<FrostKeys<C>>> {
   let mut machines = HashMap::new();
   let mut commitments = HashMap::new();
   for i in 1 ..= PARTICIPANTS {
     let machine = KeyGenMachine::<C>::new(
-      MultisigParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
+      FrostParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
       "FROST Test key_gen".to_string()
     );
     let (machine, these_commitments) = machine.generate_coefficients(rng);
@@ -89,7 +89,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
   }).collect::<HashMap<_, _>>()
 }
 
-pub fn recover<C: Curve>(keys: &HashMap<u16, MultisigKeys<C>>) -> C::F {
+pub fn recover<C: Curve>(keys: &HashMap<u16, FrostKeys<C>>) -> C::F {
   let first = keys.values().next().expect("no keys provided");
   assert!(keys.len() >= first.params().t().into(), "not enough keys provided");
   let included = keys.keys().cloned().collect::<Vec<_>>();
@@ -105,7 +105,7 @@ pub fn recover<C: Curve>(keys: &HashMap<u16, MultisigKeys<C>>) -> C::F {
 pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   algorithm: A,
-  keys: &HashMap<u16, Arc<MultisigKeys<C>>>,
+  keys: &HashMap<u16, Arc<FrostKeys<C>>>,
 ) -> HashMap<u16, AlgorithmMachine<C, A>> {
   let mut included = vec![];
   while included.len() < usize::from(keys[&1].params().t()) {

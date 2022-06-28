@@ -3,7 +3,7 @@ use std::{sync::Arc, collections::HashMap};
 use rand_core::{RngCore, CryptoRng};
 
 use crate::{
-  Curve, MultisigKeys,
+  Curve, FrostKeys,
   algorithm::{Schnorr, Hram},
   sign::{PreprocessPackage, SignMachine, SignatureMachine, AlgorithmMachine},
   tests::{curve::test_curve, schnorr::test_schnorr, recover}
@@ -22,8 +22,8 @@ pub struct Vectors {
   pub sig: String
 }
 
-// Load these vectors into MultisigKeys using a custom serialization it'll deserialize
-fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, MultisigKeys<C>> {
+// Load these vectors into FrostKeys using a custom serialization it'll deserialize
+fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKeys<C>> {
   let shares = vectors.shares.iter().map(
     |secret| C::F_from_slice(&hex::decode(secret).unwrap()).unwrap()
   ).collect::<Vec<_>>();
@@ -45,7 +45,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, Multisi
       serialized.extend(&C::G_to_bytes(share));
     }
 
-    let these_keys = MultisigKeys::<C>::deserialize(&serialized).unwrap();
+    let these_keys = FrostKeys::<C>::deserialize(&serialized).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     assert_eq!(these_keys.params().i(), i);

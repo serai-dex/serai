@@ -4,17 +4,17 @@ use rand_core::OsRng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use frost::{curve::Curve, MultisigKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
+use frost::{curve::Curve, FrostKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
 
 use crate::{coin::{CoinError, Output, Coin}, SignError, Network};
 
 pub struct WalletKeys<C: Curve> {
-  keys: MultisigKeys<C>,
+  keys: FrostKeys<C>,
   creation_height: usize
 }
 
 impl<C: Curve> WalletKeys<C> {
-  pub fn new(keys: MultisigKeys<C>, creation_height: usize) -> WalletKeys<C> {
+  pub fn new(keys: FrostKeys<C>, creation_height: usize) -> WalletKeys<C> {
     WalletKeys { keys, creation_height }
   }
 
@@ -26,7 +26,7 @@ impl<C: Curve> WalletKeys<C> {
   // system, there are potentially other benefits to binding this to a specific group key
   // It's no longer possible to influence group key gen to key cancel without breaking the hash
   // function as well, although that degree of influence means key gen is broken already
-  fn bind(&self, chain: &[u8]) -> MultisigKeys<C> {
+  fn bind(&self, chain: &[u8]) -> FrostKeys<C> {
     const DST: &[u8] = b"Serai Processor Wallet Chain Bind";
     let mut transcript = RecommendedTranscript::new(DST);
     transcript.append_message(b"chain", chain);
@@ -200,8 +200,8 @@ fn select_inputs_outputs<C: Coin>(
 pub struct Wallet<D: CoinDb, C: Coin> {
   db: D,
   coin: C,
-  keys: Vec<(Arc<MultisigKeys<C::Curve>>, Vec<C::Output>)>,
-  pending: Vec<(usize, MultisigKeys<C::Curve>)>
+  keys: Vec<(Arc<FrostKeys<C::Curve>>, Vec<C::Output>)>,
+  pending: Vec<(usize, FrostKeys<C::Curve>)>
 }
 
 impl<D: CoinDb, C: Coin> Wallet<D, C> {

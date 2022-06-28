@@ -5,7 +5,7 @@ use rand_core::{RngCore, CryptoRng};
 use group::ff::Field;
 
 use crate::{
-  Curve, MultisigKeys, schnorr::{self, SchnorrSignature}, algorithm::{Hram, Schnorr},
+  Curve, FrostKeys, schnorr::{self, SchnorrSignature}, algorithm::{Hram, Schnorr},
   tests::{key_gen, algorithm_machines, sign as sign_test}
 };
 
@@ -80,7 +80,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 fn sign_core<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   group_key: C::G,
-  keys: &HashMap<u16, Arc<MultisigKeys<C>>>
+  keys: &HashMap<u16, Arc<FrostKeys<C>>>
 ) {
   const MESSAGE: &'static [u8] = b"Hello, World!";
 

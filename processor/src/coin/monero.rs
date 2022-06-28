@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;
 use transcript::RecommendedTranscript;
-use frost::{curve::Ed25519, MultisigKeys};
+use frost::{curve::Ed25519, FrostKeys};
 
 use monero_serai::{
   transaction::{Timelock, Transaction},
@@ -52,7 +52,7 @@ impl From<SpendableOutput> for Output {
 
 #[derive(Debug)]
 pub struct SignableTransaction(
-  Arc<MultisigKeys<Ed25519>>,
+  Arc<FrostKeys<Ed25519>>,
   RecommendedTranscript,
   usize,
   MSignableTransaction
@@ -140,7 +140,7 @@ impl Coin for Monero {
 
   async fn prepare_send(
     &self,
-    keys: Arc<MultisigKeys<Ed25519>>,
+    keys: Arc<FrostKeys<Ed25519>>,
     transcript: RecommendedTranscript,
     height: usize,
     mut inputs: Vec<Output>,

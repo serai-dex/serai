@@ -18,7 +18,7 @@ pub mod tests;
 /// Parameters for a multisig
 // These fields can not be made public as they should be static
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct MultisigParams {
+pub struct FrostParams {
   /// Participants needed to sign on behalf of the group
   t: u16,
   /// Amount of participants
@@ -27,12 +27,12 @@ pub struct MultisigParams {
   i: u16,
 }
 
-impl MultisigParams {
+impl FrostParams {
   pub fn new(
     t: u16,
     n: u16,
     i: u16
-  ) -> Result<MultisigParams, FrostError> {
+  ) -> Result<FrostParams, FrostError> {
     if (t == 0) || (n == 0) {
       Err(FrostError::ZeroParameter(t, n))?;
     }
@@ -46,7 +46,7 @@ impl MultisigParams {
       Err(FrostError::InvalidParticipantIndex(n, i))?;
     }
 
-    Ok(MultisigParams{ t, n, i })
+    Ok(FrostParams{ t, n, i })
   }
 
   pub fn t(&self) -> u16 { self.t }
@@ -86,14 +86,14 @@ pub enum FrostError {
 
 // View of keys passable to algorithm implementations
 #[derive(Clone)]
-pub struct MultisigView<C: Curve> {
+pub struct FrostView<C: Curve> {
   group_key: C::G,
   included: Vec<u16>,
   secret_share: C::F,
   verification_shares: HashMap<u16, C::G>,
 }
 
-impl<C: Curve> MultisigView<C> {
+impl<C: Curve> FrostView<C> {
   pub fn group_key(&self) -> C::G {
     self.group_key
   }
@@ -134,9 +134,9 @@ pub fn lagrange<F: PrimeField>(
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct MultisigKeys<C: Curve> {
-  /// Multisig Parameters
-  params: MultisigParams,
+pub struct FrostKeys<C: Curve> {
+  /// FROST Parameters
+  params: FrostParams,
 
   /// Secret share key
   secret_share: C::F,
@@ -149,12 +149,12 @@ pub struct MultisigKeys<C: Curve> {
   offset: Option<C::F>,
 }
 
-impl<C: Curve> MultisigKeys<C> {
+impl<C: Curve> FrostKeys<C> {
   /// Offset the keys by a given scalar to allow for account and privacy schemes
   /// This offset is ephemeral and will not be included when these keys are serialized
   /// Keys offset multiple times will form a new offset of their sum
   /// Not IETF compliant
-  pub fn offset(&self, offset: C::F) -> MultisigKeys<C> {
+  pub fn offset(&self, offset: C::F) -> FrostKeys<C> {
     let mut res = self.clone();
     // Carry any existing offset
     // Enables schemes like Monero's subaddresses which have a per-subaddress offset and then a
@@ -164,7 +164,7 @@ impl<C: Curve> MultisigKeys<C> {
     res
   }
 
-  pub fn params(&self) -> MultisigParams {
+  pub fn params(&self) -> FrostParams {
     self.params
   }
 
@@ -180,7 +180,7 @@ impl<C: Curve> MultisigKeys<C> {
     self.verification_shares.clone()
   }
 
-  pub fn view(&self, included: &[u16]) -> Result<MultisigView<C>, FrostError> {
+  pub fn view(&self, included: &[u16]) -> Result<FrostView<C>, FrostError> {
     if (included.len() < self.params.t.into()) || (usize::from(self.params.n) < included.len()) {
       Err(FrostError::InvalidSigningSet("invalid amount of participants included".to_string()))?;
     }
@@ -189,7 +189,7 @@ impl<C: Curve> MultisigKeys<C> {
     let offset = self.offset.unwrap_or(C::F::zero());
     let offset_share = offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap();
 
-    Ok(MultisigView {
+    Ok(FrostView {
       group_key: self.group_key,
       secret_share: secret_share + offset_share,
       verification_shares: self.verification_shares.iter().map(
@@ -207,7 +207,7 @@ impl<C: Curve> MultisigKeys<C> {
   }
 
   pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = Vec::with_capacity(MultisigKeys::<C>::serialized_len(self.params.n));
+    let mut serialized = Vec::with_capacity(FrostKeys::<C>::serialized_len(self.params.n));
     serialized.extend(u64::try_from(C::ID.len()).unwrap().to_be_bytes());
     serialized.extend(C::ID);
     serialized.extend(&self.params.t.to_be_bytes());
@@ -221,7 +221,7 @@ impl<C: Curve> MultisigKeys<C> {
     serialized
   }
 
-  pub fn deserialize(serialized: &[u8]) -> Result<MultisigKeys<C>, FrostError> {
+  pub fn deserialize(serialized: &[u8]) -> Result<FrostKeys<C>, FrostError> {
     let mut start = u64::try_from(C::ID.len()).unwrap().to_be_bytes().to_vec();
     start.extend(C::ID);
     let mut cursor = start.len();
@@ -229,7 +229,7 @@ impl<C: Curve> MultisigKeys<C> {
     if serialized.len() < (cursor + 4) {
       Err(
         FrostError::InternalError(
-          "MultisigKeys serialization is missing its curve/participant quantities".to_string()
+          "FrostKeys serialization is missing its curve/participant quantities".to_string()
         )
       )?;
     }
@@ -246,7 +246,7 @@ impl<C: Curve> MultisigKeys<C> {
 
     let n = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
     cursor += 2;
-    if serialized.len() != MultisigKeys::<C>::serialized_len(n) {
+    if serialized.len() != FrostKeys::<C>::serialized_len(n) {
       Err(FrostError::InternalError("incorrect serialization length".to_string()))?;
     }
 
@@ -271,8 +271,8 @@ impl<C: Curve> MultisigKeys<C> {
     }
 
     Ok(
-      MultisigKeys {
-        params: MultisigParams::new(t, n, i)
+      FrostKeys {
+        params: FrostParams::new(t, n, i)
           .map_err(|_| FrostError::InternalError("invalid parameters".to_string()))?,
         secret_share,
         group_key,

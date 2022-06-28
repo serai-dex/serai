@@ -2,7 +2,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::{ff::Field, Group};
 
-use crate::{Curve, MultisigKeys, tests::key_gen};
+use crate::{Curve, FrostKeys, tests::key_gen};
 
 // Test generation of FROST keys
 fn key_generation<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
@@ -13,7 +13,7 @@ fn key_generation<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 // Test serialization of generated keys
 fn keys_serialization<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   for (_, keys) in key_gen::<_, C>(rng) {
-    assert_eq!(&MultisigKeys::<C>::deserialize(&keys.serialize()).unwrap(), &*keys);
+    assert_eq!(&FrostKeys::<C>::deserialize(&keys.serialize()).unwrap(), &*keys);
   }
 }
 
@@ -35,7 +35,7 @@ pub fn test_curve<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
     }
   }
 
-  // Test FROST key generation and serialization of MultisigKeys works as expected
+  // Test FROST key generation and serialization of FrostKeys works as expected
   key_generation::<_, C>(rng);
   keys_serialization::<_, C>(rng);
 }

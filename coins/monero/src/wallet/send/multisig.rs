@@ -8,7 +8,7 @@ use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::{EdwardsPoint,
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Ed25519,
-  FrostError, MultisigKeys,
+  FrostError, FrostKeys,
   sign::{
     PreprocessMachine, SignMachine, SignatureMachine,
     AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine
@@ -57,7 +57,7 @@ impl SignableTransaction {
   pub async fn multisig(
     self,
     rpc: &Rpc,
-    keys: MultisigKeys<Ed25519>,
+    keys: FrostKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
     height: usize,
     mut included: Vec<u16>

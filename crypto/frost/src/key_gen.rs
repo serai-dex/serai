@@ -8,7 +8,7 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
   curve::Curve,
-  FrostError, MultisigParams, MultisigKeys,
+  FrostError, FrostParams, FrostKeys,
   schnorr::{self, SchnorrSignature},
   validate_map
 };
@@ -29,7 +29,7 @@ fn challenge<C: Curve>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
 // the serialized commitments to be broadcasted over an authenticated channel to all parties
 fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
-  params: &MultisigParams,
+  params: &FrostParams,
   context: &str,
 ) -> (Vec<C::F>, Vec<u8>) {
   let t = usize::from(params.t);
@@ -72,7 +72,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
 // Verify the received data from the first round of key generation
 fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
-  params: &MultisigParams,
+  params: &FrostParams,
   context: &str,
   our_commitments: Vec<u8>,
   mut serialized: HashMap<u16, Vec<u8>>,
@@ -149,7 +149,7 @@ fn polynomial<F: PrimeField>(
 // counterparty to receive
 fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
-  params: &MultisigParams,
+  params: &FrostParams,
   context: &str,
   coefficients: Vec<C::F>,
   our_commitments: Vec<u8>,
@@ -190,12 +190,12 @@ fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
 /// broadcasted initially
 fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
-  params: MultisigParams,
+  params: FrostParams,
   mut secret_share: C::F,
   commitments: HashMap<u16, Vec<C::G>>,
   // Vec to preserve ownership
   mut serialized: HashMap<u16, Vec<u8>>,
-) -> Result<MultisigKeys<C>, FrostError> {
+) -> Result<FrostKeys<C>, FrostError> {
   validate_map(
     &mut serialized,
     &(1 ..= params.n()).into_iter().collect::<Vec<_>>(),
@@ -256,12 +256,13 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   for i in 1 ..= params.n() {
     verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes), C::LITTLE_ENDIAN));
   }
+  // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
   debug_assert_eq!(C::GENERATOR_TABLE * secret_share, verification_shares[&params.i()]);
 
   // TODO: Clear serialized and shares
 
   Ok(
-    MultisigKeys {
+    FrostKeys {
       params,
       secret_share,
       group_key: stripes[0],
@@ -272,20 +273,20 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
 }
 
 pub struct KeyGenMachine<C: Curve> {
-  params: MultisigParams,
+  params: FrostParams,
   context: String,
   _curve: PhantomData<C>,
 }
 
 pub struct SecretShareMachine<C: Curve> {
-  params: MultisigParams,
+  params: FrostParams,
   context: String,
   coefficients: Vec<C::F>,
   our_commitments: Vec<u8>,
 }
 
 pub struct KeyMachine<C: Curve> {
-  params: MultisigParams,
+  params: FrostParams,
   secret: C::F,
   commitments: HashMap<u16, Vec<C::G>>,
 }
@@ -293,7 +294,7 @@ pub struct KeyMachine<C: Curve> {
 impl<C: Curve> KeyGenMachine<C> {
   /// Creates a new machine to generate a key for the specified curve in the specified multisig
   // The context string must be unique among multisigs
-  pub fn new(params: MultisigParams, context: String) -> KeyGenMachine<C> {
+  pub fn new(params: FrostParams, context: String) -> KeyGenMachine<C> {
     KeyGenMachine { params, context, _curve: PhantomData }
   }
 
@@ -351,7 +352,7 @@ impl<C: Curve> KeyMachine<C> {
     self,
     rng: &mut R,
     shares: HashMap<u16, Vec<u8>>,
-  ) -> Result<MultisigKeys<C>, FrostError> {
+  ) -> Result<FrostKeys<C>, FrostError> {
     complete_r2(rng, self.params, self.secret, self.commitments, shares)
   }
 }

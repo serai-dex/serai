@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use transcript::RecommendedTranscript;
-use frost::{curve::Curve, MultisigKeys, sign::PreprocessMachine};
+use frost::{curve::Curve, FrostKeys, sign::PreprocessMachine};
 
 pub mod monero;
 pub use self::monero::Monero;
@@ -57,7 +57,7 @@ pub trait Coin {
 
   async fn prepare_send(
     &self,
-    keys: Arc<MultisigKeys<Self::Curve>>,
+    keys: Arc<FrostKeys<Self::Curve>>,
     transcript: RecommendedTranscript,
     height: usize,
     inputs: Vec<Self::Output>,

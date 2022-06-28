@@ -10,24 +10,24 @@ use transcript::Transcript;
 use crate::{
   curve::Curve,
   FrostError,
-  MultisigParams, MultisigKeys, MultisigView,
+  FrostParams, FrostKeys, FrostView,
   algorithm::Algorithm,
   validate_map
 };
 
-/// Pairing of an Algorithm with a MultisigKeys instance and this specific signing set
+/// Pairing of an Algorithm with a FrostKeys instance and this specific signing set
 #[derive(Clone)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
   algorithm: A,
-  keys: Arc<MultisigKeys<C>>,
-  view: MultisigView<C>,
+  keys: Arc<FrostKeys<C>>,
+  view: FrostView<C>,
 }
 
 // Currently public to enable more complex operations as desired, yet solely used in testing
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
     algorithm: A,
-    keys: Arc<MultisigKeys<C>>,
+    keys: Arc<FrostKeys<C>>,
     included: &[u16],
   ) -> Result<Params<C, A>, FrostError> {
     let mut included = included.to_vec();
@@ -60,11 +60,11 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
     Ok(Params { algorithm, view: keys.view(&included).unwrap(), keys })
   }
 
-  pub fn multisig_params(&self) -> MultisigParams {
+  pub fn multisig_params(&self) -> FrostParams {
     self.keys.params
   }
 
-  pub fn view(&self) -> MultisigView<C> {
+  pub fn view(&self) -> FrostView<C> {
     self.view.clone()
   }
 }
@@ -291,7 +291,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a key for the specified curve in the specified multisig
   pub fn new(
     algorithm: A,
-    keys: Arc<MultisigKeys<C>>,
+    keys: Arc<FrostKeys<C>>,
     included: &[u16],
   ) -> Result<AlgorithmMachine<C, A>, FrostError> {
     Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })
