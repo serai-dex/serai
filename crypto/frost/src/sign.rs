@@ -164,7 +164,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     transcript.append_message(b"message", &C::hash_msg(&msg));
 
     // Calculate the binding factor
-    C::hash_binding_factor(&transcript.challenge(b"binding"))
+    C::hash_binding_factor(transcript.challenge(b"binding").as_ref())
   };
 
   // Process the addendums

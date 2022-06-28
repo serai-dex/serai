@@ -62,6 +62,8 @@ pub trait Algorithm<C: Curve>: Clone {
 #[derive(Clone, Debug)]
 pub struct IetfTranscript(Vec<u8>);
 impl Transcript for IetfTranscript {
+  type Challenge = Vec<u8>;
+
   fn domain_separate(&mut self, _: &[u8]) {}
 
   fn append_message(&mut self, _: &'static [u8], message: &[u8]) {

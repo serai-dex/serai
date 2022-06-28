@@ -1,16 +1,18 @@
-use core::fmt::Debug;
+#![no_std]
 
-#[cfg(features = "merlin")]
+#[cfg(feature = "merlin")]
 mod merlin;
-#[cfg(features = "merlin")]
-pub use merlin::MerlinTranscript;
+#[cfg(feature = "merlin")]
+pub use crate::merlin::MerlinTranscript;
 
-use digest::{typenum::type_operators::IsGreaterOrEqual, consts::U256, Digest};
+use digest::{typenum::type_operators::IsGreaterOrEqual, consts::U256, Digest, Output};
 
 pub trait Transcript {
+  type Challenge: Clone + Send + Sync + AsRef<[u8]>;
+
   fn domain_separate(&mut self, label: &'static [u8]);
   fn append_message(&mut self, label: &'static [u8], message: &[u8]);
-  fn challenge(&mut self, label: &'static [u8]) -> Vec<u8>;
+  fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge;
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32];
 }
 
@@ -34,10 +36,13 @@ impl DigestTranscriptMember {
   }
 }
 
-#[derive(Clone, Debug)]
-pub struct DigestTranscript<D: Clone + Digest>(D) where D::OutputSize: IsGreaterOrEqual<U256>;
+pub trait SecureDigest: Clone + Digest {}
+impl<D: Clone + Digest> SecureDigest for D where D::OutputSize: IsGreaterOrEqual<U256> {}
 
-impl<D: Clone + Digest> DigestTranscript<D> where D::OutputSize: IsGreaterOrEqual<U256> {
+#[derive(Clone, Debug)]
+pub struct DigestTranscript<D: SecureDigest>(D);
+
+impl<D: SecureDigest> DigestTranscript<D> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
     self.0.update(&[kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
@@ -52,8 +57,9 @@ impl<D: Clone + Digest> DigestTranscript<D> where D::OutputSize: IsGreaterOrEqua
   }
 }
 
-impl<D: Digest + Clone> Transcript for DigestTranscript<D>
-  where D::OutputSize: IsGreaterOrEqual<U256> {
+impl<D: SecureDigest> Transcript for DigestTranscript<D> {
+  type Challenge = Output<D>;
+
   fn domain_separate(&mut self, label: &[u8]) {
     self.append(DigestTranscriptMember::Domain, label);
   }
@@ -63,14 +69,14 @@ impl<D: Digest + Clone> Transcript for DigestTranscript<D>
     self.append(DigestTranscriptMember::Value, message);
   }
 
-  fn challenge(&mut self, label: &'static [u8]) -> Vec<u8> {
+  fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge {
     self.append(DigestTranscriptMember::Challenge, label);
-    self.0.clone().finalize().to_vec()
+    self.0.clone().finalize()
   }
 
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {
     let mut seed = [0; 32];
-    seed.copy_from_slice(&self.challenge(label)[0 .. 32]);
+    seed.copy_from_slice(&self.challenge(label)[.. 32]);
     seed
   }
 }

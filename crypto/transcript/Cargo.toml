@@ -1,6 +1,6 @@
 [package]
 name = "flexible-transcript"
-version = "0.1.1"
+version = "0.1.2"
 description = "A simple transcript trait definition, along with viable options"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"

@@ -1,3 +1,5 @@
+#![no_std]
+
 use core::{
   ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   borrow::Borrow,
