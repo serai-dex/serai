@@ -29,7 +29,8 @@ use dalek::{
   }
 };
 
-use group::{ff::{Field, PrimeField}, Group, GroupEncoding, prime::PrimeGroup};
+use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
+use group::{Group, GroupEncoding, prime::PrimeGroup};
 
 macro_rules! deref_borrow {
   ($Source: ident, $Target: ident) => {
@@ -188,6 +189,21 @@ impl PrimeField for Scalar {
   fn is_odd(&self) -> Choice { unimplemented!() }
   fn multiplicative_generator() -> Self { 2u64.into() }
   fn root_of_unity() -> Self { unimplemented!() }
+}
+
+impl PrimeFieldBits for Scalar {
+  type ReprBits = [u8; 32];
+
+  fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
+    self.to_repr().into()
+  }
+
+  fn char_le_bits() -> FieldBits<Self::ReprBits> {
+    let mut bytes = (Scalar::zero() - Scalar::one()).to_repr();
+    bytes[0] += 1;
+    debug_assert_eq!(Scalar::from_bytes_mod_order(bytes), Scalar::zero());
+    bytes.into()
+  }
 }
 
 macro_rules! dalek_group {
