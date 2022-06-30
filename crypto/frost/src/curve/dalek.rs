@@ -35,8 +35,6 @@ macro_rules! dalek_curve {
       const GENERATOR: Self::G = $POINT;
       const GENERATOR_TABLE: Self::T = &$TABLE;
 
-      const LITTLE_ENDIAN: bool = true;
-
       fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
         let mut seed = vec![0; 32];
         rng.fill_bytes(&mut seed);

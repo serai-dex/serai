@@ -224,7 +224,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
     res
   };
 
-  let mut batch = BatchVerifier::new(shares.len(), C::LITTLE_ENDIAN);
+  let mut batch = BatchVerifier::new(shares.len());
   for (l, share) in &shares {
     if *l == params.i() {
       continue;
@@ -254,7 +254,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   // Calculate each user's verification share
   let mut verification_shares = HashMap::new();
   for i in 1 ..= params.n() {
-    verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes), C::LITTLE_ENDIAN));
+    verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes)));
   }
   // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
   debug_assert_eq!(C::GENERATOR_TABLE * secret_share, verification_shares[&params.i()]);

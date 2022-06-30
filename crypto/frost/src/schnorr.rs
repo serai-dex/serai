@@ -46,7 +46,7 @@ pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
   triplets: &[(u16, C::G, C::F, SchnorrSignature<C>)]
 ) -> Result<(), u16> {
   let mut values = [(C::F::one(), C::GENERATOR); 3];
-  let mut batch = BatchVerifier::new(triplets.len(), C::LITTLE_ENDIAN);
+  let mut batch = BatchVerifier::new(triplets.len());
   for triple in triplets {
     // s = r + ca
     // sG == R + cA

@@ -83,7 +83,8 @@ pub struct DLEqProof<G0: PrimeGroup, G1: PrimeGroup> {
   poks: (SchnorrPoK<G0>, SchnorrPoK<G1>)
 }
 
-impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1> {
+impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
+  where G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
   fn initialize_transcript<T: Transcript>(
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
@@ -134,13 +135,17 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1> {
   }
 
   // TODO: Use multiexp here after https://github.com/serai-dex/serai/issues/17
-  fn reconstruct_key<G: PrimeGroup>(commitments: impl Iterator<Item = G>) -> G {
+  fn reconstruct_key<G: PrimeGroup>(
+    commitments: impl Iterator<Item = G>
+  ) -> G where G::Scalar: PrimeFieldBits {
     let mut pow_2 = G::Scalar::one();
-    commitments.fold(G::identity(), |key, commitment| {
-      let res = key + (commitment * pow_2);
-      pow_2 = pow_2.double();
-      res
-    })
+    multiexp::multiexp_vartime(
+      &commitments.map(|commitment| {
+        let res = (pow_2, commitment);
+        pow_2 = pow_2.double();
+        res
+      }).collect::<Vec<_>>()
+    )
   }
 
   fn reconstruct_keys(&self) -> (G0, G1) {
@@ -169,10 +174,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1> {
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
     f: G0::Scalar
-  ) -> (
-    Self,
-    (G0::Scalar, G1::Scalar)
-  ) where G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
+  ) -> (Self, (G0::Scalar, G1::Scalar)) {
     // At least one bit will be dropped from either field element, making it irrelevant which one
     // we get a random element in
     let f = scalar_normalize::<_, G1::Scalar>(f);
@@ -262,7 +264,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1> {
     &self,
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>)
-  ) -> Result<(G0, G1), DLEqError> where G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
+  ) -> Result<(G0, G1), DLEqError> {
     let capacity = G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY);
     if self.bits.len() != capacity.try_into().unwrap() {
       return Err(DLEqError::InvalidProofLength);

@@ -1,16 +1,17 @@
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::Field, Group};
+use ff::{Field, PrimeFieldBits};
+use group::Group;
 
 use crate::{multiexp, multiexp_vartime};
 
 #[cfg(feature = "batch")]
-pub struct BatchVerifier<Id: Copy, G: Group>(Vec<(Id, Vec<(G::Scalar, G)>)>, bool);
+pub struct BatchVerifier<Id: Copy, G: Group>(Vec<(Id, Vec<(G::Scalar, G)>)>);
 
 #[cfg(feature = "batch")]
-impl<Id: Copy, G: Group> BatchVerifier<Id, G> {
-  pub fn new(capacity: usize, endian: bool) -> BatchVerifier<Id, G> {
-    BatchVerifier(Vec::with_capacity(capacity), endian)
+impl<Id: Copy, G: Group> BatchVerifier<Id, G> where <G as Group>::Scalar: PrimeFieldBits {
+  pub fn new(capacity: usize) -> BatchVerifier<Id, G> {
+    BatchVerifier(Vec::with_capacity(capacity))
   }
 
   pub fn queue<
@@ -28,15 +29,13 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> {
 
   pub fn verify(&self) -> bool {
     multiexp(
-      &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>(),
-      self.1
+      &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()
     ).is_identity().into()
   }
 
   pub fn verify_vartime(&self) -> bool {
     multiexp_vartime(
-      &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>(),
-      self.1
+      &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()
     ).is_identity().into()
   }
 
@@ -46,8 +45,7 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> {
     while slice.len() > 1 {
       let split = slice.len() / 2;
       if multiexp_vartime(
-        &slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>(),
-        self.1
+        &slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()
       ).is_identity().into() {
         slice = &slice[split ..];
       } else {
@@ -56,7 +54,7 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> {
     }
 
     slice.get(0).filter(
-      |(_, value)| !bool::from(multiexp_vartime(value, self.1).is_identity())
+      |(_, value)| !bool::from(multiexp_vartime(value).is_identity())
     ).map(|(id, _)| *id)
   }
 

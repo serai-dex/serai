@@ -4,7 +4,8 @@ use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::PrimeField, Group, GroupOps, prime::PrimeGroup};
+use ff::{PrimeField, PrimeFieldBits};
+use group::{Group, GroupOps, prime::PrimeGroup};
 
 #[cfg(any(test, feature = "dalek"))]
 mod dalek;
@@ -40,7 +41,7 @@ pub enum CurveError {
 pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// Scalar field element type
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
-  type F: PrimeField;
+  type F: PrimeField + PrimeFieldBits;
   /// Group element type
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup;
   /// Precomputed table type
@@ -56,9 +57,6 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// Table for the generator for the group
   /// If there isn't a precomputed table available, the generator itself should be used
   const GENERATOR_TABLE: Self::T;
-
-  /// If little endian is used for the scalar field's Repr
-  const LITTLE_ENDIAN: bool;
 
   /// Securely generate a random nonce. H4 from the IETF draft
   fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F;
