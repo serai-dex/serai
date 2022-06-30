@@ -6,6 +6,7 @@ members = [
   "crypto/dalek-ff-group",
   "crypto/multiexp",
 
+  "crypto/dleq",
   "crypto/frost",
 
   "coins/monero",
