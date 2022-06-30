@@ -33,10 +33,7 @@ impl<G: PrimeGroup> Generators<G> {
   }
 }
 
-pub(crate) fn challenge<T: Transcript, F: PrimeField>(
-  transcript: &mut T,
-  label: &'static [u8]
-) -> F {
+pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   assert!(F::NUM_BITS <= 384);
 
   // From here, there are three ways to get a scalar under the ff/group API
@@ -44,7 +41,7 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(
   // 2: Grabbing a UInt library to perform reduction by the modulus, then determining endianess
   //    and loading it in
   // 3: Iterating over each byte and manually doubling/adding. This is simplest
-  let challenge_bytes = transcript.challenge(label);
+  let challenge_bytes = transcript.challenge(b"challenge");
   assert!(challenge_bytes.as_ref().len() == 64);
 
   let mut challenge = F::zero();
@@ -94,7 +91,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
     transcript.append_message(b"nonce_alternate", nonces.1.to_bytes().as_ref());
     transcript.append_message(b"point_primary", points.0.to_bytes().as_ref());
     transcript.append_message(b"point_alternate", points.1.to_bytes().as_ref());
-    challenge(transcript, b"challenge")
+    challenge(transcript)
   }
 
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(

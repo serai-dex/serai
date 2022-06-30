@@ -8,7 +8,7 @@ use group::{ff::{Field, PrimeField, PrimeFieldBits}, prime::PrimeGroup};
 use crate::{Generators, challenge};
 
 pub mod scalar;
-use scalar::scalar_normalize;
+use scalar::{scalar_normalize, scalar_convert};
 
 pub(crate) mod schnorr;
 use schnorr::SchnorrPoK;
@@ -32,7 +32,7 @@ pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Bit<G0: PrimeGroup, G1: PrimeGroup> {
   commitments: (G0, G1),
-  e: (G0::Scalar, G1::Scalar),
+  e: G0::Scalar,
   s: [(G0::Scalar, G1::Scalar); 2]
 }
 
@@ -41,8 +41,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> Bit<G0, G1> {
   pub fn serialize<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     w.write_all(self.commitments.0.to_bytes().as_ref())?;
     w.write_all(self.commitments.1.to_bytes().as_ref())?;
-    w.write_all(self.e.0.to_repr().as_ref())?;
-    w.write_all(self.e.1.to_repr().as_ref())?;
+    w.write_all(self.e.to_repr().as_ref())?;
     for i in 0 .. 2 {
       w.write_all(self.s[i].0.to_repr().as_ref())?;
       w.write_all(self.s[i].1.to_repr().as_ref())?;
@@ -55,7 +54,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> Bit<G0, G1> {
     Ok(
       Bit {
         commitments: (read_point(r)?, read_point(r)?),
-        e: (read_scalar(r)?, read_scalar(r)?),
+        e: read_scalar(r)?,
         s: [
           (read_scalar(r)?, read_scalar(r)?),
           (read_scalar(r)?, read_scalar(r)?)
@@ -71,6 +70,8 @@ pub enum DLEqError {
   InvalidProofOfKnowledge,
   #[error("invalid proof length")]
   InvalidProofLength,
+  #[error("invalid challenge")]
+  InvalidChallenge,
   #[error("invalid proof")]
   InvalidProof
 }
@@ -117,7 +118,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
     transcript.append_message(b"nonce_0", nonces.0.to_bytes().as_ref());
     transcript.append_message(b"nonce_1", nonces.1.to_bytes().as_ref());
-    (challenge(&mut transcript, b"challenge_G"), challenge(&mut transcript, b"challenge_H"))
+    scalar_normalize(challenge(&mut transcript))
   }
 
   #[allow(non_snake_case)]
@@ -134,7 +135,6 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     )
   }
 
-  // TODO: Use multiexp here after https://github.com/serai-dex/serai/issues/17
   fn reconstruct_key<G: PrimeGroup>(
     commitments: impl Iterator<Item = G>
   ) -> G where G::Scalar: PrimeFieldBits {
@@ -240,9 +240,9 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
 
       bits.push(
         if *bit {
-          Bit { commitments, e: e_0, s: [s_1, s_0] }
+          Bit { commitments, e: e_0.0, s: [s_1, s_0] }
         } else {
-          Bit { commitments, e: e_1, s: [s_0, s_1] }
+          Bit { commitments, e: e_1.0, s: [s_0, s_1] }
         }
       );
 
@@ -282,7 +282,8 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     for (i, bit) in self.bits.iter().enumerate() {
       Self::transcript_bit(transcript, i, bit.commitments);
 
-      if bit.e != Self::R_nonces(
+      let bit_e = (bit.e, scalar_convert(bit.e).ok_or(DLEqError::InvalidChallenge)?);
+      if bit_e != Self::R_nonces(
         transcript.clone(),
         generators,
         bit.s[0],
@@ -295,7 +296,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
           generators,
           bit.s[1],
           bit.commitments,
-          bit.e
+          bit_e
         )
       ) {
         return Err(DLEqError::InvalidProof);

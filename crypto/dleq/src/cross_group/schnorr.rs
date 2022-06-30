@@ -28,7 +28,7 @@ impl<G: PrimeGroup> SchnorrPoK<G> {
     transcript.append_message(b"generator", generator.to_bytes().as_ref());
     transcript.append_message(b"nonce", R.to_bytes().as_ref());
     transcript.append_message(b"public_key", A.to_bytes().as_ref());
-    challenge(transcript, b"challenge")
+    challenge(transcript)
   }
 
   pub(crate) fn prove<R: RngCore + CryptoRng, T: Transcript>(
