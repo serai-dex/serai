@@ -1,28 +1,25 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use rand_core::{RngCore, CryptoRng};
 
-use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
-  scalar::Scalar,
-  edwards::CompressedEdwardsY
-};
+use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;
-use frost::MultisigKeys;
+use transcript::RecommendedTranscript;
+use frost::{curve::Ed25519, FrostKeys};
 
-use monero::{PublicKey, network::Network, util::address::Address};
 use monero_serai::{
-  frost::Ed25519,
   transaction::{Timelock, Transaction},
   rpc::Rpc,
-  wallet::{SpendableOutput, SignableTransaction as MSignableTransaction}
+  wallet::{
+    ViewPair, address::{Network, AddressType, Address},
+    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine
+  }
 };
 
-use crate::{Transcript, Output as OutputTrait, CoinError, Coin, view_key};
+use crate::{coin::{CoinError, Output as OutputTrait, Coin}, view_key};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
 impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
@@ -53,27 +50,39 @@ impl From<SpendableOutput> for Output {
   }
 }
 
+#[derive(Debug)]
 pub struct SignableTransaction(
-  Arc<MultisigKeys<Ed25519>>,
-  Transcript,
+  Arc<FrostKeys<Ed25519>>,
+  RecommendedTranscript,
   usize,
   MSignableTransaction
 );
 
+#[derive(Clone, Debug)]
 pub struct Monero {
-  rpc: Rpc,
-  view: Scalar,
-  view_pub: CompressedEdwardsY
+  pub(crate) rpc: Rpc,
+  view: Scalar
 }
 
 impl Monero {
   pub fn new(url: String) -> Monero {
     let view = view_key::<Monero>(0).0;
-    Monero {
-      rpc: Rpc::new(url),
-      view,
-      view_pub: (&view * &ED25519_BASEPOINT_TABLE).compress()
-    }
+    Monero { rpc: Rpc::new(url), view }
+  }
+
+  fn view_pair(&self, spend: dfg::EdwardsPoint) -> ViewPair {
+    ViewPair { spend: spend.0, view: self.view }
+  }
+
+  #[cfg(test)]
+  fn empty_view_pair(&self) -> ViewPair {
+    use group::Group;
+    self.view_pair(dfg::EdwardsPoint::generator())
+  }
+
+  #[cfg(test)]
+  fn empty_address(&self) -> Address {
+    self.empty_view_pair().address(Network::Mainnet, AddressType::Standard, false)
   }
 }
 
@@ -81,9 +90,13 @@ impl Monero {
 impl Coin for Monero {
   type Curve = Ed25519;
 
-  type Output = Output;
+  type Fee = Fee;
+  type Transaction = Transaction;
   type Block = Vec<Transaction>;
+
+  type Output = Output;
   type SignableTransaction = SignableTransaction;
+  type TransactionMachine = TransactionMachine;
 
   type Address = Address;
 
@@ -98,6 +111,10 @@ impl Coin for Monero {
   const MAX_INPUTS: usize = 128;
   const MAX_OUTPUTS: usize = 16;
 
+  fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
+    self.view_pair(key).address(Network::Mainnet, AddressType::Standard, true)
+  }
+
   async fn get_height(&self) -> Result<usize, CoinError> {
     self.rpc.get_height().await.map_err(|_| CoinError::ConnectionError)
   }
@@ -110,7 +127,7 @@ impl Coin for Monero {
     block
       .iter()
       .flat_map(|tx| {
-        let (outputs, timelock) = tx.scan(self.view, key.0);
+        let (outputs, timelock) = tx.scan(self.view_pair(key), true);
         if timelock == Timelock::None {
           outputs
         } else {
@@ -123,13 +140,14 @@ impl Coin for Monero {
 
   async fn prepare_send(
     &self,
-    keys: Arc<MultisigKeys<Ed25519>>,
-    transcript: Transcript,
+    keys: Arc<FrostKeys<Ed25519>>,
+    transcript: RecommendedTranscript,
     height: usize,
     mut inputs: Vec<Output>,
-    payments: &[(Address, u64)]
+    payments: &[(Address, u64)],
+    fee: Fee
   ) -> Result<SignableTransaction, CoinError> {
-    let spend = keys.group_key().0.compress();
+    let spend = keys.group_key();
     Ok(
       SignableTransaction(
         keys,
@@ -138,40 +156,76 @@ impl Coin for Monero {
         MSignableTransaction::new(
           inputs.drain(..).map(|input| input.0).collect(),
           payments.to_vec(),
-          Address::standard(
-            Network::Mainnet,
-            PublicKey { point: spend },
-            PublicKey { point: self.view_pub }
-          ),
-          100000000
+          Some(self.address(spend)),
+          fee
         ).map_err(|_| CoinError::ConnectionError)?
       )
     )
   }
 
-  async fn attempt_send<R: RngCore + CryptoRng + std::marker::Send>(
+  async fn attempt_send(
     &self,
-    rng: &mut R,
     transaction: SignableTransaction,
     included: &[u16]
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
-    let attempt = transaction.3.clone().multisig(
-      rng,
+  ) -> Result<Self::TransactionMachine, CoinError> {
+    transaction.3.clone().multisig(
       &self.rpc,
       (*transaction.0).clone(),
       transaction.1.clone(),
       transaction.2,
       included.to_vec()
-    ).await.map_err(|_| CoinError::ConnectionError)?;
+    ).await.map_err(|_| CoinError::ConnectionError)
+  }
 
-    /*
-    let tx = None;
-    self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-    Ok(
+  async fn publish_transaction(
+    &self,
+    tx: &Self::Transaction
+  ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
+    self.rpc.publish_transaction(&tx).await.map_err(|_| CoinError::ConnectionError)?;
+
+    Ok((
       tx.hash().to_vec(),
-      tx.outputs.iter().map(|output| output.key.compress().to_bytes().collect())
-    )
-    */
-    Ok((vec![], vec![]))
+      tx.prefix.outputs.iter().map(|output| output.key.compress().to_bytes()).collect()
+    ))
+  }
+
+  #[cfg(test)]
+  async fn mine_block(&self) {
+    #[derive(serde::Deserialize, Debug)]
+    struct EmptyResponse {}
+    let _: EmptyResponse = self.rpc.rpc_call("json_rpc", Some(serde_json::json!({
+      "method": "generateblocks",
+      "params": {
+        "wallet_address": self.empty_address().to_string(),
+        "amount_of_blocks": 10
+      },
+    }))).await.unwrap();
+  }
+
+  #[cfg(test)]
+  async fn test_send(&self, address: Self::Address) {
+    use rand::rngs::OsRng;
+
+    let height = self.get_height().await.unwrap();
+
+    self.mine_block().await;
+    for _ in 0 .. 7 {
+      self.mine_block().await;
+    }
+
+    let outputs = self.rpc
+      .get_block_transactions_possible(height).await.unwrap()
+      .swap_remove(0).scan(self.empty_view_pair(), false).0;
+
+    let amount = outputs[0].commitment.amount;
+    let fee = 1000000000; // TODO
+    let tx = MSignableTransaction::new(
+      outputs,
+      vec![(address, amount - fee)],
+      Some(self.empty_address()),
+      self.rpc.get_fee().await.unwrap()
+    ).unwrap().sign(&mut OsRng, &self.rpc, &Scalar::one()).await.unwrap();
+    self.rpc.publish_transaction(&tx).await.unwrap();
+    self.mine_block().await;
   }
 }

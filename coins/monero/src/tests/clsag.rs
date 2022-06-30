@@ -5,6 +5,11 @@ use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
+#[cfg(feature = "multisig")]
+use transcript::RecommendedTranscript;
+#[cfg(feature = "multisig")]
+use frost::curve::Ed25519;
+
 use crate::{
   Commitment,
   random_scalar, generate_key_image,
@@ -12,7 +17,7 @@ use crate::{
   ringct::clsag::{ClsagInput, Clsag}
 };
 #[cfg(feature = "multisig")]
-use crate::{frost::{Ed25519, MultisigError, Transcript}, ringct::clsag::{ClsagDetails, ClsagMultisig}};
+use crate::{frost::MultisigError, ringct::clsag::{ClsagDetails, ClsagMultisig}};
 
 #[cfg(feature = "multisig")]
 use frost::tests::{key_gen, algorithm_machines, sign};
@@ -96,7 +101,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
     algorithm_machines(
       &mut OsRng,
       ClsagMultisig::new(
-        Transcript::new(b"Monero Serai CLSAG Test"),
+        RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
         Arc::new(RwLock::new(Some(
           ClsagDetails::new(
             ClsagInput::new(

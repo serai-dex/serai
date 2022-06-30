@@ -1,18 +1,21 @@
 use std::{sync::Arc, collections::HashMap};
 
-use transcript::Transcript as TranscriptTrait;
+use rand_core::OsRng;
 
-use frost::{Curve, MultisigKeys};
+use group::GroupEncoding;
 
-use crate::{Transcript, CoinError, Output, Coin};
+use transcript::{Transcript, RecommendedTranscript};
+use frost::{curve::Curve, FrostKeys, sign::{PreprocessMachine, SignMachine, SignatureMachine}};
+
+use crate::{coin::{CoinError, Output, Coin}, SignError, Network};
 
 pub struct WalletKeys<C: Curve> {
-  keys: MultisigKeys<C>,
+  keys: FrostKeys<C>,
   creation_height: usize
 }
 
 impl<C: Curve> WalletKeys<C> {
-  pub fn new(keys: MultisigKeys<C>, creation_height: usize) -> WalletKeys<C> {
+  pub fn new(keys: FrostKeys<C>, creation_height: usize) -> WalletKeys<C> {
     WalletKeys { keys, creation_height }
   }
 
@@ -24,12 +27,12 @@ impl<C: Curve> WalletKeys<C> {
   // system, there are potentially other benefits to binding this to a specific group key
   // It's no longer possible to influence group key gen to key cancel without breaking the hash
   // function as well, although that degree of influence means key gen is broken already
-  fn bind(&self, chain: &[u8]) -> MultisigKeys<C> {
+  fn bind(&self, chain: &[u8]) -> FrostKeys<C> {
     const DST: &[u8] = b"Serai Processor Wallet Chain Bind";
-    let mut transcript = Transcript::new(DST);
+    let mut transcript = RecommendedTranscript::new(DST);
     transcript.append_message(b"chain", chain);
     transcript.append_message(b"curve", C::ID);
-    transcript.append_message(b"group_key", &C::G_to_bytes(&self.keys.group_key()));
+    transcript.append_message(b"group_key", self.keys.group_key().to_bytes().as_ref());
     self.keys.offset(C::hash_to_F(DST, &transcript.challenge(b"offset")))
   }
 }
@@ -100,11 +103,106 @@ impl CoinDb for MemCoinDb {
   }
 }
 
+fn select_inputs<C: Coin>(inputs: &mut Vec<C::Output>) -> (Vec<C::Output>, u64) {
+  // Sort to ensure determinism. Inefficient, yet produces the most legible code to be optimized
+  // later
+  inputs.sort_by(|a, b| a.amount().cmp(&b.amount()));
+
+  // Select the maximum amount of outputs possible
+  let res = inputs.split_off(inputs.len() - C::MAX_INPUTS.min(inputs.len()));
+  // Calculate their sum value, minus the fee needed to spend them
+  let sum = res.iter().map(|input| input.amount()).sum();
+  // sum -= C::MAX_FEE; // TODO
+  (res, sum)
+}
+
+fn select_outputs<C: Coin>(
+  payments: &mut Vec<(C::Address, u64)>,
+  value: &mut u64
+) -> Vec<(C::Address, u64)> {
+  // Prioritize large payments which will most efficiently use large inputs
+  payments.sort_by(|a, b| a.1.cmp(&b.1));
+
+  // Grab the payments this will successfully fund
+  let mut outputs = vec![];
+  let mut p = payments.len();
+  while p != 0 {
+    p -= 1;
+    if *value >= payments[p].1 {
+      *value -= payments[p].1;
+      // Swap remove will either pop the tail or insert an element that wouldn't fit, making it
+      // always safe to move past
+      outputs.push(payments.swap_remove(p));
+    }
+    // Doesn't break in this else case as a smaller payment may still fit
+  }
+
+  outputs
+}
+
+// Optimizes on the expectation selected/inputs are sorted from lowest value to highest
+fn refine_inputs<C: Coin>(
+  selected: &mut Vec<C::Output>,
+  inputs: &mut Vec<C::Output>,
+  mut remaining: u64
+) {
+  // Drop unused inputs
+  let mut s = 0;
+  while remaining > selected[s].amount() {
+    remaining -= selected[s].amount();
+    s += 1;
+  }
+  // Add them back to the inputs pool
+  inputs.extend(selected.drain(.. s));
+
+  // Replace large inputs with smaller ones
+  for s in (0 .. selected.len()).rev() {
+    for i in 0 .. inputs.len() {
+      // Doesn't break due to inputs no longer being sorted
+      // This could be made faster if we prioritized small input usage over transaction size/fees
+      // TODO: Consider. This would implicitly consolidate inputs which would be advantageous
+      if selected[s].amount() < inputs[i].amount() {
+        continue;
+      }
+
+      // If we can successfully replace this input, do so
+      let diff = selected[s].amount() - inputs[i].amount();
+      if remaining > diff {
+        remaining -= diff;
+
+        let old = selected[s].clone();
+        selected[s] = inputs[i].clone();
+        inputs[i] = old;
+      }
+    }
+  }
+}
+
+fn select_inputs_outputs<C: Coin>(
+  inputs: &mut Vec<C::Output>,
+  outputs: &mut Vec<(C::Address, u64)>
+) -> (Vec<C::Output>, Vec<(C::Address, u64)>) {
+  if inputs.len() == 0 {
+    return (vec![], vec![]);
+  }
+
+  let (mut selected, mut value) = select_inputs::<C>(inputs);
+
+  let outputs = select_outputs::<C>(outputs, &mut value);
+  if outputs.len() == 0 {
+    inputs.extend(selected);
+    return (vec![], vec![]);
+  }
+
+  refine_inputs::<C>(&mut selected, inputs, value);
+  (selected, outputs)
+}
+
 pub struct Wallet<D: CoinDb, C: Coin> {
   db: D,
   coin: C,
-  keys: Vec<(Arc<MultisigKeys<C::Curve>>, Vec<C::Output>)>,
-  pending: Vec<(usize, MultisigKeys<C::Curve>)>
+  keys: Vec<(Arc<FrostKeys<C::Curve>>, Vec<C::Output>)>,
+  pending: Vec<(usize, FrostKeys<C::Curve>)>
 }
 
 impl<D: CoinDb, C: Coin> Wallet<D, C> {
@@ -121,6 +219,9 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   pub fn scanned_height(&self) -> usize { self.db.scanned_height() }
   pub fn acknowledge_height(&mut self, canonical: usize, height: usize) {
     self.db.acknowledge_height(canonical, height);
+    if height > self.db.scanned_height() {
+      self.db.scanned_to_height(height);
+    }
   }
   pub fn acknowledged_height(&self, canonical: usize) -> usize {
     self.db.acknowledged_height(canonical)
@@ -131,17 +232,25 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     self.pending.push((self.acknowledged_height(keys.creation_height), keys.bind(C::ID)));
   }
 
+  pub fn address(&self) -> C::Address {
+    self.coin.address(self.keys[self.keys.len() - 1].0.group_key())
+  }
+
   pub async fn poll(&mut self) -> Result<(), CoinError> {
-    let confirmed_height = self.coin.get_height().await? - C::CONFIRMATIONS;
-    for height in self.scanned_height() .. confirmed_height {
+    if self.coin.get_height().await? < C::CONFIRMATIONS {
+      return Ok(());
+    }
+    let confirmed_block = self.coin.get_height().await? - C::CONFIRMATIONS;
+
+    for b in self.scanned_height() ..= confirmed_block {
       // If any keys activated at this height, shift them over
       {
         let mut k = 0;
         while k < self.pending.len() {
           // TODO
-          //if height < self.pending[k].0 {
-          //} else if height == self.pending[k].0 {
-          if height <= self.pending[k].0 {
+          //if b < self.pending[k].0 {
+          //} else if b == self.pending[k].0 {
+          if b <= self.pending[k].0 {
             self.keys.push((Arc::new(self.pending.swap_remove(k).1), vec![]));
           } else {
             k += 1;
@@ -149,7 +258,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         }
       }
 
-      let block = self.coin.get_block(height).await?;
+      let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
         outputs.extend(
           self.coin.get_outputs(&block, keys.group_key()).await.iter().cloned().filter(
@@ -157,7 +266,11 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           )
         );
       }
+
+      // Blocks are zero-indexed while heights aren't
+      self.db.scanned_to_height(b + 1);
     }
+
     Ok(())
   }
 
@@ -169,7 +282,8 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   pub async fn prepare_sends(
     &mut self,
     canonical: usize,
-    payments: Vec<(C::Address, u64)>
+    payments: Vec<(C::Address, u64)>,
+    fee: C::Fee
   ) -> Result<(Vec<(C::Address, u64)>, Vec<C::SignableTransaction>), CoinError> {
     if payments.len() == 0 {
       return Ok((vec![], vec![]));
@@ -181,50 +295,21 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     // Payments is the first set of TXs in the schedule
     // As each payment re-appears, let mut payments = schedule[payment] where the only input is
     // the source payment
-    // let (mut payments, schedule) = payments;
+    // let (mut payments, schedule) = schedule(payments);
     let mut payments = payments;
-    payments.sort_by(|a, b| a.1.cmp(&b.1).reverse());
 
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
-      // Select the highest value outputs to minimize the amount of inputs needed
-      outputs.sort_by(|a, b| a.amount().cmp(&b.amount()).reverse());
-
       while outputs.len() != 0 {
-        // Select the maximum amount of outputs possible
-        let mut inputs = &outputs[0 .. C::MAX_INPUTS.min(outputs.len())];
-
-        // Calculate their sum value, minus the fee needed to spend them
-        let mut sum = inputs.iter().map(|input| input.amount()).sum::<u64>();
-        // sum -= C::MAX_FEE; // TODO
-
-        // Grab the payments this will successfully fund
-        let mut these_payments = vec![];
-        for payment in &payments {
-          if sum > payment.1 {
-            these_payments.push(payment);
-            sum -= payment.1;
-          }
-          // Doesn't break in this else case as a smaller payment may still fit
-        }
-
-        // Move to the next set of keys if none of these outputs remain significant
-        if these_payments.len() == 0 {
+        let (inputs, outputs) = select_inputs_outputs::<C>(outputs, &mut payments);
+        // If we can no longer process any payments, move to the next set of keys
+        if outputs.len() == 0 {
+          debug_assert_eq!(inputs.len(), 0);
           break;
         }
 
-        // Drop any uneeded outputs
-        while sum > inputs[inputs.len() - 1].amount() {
-          sum -= inputs[inputs.len() - 1].amount();
-          inputs = &inputs[.. (inputs.len() - 1)];
-        }
-
-        // We now have a minimal effective outputs/payments set
-        // Take ownership while removing these candidates from the provided list
-        let inputs = outputs.drain(.. inputs.len()).collect();
-        let payments = payments.drain(.. these_payments.len()).collect::<Vec<_>>();
-
-        let mut transcript = Transcript::new(b"Serai Processor Wallet Send");
+        // Create the transcript for this transaction
+        let mut transcript = RecommendedTranscript::new(b"Serai Processor Wallet Send");
         transcript.append_message(
           b"canonical_height",
           &u64::try_from(canonical).unwrap().to_le_bytes()
@@ -237,12 +322,14 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           b"index",
           &u64::try_from(txs.len()).unwrap().to_le_bytes()
         );
+
         let tx = self.coin.prepare_send(
           keys.clone(),
           transcript,
           acknowledged_height,
           inputs,
-          &payments
+          &outputs,
+          fee
         ).await?;
         // self.db.save_tx(tx) // TODO
         txs.push(tx);
@@ -250,5 +337,27 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     }
 
     Ok((payments, txs))
+  }
+
+  pub async fn attempt_send<N: Network>(
+    &mut self,
+    network: &mut N,
+    prepared: C::SignableTransaction,
+    included: Vec<u16>
+  ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
+    let attempt = self.coin.attempt_send(
+      prepared,
+      &included
+    ).await.map_err(|e| SignError::CoinError(e))?;
+
+    let (attempt, commitments) = attempt.preprocess(&mut OsRng);
+    let commitments = network.round(commitments).await.map_err(|e| SignError::NetworkError(e))?;
+
+    let (attempt, share) = attempt.sign(commitments, b"").map_err(|e| SignError::FrostError(e))?;
+    let shares = network.round(share).await.map_err(|e| SignError::NetworkError(e))?;
+
+    let tx = attempt.complete(shares).map_err(|e| SignError::FrostError(e))?;
+
+    self.coin.publish_transaction(&tx).await.map_err(|e| SignError::CoinError(e))
   }
 }

@@ -4,6 +4,10 @@ use curve25519_dalek::{scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwards
 
 pub const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
+pub fn varint_len(varint: usize) -> usize {
+  ((usize::try_from(usize::BITS - varint.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1
+}
+
 pub fn write_varint<W: io::Write>(varint: &u64, w: &mut W) -> io::Result<()> {
   let mut varint = *varint;
   while {

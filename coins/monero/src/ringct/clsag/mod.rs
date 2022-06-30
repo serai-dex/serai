@@ -15,7 +15,8 @@ use crate::{
   Commitment,
   wallet::decoys::Decoys,
   random_scalar, hash_to_scalar, hash_to_point,
-  serialize::*
+  serialize::*,
+  transaction::RING_LEN
 };
 
 #[cfg(feature = "multisig")]
@@ -285,6 +286,10 @@ impl Clsag {
       Err(ClsagError::InvalidC1)?;
     }
     Ok(())
+  }
+
+  pub(crate) fn fee_weight() -> usize {
+    (RING_LEN * 32) + 32 + 32
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

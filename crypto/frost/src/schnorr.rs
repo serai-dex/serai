@@ -1,6 +1,6 @@
 use rand_core::{RngCore, CryptoRng};
 
-use ff::Field;
+use group::{ff::{Field, PrimeField}, GroupEncoding};
 
 use multiexp::BatchVerifier;
 
@@ -16,8 +16,8 @@ pub struct SchnorrSignature<C: Curve> {
 impl<C: Curve> SchnorrSignature<C> {
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(C::G_len() + C::F_len());
-    res.extend(C::G_to_bytes(&self.R));
-    res.extend(C::F_to_bytes(&self.s));
+    res.extend(self.R.to_bytes().as_ref());
+    res.extend(self.s.to_repr().as_ref());
     res
   }
 }

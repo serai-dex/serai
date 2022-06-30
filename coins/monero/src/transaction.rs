@@ -2,6 +2,8 @@ use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{hash, serialize::*, ringct::{RctPrunable, RctSignatures}};
 
+pub const RING_LEN: usize = 11;
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Input {
   Gen(u64),
@@ -14,6 +16,13 @@ pub enum Input {
 }
 
 impl Input {
+  // Worst-case predictive len
+  pub(crate) fn fee_weight() -> usize {
+    // Uses 1 byte for the VarInt amount due to amount being 0
+    // Uses 1 byte for the VarInt encoding of the length of the ring as well
+    1 + 1 + 1 + (8 * RING_LEN) + 32
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       Input::Gen(height) => {
@@ -56,6 +65,10 @@ pub struct Output {
 }
 
 impl Output {
+  pub(crate) fn fee_weight() -> usize {
+    1 + 1 + 32 + 1
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.amount, w)?;
     w.write_all(&[2 + (if self.tag.is_some() { 1 } else { 0 })])?;
@@ -102,6 +115,10 @@ impl Timelock {
     }
   }
 
+  pub(crate) fn fee_weight() -> usize {
+    8
+  }
+
   fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(
       &match self {
@@ -124,6 +141,15 @@ pub struct TransactionPrefix {
 }
 
 impl TransactionPrefix {
+  pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
+    // Assumes Timelock::None since this library won't let you create a TX with a timelock
+    1 + 1 +
+    varint_len(inputs) + (inputs * Input::fee_weight()) +
+    // Only 16 outputs are possible under transactions by this lib
+    1 + (outputs * Output::fee_weight()) +
+    varint_len(extra) + extra
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.version, w)?;
     self.timelock.serialize(w)?;
@@ -157,6 +183,10 @@ pub struct Transaction {
 }
 
 impl Transaction {
+  pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
+    TransactionPrefix::fee_weight(inputs, outputs, extra) + RctSignatures::fee_weight(inputs, outputs)
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     self.prefix.serialize(w)?;
     self.rct_signatures.serialize(w)

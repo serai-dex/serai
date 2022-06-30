@@ -4,7 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, MultisigView, schnorr};
+use crate::{Curve, FrostError, FrostView, schnorr};
 pub use schnorr::SchnorrSignature;
 
 /// Algorithm to use FROST with
@@ -19,14 +19,14 @@ pub trait Algorithm<C: Curve>: Clone {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    params: &MultisigView<C>,
+    params: &FrostView<C>,
     nonces: &[C::F; 2],
   ) -> Vec<u8>;
 
   /// Proccess the addendum for the specified participant. Guaranteed to be ordered
   fn process_addendum(
     &mut self,
-    params: &MultisigView<C>,
+    params: &FrostView<C>,
     l: u16,
     commitments: &[C::G; 2],
     serialized: &[u8],
@@ -38,7 +38,7 @@ pub trait Algorithm<C: Curve>: Clone {
   /// The nonce will already have been processed into the combined form d + (e * p)
   fn sign_share(
     &mut self,
-    params: &MultisigView<C>,
+    params: &FrostView<C>,
     nonce_sum: C::G,
     binding: C::F,
     nonce: C::F,
@@ -62,6 +62,8 @@ pub trait Algorithm<C: Curve>: Clone {
 #[derive(Clone, Debug)]
 pub struct IetfTranscript(Vec<u8>);
 impl Transcript for IetfTranscript {
+  type Challenge = Vec<u8>;
+
   fn domain_separate(&mut self, _: &[u8]) {}
 
   fn append_message(&mut self, _: &'static [u8], message: &[u8]) {
@@ -114,7 +116,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     _: &mut R,
-    _: &MultisigView<C>,
+    _: &FrostView<C>,
     _: &[C::F; 2],
   ) -> Vec<u8> {
     vec![]
@@ -122,7 +124,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
 
   fn process_addendum(
     &mut self,
-    _: &MultisigView<C>,
+    _: &FrostView<C>,
     _: u16,
     _: &[C::G; 2],
     _: &[u8],
@@ -132,7 +134,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
 
   fn sign_share(
     &mut self,
-    params: &MultisigView<C>,
+    params: &FrostView<C>,
     nonce_sum: C::G,
     _: C::F,
     nonce: C::F,

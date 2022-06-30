@@ -2,10 +2,10 @@ use std::{marker::PhantomData, sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ff::Field;
+use group::{ff::Field, GroupEncoding};
 
 use crate::{
-  Curve, MultisigKeys, schnorr::{self, SchnorrSignature}, algorithm::{Hram, Schnorr},
+  Curve, FrostKeys, schnorr::{self, SchnorrSignature}, algorithm::{Hram, Schnorr},
   tests::{key_gen, algorithm_machines, sign as sign_test}
 };
 
@@ -80,7 +80,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 fn sign_core<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   group_key: C::G,
-  keys: &HashMap<u16, Arc<MultisigKeys<C>>>
+  keys: &HashMap<u16, Arc<FrostKeys<C>>>
 ) {
   const MESSAGE: &'static [u8] = b"Hello, World!";
 
@@ -96,7 +96,7 @@ pub struct TestHram<C: Curve> {
 impl<C: Curve> Hram<C> for TestHram<C> {
   #[allow(non_snake_case)]
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F {
-    C::hash_to_F(b"challenge", &[&C::G_to_bytes(R), &C::G_to_bytes(A), m].concat())
+    C::hash_to_F(b"challenge", &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat())
   }
 }
 

@@ -7,6 +7,7 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+hex-literal = "0.3"
 lazy_static = "1"
 thiserror = "1"
 
@@ -16,17 +17,17 @@ rand = "0.8"
 rand_distr = "0.4"
 
 tiny-keccak = { version = "2", features = ["keccak"] }
-blake2 = "0.10"
+blake2 = { version = "0.10", optional = true }
 
 curve25519-dalek = { version = "3", features = ["std"] }
 
-ff = { version = "0.11", optional = true }
-group = { version = "0.11", optional = true }
+group = { version = "0.12", optional = true }
 
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
-transcript = { path = "../../crypto/transcript", optional = true }
-frost = { path = "../../crypto/frost", optional = true }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", features = ["recommended"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["ed25519"], optional = true }
 
+base58-monero = "1"
 monero = "0.16"
 
 hex = "0.4"
@@ -37,7 +38,7 @@ reqwest = { version = "0.11", features = ["json"] }
 
 [features]
 experimental = []
-multisig = ["ff", "group", "rand_chacha", "transcript", "frost", "dalek-ff-group"]
+multisig = ["rand_chacha", "blake2", "group", "dalek-ff-group", "transcript", "frost"]
 
 [dev-dependencies]
 sha2 = "0.10"

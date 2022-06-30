@@ -1,10 +1,9 @@
-use core::{convert::TryInto, fmt::{Formatter, Debug}};
-use std::marker::PhantomData;
+use core::convert::TryInto;
 
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::{generic_array::typenum::U64, Digest}, Blake2b512};
+use group::GroupEncoding;
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE as DTable,
@@ -12,16 +11,10 @@ use curve25519_dalek::{
   edwards::EdwardsPoint as DPoint
 };
 
-use ff::PrimeField;
-use group::Group;
-
-use transcript::{Transcript as TranscriptTrait, DigestTranscript};
-use frost::{CurveError, Curve};
+use transcript::{Transcript, RecommendedTranscript};
 use dalek_ff_group as dfg;
 
 use crate::random_scalar;
-
-pub type Transcript = DigestTranscript::<blake2::Blake2b512>;
 
 #[derive(Clone, Error, Debug)]
 pub enum MultisigError {
@@ -32,109 +25,6 @@ pub enum MultisigError {
   #[error("invalid key image {0}")]
   InvalidKeyImage(u16)
 }
-
-// Accept a parameterized hash function in order to check against the FROST vectors while still
-// allowing Blake2b to be used with wide reduction in practice
-pub struct Ed25519Internal<D: Digest<OutputSize = U64>, const WIDE: bool> {
-  _digest: PhantomData<D>
-}
-
-// Removed requirements for D to have all of these
-impl<D: Digest<OutputSize = U64>, const WIDE: bool> Clone for Ed25519Internal<D, WIDE> {
-  fn clone(&self) -> Self { *self }
-}
-impl<D: Digest<OutputSize = U64>, const WIDE: bool> Copy for Ed25519Internal<D, WIDE> {}
-impl<D: Digest<OutputSize = U64>, const WIDE: bool> PartialEq for Ed25519Internal<D, WIDE> {
-  fn eq(&self, _: &Self) -> bool { true }
-}
-impl<D: Digest<OutputSize = U64>, const WIDE: bool> Eq for Ed25519Internal<D, WIDE> {}
-impl<D: Digest<OutputSize = U64>, const WIDE: bool> Debug for Ed25519Internal<D, WIDE> {
-  fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), core::fmt::Error> { Ok(()) }
-}
-
-impl<D: Digest<OutputSize = U64>, const WIDE: bool> Curve for Ed25519Internal<D, WIDE> {
-  type F = dfg::Scalar;
-  type G = dfg::EdwardsPoint;
-  type T = &'static dfg::EdwardsBasepointTable;
-
-  const ID: &'static [u8] = b"edwards25519";
-
-  const GENERATOR: Self::G = dfg::ED25519_BASEPOINT_POINT;
-  const GENERATOR_TABLE: Self::T = &dfg::ED25519_BASEPOINT_TABLE;
-
-  const LITTLE_ENDIAN: bool = true;
-
-  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
-    let mut seed = vec![0; 32];
-    rng.fill_bytes(&mut seed);
-    seed.extend(&secret.to_bytes());
-    Self::hash_to_F(b"nonce", &seed)
-  }
-
-  fn hash_msg(msg: &[u8]) -> Vec<u8> {
-    D::digest(msg).to_vec()
-  }
-
-  fn hash_binding_factor(binding: &[u8]) -> Self::F {
-    Self::hash_to_F(b"rho", binding)
-  }
-
-  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-    let digest = D::new().chain_update(dst).chain_update(msg);
-    if WIDE {
-      dfg::Scalar::from_hash(digest)
-    } else {
-      dfg::Scalar::from_bytes_mod_order(digest.finalize()[32 ..].try_into().unwrap())
-    }
-  }
-
-  fn F_len() -> usize {
-    32
-  }
-
-  fn G_len() -> usize {
-    32
-  }
-
-  fn F_from_slice(slice: &[u8]) -> Result<Self::F, CurveError> {
-    let scalar = Self::F::from_repr(
-      slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?
-    );
-    if scalar.is_some().unwrap_u8() == 0 {
-      Err(CurveError::InvalidScalar)?;
-    }
-    Ok(scalar.unwrap())
-  }
-
-  fn G_from_slice(slice: &[u8]) -> Result<Self::G, CurveError> {
-    let bytes = slice.try_into().map_err(|_| CurveError::InvalidLength(32, slice.len()))?;
-    let point = dfg::CompressedEdwardsY::new(bytes).decompress();
-
-    if let Some(point) = point {
-      // Ban identity and torsioned points
-      if point.is_identity().into() || (!bool::from(point.is_torsion_free())) {
-        Err(CurveError::InvalidPoint)?;
-      }
-      // Ban points which weren't canonically encoded
-      if point.compress().to_bytes() != bytes {
-        Err(CurveError::InvalidPoint)?;
-      }
-      Ok(point)
-    } else {
-      Err(CurveError::InvalidPoint)
-    }
-  }
-
-  fn F_to_bytes(f: &Self::F) -> Vec<u8> {
-    f.to_repr().to_vec()
-  }
-
-  fn G_to_bytes(g: &Self::G) -> Vec<u8> {
-    g.compress().to_bytes().to_vec()
-  }
-}
-
-pub type Ed25519 = Ed25519Internal<Blake2b512, true>;
 
 // Used to prove legitimacy of key images and nonces which both involve other basepoints
 #[derive(Clone)]
@@ -151,7 +41,7 @@ impl DLEqProof {
     // the proper order if they want to reach consensus
     // It'd be a poor API to have CLSAG define a new transcript solely to pass here, just to try to
     // merge later in some form, when it should instead just merge xH (as it does)
-    let mut transcript = Transcript::new(b"DLEq Proof");
+    let mut transcript = RecommendedTranscript::new(b"DLEq Proof");
     // Bit redundant, keeps things consistent
     transcript.domain_separate(b"DLEq");
     // Doesn't include G which is constant, does include H which isn't, even though H manipulation
@@ -229,18 +119,26 @@ impl DLEqProof {
 }
 
 #[allow(non_snake_case)]
-pub fn read_dleq(
+pub(crate) fn read_dleq(
   serialized: &[u8],
   start: usize,
   H: &DPoint,
   l: u16,
   xG: &DPoint
 ) -> Result<dfg::EdwardsPoint, MultisigError> {
-  // Not using G_from_slice here would enable non-canonical points and break blame
-  // This does also ban identity points, yet those should never be a concern
-  let other = <Ed25519 as Curve>::G_from_slice(
-    &serialized[(start + 0) .. (start + 32)]
-  ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
+  if serialized.len() < start + 96 {
+    Err(MultisigError::InvalidDLEqProof(l))?;
+  }
+
+  let bytes = (&serialized[(start + 0) .. (start + 32)]).try_into().unwrap();
+  // dfg ensures the point is torsion free
+  let other = Option::<dfg::EdwardsPoint>::from(
+    dfg::EdwardsPoint::from_bytes(&bytes)).ok_or(MultisigError::InvalidDLEqProof(l)
+  )?;
+  // Ensure this is a canonical point
+  if other.to_bytes() != bytes {
+    Err(MultisigError::InvalidDLEqProof(l))?;
+  }
 
   DLEqProof::deserialize(&serialized[(start + 32) .. (start + 96)])
     .ok_or(MultisigError::InvalidDLEqProof(l))?

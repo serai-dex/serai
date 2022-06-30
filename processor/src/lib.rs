@@ -1,73 +1,33 @@
-use std::{marker::Send, sync::Arc};
+use std::{marker::Send, collections::HashMap};
 
 use async_trait::async_trait;
 use thiserror::Error;
-use rand_core::{RngCore, CryptoRng};
 
-use frost::{Curve, MultisigKeys};
+use frost::{curve::Curve, FrostError};
 
-pub(crate) use monero_serai::frost::Transcript;
-
-mod coins;
+mod coin;
+use coin::{CoinError, Coin};
 mod wallet;
 
 #[cfg(test)]
 mod tests;
 
-pub trait Output: Sized + Clone {
-  type Id: AsRef<[u8]>;
+#[derive(Clone, Error, Debug)]
+pub enum NetworkError {}
 
-  fn id(&self) -> Self::Id;
-  fn amount(&self) -> u64;
-
-  fn serialize(&self) -> Vec<u8>;
-  fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
+#[async_trait]
+pub trait Network: Send {
+  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError>;
 }
 
 #[derive(Clone, Error, Debug)]
-pub enum CoinError {
-  #[error("failed to connect to coin daemon")]
-  ConnectionError
-}
-
-#[async_trait]
-pub trait Coin {
-  type Curve: Curve;
-
-  type Output: Output;
-  type Block;
-  type SignableTransaction;
-
-  type Address: Send;
-
-  const ID: &'static [u8];
-  const CONFIRMATIONS: usize;
-  const MAX_INPUTS: usize;
-  const MAX_OUTPUTS: usize;
-
-  async fn get_height(&self) -> Result<usize, CoinError>;
-  async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError>;
-  async fn get_outputs(
-    &self,
-    block: &Self::Block,
-    key: <Self::Curve as Curve>::G
-  ) -> Vec<Self::Output>;
-
-  async fn prepare_send(
-    &self,
-    keys: Arc<MultisigKeys<Self::Curve>>,
-    transcript: Transcript,
-    height: usize,
-    inputs: Vec<Self::Output>,
-    payments: &[(Self::Address, u64)]
-  ) -> Result<Self::SignableTransaction, CoinError>;
-
-  async fn attempt_send<R: RngCore + CryptoRng + Send>(
-    &self,
-    rng: &mut R,
-    transaction: Self::SignableTransaction,
-    included: &[u16]
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+pub enum SignError {
+  #[error("FROST had an error {0}")]
+  FrostError(FrostError),
+  #[error("coin had an error {0}")]
+  CoinError(CoinError),
+  #[error("network had an error {0}")]
+  NetworkError(NetworkError)
 }
 
 // Generate a static view key for a given chain in a globally consistent manner

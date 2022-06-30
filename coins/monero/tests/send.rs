@@ -1,4 +1,6 @@
-use std::{sync::Mutex, collections::HashMap};
+use std::sync::Mutex;
+#[cfg(feature = "multisig")]
+use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 
@@ -12,20 +14,14 @@ use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
 #[cfg(feature = "multisig")]
 use dalek_ff_group::Scalar;
 #[cfg(feature = "multisig")]
-use frost::tests::{THRESHOLD, key_gen, sign};
+use transcript::RecommendedTranscript;
+#[cfg(feature = "multisig")]
+use frost::{curve::Ed25519, tests::{THRESHOLD, key_gen, sign}};
 
-use monero::{
-  network::Network,
-  util::{key::PublicKey, address::Address}
-};
-
-use monero_serai::{random_scalar, wallet::SignableTransaction};
+use monero_serai::{random_scalar, wallet::{ViewPair, address::{Network, AddressType}, SignableTransaction}};
 
 mod rpc;
 use crate::rpc::{rpc, mine_block};
-
-#[cfg(feature = "multisig")]
-use monero_serai::frost::{Transcript, Ed25519};
 
 lazy_static! {
   static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
@@ -72,15 +68,10 @@ async fn send_core(test: usize, multisig: bool) {
     }
   }
 
-  let addr = Address::standard(
-    Network::Mainnet,
-    PublicKey { point: spend_pub.compress() },
-    PublicKey { point: (&view * &ED25519_BASEPOINT_TABLE).compress() }
-  );
+  let view_pair = ViewPair { view, spend: spend_pub };
+  let addr = view_pair.address(Network::Mainnet, AddressType::Standard, false);
 
-  // TODO
-  let fee_per_byte = 50000000;
-  let fee = fee_per_byte * 2000;
+  let fee = rpc.get_fee().await.unwrap();
 
   let start = rpc.get_height().await.unwrap();
   for _ in 0 .. 7 {
@@ -100,7 +91,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       // Grab the largest output available
       let output = {
-        let mut outputs = tx.as_ref().unwrap().scan(view, spend_pub).0;
+        let mut outputs = tx.as_ref().unwrap().scan(view_pair, false).0;
         outputs.sort_by(|x, y| x.commitment.amount.cmp(&y.commitment.amount).reverse());
         outputs.swap_remove(0)
       };
@@ -125,14 +116,14 @@ async fn send_core(test: usize, multisig: bool) {
 
       for i in (start + 1) .. (start + 9) {
         let tx = rpc.get_block_transactions(i).await.unwrap().swap_remove(0);
-        let output = tx.scan(view, spend_pub).0.swap_remove(0);
+        let output = tx.scan(view_pair, false).0.swap_remove(0);
         amount += output.commitment.amount;
         outputs.push(output);
       }
     }
 
     let mut signable = SignableTransaction::new(
-      outputs, vec![(addr, amount - fee)], addr, fee_per_byte
+      outputs, vec![(addr, amount - 10000000000)], Some(addr), fee
     ).unwrap();
 
     if !multisig {
@@ -145,10 +136,9 @@ async fn send_core(test: usize, multisig: bool) {
           machines.insert(
             i,
             signable.clone().multisig(
-              &mut OsRng,
               &rpc,
               (*keys[&i]).clone(),
-              Transcript::new(b"Monero Serai Test Transaction"),
+              RecommendedTranscript::new(b"Monero Serai Test Transaction"),
               rpc.get_height().await.unwrap() - 10,
               (1 ..= THRESHOLD).collect::<Vec<_>>()
             ).await.unwrap()

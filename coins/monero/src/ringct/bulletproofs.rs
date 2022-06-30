@@ -6,6 +6,8 @@ use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use crate::{Commitment, wallet::TransactionError, serialize::*};
 
+pub(crate) const MAX_OUTPUTS: usize = 16;
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct Bulletproofs {
   pub A: EdwardsPoint,
@@ -22,8 +24,22 @@ pub struct Bulletproofs {
 }
 
 impl Bulletproofs {
+  pub(crate) fn fee_weight(outputs: usize) -> usize {
+    let proofs = 6 + usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
+    let len = (9 + (2 * proofs)) * 32;
+
+    let mut clawback = 0;
+    let padded = 1 << (proofs - 6);
+    if padded > 2 {
+      const BP_BASE: usize = 368;
+      clawback = ((BP_BASE * padded) - len) * 4 / 5;
+    }
+
+    len + clawback
+  }
+
   pub fn new<R: RngCore + CryptoRng>(rng: &mut R, outputs: &[Commitment]) -> Result<Bulletproofs, TransactionError> {
-    if outputs.len() > 16 {
+    if outputs.len() > MAX_OUTPUTS {
       return Err(TransactionError::TooManyOutputs)?;
     }
 
