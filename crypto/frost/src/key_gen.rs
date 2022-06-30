@@ -7,7 +7,7 @@ use group::{ff::{Field, PrimeField}, GroupEncoding};
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
-  curve::{Curve, F_from_slice, G_from_slice},
+  curve::{Curve, F_len, G_len, F_from_slice, G_from_slice},
   FrostError, FrostParams, FrostKeys,
   schnorr::{self, SchnorrSignature},
   validate_map
@@ -35,13 +35,13 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   let t = usize::from(params.t);
   let mut coefficients = Vec::with_capacity(t);
   let mut commitments = Vec::with_capacity(t);
-  let mut serialized = Vec::with_capacity((C::G_len() * t) + C::G_len() + C::F_len());
+  let mut serialized = Vec::with_capacity((G_len::<C>() * t) + G_len::<C>() + F_len::<C>());
 
   for i in 0 .. t {
     // Step 1: Generate t random values to form a polynomial with
     coefficients.push(C::F::random(&mut *rng));
     // Step 3: Generate public commitments
-    commitments.push(C::GENERATOR_TABLE * coefficients[i]);
+    commitments.push(C::GENERATOR * coefficients[i]);
     // Serialize them for publication
     serialized.extend(commitments[i].to_bytes().as_ref());
   }
@@ -59,7 +59,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
       challenge::<C>(
         context,
         params.i(),
-        (C::GENERATOR_TABLE * r).to_bytes().as_ref(),
+        (C::GENERATOR * r).to_bytes().as_ref(),
         &serialized
       )
     ).serialize()
@@ -83,19 +83,19 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
     (params.i(), our_commitments)
   )?;
 
-  let commitments_len = usize::from(params.t()) * C::G_len();
+  let commitments_len = usize::from(params.t()) * G_len::<C>();
 
   let mut commitments = HashMap::new();
 
   #[allow(non_snake_case)]
-  let R_bytes = |l| &serialized[&l][commitments_len .. commitments_len + C::G_len()];
+  let R_bytes = |l| &serialized[&l][commitments_len .. commitments_len + G_len::<C>()];
   #[allow(non_snake_case)]
   let R = |l| G_from_slice::<C::G>(R_bytes(l)).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
   #[allow(non_snake_case)]
   let Am = |l| &serialized[&l][0 .. commitments_len];
 
   let s = |l| F_from_slice::<C::F>(
-    &serialized[&l][commitments_len + C::G_len() ..]
+    &serialized[&l][commitments_len + G_len::<C>() ..]
   ).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
 
   let mut signatures = Vec::with_capacity(usize::from(params.n() - 1));
@@ -104,7 +104,7 @@ fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
     for c in 0 .. usize::from(params.t()) {
       these_commitments.push(
         G_from_slice::<C::G>(
-          &serialized[&l][(c * C::G_len()) .. ((c + 1) * C::G_len())]
+          &serialized[&l][(c * G_len::<C>()) .. ((c + 1) * G_len::<C>())]
         ).map_err(|_| FrostError::InvalidCommitment(l.try_into().unwrap()))?
       );
     }
@@ -257,7 +257,7 @@ fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
     verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes)));
   }
   // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
-  debug_assert_eq!(C::GENERATOR_TABLE * secret_share, verification_shares[&params.i()]);
+  debug_assert_eq!(C::GENERATOR * secret_share, verification_shares[&params.i()]);
 
   // TODO: Clear serialized and shares
 

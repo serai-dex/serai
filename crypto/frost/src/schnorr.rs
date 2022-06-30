@@ -4,7 +4,7 @@ use group::{ff::{Field, PrimeField}, GroupEncoding};
 
 use multiexp::BatchVerifier;
 
-use crate::Curve;
+use crate::{Curve, F_len, G_len};
 
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -15,7 +15,7 @@ pub struct SchnorrSignature<C: Curve> {
 
 impl<C: Curve> SchnorrSignature<C> {
   pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(C::G_len() + C::F_len());
+    let mut res = Vec::with_capacity(G_len::<C>() + F_len::<C>());
     res.extend(self.R.to_bytes().as_ref());
     res.extend(self.s.to_repr().as_ref());
     res
@@ -28,7 +28,7 @@ pub(crate) fn sign<C: Curve>(
   challenge: C::F
 ) -> SchnorrSignature<C> {
   SchnorrSignature {
-    R: C::GENERATOR_TABLE * nonce,
+    R: C::GENERATOR * nonce,
     s: nonce + (private_key * challenge)
   }
 }
@@ -38,7 +38,7 @@ pub(crate) fn verify<C: Curve>(
   challenge: C::F,
   signature: &SchnorrSignature<C>
 ) -> bool {
-  (C::GENERATOR_TABLE * signature.s) == (signature.R + (public_key * challenge))
+  (C::GENERATOR * signature.s) == (signature.R + (public_key * challenge))
 }
 
 pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(

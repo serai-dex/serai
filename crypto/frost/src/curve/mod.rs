@@ -1,11 +1,11 @@
-use core::{ops::Mul, fmt::Debug};
+use core::fmt::Debug;
 
 use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
 use ff::{PrimeField, PrimeFieldBits};
-use group::{Group, GroupOps, prime::PrimeGroup};
+use group::{Group, GroupOps, GroupEncoding, prime::PrimeGroup};
 
 #[cfg(any(test, feature = "dalek"))]
 mod dalek;
@@ -44,19 +44,13 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   type F: PrimeField + PrimeFieldBits;
   /// Group element type
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup;
-  /// Precomputed table type
-  type T: Mul<Self::F, Output = Self::G>;
 
   /// ID for this curve
   const ID: &'static [u8];
 
   /// Generator for the group
-  // While group does provide this in its API, privacy coins will want to use a custom basepoint
+  // While group does provide this in its API, privacy coins may want to use a custom basepoint
   const GENERATOR: Self::G;
-
-  /// Table for the generator for the group
-  /// If there isn't a precomputed table available, the generator itself should be used
-  const GENERATOR_TABLE: Self::T;
 
   /// Securely generate a random nonce. H4 from the IETF draft
   fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F;
@@ -83,20 +77,16 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // hash_msg and hash_binding_factor
   #[allow(non_snake_case)]
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
+}
 
-  /// Constant size of a serialized scalar field element
-  // The alternative way to grab this would be either serializing a junk element and getting its
-  // length or doing a naive division of its BITS property by 8 and assuming a lack of padding
-  #[allow(non_snake_case)]
-  fn F_len() -> usize;
+#[allow(non_snake_case)]
+pub(crate) fn F_len<C: Curve>() -> usize {
+  <C::F as PrimeField>::Repr::default().as_ref().len()
+}
 
-  /// Constant size of a serialized group element
-  // We could grab the serialization as described above yet a naive developer may use a
-  // non-constant size encoding, proving yet another reason to force this to be a provided constant
-  // A naive developer could still provide a constant for a variable length encoding, yet at least
-  // that is on them
-  #[allow(non_snake_case)]
-  fn G_len() -> usize;
+#[allow(non_snake_case)]
+pub(crate) fn G_len<C: Curve>() -> usize {
+  <C::G as GroupEncoding>::Repr::default().as_ref().len()
 }
 
 /// Field element from slice
