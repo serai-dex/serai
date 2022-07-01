@@ -10,6 +10,8 @@ edition = "2021"
 thiserror = "1"
 rand_core = "0.6"
 
+subtle = "2.4"
+
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
 
 ff = "0.12"

@@ -1,6 +1,8 @@
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
+use subtle::{Choice, ConditionallySelectable};
+
 use transcript::Transcript;
 
 use group::{ff::{Field, PrimeField, PrimeFieldBits}, prime::PrimeGroup};
@@ -197,6 +199,9 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
     let mut bits = Vec::with_capacity(capacity);
     for (i, bit) in raw_bits.iter().enumerate() {
+      let bit = *bit as u8;
+      debug_assert_eq!(bit | 1, 1);
+
       let last = i == (capacity - 1);
       let blinding_key = (
         Self::blinding_key(&mut *rng, &mut blinding_key_total.0, &mut pow_2.0, last),
@@ -211,11 +216,8 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
         (generators.0.alt * blinding_key.0),
         (generators.1.alt * blinding_key.1)
       );
-      // TODO: Not constant time
-      if *bit {
-        commitments.0 += generators.0.primary;
-        commitments.1 += generators.1.primary;
-      }
+      commitments.0 += generators.0.primary * G0::Scalar::from(bit.into());
+      commitments.1 += generators.1.primary * G1::Scalar::from(bit.into());
       Self::transcript_bit(transcript, i, commitments);
 
       let nonces = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
@@ -223,29 +225,22 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
         transcript.clone(),
         ((generators.0.alt * nonces.0), (generators.1.alt * nonces.1))
       );
-      let s_0 = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
+      let mut s_0 = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
 
-      let e_1 = Self::R_nonces(
-        transcript.clone(),
-        generators,
-        (s_0.0, s_0.1),
-        if *bit {
-          commitments
-        } else {
-          ((commitments.0 - generators.0.primary), (commitments.1 - generators.1.primary))
-        },
-        e_0
-      );
-      let s_1 = (nonces.0 + (e_1.0 * blinding_key.0), nonces.1 + (e_1.1 * blinding_key.1));
+      let mut to_sign = commitments;
+      let bit = Choice::from(bit);
+      let inv_bit = (!bit).unwrap_u8();
+      to_sign.0 -= generators.0.primary * G0::Scalar::from(inv_bit.into());
+      to_sign.1 -= generators.1.primary * G1::Scalar::from(inv_bit.into());
+      let e_1 = Self::R_nonces(transcript.clone(), generators, (s_0.0, s_0.1), to_sign, e_0);
+      let mut s_1 = (nonces.0 + (e_1.0 * blinding_key.0), nonces.1 + (e_1.1 * blinding_key.1));
 
-      bits.push(
-        if *bit {
-          Bit { commitments, e: e_0.0, s: [s_1, s_0] }
-        } else {
-          Bit { commitments, e: e_1.0, s: [s_0, s_1] }
-        }
-      );
+      let e = G0::Scalar::conditional_select(&e_1.0, &e_0.0, bit);
+      G0::Scalar::conditional_swap(&mut s_1.0, &mut s_0.0, bit);
+      G1::Scalar::conditional_swap(&mut s_1.1, &mut s_0.1, bit);
+      bits.push(Bit { commitments, e, s: [s_0, s_1] });
 
+      // Break in order to not generate commitments for unused bits
       if last {
         break;
       }
