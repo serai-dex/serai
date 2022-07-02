@@ -22,11 +22,12 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> where <G as Group>::Scalar: PrimeF
     let u = if self.0.len() == 0 {
       G::Scalar::one()
     } else {
-      let mut weight = G::Scalar::random(&mut *rng);
+      let mut weight;
       // Ensure it's non-zero, as a zero scalar would cause this item to pass no matter what
-      while weight.is_zero().into() {
+      while {
         weight = G::Scalar::random(&mut *rng);
-      }
+        weight.is_zero().into()
+      } {}
       weight
     };
     self.0.push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
