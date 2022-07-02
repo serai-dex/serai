@@ -1,6 +1,8 @@
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
+use digest::Digest;
+
 use subtle::{Choice, ConditionallySelectable};
 
 use transcript::Transcript;
@@ -182,21 +184,12 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     transcript.append_message(b"commitment_1", commitments.1.to_bytes().as_ref());
   }
 
-  /// Prove the cross-Group Discrete Log Equality for the points derived from the provided Scalar.
-  /// Since DLEq is proven for the same Scalar in both fields, and the provided Scalar may not be
-  /// valid in the other Scalar field, the Scalar is normalized as needed and the normalized forms
-  /// are returned. These are the actually equal discrete logarithms. The passed in Scalar is
-  /// solely to enable various forms of Scalar generation, such as deterministic schemes
-  pub fn prove<R: RngCore + CryptoRng, T: Clone + Transcript>(
+  fn prove_internal<R: RngCore + CryptoRng, T: Clone + Transcript>(
     rng: &mut R,
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
-    f: G0::Scalar
+    f: (G0::Scalar, G1::Scalar)
   ) -> (Self, (G0::Scalar, G1::Scalar)) {
-    // At least one bit will be dropped from either field element, making it irrelevant which one
-    // we get a random element in
-    let f = scalar_normalize::<_, G1::Scalar>(f);
-
     Self::initialize_transcript(
       transcript,
       generators,
@@ -268,6 +261,39 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
       (generators.0.primary * f.0, generators.1.primary * f.1)
     );
     (proof, f)
+  }
+
+  /// Prove the cross-Group Discrete Log Equality for the points derived from the scalar created as
+  /// the output of the passed in Digest. Given the non-standard requirements to achieve
+  /// uniformity, needing to be < 2^x instead of less than a prime moduli, this is the simplest way
+  /// to safely and securely generate a Scalar, without risk of failure, nor bias
+  /// It also ensures a lack of determinable relation between keys, guaranteeing security in the
+  /// currently expected use case for this, atomic swaps, where each swap leaks the key. Knowing
+  /// the relationship between keys would allow breaking all swaps after just one
+  pub fn prove<R: RngCore + CryptoRng, T: Clone + Transcript, D: Digest>(
+    rng: &mut R,
+    transcript: &mut T,
+    generators: (Generators<G0>, Generators<G1>),
+    digest: D
+  ) -> (Self, (G0::Scalar, G1::Scalar)) {
+    Self::prove_internal(
+      rng,
+      transcript,
+      generators,
+      Self::mutual_scalar_from_bytes(digest.finalize().as_ref())
+    )
+  }
+
+  /// Prove the cross-Group Discrete Log Equality for the points derived from the scalar passed in,
+  /// failing if it's not mutually valid. This allows for rejection sampling externally derived
+  /// scalars until they're safely usable, as needed
+  pub fn prove_without_bias<R: RngCore + CryptoRng, T: Clone + Transcript>(
+    rng: &mut R,
+    transcript: &mut T,
+    generators: (Generators<G0>, Generators<G1>),
+    f0: G0::Scalar
+  ) -> Option<(Self, (G0::Scalar, G1::Scalar))> {
+    scalar_convert(f0).map(|f1| Self::prove_internal(rng, transcript, generators, (f0, f1)))
   }
 
   /// Verify a cross-Group Discrete Log Equality statement, returning the points proven for

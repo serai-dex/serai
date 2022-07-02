@@ -10,6 +10,8 @@ edition = "2021"
 thiserror = "1"
 rand_core = "0.6"
 
+digest = "0.10"
+
 subtle = "2.4"
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
@@ -21,6 +23,9 @@ multiexp = { path = "../multiexp" }
 
 [dev-dependencies]
 hex-literal = "0.3"
+
+blake2 = "0.10"
+
 k256 = { version = "0.11", features = ["arithmetic", "bits"] }
 dalek-ff-group = { path = "../dalek-ff-group" }
 
