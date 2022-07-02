@@ -56,7 +56,7 @@ fn test_rejection_sampling() {
 }
 
 #[test]
-fn test_dleq() {
+fn test_cross_group_dleq() {
   let generators = generators();
 
   for i in 0 .. 2 {

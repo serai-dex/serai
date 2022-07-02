@@ -187,9 +187,6 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   Ok((Package { B, binding, R, share: share.clone() }, share))
 }
 
-// This doesn't check the signing set is as expected and unexpected changes can cause false blames
-// if legitimate participants are still using the original, expected, signing set. This library
-// could be made more robust in that regard
 fn complete<C: Curve, A: Algorithm<C>>(
   sign_params: &Params<C, A>,
   sign: Package<C>,
