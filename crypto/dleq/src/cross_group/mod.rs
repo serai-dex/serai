@@ -7,7 +7,7 @@ use transcript::Transcript;
 
 use group::{ff::{Field, PrimeField, PrimeFieldBits}, prime::PrimeGroup};
 
-use crate::{Generators, challenge};
+use crate::Generators;
 
 pub mod scalar;
 use scalar::{scalar_normalize, scalar_convert};
@@ -34,6 +34,11 @@ pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Bit<G0: PrimeGroup, G1: PrimeGroup> {
   commitments: (G0, G1),
+  // Merged challenges have a slight security reduction, yet one already applied to the scalar
+  // being proven for, and this saves ~8kb. Alternatively, challenges could be redefined as a seed,
+  // present here, which is then hashed for each of the two challenges, remaining unbiased/unique
+  // while maintaining the bandwidth savings, yet also while adding 252 hashes for
+  // Secp256k1/Ed25519
   e: G0::Scalar,
   s: [(G0::Scalar, G1::Scalar); 2]
 }
@@ -116,11 +121,22 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     blinding_key
   }
 
+  fn mutual_scalar_from_bytes(bytes: &[u8]) -> (G0::Scalar, G1::Scalar) {
+    let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
+    debug_assert!((bytes.len() * 8) >= capacity);
+
+    let mut accum = G0::Scalar::zero();
+    for b in 0 .. capacity {
+      accum += G0::Scalar::from((bytes[b / 8] & (1 << (b % 8))).into());
+    }
+    (accum, scalar_convert(accum).unwrap())
+  }
+
   #[allow(non_snake_case)]
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
     transcript.append_message(b"nonce_0", nonces.0.to_bytes().as_ref());
     transcript.append_message(b"nonce_1", nonces.1.to_bytes().as_ref());
-    scalar_normalize(challenge(&mut transcript))
+    Self::mutual_scalar_from_bytes(transcript.challenge(b"challenge").as_ref())
   }
 
   #[allow(non_snake_case)]
