@@ -19,7 +19,7 @@ transcript = { package = "flexible-transcript", path = "../transcript", version 
 ff = "0.12"
 group = "0.12"
 
-multiexp = { path = "../multiexp" }
+multiexp = { path = "../multiexp", optional = true }
 
 [dev-dependencies]
 hex-literal = "0.3"
@@ -35,4 +35,6 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 serialize = []
 cross_group = []
 secure_capacity_difference = []
-default = ["secure_capacity_difference"]
+
+# These only apply to cross_group, yet are default to ensure its integrity and performance
+default = ["secure_capacity_difference", "multiexp"]

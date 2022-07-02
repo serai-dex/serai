@@ -12,7 +12,7 @@ use group::{ff::{Field, PrimeField, PrimeFieldBits}, prime::PrimeGroup};
 use crate::Generators;
 
 pub mod scalar;
-use scalar::{scalar_normalize, scalar_convert};
+use scalar::scalar_convert;
 
 pub(crate) mod schnorr;
 use schnorr::SchnorrPoK;
@@ -159,13 +159,23 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     commitments: impl Iterator<Item = G>
   ) -> G where G::Scalar: PrimeFieldBits {
     let mut pow_2 = G::Scalar::one();
-    multiexp::multiexp_vartime(
+    #[cfg(feature = "multiexp")]
+    let res = multiexp::multiexp_vartime(
       &commitments.map(|commitment| {
         let res = (pow_2, commitment);
         pow_2 = pow_2.double();
         res
       }).collect::<Vec<_>>()
-    )
+    );
+
+    #[cfg(not(feature = "multiexp"))]
+    let res = commitments.fold(G::identity(), |key, commitment| {
+      let res = key + (commitment * pow_2);
+      pow_2 = pow_2.double();
+      res
+    });
+
+    res
   }
 
   fn reconstruct_keys(&self) -> (G0, G1) {
