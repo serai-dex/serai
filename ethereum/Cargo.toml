@@ -1,0 +1,17 @@
+[package]
+name = "ethereum"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+
+rand_core = "0.6"
+hex = "0.4"
+
+ff = "0.11"
+group = "0.11"
+k256 = { version = "0.11", features = ["arithmetic", "hash2curve"], optional = true }
+
+sha3 = "0.10"
+modular-frost = { path = "../crypto/frost" }
