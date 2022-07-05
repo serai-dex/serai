@@ -19,7 +19,7 @@ use dalek_ff_group as dfg;
 
 use crate::{
   hash_to_point,
-  frost::{MultisigError, DLEqProof, read_dleq},
+  frost::{MultisigError, write_dleq, read_dleq},
   ringct::clsag::{ClsagInput, Clsag}
 };
 
@@ -133,12 +133,12 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
     let mut serialized = Vec::with_capacity(ClsagMultisig::serialized_len());
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
-    serialized.extend(DLEqProof::prove(rng, &self.H, &view.secret_share().0).serialize());
+    serialized.extend(write_dleq(rng, self.H, view.secret_share().0));
 
     serialized.extend((nonces[0].0 * self.H).compress().to_bytes());
-    serialized.extend(&DLEqProof::prove(rng, &self.H, &nonces[0].0).serialize());
+    serialized.extend(write_dleq(rng, self.H, nonces[0].0));
     serialized.extend((nonces[1].0 * self.H).compress().to_bytes());
-    serialized.extend(&DLEqProof::prove(rng, &self.H, &nonces[1].0).serialize());
+    serialized.extend(write_dleq(rng, self.H, nonces[1].0));
     serialized
   }
 
@@ -170,18 +170,18 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     self.image += read_dleq(
       serialized,
       cursor,
-      &self.H,
+      self.H,
       l,
-      &view.verification_share(l).0
+      view.verification_share(l)
     ).map_err(|_| FrostError::InvalidCommitment(l))?.0;
     cursor += 96;
 
     self.transcript.append_message(b"commitment_D_H", &serialized[cursor .. (cursor + 32)]);
-    self.AH.0 += read_dleq(serialized, cursor, &self.H, l, &commitments[0]).map_err(|_| FrostError::InvalidCommitment(l))?;
+    self.AH.0 += read_dleq(serialized, cursor, self.H, l, commitments[0]).map_err(|_| FrostError::InvalidCommitment(l))?;
     cursor += 96;
 
     self.transcript.append_message(b"commitment_E_H", &serialized[cursor .. (cursor + 32)]);
-    self.AH.1 += read_dleq(serialized, cursor, &self.H, l, &commitments[1]).map_err(|_| FrostError::InvalidCommitment(l))?;
+    self.AH.1 += read_dleq(serialized, cursor, self.H, l, commitments[1]).map_err(|_| FrostError::InvalidCommitment(l))?;
 
     Ok(())
   }

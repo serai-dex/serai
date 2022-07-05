@@ -22,14 +22,9 @@ macro_rules! kp_curve {
     impl Curve for $Curve {
       type F = $lib::Scalar;
       type G = $lib::ProjectivePoint;
-      type T = $lib::ProjectivePoint;
 
       const ID: &'static [u8] = $ID;
-
       const GENERATOR: Self::G = $lib::ProjectivePoint::GENERATOR;
-      const GENERATOR_TABLE: Self::G = $lib::ProjectivePoint::GENERATOR;
-
-      const LITTLE_ENDIAN: bool = false;
 
       fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
         let mut seed = vec![0; 32];
@@ -74,14 +69,6 @@ macro_rules! kp_curve {
             bytes
           }).reduce(&modulus).unwrap().to_be_bytes()[16 ..]
         ).unwrap()
-      }
-
-      fn F_len() -> usize {
-        32
-      }
-
-      fn G_len() -> usize {
-        33
       }
     }
 

@@ -8,7 +8,7 @@ use group::{ff::{Field, PrimeField}, GroupEncoding};
 mod schnorr;
 
 pub mod curve;
-use curve::{Curve, F_from_slice, G_from_slice};
+use curve::{Curve, F_len, G_len, F_from_slice, G_from_slice};
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
@@ -160,7 +160,7 @@ impl<C: Curve> FrostKeys<C> {
     // Enables schemes like Monero's subaddresses which have a per-subaddress offset and then a
     // one-time-key offset
     res.offset = Some(offset + res.offset.unwrap_or(C::F::zero()));
-    res.group_key += C::GENERATOR_TABLE * offset;
+    res.group_key += C::GENERATOR * offset;
     res
   }
 
@@ -195,7 +195,7 @@ impl<C: Curve> FrostKeys<C> {
       verification_shares: self.verification_shares.iter().map(
         |(l, share)| (
           *l,
-          (*share * lagrange::<C::F>(*l, &included)) + (C::GENERATOR_TABLE * offset_share)
+          (*share * lagrange::<C::F>(*l, &included)) + (C::GENERATOR * offset_share)
         )
       ).collect(),
       included: included.to_vec(),
@@ -203,7 +203,7 @@ impl<C: Curve> FrostKeys<C> {
   }
 
   pub fn serialized_len(n: u16) -> usize {
-    8 + C::ID.len() + (3 * 2) + C::F_len() + C::G_len() + (usize::from(n) * C::G_len())
+    8 + C::ID.len() + (3 * 2) + F_len::<C>() + G_len::<C>() + (usize::from(n) * G_len::<C>())
   }
 
   pub fn serialize(&self) -> Vec<u8> {
@@ -253,21 +253,21 @@ impl<C: Curve> FrostKeys<C> {
     let i = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
     cursor += 2;
 
-    let secret_share = F_from_slice::<C::F>(&serialized[cursor .. (cursor + C::F_len())])
+    let secret_share = F_from_slice::<C::F>(&serialized[cursor .. (cursor + F_len::<C>())])
       .map_err(|_| FrostError::InternalError("invalid secret share".to_string()))?;
-    cursor += C::F_len();
-    let group_key = G_from_slice::<C::G>(&serialized[cursor .. (cursor + C::G_len())])
+    cursor += F_len::<C>();
+    let group_key = G_from_slice::<C::G>(&serialized[cursor .. (cursor + G_len::<C>())])
       .map_err(|_| FrostError::InternalError("invalid group key".to_string()))?;
-    cursor += C::G_len();
+    cursor += G_len::<C>();
 
     let mut verification_shares = HashMap::new();
     for l in 1 ..= n {
       verification_shares.insert(
         l,
-        G_from_slice::<C::G>(&serialized[cursor .. (cursor + C::G_len())])
+        G_from_slice::<C::G>(&serialized[cursor .. (cursor + G_len::<C>())])
           .map_err(|_| FrostError::InternalError("invalid verification share".to_string()))?
       );
-      cursor += C::G_len();
+      cursor += G_len::<C>();
     }
 
     Ok(

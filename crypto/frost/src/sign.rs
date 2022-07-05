@@ -8,7 +8,7 @@ use group::{ff::{Field, PrimeField}, GroupEncoding};
 use transcript::Transcript;
 
 use crate::{
-  curve::{Curve, F_from_slice, G_from_slice},
+  curve::{Curve, G_len, F_from_slice, G_from_slice},
   FrostError,
   FrostParams, FrostKeys, FrostView,
   algorithm::Algorithm,
@@ -84,7 +84,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
     C::random_nonce(params.view().secret_share(), &mut *rng),
     C::random_nonce(params.view().secret_share(), &mut *rng)
   ];
-  let commitments = [C::GENERATOR_TABLE * nonces[0], C::GENERATOR_TABLE * nonces[1]];
+  let commitments = [C::GENERATOR * nonces[0], C::GENERATOR * nonces[1]];
   let mut serialized = commitments[0].to_bytes().as_ref().to_vec();
   serialized.extend(commitments[1].to_bytes().as_ref());
 
@@ -146,18 +146,18 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
 
       let commitments = commitments.remove(l).unwrap();
       let mut read_commitment = |c, label| {
-        let commitment = &commitments[c .. (c + C::G_len())];
+        let commitment = &commitments[c .. (c + G_len::<C>())];
         transcript.append_message(label, commitment);
         G_from_slice::<C::G>(commitment).map_err(|_| FrostError::InvalidCommitment(*l))
       };
 
       #[allow(non_snake_case)]
       let mut read_D_E = || Ok(
-        [read_commitment(0, b"commitment_D")?, read_commitment(C::G_len(), b"commitment_E")?]
+        [read_commitment(0, b"commitment_D")?, read_commitment(G_len::<C>(), b"commitment_E")?]
       );
 
       B.insert(*l, read_D_E()?);
-      addendums.insert(*l, commitments[(C::G_len() * 2) ..].to_vec());
+      addendums.insert(*l, commitments[(G_len::<C>() * 2) ..].to_vec());
     }
 
     // Append the message to the transcript
@@ -187,9 +187,6 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   Ok((Package { B, binding, R, share: share.clone() }, share))
 }
 
-// This doesn't check the signing set is as expected and unexpected changes can cause false blames
-// if legitimate participants are still using the original, expected, signing set. This library
-// could be made more robust in that regard
 fn complete<C: Curve, A: Algorithm<C>>(
   sign_params: &Params<C, A>,
   sign: Package<C>,

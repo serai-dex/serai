@@ -23,7 +23,7 @@ fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> std::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
 }
 
-// https://github.com/monero-project/research-lab/issues/103
+// https://gist.github.com/kayabaNerve/8066c13f1fe1573286ba7a2fd79f6100
 pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
   let mut u = b"uniqueness".to_vec();
   for input in inputs {

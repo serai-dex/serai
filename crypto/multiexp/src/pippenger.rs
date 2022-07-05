@@ -1,42 +1,23 @@
-use group::{ff::PrimeField, Group};
+use ff::PrimeFieldBits;
+use group::Group;
 
-fn prep<G: Group>(pairs: &[(G::Scalar, G)], little: bool) -> (Vec<Vec<u8>>, Vec<G>) {
-  let mut res = vec![];
-  let mut points = vec![];
-  for pair in pairs {
-    let p = res.len();
-    res.push(vec![]);
-    {
-      let mut repr = pair.0.to_repr();
-      let bytes = repr.as_mut();
-      if !little {
-        bytes.reverse();
-      }
+use crate::prep_bits;
 
-      res[p].resize(bytes.len(), 0);
-      for i in 0 .. bytes.len() {
-        res[p][i] = bytes[i];
-      }
-    }
-
-    points.push(pair.1);
-  }
-
-  (res, points)
-}
-
-pub(crate) fn pippenger<G: Group>(pairs: &[(G::Scalar, G)], little: bool) -> G {
-  let (bytes, points) = prep(pairs, little);
+pub(crate) fn pippenger<G: Group>(
+  pairs: &[(G::Scalar, G)],
+  window: u8
+) -> G where G::Scalar: PrimeFieldBits {
+  let bits = prep_bits(pairs, window);
 
   let mut res = G::identity();
-  for n in (0 .. bytes[0].len()).rev() {
-    for _ in 0 .. 8 {
+  for n in (0 .. bits[0].len()).rev() {
+    for _ in 0 .. window {
       res = res.double();
     }
 
-    let mut buckets = [G::identity(); 256];
-    for p in 0 .. bytes.len() {
-      buckets[usize::from(bytes[p][n])] += points[p];
+    let mut buckets = vec![G::identity(); 2_usize.pow(window.into())];
+    for p in 0 .. bits.len() {
+      buckets[usize::from(bits[p][n])] += pairs[p].1;
     }
 
     let mut intermediate_sum = G::identity();
@@ -49,22 +30,25 @@ pub(crate) fn pippenger<G: Group>(pairs: &[(G::Scalar, G)], little: bool) -> G {
   res
 }
 
-pub(crate) fn pippenger_vartime<G: Group>(pairs: &[(G::Scalar, G)], little: bool) -> G {
-  let (bytes, points) = prep(pairs, little);
+pub(crate) fn pippenger_vartime<G: Group>(
+  pairs: &[(G::Scalar, G)],
+  window: u8
+) -> G where G::Scalar: PrimeFieldBits {
+  let bits = prep_bits(pairs, window);
 
   let mut res = G::identity();
-  for n in (0 .. bytes[0].len()).rev() {
-    if n != (bytes[0].len() - 1) {
-      for _ in 0 .. 8 {
+  for n in (0 .. bits[0].len()).rev() {
+    if n != (bits[0].len() - 1) {
+      for _ in 0 .. window {
         res = res.double();
       }
     }
 
-    let mut buckets = [G::identity(); 256];
-    for p in 0 .. bytes.len() {
-      let nibble = usize::from(bytes[p][n]);
+    let mut buckets = vec![G::identity(); 2_usize.pow(window.into())];
+    for p in 0 .. bits.len() {
+      let nibble = usize::from(bits[p][n]);
       if nibble != 0 {
-        buckets[nibble] += points[p];
+        buckets[nibble] += pairs[p].1;
       }
     }
 

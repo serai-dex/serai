@@ -5,6 +5,7 @@ description = "Multichain processor premised on canonicity to reach distributed 
 license = "AGPL-3.0-only"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
+publish = false
 
 [dependencies]
 async-trait = "0.1"
