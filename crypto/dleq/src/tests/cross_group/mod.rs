@@ -14,7 +14,7 @@ use blake2::{Digest, Blake2b512};
 
 use transcript::RecommendedTranscript;
 
-use crate::{Generators, cross_group::DLEqProof};
+use crate::{Generators, cross_group::{DLEqProof, scalar::mutual_scalar_from_bytes}};
 
 fn transcript() -> RecommendedTranscript {
   RecommendedTranscript::new(b"Cross-Group DLEq Proof Test")
@@ -102,5 +102,37 @@ fn test_cross_group_dleq() {
       assert_eq!(proof, deserialized);
       deserialized.verify(&mut transcript(), generators).unwrap();
     }
+  }
+}
+
+#[test]
+fn test_remainder() {
+  // Uses Secp256k1 for both to achieve an odd capacity of 255
+  assert_eq!(Scalar::CAPACITY, 255);
+  let generators = (generators().0, generators().0);
+  let keys = mutual_scalar_from_bytes(&[0xFF; 32]);
+  assert_eq!(keys.0, keys.1);
+
+  let (proof, res) = DLEqProof::prove_without_bias(
+    &mut OsRng,
+    &mut transcript(),
+    generators,
+    keys.0
+  ).unwrap();
+  assert_eq!(keys, res);
+
+  let public_keys = proof.verify(&mut transcript(), generators).unwrap();
+  assert_eq!(generators.0.primary * keys.0, public_keys.0);
+  assert_eq!(generators.1.primary * keys.1, public_keys.1);
+
+  #[cfg(feature = "serialize")]
+  {
+    let mut buf = vec![];
+    proof.serialize(&mut buf).unwrap();
+    let deserialized = DLEqProof::<ProjectivePoint, ProjectivePoint>::deserialize(
+      &mut std::io::Cursor::new(&buf)
+    ).unwrap();
+    assert_eq!(proof, deserialized);
+    deserialized.verify(&mut transcript(), generators).unwrap();
   }
 }
