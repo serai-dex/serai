@@ -12,7 +12,7 @@ use group::{ff::{Field, PrimeField, PrimeFieldBits}, prime::PrimeGroup};
 use crate::Generators;
 
 pub mod scalar;
-use scalar::scalar_convert;
+use scalar::{scalar_convert, mutual_scalar_from_bytes};
 
 pub(crate) mod schnorr;
 use schnorr::SchnorrPoK;
@@ -121,22 +121,11 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     blinding_key
   }
 
-  fn mutual_scalar_from_bytes(bytes: &[u8]) -> (G0::Scalar, G1::Scalar) {
-    let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
-    debug_assert!((bytes.len() * 8) >= capacity);
-
-    let mut accum = G0::Scalar::zero();
-    for b in 0 .. capacity {
-      accum += G0::Scalar::from((bytes[b / 8] & (1 << (b % 8))).into());
-    }
-    (accum, scalar_convert(accum).unwrap())
-  }
-
   #[allow(non_snake_case)]
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
     transcript.append_message(b"nonce_0", nonces.0.to_bytes().as_ref());
     transcript.append_message(b"nonce_1", nonces.1.to_bytes().as_ref());
-    Self::mutual_scalar_from_bytes(transcript.challenge(b"challenge").as_ref())
+    mutual_scalar_from_bytes(transcript.challenge(b"challenge").as_ref())
   }
 
   #[allow(non_snake_case)]
@@ -268,7 +257,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
       rng,
       transcript,
       generators,
-      Self::mutual_scalar_from_bytes(digest.finalize().as_ref())
+      mutual_scalar_from_bytes(digest.finalize().as_ref())
     )
   }
 

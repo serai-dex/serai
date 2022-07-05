@@ -18,10 +18,12 @@ pub fn scalar_normalize<F0: PrimeFieldBits, F1: PrimeFieldBits>(scalar: F0) -> (
   for bit in bits.iter().skip(bits.len() - usize::try_from(mutual_capacity).unwrap()) {
     res1 = res1.double();
     res2 = res2.double();
-    if *bit {
-      res1 += F0::one();
-      res2 += F1::one();
-    }
+
+    let bit = *bit as u8;
+    debug_assert_eq!(bit | 1, 1);
+
+    res1 += F0::from(bit.into());
+    res2 += F1::from(bit.into());
   }
 
   (res1, res2)
@@ -31,4 +33,17 @@ pub fn scalar_normalize<F0: PrimeFieldBits, F1: PrimeFieldBits>(scalar: F0) -> (
 pub fn scalar_convert<F0: PrimeFieldBits, F1: PrimeFieldBits>(scalar: F0) -> Option<F1> {
   let (valid, converted) = scalar_normalize(scalar);
   Some(converted).filter(|_| scalar == valid)
+}
+
+/// Create a mutually valid scalar from bytes via bit truncation to not introduce bias
+pub fn mutual_scalar_from_bytes<F0: PrimeFieldBits, F1: PrimeFieldBits>(bytes: &[u8]) -> (F0, F1) {
+  let capacity = usize::try_from(F0::CAPACITY.min(F1::CAPACITY)).unwrap();
+  debug_assert!((bytes.len() * 8) >= capacity);
+
+  let mut accum = F0::zero();
+  for b in 0 .. capacity {
+    accum = accum.double();
+    accum += F0::from(((bytes[b / 8] >> (b % 8)) & 1).into());
+  }
+  (accum, scalar_convert(accum).unwrap())
 }
