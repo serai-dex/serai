@@ -110,16 +110,14 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
   fn blinding_key<R: RngCore + CryptoRng, F: PrimeField>(
     rng: &mut R,
     total: &mut F,
-    pow_2: &mut F,
     last: bool
   ) -> F {
     let blinding_key = if last {
-      -*total * pow_2.invert().unwrap()
+      -*total
     } else {
       F::random(&mut *rng)
     };
-    *total += blinding_key * *pow_2;
-    *pow_2 = pow_2.double();
+    *total += blinding_key;
     blinding_key
   }
 
@@ -155,33 +153,10 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     )
   }
 
-  fn reconstruct_key<G: PrimeGroup>(
-    commitments: impl Iterator<Item = G>
-  ) -> G where G::Scalar: PrimeFieldBits {
-    let mut pow_2 = G::Scalar::one();
-    #[cfg(feature = "multiexp")]
-    let res = multiexp::multiexp_vartime(
-      &commitments.map(|commitment| {
-        let res = (pow_2, commitment);
-        pow_2 = pow_2.double();
-        res
-      }).collect::<Vec<_>>()
-    );
-
-    #[cfg(not(feature = "multiexp"))]
-    let res = commitments.fold(G::identity(), |key, commitment| {
-      let res = key + (commitment * pow_2);
-      pow_2 = pow_2.double();
-      res
-    });
-
-    res
-  }
-
   fn reconstruct_keys(&self) -> (G0, G1) {
     (
-      Self::reconstruct_key(self.bits.iter().map(|bit| bit.commitments.0)),
-      Self::reconstruct_key(self.bits.iter().map(|bit| bit.commitments.1))
+      self.bits.iter().map(|bit| bit.commitments.0).sum(),
+      self.bits.iter().map(|bit| bit.commitments.1).sum()
     )
   }
 
@@ -212,7 +187,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
     );
 
     let mut blinding_key_total = (G0::Scalar::zero(), G1::Scalar::zero());
-    let mut pow_2 = (G0::Scalar::one(), G1::Scalar::one());
+    let mut pow_2 = (generators.0.primary, generators.1.primary);
 
     let raw_bits = f.0.to_le_bits();
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
@@ -223,8 +198,8 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
 
       let last = i == (capacity - 1);
       let blinding_key = (
-        Self::blinding_key(&mut *rng, &mut blinding_key_total.0, &mut pow_2.0, last),
-        Self::blinding_key(&mut *rng, &mut blinding_key_total.1, &mut pow_2.1, last)
+        Self::blinding_key(&mut *rng, &mut blinding_key_total.0, last),
+        Self::blinding_key(&mut *rng, &mut blinding_key_total.1, last)
       );
       if last {
         debug_assert_eq!(blinding_key_total.0, G0::Scalar::zero());
@@ -235,8 +210,8 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
         (generators.0.alt * blinding_key.0),
         (generators.1.alt * blinding_key.1)
       );
-      commitments.0 += generators.0.primary * G0::Scalar::from(bit.into());
-      commitments.1 += generators.1.primary * G1::Scalar::from(bit.into());
+      commitments.0 += pow_2.0 * G0::Scalar::from(bit.into());
+      commitments.1 += pow_2.1 * G1::Scalar::from(bit.into());
       Self::transcript_bit(transcript, i, commitments);
 
       let nonces = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
@@ -249,8 +224,8 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
       let mut to_sign = commitments;
       let bit = Choice::from(bit);
       let inv_bit = (!bit).unwrap_u8();
-      to_sign.0 -= generators.0.primary * G0::Scalar::from(inv_bit.into());
-      to_sign.1 -= generators.1.primary * G1::Scalar::from(inv_bit.into());
+      to_sign.0 -= pow_2.0 * G0::Scalar::from(inv_bit.into());
+      to_sign.1 -= pow_2.1 * G1::Scalar::from(inv_bit.into());
       let e_1 = Self::R_nonces(transcript.clone(), generators, (s_0.0, s_0.1), to_sign, e_0);
       let mut s_1 = (nonces.0 + (e_1.0 * blinding_key.0), nonces.1 + (e_1.1 * blinding_key.1));
 
@@ -263,6 +238,9 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
       if last {
         break;
       }
+
+      pow_2.0 = pow_2.0.double();
+      pow_2.1 = pow_2.1.double();
     }
 
     let proof = DLEqProof { bits, poks };
@@ -326,6 +304,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
       Err(DLEqError::InvalidProofOfKnowledge)?;
     }
 
+    let mut pow_2 = (generators.0.primary, generators.1.primary);
     for (i, bit) in self.bits.iter().enumerate() {
       Self::transcript_bit(transcript, i, bit.commitments);
 
@@ -335,8 +314,8 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
         generators,
         bit.s[0],
         (
-          bit.commitments.0 - generators.0.primary,
-          bit.commitments.1 - generators.1.primary
+          bit.commitments.0 - pow_2.0,
+          bit.commitments.1 - pow_2.1
         ),
         Self::R_nonces(
           transcript.clone(),
@@ -348,6 +327,9 @@ impl<G0: PrimeGroup, G1: PrimeGroup> DLEqProof<G0, G1>
       ) {
         return Err(DLEqError::InvalidProof);
       }
+
+      pow_2.0 = pow_2.0.double();
+      pow_2.1 = pow_2.1.double();
     }
 
     Ok(keys)
