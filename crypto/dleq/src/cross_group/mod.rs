@@ -129,7 +129,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup, const POSSIBLE_VALUES: usize> Bits<G0, G1, 
 
     for i in ((actual + 1) .. (actual + POSSIBLE_VALUES + 1)).map(|i| i % POSSIBLE_VALUES) {
       let e = Self::nonces(transcript.clone(), R);
-      e_0 = G0::Scalar::conditional_select(&e_0, &e.0, usize::ct_eq(&i, &1));
+      e_0 = G0::Scalar::conditional_select(&e_0, &e.0, usize::ct_eq(&i, &0));
 
       // Solve for the real index
       if i == actual {
@@ -168,7 +168,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup, const POSSIBLE_VALUES: usize> Bits<G0, G1, 
     let ring = Self::ring(*pow_2, self.commitments);
     let e_0 = (self.e_0, scalar_convert(self.e_0).ok_or(DLEqError::InvalidChallenge)?);
     let mut e = None;
-    for i in (1 .. (POSSIBLE_VALUES + 1)).map(|i| i % POSSIBLE_VALUES) {
+    for i in 0 .. POSSIBLE_VALUES {
       e = Some(
         Self::R_nonces(transcript.clone(), generators, self.s[i], ring[i], e.unwrap_or(e_0))
       );
