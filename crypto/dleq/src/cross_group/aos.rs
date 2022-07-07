@@ -79,7 +79,7 @@ impl<
     A: (G0, G1),
     e: (G0::Scalar, G1::Scalar)
   ) -> (Vec<(G0::Scalar, G0)>, Vec<(G1::Scalar, G1)>) {
-    (vec![(s.0, generators.0.alt), (-e.0, A.0)], vec![(s.1, generators.1.alt), (-e.1, A.1)])
+    (vec![(-s.0, generators.0.alt), (e.0, A.0)], vec![(-s.1, generators.1.alt), (e.1, A.1)])
   }
 
   #[allow(non_snake_case)]
@@ -167,9 +167,8 @@ impl<
           *ring.last().unwrap(),
           e
         );
-        // TODO: Make something else negative to speed up vartime
-        statements.0.push((-G0::Scalar::one(), R0_0));
-        statements.1.push((-G1::Scalar::one(), R1_0));
+        statements.0.push((G0::Scalar::one(), R0_0));
+        statements.1.push((G1::Scalar::one(), R1_0));
         batch.0.queue(&mut *rng, (), statements.0);
         batch.1.queue(&mut *rng, (), statements.1);
       },
