@@ -1,57 +1,58 @@
-// use sha3::{Digest, Keccak256};
+use web3;
+use web3::contract::{Contract, Options};
+//use web3::types::U256;
+use serde;
+use serde_json;
+use serde_json::Value;
+use std::fs;
 
-// use group::Group;
-// use k256::{
-//   elliptic_curve::{ops::Reduce, DecompressPoint, sec1::ToEncodedPoint},
-//   U256, Scalar, ProjectivePoint, AffinePoint
-// };
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompiledContract {
+    contract_name: String,
+    bytecode: String,
+}
 
-// use modular_frost::{curve::Secp256k1, algorithm::Hram};
+pub async fn deploy_contract(
+    from: web3::types::Address,
+    filepath: String,
+) -> web3::Result<Contract<web3::transports::http::Http>> {
+    let transport = web3::transports::Http::new("http://localhost:8545")?;
+    let web3 = web3::Web3::new(transport);
+    let file_contents = fs::read_to_string(filepath).unwrap();
+    print!("{:?}", file_contents);
+    let compiled_contract: Value = serde_json::from_slice(file_contents.as_bytes()).unwrap(); // TODO: wrap err
+    let bytecode = compiled_contract["bytecode"].as_str().unwrap();
+    let contract = Contract::deploy(web3.eth(), include_bytes!("../schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json")/* file_contents.as_bytes()*/).unwrap()
+    .confirmations(0)
+    .options(Options::with(|opt| {
+        opt.value = Some(5.into());
+        opt.gas_price = Some(5.into());
+        opt.gas = Some(3_000_000.into());
+    }))
+    .execute(
+        bytecode,
+        (),
+        //(U256::from(1_000_000_u64), "My Token".to_owned(), 3u64, "MT".to_owned()),
+        from,
+    )
+    .await.unwrap(); // TODO: wrap err
+    Ok(contract)
+}
 
-// fn keccak256(data: &[u8]) -> [u8; 32] {
-//   Keccak256::digest(data).try_into().unwrap()
-// }
+#[cfg(test)]
+mod tests {
+    use crate::deploy_contract;
+    use hex_literal::hex;
 
-// fn hash_to_scalar(data: &[u8]) -> Scalar {
-//   Scalar::from_uint_reduced(U256::from_be_slice(&keccak256(data)))
-// }
-
-// fn address(point: &ProjectivePoint) -> [u8; 20] {
-//   keccak256(point.to_encoded_point(false).as_ref())[0 .. 20].try_into().unwrap()
-// }
-
-// fn ecrecover(message: Scalar, v: u8, r: Scalar, s: Scalar) -> Option<[u8; 20]> {
-//   if r.is_zero().into() || s.is_zero().into() {
-//     return None;
-//   }
-
-//   #[allow(non_snake_case)]
-//   let R = AffinePoint::decompress(&r.to_bytes(), v.into());
-//   #[allow(non_snake_case)]
-//   if let Some(R) = Option::<AffinePoint>::from(R) {
-//     #[allow(non_snake_case)]
-//     let R = ProjectivePoint::from(R);
-
-//     let r = r.invert().unwrap();
-//     let u1 = ProjectivePoint::GENERATOR * (-message * r);
-//     let u2 = R * (s * r);
-//     let key: ProjectivePoint = u1 + u2;
-//     if !bool::from(key.is_identity()) {
-//       return Some(address(&key));
-//     }
-//   }
-//   return None;
-// }
-
-// #[derive(Clone)]
-// struct EthereumHram {}
-// impl Hram<Secp256k1> for EthereumHram {
-//   #[allow(non_snake_case)]
-//   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
-//     Scalar::from_uint_reduced(
-//       U256::from_be_slice(
-//         &keccak256(&[&address(R), A.to_encoded_point(true).as_ref(), m].concat())
-//       )
-//     )
-//   }
-// }
+    #[actix_rt::test]
+    async fn test_deploy_contract() {
+        let from = hex!("90F8bf6A479f320ead074411a4B0e7944Ea8c9C1").into();
+        let _contract = deploy_contract(
+            from,
+            "./schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json".to_string(),
+        )
+        .await
+        .unwrap();
+    }
+}
