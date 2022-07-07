@@ -31,7 +31,7 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 
 [features]
 serialize = []
-cross_group = ["multiexp"]
+experimental_cross_group = ["multiexp"]
 secure_capacity_difference = []
 
 # Only applies to cross_group, yet is default to ensure security

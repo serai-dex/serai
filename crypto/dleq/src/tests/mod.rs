@@ -1,4 +1,4 @@
-#[cfg(feature = "cross_group")]
+#[cfg(feature = "experimental_cross_group")]
 mod cross_group;
 
 use hex_literal::hex;
