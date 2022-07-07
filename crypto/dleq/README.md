@@ -46,7 +46,7 @@ The following variants are available:
 The following numbers are from benchmarks performed with k256/curve25519_dalek
 on a Intel i7-118567:
 
-| Algorithm          | Size                    | Performance       |
+| Algorithm          | Size                    | Verification Time |
 |--------------------|-------------------------|-------------------|
 | `ClassicLinear`    | 56829 bytes (+27%)      | 157ms (0%)        |
 | `ConciseLinear`    | 44607 bytes (Reference) | 156ms (Reference) |
