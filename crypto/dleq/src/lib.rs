@@ -9,7 +9,7 @@ use group::prime::PrimeGroup;
 #[cfg(feature = "serialize")]
 use std::io::{self, ErrorKind, Error, Read, Write};
 
-#[cfg(feature = "experimental_cross_group")]
+#[cfg(feature = "experimental")]
 pub mod cross_group;
 
 #[cfg(test)]
