@@ -165,6 +165,11 @@ impl<
 
   #[cfg(feature = "serialize")]
   pub(crate) fn deserialize<R: Read>(r: &mut R) -> std::io::Result<Self> {
-    Ok(Bits { commitments: (read_point(r)?, read_point(r)?), signature: Aos::deserialize(r)? })
+    Ok(
+      Bits {
+        commitments: (read_point(r)?, read_point(r)?),
+        signature: Aos::deserialize(r, BitSignature::from(SIGNATURE).aos_form())?
+      }
+    )
   }
 }

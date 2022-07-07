@@ -49,7 +49,7 @@ pub(crate) fn generators() -> (Generators<G0>, Generators<G1>) {
 }
 
 macro_rules! verify_and_deserialize {
-  ($type: ident, $proof: ident, $generators: ident, $keys: ident) => {
+  ($type: ty, $proof: ident, $generators: ident, $keys: ident) => {
     let public_keys = $proof.verify(&mut OsRng, &mut transcript(), $generators).unwrap();
     assert_eq!($generators.0.primary * $keys.0, public_keys.0);
     assert_eq!($generators.1.primary * $keys.1, public_keys.1);
@@ -58,14 +58,14 @@ macro_rules! verify_and_deserialize {
     {
       let mut buf = vec![];
       $proof.serialize(&mut buf).unwrap();
-      let deserialized = $type::<G0, G1>::deserialize(&mut std::io::Cursor::new(&buf)).unwrap();
-      assert_eq!(proof, deserialized);
+      let deserialized = <$type>::deserialize(&mut std::io::Cursor::new(&buf)).unwrap();
+      assert_eq!($proof, deserialized);
     }
   }
 }
 
 macro_rules! test_dleq {
-  ($str: expr, $benchmark: ident, $name: ident, $type: ident) => {
+  ($str: literal, $benchmark: ident, $name: ident, $type: ident) => {
     #[ignore]
     #[test]
     fn $benchmark() {
@@ -93,7 +93,7 @@ macro_rules! test_dleq {
       #[cfg(feature = "serialize")]
       {
         let mut buf = vec![];
-        proofs[0].serialize(&mut buf);
+        proofs[0].serialize(&mut buf).unwrap();
         println!("{} had a proof size of {} bytes", $str, buf.len());
       }
     }
@@ -126,7 +126,7 @@ macro_rules! test_dleq {
           res
         };
 
-        verify_and_deserialize!($type, proof, generators, keys);
+        verify_and_deserialize!($type::<G0, G1>, proof, generators, keys);
       }
     }
   }
@@ -183,5 +183,10 @@ fn test_remainder() {
   ).unwrap();
   assert_eq!(keys, res);
 
-  verify_and_deserialize!(ConciseLinearDLEq, proof, generators, keys);
+  verify_and_deserialize!(
+    ConciseLinearDLEq::<ProjectivePoint, ProjectivePoint>,
+    proof,
+    generators,
+    keys
+  );
 }
