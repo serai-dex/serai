@@ -47,10 +47,13 @@ pub enum DLEqError {
   InvalidProof
 }
 
+// This should never be directly instantiated and uses a u8 to represent internal values
+// Any external usage is likely invalid
+#[doc(hidden)]
 // Debug would be such a dump of data this likely isn't helpful, but at least it's available to
 // anyone who wants it
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct DLEqProof<
+pub struct __DLEqProof<
   G0: PrimeGroup,
   G1: PrimeGroup,
   const SIGNATURE: u8,
@@ -64,7 +67,7 @@ pub struct DLEqProof<
 
 macro_rules! dleq {
   ($name: ident, $signature: expr, $remainder: literal) => {
-    pub type $name<G0, G1> = DLEqProof<
+    pub type $name<G0, G1> = __DLEqProof<
       G0,
       G1,
       { $signature.to_u8() },
@@ -105,7 +108,7 @@ impl<
   const SIGNATURE: u8,
   const RING_LEN: usize,
   const REMAINDER_RING_LEN: usize
-> DLEqProof<G0, G1, SIGNATURE, RING_LEN, REMAINDER_RING_LEN> where
+> __DLEqProof<G0, G1, SIGNATURE, RING_LEN, REMAINDER_RING_LEN> where
   G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
 
   pub(crate) fn transcript<T: Transcript>(
@@ -232,7 +235,7 @@ impl<
       );
     }
 
-    let proof = DLEqProof { bits, remainder, poks };
+    let proof = __DLEqProof { bits, remainder, poks };
     debug_assert_eq!(
       proof.reconstruct_keys(),
       (generators.0.primary * f.0, generators.1.primary * f.1)
@@ -353,7 +356,7 @@ impl<
     }
 
     Ok(
-      DLEqProof {
+      __DLEqProof {
         bits,
         remainder,
         poks: (SchnorrPoK::deserialize(r)?, SchnorrPoK::deserialize(r)?)
