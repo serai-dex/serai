@@ -6,6 +6,9 @@ license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
+[build-dependencies]
+cc = "1.0"
+
 [dependencies]
 hex-literal = "0.3"
 lazy_static = "1"
