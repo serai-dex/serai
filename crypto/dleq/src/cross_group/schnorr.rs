@@ -2,7 +2,8 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use group::{ff::Field, prime::PrimeGroup};
+use group::{ff::{Field, PrimeFieldBits}, prime::PrimeGroup};
+use multiexp::BatchVerifier;
 
 use crate::challenge;
 
@@ -20,7 +21,7 @@ pub(crate) struct SchnorrPoK<G: PrimeGroup> {
   s: G::Scalar
 }
 
-impl<G: PrimeGroup> SchnorrPoK<G> {
+impl<G: PrimeGroup> SchnorrPoK<G> where G::Scalar: PrimeFieldBits {
   // Not hram due to the lack of m
   #[allow(non_snake_case)]
   fn hra<T: Transcript>(transcript: &mut T, generator: G, R: G, A: G) -> G::Scalar {
@@ -46,16 +47,23 @@ impl<G: PrimeGroup> SchnorrPoK<G> {
     }
   }
 
-  #[must_use]
-  pub(crate) fn verify<T: Transcript>(
+  pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(
     &self,
+    rng: &mut R,
     transcript: &mut T,
     generator: G,
-    public_key: G
-  ) -> bool {
-    (generator * self.s) == (
-      self.R + (public_key * Self::hra(transcript, generator, self.R, public_key))
-    )
+    public_key: G,
+    batch: &mut BatchVerifier<(), G>
+  ) {
+    batch.queue(
+      rng,
+      (),
+      [
+        (-self.s, generator),
+        (G::Scalar::one(), self.R),
+        (Self::hra(transcript, generator, self.R, public_key), public_key)
+      ]
+    );
   }
 
   #[cfg(feature = "serialize")]
