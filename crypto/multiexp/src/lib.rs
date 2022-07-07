@@ -133,7 +133,11 @@ fn algorithm(len: usize) -> Algorithm {
   }
 
   #[cfg(debug_assertions)]
-  if len < 10 {
+  if len == 0 {
+    Algorithm::Null
+  } else if len == 1 {
+    Algorithm::Single
+  } else if len < 10 {
     Algorithm::Straus(3)
   } else if len < 80 {
     Algorithm::Straus(4)
