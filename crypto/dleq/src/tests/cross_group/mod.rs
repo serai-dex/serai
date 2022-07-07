@@ -13,7 +13,10 @@ use transcript::RecommendedTranscript;
 
 use crate::{
   Generators,
-  cross_group::{scalar::mutual_scalar_from_bytes, EfficientLinearDLEq, ConciseLinearDLEq}
+  cross_group::{
+    scalar::mutual_scalar_from_bytes,
+    ClassicLinearDLEq, EfficientLinearDLEq, ConciseLinearDLEq, CompromiseLinearDLEq
+  }
 };
 
 mod scalar;
@@ -62,7 +65,39 @@ macro_rules! verify_and_deserialize {
 }
 
 macro_rules! test_dleq {
-  ($name: ident, $type: ident) => {
+  ($str: expr, $benchmark: ident, $name: ident, $type: ident) => {
+    #[ignore]
+    #[test]
+    fn $benchmark() {
+      println!("Benchmarking with Secp256k1/Ed25519");
+      let generators = generators();
+
+      let mut seed = [0; 32];
+      OsRng.fill_bytes(&mut seed);
+      let key = Blake2b512::new().chain_update(seed);
+
+      let runs = 200;
+      let mut proofs = Vec::with_capacity(usize::try_from(runs).unwrap());
+      let time = std::time::Instant::now();
+      for _ in 0 .. runs {
+        proofs.push($type::prove(&mut OsRng, &mut transcript(), generators, key.clone()).0);
+      }
+      println!("{} had a average prove time of {}ms", $str, time.elapsed().as_millis() / runs);
+
+      let time = std::time::Instant::now();
+      for proof in &proofs {
+        proof.verify(&mut OsRng, &mut transcript(), generators).unwrap();
+      }
+      println!("{} had a average verify time of {}ms", $str, time.elapsed().as_millis() / runs);
+
+      #[cfg(feature = "serialize")]
+      {
+        let mut buf = vec![];
+        proofs[0].serialize(&mut buf);
+        println!("{} had a proof size of {} bytes", $str, buf.len());
+      }
+    }
+
     #[test]
     fn $name() {
       let generators = generators();
@@ -83,12 +118,7 @@ macro_rules! test_dleq {
           let mut res;
           while {
             key = Scalar::random(&mut OsRng);
-            res = $type::prove_without_bias(
-              &mut OsRng,
-              &mut transcript(),
-              generators,
-              key
-            );
+            res = $type::prove_without_bias(&mut OsRng, &mut transcript(), generators, key);
             res.is_none()
           } {}
           let res = res.unwrap();
@@ -102,8 +132,20 @@ macro_rules! test_dleq {
   }
 }
 
-test_dleq!(test_efficient_linear_dleq, EfficientLinearDLEq);
-test_dleq!(test_concise_linear_dleq, ConciseLinearDLEq);
+test_dleq!("ClassicLinear", benchmark_classic_linear, test_classic_linear, ClassicLinearDLEq);
+test_dleq!("ConciseLinear", benchmark_concise_linear, test_concise_linear, ConciseLinearDLEq);
+test_dleq!(
+  "EfficientLinear",
+  benchmark_efficient_linear,
+  test_efficient_linear,
+  EfficientLinearDLEq
+);
+test_dleq!(
+  "CompromiseLinear",
+  benchmark_compromise_linear,
+  test_compromise_linear,
+  CompromiseLinearDLEq
+);
 
 #[test]
 fn test_rejection_sampling() {
