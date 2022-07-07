@@ -33,6 +33,7 @@ pub(crate) fn sign<C: Curve>(
   }
 }
 
+#[must_use]
 pub(crate) fn verify<C: Curve>(
   public_key: C::G,
   challenge: C::F,

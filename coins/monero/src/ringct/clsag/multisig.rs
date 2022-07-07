@@ -227,6 +227,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     share
   }
 
+  #[must_use]
   fn verify(
     &self,
     _: dfg::EdwardsPoint,
@@ -247,6 +248,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     return None;
   }
 
+  #[must_use]
   fn verify_share(
     &self,
     verification_share: dfg::EdwardsPoint,
