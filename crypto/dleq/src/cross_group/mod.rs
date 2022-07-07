@@ -62,23 +62,39 @@ pub struct DLEqProof<
   poks: (SchnorrPoK<G0>, SchnorrPoK<G1>)
 }
 
-pub type ConciseLinearDLEq<G0, G1> = DLEqProof<
-  G0,
-  G1,
-  { BitSignature::ConciseLinear.to_u8() },
-  { BitSignature::ConciseLinear.ring_len() },
-  // There may not be a remainder, yet if there is, it'll be just one bit
-  // A ring for one bit has a RING_LEN of 2
-  2
->;
+macro_rules! dleq {
+  ($name: ident, $signature: expr, $remainder: expr) => {
+    pub type $name<G0, G1> = DLEqProof<
+      G0,
+      G1,
+      { $signature.to_u8() },
+      { $signature.ring_len() },
+      // There may not be a remainder, yet if there is one, it'll be just one bit
+      // A ring for one bit has a RING_LEN of 2
+      { if $remainder { 2 } else { 0 } }
+    >;
+  }
+}
 
- pub type EfficientLinearDLEq<G0, G1> = DLEqProof<
-  G0,
-  G1,
-  { BitSignature::EfficientLinear.to_u8() },
-  { BitSignature::EfficientLinear.ring_len() },
-  0
->;
+// Proves for 1-bit at a time with the signature form (e, s), as originally described in MRL-0010.
+// Uses a merged challenge, unlike MRL-0010, for the ring signature, saving an element from each
+// bit and removing a hash while slightly reducing challenge security. This security reduction is
+// already applied to the scalar being proven for, a result of the requirement it's mutually valid
+// over both scalar fields, hence its application here as well. This is mainly here as a point of
+// reference for the following DLEq proofs, all which use merged challenges
+dleq!(ClassicLinearDLEq, BitSignature::ClassicLinear, false);
+
+// Proves for 2-bits at a time to save 3/7 elements of every other bit
+dleq!(ConciseLinearDLEq, BitSignature::ConciseLinear, true);
+
+// Uses AOS signatures of the form R, s, to enable the final step of the ring signature to be
+// batch verified, at the cost of adding an additional element per bit
+dleq!(EfficientLinearDLEq, BitSignature::EfficientLinear, false);
+
+// Proves for 2-bits at a time while using the R, s form. This saves 3/7 elements of every other
+// bit, while adding 1 element to every bit, and is more efficient than ConciseLinear yet less
+// efficient than EfficientLinear due to having more ring signature steps which aren't batched
+dleq!(CompromiseLinearDLEq, BitSignature::CompromiseLinear, true);
 
 impl<
   G0: PrimeGroup,
@@ -279,8 +295,10 @@ impl<
     Self::transcript(transcript, generators, keys);
 
     let batch_capacity = match BitSignature::from(SIGNATURE) {
+      BitSignature::ClassicLinear => 3,
       BitSignature::ConciseLinear => 3,
-      BitSignature::EfficientLinear => (self.bits.len() + 1) * 3
+      BitSignature::EfficientLinear => (self.bits.len() + 1) * 3,
+      BitSignature::CompromiseLinear => (self.bits.len() + 1) * 3
     };
     let mut batch = (BatchVerifier::new(batch_capacity), BatchVerifier::new(batch_capacity));
 

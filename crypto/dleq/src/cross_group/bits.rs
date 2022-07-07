@@ -13,30 +13,38 @@ use std::io::{Read, Write};
 use crate::cross_group::read_point;
 
 pub(crate) enum BitSignature {
+  ClassicLinear,
   ConciseLinear,
-  EfficientLinear
+  EfficientLinear,
+  CompromiseLinear
 }
 
 impl BitSignature {
   pub(crate) const fn to_u8(&self) -> u8 {
     match self {
-      BitSignature::ConciseLinear => 0,
-      BitSignature::EfficientLinear => 1
+      BitSignature::ClassicLinear => 0,
+      BitSignature::ConciseLinear => 1,
+      BitSignature::EfficientLinear => 2,
+      BitSignature::CompromiseLinear => 3
     }
   }
 
   pub(crate) const fn from(algorithm: u8) -> BitSignature {
     match algorithm {
-      0 => BitSignature::ConciseLinear,
-      1 => BitSignature::EfficientLinear,
+      0 => BitSignature::ClassicLinear,
+      1 => BitSignature::ConciseLinear,
+      2 => BitSignature::EfficientLinear,
+      3 => BitSignature::CompromiseLinear,
       _ => panic!("Unknown algorithm")
     }
   }
 
   pub(crate) const fn bits(&self) -> usize {
     match self {
+      BitSignature::ClassicLinear => 1,
       BitSignature::ConciseLinear => 2,
-      BitSignature::EfficientLinear => 1
+      BitSignature::EfficientLinear => 1,
+      BitSignature::CompromiseLinear => 2
     }
   }
 
@@ -46,8 +54,10 @@ impl BitSignature {
 
   fn aos_form<G0: PrimeGroup, G1: PrimeGroup>(&self) -> Re<G0, G1> {
     match self {
+      BitSignature::ClassicLinear => Re::e_default(),
       BitSignature::ConciseLinear => Re::e_default(),
-      BitSignature::EfficientLinear => Re::R_default()
+      BitSignature::EfficientLinear => Re::R_default(),
+      BitSignature::CompromiseLinear => Re::R_default()
     }
   }
 }
