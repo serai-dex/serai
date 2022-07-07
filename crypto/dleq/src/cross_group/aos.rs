@@ -55,6 +55,8 @@ impl<
 > Aos<G0, G1, RING_LEN> where G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
   #[allow(non_snake_case)]
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
+    transcript.domain_separate(b"aos_membership_proof");
+    transcript.append_message(b"ring_len", &u8::try_from(RING_LEN).unwrap().to_le_bytes());
     transcript.append_message(b"nonce_0", nonces.0.to_bytes().as_ref());
     transcript.append_message(b"nonce_1", nonces.1.to_bytes().as_ref());
     mutual_scalar_from_bytes(transcript.challenge(b"challenge").as_ref())
@@ -151,6 +153,7 @@ impl<
     debug_assert!((RING_LEN == 2) || (RING_LEN == 4));
     debug_assert_eq!(RING_LEN, ring.len());
 
+    #[allow(non_snake_case)]
     match self.Re_0 {
       Re::R(R0_0, R1_0) => {
         let mut e = Self::nonces(transcript.clone(), (R0_0, R1_0));
@@ -164,6 +167,7 @@ impl<
           *ring.last().unwrap(),
           e
         );
+        // TODO: Make something else negative to speed up vartime
         statements.0.push((-G0::Scalar::one(), R0_0));
         statements.1.push((-G1::Scalar::one(), R1_0));
         batch.0.queue(&mut *rng, (), statements.0);

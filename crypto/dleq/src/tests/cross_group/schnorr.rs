@@ -1,23 +1,30 @@
 use rand_core::OsRng;
 
-use group::{ff::Field, prime::PrimeGroup};
+use group::{ff::{Field, PrimeFieldBits}, prime::PrimeGroup};
+use multiexp::BatchVerifier;
 
 use transcript::RecommendedTranscript;
 
 use crate::cross_group::schnorr::SchnorrPoK;
 
-fn test_schnorr<G: PrimeGroup>() {
+fn test_schnorr<G: PrimeGroup>() where G::Scalar: PrimeFieldBits {
   let private = G::Scalar::random(&mut OsRng);
 
   let transcript = RecommendedTranscript::new(b"Schnorr Test");
-  assert!(
-    SchnorrPoK::prove(
-      &mut OsRng,
-      &mut transcript.clone(),
-      G::generator(),
-      private
-    ).verify(&mut transcript.clone(), G::generator(), G::generator() * private)
+  let mut batch = BatchVerifier::new(3);
+  SchnorrPoK::prove(
+    &mut OsRng,
+    &mut transcript.clone(),
+    G::generator(),
+    private
+  ).verify(
+    &mut OsRng,
+    &mut transcript.clone(),
+    G::generator(),
+    G::generator() * private,
+    &mut batch
   );
+  assert!(batch.verify_vartime());
 }
 
 #[test]

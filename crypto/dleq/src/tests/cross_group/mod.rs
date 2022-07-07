@@ -1,26 +1,33 @@
-mod scalar;
-mod schnorr;
-
 use hex_literal::hex;
-use rand_core::OsRng;
+use rand_core::{RngCore, OsRng};
 
 use ff::{Field, PrimeField};
 use group::{Group, GroupEncoding};
+
+use blake2::{Digest, Blake2b512};
 
 use k256::{Scalar, ProjectivePoint};
 use dalek_ff_group::{self as dfg, EdwardsPoint, CompressedEdwardsY};
 
 use transcript::RecommendedTranscript;
 
-use crate::{Generators, cross_group::linear::EfficientDLEq};
+use crate::{
+  Generators,
+  cross_group::{scalar::mutual_scalar_from_bytes, EfficientLinearDLEq, ConciseLinearDLEq}
+};
 
-mod linear;
+mod scalar;
+mod schnorr;
+mod aos;
+
+type G0 = ProjectivePoint;
+type G1 = EdwardsPoint;
 
 pub(crate) fn transcript() -> RecommendedTranscript {
   RecommendedTranscript::new(b"Cross-Group DLEq Proof Test")
 }
 
-pub(crate) fn generators() -> (Generators<ProjectivePoint>, Generators<EdwardsPoint>) {
+pub(crate) fn generators() -> (Generators<G0>, Generators<G1>) {
   (
     Generators::new(
       ProjectivePoint::GENERATOR,
@@ -38,6 +45,66 @@ pub(crate) fn generators() -> (Generators<ProjectivePoint>, Generators<EdwardsPo
   )
 }
 
+macro_rules! verify_and_deserialize {
+  ($type: ident, $proof: ident, $generators: ident, $keys: ident) => {
+    let public_keys = $proof.verify(&mut OsRng, &mut transcript(), $generators).unwrap();
+    assert_eq!($generators.0.primary * $keys.0, public_keys.0);
+    assert_eq!($generators.1.primary * $keys.1, public_keys.1);
+
+    #[cfg(feature = "serialize")]
+    {
+      let mut buf = vec![];
+      $proof.serialize(&mut buf).unwrap();
+      let deserialized = $type::<G0, G1>::deserialize(&mut std::io::Cursor::new(&buf)).unwrap();
+      assert_eq!(proof, deserialized);
+    }
+  }
+}
+
+macro_rules! test_dleq {
+  ($name: ident, $type: ident) => {
+    #[test]
+    fn $name() {
+      let generators = generators();
+
+      for i in 0 .. 1 {
+        let (proof, keys) = if i == 0 {
+          let mut seed = [0; 32];
+          OsRng.fill_bytes(&mut seed);
+
+          $type::prove(
+            &mut OsRng,
+            &mut transcript(),
+            generators,
+            Blake2b512::new().chain_update(seed)
+          )
+        } else {
+          let mut key;
+          let mut res;
+          while {
+            key = Scalar::random(&mut OsRng);
+            res = $type::prove_without_bias(
+              &mut OsRng,
+              &mut transcript(),
+              generators,
+              key
+            );
+            res.is_none()
+          } {}
+          let res = res.unwrap();
+          assert_eq!(key, res.1.0);
+          res
+        };
+
+        verify_and_deserialize!($type, proof, generators, keys);
+      }
+    }
+  }
+}
+
+test_dleq!(test_efficient_linear_dleq, EfficientLinearDLEq);
+test_dleq!(test_concise_linear_dleq, ConciseLinearDLEq);
+
 #[test]
 fn test_rejection_sampling() {
   let mut pow_2 = Scalar::one();
@@ -46,11 +113,33 @@ fn test_rejection_sampling() {
   }
 
   assert!(
-    EfficientDLEq::prove_without_bias(
+    // Either would work
+    EfficientLinearDLEq::prove_without_bias(
       &mut OsRng,
       &mut RecommendedTranscript::new(b""),
       generators(),
       pow_2
     ).is_none()
   );
+}
+
+#[test]
+fn test_remainder() {
+  // Uses Secp256k1 for both to achieve an odd capacity of 255
+  assert_eq!(Scalar::CAPACITY, 255);
+  let generators = (generators().0, generators().0);
+  // This will ignore any unused bits, ensuring every remaining one is set
+  let keys = mutual_scalar_from_bytes(&[0xFF; 32]);
+  assert_eq!(keys.0 + Scalar::one(), Scalar::from(2u64).pow_vartime(&[255]));
+  assert_eq!(keys.0, keys.1);
+
+  let (proof, res) = ConciseLinearDLEq::prove_without_bias(
+    &mut OsRng,
+    &mut transcript(),
+    generators,
+    keys.0
+  ).unwrap();
+  assert_eq!(keys, res);
+
+  verify_and_deserialize!(ConciseLinearDLEq, proof, generators, keys);
 }

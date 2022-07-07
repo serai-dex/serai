@@ -5,7 +5,7 @@ use group::{ff::Field, Group};
 use multiexp::BatchVerifier;
 
 use crate::{
-  cross_group::linear::aos::{Re, Aos},
+  cross_group::aos::{Re, Aos},
   tests::cross_group::{G0, G1, transcript, generators}
 };
 
@@ -21,6 +21,8 @@ fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
   let generators = generators();
 
   let mut ring_keys = [(<G0 as Group>::Scalar::zero(), <G1 as Group>::Scalar::zero()); RING_LEN];
+  // Side-effect of G0 being a type-alias with identity() deprecated
+  #[allow(deprecated)]
   let mut ring = [(G0::identity(), G1::identity()); RING_LEN];
   for i in 0 .. RING_LEN {
     ring_keys[i] = (
@@ -58,6 +60,7 @@ fn test_aos_e() {
   test_aos::<4>(Re::e_default());
 }
 
+#[allow(non_snake_case)]
 #[test]
 fn test_aos_R() {
   // Batch verification appreciates the longer vectors, which means not batching bits
