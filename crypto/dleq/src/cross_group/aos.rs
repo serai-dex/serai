@@ -195,6 +195,7 @@ impl<
 
   #[cfg(feature = "serialize")]
   pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+    #[allow(non_snake_case)]
     match self.Re_0 {
       Re::R(R0, R1) => {
         w.write_all(R0.to_bytes().as_ref())?;
@@ -211,6 +212,7 @@ impl<
     Ok(())
   }
 
+  #[allow(non_snake_case)]
   #[cfg(feature = "serialize")]
   pub(crate) fn deserialize<R: Read>(r: &mut R, mut Re_0: Re<G0, G1>) -> std::io::Result<Self> {
     match Re_0 {

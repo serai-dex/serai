@@ -63,7 +63,7 @@ pub struct DLEqProof<
 }
 
 macro_rules! dleq {
-  ($name: ident, $signature: expr, $remainder: expr) => {
+  ($name: ident, $signature: expr, $remainder: literal) => {
     pub type $name<G0, G1> = DLEqProof<
       G0,
       G1,
@@ -81,10 +81,12 @@ macro_rules! dleq {
 // bit and removing a hash while slightly reducing challenge security. This security reduction is
 // already applied to the scalar being proven for, a result of the requirement it's mutually valid
 // over both scalar fields, hence its application here as well. This is mainly here as a point of
-// reference for the following DLEq proofs, all which use merged challenges
+// reference for the following DLEq proofs, all which use merged challenges, and isn't performant
+// in comparison to the others
 dleq!(ClassicLinearDLEq, BitSignature::ClassicLinear, false);
 
 // Proves for 2-bits at a time to save 3/7 elements of every other bit
+// <9% smaller than CompromiseLinear, yet ~12% slower
 dleq!(ConciseLinearDLEq, BitSignature::ConciseLinear, true);
 
 // Uses AOS signatures of the form R, s, to enable the final step of the ring signature to be
@@ -94,6 +96,7 @@ dleq!(EfficientLinearDLEq, BitSignature::EfficientLinear, false);
 // Proves for 2-bits at a time while using the R, s form. This saves 3/7 elements of every other
 // bit, while adding 1 element to every bit, and is more efficient than ConciseLinear yet less
 // efficient than EfficientLinear due to having more ring signature steps which aren't batched
+// >25% smaller than EfficientLinear and just 11% slower, making it the recommended option
 dleq!(CompromiseLinearDLEq, BitSignature::CompromiseLinear, true);
 
 impl<

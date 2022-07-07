@@ -9,6 +9,7 @@ use crate::{
   tests::cross_group::{G0, G1, transcript, generators}
 };
 
+#[allow(non_snake_case)]
 #[cfg(feature = "serialize")]
 fn test_aos_serialization<const RING_LEN: usize>(proof: Aos<G0, G1, RING_LEN>, Re_0: Re<G0, G1>) {
   let mut buf = vec![];
