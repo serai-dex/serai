@@ -166,7 +166,7 @@ impl Field for Scalar {
   fn square(&self) -> Self { *self * self }
   fn double(&self) -> Self { *self + self }
   fn invert(&self) -> CtOption<Self> {
-    CtOption::new(Self(self.0.invert()), self.is_zero())
+    CtOption::new(Self(self.0.invert()), !self.is_zero())
   }
   fn sqrt(&self) -> CtOption<Self> { unimplemented!() }
   fn is_zero(&self) -> Choice { self.0.ct_eq(&DScalar::zero()) }
