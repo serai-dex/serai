@@ -32,6 +32,12 @@ use dalek::{
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 use group::{Group, GroupEncoding, prime::PrimeGroup};
 
+fn choice(value: bool) -> Choice {
+  let bit = value as u8;
+  debug_assert_eq!(bit | 1, 1);
+  Choice::from(bit)
+}
+
 macro_rules! deref_borrow {
   ($Source: ident, $Target: ident) => {
     impl Deref for $Source {
@@ -160,7 +166,7 @@ impl Field for Scalar {
   fn square(&self) -> Self { *self * self }
   fn double(&self) -> Self { *self + self }
   fn invert(&self) -> CtOption<Self> {
-    CtOption::new(Self(self.0.invert()), Choice::from(1 as u8))
+    CtOption::new(Self(self.0.invert()), self.is_zero())
   }
   fn sqrt(&self) -> CtOption<Self> { unimplemented!() }
   fn is_zero(&self) -> Choice { self.0.ct_eq(&DScalar::zero()) }
@@ -177,11 +183,9 @@ impl PrimeField for Scalar {
   const NUM_BITS: u32 = 253;
   const CAPACITY: u32 = 252;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
-    let scalar = DScalar::from_canonical_bytes(bytes).map(|x| Scalar(x));
-    CtOption::new(
-      scalar.unwrap_or(Scalar::zero()),
-      Choice::from(if scalar.is_some() { 1 } else { 0 })
-    )
+    let scalar = DScalar::from_canonical_bytes(bytes);
+    // TODO: This unwrap_or isn't constant time, yet do we have an alternative?
+    CtOption::new(Scalar(scalar.unwrap_or(DScalar::zero())), choice(scalar.is_some()))
   }
   fn to_repr(&self) -> [u8; 32] { self.0.to_bytes() }
 
@@ -237,6 +241,8 @@ macro_rules! dalek_group {
 
     impl Group for $Point {
       type Scalar = Scalar;
+      // Ideally, this would be cryptographically secure, yet that's not a bound on the trait
+      // k256 also does this
       fn random(rng: impl RngCore) -> Self { &$BASEPOINT_TABLE * Scalar::random(rng) }
       fn identity() -> Self { Self($DPoint::identity()) }
       fn generator() -> Self { $BASEPOINT_POINT }
@@ -248,12 +254,10 @@ macro_rules! dalek_group {
       type Repr = [u8; 32];
 
       fn from_bytes(bytes: &Self::Repr) -> CtOption<Self> {
-        if let Some(point) = $DCompressed(*bytes).decompress() {
-          if $torsion_free(point) {
-            return CtOption::new($Point(point), Choice::from(1));
-          }
-        }
-        CtOption::new($Point::identity(), Choice::from(0))
+        let decompressed = $DCompressed(*bytes).decompress();
+        // TODO: Same note on unwrap_or as above
+        let point = decompressed.unwrap_or($DPoint::identity());
+        CtOption::new($Point(point), choice(decompressed.is_some()) & choice($torsion_free(point)))
       }
 
       fn from_bytes_unchecked(bytes: &Self::Repr) -> CtOption<Self> {
