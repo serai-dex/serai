@@ -9,7 +9,7 @@ use transcript::RecommendedTranscript;
 use frost::{curve::Ed25519, FrostKeys};
 
 use monero_serai::{
-  transaction::{Timelock, Transaction},
+  transaction::Transaction,
   rpc::Rpc,
   wallet::{
     ViewPair, address::{Network, AddressType, Address},
@@ -126,14 +126,7 @@ impl Coin for Monero {
   async fn get_outputs(&self, block: &Self::Block, key: dfg::EdwardsPoint) -> Vec<Self::Output> {
     block
       .iter()
-      .flat_map(|tx| {
-        let (outputs, timelock) = tx.scan(self.view_pair(key), true);
-        if timelock == Timelock::None {
-          outputs
-        } else {
-          vec![]
-        }
-      })
+      .flat_map(|tx| tx.scan(self.view_pair(key), true).not_locked())
       .map(Output::from)
       .collect()
   }
@@ -215,7 +208,7 @@ impl Coin for Monero {
 
     let outputs = self.rpc
       .get_block_transactions_possible(height).await.unwrap()
-      .swap_remove(0).scan(self.empty_view_pair(), false).0;
+      .swap_remove(0).scan(self.empty_view_pair(), false).ignore_timelock();
 
     let amount = outputs[0].commitment.amount;
     let fee = 1000000000; // TODO

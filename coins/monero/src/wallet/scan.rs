@@ -24,6 +24,30 @@ pub struct SpendableOutput {
   pub commitment: Commitment
 }
 
+pub struct Timelocked(Timelock, Vec<SpendableOutput>);
+impl Timelocked {
+  pub fn timelock(&self) -> Timelock {
+    self.0
+  }
+
+  pub fn not_locked(&self) -> Vec<SpendableOutput> {
+    if self.0 == Timelock::None {
+      return self.1.clone();
+    }
+    vec![]
+  }
+
+  /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked
+  pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<SpendableOutput>> {
+    // If the Timelocks are comparable, return the outputs if they're now unlocked
+    self.0.partial_cmp(&timelock).filter(|_| self.0 <= timelock).map(|_| self.1.clone())
+  }
+
+  pub fn ignore_timelock(&self) -> Vec<SpendableOutput> {
+    self.1.clone()
+  }
+}
+
 impl SpendableOutput {
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(32 + 1 + 32 + 32 + 40);
@@ -57,7 +81,7 @@ impl Transaction {
     &self,
     view: ViewPair,
     guaranteed: bool
-  ) -> (Vec<SpendableOutput>, Timelock) {
+  ) -> Timelocked {
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
     extra.extend(&self.prefix.extra);
@@ -75,7 +99,7 @@ impl Transaction {
 
       pubkeys = m_pubkeys.iter().map(|key| key.point.decompress()).filter_map(|key| key).collect();
     } else {
-      return (vec![], self.prefix.timelock);
+      return Timelocked(self.prefix.timelock, vec![]);
     };
 
     let mut res = vec![];
@@ -132,6 +156,6 @@ impl Transaction {
       }
     }
 
-    (res, self.prefix.timelock)
+    Timelocked(self.prefix.timelock, res)
   }
 }
