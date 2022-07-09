@@ -32,6 +32,7 @@ use dalek::{
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 use group::{Group, GroupEncoding, prime::PrimeGroup};
 
+// Convert a boolean to a Choice in a *presumably* constant time manner
 fn choice(value: bool) -> Choice {
   let bit = value as u8;
   debug_assert_eq!(bit | 1, 1);
@@ -119,24 +120,19 @@ macro_rules! math {
   }
 }
 
+/// Wrapper around the dalek Scalar type
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Scalar(pub DScalar);
 deref_borrow!(Scalar, DScalar);
 math!(Scalar, Scalar, Scalar);
 
 impl Scalar {
-  pub fn from_canonical_bytes(bytes: [u8; 32]) -> Option<Scalar> {
-    DScalar::from_canonical_bytes(bytes).map(|x| Self(x))
-  }
-
-  pub fn from_bytes_mod_order(bytes: [u8; 32]) -> Scalar {
-    Self(DScalar::from_bytes_mod_order(bytes))
-  }
-
+  /// Perform wide reduction on a 64-byte array to create a Scalar without bias
   pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Scalar {
     Self(DScalar::from_bytes_mod_order_wide(bytes))
   }
 
+  /// Derive a Scalar without bias from a digest via wide reduction
   pub fn from_hash<D: Digest<OutputSize = U64>>(hash: D) -> Scalar {
     let mut output = [0u8; 64];
     output.copy_from_slice(&hash.finalize());
@@ -174,6 +170,18 @@ impl Field for Scalar {
   fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
 }
 
+impl From<u8> for Scalar {
+  fn from(a: u8) -> Scalar { Self(DScalar::from(a)) }
+}
+
+impl From<u16> for Scalar {
+  fn from(a: u16) -> Scalar { Self(DScalar::from(a)) }
+}
+
+impl From<u32> for Scalar {
+  fn from(a: u32) -> Scalar { Self(DScalar::from(a)) }
+}
+
 impl From<u64> for Scalar {
   fn from(a: u64) -> Scalar { Self(DScalar::from(a)) }
 }
@@ -205,7 +213,7 @@ impl PrimeFieldBits for Scalar {
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
     let mut bytes = (Scalar::zero() - Scalar::one()).to_repr();
     bytes[0] += 1;
-    debug_assert_eq!(Scalar::from_bytes_mod_order(bytes), Scalar::zero());
+    debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::zero());
     bytes.into()
   }
 }
@@ -219,12 +227,12 @@ macro_rules! dalek_group {
     $Table: ident,
     $DTable: ident,
 
-    $Compressed: ident,
     $DCompressed: ident,
 
     $BASEPOINT_POINT: ident,
     $BASEPOINT_TABLE: ident
   ) => {
+    /// Wrapper around the dalek Point type. For Ed25519, this is restricted to the prime subgroup
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     pub struct $Point(pub $DPoint);
     deref_borrow!($Point, $DPoint);
@@ -271,28 +279,8 @@ macro_rules! dalek_group {
 
     impl PrimeGroup for $Point {}
 
-    pub struct $Compressed(pub $DCompressed);
-    deref_borrow!($Compressed, $DCompressed);
-    impl $Compressed {
-      pub fn new(y: [u8; 32]) -> $Compressed {
-        Self($DCompressed(y))
-      }
-
-      pub fn decompress(&self) -> Option<$Point> {
-        self.0.decompress().map(|x| $Point(x))
-      }
-
-      pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes()
-      }
-    }
-
-    impl $Point {
-      pub fn compress(&self) -> $Compressed {
-        $Compressed(self.0.compress())
-      }
-    }
-
+    /// Wrapper around the dalek Table type, offering efficient multiplication against the
+    /// basepoint
     pub struct $Table(pub $DTable);
     deref_borrow!($Table, $DTable);
     pub const $BASEPOINT_TABLE: $Table = $Table(constants::$BASEPOINT_TABLE);
@@ -312,7 +300,6 @@ dalek_group!(
   EdwardsBasepointTable,
   DEdwardsBasepointTable,
 
-  CompressedEdwardsY,
   DCompressedEdwards,
 
   ED25519_BASEPOINT_POINT,
@@ -327,7 +314,6 @@ dalek_group!(
   RistrettoBasepointTable,
   DRistrettoBasepointTable,
 
-  CompressedRistretto,
   DCompressedRistretto,
 
   RISTRETTO_BASEPOINT_POINT,
