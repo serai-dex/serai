@@ -11,5 +11,6 @@ members = [
 
   "coins/monero",
 
+  "ethereum",
   "processor",
 ]
