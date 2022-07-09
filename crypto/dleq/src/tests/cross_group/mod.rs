@@ -158,7 +158,7 @@ fn test_rejection_sampling() {
     // Either would work
     EfficientLinearDLEq::prove_without_bias(
       &mut OsRng,
-      &mut RecommendedTranscript::new(b""),
+      &mut transcript(),
       generators(),
       pow_2
     ).is_none()
