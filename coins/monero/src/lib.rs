@@ -98,20 +98,3 @@ pub fn hash(data: &[u8]) -> [u8; 32] {
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {
   Scalar::from_bytes_mod_order(hash(&data))
 }
-
-pub fn hash_to_point(point: &EdwardsPoint) -> EdwardsPoint {
-  let mut bytes = point.compress().to_bytes();
-  unsafe {
-    #[link(name = "wrapper")]
-    extern "C" {
-      fn c_hash_to_point(point: *const u8);
-    }
-
-    c_hash_to_point(bytes.as_mut_ptr());
-  }
-  CompressedEdwardsY::from_slice(&bytes).decompress().unwrap()
-}
-
-pub fn generate_key_image(secret: &Scalar) -> EdwardsPoint {
-  secret * hash_to_point(&(secret * &ED25519_BASEPOINT_TABLE))
-}

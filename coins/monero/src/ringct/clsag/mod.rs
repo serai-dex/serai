@@ -12,11 +12,11 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  Commitment,
+  Commitment, random_scalar, hash_to_scalar,
+  transaction::RING_LEN,
   wallet::decoys::Decoys,
-  random_scalar, hash_to_scalar, hash_to_point,
-  serialize::*,
-  transaction::RING_LEN
+  ringct::hash_to_point,
+  serialize::*
 };
 
 #[cfg(feature = "multisig")]
@@ -170,7 +170,7 @@ fn core(
     let c_c = mu_C * c;
 
     let L = (&s[i] * &ED25519_BASEPOINT_TABLE) + (c_p * P[i]) + (c_c * C[i]);
-    let PH = hash_to_point(&P[i]);
+    let PH = hash_to_point(P[i]);
     // Shouldn't be an issue as all of the variables in this vartime statement are public
     let R = (s[i] * PH) + images_precomp.vartime_multiscalar_mul(&[c_p, c_c]);
 
@@ -208,7 +208,7 @@ impl Clsag {
     let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
     let z = input.commitment.mask - mask;
 
-    let H = hash_to_point(&input.decoys.ring[r][0]);
+    let H = hash_to_point(input.decoys.ring[r][0]);
     let D = H * z;
     let mut s = Vec::with_capacity(input.decoys.ring.len());
     for _ in 0 .. input.decoys.ring.len() {
@@ -254,7 +254,7 @@ impl Clsag {
         mask,
         &msg,
         &nonce * &ED25519_BASEPOINT_TABLE,
-        nonce * hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0])
+        nonce * hash_to_point(inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0])
       );
       clsag.s[usize::from(inputs[i].2.decoys.i)] = nonce - ((p * inputs[i].0) + c);
 

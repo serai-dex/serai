@@ -17,8 +17,8 @@ use frost::FrostError;
 use crate::{
   Commitment,
   random_scalar,
-  generate_key_image,
   ringct::{
+    generate_key_image,
     clsag::{ClsagError, ClsagInput, Clsag},
     bulletproofs::{MAX_OUTPUTS, Bulletproofs},
     RctBase, RctPrunable, RctSignatures
@@ -126,7 +126,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
       spend + input.key_offset,
-      generate_key_image(&(spend + input.key_offset)),
+      generate_key_image(spend + input.key_offset),
       ClsagInput::new(
         input.commitment,
         decoys[i].clone()
@@ -337,7 +337,7 @@ impl SignableTransaction {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
-      images.push(generate_key_image(&offset));
+      images.push(generate_key_image(offset));
     }
     images.sort_by(key_image_sort);
 
