@@ -7,7 +7,7 @@ use crypto_bigint::{Encoding, U256, U512};
 
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
-use crate::{choice, from_wrapper, from_uint};
+use crate::{choice, constant_time, math_op, math, from_wrapper, from_uint};
 
 const FIELD_MODULUS: U256 = U256::from_be_hex(
   "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed"
@@ -20,62 +20,28 @@ pub const SQRT_M1: FieldElement = FieldElement(
   U256::from_be_hex("2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0")
 );
 
-macro_rules! math {
-  ($Op: ident, $op_fn: ident, $Assign: ident, $assign_fn: ident, $function: expr) => {
-    impl $Op<FieldElement> for FieldElement {
-      type Output = Self;
-      fn $op_fn(self, other: FieldElement) -> Self::Output {
-        Self($function(&self.0, &other.0, &FIELD_MODULUS))
-      }
-    }
-    impl $Assign<FieldElement> for FieldElement {
-      fn $assign_fn(&mut self, other: FieldElement) {
-        self.0 = $function(&self.0, &other.0, &FIELD_MODULUS);
-      }
-    }
-    impl<'a> $Op<&'a FieldElement> for FieldElement {
-      type Output = Self;
-      fn $op_fn(self, other: &'a FieldElement) -> Self::Output {
-        Self($function(&self.0, &other.0, &FIELD_MODULUS))
-      }
-    }
-    impl<'a> $Assign<&'a FieldElement> for FieldElement {
-      fn $assign_fn(&mut self, other: &'a FieldElement) {
-        self.0 = $function(&self.0, &other.0, &FIELD_MODULUS);
-      }
-    }
-  }
-}
-math!(Add, add, AddAssign, add_assign, U256::add_mod);
-math!(Sub, sub, SubAssign, sub_assign, U256::sub_mod);
+constant_time!(FieldElement, U256);
 math!(
-  Mul, mul,
-  MulAssign, mul_assign,
-  |a, b, _: &U256| {
+  FieldElement,
+  FieldElement,
+  |x, y| U256::add_mod(&x, &y, &FIELD_MODULUS),
+  |x, y| U256::sub_mod(&x, &y, &FIELD_MODULUS),
+  |x, y| {
     #[allow(non_snake_case)]
     let WIDE_MODULUS: U512 = U512::from((U256::ZERO, FIELD_MODULUS));
     debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 32]);
 
-    let wide = U256::mul_wide(a, b);
+    let wide = U256::mul_wide(&x, &y);
     U256::from_le_slice(
       &U512::from((wide.1, wide.0)).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 32]
     )
   }
 );
+from_uint!(FieldElement, U256);
 
 impl Neg for FieldElement {
   type Output = Self;
   fn neg(self) -> Self::Output { Self(self.0.neg_mod(&FIELD_MODULUS)) }
-}
-
-impl ConstantTimeEq for FieldElement {
-  fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
-}
-
-impl ConditionallySelectable for FieldElement {
-  fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-    FieldElement(U256::conditional_select(&a.0, &b.0, choice))
-  }
 }
 
 impl Field for FieldElement {
@@ -118,8 +84,6 @@ impl Field for FieldElement {
   fn cube(&self) -> Self { *self * self * self }
   fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
 }
-
-from_uint!(FieldElement, U256);
 
 impl PrimeField for FieldElement {
   type Repr = [u8; 32];
@@ -174,5 +138,5 @@ impl FieldElement {
 fn test_mul() {
   assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one(), FieldElement::zero());
   assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one().double(), FieldElement::zero());
-  assert_eq!(FieldElement(SQRT_M1).square(), -FieldElement::one());
+  assert_eq!(SQRT_M1.square(), -FieldElement::one());
 }

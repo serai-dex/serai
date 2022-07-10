@@ -6,10 +6,12 @@ use core::{
   iter::{Iterator, Sum}
 };
 
+use subtle::{ConstantTimeEq, ConditionallySelectable};
+
 use rand_core::RngCore;
 use digest::{consts::U64, Digest};
 
-use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
+use subtle::{Choice, CtOption};
 
 pub use curve25519_dalek as dalek;
 
@@ -65,59 +67,76 @@ macro_rules! deref_borrow {
   }
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! constant_time {
+  ($Value: ident, $Inner: ident) => {
+    impl ConstantTimeEq for $Value {
+      fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
+    }
+
+    impl ConditionallySelectable for $Value {
+      fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        $Value($Inner::conditional_select(&a.0, &b.0, choice))
+      }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! math_op {
+  (
+    $Value: ident,
+    $Other: ident,
+    $Op: ident,
+    $op_fn: ident,
+    $Assign: ident,
+    $assign_fn: ident,
+    $function: expr
+  ) => {
+    impl $Op<$Other> for $Value {
+      type Output = $Value;
+      fn $op_fn(self, other: $Other) -> Self::Output {
+        Self($function(self.0, other.0))
+      }
+    }
+    impl $Assign<$Other> for $Value {
+      fn $assign_fn(&mut self, other: $Other) {
+        self.0 = $function(self.0, other.0);
+      }
+    }
+    impl<'a> $Op<&'a $Other> for $Value {
+      type Output = $Value;
+      fn $op_fn(self, other: &'a $Other) -> Self::Output {
+        Self($function(self.0, other.0))
+      }
+    }
+    impl<'a> $Assign<&'a $Other> for $Value {
+      fn $assign_fn(&mut self, other: &'a $Other) {
+        self.0 = $function(self.0, other.0);
+      }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
 macro_rules! math {
-  ($Value: ident, $Factor: ident, $Product: ident) => {
-    impl Add<$Value> for $Value {
-      type Output = Self;
-      fn add(self, other: $Value) -> Self::Output { Self(self.0 + other.0) }
-    }
-    impl AddAssign for $Value {
-      fn add_assign(&mut self, other: $Value) { self.0 += other.0 }
-    }
+  ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
+    math_op!($Value, $Value, Add, add, AddAssign, add_assign, $add);
+    math_op!($Value, $Value, Sub, sub, SubAssign, sub_assign, $sub);
+    math_op!($Value, $Factor, Mul, mul, MulAssign, mul_assign, $mul);
+  }
+}
 
-    impl<'a> Add<&'a $Value> for $Value {
-      type Output = Self;
-      fn add(self, other: &'a $Value) -> Self::Output { Self(self.0 + other.0) }
-    }
-    impl<'a> AddAssign<&'a $Value> for $Value {
-      fn add_assign(&mut self, other: &'a $Value) { self.0 += other.0 }
-    }
-
-    impl Sub<$Value> for $Value {
-      type Output = Self;
-      fn sub(self, other: $Value) -> Self::Output { Self(self.0 - other.0) }
-    }
-    impl SubAssign for $Value {
-      fn sub_assign(&mut self, other: $Value) { self.0 -= other.0 }
-    }
-
-    impl<'a> Sub<&'a $Value> for $Value {
-      type Output = Self;
-      fn sub(self, other: &'a $Value) -> Self::Output { Self(self.0 - other.0) }
-    }
-    impl<'a> SubAssign<&'a $Value> for $Value {
-      fn sub_assign(&mut self, other: &'a $Value) { self.0 -= other.0 }
-    }
+macro_rules! math_neg {
+  ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
+    math!($Value, $Factor, $add, $sub, $mul);
 
     impl Neg for $Value {
       type Output = Self;
       fn neg(self) -> Self::Output { Self(-self.0) }
-    }
-
-    impl Mul<$Factor> for $Value {
-      type Output = $Product;
-      fn mul(self, other: $Factor) -> Self::Output { Self(self.0 * other.0) }
-    }
-    impl MulAssign<$Factor> for $Value {
-      fn mul_assign(&mut self, other: $Factor) { self.0 *= other.0 }
-    }
-
-    impl<'a> Mul<&'a $Factor> for $Value {
-      type Output = Self;
-      fn mul(self, b: &'a $Factor) -> $Product { Self(b.0 * self.0) }
-    }
-    impl<'a> MulAssign<&'a $Factor> for $Value {
-      fn mul_assign(&mut self, other: &'a $Factor) { self.0 *= other.0 }
     }
   }
 }
@@ -147,7 +166,8 @@ macro_rules! from_uint {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Scalar(pub DScalar);
 deref_borrow!(Scalar, DScalar);
-math!(Scalar, Scalar, Scalar);
+constant_time!(Scalar, DScalar);
+math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
 from_uint!(Scalar, DScalar);
 
 impl Scalar {
@@ -161,16 +181,6 @@ impl Scalar {
     let mut output = [0u8; 64];
     output.copy_from_slice(&hash.finalize());
     Scalar(DScalar::from_bytes_mod_order_wide(&output))
-  }
-}
-
-impl ConstantTimeEq for Scalar {
-  fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
-}
-
-impl ConditionallySelectable for Scalar {
-  fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-    Scalar(DScalar::conditional_select(a, b, choice))
   }
 }
 
@@ -244,7 +254,8 @@ macro_rules! dalek_group {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     pub struct $Point(pub $DPoint);
     deref_borrow!($Point, $DPoint);
-    math!($Point, Scalar, $Point);
+    constant_time!($Point, $DPoint);
+    math_neg!($Point, Scalar, $DPoint::add, $DPoint::sub, $DPoint::mul);
 
     pub const $BASEPOINT_POINT: $Point = $Point(constants::$BASEPOINT_POINT);
 
