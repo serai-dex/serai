@@ -19,6 +19,8 @@ rand_chacha = { version = "0.3", optional = true }
 rand = "0.8"
 rand_distr = "0.4"
 
+subtle = "2.4"
+
 tiny-keccak = { version = "2", features = ["keccak"] }
 blake2 = { version = "0.10", optional = true }
 
@@ -31,13 +33,14 @@ transcript = { package = "flexible-transcript", path = "../../crypto/transcript"
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["ed25519"], optional = true }
 dleq = { path = "../../crypto/dleq", features = ["serialize"], optional = true }
 
-base58-monero = "1"
-monero = "0.16"
-
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+base58-monero = "1"
 monero-epee-bin-serde = "1.0"
+monero = "0.16"
+
 reqwest = { version = "0.11", features = ["json"] }
 
 [features]
