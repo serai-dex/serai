@@ -32,6 +32,8 @@ use dalek::{
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 use group::{Group, GroupEncoding, prime::PrimeGroup};
 
+pub mod field;
+
 // Convert a boolean to a Choice in a *presumably* constant time manner
 fn choice(value: bool) -> Choice {
   let bit = value as u8;
@@ -120,11 +122,33 @@ macro_rules! math {
   }
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! from_wrapper {
+  ($wrapper: ident, $inner: ident, $uint: ident) => {
+    impl From<$uint> for $wrapper {
+      fn from(a: $uint) -> $wrapper { Self($inner::from(a)) }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! from_uint {
+  ($wrapper: ident, $inner: ident) => {
+    from_wrapper!($wrapper, $inner, u8);
+    from_wrapper!($wrapper, $inner, u16);
+    from_wrapper!($wrapper, $inner, u32);
+    from_wrapper!($wrapper, $inner, u64);
+  }
+}
+
 /// Wrapper around the dalek Scalar type
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Scalar(pub DScalar);
 deref_borrow!(Scalar, DScalar);
 math!(Scalar, Scalar, Scalar);
+from_uint!(Scalar, DScalar);
 
 impl Scalar {
   /// Perform wide reduction on a 64-byte array to create a Scalar without bias
@@ -168,22 +192,6 @@ impl Field for Scalar {
   fn is_zero(&self) -> Choice { self.0.ct_eq(&DScalar::zero()) }
   fn cube(&self) -> Self { *self * self * self }
   fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
-}
-
-impl From<u8> for Scalar {
-  fn from(a: u8) -> Scalar { Self(DScalar::from(a)) }
-}
-
-impl From<u16> for Scalar {
-  fn from(a: u16) -> Scalar { Self(DScalar::from(a)) }
-}
-
-impl From<u32> for Scalar {
-  fn from(a: u32) -> Scalar { Self(DScalar::from(a)) }
-}
-
-impl From<u64> for Scalar {
-  fn from(a: u64) -> Scalar { Self(DScalar::from(a)) }
 }
 
 impl PrimeField for Scalar {

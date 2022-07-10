@@ -17,4 +17,5 @@ subtle = "2.4"
 ff = "0.12"
 group = "0.12"
 
+crypto-bigint = "0.4"
 curve25519-dalek =  "3.2"
