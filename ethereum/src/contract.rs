@@ -1,42 +1,37 @@
-use ethers::{prelude::*, utils::Anvil};
+use ethers::{contract::ContractFactory, prelude::*, utils::Anvil};
 use eyre::Result;
+use std::fs::File;
 use std::{convert::TryFrom, sync::Arc, time::Duration};
 
-abigen!(Schnorr, "./schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json",);
+abigen!(
+    Schnorr,
+    "./schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json",
+    event_derives(serde::Deserialize, serde::Serialize),
+);
 
-async fn deploy_contract() -> Result<Contract> {
-    // 1. compile the contract (note this requires that you are inside the `examples` directory) and
-    // launch anvil
+pub async fn deploy_schnorr_verifier_contract(
+) -> Result<schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>> {
     let anvil = Anvil::new().spawn();
-
-    // 2. instantiate our wallet
     let wallet: LocalWallet = anvil.keys()[0].clone().into();
-
-    // 3. connect to the network
     let provider =
         Provider::<Http>::try_from(anvil.endpoint())?.interval(Duration::from_millis(10u64));
-
-    // 4. instantiate the client with the wallet
     let client = Arc::new(SignerMiddleware::new(provider, wallet));
+    let path = "./schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json";
+    let artifact: HardhatArtifact = serde_json::from_reader(File::open(path).unwrap()).unwrap();
+    let (abi, bin, _) = artifact.into_parts();
+    let factory = ContractFactory::new(abi.unwrap(), bin.unwrap(), client.clone());
+    let contract = factory.deploy(())?.send().await?;
 
-    // 5. deploy contract
-    let contract =
-        Schnrr::deploy(client).unwrap().send().await.unwrap();
-
-    // 6. call contract function
-    let greeting = greeter_contract.greet().call().await.unwrap();
-    assert_eq!("Hello World!", greeting);
-
+    let contract = Schnorr::new(contract.address(), client);
     Ok(contract)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::deploy_contract;
-    // use hex_literal::hex;
+    use super::deploy_schnorr_verifier_contract;
 
-    #[actix_rt::test]
+    #[tokio::test]
     async fn test_deploy_contract() {
-        let _contract = deploy_contract().unwrap();
+        let _contract = deploy_schnorr_verifier_contract().await.unwrap();
     }
 }
