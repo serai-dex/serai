@@ -76,6 +76,7 @@ impl Bulletproofs {
     Ok(res)
   }
 
+  #[must_use]
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     if commitments.len() > 16 {
       return false;

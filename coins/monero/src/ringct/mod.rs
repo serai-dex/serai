@@ -1,12 +1,19 @@
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-pub mod bulletproofs;
+pub(crate) mod hash_to_point;
+pub use hash_to_point::hash_to_point;
+
 pub mod clsag;
+pub mod bulletproofs;
 
 use crate::{
   serialize::*,
   ringct::{clsag::Clsag, bulletproofs::Bulletproofs}
 };
+
+pub fn generate_key_image(secret: Scalar) -> EdwardsPoint {
+  secret * hash_to_point(&secret * &ED25519_BASEPOINT_TABLE)
+}
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct RctBase {

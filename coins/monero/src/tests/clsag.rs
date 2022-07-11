@@ -12,9 +12,9 @@ use frost::curve::Ed25519;
 
 use crate::{
   Commitment,
-  random_scalar, generate_key_image,
+  random_scalar,
   wallet::Decoys,
-  ringct::clsag::{ClsagInput, Clsag}
+  ringct::{generate_key_image, clsag::{ClsagInput, Clsag}}
 };
 #[cfg(feature = "multisig")]
 use crate::{frost::MultisigError, ringct::clsag::{ClsagDetails, ClsagMultisig}};
@@ -48,7 +48,7 @@ fn clsag() {
       ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
 
-    let image = generate_key_image(&secrets[0]);
+    let image = generate_key_image(secrets[0]);
     let (clsag, pseudo_out) = Clsag::sign(
       &mut OsRng,
       &vec![(

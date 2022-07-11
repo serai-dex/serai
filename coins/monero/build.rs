@@ -1,6 +1,4 @@
-use std::process::Command;
-use std::env;
-use std::path::Path;
+use std::{env, path::Path, process::Command};
 
 fn main() {
   if !Command::new("git").args(&["submodule", "update", "--init", "--recursive"]).status().unwrap().success() {
@@ -16,14 +14,8 @@ fn main() {
 
   // Use a file to signal if Monero was already built, as that should never be rebuilt
   // If the signaling file was deleted, run this script again to rebuild Monero though
-  // TODO: Move this signaling file into OUT_DIR once Monero is built statically successfully
   println!("cargo:rerun-if-changed=c/.build/monero");
   if !Path::new("c/.build/monero").exists() {
-    if !Command::new("cmake").args(&["cmake", "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_SHARED_LIBS=1", "."])
-      .current_dir(&Path::new("c/monero")).status().unwrap().success() {
-        panic!("cmake failed to generate Monero's build scripts");
-    }
-
     if !Command::new("make").arg(format!("-j{}", &env::var("THREADS").unwrap_or("2".to_string())))
       .current_dir(&Path::new("c/monero")).status().unwrap().success() {
         panic!("make failed to build Monero. Please check your dependencies");
@@ -35,56 +27,46 @@ fn main() {
     }
   }
 
- println!("cargo:rerun-if-env-changed=OUT_DIR");
- if !Path::new(
-    &format!(
-      "{}/{}cncrypto.{}",
-      out_dir,
-      &env::consts::DLL_PREFIX,
-      &env::consts::DLL_EXTENSION
-    )
-  ).exists() {
-    for (folder, lib) in [
-      ("crypto", "cncrypto"),
-      ("device", "device"),
-      ("ringct", "ringct_basic"),
-      ("ringct", "ringct")
-    ] {
-      if !Command::new("cp").args(&[
-        &format!(
-          "c/monero/src/{}/{}{}.{}",
-          folder,
-          &env::consts::DLL_PREFIX,
-          lib,
-          &env::consts::DLL_EXTENSION
-        ),
-        out_dir
-      ]).status().unwrap().success() {
-        panic!("Failed to cp {}", lib);
-      }
-    }
-  }
-
   println!("cargo:rerun-if-changed=c/wrapper.cpp");
-  if !Command::new("g++").args(&[
-    "-O3", "-Wall", "-shared", "-std=c++14", "-fPIC",
-    "-Imonero/contrib/epee/include", "-Imonero/src",
-    "wrapper.cpp", "-o", &format!(
-      "{}/{}wrapper.{}",
-      out_dir,
-      &env::consts::DLL_PREFIX,
-      &env::consts::DLL_EXTENSION
-    ),
-    &format!("-L{}", out_dir),
-    "-ldevice", "-lringct_basic", "-lringct"
-  ]).current_dir(&Path::new("c")).status().unwrap().success() {
-    panic!("g++ failed to build the wrapper");
-  }
+  cc::Build::new()
+    .static_flag(true)
+    .warnings(false)
+    .extra_warnings(false)
+    .flag("-Wno-deprecated-declarations")
+
+    .include("c/monero/external/supercop/include")
+    .include("c/monero/contrib/epee/include")
+    .include("c/monero/src")
+    .include("c/monero/build/release/generated_include")
+
+    .define("AUTO_INITIALIZE_EASYLOGGINGPP", None)
+    .include("c/monero/external/easylogging++")
+    .file("c/monero/external/easylogging++/easylogging++.cc")
+
+    .file("c/monero/src/common/aligned.c")
+    .file("c/monero/src/common/perf_timer.cpp")
+
+    .include("c/monero/src/crypto")
+    .file("c/monero/src/crypto/crypto-ops-data.c")
+    .file("c/monero/src/crypto/crypto-ops.c")
+    .file("c/monero/src/crypto/keccak.c")
+    .file("c/monero/src/crypto/hash.c")
+
+    .include("c/monero/src/device")
+    .file("c/monero/src/device/device_default.cpp")
+
+    .include("c/monero/src/ringct")
+    .file("c/monero/src/ringct/rctCryptoOps.c")
+    .file("c/monero/src/ringct/rctTypes.cpp")
+    .file("c/monero/src/ringct/rctOps.cpp")
+    .file("c/monero/src/ringct/multiexp.cc")
+    .file("c/monero/src/ringct/bulletproofs.cc")
+    .file("c/monero/src/ringct/rctSigs.cpp")
+
+    .file("c/wrapper.cpp")
+    .compile("wrapper");
 
   println!("cargo:rustc-link-search={}", out_dir);
-  println!("cargo:rustc-link-lib=cncrypto");
-  println!("cargo:rustc-link-lib=device");
-  println!("cargo:rustc-link-lib=ringct_basic");
-  println!("cargo:rustc-link-lib=ringct");
   println!("cargo:rustc-link-lib=wrapper");
+  println!("cargo:rustc-link-lib=stdc++");
 }

@@ -96,8 +96,8 @@ fn test_ed25519() {
   test_multiexp::<EdwardsPoint>();
 }
 
-#[test]
 #[ignore]
+#[test]
 fn benchmark() {
   // Activate the processor's boost clock
   for _ in 0 .. 30 {

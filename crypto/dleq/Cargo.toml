@@ -12,14 +12,12 @@ rand_core = "0.6"
 
 digest = "0.10"
 
-subtle = "2.4"
-
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
 
 ff = "0.12"
 group = "0.12"
 
-multiexp = { path = "../multiexp", optional = true }
+multiexp = { path = "../multiexp", features = ["batch"], optional = true }
 
 [dev-dependencies]
 hex-literal = "0.3"
@@ -33,8 +31,8 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 
 [features]
 serialize = []
-cross_group = []
+experimental = ["multiexp"]
 secure_capacity_difference = []
 
-# These only apply to cross_group, yet are default to ensure its integrity and performance
-default = ["secure_capacity_difference", "multiexp"]
+# Only applies to cross_group, yet is default to ensure security
+default = ["secure_capacity_difference"]

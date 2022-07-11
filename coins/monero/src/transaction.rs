@@ -1,3 +1,5 @@
+use core::cmp::Ordering;
+
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{hash, serialize::*, ringct::{RctPrunable, RctSignatures}};
@@ -128,6 +130,17 @@ impl Timelock {
       },
       w
     )
+  }
+}
+
+impl PartialOrd for Timelock {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    match (self, other) {
+      (Timelock::None, _) => Some(Ordering::Less),
+      (Timelock::Block(a), Timelock::Block(b)) => a.partial_cmp(b),
+      (Timelock::Time(a), Timelock::Time(b)) => a.partial_cmp(b),
+      _ => None
+    }
   }
 }
 

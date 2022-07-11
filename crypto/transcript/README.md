@@ -6,6 +6,9 @@ Flexible Transcript is a crate offering:
 provided hash function.
 - `MerlinTranscript`, a wrapper of `merlin` into the trait (available via the
 `merlin` feature).
+- `RecommendedTranscript`, a transcript recommended for usage in applications.
+  Currently, this is `DigestTranscript<Blake2b512>` (available via the
+  `recommended` feature).
 
 The trait was created while working on an IETF draft which defined an incredibly
 simple transcript format. Extensions of the protocol would quickly require a

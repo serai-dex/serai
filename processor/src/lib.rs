@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use frost::{curve::Curve, FrostError};
 
-mod coin;
+pub mod coin;
 use coin::{Coin, CoinError};
 mod wallet;
 

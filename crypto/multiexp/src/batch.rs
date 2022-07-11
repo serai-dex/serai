@@ -33,12 +33,14 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> where <G as Group>::Scalar: PrimeF
     self.0.push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
   }
 
+  #[must_use]
   pub fn verify(&self) -> bool {
     multiexp(
       &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()
     ).is_identity().into()
   }
 
+  #[must_use]
   pub fn verify_vartime(&self) -> bool {
     multiexp_vartime(
       &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()

@@ -18,9 +18,8 @@ use frost::{curve::Ed25519, FrostError, FrostView, algorithm::Algorithm};
 use dalek_ff_group as dfg;
 
 use crate::{
-  hash_to_point,
   frost::{MultisigError, write_dleq, read_dleq},
-  ringct::clsag::{ClsagInput, Clsag}
+  ringct::{hash_to_point, clsag::{ClsagInput, Clsag}}
 };
 
 impl ClsagInput {
@@ -129,7 +128,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     view: &FrostView<Ed25519>,
     nonces: &[dfg::Scalar; 2]
   ) -> Vec<u8> {
-    self.H = hash_to_point(&view.group_key().0);
+    self.H = hash_to_point(view.group_key().0);
 
     let mut serialized = Vec::with_capacity(ClsagMultisig::serialized_len());
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
@@ -227,6 +226,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     share
   }
 
+  #[must_use]
   fn verify(
     &self,
     _: dfg::EdwardsPoint,
@@ -247,6 +247,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     return None;
   }
 
+  #[must_use]
   fn verify_share(
     &self,
     verification_share: dfg::EdwardsPoint,

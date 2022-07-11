@@ -56,6 +56,8 @@ pub(crate) fn prep_tables<G: Group>(
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Algorithm {
+  Null,
+  Single,
   Straus(u8),
   Pippenger(u8)
 }
@@ -107,7 +109,11 @@ Pippenger 8 is more efficient at 875 with 499µs per
 */
 fn algorithm(len: usize) -> Algorithm {
   #[cfg(not(debug_assertions))]
-  if len < 10 {
+  if len == 0 {
+    Algorithm::Null
+  } else if len == 1 {
+    Algorithm::Single
+  } else if len < 10 {
     // Straus 2 never showed a performance benefit, even with just 2 elements
     Algorithm::Straus(3)
   } else if len < 20 {
@@ -127,7 +133,11 @@ fn algorithm(len: usize) -> Algorithm {
   }
 
   #[cfg(debug_assertions)]
-  if len < 10 {
+  if len == 0 {
+    Algorithm::Null
+  } else if len == 1 {
+    Algorithm::Single
+  } else if len < 10 {
     Algorithm::Straus(3)
   } else if len < 80 {
     Algorithm::Straus(4)
@@ -149,6 +159,8 @@ fn algorithm(len: usize) -> Algorithm {
 // Performs a multiexp, automatically selecting the optimal algorithm based on amount of pairs
 pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G where G::Scalar: PrimeFieldBits {
   match algorithm(pairs.len()) {
+    Algorithm::Null => Group::identity(),
+    Algorithm::Single => pairs[0].1 * pairs[0].0,
     Algorithm::Straus(window) => straus(pairs, window),
     Algorithm::Pippenger(window) => pippenger(pairs, window)
   }
@@ -156,6 +168,8 @@ pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G where G::Scalar: PrimeF
 
 pub fn multiexp_vartime<G: Group>(pairs: &[(G::Scalar, G)]) -> G where G::Scalar: PrimeFieldBits {
   match algorithm(pairs.len()) {
+    Algorithm::Null => Group::identity(),
+    Algorithm::Single => pairs[0].1 * pairs[0].0,
     Algorithm::Straus(window) => straus_vartime(pairs, window),
     Algorithm::Pippenger(window) => pippenger_vartime(pairs, window)
   }

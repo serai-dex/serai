@@ -46,10 +46,12 @@ pub trait Algorithm<C: Curve>: Clone {
   ) -> C::F;
 
   /// Verify a signature
+  #[must_use]
   fn verify(&self, group_key: C::G, nonce: C::G, sum: C::F) -> Option<Self::Signature>;
 
   /// Verify a specific share given as a response. Used to determine blame if signature
   /// verification fails
+  #[must_use]
   fn verify_share(
     &self,
     verification_share: C::G,
@@ -145,6 +147,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     schnorr::sign::<C>(params.secret_share(), nonce, c).s
   }
 
+  #[must_use]
   fn verify(&self, group_key: C::G, nonce: C::G, sum: C::F) -> Option<Self::Signature> {
     let sig = SchnorrSignature { R: nonce, s: sum };
     if schnorr::verify::<C>(group_key, self.c.unwrap(), &sig) {
@@ -154,6 +157,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     }
   }
 
+  #[must_use]
   fn verify_share(
     &self,
     verification_share: C::G,

@@ -46,7 +46,7 @@ fn ecrecover(message: Scalar, v: u8, r: Scalar, s: Scalar) -> Option<[u8; 20]> {
 }
 
 #[derive(Clone, Default)]
-struct EthereumHram {}
+pub struct EthereumHram {}
 impl Hram<Secp256k1> for EthereumHram {
     #[allow(non_snake_case)]
     fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
@@ -56,20 +56,47 @@ impl Hram<Secp256k1> for EthereumHram {
     }
 }
 
+pub struct ProcessedSignature {
+    pub sr: Scalar,
+    pub er: Scalar,
+    pub px: Scalar,
+    pub parity: u8,
+    pub message: [u8; 32],
+    pub e: Scalar,
+}
+
 fn preprocess_signature(
-    m: &[u8],
+    m: [u8; 32],
     R: &ProjectivePoint,
     s: Scalar,
     A: &ProjectivePoint,
     chain_id: U256,
 ) -> (Scalar, Scalar) {
+    // let encoded_pk = A.to_encoded_point(true);
+    // let px = &encoded_pk.as_ref()[1..33];
+    // let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
+    // let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), m].concat());
+    // let sr = s.mul(&px_scalar).negate();
+    // let er = e.mul(&px_scalar).negate();
+    // (sr, er)
+    let processed_sig = preprocess_signature_for_contract(m, R, s, A, chain_id);
+    (processed_sig.sr, processed_sig.er)
+}
+
+pub fn preprocess_signature_for_contract(
+    m: [u8; 32],
+    R: &ProjectivePoint,
+    s: Scalar,
+    A: &ProjectivePoint,
+    chain_id: U256,
+) -> ProcessedSignature {
     let encoded_pk = A.to_encoded_point(true);
     let px = &encoded_pk.as_ref()[1..33];
     let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
-    let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), m].concat());
+    let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), &m].concat());
     let sr = s.mul(&px_scalar).negate();
     let er = e.mul(&px_scalar).negate();
-    (sr, er)
+    ProcessedSignature { sr, er, px: px_scalar, parity: &encoded_pk.as_ref()[0] - 2, message: m, e}
 }
 
 #[test]
@@ -136,9 +163,10 @@ fn test_ecrecover_hack() {
     let group_key_x = Scalar::from_uint_reduced(U256::from_be_slice(&group_key_compressed[1..33]));
 
     const MESSAGE: &'static [u8] = b"Hello, World!";
+    let hashed_message = keccak256(MESSAGE);
     let chain_id = U256::from(Scalar::ONE);
 
-    let full_message = &[chain_id.to_be_byte_array().as_slice(), MESSAGE].concat();
+    let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
     let sig = sign(
         &mut OsRng,
@@ -146,7 +174,7 @@ fn test_ecrecover_hack() {
         full_message,
     );
 
-    let (sr, er) = preprocess_signature(MESSAGE, &sig.R, sig.s, &group_key, chain_id);
+    let (sr, er) = preprocess_signature(hashed_message, &sig.R, sig.s, &group_key, chain_id);
     let q = ecrecover(sr, group_key_compressed[0] - 2, group_key_x, er).unwrap();
     assert_eq!(q, address(&sig.R),);
 }

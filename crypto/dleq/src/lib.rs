@@ -9,7 +9,7 @@ use group::prime::PrimeGroup;
 #[cfg(feature = "serialize")]
 use std::io::{self, ErrorKind, Error, Read, Write};
 
-#[cfg(feature = "cross_group")]
+#[cfg(feature = "experimental")]
 pub mod cross_group;
 
 #[cfg(test)]
@@ -34,22 +34,27 @@ impl<G: PrimeGroup> Generators<G> {
 }
 
 pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
-  assert!(F::NUM_BITS <= 384);
-
   // From here, there are three ways to get a scalar under the ff/group API
   // 1: Scalar::random(ChaCha12Rng::from_seed(self.transcript.rng_seed(b"challenge")))
   // 2: Grabbing a UInt library to perform reduction by the modulus, then determining endianess
   //    and loading it in
   // 3: Iterating over each byte and manually doubling/adding. This is simplest
-  let challenge_bytes = transcript.challenge(b"challenge");
-  assert!(challenge_bytes.as_ref().len() == 64);
+
+  // Get a wide amount of bytes to safely reduce without bias
+  let target = ((usize::try_from(F::NUM_BITS).unwrap() + 7) / 8) * 2;
+  let mut challenge_bytes = transcript.challenge(b"challenge").as_ref().to_vec();
+  while challenge_bytes.len() < target {
+    // Secure given transcripts updating on challenge
+    challenge_bytes.extend(transcript.challenge(b"challenge_extension").as_ref());
+  }
+  challenge_bytes.truncate(target);
 
   let mut challenge = F::zero();
-  for b in challenge_bytes.as_ref() {
+  for b in challenge_bytes {
     for _ in 0 .. 8 {
       challenge = challenge.double();
     }
-    challenge += F::from(u64::from(*b));
+    challenge += F::from(u64::from(b));
   }
   challenge
 }

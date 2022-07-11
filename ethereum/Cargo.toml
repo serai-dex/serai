@@ -11,3 +11,10 @@ hex-literal = "0.3"
 ethers = { git = "https://github.com/gakonst/ethers-rs", features = ["abigen", "ethers-solc"] }
 eyre = "0.6"
 tokio = { version = "1.19", features = ["macros"] }
+k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
+
+serai-processor = { path = "../processor" }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["secp256k1", "ed25519"] }
+
+[dev-dependencies]
+rand = "0.8"
