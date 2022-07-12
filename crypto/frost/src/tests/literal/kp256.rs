@@ -1,20 +1,49 @@
 use rand::rngs::OsRng;
 
-#[cfg(feature = "secp256k1")]
-use crate::tests::{curve::test_curve, schnorr::test_schnorr};
-#[cfg(feature = "secp256k1")]
-use crate::curve::Secp256k1;
-
-#[cfg(feature = "p256")]
+#[cfg(any(feature = "secp256k1", feature = "p256"))]
 use crate::tests::vectors::{Vectors, test_with_vectors};
+
+#[cfg(feature = "secp256k1")]
+use crate::curve::{Secp256k1, NonIetfSecp256k1Hram};
+
 #[cfg(feature = "p256")]
 use crate::curve::{P256, IetfP256Hram};
 
 #[cfg(feature = "secp256k1")]
 #[test]
 fn secp256k1_non_ietf() {
-  test_curve::<_, Secp256k1>(&mut OsRng);
-  test_schnorr::<_, Secp256k1>(&mut OsRng);
+  test_with_vectors::<_, Secp256k1, NonIetfSecp256k1Hram>(
+    &mut OsRng,
+    Vectors {
+      threshold: 2,
+      shares: &[
+        "08f89ffe80ac94dcb920c26f3f46140bfc7f95b493f8310f5fc1ea2b01f4254c",
+        "04f0feac2edcedc6ce1253b7fab8c86b856a797f44d83d82a385554e6e401984",
+        "00e95d59dd0d46b0e303e500b62b7ccb0e555d49f5b849f5e748c071da8c0dbc"
+      ],
+      group_secret: "0d004150d27c3bf2a42f312683d35fac7394b1e9e318249c1bfe7f0795a83114",
+      group_key: "02f37c34b66ced1fb51c34a90bdae006901f10625cc06c4f64663b0eae87d87b4f",
+
+      msg: "74657374",
+      included: &[1, 3],
+      nonces: &[
+        [
+          "31c3c1b76b76664569859b9251fbabed9d4d432c6f5aaa03ed41f9c231935798",
+          "206f4ffaeb602ccb57cbe50e146ac690e6d7317d4b93377061d9d1b4caf78a26"
+        ],
+        [
+          "0d3945bc1553676a5dd910cb4f14437d99ed421516b2617357b984820fdca520",
+          "635e0fd90caaf40b5e986d0ee0f58778e4d88731bc6ac70350ef702ffe20a21b"
+        ]
+      ],
+      sig_shares: &[
+        "18b71e284c5d008896ed8847b234ec829eda376d6208838ee7faf2ce21b154c1",
+        "a452a49c8116124d0a283f3589a96b704894b43246e47e59d376353bcc638311"
+      ],
+      sig: "03dafb28ee7ad033fd15ed470d07156617260d74a9d76a15d371d7b613d2b111e".to_owned() +
+           "7bd09c2c4cd7312d5a115c77d3bde57f2e76eeb9fa8ed01e8bb712809ee14d7d2"
+    }
+  );
 }
 
 #[cfg(feature = "p256")]

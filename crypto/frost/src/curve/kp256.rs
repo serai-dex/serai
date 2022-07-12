@@ -101,5 +101,5 @@ kp_curve!(
   Secp256k1,
   NonIetfSecp256k1Hram,
   b"secp256k1",
-  b"FROST-secp256k1-SHA256-v5"
+  b"FROST-secp256k1-SHA256-v7"
 );
