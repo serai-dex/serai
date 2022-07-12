@@ -1,5 +1,5 @@
 [package]
-name = "dleq"
+name = "dleq-serai"
 version = "0.1.0"
 description = "Implementation of single and cross-curve Discrete Log Equality proofs"
 license = "MIT"

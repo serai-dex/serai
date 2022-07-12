@@ -221,6 +221,8 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     // Re-format into the FROST-expected rho transcript
     let mut rho_transcript = A::Transcript::new(b"FROST_rho");
     rho_transcript.append_message(b"message", &C::hash_msg(&msg));
+    // This won't just be the commitments, yet the full existing transcript if used in an extended
+    // protocol
     rho_transcript.append_message(
       b"commitments",
       &C::hash_msg(transcript.challenge(b"commitments").as_ref())

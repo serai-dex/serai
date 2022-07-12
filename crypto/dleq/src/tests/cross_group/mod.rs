@@ -7,9 +7,9 @@ use group::{Group, GroupEncoding};
 use blake2::{Digest, Blake2b512};
 
 use k256::{Scalar, ProjectivePoint};
-use dalek_ff_group::{self as dfg, EdwardsPoint, CompressedEdwardsY};
+use dalek_ff_group::{self as dfg, EdwardsPoint};
 
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 
 use crate::{
   Generators,
@@ -41,9 +41,9 @@ pub(crate) fn generators() -> (Generators<G0>, Generators<G1>) {
 
     Generators::new(
       EdwardsPoint::generator(),
-      CompressedEdwardsY::new(
-        hex!("8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94")
-      ).decompress().unwrap()
+      EdwardsPoint::from_bytes(
+        &hex!("8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94")
+      ).unwrap()
     )
   )
 }

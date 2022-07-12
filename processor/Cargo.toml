@@ -3,7 +3,9 @@ name = "serai-processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
 license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/processor"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
 edition = "2021"
 publish = false
 
