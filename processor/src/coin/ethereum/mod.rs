@@ -1,5 +1,7 @@
 use sha3::{Digest, Keccak256};
 
+use ethers::utils::keccak256 as ethers_keccak256;
+
 use group::Group;
 use k256::{
     elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, sec1::ToEncodedPoint, DecompressPoint},
@@ -9,7 +11,8 @@ use k256::{
 use frost::{algorithm::Hram, curve::Secp256k1};
 
 fn keccak256(data: &[u8]) -> [u8; 32] {
-    Keccak256::digest(data).try_into().unwrap()
+    //Keccak256::digest(data).try_into().unwrap()
+    ethers_keccak256(data)
 }
 
 fn hash_to_scalar(data: &[u8]) -> Scalar {
@@ -50,8 +53,15 @@ pub struct EthereumHram {}
 impl Hram<Secp256k1> for EthereumHram {
     #[allow(non_snake_case)]
     fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
+        let a_encoded_point = A.to_encoded_point(true);
+        let mut a_encoded = a_encoded_point.as_ref().to_owned();
+        a_encoded[0] += 25;
+        let mut data = address(R).to_vec();
+        data.append(&mut a_encoded);
+        data.append(&mut m.to_vec());
         Scalar::from_uint_reduced(U256::from_be_slice(&keccak256(
-            &[&address(R), A.to_encoded_point(true).as_ref(), m].concat(),
+            //&[&address(R), &a_encoded, m].concat(),
+            &data,
         )))
     }
 }
@@ -96,7 +106,14 @@ pub fn preprocess_signature_for_contract(
     let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), &m].concat());
     let sr = s.mul(&px_scalar).negate();
     let er = e.mul(&px_scalar).negate();
-    ProcessedSignature { sr, er, px: px_scalar, parity: &encoded_pk.as_ref()[0] - 2, message: m, e}
+    ProcessedSignature {
+        sr,
+        er,
+        px: px_scalar,
+        parity: &encoded_pk.as_ref()[0] - 2,
+        message: m,
+        e,
+    }
 }
 
 #[test]
@@ -176,5 +193,16 @@ fn test_ecrecover_hack() {
 
     let (sr, er) = preprocess_signature(hashed_message, &sig.R, sig.s, &group_key, chain_id);
     let q = ecrecover(sr, group_key_compressed[0] - 2, group_key_x, er).unwrap();
-    assert_eq!(q, address(&sig.R),);
+    assert_eq!(q, address(&sig.R));
+
+    let processed_signature =
+        preprocess_signature_for_contract(hashed_message, &sig.R, sig.s, &group_key, chain_id);
+    let q = ecrecover(
+        processed_signature.sr,
+        processed_signature.parity,
+        processed_signature.px,
+        processed_signature.er,
+    )
+    .unwrap();
+    assert_eq!(q, address(&sig.R));
 }
