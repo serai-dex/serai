@@ -3,9 +3,10 @@ use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
-
 use transcript::Transcript;
+
+use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
+use multiexp::multiexp_vartime;
 
 use dleq::{Generators, DLEqProof};
 
@@ -252,12 +253,16 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   let mut Rs = Vec::with_capacity(nonces.len());
   for n in 0 .. nonces.len() {
     Rs.push(vec![C::G::identity(); nonces[n].len()]);
-    #[allow(non_snake_case)]
     for g in 0 .. nonces[n].len() {
-      Rs[n][g] = {
-        B.values().map(|(B, _)| B[n][g][0]).sum::<C::G>() +
-          B.values().map(|(B, binding)| B[n][g][1] * binding).sum::<C::G>()
-      };
+      #[allow(non_snake_case)]
+      let mut D = C::G::identity();
+      let mut statements = Vec::with_capacity(B.len());
+      #[allow(non_snake_case)]
+      for (B, binding) in B.values() {
+        D += B[n][g][0];
+        statements.push((*binding, B[n][g][1]));
+      }
+      Rs[n][g] = D + multiexp_vartime(&statements);
     }
   }
 
