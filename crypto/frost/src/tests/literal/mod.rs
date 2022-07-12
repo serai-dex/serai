@@ -1,2 +1,4 @@
-mod secp256k1;
-mod schnorr;
+#[cfg(any(test, feature = "dalek"))]
+mod dalek;
+#[cfg(feature = "kp256")]
+mod kp256;

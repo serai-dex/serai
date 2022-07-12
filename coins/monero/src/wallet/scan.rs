@@ -11,8 +11,8 @@ use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
 use crate::{
   Commitment,
   serialize::{write_varint, read_32, read_scalar, read_point},
-  transaction::Transaction,
-  wallet::{uniqueness, shared_key, amount_decryption, commitment_mask}
+  transaction::{Timelock, Transaction},
+  wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask}
 };
 
 #[derive(Clone, PartialEq, Debug)]
@@ -22,6 +22,30 @@ pub struct SpendableOutput {
   pub key: EdwardsPoint,
   pub key_offset: Scalar,
   pub commitment: Commitment
+}
+
+pub struct Timelocked(Timelock, Vec<SpendableOutput>);
+impl Timelocked {
+  pub fn timelock(&self) -> Timelock {
+    self.0
+  }
+
+  pub fn not_locked(&self) -> Vec<SpendableOutput> {
+    if self.0 == Timelock::None {
+      return self.1.clone();
+    }
+    vec![]
+  }
+
+  /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked
+  pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<SpendableOutput>> {
+    // If the Timelocks are comparable, return the outputs if they're now unlocked
+    self.0.partial_cmp(&timelock).filter(|_| self.0 <= timelock).map(|_| self.1.clone())
+  }
+
+  pub fn ignore_timelock(&self) -> Vec<SpendableOutput> {
+    self.1.clone()
+  }
 }
 
 impl SpendableOutput {
@@ -55,9 +79,9 @@ impl SpendableOutput {
 impl Transaction {
   pub fn scan(
     &self,
-    view: Scalar,
-    spend: EdwardsPoint
-  ) -> Vec<SpendableOutput> {
+    view: ViewPair,
+    guaranteed: bool
+  ) -> Timelocked {
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
     extra.extend(&self.prefix.extra);
@@ -75,61 +99,63 @@ impl Transaction {
 
       pubkeys = m_pubkeys.iter().map(|key| key.point.decompress()).filter_map(|key| key).collect();
     } else {
-      return vec![];
+      return Timelocked(self.prefix.timelock, vec![]);
     };
 
     let mut res = vec![];
     for (o, output) in self.prefix.outputs.iter().enumerate() {
       // TODO: This may be replaceable by pubkeys[o]
       for pubkey in &pubkeys {
+        let key_offset = shared_key(
+          Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
+          view.view,
+          pubkey,
+          o
+        );
+        // P - shared == spend
+        if (output.key - (&key_offset * &ED25519_BASEPOINT_TABLE)) != view.spend {
+          continue;
+        }
+
+        // Since we've found an output to us, get its amount
         let mut commitment = Commitment::zero();
 
-        // P - shared == spend
-        let matches = |shared_key| (output.key - (&shared_key * &ED25519_BASEPOINT_TABLE)) == spend;
-        let test = |shared_key| Some(shared_key).filter(|shared_key| matches(*shared_key));
+        // Miner transaction
+        if output.amount != 0 {
+          commitment.amount = output.amount;
+        // Regular transaction
+        } else {
+          let amount = match self.rct_signatures.base.ecdh_info.get(o) {
+            Some(amount) => amount_decryption(*amount, key_offset),
+            // This should never happen, yet it may be possible with miner transactions?
+            // Using get just decreases the possibility of a panic and lets us move on in that case
+            None => break
+          };
 
-        // Get the traditional shared key and unique shared key, testing if either matches for this output
-        let traditional = test(shared_key(None, view, pubkey, o));
-        let unique = test(shared_key(Some(uniqueness(&self.prefix.inputs)), view, pubkey, o));
-
-        // If either matches, grab it and decode the amount
-        if let Some(key_offset) = traditional.or(unique) {
-          // Miner transaction
-          if output.amount != 0 {
-            commitment.amount = output.amount;
-          // Regular transaction
-          } else {
-            let amount = match self.rct_signatures.base.ecdh_info.get(o) {
-              Some(amount) => amount_decryption(*amount, key_offset),
-              // This should never happen, yet it may be possible with miner transactions?
-              // Using get just decreases the possibility of a panic and lets us move on in that case
-              None => continue
-            };
-
-            // Rebuild the commitment to verify it
-            commitment = Commitment::new(commitment_mask(key_offset), amount);
-            // If this is a malicious commitment, move to the next output
-            // Any other R value will calculate to a different spend key and are therefore ignorable
-            if Some(&commitment.calculate()) != self.rct_signatures.base.commitments.get(o) {
-              break;
-            }
+          // Rebuild the commitment to verify it
+          commitment = Commitment::new(commitment_mask(key_offset), amount);
+          // If this is a malicious commitment, move to the next output
+          // Any other R value will calculate to a different spend key and are therefore ignorable
+          if Some(&commitment.calculate()) != self.rct_signatures.base.commitments.get(o) {
+            break;
           }
-
-          if commitment.amount != 0 {
-            res.push(SpendableOutput {
-              tx: self.hash(),
-              o: o.try_into().unwrap(),
-              key: output.key,
-              key_offset,
-              commitment
-            });
-          }
-          // Break to prevent public keys from being included multiple times, triggering multiple
-          // inclusions of the same output
-          break;
         }
+
+        if commitment.amount != 0 {
+          res.push(SpendableOutput {
+            tx: self.hash(),
+            o: o.try_into().unwrap(),
+            key: output.key,
+            key_offset,
+            commitment
+          });
+        }
+        // Break to prevent public keys from being included multiple times, triggering multiple
+        // inclusions of the same output
+        break;
       }
     }
-    res
+
+    Timelocked(self.prefix.timelock, res)
   }
 }

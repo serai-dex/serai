@@ -2,23 +2,34 @@
 name = "serai-processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
-license = "MIT"
+license = "AGPL-3.0-only"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
+publish = false
 
 [dependencies]
 async-trait = "0.1"
 rand_core = "0.6"
 thiserror = "1"
 
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
 curve25519-dalek = { version = "3", features = ["std"] }
 blake2 = "0.10"
 
+group = "0.12"
+
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
-frost = { path = "../crypto/frost" }
+frost = { package = "modular-frost", path = "../crypto/frost" }
 
 monero = { version = "0.16", features = ["experimental"] }
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 [dev-dependencies]
+group = "0.12"
+rand = "0.8"
+futures = "0.3"
 tokio = { version = "1", features = ["full"] }

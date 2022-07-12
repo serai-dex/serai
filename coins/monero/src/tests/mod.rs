@@ -1,4 +1,3 @@
-#[cfg(feature = "multisig")]
-mod frost;
-
+mod hash_to_point;
 mod clsag;
+mod address;

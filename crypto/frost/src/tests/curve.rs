@@ -1,9 +1,8 @@
 use rand_core::{RngCore, CryptoRng};
 
-use crate::{
-  Curve, MultisigKeys,
-  tests::{schnorr::{sign, verify, batch_verify}, key_gen}
-};
+use group::{ff::Field, Group};
+
+use crate::{Curve, FrostKeys, tests::key_gen};
 
 // Test generation of FROST keys
 fn key_generation<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
@@ -14,21 +13,30 @@ fn key_generation<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 // Test serialization of generated keys
 fn keys_serialization<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   for (_, keys) in key_gen::<_, C>(rng) {
-    assert_eq!(&MultisigKeys::<C>::deserialize(&keys.serialize()).unwrap(), &*keys);
+    assert_eq!(&FrostKeys::<C>::deserialize(&keys.serialize()).unwrap(), &*keys);
   }
 }
 
 pub fn test_curve<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   // TODO: Test the Curve functions themselves
 
-  // Test Schnorr signatures work as expected
-  // This is a bit unnecessary, as they should for any valid curve, yet this provides tests with
-  // meaning, which the above tests won't have
-  sign::<_, C>(rng);
-  verify::<_, C>(rng);
-  batch_verify::<_, C>(rng);
+  // Test successful multiexp, with enough pairs to trigger its variety of algorithms
+  // Multiexp has its own tests, yet only against k256 and Ed25519 (which should be sufficient
+  // as-is to prove multiexp), and this doesn't hurt
+  {
+    let mut pairs = Vec::with_capacity(1000);
+    let mut sum = C::G::identity();
+    for _ in 0 .. 10 {
+      for _ in 0 .. 100 {
+        pairs.push((C::F::random(&mut *rng), C::GENERATOR * C::F::random(&mut *rng)));
+        sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
+      }
+      assert_eq!(multiexp::multiexp(&pairs), sum);
+      assert_eq!(multiexp::multiexp_vartime(&pairs), sum);
+    }
+  }
 
-  // Test FROST key generation and serialization of MultisigKeys works as expected
+  // Test FROST key generation and serialization of FrostKeys works as expected
   key_generation::<_, C>(rng);
   keys_serialization::<_, C>(rng);
 }

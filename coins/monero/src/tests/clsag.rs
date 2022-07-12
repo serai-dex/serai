@@ -1,18 +1,23 @@
 #[cfg(feature = "multisig")]
-use std::{cell::RefCell, rc::Rc};
+use std::sync::{Arc, RwLock};
 
 use rand::{RngCore, rngs::OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
+#[cfg(feature = "multisig")]
+use transcript::{Transcript, RecommendedTranscript};
+#[cfg(feature = "multisig")]
+use frost::curve::Ed25519;
+
 use crate::{
   Commitment,
-  random_scalar, generate_key_image,
+  random_scalar,
   wallet::Decoys,
-  ringct::clsag::{ClsagInput, Clsag}
+  ringct::{generate_key_image, clsag::{ClsagInput, Clsag}}
 };
 #[cfg(feature = "multisig")]
-use crate::{frost::{Ed25519, MultisigError, Transcript}, ringct::clsag::{ClsagDetails, ClsagMultisig}};
+use crate::{frost::MultisigError, ringct::clsag::{ClsagDetails, ClsagMultisig}};
 
 #[cfg(feature = "multisig")]
 use frost::tests::{key_gen, algorithm_machines, sign};
@@ -43,7 +48,7 @@ fn clsag() {
       ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
 
-    let image = generate_key_image(&secrets[0]);
+    let image = generate_key_image(secrets[0]);
     let (clsag, pseudo_out) = Clsag::sign(
       &mut OsRng,
       &vec![(
@@ -96,8 +101,9 @@ fn clsag_multisig() -> Result<(), MultisigError> {
     algorithm_machines(
       &mut OsRng,
       ClsagMultisig::new(
-        Transcript::new(b"Monero Serai CLSAG Test".to_vec()),
-        Rc::new(RefCell::new(Some(
+        RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
+        keys[&1].group_key().0,
+        Arc::new(RwLock::new(Some(
           ClsagDetails::new(
             ClsagInput::new(
               Commitment::new(randomness, AMOUNT),

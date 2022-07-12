@@ -1,78 +1,38 @@
-use std::marker::Send;
+use std::{marker::Send, collections::HashMap};
 
 use async_trait::async_trait;
 use thiserror::Error;
-use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::{Digest, Update}, Blake2b512};
+use frost::{curve::Curve, FrostError};
 
-use frost::{Curve, MultisigKeys};
-
-mod coins;
+mod coin;
+use coin::{CoinError, Coin};
 mod wallet;
 
 #[cfg(test)]
 mod tests;
 
-trait Output: Sized {
-  type Id;
+#[derive(Clone, Error, Debug)]
+pub enum NetworkError {}
 
-  fn id(&self) -> Self::Id;
-  fn amount(&self) -> u64;
-
-  fn serialize(&self) -> Vec<u8>;
-  fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
+#[async_trait]
+pub trait Network: Send {
+  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError>;
 }
 
 #[derive(Clone, Error, Debug)]
-enum CoinError {
-  #[error("failed to connect to coin daemon")]
-  ConnectionError
+pub enum SignError {
+  #[error("FROST had an error {0}")]
+  FrostError(FrostError),
+  #[error("coin had an error {0}")]
+  CoinError(CoinError),
+  #[error("network had an error {0}")]
+  NetworkError(NetworkError)
 }
 
-#[async_trait]
-trait Coin {
-  type Curve: Curve;
-
-  type Output: Output;
-  type SignableTransaction;
-
-  type Address: Send;
-
-  fn id() -> &'static [u8];
-  async fn confirmations() -> usize;
-  async fn max_inputs() -> usize;
-  async fn max_outputs() -> usize;
-
-  async fn get_height(&self) -> Result<usize, CoinError>;
-  async fn get_outputs_in_block(
-    &self,
-    height: usize,
-    key: <Self::Curve as Curve>::G
-  ) -> Result<Vec<Self::Output>, CoinError>;
-
-  async fn prepare_send<R: RngCore + CryptoRng>(
-    &self,
-    keys: MultisigKeys<Self::Curve>,
-    label: Vec<u8>,
-    height: usize,
-    inputs: Vec<Self::Output>,
-    payments: &[(Self::Address, u64)]
-  ) -> Result<Self::SignableTransaction, CoinError>;
-
-  async fn attempt_send<R: RngCore + CryptoRng + Send>(
-    &self,
-    rng: &mut R,
-    transaction: Self::SignableTransaction,
-    included: &[u16]
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
-}
-
-// Generate a view key for a given chain in a globally consistent manner regardless of the current
-// group key
+// Generate a static view key for a given chain in a globally consistent manner
+// Doesn't consider the current group key to increase the simplicity of verifying Serai's status
 // Takes an index, k, for more modern privacy protocols which use multiple view keys
-// Doesn't run Curve::hash_to_F, instead returning the hash object, due to hash_to_F being a FROST
-// definition instead of a wide reduction from a hash object
-fn view_key<C: Coin>(k: u64) -> Blake2b512 {
-  Blake2b512::new().chain(b"Serai DEX View Key").chain(C::id()).chain(k.to_le_bytes())
+pub fn view_key<C: Coin>(k: u64) -> <C::Curve as Curve>::F {
+  C::Curve::hash_to_F(b"Serai DEX View Key", &[C::ID, &k.to_le_bytes()].concat())
 }

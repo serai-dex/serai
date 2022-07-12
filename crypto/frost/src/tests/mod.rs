@@ -1,23 +1,22 @@
-use std::{rc::Rc, collections::HashMap};
+use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ff::Field;
+use group::ff::Field;
 
 use crate::{
   Curve,
-  MultisigParams, MultisigKeys,
+  FrostParams, FrostKeys,
   lagrange,
-  key_gen,
+  key_gen::KeyGenMachine,
   algorithm::Algorithm,
-  sign::{StateMachine, AlgorithmMachine}
+  sign::{PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine}
 };
-
-// Internal tests
-mod schnorr;
 
 // Test suites for public usage
 pub mod curve;
+pub mod schnorr;
+pub mod vectors;
 
 // Literal test definitions to run during `cargo test`
 #[cfg(test)]
@@ -37,50 +36,37 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 
 pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R
-) -> HashMap<u16, Rc<MultisigKeys<C>>> {
-  let mut params = HashMap::new();
+) -> HashMap<u16, Arc<FrostKeys<C>>> {
   let mut machines = HashMap::new();
-
   let mut commitments = HashMap::new();
   for i in 1 ..= PARTICIPANTS {
-    params.insert(
-      i,
-      MultisigParams::new(
-        THRESHOLD,
-        PARTICIPANTS,
-        i
-      ).unwrap()
+    let machine = KeyGenMachine::<C>::new(
+      FrostParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
+      "FROST Test key_gen".to_string()
     );
-    machines.insert(
-      i,
-      key_gen::StateMachine::<C>::new(
-        params[&i],
-        "FROST test key_gen".to_string()
-      )
-    );
-    commitments.insert(
-      i,
-      machines.get_mut(&i).unwrap().generate_coefficients(rng).unwrap()
-    );
+    let (machine, these_commitments) = machine.generate_coefficients(rng);
+    machines.insert(i, machine);
+    commitments.insert(i, these_commitments);
   }
 
   let mut secret_shares = HashMap::new();
-  for (l, machine) in machines.iter_mut() {
-    secret_shares.insert(
-      *l,
+  let mut machines = machines.drain().map(|(l, machine)| {
+    let (machine, shares) = machine.generate_secret_shares(
+      rng,
       // clone_without isn't necessary, as this machine's own data will be inserted without
       // conflict, yet using it ensures the machine's own data is actually inserted as expected
-      machine.generate_secret_shares(rng, clone_without(&commitments, l)).unwrap()
-    );
-  }
+      clone_without(&commitments, &l)
+    ).unwrap();
+    secret_shares.insert(l, shares);
+    (l, machine)
+  }).collect::<HashMap<_, _>>();
 
   let mut verification_shares = None;
   let mut group_key = None;
-  let mut keys = HashMap::new();
-  for (i, machine) in machines.iter_mut() {
+  machines.drain().map(|(i, machine)| {
     let mut our_secret_shares = HashMap::new();
     for (l, shares) in &secret_shares {
-      if i == l {
+      if i == *l {
         continue;
       }
       our_secret_shares.insert(*l, shares[&i].clone());
@@ -99,13 +85,11 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
     }
     assert_eq!(group_key.unwrap(), these_keys.group_key());
 
-    keys.insert(*i, Rc::new(these_keys));
-  }
-
-  keys
+    (i, Arc::new(these_keys))
+  }).collect::<HashMap<_, _>>()
 }
 
-pub fn recover<C: Curve>(keys: &HashMap<u16, MultisigKeys<C>>) -> C::F {
+pub fn recover<C: Curve>(keys: &HashMap<u16, FrostKeys<C>>) -> C::F {
   let first = keys.values().next().expect("no keys provided");
   assert!(keys.len() >= first.params().t().into(), "not enough keys provided");
   let included = keys.keys().cloned().collect::<Vec<_>>();
@@ -114,14 +98,14 @@ pub fn recover<C: Curve>(keys: &HashMap<u16, MultisigKeys<C>>) -> C::F {
     C::F::zero(),
     |accum, (i, keys)| accum + (keys.secret_share() * lagrange::<C::F>(*i, &included))
   );
-  assert_eq!(C::generator_table() * group_private, first.group_key(), "failed to recover keys");
+  assert_eq!(C::GENERATOR * group_private, first.group_key(), "failed to recover keys");
   group_private
 }
 
 pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   algorithm: A,
-  keys: &HashMap<u16, Rc<MultisigKeys<C>>>,
+  keys: &HashMap<u16, Arc<FrostKeys<C>>>,
 ) -> HashMap<u16, AlgorithmMachine<C, A>> {
   let mut included = vec![];
   while included.len() < usize::from(keys[&1].params().t()) {
@@ -148,27 +132,28 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
   ).collect()
 }
 
-pub fn sign<R: RngCore + CryptoRng, M: StateMachine>(
+pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
   rng: &mut R,
   mut machines: HashMap<u16, M>,
   msg: &[u8]
 ) -> M::Signature {
   let mut commitments = HashMap::new();
-  for (i, machine) in machines.iter_mut() {
-    commitments.insert(*i, machine.preprocess(rng).unwrap());
-  }
+  let mut machines = machines.drain().map(|(i, machine)| {
+    let (machine, preprocess) = machine.preprocess(rng);
+    commitments.insert(i, preprocess);
+    (i, machine)
+  }).collect::<HashMap<_, _>>();
 
   let mut shares = HashMap::new();
-  for (i, machine) in machines.iter_mut() {
-    shares.insert(
-      *i,
-      machine.sign(clone_without(&commitments, i), msg).unwrap()
-    );
-  }
+  let mut machines = machines.drain().map(|(i, machine)| {
+    let (machine, share) = machine.sign(clone_without(&commitments, &i), msg).unwrap();
+    shares.insert(i, share);
+    (i, machine)
+  }).collect::<HashMap<_, _>>();
 
   let mut signature = None;
-  for (i, machine) in machines.iter_mut() {
-    let sig = machine.complete(clone_without(&shares, i)).unwrap();
+  for (i, machine) in machines.drain() {
+    let sig = machine.complete(clone_without(&shares, &i)).unwrap();
     if signature.is_none() {
       signature = Some(sig.clone());
     }

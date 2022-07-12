@@ -9,7 +9,7 @@ use serde_json::json;
 
 use reqwest;
 
-use crate::{transaction::{Input, Transaction}, block::Block};
+use crate::{transaction::{Input, Timelock, Transaction}, block::Block, wallet::Fee};
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -34,8 +34,6 @@ pub enum RpcError {
   InvalidTransaction([u8; 32])
 }
 
-pub struct Rpc(String);
-
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
   hex::decode(value).map_err(|_| RpcError::InternalError("Monero returned invalid hex".to_string()))
 }
@@ -45,6 +43,9 @@ fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
     rpc_hex(point)?.try_into().map_err(|_| RpcError::InvalidPoint(point.to_string()))?
   ).decompress().ok_or(RpcError::InvalidPoint(point.to_string()))
 }
+
+#[derive(Clone, Debug)]
+pub struct Rpc(String);
 
 impl Rpc {
   pub fn new(daemon: String) -> Rpc {
@@ -232,6 +233,34 @@ impl Rpc {
     Ok(indexes.o_indexes)
   }
 
+  // from and to are inclusive
+  pub async fn get_output_distribution(&self, from: usize, to: usize) -> Result<Vec<u64>, RpcError> {
+    #[allow(dead_code)]
+    #[derive(Deserialize, Debug)]
+    pub struct Distribution {
+      distribution: Vec<u64>
+    }
+
+    #[allow(dead_code)]
+    #[derive(Deserialize, Debug)]
+    struct Distributions {
+      distributions: Vec<Distribution>
+    }
+
+    let mut distributions: JsonRpcResponse<Distributions> = self.rpc_call("json_rpc", Some(json!({
+      "method": "get_output_distribution",
+      "params": {
+        "binary": false,
+        "amounts": [0],
+        "cumulative": true,
+        "from_height": from,
+        "to_height": to
+      }
+    }))).await?;
+
+    Ok(distributions.result.distributions.swap_remove(0).distribution)
+  }
+
   pub async fn get_outputs(
     &self,
     indexes: &[u64],
@@ -267,37 +296,29 @@ impl Rpc {
     // get the median time for the given height, yet we do need to in order to be complete
     outs.outs.iter().enumerate().map(
       |(i, out)| Ok(
-        if txs[i].prefix.unlock_time <= u64::try_from(height).unwrap() {
-          Some([rpc_point(&out.key)?, rpc_point(&out.mask)?])
-        } else { None }
+        Some([rpc_point(&out.key)?, rpc_point(&out.mask)?]).filter(|_| {
+          match txs[i].prefix.timelock {
+            Timelock::Block(t_height) => (t_height <= height),
+            _ => false
+          }
+        })
       )
     ).collect()
   }
 
-  pub async fn get_output_distribution(&self, height: usize) -> Result<Vec<u64>, RpcError> {
+  pub async fn get_fee(&self) -> Result<Fee, RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
-    pub struct Distribution {
-      distribution: Vec<u64>
+    struct FeeResponse {
+      fee: u64,
+      quantization_mask: u64
     }
 
-    #[allow(dead_code)]
-    #[derive(Deserialize, Debug)]
-    struct Distributions {
-      distributions: Vec<Distribution>
-    }
-
-    let mut distributions: JsonRpcResponse<Distributions> = self.rpc_call("json_rpc", Some(json!({
-      "method": "get_output_distribution",
-      "params": {
-        "binary": false,
-        "amounts": [0],
-        "cumulative": true,
-        "to_height": height
-      }
+    let res: JsonRpcResponse<FeeResponse> = self.rpc_call("json_rpc", Some(json!({
+      "method": "get_fee_estimate"
     }))).await?;
 
-    Ok(distributions.result.distributions.swap_remove(0).distribution)
+    Ok(Fee { per_weight: res.result.fee, mask: res.result.quantization_mask })
   }
 
   pub async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {

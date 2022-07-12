@@ -1,112 +1,187 @@
+#![no_std]
+
 use core::{
   ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   borrow::Borrow,
   iter::{Iterator, Sum}
 };
 
+use subtle::{ConstantTimeEq, ConditionallySelectable};
+
 use rand_core::RngCore;
 use digest::{consts::U64, Digest};
 
-use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
+use subtle::{Choice, CtOption};
 
 pub use curve25519_dalek as dalek;
 
 use dalek::{
   constants,
-  traits::{Identity, IsIdentity},
+  traits::Identity,
   scalar::Scalar as DScalar,
   edwards::{
-    EdwardsPoint as DPoint,
-    EdwardsBasepointTable as DTable,
-    CompressedEdwardsY as DCompressed
+    EdwardsPoint as DEdwardsPoint,
+    EdwardsBasepointTable as DEdwardsBasepointTable,
+    CompressedEdwardsY as DCompressedEdwards
+  },
+  ristretto::{
+    RistrettoPoint as DRistrettoPoint,
+    RistrettoBasepointTable as DRistrettoBasepointTable,
+    CompressedRistretto as DCompressedRistretto
   }
 };
 
-use ff::{Field, PrimeField};
-use group::Group;
+use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
+use group::{Group, GroupEncoding, prime::PrimeGroup};
 
+pub mod field;
+
+// Convert a boolean to a Choice in a *presumably* constant time manner
+fn choice(value: bool) -> Choice {
+  let bit = value as u8;
+  debug_assert_eq!(bit | 1, 1);
+  Choice::from(bit)
+}
+
+macro_rules! deref_borrow {
+  ($Source: ident, $Target: ident) => {
+    impl Deref for $Source {
+      type Target = $Target;
+
+      fn deref(&self) -> &Self::Target {
+        &self.0
+      }
+    }
+
+    impl Borrow<$Target> for $Source {
+      fn borrow(&self) -> &$Target {
+        &self.0
+      }
+    }
+
+    impl Borrow<$Target> for &$Source {
+      fn borrow(&self) -> &$Target {
+        &self.0
+      }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! constant_time {
+  ($Value: ident, $Inner: ident) => {
+    impl ConstantTimeEq for $Value {
+      fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
+    }
+
+    impl ConditionallySelectable for $Value {
+      fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        $Value($Inner::conditional_select(&a.0, &b.0, choice))
+      }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! math_op {
+  (
+    $Value: ident,
+    $Other: ident,
+    $Op: ident,
+    $op_fn: ident,
+    $Assign: ident,
+    $assign_fn: ident,
+    $function: expr
+  ) => {
+    impl $Op<$Other> for $Value {
+      type Output = $Value;
+      fn $op_fn(self, other: $Other) -> Self::Output {
+        Self($function(self.0, other.0))
+      }
+    }
+    impl $Assign<$Other> for $Value {
+      fn $assign_fn(&mut self, other: $Other) {
+        self.0 = $function(self.0, other.0);
+      }
+    }
+    impl<'a> $Op<&'a $Other> for $Value {
+      type Output = $Value;
+      fn $op_fn(self, other: &'a $Other) -> Self::Output {
+        Self($function(self.0, other.0))
+      }
+    }
+    impl<'a> $Assign<&'a $Other> for $Value {
+      fn $assign_fn(&mut self, other: &'a $Other) {
+        self.0 = $function(self.0, other.0);
+      }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! math {
+  ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
+    math_op!($Value, $Value, Add, add, AddAssign, add_assign, $add);
+    math_op!($Value, $Value, Sub, sub, SubAssign, sub_assign, $sub);
+    math_op!($Value, $Factor, Mul, mul, MulAssign, mul_assign, $mul);
+  }
+}
+
+macro_rules! math_neg {
+  ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
+    math!($Value, $Factor, $add, $sub, $mul);
+
+    impl Neg for $Value {
+      type Output = Self;
+      fn neg(self) -> Self::Output { Self(-self.0) }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! from_wrapper {
+  ($wrapper: ident, $inner: ident, $uint: ident) => {
+    impl From<$uint> for $wrapper {
+      fn from(a: $uint) -> $wrapper { Self($inner::from(a)) }
+    }
+  }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! from_uint {
+  ($wrapper: ident, $inner: ident) => {
+    from_wrapper!($wrapper, $inner, u8);
+    from_wrapper!($wrapper, $inner, u16);
+    from_wrapper!($wrapper, $inner, u32);
+    from_wrapper!($wrapper, $inner, u64);
+  }
+}
+
+/// Wrapper around the dalek Scalar type
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Scalar(pub DScalar);
+deref_borrow!(Scalar, DScalar);
+constant_time!(Scalar, DScalar);
+math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
+from_uint!(Scalar, DScalar);
 
-impl Deref for Scalar {
-  type Target = DScalar;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
+impl Scalar {
+  /// Perform wide reduction on a 64-byte array to create a Scalar without bias
+  pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Scalar {
+    Self(DScalar::from_bytes_mod_order_wide(bytes))
   }
-}
 
-impl Borrow<DScalar> for Scalar {
-  fn borrow(&self) -> &DScalar {
-    &self.0
+  /// Derive a Scalar without bias from a digest via wide reduction
+  pub fn from_hash<D: Digest<OutputSize = U64>>(hash: D) -> Scalar {
+    let mut output = [0u8; 64];
+    output.copy_from_slice(&hash.finalize());
+    Scalar(DScalar::from_bytes_mod_order_wide(&output))
   }
-}
-
-impl Borrow<DScalar> for &Scalar {
-  fn borrow(&self) -> &DScalar {
-    &self.0
-  }
-}
-
-impl Add<Scalar> for Scalar {
-  type Output = Self;
-  fn add(self, other: Scalar) -> Scalar { Self(self.0 + other.0) }
-}
-impl AddAssign for Scalar {
-  fn add_assign(&mut self, other: Scalar) { self.0 += other.0 }
-}
-
-impl<'a> Add<&'a Scalar> for Scalar {
-  type Output = Self;
-  fn add(self, other: &'a Scalar) -> Scalar { Self(self.0 + other.0) }
-}
-impl<'a> AddAssign<&'a Scalar> for Scalar {
-  fn add_assign(&mut self, other: &'a Scalar) { self.0 += other.0 }
-}
-
-impl Sub<Scalar> for Scalar {
-  type Output = Self;
-  fn sub(self, other: Scalar) -> Scalar { Self(self.0 - other.0) }
-}
-impl SubAssign for Scalar {
-  fn sub_assign(&mut self, other: Scalar) { self.0 -= other.0 }
-}
-
-impl<'a> Sub<&'a Scalar> for Scalar {
-  type Output = Self;
-  fn sub(self, other: &'a Scalar) -> Scalar { Self(self.0 - other.0) }
-}
-impl<'a> SubAssign<&'a Scalar> for Scalar {
-  fn sub_assign(&mut self, other: &'a Scalar) { self.0 -= other.0 }
-}
-
-impl Neg for Scalar {
-  type Output = Self;
-  fn neg(self) -> Scalar { Self(-self.0) }
-}
-
-impl Mul<Scalar> for Scalar {
-  type Output = Self;
-  fn mul(self, other: Scalar) -> Scalar { Self(self.0 * other.0) }
-}
-impl MulAssign for Scalar {
-  fn mul_assign(&mut self, other: Scalar) { self.0 *= other.0 }
-}
-
-impl<'a> Mul<&'a Scalar> for Scalar {
-  type Output = Self;
-  fn mul(self, other: &'a Scalar) -> Scalar { Self(self.0 * other.0) }
-}
-impl<'a> MulAssign<&'a Scalar> for Scalar {
-  fn mul_assign(&mut self, other: &'a Scalar) { self.0 *= other.0 }
-}
-
-impl ConstantTimeEq for Scalar {
-  fn ct_eq(&self, _: &Self) -> Choice { unimplemented!() }
-}
-
-impl ConditionallySelectable for Scalar {
-  fn conditional_select(_: &Self, _: &Self, _: Choice) -> Self { unimplemented!() }
 }
 
 impl Field for Scalar {
@@ -121,16 +196,12 @@ impl Field for Scalar {
   fn square(&self) -> Self { *self * self }
   fn double(&self) -> Self { *self + self }
   fn invert(&self) -> CtOption<Self> {
-    CtOption::new(Self(self.0.invert()), Choice::from(1 as u8))
+    CtOption::new(Self(self.0.invert()), !self.is_zero())
   }
   fn sqrt(&self) -> CtOption<Self> { unimplemented!() }
-  fn is_zero(&self) -> Choice { Choice::from(if self.0 == DScalar::zero() { 1 } else { 0 }) }
+  fn is_zero(&self) -> Choice { self.0.ct_eq(&DScalar::zero()) }
   fn cube(&self) -> Self { *self * self * self }
   fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
-}
-
-impl From<u64> for Scalar {
-  fn from(a: u64) -> Scalar { Self(DScalar::from(a)) }
 }
 
 impl PrimeField for Scalar {
@@ -138,177 +209,132 @@ impl PrimeField for Scalar {
   const NUM_BITS: u32 = 253;
   const CAPACITY: u32 = 252;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
-    let scalar = DScalar::from_canonical_bytes(bytes).map(|x| Scalar(x));
-    CtOption::new(
-      scalar.unwrap_or(Scalar::zero()),
-      Choice::from(if scalar.is_some() { 1 } else { 0 })
-    )
+    let scalar = DScalar::from_canonical_bytes(bytes);
+    // TODO: This unwrap_or isn't constant time, yet do we have an alternative?
+    CtOption::new(Scalar(scalar.unwrap_or(DScalar::zero())), choice(scalar.is_some()))
   }
   fn to_repr(&self) -> [u8; 32] { self.0.to_bytes() }
 
-  const S: u32 = 0;
+  const S: u32 = 2;
   fn is_odd(&self) -> Choice { unimplemented!() }
-  fn multiplicative_generator() -> Self { unimplemented!() }
+  fn multiplicative_generator() -> Self { 2u64.into() }
   fn root_of_unity() -> Self { unimplemented!() }
 }
 
-impl Scalar {
-  pub fn from_hash<D: Digest<OutputSize = U64>>(hash: D) -> Scalar {
-    let mut output = [0u8; 64];
-    output.copy_from_slice(&hash.finalize());
-    Scalar(DScalar::from_bytes_mod_order_wide(&output))
+impl PrimeFieldBits for Scalar {
+  type ReprBits = [u8; 32];
+
+  fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
+    self.to_repr().into()
+  }
+
+  fn char_le_bits() -> FieldBits<Self::ReprBits> {
+    let mut bytes = (Scalar::zero() - Scalar::one()).to_repr();
+    bytes[0] += 1;
+    debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::zero());
+    bytes.into()
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct EdwardsPoint(pub DPoint);
-pub const ED25519_BASEPOINT_POINT: EdwardsPoint = EdwardsPoint(constants::ED25519_BASEPOINT_POINT);
+macro_rules! dalek_group {
+  (
+    $Point: ident,
+    $DPoint: ident,
+    $torsion_free: expr,
 
-impl Deref for EdwardsPoint {
-    type Target = DPoint;
+    $Table: ident,
+    $DTable: ident,
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    $DCompressed: ident,
+
+    $BASEPOINT_POINT: ident,
+    $BASEPOINT_TABLE: ident
+  ) => {
+    /// Wrapper around the dalek Point type. For Ed25519, this is restricted to the prime subgroup
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct $Point(pub $DPoint);
+    deref_borrow!($Point, $DPoint);
+    constant_time!($Point, $DPoint);
+    math_neg!($Point, Scalar, $DPoint::add, $DPoint::sub, $DPoint::mul);
+
+    pub const $BASEPOINT_POINT: $Point = $Point(constants::$BASEPOINT_POINT);
+
+    impl Sum<$Point> for $Point {
+      fn sum<I: Iterator<Item = $Point>>(iter: I) -> $Point { Self($DPoint::sum(iter)) }
     }
+    impl<'a> Sum<&'a $Point> for $Point {
+      fn sum<I: Iterator<Item = &'a $Point>>(iter: I) -> $Point { Self($DPoint::sum(iter)) }
+    }
+
+    impl Group for $Point {
+      type Scalar = Scalar;
+      // Ideally, this would be cryptographically secure, yet that's not a bound on the trait
+      // k256 also does this
+      fn random(rng: impl RngCore) -> Self { &$BASEPOINT_TABLE * Scalar::random(rng) }
+      fn identity() -> Self { Self($DPoint::identity()) }
+      fn generator() -> Self { $BASEPOINT_POINT }
+      fn is_identity(&self) -> Choice { self.0.ct_eq(&$DPoint::identity()) }
+      fn double(&self) -> Self { *self + self }
+    }
+
+    impl GroupEncoding for $Point {
+      type Repr = [u8; 32];
+
+      fn from_bytes(bytes: &Self::Repr) -> CtOption<Self> {
+        let decompressed = $DCompressed(*bytes).decompress();
+        // TODO: Same note on unwrap_or as above
+        let point = decompressed.unwrap_or($DPoint::identity());
+        CtOption::new($Point(point), choice(decompressed.is_some()) & choice($torsion_free(point)))
+      }
+
+      fn from_bytes_unchecked(bytes: &Self::Repr) -> CtOption<Self> {
+        $Point::from_bytes(bytes)
+      }
+
+      fn to_bytes(&self) -> Self::Repr {
+        self.0.compress().to_bytes()
+      }
+    }
+
+    impl PrimeGroup for $Point {}
+
+    /// Wrapper around the dalek Table type, offering efficient multiplication against the
+    /// basepoint
+    pub struct $Table(pub $DTable);
+    deref_borrow!($Table, $DTable);
+    pub const $BASEPOINT_TABLE: $Table = $Table(constants::$BASEPOINT_TABLE);
+
+    impl Mul<Scalar> for &$Table {
+      type Output = $Point;
+      fn mul(self, b: Scalar) -> $Point { $Point(&b.0 * &self.0) }
+    }
+  };
 }
 
-impl Borrow<DPoint> for EdwardsPoint {
-  fn borrow(&self) -> &DPoint {
-    &self.0
-  }
-}
+dalek_group!(
+  EdwardsPoint,
+  DEdwardsPoint,
+  |point: DEdwardsPoint| point.is_torsion_free(),
 
-impl Borrow<DPoint> for &EdwardsPoint {
-  fn borrow(&self) -> &DPoint {
-    &self.0
-  }
-}
+  EdwardsBasepointTable,
+  DEdwardsBasepointTable,
 
-impl Add<EdwardsPoint> for EdwardsPoint {
-  type Output = Self;
-  fn add(self, b: EdwardsPoint) -> EdwardsPoint { Self(self.0 + b.0) }
-}
-impl AddAssign<EdwardsPoint> for EdwardsPoint {
-  fn add_assign(&mut self, other: EdwardsPoint) { self.0 += other.0 }
-}
-impl Sum<EdwardsPoint> for EdwardsPoint {
-  fn sum<I: Iterator<Item = EdwardsPoint>>(iter: I) -> EdwardsPoint { Self(DPoint::sum(iter)) }
-}
+  DCompressedEdwards,
 
-impl<'a> Add<&'a EdwardsPoint> for EdwardsPoint {
-  type Output = Self;
-  fn add(self, b: &'a EdwardsPoint) -> EdwardsPoint { Self(self.0 + b.0) }
-}
-impl<'a> AddAssign<&'a EdwardsPoint> for EdwardsPoint {
-  fn add_assign(&mut self, other: &'a EdwardsPoint) { self.0 += other.0 }
-}
-impl<'a> Sum<&'a EdwardsPoint> for EdwardsPoint {
-  fn sum<I: Iterator<Item = &'a EdwardsPoint>>(iter: I) -> EdwardsPoint { Self(DPoint::sum(iter)) }
-}
-
-impl Sub<EdwardsPoint> for EdwardsPoint {
-  type Output = Self;
-  fn sub(self, b: EdwardsPoint) -> EdwardsPoint { Self(self.0 - b.0) }
-}
-impl SubAssign<EdwardsPoint> for EdwardsPoint {
-  fn sub_assign(&mut self, other: EdwardsPoint) { self.0 -= other.0 }
-}
-
-impl<'a> Sub<&'a EdwardsPoint> for EdwardsPoint {
-  type Output = Self;
-  fn sub(self, b: &'a EdwardsPoint) -> EdwardsPoint { Self(self.0 - b.0) }
-}
-impl<'a> SubAssign<&'a EdwardsPoint> for EdwardsPoint {
-  fn sub_assign(&mut self, other: &'a EdwardsPoint) { self.0 -= other.0 }
-}
-
-impl Neg for EdwardsPoint {
-  type Output = Self;
-  fn neg(self) -> EdwardsPoint { Self(-self.0) }
-}
-
-impl Mul<Scalar> for EdwardsPoint {
-  type Output = Self;
-  fn mul(self, b: Scalar) -> EdwardsPoint { Self(b.0 * self.0) }
-}
-impl MulAssign<Scalar> for EdwardsPoint {
-  fn mul_assign(&mut self, other: Scalar) { self.0 *= other.0 }
-}
-
-impl<'a> Mul<&'a Scalar> for EdwardsPoint {
-  type Output = Self;
-  fn mul(self, b: &'a Scalar) -> EdwardsPoint { Self(b.0 * self.0) }
-}
-impl<'a> MulAssign<&'a Scalar> for EdwardsPoint {
-  fn mul_assign(&mut self, other: &'a Scalar) { self.0 *= other.0 }
-}
-
-impl Group for EdwardsPoint {
-  type Scalar = Scalar;
-  fn random(mut _rng: impl RngCore) -> Self { unimplemented!() }
-  fn identity() -> Self { Self(DPoint::identity()) }
-  fn generator() -> Self { ED25519_BASEPOINT_POINT }
-  fn is_identity(&self) -> Choice { (self.0.is_identity() as u8).into() }
-  fn double(&self) -> Self { *self + self }
-}
-
-impl Scalar {
-  pub fn from_canonical_bytes(bytes: [u8; 32]) -> Option<Scalar> {
-    DScalar::from_canonical_bytes(bytes).map(|x| Self(x))
-  }
-  pub fn from_bytes_mod_order(bytes: [u8; 32]) -> Scalar {
-    Self(DScalar::from_bytes_mod_order(bytes))
-  }
-  pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Scalar {
-    Self(DScalar::from_bytes_mod_order_wide(bytes))
-  }
-}
-
-pub struct CompressedEdwardsY(pub DCompressed);
-impl CompressedEdwardsY {
-  pub fn new(y: [u8; 32]) -> CompressedEdwardsY {
-    Self(DCompressed(y))
-  }
-
-  pub fn decompress(&self) -> Option<EdwardsPoint> {
-    self.0.decompress().map(|x| EdwardsPoint(x))
-  }
-
-  pub fn to_bytes(&self) -> [u8; 32] {
-    self.0.to_bytes()
-  }
-}
-
-impl EdwardsPoint {
-  pub fn is_torsion_free(&self) -> bool {
-    self.0.is_torsion_free()
-  }
-
-  pub fn compress(&self) -> CompressedEdwardsY {
-    CompressedEdwardsY(self.0.compress())
-  }
-}
-
-pub struct EdwardsBasepointTable(pub DTable);
-pub const ED25519_BASEPOINT_TABLE: EdwardsBasepointTable = EdwardsBasepointTable(
-  constants::ED25519_BASEPOINT_TABLE
+  ED25519_BASEPOINT_POINT,
+  ED25519_BASEPOINT_TABLE
 );
 
-impl Deref for EdwardsBasepointTable {
-    type Target = DTable;
+dalek_group!(
+  RistrettoPoint,
+  DRistrettoPoint,
+  |_| true,
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+  RistrettoBasepointTable,
+  DRistrettoBasepointTable,
 
-impl Borrow<DTable> for &EdwardsBasepointTable {
-  fn borrow(&self) -> &DTable {
-    &self.0
-  }
-}
+  DCompressedRistretto,
 
-impl Mul<Scalar> for &EdwardsBasepointTable {
-  type Output = EdwardsPoint;
-  fn mul(self, b: Scalar) -> EdwardsPoint { EdwardsPoint(&b.0 * &self.0) }
-}
+  RISTRETTO_BASEPOINT_POINT,
+  RISTRETTO_BASEPOINT_TABLE
+);

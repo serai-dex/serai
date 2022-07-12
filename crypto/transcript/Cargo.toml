@@ -1,15 +1,19 @@
 [package]
-name = "transcript"
-version = "0.1.0"
-description = "A simple transcript definition"
+name = "flexible-transcript"
+version = "0.1.2"
+description = "A simple transcript trait definition, along with viable options"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["transcript"]
 edition = "2021"
 
 [dependencies]
 digest = "0.10"
 
+blake2 = { version = "0.10", optional = true }
 merlin = { version = "3", optional = true }
 
 [features]
+recommended = ["blake2"]
 merlin = ["dep:merlin"]

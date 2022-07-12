@@ -1,6 +1,10 @@
+use core::cmp::Ordering;
+
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{hash, serialize::*, ringct::{RctPrunable, RctSignatures}};
+
+pub const RING_LEN: usize = 11;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Input {
@@ -14,6 +18,13 @@ pub enum Input {
 }
 
 impl Input {
+  // Worst-case predictive len
+  pub(crate) fn fee_weight() -> usize {
+    // Uses 1 byte for the VarInt amount due to amount being 0
+    // Uses 1 byte for the VarInt encoding of the length of the ring as well
+    1 + 1 + 1 + (8 * RING_LEN) + 32
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       Input::Gen(height) => {
@@ -56,6 +67,10 @@ pub struct Output {
 }
 
 impl Output {
+  pub(crate) fn fee_weight() -> usize {
+    1 + 1 + 32 + 1
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.amount, w)?;
     w.write_all(&[2 + (if self.tag.is_some() { 1 } else { 0 })])?;
@@ -84,19 +99,73 @@ impl Output {
   }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Timelock {
+  None,
+  Block(usize),
+  Time(u64)
+}
+
+impl Timelock {
+  fn from_raw(raw: u64) -> Timelock {
+    if raw == 0 {
+      Timelock::None
+    } else if raw < 500_000_000 {
+      Timelock::Block(usize::try_from(raw).unwrap())
+    } else {
+      Timelock::Time(raw)
+    }
+  }
+
+  pub(crate) fn fee_weight() -> usize {
+    8
+  }
+
+  fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+    write_varint(
+      &match self {
+        Timelock::None => 0,
+        Timelock::Block(block) => (*block).try_into().unwrap(),
+        Timelock::Time(time) => *time
+      },
+      w
+    )
+  }
+}
+
+impl PartialOrd for Timelock {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    match (self, other) {
+      (Timelock::None, _) => Some(Ordering::Less),
+      (Timelock::Block(a), Timelock::Block(b)) => a.partial_cmp(b),
+      (Timelock::Time(a), Timelock::Time(b)) => a.partial_cmp(b),
+      _ => None
+    }
+  }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct TransactionPrefix {
   pub version: u64,
-  pub unlock_time: u64,
+  pub timelock: Timelock,
   pub inputs: Vec<Input>,
   pub outputs: Vec<Output>,
   pub extra: Vec<u8>
 }
 
 impl TransactionPrefix {
+  pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
+    // Assumes Timelock::None since this library won't let you create a TX with a timelock
+    1 + 1 +
+    varint_len(inputs) + (inputs * Input::fee_weight()) +
+    // Only 16 outputs are possible under transactions by this lib
+    1 + (outputs * Output::fee_weight()) +
+    varint_len(extra) + extra
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.version, w)?;
-    write_varint(&self.unlock_time, w)?;
+    self.timelock.serialize(w)?;
     write_vec(Input::serialize, &self.inputs, w)?;
     write_vec(Output::serialize, &self.outputs, w)?;
     write_varint(&self.extra.len().try_into().unwrap(), w)?;
@@ -106,7 +175,7 @@ impl TransactionPrefix {
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<TransactionPrefix> {
     let mut prefix = TransactionPrefix {
       version: read_varint(r)?,
-      unlock_time: read_varint(r)?,
+      timelock: Timelock::from_raw(read_varint(r)?),
       inputs: read_vec(Input::deserialize, r)?,
       outputs: read_vec(Output::deserialize, r)?,
       extra: vec![]
@@ -127,6 +196,10 @@ pub struct Transaction {
 }
 
 impl Transaction {
+  pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
+    TransactionPrefix::fee_weight(inputs, outputs, extra) + RctSignatures::fee_weight(inputs, outputs)
+  }
+
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     self.prefix.serialize(w)?;
     self.rct_signatures.serialize(w)

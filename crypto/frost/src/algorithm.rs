@@ -4,7 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, MultisigView, schnorr};
+use crate::{Curve, FrostError, FrostView, schnorr};
 pub use schnorr::SchnorrSignature;
 
 /// Algorithm to use FROST with
@@ -13,22 +13,25 @@ pub trait Algorithm<C: Curve>: Clone {
   /// The resulting type of the signatures this algorithm will produce
   type Signature: Clone + PartialEq + Debug;
 
+  /// Obtain a mutable borrow of the underlying transcript
   fn transcript(&mut self) -> &mut Self::Transcript;
+
+  /// Obtain the list of nonces to generate, as specified by the basepoints to create commitments
+  /// against per-nonce. These are not committed to by FROST on the underlying transcript
+  fn nonces(&self) -> Vec<Vec<C::G>>;
 
   /// Generate an addendum to FROST"s preprocessing stage
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    params: &MultisigView<C>,
-    nonces: &[C::F; 2],
+    params: &FrostView<C>,
   ) -> Vec<u8>;
 
   /// Proccess the addendum for the specified participant. Guaranteed to be ordered
   fn process_addendum(
     &mut self,
-    params: &MultisigView<C>,
+    params: &FrostView<C>,
     l: u16,
-    commitments: &[C::G; 2],
     serialized: &[u8],
   ) -> Result<(), FrostError>;
 
@@ -38,23 +41,24 @@ pub trait Algorithm<C: Curve>: Clone {
   /// The nonce will already have been processed into the combined form d + (e * p)
   fn sign_share(
     &mut self,
-    params: &MultisigView<C>,
-    nonce_sum: C::G,
-    binding: C::F,
-    nonce: C::F,
+    params: &FrostView<C>,
+    nonce_sums: &[Vec<C::G>],
+    nonces: &[C::F],
     msg: &[u8],
   ) -> C::F;
 
   /// Verify a signature
-  fn verify(&self, group_key: C::G, nonce: C::G, sum: C::F) -> Option<Self::Signature>;
+  #[must_use]
+  fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature>;
 
   /// Verify a specific share given as a response. Used to determine blame if signature
   /// verification fails
+  #[must_use]
   fn verify_share(
     &self,
     l: u16,
     verification_share: C::G,
-    nonce: C::G,
+    nonces: &[Vec<C::G>],
     share: C::F,
   ) -> bool;
 }
@@ -63,6 +67,12 @@ pub trait Algorithm<C: Curve>: Clone {
 #[derive(Clone, Debug)]
 pub struct IetfTranscript(Vec<u8>);
 impl Transcript for IetfTranscript {
+  type Challenge = Vec<u8>;
+
+  fn new(_: &'static [u8]) -> IetfTranscript {
+    unimplemented!("IetfTranscript should not be used with multiple nonce protocols");
+  }
+
   fn domain_separate(&mut self, _: &[u8]) {}
 
   fn append_message(&mut self, _: &'static [u8], message: &[u8]) {
@@ -112,20 +122,22 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     &mut self.transcript
   }
 
+  fn nonces(&self) -> Vec<Vec<C::G>> {
+    vec![vec![C::GENERATOR]]
+  }
+
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     _: &mut R,
-    _: &MultisigView<C>,
-    _: &[C::F; 2],
+    _: &FrostView<C>,
   ) -> Vec<u8> {
     vec![]
   }
 
   fn process_addendum(
     &mut self,
-    _: &MultisigView<C>,
+    _: &FrostView<C>,
     _: u16,
-    _: &[C::G; 2],
     _: &[u8],
   ) -> Result<(), FrostError> {
     Ok(())
@@ -133,19 +145,19 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
 
   fn sign_share(
     &mut self,
-    params: &MultisigView<C>,
-    nonce_sum: C::G,
-    _: C::F,
-    nonce: C::F,
+    params: &FrostView<C>,
+    nonce_sums: &[Vec<C::G>],
+    nonces: &[C::F],
     msg: &[u8],
   ) -> C::F {
-    let c = H::hram(&nonce_sum, &params.group_key(), msg);
+    let c = H::hram(&nonce_sums[0][0], &params.group_key(), msg);
     self.c = Some(c);
-    schnorr::sign::<C>(params.secret_share(), nonce, c).s
+    schnorr::sign::<C>(params.secret_share(), nonces[0], c).s
   }
 
-  fn verify(&self, group_key: C::G, nonce: C::G, sum: C::F) -> Option<Self::Signature> {
-    let sig = SchnorrSignature { R: nonce, s: sum };
+  #[must_use]
+  fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature> {
+    let sig = SchnorrSignature { R: nonces[0][0], s: sum };
     if schnorr::verify::<C>(group_key, self.c.unwrap(), &sig) {
       Some(sig)
     } else {
@@ -153,17 +165,18 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     }
   }
 
+  #[must_use]
   fn verify_share(
     &self,
     _: u16,
     verification_share: C::G,
-    nonce: C::G,
+    nonces: &[Vec<C::G>],
     share: C::F,
   ) -> bool {
     schnorr::verify::<C>(
       verification_share,
       self.c.unwrap(),
-      &SchnorrSignature { R: nonce, s: share}
+      &SchnorrSignature { R: nonces[0][0], s: share}
     )
   }
 }

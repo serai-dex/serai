@@ -1,0 +1,38 @@
+[package]
+name = "dleq"
+version = "0.1.0"
+description = "Implementation of single and cross-curve Discrete Log Equality proofs"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+rand_core = "0.6"
+
+digest = "0.10"
+
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
+
+ff = "0.12"
+group = "0.12"
+
+multiexp = { path = "../multiexp", features = ["batch"], optional = true }
+
+[dev-dependencies]
+hex-literal = "0.3"
+
+blake2 = "0.10"
+
+k256 = { version = "0.11", features = ["arithmetic", "bits"] }
+dalek-ff-group = { path = "../dalek-ff-group" }
+
+transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"] }
+
+[features]
+serialize = []
+experimental = ["multiexp"]
+secure_capacity_difference = []
+
+# Only applies to cross_group, yet is default to ensure security
+default = ["secure_capacity_difference"]

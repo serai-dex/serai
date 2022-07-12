@@ -1,9 +1,11 @@
 [package]
 name = "dalek-ff-group"
-version = "0.1.0"
+version = "0.1.1"
 description = "ff/group bindings around curve25519-dalek"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["curve25519", "ed25519", "ristretto", "dalek", "group"]
 edition = "2021"
 
 [dependencies]
@@ -12,7 +14,8 @@ digest = "0.10"
 
 subtle = "2.4"
 
-ff = "0.11"
-group = "0.11"
+ff = "0.12"
+group = "0.12"
 
+crypto-bigint = "0.4"
 curve25519-dalek =  "3.2"

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{sync::Mutex, collections::HashSet};
 
 use lazy_static::lazy_static;
 
@@ -7,7 +7,7 @@ use rand_distr::{Distribution, Gamma};
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use crate::{wallet::SpendableOutput, rpc::{RpcError, Rpc}};
+use crate::{transaction::RING_LEN, wallet::SpendableOutput, rpc::{RpcError, Rpc}};
 
 const LOCK_WINDOW: usize = 10;
 const MATURITY: u64 = 60;
@@ -16,28 +16,34 @@ const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
-const RING_LEN: usize = 11;
 const DECOYS: usize = RING_LEN - 1;
 
 lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
+  static ref DISTRIBUTION: Mutex<Vec<u64>> = Mutex::new(Vec::with_capacity(3000000));
 }
 
 async fn select_n<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
   height: usize,
-  distribution: &[u64],
   high: u64,
   per_second: f64,
   used: &mut HashSet<u64>,
   count: usize
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
+  let mut iters = 0;
   let mut confirmed = Vec::with_capacity(count);
   while confirmed.len() != count {
     let remaining = count - confirmed.len();
     let mut candidates = Vec::with_capacity(remaining);
     while candidates.len() != remaining {
+      iters += 1;
+      // This is cheap and on fresh chains, thousands of rounds may be needed
+      if iters == 10000 {
+        Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
+      }
+
       // Use a gamma distribution
       let mut age = GAMMA.sample(rng).exp();
       if age > TIP_APPLICATION {
@@ -49,6 +55,7 @@ async fn select_n<R: RngCore + CryptoRng>(
 
       let o = (age * per_second) as u64;
       if o < high {
+        let distribution = DISTRIBUTION.lock().unwrap();
         let i = distribution.partition_point(|s| *s < (high - 1 - o));
         let prev = i.saturating_sub(1);
         let n = distribution[i] - distribution[prev];
@@ -110,12 +117,29 @@ impl Decoys {
       ));
     }
 
-    let distribution = rpc.get_output_distribution(height).await?;
-    let high = distribution[distribution.len() - 1];
-    let per_second = {
-      let blocks = distribution.len().min(BLOCKS_PER_YEAR);
-      let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
-      (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
+    let distribution_len = {
+      let distribution = DISTRIBUTION.lock().unwrap();
+      distribution.len()
+    };
+    if distribution_len <= height {
+      let extension = rpc.get_output_distribution(distribution_len, height).await?;
+      DISTRIBUTION.lock().unwrap().extend(extension);
+    }
+
+    let high;
+    let per_second;
+    {
+      let mut distribution = DISTRIBUTION.lock().unwrap();
+      // If asked to use an older height than previously asked, truncate to ensure accuracy
+      // Should never happen, yet risks desyncing if it did
+      distribution.truncate(height + 1); // height is inclusive, and 0 is a valid height
+
+      high = distribution[distribution.len() - 1];
+      per_second = {
+        let blocks = distribution.len().min(BLOCKS_PER_YEAR);
+        let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
+        (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
+      };
     };
 
     let mut used = HashSet::<u64>::new();
@@ -123,10 +147,9 @@ impl Decoys {
       used.insert(o.0);
     }
 
-    // Panic if not enough decoys are available
-    // TODO: Simply create a TX with less than the target amount, or at least return an error
+    // TODO: Simply create a TX with less than the target amount
     if (high - MATURITY) < u64::try_from(inputs.len() * RING_LEN).unwrap() {
-      panic!("Not enough decoys available");
+      Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
     }
 
     // Select all decoys for this transaction, assuming we generate a sane transaction
@@ -136,7 +159,6 @@ impl Decoys {
       rng,
       rpc,
       height,
-      &distribution,
       high,
       per_second,
       &mut used,
@@ -160,10 +182,7 @@ impl Decoys {
       // small chains
       if high > 500 {
         // Make sure the TX passes the sanity check that the median output is within the last 40%
-        // This actually checks the median is within the last third, a slightly more aggressive
-        // boundary, as the height used in this calculation will be slightly under the height this is
-        // sanity checked against
-        let target_median = high * 2 / 3;
+        let target_median = high * 3 / 5;
         while ring[RING_LEN / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
           for removed in ring.drain(0 .. (RING_LEN / 2)).collect::<Vec<_>>() {
@@ -180,7 +199,7 @@ impl Decoys {
 
           // Select new outputs until we have a full sized ring again
           ring.extend(
-            select_n(rng, rpc, height, &distribution, high, per_second, &mut used, RING_LEN - ring.len()).await?
+            select_n(rng, rpc, height, high, per_second, &mut used, RING_LEN - ring.len()).await?
           );
           ring.sort_by(|a, b| a.0.cmp(&b.0));
         }

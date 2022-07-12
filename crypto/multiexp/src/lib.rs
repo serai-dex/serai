@@ -1,156 +1,176 @@
-use group::{ff::PrimeField, Group};
+use ff::PrimeFieldBits;
+use group::Group;
+
+mod straus;
+use straus::*;
+
+mod pippenger;
+use pippenger::*;
 
 #[cfg(feature = "batch")]
-use group::ff::Field;
+mod batch;
 #[cfg(feature = "batch")]
-use rand_core::{RngCore, CryptoRng};
+pub use batch::BatchVerifier;
 
-fn prep<
-  G: Group,
-  I: IntoIterator<Item = (G::Scalar, G)>
->(pairs: I, little: bool) -> (Vec<Vec<u8>>, Vec<[G; 16]>) {
-  let mut nibbles = vec![];
-  let mut tables = vec![];
-  for pair in pairs.into_iter() {
-    let p = nibbles.len();
-    nibbles.push(vec![]);
-    {
-      let mut repr = pair.0.to_repr();
-      let bytes = repr.as_mut();
-      if !little {
-        bytes.reverse();
-      }
+#[cfg(test)]
+mod tests;
 
-      nibbles[p].resize(bytes.len() * 2, 0);
-      for i in 0 .. bytes.len() {
-        nibbles[p][i * 2] = bytes[i] & 0b1111;
-        nibbles[p][(i * 2) + 1] = (bytes[i] >> 4) & 0b1111;
-      }
+pub(crate) fn prep_bits<G: Group>(
+  pairs: &[(G::Scalar, G)],
+  window: u8
+) -> Vec<Vec<u8>> where G::Scalar: PrimeFieldBits {
+  let w_usize = usize::from(window);
+
+  let mut groupings = vec![];
+  for pair in pairs {
+    let p = groupings.len();
+    let bits = pair.0.to_le_bits();
+    groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
+
+    for (i, bit) in bits.into_iter().enumerate() {
+      let bit = bit as u8;
+      debug_assert_eq!(bit | 1, 1);
+      groupings[p][i / w_usize] |= bit << (i % w_usize);
     }
+  }
 
-    tables.push([G::identity(); 16]);
+  groupings
+}
+
+pub(crate) fn prep_tables<G: Group>(
+  pairs: &[(G::Scalar, G)],
+  window: u8
+) -> Vec<Vec<G>> {
+  let mut tables = Vec::with_capacity(pairs.len());
+  for pair in pairs {
+    let p = tables.len();
+    tables.push(vec![G::identity(); 2_usize.pow(window.into())]);
     let mut accum = G::identity();
-    for i in 1 .. 16 {
+    for i in 1 .. tables[p].len() {
       accum += pair.1;
       tables[p][i] = accum;
     }
   }
-
-  (nibbles, tables)
+  tables
 }
 
-// An implementation of Straus, with a extremely minimal API that lets us add other algorithms in
-// the future. Takes in an iterator of scalars and points with a boolean for if the scalars are
-// little endian encoded in their Reprs or not
-pub fn multiexp<
-  G: Group,
-  I: IntoIterator<Item = (G::Scalar, G)>
->(pairs: I, little: bool) -> G {
-  let (nibbles, tables) = prep(pairs, little);
-
-  let mut res = G::identity();
-  for b in (0 .. nibbles[0].len()).rev() {
-    for _ in 0 .. 4 {
-      res = res.double();
-    }
-
-    for s in 0 .. tables.len() {
-      res += tables[s][usize::from(nibbles[s][b])];
-    }
-  }
-  res
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Algorithm {
+  Null,
+  Single,
+  Straus(u8),
+  Pippenger(u8)
 }
 
-pub fn multiexp_vartime<
-  G: Group,
-  I: IntoIterator<Item = (G::Scalar, G)>
->(pairs: I, little: bool) -> G {
-  let (nibbles, tables) = prep(pairs, little);
+/*
+Release (with runs 20, so all of these are off by 20x):
 
-  let mut res = G::identity();
-  for b in (0 .. nibbles[0].len()).rev() {
-    for _ in 0 .. 4 {
-      res = res.double();
-    }
+k256
+Straus 3 is more efficient at 5 with 678µs per
+Straus 4 is more efficient at 10 with 530µs per
+Straus 5 is more efficient at 35 with 467µs per
 
-    for s in 0 .. tables.len() {
-      if nibbles[s][b] != 0 {
-        res += tables[s][usize::from(nibbles[s][b])];
-      }
-    }
+Pippenger 5 is more efficient at 125 with 431µs per
+Pippenger 6 is more efficient at 275 with 349µs per
+Pippenger 7 is more efficient at 375 with 360µs per
+
+dalek
+Straus 3 is more efficient at 5 with 519µs per
+Straus 4 is more efficient at 10 with 376µs per
+Straus 5 is more efficient at 170 with 330µs per
+
+Pippenger 5 is more efficient at 125 with 305µs per
+Pippenger 6 is more efficient at 275 with 250µs per
+Pippenger 7 is more efficient at 450 with 205µs per
+Pippenger 8 is more efficient at 800 with 213µs per
+
+Debug (with runs 5, so...):
+
+k256
+Straus 3 is more efficient at 5 with 2532µs per
+Straus 4 is more efficient at 10 with 1930µs per
+Straus 5 is more efficient at 80 with 1632µs per
+
+Pippenger 5 is more efficient at 150 with 1441µs per
+Pippenger 6 is more efficient at 300 with 1235µs per
+Pippenger 7 is more efficient at 475 with 1182µs per
+Pippenger 8 is more efficient at 625 with 1170µs per
+
+dalek:
+Straus 3 is more efficient at 5 with 971µs per
+Straus 4 is more efficient at 10 with 782µs per
+Straus 5 is more efficient at 75 with 778µs per
+Straus 6 is more efficient at 165 with 867µs per
+
+Pippenger 5 is more efficient at 125 with 677µs per
+Pippenger 6 is more efficient at 250 with 655µs per
+Pippenger 7 is more efficient at 475 with 500µs per
+Pippenger 8 is more efficient at 875 with 499µs per
+*/
+fn algorithm(len: usize) -> Algorithm {
+  #[cfg(not(debug_assertions))]
+  if len == 0 {
+    Algorithm::Null
+  } else if len == 1 {
+    Algorithm::Single
+  } else if len < 10 {
+    // Straus 2 never showed a performance benefit, even with just 2 elements
+    Algorithm::Straus(3)
+  } else if len < 20 {
+    Algorithm::Straus(4)
+  } else if len < 50 {
+    Algorithm::Straus(5)
+  } else if len < 100 {
+    Algorithm::Pippenger(4)
+  } else if len < 125 {
+    Algorithm::Pippenger(5)
+  } else if len < 275 {
+    Algorithm::Pippenger(6)
+  } else if len < 400 {
+    Algorithm::Pippenger(7)
+  } else {
+    Algorithm::Pippenger(8)
   }
-  res
+
+  #[cfg(debug_assertions)]
+  if len == 0 {
+    Algorithm::Null
+  } else if len == 1 {
+    Algorithm::Single
+  } else if len < 10 {
+    Algorithm::Straus(3)
+  } else if len < 80 {
+    Algorithm::Straus(4)
+  } else if len < 100 {
+    Algorithm::Straus(5)
+  } else if len < 125 {
+    Algorithm::Pippenger(4)
+  } else if len < 275 {
+    Algorithm::Pippenger(5)
+  } else if len < 475 {
+    Algorithm::Pippenger(6)
+  } else if len < 750 {
+    Algorithm::Pippenger(7)
+  } else {
+    Algorithm::Pippenger(8)
+  }
 }
 
-#[cfg(feature = "batch")]
-pub struct BatchVerifier<Id: Copy, G: Group>(Vec<(Id, Vec<(G::Scalar, G)>)>, bool);
-
-#[cfg(feature = "batch")]
-impl<Id: Copy, G: Group> BatchVerifier<Id, G> {
-  pub fn new(capacity: usize, endian: bool) -> BatchVerifier<Id, G> {
-    BatchVerifier(Vec::with_capacity(capacity), endian)
+// Performs a multiexp, automatically selecting the optimal algorithm based on amount of pairs
+pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G where G::Scalar: PrimeFieldBits {
+  match algorithm(pairs.len()) {
+    Algorithm::Null => Group::identity(),
+    Algorithm::Single => pairs[0].1 * pairs[0].0,
+    Algorithm::Straus(window) => straus(pairs, window),
+    Algorithm::Pippenger(window) => pippenger(pairs, window)
   }
+}
 
-  pub fn queue<
-    R: RngCore + CryptoRng,
-    I: IntoIterator<Item = (G::Scalar, G)>
-  >(&mut self, rng: &mut R, id: Id, pairs: I) {
-    // Define a unique scalar factor for this set of variables so individual items can't overlap
-    let u = if self.0.len() == 0 {
-      G::Scalar::one()
-    } else {
-      G::Scalar::random(rng)
-    };
-    self.0.push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
-  }
-
-  pub fn verify(&self) -> bool {
-    multiexp(
-      self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned(),
-      self.1
-    ).is_identity().into()
-  }
-
-  pub fn verify_vartime(&self) -> bool {
-    multiexp_vartime(
-      self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned(),
-      self.1
-    ).is_identity().into()
-  }
-
-  // A constant time variant may be beneficial for robust protocols
-  pub fn blame_vartime(&self) -> Option<Id> {
-    let mut slice = self.0.as_slice();
-    while slice.len() > 1 {
-      let split = slice.len() / 2;
-      if multiexp_vartime(
-        slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned(),
-        self.1
-      ).is_identity().into() {
-        slice = &slice[split ..];
-      } else {
-        slice = &slice[.. split];
-      }
-    }
-
-    slice.get(0).filter(
-      |(_, value)| !bool::from(multiexp_vartime(value.clone(), self.1).is_identity())
-    ).map(|(id, _)| *id)
-  }
-
-  pub fn verify_with_vartime_blame(&self) -> Result<(), Id> {
-    if self.verify() {
-      Ok(())
-    } else {
-      Err(self.blame_vartime().unwrap())
-    }
-  }
-
-  pub fn verify_vartime_with_vartime_blame(&self) -> Result<(), Id> {
-    if self.verify_vartime() {
-      Ok(())
-    } else {
-      Err(self.blame_vartime().unwrap())
-    }
+pub fn multiexp_vartime<G: Group>(pairs: &[(G::Scalar, G)]) -> G where G::Scalar: PrimeFieldBits {
+  match algorithm(pairs.len()) {
+    Algorithm::Null => Group::identity(),
+    Algorithm::Single => pairs[0].1 * pairs[0].0,
+    Algorithm::Straus(window) => straus_vartime(pairs, window),
+    Algorithm::Pippenger(window) => pippenger_vartime(pairs, window)
   }
 }

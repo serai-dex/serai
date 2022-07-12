@@ -6,6 +6,8 @@ use crate::{
   transaction::Input
 };
 
+pub mod address;
+
 mod scan;
 pub use scan::SpendableOutput;
 
@@ -13,15 +15,17 @@ pub(crate) mod decoys;
 pub(crate) use decoys::Decoys;
 
 mod send;
-pub use send::{TransactionError, SignableTransaction};
+pub use send::{Fee, TransactionError, SignableTransaction};
+#[cfg(feature = "multisig")]
+pub use send::TransactionMachine;
 
 fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> std::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
 }
 
-// https://github.com/monero-project/research-lab/issues/103
+// https://gist.github.com/kayabaNerve/8066c13f1fe1573286ba7a2fd79f6100
 pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
-  let mut u = b"domain_separator".to_vec();
+  let mut u = b"uniqueness".to_vec();
   for input in inputs {
     match input {
       // If Gen, this should be the only input, making this loop somewhat pointless
@@ -60,4 +64,10 @@ pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
   let mut mask = b"commitment_mask".to_vec();
   mask.extend(shared_key.to_bytes());
   hash_to_scalar(&mask)
+}
+
+#[derive(Clone, Copy)]
+pub struct ViewPair {
+  pub spend: EdwardsPoint,
+  pub view: Scalar
 }

@@ -2,10 +2,15 @@
 
 members = [
   "crypto/transcript",
-  "crypto/multiexp",
-  "crypto/frost",
+
   "crypto/dalek-ff-group",
+  "crypto/multiexp",
+
+  "crypto/dleq",
+  "crypto/frost",
+
   "coins/monero",
   "coins/firo",
+
   "processor",
 ]

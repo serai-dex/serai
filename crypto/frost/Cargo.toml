@@ -1,24 +1,46 @@
 [package]
-name = "frost"
+name = "modular-frost"
 version = "0.1.0"
-description = "Implementation of FROST over ff/group"
+description = "Modular implementation of FROST over ff/group"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["frost", "multisig", "threshold"]
 edition = "2021"
 
 [dependencies]
 thiserror = "1"
 
 rand_core = "0.6"
+hex = "0.4"
 
-ff = "0.11"
-group = "0.11"
+sha2 = { version = "0.10", optional = true }
 
-transcript = { path = "../transcript" }
+ff = "0.12"
+group = "0.12"
 
-multiexp = { path = "../multiexp", features = ["batch"] }
+elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true }
+p256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
+k256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.1", optional = true }
+
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
+
+multiexp = { path = "../multiexp", version = "0.1", features = ["batch"] }
+
+dleq = { package = "dleq", path = "../dleq", version = "0.1", features = ["serialize"] }
 
 [dev-dependencies]
 rand = "0.8"
+
 sha2 = "0.10"
-k256 = { version = "0.10", features = ["arithmetic"] }
+dalek-ff-group = { path = "../dalek-ff-group" }
+
+[features]
+curves = ["sha2"] # All officially denoted curves use the SHA2 family of hashes
+kp256 = ["elliptic-curve", "curves"]
+p256 = ["kp256", "dep:p256"]
+secp256k1 = ["kp256", "k256"]
+dalek = ["curves", "dalek-ff-group"]
+ed25519 = ["dalek"]
+ristretto = ["dalek"]
