@@ -130,8 +130,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
 
 #[allow(non_snake_case)]
 struct Package<C: Curve> {
-  B: HashMap<u16, Vec<Vec<[C::G; 2]>>>,
-  binding: C::F,
+  B: HashMap<u16, (Vec<Vec<[C::G; 2]>>, C::F)>,
   Rs: Vec<Vec<C::G>>,
   share: Vec<u8>
 }
@@ -156,19 +155,16 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     let transcript = params.algorithm.transcript();
     // Domain separate FROST
     transcript.domain_separate(b"FROST");
-    // Include the offset, if one exists
-    if let Some(offset) = params.keys.offset {
-      transcript.append_message(b"offset", offset.to_repr().as_ref());
-    }
   }
 
   #[allow(non_snake_case)]
   let mut B = HashMap::<u16, _>::with_capacity(params.view.included.len());
 
-  // Get the binding factor
+  // Get the binding factors
   let nonces = params.algorithm.nonces();
   let mut addendums = HashMap::new();
-  let binding = {
+
+  {
     let transcript = params.algorithm.transcript();
     // Parse the commitments
     for l in &params.view.included {
@@ -218,15 +214,34 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
 
         addendums.insert(*l, serialized[c ..].to_vec());
       }
-      B.insert(*l, commitments);
+      B.insert(*l, (commitments, C::F::zero()));
     }
 
-    // Append the message to the transcript
-    transcript.append_message(b"message", &C::hash_msg(&msg));
+    // Re-format into the FROST-expected rho transcript
+    let mut rho_transcript = A::Transcript::new(b"FROST_rho");
+    rho_transcript.append_message(b"message", &C::hash_msg(&msg));
+    rho_transcript.append_message(
+      b"commitments",
+      &C::hash_msg(transcript.challenge(b"commitments").as_ref())
+    );
+    // Include the offset, if one exists
+    // While this isn't part of the FROST-expected rho transcript, the offset being here coincides
+    // with another specification
+    if let Some(offset) = params.keys.offset {
+      rho_transcript.append_message(b"offset", offset.to_repr().as_ref());
+    }
 
-    // Calculate the binding factor
-    C::hash_binding_factor(transcript.challenge(b"binding").as_ref())
-  };
+    // Generate the per-signer binding factors
+    for (l, commitments) in B.iter_mut() {
+      let mut rho_transcript = rho_transcript.clone();
+      rho_transcript.append_message(b"participant", &l.to_be_bytes());
+      commitments.1 = C::hash_binding_factor(rho_transcript.challenge(b"rho").as_ref());
+    }
+
+    // Merge the rho transcript back into the global one to ensure its advanced while committing to
+    // everything
+    transcript.append_message(b"rho_transcript", rho_transcript.challenge(b"merge").as_ref());
+  }
 
   // Process the addendums
   for l in &params.view.included {
@@ -240,8 +255,8 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     #[allow(non_snake_case)]
     for g in 0 .. nonces[n].len() {
       Rs[n][g] = {
-        B.values().map(|B| B[n][g][0]).sum::<C::G>() +
-          (B.values().map(|B| B[n][g][1]).sum::<C::G>() * binding)
+        B.values().map(|(B, _)| B[n][g][0]).sum::<C::G>() +
+          B.values().map(|(B, binding)| B[n][g][1] * binding).sum::<C::G>()
       };
     }
   }
@@ -250,12 +265,12 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     &params.view,
     &Rs,
     &our_preprocess.nonces.iter().map(
-      |nonces| nonces[0] + (nonces[1] * binding)
+      |nonces| nonces[0] + (nonces[1] * B[&params.keys.params.i()].1)
     ).collect::<Vec<_>>(),
     msg
   ).to_repr().as_ref().to_vec();
 
-  Ok((Package { B, binding, Rs, share: share.clone() }, share))
+  Ok((Package { B, Rs, share: share.clone() }, share))
 }
 
 fn complete<C: Curve, A: Algorithm<C>>(
@@ -287,9 +302,9 @@ fn complete<C: Curve, A: Algorithm<C>>(
   for l in &sign_params.view.included {
     if !sign_params.algorithm.verify_share(
       sign_params.view.verification_share(*l),
-      &sign.B[l].iter().map(
+      &sign.B[l].0.iter().map(
         |nonces| nonces.iter().map(
-          |commitments| commitments[0] + (commitments[1] * sign.binding)
+          |commitments| commitments[0] + (commitments[1] * sign.B[l].1)
         ).collect()
       ).collect::<Vec<_>>(),
       responses[l]

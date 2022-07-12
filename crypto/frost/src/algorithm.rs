@@ -69,7 +69,7 @@ impl Transcript for IetfTranscript {
   type Challenge = Vec<u8>;
 
   fn new(_: &'static [u8]) -> IetfTranscript {
-    unimplemented!("IetfTranscript should not be used with multiple nonce protocols");
+    IetfTranscript(vec![])
   }
 
   fn domain_separate(&mut self, _: &[u8]) {}

@@ -36,20 +36,20 @@ fn p256_vectors() {
       included: &[1, 3],
       nonces: &[
         [
-          "081617b24375e069b39f649d4c4ce2fba6e38b73e7c16759de0b6079a22c4c7e",
-          "4de5fb77d99f03a2491a83a6a4cb91ca3c82a3f34ce94cec939174f47c9f95dd"
+          "33a519cf070a166f9ef41a798d03423743f3e7d0b0efd5d0d963773c4c53205e",
+          "307d208d0c5728f323ae374f1ebd7f14a1a49b77d9d4bc1eab222218a17765ff"
         ],
         [
-          "d186ea92593f83ea83181b184d41aa93493301ac2bc5b4b1767e94d2db943e38",
-          "486e2ee25a3fbc8e6399d748b077a2755fde99fa85cc24fa647ea4ebf5811a15"
+          "a614eadb972dc37b88aeceb6e899903f3104742d13f379a0e014541decbea4a4",
+          "e509791018504c5bb87edaf0f44761cc840888507c4cd80237971d78e65f70f2"
         ]
       ],
       sig_shares: &[
-        "9e4d8865faf8c7b3193a3b35eda3d9e12118447114b1e7d5b4809ea28067f8a9",
-        "b7d094eab6305ae74daeed1acd31abba9ab81f638d38b72c132cb25a5dfae1fc"
+        "61e8b9c474df2e66ad19fd80a6e6cec1c6fe43c0a1cffd2d1c28299e93e1bbdb",
+        "9651d355ca1dea2557ba1f73e38a9f4ff1f1afc565323ef27f88a9d14df8370e"
       ],
-      sig: "0342c14c77f9d4ef9b8bd64fb0d7bbfdb9f8216a44e5f7bbe6ac0f3ed5e1a57367".to_owned() +
-        "561e1d51b129229966e92850bad5859bfee96926fad3007cd3f38639e1ffb554"
+      sig: "02dfba781e17b830229ae4ed22ebe402873683d9dfd945d01762217fb3172c2a7".to_owned() +
+           "1f83a8d1a3efd188c04d41cf48a716e11b8eff38607023c1f9bb0d36fe1d9f2e9"
     }
   );
 }
