@@ -4,11 +4,11 @@ use ff::Field;
 use k256::Scalar;
 
 #[cfg(feature = "multisig")]
-use frost::tests::{key_gen, algorithm_machines, sign};
+use transcript::{Transcript, RecommendedTranscript};
+#[cfg(feature = "multisig")]
+use frost::{curve::Secp256k1, tests::{key_gen, algorithm_machines, sign}};
 
 use crate::spark::{F, G, H, U, chaum::*};
-#[cfg(feature = "multisig")]
-use crate::spark::frost::{Transcript, Secp256k1};
 
 #[test]
 fn chaum() {
@@ -63,7 +63,7 @@ fn chaum_multisig() {
       &mut OsRng,
       algorithm_machines(
         &mut OsRng,
-        ChaumMultisig::new(Transcript::new(b"Firo Serai Chaum Test".to_vec()), witness),
+        ChaumMultisig::new(RecommendedTranscript::new(b"Firo Serai Chaum Test"), witness),
         &keys
       ),
       &[]

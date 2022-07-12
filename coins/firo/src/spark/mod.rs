@@ -7,11 +7,12 @@ use k256::{ProjectivePoint, CompressedPoint};
 
 pub mod chaum;
 
-#[cfg(feature = "frost")]
-pub(crate) mod frost;
-
 // Extremely basic hash to curve, which should not be used, yet which offers the needed generators
 fn generator(letter: u8) -> ProjectivePoint {
+  if letter == b'G' {
+    return ProjectivePoint::GENERATOR;
+  }
+
   let mut point = [2; 33];
   let mut g = b"Generator ".to_vec();
 
