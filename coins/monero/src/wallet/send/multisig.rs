@@ -112,6 +112,7 @@ impl SignableTransaction {
         AlgorithmMachine::new(
           ClsagMultisig::new(
             transcript.clone(),
+            input.key,
             inputs[i].clone()
           ).map_err(|e| TransactionError::MultisigError(e))?,
           Arc::new(offset),
@@ -159,7 +160,10 @@ impl PreprocessMachine for TransactionMachine {
     rng: &mut R
   ) -> (TransactionSignMachine, Vec<u8>) {
     // Iterate over each CLSAG calling preprocess
-    let mut serialized = Vec::with_capacity(self.clsags.len() * (64 + ClsagMultisig::serialized_len()));
+    let mut serialized = Vec::with_capacity(
+      // D_{G, H}, E_{G, H}, DLEqs, key image addendum
+      self.clsags.len() * ((2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len())
+    );
     let clsags = self.clsags.drain(..).map(|clsag| {
       let (clsag, preprocess) = clsag.preprocess(rng);
       serialized.extend(&preprocess);
@@ -224,8 +228,8 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       }
     }
 
-    // FROST commitments, image, H commitments, and their proofs
-    let clsag_len = 64 + ClsagMultisig::serialized_len();
+    // FROST commitments and their DLEqs, and the image and its DLEq
+    let clsag_len = (2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len();
     for (l, commitments) in &commitments {
       if commitments.len() != (self.clsags.len() * clsag_len) {
         Err(FrostError::InvalidCommitment(*l))?;
@@ -246,7 +250,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     for c in 0 .. self.clsags.len() {
       for (l, preprocess) in &commitments[c] {
         images[c] += CompressedEdwardsY(
-          preprocess[64 .. 96].try_into().map_err(|_| FrostError::InvalidCommitment(*l))?
+          preprocess[(clsag_len - 96) .. (clsag_len - 64)].try_into().map_err(|_| FrostError::InvalidCommitment(*l))?
         ).decompress().ok_or(FrostError::InvalidCommitment(*l))?;
       }
     }

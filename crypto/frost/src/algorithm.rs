@@ -13,14 +13,18 @@ pub trait Algorithm<C: Curve>: Clone {
   /// The resulting type of the signatures this algorithm will produce
   type Signature: Clone + PartialEq + Debug;
 
+  /// Obtain a mutable borrow of the underlying transcript
   fn transcript(&mut self) -> &mut Self::Transcript;
+
+  /// Obtain the list of nonces to generate, as specified by the basepoints to create commitments
+  /// against per-nonce. These are not committed to by FROST on the underlying transcript
+  fn nonces(&self) -> Vec<Vec<C::G>>;
 
   /// Generate an addendum to FROST"s preprocessing stage
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
     params: &FrostView<C>,
-    nonces: &[C::F; 2],
   ) -> Vec<u8>;
 
   /// Proccess the addendum for the specified participant. Guaranteed to be ordered
@@ -28,7 +32,6 @@ pub trait Algorithm<C: Curve>: Clone {
     &mut self,
     params: &FrostView<C>,
     l: u16,
-    commitments: &[C::G; 2],
     serialized: &[u8],
   ) -> Result<(), FrostError>;
 
@@ -39,15 +42,14 @@ pub trait Algorithm<C: Curve>: Clone {
   fn sign_share(
     &mut self,
     params: &FrostView<C>,
-    nonce_sum: C::G,
-    binding: C::F,
-    nonce: C::F,
+    nonce_sums: &[Vec<C::G>],
+    nonces: &[C::F],
     msg: &[u8],
   ) -> C::F;
 
   /// Verify a signature
   #[must_use]
-  fn verify(&self, group_key: C::G, nonce: C::G, sum: C::F) -> Option<Self::Signature>;
+  fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature>;
 
   /// Verify a specific share given as a response. Used to determine blame if signature
   /// verification fails
@@ -55,7 +57,7 @@ pub trait Algorithm<C: Curve>: Clone {
   fn verify_share(
     &self,
     verification_share: C::G,
-    nonce: C::G,
+    nonces: &[Vec<C::G>],
     share: C::F,
   ) -> bool;
 }
@@ -65,6 +67,10 @@ pub trait Algorithm<C: Curve>: Clone {
 pub struct IetfTranscript(Vec<u8>);
 impl Transcript for IetfTranscript {
   type Challenge = Vec<u8>;
+
+  fn new(_: &'static [u8]) -> IetfTranscript {
+    unimplemented!("IetfTranscript should not be used with multiple nonce protocols");
+  }
 
   fn domain_separate(&mut self, _: &[u8]) {}
 
@@ -115,11 +121,14 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     &mut self.transcript
   }
 
+  fn nonces(&self) -> Vec<Vec<C::G>> {
+    vec![vec![C::GENERATOR]]
+  }
+
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     _: &mut R,
     _: &FrostView<C>,
-    _: &[C::F; 2],
   ) -> Vec<u8> {
     vec![]
   }
@@ -128,7 +137,6 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     &mut self,
     _: &FrostView<C>,
     _: u16,
-    _: &[C::G; 2],
     _: &[u8],
   ) -> Result<(), FrostError> {
     Ok(())
@@ -137,19 +145,18 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   fn sign_share(
     &mut self,
     params: &FrostView<C>,
-    nonce_sum: C::G,
-    _: C::F,
-    nonce: C::F,
+    nonce_sums: &[Vec<C::G>],
+    nonces: &[C::F],
     msg: &[u8],
   ) -> C::F {
-    let c = H::hram(&nonce_sum, &params.group_key(), msg);
+    let c = H::hram(&nonce_sums[0][0], &params.group_key(), msg);
     self.c = Some(c);
-    schnorr::sign::<C>(params.secret_share(), nonce, c).s
+    schnorr::sign::<C>(params.secret_share(), nonces[0], c).s
   }
 
   #[must_use]
-  fn verify(&self, group_key: C::G, nonce: C::G, sum: C::F) -> Option<Self::Signature> {
-    let sig = SchnorrSignature { R: nonce, s: sum };
+  fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature> {
+    let sig = SchnorrSignature { R: nonces[0][0], s: sum };
     if schnorr::verify::<C>(group_key, self.c.unwrap(), &sig) {
       Some(sig)
     } else {
@@ -161,13 +168,13 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   fn verify_share(
     &self,
     verification_share: C::G,
-    nonce: C::G,
+    nonces: &[Vec<C::G>],
     share: C::F,
   ) -> bool {
     schnorr::verify::<C>(
       verification_share,
       self.c.unwrap(),
-      &SchnorrSignature { R: nonce, s: share}
+      &SchnorrSignature { R: nonces[0][0], s: share}
     )
   }
 }

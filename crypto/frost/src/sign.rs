@@ -3,12 +3,14 @@ use std::{sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::{Field, PrimeField}, GroupEncoding};
+use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
 
 use transcript::Transcript;
 
+use dleq::{Generators, DLEqProof};
+
 use crate::{
-  curve::{Curve, G_len, F_from_slice, G_from_slice},
+  curve::{Curve, F_len, G_len, F_from_slice, G_from_slice},
   FrostError,
   FrostParams, FrostKeys, FrostView,
   algorithm::Algorithm,
@@ -69,8 +71,12 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   }
 }
 
+fn nonce_transcript<T: Transcript>() -> T {
+  T::new(b"FROST_nonce_dleq")
+}
+
 pub(crate) struct PreprocessPackage<C: Curve> {
-  pub(crate) nonces: [C::F; 2],
+  pub(crate) nonces: Vec<[C::F; 2]>,
   pub(crate) serialized: Vec<u8>,
 }
 
@@ -80,30 +86,53 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   params: &mut Params<C, A>,
 ) -> PreprocessPackage<C> {
-  let nonces = [
-    C::random_nonce(params.view().secret_share(), &mut *rng),
-    C::random_nonce(params.view().secret_share(), &mut *rng)
-  ];
-  let commitments = [C::GENERATOR * nonces[0], C::GENERATOR * nonces[1]];
-  let mut serialized = commitments[0].to_bytes().as_ref().to_vec();
-  serialized.extend(commitments[1].to_bytes().as_ref());
+  let mut serialized = Vec::with_capacity(2 * G_len::<C>());
+  let nonces = params.algorithm.nonces().iter().cloned().map(
+    |mut generators| {
+      let nonces = [
+        C::random_nonce(params.view().secret_share(), &mut *rng),
+        C::random_nonce(params.view().secret_share(), &mut *rng)
+      ];
 
-  serialized.extend(
-    &params.algorithm.preprocess_addendum(
-      rng,
-      &params.view,
-      &nonces
-    )
-  );
+      let commit = |generator: C::G| {
+        let commitments = [generator * nonces[0], generator * nonces[1]];
+        [commitments[0].to_bytes().as_ref(), commitments[1].to_bytes().as_ref()].concat().to_vec()
+      };
+
+      let first = generators.remove(0);
+      serialized.extend(commit(first));
+
+      // Iterate over the rest
+      for generator in generators.iter() {
+        serialized.extend(commit(*generator));
+        // Provide a DLEq to verify these commitments are for the same nonce
+        // TODO: Provide a single DLEq. See https://github.com/serai-dex/serai/issues/34
+        for nonce in nonces {
+          DLEqProof::prove(
+            &mut *rng,
+            // Uses an independent transcript as each signer must do this now, yet we validate them
+            // sequentially by the global order. Avoids needing to clone the transcript around
+            &mut nonce_transcript::<A::Transcript>(),
+            Generators::new(first, *generator),
+            nonce
+          ).serialize(&mut serialized).unwrap();
+        }
+      }
+
+      nonces
+    }
+  ).collect::<Vec<_>>();
+
+  serialized.extend(&params.algorithm.preprocess_addendum(rng, &params.view));
 
   PreprocessPackage { nonces, serialized }
 }
 
 #[allow(non_snake_case)]
 struct Package<C: Curve> {
-  B: HashMap<u16, [C::G; 2]>,
+  B: HashMap<u16, Vec<Vec<[C::G; 2]>>>,
   binding: C::F,
-  R: C::G,
+  Rs: Vec<Vec<C::G>>,
   share: Vec<u8>
 }
 
@@ -137,27 +166,59 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   let mut B = HashMap::<u16, _>::with_capacity(params.view.included.len());
 
   // Get the binding factor
+  let nonces = params.algorithm.nonces();
   let mut addendums = HashMap::new();
   let binding = {
     let transcript = params.algorithm.transcript();
     // Parse the commitments
     for l in &params.view.included {
       transcript.append_message(b"participant", &l.to_be_bytes());
+      let serialized = commitments.remove(l).unwrap();
 
-      let commitments = commitments.remove(l).unwrap();
       let mut read_commitment = |c, label| {
-        let commitment = &commitments[c .. (c + G_len::<C>())];
+        let commitment = &serialized[c .. (c + G_len::<C>())];
         transcript.append_message(label, commitment);
         G_from_slice::<C::G>(commitment).map_err(|_| FrostError::InvalidCommitment(*l))
       };
 
+      // While this doesn't note which nonce/basepoint this is for, those are expected to be
+      // static. Beyond that, they're committed to in the DLEq proof transcripts, ensuring
+      // consistency. While this is suboptimal, it maintains IETF compliance, and Algorithm is
+      // documented accordingly
       #[allow(non_snake_case)]
-      let mut read_D_E = || Ok(
-        [read_commitment(0, b"commitment_D")?, read_commitment(G_len::<C>(), b"commitment_E")?]
-      );
+      let mut read_D_E = |c| Ok([
+        read_commitment(c, b"commitment_D")?,
+        read_commitment(c + G_len::<C>(), b"commitment_E")?
+      ]);
 
-      B.insert(*l, read_D_E()?);
-      addendums.insert(*l, commitments[(G_len::<C>() * 2) ..].to_vec());
+      let mut c = 0;
+      let mut commitments = Vec::with_capacity(nonces.len());
+      for (n, nonce_generators) in nonces.clone().iter_mut().enumerate() {
+        commitments.push(Vec::with_capacity(nonce_generators.len()));
+
+        let first = nonce_generators.remove(0);
+        commitments[n].push(read_D_E(c)?);
+        c += 2 * G_len::<C>();
+
+        let mut c = 2 * G_len::<C>();
+        for generator in nonce_generators {
+          commitments[n].push(read_D_E(c)?);
+          c += 2 * G_len::<C>();
+          for de in 0 .. 2 {
+            DLEqProof::deserialize(
+              &mut std::io::Cursor::new(&serialized[c .. (c + (2 * F_len::<C>()))])
+            ).map_err(|_| FrostError::InvalidCommitment(*l))?.verify(
+              &mut nonce_transcript::<A::Transcript>(),
+              Generators::new(first, *generator),
+              (commitments[n][0][de], commitments[n][commitments[n].len() - 1][de])
+            ).map_err(|_| FrostError::InvalidCommitment(*l))?;
+            c += 2 * F_len::<C>();
+          }
+        }
+
+        addendums.insert(*l, serialized[c ..].to_vec());
+      }
+      B.insert(*l, commitments);
     }
 
     // Append the message to the transcript
@@ -169,22 +230,32 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
 
   // Process the addendums
   for l in &params.view.included {
-    params.algorithm.process_addendum(&params.view, *l, &B[l], &addendums[l])?;
+    params.algorithm.process_addendum(&params.view, *l, &addendums[l])?;
   }
 
   #[allow(non_snake_case)]
-  let R = {
-    B.values().map(|B| B[0]).sum::<C::G>() + (B.values().map(|B| B[1]).sum::<C::G>() * binding)
-  };
+  let mut Rs = Vec::with_capacity(nonces.len());
+  for n in 0 .. nonces.len() {
+    Rs.push(vec![C::G::identity(); nonces[n].len()]);
+    #[allow(non_snake_case)]
+    for g in 0 .. nonces[n].len() {
+      Rs[n][g] = {
+        B.values().map(|B| B[n][g][0]).sum::<C::G>() +
+          (B.values().map(|B| B[n][g][1]).sum::<C::G>() * binding)
+      };
+    }
+  }
+
   let share = params.algorithm.sign_share(
     &params.view,
-    R,
-    binding,
-    our_preprocess.nonces[0] + (our_preprocess.nonces[1] * binding),
+    &Rs,
+    &our_preprocess.nonces.iter().map(
+      |nonces| nonces[0] + (nonces[1] * binding)
+    ).collect::<Vec<_>>(),
     msg
   ).to_repr().as_ref().to_vec();
 
-  Ok((Package { B, binding, R, share: share.clone() }, share))
+  Ok((Package { B, binding, Rs, share: share.clone() }, share))
 }
 
 fn complete<C: Curve, A: Algorithm<C>>(
@@ -206,7 +277,7 @@ fn complete<C: Curve, A: Algorithm<C>>(
   // Perform signature validation instead of individual share validation
   // For the success route, which should be much more frequent, this should be faster
   // It also acts as an integrity check of this library's signing function
-  let res = sign_params.algorithm.verify(sign_params.view.group_key, sign.R, sum);
+  let res = sign_params.algorithm.verify(sign_params.view.group_key, &sign.Rs, sum);
   if let Some(res) = res {
     return Ok(res);
   }
@@ -216,7 +287,11 @@ fn complete<C: Curve, A: Algorithm<C>>(
   for l in &sign_params.view.included {
     if !sign_params.algorithm.verify_share(
       sign_params.view.verification_share(*l),
-      sign.B[l][0] + (sign.B[l][1] * sign.binding),
+      &sign.B[l].iter().map(
+        |nonces| nonces.iter().map(
+          |commitments| commitments[0] + (commitments[1] * sign.binding)
+        ).collect()
+      ).collect::<Vec<_>>(),
       responses[l]
     ) {
       Err(FrostError::InvalidShare(*l))?;

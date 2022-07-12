@@ -28,6 +28,8 @@ transcript = { package = "flexible-transcript", path = "../transcript", version 
 
 multiexp = { path = "../multiexp", version = "0.1", features = ["batch"] }
 
+dleq = { package = "dleq", path = "../dleq", version = "0.1", features = ["serialize"] }
+
 [dev-dependencies]
 rand = "0.8"
 

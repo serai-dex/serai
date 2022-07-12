@@ -6,7 +6,7 @@ use rand_chacha::ChaCha12Rng;
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
-  traits::Identity,
+  traits::{Identity, IsIdentity},
   scalar::Scalar,
   edwards::EdwardsPoint
 };
@@ -76,7 +76,6 @@ pub struct ClsagMultisig {
   H: EdwardsPoint,
   // Merged here as CLSAG needs it, passing it would be a mess, yet having it beforehand requires a round
   image: EdwardsPoint,
-  AH: (dfg::EdwardsPoint, dfg::EdwardsPoint),
 
   details: Arc<RwLock<Option<ClsagDetails>>>,
 
@@ -87,15 +86,15 @@ pub struct ClsagMultisig {
 impl ClsagMultisig {
   pub fn new(
     transcript: RecommendedTranscript,
+    output_key: EdwardsPoint,
     details: Arc<RwLock<Option<ClsagDetails>>>
   ) -> Result<ClsagMultisig, MultisigError> {
     Ok(
       ClsagMultisig {
         transcript,
 
-        H: EdwardsPoint::identity(),
+        H: hash_to_point(output_key),
         image: EdwardsPoint::identity(),
-        AH: (dfg::EdwardsPoint::identity(), dfg::EdwardsPoint::identity()),
 
         details,
 
@@ -106,7 +105,7 @@ impl ClsagMultisig {
   }
 
   pub fn serialized_len() -> usize {
-    3 * (32 + 64)
+    32 + (2 * 32)
   }
 
   fn input(&self) -> ClsagInput {
@@ -122,22 +121,18 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   type Transcript = RecommendedTranscript;
   type Signature = (Clsag, EdwardsPoint);
 
+  fn nonces(&self) -> Vec<Vec<dfg::EdwardsPoint>> {
+    vec![vec![dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)]]
+  }
+
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    view: &FrostView<Ed25519>,
-    nonces: &[dfg::Scalar; 2]
+    view: &FrostView<Ed25519>
   ) -> Vec<u8> {
-    self.H = hash_to_point(view.group_key().0);
-
-    let mut serialized = Vec::with_capacity(ClsagMultisig::serialized_len());
+    let mut serialized = Vec::with_capacity(Self::serialized_len());
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
     serialized.extend(write_dleq(rng, self.H, view.secret_share().0));
-
-    serialized.extend((nonces[0].0 * self.H).compress().to_bytes());
-    serialized.extend(write_dleq(rng, self.H, nonces[0].0));
-    serialized.extend((nonces[1].0 * self.H).compress().to_bytes());
-    serialized.extend(write_dleq(rng, self.H, nonces[1].0));
     serialized
   }
 
@@ -145,42 +140,27 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     &mut self,
     view: &FrostView<Ed25519>,
     l: u16,
-    commitments: &[dfg::EdwardsPoint; 2],
     serialized: &[u8]
   ) -> Result<(), FrostError> {
-    if serialized.len() != ClsagMultisig::serialized_len() {
+    if serialized.len() != Self::serialized_len() {
       // Not an optimal error but...
       Err(FrostError::InvalidCommitment(l))?;
     }
 
-    if self.AH.0.is_identity().into() {
+    if self.image.is_identity().into() {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
       self.transcript.append_message(b"mask", &self.mask().to_bytes());
     }
 
-    // Uses the same format FROST does for the expected commitments (nonce * G where this is nonce * H)
-    // The following technically shouldn't need to be committed to, as we've committed to equivalents,
-    // yet it doesn't hurt and may resolve some unknown issues
     self.transcript.append_message(b"participant", &l.to_be_bytes());
-
-    let mut cursor = 0;
-    self.transcript.append_message(b"image_share", &serialized[cursor .. (cursor + 32)]);
+    self.transcript.append_message(b"key_image_share", &serialized[.. 32]);
     self.image += read_dleq(
       serialized,
-      cursor,
       self.H,
       l,
       view.verification_share(l)
     ).map_err(|_| FrostError::InvalidCommitment(l))?.0;
-    cursor += 96;
-
-    self.transcript.append_message(b"commitment_D_H", &serialized[cursor .. (cursor + 32)]);
-    self.AH.0 += read_dleq(serialized, cursor, self.H, l, commitments[0]).map_err(|_| FrostError::InvalidCommitment(l))?;
-    cursor += 96;
-
-    self.transcript.append_message(b"commitment_E_H", &serialized[cursor .. (cursor + 32)]);
-    self.AH.1 += read_dleq(serialized, cursor, self.H, l, commitments[1]).map_err(|_| FrostError::InvalidCommitment(l))?;
 
     Ok(())
   }
@@ -192,14 +172,10 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn sign_share(
     &mut self,
     view: &FrostView<Ed25519>,
-    nonce_sum: dfg::EdwardsPoint,
-    b: dfg::Scalar,
-    nonce: dfg::Scalar,
+    nonce_sums: &[Vec<dfg::EdwardsPoint>],
+    nonces: &[dfg::Scalar],
     msg: &[u8]
   ) -> dfg::Scalar {
-    // Apply the binding factor to the H variant of the nonce
-    self.AH.0 += self.AH.1 * b;
-
     // Use the transcript to get a seeded random number generator
     // The transcript contains private data, preventing passive adversaries from recreating this
     // process even if they have access to commitments (specifically, the ring index being signed
@@ -216,12 +192,12 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       &self.input(),
       self.mask(),
       &self.msg.as_ref().unwrap(),
-      nonce_sum.0,
-      self.AH.0.0
+      nonce_sums[0][0].0,
+      nonce_sums[0][1].0
     );
     self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
-    let share = dfg::Scalar(nonce.0 - (p * view.secret_share().0));
+    let share = dfg::Scalar(nonces[0].0 - (p * view.secret_share().0));
 
     share
   }
@@ -230,7 +206,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn verify(
     &self,
     _: dfg::EdwardsPoint,
-    _: dfg::EdwardsPoint,
+    _: &[Vec<dfg::EdwardsPoint>],
     sum: dfg::Scalar
   ) -> Option<Self::Signature> {
     let interim = self.interim.as_ref().unwrap();
@@ -251,12 +227,12 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn verify_share(
     &self,
     verification_share: dfg::EdwardsPoint,
-    nonce: dfg::EdwardsPoint,
+    nonces: &[Vec<dfg::EdwardsPoint>],
     share: dfg::Scalar,
   ) -> bool {
     let interim = self.interim.as_ref().unwrap();
     return (&share.0 * &ED25519_BASEPOINT_TABLE) == (
-      nonce.0 - (interim.p * verification_share.0)
+      nonces[0][0].0 - (interim.p * verification_share.0)
     );
   }
 }

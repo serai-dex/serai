@@ -105,7 +105,7 @@ pub fn test_with_vectors<
     serialized.extend((C::GENERATOR * nonces[1]).to_bytes().as_ref());
 
     let (machine, serialized) = machine.unsafe_override_preprocess(
-      PreprocessPackage { nonces, serialized: serialized.clone() }
+      PreprocessPackage { nonces: vec![nonces], serialized: serialized.clone() }
     );
 
     commitments.insert(i, serialized);

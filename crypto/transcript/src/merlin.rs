@@ -17,6 +17,10 @@ impl Transcript for MerlinTranscript {
   // this wrapper should be secure with this setting
   type Challenge = [u8; 64];
 
+  fn new(name: &'static [u8]) -> Self {
+    MerlinTranscript(merlin::Transcript::new(name))
+  }
+
   fn domain_separate(&mut self, label: &'static [u8]) {
     self.append_message(b"dom-sep", label);
   }

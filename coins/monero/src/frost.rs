@@ -7,7 +7,7 @@ use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use group::{Group, GroupEncoding};
 
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 use dalek_ff_group as dfg;
 use dleq::{Generators, DLEqProof};
 
@@ -19,6 +19,10 @@ pub enum MultisigError {
   InvalidDLEqProof(u16),
   #[error("invalid key image {0}")]
   InvalidKeyImage(u16)
+}
+
+fn transcript() -> RecommendedTranscript {
+  RecommendedTranscript::new(b"monero_key_image_dleq")
 }
 
 #[allow(non_snake_case)]
@@ -35,7 +39,7 @@ pub(crate) fn write_dleq<R: RngCore + CryptoRng>(
     // the proper order if they want to reach consensus
     // It'd be a poor API to have CLSAG define a new transcript solely to pass here, just to try to
     // merge later in some form, when it should instead just merge xH (as it does)
-    &mut RecommendedTranscript::new(b"DLEq Proof"),
+    &mut transcript(),
     Generators::new(dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)),
     dfg::Scalar(x)
   ).serialize(&mut res).unwrap();
@@ -45,16 +49,15 @@ pub(crate) fn write_dleq<R: RngCore + CryptoRng>(
 #[allow(non_snake_case)]
 pub(crate) fn read_dleq(
   serialized: &[u8],
-  start: usize,
   H: EdwardsPoint,
   l: u16,
   xG: dfg::EdwardsPoint
 ) -> Result<dfg::EdwardsPoint, MultisigError> {
-  if serialized.len() < start + 96 {
+  if serialized.len() != 96 {
     Err(MultisigError::InvalidDLEqProof(l))?;
   }
 
-  let bytes = (&serialized[(start + 0) .. (start + 32)]).try_into().unwrap();
+  let bytes = (&serialized[.. 32]).try_into().unwrap();
   // dfg ensures the point is torsion free
   let xH = Option::<dfg::EdwardsPoint>::from(
     dfg::EdwardsPoint::from_bytes(&bytes)).ok_or(MultisigError::InvalidDLEqProof(l)
@@ -64,13 +67,13 @@ pub(crate) fn read_dleq(
     Err(MultisigError::InvalidDLEqProof(l))?;
   }
 
-  let proof = DLEqProof::<dfg::EdwardsPoint>::deserialize(
-    &mut Cursor::new(&serialized[(start + 32) .. (start + 96)])
+  DLEqProof::<dfg::EdwardsPoint>::deserialize(
+    &mut Cursor::new(&serialized[32 ..])
+  ).map_err(|_| MultisigError::InvalidDLEqProof(l))?.verify(
+    &mut transcript(),
+    Generators::new(dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)),
+    (xG, xH)
   ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
-
-  let mut transcript = RecommendedTranscript::new(b"DLEq Proof");
-  proof.verify(&mut transcript, Generators::new(dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)), (xG, xH))
-    .map_err(|_| MultisigError::InvalidDLEqProof(l))?;
 
   Ok(xH)
 }

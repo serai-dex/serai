@@ -10,6 +10,9 @@ use digest::{typenum::type_operators::IsGreaterOrEqual, consts::U256, Digest, Ou
 pub trait Transcript {
   type Challenge: Clone + Send + Sync + AsRef<[u8]>;
 
+  /// Create a new transcript with the specified name
+  fn new(name: &'static [u8]) -> Self;
+
   /// Apply a domain separator to the transcript
   fn domain_separate(&mut self, label: &'static [u8]);
 
@@ -62,16 +65,16 @@ impl<D: SecureDigest> DigestTranscript<D> {
     self.0.update(u64::try_from(value.len()).unwrap().to_le_bytes());
     self.0.update(value);
   }
-
-  pub fn new(name: &'static [u8]) -> Self {
-    let mut res = DigestTranscript(D::new());
-    res.append(DigestTranscriptMember::Name, name);
-    res
-  }
 }
 
 impl<D: SecureDigest> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
+
+  fn new(name: &'static [u8]) -> Self {
+    let mut res = DigestTranscript(D::new());
+    res.append(DigestTranscriptMember::Name, name);
+    res
+  }
 
   fn domain_separate(&mut self, label: &[u8]) {
     self.append(DigestTranscriptMember::Domain, label);
