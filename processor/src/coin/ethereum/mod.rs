@@ -70,6 +70,7 @@ pub struct ProcessedSignature {
     pub e: Scalar,
 }
 
+#[allow(non_snake_case)]
 fn preprocess_signature(
     m: [u8; 32],
     R: &ProjectivePoint,
@@ -81,6 +82,7 @@ fn preprocess_signature(
     (processed_sig.sr, processed_sig.er)
 }
 
+#[allow(non_snake_case)]
 pub fn preprocess_signature_for_contract(
     m: [u8; 32],
     R: &ProjectivePoint,
@@ -99,6 +101,7 @@ pub fn preprocess_signature_for_contract(
         er,
         px: px_scalar,
         parity: &encoded_pk.as_ref()[0] - 2,
+        #[allow(non_snake_case)]
         message: m,
         e,
     }
