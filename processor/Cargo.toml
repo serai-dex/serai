@@ -32,8 +32,6 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["secp
 monero = { version = "0.16", features = ["experimental"] }
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
-ethers = { git = "https://github.com/gakonst/ethers-rs" }
-
 [dev-dependencies]
 group = "0.12"
 rand = "0.8"
