@@ -1,4 +1,5 @@
 use core::fmt::Debug;
+use std::io::Read;
 
 use thiserror::Error;
 
@@ -77,41 +78,37 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   // hash_msg and hash_binding_factor
   #[allow(non_snake_case)]
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
-}
 
-#[allow(non_snake_case)]
-pub(crate) fn F_len<C: Curve>() -> usize {
-  <C::F as PrimeField>::Repr::default().as_ref().len()
-}
-
-#[allow(non_snake_case)]
-pub(crate) fn G_len<C: Curve>() -> usize {
-  <C::G as GroupEncoding>::Repr::default().as_ref().len()
-}
-
-/// Field element from slice
-#[allow(non_snake_case)]
-pub(crate) fn F_from_slice<F: PrimeField>(slice: &[u8]) -> Result<F, CurveError> {
-  let mut encoding = F::Repr::default();
-  encoding.as_mut().copy_from_slice(slice);
-
-  let point = Option::<F>::from(F::from_repr(encoding)).ok_or(CurveError::InvalidScalar)?;
-  if point.to_repr().as_ref() != slice {
-    Err(CurveError::InvalidScalar)?;
+  #[allow(non_snake_case)]
+  fn F_len() -> usize {
+    <Self::F as PrimeField>::Repr::default().as_ref().len()
   }
-  Ok(point)
-}
 
-/// Group element from slice
-#[allow(non_snake_case)]
-pub(crate) fn G_from_slice<G: PrimeGroup>(slice: &[u8]) -> Result<G, CurveError> {
-  let mut encoding = G::Repr::default();
-  encoding.as_mut().copy_from_slice(slice);
-
-  let point = Option::<G>::from(G::from_bytes(&encoding)).ok_or(CurveError::InvalidPoint)?;
-  // Ban the identity, per the FROST spec, and non-canonical points
-  if (point.is_identity().into()) || (point.to_bytes().as_ref() != slice) {
-    Err(CurveError::InvalidPoint)?;
+  #[allow(non_snake_case)]
+  fn G_len() -> usize {
+    <Self::G as GroupEncoding>::Repr::default().as_ref().len()
   }
-  Ok(point)
+
+  #[allow(non_snake_case)]
+  fn read_F<R: Read>(r: &mut R) -> Result<Self::F, CurveError> {
+    let mut encoding = <Self::F as PrimeField>::Repr::default();
+    r.read_exact(encoding.as_mut()).map_err(|_| CurveError::InvalidScalar)?;
+    // ff mandates this is canonical
+    Option::<Self::F>::from(Self::F::from_repr(encoding)).ok_or(CurveError::InvalidScalar)
+  }
+
+  #[allow(non_snake_case)]
+  fn read_G<R: Read>(r: &mut R) -> Result<Self::G, CurveError> {
+    let mut encoding = <Self::G as GroupEncoding>::Repr::default();
+    r.read_exact(encoding.as_mut()).map_err(|_| CurveError::InvalidPoint)?;
+
+    let point = Option::<Self::G>::from(
+      Self::G::from_bytes(&encoding)
+    ).ok_or(CurveError::InvalidPoint)?;
+    // Ban the identity, per the FROST spec, and non-canonical points
+    if (point.is_identity().into()) || (point.to_bytes().as_ref() != encoding.as_ref()) {
+      Err(CurveError::InvalidPoint)?;
+    }
+    Ok(point)
+  }
 }

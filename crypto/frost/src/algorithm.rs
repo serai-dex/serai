@@ -1,4 +1,5 @@
 use core::{marker::PhantomData, fmt::Debug};
+use std::io::Read;
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -28,11 +29,11 @@ pub trait Algorithm<C: Curve>: Clone {
   ) -> Vec<u8>;
 
   /// Proccess the addendum for the specified participant. Guaranteed to be ordered
-  fn process_addendum(
+  fn process_addendum<Re: Read>(
     &mut self,
     params: &FrostView<C>,
     l: u16,
-    serialized: &[u8],
+    reader: &mut Re,
   ) -> Result<(), FrostError>;
 
   /// Sign a share with the given secret/nonce
@@ -70,7 +71,7 @@ impl Transcript for IetfTranscript {
   type Challenge = Vec<u8>;
 
   fn new(_: &'static [u8]) -> IetfTranscript {
-    unimplemented!("IetfTranscript should not be used with multiple nonce protocols");
+    IetfTranscript(vec![])
   }
 
   fn domain_separate(&mut self, _: &[u8]) {}
@@ -134,11 +135,11 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     vec![]
   }
 
-  fn process_addendum(
+  fn process_addendum<Re: Read>(
     &mut self,
     _: &FrostView<C>,
     _: u16,
-    _: &[u8],
+    _: &mut Re,
   ) -> Result<(), FrostError> {
     Ok(())
   }

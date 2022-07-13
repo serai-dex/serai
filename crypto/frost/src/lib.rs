@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use std::collections::HashMap;
+use std::{io::Read, collections::HashMap};
 
 use thiserror::Error;
 
@@ -8,7 +8,7 @@ use group::{ff::{Field, PrimeField}, GroupEncoding};
 mod schnorr;
 
 pub mod curve;
-use curve::{Curve, F_len, G_len, F_from_slice, G_from_slice};
+use curve::Curve;
 pub mod key_gen;
 pub mod algorithm;
 pub mod sign;
@@ -54,7 +54,7 @@ impl FrostParams {
   pub fn i(&self) -> u16 { self.i }
 }
 
-#[derive(Clone, Error, Debug)]
+#[derive(Copy, Clone, Error, Debug)]
 pub enum FrostError {
   #[error("a parameter was 0 (required {0}, participants {1})")]
   ZeroParameter(u16, u16),
@@ -66,11 +66,11 @@ pub enum FrostError {
   InvalidParticipantIndex(u16, u16),
 
   #[error("invalid signing set ({0})")]
-  InvalidSigningSet(String),
+  InvalidSigningSet(&'static str),
   #[error("invalid participant quantity (expected {0}, got {1})")]
   InvalidParticipantQuantity(usize, usize),
   #[error("duplicated participant index ({0})")]
-  DuplicatedIndex(usize),
+  DuplicatedIndex(u16),
   #[error("missing participant {0}")]
   MissingParticipant(u16),
   #[error("invalid commitment (participant {0})")]
@@ -81,7 +81,7 @@ pub enum FrostError {
   InvalidShare(u16),
 
   #[error("internal error ({0})")]
-  InternalError(String),
+  InternalError(&'static str),
 }
 
 // View of keys passable to algorithm implementations
@@ -182,7 +182,7 @@ impl<C: Curve> FrostKeys<C> {
 
   pub fn view(&self, included: &[u16]) -> Result<FrostView<C>, FrostError> {
     if (included.len() < self.params.t.into()) || (usize::from(self.params.n) < included.len()) {
-      Err(FrostError::InvalidSigningSet("invalid amount of participants included".to_string()))?;
+      Err(FrostError::InvalidSigningSet("invalid amount of participants included"))?;
     }
 
     let secret_share = self.secret_share * lagrange::<C::F>(self.params.i, &included);
@@ -203,12 +203,12 @@ impl<C: Curve> FrostKeys<C> {
   }
 
   pub fn serialized_len(n: u16) -> usize {
-    8 + C::ID.len() + (3 * 2) + F_len::<C>() + G_len::<C>() + (usize::from(n) * G_len::<C>())
+    8 + C::ID.len() + (3 * 2) + C::F_len() + C::G_len() + (usize::from(n) * C::G_len())
   }
 
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(FrostKeys::<C>::serialized_len(self.params.n));
-    serialized.extend(u64::try_from(C::ID.len()).unwrap().to_be_bytes());
+    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
     serialized.extend(C::ID);
     serialized.extend(&self.params.t.to_be_bytes());
     serialized.extend(&self.params.n.to_be_bytes());
@@ -221,59 +221,51 @@ impl<C: Curve> FrostKeys<C> {
     serialized
   }
 
-  pub fn deserialize(serialized: &[u8]) -> Result<FrostKeys<C>, FrostError> {
-    let mut start = u64::try_from(C::ID.len()).unwrap().to_be_bytes().to_vec();
-    start.extend(C::ID);
-    let mut cursor = start.len();
+  pub fn deserialize<R: Read>(cursor: &mut R) -> Result<FrostKeys<C>, FrostError> {
+    {
+      let missing = FrostError::InternalError("FrostKeys serialization is missing its curve");
+      let different = FrostError::InternalError("deserializing FrostKeys for another curve");
 
-    if serialized.len() < (cursor + 4) {
-      Err(
-        FrostError::InternalError(
-          "FrostKeys serialization is missing its curve/participant quantities".to_string()
-        )
-      )?;
-    }
-    if &start != &serialized[.. cursor] {
-      Err(
-        FrostError::InternalError(
-          "curve is distinct between serialization and deserialization".to_string()
-        )
-      )?;
+      let mut id_len = [0; 4];
+      cursor.read_exact(&mut id_len).map_err(|_| missing)?;
+      if u32::try_from(C::ID.len()).unwrap().to_be_bytes() != id_len {
+        Err(different)?;
+      }
+
+      let mut id = vec![0; C::ID.len()];
+      cursor.read_exact(&mut id).map_err(|_| missing)?;
+      if &id != &C::ID {
+        Err(different)?;
+      }
     }
 
-    let t = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
-    cursor += 2;
+    let (t, n, i) = {
+      let mut read_u16 = || {
+        let mut value = [0; 2];
+        cursor.read_exact(&mut value).map_err(
+          |_| FrostError::InternalError("missing participant quantities")
+        )?;
+        Ok(u16::from_be_bytes(value))
+      };
+      (read_u16()?, read_u16()?, read_u16()?)
+    };
 
-    let n = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
-    cursor += 2;
-    if serialized.len() != FrostKeys::<C>::serialized_len(n) {
-      Err(FrostError::InternalError("incorrect serialization length".to_string()))?;
-    }
-
-    let i = u16::from_be_bytes(serialized[cursor .. (cursor + 2)].try_into().unwrap());
-    cursor += 2;
-
-    let secret_share = F_from_slice::<C::F>(&serialized[cursor .. (cursor + F_len::<C>())])
-      .map_err(|_| FrostError::InternalError("invalid secret share".to_string()))?;
-    cursor += F_len::<C>();
-    let group_key = G_from_slice::<C::G>(&serialized[cursor .. (cursor + G_len::<C>())])
-      .map_err(|_| FrostError::InternalError("invalid group key".to_string()))?;
-    cursor += G_len::<C>();
+    let secret_share = C::read_F(cursor)
+      .map_err(|_| FrostError::InternalError("invalid secret share"))?;
+    let group_key = C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid group key"))?;
 
     let mut verification_shares = HashMap::new();
     for l in 1 ..= n {
       verification_shares.insert(
         l,
-        G_from_slice::<C::G>(&serialized[cursor .. (cursor + G_len::<C>())])
-          .map_err(|_| FrostError::InternalError("invalid verification share".to_string()))?
+        C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid verification share"))?
       );
-      cursor += G_len::<C>();
     }
 
     Ok(
       FrostKeys {
         params: FrostParams::new(t, n, i)
-          .map_err(|_| FrostError::InternalError("invalid parameters".to_string()))?,
+          .map_err(|_| FrostError::InternalError("invalid parameters"))?,
         secret_share,
         group_key,
         verification_shares,
@@ -287,15 +279,20 @@ impl<C: Curve> FrostKeys<C> {
 pub(crate) fn validate_map<T>(
   map: &mut HashMap<u16, T>,
   included: &[u16],
-  ours: (u16, T)
+  ours: u16
 ) -> Result<(), FrostError> {
-  map.insert(ours.0, ours.1);
-
-  if map.len() != included.len() {
-    Err(FrostError::InvalidParticipantQuantity(included.len(), map.len()))?;
+  if (map.len() + 1) != included.len() {
+    Err(FrostError::InvalidParticipantQuantity(included.len(), map.len() + 1))?;
   }
 
   for included in included {
+    if *included == ours {
+      if map.contains_key(included) {
+        Err(FrostError::DuplicatedIndex(*included))?;
+      }
+      continue;
+    }
+
     if !map.contains_key(included) {
       Err(FrostError::MissingParticipant(*included))?;
     }

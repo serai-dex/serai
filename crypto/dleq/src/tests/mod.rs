@@ -9,7 +9,7 @@ use group::GroupEncoding;
 
 use k256::{Scalar, ProjectivePoint};
 
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 
 use crate::{Generators, DLEqProof};
 

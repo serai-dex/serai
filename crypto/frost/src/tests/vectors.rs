@@ -1,14 +1,14 @@
-use std::{sync::Arc, collections::HashMap};
+use std::{io::Cursor, sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
 use group::{ff::PrimeField, GroupEncoding};
 
 use crate::{
-  curve::{Curve, F_from_slice, G_from_slice}, FrostKeys,
+  curve::Curve, FrostKeys,
   algorithm::{Schnorr, Hram},
   sign::{PreprocessPackage, SignMachine, SignatureMachine, AlgorithmMachine},
-  tests::{curve::test_curve, schnorr::test_schnorr, recover}
+  tests::{clone_without, curve::test_curve, schnorr::test_schnorr, recover}
 };
 
 pub struct Vectors {
@@ -27,7 +27,7 @@ pub struct Vectors {
 // Load these vectors into FrostKeys using a custom serialization it'll deserialize
 fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKeys<C>> {
   let shares = vectors.shares.iter().map(
-    |secret| F_from_slice::<C::F>(&hex::decode(secret).unwrap()).unwrap()
+    |secret| C::read_F(&mut Cursor::new(hex::decode(secret).unwrap())).unwrap()
   ).collect::<Vec<_>>();
   let verification_shares = shares.iter().map(
     |secret| C::GENERATOR * secret
@@ -36,7 +36,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
   let mut keys = HashMap::new();
   for i in 1 ..= u16::try_from(shares.len()).unwrap() {
     let mut serialized = vec![];
-    serialized.extend(u64::try_from(C::ID.len()).unwrap().to_be_bytes());
+    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
     serialized.extend(C::ID);
     serialized.extend(vectors.threshold.to_be_bytes());
     serialized.extend(u16::try_from(shares.len()).unwrap().to_be_bytes());
@@ -47,7 +47,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
       serialized.extend(share.to_bytes().as_ref());
     }
 
-    let these_keys = FrostKeys::<C>::deserialize(&serialized).unwrap();
+    let these_keys = FrostKeys::<C>::deserialize(&mut Cursor::new(serialized)).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     assert_eq!(these_keys.params().i(), i);
@@ -70,14 +70,14 @@ pub fn test_with_vectors<
 
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
-  let group_key = G_from_slice::<C::G>(&hex::decode(vectors.group_key).unwrap()).unwrap();
+  let group_key = C::read_G(&mut Cursor::new(hex::decode(vectors.group_key).unwrap())).unwrap();
   assert_eq!(
-    C::GENERATOR * F_from_slice::<C::F>(&hex::decode(vectors.group_secret).unwrap()).unwrap(),
+    C::GENERATOR * C::read_F(&mut Cursor::new(hex::decode(vectors.group_secret).unwrap())).unwrap(),
     group_key
   );
   assert_eq!(
     recover(&keys),
-    F_from_slice::<C::F>(&hex::decode(vectors.group_secret).unwrap()).unwrap()
+    C::read_F(&mut Cursor::new(hex::decode(vectors.group_secret).unwrap())).unwrap()
   );
 
   let mut machines = vec![];
@@ -96,19 +96,28 @@ pub fn test_with_vectors<
   let mut c = 0;
   let mut machines = machines.drain(..).map(|(i, machine)| {
     let nonces = [
-      F_from_slice::<C::F>(&hex::decode(vectors.nonces[c][0]).unwrap()).unwrap(),
-      F_from_slice::<C::F>(&hex::decode(vectors.nonces[c][1]).unwrap()).unwrap()
+      C::read_F(&mut Cursor::new(hex::decode(vectors.nonces[c][0]).unwrap())).unwrap(),
+      C::read_F(&mut Cursor::new(hex::decode(vectors.nonces[c][1]).unwrap())).unwrap()
     ];
     c += 1;
-
-    let mut serialized = (C::GENERATOR * nonces[0]).to_bytes().as_ref().to_vec();
-    serialized.extend((C::GENERATOR * nonces[1]).to_bytes().as_ref());
-
-    let (machine, serialized) = machine.unsafe_override_preprocess(
-      PreprocessPackage { nonces: vec![nonces], serialized: serialized.clone() }
+    let these_commitments = vec![[C::GENERATOR * nonces[0], C::GENERATOR * nonces[1]]];
+    let machine = machine.unsafe_override_preprocess(
+      PreprocessPackage {
+        nonces: vec![nonces],
+        commitments: vec![these_commitments.clone()],
+        addendum: vec![]
+      }
     );
 
-    commitments.insert(i, serialized);
+    commitments.insert(
+      i,
+      Cursor::new(
+        [
+          these_commitments[0][0].to_bytes().as_ref(),
+          these_commitments[0][1].to_bytes().as_ref()
+        ].concat().to_vec()
+      )
+    );
     (i, machine)
   }).collect::<Vec<_>>();
 
@@ -116,19 +125,19 @@ pub fn test_with_vectors<
   c = 0;
   let mut machines = machines.drain(..).map(|(i, machine)| {
     let (machine, share) = machine.sign(
-      commitments.clone(),
+      clone_without(&commitments, &i),
       &hex::decode(vectors.msg).unwrap()
     ).unwrap();
 
     assert_eq!(share, hex::decode(vectors.sig_shares[c]).unwrap());
     c += 1;
 
-    shares.insert(i, share);
+    shares.insert(i, Cursor::new(share));
     (i, machine)
   }).collect::<HashMap<_, _>>();
 
-  for (_, machine) in machines.drain() {
-    let sig = machine.complete(shares.clone()).unwrap();
+  for (i, machine) in machines.drain() {
+    let sig = machine.complete(clone_without(&shares, &i)).unwrap();
     let mut serialized = sig.R.to_bytes().as_ref().to_vec();
     serialized.extend(sig.s.to_repr().as_ref());
     assert_eq!(hex::encode(serialized), vectors.sig);

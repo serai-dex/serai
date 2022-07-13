@@ -1,20 +1,49 @@
 use rand::rngs::OsRng;
 
-#[cfg(feature = "secp256k1")]
-use crate::tests::{curve::test_curve, schnorr::test_schnorr};
-#[cfg(feature = "secp256k1")]
-use crate::curve::Secp256k1;
-
-#[cfg(feature = "p256")]
+#[cfg(any(feature = "secp256k1", feature = "p256"))]
 use crate::tests::vectors::{Vectors, test_with_vectors};
+
+#[cfg(feature = "secp256k1")]
+use crate::curve::{Secp256k1, NonIetfSecp256k1Hram};
+
 #[cfg(feature = "p256")]
 use crate::curve::{P256, IetfP256Hram};
 
 #[cfg(feature = "secp256k1")]
 #[test]
 fn secp256k1_non_ietf() {
-  test_curve::<_, Secp256k1>(&mut OsRng);
-  test_schnorr::<_, Secp256k1>(&mut OsRng);
+  test_with_vectors::<_, Secp256k1, NonIetfSecp256k1Hram>(
+    &mut OsRng,
+    Vectors {
+      threshold: 2,
+      shares: &[
+        "08f89ffe80ac94dcb920c26f3f46140bfc7f95b493f8310f5fc1ea2b01f4254c",
+        "04f0feac2edcedc6ce1253b7fab8c86b856a797f44d83d82a385554e6e401984",
+        "00e95d59dd0d46b0e303e500b62b7ccb0e555d49f5b849f5e748c071da8c0dbc"
+      ],
+      group_secret: "0d004150d27c3bf2a42f312683d35fac7394b1e9e318249c1bfe7f0795a83114",
+      group_key: "02f37c34b66ced1fb51c34a90bdae006901f10625cc06c4f64663b0eae87d87b4f",
+
+      msg: "74657374",
+      included: &[1, 3],
+      nonces: &[
+        [
+          "31c3c1b76b76664569859b9251fbabed9d4d432c6f5aaa03ed41f9c231935798",
+          "206f4ffaeb602ccb57cbe50e146ac690e6d7317d4b93377061d9d1b4caf78a26"
+        ],
+        [
+          "0d3945bc1553676a5dd910cb4f14437d99ed421516b2617357b984820fdca520",
+          "635e0fd90caaf40b5e986d0ee0f58778e4d88731bc6ac70350ef702ffe20a21b"
+        ]
+      ],
+      sig_shares: &[
+        "18b71e284c5d008896ed8847b234ec829eda376d6208838ee7faf2ce21b154c1",
+        "a452a49c8116124d0a283f3589a96b704894b43246e47e59d376353bcc638311"
+      ],
+      sig: "03dafb28ee7ad033fd15ed470d07156617260d74a9d76a15d371d7b613d2b111e".to_owned() +
+           "7bd09c2c4cd7312d5a115c77d3bde57f2e76eeb9fa8ed01e8bb712809ee14d7d2"
+    }
+  );
 }
 
 #[cfg(feature = "p256")]
@@ -36,20 +65,20 @@ fn p256_vectors() {
       included: &[1, 3],
       nonces: &[
         [
-          "081617b24375e069b39f649d4c4ce2fba6e38b73e7c16759de0b6079a22c4c7e",
-          "4de5fb77d99f03a2491a83a6a4cb91ca3c82a3f34ce94cec939174f47c9f95dd"
+          "33a519cf070a166f9ef41a798d03423743f3e7d0b0efd5d0d963773c4c53205e",
+          "307d208d0c5728f323ae374f1ebd7f14a1a49b77d9d4bc1eab222218a17765ff"
         ],
         [
-          "d186ea92593f83ea83181b184d41aa93493301ac2bc5b4b1767e94d2db943e38",
-          "486e2ee25a3fbc8e6399d748b077a2755fde99fa85cc24fa647ea4ebf5811a15"
+          "a614eadb972dc37b88aeceb6e899903f3104742d13f379a0e014541decbea4a4",
+          "e509791018504c5bb87edaf0f44761cc840888507c4cd80237971d78e65f70f2"
         ]
       ],
       sig_shares: &[
-        "9e4d8865faf8c7b3193a3b35eda3d9e12118447114b1e7d5b4809ea28067f8a9",
-        "b7d094eab6305ae74daeed1acd31abba9ab81f638d38b72c132cb25a5dfae1fc"
+        "61e8b9c474df2e66ad19fd80a6e6cec1c6fe43c0a1cffd2d1c28299e93e1bbdb",
+        "9651d355ca1dea2557ba1f73e38a9f4ff1f1afc565323ef27f88a9d14df8370e"
       ],
-      sig: "0342c14c77f9d4ef9b8bd64fb0d7bbfdb9f8216a44e5f7bbe6ac0f3ed5e1a57367".to_owned() +
-        "561e1d51b129229966e92850bad5859bfee96926fad3007cd3f38639e1ffb554"
+      sig: "02dfba781e17b830229ae4ed22ebe402873683d9dfd945d01762217fb3172c2a7".to_owned() +
+           "1f83a8d1a3efd188c04d41cf48a716e11b8eff38607023c1f9bb0d36fe1d9f2e9"
     }
   );
 }

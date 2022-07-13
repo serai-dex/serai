@@ -4,7 +4,7 @@ use group::{ff::{Field, PrimeField}, GroupEncoding};
 
 use multiexp::BatchVerifier;
 
-use crate::{Curve, F_len, G_len};
+use crate::Curve;
 
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -15,7 +15,7 @@ pub struct SchnorrSignature<C: Curve> {
 
 impl<C: Curve> SchnorrSignature<C> {
   pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(G_len::<C>() + F_len::<C>());
+    let mut res = Vec::with_capacity(C::G_len() + C::F_len());
     res.extend(self.R.to_bytes().as_ref());
     res.extend(self.s.to_repr().as_ref());
     res

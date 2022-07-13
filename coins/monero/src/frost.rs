@@ -1,4 +1,4 @@
-use std::{convert::TryInto, io::Cursor};
+use std::io::Read;
 
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
@@ -47,17 +47,14 @@ pub(crate) fn write_dleq<R: RngCore + CryptoRng>(
 }
 
 #[allow(non_snake_case)]
-pub(crate) fn read_dleq(
-  serialized: &[u8],
+pub(crate) fn read_dleq<Re: Read>(
+  serialized: &mut Re,
   H: EdwardsPoint,
   l: u16,
   xG: dfg::EdwardsPoint
 ) -> Result<dfg::EdwardsPoint, MultisigError> {
-  if serialized.len() != 96 {
-    Err(MultisigError::InvalidDLEqProof(l))?;
-  }
-
-  let bytes = (&serialized[.. 32]).try_into().unwrap();
+  let mut bytes = [0; 32];
+  serialized.read_exact(&mut bytes).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
   // dfg ensures the point is torsion free
   let xH = Option::<dfg::EdwardsPoint>::from(
     dfg::EdwardsPoint::from_bytes(&bytes)).ok_or(MultisigError::InvalidDLEqProof(l)
@@ -68,7 +65,7 @@ pub(crate) fn read_dleq(
   }
 
   DLEqProof::<dfg::EdwardsPoint>::deserialize(
-    &mut Cursor::new(&serialized[32 ..])
+    serialized
   ).map_err(|_| MultisigError::InvalidDLEqProof(l))?.verify(
     &mut transcript(),
     Generators::new(dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)),

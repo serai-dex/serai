@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use std::sync::{Arc, RwLock};
+use std::{io::Read, sync::{Arc, RwLock}};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -104,7 +104,7 @@ impl ClsagMultisig {
     )
   }
 
-  pub fn serialized_len() -> usize {
+  pub const fn serialized_len() -> usize {
     32 + (2 * 32)
   }
 
@@ -136,17 +136,12 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     serialized
   }
 
-  fn process_addendum(
+  fn process_addendum<Re: Read>(
     &mut self,
     view: &FrostView<Ed25519>,
     l: u16,
-    serialized: &[u8]
+    serialized: &mut Re
   ) -> Result<(), FrostError> {
-    if serialized.len() != Self::serialized_len() {
-      // Not an optimal error but...
-      Err(FrostError::InvalidCommitment(l))?;
-    }
-
     if self.image.is_identity().into() {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
@@ -154,13 +149,14 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     }
 
     self.transcript.append_message(b"participant", &l.to_be_bytes());
-    self.transcript.append_message(b"key_image_share", &serialized[.. 32]);
-    self.image += read_dleq(
+    let image = read_dleq(
       serialized,
       self.H,
       l,
       view.verification_share(l)
     ).map_err(|_| FrostError::InvalidCommitment(l))?.0;
+    self.transcript.append_message(b"key_image_share", image.compress().to_bytes().as_ref());
+    self.image += image;
 
     Ok(())
   }
