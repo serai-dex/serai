@@ -33,12 +33,6 @@ pub async fn call_verify(
     contract: schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
     params: ethereum::ProcessedSignature,
 ) -> Result<()> {
-    println!("{:?}", params.sr.to_bytes());
-    println!("{:?}", params.er.to_bytes());
-    println!("{:?}", params.px.to_bytes());
-    println!("{:?}", params.parity + 27);
-    println!("{:?}", params.message);
-    println!("{:?}", params.e.to_bytes());
     let ok = contract
         .verify(
             params.sr.to_bytes().into(),
@@ -94,14 +88,11 @@ mod tests {
             .unwrap()
             .interval(Duration::from_millis(10u64));
         let chain_id = provider.get_chainid().await.unwrap();
-        // println!("{:?}", chain_id.as_u32());
         let client = Arc::new(SignerMiddleware::new(provider, wallet));
 
         let keys = key_gen::<_, Secp256k1>(&mut OsRng);
         let group_key = keys[&1].group_key();
-        //let group_key_encoded = group_key.to_encoded_point(true);
-        //let group_key_compressed = group_key_encoded.as_ref();
-        //let group_key_x = Scalar::from_uint_reduced(U256::from_be_slice(&group_key_compressed[1..33]));
+
         const MESSAGE: &'static [u8] = b"Hello, World!";
         let hashed_message = keccak256(MESSAGE);
         let chain_id = U256::from(Scalar::from(chain_id.as_u32()));
@@ -124,8 +115,6 @@ mod tests {
             &group_key,
             chain_id,
         );
-        // let q = ecrecover(sr, group_key_compressed[0] - 2, group_key_x, er).unwrap();
-        // assert_eq!(q, address(&sig.R));
 
         let contract = deploy_schnorr_verifier_contract(client).await.unwrap();
         call_verify(contract, processed_sig).await.unwrap();

@@ -1,7 +1,5 @@
 use sha3::{Digest, Keccak256};
 
-use ethers::utils::keccak256 as ethers_keccak256;
-
 use group::Group;
 use k256::{
     elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, sec1::ToEncodedPoint, DecompressPoint},
@@ -11,8 +9,7 @@ use k256::{
 use frost::{algorithm::Hram, curve::Secp256k1};
 
 fn keccak256(data: &[u8]) -> [u8; 32] {
-    //Keccak256::digest(data).try_into().unwrap()
-    ethers_keccak256(data)
+    Keccak256::digest(data).try_into().unwrap()
 }
 
 fn hash_to_scalar(data: &[u8]) -> Scalar {
@@ -20,7 +17,8 @@ fn hash_to_scalar(data: &[u8]) -> Scalar {
 }
 
 fn address(point: &ProjectivePoint) -> [u8; 20] {
-    keccak256(point.to_encoded_point(false).as_ref())[0..20]
+    let encoded_point = point.to_encoded_point(false);
+    keccak256(&encoded_point.as_ref()[1..65])[12..32]
         .try_into()
         .unwrap()
 }
@@ -55,14 +53,11 @@ impl Hram<Secp256k1> for EthereumHram {
     fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
         let a_encoded_point = A.to_encoded_point(true);
         let mut a_encoded = a_encoded_point.as_ref().to_owned();
-        a_encoded[0] += 25;
+        a_encoded[0] += 25; // Ethereum uses 27/28 for point parity
         let mut data = address(R).to_vec();
         data.append(&mut a_encoded);
         data.append(&mut m.to_vec());
-        Scalar::from_uint_reduced(U256::from_be_slice(&keccak256(
-            //&[&address(R), &a_encoded, m].concat(),
-            &data,
-        )))
+        Scalar::from_uint_reduced(U256::from_be_slice(&keccak256(&data)))
     }
 }
 
@@ -82,13 +77,6 @@ fn preprocess_signature(
     A: &ProjectivePoint,
     chain_id: U256,
 ) -> (Scalar, Scalar) {
-    // let encoded_pk = A.to_encoded_point(true);
-    // let px = &encoded_pk.as_ref()[1..33];
-    // let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
-    // let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), m].concat());
-    // let sr = s.mul(&px_scalar).negate();
-    // let er = e.mul(&px_scalar).negate();
-    // (sr, er)
     let processed_sig = preprocess_signature_for_contract(m, R, s, A, chain_id);
     (processed_sig.sr, processed_sig.er)
 }
