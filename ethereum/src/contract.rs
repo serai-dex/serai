@@ -30,8 +30,8 @@ pub async fn deploy_schnorr_verifier_contract(
 }
 
 pub async fn call_verify(
-    contract: schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
-    params: ethereum::ProcessedSignature,
+    contract: &schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
+    params: &ethereum::ProcessedSignature,
 ) -> Result<()> {
     let ok = contract
         .verify(
@@ -108,7 +108,7 @@ mod tests {
             ),
             full_message,
         );
-        let processed_sig = ethereum::preprocess_signature_for_contract(
+        let mut processed_sig = ethereum::preprocess_signature_for_contract(
             hashed_message,
             &sig.R,
             sig.s,
@@ -117,6 +117,11 @@ mod tests {
         );
 
         let contract = deploy_schnorr_verifier_contract(client).await.unwrap();
-        call_verify(contract, processed_sig).await.unwrap();
+        call_verify(&contract, &processed_sig).await.unwrap();
+
+        // test invalid signature fails
+        processed_sig.message[0] = 0;
+        let res = call_verify(&contract, &processed_sig).await;
+        assert!(res.is_err());
     }
 }
