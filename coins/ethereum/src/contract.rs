@@ -1,6 +1,6 @@
+use crate::crypto::ProcessedSignature;
 use ethers::{contract::ContractFactory, prelude::*};
 use eyre::{eyre, Result};
-use serai_processor::coin::ethereum;
 use std::fs::File;
 use std::sync::Arc;
 use thiserror::Error;
@@ -17,7 +17,7 @@ abigen!(
     event_derives(serde::Deserialize, serde::Serialize),
 );
 
-pub async fn deploy_schnorr_verifier_contract(
+pub(crate) async fn deploy_schnorr_verifier_contract(
     client: Arc<SignerMiddleware<Provider<Http>, LocalWallet>>,
 ) -> Result<schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>> {
     let path = "./schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json";
@@ -31,7 +31,7 @@ pub async fn deploy_schnorr_verifier_contract(
 
 pub async fn call_verify(
     contract: &schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
-    params: &ethereum::ProcessedSignature,
+    params: &ProcessedSignature,
 ) -> Result<()> {
     let ok = contract
         .verify(
@@ -71,6 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ecrecover_hack() {
+        use crate::crypto;
         use ethers::utils::keccak256;
         use frost::{
             algorithm::Schnorr,
@@ -80,7 +81,6 @@ mod tests {
         use k256::elliptic_curve::bigint::ArrayEncoding;
         use k256::{Scalar, U256};
         use rand::rngs::OsRng;
-        use serai_processor::coin::ethereum;
 
         let anvil = Anvil::new().spawn();
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
@@ -103,12 +103,12 @@ mod tests {
             &mut OsRng,
             algorithm_machines(
                 &mut OsRng,
-                Schnorr::<Secp256k1, ethereum::EthereumHram>::new(),
+                Schnorr::<Secp256k1, crypto::EthereumHram>::new(),
                 &keys,
             ),
             full_message,
         );
-        let mut processed_sig = ethereum::preprocess_signature_for_contract(
+        let mut processed_sig = crypto::preprocess_signature_for_contract(
             hashed_message,
             &sig.R,
             sig.s,

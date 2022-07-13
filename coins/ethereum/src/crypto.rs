@@ -122,7 +122,6 @@ fn test_ecrecover() {
     const MESSAGE: &'static [u8] = b"Hello, World!";
     let sig: Signature = private.sign(MESSAGE);
     public.verify(MESSAGE, &sig).unwrap();
-    //assert!(verify(ProjectivePoint::from(public), MESSAGE, *sig.r(), *sig.s()));
 
     assert_eq!(
         ecrecover(
