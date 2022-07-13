@@ -1,3 +1,5 @@
+use std::io::Cursor;
+
 use rand_core::{RngCore, CryptoRng};
 
 use group::{ff::Field, Group};
@@ -13,7 +15,7 @@ fn key_generation<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 // Test serialization of generated keys
 fn keys_serialization<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   for (_, keys) in key_gen::<_, C>(rng) {
-    assert_eq!(&FrostKeys::<C>::deserialize(&keys.serialize()).unwrap(), &*keys);
+    assert_eq!(&FrostKeys::<C>::deserialize(&mut Cursor::new(keys.serialize())).unwrap(), &*keys);
   }
 }
 
