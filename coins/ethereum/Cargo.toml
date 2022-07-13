@@ -1,6 +1,9 @@
 [package]
-name = "ethereum"
+name = "ethereum-serai"
 version = "0.1.0"
+description = "An Ethereum library supporting Schnorr signing and on-chain verification"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabethjbinks@gmail.com>"]
 edition = "2021"
 
 [dependencies]
@@ -13,7 +16,7 @@ ethers = { git = "https://github.com/gakonst/ethers-rs", features = ["abigen", "
 eyre = "0.6"
 
 k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1", "ed25519"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1"] }
 sha3 = "0.10"
 curve25519-dalek = { version = "3", features = ["std"] }
 group = "0.12"
