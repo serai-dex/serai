@@ -9,8 +9,8 @@ members = [
   "crypto/dleq",
   "crypto/frost",
 
+  "coins/ethereum",
   "coins/monero",
 
-  "ethereum",
   "processor",
 ]
