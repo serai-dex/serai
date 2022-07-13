@@ -43,7 +43,7 @@ fn chaum_multisig() {
   #[allow(non_snake_case)]
   let mut S_T = vec![];
   let mut xz = vec![];
-  for _ in 0 .. 2 {
+  for _ in 0 .. 5 {
     let x = Scalar::random(&mut OsRng);
     let z = Scalar::random(&mut OsRng);
 

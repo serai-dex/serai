@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
@@ -61,11 +63,11 @@ impl Algorithm<Secp256k1> for ChaumMultisig {
     vec![]
   }
 
-  fn process_addendum(
+  fn process_addendum<Re: Read>(
     &mut self,
     _: &FrostView<Secp256k1>,
     _: u16,
-    _: &[u8]
+    _: &mut Re
   ) -> Result<(), FrostError> {
     Ok(())
   }
