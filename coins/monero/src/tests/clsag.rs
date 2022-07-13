@@ -6,7 +6,7 @@ use rand::{RngCore, rngs::OsRng};
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 #[cfg(feature = "multisig")]
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
 use frost::curve::Ed25519;
 
@@ -102,6 +102,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
       &mut OsRng,
       ClsagMultisig::new(
         RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
+        keys[&1].group_key().0,
         Arc::new(RwLock::new(Some(
           ClsagDetails::new(
             ClsagInput::new(

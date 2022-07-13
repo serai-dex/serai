@@ -1,4 +1,4 @@
-use std::{sync::{Arc, RwLock}, collections::HashMap};
+use std::{io::{Read, Cursor}, sync::{Arc, RwLock}, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -112,6 +112,7 @@ impl SignableTransaction {
         AlgorithmMachine::new(
           ClsagMultisig::new(
             transcript.clone(),
+            input.key,
             inputs[i].clone()
           ).map_err(|e| TransactionError::MultisigError(e))?,
           Arc::new(offset),
@@ -159,7 +160,10 @@ impl PreprocessMachine for TransactionMachine {
     rng: &mut R
   ) -> (TransactionSignMachine, Vec<u8>) {
     // Iterate over each CLSAG calling preprocess
-    let mut serialized = Vec::with_capacity(self.clsags.len() * (64 + ClsagMultisig::serialized_len()));
+    let mut serialized = Vec::with_capacity(
+      // D_{G, H}, E_{G, H}, DLEqs, key image addendum
+      self.clsags.len() * ((2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len())
+    );
     let clsags = self.clsags.drain(..).map(|clsag| {
       let (clsag, preprocess) = clsag.preprocess(rng);
       serialized.extend(&preprocess);
@@ -198,57 +202,57 @@ impl PreprocessMachine for TransactionMachine {
 impl SignMachine<Transaction> for TransactionSignMachine {
   type SignatureMachine = TransactionSignatureMachine;
 
-  fn sign(
+  fn sign<Re: Read>(
     mut self,
-    mut commitments: HashMap<u16, Vec<u8>>,
+    mut commitments: HashMap<u16, Re>,
     msg: &[u8]
   ) -> Result<(TransactionSignatureMachine, Vec<u8>), FrostError> {
     if msg.len() != 0 {
       Err(
         FrostError::InternalError(
-          "message was passed to the TransactionMachine when it generates its own".to_string()
+          "message was passed to the TransactionMachine when it generates its own"
         )
       )?;
     }
 
-    // Add all commitments to the transcript for their entropy
-    // While each CLSAG will do this as they need to for security, they have their own transcripts
-    // cloned from this TX's initial premise's transcript. For our TX transcript to have the CLSAG
-    // data for entropy, it'll have to be added ourselves
-    commitments.insert(self.i, self.our_preprocess);
-    for l in &self.included {
-      self.transcript.append_message(b"participant", &(*l).to_be_bytes());
-      // FROST itself will error if this is None, so let it
-      if let Some(preprocess) = commitments.get(l) {
-        self.transcript.append_message(b"preprocess", preprocess);
-      }
-    }
-
-    // FROST commitments, image, H commitments, and their proofs
-    let clsag_len = 64 + ClsagMultisig::serialized_len();
-    for (l, commitments) in &commitments {
-      if commitments.len() != (self.clsags.len() * clsag_len) {
-        Err(FrostError::InvalidCommitment(*l))?;
-      }
-    }
+    // FROST commitments and their DLEqs, and the image and its DLEq
+    const CLSAG_LEN: usize = (2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len();
 
     // Convert the unified commitments to a Vec of the individual commitments
-    let mut commitments = (0 .. self.clsags.len()).map(|_| commitments.iter_mut().map(
-      |(l, commitments)| (*l, commitments.drain(.. clsag_len).collect::<Vec<_>>())
-    ).collect::<HashMap<_, _>>()).collect::<Vec<_>>();
-
-    // Calculate the key images
-    // Clsag will parse/calculate/validate this as needed, yet doing so here as well provides
-    // the easiest API overall, as this is where the TX is (which needs the key images in its
-    // message), along with where the outputs are determined (where our change output needs these
-    // to be unique)
     let mut images = vec![EdwardsPoint::identity(); self.clsags.len()];
-    for c in 0 .. self.clsags.len() {
-      for (l, preprocess) in &commitments[c] {
+    let mut commitments = (0 .. self.clsags.len()).map(|c| {
+      let mut buf = [0; CLSAG_LEN];
+      (&self.included).iter().map(|l| {
+        // Add all commitments to the transcript for their entropy
+        // While each CLSAG will do this as they need to for security, they have their own transcripts
+        // cloned from this TX's initial premise's transcript. For our TX transcript to have the CLSAG
+        // data for entropy, it'll have to be added ourselves here
+        self.transcript.append_message(b"participant", &(*l).to_be_bytes());
+        if *l == self.i {
+          buf.copy_from_slice(self.our_preprocess.drain(.. CLSAG_LEN).as_slice());
+        } else {
+          commitments.get_mut(l).ok_or(FrostError::MissingParticipant(*l))?
+            .read_exact(&mut buf).map_err(|_| FrostError::InvalidCommitment(*l))?;
+        }
+        self.transcript.append_message(b"preprocess", &buf);
+
+        // While here, calculate the key image
+        // Clsag will parse/calculate/validate this as needed, yet doing so here as well provides
+        // the easiest API overall, as this is where the TX is (which needs the key images in its
+        // message), along with where the outputs are determined (where our outputs may need
+        // these in order to guarantee uniqueness)
         images[c] += CompressedEdwardsY(
-          preprocess[64 .. 96].try_into().map_err(|_| FrostError::InvalidCommitment(*l))?
+          buf[(CLSAG_LEN - 96) .. (CLSAG_LEN - 64)].try_into().map_err(|_| FrostError::InvalidCommitment(*l))?
         ).decompress().ok_or(FrostError::InvalidCommitment(*l))?;
-      }
+
+        Ok((*l, Cursor::new(buf)))
+      }).collect::<Result<HashMap<_, _>, _>>()
+    }).collect::<Result<Vec<_>, _>>()?;
+
+    // Remove our preprocess which shouldn't be here. It was just the easiest way to implement the
+    // above
+    for map in commitments.iter_mut() {
+      map.remove(&self.i);
     }
 
     // Create the actual transaction
@@ -341,16 +345,18 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 }
 
 impl SignatureMachine<Transaction> for TransactionSignatureMachine {
-  fn complete(self, mut shares: HashMap<u16, Vec<u8>>) -> Result<Transaction, FrostError> {
+  fn complete<Re: Read>(self, mut shares: HashMap<u16, Re>) -> Result<Transaction, FrostError> {
     let mut tx = self.tx;
     match tx.rct_signatures.prunable {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
         for clsag in self.clsags {
           let (clsag, pseudo_out) = clsag.complete(
-            shares.iter_mut().map(
-              |(l, shares)| (*l, shares.drain(.. 32).collect())
-            ).collect::<HashMap<_, _>>()
+            shares.iter_mut().map(|(l, shares)| {
+              let mut buf = [0; 32];
+              shares.read_exact(&mut buf).map_err(|_| FrostError::InvalidShare(*l))?;
+              Ok((*l, Cursor::new(buf)))
+            }).collect::<Result<HashMap<_, _>, _>>()?
           )?;
           clsags.push(clsag);
           pseudo_outs.push(pseudo_out);
