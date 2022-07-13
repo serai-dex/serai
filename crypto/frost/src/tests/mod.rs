@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashMap};
+use std::{io::Cursor, sync::Arc, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -46,15 +46,13 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
     );
     let (machine, these_commitments) = machine.generate_coefficients(rng);
     machines.insert(i, machine);
-    commitments.insert(i, these_commitments);
+    commitments.insert(i, Cursor::new(these_commitments));
   }
 
   let mut secret_shares = HashMap::new();
   let mut machines = machines.drain().map(|(l, machine)| {
     let (machine, shares) = machine.generate_secret_shares(
       rng,
-      // clone_without isn't necessary, as this machine's own data will be inserted without
-      // conflict, yet using it ensures the machine's own data is actually inserted as expected
       clone_without(&commitments, &l)
     ).unwrap();
     secret_shares.insert(l, shares);
@@ -69,7 +67,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(
       if i == *l {
         continue;
       }
-      our_secret_shares.insert(*l, shares[&i].clone());
+      our_secret_shares.insert(*l, Cursor::new(shares[&i].clone()));
     }
     let these_keys = machine.complete(rng, our_secret_shares).unwrap();
 
@@ -140,14 +138,14 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
   let mut commitments = HashMap::new();
   let mut machines = machines.drain().map(|(i, machine)| {
     let (machine, preprocess) = machine.preprocess(rng);
-    commitments.insert(i, preprocess);
+    commitments.insert(i, Cursor::new(preprocess));
     (i, machine)
   }).collect::<HashMap<_, _>>();
 
   let mut shares = HashMap::new();
   let mut machines = machines.drain().map(|(i, machine)| {
     let (machine, share) = machine.sign(clone_without(&commitments, &i), msg).unwrap();
-    shares.insert(i, share);
+    shares.insert(i, Cursor::new(share));
     (i, machine)
   }).collect::<HashMap<_, _>>();
 

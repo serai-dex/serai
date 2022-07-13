@@ -14,7 +14,7 @@ use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
 #[cfg(feature = "multisig")]
 use dalek_ff_group::Scalar;
 #[cfg(feature = "multisig")]
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
 use frost::{curve::Ed25519, tests::{THRESHOLD, key_gen, sign}};
 

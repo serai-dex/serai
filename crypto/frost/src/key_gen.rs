@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, collections::HashMap};
+use std::{marker::PhantomData, io::{Read, Cursor}, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -7,7 +7,7 @@ use group::{ff::{Field, PrimeField}, GroupEncoding};
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
-  curve::{Curve, F_len, G_len, F_from_slice, G_from_slice},
+  curve::Curve,
   FrostError, FrostParams, FrostKeys,
   schnorr::{self, SchnorrSignature},
   validate_map
@@ -31,11 +31,11 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
-) -> (Vec<C::F>, Vec<u8>) {
+) -> (Vec<C::F>, Vec<C::G>, Vec<u8>) {
   let t = usize::from(params.t);
   let mut coefficients = Vec::with_capacity(t);
   let mut commitments = Vec::with_capacity(t);
-  let mut serialized = Vec::with_capacity((G_len::<C>() * t) + G_len::<C>() + F_len::<C>());
+  let mut serialized = Vec::with_capacity((C::G_len() * t) + C::G_len() + C::F_len());
 
   for i in 0 .. t {
     // Step 1: Generate t random values to form a polynomial with
@@ -66,58 +66,55 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   );
 
   // Step 4: Broadcast
-  (coefficients, serialized)
+  (coefficients, commitments, serialized)
 }
 
 // Verify the received data from the first round of key generation
-fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
+fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
-  our_commitments: Vec<u8>,
-  mut serialized: HashMap<u16, Vec<u8>>,
+  our_commitments: Vec<C::G>,
+  mut serialized: HashMap<u16, Re>,
 ) -> Result<HashMap<u16, Vec<C::G>>, FrostError> {
-  validate_map(
-    &mut serialized,
-    &(1 ..= params.n()).into_iter().collect::<Vec<_>>(),
-    (params.i(), our_commitments)
-  )?;
-
-  let commitments_len = usize::from(params.t()) * G_len::<C>();
+  validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   let mut commitments = HashMap::new();
-
-  #[allow(non_snake_case)]
-  let R_bytes = |l| &serialized[&l][commitments_len .. commitments_len + G_len::<C>()];
-  #[allow(non_snake_case)]
-  let R = |l| G_from_slice::<C::G>(R_bytes(l)).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
-  #[allow(non_snake_case)]
-  let Am = |l| &serialized[&l][0 .. commitments_len];
-
-  let s = |l| F_from_slice::<C::F>(
-    &serialized[&l][commitments_len + G_len::<C>() ..]
-  ).map_err(|_| FrostError::InvalidProofOfKnowledge(l));
+  commitments.insert(params.i, our_commitments);
 
   let mut signatures = Vec::with_capacity(usize::from(params.n() - 1));
   for l in 1 ..= params.n() {
+    if l == params.i {
+      continue;
+    }
+
+    let invalid = FrostError::InvalidCommitment(l.try_into().unwrap());
+
+    // Read the entire list of commitments as the key we're providing a PoK for (A) and the message
+    #[allow(non_snake_case)]
+    let mut Am = vec![0; usize::from(params.t()) * C::G_len()];
+    serialized.get_mut(&l).unwrap().read_exact(&mut Am).map_err(|_| invalid)?;
+
     let mut these_commitments = vec![];
-    for c in 0 .. usize::from(params.t()) {
-      these_commitments.push(
-        G_from_slice::<C::G>(
-          &serialized[&l][(c * G_len::<C>()) .. ((c + 1) * G_len::<C>())]
-        ).map_err(|_| FrostError::InvalidCommitment(l.try_into().unwrap()))?
-      );
+    let mut cursor = Cursor::new(&Am);
+    for _ in 0 .. usize::from(params.t()) {
+      these_commitments.push(C::read_G(&mut cursor).map_err(|_| invalid)?);
     }
 
     // Don't bother validating our own proof of knowledge
     if l != params.i() {
+      let cursor = serialized.get_mut(&l).unwrap();
+      #[allow(non_snake_case)]
+      let R = C::read_G(cursor).map_err(|_| FrostError::InvalidProofOfKnowledge(l))?;
+      let s = C::read_F(cursor).map_err(|_| FrostError::InvalidProofOfKnowledge(l))?;
+
       // Step 5: Validate each proof of knowledge
       // This is solely the prep step for the latter batch verification
       signatures.push((
         l,
         these_commitments[0],
-        challenge::<C>(context, l, R_bytes(l), Am(l)),
-        SchnorrSignature::<C> { R: R(l)?, s: s(l)? }
+        challenge::<C>(context, l, R.to_bytes().as_ref(), &Am),
+        SchnorrSignature::<C> { R, s }
       ));
     }
 
@@ -147,15 +144,15 @@ fn polynomial<F: PrimeField>(
 // Implements round 1, step 5 and round 2, step 1 of FROST key generation
 // Returns our secret share part, commitments for the next step, and a vector for each
 // counterparty to receive
-fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
+fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
   coefficients: Vec<C::F>,
-  our_commitments: Vec<u8>,
-  commitments: HashMap<u16, Vec<u8>>,
+  our_commitments: Vec<C::G>,
+  commitments: HashMap<u16, Re>,
 ) -> Result<(C::F, HashMap<u16, Vec<C::G>>, HashMap<u16, Vec<u8>>), FrostError> {
-  let commitments = verify_r1::<R, C>(rng, params, context, our_commitments, commitments)?;
+  let commitments = verify_r1::<_, _, C>(rng, params, context, our_commitments, commitments)?;
 
   // Step 1: Generate secret shares for all other parties
   let mut res = HashMap::new();
@@ -188,25 +185,21 @@ fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
 /// issue, yet simply confirming protocol completion without issue is enough to confirm the same
 /// key was generated as long as a lack of duplicated commitments was also confirmed when they were
 /// broadcasted initially
-fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
+fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: FrostParams,
   mut secret_share: C::F,
   commitments: HashMap<u16, Vec<C::G>>,
-  // Vec to preserve ownership
-  mut serialized: HashMap<u16, Vec<u8>>,
+  mut serialized: HashMap<u16, Re>,
 ) -> Result<FrostKeys<C>, FrostError> {
-  validate_map(
-    &mut serialized,
-    &(1 ..= params.n()).into_iter().collect::<Vec<_>>(),
-    (params.i(), secret_share.to_repr().as_ref().to_vec())
-  )?;
+  validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   // Step 2. Verify each share
   let mut shares = HashMap::new();
-  for (l, share) in serialized {
-    shares.insert(l, F_from_slice::<C::F>(&share).map_err(|_| FrostError::InvalidShare(l))?);
+  for (l, share) in serialized.iter_mut() {
+    shares.insert(*l, C::read_F(share).map_err(|_| FrostError::InvalidShare(*l))?);
   }
+  shares.insert(params.i(), secret_share);
 
   // Calculate the exponent for a given participant and apply it to a series of commitments
   // Initially used with the actual commitments to verify the secret share, later used with stripes
@@ -282,7 +275,7 @@ pub struct SecretShareMachine<C: Curve> {
   params: FrostParams,
   context: String,
   coefficients: Vec<C::F>,
-  our_commitments: Vec<u8>,
+  our_commitments: Vec<C::G>,
 }
 
 pub struct KeyMachine<C: Curve> {
@@ -303,15 +296,20 @@ impl<C: Curve> KeyGenMachine<C> {
   /// channel. If any party submits multiple sets of commitments, they MUST be treated as malicious
   pub fn generate_coefficients<R: RngCore + CryptoRng>(
     self,
-    rng: &mut R
+    rng: &mut R,
   ) -> (SecretShareMachine<C>, Vec<u8>) {
-    let (coefficients, serialized) = generate_key_r1::<R, C>(rng, &self.params, &self.context);
+    let (
+      coefficients,
+      our_commitments,
+      serialized
+    ) = generate_key_r1::<_, C>(rng, &self.params, &self.context);
+
     (
       SecretShareMachine {
         params: self.params,
         context: self.context,
         coefficients,
-        our_commitments: serialized.clone()
+        our_commitments,
       },
       serialized,
     )
@@ -324,12 +322,12 @@ impl<C: Curve> SecretShareMachine<C> {
   /// index = Vec index. An empty vector is expected at index 0 to allow for this. An empty vector
   /// is also expected at index i which is locally handled. Returns a byte vector representing a
   /// secret share for each other participant which should be encrypted before sending
-  pub fn generate_secret_shares<R: RngCore + CryptoRng>(
+  pub fn generate_secret_shares<Re: Read, R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-    commitments: HashMap<u16, Vec<u8>>,
+    commitments: HashMap<u16, Re>,
   ) -> Result<(KeyMachine<C>, HashMap<u16, Vec<u8>>), FrostError> {
-    let (secret, commitments, shares) = generate_key_r2::<R, C>(
+    let (secret, commitments, shares) = generate_key_r2::<_, _, C>(
       rng,
       &self.params,
       &self.context,
@@ -348,10 +346,10 @@ impl<C: Curve> KeyMachine<C> {
   /// group's public key, while setting a valid secret share inside the machine. > t participants
   /// must report completion without issue before this key can be considered usable, yet you should
   /// wait for all participants to report as such
-  pub fn complete<R: RngCore + CryptoRng>(
+  pub fn complete<Re: Read, R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-    shares: HashMap<u16, Vec<u8>>,
+    shares: HashMap<u16, Re>,
   ) -> Result<FrostKeys<C>, FrostError> {
     complete_r2(rng, self.params, self.secret, self.commitments, shares)
   }

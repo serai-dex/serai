@@ -3,7 +3,7 @@ use rand_core::OsRng;
 use group::{ff::{Field, PrimeFieldBits}, prime::PrimeGroup};
 use multiexp::BatchVerifier;
 
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 
 use crate::cross_group::schnorr::SchnorrPoK;
 

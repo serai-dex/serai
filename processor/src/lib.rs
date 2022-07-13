@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::Send};
+use std::{collections::HashMap, io::Cursor, marker::Send};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -17,7 +17,8 @@ pub enum NetworkError {}
 
 #[async_trait]
 pub trait Network: Send {
-    async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError>;
+    async fn round(&mut self, data: Vec<u8>)
+        -> Result<HashMap<u16, Cursor<Vec<u8>>>, NetworkError>;
 }
 
 #[derive(Clone, Error, Debug)]

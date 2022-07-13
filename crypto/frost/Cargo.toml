@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"
@@ -26,7 +26,9 @@ dalek-ff-group = { path = "../dalek-ff-group", version = "0.1", optional = true 
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
 
-multiexp = { path = "../multiexp", version = "0.1", features = ["batch"] }
+multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
+
+dleq = { package = "dleq-serai", path = "../dleq", version = "0.1", features = ["serialize"] }
 
 [dev-dependencies]
 rand = "0.8"

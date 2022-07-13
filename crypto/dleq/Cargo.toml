@@ -1,5 +1,5 @@
 [package]
-name = "dleq"
+name = "dleq-serai"
 version = "0.1.0"
 description = "Implementation of single and cross-curve Discrete Log Equality proofs"
 license = "MIT"
@@ -17,7 +17,7 @@ transcript = { package = "flexible-transcript", path = "../transcript", version 
 ff = "0.12"
 group = "0.12"
 
-multiexp = { path = "../multiexp", features = ["batch"], optional = true }
+multiexp = { path = "../multiexp", version = "0.2", features = ["batch"], optional = true }
 
 [dev-dependencies]
 hex-literal = "0.3"

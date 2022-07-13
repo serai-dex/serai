@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    io::Cursor,
     sync::{Arc, RwLock},
 };
 
@@ -18,7 +19,7 @@ struct LocalNetwork {
     i: u16,
     size: u16,
     round: usize,
-    rounds: Arc<RwLock<Vec<HashMap<u16, Vec<u8>>>>>,
+    rounds: Arc<RwLock<Vec<HashMap<u16, Cursor<Vec<u8>>>>>>,
 }
 
 impl LocalNetwork {
@@ -39,13 +40,16 @@ impl LocalNetwork {
 
 #[async_trait]
 impl Network for LocalNetwork {
-    async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError> {
+    async fn round(
+        &mut self,
+        data: Vec<u8>,
+    ) -> Result<HashMap<u16, Cursor<Vec<u8>>>, NetworkError> {
         {
             let mut rounds = self.rounds.write().unwrap();
             if rounds.len() == self.round {
                 rounds.push(HashMap::new());
             }
-            rounds[self.round].insert(self.i, data);
+            rounds[self.round].insert(self.i, Cursor::new(data));
         }
 
         while {
@@ -55,7 +59,8 @@ impl Network for LocalNetwork {
             tokio::task::yield_now().await;
         }
 
-        let res = self.rounds.try_read().unwrap()[self.round].clone();
+        let mut res = self.rounds.try_read().unwrap()[self.round].clone();
+        res.remove(&self.i);
         self.round += 1;
         Ok(res)
     }

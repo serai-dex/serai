@@ -1,3 +1,5 @@
+use std::io::Cursor;
+
 use rand_core::{RngCore, CryptoRng};
 
 use sha2::{digest::Update, Digest, Sha256};
@@ -6,7 +8,7 @@ use group::{ff::Field, GroupEncoding};
 
 use elliptic_curve::{bigint::{Encoding, U384}, hash2curve::{Expander, ExpandMsg, ExpandMsgXmd}};
 
-use crate::{curve::{Curve, F_from_slice}, algorithm::Hram};
+use crate::{curve::Curve, algorithm::Hram};
 
 macro_rules! kp_curve {
   (
@@ -58,16 +60,18 @@ macro_rules! kp_curve {
         let mut modulus = vec![0; 16];
         modulus.extend((Self::F::zero() - Self::F::one()).to_bytes());
         let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
-        F_from_slice::<Self::F>(
-          &U384::from_be_slice(&{
-            let mut bytes = [0; 48];
-            ExpandMsgXmd::<Sha256>::expand_message(
-              &[msg],
-              dst,
-              48
-            ).unwrap().fill_bytes(&mut bytes);
-            bytes
-          }).reduce(&modulus).unwrap().to_be_bytes()[16 ..]
+        Self::read_F(
+          &mut Cursor::new(
+            &U384::from_be_slice(&{
+              let mut bytes = [0; 48];
+              ExpandMsgXmd::<Sha256>::expand_message(
+                &[msg],
+                dst,
+                48
+              ).unwrap().fill_bytes(&mut bytes);
+              bytes
+            }).reduce(&modulus).unwrap().to_be_bytes()[16 ..]
+          )
         ).unwrap()
       }
     }
@@ -101,5 +105,5 @@ kp_curve!(
   Secp256k1,
   NonIetfSecp256k1Hram,
   b"secp256k1",
-  b"FROST-secp256k1-SHA256-v5"
+  b"FROST-secp256k1-SHA256-v7"
 );
