@@ -6,9 +6,8 @@ use group::{ff::{Field, PrimeFieldBits}, prime::PrimeGroup};
 
 use multiexp::BatchVerifier;
 
-use crate::{
-  Generators,
-  cross_group::{DLEqError, scalar::{scalar_convert, mutual_scalar_from_bytes}}
+use crate::cross_group::{
+  Generators, DLEqError, scalar::{scalar_convert, mutual_scalar_from_bytes}
 };
 
 #[cfg(feature = "serialize")]

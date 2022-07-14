@@ -30,9 +30,10 @@ dalek-ff-group = { path = "../dalek-ff-group" }
 transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"] }
 
 [features]
-serialize = []
-experimental = ["multiexp"]
+std = []
+serialize = ["std"]
+experimental = ["std", "multiexp"]
 secure_capacity_difference = []
 
-# Only applies to cross_group, yet is default to ensure security
+# Only applies to experimental, yet is default to ensure security
 default = ["secure_capacity_difference"]

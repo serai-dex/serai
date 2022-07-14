@@ -8,8 +8,6 @@ use transcript::Transcript;
 use group::{ff::{Field, PrimeField, PrimeFieldBits}, prime::PrimeGroup};
 use multiexp::BatchVerifier;
 
-use crate::Generators;
-
 pub mod scalar;
 use scalar::{scalar_convert, mutual_scalar_from_bytes};
 
@@ -33,6 +31,24 @@ pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G
     Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid point"))?;
   }
   Ok(point.unwrap())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Generators<G: PrimeGroup> {
+  pub primary: G,
+  pub alt: G
+}
+
+impl<G: PrimeGroup> Generators<G> {
+  pub fn new(primary: G, alt: G) -> Generators<G> {
+    Generators { primary, alt }
+  }
+
+  fn transcript<T: Transcript>(&self, transcript: &mut T) {
+    transcript.domain_separate(b"generators");
+    transcript.append_message(b"primary", self.primary.to_bytes().as_ref());
+    transcript.append_message(b"alternate", self.alt.to_bytes().as_ref());
+  }
 }
 
 #[derive(Error, PartialEq, Eq, Debug)]

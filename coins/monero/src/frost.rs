@@ -9,7 +9,7 @@ use group::{Group, GroupEncoding};
 
 use transcript::{Transcript, RecommendedTranscript};
 use dalek_ff_group as dfg;
-use dleq::{Generators, DLEqProof};
+use dleq::DLEqProof;
 
 #[derive(Clone, Error, Debug)]
 pub enum MultisigError {
@@ -40,7 +40,7 @@ pub(crate) fn write_dleq<R: RngCore + CryptoRng>(
     // It'd be a poor API to have CLSAG define a new transcript solely to pass here, just to try to
     // merge later in some form, when it should instead just merge xH (as it does)
     &mut transcript(),
-    Generators::new(dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)),
+    &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)],
     dfg::Scalar(x)
   ).serialize(&mut res).unwrap();
   res
@@ -68,8 +68,8 @@ pub(crate) fn read_dleq<Re: Read>(
     serialized
   ).map_err(|_| MultisigError::InvalidDLEqProof(l))?.verify(
     &mut transcript(),
-    Generators::new(dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)),
-    (xG, xH)
+    &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(H)],
+    &[xG, xH]
   ).map_err(|_| MultisigError::InvalidDLEqProof(l))?;
 
   Ok(xH)

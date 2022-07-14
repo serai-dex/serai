@@ -5,7 +5,7 @@ use transcript::Transcript;
 use group::{ff::PrimeFieldBits, prime::PrimeGroup};
 use multiexp::BatchVerifier;
 
-use crate::{Generators, cross_group::{DLEqError, aos::{Re, Aos}}};
+use crate::cross_group::{Generators, DLEqError, aos::{Re, Aos}};
 
 #[cfg(feature = "serialize")]
 use std::io::{Read, Write};

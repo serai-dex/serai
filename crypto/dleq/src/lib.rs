@@ -1,4 +1,5 @@
-use thiserror::Error;
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
@@ -14,24 +15,6 @@ pub mod cross_group;
 
 #[cfg(test)]
 mod tests;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Generators<G: PrimeGroup> {
-  primary: G,
-  alt: G
-}
-
-impl<G: PrimeGroup> Generators<G> {
-  pub fn new(primary: G, alt: G) -> Generators<G> {
-    Generators { primary, alt }
-  }
-
-  fn transcript<T: Transcript>(&self, transcript: &mut T) {
-    transcript.domain_separate(b"generators");
-    transcript.append_message(b"primary", self.primary.to_bytes().as_ref());
-    transcript.append_message(b"alternate", self.alt.to_bytes().as_ref());
-  }
-}
 
 pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   // From here, there are three ways to get a scalar under the ff/group API
@@ -70,9 +53,8 @@ fn read_scalar<R: Read, F: PrimeField>(r: &mut R) -> io::Result<F> {
   Ok(scalar.unwrap())
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum DLEqError {
-  #[error("invalid proof")]
   InvalidProof
 }
 
@@ -84,34 +66,26 @@ pub struct DLEqProof<G: PrimeGroup> {
 
 #[allow(non_snake_case)]
 impl<G: PrimeGroup> DLEqProof<G> {
-  fn challenge<T: Transcript>(
-    transcript: &mut T,
-    generators: Generators<G>,
-    nonces: (G, G),
-    points: (G, G)
-  ) -> G::Scalar {
-    generators.transcript(transcript);
-    transcript.domain_separate(b"dleq");
-    transcript.append_message(b"nonce_primary", nonces.0.to_bytes().as_ref());
-    transcript.append_message(b"nonce_alternate", nonces.1.to_bytes().as_ref());
-    transcript.append_message(b"point_primary", points.0.to_bytes().as_ref());
-    transcript.append_message(b"point_alternate", points.1.to_bytes().as_ref());
-    challenge(transcript)
+  fn transcript<T: Transcript>(transcript: &mut T, generator: G, nonce: G, point: G) {
+    transcript.append_message(b"generator", generator.to_bytes().as_ref());
+    transcript.append_message(b"nonce", nonce.to_bytes().as_ref());
+    transcript.append_message(b"point", point.to_bytes().as_ref());
   }
 
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
     transcript: &mut T,
-    generators: Generators<G>,
+    generators: &[G],
     scalar: G::Scalar
   ) -> DLEqProof<G> {
     let r = G::Scalar::random(rng);
-    let c = Self::challenge(
-      transcript,
-      generators,
-      (generators.primary * r, generators.alt * r),
-      (generators.primary * scalar, generators.alt * scalar)
-    );
+
+    transcript.domain_separate(b"dleq");
+    for generator in generators {
+      Self::transcript(transcript, *generator, *generator * r, *generator * scalar);
+    }
+
+    let c = challenge(transcript);
     let s = r + (c * scalar);
 
     DLEqProof { c, s }
@@ -120,18 +94,19 @@ impl<G: PrimeGroup> DLEqProof<G> {
   pub fn verify<T: Transcript>(
     &self,
     transcript: &mut T,
-    generators: Generators<G>,
-    points: (G, G)
+    generators: &[G],
+    points: &[G]
   ) -> Result<(), DLEqError> {
-    if self.c != Self::challenge(
-      transcript,
-      generators,
-      (
-        (generators.primary * self.s) - (points.0 * self.c),
-        (generators.alt * self.s) -  (points.1 * self.c)
-      ),
-      points
-    ) {
+    if generators.len() != points.len() {
+      Err(DLEqError::InvalidProof)?;
+    }
+
+    transcript.domain_separate(b"dleq");
+    for (generator, point) in generators.iter().zip(points) {
+      Self::transcript(transcript, *generator, (*generator * self.s) - (*point * self.c), *point);
+    }
+
+    if self.c != challenge(transcript) {
       Err(DLEqError::InvalidProof)?;
     }
 

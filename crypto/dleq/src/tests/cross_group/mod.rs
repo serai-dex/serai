@@ -12,10 +12,9 @@ use dalek_ff_group::{self as dfg, EdwardsPoint};
 use transcript::{Transcript, RecommendedTranscript};
 
 use crate::{
-  Generators,
   cross_group::{
     scalar::mutual_scalar_from_bytes,
-    ClassicLinearDLEq, EfficientLinearDLEq, ConciseLinearDLEq, CompromiseLinearDLEq
+    Generators, ClassicLinearDLEq, EfficientLinearDLEq, ConciseLinearDLEq, CompromiseLinearDLEq
   }
 };
 

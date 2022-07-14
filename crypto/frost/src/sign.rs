@@ -8,7 +8,7 @@ use transcript::Transcript;
 use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
 use multiexp::multiexp_vartime;
 
-use dleq::{Generators, DLEqProof};
+use dleq::DLEqProof;
 
 use crate::{
   curve::Curve,
@@ -88,8 +88,8 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   params: &mut Params<C, A>,
 ) -> (PreprocessPackage<C>, Vec<u8>) {
   let mut serialized = Vec::with_capacity(2 * C::G_len());
-  let (nonces, commitments) = params.algorithm.nonces().iter().cloned().map(
-    |mut generators| {
+  let (nonces, commitments) = params.algorithm.nonces().iter().map(
+    |generators| {
       let nonces = [
         C::random_nonce(params.view().secret_share(), &mut *rng),
         C::random_nonce(params.view().secret_share(), &mut *rng)
@@ -103,21 +103,23 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
       };
 
       let mut commitments = Vec::with_capacity(generators.len());
-      let first = generators.remove(0);
-      commitments.push(commit(first, &mut serialized));
-
-      // Iterate over the rest
       for generator in generators.iter() {
         commitments.push(commit(*generator, &mut serialized));
-        // Provide a DLEq to verify these commitments are for the same nonce
-        // TODO: Provide a single DLEq. See https://github.com/serai-dex/serai/issues/34
+      }
+
+      // Provide a DLEq proof to verify these commitments are for the same nonce
+      if generators.len() >= 2 {
+        // Uses an independent transcript as each signer must do this now, yet we validate them
+        // sequentially by the global order. Avoids needing to clone and fork the transcript around
+        let mut transcript = nonce_transcript::<A::Transcript>();
+
+        // This could be further optimized with a multi-nonce proof.
+        // See https://github.com/serai-dex/serai/issues/38
         for nonce in nonces {
           DLEqProof::prove(
             &mut *rng,
-            // Uses an independent transcript as each signer must do this now, yet we validate them
-            // sequentially by the global order. Avoids needing to clone the transcript around
-            &mut nonce_transcript::<A::Transcript>(),
-            Generators::new(first, *generator),
+            &mut transcript,
+            &generators,
             nonce
           ).serialize(&mut serialized).unwrap();
         }
@@ -203,21 +205,20 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
         let mut commitments = Vec::with_capacity(nonces.len());
         for (n, nonce_generators) in nonces.clone().iter_mut().enumerate() {
           commitments.push(Vec::with_capacity(nonce_generators.len()));
-
-          let first = nonce_generators.remove(0);
-          commitments[n].push(read_D_E::<_, C>(&mut cursor, *l)?);
-          transcript(params.algorithm.transcript(), commitments[n][0]);
-
-          for generator in nonce_generators {
+          for _ in 0 .. nonce_generators.len() {
             commitments[n].push(read_D_E::<_, C>(&mut cursor, *l)?);
             transcript(params.algorithm.transcript(), commitments[n][commitments[n].len() - 1]);
+          }
+
+          if nonce_generators.len() >= 2 {
+            let mut transcript = nonce_transcript::<A::Transcript>();
             for de in 0 .. 2 {
               DLEqProof::deserialize(
                 &mut cursor
               ).map_err(|_| FrostError::InvalidCommitment(*l))?.verify(
-                &mut nonce_transcript::<A::Transcript>(),
-                Generators::new(first, *generator),
-                (commitments[n][0][de], commitments[n][commitments[n].len() - 1][de])
+                &mut transcript,
+                &nonce_generators,
+                &commitments[n].iter().map(|commitments| commitments[de]).collect::<Vec<_>>(),
               ).map_err(|_| FrostError::InvalidCommitment(*l))?;
             }
           }
