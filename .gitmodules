@@ -1,6 +1,3 @@
 [submodule "coins/monero/c/monero"]
 	path = coins/monero/c/monero
 	url = https://github.com/monero-project/monero
-[submodule "coins/ethereum/schnorr-verify"]
-	path = coins/ethereum/schnorr-verify
-	url = https://github.com/noot/schnorr-verify.git

@@ -1,5 +1,5 @@
 use crate::crypto::ProcessedSignature;
-use ethers::{contract::ContractFactory, prelude::*};
+use ethers::{contract::ContractFactory, prelude::*, solc::artifacts::contract::ContractBytecode};
 use eyre::{eyre, Result};
 use std::fs::File;
 use std::sync::Arc;
@@ -13,17 +13,18 @@ pub enum EthereumError {
 
 abigen!(
     Schnorr,
-    "./schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json",
+    "./artifacts/Schnorr.sol/Schnorr.json",
     event_derives(serde::Deserialize, serde::Serialize),
 );
 
 pub async fn deploy_schnorr_verifier_contract(
     client: Arc<SignerMiddleware<Provider<Http>, LocalWallet>>,
 ) -> Result<schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>> {
-    let path = "./schnorr-verify/artifacts/contracts/Schnorr.sol/Schnorr.json";
-    let artifact: HardhatArtifact = serde_json::from_reader(File::open(path).unwrap()).unwrap();
-    let (abi, bin, _) = artifact.into_parts();
-    let factory = ContractFactory::new(abi.unwrap(), bin.unwrap(), client.clone());
+    let path = "./artifacts/Schnorr.sol/Schnorr.json";
+    let artifact: ContractBytecode = serde_json::from_reader(File::open(path).unwrap()).unwrap();
+    let abi = artifact.abi.unwrap();
+    let bin = artifact.bytecode.unwrap().object;
+    let factory = ContractFactory::new(abi, bin.into_bytes().unwrap(), client.clone());
     let contract = factory.deploy(())?.send().await?;
     let contract = Schnorr::new(contract.address(), client);
     Ok(contract)
