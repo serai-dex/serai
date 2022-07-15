@@ -11,7 +11,10 @@ use dalek_ff_group::EdwardsPoint;
 use crate::{straus, pippenger, multiexp, multiexp_vartime};
 
 #[allow(dead_code)]
-fn benchmark_internal<G: Group>(straus_bool: bool) where G::Scalar: PrimeFieldBits {
+fn benchmark_internal<G: Group>(straus_bool: bool)
+where
+  G::Scalar: PrimeFieldBits,
+{
   let runs: usize = 20;
 
   let mut start = 0;
@@ -64,7 +67,10 @@ fn benchmark_internal<G: Group>(straus_bool: bool) where G::Scalar: PrimeFieldBi
       current += 1;
       println!(
         "{} {} is more efficient at {} with {}µs per",
-        if straus_bool { "Straus" } else { "Pippenger" }, current, pairs.len(), next_per
+        if straus_bool { "Straus" } else { "Pippenger" },
+        current,
+        pairs.len(),
+        next_per
       );
       if current >= 8 {
         return;
@@ -73,7 +79,10 @@ fn benchmark_internal<G: Group>(straus_bool: bool) where G::Scalar: PrimeFieldBi
   }
 }
 
-fn test_multiexp<G: Group>() where G::Scalar: PrimeFieldBits {
+fn test_multiexp<G: Group>()
+where
+  G::Scalar: PrimeFieldBits,
+{
   let mut pairs = Vec::with_capacity(1000);
   let mut sum = G::identity();
   for _ in 0 .. 10 {

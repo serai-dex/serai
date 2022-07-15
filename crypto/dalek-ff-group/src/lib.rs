@@ -3,7 +3,7 @@
 use core::{
   ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   borrow::Borrow,
-  iter::{Iterator, Sum}
+  iter::{Iterator, Sum},
 };
 
 use subtle::{ConstantTimeEq, ConditionallySelectable};
@@ -20,15 +20,13 @@ use dalek::{
   traits::Identity,
   scalar::Scalar as DScalar,
   edwards::{
-    EdwardsPoint as DEdwardsPoint,
-    EdwardsBasepointTable as DEdwardsBasepointTable,
-    CompressedEdwardsY as DCompressedEdwards
+    EdwardsPoint as DEdwardsPoint, EdwardsBasepointTable as DEdwardsBasepointTable,
+    CompressedEdwardsY as DCompressedEdwards,
   },
   ristretto::{
-    RistrettoPoint as DRistrettoPoint,
-    RistrettoBasepointTable as DRistrettoBasepointTable,
-    CompressedRistretto as DCompressedRistretto
-  }
+    RistrettoPoint as DRistrettoPoint, RistrettoBasepointTable as DRistrettoBasepointTable,
+    CompressedRistretto as DCompressedRistretto,
+  },
 };
 
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
@@ -64,7 +62,7 @@ macro_rules! deref_borrow {
         &self.0
       }
     }
-  }
+  };
 }
 
 #[doc(hidden)]
@@ -72,7 +70,9 @@ macro_rules! deref_borrow {
 macro_rules! constant_time {
   ($Value: ident, $Inner: ident) => {
     impl ConstantTimeEq for $Value {
-      fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
+      fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+      }
     }
 
     impl ConditionallySelectable for $Value {
@@ -80,7 +80,7 @@ macro_rules! constant_time {
         $Value($Inner::conditional_select(&a.0, &b.0, choice))
       }
     }
-  }
+  };
 }
 
 #[doc(hidden)]
@@ -117,7 +117,7 @@ macro_rules! math_op {
         self.0 = $function(self.0, other.0);
       }
     }
-  }
+  };
 }
 
 #[doc(hidden)]
@@ -127,7 +127,7 @@ macro_rules! math {
     math_op!($Value, $Value, Add, add, AddAssign, add_assign, $add);
     math_op!($Value, $Value, Sub, sub, SubAssign, sub_assign, $sub);
     math_op!($Value, $Factor, Mul, mul, MulAssign, mul_assign, $mul);
-  }
+  };
 }
 
 macro_rules! math_neg {
@@ -136,9 +136,11 @@ macro_rules! math_neg {
 
     impl Neg for $Value {
       type Output = Self;
-      fn neg(self) -> Self::Output { Self(-self.0) }
+      fn neg(self) -> Self::Output {
+        Self(-self.0)
+      }
     }
-  }
+  };
 }
 
 #[doc(hidden)]
@@ -146,9 +148,11 @@ macro_rules! math_neg {
 macro_rules! from_wrapper {
   ($wrapper: ident, $inner: ident, $uint: ident) => {
     impl From<$uint> for $wrapper {
-      fn from(a: $uint) -> $wrapper { Self($inner::from(a)) }
+      fn from(a: $uint) -> $wrapper {
+        Self($inner::from(a))
+      }
     }
-  }
+  };
 }
 
 #[doc(hidden)]
@@ -159,7 +163,7 @@ macro_rules! from_uint {
     from_wrapper!($wrapper, $inner, u16);
     from_wrapper!($wrapper, $inner, u32);
     from_wrapper!($wrapper, $inner, u64);
-  }
+  };
 }
 
 /// Wrapper around the dalek Scalar type
@@ -191,17 +195,33 @@ impl Field for Scalar {
     Self(DScalar::from_bytes_mod_order_wide(&r))
   }
 
-  fn zero() -> Self { Self(DScalar::zero()) }
-  fn one() -> Self { Self(DScalar::one()) }
-  fn square(&self) -> Self { *self * self }
-  fn double(&self) -> Self { *self + self }
+  fn zero() -> Self {
+    Self(DScalar::zero())
+  }
+  fn one() -> Self {
+    Self(DScalar::one())
+  }
+  fn square(&self) -> Self {
+    *self * self
+  }
+  fn double(&self) -> Self {
+    *self + self
+  }
   fn invert(&self) -> CtOption<Self> {
     CtOption::new(Self(self.0.invert()), !self.is_zero())
   }
-  fn sqrt(&self) -> CtOption<Self> { unimplemented!() }
-  fn is_zero(&self) -> Choice { self.0.ct_eq(&DScalar::zero()) }
-  fn cube(&self) -> Self { *self * self * self }
-  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
+  fn sqrt(&self) -> CtOption<Self> {
+    unimplemented!()
+  }
+  fn is_zero(&self) -> Choice {
+    self.0.ct_eq(&DScalar::zero())
+  }
+  fn cube(&self) -> Self {
+    *self * self * self
+  }
+  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
+    unimplemented!()
+  }
 }
 
 impl PrimeField for Scalar {
@@ -213,12 +233,20 @@ impl PrimeField for Scalar {
     // TODO: This unwrap_or isn't constant time, yet do we have an alternative?
     CtOption::new(Scalar(scalar.unwrap_or(DScalar::zero())), choice(scalar.is_some()))
   }
-  fn to_repr(&self) -> [u8; 32] { self.0.to_bytes() }
+  fn to_repr(&self) -> [u8; 32] {
+    self.0.to_bytes()
+  }
 
   const S: u32 = 2;
-  fn is_odd(&self) -> Choice { unimplemented!() }
-  fn multiplicative_generator() -> Self { 2u64.into() }
-  fn root_of_unity() -> Self { unimplemented!() }
+  fn is_odd(&self) -> Choice {
+    unimplemented!()
+  }
+  fn multiplicative_generator() -> Self {
+    2u64.into()
+  }
+  fn root_of_unity() -> Self {
+    unimplemented!()
+  }
 }
 
 impl PrimeFieldBits for Scalar {
@@ -260,21 +288,35 @@ macro_rules! dalek_group {
     pub const $BASEPOINT_POINT: $Point = $Point(constants::$BASEPOINT_POINT);
 
     impl Sum<$Point> for $Point {
-      fn sum<I: Iterator<Item = $Point>>(iter: I) -> $Point { Self($DPoint::sum(iter)) }
+      fn sum<I: Iterator<Item = $Point>>(iter: I) -> $Point {
+        Self($DPoint::sum(iter))
+      }
     }
     impl<'a> Sum<&'a $Point> for $Point {
-      fn sum<I: Iterator<Item = &'a $Point>>(iter: I) -> $Point { Self($DPoint::sum(iter)) }
+      fn sum<I: Iterator<Item = &'a $Point>>(iter: I) -> $Point {
+        Self($DPoint::sum(iter))
+      }
     }
 
     impl Group for $Point {
       type Scalar = Scalar;
       // Ideally, this would be cryptographically secure, yet that's not a bound on the trait
       // k256 also does this
-      fn random(rng: impl RngCore) -> Self { &$BASEPOINT_TABLE * Scalar::random(rng) }
-      fn identity() -> Self { Self($DPoint::identity()) }
-      fn generator() -> Self { $BASEPOINT_POINT }
-      fn is_identity(&self) -> Choice { self.0.ct_eq(&$DPoint::identity()) }
-      fn double(&self) -> Self { *self + self }
+      fn random(rng: impl RngCore) -> Self {
+        &$BASEPOINT_TABLE * Scalar::random(rng)
+      }
+      fn identity() -> Self {
+        Self($DPoint::identity())
+      }
+      fn generator() -> Self {
+        $BASEPOINT_POINT
+      }
+      fn is_identity(&self) -> Choice {
+        self.0.ct_eq(&$DPoint::identity())
+      }
+      fn double(&self) -> Self {
+        *self + self
+      }
     }
 
     impl GroupEncoding for $Point {
@@ -306,7 +348,9 @@ macro_rules! dalek_group {
 
     impl Mul<Scalar> for &$Table {
       type Output = $Point;
-      fn mul(self, b: Scalar) -> $Point { $Point(&b.0 * &self.0) }
+      fn mul(self, b: Scalar) -> $Point {
+        $Point(&b.0 * &self.0)
+      }
     }
   };
 }
@@ -315,12 +359,9 @@ dalek_group!(
   EdwardsPoint,
   DEdwardsPoint,
   |point: DEdwardsPoint| point.is_torsion_free(),
-
   EdwardsBasepointTable,
   DEdwardsBasepointTable,
-
   DCompressedEdwards,
-
   ED25519_BASEPOINT_POINT,
   ED25519_BASEPOINT_TABLE
 );
@@ -329,12 +370,9 @@ dalek_group!(
   RistrettoPoint,
   DRistrettoPoint,
   |_| true,
-
   RistrettoBasepointTable,
   DRistrettoBasepointTable,
-
   DCompressedRistretto,
-
   RISTRETTO_BASEPOINT_POINT,
   RISTRETTO_BASEPOINT_TABLE
 );

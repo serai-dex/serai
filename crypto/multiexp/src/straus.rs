@@ -3,10 +3,10 @@ use group::Group;
 
 use crate::{prep_bits, prep_tables};
 
-pub(crate) fn straus<G: Group>(
-  pairs: &[(G::Scalar, G)],
-  window: u8
-) -> G where G::Scalar: PrimeFieldBits {
+pub(crate) fn straus<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
+where
+  G::Scalar: PrimeFieldBits,
+{
   let groupings = prep_bits(pairs, window);
   let tables = prep_tables(pairs, window);
 
@@ -23,10 +23,10 @@ pub(crate) fn straus<G: Group>(
   res
 }
 
-pub(crate) fn straus_vartime<G: Group>(
-  pairs: &[(G::Scalar, G)],
-  window: u8
-) -> G where G::Scalar: PrimeFieldBits {
+pub(crate) fn straus_vartime<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
+where
+  G::Scalar: PrimeFieldBits,
+{
   let groupings = prep_bits(pairs, window);
   let tables = prep_tables(pairs, window);
 

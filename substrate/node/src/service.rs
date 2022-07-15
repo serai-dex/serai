@@ -21,7 +21,7 @@ type PartialComponents = sc_service::PartialComponents<
 
 pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceError> {
   if config.keystore_remote.is_some() {
-    return Err(ServiceError::Other("Remote Keystores are not supported".to_string()))
+    return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
 
   let telemetry = config
@@ -39,19 +39,15 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     config.wasm_method,
     config.default_heap_pages,
     config.max_runtime_instances,
-    config.runtime_cache_size
+    config.runtime_cache_size,
   );
 
-  let (
-    client,
-    backend,
-    keystore_container,
-    task_manager
-  ) = sc_service::new_full_parts::<Block, RuntimeApi, _>(
-    config,
-    telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
-    executor
-  )?;
+  let (client, backend, keystore_container, task_manager) =
+    sc_service::new_full_parts::<Block, RuntimeApi, _>(
+      config,
+      telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
+      executor,
+    )?;
   let client = Arc::new(client);
 
   let telemetry = telemetry.map(|(worker, telemetry)| {
@@ -66,28 +62,26 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     config.role.is_authority().into(),
     config.prometheus_registry(),
     task_manager.spawn_essential_handle(),
-    client.clone()
+    client.clone(),
   );
 
   let import_queue = serai_consensus::import_queue(
     &task_manager,
     client.clone(),
     select_chain.clone(),
-    config.prometheus_registry()
+    config.prometheus_registry(),
   )?;
 
-  Ok(
-    sc_service::PartialComponents {
-      client,
-      backend,
-      task_manager,
-      import_queue,
-      keystore_container,
-      select_chain,
-      transaction_pool,
-      other: telemetry,
-    }
-  )
+  Ok(sc_service::PartialComponents {
+    client,
+    backend,
+    task_manager,
+    import_queue,
+    keystore_container,
+    select_chain,
+    transaction_pool,
+    other: telemetry,
+  })
 }
 
 pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
@@ -99,11 +93,11 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     keystore_container,
     select_chain,
     other: mut telemetry,
-    transaction_pool
+    transaction_pool,
   } = new_partial(&config)?;
 
-  let (network, system_rpc_tx, network_starter) = sc_service::build_network(
-    sc_service::BuildNetworkParams {
+  let (network, system_rpc_tx, network_starter) =
+    sc_service::build_network(sc_service::BuildNetworkParams {
       config: &config,
       client: client.clone(),
       transaction_pool: transaction_pool.clone(),
@@ -111,8 +105,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       import_queue,
       block_announce_validator_builder: None,
       warp_sync: None,
-    }
-  )?;
+    })?;
 
   if config.offchain_worker.enabled {
     sc_service::build_offchain_workers(
@@ -130,29 +123,28 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     let client = client.clone();
     let pool = transaction_pool.clone();
 
-    Box::new(
-      move |deny_unsafe, _| {
-        crate::rpc::create_full(
-          crate::rpc::FullDeps { client: client.clone(), pool: pool.clone(), deny_unsafe }
-        ).map_err(Into::into)
-      }
-    )
+    Box::new(move |deny_unsafe, _| {
+      crate::rpc::create_full(crate::rpc::FullDeps {
+        client: client.clone(),
+        pool: pool.clone(),
+        deny_unsafe,
+      })
+      .map_err(Into::into)
+    })
   };
 
-  sc_service::spawn_tasks(
-    sc_service::SpawnTasksParams {
-      network: network.clone(),
-      client: client.clone(),
-      keystore: keystore_container.sync_keystore(),
-      task_manager: &mut task_manager,
-      transaction_pool: transaction_pool.clone(),
-      rpc_builder: rpc_extensions_builder,
-      backend,
-      system_rpc_tx,
-      config,
-      telemetry: telemetry.as_mut(),
-    }
-  )?;
+  sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+    network: network.clone(),
+    client: client.clone(),
+    keystore: keystore_container.sync_keystore(),
+    task_manager: &mut task_manager,
+    transaction_pool: transaction_pool.clone(),
+    rpc_builder: rpc_extensions_builder,
+    backend,
+    system_rpc_tx,
+    config,
+    telemetry: telemetry.as_mut(),
+  })?;
 
   if role.is_authority() {
     serai_consensus::authority(
@@ -161,7 +153,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       network,
       transaction_pool,
       select_chain,
-      prometheus_registry.as_ref()
+      prometheus_registry.as_ref(),
     );
   }
 

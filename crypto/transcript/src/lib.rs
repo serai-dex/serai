@@ -34,7 +34,7 @@ enum DigestTranscriptMember {
   Domain,
   Label,
   Value,
-  Challenge
+  Challenge,
 }
 
 impl DigestTranscriptMember {
@@ -44,7 +44,7 @@ impl DigestTranscriptMember {
       DigestTranscriptMember::Domain => 1,
       DigestTranscriptMember::Label => 2,
       DigestTranscriptMember::Value => 3,
-      DigestTranscriptMember::Challenge => 4
+      DigestTranscriptMember::Challenge => 4,
     }
   }
 }

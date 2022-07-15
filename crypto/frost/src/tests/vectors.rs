@@ -5,10 +5,11 @@ use rand_core::{RngCore, CryptoRng};
 use group::{ff::PrimeField, GroupEncoding};
 
 use crate::{
-  curve::Curve, FrostKeys,
+  curve::Curve,
+  FrostKeys,
   algorithm::{Schnorr, Hram},
   sign::{PreprocessPackage, SignMachine, SignatureMachine, AlgorithmMachine},
-  tests::{clone_without, curve::test_curve, schnorr::test_schnorr, recover}
+  tests::{clone_without, curve::test_curve, schnorr::test_schnorr, recover},
 };
 
 pub struct Vectors {
@@ -21,17 +22,17 @@ pub struct Vectors {
   pub included: &'static [u16],
   pub nonces: &'static [[&'static str; 2]],
   pub sig_shares: &'static [&'static str],
-  pub sig: String
+  pub sig: String,
 }
 
 // Load these vectors into FrostKeys using a custom serialization it'll deserialize
 fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKeys<C>> {
-  let shares = vectors.shares.iter().map(
-    |secret| C::read_F(&mut Cursor::new(hex::decode(secret).unwrap())).unwrap()
-  ).collect::<Vec<_>>();
-  let verification_shares = shares.iter().map(
-    |secret| C::GENERATOR * secret
-  ).collect::<Vec<_>>();
+  let shares = vectors
+    .shares
+    .iter()
+    .map(|secret| C::read_F(&mut Cursor::new(hex::decode(secret).unwrap())).unwrap())
+    .collect::<Vec<_>>();
+  let verification_shares = shares.iter().map(|secret| C::GENERATOR * secret).collect::<Vec<_>>();
 
   let mut keys = HashMap::new();
   for i in 1 ..= u16::try_from(shares.len()).unwrap() {
@@ -59,11 +60,10 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
   keys
 }
 
-pub fn test_with_vectors<
-  R: RngCore + CryptoRng,
-  C: Curve,
-  H: Hram<C>
->(rng: &mut R, vectors: Vectors) {
+pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
+  rng: &mut R,
+  vectors: Vectors,
+) {
   // Do basic tests before trying the vectors
   test_curve::<_, C>(&mut *rng);
   test_schnorr::<_, C>(rng);
@@ -87,54 +87,59 @@ pub fn test_with_vectors<
       AlgorithmMachine::new(
         Schnorr::<C, H>::new(),
         Arc::new(keys[i].clone()),
-        vectors.included.clone()
-      ).unwrap()
+        vectors.included.clone(),
+      )
+      .unwrap(),
     ));
   }
 
   let mut commitments = HashMap::new();
   let mut c = 0;
-  let mut machines = machines.drain(..).map(|(i, machine)| {
-    let nonces = [
-      C::read_F(&mut Cursor::new(hex::decode(vectors.nonces[c][0]).unwrap())).unwrap(),
-      C::read_F(&mut Cursor::new(hex::decode(vectors.nonces[c][1]).unwrap())).unwrap()
-    ];
-    c += 1;
-    let these_commitments = vec![[C::GENERATOR * nonces[0], C::GENERATOR * nonces[1]]];
-    let machine = machine.unsafe_override_preprocess(
-      PreprocessPackage {
+  let mut machines = machines
+    .drain(..)
+    .map(|(i, machine)| {
+      let nonces = [
+        C::read_F(&mut Cursor::new(hex::decode(vectors.nonces[c][0]).unwrap())).unwrap(),
+        C::read_F(&mut Cursor::new(hex::decode(vectors.nonces[c][1]).unwrap())).unwrap(),
+      ];
+      c += 1;
+      let these_commitments = vec![[C::GENERATOR * nonces[0], C::GENERATOR * nonces[1]]];
+      let machine = machine.unsafe_override_preprocess(PreprocessPackage {
         nonces: vec![nonces],
         commitments: vec![these_commitments.clone()],
-        addendum: vec![]
-      }
-    );
+        addendum: vec![],
+      });
 
-    commitments.insert(
-      i,
-      Cursor::new(
-        [
-          these_commitments[0][0].to_bytes().as_ref(),
-          these_commitments[0][1].to_bytes().as_ref()
-        ].concat().to_vec()
-      )
-    );
-    (i, machine)
-  }).collect::<Vec<_>>();
+      commitments.insert(
+        i,
+        Cursor::new(
+          [
+            these_commitments[0][0].to_bytes().as_ref(),
+            these_commitments[0][1].to_bytes().as_ref(),
+          ]
+          .concat()
+          .to_vec(),
+        ),
+      );
+      (i, machine)
+    })
+    .collect::<Vec<_>>();
 
   let mut shares = HashMap::new();
   c = 0;
-  let mut machines = machines.drain(..).map(|(i, machine)| {
-    let (machine, share) = machine.sign(
-      clone_without(&commitments, &i),
-      &hex::decode(vectors.msg).unwrap()
-    ).unwrap();
+  let mut machines = machines
+    .drain(..)
+    .map(|(i, machine)| {
+      let (machine, share) =
+        machine.sign(clone_without(&commitments, &i), &hex::decode(vectors.msg).unwrap()).unwrap();
 
-    assert_eq!(share, hex::decode(vectors.sig_shares[c]).unwrap());
-    c += 1;
+      assert_eq!(share, hex::decode(vectors.sig_shares[c]).unwrap());
+      c += 1;
 
-    shares.insert(i, Cursor::new(share));
-    (i, machine)
-  }).collect::<HashMap<_, _>>();
+      shares.insert(i, Cursor::new(share));
+      (i, machine)
+    })
+    .collect::<HashMap<_, _>>();
 
   for (i, machine) in machines.drain() {
     let sig = machine.complete(clone_without(&shares, &i)).unwrap();

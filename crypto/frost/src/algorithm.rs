@@ -55,12 +55,7 @@ pub trait Algorithm<C: Curve>: Clone {
   /// Verify a specific share given as a response. Used to determine blame if signature
   /// verification fails
   #[must_use]
-  fn verify_share(
-    &self,
-    verification_share: C::G,
-    nonces: &[Vec<C::G>],
-    share: C::F,
-  ) -> bool;
+  fn verify_share(&self, verification_share: C::G, nonces: &[Vec<C::G>], share: C::F) -> bool;
 }
 
 // Transcript which will create an IETF compliant serialization for the binding factor
@@ -88,7 +83,6 @@ impl Transcript for IetfTranscript {
   }
 }
 
-
 pub trait Hram<C: Curve>: Clone {
   /// HRAM function to generate a challenge
   /// H2 from the IETF draft despite having a different argument set (not pre-formatted)
@@ -105,11 +99,7 @@ pub struct Schnorr<C: Curve, H: Hram<C>> {
 
 impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
   pub fn new() -> Schnorr<C, H> {
-    Schnorr {
-      transcript: IetfTranscript(vec![]),
-      c: None,
-      _hram: PhantomData
-    }
+    Schnorr { transcript: IetfTranscript(vec![]), c: None, _hram: PhantomData }
   }
 }
 
@@ -166,16 +156,11 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   }
 
   #[must_use]
-  fn verify_share(
-    &self,
-    verification_share: C::G,
-    nonces: &[Vec<C::G>],
-    share: C::F,
-  ) -> bool {
+  fn verify_share(&self, verification_share: C::G, nonces: &[Vec<C::G>], share: C::F) -> bool {
     schnorr::verify::<C>(
       verification_share,
       self.c.unwrap(),
-      &SchnorrSignature { R: nonces[0][0], s: share}
+      &SchnorrSignature { R: nonces[0][0], s: share },
     )
   }
 }

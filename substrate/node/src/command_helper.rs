@@ -15,7 +15,7 @@ use runtime::SystemCall;
 use crate::service::FullClient;
 
 pub struct BenchmarkExtrinsicBuilder {
-  client: Arc<FullClient>
+  client: Arc<FullClient>,
 }
 
 impl BenchmarkExtrinsicBuilder {
@@ -26,16 +26,12 @@ impl BenchmarkExtrinsicBuilder {
 
 impl frame_benchmarking_cli::ExtrinsicBuilder for BenchmarkExtrinsicBuilder {
   fn remark(&self, nonce: u32) -> std::result::Result<OpaqueExtrinsic, &'static str> {
-    Ok(
-      OpaqueExtrinsic::from(
-        create_benchmark_extrinsic(
-          self.client.as_ref(),
-          Sr25519Keyring::Bob.pair(),
-          SystemCall::remark { remark: vec![] }.into(),
-          nonce
-        )
-      )
-    )
+    Ok(OpaqueExtrinsic::from(create_benchmark_extrinsic(
+      self.client.as_ref(),
+      Sr25519Keyring::Bob.pair(),
+      SystemCall::remark { remark: vec![] }.into(),
+      nonce,
+    )))
   }
 }
 
@@ -50,17 +46,15 @@ pub fn create_benchmark_extrinsic(
     frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
     frame_system::CheckTxVersion::<runtime::Runtime>::new(),
     frame_system::CheckGenesis::<runtime::Runtime>::new(),
-    frame_system::CheckEra::<runtime::Runtime>::from(
-      sp_runtime::generic::Era::mortal(
-        u64::from(
-          runtime::BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2)
-        ),
-        client.chain_info().best_number.into(),
-      )
-    ),
+    frame_system::CheckEra::<runtime::Runtime>::from(sp_runtime::generic::Era::mortal(
+      u64::from(
+        runtime::BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2),
+      ),
+      client.chain_info().best_number.into(),
+    )),
     frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
     frame_system::CheckWeight::<runtime::Runtime>::new(),
-    pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0)
+    pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
   );
 
   runtime::UncheckedExtrinsic::new_signed(
@@ -79,8 +73,9 @@ pub fn create_benchmark_extrinsic(
           (),
           (),
           (),
-        )
-      ).using_encoded(|e| sender.sign(e))
+        ),
+      )
+      .using_encoded(|e| sender.sign(e)),
     ),
     extra,
   )

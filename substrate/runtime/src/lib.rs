@@ -10,8 +10,7 @@ use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys,
   traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, MultiSignature,
-  Perbill
+  ApplyExtrinsicResult, MultiSignature, Perbill,
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -20,8 +19,11 @@ use sp_version::RuntimeVersion;
 
 use frame_support::{
   traits::{ConstU8, ConstU32, ConstU64},
-  weights::{constants::{RocksDbWeight, WEIGHT_PER_SECOND}, IdentityFee},
-  parameter_types, construct_runtime
+  weights::{
+    constants::{RocksDbWeight, WEIGHT_PER_SECOND},
+    IdentityFee,
+  },
+  parameter_types, construct_runtime,
 };
 pub use frame_system::Call as SystemCall;
 pub use pallet_timestamp::Call as TimestampCall;
@@ -70,7 +72,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   impl_version: 1,
   apis: RUNTIME_API_VERSIONS,
   transaction_version: 1,
-  state_version: 1
+  state_version: 1,
 };
 
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
