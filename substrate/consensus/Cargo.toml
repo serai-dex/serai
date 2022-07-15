@@ -1,0 +1,33 @@
+[package]
+name = "serai-consensus"
+version = "0.1.0"
+description = "Serai consensus module"
+license = "AGPL-3.0-only"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+
+[dependencies]
+sp-core = { version = "6.0.0", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-trie = { version = "6.0.0", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-timestamp = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sc-consensus = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-consensus = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sc-transaction-pool = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sc-basic-authorship = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sc-consensus-pow = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-consensus-pow = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+sc-network = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai"  }
+sc-service = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai", features = ["wasmtime"]  }
+sc-executor = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai", features = ["wasmtime"]  }
+sp-runtime = { version = "6.0.0", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+substrate-prometheus-endpoint = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+sc-client-api = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-api = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+serai-runtime = { path = "../runtime" }
+
+tokio = "1.15"

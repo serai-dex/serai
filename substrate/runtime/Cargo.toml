@@ -1,0 +1,94 @@
+[package]
+name = "serai-runtime"
+version = "0.1.0"
+description = "Serai network node runtime, built over Substrate"
+license = "AGPL-3.0-only"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
+scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
+
+sp-core = { version = "6.0.0", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-std = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-version = { version = "5.0.0", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-inherents = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai"}
+sp-offchain = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-session = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-transaction-pool = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-block-builder = {  version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai"}
+sp-runtime = { version = "6.0.0", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-api = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+frame-support = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+frame-system = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+frame-executive = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+frame-try-runtime = { version = "0.10.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai", optional = true }
+
+pallet-timestamp = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+pallet-transaction-payment = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+# Used for the node template's RPCs
+frame-system-rpc-runtime-api = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+pallet-transaction-payment-rpc-runtime-api = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+# Used for runtime benchmarking
+frame-benchmarking = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai", optional = true }
+frame-system-benchmarking = { version = "4.0.0-dev", default-features = false, git = "https://github.com/serai-dex/substrate.git", branch = "serai", optional = true }
+hex-literal = { version = "0.3.4", optional = true }
+
+[build-dependencies]
+substrate-wasm-builder = { version = "5.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+
+[features]
+std = [
+  "codec/std",
+  "scale-info/std",
+
+  "sp-core/std",
+  "sp-std/std",
+  "sp-version/std",
+  "sp-inherents/std",
+  "sp-offchain/std",
+  "sp-session/std",
+  "sp-transaction-pool/std",
+  "sp-block-builder/std",
+  "sp-runtime/std",
+  "sp-api/std",
+
+  "frame-support/std",
+  "frame-system-rpc-runtime-api/std",
+  "frame-system/std",
+  "frame-executive/std",
+
+  "pallet-timestamp/std",
+  "pallet-balances/std",
+  "pallet-transaction-payment/std",
+  "pallet-transaction-payment-rpc-runtime-api/std"
+]
+
+runtime-benchmarks = [
+  "hex-literal",
+  "sp-runtime/runtime-benchmarks",
+  "frame-benchmarking/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+  "frame-system-benchmarking",
+  "frame-system/runtime-benchmarks",
+  "pallet-timestamp/runtime-benchmarks",
+  "pallet-balances/runtime-benchmarks"
+]
+
+try-runtime = [
+  "frame-executive/try-runtime",
+  "frame-try-runtime",
+  "frame-system/try-runtime",
+
+  "pallet-timestamp/try-runtime",
+  "pallet-balances/try-runtime",
+  "pallet-transaction-payment/try-runtime"
+]
+
+default = ["std"]
