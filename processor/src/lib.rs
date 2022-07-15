@@ -27,7 +27,7 @@ pub enum SignError {
   #[error("coin had an error {0}")]
   CoinError(CoinError),
   #[error("network had an error {0}")]
-  NetworkError(NetworkError)
+  NetworkError(NetworkError),
 }
 
 // Generate a static view key for a given chain in a globally consistent manner

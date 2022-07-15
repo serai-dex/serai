@@ -63,7 +63,7 @@ macro_rules! dalek_curve {
         $Curve::hash_to_F($chal, &[&R.compress().to_bytes(), &A.compress().to_bytes(), m].concat())
       }
     }
-  }
+  };
 }
 
 #[cfg(any(test, feature = "ristretto"))]

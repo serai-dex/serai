@@ -16,9 +16,19 @@ use dalek_ff_group::Scalar;
 #[cfg(feature = "multisig")]
 use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
-use frost::{curve::Ed25519, tests::{THRESHOLD, key_gen, sign}};
+use frost::{
+  curve::Ed25519,
+  tests::{THRESHOLD, key_gen, sign},
+};
 
-use monero_serai::{random_scalar, wallet::{ViewPair, address::{Network, AddressType}, SignableTransaction}};
+use monero_serai::{
+  random_scalar,
+  wallet::{
+    ViewPair,
+    address::{Network, AddressType},
+    SignableTransaction,
+  },
+};
 
 mod rpc;
 use crate::rpc::{rpc, mine_block};
@@ -122,9 +132,9 @@ async fn send_core(test: usize, multisig: bool) {
       }
     }
 
-    let mut signable = SignableTransaction::new(
-      outputs, vec![(addr, amount - 10000000000)], Some(addr), fee
-    ).unwrap();
+    let mut signable =
+      SignableTransaction::new(outputs, vec![(addr, amount - 10000000000)], Some(addr), fee)
+        .unwrap();
 
     if !multisig {
       tx = Some(signable.sign(&mut OsRng, &rpc, &spend).await.unwrap());
@@ -135,13 +145,17 @@ async fn send_core(test: usize, multisig: bool) {
         for i in 1 ..= THRESHOLD {
           machines.insert(
             i,
-            signable.clone().multisig(
-              &rpc,
-              (*keys[&i]).clone(),
-              RecommendedTranscript::new(b"Monero Serai Test Transaction"),
-              rpc.get_height().await.unwrap() - 10,
-              (1 ..= THRESHOLD).collect::<Vec<_>>()
-            ).await.unwrap()
+            signable
+              .clone()
+              .multisig(
+                &rpc,
+                (*keys[&i]).clone(),
+                RecommendedTranscript::new(b"Monero Serai Test Transaction"),
+                rpc.get_height().await.unwrap() - 10,
+                (1 ..= THRESHOLD).collect::<Vec<_>>(),
+              )
+              .await
+              .unwrap(),
           );
         }
 

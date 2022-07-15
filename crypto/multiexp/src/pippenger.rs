@@ -3,10 +3,10 @@ use group::Group;
 
 use crate::prep_bits;
 
-pub(crate) fn pippenger<G: Group>(
-  pairs: &[(G::Scalar, G)],
-  window: u8
-) -> G where G::Scalar: PrimeFieldBits {
+pub(crate) fn pippenger<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
+where
+  G::Scalar: PrimeFieldBits,
+{
   let bits = prep_bits(pairs, window);
 
   let mut res = G::identity();
@@ -30,10 +30,10 @@ pub(crate) fn pippenger<G: Group>(
   res
 }
 
-pub(crate) fn pippenger_vartime<G: Group>(
-  pairs: &[(G::Scalar, G)],
-  window: u8
-) -> G where G::Scalar: PrimeFieldBits {
+pub(crate) fn pippenger_vartime<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
+where
+  G::Scalar: PrimeFieldBits,
+{
   let bits = prep_bits(pairs, window);
 
   let mut res = G::identity();

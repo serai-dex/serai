@@ -12,7 +12,7 @@ pub use self::monero::Monero;
 #[derive(Clone, Error, Debug)]
 pub enum CoinError {
   #[error("failed to connect to coin daemon")]
-  ConnectionError
+  ConnectionError,
 }
 
 pub trait Output: Sized + Clone {
@@ -52,7 +52,7 @@ pub trait Coin {
   async fn get_outputs(
     &self,
     block: &Self::Block,
-    key: <Self::Curve as Curve>::G
+    key: <Self::Curve as Curve>::G,
   ) -> Vec<Self::Output>;
 
   async fn prepare_send(
@@ -62,18 +62,18 @@ pub trait Coin {
     height: usize,
     inputs: Vec<Self::Output>,
     payments: &[(Self::Address, u64)],
-    fee: Self::Fee
+    fee: Self::Fee,
   ) -> Result<Self::SignableTransaction, CoinError>;
 
   async fn attempt_send(
     &self,
     transaction: Self::SignableTransaction,
-    included: &[u16]
+    included: &[u16],
   ) -> Result<Self::TransactionMachine, CoinError>;
 
   async fn publish_transaction(
     &self,
-    tx: &Self::Transaction
+    tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
 
   #[cfg(test)]

@@ -55,13 +55,13 @@ fn read_scalar<R: Read, F: PrimeField>(r: &mut R) -> io::Result<F> {
 
 #[derive(Debug)]
 pub enum DLEqError {
-  InvalidProof
+  InvalidProof,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct DLEqProof<G: PrimeGroup> {
   c: G::Scalar,
-  s: G::Scalar
+  s: G::Scalar,
 }
 
 #[allow(non_snake_case)]
@@ -76,7 +76,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
     rng: &mut R,
     transcript: &mut T,
     generators: &[G],
-    scalar: G::Scalar
+    scalar: G::Scalar,
   ) -> DLEqProof<G> {
     let r = G::Scalar::random(rng);
 
@@ -95,7 +95,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
     &self,
     transcript: &mut T,
     generators: &[G],
-    points: &[G]
+    points: &[G],
   ) -> Result<(), DLEqError> {
     if generators.len() != points.len() {
       Err(DLEqError::InvalidProof)?;

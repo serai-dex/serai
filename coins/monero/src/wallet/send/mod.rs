@@ -3,11 +3,7 @@ use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 use rand::seq::SliceRandom;
 
-use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
-  scalar::Scalar,
-  edwards::EdwardsPoint
-};
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 use monero::{consensus::Encodable, PublicKey, blockdata::transaction::SubField};
 
@@ -15,20 +11,20 @@ use monero::{consensus::Encodable, PublicKey, blockdata::transaction::SubField};
 use frost::FrostError;
 
 use crate::{
-  Commitment,
-  random_scalar,
+  Commitment, random_scalar,
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagInput, Clsag},
     bulletproofs::{MAX_OUTPUTS, Bulletproofs},
-    RctBase, RctPrunable, RctSignatures
+    RctBase, RctPrunable, RctSignatures,
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{
-    address::{AddressType, Address}, SpendableOutput, Decoys,
-    key_image_sort, uniqueness, shared_key, commitment_mask, amount_encryption
-  }
+    address::{AddressType, Address},
+    SpendableOutput, Decoys, key_image_sort, uniqueness, shared_key, commitment_mask,
+    amount_encryption,
+  },
 };
 #[cfg(feature = "multisig")]
 use crate::frost::MultisigError;
@@ -44,7 +40,7 @@ struct SendOutput {
   R: EdwardsPoint,
   dest: EdwardsPoint,
   commitment: Commitment,
-  amount: [u8; 8]
+  amount: [u8; 8],
 }
 
 impl SendOutput {
@@ -52,26 +48,24 @@ impl SendOutput {
     rng: &mut R,
     unique: [u8; 32],
     output: (Address, u64),
-    o: usize
+    o: usize,
   ) -> SendOutput {
     let r = random_scalar(rng);
-    let shared_key = shared_key(
-      Some(unique).filter(|_| output.0.meta.guaranteed),
-      r,
-      &output.0.view,
-      o
-    );
+    let shared_key =
+      shared_key(Some(unique).filter(|_| output.0.meta.guaranteed), r, &output.0.view, o);
 
     let spend = output.0.spend;
     SendOutput {
       R: match output.0.meta.kind {
         AddressType::Standard => &r * &ED25519_BASEPOINT_TABLE,
-        AddressType::Integrated(_) => unimplemented!("SendOutput::new doesn't support Integrated addresses"),
-        AddressType::Subaddress => &r * spend
+        AddressType::Integrated(_) => {
+          unimplemented!("SendOutput::new doesn't support Integrated addresses")
+        }
+        AddressType::Subaddress => &r * spend,
       },
       dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + spend),
       commitment: Commitment::new(commitment_mask(shared_key), output.1),
-      amount: amount_encryption(output.1, shared_key)
+      amount: amount_encryption(output.1, shared_key),
     }
   }
 }
@@ -103,7 +97,7 @@ pub enum TransactionError {
   FrostError(FrostError),
   #[cfg(feature = "multisig")]
   #[error("multisig error {0}")]
-  MultisigError(MultisigError)
+  MultisigError(MultisigError),
 }
 
 async fn prepare_inputs<R: RngCore + CryptoRng>(
@@ -111,7 +105,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   rpc: &Rpc,
   inputs: &[SpendableOutput],
   spend: &Scalar,
-  tx: &mut Transaction
+  tx: &mut Transaction,
 ) -> Result<Vec<(Scalar, EdwardsPoint, ClsagInput)>, TransactionError> {
   let mut signable = Vec::with_capacity(inputs.len());
 
@@ -120,34 +114,33 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
     rng,
     rpc,
     rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))? - 10,
-    inputs
-  ).await.map_err(|e| TransactionError::RpcError(e))?;
+    inputs,
+  )
+  .await
+  .map_err(|e| TransactionError::RpcError(e))?;
 
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
       spend + input.key_offset,
       generate_key_image(spend + input.key_offset),
-      ClsagInput::new(
-        input.commitment,
-        decoys[i].clone()
-      ).map_err(|e| TransactionError::ClsagError(e))?
+      ClsagInput::new(input.commitment, decoys[i].clone())
+        .map_err(|e| TransactionError::ClsagError(e))?,
     ));
 
     tx.prefix.inputs.push(Input::ToKey {
       amount: 0,
       key_offsets: decoys[i].offsets.clone(),
-      key_image: signable[i].1
+      key_image: signable[i].1,
     });
   }
 
   signable.sort_by(|x, y| x.1.compress().to_bytes().cmp(&y.1.compress().to_bytes()).reverse());
-  tx.prefix.inputs.sort_by(|x, y| if let (
-    Input::ToKey { key_image: x, ..},
-    Input::ToKey { key_image: y, ..}
-  ) = (x, y) {
-    x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
-  } else {
-    panic!("Input wasn't ToKey")
+  tx.prefix.inputs.sort_by(|x, y| {
+    if let (Input::ToKey { key_image: x, .. }, Input::ToKey { key_image: y, .. }) = (x, y) {
+      x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
+    } else {
+      panic!("Input wasn't ToKey")
+    }
   });
 
   Ok(signable)
@@ -156,7 +149,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Fee {
   pub per_weight: u64,
-  pub mask: u64
+  pub mask: u64,
 }
 
 impl Fee {
@@ -170,7 +163,7 @@ pub struct SignableTransaction {
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
   outputs: Vec<SendOutput>,
-  fee: u64
+  fee: u64,
 }
 
 impl SignableTransaction {
@@ -178,15 +171,13 @@ impl SignableTransaction {
     inputs: Vec<SpendableOutput>,
     mut payments: Vec<(Address, u64)>,
     change_address: Option<Address>,
-    fee_rate: Fee
+    fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure all addresses are valid
-    let test = |addr: Address| {
-      match addr.meta.kind {
-        AddressType::Standard => Ok(()),
-        AddressType::Integrated(..) => Err(TransactionError::InvalidAddress),
-        AddressType::Subaddress => Ok(())
-      }
+    let test = |addr: Address| match addr.meta.kind {
+      AddressType::Standard => Ok(()),
+      AddressType::Integrated(..) => Err(TransactionError::InvalidAddress),
+      AddressType::Subaddress => Ok(()),
     };
 
     for payment in &payments {
@@ -229,7 +220,8 @@ impl SignableTransaction {
     // If we have yet to add a change output, do so if it's economically viable
     if (!change) && change_address.is_some() && (in_amount != out_amount) {
       // Check even with the new fee, there's remaining funds
-      let change_fee = fee_rate.calculate(Transaction::fee_weight(inputs.len(), outputs + 1, extra)) - fee;
+      let change_fee =
+        fee_rate.calculate(Transaction::fee_weight(inputs.len(), outputs + 1, extra)) - fee;
       if (out_amount + change_fee) < in_amount {
         change = true;
         outputs += 1;
@@ -246,20 +238,13 @@ impl SignableTransaction {
       payments.push((change_address.unwrap(), in_amount - out_amount));
     }
 
-    Ok(
-      SignableTransaction {
-        inputs,
-        payments,
-        outputs: vec![],
-        fee
-      }
-    )
+    Ok(SignableTransaction { inputs, payments, outputs: vec![], fee })
   }
 
   fn prepare_outputs<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    uniqueness: [u8; 32]
+    uniqueness: [u8; 32],
   ) -> (Vec<Commitment>, Scalar) {
     // Shuffle the payments
     self.payments.shuffle(rng);
@@ -275,29 +260,23 @@ impl SignableTransaction {
     (commitments, sum)
   }
 
-  fn prepare_transaction(
-    &self,
-    commitments: &[Commitment],
-    bp: Bulletproofs
-  ) -> Transaction {
+  fn prepare_transaction(&self, commitments: &[Commitment], bp: Bulletproofs) -> Transaction {
     // Create the TX extra
     // TODO: Review this for canonicity with Monero
     let mut extra = vec![];
-    SubField::TxPublicKey(
-      PublicKey { point: self.outputs[0].R.compress() }
-    ).consensus_encode(&mut extra).unwrap();
+    SubField::TxPublicKey(PublicKey { point: self.outputs[0].R.compress() })
+      .consensus_encode(&mut extra)
+      .unwrap();
     SubField::AdditionalPublickKey(
-      self.outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect()
-    ).consensus_encode(&mut extra).unwrap();
+      self.outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect(),
+    )
+    .consensus_encode(&mut extra)
+    .unwrap();
 
     let mut tx_outputs = Vec::with_capacity(self.outputs.len());
     let mut ecdh_info = Vec::with_capacity(self.outputs.len());
     for o in 0 .. self.outputs.len() {
-      tx_outputs.push(Output {
-        amount: 0,
-        key: self.outputs[o].dest,
-        tag: None
-      });
+      tx_outputs.push(Output { amount: 0, key: self.outputs[o].dest, tag: None });
       ecdh_info.push(self.outputs[o].amount);
     }
 
@@ -307,20 +286,20 @@ impl SignableTransaction {
         timelock: Timelock::None,
         inputs: vec![],
         outputs: tx_outputs,
-        extra
+        extra,
       },
       rct_signatures: RctSignatures {
         base: RctBase {
           fee: self.fee,
           ecdh_info,
-          commitments: commitments.iter().map(|commitment| commitment.calculate()).collect()
+          commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
         },
         prunable: RctPrunable::Clsag {
           bulletproofs: vec![bp],
           clsags: vec![],
-          pseudo_outs: vec![]
-        }
-      }
+          pseudo_outs: vec![],
+        },
+      },
     }
   }
 
@@ -328,7 +307,7 @@ impl SignableTransaction {
     &mut self,
     rng: &mut R,
     rpc: &Rpc,
-    spend: &Scalar
+    spend: &Scalar,
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
@@ -344,12 +323,11 @@ impl SignableTransaction {
     let (commitments, mask_sum) = self.prepare_outputs(
       rng,
       uniqueness(
-        &images.iter().map(|image| Input::ToKey {
-          amount: 0,
-          key_offsets: vec![],
-          key_image: *image
-        }).collect::<Vec<_>>()
-      )
+        &images
+          .iter()
+          .map(|image| Input::ToKey { amount: 0, key_offsets: vec![], key_image: *image })
+          .collect::<Vec<_>>(),
+      ),
     );
 
     let mut tx = self.prepare_transaction(&commitments, Bulletproofs::new(rng, &commitments)?);
@@ -361,7 +339,8 @@ impl SignableTransaction {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
-        pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1.clone()).collect::<Vec<_>>());
+        pseudo_outs
+          .append(&mut clsag_pairs.iter().map(|clsag| clsag.1.clone()).collect::<Vec<_>>());
       }
     }
     Ok(tx)

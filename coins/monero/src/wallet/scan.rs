@@ -1,10 +1,6 @@
 use std::convert::TryFrom;
 
-use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
-  scalar::Scalar,
-  edwards::EdwardsPoint
-};
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
 
@@ -12,7 +8,7 @@ use crate::{
   Commitment,
   serialize::{write_varint, read_32, read_scalar, read_point},
   transaction::{Timelock, Transaction},
-  wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask}
+  wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
 #[derive(Clone, PartialEq, Debug)]
@@ -21,7 +17,7 @@ pub struct SpendableOutput {
   pub o: u8,
   pub key: EdwardsPoint,
   pub key_offset: Scalar,
-  pub commitment: Commitment
+  pub commitment: Commitment,
 }
 
 pub struct Timelocked(Timelock, Vec<SpendableOutput>);
@@ -61,27 +57,26 @@ impl SpendableOutput {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
-    Ok(
-      SpendableOutput {
-        tx: read_32(r)?,
-        o: { let mut o = [0; 1]; r.read_exact(&mut o)?; o[0] },
-        key: read_point(r)?,
-        key_offset: read_scalar(r)?,
-        commitment: Commitment::new(
-          read_scalar(r)?,
-          { let mut amount = [0; 8]; r.read_exact(&mut amount)?; u64::from_le_bytes(amount) }
-        )
-      }
-    )
+    Ok(SpendableOutput {
+      tx: read_32(r)?,
+      o: {
+        let mut o = [0; 1];
+        r.read_exact(&mut o)?;
+        o[0]
+      },
+      key: read_point(r)?,
+      key_offset: read_scalar(r)?,
+      commitment: Commitment::new(read_scalar(r)?, {
+        let mut amount = [0; 8];
+        r.read_exact(&mut amount)?;
+        u64::from_le_bytes(amount)
+      }),
+    })
   }
 }
 
 impl Transaction {
-  pub fn scan(
-    &self,
-    view: ViewPair,
-    guaranteed: bool
-  ) -> Timelocked {
+  pub fn scan(&self, view: ViewPair, guaranteed: bool) -> Timelocked {
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
     extra.extend(&self.prefix.extra);
@@ -110,7 +105,7 @@ impl Transaction {
           Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
           view.view,
           pubkey,
-          o
+          o,
         );
         // P - shared == spend
         if (output.key - (&key_offset * &ED25519_BASEPOINT_TABLE)) != view.spend {
@@ -129,7 +124,7 @@ impl Transaction {
             Some(amount) => amount_decryption(*amount, key_offset),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
-            None => break
+            None => break,
           };
 
           // Rebuild the commitment to verify it
@@ -147,7 +142,7 @@ impl Transaction {
             o: o.try_into().unwrap(),
             key: output.key,
             key_offset,
-            commitment
+            commitment,
           });
         }
         // Break to prevent public keys from being included multiple times, triggering multiple
