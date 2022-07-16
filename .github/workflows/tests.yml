@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions-rs/cargo@v1
+      - name: Install nightly
+        run: rustup toolchain install nightly
       - name: Install nightly rustfmt
         run: rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu
       - name: Run rustfmt
