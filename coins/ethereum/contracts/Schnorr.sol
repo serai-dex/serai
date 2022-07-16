@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: LGPLv3
+//SPDX-License-Identifier: AGPLv3
 pragma solidity ^0.8.0;
 
 // see https://github.com/noot/schnorr-verify for implementation details
