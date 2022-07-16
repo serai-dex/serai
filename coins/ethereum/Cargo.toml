@@ -1,0 +1,28 @@
+[package]
+name = "ethereum-serai"
+version = "0.1.0"
+description = "An Ethereum library supporting Schnorr signing and on-chain verification"
+license = "AGPL-3.0-only"
+authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabethjbinks@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+serde_json = "1.0"
+serde = "1.0"
+hex-literal = "0.3"
+
+ethers = { git = "https://github.com/gakonst/ethers-rs", features = ["abigen", "ethers-solc"] }
+eyre = "0.6"
+
+k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1"] }
+sha3 = "0.10"
+group = "0.12"
+
+[dev-dependencies]
+rand = "0.8"
+tokio = { version = "1.19", features = ["macros"] }
+
+[build-dependencies]
+ethers-solc = { git = "https://github.com/gakonst/ethers-rs" }
