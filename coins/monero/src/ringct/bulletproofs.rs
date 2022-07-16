@@ -20,7 +20,7 @@ pub struct Bulletproofs {
   pub R: Vec<EdwardsPoint>,
   pub a: Scalar,
   pub b: Scalar,
-  pub t: Scalar
+  pub t: Scalar,
 }
 
 impl Bulletproofs {
@@ -38,7 +38,10 @@ impl Bulletproofs {
     len + clawback
   }
 
-  pub fn new<R: RngCore + CryptoRng>(rng: &mut R, outputs: &[Commitment]) -> Result<Bulletproofs, TransactionError> {
+  pub fn new<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    outputs: &[Commitment],
+  ) -> Result<Bulletproofs, TransactionError> {
     if outputs.len() > MAX_OUTPUTS {
       return Err(TransactionError::TooManyOutputs)?;
     }
@@ -54,22 +57,28 @@ impl Bulletproofs {
       #[link(name = "wrapper")]
       extern "C" {
         fn free(ptr: *const u8);
-        fn c_generate_bp(seed: *const u8, len: u8, amounts: *const u64, masks: *const [u8; 32]) -> *const u8;
+        fn c_generate_bp(
+          seed: *const u8,
+          len: u8,
+          amounts: *const u64,
+          masks: *const [u8; 32],
+        ) -> *const u8;
       }
 
       let ptr = c_generate_bp(
         seed.as_ptr(),
         u8::try_from(outputs.len()).unwrap(),
         amounts.as_ptr(),
-        masks.as_ptr()
+        masks.as_ptr(),
       );
 
       let mut len = 6 * 32;
       len += (2 * (1 + (usize::from(ptr.add(len).read()) * 32))) + (3 * 32);
       res = Bulletproofs::deserialize(
         // Wrap in a cursor to provide a mutable Reader
-        &mut std::io::Cursor::new(std::slice::from_raw_parts(ptr, len))
-      ).expect("Couldn't deserialize Bulletproofs from Monero");
+        &mut std::io::Cursor::new(std::slice::from_raw_parts(ptr, len)),
+      )
+      .expect("Couldn't deserialize Bulletproofs from Monero");
       free(ptr);
     };
 
@@ -87,9 +96,10 @@ impl Bulletproofs {
 
     let mut serialized = Vec::with_capacity((9 + (2 * self.L.len())) * 32);
     self.serialize(&mut serialized).unwrap();
-    let commitments: Vec<[u8; 32]> = commitments.iter().map(
-      |commitment| (commitment * Scalar::from(8u8).invert()).compress().to_bytes()
-    ).collect();
+    let commitments: Vec<[u8; 32]> = commitments
+      .iter()
+      .map(|commitment| (commitment * Scalar::from(8u8).invert()).compress().to_bytes())
+      .collect();
 
     unsafe {
       #[link(name = "wrapper")]
@@ -99,7 +109,7 @@ impl Bulletproofs {
           serialized_len: usize,
           serialized: *const u8,
           commitments_len: u8,
-          commitments: *const [u8; 32]
+          commitments: *const [u8; 32],
         ) -> bool;
       }
 
@@ -108,15 +118,16 @@ impl Bulletproofs {
         serialized.len(),
         serialized.as_ptr(),
         u8::try_from(commitments.len()).unwrap(),
-        commitments.as_ptr()
+        commitments.as_ptr(),
       )
     }
   }
 
-  fn serialize_core<
-    W: std::io::Write,
-    F: Fn(&[EdwardsPoint], &mut W) -> std::io::Result<()>
-  >(&self, w: &mut W, specific_write_vec: F) -> std::io::Result<()> {
+  fn serialize_core<W: std::io::Write, F: Fn(&[EdwardsPoint], &mut W) -> std::io::Result<()>>(
+    &self,
+    w: &mut W,
+    specific_write_vec: F,
+  ) -> std::io::Result<()> {
     write_point(&self.A, w)?;
     write_point(&self.S, w)?;
     write_point(&self.T1, w)?;
@@ -150,7 +161,7 @@ impl Bulletproofs {
       R: read_vec(read_point, r)?,
       a: read_scalar(r)?,
       b: read_scalar(r)?,
-      t: read_scalar(r)?
+      t: read_scalar(r)?,
     };
 
     if bp.L.len() != bp.R.len() {

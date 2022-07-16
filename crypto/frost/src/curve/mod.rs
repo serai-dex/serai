@@ -102,9 +102,8 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
     let mut encoding = <Self::G as GroupEncoding>::Repr::default();
     r.read_exact(encoding.as_mut()).map_err(|_| CurveError::InvalidPoint)?;
 
-    let point = Option::<Self::G>::from(
-      Self::G::from_bytes(&encoding)
-    ).ok_or(CurveError::InvalidPoint)?;
+    let point =
+      Option::<Self::G>::from(Self::G::from_bytes(&encoding)).ok_or(CurveError::InvalidPoint)?;
     // Ban the identity, per the FROST spec, and non-canonical points
     if (point.is_identity().into()) || (point.to_bytes().as_ref() != encoding.as_ref()) {
       Err(CurveError::InvalidPoint)?;

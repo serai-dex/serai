@@ -5,34 +5,32 @@ use rand_core::{RngCore, CryptoRng};
 use group::{ff::Field, GroupEncoding};
 
 use crate::{
-  Curve, FrostKeys, schnorr::{self, SchnorrSignature}, algorithm::{Hram, Schnorr},
-  tests::{key_gen, algorithm_machines, sign as sign_test}
+  Curve, FrostKeys,
+  schnorr::{self, SchnorrSignature},
+  algorithm::{Hram, Schnorr},
+  tests::{key_gen, algorithm_machines, sign as sign_test},
 };
 
 pub(crate) fn core_sign<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let private_key = C::F::random(&mut *rng);
   let nonce = C::F::random(&mut *rng);
   let challenge = C::F::random(rng); // Doesn't bother to craft an HRAM
-  assert!(
-    schnorr::verify::<C>(
-      C::GENERATOR * private_key,
-      challenge,
-      &schnorr::sign(private_key, nonce, challenge)
-    )
-  );
+  assert!(schnorr::verify::<C>(
+    C::GENERATOR * private_key,
+    challenge,
+    &schnorr::sign(private_key, nonce, challenge)
+  ));
 }
 
 // The above sign function verifies signing works
 // This verifies invalid signatures don't pass, using zero signatures, which should effectively be
 // random
 pub(crate) fn core_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
-  assert!(
-    !schnorr::verify::<C>(
-      C::GENERATOR * C::F::random(&mut *rng),
-      C::F::random(rng),
-      &SchnorrSignature { R: C::GENERATOR * C::F::zero(), s: C::F::zero() }
-    )
-  );
+  assert!(!schnorr::verify::<C>(
+    C::GENERATOR * C::F::random(&mut *rng),
+    C::F::random(rng),
+    &SchnorrSignature { R: C::GENERATOR * C::F::zero(), s: C::F::zero() }
+  ));
 }
 
 pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
@@ -47,9 +45,9 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   }
 
   // Batch verify
-  let triplets = (0 .. 5).map(
-    |i| (u16::try_from(i + 1).unwrap(), C::GENERATOR * keys[i], challenges[i], sigs[i])
-  ).collect::<Vec<_>>();
+  let triplets = (0 .. 5)
+    .map(|i| (u16::try_from(i + 1).unwrap(), C::GENERATOR * keys[i], challenges[i], sigs[i]))
+    .collect::<Vec<_>>();
   schnorr::batch_verify(rng, &triplets).unwrap();
 
   // Shift 1 from s from one to another and verify it fails
@@ -80,7 +78,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 fn sign_core<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   group_key: C::G,
-  keys: &HashMap<u16, Arc<FrostKeys<C>>>
+  keys: &HashMap<u16, Arc<FrostKeys<C>>>,
 ) {
   const MESSAGE: &'static [u8] = b"Hello, World!";
 
@@ -91,7 +89,7 @@ fn sign_core<R: RngCore + CryptoRng, C: Curve>(
 
 #[derive(Clone)]
 pub struct TestHram<C: Curve> {
-  _curve: PhantomData<C>
+  _curve: PhantomData<C>,
 }
 impl<C: Curve> Hram<C> for TestHram<C> {
   #[allow(non_snake_case)]

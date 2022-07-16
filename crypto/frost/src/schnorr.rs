@@ -1,6 +1,9 @@
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::{Field, PrimeField}, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
 
 use multiexp::BatchVerifier;
 
@@ -25,26 +28,23 @@ impl<C: Curve> SchnorrSignature<C> {
 pub(crate) fn sign<C: Curve>(
   private_key: C::F,
   nonce: C::F,
-  challenge: C::F
+  challenge: C::F,
 ) -> SchnorrSignature<C> {
-  SchnorrSignature {
-    R: C::GENERATOR * nonce,
-    s: nonce + (private_key * challenge)
-  }
+  SchnorrSignature { R: C::GENERATOR * nonce, s: nonce + (private_key * challenge) }
 }
 
 #[must_use]
 pub(crate) fn verify<C: Curve>(
   public_key: C::G,
   challenge: C::F,
-  signature: &SchnorrSignature<C>
+  signature: &SchnorrSignature<C>,
 ) -> bool {
   (C::GENERATOR * signature.s) == (signature.R + (public_key * challenge))
 }
 
 pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
   rng: &mut R,
-  triplets: &[(u16, C::G, C::F, SchnorrSignature<C>)]
+  triplets: &[(u16, C::G, C::F, SchnorrSignature<C>)],
 ) -> Result<(), u16> {
   let mut values = [(C::F::one(), C::GENERATOR); 3];
   let mut batch = BatchVerifier::new(triplets.len());

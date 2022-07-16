@@ -2,7 +2,10 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use group::{ff::{Field, PrimeFieldBits}, prime::PrimeGroup};
+use group::{
+  ff::{Field, PrimeFieldBits},
+  prime::PrimeGroup,
+};
 use multiexp::BatchVerifier;
 
 use crate::challenge;
@@ -18,10 +21,13 @@ use crate::{read_scalar, cross_group::read_point};
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct SchnorrPoK<G: PrimeGroup> {
   R: G,
-  s: G::Scalar
+  s: G::Scalar,
 }
 
-impl<G: PrimeGroup> SchnorrPoK<G> where G::Scalar: PrimeFieldBits {
+impl<G: PrimeGroup> SchnorrPoK<G>
+where
+  G::Scalar: PrimeFieldBits,
+{
   // Not hram due to the lack of m
   #[allow(non_snake_case)]
   fn hra<T: Transcript>(transcript: &mut T, generator: G, R: G, A: G) -> G::Scalar {
@@ -36,14 +42,14 @@ impl<G: PrimeGroup> SchnorrPoK<G> where G::Scalar: PrimeFieldBits {
     rng: &mut R,
     transcript: &mut T,
     generator: G,
-    private_key: G::Scalar
+    private_key: G::Scalar,
   ) -> SchnorrPoK<G> {
     let nonce = G::Scalar::random(rng);
     #[allow(non_snake_case)]
     let R = generator * nonce;
     SchnorrPoK {
       R,
-      s: nonce + (private_key * SchnorrPoK::hra(transcript, generator, R, generator * private_key))
+      s: nonce + (private_key * SchnorrPoK::hra(transcript, generator, R, generator * private_key)),
     }
   }
 
@@ -53,7 +59,7 @@ impl<G: PrimeGroup> SchnorrPoK<G> where G::Scalar: PrimeFieldBits {
     transcript: &mut T,
     generator: G,
     public_key: G,
-    batch: &mut BatchVerifier<(), G>
+    batch: &mut BatchVerifier<(), G>,
   ) {
     batch.queue(
       rng,
@@ -61,8 +67,8 @@ impl<G: PrimeGroup> SchnorrPoK<G> where G::Scalar: PrimeFieldBits {
       [
         (-self.s, generator),
         (G::Scalar::one(), self.R),
-        (Self::hra(transcript, generator, self.R, public_key), public_key)
-      ]
+        (Self::hra(transcript, generator, self.R, public_key), public_key),
+      ],
     );
   }
 

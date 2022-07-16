@@ -1,5 +1,4 @@
 [workspace]
-
 members = [
   "crypto/transcript",
 
@@ -13,4 +12,11 @@ members = [
   "coins/monero",
 
   "processor",
+
+  "substrate/runtime",
+  "substrate/consensus",
+  "substrate/node"
 ]
+
+[profile.release]
+panic = "unwind"

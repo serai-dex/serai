@@ -9,15 +9,20 @@ use crate::{multiexp, multiexp_vartime};
 pub struct BatchVerifier<Id: Copy, G: Group>(Vec<(Id, Vec<(G::Scalar, G)>)>);
 
 #[cfg(feature = "batch")]
-impl<Id: Copy, G: Group> BatchVerifier<Id, G> where <G as Group>::Scalar: PrimeFieldBits {
+impl<Id: Copy, G: Group> BatchVerifier<Id, G>
+where
+  <G as Group>::Scalar: PrimeFieldBits,
+{
   pub fn new(capacity: usize) -> BatchVerifier<Id, G> {
     BatchVerifier(Vec::with_capacity(capacity))
   }
 
-  pub fn queue<
-    R: RngCore + CryptoRng,
-    I: IntoIterator<Item = (G::Scalar, G)>
-  >(&mut self, rng: &mut R, id: Id, pairs: I) {
+  pub fn queue<R: RngCore + CryptoRng, I: IntoIterator<Item = (G::Scalar, G)>>(
+    &mut self,
+    rng: &mut R,
+    id: Id,
+    pairs: I,
+  ) {
     // Define a unique scalar factor for this set of variables so individual items can't overlap
     let u = if self.0.len() == 0 {
       G::Scalar::one()
@@ -35,16 +40,16 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> where <G as Group>::Scalar: PrimeF
 
   #[must_use]
   pub fn verify(&self) -> bool {
-    multiexp(
-      &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()
-    ).is_identity().into()
+    multiexp(&self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
+      .is_identity()
+      .into()
   }
 
   #[must_use]
   pub fn verify_vartime(&self) -> bool {
-    multiexp_vartime(
-      &self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()
-    ).is_identity().into()
+    multiexp_vartime(&self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
+      .is_identity()
+      .into()
   }
 
   // A constant time variant may be beneficial for robust protocols
@@ -53,17 +58,21 @@ impl<Id: Copy, G: Group> BatchVerifier<Id, G> where <G as Group>::Scalar: PrimeF
     while slice.len() > 1 {
       let split = slice.len() / 2;
       if multiexp_vartime(
-        &slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>()
-      ).is_identity().into() {
+        &slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>(),
+      )
+      .is_identity()
+      .into()
+      {
         slice = &slice[split ..];
       } else {
         slice = &slice[.. split];
       }
     }
 
-    slice.get(0).filter(
-      |(_, value)| !bool::from(multiexp_vartime(value).is_identity())
-    ).map(|(id, _)| *id)
+    slice
+      .get(0)
+      .filter(|(_, value)| !bool::from(multiexp_vartime(value).is_identity()))
+      .map(|(id, _)| *id)
   }
 
   pub fn verify_with_vartime_blame(&self) -> Result<(), Id> {

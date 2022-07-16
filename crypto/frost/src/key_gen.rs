@@ -1,8 +1,15 @@
-use std::{marker::PhantomData, io::{Read, Cursor}, collections::HashMap};
+use std::{
+  marker::PhantomData,
+  io::{Read, Cursor},
+  collections::HashMap,
+};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::{Field, PrimeField}, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
 
 use multiexp::{multiexp_vartime, BatchVerifier};
 
@@ -10,7 +17,7 @@ use crate::{
   curve::Curve,
   FrostError, FrostParams, FrostKeys,
   schnorr::{self, SchnorrSignature},
-  validate_map
+  validate_map,
 };
 
 #[allow(non_snake_case)]
@@ -56,13 +63,9 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
       // There's no reason to spend the time and effort to make this deterministic besides a
       // general obsession with canonicity and determinism though
       r,
-      challenge::<C>(
-        context,
-        params.i(),
-        (C::GENERATOR * r).to_bytes().as_ref(),
-        &serialized
-      )
-    ).serialize()
+      challenge::<C>(context, params.i(), (C::GENERATOR * r).to_bytes().as_ref(), &serialized),
+    )
+    .serialize(),
   );
 
   // Step 4: Broadcast
@@ -114,7 +117,7 @@ fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
         l,
         these_commitments[0],
         challenge::<C>(context, l, R.to_bytes().as_ref(), &Am),
-        SchnorrSignature::<C> { R, s }
+        SchnorrSignature::<C> { R, s },
       ));
     }
 
@@ -126,10 +129,7 @@ fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   Ok(commitments)
 }
 
-fn polynomial<F: PrimeField>(
-  coefficients: &[F],
-  l: u16
-) -> F {
+fn polynomial<F: PrimeField>(coefficients: &[F], l: u16) -> F {
   let l = F::from(u64::from(l));
   let mut share = F::zero();
   for (idx, coefficient) in coefficients.iter().rev().enumerate() {
@@ -207,13 +207,10 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   let exponential = |i: u16, values: &[_]| {
     let i = C::F::from(i.into());
     let mut res = Vec::with_capacity(params.t().into());
-    (0 .. usize::from(params.t())).into_iter().fold(
-      C::F::one(),
-      |exp, l| {
-        res.push((exp, values[l]));
-        exp * i
-      }
-    );
+    (0 .. usize::from(params.t())).into_iter().fold(C::F::one(), |exp, l| {
+      res.push((exp, values[l]));
+      exp * i
+    });
     res
   };
 
@@ -254,15 +251,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
 
   // TODO: Clear serialized and shares
 
-  Ok(
-    FrostKeys {
-      params,
-      secret_share,
-      group_key: stripes[0],
-      verification_shares,
-      offset: None
-    }
-  )
+  Ok(FrostKeys { params, secret_share, group_key: stripes[0], verification_shares, offset: None })
 }
 
 pub struct KeyGenMachine<C: Curve> {
@@ -298,11 +287,8 @@ impl<C: Curve> KeyGenMachine<C> {
     self,
     rng: &mut R,
   ) -> (SecretShareMachine<C>, Vec<u8>) {
-    let (
-      coefficients,
-      our_commitments,
-      serialized
-    ) = generate_key_r1::<_, C>(rng, &self.params, &self.context);
+    let (coefficients, our_commitments, serialized) =
+      generate_key_r1::<_, C>(rng, &self.params, &self.context);
 
     (
       SecretShareMachine {

@@ -2,7 +2,10 @@ use std::string::ToString;
 
 use thiserror::Error;
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, edwards::{EdwardsPoint, CompressedEdwardsY}};
+use curve25519_dalek::{
+  constants::ED25519_BASEPOINT_TABLE,
+  edwards::{EdwardsPoint, CompressedEdwardsY},
+};
 
 use base58_monero::base58::{encode_check, decode_check};
 
@@ -12,14 +15,14 @@ use crate::wallet::ViewPair;
 pub enum Network {
   Mainnet,
   Testnet,
-  Stagenet
+  Stagenet,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AddressType {
   Standard,
   Integrated([u8; 8]),
-  Subaddress
+  Subaddress,
 }
 
 impl AddressType {
@@ -27,7 +30,7 @@ impl AddressType {
     match network {
       Network::Mainnet => (18, 19, 42),
       Network::Testnet => (53, 54, 63),
-      Network::Stagenet => (24, 25, 36)
+      Network::Stagenet => (24, 25, 36),
     }
   }
 }
@@ -36,7 +39,7 @@ impl AddressType {
 pub struct AddressMeta {
   pub network: Network,
   pub kind: AddressType,
-  pub guaranteed: bool
+  pub guaranteed: bool,
 }
 
 #[derive(Clone, Error, Debug)]
@@ -50,7 +53,7 @@ pub enum AddressError {
   #[error("different network than expected")]
   DifferentNetwork,
   #[error("invalid key")]
-  InvalidKey
+  InvalidKey,
 }
 
 impl AddressMeta {
@@ -59,7 +62,7 @@ impl AddressMeta {
     let byte = match self.kind {
       AddressType::Standard => bytes.0,
       AddressType::Integrated(_) => bytes.1,
-      AddressType::Subaddress => bytes.2
+      AddressType::Subaddress => bytes.2,
     };
     byte | (if self.guaranteed { 1 << 7 } else { 0 })
   }
@@ -76,7 +79,7 @@ impl AddressMeta {
         _ if actual == standard => Some(AddressType::Standard),
         _ if actual == integrated => Some(AddressType::Integrated([0; 8])),
         _ if actual == subaddress => Some(AddressType::Subaddress),
-        _ => None
+        _ => None,
       } {
         meta = Some(AddressMeta { network, kind, guaranteed });
         break;
@@ -91,19 +94,15 @@ impl AddressMeta {
 pub struct Address {
   pub meta: AddressMeta,
   pub spend: EdwardsPoint,
-  pub view: EdwardsPoint
+  pub view: EdwardsPoint,
 }
 
 impl ViewPair {
   pub fn address(&self, network: Network, kind: AddressType, guaranteed: bool) -> Address {
     Address {
-      meta: AddressMeta {
-        network,
-        kind,
-        guaranteed
-      },
+      meta: AddressMeta { network, kind, guaranteed },
       spend: self.spend,
-      view: &self.view * &ED25519_BASEPOINT_TABLE
+      view: &self.view * &ED25519_BASEPOINT_TABLE,
     }
   }
 }
@@ -134,14 +133,18 @@ impl Address {
 
     let len = match meta.kind {
       AddressType::Standard | AddressType::Subaddress => 65,
-      AddressType::Integrated(_) => 73
+      AddressType::Integrated(_) => 73,
     };
     if raw.len() != len {
       Err(AddressError::InvalidLength)?;
     }
 
-    let spend = CompressedEdwardsY(raw[1 .. 33].try_into().unwrap()).decompress().ok_or(AddressError::InvalidKey)?;
-    let view = CompressedEdwardsY(raw[33 .. 65].try_into().unwrap()).decompress().ok_or(AddressError::InvalidKey)?;
+    let spend = CompressedEdwardsY(raw[1 .. 33].try_into().unwrap())
+      .decompress()
+      .ok_or(AddressError::InvalidKey)?;
+    let view = CompressedEdwardsY(raw[33 .. 65].try_into().unwrap())
+      .decompress()
+      .ok_or(AddressError::InvalidKey)?;
 
     if let AddressType::Integrated(ref mut payment_id) = meta.kind {
       payment_id.copy_from_slice(&raw[65 .. 73]);

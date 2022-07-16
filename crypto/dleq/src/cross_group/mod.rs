@@ -5,10 +5,11 @@ use digest::Digest;
 
 use transcript::Transcript;
 
-use group::{ff::{Field, PrimeField, PrimeFieldBits}, prime::PrimeGroup};
+use group::{
+  ff::{Field, PrimeField, PrimeFieldBits},
+  prime::PrimeGroup,
+};
 use multiexp::BatchVerifier;
-
-use crate::Generators;
 
 pub mod scalar;
 use scalar::{scalar_convert, mutual_scalar_from_bytes};
@@ -35,6 +36,24 @@ pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G
   Ok(point.unwrap())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Generators<G: PrimeGroup> {
+  pub primary: G,
+  pub alt: G,
+}
+
+impl<G: PrimeGroup> Generators<G> {
+  pub fn new(primary: G, alt: G) -> Generators<G> {
+    Generators { primary, alt }
+  }
+
+  fn transcript<T: Transcript>(&self, transcript: &mut T) {
+    transcript.domain_separate(b"generators");
+    transcript.append_message(b"primary", self.primary.to_bytes().as_ref());
+    transcript.append_message(b"alternate", self.alt.to_bytes().as_ref());
+  }
+}
+
 #[derive(Error, PartialEq, Eq, Debug)]
 pub enum DLEqError {
   #[error("invalid proof of knowledge")]
@@ -44,7 +63,7 @@ pub enum DLEqError {
   #[error("invalid challenge")]
   InvalidChallenge,
   #[error("invalid proof")]
-  InvalidProof
+  InvalidProof,
 }
 
 // This should never be directly instantiated and uses a u8 to represent internal values
@@ -58,11 +77,14 @@ pub struct __DLEqProof<
   G1: PrimeGroup,
   const SIGNATURE: u8,
   const RING_LEN: usize,
-  const REMAINDER_RING_LEN: usize
-> where G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
+  const REMAINDER_RING_LEN: usize,
+> where
+  G0::Scalar: PrimeFieldBits,
+  G1::Scalar: PrimeFieldBits,
+{
   bits: Vec<Bits<G0, G1, SIGNATURE, RING_LEN>>,
   remainder: Option<Bits<G0, G1, SIGNATURE, REMAINDER_RING_LEN>>,
-  poks: (SchnorrPoK<G0>, SchnorrPoK<G1>)
+  poks: (SchnorrPoK<G0>, SchnorrPoK<G1>),
 }
 
 macro_rules! dleq {
@@ -74,9 +96,15 @@ macro_rules! dleq {
       { $signature.ring_len() },
       // There may not be a remainder, yet if there is one, it'll be just one bit
       // A ring for one bit has a RING_LEN of 2
-      { if $remainder { 2 } else { 0 } }
+      {
+        if $remainder {
+          2
+        } else {
+          0
+        }
+      },
     >;
-  }
+  };
 }
 
 // Proves for 1-bit at a time with the signature form (e, s), as originally described in MRL-0010.
@@ -103,18 +131,20 @@ dleq!(EfficientLinearDLEq, BitSignature::EfficientLinear, false);
 dleq!(CompromiseLinearDLEq, BitSignature::CompromiseLinear, true);
 
 impl<
-  G0: PrimeGroup,
-  G1: PrimeGroup,
-  const SIGNATURE: u8,
-  const RING_LEN: usize,
-  const REMAINDER_RING_LEN: usize
-> __DLEqProof<G0, G1, SIGNATURE, RING_LEN, REMAINDER_RING_LEN> where
-  G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
-
+    G0: PrimeGroup,
+    G1: PrimeGroup,
+    const SIGNATURE: u8,
+    const RING_LEN: usize,
+    const REMAINDER_RING_LEN: usize,
+  > __DLEqProof<G0, G1, SIGNATURE, RING_LEN, REMAINDER_RING_LEN>
+where
+  G0::Scalar: PrimeFieldBits,
+  G1::Scalar: PrimeFieldBits,
+{
   pub(crate) fn transcript<T: Transcript>(
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
-    keys: (G0, G1)
+    keys: (G0, G1),
   ) {
     transcript.domain_separate(b"cross_group_dleq");
     generators.0.transcript(transcript);
@@ -127,13 +157,9 @@ impl<
   pub(crate) fn blinding_key<R: RngCore + CryptoRng, F: PrimeField>(
     rng: &mut R,
     total: &mut F,
-    last: bool
+    last: bool,
   ) -> F {
-    let blinding_key = if last {
-      -*total
-    } else {
-      F::random(&mut *rng)
-    };
+    let blinding_key = if last { -*total } else { F::random(&mut *rng) };
     *total += blinding_key;
     blinding_key
   }
@@ -141,7 +167,7 @@ impl<
   fn reconstruct_keys(&self) -> (G0, G1) {
     let mut res = (
       self.bits.iter().map(|bit| bit.commitments.0).sum::<G0>(),
-      self.bits.iter().map(|bit| bit.commitments.1).sum::<G1>()
+      self.bits.iter().map(|bit| bit.commitments.1).sum::<G1>(),
     );
 
     if let Some(bit) = &self.remainder {
@@ -156,24 +182,24 @@ impl<
     rng: &mut R,
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
-    f: (G0::Scalar, G1::Scalar)
+    f: (G0::Scalar, G1::Scalar),
   ) -> (Self, (G0::Scalar, G1::Scalar)) {
     Self::transcript(
       transcript,
       generators,
-      ((generators.0.primary * f.0), (generators.1.primary * f.1))
+      ((generators.0.primary * f.0), (generators.1.primary * f.1)),
     );
 
     let poks = (
       SchnorrPoK::<G0>::prove(rng, transcript, generators.0.primary, f.0),
-      SchnorrPoK::<G1>::prove(rng, transcript, generators.1.primary, f.1)
+      SchnorrPoK::<G1>::prove(rng, transcript, generators.1.primary, f.1),
     );
 
     let mut blinding_key_total = (G0::Scalar::zero(), G1::Scalar::zero());
     let mut blinding_key = |rng: &mut R, last| {
       let blinding_key = (
         Self::blinding_key(&mut *rng, &mut blinding_key_total.0, last),
-        Self::blinding_key(&mut *rng, &mut blinding_key_total.1, last)
+        Self::blinding_key(&mut *rng, &mut blinding_key_total.1, last),
       );
       if last {
         debug_assert_eq!(blinding_key_total.0, G0::Scalar::zero());
@@ -203,17 +229,15 @@ impl<
       if (i % bits_per_group) == (bits_per_group - 1) {
         let last = i == (capacity - 1);
         let blinding_key = blinding_key(&mut *rng, last);
-        bits.push(
-          Bits::prove(
-            &mut *rng,
-            transcript,
-            generators,
-            i / bits_per_group,
-            &mut pow_2,
-            these_bits,
-            blinding_key
-          )
-        );
+        bits.push(Bits::prove(
+          &mut *rng,
+          transcript,
+          generators,
+          i / bits_per_group,
+          &mut pow_2,
+          these_bits,
+          blinding_key,
+        ));
         these_bits = 0;
       }
     }
@@ -222,17 +246,15 @@ impl<
     let mut remainder = None;
     if capacity != ((capacity / bits_per_group) * bits_per_group) {
       let blinding_key = blinding_key(&mut *rng, true);
-      remainder = Some(
-        Bits::prove(
-          &mut *rng,
-          transcript,
-          generators,
-          capacity / bits_per_group,
-          &mut pow_2,
-          these_bits,
-          blinding_key
-        )
-      );
+      remainder = Some(Bits::prove(
+        &mut *rng,
+        transcript,
+        generators,
+        capacity / bits_per_group,
+        &mut pow_2,
+        these_bits,
+        blinding_key,
+      ));
     }
 
     let proof = __DLEqProof { bits, remainder, poks };
@@ -254,13 +276,13 @@ impl<
     rng: &mut R,
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
-    digest: D
+    digest: D,
   ) -> (Self, (G0::Scalar, G1::Scalar)) {
     Self::prove_internal(
       rng,
       transcript,
       generators,
-      mutual_scalar_from_bytes(digest.finalize().as_ref())
+      mutual_scalar_from_bytes(digest.finalize().as_ref()),
     )
   }
 
@@ -271,7 +293,7 @@ impl<
     rng: &mut R,
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
-    f0: G0::Scalar
+    f0: G0::Scalar,
   ) -> Option<(Self, (G0::Scalar, G1::Scalar))> {
     scalar_convert(f0).map(|f1| Self::prove_internal(rng, transcript, generators, (f0, f1)))
   }
@@ -281,19 +303,18 @@ impl<
     &self,
     rng: &mut R,
     transcript: &mut T,
-    generators: (Generators<G0>, Generators<G1>)
+    generators: (Generators<G0>, Generators<G1>),
   ) -> Result<(G0, G1), DLEqError> {
-    let capacity = usize::try_from(
-      G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)
-    ).unwrap();
+    let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
     let bits_per_group = BitSignature::from(SIGNATURE).bits();
     let has_remainder = (capacity % bits_per_group) != 0;
 
     // These shouldn't be possible, as locally created and deserialized proofs should be properly
     // formed in these regards, yet it doesn't hurt to check and would be problematic if true
-    if (self.bits.len() != (capacity / bits_per_group)) || (
-      (self.remainder.is_none() && has_remainder) || (self.remainder.is_some() && !has_remainder)
-    ) {
+    if (self.bits.len() != (capacity / bits_per_group)) ||
+      ((self.remainder.is_none() && has_remainder) ||
+        (self.remainder.is_some() && !has_remainder))
+    {
       return Err(DLEqError::InvalidProofLength);
     }
 
@@ -304,7 +325,7 @@ impl<
       BitSignature::ClassicLinear => 3,
       BitSignature::ConciseLinear => 3,
       BitSignature::EfficientLinear => (self.bits.len() + 1) * 3,
-      BitSignature::CompromiseLinear => (self.bits.len() + 1) * 3
+      BitSignature::CompromiseLinear => (self.bits.len() + 1) * 3,
     };
     let mut batch = (BatchVerifier::new(batch_capacity), BatchVerifier::new(batch_capacity));
 
@@ -340,9 +361,7 @@ impl<
 
   #[cfg(feature = "serialize")]
   pub fn deserialize<R: Read>(r: &mut R) -> std::io::Result<Self> {
-    let capacity = usize::try_from(
-      G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)
-    ).unwrap();
+    let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
     let bits_per_group = BitSignature::from(SIGNATURE).bits();
 
     let mut bits = Vec::with_capacity(capacity / bits_per_group);
@@ -355,12 +374,10 @@ impl<
       remainder = Some(Bits::deserialize(r)?);
     }
 
-    Ok(
-      __DLEqProof {
-        bits,
-        remainder,
-        poks: (SchnorrPoK::deserialize(r)?, SchnorrPoK::deserialize(r)?)
-      }
-    )
+    Ok(__DLEqProof {
+      bits,
+      remainder,
+      poks: (SchnorrPoK::deserialize(r)?, SchnorrPoK::deserialize(r)?),
+    })
   }
 }
