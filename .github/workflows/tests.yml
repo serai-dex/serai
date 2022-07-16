@@ -1,0 +1,38 @@
+name: Tests
+
+on: [pull_request]
+
+jobs:
+  test:
+    name: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install stable
+      run: rustup toolchain install stable
+    - name: Build
+      run: ./scripts/build.sh
+    - name: Run tests
+      run: ./scripts/test.sh
+
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - run: rustup component add rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - run: rustup component add clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
