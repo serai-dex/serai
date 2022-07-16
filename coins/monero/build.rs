@@ -16,7 +16,7 @@ fn main() {
   // If the signaling file was deleted, run this script again to rebuild Monero though
   println!("cargo:rerun-if-changed=c/.build/monero");
   if !Path::new("c/.build/monero").exists() {
-    if !Command::new("make").arg(format!("-j{}", &env::var("THREADS").unwrap_or("2".to_string())))
+    if !Command::new("make").arg(format!("-j{}", &env::var("THREADS").unwrap_or_else(|_| "2".to_string())))
       .current_dir(&Path::new("c/monero")).status().unwrap().success() {
         panic!("make failed to build Monero. Please check your dependencies");
     }
