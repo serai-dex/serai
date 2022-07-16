@@ -217,7 +217,7 @@ impl Coin for Monero {
     let height = self.get_height().await.unwrap();
 
     self.mine_block().await;
-    for _ in 0..7 {
+    for _ in 0 .. 7 {
       self.mine_block().await;
     }
 

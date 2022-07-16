@@ -52,7 +52,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
       Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], keys.params.n))?;
     }
     // Same signer included multiple times
-    for i in 0..included.len() - 1 {
+    for i in 0 .. included.len() - 1 {
       if included[i] == included[i + 1] {
         Err(FrostError::DuplicatedIndex(included[i]))?;
       }
@@ -209,14 +209,14 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
         let mut commitments = Vec::with_capacity(nonces.len());
         for (n, nonce_generators) in nonces.clone().iter_mut().enumerate() {
           commitments.push(Vec::with_capacity(nonce_generators.len()));
-          for _ in 0..nonce_generators.len() {
+          for _ in 0 .. nonce_generators.len() {
             commitments[n].push(read_D_E::<_, C>(&mut cursor, *l)?);
             transcript(params.algorithm.transcript(), commitments[n][commitments[n].len() - 1]);
           }
 
           if nonce_generators.len() >= 2 {
             let mut transcript = nonce_transcript::<A::Transcript>();
-            for de in 0..2 {
+            for de in 0 .. 2 {
               DLEqProof::deserialize(&mut cursor)
                 .map_err(|_| FrostError::InvalidCommitment(*l))?
                 .verify(
@@ -267,9 +267,9 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
 
   #[allow(non_snake_case)]
   let mut Rs = Vec::with_capacity(nonces.len());
-  for n in 0..nonces.len() {
+  for n in 0 .. nonces.len() {
     Rs.push(vec![C::G::identity(); nonces[n].len()]);
-    for g in 0..nonces[n].len() {
+    for g in 0 .. nonces[n].len() {
       #[allow(non_snake_case)]
       let mut D = C::G::identity();
       let mut statements = Vec::with_capacity(B.len());

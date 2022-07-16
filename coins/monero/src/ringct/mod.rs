@@ -54,7 +54,7 @@ impl RctBase {
       } else {
         RctBase {
           fee: read_varint(r)?,
-          ecdh_info: (0..outputs)
+          ecdh_info: (0 .. outputs)
             .map(|_| {
               let mut ecdh = [0; 8];
               r.read_exact(&mut ecdh).map(|_| ecdh)
@@ -106,7 +106,7 @@ impl RctPrunable {
       0 => RctPrunable::Null,
       5 => RctPrunable::Clsag {
         bulletproofs: read_vec(Bulletproofs::deserialize, r)?,
-        clsags: (0..decoys.len())
+        clsags: (0 .. decoys.len())
           .map(|o| Clsag::deserialize(decoys[o], r))
           .collect::<Result<_, _>>()?,
         pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,

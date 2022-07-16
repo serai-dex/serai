@@ -232,7 +232,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     share: dfg::Scalar,
   ) -> bool {
     let interim = self.interim.as_ref().unwrap();
-    return (&share.0 * &ED25519_BASEPOINT_TABLE)
-      == (nonces[0][0].0 - (interim.p * verification_share.0));
+    return (&share.0 * &ED25519_BASEPOINT_TABLE) ==
+      (nonces[0][0].0 - (interim.p * verification_share.0));
   }
 }

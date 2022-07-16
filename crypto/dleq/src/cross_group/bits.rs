@@ -86,14 +86,14 @@ where
 
   fn ring(pow_2: (G0, G1), commitments: (G0, G1)) -> Vec<(G0, G1)> {
     let mut res = vec![commitments; RING_LEN];
-    for i in 1..RING_LEN {
+    for i in 1 .. RING_LEN {
       res[i] = (res[i - 1].0 - pow_2.0, res[i - 1].1 - pow_2.1);
     }
     res
   }
 
   fn shift(pow_2: &mut (G0, G1)) {
-    for _ in 0..BitSignature::from(SIGNATURE).bits() {
+    for _ in 0 .. BitSignature::from(SIGNATURE).bits() {
       pow_2.0 = pow_2.0.double();
       pow_2.1 = pow_2.1.double();
     }

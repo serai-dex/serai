@@ -43,7 +43,7 @@ pub(crate) fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec
     let p = tables.len();
     tables.push(vec![G::identity(); 2_usize.pow(window.into())]);
     let mut accum = G::identity();
-    for i in 1..tables[p].len() {
+    for i in 1 .. tables[p].len() {
       accum += pair.1;
       tables[p][i] = accum;
     }

@@ -139,15 +139,15 @@ impl Address {
       Err(AddressError::InvalidLength)?;
     }
 
-    let spend = CompressedEdwardsY(raw[1..33].try_into().unwrap())
+    let spend = CompressedEdwardsY(raw[1 .. 33].try_into().unwrap())
       .decompress()
       .ok_or(AddressError::InvalidKey)?;
-    let view = CompressedEdwardsY(raw[33..65].try_into().unwrap())
+    let view = CompressedEdwardsY(raw[33 .. 65].try_into().unwrap())
       .decompress()
       .ok_or(AddressError::InvalidKey)?;
 
     if let AddressType::Integrated(ref mut payment_id) = meta.kind {
-      payment_id.copy_from_slice(&raw[65..73]);
+      payment_id.copy_from_slice(&raw[65 .. 73]);
     }
 
     Ok(Address { meta, spend, view })

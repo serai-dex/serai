@@ -28,11 +28,11 @@ math!(
   |x, y| {
     #[allow(non_snake_case)]
     let WIDE_MODULUS: U512 = U512::from((U256::ZERO, FIELD_MODULUS));
-    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[..32]);
+    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 32]);
 
     let wide = U256::mul_wide(&x, &y);
     U256::from_le_slice(
-      &U512::from((wide.1, wide.0)).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[..32],
+      &U512::from((wide.1, wide.0)).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 32],
     )
   }
 );
@@ -52,10 +52,10 @@ impl Field for FieldElement {
 
     #[allow(non_snake_case)]
     let WIDE_MODULUS: U512 = U512::from((U256::ZERO, FIELD_MODULUS));
-    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[..32]);
+    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 32]);
 
     FieldElement(U256::from_le_slice(
-      &U512::from_be_bytes(bytes).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[..32],
+      &U512::from_be_bytes(bytes).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 32],
     ))
   }
 

@@ -76,7 +76,7 @@ impl SignableTransaction {
     mut included: Vec<u16>,
   ) -> Result<TransactionMachine, TransactionError> {
     let mut inputs = vec![];
-    for _ in 0..self.inputs.len() {
+    for _ in 0 .. self.inputs.len() {
       // Doesn't resize as that will use a single Rc for the entire Vec
       inputs.push(Arc::new(RwLock::new(None)));
     }
@@ -234,7 +234,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     // Convert the unified commitments to a Vec of the individual commitments
     let mut images = vec![EdwardsPoint::identity(); self.clsags.len()];
-    let mut commitments = (0..self.clsags.len())
+    let mut commitments = (0 .. self.clsags.len())
       .map(|c| {
         let mut buf = [0; CLSAG_LEN];
         (&self.included)
@@ -246,7 +246,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // transcript to have the CLSAG data for entropy, it'll have to be added ourselves here
             self.transcript.append_message(b"participant", &(*l).to_be_bytes());
             if *l == self.i {
-              buf.copy_from_slice(self.our_preprocess.drain(..CLSAG_LEN).as_slice());
+              buf.copy_from_slice(self.our_preprocess.drain(.. CLSAG_LEN).as_slice());
             } else {
               commitments
                 .get_mut(l)
@@ -262,7 +262,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // images in its message), along with where the outputs are determined (where our
             // outputs may need these in order to guarantee uniqueness)
             images[c] += CompressedEdwardsY(
-              buf[(CLSAG_LEN - 96)..(CLSAG_LEN - 64)]
+              buf[(CLSAG_LEN - 96) .. (CLSAG_LEN - 64)]
                 .try_into()
                 .map_err(|_| FrostError::InvalidCommitment(*l))?,
             )

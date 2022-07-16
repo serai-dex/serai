@@ -36,8 +36,8 @@ fn ristretto_vectors() {
         "efae3a83437fa8cd96194aacc56a7eb841630c280da99e7764a81d1340323306",
         "96ddc4582e45eabce46f07b9e9375f8b49d35d1510fd34ac02b1e79d6100a602",
       ],
-      sig: "7ec584cef9a383afb43883b73bcaa6313afe878bd5fe75a608311b866a76ec67".to_owned()
-        + "858cffdb71c4928a7b895165afa2dd438b366a3d1da6d323675905b1a132d908",
+      sig: "7ec584cef9a383afb43883b73bcaa6313afe878bd5fe75a608311b866a76ec67".to_owned() +
+        "858cffdb71c4928a7b895165afa2dd438b366a3d1da6d323675905b1a132d908",
     },
   );
 }
@@ -73,8 +73,8 @@ fn ed25519_vectors() {
         "caae171b83bff0c2c6f56a1276892918ba228146f6344b85d2ec6efeb6f16d0d",
         "ea6fdbf61683cf5f1f742e1b91583f0f667f0369efd2e33399b96d5a3ff0300d",
       ],
-      sig: "5da10008c13c04dd72328ba8e0f72b63cad43c3bf4b7eaada1c78225afbd977e".to_owned()
-        + "c74afdb47fdfadca0fcda18a28e8891220a284afe5072fb96ba6dc58f6e19e0a",
+      sig: "5da10008c13c04dd72328ba8e0f72b63cad43c3bf4b7eaada1c78225afbd977e".to_owned() +
+        "c74afdb47fdfadca0fcda18a28e8891220a284afe5072fb96ba6dc58f6e19e0a",
     },
   );
 }

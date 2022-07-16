@@ -35,7 +35,7 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, Arc<FrostKeys<C>>> {
   let mut machines = HashMap::new();
   let mut commitments = HashMap::new();
-  for i in 1..=PARTICIPANTS {
+  for i in 1 ..= PARTICIPANTS {
     let machine = KeyGenMachine::<C>::new(
       FrostParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
       "FROST Test key_gen".to_string(),

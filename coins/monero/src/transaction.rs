@@ -163,13 +163,13 @@ pub struct TransactionPrefix {
 impl TransactionPrefix {
   pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
     // Assumes Timelock::None since this library won't let you create a TX with a timelock
-    1 + 1
-      + varint_len(inputs)
-      + (inputs * Input::fee_weight())
-      + 1
-      + (outputs * Output::fee_weight())
-      + varint_len(extra)
-      + extra
+    1 + 1 +
+      varint_len(inputs) +
+      (inputs * Input::fee_weight()) +
+      1 +
+      (outputs * Output::fee_weight()) +
+      varint_len(extra) +
+      extra
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -206,8 +206,8 @@ pub struct Transaction {
 
 impl Transaction {
   pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
-    TransactionPrefix::fee_weight(inputs, outputs, extra)
-      + RctSignatures::fee_weight(inputs, outputs)
+    TransactionPrefix::fee_weight(inputs, outputs, extra) +
+      RctSignatures::fee_weight(inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

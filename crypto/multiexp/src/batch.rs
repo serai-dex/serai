@@ -58,14 +58,14 @@ where
     while slice.len() > 1 {
       let split = slice.len() / 2;
       if multiexp_vartime(
-        &slice[..split].iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>(),
+        &slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>(),
       )
       .is_identity()
       .into()
       {
-        slice = &slice[split..];
+        slice = &slice[split ..];
       } else {
-        slice = &slice[..split];
+        slice = &slice[.. split];
       }
     }
 

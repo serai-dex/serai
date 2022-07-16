@@ -40,8 +40,8 @@ fn secp256k1_non_ietf() {
         "18b71e284c5d008896ed8847b234ec829eda376d6208838ee7faf2ce21b154c1",
         "a452a49c8116124d0a283f3589a96b704894b43246e47e59d376353bcc638311",
       ],
-      sig: "03dafb28ee7ad033fd15ed470d07156617260d74a9d76a15d371d7b613d2b111e".to_owned()
-        + "7bd09c2c4cd7312d5a115c77d3bde57f2e76eeb9fa8ed01e8bb712809ee14d7d2",
+      sig: "03dafb28ee7ad033fd15ed470d07156617260d74a9d76a15d371d7b613d2b111e".to_owned() +
+        "7bd09c2c4cd7312d5a115c77d3bde57f2e76eeb9fa8ed01e8bb712809ee14d7d2",
     },
   );
 }
@@ -77,8 +77,8 @@ fn p256_vectors() {
         "61e8b9c474df2e66ad19fd80a6e6cec1c6fe43c0a1cffd2d1c28299e93e1bbdb",
         "9651d355ca1dea2557ba1f73e38a9f4ff1f1afc565323ef27f88a9d14df8370e",
       ],
-      sig: "02dfba781e17b830229ae4ed22ebe402873683d9dfd945d01762217fb3172c2a7".to_owned()
-        + "1f83a8d1a3efd188c04d41cf48a716e11b8eff38607023c1f9bb0d36fe1d9f2e9",
+      sig: "02dfba781e17b830229ae4ed22ebe402873683d9dfd945d01762217fb3172c2a7".to_owned() +
+        "1f83a8d1a3efd188c04d41cf48a716e11b8eff38607023c1f9bb0d36fe1d9f2e9",
     },
   );
 }

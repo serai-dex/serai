@@ -56,7 +56,7 @@ pub(crate) fn shared_key(
 pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
   let mut amount_mask = b"amount".to_vec();
   amount_mask.extend(key.to_bytes());
-  (amount ^ u64::from_le_bytes(hash(&amount_mask)[0..8].try_into().unwrap())).to_le_bytes()
+  (amount ^ u64::from_le_bytes(hash(&amount_mask)[0 .. 8].try_into().unwrap())).to_le_bytes()
 }
 
 fn amount_decryption(amount: [u8; 8], key: Scalar) -> u64 {

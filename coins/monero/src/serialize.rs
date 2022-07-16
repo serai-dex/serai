@@ -99,7 +99,7 @@ pub fn read_raw_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(
   let mut res = Vec::with_capacity(
     len.try_into().map_err(|_| io::Error::new(io::ErrorKind::Other, "length exceeds usize"))?,
   );
-  for _ in 0..len {
+  for _ in 0 .. len {
     res.push(f(r)?);
   }
   Ok(res)

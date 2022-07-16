@@ -59,7 +59,7 @@ impl Block {
     Ok(Block {
       header: BlockHeader::deserialize(r)?,
       miner_tx: Transaction::deserialize(r)?,
-      txs: (0..read_varint(r)?)
+      txs: (0 .. read_varint(r)?)
         .map(|_| {
           let mut tx = [0; 32];
           r.read_exact(&mut tx).map(|_| tx)

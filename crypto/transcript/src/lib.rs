@@ -92,7 +92,7 @@ impl<D: SecureDigest> Transcript for DigestTranscript<D> {
 
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {
     let mut seed = [0; 32];
-    seed.copy_from_slice(&self.challenge(label)[..32]);
+    seed.copy_from_slice(&self.challenge(label)[.. 32]);
     seed
   }
 }

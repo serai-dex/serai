@@ -34,7 +34,7 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
 
   let mut challenge = F::zero();
   for b in challenge_bytes {
-    for _ in 0..8 {
+    for _ in 0 .. 8 {
       challenge = challenge.double();
     }
     challenge += F::from(u64::from(b));

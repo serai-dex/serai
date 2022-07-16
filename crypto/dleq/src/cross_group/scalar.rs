@@ -41,7 +41,7 @@ pub fn mutual_scalar_from_bytes<F0: PrimeFieldBits, F1: PrimeFieldBits>(bytes: &
   debug_assert!((bytes.len() * 8) >= capacity);
 
   let mut accum = F0::zero();
-  for b in 0..capacity {
+  for b in 0 .. capacity {
     accum = accum.double();
     accum += F0::from(((bytes[b / 8] >> (b % 8)) & 1).into());
   }

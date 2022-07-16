@@ -35,12 +35,12 @@ const RING_INDEX: u8 = 3;
 
 #[test]
 fn clsag() {
-  for real in 0..RING_LEN {
+  for real in 0 .. RING_LEN {
     let msg = [1; 32];
 
     let mut secrets = [Scalar::zero(), Scalar::zero()];
     let mut ring = vec![];
-    for i in 0..RING_LEN {
+    for i in 0 .. RING_LEN {
       let dest = random_scalar(&mut OsRng);
       let mask = random_scalar(&mut OsRng);
       let amount;
@@ -63,7 +63,7 @@ fn clsag() {
           Commitment::new(secrets[1], AMOUNT),
           Decoys {
             i: u8::try_from(real).unwrap(),
-            offsets: (1..=RING_LEN).into_iter().collect(),
+            offsets: (1 ..= RING_LEN).into_iter().collect(),
             ring: ring.clone(),
           },
         )
@@ -86,7 +86,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
 
   let randomness = random_scalar(&mut OsRng);
   let mut ring = vec![];
-  for i in 0..RING_LEN {
+  for i in 0 .. RING_LEN {
     let dest;
     let mask;
     let amount;
@@ -115,7 +115,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
             Commitment::new(randomness, AMOUNT),
             Decoys {
               i: RING_INDEX,
-              offsets: (1..=RING_LEN).into_iter().collect(),
+              offsets: (1 ..= RING_LEN).into_iter().collect(),
               ring: ring.clone(),
             },
           )

@@ -119,7 +119,7 @@ where
     #[allow(non_snake_case)]
     let mut R = original_R;
 
-    for i in ((actual + 1)..(actual + RING_LEN + 1)).map(|i| i % RING_LEN) {
+    for i in ((actual + 1) .. (actual + RING_LEN + 1)).map(|i| i % RING_LEN) {
       let e = Self::nonces(transcript.clone(), R);
       if i == 0 {
         match Re_0 {
@@ -163,7 +163,7 @@ where
     match self.Re_0 {
       Re::R(R0_0, R1_0) => {
         let mut e = Self::nonces(transcript.clone(), (R0_0, R1_0));
-        for i in 0..(RING_LEN - 1) {
+        for i in 0 .. (RING_LEN - 1) {
           e = Self::R_nonces(transcript.clone(), generators, self.s[i], ring[i], e);
         }
 
@@ -178,7 +178,7 @@ where
       Re::e(e_0) => {
         let e_0 = (e_0, scalar_convert(e_0).ok_or(DLEqError::InvalidChallenge)?);
         let mut e = None;
-        for i in 0..RING_LEN {
+        for i in 0 .. RING_LEN {
           e = Some(Self::R_nonces(
             transcript.clone(),
             generators,
@@ -210,7 +210,7 @@ where
       Re::e(e) => w.write_all(e.to_repr().as_ref())?,
     }
 
-    for i in 0..RING_LEN {
+    for i in 0 .. RING_LEN {
       w.write_all(self.s[i].0.to_repr().as_ref())?;
       w.write_all(self.s[i].1.to_repr().as_ref())?;
     }
@@ -230,7 +230,7 @@ where
     }
 
     let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
-    for i in 0..RING_LEN {
+    for i in 0 .. RING_LEN {
       s[i] = (read_scalar(r)?, read_scalar(r)?);
     }
 

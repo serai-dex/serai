@@ -35,7 +35,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
   let verification_shares = shares.iter().map(|secret| C::GENERATOR * secret).collect::<Vec<_>>();
 
   let mut keys = HashMap::new();
-  for i in 1..=u16::try_from(shares.len()).unwrap() {
+  for i in 1 ..= u16::try_from(shares.len()).unwrap() {
     let mut serialized = vec![];
     serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
     serialized.extend(C::ID);

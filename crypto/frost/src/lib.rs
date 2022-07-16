@@ -218,7 +218,7 @@ impl<C: Curve> FrostKeys<C> {
     serialized.extend(&self.params.i.to_be_bytes());
     serialized.extend(self.secret_share.to_repr().as_ref());
     serialized.extend(self.group_key.to_bytes().as_ref());
-    for l in 1..=self.params.n.into() {
+    for l in 1 ..= self.params.n.into() {
       serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
     }
     serialized
@@ -259,7 +259,7 @@ impl<C: Curve> FrostKeys<C> {
       C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid group key"))?;
 
     let mut verification_shares = HashMap::new();
-    for l in 1..=n {
+    for l in 1 ..= n {
       verification_shares.insert(
         l,
         C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid verification share"))?,

@@ -66,7 +66,7 @@ macro_rules! kp_curve {
           })
           .reduce(&modulus)
           .unwrap()
-          .to_be_bytes()[16..],
+          .to_be_bytes()[16 ..],
         ))
         .unwrap()
       }

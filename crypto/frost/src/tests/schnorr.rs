@@ -38,14 +38,14 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let mut keys = vec![];
   let mut challenges = vec![];
   let mut sigs = vec![];
-  for i in 0..5 {
+  for i in 0 .. 5 {
     keys.push(C::F::random(&mut *rng));
     challenges.push(C::F::random(&mut *rng));
     sigs.push(schnorr::sign::<C>(keys[i], C::F::random(&mut *rng), challenges[i]));
   }
 
   // Batch verify
-  let triplets = (0..5)
+  let triplets = (0 .. 5)
     .map(|i| (u16::try_from(i + 1).unwrap(), C::GENERATOR * keys[i], challenges[i], sigs[i]))
     .collect::<Vec<_>>();
   schnorr::batch_verify(rng, &triplets).unwrap();
@@ -64,7 +64,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   }
 
   // Make sure a completely invalid signature fails when included
-  for i in 0..5 {
+  for i in 0 .. 5 {
     let mut triplets = triplets.clone();
     triplets[i].3.s = C::F::random(&mut *rng);
     if let Err(blame) = schnorr::batch_verify(rng, &triplets) {
@@ -108,7 +108,7 @@ fn sign_with_offset<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let group_key = keys[&1].group_key();
 
   let offset = C::hash_to_F(b"FROST Test sign_with_offset", b"offset");
-  for i in 1..=u16::try_from(keys.len()).unwrap() {
+  for i in 1 ..= u16::try_from(keys.len()).unwrap() {
     keys.insert(i, Arc::new(keys[&i].offset(offset)));
   }
   let offset_key = group_key + (C::GENERATOR * offset);

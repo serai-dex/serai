@@ -268,14 +268,14 @@ impl SignableTransaction {
       .consensus_encode(&mut extra)
       .unwrap();
     SubField::AdditionalPublickKey(
-      self.outputs[1..].iter().map(|output| PublicKey { point: output.R.compress() }).collect(),
+      self.outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect(),
     )
     .consensus_encode(&mut extra)
     .unwrap();
 
     let mut tx_outputs = Vec::with_capacity(self.outputs.len());
     let mut ecdh_info = Vec::with_capacity(self.outputs.len());
-    for o in 0..self.outputs.len() {
+    for o in 0 .. self.outputs.len() {
       tx_outputs.push(Output { amount: 0, key: self.outputs[o].dest, tag: None });
       ecdh_info.push(self.outputs[o].amount);
     }

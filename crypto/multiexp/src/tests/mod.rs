@@ -32,19 +32,19 @@ where
   let mut pairs = Vec::with_capacity(total);
   let mut sum = G::identity();
 
-  for _ in 0..start {
+  for _ in 0 .. start {
     pairs.push((G::Scalar::random(&mut OsRng), G::generator() * G::Scalar::random(&mut OsRng)));
     sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
   }
 
-  for _ in 0..(total / increment) {
-    for _ in 0..increment {
+  for _ in 0 .. (total / increment) {
+    for _ in 0 .. increment {
       pairs.push((G::Scalar::random(&mut OsRng), G::generator() * G::Scalar::random(&mut OsRng)));
       sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
     }
 
     let now = Instant::now();
-    for _ in 0..runs {
+    for _ in 0 .. runs {
       if straus_bool {
         assert_eq!(straus(&pairs, current), sum);
       } else {
@@ -54,7 +54,7 @@ where
     let current_per = now.elapsed().as_micros() / u128::try_from(pairs.len()).unwrap();
 
     let now = Instant::now();
-    for _ in 0..runs {
+    for _ in 0 .. runs {
       if straus_bool {
         assert_eq!(straus(&pairs, current + 1), sum);
       } else {
@@ -85,8 +85,8 @@ where
 {
   let mut pairs = Vec::with_capacity(1000);
   let mut sum = G::identity();
-  for _ in 0..10 {
-    for _ in 0..100 {
+  for _ in 0 .. 10 {
+    for _ in 0 .. 100 {
       pairs.push((G::Scalar::random(&mut OsRng), G::generator() * G::Scalar::random(&mut OsRng)));
       sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
     }
@@ -109,7 +109,7 @@ fn test_ed25519() {
 #[test]
 fn benchmark() {
   // Activate the processor's boost clock
-  for _ in 0..30 {
+  for _ in 0 .. 30 {
     test_multiexp::<ProjectivePoint>();
   }
 

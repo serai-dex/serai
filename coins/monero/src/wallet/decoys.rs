@@ -75,7 +75,7 @@ async fn select_n<R: RngCore + CryptoRng>(
     }
 
     let outputs = rpc.get_outputs(&candidates, height).await?;
-    for i in 0..outputs.len() {
+    for i in 0 .. outputs.len() {
       if let Some(output) = outputs[i] {
         confirmed.push((candidates[i], output));
       }
@@ -88,7 +88,7 @@ async fn select_n<R: RngCore + CryptoRng>(
 fn offset(ring: &[u64]) -> Vec<u64> {
   let mut res = vec![ring[0]];
   res.resize(ring.len(), 0);
-  for m in (1..ring.len()).rev() {
+  for m in (1 .. ring.len()).rev() {
     res[m] = ring[m] - ring[m - 1];
   }
   res
@@ -165,7 +165,7 @@ impl Decoys {
     let mut res = Vec::with_capacity(inputs.len());
     for o in outputs {
       // Grab the decoys for this specific output
-      let mut ring = decoys.drain((decoys.len() - DECOYS)..).collect::<Vec<_>>();
+      let mut ring = decoys.drain((decoys.len() - DECOYS) ..).collect::<Vec<_>>();
       ring.push(o);
       ring.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -182,7 +182,7 @@ impl Decoys {
         let target_median = high * 3 / 5;
         while ring[RING_LEN / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
-          for removed in ring.drain(0..(RING_LEN / 2)).collect::<Vec<_>>() {
+          for removed in ring.drain(0 .. (RING_LEN / 2)).collect::<Vec<_>>() {
             // If we removed the real spend, add it back
             if removed.0 == o.0 {
               ring.push(o);

@@ -9,7 +9,7 @@ use crate::{
 
 #[test]
 fn hash_to_point() {
-  for _ in 0..50 {
+  for _ in 0 .. 50 {
     let point = &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE;
     assert_eq!(rust_hash_to_point(point), c_hash_to_point(point));
   }

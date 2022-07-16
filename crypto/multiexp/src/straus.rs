@@ -11,12 +11,12 @@ where
   let tables = prep_tables(pairs, window);
 
   let mut res = G::identity();
-  for b in (0..groupings[0].len()).rev() {
-    for _ in 0..window {
+  for b in (0 .. groupings[0].len()).rev() {
+    for _ in 0 .. window {
       res = res.double();
     }
 
-    for s in 0..tables.len() {
+    for s in 0 .. tables.len() {
       res += tables[s][usize::from(groupings[s][b])];
     }
   }
@@ -31,14 +31,14 @@ where
   let tables = prep_tables(pairs, window);
 
   let mut res = G::identity();
-  for b in (0..groupings[0].len()).rev() {
+  for b in (0 .. groupings[0].len()).rev() {
     if b != (groupings[0].len() - 1) {
-      for _ in 0..window {
+      for _ in 0 .. window {
         res = res.double();
       }
     }
 
-    for s in 0..tables.len() {
+    for s in 0 .. tables.len() {
       if groupings[s][b] != 0 {
         res += tables[s][usize::from(groupings[s][b])];
       }

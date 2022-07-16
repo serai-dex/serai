@@ -38,15 +38,15 @@ fn test_dleq() {
     .unwrap(),
   ];
 
-  for i in 0..5 {
+  for i in 0 .. 5 {
     let key = Scalar::random(&mut OsRng);
-    let proof = DLEqProof::prove(&mut OsRng, &mut transcript(), &generators[..i], key);
+    let proof = DLEqProof::prove(&mut OsRng, &mut transcript(), &generators[.. i], key);
 
     let mut keys = [ProjectivePoint::GENERATOR; 5];
-    for k in 0..5 {
+    for k in 0 .. 5 {
       keys[k] = generators[k] * key;
     }
-    proof.verify(&mut transcript(), &generators[..i], &keys[..i]).unwrap();
+    proof.verify(&mut transcript(), &generators[.. i], &keys[.. i]).unwrap();
 
     #[cfg(feature = "serialize")]
     {
