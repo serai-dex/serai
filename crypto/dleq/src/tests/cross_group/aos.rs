@@ -6,7 +6,7 @@ use multiexp::BatchVerifier;
 
 use crate::{
   cross_group::aos::{Re, Aos},
-  tests::cross_group::{G0, G1, transcript, generators}
+  tests::cross_group::{G0, G1, transcript, generators},
 };
 
 #[allow(non_snake_case)]
@@ -25,15 +25,13 @@ fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
   // Side-effect of G0 being a type-alias with identity() deprecated
   #[allow(deprecated)]
   let mut ring = [(G0::identity(), G1::identity()); RING_LEN];
-  for i in 0 .. RING_LEN {
-    ring_keys[i] = (
-      <G0 as Group>::Scalar::random(&mut OsRng),
-      <G1 as Group>::Scalar::random(&mut OsRng)
-    );
+  for i in 0..RING_LEN {
+    ring_keys[i] =
+      (<G0 as Group>::Scalar::random(&mut OsRng), <G1 as Group>::Scalar::random(&mut OsRng));
     ring[i] = (generators.0.alt * ring_keys[i].0, generators.1.alt * ring_keys[i].1);
   }
 
-  for actual in 0 .. RING_LEN {
+  for actual in 0..RING_LEN {
     let proof = Aos::<_, _, RING_LEN>::prove(
       &mut OsRng,
       transcript(),
@@ -41,7 +39,7 @@ fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
       &ring,
       actual,
       ring_keys[actual],
-      default.clone()
+      default.clone(),
     );
 
     let mut batch = (BatchVerifier::new(0), BatchVerifier::new(0));

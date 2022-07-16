@@ -1,25 +1,38 @@
-use std::{io::{Read, Cursor}, sync::{Arc, RwLock}, collections::HashMap};
+use std::{
+  io::{Read, Cursor},
+  sync::{Arc, RwLock},
+  collections::HashMap,
+};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
-use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::{EdwardsPoint, CompressedEdwardsY}};
+use curve25519_dalek::{
+  traits::Identity,
+  scalar::Scalar,
+  edwards::{EdwardsPoint, CompressedEdwardsY},
+};
 
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Ed25519,
   FrostError, FrostKeys,
   sign::{
-    PreprocessMachine, SignMachine, SignatureMachine,
-    AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine
-  }
+    PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine, AlgorithmSignMachine,
+    AlgorithmSignatureMachine,
+  },
 };
 
 use crate::{
-  random_scalar, ringct::{clsag::{ClsagInput, ClsagDetails, ClsagMultisig}, bulletproofs::Bulletproofs, RctPrunable},
+  random_scalar,
+  ringct::{
+    clsag::{ClsagInput, ClsagDetails, ClsagMultisig},
+    bulletproofs::Bulletproofs,
+    RctPrunable,
+  },
   transaction::{Input, Transaction},
   rpc::Rpc,
-  wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness}
+  wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness},
 };
 
 pub struct TransactionMachine {
@@ -31,7 +44,7 @@ pub struct TransactionMachine {
   decoys: Vec<Decoys>,
 
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
-  clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>
+  clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>,
 }
 
 pub struct TransactionSignMachine {
@@ -45,12 +58,12 @@ pub struct TransactionSignMachine {
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
   clsags: Vec<AlgorithmSignMachine<Ed25519, ClsagMultisig>>,
 
-  our_preprocess: Vec<u8>
+  our_preprocess: Vec<u8>,
 }
 
 pub struct TransactionSignatureMachine {
   tx: Transaction,
-  clsags: Vec<AlgorithmSignatureMachine<Ed25519, ClsagMultisig>>
+  clsags: Vec<AlgorithmSignatureMachine<Ed25519, ClsagMultisig>>,
 }
 
 impl SignableTransaction {
@@ -60,10 +73,10 @@ impl SignableTransaction {
     keys: FrostKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
     height: usize,
-    mut included: Vec<u16>
+    mut included: Vec<u16>,
   ) -> Result<TransactionMachine, TransactionError> {
     let mut inputs = vec![];
-    for _ in 0 .. self.inputs.len() {
+    for _ in 0..self.inputs.len() {
       // Doesn't resize as that will use a single Rc for the entire Vec
       inputs.push(Arc::new(RwLock::new(None)));
     }
@@ -80,9 +93,10 @@ impl SignableTransaction {
     // The data itself will be included, making this unnecessary, yet a lot of this is technically
     // unnecessary. Anything which further increases security at almost no cost should be followed
     transcript.append_message(b"height", &u64::try_from(height).unwrap().to_le_bytes());
-    // Also include the spend_key as below only the key offset is included, so this confirms the sum product
-    // Useful as confirming the sum product confirms the key image, further guaranteeing the one time
-    // properties noted below
+    // Also include the spend_key as below only the key offset is included, so this transcripts the
+    // sum product
+    // Useful as transcripting the sum product effectively transcripts the key image, further
+    // guaranteeing the one time properties noted below
     transcript.append_message(b"spend_key", &keys.group_key().0.compress().to_bytes());
     for input in &self.inputs {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
@@ -110,14 +124,12 @@ impl SignableTransaction {
 
       clsags.push(
         AlgorithmMachine::new(
-          ClsagMultisig::new(
-            transcript.clone(),
-            input.key,
-            inputs[i].clone()
-          ).map_err(|e| TransactionError::MultisigError(e))?,
+          ClsagMultisig::new(transcript.clone(), input.key, inputs[i].clone())
+            .map_err(|e| TransactionError::MultisigError(e))?,
           Arc::new(offset),
-          &included
-        ).map_err(|e| TransactionError::FrostError(e))?
+          &included,
+        )
+        .map_err(|e| TransactionError::FrostError(e))?,
       );
     }
 
@@ -132,22 +144,22 @@ impl SignableTransaction {
       &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys")),
       rpc,
       height,
-      &self.inputs
-    ).await.map_err(|e| TransactionError::RpcError(e))?;
-
-    Ok(
-      TransactionMachine {
-        signable: self,
-        i: keys.params().i(),
-        included,
-        transcript,
-
-        decoys,
-
-        inputs,
-        clsags
-      }
+      &self.inputs,
     )
+    .await
+    .map_err(|e| TransactionError::RpcError(e))?;
+
+    Ok(TransactionMachine {
+      signable: self,
+      i: keys.params().i(),
+      included,
+      transcript,
+
+      decoys,
+
+      inputs,
+      clsags,
+    })
   }
 }
 
@@ -157,18 +169,22 @@ impl PreprocessMachine for TransactionMachine {
 
   fn preprocess<R: RngCore + CryptoRng>(
     mut self,
-    rng: &mut R
+    rng: &mut R,
   ) -> (TransactionSignMachine, Vec<u8>) {
     // Iterate over each CLSAG calling preprocess
     let mut serialized = Vec::with_capacity(
       // D_{G, H}, E_{G, H}, DLEqs, key image addendum
-      self.clsags.len() * ((2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len())
+      self.clsags.len() * ((2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len()),
     );
-    let clsags = self.clsags.drain(..).map(|clsag| {
-      let (clsag, preprocess) = clsag.preprocess(rng);
-      serialized.extend(&preprocess);
-      clsag
-    }).collect();
+    let clsags = self
+      .clsags
+      .drain(..)
+      .map(|clsag| {
+        let (clsag, preprocess) = clsag.preprocess(rng);
+        serialized.extend(&preprocess);
+        clsag
+      })
+      .collect();
     let our_preprocess = serialized.clone();
 
     // We could add further entropy here, and previous versions of this library did so
@@ -194,7 +210,7 @@ impl PreprocessMachine for TransactionMachine {
 
         our_preprocess,
       },
-      serialized
+      serialized,
     )
   }
 }
@@ -205,14 +221,12 @@ impl SignMachine<Transaction> for TransactionSignMachine {
   fn sign<Re: Read>(
     mut self,
     mut commitments: HashMap<u16, Re>,
-    msg: &[u8]
+    msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Vec<u8>), FrostError> {
     if msg.len() != 0 {
-      Err(
-        FrostError::InternalError(
-          "message was passed to the TransactionMachine when it generates its own"
-        )
-      )?;
+      Err(FrostError::InternalError(
+        "message was passed to the TransactionMachine when it generates its own",
+      ))?;
     }
 
     // FROST commitments and their DLEqs, and the image and its DLEq
@@ -220,34 +234,46 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     // Convert the unified commitments to a Vec of the individual commitments
     let mut images = vec![EdwardsPoint::identity(); self.clsags.len()];
-    let mut commitments = (0 .. self.clsags.len()).map(|c| {
-      let mut buf = [0; CLSAG_LEN];
-      (&self.included).iter().map(|l| {
-        // Add all commitments to the transcript for their entropy
-        // While each CLSAG will do this as they need to for security, they have their own transcripts
-        // cloned from this TX's initial premise's transcript. For our TX transcript to have the CLSAG
-        // data for entropy, it'll have to be added ourselves here
-        self.transcript.append_message(b"participant", &(*l).to_be_bytes());
-        if *l == self.i {
-          buf.copy_from_slice(self.our_preprocess.drain(.. CLSAG_LEN).as_slice());
-        } else {
-          commitments.get_mut(l).ok_or(FrostError::MissingParticipant(*l))?
-            .read_exact(&mut buf).map_err(|_| FrostError::InvalidCommitment(*l))?;
-        }
-        self.transcript.append_message(b"preprocess", &buf);
+    let mut commitments = (0..self.clsags.len())
+      .map(|c| {
+        let mut buf = [0; CLSAG_LEN];
+        (&self.included)
+          .iter()
+          .map(|l| {
+            // Add all commitments to the transcript for their entropy
+            // While each CLSAG will do this as they need to for security, they have their own
+            // transcripts cloned from this TX's initial premise's transcript. For our TX
+            // transcript to have the CLSAG data for entropy, it'll have to be added ourselves here
+            self.transcript.append_message(b"participant", &(*l).to_be_bytes());
+            if *l == self.i {
+              buf.copy_from_slice(self.our_preprocess.drain(..CLSAG_LEN).as_slice());
+            } else {
+              commitments
+                .get_mut(l)
+                .ok_or(FrostError::MissingParticipant(*l))?
+                .read_exact(&mut buf)
+                .map_err(|_| FrostError::InvalidCommitment(*l))?;
+            }
+            self.transcript.append_message(b"preprocess", &buf);
 
-        // While here, calculate the key image
-        // Clsag will parse/calculate/validate this as needed, yet doing so here as well provides
-        // the easiest API overall, as this is where the TX is (which needs the key images in its
-        // message), along with where the outputs are determined (where our outputs may need
-        // these in order to guarantee uniqueness)
-        images[c] += CompressedEdwardsY(
-          buf[(CLSAG_LEN - 96) .. (CLSAG_LEN - 64)].try_into().map_err(|_| FrostError::InvalidCommitment(*l))?
-        ).decompress().ok_or(FrostError::InvalidCommitment(*l))?;
+            // While here, calculate the key image
+            // Clsag will parse/calculate/validate this as needed, yet doing so here as well
+            // provides the easiest API overall, as this is where the TX is (which needs the key
+            // images in its message), along with where the outputs are determined (where our
+            // outputs may need these in order to guarantee uniqueness)
+            images[c] += CompressedEdwardsY(
+              buf[(CLSAG_LEN - 96)..(CLSAG_LEN - 64)]
+                .try_into()
+                .map_err(|_| FrostError::InvalidCommitment(*l))?,
+            )
+            .decompress()
+            .ok_or(FrostError::InvalidCommitment(*l))?;
 
-        Ok((*l, Cursor::new(buf)))
-      }).collect::<Result<HashMap<_, _>, _>>()
-    }).collect::<Result<Vec<_>, _>>()?;
+            Ok((*l, Cursor::new(buf)))
+          })
+          .collect::<Result<HashMap<_, _>, _>>()
+      })
+      .collect::<Result<Vec<_>, _>>()?;
 
     // Remove our preprocess which shouldn't be here. It was just the easiest way to implement the
     // above
@@ -265,20 +291,20 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       (commitments, output_masks) = self.signable.prepare_outputs(
         &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys")),
         uniqueness(
-          &images.iter().map(|image| Input::ToKey {
-            amount: 0,
-            key_offsets: vec![],
-            key_image: *image
-          }).collect::<Vec<_>>()
-        )
+          &images
+            .iter()
+            .map(|image| Input::ToKey { amount: 0, key_offsets: vec![], key_image: *image })
+            .collect::<Vec<_>>(),
+        ),
       );
 
       self.signable.prepare_transaction(
         &commitments,
         Bulletproofs::new(
           &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs")),
-          &commitments
-        ).unwrap()
+          &commitments,
+        )
+        .unwrap(),
       )
     };
 
@@ -291,7 +317,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
         self.decoys.swap_remove(0),
         self.inputs.swap_remove(0),
         self.clsags.swap_remove(0),
-        commitments.swap_remove(0)
+        commitments.swap_remove(0),
       ));
     }
     sorted.sort_by(|x, y| key_image_sort(&x.0, &y.0));
@@ -308,23 +334,18 @@ impl SignMachine<Transaction> for TransactionSignMachine {
         sum_pseudo_outs += mask;
       }
 
-      tx.prefix.inputs.push(
-        Input::ToKey {
-          amount: 0,
-          key_offsets: value.2.offsets.clone(),
-          key_image: value.0
-        }
-      );
+      tx.prefix.inputs.push(Input::ToKey {
+        amount: 0,
+        key_offsets: value.2.offsets.clone(),
+        key_image: value.0,
+      });
 
-      *value.3.write().unwrap() = Some(
-        ClsagDetails::new(
-          ClsagInput::new(
-            value.1.commitment,
-            value.2
-          ).map_err(|_| panic!("Signing an input which isn't present in the ring we created for it"))?,
-          mask
-        )
-      );
+      *value.3.write().unwrap() = Some(ClsagDetails::new(
+        ClsagInput::new(value.1.commitment, value.2).map_err(|_| {
+          panic!("Signing an input which isn't present in the ring we created for it")
+        })?,
+        mask,
+      ));
 
       self.clsags.push(value.4);
       commitments.push(value.5);
@@ -334,11 +355,15 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     // Iterate over each CLSAG calling sign
     let mut serialized = Vec::with_capacity(self.clsags.len() * 32);
-    let clsags = self.clsags.drain(..).map(|clsag| {
-      let (clsag, share) = clsag.sign(commitments.remove(0), &msg)?;
-      serialized.extend(&share);
-      Ok(clsag)
-    }).collect::<Result<_, _>>()?;
+    let clsags = self
+      .clsags
+      .drain(..)
+      .map(|clsag| {
+        let (clsag, share) = clsag.sign(commitments.remove(0), &msg)?;
+        serialized.extend(&share);
+        Ok(clsag)
+      })
+      .collect::<Result<_, _>>()?;
 
     Ok((TransactionSignatureMachine { tx, clsags }, serialized))
   }
@@ -352,11 +377,14 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
         for clsag in self.clsags {
           let (clsag, pseudo_out) = clsag.complete(
-            shares.iter_mut().map(|(l, shares)| {
-              let mut buf = [0; 32];
-              shares.read_exact(&mut buf).map_err(|_| FrostError::InvalidShare(*l))?;
-              Ok((*l, Cursor::new(buf)))
-            }).collect::<Result<HashMap<_, _>, _>>()?
+            shares
+              .iter_mut()
+              .map(|(l, shares)| {
+                let mut buf = [0; 32];
+                shares.read_exact(&mut buf).map_err(|_| FrostError::InvalidShare(*l))?;
+                Ok((*l, Cursor::new(buf)))
+              })
+              .collect::<Result<HashMap<_, _>, _>>()?,
           )?;
           clsags.push(clsag);
           pseudo_outs.push(pseudo_out);

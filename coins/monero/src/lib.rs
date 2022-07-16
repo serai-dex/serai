@@ -10,7 +10,7 @@ use tiny_keccak::{Hasher, Keccak};
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   scalar::Scalar,
-  edwards::{EdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY}
+  edwards::{EdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY},
 };
 
 #[cfg(feature = "multisig")]
@@ -31,8 +31,13 @@ mod tests;
 
 lazy_static! {
   static ref H: EdwardsPoint = CompressedEdwardsY(
-    hex::decode("8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94").unwrap().try_into().unwrap()
-  ).decompress().unwrap();
+    hex::decode("8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94")
+      .unwrap()
+      .try_into()
+      .unwrap()
+  )
+  .decompress()
+  .unwrap();
   static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&*H);
 }
 
@@ -40,9 +45,7 @@ lazy_static! {
 // need to link against libsodium
 #[no_mangle]
 unsafe extern "C" fn crypto_verify_32(a: *const u8, b: *const u8) -> isize {
-  isize::from(
-    slice::from_raw_parts(a, 32).ct_eq(slice::from_raw_parts(b, 32)).unwrap_u8()
-  ) - 1
+  isize::from(slice::from_raw_parts(a, 32).ct_eq(slice::from_raw_parts(b, 32)).unwrap_u8()) - 1
 }
 
 // Offer a wide reduction to C. Our seeded RNG prevented Monero from defining an unbiased scalar
@@ -51,9 +54,8 @@ unsafe extern "C" fn crypto_verify_32(a: *const u8, b: *const u8) -> isize {
 // sampling however, hence the need for this function
 #[no_mangle]
 unsafe extern "C" fn monero_wide_reduce(value: *mut u8) {
-  let res = Scalar::from_bytes_mod_order_wide(
-    std::slice::from_raw_parts(value, 64).try_into().unwrap()
-  );
+  let res =
+    Scalar::from_bytes_mod_order_wide(std::slice::from_raw_parts(value, 64).try_into().unwrap());
   for (i, b) in res.to_bytes().iter().enumerate() {
     value.add(i).write(*b);
   }
@@ -63,12 +65,12 @@ unsafe extern "C" fn monero_wide_reduce(value: *mut u8) {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Commitment {
   pub mask: Scalar,
-  pub amount: u64
+  pub amount: u64,
 }
 
 impl Commitment {
   pub fn zero() -> Commitment {
-    Commitment { mask: Scalar::one(), amount: 0}
+    Commitment { mask: Scalar::one(), amount: 0 }
   }
 
   pub fn new(mask: Scalar, amount: u64) -> Commitment {

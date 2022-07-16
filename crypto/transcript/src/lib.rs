@@ -34,7 +34,7 @@ enum DigestTranscriptMember {
   Domain,
   Label,
   Value,
-  Challenge
+  Challenge,
 }
 
 impl DigestTranscriptMember {
@@ -44,7 +44,7 @@ impl DigestTranscriptMember {
       DigestTranscriptMember::Domain => 1,
       DigestTranscriptMember::Label => 2,
       DigestTranscriptMember::Value => 3,
-      DigestTranscriptMember::Challenge => 4
+      DigestTranscriptMember::Challenge => 4,
     }
   }
 }
@@ -92,7 +92,7 @@ impl<D: SecureDigest> Transcript for DigestTranscript<D> {
 
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {
     let mut seed = [0; 32];
-    seed.copy_from_slice(&self.challenge(label)[.. 32]);
+    seed.copy_from_slice(&self.challenge(label)[..32]);
     seed
   }
 }

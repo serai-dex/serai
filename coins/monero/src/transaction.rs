@@ -2,7 +2,11 @@ use core::cmp::Ordering;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use crate::{hash, serialize::*, ringct::{RctPrunable, RctSignatures}};
+use crate::{
+  hash,
+  serialize::*,
+  ringct::{RctPrunable, RctSignatures},
+};
 
 pub const RING_LEN: usize = 11;
 
@@ -10,11 +14,7 @@ pub const RING_LEN: usize = 11;
 pub enum Input {
   Gen(u64),
 
-  ToKey {
-    amount: u64,
-    key_offsets: Vec<u64>,
-    key_image: EdwardsPoint
-  }
+  ToKey { amount: u64, key_offsets: Vec<u64>, key_image: EdwardsPoint },
 }
 
 impl Input {
@@ -30,7 +30,7 @@ impl Input {
       Input::Gen(height) => {
         w.write_all(&[255])?;
         write_varint(height, w)
-      },
+      }
 
       Input::ToKey { amount, key_offsets, key_image } => {
         w.write_all(&[2])?;
@@ -44,17 +44,18 @@ impl Input {
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Input> {
     let mut variant = [0];
     r.read_exact(&mut variant)?;
-    Ok(
-      match variant[0] {
-        255 => Input::Gen(read_varint(r)?),
-        2 => Input::ToKey {
-          amount: read_varint(r)?,
-          key_offsets: read_vec(read_varint, r)?,
-          key_image: read_point(r)?
-        },
-        _ => Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown/unused input type"))?
-      }
-    )
+    Ok(match variant[0] {
+      255 => Input::Gen(read_varint(r)?),
+      2 => Input::ToKey {
+        amount: read_varint(r)?,
+        key_offsets: read_vec(read_varint, r)?,
+        key_image: read_point(r)?,
+      },
+      _ => Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Tried to deserialize unknown/unused input type",
+      ))?,
+    })
   }
 }
 
@@ -63,7 +64,7 @@ impl Input {
 pub struct Output {
   pub amount: u64,
   pub key: EdwardsPoint,
-  pub tag: Option<u8>
+  pub tag: Option<u8>,
 }
 
 impl Output {
@@ -86,16 +87,22 @@ impl Output {
     let mut tag = [0];
     r.read_exact(&mut tag)?;
     if (tag[0] != 2) && (tag[0] != 3) {
-      Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown/unused output type"))?;
+      Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Tried to deserialize unknown/unused output type",
+      ))?;
     }
 
-    Ok(
-      Output {
-        amount,
-        key: read_point(r)?,
-        tag: if tag[0] == 3 { r.read_exact(&mut tag)?; Some(tag[0]) } else { None }
-      }
-    )
+    Ok(Output {
+      amount,
+      key: read_point(r)?,
+      tag: if tag[0] == 3 {
+        r.read_exact(&mut tag)?;
+        Some(tag[0])
+      } else {
+        None
+      },
+    })
   }
 }
 
@@ -103,7 +110,7 @@ impl Output {
 pub enum Timelock {
   None,
   Block(usize),
-  Time(u64)
+  Time(u64),
 }
 
 impl Timelock {
@@ -126,9 +133,9 @@ impl Timelock {
       &match self {
         Timelock::None => 0,
         Timelock::Block(block) => (*block).try_into().unwrap(),
-        Timelock::Time(time) => *time
+        Timelock::Time(time) => *time,
       },
-      w
+      w,
     )
   }
 }
@@ -139,7 +146,7 @@ impl PartialOrd for Timelock {
       (Timelock::None, _) => Some(Ordering::Less),
       (Timelock::Block(a), Timelock::Block(b)) => a.partial_cmp(b),
       (Timelock::Time(a), Timelock::Time(b)) => a.partial_cmp(b),
-      _ => None
+      _ => None,
     }
   }
 }
@@ -150,17 +157,19 @@ pub struct TransactionPrefix {
   pub timelock: Timelock,
   pub inputs: Vec<Input>,
   pub outputs: Vec<Output>,
-  pub extra: Vec<u8>
+  pub extra: Vec<u8>,
 }
 
 impl TransactionPrefix {
   pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
     // Assumes Timelock::None since this library won't let you create a TX with a timelock
-    1 + 1 +
-    varint_len(inputs) + (inputs * Input::fee_weight()) +
-    // Only 16 outputs are possible under transactions by this lib
-    1 + (outputs * Output::fee_weight()) +
-    varint_len(extra) + extra
+    1 + 1
+      + varint_len(inputs)
+      + (inputs * Input::fee_weight())
+      + 1
+      + (outputs * Output::fee_weight())
+      + varint_len(extra)
+      + extra
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -178,7 +187,7 @@ impl TransactionPrefix {
       timelock: Timelock::from_raw(read_varint(r)?),
       inputs: read_vec(Input::deserialize, r)?,
       outputs: read_vec(Output::deserialize, r)?,
-      extra: vec![]
+      extra: vec![],
     };
 
     let len = read_varint(r)?;
@@ -192,12 +201,13 @@ impl TransactionPrefix {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
-  pub rct_signatures: RctSignatures
+  pub rct_signatures: RctSignatures,
 }
 
 impl Transaction {
   pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
-    TransactionPrefix::fee_weight(inputs, outputs, extra) + RctSignatures::fee_weight(inputs, outputs)
+    TransactionPrefix::fee_weight(inputs, outputs, extra)
+      + RctSignatures::fee_weight(inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -207,19 +217,21 @@ impl Transaction {
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Transaction> {
     let prefix = TransactionPrefix::deserialize(r)?;
-    Ok(
-      Transaction {
-        rct_signatures: RctSignatures::deserialize(
-          prefix.inputs.iter().map(|input| match input {
-            Input::Gen(_) => 0,
-            Input::ToKey { key_offsets, .. } => key_offsets.len()
-          }).collect(),
-          prefix.outputs.len(),
-          r
-        )?,
+    Ok(Transaction {
+      rct_signatures: RctSignatures::deserialize(
         prefix
-      }
-    )
+          .inputs
+          .iter()
+          .map(|input| match input {
+            Input::Gen(_) => 0,
+            Input::ToKey { key_offsets, .. } => key_offsets.len(),
+          })
+          .collect(),
+        prefix.outputs.len(),
+        r,
+      )?,
+      prefix,
+    })
   }
 
   pub fn hash(&self) -> [u8; 32] {
@@ -234,10 +246,11 @@ impl Transaction {
       sig_hash.extend(hash(&serialized));
       serialized.clear();
 
-      self.rct_signatures.base.serialize(
-        &mut serialized,
-        self.rct_signatures.prunable.rct_type()
-      ).unwrap();
+      self
+        .rct_signatures
+        .base
+        .serialize(&mut serialized, self.rct_signatures.prunable.rct_type())
+        .unwrap();
       sig_hash.extend(hash(&serialized));
       serialized.clear();
 
@@ -262,7 +275,11 @@ impl Transaction {
     sig_hash.extend(hash(&serialized));
     serialized.clear();
 
-    self.rct_signatures.base.serialize(&mut serialized, self.rct_signatures.prunable.rct_type()).unwrap();
+    self
+      .rct_signatures
+      .base
+      .serialize(&mut serialized, self.rct_signatures.prunable.rct_type())
+      .unwrap();
     sig_hash.extend(hash(&serialized));
     serialized.clear();
 

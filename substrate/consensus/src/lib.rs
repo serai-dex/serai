@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{marker::Sync, sync::Arc, time::Duration};
 
 use substrate_prometheus_endpoint::Registry;
 
@@ -27,11 +27,8 @@ impl sc_executor::NativeExecutionDispatch for ExecutorDispatch {
   }
 }
 
-pub type FullClient = sc_service::TFullClient<
-  Block,
-  RuntimeApi,
-  NativeElseWasmExecutor<ExecutorDispatch>
->;
+pub type FullClient =
+  sc_service::TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
 type Db = sp_trie::PrefixedMemoryDB<sp_runtime::traits::BlakeTwo256>;
 
@@ -39,45 +36,45 @@ pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
   task_manager: &TaskManager,
   client: Arc<FullClient>,
   select_chain: S,
-  registry: Option<&Registry>
+  registry: Option<&Registry>,
 ) -> Result<sc_pow::PowImportQueue<Block, Db>, sp_consensus::Error> {
-  let pow_block_import = Box::new(
-    sc_pow::PowBlockImport::new(
-      client.clone(),
-      client.clone(),
-      algorithm::AcceptAny,
-      0,
-      select_chain.clone(),
-      |_, _| { async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) } },
-      sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone())
-    )
-  );
+  let pow_block_import = Box::new(sc_pow::PowBlockImport::new(
+    client.clone(),
+    client.clone(),
+    algorithm::AcceptAny,
+    0,
+    select_chain.clone(),
+    |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
+    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
+  ));
 
   sc_pow::import_queue(
     pow_block_import,
     None,
     algorithm::AcceptAny,
     &task_manager.spawn_essential_handle(),
-    registry
+    registry,
   )
 }
 
 // Produce a block every 5 seconds
 async fn produce<
   Block: sp_api::BlockT<Hash = sp_core::H256>,
-  Algorithm: sc_pow::PowAlgorithm<Block, Difficulty = sp_core::U256> +
-               'static + Send + std::marker::Sync,
+  Algorithm: sc_pow::PowAlgorithm<Block, Difficulty = sp_core::U256> + Send + Sync + 'static,
   C: sp_api::ProvideRuntimeApi<Block> + 'static,
   Link: sc_consensus::JustificationSyncLink<Block> + 'static,
-  P: Send + 'static
->(worker: sc_pow::MiningHandle<Block, Algorithm, C, Link, P>)
-  where sp_api::TransactionFor<C, Block>: Send + 'static {
+  P: Send + 'static,
+>(
+  worker: sc_pow::MiningHandle<Block, Algorithm, C, Link, P>,
+) where
+  sp_api::TransactionFor<C, Block>: Send + 'static,
+{
   loop {
     let worker_clone = worker.clone();
     std::thread::spawn(move || {
-      tokio::runtime::Runtime::new().unwrap().handle().block_on(
-        async { worker_clone.submit(vec![]).await; }
-      );
+      tokio::runtime::Runtime::new().unwrap().handle().block_on(async {
+        worker_clone.submit(vec![]).await;
+      });
     });
     tokio::time::sleep(Duration::from_secs(5)).await;
   }
@@ -90,14 +87,14 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
   network: Arc<sc_network::NetworkService<Block, <Block as sp_runtime::traits::Block>::Hash>>,
   pool: Arc<sc_transaction_pool::FullPool<Block, FullClient>>,
   select_chain: S,
-  registry: Option<&Registry>
+  registry: Option<&Registry>,
 ) {
   let proposer = sc_basic_authorship::ProposerFactory::new(
     task_manager.spawn_handle(),
     client.clone(),
     pool,
     registry,
-    None
+    None,
   );
 
   let can_author_with = sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone());
@@ -108,8 +105,8 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     algorithm::AcceptAny,
     0, // Block to start checking inherents at
     select_chain.clone(),
-    move |_, _| { async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) } },
-    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone())
+    move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
+    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
   let (worker, worker_task) = sc_pow::start_mining_worker(
@@ -121,17 +118,13 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     network.clone(),
     network.clone(),
     None,
-    move |_, _| { async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) } },
+    move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
     Duration::from_secs(1),
     Duration::from_secs(2),
-    can_author_with
+    can_author_with,
   );
 
-  task_manager
-    .spawn_essential_handle()
-    .spawn_blocking("pow", None, worker_task);
+  task_manager.spawn_essential_handle().spawn_blocking("pow", None, worker_task);
 
-  task_manager
-    .spawn_essential_handle()
-    .spawn("producer", None, produce(worker));
+  task_manager.spawn_essential_handle().spawn("producer", None, produce(worker));
 }

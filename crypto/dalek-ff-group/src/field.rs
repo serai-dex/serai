@@ -9,16 +9,15 @@ use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
 use crate::{choice, constant_time, math_op, math, from_wrapper, from_uint};
 
-const FIELD_MODULUS: U256 = U256::from_be_hex(
-  "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed"
-);
+const FIELD_MODULUS: U256 =
+  U256::from_be_hex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed");
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct FieldElement(U256);
 
-pub const SQRT_M1: FieldElement = FieldElement(
-  U256::from_be_hex("2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0")
-);
+pub const SQRT_M1: FieldElement = FieldElement(U256::from_be_hex(
+  "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
+));
 
 constant_time!(FieldElement, U256);
 math!(
@@ -29,11 +28,11 @@ math!(
   |x, y| {
     #[allow(non_snake_case)]
     let WIDE_MODULUS: U512 = U512::from((U256::ZERO, FIELD_MODULUS));
-    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 32]);
+    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[..32]);
 
     let wide = U256::mul_wide(&x, &y);
     U256::from_le_slice(
-      &U512::from((wide.1, wide.0)).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 32]
+      &U512::from((wide.1, wide.0)).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[..32],
     )
   }
 );
@@ -41,7 +40,9 @@ from_uint!(FieldElement, U256);
 
 impl Neg for FieldElement {
   type Output = Self;
-  fn neg(self) -> Self::Output { Self(self.0.neg_mod(&FIELD_MODULUS)) }
+  fn neg(self) -> Self::Output {
+    Self(self.0.neg_mod(&FIELD_MODULUS))
+  }
 }
 
 impl Field for FieldElement {
@@ -51,19 +52,25 @@ impl Field for FieldElement {
 
     #[allow(non_snake_case)]
     let WIDE_MODULUS: U512 = U512::from((U256::ZERO, FIELD_MODULUS));
-    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 32]);
+    debug_assert_eq!(FIELD_MODULUS.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[..32]);
 
-    FieldElement(
-      U256::from_le_slice(
-        &U512::from_be_bytes(bytes).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 32]
-      )
-    )
+    FieldElement(U256::from_le_slice(
+      &U512::from_be_bytes(bytes).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[..32],
+    ))
   }
 
-  fn zero() -> Self { Self(U256::ZERO) }
-  fn one() -> Self { Self(U256::ONE) }
-  fn square(&self) -> Self { *self * self }
-  fn double(&self) -> Self { *self + self }
+  fn zero() -> Self {
+    Self(U256::ZERO)
+  }
+  fn one() -> Self {
+    Self(U256::ONE)
+  }
+  fn square(&self) -> Self {
+    *self * self
+  }
+  fn double(&self) -> Self {
+    *self + self
+  }
 
   fn invert(&self) -> CtOption<Self> {
     CtOption::new(self.pow(-FieldElement(U256::from(2u64))), !self.is_zero())
@@ -80,9 +87,15 @@ impl Field for FieldElement {
     CtOption::new(Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self)), 1.into())
   }
 
-  fn is_zero(&self) -> Choice { self.0.ct_eq(&U256::ZERO) }
-  fn cube(&self) -> Self { *self * self * self }
-  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self { unimplemented!() }
+  fn is_zero(&self) -> Choice {
+    self.0.ct_eq(&U256::ZERO)
+  }
+  fn cube(&self) -> Self {
+    *self * self * self
+  }
+  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
+    unimplemented!()
+  }
 }
 
 impl PrimeField for FieldElement {
@@ -93,15 +106,21 @@ impl PrimeField for FieldElement {
     let res = Self(U256::from_le_bytes(bytes));
     CtOption::new(res, res.0.add_mod(&U256::ZERO, &FIELD_MODULUS).ct_eq(&res.0))
   }
-  fn to_repr(&self) -> [u8; 32] { self.0.to_le_bytes() }
+  fn to_repr(&self) -> [u8; 32] {
+    self.0.to_le_bytes()
+  }
 
   const S: u32 = 2;
-  fn is_odd(&self) -> Choice { unimplemented!() }
-  fn multiplicative_generator() -> Self { 2u64.into() }
+  fn is_odd(&self) -> Choice {
+    unimplemented!()
+  }
+  fn multiplicative_generator() -> Self {
+    2u64.into()
+  }
   fn root_of_unity() -> Self {
-    FieldElement(
-      U256::from_be_hex("2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0")
-    )
+    FieldElement(U256::from_be_hex(
+      "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
+    ))
   }
 }
 

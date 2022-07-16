@@ -14,21 +14,25 @@ use serai_runtime::{opaque::Block, AccountId, Balance, Index};
 pub struct FullDeps<C, P> {
   pub client: Arc<C>,
   pub pool: Arc<P>,
-  pub deny_unsafe: DenyUnsafe
+  pub deny_unsafe: DenyUnsafe,
 }
 
 pub fn create_full<
-  C: ProvideRuntimeApi<Block> +
-     HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockchainError> +
-     Send + Sync + 'static,
-  P: TransactionPool + 'static
+  C: ProvideRuntimeApi<Block>
+    + HeaderBackend<Block>
+    + HeaderMetadata<Block, Error = BlockchainError>
+    + Send
+    + Sync
+    + 'static,
+  P: TransactionPool + 'static,
 >(
-  deps: FullDeps<C, P>
+  deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
-  where C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index> +
-                pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance> +
-                BlockBuilder<Block> {
-
+where
+  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>
+    + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
+    + BlockBuilder<Block>,
+{
   use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
   use substrate_frame_rpc_system::{System, SystemApiServer};
 

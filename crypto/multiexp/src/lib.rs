@@ -15,10 +15,10 @@ pub use batch::BatchVerifier;
 #[cfg(test)]
 mod tests;
 
-pub(crate) fn prep_bits<G: Group>(
-  pairs: &[(G::Scalar, G)],
-  window: u8
-) -> Vec<Vec<u8>> where G::Scalar: PrimeFieldBits {
+pub(crate) fn prep_bits<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<u8>>
+where
+  G::Scalar: PrimeFieldBits,
+{
   let w_usize = usize::from(window);
 
   let mut groupings = vec![];
@@ -37,16 +37,13 @@ pub(crate) fn prep_bits<G: Group>(
   groupings
 }
 
-pub(crate) fn prep_tables<G: Group>(
-  pairs: &[(G::Scalar, G)],
-  window: u8
-) -> Vec<Vec<G>> {
+pub(crate) fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
   let mut tables = Vec::with_capacity(pairs.len());
   for pair in pairs {
     let p = tables.len();
     tables.push(vec![G::identity(); 2_usize.pow(window.into())]);
     let mut accum = G::identity();
-    for i in 1 .. tables[p].len() {
+    for i in 1..tables[p].len() {
       accum += pair.1;
       tables[p][i] = accum;
     }
@@ -59,7 +56,7 @@ enum Algorithm {
   Null,
   Single,
   Straus(u8),
-  Pippenger(u8)
+  Pippenger(u8),
 }
 
 /*
@@ -157,20 +154,26 @@ fn algorithm(len: usize) -> Algorithm {
 }
 
 // Performs a multiexp, automatically selecting the optimal algorithm based on amount of pairs
-pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G where G::Scalar: PrimeFieldBits {
+pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G
+where
+  G::Scalar: PrimeFieldBits,
+{
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
     Algorithm::Single => pairs[0].1 * pairs[0].0,
     Algorithm::Straus(window) => straus(pairs, window),
-    Algorithm::Pippenger(window) => pippenger(pairs, window)
+    Algorithm::Pippenger(window) => pippenger(pairs, window),
   }
 }
 
-pub fn multiexp_vartime<G: Group>(pairs: &[(G::Scalar, G)]) -> G where G::Scalar: PrimeFieldBits {
+pub fn multiexp_vartime<G: Group>(pairs: &[(G::Scalar, G)]) -> G
+where
+  G::Scalar: PrimeFieldBits,
+{
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
     Algorithm::Single => pairs[0].1 * pairs[0].0,
     Algorithm::Straus(window) => straus_vartime(pairs, window),
-    Algorithm::Pippenger(window) => pippenger_vartime(pairs, window)
+    Algorithm::Pippenger(window) => pippenger_vartime(pairs, window),
   }
 }

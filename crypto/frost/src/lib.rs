@@ -3,7 +3,10 @@ use std::{io::Read, collections::HashMap};
 
 use thiserror::Error;
 
-use group::{ff::{Field, PrimeField}, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
 
 mod schnorr;
 
@@ -28,11 +31,7 @@ pub struct FrostParams {
 }
 
 impl FrostParams {
-  pub fn new(
-    t: u16,
-    n: u16,
-    i: u16
-  ) -> Result<FrostParams, FrostError> {
+  pub fn new(t: u16, n: u16, i: u16) -> Result<FrostParams, FrostError> {
     if (t == 0) || (n == 0) {
       Err(FrostError::ZeroParameter(t, n))?;
     }
@@ -46,12 +45,18 @@ impl FrostParams {
       Err(FrostError::InvalidParticipantIndex(n, i))?;
     }
 
-    Ok(FrostParams{ t, n, i })
+    Ok(FrostParams { t, n, i })
   }
 
-  pub fn t(&self) -> u16 { self.t }
-  pub fn n(&self) -> u16 { self.n }
-  pub fn i(&self) -> u16 { self.i }
+  pub fn t(&self) -> u16 {
+    self.t
+  }
+  pub fn n(&self) -> u16 {
+    self.n
+  }
+  pub fn i(&self) -> u16 {
+    self.i
+  }
 }
 
 #[derive(Copy, Clone, Error, Debug)]
@@ -112,10 +117,7 @@ impl<C: Curve> FrostView<C> {
 }
 
 /// Calculate the lagrange coefficient for a signing set
-pub fn lagrange<F: PrimeField>(
-  i: u16,
-  included: &[u16],
-) -> F {
+pub fn lagrange<F: PrimeField>(i: u16, included: &[u16]) -> F {
   let mut num = F::one();
   let mut denom = F::one();
   for l in included {
@@ -192,12 +194,13 @@ impl<C: Curve> FrostKeys<C> {
     Ok(FrostView {
       group_key: self.group_key,
       secret_share: secret_share + offset_share,
-      verification_shares: self.verification_shares.iter().map(
-        |(l, share)| (
-          *l,
-          (*share * lagrange::<C::F>(*l, &included)) + (C::GENERATOR * offset_share)
-        )
-      ).collect(),
+      verification_shares: self
+        .verification_shares
+        .iter()
+        .map(|(l, share)| {
+          (*l, (*share * lagrange::<C::F>(*l, &included)) + (C::GENERATOR * offset_share))
+        })
+        .collect(),
       included: included.to_vec(),
     })
   }
@@ -215,7 +218,7 @@ impl<C: Curve> FrostKeys<C> {
     serialized.extend(&self.params.i.to_be_bytes());
     serialized.extend(self.secret_share.to_repr().as_ref());
     serialized.extend(self.group_key.to_bytes().as_ref());
-    for l in 1 ..= self.params.n.into() {
+    for l in 1..=self.params.n.into() {
       serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
     }
     serialized
@@ -242,36 +245,35 @@ impl<C: Curve> FrostKeys<C> {
     let (t, n, i) = {
       let mut read_u16 = || {
         let mut value = [0; 2];
-        cursor.read_exact(&mut value).map_err(
-          |_| FrostError::InternalError("missing participant quantities")
-        )?;
+        cursor
+          .read_exact(&mut value)
+          .map_err(|_| FrostError::InternalError("missing participant quantities"))?;
         Ok(u16::from_be_bytes(value))
       };
       (read_u16()?, read_u16()?, read_u16()?)
     };
 
-    let secret_share = C::read_F(cursor)
-      .map_err(|_| FrostError::InternalError("invalid secret share"))?;
-    let group_key = C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid group key"))?;
+    let secret_share =
+      C::read_F(cursor).map_err(|_| FrostError::InternalError("invalid secret share"))?;
+    let group_key =
+      C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid group key"))?;
 
     let mut verification_shares = HashMap::new();
-    for l in 1 ..= n {
+    for l in 1..=n {
       verification_shares.insert(
         l,
-        C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid verification share"))?
+        C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid verification share"))?,
       );
     }
 
-    Ok(
-      FrostKeys {
-        params: FrostParams::new(t, n, i)
-          .map_err(|_| FrostError::InternalError("invalid parameters"))?,
-        secret_share,
-        group_key,
-        verification_shares,
-        offset: None
-      }
-    )
+    Ok(FrostKeys {
+      params: FrostParams::new(t, n, i)
+        .map_err(|_| FrostError::InternalError("invalid parameters"))?,
+      secret_share,
+      group_key,
+      verification_shares,
+      offset: None,
+    })
   }
 }
 
@@ -279,7 +281,7 @@ impl<C: Curve> FrostKeys<C> {
 pub(crate) fn validate_map<T>(
   map: &mut HashMap<u16, T>,
   included: &[u16],
-  ours: u16
+  ours: u16,
 ) -> Result<(), FrostError> {
   if (map.len() + 1) != included.len() {
     Err(FrostError::InvalidParticipantQuantity(included.len(), map.len() + 1))?;

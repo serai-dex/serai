@@ -6,7 +6,9 @@ use crate::Transcript;
 pub struct MerlinTranscript(pub merlin::Transcript);
 // Merlin doesn't implement Debug so provide a stub which won't panic
 impl Debug for MerlinTranscript {
-  fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), core::fmt::Error> { Ok(()) }
+  fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    Ok(())
+  }
 }
 
 impl Transcript for MerlinTranscript {
@@ -37,7 +39,7 @@ impl Transcript for MerlinTranscript {
 
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {
     let mut seed = [0; 32];
-    seed.copy_from_slice(&self.challenge(label)[.. 32]);
+    seed.copy_from_slice(&self.challenge(label)[..32]);
     seed
   }
 }

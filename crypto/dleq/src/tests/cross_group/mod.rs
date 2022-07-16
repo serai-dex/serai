@@ -13,9 +13,9 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use crate::{
   cross_group::{
-    scalar::mutual_scalar_from_bytes,
-    Generators, ClassicLinearDLEq, EfficientLinearDLEq, ConciseLinearDLEq, CompromiseLinearDLEq
-  }
+    scalar::mutual_scalar_from_bytes, Generators, ClassicLinearDLEq, EfficientLinearDLEq,
+    ConciseLinearDLEq, CompromiseLinearDLEq,
+  },
 };
 
 mod scalar;
@@ -34,16 +34,17 @@ pub(crate) fn generators() -> (Generators<G0>, Generators<G1>) {
     Generators::new(
       ProjectivePoint::GENERATOR,
       ProjectivePoint::from_bytes(
-        &(hex!("0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0").into())
-      ).unwrap()
+        &(hex!("0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0").into()),
+      )
+      .unwrap(),
     ),
-
     Generators::new(
       EdwardsPoint::generator(),
-      EdwardsPoint::from_bytes(
-        &hex!("8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94")
-      ).unwrap()
-    )
+      EdwardsPoint::from_bytes(&hex!(
+        "8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94"
+      ))
+      .unwrap(),
+    ),
   )
 }
 
@@ -60,7 +61,7 @@ macro_rules! verify_and_deserialize {
       let deserialized = <$type>::deserialize(&mut std::io::Cursor::new(&buf)).unwrap();
       assert_eq!($proof, deserialized);
     }
-  }
+  };
 }
 
 macro_rules! test_dleq {
@@ -78,7 +79,7 @@ macro_rules! test_dleq {
       let runs = 200;
       let mut proofs = Vec::with_capacity(usize::try_from(runs).unwrap());
       let time = std::time::Instant::now();
-      for _ in 0 .. runs {
+      for _ in 0..runs {
         proofs.push($type::prove(&mut OsRng, &mut transcript(), generators, key.clone()).0);
       }
       println!("{} had a average prove time of {}ms", $str, time.elapsed().as_millis() / runs);
@@ -101,7 +102,7 @@ macro_rules! test_dleq {
     fn $name() {
       let generators = generators();
 
-      for i in 0 .. 1 {
+      for i in 0..1 {
         let (proof, keys) = if i == 0 {
           let mut seed = [0; 32];
           OsRng.fill_bytes(&mut seed);
@@ -110,7 +111,7 @@ macro_rules! test_dleq {
             &mut OsRng,
             &mut transcript(),
             generators,
-            Blake2b512::new().chain_update(seed)
+            Blake2b512::new().chain_update(seed),
           )
         } else {
           let mut key;
@@ -121,14 +122,14 @@ macro_rules! test_dleq {
             res.is_none()
           } {}
           let res = res.unwrap();
-          assert_eq!(key, res.1.0);
+          assert_eq!(key, res.1 .0);
           res
         };
 
         verify_and_deserialize!($type::<G0, G1>, proof, generators, keys);
       }
     }
-  }
+  };
 }
 
 test_dleq!("ClassicLinear", benchmark_classic_linear, test_classic_linear, ClassicLinearDLEq);
@@ -149,18 +150,14 @@ test_dleq!(
 #[test]
 fn test_rejection_sampling() {
   let mut pow_2 = Scalar::one();
-  for _ in 0 .. dfg::Scalar::CAPACITY {
+  for _ in 0..dfg::Scalar::CAPACITY {
     pow_2 = pow_2.double();
   }
 
   assert!(
     // Either would work
-    EfficientLinearDLEq::prove_without_bias(
-      &mut OsRng,
-      &mut transcript(),
-      generators(),
-      pow_2
-    ).is_none()
+    EfficientLinearDLEq::prove_without_bias(&mut OsRng, &mut transcript(), generators(), pow_2)
+      .is_none()
   );
 }
 
@@ -174,12 +171,9 @@ fn test_remainder() {
   assert_eq!(keys.0 + Scalar::one(), Scalar::from(2u64).pow_vartime(&[255]));
   assert_eq!(keys.0, keys.1);
 
-  let (proof, res) = ConciseLinearDLEq::prove_without_bias(
-    &mut OsRng,
-    &mut transcript(),
-    generators,
-    keys.0
-  ).unwrap();
+  let (proof, res) =
+    ConciseLinearDLEq::prove_without_bias(&mut OsRng, &mut transcript(), generators, keys.0)
+      .unwrap();
   assert_eq!(keys, res);
 
   verify_and_deserialize!(

@@ -12,12 +12,16 @@ use monero_serai::{
   transaction::Transaction,
   rpc::Rpc,
   wallet::{
-    ViewPair, address::{Network, AddressType, Address},
-    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine
-  }
+    ViewPair,
+    address::{Network, AddressType, Address},
+    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
+  },
 };
 
-use crate::{coin::{CoinError, Output as OutputTrait, Coin}, view_key};
+use crate::{
+  coin::{CoinError, Output as OutputTrait, Coin},
+  view_key,
+};
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -55,13 +59,13 @@ pub struct SignableTransaction(
   Arc<FrostKeys<Ed25519>>,
   RecommendedTranscript,
   usize,
-  MSignableTransaction
+  MSignableTransaction,
 );
 
 #[derive(Clone, Debug)]
 pub struct Monero {
   pub(crate) rpc: Rpc,
-  view: Scalar
+  view: Scalar,
 }
 
 impl Monero {
@@ -138,47 +142,51 @@ impl Coin for Monero {
     height: usize,
     mut inputs: Vec<Output>,
     payments: &[(Address, u64)],
-    fee: Fee
+    fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
     let spend = keys.group_key();
-    Ok(
-      SignableTransaction(
-        keys,
-        transcript,
-        height,
-        MSignableTransaction::new(
-          inputs.drain(..).map(|input| input.0).collect(),
-          payments.to_vec(),
-          Some(self.address(spend)),
-          fee
-        ).map_err(|_| CoinError::ConnectionError)?
+    Ok(SignableTransaction(
+      keys,
+      transcript,
+      height,
+      MSignableTransaction::new(
+        inputs.drain(..).map(|input| input.0).collect(),
+        payments.to_vec(),
+        Some(self.address(spend)),
+        fee,
       )
-    )
+      .map_err(|_| CoinError::ConnectionError)?,
+    ))
   }
 
   async fn attempt_send(
     &self,
     transaction: SignableTransaction,
-    included: &[u16]
+    included: &[u16],
   ) -> Result<Self::TransactionMachine, CoinError> {
-    transaction.3.clone().multisig(
-      &self.rpc,
-      (*transaction.0).clone(),
-      transaction.1.clone(),
-      transaction.2,
-      included.to_vec()
-    ).await.map_err(|_| CoinError::ConnectionError)
+    transaction
+      .3
+      .clone()
+      .multisig(
+        &self.rpc,
+        (*transaction.0).clone(),
+        transaction.1.clone(),
+        transaction.2,
+        included.to_vec(),
+      )
+      .await
+      .map_err(|_| CoinError::ConnectionError)
   }
 
   async fn publish_transaction(
     &self,
-    tx: &Self::Transaction
+    tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
     self.rpc.publish_transaction(&tx).await.map_err(|_| CoinError::ConnectionError)?;
 
     Ok((
       tx.hash().to_vec(),
-      tx.prefix.outputs.iter().map(|output| output.key.compress().to_bytes()).collect()
+      tx.prefix.outputs.iter().map(|output| output.key.compress().to_bytes()).collect(),
     ))
   }
 
@@ -186,13 +194,20 @@ impl Coin for Monero {
   async fn mine_block(&self) {
     #[derive(serde::Deserialize, Debug)]
     struct EmptyResponse {}
-    let _: EmptyResponse = self.rpc.rpc_call("json_rpc", Some(serde_json::json!({
-      "method": "generateblocks",
-      "params": {
-        "wallet_address": self.empty_address().to_string(),
-        "amount_of_blocks": 10
-      },
-    }))).await.unwrap();
+    let _: EmptyResponse = self
+      .rpc
+      .rpc_call(
+        "json_rpc",
+        Some(serde_json::json!({
+          "method": "generateblocks",
+          "params": {
+            "wallet_address": self.empty_address().to_string(),
+            "amount_of_blocks": 10
+          },
+        })),
+      )
+      .await
+      .unwrap();
   }
 
   #[cfg(test)]
@@ -202,13 +217,18 @@ impl Coin for Monero {
     let height = self.get_height().await.unwrap();
 
     self.mine_block().await;
-    for _ in 0 .. 7 {
+    for _ in 0..7 {
       self.mine_block().await;
     }
 
-    let outputs = self.rpc
-      .get_block_transactions_possible(height).await.unwrap()
-      .swap_remove(0).scan(self.empty_view_pair(), false).ignore_timelock();
+    let outputs = self
+      .rpc
+      .get_block_transactions_possible(height)
+      .await
+      .unwrap()
+      .swap_remove(0)
+      .scan(self.empty_view_pair(), false)
+      .ignore_timelock();
 
     let amount = outputs[0].commitment.amount;
     let fee = 1000000000; // TODO
@@ -216,8 +236,12 @@ impl Coin for Monero {
       outputs,
       vec![(address, amount - fee)],
       Some(self.empty_address()),
-      self.rpc.get_fee().await.unwrap()
-    ).unwrap().sign(&mut OsRng, &self.rpc, &Scalar::one()).await.unwrap();
+      self.rpc.get_fee().await.unwrap(),
+    )
+    .unwrap()
+    .sign(&mut OsRng, &self.rpc, &Scalar::one())
+    .await
+    .unwrap();
     self.rpc.publish_transaction(&tx).await.unwrap();
     self.mine_block().await;
   }

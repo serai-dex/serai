@@ -1,13 +1,23 @@
 use std::{env, path::Path, process::Command};
 
 fn main() {
-  if !Command::new("git").args(&["submodule", "update", "--init", "--recursive"]).status().unwrap().success() {
+  if !Command::new("git")
+    .args(&["submodule", "update", "--init", "--recursive"])
+    .status()
+    .unwrap()
+    .success()
+  {
     panic!("git failed to init submodules");
   }
 
-  if !Command ::new("mkdir").args(&["-p", ".build"])
-    .current_dir(&Path::new("c")).status().unwrap().success() {
-      panic!("failed to create a directory to track build progress");
+  if !Command::new("mkdir")
+    .args(&["-p", ".build"])
+    .current_dir(&Path::new("c"))
+    .status()
+    .unwrap()
+    .success()
+  {
+    panic!("failed to create a directory to track build progress");
   }
 
   let out_dir = &env::var("OUT_DIR").unwrap();
@@ -16,18 +26,29 @@ fn main() {
   // If the signaling file was deleted, run this script again to rebuild Monero though
   println!("cargo:rerun-if-changed=c/.build/monero");
   if !Path::new("c/.build/monero").exists() {
-    if !Command::new("make").arg(format!("-j{}", &env::var("THREADS").unwrap_or_else(|_| "2".to_string())))
-      .current_dir(&Path::new("c/monero")).status().unwrap().success() {
-        panic!("make failed to build Monero. Please check your dependencies");
+    if !Command::new("make")
+      .arg(format!("-j{}", &env::var("THREADS").unwrap_or_else(|_| "2".to_string())))
+      .current_dir(&Path::new("c/monero"))
+      .status()
+      .unwrap()
+      .success()
+    {
+      panic!("make failed to build Monero. Please check your dependencies");
     }
 
-    if !Command::new("touch").arg("monero")
-      .current_dir(&Path::new("c/.build")).status().unwrap().success() {
-        panic!("failed to create a file to label Monero as built");
+    if !Command::new("touch")
+      .arg("monero")
+      .current_dir(&Path::new("c/.build"))
+      .status()
+      .unwrap()
+      .success()
+    {
+      panic!("failed to create a file to label Monero as built");
     }
   }
 
   println!("cargo:rerun-if-changed=c/wrapper.cpp");
+  #[rustfmt::skip]
   cc::Build::new()
     .static_flag(true)
     .warnings(false)

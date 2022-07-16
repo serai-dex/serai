@@ -2,12 +2,16 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use group::{ff::{Field, PrimeFieldBits}, prime::PrimeGroup};
+use group::{
+  ff::{Field, PrimeFieldBits},
+  prime::PrimeGroup,
+};
 
 use multiexp::BatchVerifier;
 
 use crate::cross_group::{
-  Generators, DLEqError, scalar::{scalar_convert, mutual_scalar_from_bytes}
+  Generators, DLEqError,
+  scalar::{scalar_convert, mutual_scalar_from_bytes},
 };
 
 #[cfg(feature = "serialize")]
@@ -26,7 +30,7 @@ pub(crate) enum Re<G0: PrimeGroup, G1: PrimeGroup> {
   // present here, which is then hashed for each of the two challenges, remaining unbiased/unique
   // while maintaining the bandwidth savings, yet also while adding 252 hashes for
   // Secp256k1/Ed25519
-  e(G0::Scalar)
+  e(G0::Scalar),
 }
 
 impl<G0: PrimeGroup, G1: PrimeGroup> Re<G0, G1> {
@@ -44,14 +48,14 @@ impl<G0: PrimeGroup, G1: PrimeGroup> Re<G0, G1> {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct Aos<G0: PrimeGroup, G1: PrimeGroup, const RING_LEN: usize> {
   Re_0: Re<G0, G1>,
-  s: [(G0::Scalar, G1::Scalar); RING_LEN]
+  s: [(G0::Scalar, G1::Scalar); RING_LEN],
 }
 
-impl<
-  G0: PrimeGroup,
-  G1: PrimeGroup,
-  const RING_LEN: usize
-> Aos<G0, G1, RING_LEN> where G0::Scalar: PrimeFieldBits, G1::Scalar: PrimeFieldBits {
+impl<G0: PrimeGroup, G1: PrimeGroup, const RING_LEN: usize> Aos<G0, G1, RING_LEN>
+where
+  G0::Scalar: PrimeFieldBits,
+  G1::Scalar: PrimeFieldBits,
+{
   #[allow(non_snake_case)]
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
     transcript.domain_separate(b"aos_membership_proof");
@@ -66,7 +70,7 @@ impl<
     generators: (Generators<G0>, Generators<G1>),
     s: (G0::Scalar, G1::Scalar),
     A: (G0, G1),
-    e: (G0::Scalar, G1::Scalar)
+    e: (G0::Scalar, G1::Scalar),
   ) -> (G0, G1) {
     (((generators.0.alt * s.0) - (A.0 * e.0)), ((generators.1.alt * s.1) - (A.1 * e.1)))
   }
@@ -76,7 +80,7 @@ impl<
     generators: (Generators<G0>, Generators<G1>),
     s: (G0::Scalar, G1::Scalar),
     A: (G0, G1),
-    e: (G0::Scalar, G1::Scalar)
+    e: (G0::Scalar, G1::Scalar),
   ) -> (Vec<(G0::Scalar, G0)>, Vec<(G1::Scalar, G1)>) {
     (vec![(-s.0, generators.0.alt), (e.0, A.0)], vec![(-s.1, generators.1.alt), (e.1, A.1)])
   }
@@ -87,7 +91,7 @@ impl<
     generators: (Generators<G0>, Generators<G1>),
     s: (G0::Scalar, G1::Scalar),
     A: (G0, G1),
-    e: (G0::Scalar, G1::Scalar)
+    e: (G0::Scalar, G1::Scalar),
   ) -> (G0::Scalar, G1::Scalar) {
     Self::nonces(transcript, Self::R(generators, s, A, e))
   }
@@ -100,7 +104,7 @@ impl<
     ring: &[(G0, G1)],
     actual: usize,
     blinding_key: (G0::Scalar, G1::Scalar),
-    mut Re_0: Re<G0, G1>
+    mut Re_0: Re<G0, G1>,
   ) -> Self {
     // While it is possible to use larger values, it's not efficient to do so
     // 2 + 2 == 2^2, yet 2 + 2 + 2 < 2^3
@@ -115,12 +119,15 @@ impl<
     #[allow(non_snake_case)]
     let mut R = original_R;
 
-    for i in ((actual + 1) .. (actual + RING_LEN + 1)).map(|i| i % RING_LEN) {
+    for i in ((actual + 1)..(actual + RING_LEN + 1)).map(|i| i % RING_LEN) {
       let e = Self::nonces(transcript.clone(), R);
       if i == 0 {
         match Re_0 {
-          Re::R(ref mut R0_0, ref mut R1_0) => { *R0_0 = R.0; *R1_0 = R.1 },
-          Re::e(ref mut e_0) => *e_0 = e.0
+          Re::R(ref mut R0_0, ref mut R1_0) => {
+            *R0_0 = R.0;
+            *R1_0 = R.1
+          }
+          Re::e(ref mut e_0) => *e_0 = e.0,
         }
       }
 
@@ -147,7 +154,7 @@ impl<
     transcript: T,
     generators: (Generators<G0>, Generators<G1>),
     batch: &mut (BatchVerifier<(), G0>, BatchVerifier<(), G1>),
-    ring: &[(G0, G1)]
+    ring: &[(G0, G1)],
   ) -> Result<(), DLEqError> {
     debug_assert!((RING_LEN == 2) || (RING_LEN == 4));
     debug_assert_eq!(RING_LEN, ring.len());
@@ -156,29 +163,29 @@ impl<
     match self.Re_0 {
       Re::R(R0_0, R1_0) => {
         let mut e = Self::nonces(transcript.clone(), (R0_0, R1_0));
-        for i in 0 .. (RING_LEN - 1) {
+        for i in 0..(RING_LEN - 1) {
           e = Self::R_nonces(transcript.clone(), generators, self.s[i], ring[i], e);
         }
 
-        let mut statements = Self::R_batch(
-          generators,
-          *self.s.last().unwrap(),
-          *ring.last().unwrap(),
-          e
-        );
+        let mut statements =
+          Self::R_batch(generators, *self.s.last().unwrap(), *ring.last().unwrap(), e);
         statements.0.push((G0::Scalar::one(), R0_0));
         statements.1.push((G1::Scalar::one(), R1_0));
         batch.0.queue(&mut *rng, (), statements.0);
         batch.1.queue(&mut *rng, (), statements.1);
-      },
+      }
 
       Re::e(e_0) => {
         let e_0 = (e_0, scalar_convert(e_0).ok_or(DLEqError::InvalidChallenge)?);
         let mut e = None;
-        for i in 0 .. RING_LEN {
-          e = Some(
-            Self::R_nonces(transcript.clone(), generators, self.s[i], ring[i], e.unwrap_or(e_0))
-          );
+        for i in 0..RING_LEN {
+          e = Some(Self::R_nonces(
+            transcript.clone(),
+            generators,
+            self.s[i],
+            ring[i],
+            e.unwrap_or(e_0),
+          ));
         }
 
         // Will panic if the above loop is never run somehow
@@ -199,11 +206,11 @@ impl<
       Re::R(R0, R1) => {
         w.write_all(R0.to_bytes().as_ref())?;
         w.write_all(R1.to_bytes().as_ref())?;
-      },
-      Re::e(e) => w.write_all(e.to_repr().as_ref())?
+      }
+      Re::e(e) => w.write_all(e.to_repr().as_ref())?,
     }
 
-    for i in 0 .. RING_LEN {
+    for i in 0..RING_LEN {
       w.write_all(self.s[i].0.to_repr().as_ref())?;
       w.write_all(self.s[i].1.to_repr().as_ref())?;
     }
@@ -215,12 +222,15 @@ impl<
   #[cfg(feature = "serialize")]
   pub(crate) fn deserialize<R: Read>(r: &mut R, mut Re_0: Re<G0, G1>) -> std::io::Result<Self> {
     match Re_0 {
-      Re::R(ref mut R0, ref mut R1) => { *R0 = read_point(r)?; *R1 = read_point(r)? },
-      Re::e(ref mut e) => *e = read_scalar(r)?
+      Re::R(ref mut R0, ref mut R1) => {
+        *R0 = read_point(r)?;
+        *R1 = read_point(r)?
+      }
+      Re::e(ref mut e) => *e = read_scalar(r)?,
     }
 
     let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
-    for i in 0 .. RING_LEN {
+    for i in 0..RING_LEN {
       s[i] = (read_scalar(r)?, read_scalar(r)?);
     }
 

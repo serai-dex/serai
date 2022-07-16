@@ -1,0 +1,16 @@
+tab_spaces = 2
+
+max_width = 100
+# Let the developer decide based on the 100 char line limit
+use_small_heuristics = "Max"
+
+error_on_line_overflow = true
+error_on_unformatted = true
+
+imports_granularity = "Crate"
+reorder_imports = false
+reorder_modules = false
+
+unstable_features = true
+spaces_around_ranges = true
+binop_separator = "Back"

@@ -1,8 +1,15 @@
-use std::{marker::PhantomData, io::{Read, Cursor}, collections::HashMap};
+use std::{
+  marker::PhantomData,
+  io::{Read, Cursor},
+  collections::HashMap,
+};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::{Field, PrimeField}, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
 
 use multiexp::{multiexp_vartime, BatchVerifier};
 
@@ -10,7 +17,7 @@ use crate::{
   curve::Curve,
   FrostError, FrostParams, FrostKeys,
   schnorr::{self, SchnorrSignature},
-  validate_map
+  validate_map,
 };
 
 #[allow(non_snake_case)]
@@ -37,7 +44,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   let mut commitments = Vec::with_capacity(t);
   let mut serialized = Vec::with_capacity((C::G_len() * t) + C::G_len() + C::F_len());
 
-  for i in 0 .. t {
+  for i in 0..t {
     // Step 1: Generate t random values to form a polynomial with
     coefficients.push(C::F::random(&mut *rng));
     // Step 3: Generate public commitments
@@ -56,13 +63,9 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
       // There's no reason to spend the time and effort to make this deterministic besides a
       // general obsession with canonicity and determinism though
       r,
-      challenge::<C>(
-        context,
-        params.i(),
-        (C::GENERATOR * r).to_bytes().as_ref(),
-        &serialized
-      )
-    ).serialize()
+      challenge::<C>(context, params.i(), (C::GENERATOR * r).to_bytes().as_ref(), &serialized),
+    )
+    .serialize(),
   );
 
   // Step 4: Broadcast
@@ -77,13 +80,13 @@ fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   our_commitments: Vec<C::G>,
   mut serialized: HashMap<u16, Re>,
 ) -> Result<HashMap<u16, Vec<C::G>>, FrostError> {
-  validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
+  validate_map(&mut serialized, &(1..=params.n()).collect::<Vec<_>>(), params.i())?;
 
   let mut commitments = HashMap::new();
   commitments.insert(params.i, our_commitments);
 
   let mut signatures = Vec::with_capacity(usize::from(params.n() - 1));
-  for l in 1 ..= params.n() {
+  for l in 1..=params.n() {
     if l == params.i {
       continue;
     }
@@ -97,7 +100,7 @@ fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
 
     let mut these_commitments = vec![];
     let mut cursor = Cursor::new(&Am);
-    for _ in 0 .. usize::from(params.t()) {
+    for _ in 0..usize::from(params.t()) {
       these_commitments.push(C::read_G(&mut cursor).map_err(|_| invalid)?);
     }
 
@@ -114,7 +117,7 @@ fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
         l,
         these_commitments[0],
         challenge::<C>(context, l, R.to_bytes().as_ref(), &Am),
-        SchnorrSignature::<C> { R, s }
+        SchnorrSignature::<C> { R, s },
       ));
     }
 
@@ -126,10 +129,7 @@ fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   Ok(commitments)
 }
 
-fn polynomial<F: PrimeField>(
-  coefficients: &[F],
-  l: u16
-) -> F {
+fn polynomial<F: PrimeField>(coefficients: &[F], l: u16) -> F {
   let l = F::from(u64::from(l));
   let mut share = F::zero();
   for (idx, coefficient) in coefficients.iter().rev().enumerate() {
@@ -156,7 +156,7 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
 
   // Step 1: Generate secret shares for all other parties
   let mut res = HashMap::new();
-  for l in 1 ..= params.n() {
+  for l in 1..=params.n() {
     // Don't insert our own shares to the byte buffer which is meant to be sent around
     // An app developer could accidentally send it. Best to keep this black boxed
     if l == params.i() {
@@ -192,7 +192,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   commitments: HashMap<u16, Vec<C::G>>,
   mut serialized: HashMap<u16, Re>,
 ) -> Result<FrostKeys<C>, FrostError> {
-  validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
+  validate_map(&mut serialized, &(1..=params.n()).collect::<Vec<_>>(), params.i())?;
 
   // Step 2. Verify each share
   let mut shares = HashMap::new();
@@ -207,13 +207,10 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   let exponential = |i: u16, values: &[_]| {
     let i = C::F::from(i.into());
     let mut res = Vec::with_capacity(params.t().into());
-    (0 .. usize::from(params.t())).into_iter().fold(
-      C::F::one(),
-      |exp, l| {
-        res.push((exp, values[l]));
-        exp * i
-      }
-    );
+    (0..usize::from(params.t())).into_iter().fold(C::F::one(), |exp, l| {
+      res.push((exp, values[l]));
+      exp * i
+    });
     res
   };
 
@@ -240,13 +237,13 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   // If these weren't just sums, yet the tables used in multiexp, this would be further optimized
   // As of right now, each multiexp will regenerate them
   let mut stripes = Vec::with_capacity(usize::from(params.t()));
-  for t in 0 .. usize::from(params.t()) {
+  for t in 0..usize::from(params.t()) {
     stripes.push(commitments.values().map(|commitments| commitments[t]).sum());
   }
 
   // Calculate each user's verification share
   let mut verification_shares = HashMap::new();
-  for i in 1 ..= params.n() {
+  for i in 1..=params.n() {
     verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes)));
   }
   // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
@@ -254,15 +251,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
 
   // TODO: Clear serialized and shares
 
-  Ok(
-    FrostKeys {
-      params,
-      secret_share,
-      group_key: stripes[0],
-      verification_shares,
-      offset: None
-    }
-  )
+  Ok(FrostKeys { params, secret_share, group_key: stripes[0], verification_shares, offset: None })
 }
 
 pub struct KeyGenMachine<C: Curve> {
@@ -298,11 +287,8 @@ impl<C: Curve> KeyGenMachine<C> {
     self,
     rng: &mut R,
   ) -> (SecretShareMachine<C>, Vec<u8>) {
-    let (
-      coefficients,
-      our_commitments,
-      serialized
-    ) = generate_key_r1::<_, C>(rng, &self.params, &self.context);
+    let (coefficients, our_commitments, serialized) =
+      generate_key_r1::<_, C>(rng, &self.params, &self.context);
 
     (
       SecretShareMachine {

@@ -1,20 +1,24 @@
 use core::fmt;
-use std::{io::{Read, Cursor}, sync::Arc, collections::HashMap};
+use std::{
+  io::{Read, Cursor},
+  sync::Arc,
+  collections::HashMap,
+};
 
 use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use group::{ff::{Field, PrimeField}, Group, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  Group, GroupEncoding,
+};
 use multiexp::multiexp_vartime;
 
 use dleq::DLEqProof;
 
 use crate::{
-  curve::Curve,
-  FrostError, FrostParams, FrostKeys, FrostView,
-  algorithm::Algorithm,
-  validate_map
+  curve::Curve, FrostError, FrostParams, FrostKeys, FrostView, algorithm::Algorithm, validate_map,
 };
 
 /// Pairing of an Algorithm with a FrostKeys instance and this specific signing set
@@ -48,7 +52,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
       Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], keys.params.n))?;
     }
     // Same signer included multiple times
-    for i in 0 .. included.len() - 1 {
+    for i in 0..included.len() - 1 {
       if included[i] == included[i + 1] {
         Err(FrostError::DuplicatedIndex(included[i]))?;
       }
@@ -88,11 +92,14 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   params: &mut Params<C, A>,
 ) -> (PreprocessPackage<C>, Vec<u8>) {
   let mut serialized = Vec::with_capacity(2 * C::G_len());
-  let (nonces, commitments) = params.algorithm.nonces().iter().map(
-    |generators| {
+  let (nonces, commitments) = params
+    .algorithm
+    .nonces()
+    .iter()
+    .map(|generators| {
       let nonces = [
         C::random_nonce(params.view().secret_share(), &mut *rng),
-        C::random_nonce(params.view().secret_share(), &mut *rng)
+        C::random_nonce(params.view().secret_share(), &mut *rng),
       ];
 
       let commit = |generator: C::G, buf: &mut Vec<u8>| {
@@ -116,18 +123,15 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
         // This could be further optimized with a multi-nonce proof.
         // See https://github.com/serai-dex/serai/issues/38
         for nonce in nonces {
-          DLEqProof::prove(
-            &mut *rng,
-            &mut transcript,
-            &generators,
-            nonce
-          ).serialize(&mut serialized).unwrap();
+          DLEqProof::prove(&mut *rng, &mut transcript, &generators, nonce)
+            .serialize(&mut serialized)
+            .unwrap();
         }
       }
 
       (nonces, commitments)
-    }
-  ).unzip();
+    })
+    .unzip();
 
   let addendum = params.algorithm.preprocess_addendum(rng, &params.view);
   serialized.extend(&addendum);
@@ -139,7 +143,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
 fn read_D_E<Re: Read, C: Curve>(cursor: &mut Re, l: u16) -> Result<[C::G; 2], FrostError> {
   Ok([
     C::read_G(cursor).map_err(|_| FrostError::InvalidCommitment(l))?,
-    C::read_G(cursor).map_err(|_| FrostError::InvalidCommitment(l))?
+    C::read_G(cursor).map_err(|_| FrostError::InvalidCommitment(l))?,
   ])
 }
 
@@ -197,7 +201,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
         params.algorithm.process_addendum(
           &params.view,
           *l,
-          &mut Cursor::new(our_preprocess.addendum.clone())
+          &mut Cursor::new(our_preprocess.addendum.clone()),
         )?;
       } else {
         let mut cursor = commitments.remove(l).unwrap();
@@ -205,21 +209,22 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
         let mut commitments = Vec::with_capacity(nonces.len());
         for (n, nonce_generators) in nonces.clone().iter_mut().enumerate() {
           commitments.push(Vec::with_capacity(nonce_generators.len()));
-          for _ in 0 .. nonce_generators.len() {
+          for _ in 0..nonce_generators.len() {
             commitments[n].push(read_D_E::<_, C>(&mut cursor, *l)?);
             transcript(params.algorithm.transcript(), commitments[n][commitments[n].len() - 1]);
           }
 
           if nonce_generators.len() >= 2 {
             let mut transcript = nonce_transcript::<A::Transcript>();
-            for de in 0 .. 2 {
-              DLEqProof::deserialize(
-                &mut cursor
-              ).map_err(|_| FrostError::InvalidCommitment(*l))?.verify(
-                &mut transcript,
-                &nonce_generators,
-                &commitments[n].iter().map(|commitments| commitments[de]).collect::<Vec<_>>(),
-              ).map_err(|_| FrostError::InvalidCommitment(*l))?;
+            for de in 0..2 {
+              DLEqProof::deserialize(&mut cursor)
+                .map_err(|_| FrostError::InvalidCommitment(*l))?
+                .verify(
+                  &mut transcript,
+                  &nonce_generators,
+                  &commitments[n].iter().map(|commitments| commitments[de]).collect::<Vec<_>>(),
+                )
+                .map_err(|_| FrostError::InvalidCommitment(*l))?;
             }
           }
         }
@@ -236,7 +241,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
     // protocol
     rho_transcript.append_message(
       b"commitments",
-      &C::hash_msg(params.algorithm.transcript().challenge(b"commitments").as_ref())
+      &C::hash_msg(params.algorithm.transcript().challenge(b"commitments").as_ref()),
     );
     // Include the offset, if one exists
     // While this isn't part of the FROST-expected rho transcript, the offset being here coincides
@@ -254,17 +259,17 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
 
     // Merge the rho transcript back into the global one to ensure its advanced while committing to
     // everything
-    params.algorithm.transcript().append_message(
-      b"rho_transcript",
-      rho_transcript.challenge(b"merge").as_ref()
-    );
+    params
+      .algorithm
+      .transcript()
+      .append_message(b"rho_transcript", rho_transcript.challenge(b"merge").as_ref());
   }
 
   #[allow(non_snake_case)]
   let mut Rs = Vec::with_capacity(nonces.len());
-  for n in 0 .. nonces.len() {
+  for n in 0..nonces.len() {
     Rs.push(vec![C::G::identity(); nonces[n].len()]);
-    for g in 0 .. nonces[n].len() {
+    for g in 0..nonces[n].len() {
       #[allow(non_snake_case)]
       let mut D = C::G::identity();
       let mut statements = Vec::with_capacity(B.len());
@@ -280,10 +285,12 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
   let share = params.algorithm.sign_share(
     &params.view,
     &Rs,
-    &our_preprocess.nonces.iter().map(
-      |nonces| nonces[0] + (nonces[1] * B[&params.keys.params.i()].1)
-    ).collect::<Vec<_>>(),
-    msg
+    &our_preprocess
+      .nonces
+      .iter()
+      .map(|nonces| nonces[0] + (nonces[1] * B[&params.keys.params.i()].1))
+      .collect::<Vec<_>>(),
+    msg,
   );
   Ok((Package { B, Rs, share }, share.to_repr().as_ref().to_vec()))
 }
@@ -321,21 +328,21 @@ fn complete<Re: Read, C: Curve, A: Algorithm<C>>(
   for l in &sign_params.view.included {
     if !sign_params.algorithm.verify_share(
       sign_params.view.verification_share(*l),
-      &sign.B[l].0.iter().map(
-        |nonces| nonces.iter().map(
-          |commitments| commitments[0] + (commitments[1] * sign.B[l].1)
-        ).collect()
-      ).collect::<Vec<_>>(),
-      responses[l]
+      &sign.B[l]
+        .0
+        .iter()
+        .map(|nonces| {
+          nonces.iter().map(|commitments| commitments[0] + (commitments[1] * sign.B[l].1)).collect()
+        })
+        .collect::<Vec<_>>(),
+      responses[l],
     ) {
       Err(FrostError::InvalidShare(*l))?;
     }
   }
 
   // If everyone has a valid share and there were enough participants, this should've worked
-  Err(
-    FrostError::InternalError("everyone had a valid share yet the signature was still invalid")
-  )
+  Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
 }
 
 pub trait PreprocessMachine {
@@ -345,10 +352,7 @@ pub trait PreprocessMachine {
   /// Perform the preprocessing round required in order to sign
   /// Returns a byte vector which must be transmitted to all parties selected for this signing
   /// process, over an authenticated channel
-  fn preprocess<R: RngCore + CryptoRng>(
-    self,
-    rng: &mut R
-  ) -> (Self::SignMachine, Vec<u8>);
+  fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R) -> (Self::SignMachine, Vec<u8>);
 }
 
 pub trait SignMachine<S> {
@@ -376,7 +380,7 @@ pub trait SignatureMachine<S> {
 
 /// State machine which manages signing for an arbitrary signature algorithm
 pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
-  params: Params<C, A>
+  params: Params<C, A>,
 }
 
 pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
@@ -401,7 +405,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
 
   pub(crate) fn unsafe_override_preprocess(
     self,
-    preprocess: PreprocessPackage<C>
+    preprocess: PreprocessPackage<C>,
   ) -> AlgorithmSignMachine<C, A> {
     AlgorithmSignMachine { params: self.params, preprocess }
   }
@@ -411,10 +415,7 @@ impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
   type Signature = A::Signature;
   type SignMachine = AlgorithmSignMachine<C, A>;
 
-  fn preprocess<R: RngCore + CryptoRng>(
-    self,
-    rng: &mut R
-  ) -> (Self::SignMachine, Vec<u8>) {
+  fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R) -> (Self::SignMachine, Vec<u8>) {
     let mut params = self.params;
     let (preprocess, serialized) = preprocess::<R, C, A>(rng, &mut params);
     (AlgorithmSignMachine { params, preprocess }, serialized)
@@ -427,7 +428,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
   fn sign<Re: Read>(
     self,
     commitments: HashMap<u16, Re>,
-    msg: &[u8]
+    msg: &[u8],
   ) -> Result<(Self::SignatureMachine, Vec<u8>), FrostError> {
     let mut params = self.params;
     let (sign, serialized) = sign_with_share(&mut params, self.preprocess, commitments, msg)?;
@@ -435,10 +436,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
   }
 }
 
-impl<
-  C: Curve,
-  A: Algorithm<C>
-> SignatureMachine<A::Signature> for AlgorithmSignatureMachine<C, A> {
+impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSignatureMachine<C, A> {
   fn complete<Re: Read>(self, shares: HashMap<u16, Re>) -> Result<A::Signature, FrostError> {
     complete(&self.params, self.sign, shares)
   }

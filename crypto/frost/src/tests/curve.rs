@@ -28,8 +28,8 @@ pub fn test_curve<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   {
     let mut pairs = Vec::with_capacity(1000);
     let mut sum = C::G::identity();
-    for _ in 0 .. 10 {
-      for _ in 0 .. 100 {
+    for _ in 0..10 {
+      for _ in 0..100 {
         pairs.push((C::F::random(&mut *rng), C::GENERATOR * C::F::random(&mut *rng)));
         sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
       }

@@ -1,5 +1,8 @@
 use core::fmt::Debug;
-use std::{io::Read, sync::{Arc, RwLock}};
+use std::{
+  io::Read,
+  sync::{Arc, RwLock},
+};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -8,7 +11,7 @@ use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   traits::{Identity, IsIdentity},
   scalar::Scalar,
-  edwards::EdwardsPoint
+  edwards::EdwardsPoint,
 };
 
 use group::Group;
@@ -19,7 +22,10 @@ use dalek_ff_group as dfg;
 
 use crate::{
   frost::{MultisigError, write_dleq, read_dleq},
-  ringct::{hash_to_point, clsag::{ClsagInput, Clsag}}
+  ringct::{
+    hash_to_point,
+    clsag::{ClsagInput, Clsag},
+  },
 };
 
 impl ClsagInput {
@@ -49,7 +55,7 @@ impl ClsagInput {
 #[derive(Clone, Debug)]
 pub struct ClsagDetails {
   input: ClsagInput,
-  mask: Scalar
+  mask: Scalar,
 }
 
 impl ClsagDetails {
@@ -65,7 +71,7 @@ struct Interim {
   c: Scalar,
 
   clsag: Clsag,
-  pseudo_out: EdwardsPoint
+  pseudo_out: EdwardsPoint,
 }
 
 #[allow(non_snake_case)]
@@ -74,34 +80,33 @@ pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
   H: EdwardsPoint,
-  // Merged here as CLSAG needs it, passing it would be a mess, yet having it beforehand requires a round
+  // Merged here as CLSAG needs it, passing it would be a mess, yet having it beforehand requires
+  // an extra round
   image: EdwardsPoint,
 
   details: Arc<RwLock<Option<ClsagDetails>>>,
 
   msg: Option<[u8; 32]>,
-  interim: Option<Interim>
+  interim: Option<Interim>,
 }
 
 impl ClsagMultisig {
   pub fn new(
     transcript: RecommendedTranscript,
     output_key: EdwardsPoint,
-    details: Arc<RwLock<Option<ClsagDetails>>>
+    details: Arc<RwLock<Option<ClsagDetails>>>,
   ) -> Result<ClsagMultisig, MultisigError> {
-    Ok(
-      ClsagMultisig {
-        transcript,
+    Ok(ClsagMultisig {
+      transcript,
 
-        H: hash_to_point(output_key),
-        image: EdwardsPoint::identity(),
+      H: hash_to_point(output_key),
+      image: EdwardsPoint::identity(),
 
-        details,
+      details,
 
-        msg: None,
-        interim: None
-      }
-    )
+      msg: None,
+      interim: None,
+    })
   }
 
   pub const fn serialized_len() -> usize {
@@ -128,7 +133,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    view: &FrostView<Ed25519>
+    view: &FrostView<Ed25519>,
   ) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(Self::serialized_len());
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
@@ -140,7 +145,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     &mut self,
     view: &FrostView<Ed25519>,
     l: u16,
-    serialized: &mut Re
+    serialized: &mut Re,
   ) -> Result<(), FrostError> {
     if self.image.is_identity().into() {
       self.transcript.domain_separate(b"CLSAG");
@@ -149,12 +154,9 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     }
 
     self.transcript.append_message(b"participant", &l.to_be_bytes());
-    let image = read_dleq(
-      serialized,
-      self.H,
-      l,
-      view.verification_share(l)
-    ).map_err(|_| FrostError::InvalidCommitment(l))?.0;
+    let image = read_dleq(serialized, self.H, l, view.verification_share(l))
+      .map_err(|_| FrostError::InvalidCommitment(l))?
+      .0;
     self.transcript.append_message(b"key_image_share", image.compress().to_bytes().as_ref());
     self.image += image;
 
@@ -170,7 +172,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     view: &FrostView<Ed25519>,
     nonce_sums: &[Vec<dfg::EdwardsPoint>],
     nonces: &[dfg::Scalar],
-    msg: &[u8]
+    msg: &[u8],
   ) -> dfg::Scalar {
     // Use the transcript to get a seeded random number generator
     // The transcript contains private data, preventing passive adversaries from recreating this
@@ -189,7 +191,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       self.mask(),
       &self.msg.as_ref().unwrap(),
       nonce_sums[0][0].0,
-      nonce_sums[0][1].0
+      nonce_sums[0][1].0,
     );
     self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
@@ -203,17 +205,20 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     &self,
     _: dfg::EdwardsPoint,
     _: &[Vec<dfg::EdwardsPoint>],
-    sum: dfg::Scalar
+    sum: dfg::Scalar,
   ) -> Option<Self::Signature> {
     let interim = self.interim.as_ref().unwrap();
     let mut clsag = interim.clsag.clone();
     clsag.s[usize::from(self.input().decoys.i)] = sum.0 - interim.c;
-    if clsag.verify(
-      &self.input().decoys.ring,
-      &self.image,
-      &interim.pseudo_out,
-      &self.msg.as_ref().unwrap()
-    ).is_ok() {
+    if clsag
+      .verify(
+        &self.input().decoys.ring,
+        &self.image,
+        &interim.pseudo_out,
+        &self.msg.as_ref().unwrap(),
+      )
+      .is_ok()
+    {
       return Some((clsag, interim.pseudo_out));
     }
     return None;
@@ -227,8 +232,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     share: dfg::Scalar,
   ) -> bool {
     let interim = self.interim.as_ref().unwrap();
-    return (&share.0 * &ED25519_BASEPOINT_TABLE) == (
-      nonces[0][0].0 - (interim.p * verification_share.0)
-    );
+    return (&share.0 * &ED25519_BASEPOINT_TABLE)
+      == (nonces[0][0].0 - (interim.p * verification_share.0));
   }
 }

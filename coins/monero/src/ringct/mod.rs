@@ -8,7 +8,7 @@ pub mod bulletproofs;
 
 use crate::{
   serialize::*,
-  ringct::{clsag::Clsag, bulletproofs::Bulletproofs}
+  ringct::{clsag::Clsag, bulletproofs::Bulletproofs},
 };
 
 pub fn generate_key_image(secret: Scalar) -> EdwardsPoint {
@@ -19,7 +19,7 @@ pub fn generate_key_image(secret: Scalar) -> EdwardsPoint {
 pub struct RctBase {
   pub fee: u64,
   pub ecdh_info: Vec<[u8; 8]>,
-  pub commitments: Vec<EdwardsPoint>
+  pub commitments: Vec<EdwardsPoint>,
 }
 
 impl RctBase {
@@ -37,12 +37,15 @@ impl RctBase {
           w.write_all(ecdh)?;
         }
         write_raw_vec(write_point, &self.commitments, w)
-      },
-      _ => panic!("Serializing unknown RctType's Base")
+      }
+      _ => panic!("Serializing unknown RctType's Base"),
     }
   }
 
-  pub fn deserialize<R: std::io::Read>(outputs: usize, r: &mut R) -> std::io::Result<(RctBase, u8)> {
+  pub fn deserialize<R: std::io::Read>(
+    outputs: usize,
+    r: &mut R,
+  ) -> std::io::Result<(RctBase, u8)> {
     let mut rct_type = [0];
     r.read_exact(&mut rct_type)?;
     Ok((
@@ -51,13 +54,16 @@ impl RctBase {
       } else {
         RctBase {
           fee: read_varint(r)?,
-          ecdh_info: (0 .. outputs).map(
-            |_| { let mut ecdh = [0; 8]; r.read_exact(&mut ecdh).map(|_| ecdh) }
-          ).collect::<Result<_, _>>()?,
-          commitments: read_raw_vec(read_point, outputs, r)?
+          ecdh_info: (0..outputs)
+            .map(|_| {
+              let mut ecdh = [0; 8];
+              r.read_exact(&mut ecdh).map(|_| ecdh)
+            })
+            .collect::<Result<_, _>>()?,
+          commitments: read_raw_vec(read_point, outputs, r)?,
         }
       },
-      rct_type[0]
+      rct_type[0],
     ))
   }
 }
@@ -65,18 +71,14 @@ impl RctBase {
 #[derive(Clone, PartialEq, Debug)]
 pub enum RctPrunable {
   Null,
-  Clsag {
-    bulletproofs: Vec<Bulletproofs>,
-    clsags: Vec<Clsag>,
-    pseudo_outs: Vec<EdwardsPoint>
-  }
+  Clsag { bulletproofs: Vec<Bulletproofs>, clsags: Vec<Clsag>, pseudo_outs: Vec<EdwardsPoint> },
 }
 
 impl RctPrunable {
   pub fn rct_type(&self) -> u8 {
     match self {
       RctPrunable::Null => 0,
-      RctPrunable::Clsag { .. } => 5
+      RctPrunable::Clsag { .. } => 5,
     }
   }
 
@@ -98,26 +100,30 @@ impl RctPrunable {
   pub fn deserialize<R: std::io::Read>(
     rct_type: u8,
     decoys: &[usize],
-    r: &mut R
+    r: &mut R,
   ) -> std::io::Result<RctPrunable> {
-    Ok(
-      match rct_type {
-        0 => RctPrunable::Null,
-        5 => RctPrunable::Clsag {
-          // TODO: Can the amount of outputs be calculated from the BPs for any validly formed TX?
-          bulletproofs: read_vec(Bulletproofs::deserialize, r)?,
-          clsags: (0 .. decoys.len()).map(|o| Clsag::deserialize(decoys[o], r)).collect::<Result<_, _>>()?,
-          pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?
-        },
-        _ => Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown RCT type"))?
-      }
-    )
+    Ok(match rct_type {
+      0 => RctPrunable::Null,
+      5 => RctPrunable::Clsag {
+        bulletproofs: read_vec(Bulletproofs::deserialize, r)?,
+        clsags: (0..decoys.len())
+          .map(|o| Clsag::deserialize(decoys[o], r))
+          .collect::<Result<_, _>>()?,
+        pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
+      },
+      _ => Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Tried to deserialize unknown RCT type",
+      ))?,
+    })
   }
 
   pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
-      RctPrunable::Clsag { bulletproofs, .. } => bulletproofs.iter().map(|bp| bp.signature_serialize(w)).collect(),
+      RctPrunable::Clsag { bulletproofs, .. } => {
+        bulletproofs.iter().map(|bp| bp.signature_serialize(w)).collect()
+      }
     }
   }
 }
@@ -125,7 +131,7 @@ impl RctPrunable {
 #[derive(Clone, PartialEq, Debug)]
 pub struct RctSignatures {
   pub base: RctBase,
-  pub prunable: RctPrunable
+  pub prunable: RctPrunable,
 }
 
 impl RctSignatures {
@@ -138,7 +144,11 @@ impl RctSignatures {
     self.prunable.serialize(w)
   }
 
-  pub fn deserialize<R: std::io::Read>(decoys: Vec<usize>, outputs: usize, r: &mut R) -> std::io::Result<RctSignatures> {
+  pub fn deserialize<R: std::io::Read>(
+    decoys: Vec<usize>,
+    outputs: usize,
+    r: &mut R,
+  ) -> std::io::Result<RctSignatures> {
     let base = RctBase::deserialize(outputs, r)?;
     Ok(RctSignatures { base: base.0, prunable: RctPrunable::deserialize(base.1, &decoys, r)? })
   }

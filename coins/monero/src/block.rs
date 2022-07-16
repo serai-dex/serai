@@ -1,7 +1,4 @@
-use crate::{
-  serialize::*,
-  transaction::Transaction
-};
+use crate::{serialize::*, transaction::Transaction};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct BlockHeader {
@@ -9,7 +6,7 @@ pub struct BlockHeader {
   pub minor_version: u64,
   pub timestamp: u64,
   pub previous: [u8; 32],
-  pub nonce: u32
+  pub nonce: u32,
 }
 
 impl BlockHeader {
@@ -22,15 +19,21 @@ impl BlockHeader {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<BlockHeader> {
-    Ok(
-      BlockHeader {
-        major_version: read_varint(r)?,
-        minor_version: read_varint(r)?,
-        timestamp: read_varint(r)?,
-        previous: { let mut previous = [0; 32]; r.read_exact(&mut previous)?; previous },
-        nonce: { let mut nonce = [0; 4]; r.read_exact(&mut nonce)?; u32::from_le_bytes(nonce) }
-      }
-    )
+    Ok(BlockHeader {
+      major_version: read_varint(r)?,
+      minor_version: read_varint(r)?,
+      timestamp: read_varint(r)?,
+      previous: {
+        let mut previous = [0; 32];
+        r.read_exact(&mut previous)?;
+        previous
+      },
+      nonce: {
+        let mut nonce = [0; 4];
+        r.read_exact(&mut nonce)?;
+        u32::from_le_bytes(nonce)
+      },
+    })
   }
 }
 
@@ -38,7 +41,7 @@ impl BlockHeader {
 pub struct Block {
   pub header: BlockHeader,
   pub miner_tx: Transaction,
-  pub txs: Vec<[u8; 32]>
+  pub txs: Vec<[u8; 32]>,
 }
 
 impl Block {
@@ -53,14 +56,15 @@ impl Block {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Block> {
-    Ok(
-      Block {
-        header: BlockHeader::deserialize(r)?,
-        miner_tx: Transaction::deserialize(r)?,
-        txs: (0 .. read_varint(r)?).map(
-          |_| { let mut tx = [0; 32]; r.read_exact(&mut tx).map(|_| tx) }
-        ).collect::<Result<_, _>>()?
-      }
-    )
+    Ok(Block {
+      header: BlockHeader::deserialize(r)?,
+      miner_tx: Transaction::deserialize(r)?,
+      txs: (0..read_varint(r)?)
+        .map(|_| {
+          let mut tx = [0; 32];
+          r.read_exact(&mut tx).map(|_| tx)
+        })
+        .collect::<Result<_, _>>()?,
+    })
   }
 }

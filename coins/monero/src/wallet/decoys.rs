@@ -7,7 +7,11 @@ use rand_distr::{Distribution, Gamma};
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use crate::{transaction::RING_LEN, wallet::SpendableOutput, rpc::{RpcError, Rpc}};
+use crate::{
+  transaction::RING_LEN,
+  wallet::SpendableOutput,
+  rpc::{RpcError, Rpc},
+};
 
 const LOCK_WINDOW: usize = 10;
 const MATURITY: u64 = 60;
@@ -30,7 +34,7 @@ async fn select_n<R: RngCore + CryptoRng>(
   high: u64,
   per_second: f64,
   used: &mut HashSet<u64>,
-  count: usize
+  count: usize,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   let mut iters = 0;
   let mut confirmed = Vec::with_capacity(count);
@@ -71,7 +75,7 @@ async fn select_n<R: RngCore + CryptoRng>(
     }
 
     let outputs = rpc.get_outputs(&candidates, height).await?;
-    for i in 0 .. outputs.len() {
+    for i in 0..outputs.len() {
       if let Some(output) = outputs[i] {
         confirmed.push((candidates[i], output));
       }
@@ -84,7 +88,7 @@ async fn select_n<R: RngCore + CryptoRng>(
 fn offset(ring: &[u64]) -> Vec<u64> {
   let mut res = vec![ring[0]];
   res.resize(ring.len(), 0);
-  for m in (1 .. ring.len()).rev() {
+  for m in (1..ring.len()).rev() {
     res[m] = ring[m] - ring[m - 1];
   }
   res
@@ -94,7 +98,7 @@ fn offset(ring: &[u64]) -> Vec<u64> {
 pub struct Decoys {
   pub i: u8,
   pub offsets: Vec<u64>,
-  pub ring: Vec<[EdwardsPoint; 2]>
+  pub ring: Vec<[EdwardsPoint; 2]>,
 }
 
 impl Decoys {
@@ -106,14 +110,14 @@ impl Decoys {
     rng: &mut R,
     rpc: &Rpc,
     height: usize,
-    inputs: &[SpendableOutput]
+    inputs: &[SpendableOutput],
   ) -> Result<Vec<Decoys>, RpcError> {
     // Convert the inputs in question to the raw output data
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
       outputs.push((
         rpc.get_o_indexes(input.tx).await?[usize::from(input.o)],
-        [input.key, input.commitment.calculate()]
+        [input.key, input.commitment.calculate()],
       ));
     }
 
@@ -153,22 +157,15 @@ impl Decoys {
     }
 
     // Select all decoys for this transaction, assuming we generate a sane transaction
-    // We should almost never naturally generate an insane transaction, hence why this doesn't bother
-    // with an overage
-    let mut decoys = select_n(
-      rng,
-      rpc,
-      height,
-      high,
-      per_second,
-      &mut used,
-      inputs.len() * DECOYS
-    ).await?;
+    // We should almost never naturally generate an insane transaction, hence why this doesn't
+    // bother with an overage
+    let mut decoys =
+      select_n(rng, rpc, height, high, per_second, &mut used, inputs.len() * DECOYS).await?;
 
     let mut res = Vec::with_capacity(inputs.len());
     for o in outputs {
       // Grab the decoys for this specific output
-      let mut ring = decoys.drain((decoys.len() - DECOYS) ..).collect::<Vec<_>>();
+      let mut ring = decoys.drain((decoys.len() - DECOYS)..).collect::<Vec<_>>();
       ring.push(o);
       ring.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -178,40 +175,42 @@ impl Decoys {
       // 500 outputs since while itself not being a sufficiently mature blockchain
       // Considering Monero's p2p layer doesn't actually check transaction sanity, it should be
       // fine for us to not have perfectly matching rules, especially since this code will infinite
-      // loop if it can't determine sanity, which is possible with sufficient inputs on sufficiently
-      // small chains
+      // loop if it can't determine sanity, which is possible with sufficient inputs on
+      // sufficiently small chains
       if high > 500 {
         // Make sure the TX passes the sanity check that the median output is within the last 40%
         let target_median = high * 3 / 5;
         while ring[RING_LEN / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
-          for removed in ring.drain(0 .. (RING_LEN / 2)).collect::<Vec<_>>() {
+          for removed in ring.drain(0..(RING_LEN / 2)).collect::<Vec<_>>() {
             // If we removed the real spend, add it back
             if removed.0 == o.0 {
               ring.push(o);
             } else {
-              // We could not remove this, saving CPU time and removing low values as possibilities, yet
-              // it'd increase the amount of decoys required to create this transaction and some removed
-              // outputs may be the best option (as we drop the first half, not just the bottom n)
+              // We could not remove this, saving CPU time and removing low values as
+              // possibilities, yet it'd increase the amount of decoys required to create this
+              // transaction and some removed outputs may be the best option (as we drop the first
+              // half, not just the bottom n)
               used.remove(&removed.0);
             }
           }
 
           // Select new outputs until we have a full sized ring again
           ring.extend(
-            select_n(rng, rpc, height, high, per_second, &mut used, RING_LEN - ring.len()).await?
+            select_n(rng, rpc, height, high, per_second, &mut used, RING_LEN - ring.len()).await?,
           );
           ring.sort_by(|a, b| a.0.cmp(&b.0));
         }
 
-        // The other sanity check rule is about duplicates, yet we already enforce unique ring members
+        // The other sanity check rule is about duplicates, yet we already enforce unique ring
+        // members
       }
 
       res.push(Decoys {
         // Binary searches for the real spend since we don't know where it sorted to
         i: u8::try_from(ring.partition_point(|x| x.0 < o.0)).unwrap(),
         offsets: offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),
-        ring: ring.iter().map(|output| output.1).collect()
+        ring: ring.iter().map(|output| output.1).collect(),
       });
     }
 

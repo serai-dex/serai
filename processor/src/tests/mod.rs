@@ -1,24 +1,32 @@
-use std::{io::Cursor, sync::{Arc, RwLock}, collections::HashMap};
+use std::{
+  io::Cursor,
+  sync::{Arc, RwLock},
+  collections::HashMap,
+};
 
 use async_trait::async_trait;
 
 use rand::rngs::OsRng;
 
-use crate::{NetworkError, Network, coin::{Coin, Monero}, wallet::{WalletKeys, MemCoinDb, Wallet}};
+use crate::{
+  NetworkError, Network,
+  coin::{Coin, Monero},
+  wallet::{WalletKeys, MemCoinDb, Wallet},
+};
 
 #[derive(Clone)]
 struct LocalNetwork {
   i: u16,
   size: u16,
   round: usize,
-  rounds: Arc<RwLock<Vec<HashMap<u16, Cursor<Vec<u8>>>>>>
+  rounds: Arc<RwLock<Vec<HashMap<u16, Cursor<Vec<u8>>>>>>,
 }
 
 impl LocalNetwork {
   fn new(size: u16) -> Vec<LocalNetwork> {
     let rounds = Arc::new(RwLock::new(vec![]));
     let mut res = vec![];
-    for i in 1 ..= size {
+    for i in 1..=size {
       res.push(LocalNetwork { i, size, round: 0, rounds: rounds.clone() });
     }
     res
@@ -60,12 +68,10 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   let mut networks = LocalNetwork::new(threshold);
 
   let mut wallets = vec![];
-  for i in 1 ..= threshold {
+  for i in 1..=threshold {
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_height(0, height);
-    wallet.add_keys(
-      &WalletKeys::new(Arc::try_unwrap(keys.remove(&i).take().unwrap()).unwrap(), 0)
-    );
+    wallet.add_keys(&WalletKeys::new(Arc::try_unwrap(keys.remove(&i).take().unwrap()).unwrap(), 0));
     wallets.push(wallet);
   }
 
@@ -87,20 +93,20 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
     let height = coin.get_height().await.unwrap();
     wallet.acknowledge_height(1, height - 10);
-    let signable = wallet.prepare_sends(
-      1,
-      vec![(wallet.address(), 10000000000)],
-      fee
-    ).await.unwrap().1.swap_remove(0);
-    futures.push(
-      wallet.attempt_send(network, signable, (1 ..= threshold).into_iter().collect::<Vec<_>>())
-    );
+    let signable = wallet
+      .prepare_sends(1, vec![(wallet.address(), 10000000000)], fee)
+      .await
+      .unwrap()
+      .1
+      .swap_remove(0);
+    futures.push(wallet.attempt_send(
+      network,
+      signable,
+      (1..=threshold).into_iter().collect::<Vec<_>>(),
+    ));
   }
 
-  println!(
-    "{:?}",
-    hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0)
-  );
+  println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
 }
 
 #[tokio::test]
