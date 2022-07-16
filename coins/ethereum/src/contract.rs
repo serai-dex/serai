@@ -36,10 +36,10 @@ pub async fn call_verify(
 ) -> Result<()> {
     let ok = contract
         .verify(
-            params.s.to_bytes().into(),
-            params.px.to_bytes().into(),
             params.parity + 27,
+            params.px.to_bytes().into(),
             params.message.into(),
+            params.s.to_bytes().into(),
             params.e.to_bytes().into(),
         )
         .call()

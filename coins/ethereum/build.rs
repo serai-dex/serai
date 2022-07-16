@@ -1,7 +1,7 @@
 use ethers_solc::{Project, ProjectPathsConfig};
 
 fn main() {
-    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=contracts/Schnorr.sol");
 
     // configure the project with all its paths, solc, cache etc.
     let project = Project::builder()
