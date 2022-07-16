@@ -11,9 +11,9 @@ jobs:
     - name: Install stable
       run: rustup toolchain install stable
     - name: Build
-      run: ./scripts/build.sh
+      run: bash ./scripts/build.sh
     - name: Run tests
-      run: ./scripts/test.sh
+      run: bash ./scripts/test.sh
 
   fmt:
     name: fmt
@@ -24,7 +24,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --all -- --check
+          args: +nightly --all -- --check
 
   clippy:
     name: clippy
