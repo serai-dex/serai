@@ -19,8 +19,6 @@ jobs:
     name: fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - run: rustup component add rustfmt
       - uses: actions-rs/cargo@v1
       - name: Install nightly rustfmt
         run: rustup component add rustfmt --toolchain nightly-x86_64-unknown-linux-gnu
@@ -37,4 +35,3 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
-          
