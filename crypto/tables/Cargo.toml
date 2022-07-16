@@ -1,0 +1,16 @@
+[package]
+name = "tables"
+version = "0.1.0"
+description = "Efficient multiplication tables for ff/group"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["ff", "group"]
+edition = "2021"
+
+[dependencies]
+ff = "0.12"
+group = "0.12"
+
+[dev-dependencies]
+k256 = { version = "0.11", features = ["bits"] }
