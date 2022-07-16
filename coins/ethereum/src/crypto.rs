@@ -62,8 +62,7 @@ impl Hram<Secp256k1> for EthereumHram {
 }
 
 pub struct ProcessedSignature {
-    pub sr: Scalar,
-    pub er: Scalar,
+    pub s: Scalar,
     pub px: Scalar,
     pub parity: u8,
     pub message: [u8; 32],
@@ -71,19 +70,21 @@ pub struct ProcessedSignature {
 }
 
 #[allow(non_snake_case)]
-pub fn preprocess_signature(
+pub fn preprocess_signature_for_ecrecover(
     m: [u8; 32],
     R: &ProjectivePoint,
     s: Scalar,
     A: &ProjectivePoint,
     chain_id: U256,
 ) -> (Scalar, Scalar) {
-    let processed_sig = preprocess_signature_for_contract(m, R, s, A, chain_id);
-    (processed_sig.sr, processed_sig.er)
+    let processed_sig = process_signature_for_contract(m, R, s, A, chain_id);
+    let sr = processed_sig.s.mul(&processed_sig.px).negate();
+    let er = processed_sig.e.mul(&processed_sig.px).negate();
+    (sr, er)
 }
 
 #[allow(non_snake_case)]
-pub fn preprocess_signature_for_contract(
+pub fn process_signature_for_contract(
     m: [u8; 32],
     R: &ProjectivePoint,
     s: Scalar,
@@ -94,11 +95,8 @@ pub fn preprocess_signature_for_contract(
     let px = &encoded_pk.as_ref()[1..33];
     let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
     let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), &m].concat());
-    let sr = s.mul(&px_scalar).negate();
-    let er = e.mul(&px_scalar).negate();
     ProcessedSignature {
-        sr,
-        er,
+        s,
         px: px_scalar,
         parity: &encoded_pk.as_ref()[0] - 2,
         #[allow(non_snake_case)]

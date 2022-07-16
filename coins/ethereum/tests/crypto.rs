@@ -79,18 +79,8 @@ fn test_ecrecover_hack() {
         full_message,
     );
 
-    let (sr, er) = preprocess_signature(hashed_message, &sig.R, sig.s, &group_key, chain_id);
+    let (sr, er) =
+        preprocess_signature_for_ecrecover(hashed_message, &sig.R, sig.s, &group_key, chain_id);
     let q = ecrecover(sr, group_key_compressed[0] - 2, group_key_x, er).unwrap();
-    assert_eq!(q, address(&sig.R));
-
-    let processed_signature =
-        preprocess_signature_for_contract(hashed_message, &sig.R, sig.s, &group_key, chain_id);
-    let q = ecrecover(
-        processed_signature.sr,
-        processed_signature.parity,
-        processed_signature.px,
-        processed_signature.er,
-    )
-    .unwrap();
     assert_eq!(q, address(&sig.R));
 }
