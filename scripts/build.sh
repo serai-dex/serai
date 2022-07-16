@@ -1,5 +1,7 @@
 #!/bin/bash
 BASEDIR=$(pwd)
+rustup install nightly
+rustup default nightly
 git submodule update --init --recursive
 sudo apt-get install libgtest-dev && cd /usr/src/gtest && sudo cmake . && sudo make
 sudo mv lib/libg* /usr/lib/

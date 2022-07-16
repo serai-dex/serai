@@ -8,8 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Install stable
-      run: rustup toolchain install stable
+    - name: Install nightly
+      run: rustup toolchain install nightly
     - name: Build
       run: bash ./scripts/build.sh
     - name: Run tests
@@ -37,3 +37,4 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
+          
