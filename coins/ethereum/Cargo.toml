@@ -2,7 +2,7 @@
 name = "ethereum-serai"
 version = "0.1.0"
 description = "An Ethereum library supporting Schnorr signing and on-chain verification"
-license = "GPLv3"
+license = "AGPLv3"
 authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabethjbinks@gmail.com>"]
 edition = "2021"
 
