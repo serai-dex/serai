@@ -29,9 +29,14 @@ frame-system = { git = "https://github.com/serai-dex/substrate", default-feature
 frame-executive = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-try-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
+pallet-randomness-collective-flip = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+pallet-contracts-primitives = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-contracts = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-contracts-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 # Used for the node template's RPCs
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -65,10 +70,15 @@ std = [
   "frame-system/std",
   "frame-executive/std",
 
+  "pallet-randomness-collective-flip/std",
   "pallet-timestamp/std",
   "pallet-balances/std",
   "pallet-transaction-payment/std",
   "pallet-transaction-payment-rpc-runtime-api/std",
+
+	"pallet-contracts/std",
+	"pallet-contracts-primitives/std",
+	"pallet-contracts-rpc-runtime-api/std",
 ]
 
 runtime-benchmarks = [
@@ -87,6 +97,7 @@ try-runtime = [
   "frame-try-runtime",
   "frame-system/try-runtime",
 
+	"pallet-randomness-collective-flip/try-runtime",
   "pallet-timestamp/try-runtime",
   "pallet-balances/try-runtime",
   "pallet-transaction-payment/try-runtime",
