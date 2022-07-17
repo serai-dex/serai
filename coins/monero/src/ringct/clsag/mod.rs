@@ -103,7 +103,7 @@ fn core(
   let mut to_hash = Vec::with_capacity(((2 * n) + 5) * 32);
   to_hash.extend(PREFIX);
   to_hash.extend(AGG_0);
-  to_hash.extend([0; 32 - PREFIX_AGG_0_LEN.len()]);
+  to_hash.extend([0; 32 - PREFIX_AGG_0_LEN]);
 
   let mut P = Vec::with_capacity(n);
   for member in ring {
@@ -123,7 +123,7 @@ fn core(
   // mu_P with agg_0
   let mu_P = hash_to_scalar(&to_hash);
   // mu_C with agg_1
-  to_hash[PREFIX_AGG_0_LEN.len() - 1] = b'1';
+  to_hash[PREFIX_AGG_0_LEN - 1] = b'1';
   let mu_C = hash_to_scalar(&to_hash);
 
   // Truncate it for the round transcript, altering the DST as needed
