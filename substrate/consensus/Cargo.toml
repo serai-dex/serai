@@ -8,25 +8,25 @@ edition = "2021"
 publish = false
 
 [dependencies]
-sp-core = { version = "6.0.0", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sp-trie = { version = "6.0.0", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sp-timestamp = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sc-consensus = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sp-consensus = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sc-transaction-pool = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sc-basic-authorship = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sc-consensus-pow = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sp-consensus-pow = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-trie = { git = "https://github.com/serai-dex/substrate" }
+sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
+sc-consensus = { git = "https://github.com/serai-dex/substrate" }
+sp-consensus = { git = "https://github.com/serai-dex/substrate" }
+sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
+sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
+sc-consensus-pow = { git = "https://github.com/serai-dex/substrate" }
+sp-consensus-pow = { git = "https://github.com/serai-dex/substrate" }
 
-sc-network = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai"  }
-sc-service = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai", features = ["wasmtime"]  }
-sc-executor = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai", features = ["wasmtime"]  }
-sp-runtime = { version = "6.0.0", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sc-network = { git = "https://github.com/serai-dex/substrate" }
+sc-service = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
+sc-executor = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 
-substrate-prometheus-endpoint = { version = "0.10.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate" }
 
-sc-client-api = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
-sp-api = { version = "4.0.0-dev", git = "https://github.com/serai-dex/substrate.git", branch = "serai" }
+sc-client-api = { git = "https://github.com/serai-dex/substrate" }
+sp-api = { git = "https://github.com/serai-dex/substrate" }
 
 serai-runtime = { path = "../runtime" }
 
