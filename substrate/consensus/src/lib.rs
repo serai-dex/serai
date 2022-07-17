@@ -76,7 +76,7 @@ async fn produce<
         worker_clone.submit(vec![]).await;
       });
     });
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(6)).await;
   }
 }
 
@@ -119,7 +119,7 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     network.clone(),
     None,
     move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
-    Duration::from_secs(1),
+    Duration::from_secs(6),
     Duration::from_secs(2),
     can_author_with,
   );
