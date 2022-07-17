@@ -15,7 +15,9 @@ members = [
 
   "substrate/runtime",
   "substrate/consensus",
-  "substrate/node"
+  "substrate/node",
+
+  "contracts/multisig",
 ]
 
 [profile.release]
