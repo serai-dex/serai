@@ -33,3 +33,59 @@ impl Environment for SeraiEnvironment {
 
   type ChainExtension = SeraiExtension;
 }
+
+pub fn test_register() {
+  struct ExtensionLen;
+  impl ink_env::test::ChainExtension for ExtensionLen {
+    fn func_id(&self) -> u32 {
+      0
+    }
+
+    fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
+      scale::Encode::encode_to(&5u16, output);
+      0
+    }
+  }
+  ink_env::test::register_chain_extension(ExtensionLen);
+
+  struct ExtensionId;
+  impl ink_env::test::ChainExtension for ExtensionId {
+    fn func_id(&self) -> u32 {
+      1
+    }
+
+    fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
+      scale::Encode::encode_to(&[0xffu8; 32], output);
+      0
+    }
+  }
+  ink_env::test::register_chain_extension(ExtensionId);
+
+  struct ExtensionActive;
+  impl ink_env::test::ChainExtension for ExtensionActive {
+    fn func_id(&self) -> u32 {
+      2
+    }
+
+    fn call(&mut self, input: &[u8], output: &mut Vec<u8>) -> u32 {
+      use scale::Decode;
+      let potential = AccountId::decode(&mut &input[1 ..]).unwrap(); // TODO: Why is this 1 ..?
+
+      let mut presence = false;
+      for validator in [
+        AccountId::from([1; 32]),
+        AccountId::from([2; 32]),
+        AccountId::from([3; 32]),
+        AccountId::from([4; 32]),
+        AccountId::from([5; 32])
+      ].clone() {
+        if potential == validator {
+          presence = true;
+        }
+      }
+      scale::Encode::encode_to(&presence, output);
+      0
+    }
+  }
+  ink_env::test::register_chain_extension(ExtensionActive);
+}

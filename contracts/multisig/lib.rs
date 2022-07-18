@@ -39,7 +39,7 @@ mod multisig {
     #[ink(topic)]
     hash: [u8; 32],
     /// Keys voted on.
-    keys: Vec<Vec<u8>>,
+    keys: Option<Vec<Vec<u8>>>,
   }
 
   /// Event emitted when the new keys are fully generated for all curves, having been fully voted
@@ -123,14 +123,14 @@ mod multisig {
       self.voted.insert((validator, keys_hash), &());
 
       let votes = if let Some(votes) = self.votes.get((validator_set, keys_hash)) {
-        self.env().emit_event(Vote { validator, validator_set, hash: keys_hash, keys: vec![] });
+        self.env().emit_event(Vote { validator, validator_set, hash: keys_hash, keys: None });
         votes + 1
       } else {
         self.env().emit_event(Vote {
           validator,
           validator_set,
           hash: keys_hash,
-          keys: keys.clone(),
+          keys: Some(keys.clone()),
         });
         1
       };
@@ -147,6 +147,106 @@ mod multisig {
       }
 
       Ok(())
+    }
+  }
+
+  #[cfg(test)]
+  mod tests {
+    use super::*;
+
+    use ink_env::{
+      hash::{CryptoHash, Blake2x256},
+      AccountId,
+      topics::PrefixedValue,
+    };
+    use ink_lang as ink;
+
+    type Event = <Multisig as ::ink_lang::reflect::ContractEventBase>::Type;
+
+    fn hash_prefixed<T: scale::Encode>(prefixed: PrefixedValue<T>) -> [u8; 32] {
+      let encoded = prefixed.encode();
+      let mut hash = [0; 32];
+      if encoded.len() < 32 {
+        hash[.. encoded.len()].copy_from_slice(&encoded);
+      } else {
+        Blake2x256::hash(&encoded, &mut hash);
+      }
+      hash
+    }
+
+    fn assert_vote(
+      event: &ink_env::test::EmittedEvent,
+      expected_validator: AccountId,
+      expected_validator_set: [u8; 32],
+      expected_hash: [u8; 32],
+      expected_keys: Option<Vec<Vec<u8>>>,
+    ) {
+      let decoded_event = <Event as scale::Decode>::decode(&mut &event.data[..])
+        .expect("encountered invalid contract event data buffer");
+
+      if let Event::Vote(Vote { validator, validator_set, hash, keys }) = decoded_event {
+        assert_eq!(validator, expected_validator);
+        assert_eq!(validator_set, expected_validator_set);
+        assert_eq!(hash, expected_hash);
+        assert_eq!(keys, expected_keys);
+      } else {
+        panic!("invalid Vote event")
+      }
+
+      let expected_topics = vec![
+        hash_prefixed(PrefixedValue { prefix: b"", value: b"Multisig::Vote" }),
+        hash_prefixed(PrefixedValue {
+          prefix: b"Multisig::Vote::validator",
+          value: &expected_validator,
+        }),
+        hash_prefixed(PrefixedValue {
+          prefix: b"Multisig::Vote::validator_set",
+          value: &expected_validator_set,
+        }),
+        hash_prefixed(PrefixedValue { prefix: b"Multisig::Vote::hash", value: &expected_hash }),
+      ];
+
+      for (n, (actual_topic, expected_topic)) in
+        event.topics.iter().zip(expected_topics).enumerate()
+      {
+        assert_eq!(actual_topic, &expected_topic, "encountered invalid topic at {}", n);
+      }
+    }
+
+    /// The default constructor does its job.
+    #[ink::test]
+    fn new() {
+      let multisig = Multisig::new();
+      assert_eq!(multisig.validator_set(), [0; 32]);
+    }
+
+    #[ink::test]
+    fn non_existent_curve() {
+      assert_eq!(Multisig::new().key(0), Err(Error::NonExistentCurve));
+    }
+
+    #[ink::test]
+    fn vote() {
+      serai_extension::test_register();
+      ink_env::test::set_caller::<ink_env::DefaultEnvironment>(AccountId::from([1; 32]));
+
+      let mut multisig = Multisig::new();
+
+      let keys = vec![vec![0, 1], vec![2, 3]];
+      multisig.vote(keys.clone()).unwrap();
+      let emitted_events = ink_env::test::recorded_events().collect::<Vec<_>>();
+      assert_eq!(emitted_events.len(), 1);
+      assert_vote(
+        &emitted_events[0],
+        AccountId::from([1; 32]),
+        [0xff; 32],
+        {
+          let mut hash = [0; 32];
+          ink_env::hash_encoded::<Blake2x256, _>(&keys, &mut hash);
+          hash
+        },
+        Some(keys),
+      );
     }
   }
 }

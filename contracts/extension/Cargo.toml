@@ -7,6 +7,8 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+
 ink_env = { version = "3", default-features = false }
 ink_lang = { version = "3", default-features = false }
 
