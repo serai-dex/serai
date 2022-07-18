@@ -220,20 +220,22 @@ mod multisig {
       assert_eq!(multisig.validator_set(), [0; 32]);
     }
 
+    /// Non-existent curves error accordingly.
     #[ink::test]
     fn non_existent_curve() {
       assert_eq!(Multisig::new().key(0), Err(Error::NonExistentCurve));
     }
 
+    /// Validators can vote on keys.
     #[ink::test]
     fn vote() {
       serai_extension::test_register();
-      ink_env::test::set_caller::<ink_env::DefaultEnvironment>(AccountId::from([1; 32]));
-
+      let keys = vec![vec![0, 1], vec![2, 3]];
       let mut multisig = Multisig::new();
 
-      let keys = vec![vec![0, 1], vec![2, 3]];
+      ink_env::test::set_caller::<ink_env::DefaultEnvironment>(AccountId::from([1; 32]));
       multisig.vote(keys.clone()).unwrap();
+
       let emitted_events = ink_env::test::recorded_events().collect::<Vec<_>>();
       assert_eq!(emitted_events.len(), 1);
       assert_vote(
@@ -246,6 +248,33 @@ mod multisig {
           hash
         },
         Some(keys),
+      );
+    }
+
+    /// Subsequent votes don't re-emit the full keys.
+    #[ink::test]
+    fn subsequent_vote() {
+      serai_extension::test_register();
+      let keys = vec![vec![0, 1], vec![2, 3]];
+      let mut multisig = Multisig::new();
+
+      ink_env::test::set_caller::<ink_env::DefaultEnvironment>(AccountId::from([1; 32]));
+      multisig.vote(keys.clone()).unwrap();
+      ink_env::test::set_caller::<ink_env::DefaultEnvironment>(AccountId::from([2; 32]));
+      multisig.vote(keys.clone()).unwrap();
+
+      let emitted_events = ink_env::test::recorded_events().collect::<Vec<_>>();
+      assert_eq!(emitted_events.len(), 2);
+      assert_vote(
+        &emitted_events[1],
+        AccountId::from([2; 32]),
+        [0xff; 32],
+        {
+          let mut hash = [0; 32];
+          ink_env::hash_encoded::<Blake2x256, _>(&keys, &mut hash);
+          hash
+        },
+        None,
       );
     }
   }
