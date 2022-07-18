@@ -18,6 +18,9 @@ ink_lang = { version = "3", default-features = false }
 
 serai-extension = { path = "../extension", default-features = false }
 
+[dev-dependencies]
+lazy_static = "1"
+
 [lib]
 name = "serai_multisig"
 path = "lib.rs"
