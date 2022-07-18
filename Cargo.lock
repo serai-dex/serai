@@ -7513,6 +7513,7 @@ version = "0.1.0"
 dependencies = [
  "ink_env",
  "ink_lang",
+ "parity-scale-codec",
 ]
 
 [[package]]
