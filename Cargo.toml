@@ -17,6 +17,7 @@ members = [
   "substrate/consensus",
   "substrate/node",
 
+  "contracts/extension",
   "contracts/multisig",
 ]
 
