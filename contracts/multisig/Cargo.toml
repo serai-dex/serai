@@ -1,5 +1,5 @@
 [package]
-name = "multisig-serai"
+name = "serai-multisig"
 version = "0.1.0"
 description = "An ink! tracker for Serai's current multisig"
 license = "AGPL-3.0-only"
@@ -7,31 +7,33 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
+
 ink_primitives = { version = "3", default-features = false }
 ink_metadata = { version = "3", default-features = false, features = ["derive"], optional = true }
 ink_env = { version = "3", default-features = false }
 ink_storage = { version = "3", default-features = false }
 ink_lang = { version = "3", default-features = false }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
+serai-extension = { path = "../extension", default-features = false }
 
 [lib]
-name = "multisig"
+name = "serai_multisig"
 path = "lib.rs"
-crate-type = [
-	# Used for normal contract Wasm blobs.
-	"cdylib",
-]
+crate-type = ["cdylib"]
 
 [features]
 default = ["std"]
 std = [
+  "scale/std",
+  "scale-info/std",
+
+  "ink_primitives/std",
   "ink_metadata/std",
   "ink_env/std",
   "ink_storage/std",
-  "ink_primitives/std",
-  "scale/std",
-  "scale-info/std",
+
+  "serai-extension/std",
 ]
 ink-as-dependency = []
