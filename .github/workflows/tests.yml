@@ -11,7 +11,7 @@ jobs:
     - name: Install nightly
       run: rustup toolchain install nightly
     - name: Install WASM toolchain
-      run: rustup target add wasm32-unknown-unknown
+      run: rustup target add wasm32-unknown-unknown --toolchain nightly 
     - name: Build
       run: bash ./scripts/build.sh
     - name: Run tests
