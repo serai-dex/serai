@@ -30,6 +30,6 @@ outgoing payments as well, until the end of the grace period, at which point
 they're no longer eligible to receive funds and they forward all of their funds
 to the new set of keys.
 
-### `vote(keys: Vec<Vec<u8>>)`
+### `vote(keys: Vec<Option<Key>>)`
 
 Lets a validator vote on a set of keys for their validator set.

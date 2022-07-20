@@ -3,22 +3,32 @@
 use ink_lang as ink;
 use ink_env::{Environment, DefaultEnvironment, AccountId};
 
+pub type Curve = u16;
+pub type Coin = u32;
+pub type GlobalValidatorSetId = u32;
+pub type ValidatorSetIndex = u8;
+pub type Key = Vec<u8>;
+
 #[ink::chain_extension]
 pub trait SeraiExtension {
   type ErrorCode = ();
 
-  /// Returns the amount of active validators on the current chain.
+  /// Returns the ID for the current global validator set.
   #[ink(extension = 0, handle_status = false, returns_result = false)]
-  fn active_validators_len() -> u16;
+  fn global_validator_set_id() -> GlobalValidatorSetId;
 
-  /// Returns the ID for the current validator set for the current chain.
-  // TODO: Decide if this should be an increasing unsigned integer instead of a hash.
+  /// Returns the amount of active validator sets within the global validator set.
   #[ink(extension = 1, handle_status = false, returns_result = false)]
-  fn validator_set_id() -> [u8; 32];
+  fn validator_sets() -> u8;
 
-  /// Returns if the specified account is an active validator for the current chain.
+  /// Returns the amount of key shares used within the specified validator set.
   #[ink(extension = 2, handle_status = false, returns_result = false)]
-  fn is_active_validator(account: &AccountId) -> bool;
+  fn validator_set_shares(set: ValidatorSetIndex) -> u16;
+
+  /// Returns the validator set the specified account is in, along with their amount of shares in
+  /// that validator set, if they are in a current validator
+  #[ink(extension = 3, handle_status = false, returns_result = false)]
+  fn active_validator(account: &AccountId) -> Option<(ValidatorSetIndex, u16)>;
 }
 
 pub struct SeraiEnvironment;
@@ -45,41 +55,57 @@ pub fn test_validators() -> Vec<AccountId> {
 }
 
 pub fn test_register() {
-  struct ExtensionLen;
-  impl ink_env::test::ChainExtension for ExtensionLen {
-    fn func_id(&self) -> u32 {
-      0
-    }
-
-    fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
-      scale::Encode::encode_to(&u16::try_from(test_validators().len()).unwrap(), output);
-      0
-    }
-  }
-  ink_env::test::register_chain_extension(ExtensionLen);
-
   struct ExtensionId;
   impl ink_env::test::ChainExtension for ExtensionId {
     fn func_id(&self) -> u32 {
-      1
+      0
     }
 
     fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
-      scale::Encode::encode_to(&[0xffu8; 32], output);
+      // Non-0 global validator set ID
+      scale::Encode::encode_to(&1u32, output);
       0
     }
   }
   ink_env::test::register_chain_extension(ExtensionId);
 
-  struct ExtensionActive;
-  impl ink_env::test::ChainExtension for ExtensionActive {
+  struct ExtensionSets;
+  impl ink_env::test::ChainExtension for ExtensionSets {
+    fn func_id(&self) -> u32 {
+      1
+    }
+
+    fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
+      // 1 validator set
+      scale::Encode::encode_to(&1u8, output);
+      0
+    }
+  }
+  ink_env::test::register_chain_extension(ExtensionSets);
+
+  struct ExtensionShares;
+  impl ink_env::test::ChainExtension for ExtensionShares {
     fn func_id(&self) -> u32 {
       2
     }
 
+    fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
+      // 1 key share per validator
+      scale::Encode::encode_to(&u16::try_from(test_validators().len()).unwrap(), output);
+      0
+    }
+  }
+  ink_env::test::register_chain_extension(ExtensionShares);
+
+  struct ExtensionActive;
+  impl ink_env::test::ChainExtension for ExtensionActive {
+    fn func_id(&self) -> u32 {
+      3
+    }
+
     fn call(&mut self, input: &[u8], output: &mut Vec<u8>) -> u32 {
       use scale::Decode;
-      let potential = AccountId::decode(&mut &input[1 ..]).unwrap(); // TODO: Why is this 1 ..?
+      let potential = AccountId::decode(&mut &input[1 ..]).unwrap(); // TODO: Why is this [1 ..]?
 
       let mut presence = false;
       for validator in test_validators() {
@@ -87,7 +113,8 @@ pub fn test_register() {
           presence = true;
         }
       }
-      scale::Encode::encode_to(&presence, output);
+      // Validator set 0, 1 key share
+      scale::Encode::encode_to(&Some((0u8, 1u16)).filter(|_| presence), output);
       0
     }
   }
