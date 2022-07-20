@@ -154,19 +154,26 @@ mod multisig {
       }
       self.voted.insert((validator, keys_hash), &());
 
-      let votes = if let Some(votes) = self.votes.get((global_validator_set, validator_set, keys_hash)) {
-        self.env().emit_event(Vote { validator, global_validator_set, validator_set, hash: keys_hash, keys: None });
-        votes + shares
-      } else {
-        self.env().emit_event(Vote {
-          validator,
-          global_validator_set,
-          validator_set,
-          hash: keys_hash,
-          keys: Some(keys.clone()),
-        });
-        shares
-      };
+      let votes =
+        if let Some(votes) = self.votes.get((global_validator_set, validator_set, keys_hash)) {
+          self.env().emit_event(Vote {
+            validator,
+            global_validator_set,
+            validator_set,
+            hash: keys_hash,
+            keys: None,
+          });
+          votes + shares
+        } else {
+          self.env().emit_event(Vote {
+            validator,
+            global_validator_set,
+            validator_set,
+            hash: keys_hash,
+            keys: Some(keys.clone()),
+          });
+          shares
+        };
       // We could skip writing this if we've reached consensus, yet best to keep our ducks in a row
       self.votes.insert((global_validator_set, validator_set, keys_hash), &votes);
 
@@ -232,7 +239,13 @@ mod multisig {
       let decoded_event = <Event as scale::Decode>::decode(&mut &event.data[..])
         .expect("encountered invalid contract event data buffer");
 
-      if let Event::Vote(Vote { validator, global_validator_set, validator_set, hash, keys: actual_keys }) = decoded_event
+      if let Event::Vote(Vote {
+        validator,
+        global_validator_set,
+        validator_set,
+        hash,
+        keys: actual_keys,
+      }) = decoded_event
       {
         assert_eq!(validator, expected_validator);
         assert_eq!(global_validator_set, *EXPECTED_GLOBAL_VALIDATOR_SET);
