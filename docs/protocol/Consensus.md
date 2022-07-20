@@ -1,3 +1,11 @@
+# Oraclization (message)
+
+`Oraclization` messages are published by the current block producer and communicate an external event being communicated to the native chain. This is presumably some other cryptocurrency, such as BTC, being sent to the multisig wallet, triggering a privileged call enabling relevant actions.
+
+# Report (message)
+
+`Report` reports a validator for malicious or invalid behavior. This may be publishing a false `Oraclization` or failing to participate as expected. These apply a penalty to the validator's assigned rewards, which is distinct from the bond which must be kept as a multiple of 1m. If the amount deducted exceeds their assigned rewards, they are scheduled for removal with an appropriately reduced bond.
+
 # Consensus
 
 Consensus is a modified Aura implementation with the following notes:
