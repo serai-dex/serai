@@ -19,7 +19,7 @@ members = [
 
   "contracts/extension",
   "contracts/multisig",
-  "contracts/token",
+  "contracts/asset",
 ]
 
 [profile.release]

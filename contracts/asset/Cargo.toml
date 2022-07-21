@@ -1,5 +1,5 @@
 [package]
-name = "serai-token"
+name = "serai-asset"
 version = "0.1.0"
 description = "An ink! token designed for Serai assets"
 license = "AGPL-3.0-only"
@@ -11,34 +11,35 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
 
 ink_primitives = { version = "3", default-features = false }
-ink_metadata = { version = "3", default-features = false, features = ["derive"], optional = true }
+ink_prelude = { version = "3", default-features = false }
+ink_metadata = { version = "3", default-features = false, features = ["derive"] }
 ink_env = { version = "3", default-features = false }
 ink_storage = { version = "3", default-features = false }
 ink_lang = { version = "3", default-features = false }
 
-openbrush = { version = "~2.0.0", default-features = false, features = ["psp22", "ownable"] }
+openbrush = { version = "~2.1.0", default-features = false, features = ["psp22"] }
+
+serai-extension = { path = "../extension", default-features = false }
 
 [lib]
-name = "token"
+name = "serai_asset"
 path = "lib.rs"
-crate-type = [
-	"cdylib",
-]
+crate-type = ["cdylib"]
 
 [features]
 default = ["std"]
 std = [
   "scale/std",
-  "scale-info",
   "scale-info/std",
 
   "ink_primitives/std",
-  "ink_metadata",
+  "ink_prelude/std",
   "ink_metadata/std",
   "ink_env/std",
   "ink_storage/std",
-  "ink_lang/std",
 
   "openbrush/std",
+
+  "serai-extension/std",
 ]
 ink-as-dependency = []

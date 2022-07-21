@@ -3,6 +3,8 @@
 use ink_lang as ink;
 use ink_env::{Environment, DefaultEnvironment, AccountId};
 
+pub mod only_inherent;
+
 pub type Curve = u16;
 pub type Coin = u32;
 pub type GlobalValidatorSetId = u32;
@@ -13,21 +15,25 @@ pub type Key = Vec<u8>;
 pub trait SeraiExtension {
   type ErrorCode = ();
 
-  /// Returns the ID for the current global validator set.
+  /// Returns if the current transaction is an inherent transaction or not.
   #[ink(extension = 0, handle_status = false, returns_result = false)]
+  fn inherent() -> bool;
+
+  /// Returns the ID for the current global validator set.
+  #[ink(extension = 1, handle_status = false, returns_result = false)]
   fn global_validator_set_id() -> GlobalValidatorSetId;
 
   /// Returns the amount of active validator sets within the global validator set.
-  #[ink(extension = 1, handle_status = false, returns_result = false)]
+  #[ink(extension = 2, handle_status = false, returns_result = false)]
   fn validator_sets() -> u8;
 
   /// Returns the amount of key shares used within the specified validator set.
-  #[ink(extension = 2, handle_status = false, returns_result = false)]
+  #[ink(extension = 3, handle_status = false, returns_result = false)]
   fn validator_set_shares(set: ValidatorSetIndex) -> u16;
 
   /// Returns the validator set the specified account is in, along with their amount of shares in
   /// that validator set, if they are in a current validator
-  #[ink(extension = 3, handle_status = false, returns_result = false)]
+  #[ink(extension = 4, handle_status = false, returns_result = false)]
   fn active_validator(account: &AccountId) -> Option<(ValidatorSetIndex, u16)>;
 }
 
@@ -55,10 +61,24 @@ pub fn test_validators() -> Vec<AccountId> {
 }
 
 pub fn test_register() {
+  struct ExtensionInherent;
+  impl ink_env::test::ChainExtension for ExtensionInherent {
+    fn func_id(&self) -> u32 {
+      0
+    }
+
+    fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
+      // Say it's an inherent so inherent-only functions can be called
+      scale::Encode::encode_to(&true, output);
+      0
+    }
+  }
+  ink_env::test::register_chain_extension(ExtensionInherent);
+
   struct ExtensionId;
   impl ink_env::test::ChainExtension for ExtensionId {
     fn func_id(&self) -> u32 {
-      0
+      1
     }
 
     fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
@@ -72,7 +92,7 @@ pub fn test_register() {
   struct ExtensionSets;
   impl ink_env::test::ChainExtension for ExtensionSets {
     fn func_id(&self) -> u32 {
-      1
+      2
     }
 
     fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
@@ -86,7 +106,7 @@ pub fn test_register() {
   struct ExtensionShares;
   impl ink_env::test::ChainExtension for ExtensionShares {
     fn func_id(&self) -> u32 {
-      2
+      3
     }
 
     fn call(&mut self, _: &[u8], output: &mut Vec<u8>) -> u32 {
@@ -100,7 +120,7 @@ pub fn test_register() {
   struct ExtensionActive;
   impl ink_env::test::ChainExtension for ExtensionActive {
     fn func_id(&self) -> u32 {
-      3
+      4
     }
 
     fn call(&mut self, input: &[u8], output: &mut Vec<u8>) -> u32 {
