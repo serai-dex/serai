@@ -2,10 +2,10 @@
 
 Validator Sets are defined at the protocol level, with the following parameters:
 
-- `index` (VS):        Validator set index, a global key atomically increasing
+  - `index` (VS):        Validator set index, a global key atomically increasing
 from 0.
-- `bond`  (Amount):    Amount of bond per key-share of this validator set.
-- `coins` (Vec<Coin>): Coins managed by this validator set.
+  - `bond`  (Amount):    Amount of bond per key-share of this validator set.
+  - `coins` (Vec<Coin>): Coins managed by this validator set.
 
 At launch, there will solely be validator set 0, managing Bitcoin, Ethereum,
 USDC, DAI, and Monero.
