@@ -2,9 +2,9 @@
 
 ### Register (message)
 
-- `validator` (signer): Address which will be the validator on Substrate.
-- `manager`   (signer): Address which will manage this validator.
-- `set`       (VS):     Validator set being joined.
+  - `validator` (signer): Address which will be the validator on Substrate.
+  - `manager`   (signer): Address which will manage this validator.
+  - `set`       (VS):     Validator set being joined.
 
 Marks `validator` as a validator candidate for the specified validator set,
 enabling delegation.
