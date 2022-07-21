@@ -22,6 +22,17 @@ pub mod asset {
     }
   }
 
+  #[ink(event)]
+  pub struct NativeTransfer {
+    #[ink(topic)]
+    from: AccountId,
+    #[ink(topic)]
+    to: Vec<u8>,
+    // TODO: Replace Balance, which is DefaultEnvironment's u128, with u64
+    amount: Balance,
+    data: Option<Vec<u8>>,
+  }
+
   #[ink(storage)]
   #[derive(Default, SpreadAllocate, PSP22Storage, PSP22MetadataStorage)]
   pub struct SeraiAsset {
@@ -72,6 +83,18 @@ pub mod asset {
         Err(Error::NotCallable) => Ok(()),
         Err(_) => Err(PSP22Error::Custom("invalid in instruction".to_string())),
       }
+    }
+
+    #[ink(message)]
+    pub fn native_transfer(
+      &mut self,
+      to: Vec<u8>,
+      amount: Balance,
+      data: Option<Vec<u8>>,
+    ) -> Result<(), PSP22Error> {
+      self._burn_from(self.env().caller(), amount)?;
+      self.env().emit_event(NativeTransfer { from: self.env().caller(), to, amount, data });
+      Ok(())
     }
   }
 }
