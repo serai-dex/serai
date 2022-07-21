@@ -41,8 +41,10 @@ If the transaction fails, funds are scheduled to be returned to `origin`.
 
 ### Out Instructions
 
-  - `destination` (Network, Address): Address to receive funds to.
-  - `data`        (Vec<u8>): The data to call the target with.
+  - `destination` (Enum { Native(Address), Serai(Address) }): Address to receive
+funds to.
+  - `data`        (Vec<u8>):                                  The data to call
+the target with.
 
 If the network is Serai, this is a transfer. Else, it's a withdrawal to the
 specified address with the specified data. Asset contracts perform no validation
@@ -55,11 +57,11 @@ to an In Instruction.
 
 ##### Raw
 
-Raw Shorthand encodes a raw In Instruction with no further processing. This In
-Instruction is serialized as if it was top-level.
+Raw Shorthand encodes a raw In Instruction with no further processing.
 
 ##### Swap
 
+  - `origin`  (Option<Address>): In Instruction's `origin`.
   - `coin`    (Coin):            Coin to swap funds for.
   - `minimum` (Amount):          Minimum amount of `coin` to receive.
   - `out`     (Out Instruction): Final destination for funds.
@@ -68,6 +70,7 @@ which expands to:
 
 ```
 In Instruction {
+  origin,
   target: Router,
   data:   swap(Incoming Asset, out, minimum)
 }
@@ -82,17 +85,19 @@ where `swap` is a function which:
 
 For a Bitcoin to Monero swap, Swap Shorthand is expected to generally take:
 
-  - 1 byte to identify as Swap
-  - 1 byte for `coin`
-  - 4 bytes for `minimum`
-  - 1 byte for `out`'s `destination` field label
-  - 1 byte for `out`'s `destination`'s network
-  - 65 bytes for `out`'s `destination`'s address
+  - 1 byte to identify as Swap.
+  - 1 byte to not override `origin`.
+  - 1 byte for `coin`.
+  - 4 bytes for `minimum`.
+  - 1 byte for `out`'s `destination` field label.
+  - 1 byte for `out`'s `destination`'s ordinal byte.
+  - 65 bytes for `out`'s `destination`'s address.
 
-Or 73 bytes.
+Or 74 bytes.
 
 ##### Add Liquidity
 
+  - `origin`  (Option<Address>): In Instruction's `origin`.
   - `minimum` (Amount):  Minimum amount of SRI to receive.
   - `gas`     (Amount):  Amount of SRI to send to `address` to cover gas in the
 future.
@@ -102,6 +107,7 @@ which expands to:
 
 ```
 In Instruction {
+  origin,
   target: Router,
   data:   swap_and_add_liquidity(Incoming Asset, address, minimum, gas)
 }
@@ -118,12 +124,13 @@ a matching amount of the incoming asset.
 For adding liquidity from Bitcoin, Add Liquidity Shorthand is expected to
 generally take:
 
-  - 1 byte to identify as Add Liquidity
-  - 5 bytes for `minimum`
+  - 1 byte to identify as Add Liquidity.
+  - 1 byte to not override `origin`.
+  - 5 bytes for `minimum`.
   - 1/4 bytes for `gas`.
   - 32 bytes for `address`.
 
-Or 39/42 bytes, depending on whether or not the Serai address already has gas.
+Or 40/43 bytes, depending on whether or not the Serai address already has gas.
 
 ### Examples
 
@@ -134,7 +141,7 @@ All examples are assumed to be from Bitcoin.
 ```
 In Instruction {
   target: Bitcoin Asset Contract,
-  data:   Withdraw(Out Instruction { destination: (Bitcoin, Bitcoin Sender) })
+  data:   Withdraw(Out Instruction { destination: Native(Bitcoin Sender) })
 }
 ```
 
