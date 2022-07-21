@@ -78,10 +78,10 @@ In Instruction {
 
 where `swap` is a function which:
 
-  - Swaps the incoming funds for SRI.
-  - Swaps the SRI for `coin`.
-  - Checks the amount of `coin` received is greater than `minimum`.
-  - Executes `out` with the amount of `coin` received.
+  1) Swaps the incoming funds for SRI.
+  2) Swaps the SRI for `coin`.
+  3) Checks the amount of `coin` received is greater than `minimum`.
+  4) Executes `out` with the amount of `coin` received.
 
 For a Bitcoin to Monero swap, Swap Shorthand is expected to generally take:
 
@@ -115,11 +115,11 @@ In Instruction {
 
 where `swap_and_add_liquidity` is a function which:
 
-  - Swaps half of the incoming funds for SRI.
-  - Checks the amount of SRI received is greater than `minimum`.
-  - Calls `swap_and_add_liquidity` with the amount of SRI received - `gas`, and
+  1) Swaps half of the incoming funds for SRI.
+  2) Checks the amount of SRI received is greater than `minimum`.
+  3) Calls `swap_and_add_liquidity` with the amount of SRI received - `gas`, and
 a matching amount of the incoming asset.
-  - Transfers any leftover funds to `address`.
+  4) Transfers any leftover funds to `address`.
 
 For adding liquidity from Bitcoin, Add Liquidity Shorthand is expected to
 generally take:
