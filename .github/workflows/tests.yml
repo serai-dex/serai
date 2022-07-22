@@ -154,6 +154,13 @@ jobs:
           profile: minimal
           default: true
 
+      - name: Install WASM toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+          target: wasm32-unknown-unknown
+
       - name: Ethereum cache
         uses: actions/cache@v3
         with:
