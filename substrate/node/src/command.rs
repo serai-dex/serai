@@ -114,21 +114,6 @@ pub fn run() -> sc_cli::Result<()> {
       BenchmarkCmd::Machine(cmd) => cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()),
     }),
 
-    #[cfg(feature = "try-runtime")]
-    Some(Subcommand::TryRuntime(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      Ok((
-        cmd.run::<Block, service::ExecutorDispatch>(config),
-        sc_service::TaskManager::new(
-          config.tokio_handle.clone(),
-          config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
-        )
-        .map_err(|e| sc_cli::Error::Service(sc_service::Error::Prometheus(e)))?,
-      ))
-    }),
-
-    #[cfg(not(feature = "try-runtime"))]
-    Some(Subcommand::TryRuntime) => Err("TryRuntime wasn't enabled when building the node".into()),
-
     Some(Subcommand::ChainInfo(cmd)) => {
       cli.create_runner(cmd)?.sync_run(|config| cmd.run::<Block>(&config))
     }
