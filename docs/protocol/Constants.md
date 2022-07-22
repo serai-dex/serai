@@ -5,14 +5,14 @@
 These are the list of types used to represent various properties within the
 protocol.
 
-| Alias                   | Shorthand | Type    |
-|-------------------------|-----------|---------|
-| Amount                  | Amount    | u64     |
-| Curve                   | Curve     | u16     |
-| Coin                    | Coin      | u32     |
-| Global Validator Set ID | GVSID     | u32     |
-| Validator Set Index     | VS        | u8      |
-| Key                     | Key       | Vec<u8> |
+| Alias                   | Shorthand | Type     |
+|-------------------------|-----------|----------|
+| Amount                  | Amount    | u64      |
+| Curve                   | Curve     | u16      |
+| Coin                    | Coin      | u32      |
+| Global Validator Set ID | GVSID     | u32      |
+| Validator Set Index     | VS        | u8       |
+| Key                     | Key       | Vec\<u8> |
 
 ### Curves
 
