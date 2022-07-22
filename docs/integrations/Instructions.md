@@ -49,7 +49,7 @@ Upon receiving funds, the respective Serai Asset contract is called, minting the
 appropriate amount of coins, and transferring them to `target`, calling it with
 the attached data.
 
-If the transaction fails, funds are scheduled to be returned to `origin`.
+If the instruction fails, funds are scheduled to be returned to `origin`.
 
 ### Out Instructions
 
