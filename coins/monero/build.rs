@@ -26,9 +26,37 @@ fn main() {
   // If the signaling file was deleted, run this script again to rebuild Monero though
   println!("cargo:rerun-if-changed=c/.build/monero");
   if !Path::new("c/.build/monero").exists() {
+    if !Command::new("mkdir")
+      .args(&["-p", "build/release"])
+      .current_dir(&Path::new("c/monero"))
+      .status()
+      .unwrap()
+      .success()
+    {
+      panic!("failed to mkdir");
+    }
+
+    if !Command::new("cmake")
+      .args(&[
+        "-D",
+        &format!("ARCH=\"{}\"", &env::var("ARCH").unwrap_or_else(|_| "native".to_string())),
+        "-D",
+        "BUILD_TESTS=OFF",
+        "-D",
+        "CMAKE_BUILD_TYPE=Release",
+        "../..",
+      ])
+      .current_dir(&Path::new("c/monero/build/release"))
+      .status()
+      .unwrap()
+      .success()
+    {
+      panic!("failed to call cmake. Please check your dependencies");
+    }
+
     if !Command::new("make")
       .arg(format!("-j{}", &env::var("THREADS").unwrap_or_else(|_| "2".to_string())))
-      .current_dir(&Path::new("c/monero"))
+      .current_dir(&Path::new("c/monero/build/release"))
       .status()
       .unwrap()
       .success()

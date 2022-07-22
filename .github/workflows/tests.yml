@@ -68,7 +68,7 @@ jobs:
           key: ${{ runner.os }}-cargo-rust
 
       - name: Build
-        run: cargo build --all-features
+        run: ARCH=default cargo build --all-features
 
   # Mirror the build job for Clippy
   clippy:
@@ -177,7 +177,7 @@ jobs:
           key: ${{ runner.os }}-cargo-rust
 
       - name: Monero Regtest Daemon
-        run: MONERO_USE_SOFTWARE_AES=1 MONERO_RANDOMX_UMASK=8 ./coins/monero/c/monero/build/release/bin/monerod --regtest --offline --fixed-difficulty=1 --detach
+        run: ./coins/monero/c/monero/build/release/bin/monerod --regtest --offline --fixed-difficulty=1 --detach
 
       - name: Run tests
         run: cargo test --all-features
