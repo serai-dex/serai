@@ -59,7 +59,7 @@ pub(crate) fn rust_hash_to_point(key: EdwardsPoint) -> EdwardsPoint {
   #[allow(non_snake_case)]
   let mut Y = z - w;
 
-  Y = Y * Z.invert().unwrap();
+  Y *= Z.invert().unwrap();
   let mut bytes = Y.to_repr();
   bytes[31] |= sign.unwrap_u8() << 7;
 

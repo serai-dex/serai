@@ -32,7 +32,7 @@ fn testnet_genesis(wasm_binary: &[u8], endowed_accounts: Vec<AccountId>) -> Gene
 }
 
 pub fn development_config() -> Result<ChainSpec, &'static str> {
-  let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available")?;
+  let wasm_binary = WASM_BINARY.ok_or("Development wasm not available")?;
 
   Ok(ChainSpec::from_genesis(
     // Name

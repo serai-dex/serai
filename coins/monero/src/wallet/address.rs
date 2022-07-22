@@ -57,6 +57,7 @@ pub enum AddressError {
 }
 
 impl AddressMeta {
+  #[allow(clippy::wrong_self_convention)]
   fn to_byte(&self) -> u8 {
     let bytes = AddressType::network_bytes(self.network);
     let byte = match self.kind {

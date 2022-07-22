@@ -37,7 +37,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
     included: &[u16],
   ) -> Result<Params<C, A>, FrostError> {
     let mut included = included.to_vec();
-    (&mut included).sort_unstable();
+    included.sort_unstable();
 
     // Included < threshold
     if included.len() < usize::from(keys.params.t) {
@@ -123,7 +123,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
         // This could be further optimized with a multi-nonce proof.
         // See https://github.com/serai-dex/serai/issues/38
         for nonce in nonces {
-          DLEqProof::prove(&mut *rng, &mut transcript, &generators, nonce)
+          DLEqProof::prove(&mut *rng, &mut transcript, generators, nonce)
             .serialize(&mut serialized)
             .unwrap();
         }
@@ -221,7 +221,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
                 .map_err(|_| FrostError::InvalidCommitment(*l))?
                 .verify(
                   &mut transcript,
-                  &nonce_generators,
+                  nonce_generators,
                   &commitments[n].iter().map(|commitments| commitments[de]).collect::<Vec<_>>(),
                 )
                 .map_err(|_| FrostError::InvalidCommitment(*l))?;
@@ -236,7 +236,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
 
     // Re-format into the FROST-expected rho transcript
     let mut rho_transcript = A::Transcript::new(b"FROST_rho");
-    rho_transcript.append_message(b"message", &C::hash_msg(&msg));
+    rho_transcript.append_message(b"message", &C::hash_msg(msg));
     // This won't just be the commitments, yet the full existing transcript if used in an extended
     // protocol
     rho_transcript.append_message(

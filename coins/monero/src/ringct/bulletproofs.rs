@@ -8,7 +8,7 @@ use crate::{Commitment, wallet::TransactionError, serialize::*};
 
 pub(crate) const MAX_OUTPUTS: usize = 16;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Bulletproofs {
   pub A: EdwardsPoint,
   pub S: EdwardsPoint,

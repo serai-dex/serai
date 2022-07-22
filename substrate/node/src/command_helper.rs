@@ -62,7 +62,7 @@ pub fn create_benchmark_extrinsic(
     sp_runtime::AccountId32::from(sender.public()).into(),
     runtime::Signature::Sr25519(
       runtime::SignedPayload::from_raw(
-        call.clone(),
+        call,
         extra.clone(),
         (
           (),

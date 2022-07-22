@@ -27,7 +27,7 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
       // If Gen, this should be the only input, making this loop somewhat pointless
       // This works and even if there were somehow multiple inputs, it'd be a false negative
       Input::Gen(height) => {
-        write_varint(&(*height).try_into().unwrap(), &mut u).unwrap();
+        write_varint(height, &mut u).unwrap();
       }
       Input::ToKey { key_image, .. } => u.extend(key_image.compress().to_bytes()),
     }
