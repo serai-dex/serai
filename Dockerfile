@@ -2,8 +2,6 @@
 # serai Docker image
 #
 # ex: docker build --tag serai .
-# 
-# takes about 10 minutes to build on a Ryzen 5900HX
 
 FROM debian:bullseye-slim as build
 
@@ -57,6 +55,7 @@ WORKDIR /serai
 
 # Finally build!
 #TODO: maybe ARCH and nproc as ARG parameters?
+# Takes about 15 minutes to build on a Ryzen 5900HX with 32GB of RAM
 RUN ARCH=default cargo build --all-features --release --verbose -j$(nproc)
 
 
