@@ -3,7 +3,7 @@
 Instructions are used to communicate with networks connected to Serai, and they
 come in two forms:
 
-  - In Instructions are [Application Calls](../Serai.md#application-call),
+  - In Instructions are [Application Calls](../Serai.md#application-calls),
 paired with incoming funds. Encoded in transactions on connected networks,
 Serai will parse out instructions when it receives funds, executing the included
 calls.
