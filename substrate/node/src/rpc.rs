@@ -29,10 +29,10 @@ pub fn create_full<
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index> +
-    pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance> +
-    pallet_contracts_rpc::ContractsRuntimeApi<Block, AccountId, Balance, BlockNumber, Hash> +
-    BlockBuilder<Block>,
+  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>
+    + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
+    + pallet_contracts_rpc::ContractsRuntimeApi<Block, AccountId, Balance, BlockNumber, Hash>
+    + BlockBuilder<Block>,
 {
   use substrate_frame_rpc_system::{System, SystemApiServer};
   use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
