@@ -14,6 +14,7 @@ jobs:
         run: |
           pip3 install solc-select
           solc-select install 0.8.9
+          solc-select use 0.8.9
 
       - name: Install Monero Dependencies
         run: |
@@ -27,6 +28,12 @@ jobs:
         with:
           toolchain: stable
           default: true
+
+      - name: Build Ethereum
+        run: cd ./coins/ethereum && cargo build --all-features
+
+      - name: Build Monero
+        run: cd ./coins/monero && cargo build --all-features
 
       - name: Install WASM toolchain
         uses: actions-rs/toolchain@v1
