@@ -12,7 +12,9 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 ink_env = { version = "3", default-features = false }
 ink_lang = { version = "3", default-features = false }
 
+openbrush = { version = "~2.1.0", default-features = false, features = ["psp22"] }
+
 [features]
 default = ["std"]
-std = ["ink_env/std"]
+std = ["ink_env/std", "openbrush/std"]
 ink-as-dependency = []
