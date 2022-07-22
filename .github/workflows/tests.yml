@@ -31,6 +31,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          profile: minimal
           default: true
           components: clippy
 
@@ -38,7 +39,9 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
+          profile: minimal
           target: wasm32-unknown-unknown
+          components: clippy
 
       - name: Ethereum cache
         uses: actions/cache@v3
@@ -62,12 +65,12 @@ jobs:
             ./target
           key: ${{ runner.os }}-cargo-rust
 
-      - name: Build
-        run: cargo build --all-features
-
       # Run Clippy now since it requires the full build suite
       - name: Run Clippy
         run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
+
+      - name: Build
+        run: cargo build --all-features
 
   test:
     runs-on: ubuntu-latest
@@ -92,6 +95,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          profile: minimal
           default: true
 
       - name: Ethereum cache
