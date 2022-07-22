@@ -57,7 +57,7 @@ If the instruction fails, funds are scheduled to be returned to `origin`.
 
   - `destination` (Enum { Native(Address), Serai(Address) }): Address to receive
 funds to.
-  - `data`        (Option<Vec<u8>>):                          The data to call
+  - `data`        (Option\<Vec\<u8>>):                        The data to call
 the target with.
 
 Transfer the funds included with this instruction to the specified address with
