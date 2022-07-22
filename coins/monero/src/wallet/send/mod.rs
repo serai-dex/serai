@@ -35,7 +35,7 @@ mod multisig;
 pub use multisig::TransactionMachine;
 
 #[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 struct SendOutput {
   R: EdwardsPoint,
   dest: EdwardsPoint,
@@ -61,7 +61,7 @@ impl SendOutput {
         AddressType::Integrated(_) => {
           unimplemented!("SendOutput::new doesn't support Integrated addresses")
         }
-        AddressType::Subaddress => &r * spend,
+        AddressType::Subaddress => r * spend,
       },
       dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + spend),
       commitment: Commitment::new(commitment_mask(shared_key), output.1),
@@ -113,18 +113,17 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   let decoys = Decoys::select(
     rng,
     rpc,
-    rpc.get_height().await.map_err(|e| TransactionError::RpcError(e))? - 10,
+    rpc.get_height().await.map_err(TransactionError::RpcError)? - 10,
     inputs,
   )
   .await
-  .map_err(|e| TransactionError::RpcError(e))?;
+  .map_err(TransactionError::RpcError)?;
 
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
       spend + input.key_offset,
       generate_key_image(spend + input.key_offset),
-      ClsagInput::new(input.commitment, decoys[i].clone())
-        .map_err(|e| TransactionError::ClsagError(e))?,
+      ClsagInput::new(input.commitment, decoys[i].clone()).map_err(TransactionError::ClsagError)?,
     ));
 
     tx.prefix.inputs.push(Input::ToKey {
@@ -158,7 +157,7 @@ impl Fee {
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignableTransaction {
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
@@ -187,10 +186,10 @@ impl SignableTransaction {
       test(change)?;
     }
 
-    if inputs.len() == 0 {
+    if inputs.is_empty() {
       Err(TransactionError::NoInputs)?;
     }
-    if payments.len() == 0 {
+    if payments.is_empty() {
       Err(TransactionError::NoOutputs)?;
     }
 
@@ -339,8 +338,7 @@ impl SignableTransaction {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
-        pseudo_outs
-          .append(&mut clsag_pairs.iter().map(|clsag| clsag.1.clone()).collect::<Vec<_>>());
+        pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1).collect::<Vec<_>>());
       }
     }
     Ok(tx)

@@ -231,7 +231,7 @@ impl PrimeField for Scalar {
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
     // TODO: This unwrap_or isn't constant time, yet do we have an alternative?
-    CtOption::new(Scalar(scalar.unwrap_or(DScalar::zero())), choice(scalar.is_some()))
+    CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(scalar.is_some()))
   }
   fn to_repr(&self) -> [u8; 32] {
     self.0.to_bytes()

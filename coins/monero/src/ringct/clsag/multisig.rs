@@ -65,7 +65,7 @@ impl ClsagDetails {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 struct Interim {
   p: Scalar,
   c: Scalar,
@@ -147,7 +147,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     l: u16,
     serialized: &mut Re,
   ) -> Result<(), FrostError> {
-    if self.image.is_identity().into() {
+    if self.image.is_identity() {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
       self.transcript.append_message(b"mask", &self.mask().to_bytes());
@@ -189,15 +189,13 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       &self.image,
       &self.input(),
       self.mask(),
-      &self.msg.as_ref().unwrap(),
+      self.msg.as_ref().unwrap(),
       nonce_sums[0][0].0,
       nonce_sums[0][1].0,
     );
     self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
-    let share = dfg::Scalar(nonces[0].0 - (p * view.secret_share().0));
-
-    share
+    dfg::Scalar(nonces[0].0 - (p * view.secret_share().0))
   }
 
   #[must_use]
@@ -215,13 +213,13 @@ impl Algorithm<Ed25519> for ClsagMultisig {
         &self.input().decoys.ring,
         &self.image,
         &interim.pseudo_out,
-        &self.msg.as_ref().unwrap(),
+        self.msg.as_ref().unwrap(),
       )
       .is_ok()
     {
       return Some((clsag, interim.pseudo_out));
     }
-    return None;
+    None
   }
 
   #[must_use]
@@ -232,7 +230,6 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     share: dfg::Scalar,
   ) -> bool {
     let interim = self.interim.as_ref().unwrap();
-    return (&share.0 * &ED25519_BASEPOINT_TABLE) ==
-      (nonces[0][0].0 - (interim.p * verification_share.0));
+    (&share.0 * &ED25519_BASEPOINT_TABLE) == (nonces[0][0].0 - (interim.p * verification_share.0))
   }
 }

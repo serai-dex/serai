@@ -11,7 +11,7 @@ use crate::{
   wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SpendableOutput {
   pub tx: [u8; 32],
   pub o: u8,
@@ -92,7 +92,7 @@ impl Transaction {
         m_pubkeys.extend(&keys);
       }
 
-      pubkeys = m_pubkeys.iter().map(|key| key.point.decompress()).filter_map(|key| key).collect();
+      pubkeys = m_pubkeys.iter().filter_map(|key| key.point.decompress()).collect();
     } else {
       return Timelocked(self.prefix.timelock, vec![]);
     };

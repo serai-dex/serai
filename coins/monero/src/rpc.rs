@@ -47,7 +47,7 @@ fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
     rpc_hex(point)?.try_into().map_err(|_| RpcError::InvalidPoint(point.to_string()))?,
   )
   .decompress()
-  .ok_or(RpcError::InvalidPoint(point.to_string()))
+  .ok_or_else(|| RpcError::InvalidPoint(point.to_string()))
 }
 
 #[derive(Clone, Debug)]
@@ -110,7 +110,7 @@ impl Rpc {
     &self,
     hashes: &[[u8; 32]],
   ) -> Result<(Vec<Result<Transaction, RpcError>>, Vec<[u8; 32]>), RpcError> {
-    if hashes.len() == 0 {
+    if hashes.is_empty() {
       return Ok((vec![], vec![]));
     }
 
@@ -142,14 +142,14 @@ impl Rpc {
         .iter()
         .map(|res| {
           let tx = Transaction::deserialize(&mut std::io::Cursor::new(
-            rpc_hex(if res.as_hex.len() != 0 { &res.as_hex } else { &res.pruned_as_hex }).unwrap(),
+            rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex }).unwrap(),
           ))
           .map_err(|_| {
             RpcError::InvalidTransaction(hex::decode(&res.tx_hash).unwrap().try_into().unwrap())
           })?;
 
           // https://github.com/monero-project/monero/issues/8311
-          if res.as_hex.len() == 0 {
+          if res.as_hex.is_empty() {
             match tx.prefix.inputs.get(0) {
               Some(Input::Gen { .. }) => (),
               _ => Err(RpcError::PrunedTransaction)?,
@@ -165,7 +165,7 @@ impl Rpc {
 
   pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
     let (txs, missed) = self.get_transactions_core(hashes).await?;
-    if missed.len() != 0 {
+    if !missed.is_empty() {
       Err(RpcError::TransactionsNotFound(missed))?;
     }
     // This will clone several KB and is accordingly inefficient

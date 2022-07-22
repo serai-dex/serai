@@ -163,6 +163,7 @@ where
     match self.Re_0 {
       Re::R(R0_0, R1_0) => {
         let mut e = Self::nonces(transcript.clone(), (R0_0, R1_0));
+        #[allow(clippy::needless_range_loop)]
         for i in 0 .. (RING_LEN - 1) {
           e = Self::R_nonces(transcript.clone(), generators, self.s[i], ring[i], e);
         }
@@ -178,6 +179,7 @@ where
       Re::e(e_0) => {
         let e_0 = (e_0, scalar_convert(e_0).ok_or(DLEqError::InvalidChallenge)?);
         let mut e = None;
+        #[allow(clippy::needless_range_loop)]
         for i in 0 .. RING_LEN {
           e = Some(Self::R_nonces(
             transcript.clone(),
@@ -230,8 +232,8 @@ where
     }
 
     let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
-    for i in 0 .. RING_LEN {
-      s[i] = (read_scalar(r)?, read_scalar(r)?);
+    for s in s.iter_mut() {
+      *s = (read_scalar(r)?, read_scalar(r)?);
     }
 
     Ok(Aos { Re_0, s })

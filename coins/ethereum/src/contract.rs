@@ -34,17 +34,17 @@ pub async fn call_verify(
   contract: &schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
   params: &ProcessedSignature,
 ) -> Result<()> {
-  let ok = contract
+  if contract
     .verify(
       params.parity + 27,
       params.px.to_bytes().into(),
-      params.message.into(),
+      params.message,
       params.s.to_bytes().into(),
       params.e.to_bytes().into(),
     )
     .call()
-    .await?;
-  if ok {
+    .await?
+  {
     Ok(())
   } else {
     Err(eyre!(EthereumError::VerificationError))

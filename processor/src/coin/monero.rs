@@ -25,6 +25,12 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
+impl From<SpendableOutput> for Output {
+  fn from(output: SpendableOutput) -> Output {
+    Output(output)
+  }
+}
+
 impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
   // While the Monero library offers a variant which allows senders to ensure their TXs have unique
@@ -44,13 +50,7 @@ impl OutputTrait for Output {
   }
 
   fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-    SpendableOutput::deserialize(reader).map(|o| Output(o))
-  }
-}
-
-impl From<SpendableOutput> for Output {
-  fn from(output: SpendableOutput) -> Output {
-    Output(output)
+    SpendableOutput::deserialize(reader).map(Output)
   }
 }
 
@@ -182,7 +182,7 @@ impl Coin for Monero {
     &self,
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
-    self.rpc.publish_transaction(&tx).await.map_err(|_| CoinError::ConnectionError)?;
+    self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
 
     Ok((
       tx.hash().to_vec(),

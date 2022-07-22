@@ -108,7 +108,7 @@ impl SignableTransaction {
       transcript.append_message(b"input_shared_key", &input.key_offset.to_bytes());
     }
     for payment in &self.payments {
-      transcript.append_message(b"payment_address", &payment.0.to_string().as_bytes());
+      transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
       transcript.append_message(b"payment_amount", &payment.1.to_le_bytes());
     }
 
@@ -125,11 +125,11 @@ impl SignableTransaction {
       clsags.push(
         AlgorithmMachine::new(
           ClsagMultisig::new(transcript.clone(), input.key, inputs[i].clone())
-            .map_err(|e| TransactionError::MultisigError(e))?,
+            .map_err(TransactionError::MultisigError)?,
           Arc::new(offset),
           &included,
         )
-        .map_err(|e| TransactionError::FrostError(e))?,
+        .map_err(TransactionError::FrostError)?,
       );
     }
 
@@ -147,7 +147,7 @@ impl SignableTransaction {
       &self.inputs,
     )
     .await
-    .map_err(|e| TransactionError::RpcError(e))?;
+    .map_err(TransactionError::RpcError)?;
 
     Ok(TransactionMachine {
       signable: self,
@@ -223,7 +223,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     mut commitments: HashMap<u16, Re>,
     msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Vec<u8>), FrostError> {
-    if msg.len() != 0 {
+    if !msg.is_empty() {
       Err(FrostError::InternalError(
         "message was passed to the TransactionMachine when it generates its own",
       ))?;
@@ -237,7 +237,8 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     let mut commitments = (0 .. self.clsags.len())
       .map(|c| {
         let mut buf = [0; CLSAG_LEN];
-        (&self.included)
+        self
+          .included
           .iter()
           .map(|l| {
             // Add all commitments to the transcript for their entropy
@@ -310,7 +311,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     // Sort the inputs, as expected
     let mut sorted = Vec::with_capacity(self.clsags.len());
-    while self.clsags.len() != 0 {
+    while !self.clsags.is_empty() {
       sorted.push((
         images.swap_remove(0),
         self.signable.inputs.swap_remove(0),
@@ -324,11 +325,11 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks"));
     let mut sum_pseudo_outs = Scalar::zero();
-    while sorted.len() != 0 {
+    while !sorted.is_empty() {
       let value = sorted.remove(0);
 
       let mut mask = random_scalar(&mut rng);
-      if sorted.len() == 0 {
+      if sorted.is_empty() {
         mask = output_masks - sum_pseudo_outs;
       } else {
         sum_pseudo_outs += mask;

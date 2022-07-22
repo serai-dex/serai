@@ -59,7 +59,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
     if let Err(blame) = schnorr::batch_verify(rng, &triplets) {
       assert_eq!(blame, 2);
     } else {
-      assert!(false);
+      panic!("batch verification considered a malleated signature valid");
     }
   }
 
@@ -70,7 +70,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
     if let Err(blame) = schnorr::batch_verify(rng, &triplets) {
       assert_eq!(blame, u16::try_from(i + 1).unwrap());
     } else {
-      assert!(false);
+      panic!("batch verification considered an invalid signature valid");
     }
   }
 }
@@ -80,7 +80,7 @@ fn sign_core<R: RngCore + CryptoRng, C: Curve>(
   group_key: C::G,
   keys: &HashMap<u16, Arc<FrostKeys<C>>>,
 ) {
-  const MESSAGE: &'static [u8] = b"Hello, World!";
+  const MESSAGE: &[u8] = b"Hello, World!";
 
   let machines = algorithm_machines(rng, Schnorr::<C, TestHram<C>>::new(), keys);
   let sig = sign_test(&mut *rng, machines, MESSAGE);

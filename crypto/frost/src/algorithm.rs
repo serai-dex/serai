@@ -97,6 +97,12 @@ pub struct Schnorr<C: Curve, H: Hram<C>> {
   _hram: PhantomData<H>,
 }
 
+impl<C: Curve, H: Hram<C>> Default for Schnorr<C, H> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
   pub fn new() -> Schnorr<C, H> {
     Schnorr { transcript: IetfTranscript(vec![]), c: None, _hram: PhantomData }

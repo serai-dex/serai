@@ -24,7 +24,7 @@ where
     pairs: I,
   ) {
     // Define a unique scalar factor for this set of variables so individual items can't overlap
-    let u = if self.0.len() == 0 {
+    let u = if self.0.is_empty() {
       G::Scalar::one()
     } else {
       let mut weight;

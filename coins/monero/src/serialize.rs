@@ -50,7 +50,7 @@ pub fn write_vec<T, W: io::Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   w: &mut W,
 ) -> io::Result<()> {
   write_varint(&values.len().try_into().unwrap(), w)?;
-  write_raw_vec(f, &values, w)
+  write_raw_vec(f, values, w)
 }
 
 pub fn read_byte<R: io::Read>(r: &mut R) -> io::Result<u8> {
@@ -81,14 +81,14 @@ pub fn read_32<R: io::Read>(r: &mut R) -> io::Result<[u8; 32]> {
 // TODO: https://github.com/serai-dex/serai/issues/25
 pub fn read_scalar<R: io::Read>(r: &mut R) -> io::Result<Scalar> {
   Scalar::from_canonical_bytes(read_32(r)?)
-    .ok_or(io::Error::new(io::ErrorKind::Other, "unreduced scalar"))
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "unreduced scalar"))
 }
 
 pub fn read_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
   CompressedEdwardsY(read_32(r)?)
     .decompress()
     .filter(|point| point.is_torsion_free())
-    .ok_or(io::Error::new(io::ErrorKind::Other, "invalid point"))
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))
 }
 
 pub fn read_raw_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(
@@ -96,9 +96,7 @@ pub fn read_raw_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(
   len: usize,
   r: &mut R,
 ) -> io::Result<Vec<T>> {
-  let mut res = Vec::with_capacity(
-    len.try_into().map_err(|_| io::Error::new(io::ErrorKind::Other, "length exceeds usize"))?,
-  );
+  let mut res = Vec::with_capacity(len);
   for _ in 0 .. len {
     res.push(f(r)?);
   }
