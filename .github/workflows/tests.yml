@@ -95,8 +95,9 @@ jobs:
                            libunbound-dev libsodium-dev
 
       - name: Monero Regtest Daemon
-        run: ./coins/monero/c/monero/build/release/bin/monerod --detach \
-               --regtest --offline --fixed-difficulty=1
+        run: >
+          ./coins/monero/c/monero/build/release/bin/monerod --regtest --offline
+            --fixed-difficulty=1 --detach
 
       - name: Run tests
         run: cargo test --all-features
@@ -131,11 +132,10 @@ jobs:
           profile: minimal
           components: clippy
 
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: ./coins/monero/c/.build
-          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
+      - name: Claim Monero is built
+        run: |
+          mkdir -p ./coins/monero/c/.build
+          touch ./coins/monero/c/.build/monero
 
       - name: Cargo/Rust cache
         uses: actions/cache@v3
@@ -146,5 +146,6 @@ jobs:
           key: ${{ runner.os }}-cargo-rust
 
       - name: Run Clippy
-        run: cargo clippy --all-features \
-               -- -D warnings -A clippy::type_complexity -A dead_code
+        run: >
+          cargo clippy --all-features -- -D warnings
+            -A clippy::type_complexity -A dead_code
