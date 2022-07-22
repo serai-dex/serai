@@ -67,10 +67,6 @@ jobs:
             ./target
           key: ${{ runner.os }}-cargo-rust
 
-      # Run Clippy now since it requires the full build suite
-      - name: Run Clippy
-        run: cargo +nightly clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
-
       - name: Build
         run: cargo build --all-features
 
