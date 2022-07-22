@@ -88,6 +88,12 @@ jobs:
             ./target
           key: ${{ runner.os }}-cargo-rust
 
+      - name: Install Monero Dependencies
+        run: |
+          sudo apt update
+          sudo apt install libboost-all-dev libssl-dev libzmq3-dev libpgm-dev \
+                           libunbound-dev libsodium-dev
+
       - name: Monero Regtest Daemon
         run: ./coins/monero/c/monero/build/release/bin/monerod --detach \
                --regtest --offline --fixed-difficulty=1
@@ -121,6 +127,7 @@ jobs:
       - name: Install Clippy
         uses: actions-rs/toolchain@v1
         with:
+          toolchain: stable
           profile: minimal
           components: clippy
 
