@@ -39,7 +39,7 @@ fn main() {
     if !Command::new("cmake")
       .args(&[
         "-D",
-        &format!("ARCH=\"{}\"", &env::var("ARCH").unwrap_or_else(|_| "native".to_string())),
+        &format!("ARCH={}", &env::var("ARCH").unwrap_or_else(|_| "native".to_string())),
         "-D",
         "BUILD_TESTS=OFF",
         "-D",
