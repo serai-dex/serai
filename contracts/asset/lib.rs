@@ -55,6 +55,8 @@ pub mod asset {
       })
     }
 
+    /// Mint a matching representation for newly received funds and execute the associated
+    /// instruction.
     #[ink(message)]
     #[openbrush::modifiers(only_inherent)]
     pub fn mint(
@@ -85,6 +87,32 @@ pub mod asset {
       }
     }
 
+    /// Internal function to burn funds from the specified account, emitting the NativeTransfer
+    /// event.
+    fn _native_transfer(
+      &mut self,
+      from: AccountId,
+      to: Vec<u8>,
+      amount: Balance,
+      data: Option<Vec<u8>>
+    ) -> Result<(), PSP22Error> {
+      self._burn_from(from, amount)?;
+      self.env().emit_event(NativeTransfer { from, to, amount, data });
+      Ok(())
+    }
+
+    /// Perform a native transfer of funds already present in this contract.
+    #[ink(message)]
+    pub fn complete_native_transfer(
+      &mut self,
+      to: Vec<u8>,
+      data: Option<Vec<u8>>,
+    ) -> Result<(), PSP22Error> {
+      let asset_address = self.env().account_id();
+      self._native_transfer(asset_address, to, self._balance_of(&asset_address), data)
+    }
+
+    /// Perform a native transfer of funds currently held.
     #[ink(message)]
     pub fn native_transfer(
       &mut self,
@@ -92,9 +120,27 @@ pub mod asset {
       amount: Balance,
       data: Option<Vec<u8>>,
     ) -> Result<(), PSP22Error> {
-      self._burn_from(self.env().caller(), amount)?;
-      self.env().emit_event(NativeTransfer { from: self.env().caller(), to, amount, data });
-      Ok(())
+      self._native_transfer(self.env().caller(), to, amount, data)
+    }
+
+    /// Perform a native transfer of funds currently held in a wallet you have an allowance from.
+    #[ink(message)]
+    pub fn native_transfer_from(
+      &mut self,
+      from: AccountId,
+      to: Vec<u8>,
+      amount: Balance,
+      data: Option<Vec<u8>>,
+    ) -> Result<(), PSP22Error> {
+      let caller = self.env().caller();
+      let allowance = self.allowance(from, caller);
+      if allowance < amount {
+        return Err(PSP22Error::InsufficientAllowance)
+      }
+      self._approve_from_to(from, caller, allowance - amount)?;
+
+      self._native_transfer(from, to, amount, data)
+    }
     }
   }
 }
