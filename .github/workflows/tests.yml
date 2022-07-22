@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  build-with-clippy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -25,7 +25,7 @@ jobs:
           sudo apt update
           sudo apt install build-essential cmake pkg-config libboost-all-dev \
                            libssl-dev libzmq3-dev libpgm-dev libunbound-dev \
-                           libsodium-dev
+                           libsodium-dev ccache
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -33,7 +33,6 @@ jobs:
           toolchain: stable
           profile: minimal
           default: true
-          components: clippy
 
       - name: Install WASM toolchain
         uses: actions-rs/toolchain@v1
@@ -41,8 +40,9 @@ jobs:
           toolchain: nightly
           profile: minimal
           target: wasm32-unknown-unknown
-          components: clippy
 
+      # Cache everything, not only for performance, yet to export these to the
+      # following jobs
       - name: Ethereum cache
         uses: actions/cache@v3
         with:
@@ -55,6 +55,8 @@ jobs:
           path: |
             ./coins/monero/c/.build
             ./coins/monero/c/monero/build
+          # Hash src, as theoretically, a different version of Monero warranting
+          # a rebuild would've changed *something* under src
           key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
 
       - name: Cargo/Rust cache
@@ -67,14 +69,72 @@ jobs:
 
       # Run Clippy now since it requires the full build suite
       - name: Run Clippy
-        run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
+        run: cargo +nightly clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
 
       - name: Build
         run: cargo build --all-features
 
+  # Mirror the build job for Clippy
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+
+      - name: Install solc
+        run: |
+          pip3 install solc-select
+          solc-select install 0.8.9
+          solc-select use 0.8.9
+
+      - name: Install Monero Dependencies
+        run: |
+          sudo apt update
+          sudo apt install build-essential cmake pkg-config libboost-all-dev \
+                           libssl-dev libzmq3-dev libpgm-dev libunbound-dev \
+                           libsodium-dev ccache
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          # Clippy requires nightly for some reason
+          toolchain: nightly
+          profile: minimal
+          default: true
+          components: clippy
+
+      - name: Install WASM toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+          target: wasm32-unknown-unknown
+
+      # Grab the Monero cache since it'll be unaffected by Rust versioning
+      - name: Monero cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ./coins/monero/c/.build
+            ./coins/monero/c/monero/build
+          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
+
+      # Define a separate cache for nightly Rust
+      - name: Cargo/Rust nightly cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo
+            ./target
+          key: ${{ runner.os }}-cargo-rust-nightly
+
+      - name: Run Clippy
+        run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
+
   test:
     runs-on: ubuntu-latest
-    needs: build-with-clippy
+    needs: build
     steps:
       - uses: actions/checkout@v3
         with:
