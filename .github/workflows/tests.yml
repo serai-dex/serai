@@ -39,6 +39,12 @@ jobs:
           toolchain: nightly
           target: wasm32-unknown-unknown
 
+      - name: Ethereum cache
+        uses: actions/cache@v3
+        with:
+          path: ./coins/ethereum/artifacts
+          key: ${{ runner.os }}-${{ hashFiles('./coins/ethereum/contracts') }}
+
       - name: Monero cache
         uses: actions/cache@v3
         with:
@@ -53,7 +59,6 @@ jobs:
           path: |
             ~/.cargo
             ./target
-            ./coins/ethereum/artifacts
           key: ${{ runner.os }}-cargo-rust
 
       - name: Build
@@ -67,6 +72,11 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
       - name: Install Monero Dependencies
         run: |
           sudo apt update
@@ -78,6 +88,12 @@ jobs:
         with:
           toolchain: stable
           default: true
+
+      - name: Ethereum cache
+        uses: actions/cache@v3
+        with:
+          path: ./coins/ethereum/artifacts
+          key: ${{ runner.os }}-${{ hashFiles('./coins/ethereum/contracts') }}
 
       - name: Monero cache
         uses: actions/cache@v3
@@ -93,7 +109,6 @@ jobs:
           path: |
             ~/.cargo
             ./target
-            ./coins/ethereum/artifacts
           key: ${{ runner.os }}-cargo-rust
 
       - name: Monero Regtest Daemon
@@ -143,7 +158,6 @@ jobs:
           path: |
             ~/.cargo
             ./target
-            ./coins/ethereum/artifacts
           key: ${{ runner.os }}-cargo-rust
 
       - name: Run Clippy
