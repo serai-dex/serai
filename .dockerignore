@@ -1,0 +1,8 @@
+.vscode
+README.md
+AGPL-3.0
+docs
+Dockerfile
+.dockerignore
+target
+Cargo.lock
