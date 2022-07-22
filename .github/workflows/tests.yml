@@ -43,12 +43,6 @@ jobs:
 
       # Cache everything, not only for performance, yet to export these to the
       # following jobs
-      - name: Ethereum cache
-        uses: actions/cache@v3
-        with:
-          path: ./coins/ethereum/artifacts
-          key: ${{ runner.os }}-${{ hashFiles('./coins/ethereum/contracts') }}
-
       - name: Monero cache
         uses: actions/cache@v3
         with:
@@ -136,6 +130,12 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: Install solc
+        run: |
+          pip3 install solc-select
+          solc-select install 0.8.9
+          solc-select use 0.8.9
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -160,12 +160,6 @@ jobs:
           toolchain: nightly
           profile: minimal
           target: wasm32-unknown-unknown
-
-      - name: Ethereum cache
-        uses: actions/cache@v3
-        with:
-          path: ./coins/ethereum/artifacts
-          key: ${{ runner.os }}-${{ hashFiles('./coins/ethereum/contracts') }}
 
       - name: Monero cache
         uses: actions/cache@v3
