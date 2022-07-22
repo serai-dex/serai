@@ -1,0 +1,18 @@
+[package]
+name = "serai-extension"
+version = "0.1.0"
+description = "An ink! extension for exposing Serai to ink"
+license = "AGPL-3.0-only"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+
+ink_env = { version = "3", default-features = false }
+ink_lang = { version = "3", default-features = false }
+
+[features]
+default = ["std"]
+std = ["ink_env/std"]
+ink-as-dependency = []
