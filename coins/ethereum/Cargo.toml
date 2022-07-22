@@ -12,7 +12,7 @@ serde_json = "1.0"
 serde = "1.0"
 hex-literal = "0.3"
 
-ethers = { git = "https://github.com/gakonst/ethers-rs", features = ["abigen", "ethers-solc"] }
+ethers = { version = "0.14", features = ["abigen", "ethers-solc"] }
 eyre = "0.6"
 
 k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
@@ -25,4 +25,4 @@ rand = "0.8"
 tokio = { version = "1.19", features = ["macros"] }
 
 [build-dependencies]
-ethers-solc = { git = "https://github.com/gakonst/ethers-rs" }
+ethers-solc = "0.14"
