@@ -26,12 +26,14 @@ act on invalid data, or send to itself, it will drop the entire instruction.
 ### Serialization
 
   - Numbers are exclusively unsigned and encoded as compact integers under
-SCALE. If omitted, `0`.
+SCALE.
   - Enums are prefixed by an ordinal byte of their type, followed by their
 actual values.
-  - Vectors are prefixed by their length. If omitted, `vec![]`.
-  - Instruction fields are numbered and sequentially encoded, each prefixed by
-an ordinal byte. All other fields are sequentially encoded with no markers.
+  - Vectors are prefixed by their length.
+  - In Instruction fields are numbered and sequentially encoded, allowing
+omission, each prefixed by an ordinal byte. This is due to its fields being more
+frequently omitted than not, making their presence what's notable.
+  - All other types have their fields sequentially encoded with no markers.
 
 Certain fields may be omitted depending on the network in question.
 
@@ -55,7 +57,7 @@ If the instruction fails, funds are scheduled to be returned to `origin`.
 
   - `destination` (Enum { Native(Address), Serai(Address) }): Address to receive
 funds to.
-  - `data`        (Vec<u8>):                                  The data to call
+  - `data`        (Option<Vec<u8>>):                          The data to call
 the target with.
 
 Transfer the funds included with this instruction to the specified address with
