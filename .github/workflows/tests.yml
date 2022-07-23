@@ -8,27 +8,29 @@ on:
 
 jobs:
   monero-daemon:
-    - name: Monero cache
-      id: cache-monerod
-      uses: actions/cache@v3
-      with:
-        path: monerod
-        key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Monero cache
+        id: cache-monerod
+        uses: actions/cache@v3
+        with:
+          path: monerod
+          key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
 
-    - name: Download the Monero Daemon
-      if: steps.cache-monerod.cache-hit != 'true'
-      # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
-      # to the contained folder not following the same naming scheme and
-      # requiring further expansion not worth doing right now
-      run: |
-        RUNNER_OS=${{ runner.os }}
-        RUNNER_ARCH=${{ runner.arch }}
-        OS_ARCH=${RUNNER_OS,,}-${RUNNER_ARCH,,}
-        OS_ARCH=linux-x64
+      - name: Download the Monero Daemon
+        if: steps.cache-monerod.cache-hit != 'true'
+        # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
+        # to the contained folder not following the same naming scheme and
+        # requiring further expansion not worth doing right now
+        run: |
+          RUNNER_OS=${{ runner.os }}
+          RUNNER_ARCH=${{ runner.arch }}
+          OS_ARCH=${RUNNER_OS,,}-${RUNNER_ARCH,,}
+          OS_ARCH=linux-x64
 
-        wget https://downloads.getmonero.org/cli/monero-$OS_ARCH-v0.17.3.2.tar.bz2
-        tar -xvf monero-$OS_ARCH-v0.17.3.2.tar.bz2
-        mv monero-x86_64-linux-gnu-v0.17.3.2/monerod monerod
+          wget https://downloads.getmonero.org/cli/monero-$OS_ARCH-v0.17.3.2.tar.bz2
+          tar -xvf monero-$OS_ARCH-v0.17.3.2.tar.bz2
+          mv monero-x86_64-linux-gnu-v0.17.3.2/monerod monerod
 
   build:
     runs-on: ubuntu-latest
