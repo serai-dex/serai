@@ -23,7 +23,7 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install build-essential libboost-all-dev
+          sudo apt install build-essential libboost-all-dev libsodium-dev
 
       - name: Monero cache
         id: cache-monerod
@@ -89,7 +89,7 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install build-essential libboost-all-dev
+          sudo apt install build-essential libboost-all-dev libsodium-dev
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -141,7 +141,7 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install build-essential libboost-all-dev
+          sudo apt install build-essential libboost-all-dev libsodium-dev
 
       - name: Monero cache
         uses: actions/cache@v3
