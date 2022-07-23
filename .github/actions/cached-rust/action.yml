@@ -1,0 +1,34 @@
+name: cached-rust
+description: Installs Rust, caching ~/.cargo and ./target
+
+inputs:
+  toolchain:
+    description: "Toolchain to install"
+    required: false
+    default: stable
+
+  components:
+    description: "Components to install"
+    required: false
+    default: []
+
+outputs:
+
+runs:
+  using: "composite"
+  steps:
+    - name: Rust cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo
+          ./target
+        key: ${{ runner.os }}-${{ runner.arch }}-rust-${{ inputs.toolchain }}
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        profile: minimal
+        default: true
+        components: ${{ inputs.components }}

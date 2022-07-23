@@ -18,22 +18,11 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: ./.github/actions/cached-rust
         with:
           # Clippy requires nightly for some reason
           toolchain: nightly
-          profile: minimal
-          default: true
           components: clippy
-
-      # Define a separate cache for nightly Rust
-      - name: Cargo/Rust nightly cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo
-            ./target
-          key: ${{ runner.os }}-cargo-rust-nightly
 
       - name: Run Clippy
         run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
@@ -57,19 +46,7 @@ jobs:
         uses: ./.github/actions/monero
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          default: true
-
-      - name: Cargo/Rust cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo
-            ./target
-          key: ${{ runner.os }}-cargo-rust
+        uses: ./.github/actions/cached-rust
 
       - name: Run tests
         run: cargo test --all-features
@@ -79,6 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Doesn't grab the cache because it doesn't need it
       - name: Install rustfmt
         uses: actions-rs/toolchain@v1
         with:
