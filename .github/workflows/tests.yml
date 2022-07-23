@@ -25,6 +25,27 @@ jobs:
           sudo apt update
           sudo apt install build-essential libboost-all-dev
 
+      - name: Monero cache
+        id: cache-monerod
+        with: actions/cache@v3
+          path: monerod
+          key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
+
+      - name: Download the Monero Daemon
+        if: steps.cache-monerod.cache-hit != 'true'
+        # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
+        # to the contained folder not following the same naming scheme and
+        # requiring further expansion not worth doing right now
+        run: |
+          RUNNER_OS=${{ runner.os }}
+          RUNNER_ARCH=${{ runner.arch }}
+          OS_ARCH=${RUNNER_OS,,}-${RUNNER_ARCH,,}
+          OS_ARCH=linux-x64
+
+          wget https://downloads.getmonero.org/cli/monero-$OS_ARCH-v0.17.3.2.tar.bz2
+          tar -xvf monero-$OS_ARCH-v0.17.3.2.tar.bz2
+          mv monero-x86_64-linux-gnu-v0.17.3.2/monerod monerod
+
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -116,11 +137,18 @@ jobs:
         with:
           version: nightly
 
-      - name: Monero Regtest Daemon
+      - name: Install Monero Dependencies
         run: |
-          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.17.3.2.tar.bz2
-          tar -xvf monero-linux-x64-v0.17.3.2.tar.bz2
-          ./monero-x86_64-linux-gnu-v0.17.3.2/monerod --regtest --offline --fixed-difficulty=1 --detach
+          sudo apt update
+          sudo apt install build-essential libboost-all-dev
+
+      - name: Monero cache
+        with: actions/cache@v3
+          path: monerod
+          key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
+
+      - name: Monero Regtest Daemon
+        run: ./monerod --regtest --offline --fixed-difficulty=1 --detach
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
