@@ -4,13 +4,6 @@ description: Spawns a regtest Monero daemon
 env:
   version: 0.17.3.2
 
-# Does not take version as an input as this is the source of truth for what
-# version to use for Serai, at this time. Could be further modularized
-inputs:
-
-# VM state should automatically be an output
-outputs:
-
 runs:
   using: "composite"
   steps:
@@ -26,6 +19,7 @@ runs:
       # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
       # to the contained folder not following the same naming scheme and
       # requiring further expansion not worth doing right now
+      shell: bash
       run: |
         RUNNER_OS=${{ runner.os }}
         RUNNER_ARCH=${{ runner.arch }}
@@ -43,4 +37,5 @@ runs:
         mv monero-x86_64-linux-gnu-v${{ env.version }}/monerod monerod
 
     - name: Monero Regtest Daemon
+      shell: bash
       run: ./monerod --regtest --offline --fixed-difficulty=1 --detach

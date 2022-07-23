@@ -1,20 +1,18 @@
 name: build-dependencies
 description: Installs build dependencies for Serai
 
-inputs:
-
-outputs:
-
 runs:
   using: "composite"
   steps:
     - name: Install solc
+      shell: bash
       run: |
         pip3 install solc-select
         solc-select install 0.8.9
         solc-select use 0.8.9
 
     - name: Install Monero Dependencies
+      shell: bash
       run: |
         sudo apt update
         sudo apt install build-essential libboost-all-dev libsodium-dev
