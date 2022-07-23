@@ -6,7 +6,7 @@ use serai_extension::{Curve, GlobalValidatorSetId, ValidatorSetIndex, Key};
 
 type KeysHash = [u8; 32];
 
-#[allow(clippy::all)]
+#[allow(clippy::let_unit_value)]
 #[ink::contract(env = serai_extension::SeraiEnvironment)]
 mod multisig {
   use scale::Encode;
@@ -96,6 +96,7 @@ mod multisig {
 
   impl Multisig {
     /// Deploys the Multisig contract.
+    #[allow(clippy::new_without_default)]
     #[ink(constructor)]
     pub fn new() -> Self {
       ink_lang::utils::initialize_contract(|_| {})

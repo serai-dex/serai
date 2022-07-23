@@ -22,6 +22,26 @@ members = [
   "contracts/asset",
 ]
 
+# Don't include the contracts, which require nightly
+default-members = [
+  "crypto/transcript",
+
+  "crypto/dalek-ff-group",
+  "crypto/multiexp",
+
+  "crypto/dleq",
+  "crypto/frost",
+
+  "coins/ethereum",
+  "coins/monero",
+
+  "processor",
+
+  "substrate/runtime",
+  "substrate/consensus",
+  "substrate/node",
+]
+
 [profile.release]
 panic = "unwind"
 
