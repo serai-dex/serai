@@ -27,7 +27,8 @@ jobs:
 
       - name: Monero cache
         id: cache-monerod
-        with: actions/cache@v3
+        uses: actions/cache@v3
+        with:
           path: monerod
           key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
 
@@ -143,7 +144,8 @@ jobs:
           sudo apt install build-essential libboost-all-dev
 
       - name: Monero cache
-        with: actions/cache@v3
+        uses: actions/cache@v3
+        with:
           path: monerod
           key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
 
