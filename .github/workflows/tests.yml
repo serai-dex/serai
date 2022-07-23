@@ -7,31 +7,6 @@ on:
   pull_request:
 
 jobs:
-  monero-daemon:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Monero cache
-        id: cache-monerod
-        uses: actions/cache@v3
-        with:
-          path: monerod
-          key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
-
-      - name: Download the Monero Daemon
-        if: steps.cache-monerod.outputs.cache-hit != 'true'
-        # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
-        # to the contained folder not following the same naming scheme and
-        # requiring further expansion not worth doing right now
-        run: |
-          RUNNER_OS=${{ runner.os }}
-          RUNNER_ARCH=${{ runner.arch }}
-          OS_ARCH=${RUNNER_OS,,}-${RUNNER_ARCH,,}
-          OS_ARCH=linux-x64
-
-          wget https://downloads.getmonero.org/cli/monero-$OS_ARCH-v0.17.3.2.tar.bz2
-          tar -xvf monero-$OS_ARCH-v0.17.3.2.tar.bz2
-          mv monero-x86_64-linux-gnu-v0.17.3.2/monerod monerod
-
   clippy:
     runs-on: ubuntu-latest
     steps:
@@ -39,99 +14,39 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Install solc
-        run: |
-          pip3 install solc-select
-          solc-select install 0.8.9
-          solc-select use 0.8.9
-
-      - name: Install Monero Dependencies
-        run: |
-          sudo apt update
-          sudo apt install build-essential libboost-all-dev libsodium-dev
+      - name: Build Dependencies
+        uses: ./.github/actions/build-dependencies
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: ./.github/actions/cached-rust
         with:
           # Clippy requires nightly for some reason
           toolchain: nightly
-          profile: minimal
-          default: true
           components: clippy
-
-      - name: Install WASM toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          profile: minimal
-          target: wasm32-unknown-unknown
-
-      # Define a separate cache for nightly Rust
-      - name: Cargo/Rust nightly cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo
-            ./target
-          key: ${{ runner.os }}-cargo-rust-nightly
 
       - name: Run Clippy
         run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
 
   test:
     runs-on: ubuntu-latest
-    needs: monero-daemon
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
 
-      - name: Install solc
-        run: |
-          pip3 install solc-select
-          solc-select install 0.8.9
-          solc-select use 0.8.9
+      - name: Build Dependencies
+        uses: ./.github/actions/build-dependencies
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
 
-      - name: Install Monero Dependencies
-        run: |
-          sudo apt update
-          sudo apt install build-essential libboost-all-dev libsodium-dev
-
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: monerod
-          key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
-
       - name: Monero Regtest Daemon
-        run: ./monerod --regtest --offline --fixed-difficulty=1 --detach
+        uses: ./.github/actions/monero
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          default: true
-
-      - name: Install WASM toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          profile: minimal
-          target: wasm32-unknown-unknown
-
-      - name: Cargo/Rust cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo
-            ./target
-          key: ${{ runner.os }}-cargo-rust
+        uses: ./.github/actions/cached-rust
 
       - name: Run tests
         run: cargo test --all-features
@@ -141,6 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Doesn't grab the cache because it doesn't need it
       - name: Install rustfmt
         uses: actions-rs/toolchain@v1
         with:
