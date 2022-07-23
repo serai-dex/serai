@@ -40,7 +40,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: monero-daemon
     steps:
       - uses: actions/checkout@v3
         with:
