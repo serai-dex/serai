@@ -38,7 +38,7 @@ lazy_static! {
   )
   .decompress()
   .unwrap();
-  static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&*H);
+  static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H);
 }
 
 // Function from libsodium our subsection of Monero relies on. Implementing it here means we don't
@@ -98,5 +98,5 @@ pub fn hash(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {
-  Scalar::from_bytes_mod_order(hash(&data))
+  Scalar::from_bytes_mod_order(hash(data))
 }

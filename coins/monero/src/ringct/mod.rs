@@ -15,7 +15,7 @@ pub fn generate_key_image(secret: Scalar) -> EdwardsPoint {
   secret * hash_to_point(&secret * &ED25519_BASEPOINT_TABLE)
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RctBase {
   pub fee: u64,
   pub ecdh_info: Vec<[u8; 8]>,
@@ -68,7 +68,7 @@ impl RctBase {
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RctPrunable {
   Null,
   Clsag { bulletproofs: Vec<Bulletproofs>, clsags: Vec<Clsag>, pseudo_outs: Vec<EdwardsPoint> },
@@ -90,9 +90,9 @@ impl RctPrunable {
     match self {
       RctPrunable::Null => Ok(()),
       RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
-        write_vec(Bulletproofs::serialize, &bulletproofs, w)?;
-        write_raw_vec(Clsag::serialize, &clsags, w)?;
-        write_raw_vec(write_point, &pseudo_outs, w)
+        write_vec(Bulletproofs::serialize, bulletproofs, w)?;
+        write_raw_vec(Clsag::serialize, clsags, w)?;
+        write_raw_vec(write_point, pseudo_outs, w)
       }
     }
   }
@@ -122,13 +122,13 @@ impl RctPrunable {
     match self {
       RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
       RctPrunable::Clsag { bulletproofs, .. } => {
-        bulletproofs.iter().map(|bp| bp.signature_serialize(w)).collect()
+        bulletproofs.iter().try_for_each(|bp| bp.signature_serialize(w))
       }
     }
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RctSignatures {
   pub base: RctBase,
   pub prunable: RctPrunable,

@@ -87,7 +87,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       AlgorithmMachine::new(
         Schnorr::<C, H>::new(),
         Arc::new(keys[i].clone()),
-        vectors.included.clone(),
+        &vectors.included.to_vec().clone(),
       )
       .unwrap(),
     ));

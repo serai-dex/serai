@@ -15,6 +15,7 @@ use std::io::{Read, Write};
 #[cfg(feature = "serialize")]
 use crate::cross_group::read_point;
 
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum BitSignature {
   ClassicLinear,
   ConciseLinear,

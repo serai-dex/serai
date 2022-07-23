@@ -159,22 +159,22 @@ fn refine_inputs<C: Coin>(
 
   // Replace large inputs with smaller ones
   for s in (0 .. selected.len()).rev() {
-    for i in 0 .. inputs.len() {
+    for input in inputs.iter_mut() {
       // Doesn't break due to inputs no longer being sorted
       // This could be made faster if we prioritized small input usage over transaction size/fees
       // TODO: Consider. This would implicitly consolidate inputs which would be advantageous
-      if selected[s].amount() < inputs[i].amount() {
+      if selected[s].amount() < input.amount() {
         continue;
       }
 
       // If we can successfully replace this input, do so
-      let diff = selected[s].amount() - inputs[i].amount();
+      let diff = selected[s].amount() - input.amount();
       if remaining > diff {
         remaining -= diff;
 
         let old = selected[s].clone();
-        selected[s] = inputs[i].clone();
-        inputs[i] = old;
+        selected[s] = input.clone();
+        *input = old;
       }
     }
   }
@@ -184,14 +184,14 @@ fn select_inputs_outputs<C: Coin>(
   inputs: &mut Vec<C::Output>,
   outputs: &mut Vec<(C::Address, u64)>,
 ) -> (Vec<C::Output>, Vec<(C::Address, u64)>) {
-  if inputs.len() == 0 {
+  if inputs.is_empty() {
     return (vec![], vec![]);
   }
 
   let (mut selected, mut value) = select_inputs::<C>(inputs);
 
   let outputs = select_outputs::<C>(outputs, &mut value);
-  if outputs.len() == 0 {
+  if outputs.is_empty() {
     inputs.extend(selected);
     return (vec![], vec![]);
   }
@@ -287,7 +287,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     payments: Vec<(C::Address, u64)>,
     fee: C::Fee,
   ) -> Result<(Vec<(C::Address, u64)>, Vec<C::SignableTransaction>), CoinError> {
-    if payments.len() == 0 {
+    if payments.is_empty() {
       return Ok((vec![], vec![]));
     }
 
@@ -302,10 +302,10 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
-      while outputs.len() != 0 {
+      while !outputs.is_empty() {
         let (inputs, outputs) = select_inputs_outputs::<C>(outputs, &mut payments);
         // If we can no longer process any payments, move to the next set of keys
-        if outputs.len() == 0 {
+        if outputs.is_empty() {
           debug_assert_eq!(inputs.len(), 0);
           break;
         }
@@ -339,16 +339,16 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     included: Vec<u16>,
   ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
     let attempt =
-      self.coin.attempt_send(prepared, &included).await.map_err(|e| SignError::CoinError(e))?;
+      self.coin.attempt_send(prepared, &included).await.map_err(SignError::CoinError)?;
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);
-    let commitments = network.round(commitments).await.map_err(|e| SignError::NetworkError(e))?;
+    let commitments = network.round(commitments).await.map_err(SignError::NetworkError)?;
 
-    let (attempt, share) = attempt.sign(commitments, b"").map_err(|e| SignError::FrostError(e))?;
-    let shares = network.round(share).await.map_err(|e| SignError::NetworkError(e))?;
+    let (attempt, share) = attempt.sign(commitments, b"").map_err(SignError::FrostError)?;
+    let shares = network.round(share).await.map_err(SignError::NetworkError)?;
 
-    let tx = attempt.complete(shares).map_err(|e| SignError::FrostError(e))?;
+    let tx = attempt.complete(shares).map_err(SignError::FrostError)?;
 
-    self.coin.publish_transaction(&tx).await.map_err(|e| SignError::CoinError(e))
+    self.coin.publish_transaction(&tx).await.map_err(SignError::CoinError)
   }
 }

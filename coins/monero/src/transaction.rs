@@ -10,7 +10,7 @@ use crate::{
 
 pub const RING_LEN: usize = 11;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Input {
   Gen(u64),
 
@@ -60,7 +60,7 @@ impl Input {
 }
 
 // Doesn't bother moving to an enum for the unused Script classes
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
   pub amount: u64,
   pub key: EdwardsPoint,
@@ -106,7 +106,7 @@ impl Output {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Timelock {
   None,
   Block(usize),
@@ -151,7 +151,7 @@ impl PartialOrd for Timelock {
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TransactionPrefix {
   pub version: u64,
   pub timelock: Timelock,
@@ -198,7 +198,7 @@ impl TransactionPrefix {
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
   pub rct_signatures: RctSignatures,

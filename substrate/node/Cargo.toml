@@ -49,13 +49,9 @@ frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate" }
 serai-consensus = { path = "../consensus" }
 serai-runtime = { path = "../runtime" }
 
-# CLI-specific dependencies
-try-runtime-cli = { git = "https://github.com/serai-dex/substrate", optional = true }
-
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate.git" }
 
 [features]
 default = []
 runtime-benchmarks = ["serai-runtime/runtime-benchmarks"]
-try-runtime = ["serai-runtime/try-runtime", "try-runtime-cli"]

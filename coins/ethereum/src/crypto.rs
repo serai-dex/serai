@@ -41,7 +41,8 @@ pub fn ecrecover(message: Scalar, v: u8, r: Scalar, s: Scalar) -> Option<[u8; 20
       return Some(address(&key));
     }
   }
-  return None;
+
+  None
 }
 
 #[derive(Clone, Default)]

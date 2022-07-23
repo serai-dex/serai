@@ -43,7 +43,7 @@ pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
     client.clone(),
     algorithm::AcceptAny,
     0,
-    select_chain.clone(),
+    select_chain,
     |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
     sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
@@ -116,7 +116,7 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     algorithm::AcceptAny,
     proposer,
     network.clone(),
-    network.clone(),
+    network,
     None,
     move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
     Duration::from_secs(6),

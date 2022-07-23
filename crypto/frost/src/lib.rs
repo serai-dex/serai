@@ -161,7 +161,7 @@ impl<C: Curve> FrostKeys<C> {
     // Carry any existing offset
     // Enables schemes like Monero's subaddresses which have a per-subaddress offset and then a
     // one-time-key offset
-    res.offset = Some(offset + res.offset.unwrap_or(C::F::zero()));
+    res.offset = Some(offset + res.offset.unwrap_or_else(C::F::zero));
     res.group_key += C::GENERATOR * offset;
     res
   }
@@ -187,8 +187,8 @@ impl<C: Curve> FrostKeys<C> {
       Err(FrostError::InvalidSigningSet("invalid amount of participants included"))?;
     }
 
-    let secret_share = self.secret_share * lagrange::<C::F>(self.params.i, &included);
-    let offset = self.offset.unwrap_or(C::F::zero());
+    let secret_share = self.secret_share * lagrange::<C::F>(self.params.i, included);
+    let offset = self.offset.unwrap_or_else(C::F::zero);
     let offset_share = offset * C::F::from(included.len().try_into().unwrap()).invert().unwrap();
 
     Ok(FrostView {
@@ -198,7 +198,7 @@ impl<C: Curve> FrostKeys<C> {
         .verification_shares
         .iter()
         .map(|(l, share)| {
-          (*l, (*share * lagrange::<C::F>(*l, &included)) + (C::GENERATOR * offset_share))
+          (*l, (*share * lagrange::<C::F>(*l, included)) + (C::GENERATOR * offset_share))
         })
         .collect(),
       included: included.to_vec(),
@@ -218,7 +218,7 @@ impl<C: Curve> FrostKeys<C> {
     serialized.extend(&self.params.i.to_be_bytes());
     serialized.extend(self.secret_share.to_repr().as_ref());
     serialized.extend(self.group_key.to_bytes().as_ref());
-    for l in 1 ..= self.params.n.into() {
+    for l in 1 ..= self.params.n {
       serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
     }
     serialized
@@ -237,7 +237,7 @@ impl<C: Curve> FrostKeys<C> {
 
       let mut id = vec![0; C::ID.len()];
       cursor.read_exact(&mut id).map_err(|_| missing)?;
-      if &id != &C::ID {
+      if id != C::ID {
         Err(different)?;
       }
     }

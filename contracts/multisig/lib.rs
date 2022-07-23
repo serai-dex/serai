@@ -6,6 +6,7 @@ use serai_extension::{Curve, GlobalValidatorSetId, ValidatorSetIndex, Key};
 
 type KeysHash = [u8; 32];
 
+#[allow(clippy::all)]
 #[ink::contract(env = serai_extension::SeraiEnvironment)]
 mod multisig {
   use scale::Encode;

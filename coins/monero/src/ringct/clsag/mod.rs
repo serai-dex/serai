@@ -41,7 +41,7 @@ pub enum ClsagError {
   InvalidC1,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
   pub commitment: Commitment,
@@ -69,6 +69,7 @@ impl ClsagInput {
   }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum Mode {
   Sign(usize, EdwardsPoint, EdwardsPoint),
   #[cfg(feature = "experimental")]
@@ -182,7 +183,7 @@ fn core(
   ((D, c * mu_P, c * mu_C), c1.unwrap_or(c))
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Clsag {
   pub D: EdwardsPoint,
   pub s: Vec<Scalar>,

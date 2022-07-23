@@ -20,3 +20,10 @@ wallet.
 
 - `processor` - A generic chain processor to process data for Serai and process
   events from Serai, executing transactions as expected and needed.
+
+### Links
+
+- [Twitter](https://twitter.com/SeraiDEX):         https://twitter.com/SeraiDEX
+- [Discord](https://discord.gg/mpEUtJR3vz):        https://discord.gg/mpEUtJR3vz
+- [Matrix](https://matrix.to/#/#serai:matrix.org):
+https://matrix.to/#/#serai:matrix.org
