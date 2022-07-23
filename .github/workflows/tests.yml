@@ -46,12 +46,17 @@ jobs:
       - name: Monero cache
         uses: actions/cache@v3
         with:
-          path: |
-            ./coins/monero/c/.build
-            ./coins/monero/c/monero/build
+          path: ./coins/monero/c/monero/build
           # Hash src, as theoretically, a different version of Monero warranting
           # a rebuild would've changed *something* under src
           key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
+
+      # We could download a Monero binary here instead
+      - name: Build Monero
+        run: |
+          cd coins/monero/c/monero
+          make
+          cd ../../../..
 
       - name: Cargo/Rust cache
         uses: actions/cache@v3
@@ -101,15 +106,6 @@ jobs:
           profile: minimal
           target: wasm32-unknown-unknown
 
-      # Grab the Monero cache since it'll be unaffected by Rust versioning
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ./coins/monero/c/.build
-            ./coins/monero/c/monero/build
-          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
-
       # Define a separate cache for nightly Rust
       - name: Cargo/Rust nightly cache
         uses: actions/cache@v3
@@ -141,7 +137,7 @@ jobs:
         with:
           version: nightly
 
-      - name: Install Monero Dependencies
+      - name: Install Monero Runtime Dependencies
         run: |
           sudo apt update
           sudo apt install libboost-all-dev libssl-dev libzmq3-dev libpgm-dev \
@@ -164,9 +160,7 @@ jobs:
       - name: Monero cache
         uses: actions/cache@v3
         with:
-          path: |
-            ./coins/monero/c/.build
-            ./coins/monero/c/monero/build
+          path: ./coins/monero/c/monero/build
           key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
 
       - name: Cargo/Rust cache

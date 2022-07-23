@@ -1,7 +1,5 @@
 #include <mutex>
 
-#include "device/device_default.hpp"
-
 #include "ringct/bulletproofs.h"
 #include "ringct/rctSigs.h"
 
