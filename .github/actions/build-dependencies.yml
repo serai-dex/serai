@@ -1,0 +1,27 @@
+name: build-dependencies
+description: Installs build dependencies for Serai
+
+inputs:
+
+outputs:
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install solc
+      run: |
+        pip3 install solc-select
+        solc-select install 0.8.9
+        solc-select use 0.8.9
+
+    - name: Install Monero Dependencies
+      run: |
+        sudo apt update
+        sudo apt install build-essential libboost-all-dev libsodium-dev
+
+    - name: Install WASM toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        profile: minimal
+        target: wasm32-unknown-unknown
