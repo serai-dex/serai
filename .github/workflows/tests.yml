@@ -18,7 +18,7 @@ jobs:
           key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
 
       - name: Download the Monero Daemon
-        if: steps.cache-monerod.cache-hit != 'true'
+        if: steps.cache-monerod.outputs.cache-hit != 'true'
         # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
         # to the contained folder not following the same naming scheme and
         # requiring further expansion not worth doing right now
