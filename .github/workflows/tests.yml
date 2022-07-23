@@ -7,6 +7,31 @@ on:
   pull_request:
 
 jobs:
+  monero-daemon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Monero cache
+        id: cache-monerod
+        uses: actions/cache@v3
+        with:
+          path: monerod
+          key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
+
+      - name: Download the Monero Daemon
+        if: steps.cache-monerod.outputs.cache-hit != 'true'
+        # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
+        # to the contained folder not following the same naming scheme and
+        # requiring further expansion not worth doing right now
+        run: |
+          RUNNER_OS=${{ runner.os }}
+          RUNNER_ARCH=${{ runner.arch }}
+          OS_ARCH=${RUNNER_OS,,}-${RUNNER_ARCH,,}
+          OS_ARCH=linux-x64
+
+          wget https://downloads.getmonero.org/cli/monero-$OS_ARCH-v0.17.3.2.tar.bz2
+          tar -xvf monero-$OS_ARCH-v0.17.3.2.tar.bz2
+          mv monero-x86_64-linux-gnu-v0.17.3.2/monerod monerod
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -23,9 +48,7 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install build-essential cmake pkg-config libboost-all-dev \
-                           libssl-dev libzmq3-dev libpgm-dev libunbound-dev \
-                           libsodium-dev ccache
+          sudo apt install build-essential libboost-all-dev libsodium-dev
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -40,18 +63,6 @@ jobs:
           toolchain: nightly
           profile: minimal
           target: wasm32-unknown-unknown
-
-      # Cache everything, not only for performance, yet to export these to the
-      # following jobs
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ./coins/monero/c/.build
-            ./coins/monero/c/monero/build
-          # Hash src, as theoretically, a different version of Monero warranting
-          # a rebuild would've changed *something* under src
-          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
 
       - name: Cargo/Rust cache
         uses: actions/cache@v3
@@ -81,9 +92,7 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install build-essential cmake pkg-config libboost-all-dev \
-                           libssl-dev libzmq3-dev libpgm-dev libunbound-dev \
-                           libsodium-dev ccache
+          sudo apt install build-essential libboost-all-dev libsodium-dev
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -101,15 +110,6 @@ jobs:
           profile: minimal
           target: wasm32-unknown-unknown
 
-      # Grab the Monero cache since it'll be unaffected by Rust versioning
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ./coins/monero/c/.build
-            ./coins/monero/c/monero/build
-          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
-
       # Define a separate cache for nightly Rust
       - name: Cargo/Rust nightly cache
         uses: actions/cache@v3
@@ -124,7 +124,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [monero-daemon, build]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -144,8 +144,16 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install libboost-all-dev libssl-dev libzmq3-dev libpgm-dev \
-                           libunbound-dev libsodium-dev
+          sudo apt install build-essential libboost-all-dev libsodium-dev
+
+      - name: Monero cache
+        uses: actions/cache@v3
+        with:
+          path: monerod
+          key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
+
+      - name: Monero Regtest Daemon
+        run: ./monerod --regtest --offline --fixed-difficulty=1 --detach
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -161,14 +169,6 @@ jobs:
           profile: minimal
           target: wasm32-unknown-unknown
 
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ./coins/monero/c/.build
-            ./coins/monero/c/monero/build
-          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
-
       - name: Cargo/Rust cache
         uses: actions/cache@v3
         with:
@@ -176,9 +176,6 @@ jobs:
             ~/.cargo
             ./target
           key: ${{ runner.os }}-cargo-rust
-
-      - name: Monero Regtest Daemon
-        run: ./coins/monero/c/monero/build/release/bin/monerod --regtest --offline --fixed-difficulty=1 --detach
 
       - name: Run tests
         run: cargo test --all-features
