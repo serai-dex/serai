@@ -20,13 +20,13 @@ jobs:
       - name: Install Rust
         uses: ./.github/actions/cached-rust
         with:
-          # Clippy requires nightly for some reason
+          # Clippy requires nightly due to serai-runtime
           toolchain: nightly
           components: clippy
 
       - name: Run Clippy
         run: |
-          cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
+          cargo +nightly clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
           for dir in $(find contracts/* -maxdepth 0 -type d); do (cd $dir && cargo clippy --all-features); done
 
   test:
