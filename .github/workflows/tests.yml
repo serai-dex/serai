@@ -23,9 +23,7 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install build-essential cmake pkg-config libboost-all-dev \
-                           libssl-dev libzmq3-dev libpgm-dev libunbound-dev \
-                           libsodium-dev ccache
+          sudo apt install build-essential libboost-all-dev
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -40,23 +38,6 @@ jobs:
           toolchain: nightly
           profile: minimal
           target: wasm32-unknown-unknown
-
-      # Cache everything, not only for performance, yet to export these to the
-      # following jobs
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: ./coins/monero/c/monero/build
-          # Hash src, as theoretically, a different version of Monero warranting
-          # a rebuild would've changed *something* under src
-          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
-
-      # We could download a Monero binary here instead
-      - name: Build Monero
-        run: |
-          cd coins/monero/c/monero
-          make
-          cd ../../../..
 
       - name: Cargo/Rust cache
         uses: actions/cache@v3
@@ -86,9 +67,7 @@ jobs:
       - name: Install Monero Dependencies
         run: |
           sudo apt update
-          sudo apt install build-essential cmake pkg-config libboost-all-dev \
-                           libssl-dev libzmq3-dev libpgm-dev libunbound-dev \
-                           libsodium-dev ccache
+          sudo apt install build-essential libboost-all-dev
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -137,11 +116,11 @@ jobs:
         with:
           version: nightly
 
-      - name: Install Monero Runtime Dependencies
+      - name: Monero Regtest Daemon
         run: |
-          sudo apt update
-          sudo apt install libboost-all-dev libssl-dev libzmq3-dev libpgm-dev \
-                           libunbound-dev libsodium-dev
+          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.17.3.2.tar.bz2
+          tar -xvf monero-linux-x64-v0.17.3.2.tar.bz2
+          ./monero-x86_64-linux-gnu-v0.17.3.2/monerod --regtest --offline --fixed-difficulty=1 --detach
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -157,12 +136,6 @@ jobs:
           profile: minimal
           target: wasm32-unknown-unknown
 
-      - name: Monero cache
-        uses: actions/cache@v3
-        with:
-          path: ./coins/monero/c/monero/build
-          key: ${{ runner.os }}-${{ hashFiles('./coins/monero/c/monero/src') }}
-
       - name: Cargo/Rust cache
         uses: actions/cache@v3
         with:
@@ -170,9 +143,6 @@ jobs:
             ~/.cargo
             ./target
           key: ${{ runner.os }}-cargo-rust
-
-      - name: Monero Regtest Daemon
-        run: ./coins/monero/c/monero/build/release/bin/monerod --regtest --offline --fixed-difficulty=1 --detach
 
       - name: Run tests
         run: cargo test --all-features
