@@ -10,9 +10,7 @@ inputs:
   components:
     description: "Components to install"
     required: false
-    default: []
-
-outputs:
+    default:
 
 runs:
   using: "composite"
