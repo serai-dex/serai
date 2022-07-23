@@ -19,7 +19,8 @@ runs:
       uses: actions/cache@v3
       with:
         path: |
-          ~/.cargo
+          ~/.cargo/registry
+          ~/.cargo/git
           ./target
         key: ${{ runner.os }}-${{ runner.arch }}-rust-${{ inputs.toolchain }}
 
