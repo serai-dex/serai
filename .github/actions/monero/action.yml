@@ -1,11 +1,10 @@
 name: monero-regtest
 description: Spawns a regtest Monero daemon
 
-env:
-  version: 0.17.3.2
-
 runs:
   using: "composite"
+  env:
+    version: 0.17.3.2
   steps:
     - name: Monero daemon cache
       id: cache-monerod
