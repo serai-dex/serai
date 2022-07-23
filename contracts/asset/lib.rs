@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![feature(min_specialization)]
 
+#[allow(clippy::let_unit_value)]
 #[openbrush::contract(env = serai_extension::SeraiEnvironment)]
 pub mod asset {
   use ink_prelude::string::String;
@@ -94,7 +95,7 @@ pub mod asset {
       from: AccountId,
       to: Vec<u8>,
       amount: Balance,
-      data: Option<Vec<u8>>
+      data: Option<Vec<u8>>,
     ) -> Result<(), PSP22Error> {
       self._burn_from(from, amount)?;
       self.env().emit_event(NativeTransfer { from, to, amount, data });
@@ -135,12 +136,11 @@ pub mod asset {
       let caller = self.env().caller();
       let allowance = self.allowance(from, caller);
       if allowance < amount {
-        return Err(PSP22Error::InsufficientAllowance)
+        return Err(PSP22Error::InsufficientAllowance);
       }
       self._approve_from_to(from, caller, allowance - amount)?;
 
       self._native_transfer(from, to, amount, data)
-    }
     }
   }
 }
