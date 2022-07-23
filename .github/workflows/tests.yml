@@ -32,50 +32,6 @@ jobs:
           tar -xvf monero-$OS_ARCH-v0.17.3.2.tar.bz2
           mv monero-x86_64-linux-gnu-v0.17.3.2/monerod monerod
 
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-
-      - name: Install solc
-        run: |
-          pip3 install solc-select
-          solc-select install 0.8.9
-          solc-select use 0.8.9
-
-      - name: Install Monero Dependencies
-        run: |
-          sudo apt update
-          sudo apt install build-essential libboost-all-dev libsodium-dev
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          default: true
-
-      - name: Install WASM toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          profile: minimal
-          target: wasm32-unknown-unknown
-
-      - name: Cargo/Rust cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo
-            ./target
-          key: ${{ runner.os }}-cargo-rust
-
-      - name: Build
-        run: ARCH=default cargo build --all-features
-
-  # Mirror the build job for Clippy
   clippy:
     runs-on: ubuntu-latest
     steps:
@@ -124,7 +80,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [monero-daemon, build]
+    needs: monero-daemon
     steps:
       - uses: actions/checkout@v3
         with:
