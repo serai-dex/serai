@@ -8,7 +8,7 @@ use subtle::ConstantTimeEq;
 use tiny_keccak::{Hasher, Keccak};
 
 use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
+  constants::{ED25519_BASEPOINT_POINT, ED25519_BASEPOINT_TABLE},
   scalar::Scalar,
   edwards::{EdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY},
 };
@@ -30,14 +30,11 @@ pub mod wallet;
 mod tests;
 
 lazy_static! {
-  static ref H: EdwardsPoint = CompressedEdwardsY(
-    hex::decode("8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94")
+  static ref H: EdwardsPoint =
+    CompressedEdwardsY(hash(&ED25519_BASEPOINT_POINT.compress().to_bytes()))
+      .decompress()
       .unwrap()
-      .try_into()
-      .unwrap()
-  )
-  .decompress()
-  .unwrap();
+      .mul_by_cofactor();
   static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H);
 }
 
