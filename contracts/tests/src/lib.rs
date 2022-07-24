@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use scale::{Encode, Decode};
 
 use ink_env::{
@@ -22,6 +24,7 @@ fn hash_prefixed<T: Encode>(prefixed: PrefixedValue<T>) -> [u8; 32] {
 #[ink::contract]
 mod callee_contract {
   use ink_storage::traits::{SpreadLayout, PackedLayout};
+  use ink_prelude::vec::Vec;
 
   use super::*;
 
@@ -43,9 +46,8 @@ mod callee_contract {
     pub value: Vec<u8>,
   }
 
-  #[derive(
-    Debug, Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, SpreadLayout, PackedLayout,
-  )]
+  #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+  #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, SpreadLayout, PackedLayout)]
   pub struct CallStruct {
     pub a: u64,
     pub b: bool,
@@ -103,6 +105,8 @@ mod callee_contract {
 }
 
 pub mod callee {
+  use ink_prelude::vec;
+
   use super::*;
   pub use callee_contract::*;
 
@@ -139,6 +143,7 @@ pub mod callee {
       topic[.. value.len()].copy_from_slice(&value);
       topic
     };
+
 
     let mut expected_topics = vec![
       event_topic,

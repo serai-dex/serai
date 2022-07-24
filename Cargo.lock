@@ -7585,6 +7585,7 @@ dependencies = [
  "openbrush",
  "parity-scale-codec",
  "scale-info",
+ "serai-contract-tests",
  "serai-extension",
 ]
 
@@ -7613,17 +7614,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "serai-extension"
+name = "serai-contract-tests"
 version = "0.1.0"
 dependencies = [
  "ink_env",
  "ink_lang",
  "ink_metadata",
+ "ink_prelude",
  "ink_primitives",
  "ink_storage",
- "openbrush",
  "parity-scale-codec",
  "scale-info",
+]
+
+[[package]]
+name = "serai-extension"
+version = "0.1.0"
+dependencies = [
+ "ink_env",
+ "ink_lang",
+ "openbrush",
+ "parity-scale-codec",
 ]
 
 [[package]]

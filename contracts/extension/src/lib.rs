@@ -4,7 +4,6 @@ use ink_lang as ink;
 use ink_env::{Environment, DefaultEnvironment, AccountId};
 
 pub mod only_inherent;
-pub mod tests;
 
 pub type Curve = u16;
 pub type Coin = u32;

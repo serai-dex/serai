@@ -8,17 +8,14 @@ edition = "2021"
 
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
 
-ink_primitives = { version = "3", default-features = false }
-ink_metadata = { version = "3", default-features = false, features = ["derive"], optional = true }
 ink_env = { version = "3", default-features = false }
-ink_storage = { version = "3", default-features = false }
 ink_lang = { version = "3", default-features = false }
 
 openbrush = { version = "~2.1.0", features = ["psp22"], default-features = false }
 
 [features]
-default = ["std"]
-std = ["scale-info/std", "ink_env/std", "ink_metadata/std", "openbrush/std"]
+std = ["ink_env/std", "openbrush/std"]
 ink-as-dependency = []
+
+default = ["std"]

@@ -1,7 +1,7 @@
 [package]
-name = "serai-multisig"
+name = "serai-contract-tests"
 version = "0.1.0"
-description = "An ink! tracker for Serai's current multisig"
+description = "A collection of utilities for testing ink! contracts"
 license = "AGPL-3.0-only"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
@@ -12,32 +12,13 @@ scale-info = { version = "2", default-features = false, features = ["derive"], o
 
 ink_primitives = { version = "3", default-features = false }
 ink_storage = { version = "3", default-features = false }
+ink_prelude = { version = "3", default-features = false }
 ink_env = { version = "3", default-features = false }
 ink_lang = { version = "3", default-features = false }
 ink_metadata = { version = "3", default-features = false, features = ["derive"], optional = true }
 
-serai-extension = { path = "../extension", default-features = false }
-
-[dev-dependencies]
-lazy_static = "1"
-
-[lib]
-name = "serai_multisig"
-path = "lib.rs"
-crate-type = ["cdylib"]
-
 [features]
-std = [
-  "scale/std",
-  "scale-info/std",
-
-  "ink_primitives/std",
-  "ink_storage/std",
-  "ink_env/std",
-  "ink_metadata/std",
-
-  "serai-extension/std",
-]
+std = ["scale-info/std", "ink_storage/std", "ink_env/std", "ink_metadata/std"]
 ink-as-dependency = []
 
 default = ["std"]
