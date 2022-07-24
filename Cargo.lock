@@ -7618,8 +7618,12 @@ version = "0.1.0"
 dependencies = [
  "ink_env",
  "ink_lang",
+ "ink_metadata",
+ "ink_primitives",
+ "ink_storage",
  "openbrush",
  "parity-scale-codec",
+ "scale-info",
 ]
 
 [[package]]

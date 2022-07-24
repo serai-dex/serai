@@ -11,10 +11,10 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
 
 ink_primitives = { version = "3", default-features = false }
-ink_metadata = { version = "3", default-features = false, features = ["derive"], optional = true }
-ink_env = { version = "3", default-features = false }
 ink_storage = { version = "3", default-features = false }
+ink_env = { version = "3", default-features = false }
 ink_lang = { version = "3", default-features = false }
+ink_metadata = { version = "3", default-features = false, features = ["derive"], optional = true }
 
 serai-extension = { path = "../extension", default-features = false }
 
@@ -33,9 +33,9 @@ std = [
   "scale-info/std",
 
   "ink_primitives/std",
-  "ink_metadata/std",
-  "ink_env/std",
   "ink_storage/std",
+  "ink_env/std",
+  "ink_metadata/std",
 
   "serai-extension/std",
 ]
