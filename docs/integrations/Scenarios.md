@@ -9,7 +9,7 @@ in/out flow.
 Shorthand::Raw(
   In Instruction {
     target: Incoming Asset Contract,
-    data:   native_transfer(Incoming Asset Sender)
+    data:   complete_native_transfer(Incoming Asset Sender)
   }
 )
 ```
