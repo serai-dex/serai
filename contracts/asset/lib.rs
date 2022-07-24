@@ -97,6 +97,9 @@ pub mod asset {
       amount: Balance,
       data: Option<Vec<u8>>,
     ) -> Result<(), PSP22Error> {
+      if amount == 0 {
+        Err(PSP22Error::Custom("no funds for native transfer".to_string()))?;
+      }
       self._burn_from(from, amount)?;
       self.env().emit_event(NativeTransfer { from, to, amount, data });
       Ok(())
