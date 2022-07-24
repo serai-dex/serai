@@ -36,20 +36,20 @@ pub mod asset {
 
   #[ink(storage)]
   #[derive(Default, SpreadAllocate, PSP22Storage, PSP22MetadataStorage)]
-  pub struct SeraiAsset {
+  pub struct Asset {
     #[PSP22StorageField]
     psp22: PSP22Data,
     #[PSP22MetadataStorageField]
     metadata: PSP22MetadataData,
   }
 
-  impl PSP22 for SeraiAsset {}
-  impl PSP22Metadata for SeraiAsset {}
+  impl PSP22 for Asset {}
+  impl PSP22Metadata for Asset {}
 
-  impl SeraiAsset {
+  impl Asset {
     #[ink(constructor)]
     pub fn new(name: String, symbol: String) -> Self {
-      ink_lang::codegen::initialize_contract(|instance: &mut SeraiAsset| {
+      ink_lang::codegen::initialize_contract(|instance: &mut Asset| {
         instance.metadata.name = Some(name);
         instance.metadata.symbol = Some(symbol);
         instance.metadata.decimals = 8;
@@ -144,6 +144,38 @@ pub mod asset {
       self._approve_from_to(from, caller, allowance - amount)?;
 
       self._native_transfer(from, to, amount, data)
+    }
+  }
+
+  #[cfg(test)]
+  mod tests {
+    use ink_env::AccountId;
+    use ink_lang as ink;
+
+    use serai_extension::test_register;
+
+    use super::*;
+
+    fn _new() -> Asset {
+      test_register();
+      Asset::new("Test Asset".to_string(), "TEST".to_string())
+    }
+
+    #[ink::test]
+    pub fn new() {
+      _new();
+    }
+
+    #[ink::test]
+    pub fn mint() {
+      let mut asset = _new();
+      asset.mint(AccountId::from([1; 32]), 1, vec![]).unwrap();
+      //assert_mint();
+    }
+
+    #[ink::test]
+    pub fn complete_native_transfer() {
+
     }
   }
 }

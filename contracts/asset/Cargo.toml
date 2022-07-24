@@ -20,6 +20,7 @@ ink_lang = { version = "3", default-features = false }
 openbrush = { version = "~2.1.0", default-features = false, features = ["psp22"] }
 
 serai-extension = { path = "../extension", default-features = false }
+serai-contract-tests = { path = "../tests", default-features = false, features = ["ink-as-dependency"] }
 
 [lib]
 name = "serai_asset"
@@ -27,7 +28,6 @@ path = "lib.rs"
 crate-type = ["cdylib"]
 
 [features]
-default = ["std"]
 std = [
   "scale/std",
   "scale-info/std",
@@ -43,3 +43,5 @@ std = [
   "serai-extension/std",
 ]
 ink-as-dependency = []
+
+default = ["std"]
