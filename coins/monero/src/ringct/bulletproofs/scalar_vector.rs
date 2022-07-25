@@ -1,7 +1,5 @@
 use core::{ops::{Add, Sub, Mul, Index}, slice::SliceIndex};
 
-use lazy_static::lazy_static;
-
 use group::ff::Field;
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
@@ -89,16 +87,12 @@ pub(crate) fn vector_powers(x: Scalar, n: usize) -> ScalarVector {
   ScalarVector(res)
 }
 
-pub(crate) fn hadamard_fold(v: &mut Vec<EdwardsPoint>, a: Scalar, b: Scalar, scale: Option<&ScalarVector>) {
+pub(crate) fn hadamard_fold(v: &mut Vec<EdwardsPoint>, a: Scalar, b: Scalar) {
   let half = v.len() / 2;
   assert_eq!(half * 2, v.len());
 
   for n in 0 .. half {
-    v[n] = multiexp(&[
-      (a * scale.map(|s| s[n]).unwrap_or_else(Scalar::one), v[n]),
-      (b * scale.map(|s| s[half + n]).unwrap_or_else(Scalar::one), v[half + n])
-    ]);
+    v[n] = multiexp(&[(a, v[n]), (b, v[half + n])]);
   }
-
   v.truncate(half);
 }

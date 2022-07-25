@@ -52,61 +52,6 @@ pub(crate) fn vector_exponent(a: &ScalarVector, b: &ScalarVector) -> EdwardsPoin
   (a * &G_i[.. a.len()]) + (b * &H_i[.. b.len()])
 }
 
-fn LR_single(
-  size: usize,
-  A: &[EdwardsPoint], B: &[EdwardsPoint],
-  a: &ScalarVector, b: &ScalarVector,
-  Abo: usize, Bao: usize,
-  scale: Option<&ScalarVector>,
-  extra: Scalar,
-) -> EdwardsPoint {
-  let mut variables = Vec::with_capacity((2 * size) + 1);
-  for i in 0 .. size {
-    variables.push((a[Bao + i] * *INV_EIGHT, A[Abo + i]));
-    variables.push((b[Abo + i] * *INV_EIGHT, B[Bao + i]));
-    if let Some(scale) = scale {
-      variables[(i * 2) + 1].0 *= scale[Bao + i];
-    }
-  }
-  variables.push((extra * *INV_EIGHT, *H));
-  multiexp(&variables)
-}
-
-fn LR(
-  n_prime: usize,
-  G_prime: &[EdwardsPoint], H_prime: &[EdwardsPoint],
-  a_prime: &ScalarVector, b_prime: &ScalarVector,
-  scale: Option<&ScalarVector>,
-  extra: (Scalar, Scalar, Scalar),
-) -> (EdwardsPoint, EdwardsPoint) {
-  let n_prime_2 = n_prime * 2;
-  assert!(n_prime_2 <= G_prime.len());
-  assert!(n_prime_2 <= H_prime.len());
-  assert!(n_prime_2 <= a_prime.len());
-  assert!(n_prime_2 <= b_prime.len());
-  assert!(n_prime_2 <= MAX_MN);
-
-  let L = LR_single(
-    n_prime,
-    G_prime, H_prime,
-    a_prime, b_prime,
-    n_prime, 0,
-    scale,
-    extra.0 * extra.2,
-  );
-
-  let R = LR_single(
-    n_prime,
-    G_prime, H_prime,
-    a_prime, b_prime,
-    0, n_prime,
-    scale,
-    extra.1 * extra.2,
-  );
-
-  (L, R)
-}
-
 fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
   let slice = &[cache.to_bytes().as_ref(), mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()].concat();
   *cache = hash_to_scalar(slice);
@@ -133,18 +78,14 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   let MN = M * N;
 
   let mut aL = ScalarVector(vec![Scalar::zero(); MN]);
-  let mut aL8 = ScalarVector(vec![Scalar::zero(); MN]);
   let mut aR = ScalarVector(vec![Scalar::zero(); MN]);
-  let mut aR8 = ScalarVector(vec![Scalar::zero(); MN]);
 
   for j in 0 .. M {
     for i in (0 .. N).rev() {
       if (j < sv.len()) && ((sv[j][i / 8] & (1u8 << (i % 8))) != 0) {
         aL.0[(j * N) + i] = Scalar::one();
-        aL8.0[(j * N) + i] = *INV_EIGHT;
       } else {
         aR.0[(j * N) + i] = -Scalar::one();
-        aR8.0[(j * N) + i] = -*INV_EIGHT;
       }
     }
   }
@@ -177,7 +118,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   let mut cache = hash_to_scalar(&V.iter().map(|V| V.compress().to_bytes()).flatten().collect::<Vec<_>>());
 
   let alpha = random_scalar(&mut *rng);
-  let A = vector_exponent(&aL8, &aR8) + (EdwardsPoint::generator() * (alpha * *INV_EIGHT));
+  let A = (vector_exponent(&aL, &aR) + (EdwardsPoint::generator() * alpha)) * *INV_EIGHT;
 
   let sL = ScalarVector((0 .. MN).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>());
   let sR = ScalarVector((0 .. MN).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>());
@@ -237,29 +178,51 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   assert!(x_ip != Scalar::zero());
 
   let mut n_prime = MN;
-  let mut G_prime = G_i[.. n_prime].to_vec();
-  let mut H_prime = H_i[.. n_prime].to_vec();
-  let mut a_prime = l.clone();
-  let mut b_prime = r.clone();
+  let mut a_prime = l;
+  let mut b_prime = r;
   assert_eq!(a_prime.len(), n_prime);
   assert_eq!(b_prime.len(), n_prime);
 
   let yinv = y.invert().unwrap();
   let yinvpow = vector_powers(yinv, MN);
-  debug_assert_eq!(yinvpow[0], Scalar::one());
-  debug_assert_eq!(yinvpow[1], yinv);
+
+  let mut G_prime = G_i[.. n_prime].to_vec();
+  let mut H_prime = H_i[.. n_prime].iter().enumerate().map(|(i, this_H)| *this_H * yinvpow[i]).collect::<Vec<_>>();
+  let U = *H * x_ip;
 
   let mut L = Vec::with_capacity(logMN);
   let mut R = Vec::with_capacity(logMN);
 
-  let mut scale = Some(&yinvpow);
   while n_prime > 1 {
     n_prime /= 2;
 
-    let cL = inner_product(&a_prime.slice(.. n_prime), &b_prime.slice(n_prime ..));
-    let cR = inner_product(&a_prime.slice(n_prime ..), &b_prime.slice(.. n_prime));
+    let aL = a_prime.slice(.. n_prime);
+    let aR = a_prime.slice(n_prime ..);
 
-    let (L_i, R_i) = LR(n_prime, &G_prime, &H_prime, &a_prime, &b_prime, scale, (cL, cR, x_ip));
+    let bL = b_prime.slice(.. n_prime);
+    let bR = b_prime.slice(n_prime ..);
+
+    let cL = inner_product(&aL, &bR);
+    let cR = inner_product(&aR, &bL);
+
+    let G_L = G_prime[.. n_prime].to_vec();
+    let G_R = G_prime[n_prime ..].to_vec();
+
+    let H_L = H_prime[.. n_prime].to_vec();
+    let H_R = H_prime[n_prime ..].to_vec();
+
+    let mut L_i_s = aL.0.iter().cloned().zip(G_R.iter().cloned()).chain(
+      bR.0.iter().cloned().zip(H_L.iter().cloned())
+    ).collect::<Vec<_>>();
+    L_i_s.push((cL, U));
+    let L_i = multiexp(&L_i_s) * *INV_EIGHT;
+
+    let mut R_i_s = aR.0.iter().cloned().zip(G_L.iter().cloned()).chain(
+      bL.0.iter().cloned().zip(H_R.iter().cloned())
+    ).collect::<Vec<_>>();
+    R_i_s.push((cR, U));
+    let R_i = multiexp(&R_i_s) * *INV_EIGHT;
+
     L.push(L_i);
     R.push(R_i);
 
@@ -268,14 +231,12 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
 
     let winv = w.invert().unwrap();
     if n_prime > 1 {
-      hadamard_fold(&mut G_prime, winv, w, None);
-      hadamard_fold(&mut H_prime, w, winv, scale);
+      hadamard_fold(&mut G_prime, winv, w);
+      hadamard_fold(&mut H_prime, w, winv);
     }
 
-    a_prime = (a_prime.slice(.. n_prime) * w) + (a_prime.slice(n_prime ..) * winv);
-    b_prime = (b_prime.slice(.. n_prime) * winv) + (b_prime.slice(n_prime ..) * w);
-
-    scale = None;
+    a_prime = (aL * w) + (aR * winv);
+    b_prime = (bL * winv) + (bR * w);
   }
   assert_eq!(L.len(), logMN);
   assert_eq!(R.len(), logMN);
