@@ -9,7 +9,7 @@ use crate::{Commitment, wallet::TransactionError, serialize::*};
 pub(crate) mod scalar_vector;
 
 mod core;
-pub(crate) use self::core::{MAX_M, c_generator, generator};
+pub(crate) use self::core::MAX_M;
 use self::core::prove;
 
 pub(crate) const MAX_OUTPUTS: usize = MAX_M;
