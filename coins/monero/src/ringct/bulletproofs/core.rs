@@ -244,7 +244,10 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   assert_eq!(a_prime.len(), n_prime);
   assert_eq!(b_prime.len(), n_prime);
 
-  let yinvpow = vector_powers(y.invert().unwrap(), MN);
+  let yinv = y.invert().unwrap();
+  let yinvpow = vector_powers(yinv, MN);
+  debug_assert_eq!(yinvpow[0], Scalar::one());
+  debug_assert_eq!(yinvpow[1], yinv);
 
   let mut L = Vec::with_capacity(logMN);
   let mut R = Vec::with_capacity(logMN);
