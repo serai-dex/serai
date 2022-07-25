@@ -6,7 +6,13 @@ use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use crate::{Commitment, wallet::TransactionError, serialize::*};
 
-pub(crate) const MAX_OUTPUTS: usize = 16;
+pub(crate) mod scalar_vector;
+
+mod core;
+pub(crate) use self::core::{MAX_M, c_generator, generator};
+use self::core::prove;
+
+pub(crate) const MAX_OUTPUTS: usize = MAX_M;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Bulletproofs {
@@ -45,44 +51,7 @@ impl Bulletproofs {
     if outputs.len() > MAX_OUTPUTS {
       return Err(TransactionError::TooManyOutputs)?;
     }
-
-    let mut seed = [0; 32];
-    rng.fill_bytes(&mut seed);
-
-    let masks = outputs.iter().map(|commitment| commitment.mask.to_bytes()).collect::<Vec<_>>();
-    let amounts = outputs.iter().map(|commitment| commitment.amount).collect::<Vec<_>>();
-
-    let res;
-    unsafe {
-      #[link(name = "wrapper")]
-      extern "C" {
-        fn free(ptr: *const u8);
-        fn c_generate_bp(
-          seed: *const u8,
-          len: u8,
-          amounts: *const u64,
-          masks: *const [u8; 32],
-        ) -> *const u8;
-      }
-
-      let ptr = c_generate_bp(
-        seed.as_ptr(),
-        u8::try_from(outputs.len()).unwrap(),
-        amounts.as_ptr(),
-        masks.as_ptr(),
-      );
-
-      let mut len = 6 * 32;
-      len += (2 * (1 + (usize::from(ptr.add(len).read()) * 32))) + (3 * 32);
-      res = Bulletproofs::deserialize(
-        // Wrap in a cursor to provide a mutable Reader
-        &mut std::io::Cursor::new(std::slice::from_raw_parts(ptr, len)),
-      )
-      .expect("Couldn't deserialize Bulletproofs from Monero");
-      free(ptr);
-    };
-
-    Ok(res)
+    Ok(prove(rng, outputs))
   }
 
   #[must_use]

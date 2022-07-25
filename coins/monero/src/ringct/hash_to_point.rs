@@ -7,12 +7,11 @@ use dalek_ff_group::field::FieldElement;
 
 use crate::hash;
 
-pub fn hash_to_point(point: EdwardsPoint) -> EdwardsPoint {
-  let mut bytes = point.compress().to_bytes();
+pub(crate) fn raw_hash_to_point(mut bytes: [u8; 32]) -> EdwardsPoint {
   unsafe {
     #[link(name = "wrapper")]
     extern "C" {
-      fn c_hash_to_point(point: *const u8);
+      fn c_hash_to_point(key: *const u8);
     }
 
     c_hash_to_point(bytes.as_mut_ptr());
@@ -24,11 +23,11 @@ pub fn hash_to_point(point: EdwardsPoint) -> EdwardsPoint {
 // for all branches, there still could be *some* discrepancy somewhere. There's no reason to use it
 // unless we're trying to purge that section of the C static library, which we aren't right now
 #[allow(dead_code)]
-pub(crate) fn rust_hash_to_point(key: EdwardsPoint) -> EdwardsPoint {
+pub(crate) fn rust_hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   #[allow(non_snake_case)]
   let A = FieldElement::from(486662u64);
 
-  let v = FieldElement::from_square(hash(&key.compress().to_bytes())).double();
+  let v = FieldElement::from_square(hash(&bytes)).double();
   let w = v + FieldElement::one();
   let x = w.square() + (-A.square() * v);
 
@@ -64,4 +63,8 @@ pub(crate) fn rust_hash_to_point(key: EdwardsPoint) -> EdwardsPoint {
   bytes[31] |= sign.unwrap_u8() << 7;
 
   CompressedEdwardsY(bytes).decompress().unwrap().mul_by_cofactor()
+}
+
+pub fn hash_to_point(key: EdwardsPoint) -> EdwardsPoint {
+  raw_hash_to_point(key.compress().to_bytes())
 }
