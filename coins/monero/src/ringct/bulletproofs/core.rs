@@ -113,14 +113,14 @@ fn hash_commitments(commitments: &[Commitment]) -> Scalar {
   hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>())
 }
 
-fn alpha<R: RngCore + CryptoRng>(
+fn alpha_rho<R: RngCore + CryptoRng>(
   rng: &mut R,
   generators: &Generators,
   aL: &ScalarVector,
   aR: &ScalarVector,
 ) -> (Scalar, EdwardsPoint) {
-  let alpha = Scalar::random(rng);
-  (alpha, (vector_exponent(generators, aL, aR) + (EdwardsPoint::generator() * alpha)) * *INV_EIGHT)
+  let ar = Scalar::random(rng);
+  (ar, (vector_exponent(generators, aL, aR) + (EdwardsPoint::generator() * ar)) * *INV_EIGHT)
 }
 
 fn LR_statements(
@@ -142,11 +142,14 @@ fn LR_statements(
   res
 }
 
+lazy_static! {
+  static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), N);
+}
+
 // Bulletproofs-specific
 lazy_static! {
   static ref GENERATORS: Generators = generators_core(b"bulletproof");
   static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); N]);
-  static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), N);
   static ref IP12: Scalar = inner_product(&ONE_N, &TWO_N);
 }
 
@@ -203,12 +206,11 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
 
   let (aL, aR) = bit_decompose(commitments);
   let mut cache = hash_commitments(commitments);
-  let (alpha, A) = alpha(rng, &GENERATORS, &aL, &aR);
+  let (alpha, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
 
   let (sL, sR) =
     ScalarVector((0 .. (MN * 2)).map(|_| Scalar::random(&mut *rng)).collect::<Vec<_>>()).split();
-  let rho = Scalar::random(&mut *rng);
-  let S = (vector_exponent(&GENERATORS, &sL, &sR) + (EdwardsPoint::generator() * rho)) * *INV_EIGHT;
+  let (rho, S) = alpha_rho(&mut *rng, &GENERATORS, &sL, &sR);
 
   let y = hash_cache(&mut cache, &[A.compress().to_bytes(), S.compress().to_bytes()]);
   let mut cache = hash_to_scalar(&y.to_bytes());
@@ -233,7 +235,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let t2 = inner_product(&l1, &r1);
 
   let tau1 = Scalar::random(&mut *rng);
-  let tau2 = Scalar::random(&mut *rng);
+  let tau2 = Scalar::random(rng);
 
   let T1 = prove_multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]);
   let T2 = prove_multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]);
@@ -318,19 +320,18 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
 
   let (aL, aR) = bit_decompose(commitments);
   let mut cache = hash_plus(&[hash_commitments(commitments).to_bytes()]);
-  let (alpha, A) = alpha(rng, &GENERATORS, &aL, &aR);
+  let (mut alpha1, A) = alpha_rho(&mut *rng, &GENERATORS_PLUS, &aL, &aR);
 
   let y = hash_cache(&mut cache, &[A.compress().to_bytes()]);
   let mut cache = hash_to_scalar(&y.to_bytes());
   let z = cache;
 
   let zpow = ScalarVector::even_powers(z, 2 * M);
-  let two_pow = ScalarVector::powers(Scalar::from(2u8), N);
   // d[j*N+i] = z**(2*(j+1)) * 2**i
   let mut d = vec![Scalar::zero(); MN];
   for j in 0 .. M {
     for i in 0 .. N {
-      d[(j * N) + i] = zpow[j] * two_pow[i];
+      d[(j * N) + i] = zpow[j] * TWO_N[i];
     }
   }
 
@@ -341,7 +342,6 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
   y_for_d.0.reverse();
   let aR1 = (aR + z) + (y_for_d * ScalarVector(d));
 
-  let mut alpha1 = alpha;
   for (j, gamma) in commitments.iter().map(|c| Scalar(c.mask)).enumerate() {
     alpha1 += zpow[j] * ypow[MN + 1] * gamma;
   }
@@ -352,13 +352,8 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
   let yinv = y.invert().unwrap();
   let yinvpow = ScalarVector::powers(yinv, MN);
 
-  let mut G_proof = GENERATORS.G[.. a.len()].to_vec();
-  let mut H_proof = GENERATORS.H[.. a.len()].to_vec();
-
-  /*
-  H_proof.iter_mut().zip(yinvpow.0.iter()).for_each(|(this_H, yinvpow)| *this_H *= yinvpow);
-  let U = *H * x_ip;
-  */
+  let mut G_proof = GENERATORS_PLUS.G[.. a.len()].to_vec();
+  let mut H_proof = GENERATORS_PLUS.H[.. a.len()].to_vec();
 
   let mut L = Vec::with_capacity(logMN);
   let mut R = Vec::with_capacity(logMN);
@@ -376,12 +371,12 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
     let (H_L, H_R) = H_proof.split_at(aL.len());
 
     let mut L_i = LR_statements(&(&aL * yinvpow[aL.len()]), G_R, &bR, H_L, cL, *H);
-    L_i.push((cL, ED25519_BASEPOINT_POINT));
+    L_i.push((dL, ED25519_BASEPOINT_POINT));
     let L_i = prove_multiexp(&L_i);
     L.push(L_i);
 
     let mut R_i = LR_statements(&(&aR * ypow[aR.len()]), G_L, &bL, H_R, cR, *H);
-    R_i.push((cR, ED25519_BASEPOINT_POINT));
+    R_i.push((dR, ED25519_BASEPOINT_POINT));
     let R_i = prove_multiexp(&R_i);
     R.push(R_i);
 
@@ -394,8 +389,7 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
     a = (&aL * w) + (aR * (winv * ypow[aL.len()]));
     b = (bL * winv) + (bR * w);
 
-    let wsq = w * w;
-    alpha1 += (dL * wsq) + (dR * wsq.invert().unwrap());
+    alpha1 += (dL * (w * w)) + (dR * (winv * winv));
   }
 
   let r = Scalar::random(&mut *rng);

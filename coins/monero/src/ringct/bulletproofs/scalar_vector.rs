@@ -104,7 +104,8 @@ pub(crate) fn inner_product(a: &ScalarVector, b: &ScalarVector) -> Scalar {
 }
 
 pub(crate) fn weighted_inner_product(a: &ScalarVector, b: &ScalarVector, y: Scalar) -> Scalar {
-  (a * b * ScalarVector::powers(y, a.len())).sum()
+  // y ** 0 is not used as a power
+  (a * b * ScalarVector(ScalarVector::powers(y, a.len() + 1).0[1 ..].to_vec())).sum()
 }
 
 impl Mul<&[EdwardsPoint]> for &ScalarVector {
