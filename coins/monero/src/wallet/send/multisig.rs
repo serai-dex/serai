@@ -306,7 +306,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
         Bulletproofs::prove(
           &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs")),
           &commitments,
-          false,
+          true,
         )
         .unwrap(),
       )

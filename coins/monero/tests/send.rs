@@ -137,7 +137,7 @@ async fn send_core(test: usize, multisig: bool) {
         .unwrap();
 
     if !multisig {
-      tx = Some(signable.sign(&mut OsRng, 16, &rpc, &spend).await.unwrap());
+      tx = Some(signable.sign(&mut OsRng, &rpc, 16, &spend).await.unwrap());
     } else {
       #[cfg(feature = "multisig")]
       {

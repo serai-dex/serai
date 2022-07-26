@@ -211,7 +211,8 @@ impl SignableTransaction {
     let extra = (outputs * (2 + 32)) - (outputs.saturating_sub(2) * 2);
 
     // Calculate the fee.
-    let mut fee = fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs, extra));
+    let mut fee =
+      fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs, extra));
 
     // Make sure we have enough funds
     let in_amount = inputs.iter().map(|input| input.commitment.amount).sum::<u64>();
@@ -224,7 +225,8 @@ impl SignableTransaction {
     if (!change) && change_address.is_some() && (in_amount != out_amount) {
       // Check even with the new fee, there's remaining funds
       let change_fee =
-        fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs + 1, extra)) - fee;
+        fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs + 1, extra)) -
+          fee;
       if (out_amount + change_fee) < in_amount {
         change = true;
         outputs += 1;
@@ -310,8 +312,8 @@ impl SignableTransaction {
   pub async fn sign<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    ring_len: usize,
     rpc: &Rpc,
+    ring_len: usize,
     spend: &Scalar,
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());

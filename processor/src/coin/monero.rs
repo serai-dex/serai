@@ -169,6 +169,7 @@ impl Coin for Monero {
       .clone()
       .multisig(
         &self.rpc,
+        16,
         (*transaction.0).clone(),
         transaction.1.clone(),
         transaction.2,
@@ -231,7 +232,7 @@ impl Coin for Monero {
       .ignore_timelock();
 
     let amount = outputs[0].commitment.amount;
-    let fee = 1000000000; // TODO
+    let fee = 3000000000; // TODO
     let tx = MSignableTransaction::new(
       outputs,
       vec![(address, amount - fee)],
@@ -239,7 +240,7 @@ impl Coin for Monero {
       self.rpc.get_fee().await.unwrap(),
     )
     .unwrap()
-    .sign(&mut OsRng, &self.rpc, &Scalar::one())
+    .sign(&mut OsRng, &self.rpc, 16, &Scalar::one())
     .await
     .unwrap();
     self.rpc.publish_transaction(&tx).await.unwrap();

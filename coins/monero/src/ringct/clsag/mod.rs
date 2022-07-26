@@ -12,8 +12,8 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
-  ringct::hash_to_point, serialize::*,
+  Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys, ringct::hash_to_point,
+  serialize::*,
 };
 
 #[cfg(feature = "multisig")]

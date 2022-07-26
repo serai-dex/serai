@@ -15,6 +15,7 @@ use self::core::{MAX_M, prove, prove_plus};
 pub(crate) const MAX_OUTPUTS: usize = MAX_M;
 
 impl Bulletproofs {
+  // TODO
   pub(crate) fn fee_weight(outputs: usize) -> usize {
     let proofs = 6 + usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
     let len = (9 + (2 * proofs)) * 32;

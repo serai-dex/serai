@@ -7,7 +7,10 @@ use rand_distr::{Distribution, Gamma};
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use crate::{wallet::SpendableOutput, rpc::{RpcError, Rpc}};
+use crate::{
+  wallet::SpendableOutput,
+  rpc::{RpcError, Rpc},
+};
 
 const LOCK_WINDOW: usize = 10;
 const MATURITY: u64 = 60;

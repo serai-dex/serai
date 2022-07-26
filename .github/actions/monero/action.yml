@@ -9,7 +9,7 @@ runs:
       uses: actions/cache@v3
       with:
         path: monerod
-        key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.17.3.2
+        key: monerod-${{ runner.os }}-${{ runner.arch }}-v0.18.0.0
 
     - name: Download the Monero Daemon
       if: steps.cache-monerod.outputs.cache-hit != 'true'
@@ -27,11 +27,11 @@ runs:
         RUNNER_OS=linux
         RUNNER_ARCH=x64
 
-        FILE=monero-$RUNNER_OS-$RUNNER_ARCH-v0.17.3.2.tar.bz2
+        FILE=monero-$RUNNER_OS-$RUNNER_ARCH-v0.18.0.0.tar.bz2
         wget https://downloads.getmonero.org/cli/$FILE
         tar -xvf $FILE
 
-        mv monero-x86_64-linux-gnu-v0.17.3.2/monerod monerod
+        mv monero-x86_64-linux-gnu-v0.18.0.0/monerod monerod
 
     - name: Monero Regtest Daemon
       shell: bash
