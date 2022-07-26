@@ -137,7 +137,7 @@ async fn send_core(test: usize, multisig: bool) {
         .unwrap();
 
     if !multisig {
-      tx = Some(signable.sign(&mut OsRng, &rpc, &spend).await.unwrap());
+      tx = Some(signable.sign(&mut OsRng, 16, &rpc, &spend).await.unwrap());
     } else {
       #[cfg(feature = "multisig")]
       {
@@ -149,6 +149,7 @@ async fn send_core(test: usize, multisig: bool) {
               .clone()
               .multisig(
                 &rpc,
+                16,
                 (*keys[&i]).clone(),
                 RecommendedTranscript::new(b"Monero Serai Test Transaction"),
                 rpc.get_height().await.unwrap() - 10,

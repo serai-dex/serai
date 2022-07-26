@@ -93,8 +93,8 @@ impl RctPrunable {
     }
   }
 
-  pub(crate) fn fee_weight(inputs: usize, outputs: usize) -> usize {
-    1 + Bulletproofs::fee_weight(outputs) + (inputs * (Clsag::fee_weight() + 32))
+  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
+    1 + Bulletproofs::fee_weight(outputs) + (inputs * (Clsag::fee_weight(ring_len) + 32))
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -155,8 +155,8 @@ pub struct RctSignatures {
 }
 
 impl RctSignatures {
-  pub(crate) fn fee_weight(inputs: usize, outputs: usize) -> usize {
-    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(inputs, outputs)
+  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
+    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(ring_len, inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

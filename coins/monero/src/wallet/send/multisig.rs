@@ -70,6 +70,7 @@ impl SignableTransaction {
   pub async fn multisig(
     self,
     rpc: &Rpc,
+    ring_len: usize,
     keys: FrostKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
     height: usize,
@@ -143,6 +144,7 @@ impl SignableTransaction {
       // committed to. They'll also be committed to later via the TX message as a whole
       &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys")),
       rpc,
+      ring_len,
       height,
       &self.inputs,
     )

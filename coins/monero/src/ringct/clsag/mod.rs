@@ -12,7 +12,7 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  Commitment, random_scalar, hash_to_scalar, transaction::RING_LEN, wallet::decoys::Decoys,
+  Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
   ringct::hash_to_point, serialize::*,
 };
 
@@ -292,8 +292,8 @@ impl Clsag {
     Ok(())
   }
 
-  pub(crate) fn fee_weight() -> usize {
-    (RING_LEN * 32) + 32 + 32
+  pub(crate) fn fee_weight(ring_len: usize) -> usize {
+    (ring_len * 32) + 32 + 32
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

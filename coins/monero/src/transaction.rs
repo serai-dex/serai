@@ -8,8 +8,6 @@ use crate::{
   ringct::{RctPrunable, RctSignatures},
 };
 
-pub const RING_LEN: usize = 11;
-
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Input {
   Gen(u64),
@@ -19,10 +17,10 @@ pub enum Input {
 
 impl Input {
   // Worst-case predictive len
-  pub(crate) fn fee_weight() -> usize {
+  pub(crate) fn fee_weight(ring_len: usize) -> usize {
     // Uses 1 byte for the VarInt amount due to amount being 0
     // Uses 1 byte for the VarInt encoding of the length of the ring as well
-    1 + 1 + 1 + (8 * RING_LEN) + 32
+    1 + 1 + 1 + (8 * ring_len) + 32
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -161,11 +159,11 @@ pub struct TransactionPrefix {
 }
 
 impl TransactionPrefix {
-  pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
+  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize, extra: usize) -> usize {
     // Assumes Timelock::None since this library won't let you create a TX with a timelock
     1 + 1 +
       varint_len(inputs) +
-      (inputs * Input::fee_weight()) +
+      (inputs * Input::fee_weight(ring_len)) +
       1 +
       (outputs * Output::fee_weight()) +
       varint_len(extra) +
@@ -205,9 +203,9 @@ pub struct Transaction {
 }
 
 impl Transaction {
-  pub(crate) fn fee_weight(inputs: usize, outputs: usize, extra: usize) -> usize {
-    TransactionPrefix::fee_weight(inputs, outputs, extra) +
-      RctSignatures::fee_weight(inputs, outputs)
+  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize, extra: usize) -> usize {
+    TransactionPrefix::fee_weight(ring_len, inputs, outputs, extra) +
+      RctSignatures::fee_weight(ring_len, inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

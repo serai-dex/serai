@@ -103,6 +103,7 @@ pub enum TransactionError {
 async fn prepare_inputs<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
+  ring_len: usize,
   inputs: &[SpendableOutput],
   spend: &Scalar,
   tx: &mut Transaction,
@@ -113,6 +114,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   let decoys = Decoys::select(
     rng,
     rpc,
+    ring_len,
     rpc.get_height().await.map_err(TransactionError::RpcError)? - 10,
     inputs,
   )
@@ -172,6 +174,8 @@ impl SignableTransaction {
     change_address: Option<Address>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
+    let ring_len = 16;
+
     // Make sure all addresses are valid
     let test = |addr: Address| match addr.meta.kind {
       AddressType::Standard => Ok(()),
@@ -207,7 +211,7 @@ impl SignableTransaction {
     let extra = (outputs * (2 + 32)) - (outputs.saturating_sub(2) * 2);
 
     // Calculate the fee.
-    let mut fee = fee_rate.calculate(Transaction::fee_weight(inputs.len(), outputs, extra));
+    let mut fee = fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs, extra));
 
     // Make sure we have enough funds
     let in_amount = inputs.iter().map(|input| input.commitment.amount).sum::<u64>();
@@ -220,7 +224,7 @@ impl SignableTransaction {
     if (!change) && change_address.is_some() && (in_amount != out_amount) {
       // Check even with the new fee, there's remaining funds
       let change_fee =
-        fee_rate.calculate(Transaction::fee_weight(inputs.len(), outputs + 1, extra)) - fee;
+        fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs + 1, extra)) - fee;
       if (out_amount + change_fee) < in_amount {
         change = true;
         outputs += 1;
@@ -275,7 +279,7 @@ impl SignableTransaction {
     let mut tx_outputs = Vec::with_capacity(self.outputs.len());
     let mut ecdh_info = Vec::with_capacity(self.outputs.len());
     for o in 0 .. self.outputs.len() {
-      tx_outputs.push(Output { amount: 0, key: self.outputs[o].dest, tag: None });
+      tx_outputs.push(Output { amount: 0, key: self.outputs[o].dest, tag: Some(0) });
       ecdh_info.push(self.outputs[o].amount);
     }
 
@@ -306,6 +310,7 @@ impl SignableTransaction {
   pub async fn sign<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
+    ring_len: usize,
     rpc: &Rpc,
     spend: &Scalar,
   ) -> Result<Transaction, TransactionError> {
@@ -331,9 +336,9 @@ impl SignableTransaction {
     );
 
     let mut tx =
-      self.prepare_transaction(&commitments, Bulletproofs::prove(rng, &commitments, false)?);
+      self.prepare_transaction(&commitments, Bulletproofs::prove(rng, &commitments, true)?);
 
-    let signable = prepare_inputs(rng, rpc, &self.inputs, spend, &mut tx).await?;
+    let signable = prepare_inputs(rng, rpc, ring_len, &self.inputs, spend, &mut tx).await?;
 
     let clsag_pairs = Clsag::sign(rng, &signable, mask_sum, tx.signature_hash());
     match tx.rct_signatures.prunable {
