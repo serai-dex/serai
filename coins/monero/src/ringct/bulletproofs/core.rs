@@ -49,7 +49,7 @@ lazy_static! {
   static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
   pub(crate) static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); MAX_N]);
   pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), MAX_N);
-  pub(crate) static ref IP12: Scalar = inner_product(&*ONE_N, &*TWO_N);
+  pub(crate) static ref IP12: Scalar = inner_product(&ONE_N, &TWO_N);
   static ref H_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator(g * 2)).collect();
   static ref G_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator((g * 2) + 1)).collect();
 }
