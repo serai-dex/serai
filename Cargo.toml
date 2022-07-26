@@ -21,6 +21,22 @@ members = [
   "contracts/multisig",
 ]
 
+# Always compile Monero (and a variety of dependencies) with optimizations due
+# to the unoptimized performance of Bulletproofs
+[profile.dev.package]
+subtle = { opt-level = 3 }
+curve25519-dalek = { opt-level = 3 }
+
+ff = { opt-level = 3 }
+group = { opt-level = 3 }
+
+crypto-bigint = { opt-level = 3 }
+dalek-ff-group = { opt-level = 3 }
+
+multiexp = { opt-level = 3 }
+
+monero-serai = { opt-level = 3 }
+
 [profile.release]
 panic = "unwind"
 
