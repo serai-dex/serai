@@ -11,8 +11,11 @@ use multiexp::multiexp;
 
 use crate::{
   H as DALEK_H, Commitment, random_scalar as dalek_random, hash, hash_to_scalar as dalek_hash,
-  ringct::{hash_to_point::raw_hash_to_point, bulletproofs::{scalar_vector::*, Bulletproofs}},
-  serialize::write_varint
+  ringct::{
+    hash_to_point::raw_hash_to_point,
+    bulletproofs::{scalar_vector::*, Bulletproofs},
+  },
+  serialize::write_varint,
 };
 
 pub(crate) const MAX_M: usize = 16;
@@ -44,11 +47,9 @@ fn generator(i: usize) -> EdwardsPoint {
 lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert().unwrap();
   static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
-
   pub(crate) static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); MAX_N]);
   pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), MAX_N);
   pub(crate) static ref IP12: Scalar = inner_product(&*ONE_N, &*TWO_N);
-
   static ref H_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator(g * 2)).collect();
   static ref G_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator((g * 2) + 1)).collect();
 }
@@ -59,12 +60,17 @@ pub(crate) fn vector_exponent(a: &ScalarVector, b: &ScalarVector) -> EdwardsPoin
 }
 
 fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
-  let slice = &[cache.to_bytes().as_ref(), mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()].concat();
+  let slice =
+    &[cache.to_bytes().as_ref(), mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()]
+      .concat();
   *cache = hash_to_scalar(slice);
   *cache
 }
 
-pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitment]) -> Bulletproofs {
+pub(crate) fn prove<R: RngCore + CryptoRng>(
+  rng: &mut R,
+  commitments: &[Commitment],
+) -> Bulletproofs {
   let sv = ScalarVector(commitments.iter().cloned().map(|c| Scalar::from(c.amount)).collect());
   let gamma = ScalarVector(commitments.iter().cloned().map(|c| Scalar(c.mask)).collect());
 
@@ -99,12 +105,14 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
 
   // Commitments * INV_EIGHT
   let V = commitments.iter().map(|c| EdwardsPoint(c.calculate()) * *INV_EIGHT).collect::<Vec<_>>();
-  let mut cache = hash_to_scalar(&V.iter().map(|V| V.compress().to_bytes()).flatten().collect::<Vec<_>>());
+  let mut cache =
+    hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>());
 
   let alpha = random_scalar(&mut *rng);
   let A = (vector_exponent(&aL, &aR) + (EdwardsPoint::generator() * alpha)) * *INV_EIGHT;
 
-  let (sL, sR) = ScalarVector((0 .. (MN * 2)).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>()).split();
+  let (sL, sR) =
+    ScalarVector((0 .. (MN * 2)).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>()).split();
   let rho = random_scalar(&mut *rng);
   let S = (vector_exponent(&sL, &sR) + (EdwardsPoint::generator() * rho)) * *INV_EIGHT;
 
@@ -136,7 +144,8 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   let T1 = multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]) * *INV_EIGHT;
   let T2 = multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]) * *INV_EIGHT;
 
-  let x = hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
+  let x =
+    hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
 
   let mut taux = (tau2 * (x * x)) + (tau1 * x);
   for i in 1 ..= sv.len() {
@@ -175,15 +184,23 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
     let (G_L, G_R) = G_proof.split_at(aL.len());
     let (H_L, H_R) = H_proof.split_at(aL.len());
 
-    let mut L_i_s = aL.0.iter().cloned().zip(G_R.iter().cloned()).chain(
-      bR.0.iter().cloned().zip(H_L.iter().cloned())
-    ).collect::<Vec<_>>();
+    let mut L_i_s = aL
+      .0
+      .iter()
+      .cloned()
+      .zip(G_R.iter().cloned())
+      .chain(bR.0.iter().cloned().zip(H_L.iter().cloned()))
+      .collect::<Vec<_>>();
     L_i_s.push((cL, U));
     let L_i = multiexp(&L_i_s) * *INV_EIGHT;
 
-    let mut R_i_s = aR.0.iter().cloned().zip(G_L.iter().cloned()).chain(
-      bL.0.iter().cloned().zip(H_R.iter().cloned())
-    ).collect::<Vec<_>>();
+    let mut R_i_s = aR
+      .0
+      .iter()
+      .cloned()
+      .zip(G_L.iter().cloned())
+      .chain(bL.0.iter().cloned().zip(H_R.iter().cloned()))
+      .collect::<Vec<_>>();
     R_i_s.push((cR, U));
     let R_i = multiexp(&R_i_s) * *INV_EIGHT;
 
@@ -213,6 +230,6 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
     R: R.drain(..).map(|R| *R).collect(),
     a: *a[0],
     b: *b[0],
-    t: *t
+    t: *t,
   }
 }

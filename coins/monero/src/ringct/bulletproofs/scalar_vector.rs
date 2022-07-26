@@ -38,7 +38,7 @@ macro_rules! math_op {
         ScalarVector(self.0.iter().zip(b.0.iter()).map($f).collect())
       }
     }
-  }
+  };
 }
 math_op!(Add, add, |(a, b): (&Scalar, &Scalar)| *a + *b);
 math_op!(Sub, sub, |(a, b): (&Scalar, &Scalar)| *a - *b);
@@ -92,7 +92,12 @@ impl Mul<&[EdwardsPoint]> for &ScalarVector {
   }
 }
 
-pub(crate) fn hadamard_fold(l: &[EdwardsPoint], r: &[EdwardsPoint], a: Scalar, b: Scalar) -> Vec<EdwardsPoint> {
+pub(crate) fn hadamard_fold(
+  l: &[EdwardsPoint],
+  r: &[EdwardsPoint],
+  a: Scalar,
+  b: Scalar,
+) -> Vec<EdwardsPoint> {
   let mut res = Vec::with_capacity(l.len() / 2);
   for i in 0 .. l.len() {
     res.push(multiexp(&[(a, l[i]), (b, r[i])]));
