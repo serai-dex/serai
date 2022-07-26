@@ -270,7 +270,7 @@ impl Clsag {
   ) -> Result<(), ClsagError> {
     // Preliminary checks. s, c1, and points must also be encoded canonically, which isn't checked
     // here
-    if ring.len() == 0 {
+    if ring.is_empty() {
       Err(ClsagError::InvalidRing)?;
     }
     if ring.len() != self.s.len() {

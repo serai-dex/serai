@@ -11,12 +11,6 @@ runs:
         solc-select install 0.8.9
         solc-select use 0.8.9
 
-    - name: Install Monero Dependencies
-      shell: bash
-      run: |
-        sudo apt update
-        sudo apt install build-essential libboost-all-dev libsodium-dev
-
     - name: Install WASM toolchain
       uses: actions-rs/toolchain@v1
       with:
