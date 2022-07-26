@@ -10,7 +10,7 @@ pub(crate) mod scalar_vector;
 
 mod core;
 pub(crate) use self::core::Bulletproofs;
-use self::core::{MAX_M, prove};
+use self::core::{MAX_M, prove, prove_plus};
 
 pub(crate) const MAX_OUTPUTS: usize = MAX_M;
 
@@ -32,11 +32,12 @@ impl Bulletproofs {
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: &[Commitment],
+    plus: bool,
   ) -> Result<Bulletproofs, TransactionError> {
     if outputs.len() > MAX_OUTPUTS {
       return Err(TransactionError::TooManyOutputs)?;
     }
-    Ok(prove(rng, outputs))
+    Ok(if !plus { prove(rng, outputs) } else { prove_plus(rng, outputs) })
   }
 
   fn serialize_core<W: std::io::Write, F: Fn(&[EdwardsPoint], &mut W) -> std::io::Result<()>>(

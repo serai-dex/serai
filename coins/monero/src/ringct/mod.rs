@@ -31,7 +31,7 @@ impl RctBase {
     w.write_all(&[rct_type])?;
     match rct_type {
       0 => Ok(()),
-      5 => {
+      5 | 6 => {
         write_varint(&self.fee, w)?;
         for ecdh in &self.ecdh_info {
           w.write_all(ecdh)?;
@@ -71,14 +71,25 @@ impl RctBase {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RctPrunable {
   Null,
-  Clsag { bulletproofs: Vec<Bulletproofs>, clsags: Vec<Clsag>, pseudo_outs: Vec<EdwardsPoint> },
+  Clsag {
+    plus: bool,
+    bulletproofs: Vec<Bulletproofs>,
+    clsags: Vec<Clsag>,
+    pseudo_outs: Vec<EdwardsPoint>,
+  },
 }
 
 impl RctPrunable {
   pub fn rct_type(&self) -> u8 {
     match self {
       RctPrunable::Null => 0,
-      RctPrunable::Clsag { .. } => 5,
+      RctPrunable::Clsag { plus, .. } => {
+        if !plus {
+          5
+        } else {
+          6
+        }
+      }
     }
   }
 
@@ -89,7 +100,7 @@ impl RctPrunable {
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       RctPrunable::Null => Ok(()),
-      RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
+      RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs, .. } => {
         write_vec(Bulletproofs::serialize, bulletproofs, w)?;
         write_raw_vec(Clsag::serialize, clsags, w)?;
         write_raw_vec(write_point, pseudo_outs, w)
@@ -102,15 +113,24 @@ impl RctPrunable {
     decoys: &[usize],
     r: &mut R,
   ) -> std::io::Result<RctPrunable> {
-    Ok(match rct_type {
-      0 => RctPrunable::Null,
-      5 => RctPrunable::Clsag {
-        bulletproofs: read_vec(Bulletproofs::deserialize, r)?,
+    let mut read_clsag = |plus| -> std::io::Result<RctPrunable> {
+      Ok(RctPrunable::Clsag {
+        plus,
+        bulletproofs: read_vec(
+          if !plus { Bulletproofs::deserialize } else { Bulletproofs::deserialize_plus },
+          r,
+        )?,
         clsags: (0 .. decoys.len())
           .map(|o| Clsag::deserialize(decoys[o], r))
           .collect::<Result<_, _>>()?,
         pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
-      },
+      })
+    };
+
+    Ok(match rct_type {
+      0 => RctPrunable::Null,
+      5 => read_clsag(false)?,
+      6 => read_clsag(true)?,
       _ => Err(std::io::Error::new(
         std::io::ErrorKind::Other,
         "Tried to deserialize unknown RCT type",

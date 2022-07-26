@@ -294,6 +294,7 @@ impl SignableTransaction {
           commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
         },
         prunable: RctPrunable::Clsag {
+          plus: matches!(bp, Bulletproofs::Plus { .. }),
           bulletproofs: vec![bp],
           clsags: vec![],
           pseudo_outs: vec![],
@@ -329,7 +330,8 @@ impl SignableTransaction {
       ),
     );
 
-    let mut tx = self.prepare_transaction(&commitments, Bulletproofs::prove(rng, &commitments)?);
+    let mut tx =
+      self.prepare_transaction(&commitments, Bulletproofs::prove(rng, &commitments, false)?);
 
     let signable = prepare_inputs(rng, rpc, &self.inputs, spend, &mut tx).await?;
 
