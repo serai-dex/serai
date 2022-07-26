@@ -264,6 +264,12 @@ impl PrimeFieldBits for Scalar {
   }
 }
 
+impl Sum<Scalar> for Scalar {
+  fn sum<I: Iterator<Item = Scalar>>(iter: I) -> Scalar {
+    Self(DScalar::sum(iter))
+  }
+}
+
 macro_rules! dalek_group {
   (
     $Point: ident,

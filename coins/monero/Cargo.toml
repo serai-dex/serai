@@ -28,6 +28,7 @@ curve25519-dalek = { version = "3", features = ["std"] }
 
 group = { version = "0.12" }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
+multiexp = { path = "../../crypto/multiexp" }
 
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", features = ["recommended"], optional = true }
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["ed25519"], optional = true }
