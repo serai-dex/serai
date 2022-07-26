@@ -7,12 +7,16 @@ use rand_core::{RngCore, CryptoRng};
 use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as DalekPoint};
 
 use group::{ff::Field, Group};
-use dalek_ff_group::{Scalar, EdwardsPoint};
+use dalek_ff_group::{ED25519_BASEPOINT_POINT, Scalar, EdwardsPoint};
 
-use multiexp::multiexp;
+use multiexp::multiexp as const_multiexp;
+
+fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
+  const_multiexp(pairs) * *INV_EIGHT
+}
 
 use crate::{
-  H as DALEK_H, Commitment, random_scalar as dalek_random, hash, hash_to_scalar as dalek_hash,
+  H as DALEK_H, Commitment, hash, hash_to_scalar as dalek_hash,
   ringct::{hash_to_point::raw_hash_to_point, bulletproofs::scalar_vector::*},
   serialize::write_varint,
 };
@@ -21,10 +25,6 @@ use crate::{
 lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert().unwrap();
   static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
-}
-
-fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
-  Scalar(dalek_random(rng))
 }
 
 fn hash_to_scalar(data: &[u8]) -> Scalar {
@@ -64,6 +64,7 @@ fn generators_core(prefix: &'static [u8]) -> Generators {
   res
 }
 
+// TODO: Have this take in other, multiplied by G, and do a single multiexp
 fn vector_exponent(generators: &Generators, a: &ScalarVector, b: &ScalarVector) -> EdwardsPoint {
   debug_assert_eq!(a.len(), b.len());
   (a * &generators.G[.. a.len()]) + (b * &generators.H[.. b.len()])
@@ -96,7 +97,7 @@ fn MN(outputs: usize) -> (usize, usize, usize) {
 fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, ScalarVector) {
   let (_, M, MN) = MN(commitments.len());
 
-  let sv = ScalarVector(commitments.iter().cloned().map(|c| Scalar::from(c.amount)).collect());
+  let sv = commitments.iter().map(|c| Scalar::from(c.amount)).collect::<Vec<_>>();
   let mut aL = ScalarVector::new(MN);
   let mut aR = ScalarVector::new(MN);
 
@@ -124,8 +125,27 @@ fn alpha<R: RngCore + CryptoRng>(
   aL: &ScalarVector,
   aR: &ScalarVector,
 ) -> (Scalar, EdwardsPoint) {
-  let alpha = random_scalar(&mut *rng);
+  let alpha = Scalar::random(rng);
   (alpha, (vector_exponent(generators, aL, aR) + (EdwardsPoint::generator() * alpha)) * *INV_EIGHT)
+}
+
+fn LR_statements(
+  a: &ScalarVector,
+  G_i: &[EdwardsPoint],
+  b: &ScalarVector,
+  H_i: &[EdwardsPoint],
+  cL: Scalar,
+  U: EdwardsPoint,
+) -> Vec<(Scalar, EdwardsPoint)> {
+  let mut res = a
+    .0
+    .iter()
+    .cloned()
+    .zip(G_i.iter().cloned())
+    .chain(b.0.iter().cloned().zip(H_i.iter().cloned()))
+    .collect::<Vec<_>>();
+  res.push((cL, U));
+  res
 }
 
 // Bulletproofs-specific
@@ -136,28 +156,20 @@ lazy_static! {
 // Bulletproofs+-specific
 lazy_static! {
   static ref GENERATORS_PLUS: Generators = generators_core(b"bulletproof_plus");
-  static ref TRANSCRIPT_PLUS: EdwardsPoint =
-    EdwardsPoint(raw_hash_to_point(hash(b"bulletproof_plus_transcript")));
+  static ref TRANSCRIPT_PLUS: [u8; 32] =
+    EdwardsPoint(raw_hash_to_point(hash(b"bulletproof_plus_transcript"))).compress().to_bytes();
 }
 
-fn even_powers_sum(x: Scalar, pow: usize) -> Scalar {
-  debug_assert!(pow != 0);
-  // Verify pow is a power of two
-  debug_assert_eq!(((pow - 1) & pow), 0);
-
-  let xsq = x * x;
-  let mut res = xsq;
-
-  let mut prev = 2;
-  while prev < pow {
-    res += res * xsq;
-    prev += 2;
-  }
-
-  res
+// TRANSCRIPT_PLUS isn't a Scalar, so we need this alternative for the first hash
+fn hash_plus(mash: &[[u8; 32]]) -> Scalar {
+  let slice =
+    &[&*TRANSCRIPT_PLUS as &[u8], mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()]
+      .concat();
+  hash_to_scalar(slice)
 }
 
 // Types for all Bulletproofs
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproofs {
   Original {
@@ -173,6 +185,17 @@ pub enum Bulletproofs {
     b: DalekScalar,
     t: DalekScalar,
   },
+
+  Plus {
+    A: DalekPoint,
+    A1: DalekPoint,
+    B: DalekPoint,
+    r1: DalekScalar,
+    s1: DalekScalar,
+    d1: DalekScalar,
+    L: Vec<DalekPoint>,
+    R: Vec<DalekPoint>,
+  },
 }
 
 pub(crate) fn prove<R: RngCore + CryptoRng>(
@@ -186,8 +209,8 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let (alpha, A) = alpha(rng, &GENERATORS, &aL, &aR);
 
   let (sL, sR) =
-    ScalarVector((0 .. (MN * 2)).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>()).split();
-  let rho = random_scalar(&mut *rng);
+    ScalarVector((0 .. (MN * 2)).map(|_| Scalar::random(&mut *rng)).collect::<Vec<_>>()).split();
+  let rho = Scalar::random(&mut *rng);
   let S = (vector_exponent(&GENERATORS, &sL, &sR) + (EdwardsPoint::generator() * rho)) * *INV_EIGHT;
 
   let y = hash_cache(&mut cache, &[A.compress().to_bytes(), S.compress().to_bytes()]);
@@ -212,19 +235,18 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let t1 = inner_product(&l0, &r1) + inner_product(&l1, &r0);
   let t2 = inner_product(&l1, &r1);
 
-  let tau1 = random_scalar(&mut *rng);
-  let tau2 = random_scalar(&mut *rng);
+  let tau1 = Scalar::random(&mut *rng);
+  let tau2 = Scalar::random(&mut *rng);
 
-  let T1 = multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]) * *INV_EIGHT;
-  let T2 = multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]) * *INV_EIGHT;
+  let T1 = prove_multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]);
+  let T2 = prove_multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]);
 
   let x =
     hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
 
-  let gamma = ScalarVector(commitments.iter().cloned().map(|c| Scalar(c.mask)).collect());
   let mut taux = (tau2 * (x * x)) + (tau1 * x);
-  for i in 1 ..= gamma.len() {
-    taux += zpow[i + 1] * gamma[i - 1];
+  for (i, gamma) in commitments.iter().map(|c| Scalar(c.mask)).enumerate() {
+    taux += zpow[i + 2] * gamma;
   }
   let mu = (x * rho) + alpha;
 
@@ -259,26 +281,8 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     let (G_L, G_R) = G_proof.split_at(aL.len());
     let (H_L, H_R) = H_proof.split_at(aL.len());
 
-    let mut L_i_s = aL
-      .0
-      .iter()
-      .cloned()
-      .zip(G_R.iter().cloned())
-      .chain(bR.0.iter().cloned().zip(H_L.iter().cloned()))
-      .collect::<Vec<_>>();
-    L_i_s.push((cL, U));
-    let L_i = multiexp(&L_i_s) * *INV_EIGHT;
-
-    let mut R_i_s = aR
-      .0
-      .iter()
-      .cloned()
-      .zip(G_L.iter().cloned())
-      .chain(bL.0.iter().cloned().zip(H_R.iter().cloned()))
-      .collect::<Vec<_>>();
-    R_i_s.push((cR, U));
-    let R_i = multiexp(&R_i_s) * *INV_EIGHT;
-
+    let L_i = prove_multiexp(&LR_statements(&aL, G_R, &bR, H_L, cL, U));
+    let R_i = prove_multiexp(&LR_statements(&aR, G_L, &bL, H_R, cR, U));
     L.push(L_i);
     R.push(R_i);
 
@@ -306,5 +310,125 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     a: *a[0],
     b: *b[0],
     t: *t,
+  }
+}
+
+pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
+  rng: &mut R,
+  commitments: &[Commitment],
+) -> Bulletproofs {
+  let (logMN, M, MN) = MN(commitments.len());
+
+  let (aL, aR) = bit_decompose(commitments);
+  let mut cache = hash_plus(&[hash_commitments(commitments).to_bytes()]);
+  let (alpha, A) = alpha(rng, &GENERATORS, &aL, &aR);
+
+  let y = hash_cache(&mut cache, &[A.compress().to_bytes()]);
+  let mut cache = hash_to_scalar(&y.to_bytes());
+  let z = cache;
+
+  let zpow = ScalarVector::even_powers(z, 2 * M);
+  let two_pow = ScalarVector::powers(Scalar::from(2u8), N);
+  // d[j*N+i] = z**(2*(j+1)) * 2**i
+  let mut d = vec![Scalar::zero(); MN];
+  for j in 0 .. M {
+    for i in 0 .. N {
+      d[(j * N) + i] = zpow[j] * two_pow[i];
+    }
+  }
+
+  let ypow = ScalarVector::powers(y, MN + 2);
+  let aL1 = aL - z;
+  let mut aR1 = aR + z;
+
+  let mut y_for_d = ScalarVector(ypow.0[1 ..= MN].to_vec());
+  y_for_d.0.reverse();
+  aR1 = aR1 + y_for_d * ScalarVector(d);
+
+  let mut alpha1 = alpha;
+  for (j, gamma) in commitments.iter().map(|c| Scalar(c.mask)).enumerate() {
+    alpha1 += zpow[j] * ypow[MN + 1] * gamma;
+  }
+
+  let mut a = aL1;
+  let mut b = aR1;
+
+  let yinv = y.invert().unwrap();
+  let yinvpow = ScalarVector::powers(yinv, MN);
+
+  let mut G_proof = GENERATORS.G[.. a.len()].to_vec();
+  let mut H_proof = GENERATORS.H[.. a.len()].to_vec();
+
+  /*
+  H_proof.iter_mut().zip(yinvpow.0.iter()).for_each(|(this_H, yinvpow)| *this_H *= yinvpow);
+  let U = *H * x_ip;
+  */
+
+  let mut L = Vec::with_capacity(logMN);
+  let mut R = Vec::with_capacity(logMN);
+
+  while a.len() != 1 {
+    let (aL, aR) = a.split();
+    let (bL, bR) = b.split();
+
+    let cL = weighted_inner_product(&aL, &bR, y);
+    let cR = weighted_inner_product(&aR, &bL, y);
+
+    let (dL, dR) = (Scalar::random(&mut *rng), Scalar::random(&mut *rng));
+
+    let (G_L, G_R) = G_proof.split_at(aL.len());
+    let (H_L, H_R) = H_proof.split_at(aL.len());
+
+    let mut L_i = LR_statements(&aL, G_R, &bR, H_L, cL, *H);
+    L_i.push((cL, ED25519_BASEPOINT_POINT));
+    let L_i = prove_multiexp(&L_i);
+    L.push(L_i);
+
+    let mut R_i = LR_statements(&aR, G_L, &bL, H_R, cR, *H);
+    R_i.push((cR, ED25519_BASEPOINT_POINT));
+    let R_i = prove_multiexp(&R_i);
+    R.push(R_i);
+
+    let w = hash_cache(&mut cache, &[L_i.compress().to_bytes(), R_i.compress().to_bytes()]);
+    let winv = w.invert().unwrap();
+
+    G_proof = hadamard_fold(G_L, G_R, winv, w * yinvpow[aL.len()]);
+    H_proof = hadamard_fold(H_L, H_R, w, winv);
+
+    a = (&aL * w) + (aR * (winv * ypow[aL.len()]));
+    b = (bL * winv) + (bR * w);
+
+    let wsq = w * w;
+    let wsq_inv = wsq.invert().unwrap();
+    alpha1 += (dL * wsq) + (dR * wsq_inv);
+  }
+
+  let r = Scalar::random(&mut *rng);
+  let s = Scalar::random(&mut *rng);
+  let d = Scalar::random(&mut *rng);
+  let eta = Scalar::random(rng);
+
+  let A1 = prove_multiexp(&[
+    (r, G_proof[0]),
+    (s, H_proof[0]),
+    (d, ED25519_BASEPOINT_POINT),
+    ((r * y * b[0]) + (s * y * a[0]), *H),
+  ]);
+  let B = prove_multiexp(&[(r * y * s, *H), (eta, ED25519_BASEPOINT_POINT)]);
+  let e = hash_cache(&mut cache, &[A1.compress().to_bytes(), B.compress().to_bytes()]);
+
+  let r1 = (a[0] * e) + r;
+  let s1 = (b[0] * e) + s;
+  let d1 = ((d * e) + eta) + (alpha1 * (e * e));
+
+  Bulletproofs::Plus {
+    A: *A,
+    A1: *A1,
+    B: *B,
+    r1: *r1,
+    s1: *s1,
+    d1: *d1,
+    L: L.drain(..).map(|L| *L).collect(),
+    R: R.drain(..).map(|R| *R).collect(),
   }
 }

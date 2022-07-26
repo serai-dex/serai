@@ -60,6 +60,24 @@ impl ScalarVector {
     ScalarVector(res)
   }
 
+  pub(crate) fn even_powers(x: Scalar, pow: usize) -> ScalarVector {
+    debug_assert!(pow != 0);
+    // Verify pow is a power of two
+    debug_assert_eq!(((pow - 1) & pow), 0);
+
+    let xsq = x * x;
+    let mut res = ScalarVector(Vec::with_capacity(pow / 2));
+    res.0.push(xsq);
+
+    let mut prev = 2;
+    while prev < pow {
+      res.0.push(res[res.len() - 1] * xsq);
+      prev += 2;
+    }
+
+    res
+  }
+
   pub(crate) fn sum(mut self) -> Scalar {
     self.0.drain(..).sum()
   }
