@@ -25,7 +25,13 @@ fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
 }
 
 fn hash_to_scalar(data: &[u8]) -> Scalar {
-  Scalar(dalek_hash(data))
+  let scalar = Scalar(dalek_hash(data));
+  // Monero will explicitly retry on these cases, as them occurring breaks the proof
+  // This library acknowledges their practical impossibility of them occurring, and doesn't bother
+  // to code in logic to handle it. That said, if they ever occur, something must happen in order
+  // to not generate a proof we believe to be valid when it isn't
+  assert!(!bool::from(scalar.is_zero()), "ZERO HASH: {:?}", data);
+  scalar
 }
 
 fn generator(i: usize) -> EdwardsPoint {
@@ -40,7 +46,7 @@ lazy_static! {
   static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
 
   pub(crate) static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); MAX_N]);
-  pub(crate) static ref TWO_N: ScalarVector = vector_powers(Scalar::from(2u8), MAX_N);
+  pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), MAX_N);
   pub(crate) static ref IP12: Scalar = inner_product(&*ONE_N, &*TWO_N);
 
   static ref H_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator(g * 2)).collect();
@@ -64,6 +70,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
 
   let logN = 6;
   let N = 1 << logN;
+  assert_eq!(N, 64);
 
   let mut logM = 0;
   let mut M;
@@ -77,8 +84,8 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   let logMN = logM + logN;
   let MN = M * N;
 
-  let mut aL = ScalarVector(vec![Scalar::zero(); MN]);
-  let mut aR = ScalarVector(vec![Scalar::zero(); MN]);
+  let mut aL = ScalarVector::new(MN);
+  let mut aR = ScalarVector::new(MN);
 
   for j in 0 .. M {
     for i in (0 .. N).rev() {
@@ -90,29 +97,6 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
     }
   }
 
-  {
-    for j in 0 .. M {
-      let mut test_aL = 0;
-      let mut test_aR = 0;
-      for i in 0 .. N {
-        if aL[(j * N) + i] == Scalar::one() {
-          test_aL += 1 << i;
-        }
-        if aR[(j * N) + i] == Scalar::zero() {
-          test_aR += 1 << i;
-        }
-      }
-      let mut test = 0;
-      if j < sv.len() {
-        for n in 0 .. 8 {
-          test |= u64::from(sv[j][n]) << (8 * n);
-        }
-      }
-      debug_assert_eq!(test_aL, test);
-      debug_assert_eq!(test_aR, test);
-    }
-  }
-
   // Commitments * INV_EIGHT
   let V = commitments.iter().map(|c| EdwardsPoint(c.calculate()) * *INV_EIGHT).collect::<Vec<_>>();
   let mut cache = hash_to_scalar(&V.iter().map(|V| V.compress().to_bytes()).flatten().collect::<Vec<_>>());
@@ -120,29 +104,26 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   let alpha = random_scalar(&mut *rng);
   let A = (vector_exponent(&aL, &aR) + (EdwardsPoint::generator() * alpha)) * *INV_EIGHT;
 
-  let sL = ScalarVector((0 .. MN).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>());
-  let sR = ScalarVector((0 .. MN).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>());
+  let (sL, sR) = ScalarVector((0 .. (MN * 2)).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>()).split();
   let rho = random_scalar(&mut *rng);
   let S = (vector_exponent(&sL, &sR) + (EdwardsPoint::generator() * rho)) * *INV_EIGHT;
 
   let y = hash_cache(&mut cache, &[A.compress().to_bytes(), S.compress().to_bytes()]);
-  assert!(y != Scalar::zero());
   let mut cache = hash_to_scalar(&y.to_bytes());
   let z = cache;
-  assert!(z != Scalar::zero());
 
   let l0 = &aL - z;
   let l1 = sL;
 
   let mut zero_twos = Vec::with_capacity(MN);
-  let zpow = vector_powers(z, M + 2);
+  let zpow = ScalarVector::powers(z, M + 2);
   for j in 0 .. M {
     for i in 0 .. N {
       zero_twos.push(zpow[j + 2] * TWO_N[i]);
     }
   }
 
-  let yMN = vector_powers(y, MN);
+  let yMN = ScalarVector::powers(y, MN);
   let r0 = (&(aR + z) * &yMN) + ScalarVector(zero_twos);
   let r1 = yMN * sR;
 
@@ -156,7 +137,6 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
   let T2 = multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]) * *INV_EIGHT;
 
   let x = hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
-  assert!(x != Scalar::zero());
 
   let mut taux = (tau2 * (x * x)) + (tau1 * x);
   for i in 1 ..= sv.len() {
@@ -169,51 +149,31 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
 
   let t = inner_product(&l, &r);
 
-  {
-    let t0 = inner_product(&l0, &r0);
-    assert_eq!((t2 * x * x) + ((t1 * x) + t0), t);
-  }
-
   let x_ip = hash_cache(&mut cache, &[x.to_bytes(), taux.to_bytes(), mu.to_bytes(), t.to_bytes()]);
-  assert!(x_ip != Scalar::zero());
 
-  let mut n_prime = MN;
-  let mut a_prime = l;
-  let mut b_prime = r;
-  assert_eq!(a_prime.len(), n_prime);
-  assert_eq!(b_prime.len(), n_prime);
+  let mut a = l;
+  let mut b = r;
 
   let yinv = y.invert().unwrap();
-  let yinvpow = vector_powers(yinv, MN);
+  let yinvpow = ScalarVector::powers(yinv, MN);
 
-  let mut G_prime = G_i[.. n_prime].to_vec();
-  let mut H_prime = H_i[.. n_prime].iter().enumerate().map(|(i, this_H)| *this_H * yinvpow[i]).collect::<Vec<_>>();
+  let mut G_proof = G_i[.. a.len()].to_vec();
+  let mut H_proof = H_i[.. a.len()].to_vec();
+  H_proof.iter_mut().zip(yinvpow.0.iter()).for_each(|(this_H, yinvpow)| *this_H *= yinvpow);
   let U = *H * x_ip;
 
   let mut L = Vec::with_capacity(logMN);
   let mut R = Vec::with_capacity(logMN);
 
-  while n_prime > 1 {
-    n_prime /= 2;
-
-    let aL = a_prime.slice(.. n_prime);
-    let aR = a_prime.slice(n_prime ..);
-    assert_eq!(aL.len(), aR.len());
-
-    let bL = b_prime.slice(.. n_prime);
-    let bR = b_prime.slice(n_prime ..);
-    assert_eq!(bL.len(), bR.len());
+  while a.len() != 1 {
+    let (aL, aR) = a.split();
+    let (bL, bR) = b.split();
 
     let cL = inner_product(&aL, &bR);
     let cR = inner_product(&aR, &bL);
 
-    let G_L = G_prime[.. n_prime].to_vec();
-    let G_R = G_prime[n_prime ..].to_vec();
-    assert_eq!(G_L.len(), G_R.len());
-
-    let H_L = H_prime[.. n_prime].to_vec();
-    let H_R = H_prime[n_prime ..].to_vec();
-    assert_eq!(H_L.len(), H_R.len());
+    let (G_L, G_R) = G_proof.split_at(aL.len());
+    let (H_L, H_R) = H_proof.split_at(aL.len());
 
     let mut L_i_s = aL.0.iter().cloned().zip(G_R.iter().cloned()).chain(
       bR.0.iter().cloned().zip(H_L.iter().cloned())
@@ -231,21 +191,16 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
     R.push(R_i);
 
     let w = hash_cache(&mut cache, &[L_i.compress().to_bytes(), R_i.compress().to_bytes()]);
-    assert!(w != Scalar::zero());
-
     let winv = w.invert().unwrap();
-    if n_prime > 1 {
-      hadamard_fold(&mut G_prime, winv, w);
-      hadamard_fold(&mut H_prime, w, winv);
-    }
 
-    a_prime = (aL * w) + (aR * winv);
-    b_prime = (bL * winv) + (bR * w);
+    a = (aL * w) + (aR * winv);
+    b = (bL * winv) + (bR * w);
+
+    if a.len() != 1 {
+      G_proof = hadamard_fold(G_L, G_R, winv, w);
+      H_proof = hadamard_fold(H_L, H_R, w, winv);
+    }
   }
-  assert_eq!(L.len(), logMN);
-  assert_eq!(R.len(), logMN);
-  assert_eq!(a_prime.len(), 1);
-  assert_eq!(b_prime.len(), 1);
 
   Bulletproofs {
     A: *A,
@@ -256,8 +211,8 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
     mu: *mu,
     L: L.drain(..).map(|L| *L).collect(),
     R: R.drain(..).map(|R| *R).collect(),
-    a: *a_prime[0],
-    b: *b_prime[0],
+    a: *a[0],
+    b: *b[0],
     t: *t
   }
 }
