@@ -301,7 +301,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
       self.signable.prepare_transaction(
         &commitments,
-        Bulletproofs::new(
+        Bulletproofs::prove(
           &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs")),
           &commitments,
         )

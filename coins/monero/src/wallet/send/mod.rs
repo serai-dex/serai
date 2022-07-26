@@ -329,7 +329,7 @@ impl SignableTransaction {
       ),
     );
 
-    let mut tx = self.prepare_transaction(&commitments, Bulletproofs::new(rng, &commitments)?);
+    let mut tx = self.prepare_transaction(&commitments, Bulletproofs::prove(rng, &commitments)?);
 
     let signable = prepare_inputs(rng, rpc, &self.inputs, spend, &mut tx).await?;
 

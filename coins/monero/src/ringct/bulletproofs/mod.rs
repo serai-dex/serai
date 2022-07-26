@@ -2,32 +2,17 @@
 
 use rand_core::{RngCore, CryptoRng};
 
-use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
+use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{Commitment, wallet::TransactionError, serialize::*};
 
 pub(crate) mod scalar_vector;
 
 mod core;
-pub(crate) use self::core::MAX_M;
-use self::core::prove;
+pub(crate) use self::core::Bulletproofs;
+use self::core::{MAX_M, prove};
 
 pub(crate) const MAX_OUTPUTS: usize = MAX_M;
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Bulletproofs {
-  pub A: EdwardsPoint,
-  pub S: EdwardsPoint,
-  pub T1: EdwardsPoint,
-  pub T2: EdwardsPoint,
-  pub taux: Scalar,
-  pub mu: Scalar,
-  pub L: Vec<EdwardsPoint>,
-  pub R: Vec<EdwardsPoint>,
-  pub a: Scalar,
-  pub b: Scalar,
-  pub t: Scalar,
-}
 
 impl Bulletproofs {
   pub(crate) fn fee_weight(outputs: usize) -> usize {
@@ -44,7 +29,7 @@ impl Bulletproofs {
     len + clawback
   }
 
-  pub fn new<R: RngCore + CryptoRng>(
+  pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: &[Commitment],
   ) -> Result<Bulletproofs, TransactionError> {
@@ -59,17 +44,21 @@ impl Bulletproofs {
     w: &mut W,
     specific_write_vec: F,
   ) -> std::io::Result<()> {
-    write_point(&self.A, w)?;
-    write_point(&self.S, w)?;
-    write_point(&self.T1, w)?;
-    write_point(&self.T2, w)?;
-    write_scalar(&self.taux, w)?;
-    write_scalar(&self.mu, w)?;
-    specific_write_vec(&self.L, w)?;
-    specific_write_vec(&self.R, w)?;
-    write_scalar(&self.a, w)?;
-    write_scalar(&self.b, w)?;
-    write_scalar(&self.t, w)
+    match self {
+      Bulletproofs::Original { A, S, T1, T2, taux, mu, L, R, a, b, t } => {
+        write_point(A, w)?;
+        write_point(S, w)?;
+        write_point(T1, w)?;
+        write_point(T2, w)?;
+        write_scalar(taux, w)?;
+        write_scalar(mu, w)?;
+        specific_write_vec(L, w)?;
+        specific_write_vec(R, w)?;
+        write_scalar(a, w)?;
+        write_scalar(b, w)?;
+        write_scalar(t, w)
+      }
+    }
   }
 
   pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -81,7 +70,7 @@ impl Bulletproofs {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
-    let bp = Bulletproofs {
+    Ok(Bulletproofs::Original {
       A: read_point(r)?,
       S: read_point(r)?,
       T1: read_point(r)?,
@@ -93,11 +82,6 @@ impl Bulletproofs {
       a: read_scalar(r)?,
       b: read_scalar(r)?,
       t: read_scalar(r)?,
-    };
-
-    if bp.L.len() != bp.R.len() {
-      Err(std::io::Error::new(std::io::ErrorKind::Other, "mismatched L/R len"))?;
-    }
-    Ok(bp)
+    })
   }
 }

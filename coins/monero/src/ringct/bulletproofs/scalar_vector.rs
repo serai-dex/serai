@@ -50,17 +50,18 @@ impl ScalarVector {
   }
 
   pub(crate) fn powers(x: Scalar, len: usize) -> ScalarVector {
-    let mut res = Vec::with_capacity(len);
-    if len == 0 {
-      return ScalarVector(res);
-    }
+    debug_assert!(len != 0);
 
+    let mut res = Vec::with_capacity(len);
     res.push(Scalar::one());
     for i in 1 .. len {
       res.push(res[i - 1] * x);
     }
-
     ScalarVector(res)
+  }
+
+  pub(crate) fn sum(mut self) -> Scalar {
+    self.0.drain(..).sum()
   }
 
   pub(crate) fn len(&self) -> usize {
@@ -81,7 +82,11 @@ impl Index<usize> for ScalarVector {
 }
 
 pub(crate) fn inner_product(a: &ScalarVector, b: &ScalarVector) -> Scalar {
-  (a * b).0.drain(..).sum()
+  (a * b).sum()
+}
+
+pub(crate) fn weighted_inner_product(a: &ScalarVector, b: &ScalarVector, y: Scalar) -> Scalar {
+  (a * b * ScalarVector::powers(y, a.len())).sum()
 }
 
 impl Mul<&[EdwardsPoint]> for &ScalarVector {

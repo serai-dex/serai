@@ -4,6 +4,8 @@
 use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 
+use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as DalekPoint};
+
 use group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
@@ -11,18 +13,16 @@ use multiexp::multiexp;
 
 use crate::{
   H as DALEK_H, Commitment, random_scalar as dalek_random, hash, hash_to_scalar as dalek_hash,
-  ringct::{
-    hash_to_point::raw_hash_to_point,
-    bulletproofs::{scalar_vector::*, Bulletproofs},
-  },
+  ringct::{hash_to_point::raw_hash_to_point, bulletproofs::scalar_vector::*},
   serialize::write_varint,
 };
 
-pub(crate) const MAX_M: usize = 16;
-const N: usize = 64;
-const MAX_MN: usize = MAX_M * N;
+// Bring things into ff/group
+lazy_static! {
+  static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert().unwrap();
+  static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
+}
 
-// Wrap random_scalar and hash_to_scalar into dalek_ff_group
 fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
   Scalar(dalek_random(rng))
 }
@@ -31,26 +31,42 @@ fn hash_to_scalar(data: &[u8]) -> Scalar {
   Scalar(dalek_hash(data))
 }
 
-fn generator(i: usize) -> EdwardsPoint {
-  let mut transcript = (*H).compress().to_bytes().to_vec();
-  transcript.extend(b"bulletproof");
-  write_varint(&i.try_into().unwrap(), &mut transcript).unwrap();
-  EdwardsPoint(raw_hash_to_point(hash(&transcript)))
-}
+// Components common between variants
+pub(crate) const MAX_M: usize = 16;
+const N: usize = 64;
+const MAX_MN: usize = MAX_M * N;
 
 lazy_static! {
-  static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert().unwrap();
-  static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
-  pub(crate) static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); MAX_N]);
-  pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), MAX_N);
-  pub(crate) static ref IP12: Scalar = inner_product(&ONE_N, &TWO_N);
-  static ref H_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator(g * 2)).collect();
-  static ref G_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator((g * 2) + 1)).collect();
+  static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); N]);
+  static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), N);
+  static ref IP12: Scalar = inner_product(&ONE_N, &TWO_N);
 }
 
-pub(crate) fn vector_exponent(a: &ScalarVector, b: &ScalarVector) -> EdwardsPoint {
+struct Generators {
+  G: Vec<EdwardsPoint>,
+  H: Vec<EdwardsPoint>,
+}
+
+fn generators_core(prefix: &'static [u8]) -> Generators {
+  let mut res = Generators { G: Vec::with_capacity(MAX_MN), H: Vec::with_capacity(MAX_MN) };
+  for i in 0 .. MAX_MN {
+    let i = 2 * i;
+
+    let mut even = (*H).compress().to_bytes().to_vec();
+    even.extend(prefix);
+    let mut odd = even.clone();
+
+    write_varint(&i.try_into().unwrap(), &mut even).unwrap();
+    write_varint(&(i + 1).try_into().unwrap(), &mut odd).unwrap();
+    res.H.push(EdwardsPoint(raw_hash_to_point(hash(&even))));
+    res.G.push(EdwardsPoint(raw_hash_to_point(hash(&odd))));
+  }
+  res
+}
+
+fn vector_exponent(generators: &Generators, a: &ScalarVector, b: &ScalarVector) -> EdwardsPoint {
   debug_assert_eq!(a.len(), b.len());
-  (a * &G_i[.. a.len()]) + (b * &H_i[.. b.len()])
+  (a * &generators.G[.. a.len()]) + (b * &generators.H[.. b.len()])
 }
 
 fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
@@ -61,13 +77,7 @@ fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
   *cache
 }
 
-pub(crate) fn prove<R: RngCore + CryptoRng>(
-  rng: &mut R,
-  commitments: &[Commitment],
-) -> Bulletproofs {
-  let sv = ScalarVector(commitments.iter().cloned().map(|c| Scalar::from(c.amount)).collect());
-  let gamma = ScalarVector(commitments.iter().cloned().map(|c| Scalar(c.mask)).collect());
-
+fn MN(outputs: usize) -> (usize, usize, usize) {
   let logN = 6;
   debug_assert_eq!(N, 1 << logN);
 
@@ -75,14 +85,18 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let mut M;
   while {
     M = 1 << logM;
-    (M <= MAX_M) && (M < sv.len())
+    (M <= MAX_M) && (M < outputs)
   } {
     logM += 1;
   }
 
-  let logMN = logM + logN;
-  let MN = M * N;
+  (logM + logN, M, M * N)
+}
 
+fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, ScalarVector) {
+  let (_, M, MN) = MN(commitments.len());
+
+  let sv = ScalarVector(commitments.iter().cloned().map(|c| Scalar::from(c.amount)).collect());
   let mut aL = ScalarVector::new(MN);
   let mut aR = ScalarVector::new(MN);
 
@@ -96,18 +110,85 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     }
   }
 
-  // Commitments * INV_EIGHT
-  let V = commitments.iter().map(|c| EdwardsPoint(c.calculate()) * *INV_EIGHT).collect::<Vec<_>>();
-  let mut cache =
-    hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>());
+  (aL, aR)
+}
 
+fn hash_commitments(commitments: &[Commitment]) -> Scalar {
+  let V = commitments.iter().map(|c| EdwardsPoint(c.calculate()) * *INV_EIGHT).collect::<Vec<_>>();
+  hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>())
+}
+
+fn alpha<R: RngCore + CryptoRng>(
+  rng: &mut R,
+  generators: &Generators,
+  aL: &ScalarVector,
+  aR: &ScalarVector,
+) -> (Scalar, EdwardsPoint) {
   let alpha = random_scalar(&mut *rng);
-  let A = (vector_exponent(&aL, &aR) + (EdwardsPoint::generator() * alpha)) * *INV_EIGHT;
+  (alpha, (vector_exponent(generators, aL, aR) + (EdwardsPoint::generator() * alpha)) * *INV_EIGHT)
+}
+
+// Bulletproofs-specific
+lazy_static! {
+  static ref GENERATORS: Generators = generators_core(b"bulletproof");
+}
+
+// Bulletproofs+-specific
+lazy_static! {
+  static ref GENERATORS_PLUS: Generators = generators_core(b"bulletproof_plus");
+  static ref TRANSCRIPT_PLUS: EdwardsPoint =
+    EdwardsPoint(raw_hash_to_point(hash(b"bulletproof_plus_transcript")));
+}
+
+fn even_powers_sum(x: Scalar, pow: usize) -> Scalar {
+  debug_assert!(pow != 0);
+  // Verify pow is a power of two
+  debug_assert_eq!(((pow - 1) & pow), 0);
+
+  let xsq = x * x;
+  let mut res = xsq;
+
+  let mut prev = 2;
+  while prev < pow {
+    res += res * xsq;
+    prev += 2;
+  }
+
+  res
+}
+
+// Types for all Bulletproofs
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Bulletproofs {
+  Original {
+    A: DalekPoint,
+    S: DalekPoint,
+    T1: DalekPoint,
+    T2: DalekPoint,
+    taux: DalekScalar,
+    mu: DalekScalar,
+    L: Vec<DalekPoint>,
+    R: Vec<DalekPoint>,
+    a: DalekScalar,
+    b: DalekScalar,
+    t: DalekScalar,
+  },
+}
+
+pub(crate) fn prove<R: RngCore + CryptoRng>(
+  rng: &mut R,
+  commitments: &[Commitment],
+) -> Bulletproofs {
+  let (logMN, M, MN) = MN(commitments.len());
+
+  let (aL, aR) = bit_decompose(commitments);
+  let mut cache = hash_commitments(commitments);
+  let (alpha, A) = alpha(rng, &GENERATORS, &aL, &aR);
 
   let (sL, sR) =
     ScalarVector((0 .. (MN * 2)).map(|_| random_scalar(&mut *rng)).collect::<Vec<_>>()).split();
   let rho = random_scalar(&mut *rng);
-  let S = (vector_exponent(&sL, &sR) + (EdwardsPoint::generator() * rho)) * *INV_EIGHT;
+  let S = (vector_exponent(&GENERATORS, &sL, &sR) + (EdwardsPoint::generator() * rho)) * *INV_EIGHT;
 
   let y = hash_cache(&mut cache, &[A.compress().to_bytes(), S.compress().to_bytes()]);
   let mut cache = hash_to_scalar(&y.to_bytes());
@@ -140,8 +221,9 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let x =
     hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
 
+  let gamma = ScalarVector(commitments.iter().cloned().map(|c| Scalar(c.mask)).collect());
   let mut taux = (tau2 * (x * x)) + (tau1 * x);
-  for i in 1 ..= sv.len() {
+  for i in 1 ..= gamma.len() {
     taux += zpow[i + 1] * gamma[i - 1];
   }
   let mu = (x * rho) + alpha;
@@ -159,8 +241,8 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let yinv = y.invert().unwrap();
   let yinvpow = ScalarVector::powers(yinv, MN);
 
-  let mut G_proof = G_i[.. a.len()].to_vec();
-  let mut H_proof = H_i[.. a.len()].to_vec();
+  let mut G_proof = GENERATORS.G[.. a.len()].to_vec();
+  let mut H_proof = GENERATORS.H[.. a.len()].to_vec();
   H_proof.iter_mut().zip(yinvpow.0.iter()).for_each(|(this_H, yinvpow)| *this_H *= yinvpow);
   let U = *H * x_ip;
 
@@ -212,7 +294,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     }
   }
 
-  Bulletproofs {
+  Bulletproofs::Original {
     A: *A,
     S: *S,
     T1: *T1,
