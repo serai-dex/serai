@@ -26,7 +26,7 @@ macro_rules! math_op {
     impl $Op<ScalarVector> for ScalarVector {
       type Output = ScalarVector;
       fn $op(self, b: ScalarVector) -> ScalarVector {
-        assert_eq!(self.len(), b.len());
+        debug_assert_eq!(self.len(), b.len());
         ScalarVector(self.0.iter().zip(b.0.iter()).map($f).collect())
       }
     }
@@ -34,7 +34,7 @@ macro_rules! math_op {
     impl $Op<&ScalarVector> for &ScalarVector {
       type Output = ScalarVector;
       fn $op(self, b: &ScalarVector) -> ScalarVector {
-        assert_eq!(self.len(), b.len());
+        debug_assert_eq!(self.len(), b.len());
         ScalarVector(self.0.iter().zip(b.0.iter()).map($f).collect())
       }
     }
@@ -87,7 +87,7 @@ pub(crate) fn inner_product(a: &ScalarVector, b: &ScalarVector) -> Scalar {
 impl Mul<&[EdwardsPoint]> for &ScalarVector {
   type Output = EdwardsPoint;
   fn mul(self, b: &[EdwardsPoint]) -> EdwardsPoint {
-    assert_eq!(self.len(), b.len());
+    debug_assert_eq!(self.len(), b.len());
     multiexp(&self.0.iter().cloned().zip(b.iter().cloned()).collect::<Vec<_>>())
   }
 }

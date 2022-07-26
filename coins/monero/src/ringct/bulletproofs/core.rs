@@ -19,8 +19,8 @@ use crate::{
 };
 
 pub(crate) const MAX_M: usize = 16;
-pub(crate) const MAX_N: usize = 64;
-const MAX_MN: usize = MAX_M * MAX_N;
+const N: usize = 64;
+const MAX_MN: usize = MAX_M * N;
 
 // Wrap random_scalar and hash_to_scalar into dalek_ff_group
 fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
@@ -49,7 +49,7 @@ lazy_static! {
 }
 
 pub(crate) fn vector_exponent(a: &ScalarVector, b: &ScalarVector) -> EdwardsPoint {
-  assert_eq!(a.len(), b.len());
+  debug_assert_eq!(a.len(), b.len());
   (a * &G_i[.. a.len()]) + (b * &H_i[.. b.len()])
 }
 
@@ -69,8 +69,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let gamma = ScalarVector(commitments.iter().cloned().map(|c| Scalar(c.mask)).collect());
 
   let logN = 6;
-  let N = 1 << logN;
-  assert_eq!(N, 64);
+  debug_assert_eq!(N, 1 << logN);
 
   let mut logM = 0;
   let mut M;
