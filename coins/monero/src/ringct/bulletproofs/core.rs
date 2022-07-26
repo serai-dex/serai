@@ -40,7 +40,7 @@ lazy_static! {
   static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
 
   pub(crate) static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); MAX_N]);
-  pub(crate) static ref TWO_N: ScalarVector = ScalarVector(vec![Scalar::from(2u8); MAX_N]);
+  pub(crate) static ref TWO_N: ScalarVector = vector_powers(Scalar::from(2u8), MAX_N);
   pub(crate) static ref IP12: Scalar = inner_product(&*ONE_N, &*TWO_N);
 
   static ref H_i: Vec<EdwardsPoint> = (0 .. MAX_MN).map(|g| generator(g * 2)).collect();
@@ -198,18 +198,22 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitme
 
     let aL = a_prime.slice(.. n_prime);
     let aR = a_prime.slice(n_prime ..);
+    assert_eq!(aL.len(), aR.len());
 
     let bL = b_prime.slice(.. n_prime);
     let bR = b_prime.slice(n_prime ..);
+    assert_eq!(bL.len(), bR.len());
 
     let cL = inner_product(&aL, &bR);
     let cR = inner_product(&aR, &bL);
 
     let G_L = G_prime[.. n_prime].to_vec();
     let G_R = G_prime[n_prime ..].to_vec();
+    assert_eq!(G_L.len(), G_R.len());
 
     let H_L = H_prime[.. n_prime].to_vec();
     let H_R = H_prime[n_prime ..].to_vec();
+    assert_eq!(H_L.len(), H_R.len());
 
     let mut L_i_s = aL.0.iter().cloned().zip(G_R.iter().cloned()).chain(
       bR.0.iter().cloned().zip(H_L.iter().cloned())
