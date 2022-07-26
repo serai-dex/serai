@@ -74,8 +74,6 @@ fn clsag() {
     )
     .swap_remove(0);
     clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
-    #[cfg(feature = "experimental")]
-    clsag.rust_verify(&ring, &image, &pseudo_out, &msg).unwrap();
   }
 }
 

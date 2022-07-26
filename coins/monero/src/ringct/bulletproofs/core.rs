@@ -28,13 +28,7 @@ fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
 }
 
 fn hash_to_scalar(data: &[u8]) -> Scalar {
-  let scalar = Scalar(dalek_hash(data));
-  // Monero will explicitly retry on these cases, as them occurring breaks the proof
-  // This library acknowledges their practical impossibility of them occurring, and doesn't bother
-  // to code in logic to handle it. That said, if they ever occur, something must happen in order
-  // to not generate a proof we believe to be valid when it isn't
-  assert!(!bool::from(scalar.is_zero()), "ZERO HASH: {:?}", data);
-  scalar
+  Scalar(dalek_hash(data))
 }
 
 fn generator(i: usize) -> EdwardsPoint {

@@ -1,9 +1,5 @@
-use std::slice;
-
 use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
-
-use subtle::ConstantTimeEq;
 
 use tiny_keccak::{Hasher, Keccak};
 
@@ -36,26 +32,6 @@ lazy_static! {
       .unwrap()
       .mul_by_cofactor();
   static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H);
-}
-
-// Function from libsodium our subsection of Monero relies on. Implementing it here means we don't
-// need to link against libsodium
-#[no_mangle]
-unsafe extern "C" fn crypto_verify_32(a: *const u8, b: *const u8) -> isize {
-  isize::from(slice::from_raw_parts(a, 32).ct_eq(slice::from_raw_parts(b, 32)).unwrap_u8()) - 1
-}
-
-// Offer a wide reduction to C. Our seeded RNG prevented Monero from defining an unbiased scalar
-// generation function, and in order to not use Monero code (which would require propagating its
-// license), the function was rewritten. It was rewritten with wide reduction, instead of rejection
-// sampling however, hence the need for this function
-#[no_mangle]
-unsafe extern "C" fn monero_wide_reduce(value: *mut u8) {
-  let res =
-    Scalar::from_bytes_mod_order_wide(std::slice::from_raw_parts(value, 64).try_into().unwrap());
-  for (i, b) in res.to_bytes().iter().enumerate() {
-    value.add(i).write(*b);
-  }
 }
 
 #[allow(non_snake_case)]
@@ -95,5 +71,11 @@ pub fn hash(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {
-  Scalar::from_bytes_mod_order(hash(data))
+  let scalar = Scalar::from_bytes_mod_order(hash(data));
+  // Monero will explicitly error in this case
+  // This library acknowledges its practical impossibility of it occurring, and doesn't bother to
+  // code in logic to handle it. That said, if it ever occurs, something must happen in order to
+  // not generate/verify a proof we believe to be valid when it isn't
+  assert!(scalar != Scalar::zero(), "ZERO HASH: {:?}", data);
+  scalar
 }

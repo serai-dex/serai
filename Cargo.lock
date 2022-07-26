@@ -4569,7 +4569,6 @@ version = "0.1.0"
 dependencies = [
  "base58-monero 1.0.0",
  "blake2",
- "cc",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "dleq-serai",

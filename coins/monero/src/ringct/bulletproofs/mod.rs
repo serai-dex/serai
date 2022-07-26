@@ -54,44 +54,6 @@ impl Bulletproofs {
     Ok(prove(rng, outputs))
   }
 
-  #[must_use]
-  pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
-    if commitments.len() > 16 {
-      return false;
-    }
-
-    let mut seed = [0; 32];
-    rng.fill_bytes(&mut seed);
-
-    let mut serialized = Vec::with_capacity((9 + (2 * self.L.len())) * 32);
-    self.serialize(&mut serialized).unwrap();
-    let commitments: Vec<[u8; 32]> = commitments
-      .iter()
-      .map(|commitment| (commitment * Scalar::from(8u8).invert()).compress().to_bytes())
-      .collect();
-
-    unsafe {
-      #[link(name = "wrapper")]
-      extern "C" {
-        fn c_verify_bp(
-          seed: *const u8,
-          serialized_len: usize,
-          serialized: *const u8,
-          commitments_len: u8,
-          commitments: *const [u8; 32],
-        ) -> bool;
-      }
-
-      c_verify_bp(
-        seed.as_ptr(),
-        serialized.len(),
-        serialized.as_ptr(),
-        u8::try_from(commitments.len()).unwrap(),
-        commitments.as_ptr(),
-      )
-    }
-  }
-
   fn serialize_core<W: std::io::Write, F: Fn(&[EdwardsPoint], &mut W) -> std::io::Result<()>>(
     &self,
     w: &mut W,

@@ -6,9 +6,6 @@ license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
-[build-dependencies]
-cc = "1.0"
-
 [dependencies]
 hex-literal = "0.3"
 lazy_static = "1"
@@ -45,7 +42,6 @@ monero = "0.16"
 reqwest = { version = "0.11", features = ["json"] }
 
 [features]
-experimental = []
 multisig = ["rand_chacha", "blake2", "transcript", "frost", "dleq"]
 
 [dev-dependencies]

@@ -7,7 +7,7 @@ use rand_core::{RngCore, CryptoRng};
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   scalar::Scalar,
-  traits::VartimePrecomputedMultiscalarMul,
+  traits::{IsIdentity, VartimePrecomputedMultiscalarMul},
   edwards::{EdwardsPoint, VartimeEdwardsPrecomputation},
 };
 
@@ -29,10 +29,14 @@ lazy_static! {
 pub enum ClsagError {
   #[error("internal error ({0})")]
   InternalError(String),
+  #[error("invalid ring")]
+  InvalidRing,
   #[error("invalid ring member (member {0}, ring size {1})")]
   InvalidRingMember(u8, u8),
   #[error("invalid commitment")]
   InvalidCommitment,
+  #[error("invalid key image")]
+  InvalidImage,
   #[error("invalid D")]
   InvalidD,
   #[error("invalid s")]
@@ -72,7 +76,6 @@ impl ClsagInput {
 #[allow(clippy::large_enum_variant)]
 enum Mode {
   Sign(usize, EdwardsPoint, EdwardsPoint),
-  #[cfg(feature = "experimental")]
   Verify(Scalar),
 }
 
@@ -150,7 +153,6 @@ fn core(
       c = hash_to_scalar(&to_hash);
     }
 
-    #[cfg(feature = "experimental")]
     Mode::Verify(c1) => {
       start = 0;
       end = n;
@@ -259,17 +261,31 @@ impl Clsag {
     res
   }
 
-  // Not extensively tested nor guaranteed to have expected parity with Monero
-  #[cfg(feature = "experimental")]
-  pub fn rust_verify(
+  pub fn verify(
     &self,
     ring: &[[EdwardsPoint; 2]],
     I: &EdwardsPoint,
     pseudo_out: &EdwardsPoint,
     msg: &[u8; 32],
   ) -> Result<(), ClsagError> {
-    let (_, c1) =
-      core(ring, I, pseudo_out, msg, &self.D.mul_by_cofactor(), &self.s, Mode::Verify(self.c1));
+    // Preliminary checks. s, c1, and points must also be encoded canonically, which isn't checked
+    // here
+    if ring.len() == 0 {
+      Err(ClsagError::InvalidRing)?;
+    }
+    if ring.len() != self.s.len() {
+      Err(ClsagError::InvalidS)?;
+    }
+    if I.is_identity() {
+      Err(ClsagError::InvalidImage)?;
+    }
+
+    let D = self.D.mul_by_cofactor();
+    if D.is_identity() {
+      Err(ClsagError::InvalidD)?;
+    }
+
+    let (_, c1) = core(ring, I, pseudo_out, msg, &D, &self.s, Mode::Verify(self.c1));
     if c1 != self.c1 {
       Err(ClsagError::InvalidC1)?;
     }
@@ -288,59 +304,5 @@ impl Clsag {
 
   pub fn deserialize<R: std::io::Read>(decoys: usize, r: &mut R) -> std::io::Result<Clsag> {
     Ok(Clsag { s: read_raw_vec(read_scalar, decoys, r)?, c1: read_scalar(r)?, D: read_point(r)? })
-  }
-
-  pub fn verify(
-    &self,
-    ring: &[[EdwardsPoint; 2]],
-    I: &EdwardsPoint,
-    pseudo_out: &EdwardsPoint,
-    msg: &[u8; 32],
-  ) -> Result<(), ClsagError> {
-    // Serialize it to pass the struct to Monero without extensive FFI
-    let mut serialized = Vec::with_capacity(1 + ((self.s.len() + 2) * 32));
-    write_varint(&self.s.len().try_into().unwrap(), &mut serialized).unwrap();
-    self.serialize(&mut serialized).unwrap();
-
-    let I_bytes = I.compress().to_bytes();
-
-    let mut ring_bytes = vec![];
-    for member in ring {
-      ring_bytes.extend(&member[0].compress().to_bytes());
-      ring_bytes.extend(&member[1].compress().to_bytes());
-    }
-
-    let pseudo_out_bytes = pseudo_out.compress().to_bytes();
-
-    unsafe {
-      // Uses Monero's C verification function to ensure compatibility with Monero
-      #[link(name = "wrapper")]
-      extern "C" {
-        pub(crate) fn c_verify_clsag(
-          serialized_len: usize,
-          serialized: *const u8,
-          ring_size: u8,
-          ring: *const u8,
-          I: *const u8,
-          pseudo_out: *const u8,
-          msg: *const u8,
-        ) -> bool;
-      }
-
-      if c_verify_clsag(
-        serialized.len(),
-        serialized.as_ptr(),
-        u8::try_from(ring.len())
-          .map_err(|_| ClsagError::InternalError("too large ring".to_string()))?,
-        ring_bytes.as_ptr(),
-        I_bytes.as_ptr(),
-        pseudo_out_bytes.as_ptr(),
-        msg.as_ptr(),
-      ) {
-        Ok(())
-      } else {
-        Err(ClsagError::InvalidC1)
-      }
-    }
   }
 }
