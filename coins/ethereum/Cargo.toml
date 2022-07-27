@@ -7,22 +7,25 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabeth
 edition = "2021"
 
 [dependencies]
+hex-literal = "0.3"
 thiserror = "1"
+rand_core = "0.6"
+
 serde_json = "1.0"
 serde = "1.0"
-hex-literal = "0.3"
 
-ethers = { version = "0.14", features = ["abigen", "ethers-solc"] }
-eyre = "0.6"
+sha3 = "0.10"
 
+group = "0.12"
 k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1"] }
-sha3 = "0.10"
-group = "0.12"
+
+eyre = "0.6"
+
+ethers = { version = "0.14", features = ["abigen", "ethers-solc"] }
 
 [dev-dependencies]
-rand = "0.8"
-tokio = { version = "1.19", features = ["macros"] }
+tokio = { version = "1", features = ["macros"] }
 
 [build-dependencies]
 ethers-solc = "0.14"

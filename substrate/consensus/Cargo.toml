@@ -30,4 +30,4 @@ sp-api = { git = "https://github.com/serai-dex/substrate" }
 
 serai-runtime = { path = "../runtime" }
 
-tokio = "1.15"
+tokio = "1"

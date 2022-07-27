@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 
 #[cfg(feature = "multisig")]
 use blake2::{digest::Update, Digest, Blake2b512};

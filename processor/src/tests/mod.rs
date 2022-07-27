@@ -6,7 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 
 use crate::{
   NetworkError, Network,

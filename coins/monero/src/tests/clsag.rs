@@ -1,7 +1,7 @@
 #[cfg(feature = "multisig")]
 use std::sync::{Arc, RwLock};
 
-use rand::{RngCore, rngs::OsRng};
+use rand_core::{RngCore, OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 

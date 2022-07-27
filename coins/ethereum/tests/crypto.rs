@@ -12,7 +12,7 @@ fn test_ecrecover() {
     signature::{Signer, Verifier},
     SigningKey, VerifyingKey,
   };
-  use rand::rngs::OsRng;
+  use rand_core::OsRng;
 
   let private = SigningKey::random(&mut OsRng);
   let public = VerifyingKey::from(&private);
@@ -33,7 +33,7 @@ fn test_signing() {
     algorithm::Schnorr,
     tests::{algorithm_machines, key_gen, sign},
   };
-  use rand::rngs::OsRng;
+  use rand_core::OsRng;
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
   let _group_key = keys[&1].group_key();
@@ -53,7 +53,7 @@ fn test_ecrecover_hack() {
     algorithm::Schnorr,
     tests::{algorithm_machines, key_gen, sign},
   };
-  use rand::rngs::OsRng;
+  use rand_core::OsRng;
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
   let group_key = keys[&1].group_key();

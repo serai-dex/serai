@@ -1,4 +1,4 @@
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 
 #[cfg(any(feature = "secp256k1", feature = "p256"))]
 use crate::tests::vectors::{Vectors, test_with_vectors};

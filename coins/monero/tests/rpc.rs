@@ -1,4 +1,4 @@
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 
 use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
 

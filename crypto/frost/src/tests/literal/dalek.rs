@@ -1,4 +1,4 @@
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 
 use crate::{
   curve,

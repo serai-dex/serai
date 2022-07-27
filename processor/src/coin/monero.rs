@@ -213,7 +213,7 @@ impl Coin for Monero {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
-    use rand::rngs::OsRng;
+    use rand_core::OsRng;
 
     let height = self.get_height().await.unwrap();
 

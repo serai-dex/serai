@@ -24,7 +24,7 @@ async fn test_ecrecover_hack() {
   };
   use k256::elliptic_curve::bigint::ArrayEncoding;
   use k256::{Scalar, U256};
-  use rand::rngs::OsRng;
+  use rand_core::OsRng;
 
   let anvil = Anvil::new().spawn();
   let wallet: LocalWallet = anvil.keys()[0].clone().into();

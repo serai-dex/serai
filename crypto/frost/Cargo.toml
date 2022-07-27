@@ -31,8 +31,6 @@ multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 dleq = { package = "dleq-serai", path = "../dleq", version = "0.1", features = ["serialize"] }
 
 [dev-dependencies]
-rand = "0.8"
-
 sha2 = "0.10"
 dalek-ff-group = { path = "../dalek-ff-group" }
 
