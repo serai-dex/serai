@@ -35,22 +35,29 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
   hash(&u)
 }
 
-// Hs(8Ra || o) with https://github.com/monero-project/research-lab/issues/103 as an option
+// Hs("view_tag" || 8Ra || o) and Hs(8Ra || o) with uniqueness inclusion as an option
 #[allow(non_snake_case)]
 pub(crate) fn shared_key(
   uniqueness: Option<[u8; 32]>,
   s: Scalar,
   P: &EdwardsPoint,
   o: usize,
-) -> Scalar {
-  // uniqueness
-  let mut shared = uniqueness.map_or(vec![], |uniqueness| uniqueness.to_vec());
-  // || 8Ra
-  shared.extend((s * P).mul_by_cofactor().compress().to_bytes().to_vec());
+) -> (u8, Scalar) {
+  // 8Ra
+  let mut output_derivation = (s * P).mul_by_cofactor().compress().to_bytes().to_vec();
   // || o
-  write_varint(&o.try_into().unwrap(), &mut shared).unwrap();
-  // Hs()
-  hash_to_scalar(&shared)
+  write_varint(&o.try_into().unwrap(), &mut output_derivation).unwrap();
+
+  let view_tag = hash(&[b"view_tag".as_ref(), &output_derivation].concat())[0];
+
+  // uniqueness ||
+  let shared_key = if let Some(uniqueness) = uniqueness {
+    [uniqueness.as_ref(), &output_derivation].concat().to_vec()
+  } else {
+    output_derivation
+  };
+
+  (view_tag, hash_to_scalar(&shared_key))
 }
 
 pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {

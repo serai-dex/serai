@@ -62,7 +62,7 @@ impl Input {
 pub struct Output {
   pub amount: u64,
   pub key: EdwardsPoint,
-  pub tag: Option<u8>,
+  pub view_tag: Option<u8>,
 }
 
 impl Output {
@@ -72,31 +72,34 @@ impl Output {
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.amount, w)?;
-    w.write_all(&[2 + (if self.tag.is_some() { 1 } else { 0 })])?;
+    w.write_all(&[2 + (if self.view_tag.is_some() { 1 } else { 0 })])?;
     write_point(&self.key, w)?;
-    if let Some(tag) = self.tag {
-      w.write_all(&[tag])?;
+    if let Some(view_tag) = self.view_tag {
+      w.write_all(&[view_tag])?;
     }
     Ok(())
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Output> {
     let amount = read_varint(r)?;
-    let mut tag = [0];
-    r.read_exact(&mut tag)?;
-    if (tag[0] != 2) && (tag[0] != 3) {
-      Err(std::io::Error::new(
+    let mut output_type = [0];
+    r.read_exact(&mut output_type)?;
+    let view_tag = match output_type[0] {
+      2 => false,
+      3 => true,
+      _ => Err(std::io::Error::new(
         std::io::ErrorKind::Other,
         "Tried to deserialize unknown/unused output type",
-      ))?;
-    }
+      ))?,
+    };
 
     Ok(Output {
       amount,
       key: read_point(r)?,
-      tag: if tag[0] == 3 {
-        r.read_exact(&mut tag)?;
-        Some(tag[0])
+      view_tag: if view_tag {
+        let mut view_tag = [0];
+        r.read_exact(&mut view_tag)?;
+        Some(view_tag[0])
       } else {
         None
       },

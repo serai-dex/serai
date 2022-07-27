@@ -38,6 +38,7 @@ pub use multisig::TransactionMachine;
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct SendOutput {
   R: EdwardsPoint,
+  view_tag: u8,
   dest: EdwardsPoint,
   commitment: Commitment,
   amount: [u8; 8],
@@ -51,7 +52,7 @@ impl SendOutput {
     o: usize,
   ) -> SendOutput {
     let r = random_scalar(rng);
-    let shared_key =
+    let (view_tag, shared_key) =
       shared_key(Some(unique).filter(|_| output.0.meta.guaranteed), r, &output.0.view, o);
 
     let spend = output.0.spend;
@@ -63,6 +64,7 @@ impl SendOutput {
         }
         AddressType::Subaddress => r * spend,
       },
+      view_tag,
       dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + spend),
       commitment: Commitment::new(commitment_mask(shared_key), output.1),
       amount: amount_encryption(output.1, shared_key),
@@ -297,7 +299,7 @@ impl SignableTransaction {
       tx_outputs.push(Output {
         amount: 0,
         key: self.outputs[o].dest,
-        tag: Some(0).filter(|_| matches!(self.protocol, Protocol::v16)),
+        view_tag: Some(self.outputs[o].view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
       ecdh_info.push(self.outputs[o].amount);
     }

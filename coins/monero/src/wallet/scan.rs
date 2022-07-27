@@ -101,12 +101,19 @@ impl Transaction {
     for (o, output) in self.prefix.outputs.iter().enumerate() {
       // TODO: This may be replaceable by pubkeys[o]
       for pubkey in &pubkeys {
-        let key_offset = shared_key(
+        let (view_tag, key_offset) = shared_key(
           Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
           view.view,
           pubkey,
           o,
         );
+
+        if let Some(actual_view_tag) = output.view_tag {
+          if actual_view_tag != view_tag {
+            continue;
+          }
+        }
+
         // P - shared == spend
         if (output.key - (&key_offset * &ED25519_BASEPOINT_TABLE)) != view.spend {
           continue;
