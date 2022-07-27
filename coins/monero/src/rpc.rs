@@ -10,6 +10,7 @@ use serde_json::json;
 use reqwest;
 
 use crate::{
+  Protocol,
   transaction::{Input, Timelock, Transaction},
   block::Block,
   wallet::Fee,
@@ -96,6 +97,37 @@ impl Rpc {
       monero_epee_bin_serde::from_bytes(&res.bytes().await.map_err(|_| RpcError::ConnectionError)?)
         .map_err(|_| RpcError::InternalError("Failed to parse binary response".to_string()))?
     })
+  }
+
+  pub async fn get_protocol(&self) -> Result<Protocol, RpcError> {
+    #[derive(Deserialize, Debug)]
+    struct ProtocolResponse {
+      major_version: usize,
+    }
+
+    #[derive(Deserialize, Debug)]
+    struct LastHeaderResponse {
+      block_header: ProtocolResponse,
+    }
+
+    Ok(
+      match self
+        .rpc_call::<_, JsonRpcResponse<LastHeaderResponse>>(
+          "json_rpc",
+          Some(json!({
+            "method": "get_last_block_header"
+          })),
+        )
+        .await?
+        .result
+        .block_header
+        .major_version
+      {
+        13 | 14 => Protocol::v14,
+        15 | 16 => Protocol::v16,
+        _ => Protocol::Unsupported,
+      },
+    )
   }
 
   pub async fn get_height(&self) -> Result<usize, RpcError> {

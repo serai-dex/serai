@@ -11,7 +11,7 @@ use monero::{consensus::Encodable, PublicKey, blockdata::transaction::SubField};
 use frost::FrostError;
 
 use crate::{
-  Commitment, random_scalar,
+  Protocol, Commitment, random_scalar,
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagInput, Clsag},
@@ -161,6 +161,7 @@ impl Fee {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignableTransaction {
+  protocol: Protocol,
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
   outputs: Vec<SendOutput>,
@@ -169,13 +170,12 @@ pub struct SignableTransaction {
 
 impl SignableTransaction {
   pub fn new(
+    protocol: Protocol,
     inputs: Vec<SpendableOutput>,
     mut payments: Vec<(Address, u64)>,
     change_address: Option<Address>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
-    let ring_len = 16;
-
     // Make sure all addresses are valid
     let test = |addr: Address| match addr.meta.kind {
       AddressType::Standard => Ok(()),
@@ -204,15 +204,19 @@ impl SignableTransaction {
     if change && change_address.is_none() {
       Err(TransactionError::NoChange)?;
     }
-    let mut outputs = payments.len() + (if change { 1 } else { 0 });
+    let outputs = payments.len() + (if change { 1 } else { 0 });
 
     // Calculate the extra length.
     // Type, length, value, with 1 field for the first key and 1 field for the rest
     let extra = (outputs * (2 + 32)) - (outputs.saturating_sub(2) * 2);
 
     // Calculate the fee.
-    let mut fee =
-      fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs, extra));
+    let mut fee = fee_rate.calculate(Transaction::fee_weight(
+      protocol.ring_len(),
+      inputs.len(),
+      outputs,
+      extra,
+    ));
 
     // Make sure we have enough funds
     let in_amount = inputs.iter().map(|input| input.commitment.amount).sum::<u64>();
@@ -224,26 +228,28 @@ impl SignableTransaction {
     // If we have yet to add a change output, do so if it's economically viable
     if (!change) && change_address.is_some() && (in_amount != out_amount) {
       // Check even with the new fee, there's remaining funds
-      let change_fee =
-        fee_rate.calculate(Transaction::fee_weight(ring_len, inputs.len(), outputs + 1, extra)) -
-          fee;
+      let change_fee = fee_rate.calculate(Transaction::fee_weight(
+        protocol.ring_len(),
+        inputs.len(),
+        outputs + 1,
+        extra,
+      )) - fee;
       if (out_amount + change_fee) < in_amount {
         change = true;
-        outputs += 1;
         out_amount += change_fee;
         fee += change_fee;
       }
-    }
-
-    if outputs > MAX_OUTPUTS {
-      Err(TransactionError::TooManyOutputs)?;
     }
 
     if change {
       payments.push((change_address.unwrap(), in_amount - out_amount));
     }
 
-    Ok(SignableTransaction { inputs, payments, outputs: vec![], fee })
+    if payments.len() > MAX_OUTPUTS {
+      Err(TransactionError::TooManyOutputs)?;
+    }
+
+    Ok(SignableTransaction { protocol, inputs, payments, outputs: vec![], fee })
   }
 
   fn prepare_outputs<R: RngCore + CryptoRng>(
@@ -265,7 +271,14 @@ impl SignableTransaction {
     (commitments, sum)
   }
 
-  fn prepare_transaction(&self, commitments: &[Commitment], bp: Bulletproofs) -> Transaction {
+  fn prepare_transaction<R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    commitments: &[Commitment],
+  ) -> Transaction {
+    // Safe due to the constructor checking MAX_OUTPUTS
+    let bp = Bulletproofs::prove(rng, commitments, self.protocol.bp_plus()).unwrap();
+
     // Create the TX extra
     // TODO: Review this for canonicity with Monero
     let mut extra = vec![];
@@ -281,7 +294,11 @@ impl SignableTransaction {
     let mut tx_outputs = Vec::with_capacity(self.outputs.len());
     let mut ecdh_info = Vec::with_capacity(self.outputs.len());
     for o in 0 .. self.outputs.len() {
-      tx_outputs.push(Output { amount: 0, key: self.outputs[o].dest, tag: Some(0) });
+      tx_outputs.push(Output {
+        amount: 0,
+        key: self.outputs[o].dest,
+        tag: Some(0).filter(|_| matches!(self.protocol, Protocol::v16)),
+      });
       ecdh_info.push(self.outputs[o].amount);
     }
 
@@ -300,7 +317,6 @@ impl SignableTransaction {
           commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
         },
         prunable: RctPrunable::Clsag {
-          plus: matches!(bp, Bulletproofs::Plus { .. }),
           bulletproofs: vec![bp],
           clsags: vec![],
           pseudo_outs: vec![],
@@ -313,7 +329,6 @@ impl SignableTransaction {
     &mut self,
     rng: &mut R,
     rpc: &Rpc,
-    ring_len: usize,
     spend: &Scalar,
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
@@ -337,10 +352,10 @@ impl SignableTransaction {
       ),
     );
 
-    let mut tx =
-      self.prepare_transaction(&commitments, Bulletproofs::prove(rng, &commitments, true)?);
+    let mut tx = self.prepare_transaction(rng, &commitments);
 
-    let signable = prepare_inputs(rng, rpc, ring_len, &self.inputs, spend, &mut tx).await?;
+    let signable =
+      prepare_inputs(rng, rpc, self.protocol.ring_len(), &self.inputs, spend, &mut tx).await?;
 
     let clsag_pairs = Clsag::sign(rng, &signable, mask_sum, tx.signature_hash());
     match tx.rct_signatures.prunable {

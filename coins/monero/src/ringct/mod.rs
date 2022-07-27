@@ -71,20 +71,15 @@ impl RctBase {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RctPrunable {
   Null,
-  Clsag {
-    plus: bool,
-    bulletproofs: Vec<Bulletproofs>,
-    clsags: Vec<Clsag>,
-    pseudo_outs: Vec<EdwardsPoint>,
-  },
+  Clsag { bulletproofs: Vec<Bulletproofs>, clsags: Vec<Clsag>, pseudo_outs: Vec<EdwardsPoint> },
 }
 
 impl RctPrunable {
   pub fn rct_type(&self) -> u8 {
     match self {
       RctPrunable::Null => 0,
-      RctPrunable::Clsag { plus, .. } => {
-        if !plus {
+      RctPrunable::Clsag { bulletproofs, .. } => {
+        if matches!(bulletproofs[0], Bulletproofs::Original { .. }) {
           5
         } else {
           6
@@ -113,24 +108,18 @@ impl RctPrunable {
     decoys: &[usize],
     r: &mut R,
   ) -> std::io::Result<RctPrunable> {
-    let mut read_clsag = |plus| -> std::io::Result<RctPrunable> {
-      Ok(RctPrunable::Clsag {
-        plus,
+    Ok(match rct_type {
+      0 => RctPrunable::Null,
+      5 | 6 => RctPrunable::Clsag {
         bulletproofs: read_vec(
-          if !plus { Bulletproofs::deserialize } else { Bulletproofs::deserialize_plus },
+          if rct_type == 5 { Bulletproofs::deserialize } else { Bulletproofs::deserialize_plus },
           r,
         )?,
         clsags: (0 .. decoys.len())
           .map(|o| Clsag::deserialize(decoys[o], r))
           .collect::<Result<_, _>>()?,
         pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
-      })
-    };
-
-    Ok(match rct_type {
-      0 => RctPrunable::Null,
-      5 => read_clsag(false)?,
-      6 => read_clsag(true)?,
+      },
       _ => Err(std::io::Error::new(
         std::io::ErrorKind::Other,
         "Tried to deserialize unknown RCT type",
