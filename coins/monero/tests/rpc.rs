@@ -10,7 +10,7 @@ use monero::{
 };
 
 use monero_serai::{
-  random_scalar,
+  Protocol, random_scalar,
   rpc::{EmptyResponse, RpcError, Rpc},
 };
 
@@ -29,8 +29,10 @@ pub async fn rpc() -> Rpc {
   )
   .to_string();
 
-  // Mine 10 blocks so we have 10 decoys so decoy selection doesn't fail
+  // Mine 20 blocks to ensure decoy availability
   mine_block(&rpc, &addr).await.unwrap();
+  mine_block(&rpc, &addr).await.unwrap();
+  assert!(!matches!(rpc.get_protocol().await.unwrap(), Protocol::Unsupported));
 
   rpc
 }

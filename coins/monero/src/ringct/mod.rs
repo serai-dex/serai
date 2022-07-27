@@ -31,7 +31,7 @@ impl RctBase {
     w.write_all(&[rct_type])?;
     match rct_type {
       0 => Ok(()),
-      5 => {
+      5 | 6 => {
         write_varint(&self.fee, w)?;
         for ecdh in &self.ecdh_info {
           w.write_all(ecdh)?;
@@ -78,18 +78,24 @@ impl RctPrunable {
   pub fn rct_type(&self) -> u8 {
     match self {
       RctPrunable::Null => 0,
-      RctPrunable::Clsag { .. } => 5,
+      RctPrunable::Clsag { bulletproofs, .. } => {
+        if matches!(bulletproofs[0], Bulletproofs::Original { .. }) {
+          5
+        } else {
+          6
+        }
+      }
     }
   }
 
-  pub(crate) fn fee_weight(inputs: usize, outputs: usize) -> usize {
-    1 + Bulletproofs::fee_weight(outputs) + (inputs * (Clsag::fee_weight() + 32))
+  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
+    1 + Bulletproofs::fee_weight(outputs) + (inputs * (Clsag::fee_weight(ring_len) + 32))
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       RctPrunable::Null => Ok(()),
-      RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
+      RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs, .. } => {
         write_vec(Bulletproofs::serialize, bulletproofs, w)?;
         write_raw_vec(Clsag::serialize, clsags, w)?;
         write_raw_vec(write_point, pseudo_outs, w)
@@ -104,8 +110,11 @@ impl RctPrunable {
   ) -> std::io::Result<RctPrunable> {
     Ok(match rct_type {
       0 => RctPrunable::Null,
-      5 => RctPrunable::Clsag {
-        bulletproofs: read_vec(Bulletproofs::deserialize, r)?,
+      5 | 6 => RctPrunable::Clsag {
+        bulletproofs: read_vec(
+          if rct_type == 5 { Bulletproofs::deserialize } else { Bulletproofs::deserialize_plus },
+          r,
+        )?,
         clsags: (0 .. decoys.len())
           .map(|o| Clsag::deserialize(decoys[o], r))
           .collect::<Result<_, _>>()?,
@@ -135,8 +144,8 @@ pub struct RctSignatures {
 }
 
 impl RctSignatures {
-  pub(crate) fn fee_weight(inputs: usize, outputs: usize) -> usize {
-    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(inputs, outputs)
+  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
+    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(ring_len, inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

@@ -10,11 +10,12 @@ pub(crate) mod scalar_vector;
 
 mod core;
 pub(crate) use self::core::Bulletproofs;
-use self::core::{MAX_M, prove};
+use self::core::{MAX_M, prove, prove_plus};
 
 pub(crate) const MAX_OUTPUTS: usize = MAX_M;
 
 impl Bulletproofs {
+  // TODO
   pub(crate) fn fee_weight(outputs: usize) -> usize {
     let proofs = 6 + usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
     let len = (9 + (2 * proofs)) * 32;
@@ -32,11 +33,12 @@ impl Bulletproofs {
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: &[Commitment],
+    plus: bool,
   ) -> Result<Bulletproofs, TransactionError> {
     if outputs.len() > MAX_OUTPUTS {
       return Err(TransactionError::TooManyOutputs)?;
     }
-    Ok(prove(rng, outputs))
+    Ok(if !plus { prove(rng, outputs) } else { prove_plus(rng, outputs) })
   }
 
   fn serialize_core<W: std::io::Write, F: Fn(&[EdwardsPoint], &mut W) -> std::io::Result<()>>(
@@ -57,6 +59,17 @@ impl Bulletproofs {
         write_scalar(a, w)?;
         write_scalar(b, w)?;
         write_scalar(t, w)
+      }
+
+      Bulletproofs::Plus { A, A1, B, r1, s1, d1, L, R } => {
+        write_point(A, w)?;
+        write_point(A1, w)?;
+        write_point(B, w)?;
+        write_scalar(r1, w)?;
+        write_scalar(s1, w)?;
+        write_scalar(d1, w)?;
+        specific_write_vec(L, w)?;
+        specific_write_vec(R, w)
       }
     }
   }
@@ -82,6 +95,19 @@ impl Bulletproofs {
       a: read_scalar(r)?,
       b: read_scalar(r)?,
       t: read_scalar(r)?,
+    })
+  }
+
+  pub fn deserialize_plus<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
+    Ok(Bulletproofs::Plus {
+      A: read_point(r)?,
+      A1: read_point(r)?,
+      B: read_point(r)?,
+      r1: read_scalar(r)?,
+      s1: read_scalar(r)?,
+      d1: read_scalar(r)?,
+      L: read_vec(read_point, r)?,
+      R: read_vec(read_point, r)?,
     })
   }
 }

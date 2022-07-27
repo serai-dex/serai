@@ -25,6 +25,32 @@ pub mod wallet;
 #[cfg(test)]
 mod tests;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(non_camel_case_types)]
+pub enum Protocol {
+  Unsupported,
+  v14,
+  v16,
+}
+
+impl Protocol {
+  pub(crate) fn ring_len(&self) -> usize {
+    match self {
+      Protocol::Unsupported => panic!("Unsupported protocol version"),
+      Protocol::v14 => 11,
+      Protocol::v16 => 16,
+    }
+  }
+
+  pub(crate) fn bp_plus(&self) -> bool {
+    match self {
+      Protocol::Unsupported => panic!("Unsupported protocol version"),
+      Protocol::v14 => false,
+      Protocol::v16 => true,
+    }
+  }
+}
+
 lazy_static! {
   static ref H: EdwardsPoint =
     CompressedEdwardsY(hash(&ED25519_BASEPOINT_POINT.compress().to_bytes()))

@@ -27,7 +27,6 @@ use crate::{
   random_scalar,
   ringct::{
     clsag::{ClsagInput, ClsagDetails, ClsagMultisig},
-    bulletproofs::Bulletproofs,
     RctPrunable,
   },
   transaction::{Input, Transaction},
@@ -143,6 +142,7 @@ impl SignableTransaction {
       // committed to. They'll also be committed to later via the TX message as a whole
       &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys")),
       rpc,
+      self.protocol.ring_len(),
       height,
       &self.inputs,
     )
@@ -300,12 +300,8 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       );
 
       self.signable.prepare_transaction(
+        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs")),
         &commitments,
-        Bulletproofs::prove(
-          &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs")),
-          &commitments,
-        )
-        .unwrap(),
       )
     };
 

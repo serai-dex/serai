@@ -115,12 +115,12 @@ async fn send_core(test: usize, multisig: bool) {
         continue;
       }
 
-      // We actually need 80 decoys for this transaction, so mine until then
-      // 80 + 60 (miner TX maturity) + 10 (lock blocks)
+      // We actually need 120 decoys for this transaction, so mine until then
+      // 120 + 60 (miner TX maturity) + 10 (lock blocks)
       // It is possible for this to be lower, by noting maturity is sufficient regardless of lock
       // blocks, yet that's not currently implemented
       // TODO, if we care
-      while rpc.get_height().await.unwrap() < 160 {
+      while rpc.get_height().await.unwrap() < 200 {
         mine_block(&rpc, &addr.to_string()).await.unwrap();
       }
 
@@ -132,9 +132,14 @@ async fn send_core(test: usize, multisig: bool) {
       }
     }
 
-    let mut signable =
-      SignableTransaction::new(outputs, vec![(addr, amount - 10000000000)], Some(addr), fee)
-        .unwrap();
+    let mut signable = SignableTransaction::new(
+      rpc.get_protocol().await.unwrap(),
+      outputs,
+      vec![(addr, amount - 10000000000)],
+      Some(addr),
+      fee,
+    )
+    .unwrap();
 
     if !multisig {
       tx = Some(signable.sign(&mut OsRng, &rpc, &spend).await.unwrap());

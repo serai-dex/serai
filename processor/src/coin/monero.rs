@@ -150,6 +150,7 @@ impl Coin for Monero {
       transcript,
       height,
       MSignableTransaction::new(
+        self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
         Some(self.address(spend)),
@@ -231,8 +232,9 @@ impl Coin for Monero {
       .ignore_timelock();
 
     let amount = outputs[0].commitment.amount;
-    let fee = 1000000000; // TODO
+    let fee = 3000000000; // TODO
     let tx = MSignableTransaction::new(
+      self.rpc.get_protocol().await.unwrap(),
       outputs,
       vec![(address, amount - fee)],
       Some(self.empty_address()),

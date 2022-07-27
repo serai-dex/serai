@@ -8,7 +8,6 @@ use rand_distr::{Distribution, Gamma};
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
-  transaction::RING_LEN,
   wallet::SpendableOutput,
   rpc::{RpcError, Rpc},
 };
@@ -19,8 +18,6 @@ const RECENT_WINDOW: usize = 15;
 const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
-
-const DECOYS: usize = RING_LEN - 1;
 
 lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
@@ -109,9 +106,12 @@ impl Decoys {
   pub(crate) async fn select<R: RngCore + CryptoRng>(
     rng: &mut R,
     rpc: &Rpc,
+    ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],
   ) -> Result<Vec<Decoys>, RpcError> {
+    let decoy_count = ring_len - 1;
+
     // Convert the inputs in question to the raw output data
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
@@ -152,7 +152,7 @@ impl Decoys {
     }
 
     // TODO: Simply create a TX with less than the target amount
-    if (high - MATURITY) < u64::try_from(inputs.len() * RING_LEN).unwrap() {
+    if (high - MATURITY) < u64::try_from(inputs.len() * ring_len).unwrap() {
       Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
     }
 
@@ -160,12 +160,12 @@ impl Decoys {
     // We should almost never naturally generate an insane transaction, hence why this doesn't
     // bother with an overage
     let mut decoys =
-      select_n(rng, rpc, height, high, per_second, &mut used, inputs.len() * DECOYS).await?;
+      select_n(rng, rpc, height, high, per_second, &mut used, inputs.len() * decoy_count).await?;
 
     let mut res = Vec::with_capacity(inputs.len());
     for o in outputs {
       // Grab the decoys for this specific output
-      let mut ring = decoys.drain((decoys.len() - DECOYS) ..).collect::<Vec<_>>();
+      let mut ring = decoys.drain((decoys.len() - decoy_count) ..).collect::<Vec<_>>();
       ring.push(o);
       ring.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -180,9 +180,9 @@ impl Decoys {
       if high > 500 {
         // Make sure the TX passes the sanity check that the median output is within the last 40%
         let target_median = high * 3 / 5;
-        while ring[RING_LEN / 2].0 < target_median {
+        while ring[ring_len / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
-          for removed in ring.drain(0 .. (RING_LEN / 2)).collect::<Vec<_>>() {
+          for removed in ring.drain(0 .. (ring_len / 2)).collect::<Vec<_>>() {
             // If we removed the real spend, add it back
             if removed.0 == o.0 {
               ring.push(o);
@@ -197,7 +197,7 @@ impl Decoys {
 
           // Select new outputs until we have a full sized ring again
           ring.extend(
-            select_n(rng, rpc, height, high, per_second, &mut used, RING_LEN - ring.len()).await?,
+            select_n(rng, rpc, height, high, per_second, &mut used, ring_len - ring.len()).await?,
           );
           ring.sort_by(|a, b| a.0.cmp(&b.0));
         }
