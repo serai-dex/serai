@@ -5,11 +5,11 @@ on:
     branches:
       - develop
     paths:
-      - coins/monero
+      - "coins/monero/**"
 
   pull_request:
     paths:
-      - coins/monero
+      - "coins/monero/**"
 
 jobs:
   # Only run these once since they will be consistent regardless of any node
