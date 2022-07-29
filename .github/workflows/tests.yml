@@ -16,13 +16,10 @@ jobs:
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
-
-      - name: Install Rust
-        uses: ./.github/actions/cached-rust
         with:
           # Clippy requires nightly for some reason
-          toolchain: nightly
-          components: clippy
+          rust-toolchain: nightly
+          rust-components: clippy
 
       - name: Run Clippy
         run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
@@ -34,53 +31,18 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Build Dependencies
-        uses: ./.github/actions/build-dependencies
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-
-      - name: Monero Regtest Daemon
-        uses: ./.github/actions/monero
-
-      - name: Install Rust
-        uses: ./.github/actions/cached-rust
-
-      - name: Run tests
+      - name: Run Tests
         run: cargo test --all-features
-
-  # Test the Monero code against protocol v14 (node v17) as well
-  test-monero14:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-
-      - name: Build Dependencies
-        uses: ./.github/actions/build-dependencies
-
-      - name: Monero Regtest Daemon
-        uses: ./.github/actions/monero
-        with:
-          version: v0.17.3.2
-
-      - name: Install Rust
-        uses: ./.github/actions/cached-rust
-
-      - name: Run tests
-        run: |
-          (cd coins/monero && cargo test --all-features)
-          (cd processor && cargo test --all-features monero)
 
   fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      # Doesn't grab the cache because it doesn't need it
+      # Doesn't grab the cache as it's not needed
       - name: Install rustfmt
         uses: actions-rs/toolchain@v1
         with:

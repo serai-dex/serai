@@ -1,0 +1,37 @@
+name: Monero Tests
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - coins/monero
+
+  pull_request:
+    paths:
+      - coins/monero
+
+jobs:
+  monero-tests:
+    runs-on: ubuntu-latest
+    # Test against all supported protocol versions
+    strategy:
+      matrix:
+        version: [v0.17.3.2, v0.18.0.0]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
+        with:
+          monero-version: ${{ matrix.version }}
+
+      - name: Run Monero Tests
+        # https://github.com/rust-lang/cargo/issues/8396
+        run: cd coins/monero && cargo test --all-features --test '*'
+
+      - name: Run Processor's Monero Tests
+        run: cd processor && cargo test --all-features monero

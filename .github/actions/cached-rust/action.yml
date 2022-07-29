@@ -15,7 +15,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Rust cache
+    - name: Rust Cache
       uses: actions/cache@v3
       with:
         path: |
