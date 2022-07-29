@@ -10,7 +10,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Monero daemon cache
+    - name: Monero Daemon Cache
       id: cache-monerod
       uses: actions/cache@v3
       with:

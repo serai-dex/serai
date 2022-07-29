@@ -1,0 +1,24 @@
+name: test-dependencies
+description: Installs test dependencies for Serai
+
+inputs:
+  monero-version:
+    description: "Monero version to download and run as a regtest node"
+    required: false
+    default: v0.18.0.0
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Build Dependencies
+      uses: ./.github/actions/build-dependencies
+
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+      with:
+        version: nightly
+
+    - name: Run a Monero Regtest Node
+      uses: ./.github/actions/monero
+      with:
+        version: ${{ inputs.monero-version }}
