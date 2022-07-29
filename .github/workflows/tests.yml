@@ -35,7 +35,8 @@ jobs:
         uses: ./.github/actions/test-dependencies
 
       - name: Run Tests
-        run: cargo test --all-features
+        # Exclude Monero Serai which has a dedicated workflow run whenever it changes
+        run: cargo test --exclude monero-serai --all-features
 
   fmt:
     runs-on: ubuntu-latest

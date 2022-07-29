@@ -12,7 +12,24 @@ on:
       - coins/monero
 
 jobs:
-  monero-tests:
+  # Only run these once since they will be consistent regardless of any node
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
+
+      - name: Run Unit Tests Without Features
+        run: cargo test --package monero-serai --lib
+
+      - name: Run Unit Tests
+        run: cargo test --package monero-serai --all-features --lib
+
+  integration-tests:
     runs-on: ubuntu-latest
     # Test against all supported protocol versions
     strategy:
@@ -29,9 +46,12 @@ jobs:
         with:
           monero-version: ${{ matrix.version }}
 
-      - name: Run Monero Tests
+      - name: Run Integration Tests Without Features
+        run: cargo test --package monero-serai --test '*'
+
+      - name: Run Integration Tests
         # https://github.com/rust-lang/cargo/issues/8396
-        run: cd coins/monero && cargo test --all-features --test '*'
+        run: cargo test --package monero-serai --all-features --test '*'
 
       - name: Run Processor's Monero Tests
-        run: cd processor && cargo test --all-features monero
+        run: cargo test --package serai-processor monero
