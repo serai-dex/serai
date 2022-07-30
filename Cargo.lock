@@ -1524,7 +1524,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dleq-serai"
+name = "dleq"
 version = "0.1.0"
 dependencies = [
  "blake2",
@@ -4522,7 +4522,7 @@ name = "modular-frost"
 version = "0.2.0"
 dependencies = [
  "dalek-ff-group",
- "dleq-serai",
+ "dleq",
  "elliptic-curve",
  "ff",
  "flexible-transcript",
@@ -4570,7 +4570,7 @@ dependencies = [
  "blake2",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
- "dleq-serai",
+ "dleq",
  "flexible-transcript",
  "group",
  "hex",

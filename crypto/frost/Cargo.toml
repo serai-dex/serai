@@ -28,7 +28,7 @@ transcript = { package = "flexible-transcript", path = "../transcript", version 
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
-dleq = { package = "dleq-serai", path = "../dleq", version = "0.1", features = ["serialize"] }
+dleq = { path = "../dleq", version = "0.1", features = ["serialize"] }
 
 [dev-dependencies]
 sha2 = "0.10"
