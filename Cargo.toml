@@ -19,6 +19,7 @@ members = [
 
   "processor",
 
+  "substrate/in-instructions",
   "substrate/runtime",
   "substrate/consensus",
   "substrate/node",

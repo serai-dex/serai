@@ -7547,6 +7547,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-in-instructions"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-std",
+ "thiserror",
+]
+
+[[package]]
 name = "serai-multisig"
 version = "0.1.0"
 dependencies = [
