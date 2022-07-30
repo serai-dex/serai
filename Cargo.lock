@@ -7525,7 +7525,6 @@ dependencies = [
  "sc-network",
  "sc-service",
  "sc-transaction-pool",
- "serai-in-instructions",
  "serai-runtime",
  "sp-api",
  "sp-consensus",
@@ -7545,21 +7544,6 @@ dependencies = [
  "ink_env",
  "ink_lang",
  "parity-scale-codec",
-]
-
-[[package]]
-name = "serai-in-instructions"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-inherents",
- "sp-runtime",
- "sp-std",
- "thiserror",
 ]
 
 [[package]]
@@ -7653,7 +7637,6 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "scale-info",
- "serai-in-instructions",
  "sp-api",
  "sp-block-builder",
  "sp-core",

@@ -42,3 +42,7 @@ runs:
         toolchain: ${{ steps.nightly.outputs.version }}
         profile: minimal
         target: wasm32-unknown-unknown
+
+    - name: Install subxt
+      shell: bash
+      run: cargo install subxt-cli

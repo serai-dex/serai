@@ -26,6 +26,9 @@ transcript = { package = "flexible-transcript", path = "../crypto/transcript", f
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
+scale = { package = "parity-scale-codec", version = "3.0.0" }
+subxt = "0.22"
+
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 [dev-dependencies]
