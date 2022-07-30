@@ -66,24 +66,22 @@ pub fn create_benchmark_extrinsic(
 
   runtime::UncheckedExtrinsic::new_signed(
     call.clone(),
-    sp_runtime::AccountId32::from(sender.public()).into(),
-    runtime::Signature::Sr25519(
-      runtime::SignedPayload::from_raw(
-        call,
-        extra.clone(),
-        (
-          (),
-          runtime::VERSION.spec_version,
-          runtime::VERSION.transaction_version,
-          client.block_hash(0).ok().flatten().unwrap(),
-          client.chain_info().best_hash,
-          (),
-          (),
-          (),
-        ),
-      )
-      .using_encoded(|e| sender.sign(e)),
-    ),
+    sender.public(),
+    runtime::SignedPayload::from_raw(
+      call,
+      extra.clone(),
+      (
+        (),
+        runtime::VERSION.spec_version,
+        runtime::VERSION.transaction_version,
+        client.block_hash(0).ok().flatten().unwrap(),
+        client.chain_info().best_hash,
+        (),
+        (),
+        (),
+      ),
+    )
+    .using_encoded(|e| sender.sign(e)),
     extra,
   )
 }

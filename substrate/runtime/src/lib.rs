@@ -7,9 +7,9 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys,
-  traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+  traits::{IdentityLookup, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, MultiSignature, Perbill,
+  ApplyExtrinsicResult, Perbill,
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -34,12 +34,11 @@ use pallet_transaction_payment::CurrencyAdapter;
 /// An index to a block.
 pub type BlockNumber = u32;
 
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
-pub type Signature = MultiSignature;
+/// Signature type
+pub type Signature = sp_core::sr25519::Signature;
 
-/// Some way of identifying an account on the chain. We intentionally make it equivalent
-/// to the public key of our transaction signing scheme.
-pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+/// Account ID type, equivalent to a public key
+pub type AccountId = sp_core::sr25519::Public;
 
 /// Balance of an account.
 pub type Balance = u64;
@@ -103,7 +102,7 @@ parameter_types! {
   pub const BlockHashCount: BlockNumber = 2400;
   pub const Version: RuntimeVersion = VERSION;
 
-  pub const SS58Prefix: u8 = 42; // TODO: Remove
+  pub const SS58Prefix: u8 = 42; // TODO: Remove for Bech32m
 
   // 1 MB block size limit
   pub BlockLength: frame_system::limits::BlockLength =
@@ -132,7 +131,7 @@ impl frame_system::Config for Runtime {
   type BlockLength = BlockLength;
   type AccountId = AccountId;
   type RuntimeCall = RuntimeCall;
-  type Lookup = AccountIdLookup<AccountId, ()>;
+  type Lookup = IdentityLookup<AccountId>;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
@@ -151,7 +150,7 @@ impl frame_system::Config for Runtime {
 
   type AccountData = pallet_balances::AccountData<Balance>;
   type SystemWeightInfo = ();
-  type SS58Prefix = SS58Prefix; // TODO: Remove
+  type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
@@ -193,12 +192,6 @@ impl pallet_contracts::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type RuntimeCall = RuntimeCall;
 
-  /// The safest default is to allow no calls at all.
-  ///
-  /// Runtimes should whitelist dispatchables that are allowed to be called from contracts
-  /// and make sure they are stable. Dispatchables exposed to contracts are not allowed to
-  /// change because that would break already deployed contracts. The `Call` structure itself
-  /// is not allowed to change the indices of existing pallets, too.
   type CallFilter = frame_support::traits::Nothing;
   type DepositPerItem = DepositPerItem;
   type DepositPerByte = DepositPerByte;
@@ -215,7 +208,7 @@ impl pallet_contracts::Config for Runtime {
   type MaxStorageKeyLen = ConstU32<128>;
 }
 
-pub type Address = sp_runtime::MultiAddress<AccountId, ()>;
+pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedExtra = (
