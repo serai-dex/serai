@@ -1,4 +1,10 @@
-use std::{io::Write, env, path::Path, fs::{File, remove_file}, process::Command};
+use std::{
+  io::Write,
+  env,
+  path::Path,
+  fs::{File, remove_file},
+  process::Command,
+};
 
 #[must_use]
 fn subxt(metadata: &Path) -> bool {
@@ -35,12 +41,14 @@ fn main() {
   }
 
   // Run a task, running it every 10 seconds for the specified amount of minutes
-  let run_for_minutes = |minutes, task: &mut dyn FnMut() -> bool| for _ in 0 .. (minutes * 6) {
-    if task() {
-      break;
-    }
+  let run_for_minutes = |minutes, task: &mut dyn FnMut() -> bool| {
+    for _ in 0 .. (minutes * 6) {
+      if task() {
+        break;
+      }
 
-    std::thread::sleep(std::time::Duration::from_secs(10));
+      std::thread::sleep(std::time::Duration::from_secs(10));
+    }
   };
 
   // If the node doesn't exist, wait for it to

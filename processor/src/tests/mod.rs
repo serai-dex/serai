@@ -1,4 +1,4 @@
-mod serai;
+mod substrate;
 
 mod send;
 pub(crate) use send::test_send;

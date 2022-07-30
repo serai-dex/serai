@@ -27,6 +27,8 @@ dalek-ff-group = { path = "../crypto/dalek-ff-group" }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
 scale = { package = "parity-scale-codec", version = "3.0.0" }
+frame-system = { git = "https://github.com/serai-dex/substrate" }
+serai-runtime = { path = "../substrate/runtime" }
 subxt = "0.22"
 
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
