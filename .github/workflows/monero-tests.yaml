@@ -26,8 +26,7 @@ jobs:
       - name: Run Unit Tests Without Features
         run: cargo test --package monero-serai --lib
 
-      - name: Run Unit Tests
-        run: cargo test --package monero-serai --all-features --lib
+      # Doesn't run unit tests with features as the tests workflow will
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -47,11 +46,12 @@ jobs:
           monero-version: ${{ matrix.version }}
 
       - name: Run Integration Tests Without Features
+        # https://github.com/rust-lang/cargo/issues/8396
         run: cargo test --package monero-serai --test '*'
 
       - name: Run Integration Tests
-        # https://github.com/rust-lang/cargo/issues/8396
-        run: cargo test --package monero-serai --all-features --test '*'
-
-      - name: Run Processor's Monero Tests
-        run: cargo test --package serai-processor monero
+        # Don't run if the the tests workflow also will
+        if: ${{ matrix.version != v0.18.0.0 }}
+        run: |
+          cargo test --package monero-serai --all-features --test '*'
+          cargo test --package serai-processor monero
