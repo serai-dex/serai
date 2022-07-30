@@ -1,9 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use scale::Encode;
-#[cfg(feature = "std")]
-use scale::Decode;
+use scale::{Encode, Decode};
 
+use sp_std::vec::Vec;
 use sp_inherents::{InherentData, InherentIdentifier, IsFatalError};
 
 pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
@@ -11,22 +10,22 @@ pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 // the odds of synchrony
 const DELAY: u32 = 2;
 
-#[derive(Clone, PartialEq, Eq, Encode)]
-#[cfg_attr(feature = "std", derive(Debug, Decode, scale_info::TypeInfo))]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo)]
+#[cfg_attr(feature = "std", derive(Debug))]
 pub struct InInstruction {
   destination: [u8; 32],
   amount: u64,
   data: Vec<u8>,
 }
 
-type Batch = Vec<InInstruction>;
-type Batches = Vec<Batch>;
-type Coins = Vec<Batches>;
+pub(crate) type Batch = Vec<InInstruction>;
+pub(crate) type Batches = Vec<Batch>;
+pub(crate) type Coins = Vec<Batches>;
 
 // Block we learned of it, instructions
-type TimedBatch = (u32, Batch);
-type PendingBatches = Vec<TimedBatch>;
-type PendingCoins = Vec<PendingBatches>;
+pub(crate) type TimedBatch = (u32, Batch);
+pub(crate) type PendingBatches = Vec<TimedBatch>;
+pub(crate) type PendingCoins = Vec<PendingBatches>;
 
 #[derive(Encode, sp_runtime::RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Decode, thiserror::Error))]
@@ -36,9 +35,9 @@ pub enum InherentError {
   #[cfg_attr(feature = "std", error("inherent has {0} coins despite us having {1}"))]
   UnrecognizedCoins(u32, u32),
   #[cfg_attr(feature = "std", error("coin {0} has {1} more batches than we do"))]
-  UnrecognizedBatch(u16, u32),
+  UnrecognizedBatch(u32, u32),
   #[cfg_attr(feature = "std", error("coin {0} has an invalid batch"))]
-  InvalidBatch(u16),
+  InvalidBatch(u32),
 }
 
 impl IsFatalError for InherentError {
@@ -54,7 +53,15 @@ pub mod pallet {
   use frame_system::pallet_prelude::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config {}
+  pub trait Config: frame_system::Config {
+    type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+  }
+
+  #[pallet::event]
+  #[pallet::generate_deposit(fn deposit_event)]
+  pub enum Event<T: Config> {
+    Batch(u32, u32),
+  }
 
   #[pallet::pallet]
   #[pallet::generate_store(pub(super) trait Store)]
@@ -65,10 +72,6 @@ pub mod pallet {
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-    fn on_initialize(_: BlockNumberFor<T>) -> Weight {
-      0
-    }
-
     fn on_finalize(_: BlockNumberFor<T>) {
       ExecutedBatches::<T>::take();
     }
@@ -82,7 +85,15 @@ pub mod pallet {
       assert!(!ExecutedBatches::<T>::exists());
       ExecutedBatches::<T>::put(true);
 
-      // TODO: EXECUTE
+      for (coin, batches) in coins.iter().enumerate() {
+        for batch in batches {
+          Self::deposit_event(Event::Batch(
+            coin.try_into().unwrap(),
+            batch.len().try_into().unwrap(),
+          ));
+          // TODO: EXECUTE
+        }
+      }
 
       Ok(())
     }
