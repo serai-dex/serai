@@ -33,6 +33,7 @@ substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate"
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
 sp-api = { git = "https://github.com/serai-dex/substrate" }
 
+serai-in-instructions = { path = "../in-instructions" }
 serai-runtime = { path = "../runtime" }
 
 tokio = "1"

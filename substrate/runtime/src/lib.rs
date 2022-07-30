@@ -208,6 +208,10 @@ impl pallet_contracts::Config for Runtime {
   type MaxStorageKeyLen = ConstU32<128>;
 }
 
+impl serai_in_instructions::pallet::Config for Runtime {
+  type Event = Event;
+}
+
 pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
@@ -239,11 +243,14 @@ construct_runtime!(
     UncheckedExtrinsic = UncheckedExtrinsic
   {
     System: frame_system,
+
     RandomnessCollectiveFlip: pallet_randomness_collective_flip,
     Timestamp: pallet_timestamp,
     Balances: pallet_balances,
     TransactionPayment: pallet_transaction_payment,
     Contracts: pallet_contracts,
+
+    InInstructions: serai_in_instructions::pallet,
   }
 );
 
@@ -347,6 +354,7 @@ sp_api::impl_runtime_apis! {
     ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<Balance> {
       TransactionPayment::query_info(uxt, len)
     }
+
     fn query_fee_details(
       uxt: <Block as BlockT>::Extrinsic,
       len: u32,

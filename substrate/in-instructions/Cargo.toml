@@ -14,12 +14,12 @@ thiserror = { version = "1", optional = true }
 scale = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
 
-sp-std = { default-features = false, git = "https://github.com/serai-dex/substrate" }
-sp-inherents = { default-features = false, git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { default-features = false, git = "https://github.com/serai-dex/substrate" }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-inherents = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-frame-system = { default-features = false, git = "https://github.com/serai-dex/substrate" }
-frame-support = { default-features = false, git = "https://github.com/serai-dex/substrate" }
+frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
 std = [

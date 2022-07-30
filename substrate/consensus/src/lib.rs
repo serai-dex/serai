@@ -31,6 +31,14 @@ pub type FullClient =
 
 type Db = sp_trie::PrefixedMemoryDB<sp_runtime::traits::BlakeTwo256>;
 
+fn providers(
+) -> (sp_timestamp::InherentDataProvider, serai_in_instructions::provider::InherentDataProvider) {
+  (
+    sp_timestamp::InherentDataProvider::from_system_time(),
+    serai_in_instructions::provider::InherentDataProvider::new(),
+  )
+}
+
 pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
   task_manager: &TaskManager,
   client: Arc<FullClient>,
@@ -43,7 +51,8 @@ pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
     algorithm::AcceptAny,
     0,
     select_chain,
-    |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
+    |_, _| async { Ok(providers()) },
+    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
   sc_pow::import_queue(
@@ -101,7 +110,8 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     algorithm::AcceptAny,
     0, // Block to start checking inherents at
     select_chain.clone(),
-    move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
+    move |_, _| async { Ok(providers()) },
+    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
   let (worker, worker_task) = sc_pow::start_mining_worker(
@@ -113,7 +123,7 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     network.clone(),
     network,
     None,
-    move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
+    move |_, _| async { Ok(providers()) },
     Duration::from_secs(6),
     Duration::from_secs(2),
   );
