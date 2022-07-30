@@ -22,6 +22,8 @@ jobs:
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
+        with:
+          serai: false
 
       - name: Run Unit Tests Without Features
         run: cargo test --package monero-serai --lib

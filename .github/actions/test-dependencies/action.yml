@@ -7,6 +7,11 @@ inputs:
     required: false
     default: v0.18.0.0
 
+  serai:
+    description: "Run a Serai development node in the background"
+    required: false
+    default: true
+
 runs:
   using: "composite"
   steps:
@@ -22,3 +27,10 @@ runs:
       uses: ./.github/actions/monero
       with:
         version: ${{ inputs.monero-version }}
+
+    - name: Run a Serai Development Node
+      if: ${{ inputs.serai }}
+      shell: bash
+      run: |
+        cargo build
+        ./target/debug/serai-node --dev &

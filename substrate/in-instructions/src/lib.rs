@@ -117,7 +117,7 @@ pub mod pallet {
         coins.push(Batches::new());
         for batch in batches {
           // If this batch has been queued for the delay period, propose it
-          let current_block = 1; // TODO
+          let current_block = 5; // TODO
           if (batch.0 + DELAY) <= current_block {
             coins[coin].push(batch.1.clone());
             any = true;

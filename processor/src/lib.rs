@@ -10,7 +10,7 @@ use coin::{CoinError, Coin};
 
 mod wallet;
 
-mod substrate;
+mod serai;
 
 #[cfg(test)]
 mod tests;
