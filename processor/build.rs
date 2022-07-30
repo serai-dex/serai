@@ -9,6 +9,10 @@ fn subxt(metadata: &Path) -> bool {
   }
 
   File::create(metadata).unwrap().write_all(&subxt.output().unwrap().stdout).unwrap();
+
+  // Rerun if any further changes to the metadata file (such as deletion) occur
+  println!("cargo:rerun-if-changed={}", metadata.display());
+
   true
 }
 
@@ -59,7 +63,4 @@ fn main() {
   if !metadata.exists() {
     panic!("failed to download metadata within 5 minutes");
   }
-
-  // Rerun if the metadata file is deleted
-  println!("cargo:rerun-if-changed={}", metadata.display());
 }
