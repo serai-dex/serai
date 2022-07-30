@@ -7550,6 +7550,7 @@ dependencies = [
 name = "serai-in-instructions"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "frame-support",
  "frame-system",
  "parity-scale-codec",

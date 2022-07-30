@@ -5,6 +5,9 @@ use scale::{Encode, Decode};
 use sp_std::vec::Vec;
 use sp_inherents::{InherentData, InherentIdentifier, IsFatalError};
 
+#[cfg(feature = "std")]
+pub mod provider;
+
 pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 // Amount of blocks to delay creating an inherent with a certain batch of transactions to increase
 // the odds of synchrony
