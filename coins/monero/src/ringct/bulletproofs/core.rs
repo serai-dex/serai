@@ -168,34 +168,45 @@ fn hash_plus(mash: &[[u8; 32]]) -> Scalar {
   hash_to_scalar(slice)
 }
 
-// Types for all Bulletproofs
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct OriginalStruct {
+  pub(crate) A: DalekPoint,
+  pub(crate) S: DalekPoint,
+  pub(crate) T1: DalekPoint,
+  pub(crate) T2: DalekPoint,
+  pub(crate) taux: DalekScalar,
+  pub(crate) mu: DalekScalar,
+  pub(crate) L: Vec<DalekPoint>,
+  pub(crate) R: Vec<DalekPoint>,
+  pub(crate) a: DalekScalar,
+  pub(crate) b: DalekScalar,
+  pub(crate) t: DalekScalar,
+}
+
+impl OriginalStruct {
+  #[must_use]
+  pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, outputs: &[Commitment]) -> bool {
+    todo!()
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct PlusStruct {
+  pub(crate) A: DalekPoint,
+  pub(crate) A1: DalekPoint,
+  pub(crate) B: DalekPoint,
+  pub(crate) r1: DalekScalar,
+  pub(crate) s1: DalekScalar,
+  pub(crate) d1: DalekScalar,
+  pub(crate) L: Vec<DalekPoint>,
+  pub(crate) R: Vec<DalekPoint>,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproofs {
-  Original {
-    A: DalekPoint,
-    S: DalekPoint,
-    T1: DalekPoint,
-    T2: DalekPoint,
-    taux: DalekScalar,
-    mu: DalekScalar,
-    L: Vec<DalekPoint>,
-    R: Vec<DalekPoint>,
-    a: DalekScalar,
-    b: DalekScalar,
-    t: DalekScalar,
-  },
-
-  Plus {
-    A: DalekPoint,
-    A1: DalekPoint,
-    B: DalekPoint,
-    r1: DalekScalar,
-    s1: DalekScalar,
-    d1: DalekScalar,
-    L: Vec<DalekPoint>,
-    R: Vec<DalekPoint>,
-  },
+  Original(OriginalStruct),
+  Plus(PlusStruct),
 }
 
 pub(crate) fn prove<R: RngCore + CryptoRng>(
@@ -297,7 +308,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     }
   }
 
-  Bulletproofs::Original {
+  Bulletproofs::Original(OriginalStruct {
     A: *A,
     S: *S,
     T1: *T1,
@@ -309,7 +320,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     a: *a[0],
     b: *b[0],
     t: *t,
-  }
+  })
 }
 
 pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
@@ -410,7 +421,7 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
   let s1 = (b[0] * e) + s;
   let d1 = ((d * e) + eta) + (alpha1 * (e * e));
 
-  Bulletproofs::Plus {
+  Bulletproofs::Plus(PlusStruct {
     A: *A,
     A1: *A1,
     B: *B,
@@ -419,5 +430,5 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
     d1: *d1,
     L: L.drain(..).map(|L| *L).collect(),
     R: R.drain(..).map(|R| *R).collect(),
-  }
+  })
 }

@@ -10,7 +10,7 @@ pub(crate) mod scalar_vector;
 
 mod core;
 pub(crate) use self::core::Bulletproofs;
-use self::core::{MAX_M, prove, prove_plus};
+use self::core::{MAX_M, OriginalStruct, PlusStruct, prove, prove_plus};
 
 pub(crate) const MAX_OUTPUTS: usize = MAX_M;
 
@@ -41,35 +41,43 @@ impl Bulletproofs {
     Ok(if !plus { prove(rng, outputs) } else { prove_plus(rng, outputs) })
   }
 
+  #[must_use]
+  pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, outputs: &[Commitment]) -> bool {
+    match self {
+      Bulletproofs::Original(bp) => bp.verify(rng, outputs),
+      Bulletproofs::Plus(_) => unimplemented!("Bulletproofs+ verification isn't implemented"),
+    }
+  }
+
   fn serialize_core<W: std::io::Write, F: Fn(&[EdwardsPoint], &mut W) -> std::io::Result<()>>(
     &self,
     w: &mut W,
     specific_write_vec: F,
   ) -> std::io::Result<()> {
     match self {
-      Bulletproofs::Original { A, S, T1, T2, taux, mu, L, R, a, b, t } => {
-        write_point(A, w)?;
-        write_point(S, w)?;
-        write_point(T1, w)?;
-        write_point(T2, w)?;
-        write_scalar(taux, w)?;
-        write_scalar(mu, w)?;
-        specific_write_vec(L, w)?;
-        specific_write_vec(R, w)?;
-        write_scalar(a, w)?;
-        write_scalar(b, w)?;
-        write_scalar(t, w)
+      Bulletproofs::Original(bp) => {
+        write_point(&bp.A, w)?;
+        write_point(&bp.S, w)?;
+        write_point(&bp.T1, w)?;
+        write_point(&bp.T2, w)?;
+        write_scalar(&bp.taux, w)?;
+        write_scalar(&bp.mu, w)?;
+        specific_write_vec(&bp.L, w)?;
+        specific_write_vec(&bp.R, w)?;
+        write_scalar(&bp.a, w)?;
+        write_scalar(&bp.b, w)?;
+        write_scalar(&bp.t, w)
       }
 
-      Bulletproofs::Plus { A, A1, B, r1, s1, d1, L, R } => {
-        write_point(A, w)?;
-        write_point(A1, w)?;
-        write_point(B, w)?;
-        write_scalar(r1, w)?;
-        write_scalar(s1, w)?;
-        write_scalar(d1, w)?;
-        specific_write_vec(L, w)?;
-        specific_write_vec(R, w)
+      Bulletproofs::Plus(bp) => {
+        write_point(&bp.A, w)?;
+        write_point(&bp.A1, w)?;
+        write_point(&bp.B, w)?;
+        write_scalar(&bp.r1, w)?;
+        write_scalar(&bp.s1, w)?;
+        write_scalar(&bp.d1, w)?;
+        specific_write_vec(&bp.L, w)?;
+        specific_write_vec(&bp.R, w)
       }
     }
   }
@@ -83,7 +91,7 @@ impl Bulletproofs {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
-    Ok(Bulletproofs::Original {
+    Ok(Bulletproofs::Original(OriginalStruct {
       A: read_point(r)?,
       S: read_point(r)?,
       T1: read_point(r)?,
@@ -95,11 +103,11 @@ impl Bulletproofs {
       a: read_scalar(r)?,
       b: read_scalar(r)?,
       t: read_scalar(r)?,
-    })
+    }))
   }
 
   pub fn deserialize_plus<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
-    Ok(Bulletproofs::Plus {
+    Ok(Bulletproofs::Plus(PlusStruct {
       A: read_point(r)?,
       A1: read_point(r)?,
       B: read_point(r)?,
@@ -108,6 +116,6 @@ impl Bulletproofs {
       d1: read_scalar(r)?,
       L: read_vec(read_point, r)?,
       R: read_vec(read_point, r)?,
-    })
+    }))
   }
 }
