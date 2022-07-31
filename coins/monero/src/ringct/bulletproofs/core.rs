@@ -232,15 +232,35 @@ impl OriginalStruct {
   #[must_use]
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, V: Vec<EdwardsPoint>) -> bool {
 
-    let M = 2usize.pow(self.L.len().try_into().unwrap())/N ;
-    println!("Valor de L.len = {}",self.L.len());
-    println!("Valor de M = {}",M);
+    //Verification on the vector sizes should be implemented here. It is very important to verify
+    //if the sizes correspond to the expected 64 bits value that we are rangeproofing.
 
+    assert!( self.taux.is_canonical(),"taux is not canonical");
+    assert!( self.mu.is_canonical(),"mu is not canonical");
+    assert!( self.a.is_canonical(),"a is not canonical");
+    assert!( self.b.is_canonical(),"b is not canonical");
+    assert!( self.t.is_canonical(),"t is not canonical");
+
+    assert!( V.len()>=1, "V does not have at least one element");
+    assert!( self.L.len() == self.R.len(), "R and L have different sizes");
+    assert!( self.L.len() > 0, "Empty proof. L <= 0");
+
+
+    let maxM = 16; //Max outputs in bulletproofs 
+    let mut logM = 0;
+    let mut M = 0;
+    while M <= maxM && M < V.len() {M = 2<<logM;logM+=1;}
+    assert!( self.L.len() == 6+logM, "Proof is not the expected size");
+
+
+    M = 2usize.pow(self.L.len().try_into().unwrap())/N ;
     let logN = 6;
     let mut max_length = 0;
     let mut nV = 0;
-
     max_length = cmp::max(max_length,self.L.len());
+
+    assert!( max_length < 32,"At least one proof is too large");
+
     let logM = max_length.clone();
     let maxMN = M*N;// 1 << max_length as usize;
     let MN = M*N;
@@ -249,29 +269,20 @@ impl OriginalStruct {
     nV = V.len() + 1;
 
     let mut cache:Scalar = hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>());
-    //println!("cache: {:02X?}", cache.to_bytes());
-
     let y = hash_cache(&mut cache, &[self.A.compress().to_bytes(), self.S.compress().to_bytes()]);
-
-    //println!("y: {:02X?}", y.to_bytes());
+    assert!( y != Scalar::zero(), "scalar y is zero");
 
     let z = hash_to_scalar(&y.to_bytes());
     cache = z;
+    assert!( z != Scalar::zero(), "scalar z is zero");
 
-    //println!("z: {:02X?}", z.to_bytes());
-    //println!("A: {:02X?}", self.A.compress().to_bytes());
-    //println!("cache: {:02X?}", cache.to_bytes());
     let x = hash_cache(&mut cache, &[z.to_bytes(), self.T1.compress().to_bytes(), self.T2.compress().to_bytes()]);
     hash_cache(&mut cache, &[z.to_bytes(), self.T1.compress().to_bytes(), self.T2.compress().to_bytes()]);
-    //println!("x: {:02X?}", x.to_bytes());
     cache = x;
 
     let x_ip = hash_cache(&mut cache, &[x.to_bytes(), self.taux.to_bytes(), self.mu.to_bytes(), self.t.to_bytes()]);
-    //println!("x_ip: {:02X?}", x_ip.to_bytes());
+    assert!( x_ip != Scalar::zero(), "scalar x_ip is zero");
 
-
-    //if x_ip == 0: Error
-    // check sizes ... VERY IMPORTANT HERE
 
     let mut y0: Scalar = Scalar::from(0u8);
     let mut y1: Scalar = Scalar::from(0u8);
@@ -280,16 +291,8 @@ impl OriginalStruct {
     let mut z4 = vec![Scalar::from(0u8); maxMN];
     let mut z5 = vec![Scalar::from(0u8); maxMN];
 
-
-    //let weight_y = random_scalar(&mut *rng);
-    //let weight_z = random_scalar(&mut *rng);
-  
     let weight_y = Scalar::random(&mut *rng);
     let weight_z = Scalar::random(&mut *rng);
-
-    //let weight_y: Scalar = Scalar(DalekScalar::from_bytes_mod_order(hex!("269b29e4a54ed754b173165497adbb657f2833d08d4d61eaf55d1ec8ac91c706")));
-    //let weight_z: Scalar = Scalar(DalekScalar::from_bytes_mod_order(hex!("c7297e7085a86731dda22d5e9e761b1e4e5a97115e4379be721e1f7a8fea470e")));
-
 
     y0 +=  -Scalar(self.taux)*weight_y;
 
@@ -306,7 +309,6 @@ impl OriginalStruct {
     y1 += (Scalar(self.t)-(z*ip1y+k))*weight_y;
 
     let mut rounds:i32 = self.L.len() as i32;
-    println!("rounds: {}",rounds);
 
     let mut w = Vec::<Scalar>::with_capacity(rounds as usize);
     let mut w_inv = Vec::<Scalar>::with_capacity(rounds as usize);
@@ -340,47 +342,38 @@ impl OriginalStruct {
     multiexp_data_vector.push((weight_z,proof8_A));
     multiexp_data_vector.push((x*weight_z,proof8_S));
 
-
-    //let res = multiexp(&multiexp_data_vector);
-    //println!("res = {:02X?}",res.compress().to_bytes());
-
-      let y_inv = y.invert().unwrap();
-      let yinvpow = ScalarVector::powers(y_inv, MN);
+    let y_inv = y.invert().unwrap();
+    let yinvpow = ScalarVector::powers(y_inv, MN);
 
     for i in 0..MN {
-        let mut index:i32= i as i32;
-        let mut g_scalar:Scalar = Scalar(self.a);
-        let mut h_scalar:Scalar = Scalar(self.b)*yinvpow[i];
-        for j in (0..rounds).rev() {
-            let mut J:i32 = (w.len() as i32)-(j as i32)-1i32;
-            let mut base_power:i32 = 2i32.pow(j as u32);
-            if index/base_power == 0 {
-                g_scalar = g_scalar * w_inv[J as usize];
-                h_scalar = h_scalar * w[J as usize];
-            }
-            else
-            {
-                g_scalar = g_scalar * w[J as usize];
-                h_scalar = h_scalar * w_inv[J as usize];
-                index -= base_power;
-            }
+    let mut index:i32= i as i32;
+    let mut g_scalar:Scalar = Scalar(self.a);
+    let mut h_scalar:Scalar = Scalar(self.b)*yinvpow[i];
+    for j in (0..rounds).rev() {
+        let mut J:i32 = (w.len() as i32)-(j as i32)-1i32;
+        let mut base_power:i32 = 2i32.pow(j as u32);
+        if index/base_power == 0 {
+            g_scalar = g_scalar * w_inv[J as usize];
+            h_scalar = h_scalar * w[J as usize];
         }
-
-        g_scalar += z;
-        h_scalar -= (z* pow_sca(y,i as usize) + pow_sca(z,2+i/N as usize) * pow_sca(Scalar::from(2u8),i%N as usize)) * pow_sca(y_inv,i as usize);
-
-        
-        z4[i] -= g_scalar*weight_z;
-        z5[i] -= h_scalar*weight_z;
+        else
+        {
+            g_scalar = g_scalar * w[J as usize];
+            h_scalar = h_scalar * w_inv[J as usize];
+            index -= base_power;
+        }
     }
 
-        z1 += Scalar(self.mu)*weight_z;
-        z3 += (Scalar(self.t)-Scalar(self.a)*Scalar(self.b))*x_ip*weight_z;
+    g_scalar += z;
+    h_scalar -= (z* pow_sca(y,i as usize) + pow_sca(z,2+i/N as usize) * pow_sca(Scalar::from(2u8),i%N as usize)) * pow_sca(y_inv,i as usize);
 
-    println!("z1: {:02X?}", z1.to_bytes());
-    println!("z3: {:02X?}", z3.to_bytes());
-    println!("y1: {:02X?}", y1.to_bytes());
-    println!("y0: {:02X?}", y0.to_bytes());
+
+    z4[i] -= g_scalar*weight_z;
+    z5[i] -= h_scalar*weight_z;
+    }
+
+    z1 += Scalar(self.mu)*weight_z;
+    z3 += (Scalar(self.t)-Scalar(self.a)*Scalar(self.b))*x_ip*weight_z;
 
     for j in 0..proof8_L.len() {
         tmp = w[j]*w[j]*weight_z;
@@ -389,26 +382,19 @@ impl OriginalStruct {
         multiexp_data_vector.push((tmp, proof8_R[j]));
         }
 
-    //Check all proofs together from here
-        
     multiexp_data_vector.push((y0-z1,G));
     multiexp_data_vector.push((z3-y1,*H));
 
-    //send this to table
+    //This is very inefficient. Send this to a table
     let mut Gi = GENERATORS.G[.. (M*N)].to_vec();
     let mut Hi = GENERATORS.H[.. (M*N)].to_vec();
-
-    //for i in 0..(M*N) {
-    //println!("Gi = {:02X?}",Gi[i].compress().to_bytes());
-    //println!("Hi = {:02X?}",Hi[i].compress().to_bytes());
-    //}
 
     for i in 0..(M*N) {
     multiexp_data_vector.push((z4[i],Gi[i]));
     multiexp_data_vector.push((z5[i],Hi[i]));
     }
 
-
+    //Checks should be sent to a list for batch proofs
     let res = const_multiexp(&multiexp_data_vector);
     println!("res = {:02X?}",res.compress().to_bytes());
     if res == EdwardsPoint::identity() { true } else { false }

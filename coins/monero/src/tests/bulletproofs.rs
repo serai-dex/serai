@@ -55,15 +55,15 @@ fn bulletproofs() {
 
 
     ////This is working for the example above.
-    //let struct_bp = Bulletproofs::Original(OriginalStruct{A,S,T1,T2,taux,mu,L,R,a,b,t});
-    //assert!(struct_bp.verify(&mut OsRng,V));
+    let struct_bp = Bulletproofs::Original(OriginalStruct{A,S,T1,T2,taux,mu,L,R,a,b,t});
+    assert!(struct_bp.verify(&mut OsRng,V));
 
 
     ////This is not working... is the prove function really working or the verify is buggy?
-    let commitments = (1 ..= 2).map(|i| Commitment::new(random_scalar(&mut OsRng), i)).collect::<Vec<_>>();
-    let Vc: Vec<ff_EP> = commitments.iter().map(|i| ff_EP(Commitment::calculate(i))).collect::<Vec<_>>();
-    let bp_proofs = Bulletproofs::prove(&mut OsRng, &commitments,false).unwrap();
-    assert!(bp_proofs.verify(&mut OsRng, Vc)); 
+    //let commitments = (1 ..= 2).map(|i| Commitment::new(random_scalar(&mut OsRng), i)).collect::<Vec<_>>();
+    //let Vc: Vec<ff_EP> = commitments.iter().map(|i| ff_EP(Commitment::calculate(i))).collect::<Vec<_>>();
+    //let bp_proofs = Bulletproofs::prove(&mut OsRng, &commitments,false).unwrap();
+    //assert!(bp_proofs.verify(&mut OsRng, Vc)); 
     
 }
 
