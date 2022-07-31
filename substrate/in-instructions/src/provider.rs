@@ -2,12 +2,18 @@ use scale::Decode;
 
 use sp_inherents::{Error, InherentData, InherentIdentifier};
 
-use crate::{INHERENT_IDENTIFIER, InInstruction, PendingCoins, InherentError};
+use crate::{
+  INHERENT_IDENTIFIER, InInstruction, Batch, PendingBatch, Coin, PendingCoins, InherentError,
+};
 
 fn coin_batches() -> PendingCoins {
-  let batch = (0, vec![InInstruction { destination: [0xff; 32], amount: 1, data: vec![] }]);
-  let batches = vec![batch];
-  let coins = vec![batches];
+  let batch = Batch {
+    id: 0,
+    instructions: vec![InInstruction { destination: [0xff; 32], amount: 1, data: vec![] }],
+  };
+  let pending = PendingBatch { reported_at: 0, batch };
+  let coin = Coin { height: 5, batches: vec![pending] };
+  let coins = vec![Some(coin)];
   coins
 }
 
@@ -37,8 +43,6 @@ impl sp_inherents::InherentDataProvider for InherentDataProvider {
       return None;
     }
 
-    Some(Err(Error::Application(Box::from(
-      <InherentError as Decode>::decode(&mut error).ok()?,
-    ))))
+    Some(Err(Error::Application(Box::from(<InherentError as Decode>::decode(&mut error).ok()?))))
   }
 }
