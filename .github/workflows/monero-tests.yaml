@@ -51,7 +51,7 @@ jobs:
 
       - name: Run Integration Tests
         # Don't run if the the tests workflow also will
-        if: ${{ matrix.version != "v0.18.0.0" }}
+        if: ${{ matrix.version != v0\.18\.0\.0 }}
         run: |
           cargo test --package monero-serai --all-features --test '*'
           cargo test --package serai-processor monero
