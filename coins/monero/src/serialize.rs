@@ -85,9 +85,11 @@ pub fn read_scalar<R: io::Read>(r: &mut R) -> io::Result<Scalar> {
 }
 
 pub fn read_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
-  CompressedEdwardsY(read_32(r)?)
+  let bytes = read_32(r)?;
+  CompressedEdwardsY(bytes)
     .decompress()
-    .filter(|point| point.is_torsion_free())
+    // Ban torsioned points, and points which are either unreduced or -0
+    .filter(|point| point.is_torsion_free() && (point.compress().to_bytes() == bytes))
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))
 }
 
