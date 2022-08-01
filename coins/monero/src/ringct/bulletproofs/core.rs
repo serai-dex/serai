@@ -280,6 +280,10 @@ impl OriginalStruct {
         }
       }
 
+      for w in &w_cache {
+        debug_assert!(!bool::from(w.is_zero()));
+      }
+
       for i in 0 .. MN {
         let g = (Scalar(self.a) * w_cache[i]) + z;
         proof.push((-g, GENERATORS.G[i]));
