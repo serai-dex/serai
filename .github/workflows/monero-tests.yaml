@@ -33,7 +33,7 @@ jobs:
     # Test against all supported protocol versions
     strategy:
       matrix:
-        version: ["v0.17.3.2", "v0.18.0.0"]
+        version: [v0.17.3.2, v0.18.0.0]
 
     steps:
       - uses: actions/checkout@v3
@@ -51,7 +51,7 @@ jobs:
 
       - name: Run Integration Tests
         # Don't run if the the tests workflow also will
-        if: ${{ matrix.version != "v0.18.0.0" }}
+        if: ${{ matrix.version != 'v0.18.0.0' }}
         run: |
           cargo test --package monero-serai --all-features --test '*'
           cargo test --package serai-processor monero
