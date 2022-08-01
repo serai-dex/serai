@@ -9,7 +9,7 @@ use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as D
 use group::{ff::Field, Group};
 use dalek_ff_group::{ED25519_BASEPOINT_POINT as G, Scalar, EdwardsPoint};
 
-use multiexp::{BatchVerifier, multiexp as multiexp_const, multiexp_vartime};
+use multiexp::{BatchVerifier, multiexp as multiexp_const};
 
 fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
   multiexp_const(pairs) * *INV_EIGHT
@@ -184,20 +184,26 @@ pub struct OriginalStruct {
 
 impl OriginalStruct {
   #[must_use]
-  fn verify_core(&self, commitments: &[DalekPoint]) -> Option<Vec<(Scalar, EdwardsPoint)>> {
+  fn verify_core<ID: Copy, R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    verifier: &mut BatchVerifier<ID, EdwardsPoint>,
+    id: ID,
+    commitments: &[DalekPoint],
+  ) -> bool {
     // Verify commitments are valid
     if commitments.is_empty() || (commitments.len() > MAX_M) {
-      return None;
+      return false;
     }
 
     // Verify L and R are properly sized
     if self.L.len() != self.R.len() {
-      return None;
+      return false;
     }
 
     let (logMN, M, MN) = MN(commitments.len());
     if self.L.len() != logMN {
-      return None;
+      return false;
     }
 
     // Rebuild all challenges
@@ -237,21 +243,18 @@ impl OriginalStruct {
     let commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
 
     // Verify it
-    let mut proof = Vec::with_capacity(MN);
-    proof.push((-Scalar(self.taux) - Scalar(self.mu), G));
+    let mut proof = Vec::with_capacity(4 + commitments.len());
 
     let zpow = ScalarVector::powers(z, M + 3);
-
-    {
-      let ip1y = ScalarVector::powers(y, M * N).sum();
-      let mut k = -(zpow[2] * ip1y);
-      for j in 1 ..= M {
-        k -= zpow[j + 2] * *IP12;
-      }
-      let z3 = (Scalar(self.t) - (Scalar(self.a) * Scalar(self.b))) * x_ip;
-      let y1 = Scalar(self.t) - ((z * ip1y) + k);
-      proof.push((z3 - y1, *H));
+    let ip1y = ScalarVector::powers(y, M * N).sum();
+    let mut k = -(zpow[2] * ip1y);
+    for j in 1 ..= M {
+      k -= zpow[j + 2] * *IP12;
     }
+    let y1 = Scalar(self.t) - ((z * ip1y) + k);
+    proof.push((-y1, *H));
+
+    proof.push((-Scalar(self.taux), G));
 
     for (j, commitment) in commitments.iter().enumerate() {
       proof.push((zpow[j + 2], *commitment));
@@ -259,6 +262,12 @@ impl OriginalStruct {
 
     proof.push((x, T1));
     proof.push((x * x, T2));
+    verifier.queue(&mut *rng, id, proof);
+
+    proof = Vec::with_capacity(4 + (2 * (MN + logMN)));
+    let z3 = (Scalar(self.t) - (Scalar(self.a) * Scalar(self.b))) * x_ip;
+    proof.push((z3, *H));
+    proof.push((-Scalar(self.mu), G));
 
     proof.push((Scalar::one(), A));
     proof.push((x, S));
@@ -298,33 +307,34 @@ impl OriginalStruct {
       proof.push((w[i] * w[i], L[i]));
       proof.push((winv[i] * winv[i], R[i]));
     }
+    verifier.queue(rng, id, proof);
 
-    Some(proof)
+    true
   }
 
   #[must_use]
-  pub(crate) fn verify(&self, commitments: &[DalekPoint]) -> bool {
-    if let Some(proof) = self.verify_core(commitments) {
-      multiexp_vartime(&proof).is_identity().into()
-    } else {
-      false
-    }
-  }
-
-  #[must_use]
-  pub(crate) fn batch_verify<R: RngCore + CryptoRng>(
+  pub(crate) fn verify<R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<usize, EdwardsPoint>,
-    id: usize,
     commitments: &[DalekPoint],
   ) -> bool {
-    if let Some(proof) = self.verify_core(commitments) {
-      verifier.queue(rng, id, proof);
-      true
+    let mut verifier = BatchVerifier::new(4 + commitments.len() + 4 + (2 * (MAX_MN + 10)));
+    if self.verify_core(rng, &mut verifier, (), commitments) {
+      verifier.verify_vartime()
     } else {
       false
     }
+  }
+
+  #[must_use]
+  pub(crate) fn batch_verify<ID: Copy, R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    verifier: &mut BatchVerifier<ID, EdwardsPoint>,
+    id: ID,
+    commitments: &[DalekPoint],
+  ) -> bool {
+    self.verify_core(rng, verifier, id, commitments)
   }
 }
 

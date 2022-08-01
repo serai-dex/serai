@@ -44,13 +44,16 @@ fn bulletproofs_vector() {
     b: scalar(hex!("fe80cf5756473482581e1d38644007793ddc66fdeb9404ec1689a907e4863302")),
     t: scalar(hex!("40dfb08e09249040df997851db311bd6827c26e87d6f0f332c55be8eef10e603"))
   })
-  .verify(&[
-    // For some reason, these vectors are * INV_EIGHT
-    point(hex!("8e8f23f315edae4f6c2f948d9a861e0ae32d356b933cd11d2f0e031ac744c41f"))
-      .mul_by_cofactor(),
-    point(hex!("2829cbd025aa54cd6e1b59a032564f22f0b2e5627f7f2c4297f90da438b5510f"))
-      .mul_by_cofactor(),
-  ]));
+  .verify(
+    &mut OsRng,
+    &[
+      // For some reason, these vectors are * INV_EIGHT
+      point(hex!("8e8f23f315edae4f6c2f948d9a861e0ae32d356b933cd11d2f0e031ac744c41f"))
+        .mul_by_cofactor(),
+      point(hex!("2829cbd025aa54cd6e1b59a032564f22f0b2e5627f7f2c4297f90da438b5510f"))
+        .mul_by_cofactor(),
+    ]
+  ));
 }
 
 #[test]
@@ -65,7 +68,7 @@ fn bulletproofs() {
     let bp = Bulletproofs::prove(&mut OsRng, &commitments, false).unwrap();
 
     let commitments = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
-    assert!(bp.verify(&commitments));
+    assert!(bp.verify(&mut OsRng, &commitments));
     assert!(bp.batch_verify(&mut OsRng, &mut verifier, i, &commitments));
   }
   assert!(verifier.verify_vartime());

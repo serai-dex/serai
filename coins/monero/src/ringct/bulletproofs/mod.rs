@@ -43,19 +43,19 @@ impl Bulletproofs {
   }
 
   #[must_use]
-  pub fn verify(&self, commitments: &[EdwardsPoint]) -> bool {
+  pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     match self {
-      Bulletproofs::Original(bp) => bp.verify(commitments),
+      Bulletproofs::Original(bp) => bp.verify(rng, commitments),
       Bulletproofs::Plus(_) => unimplemented!("Bulletproofs+ verification isn't implemented"),
     }
   }
 
   #[must_use]
-  pub fn batch_verify<R: RngCore + CryptoRng>(
+  pub fn batch_verify<ID: Copy, R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<usize, dalek_ff_group::EdwardsPoint>,
-    id: usize,
+    verifier: &mut BatchVerifier<ID, dalek_ff_group::EdwardsPoint>,
+    id: ID,
     commitments: &[EdwardsPoint],
   ) -> bool {
     match self {
