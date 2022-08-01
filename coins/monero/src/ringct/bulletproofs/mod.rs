@@ -8,12 +8,22 @@ use multiexp::BatchVerifier;
 use crate::{Commitment, wallet::TransactionError, serialize::*};
 
 pub(crate) mod scalar_vector;
+pub(crate) mod core;
 
-pub mod core;
-pub(crate) use self::core::Bulletproofs;
-use self::core::{MAX_M, OriginalStruct, PlusStruct, prove, prove_plus};
+pub(crate) mod original;
+pub(crate) mod plus;
 
-pub(crate) const MAX_OUTPUTS: usize = MAX_M;
+pub(crate) use self::original::OriginalStruct;
+pub(crate) use self::plus::PlusStruct;
+
+pub(crate) const MAX_OUTPUTS: usize = self::core::MAX_M;
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Bulletproofs {
+  Original(OriginalStruct),
+  Plus(PlusStruct),
+}
 
 impl Bulletproofs {
   // TODO
@@ -39,14 +49,18 @@ impl Bulletproofs {
     if outputs.len() > MAX_OUTPUTS {
       return Err(TransactionError::TooManyOutputs)?;
     }
-    Ok(if !plus { prove(rng, outputs) } else { prove_plus(rng, outputs) })
+    Ok(if !plus {
+      Bulletproofs::Original(OriginalStruct::prove(rng, outputs))
+    } else {
+      Bulletproofs::Plus(PlusStruct::prove(rng, outputs))
+    })
   }
 
   #[must_use]
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     match self {
       Bulletproofs::Original(bp) => bp.verify(rng, commitments),
-      Bulletproofs::Plus(_) => unimplemented!("Bulletproofs+ verification isn't implemented"),
+      Bulletproofs::Plus(bp) => bp.verify(rng, commitments),
     }
   }
 
@@ -60,7 +74,7 @@ impl Bulletproofs {
   ) -> bool {
     match self {
       Bulletproofs::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
-      Bulletproofs::Plus(_) => unimplemented!("Bulletproofs+ verification isn't implemented"),
+      Bulletproofs::Plus(bp) => bp.batch_verify(rng, verifier, id, commitments),
     }
   }
 

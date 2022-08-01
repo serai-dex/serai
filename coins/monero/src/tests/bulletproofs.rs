@@ -6,7 +6,7 @@ use multiexp::BatchVerifier;
 
 use crate::{
   Commitment, random_scalar,
-  ringct::bulletproofs::{Bulletproofs, core::OriginalStruct},
+  ringct::bulletproofs::{Bulletproofs, original::OriginalStruct},
 };
 
 #[test]
