@@ -2,6 +2,7 @@ use hex_literal::hex;
 use rand::rngs::OsRng;
 
 use curve25519_dalek::{scalar::Scalar, edwards::CompressedEdwardsY};
+use multiexp::BatchVerifier;
 
 use crate::{
   Commitment, random_scalar,
@@ -43,31 +44,36 @@ fn bulletproofs_vector() {
     b: scalar(hex!("fe80cf5756473482581e1d38644007793ddc66fdeb9404ec1689a907e4863302")),
     t: scalar(hex!("40dfb08e09249040df997851db311bd6827c26e87d6f0f332c55be8eef10e603"))
   })
-  .verify(
-    &mut OsRng,
-    &[
-      // For some reason, these vectors are * INV_EIGHT
-      point(hex!("8e8f23f315edae4f6c2f948d9a861e0ae32d356b933cd11d2f0e031ac744c41f"))
-        .mul_by_cofactor(),
-      point(hex!("2829cbd025aa54cd6e1b59a032564f22f0b2e5627f7f2c4297f90da438b5510f"))
-        .mul_by_cofactor(),
-    ]
-  ));
+  .verify(&[
+    // For some reason, these vectors are * INV_EIGHT
+    point(hex!("8e8f23f315edae4f6c2f948d9a861e0ae32d356b933cd11d2f0e031ac744c41f"))
+      .mul_by_cofactor(),
+    point(hex!("2829cbd025aa54cd6e1b59a032564f22f0b2e5627f7f2c4297f90da438b5510f"))
+      .mul_by_cofactor(),
+  ]));
 }
 
 #[test]
 fn bulletproofs() {
   // Create Bulletproofs for all possible output quantities
+  let mut verifier = BatchVerifier::new(0);
   for i in 1 .. 17 {
-    let commitments =
-      (1 ..= i).map(|i| Commitment::new(random_scalar(&mut OsRng), i)).collect::<Vec<_>>();
+    let commitments = (1 ..= i)
+      .map(|i| Commitment::new(random_scalar(&mut OsRng), u64::try_from(i).unwrap()))
+      .collect::<Vec<_>>();
 
-    assert!(Bulletproofs::prove(&mut OsRng, &commitments, false)
-      .unwrap()
-      .verify(&mut OsRng, &commitments.iter().map(Commitment::calculate).collect::<Vec<_>>()));
+    let bp = Bulletproofs::prove(&mut OsRng, &commitments, false).unwrap();
+
+    let commitments = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
+    assert!(bp.verify(&commitments));
+    assert!(bp.batch_verify(&mut OsRng, &mut verifier, i, &commitments));
   }
+  assert!(verifier.verify_vartime());
+}
 
-  // Check it errors if we try to create too many
+#[test]
+fn bulletproofs_max() {
+  // Check Bulletproofs errors if we try to prove for too many outputs
   assert!(
     Bulletproofs::prove(&mut OsRng, &[Commitment::new(Scalar::zero(), 0); 17], false).is_err()
   );

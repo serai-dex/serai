@@ -9,7 +9,7 @@ use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as D
 use group::{ff::Field, Group};
 use dalek_ff_group::{ED25519_BASEPOINT_POINT as G, Scalar, EdwardsPoint};
 
-use multiexp::{multiexp as multiexp_const, multiexp_vartime};
+use multiexp::{BatchVerifier, multiexp as multiexp_const, multiexp_vartime};
 
 fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
   multiexp_const(pairs) * *INV_EIGHT
@@ -183,19 +183,21 @@ pub struct OriginalStruct {
 }
 
 impl OriginalStruct {
-  pub(crate) fn verify<R: RngCore + CryptoRng>(
-    &self,
-    _rng: &mut R,
-    commitments: &[DalekPoint],
-  ) -> bool {
+  #[must_use]
+  fn verify_core(&self, commitments: &[DalekPoint]) -> Option<Vec<(Scalar, EdwardsPoint)>> {
+    // Verify commitments are valid
+    if commitments.is_empty() || (commitments.len() > MAX_M) {
+      return None;
+    }
+
     // Verify L and R are properly sized
     if self.L.len() != self.R.len() {
-      return false;
+      return None;
     }
 
     let (logMN, M, MN) = MN(commitments.len());
     if self.L.len() != logMN {
-      return false;
+      return None;
     }
 
     // Rebuild all challenges
@@ -293,7 +295,32 @@ impl OriginalStruct {
       proof.push((winv[i] * winv[i], R[i]));
     }
 
-    multiexp_vartime(&proof).is_identity().into()
+    Some(proof)
+  }
+
+  #[must_use]
+  pub(crate) fn verify(&self, commitments: &[DalekPoint]) -> bool {
+    if let Some(proof) = self.verify_core(commitments) {
+      multiexp_vartime(&proof).is_identity().into()
+    } else {
+      false
+    }
+  }
+
+  #[must_use]
+  pub(crate) fn batch_verify<R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    verifier: &mut BatchVerifier<usize, EdwardsPoint>,
+    id: usize,
+    commitments: &[DalekPoint],
+  ) -> bool {
+    if let Some(proof) = self.verify_core(commitments) {
+      verifier.queue(rng, id, proof);
+      true
+    } else {
+      false
+    }
   }
 }
 
