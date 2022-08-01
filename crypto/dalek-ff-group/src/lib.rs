@@ -372,6 +372,12 @@ dalek_group!(
   ED25519_BASEPOINT_TABLE
 );
 
+impl EdwardsPoint {
+  pub fn mul_by_cofactor(&self) -> EdwardsPoint {
+    EdwardsPoint(self.0.mul_by_cofactor())
+  }
+}
+
 dalek_group!(
   RistrettoPoint,
   DRistrettoPoint,

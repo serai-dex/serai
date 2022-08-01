@@ -7,12 +7,12 @@ use rand_core::{RngCore, CryptoRng};
 use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as DalekPoint};
 
 use group::{ff::Field, Group};
-use dalek_ff_group::{ED25519_BASEPOINT_POINT, Scalar, EdwardsPoint};
+use dalek_ff_group::{ED25519_BASEPOINT_POINT as G, Scalar, EdwardsPoint};
 
-use multiexp::multiexp as const_multiexp;
+use multiexp::{BatchVerifier, multiexp as multiexp_const};
 
 fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
-  const_multiexp(pairs) * *INV_EIGHT
+  multiexp_const(pairs) * *INV_EIGHT
 }
 
 use crate::{
@@ -108,9 +108,11 @@ fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, ScalarVector) {
   (aL, aR)
 }
 
-fn hash_commitments(commitments: &[Commitment]) -> Scalar {
-  let V = commitments.iter().map(|c| EdwardsPoint(c.calculate()) * *INV_EIGHT).collect::<Vec<_>>();
-  hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>())
+fn hash_commitments<C: IntoIterator<Item = DalekPoint>>(
+  commitments: C,
+) -> (Scalar, Vec<EdwardsPoint>) {
+  let V = commitments.into_iter().map(|c| EdwardsPoint(c) * *INV_EIGHT).collect::<Vec<_>>();
+  (hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>()), V)
 }
 
 fn alpha_rho<R: RngCore + CryptoRng>(
@@ -161,41 +163,198 @@ lazy_static! {
 }
 
 // TRANSCRIPT_PLUS isn't a Scalar, so we need this alternative for the first hash
-fn hash_plus(mash: &[[u8; 32]]) -> Scalar {
-  let slice =
-    &[&*TRANSCRIPT_PLUS as &[u8], mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()]
-      .concat();
-  hash_to_scalar(slice)
+fn hash_plus(mash: &[u8]) -> Scalar {
+  hash_to_scalar(&[&*TRANSCRIPT_PLUS as &[u8], mash].concat())
 }
 
-// Types for all Bulletproofs
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct OriginalStruct {
+  pub(crate) A: DalekPoint,
+  pub(crate) S: DalekPoint,
+  pub(crate) T1: DalekPoint,
+  pub(crate) T2: DalekPoint,
+  pub(crate) taux: DalekScalar,
+  pub(crate) mu: DalekScalar,
+  pub(crate) L: Vec<DalekPoint>,
+  pub(crate) R: Vec<DalekPoint>,
+  pub(crate) a: DalekScalar,
+  pub(crate) b: DalekScalar,
+  pub(crate) t: DalekScalar,
+}
+
+impl OriginalStruct {
+  #[must_use]
+  fn verify_core<ID: Copy, R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    verifier: &mut BatchVerifier<ID, EdwardsPoint>,
+    id: ID,
+    commitments: &[DalekPoint],
+  ) -> bool {
+    // Verify commitments are valid
+    if commitments.is_empty() || (commitments.len() > MAX_M) {
+      return false;
+    }
+
+    // Verify L and R are properly sized
+    if self.L.len() != self.R.len() {
+      return false;
+    }
+
+    let (logMN, M, MN) = MN(commitments.len());
+    if self.L.len() != logMN {
+      return false;
+    }
+
+    // Rebuild all challenges
+    let (mut cache, commitments) = hash_commitments(commitments.iter().cloned());
+    let y = hash_cache(&mut cache, &[self.A.compress().to_bytes(), self.S.compress().to_bytes()]);
+
+    let z = hash_to_scalar(&y.to_bytes());
+    cache = z;
+
+    let x = hash_cache(
+      &mut cache,
+      &[z.to_bytes(), self.T1.compress().to_bytes(), self.T2.compress().to_bytes()],
+    );
+
+    let x_ip = hash_cache(
+      &mut cache,
+      &[x.to_bytes(), self.taux.to_bytes(), self.mu.to_bytes(), self.t.to_bytes()],
+    );
+
+    let mut w = Vec::with_capacity(logMN);
+    let mut winv = Vec::with_capacity(logMN);
+    for (L, R) in self.L.iter().zip(&self.R) {
+      w.push(hash_cache(&mut cache, &[L.compress().to_bytes(), R.compress().to_bytes()]));
+      winv.push(cache.invert().unwrap());
+    }
+
+    // Convert the proof from * INV_EIGHT to its actual form
+    let normalize = |point: &DalekPoint| EdwardsPoint(point.mul_by_cofactor());
+
+    let L = self.L.iter().map(normalize).collect::<Vec<_>>();
+    let R = self.R.iter().map(normalize).collect::<Vec<_>>();
+    let T1 = normalize(&self.T1);
+    let T2 = normalize(&self.T2);
+    let A = normalize(&self.A);
+    let S = normalize(&self.S);
+
+    let commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
+
+    // Verify it
+    let mut proof = Vec::with_capacity(4 + commitments.len());
+
+    let zpow = ScalarVector::powers(z, M + 3);
+    let ip1y = ScalarVector::powers(y, M * N).sum();
+    let mut k = -(zpow[2] * ip1y);
+    for j in 1 ..= M {
+      k -= zpow[j + 2] * *IP12;
+    }
+    let y1 = Scalar(self.t) - ((z * ip1y) + k);
+    proof.push((-y1, *H));
+
+    proof.push((-Scalar(self.taux), G));
+
+    for (j, commitment) in commitments.iter().enumerate() {
+      proof.push((zpow[j + 2], *commitment));
+    }
+
+    proof.push((x, T1));
+    proof.push((x * x, T2));
+    verifier.queue(&mut *rng, id, proof);
+
+    proof = Vec::with_capacity(4 + (2 * (MN + logMN)));
+    let z3 = (Scalar(self.t) - (Scalar(self.a) * Scalar(self.b))) * x_ip;
+    proof.push((z3, *H));
+    proof.push((-Scalar(self.mu), G));
+
+    proof.push((Scalar::one(), A));
+    proof.push((x, S));
+
+    {
+      let ypow = ScalarVector::powers(y, MN);
+      let yinv = y.invert().unwrap();
+      let yinvpow = ScalarVector::powers(yinv, MN);
+
+      let mut w_cache = vec![Scalar::zero(); MN];
+      w_cache[0] = winv[0];
+      w_cache[1] = w[0];
+      for j in 1 .. logMN {
+        let mut slots = (1 << (j + 1)) - 1;
+        while slots > 0 {
+          w_cache[slots] = w_cache[slots / 2] * w[j];
+          w_cache[slots - 1] = w_cache[slots / 2] * winv[j];
+          slots = slots.saturating_sub(2);
+        }
+      }
+
+      for w in &w_cache {
+        debug_assert!(!bool::from(w.is_zero()));
+      }
+
+      for i in 0 .. MN {
+        let g = (Scalar(self.a) * w_cache[i]) + z;
+        proof.push((-g, GENERATORS.G[i]));
+
+        let mut h = Scalar(self.b) * yinvpow[i] * w_cache[(!i) & (MN - 1)];
+        h -= ((zpow[(i / N) + 2] * TWO_N[i % N]) + (z * ypow[i])) * yinvpow[i];
+        proof.push((-h, GENERATORS.H[i]));
+      }
+    }
+
+    for i in 0 .. logMN {
+      proof.push((w[i] * w[i], L[i]));
+      proof.push((winv[i] * winv[i], R[i]));
+    }
+    verifier.queue(rng, id, proof);
+
+    true
+  }
+
+  #[must_use]
+  pub(crate) fn verify<R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    commitments: &[DalekPoint],
+  ) -> bool {
+    let mut verifier = BatchVerifier::new(4 + commitments.len() + 4 + (2 * (MAX_MN + 10)));
+    if self.verify_core(rng, &mut verifier, (), commitments) {
+      verifier.verify_vartime()
+    } else {
+      false
+    }
+  }
+
+  #[must_use]
+  pub(crate) fn batch_verify<ID: Copy, R: RngCore + CryptoRng>(
+    &self,
+    rng: &mut R,
+    verifier: &mut BatchVerifier<ID, EdwardsPoint>,
+    id: ID,
+    commitments: &[DalekPoint],
+  ) -> bool {
+    self.verify_core(rng, verifier, id, commitments)
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct PlusStruct {
+  pub(crate) A: DalekPoint,
+  pub(crate) A1: DalekPoint,
+  pub(crate) B: DalekPoint,
+  pub(crate) r1: DalekScalar,
+  pub(crate) s1: DalekScalar,
+  pub(crate) d1: DalekScalar,
+  pub(crate) L: Vec<DalekPoint>,
+  pub(crate) R: Vec<DalekPoint>,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproofs {
-  Original {
-    A: DalekPoint,
-    S: DalekPoint,
-    T1: DalekPoint,
-    T2: DalekPoint,
-    taux: DalekScalar,
-    mu: DalekScalar,
-    L: Vec<DalekPoint>,
-    R: Vec<DalekPoint>,
-    a: DalekScalar,
-    b: DalekScalar,
-    t: DalekScalar,
-  },
-
-  Plus {
-    A: DalekPoint,
-    A1: DalekPoint,
-    B: DalekPoint,
-    r1: DalekScalar,
-    s1: DalekScalar,
-    d1: DalekScalar,
-    L: Vec<DalekPoint>,
-    R: Vec<DalekPoint>,
-  },
+  Original(OriginalStruct),
+  Plus(PlusStruct),
 }
 
 pub(crate) fn prove<R: RngCore + CryptoRng>(
@@ -205,7 +364,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let (logMN, M, MN) = MN(commitments.len());
 
   let (aL, aR) = bit_decompose(commitments);
-  let mut cache = hash_commitments(commitments);
+  let (mut cache, _) = hash_commitments(commitments.iter().map(Commitment::calculate));
   let (alpha, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
 
   let (sL, sR) =
@@ -297,7 +456,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     }
   }
 
-  Bulletproofs::Original {
+  Bulletproofs::Original(OriginalStruct {
     A: *A,
     S: *S,
     T1: *T1,
@@ -309,7 +468,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     a: *a[0],
     b: *b[0],
     t: *t,
-  }
+  })
 }
 
 pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
@@ -319,7 +478,8 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
   let (logMN, M, MN) = MN(commitments.len());
 
   let (aL, aR) = bit_decompose(commitments);
-  let mut cache = hash_plus(&[hash_commitments(commitments).to_bytes()]);
+  let (mut cache, _) = hash_commitments(commitments.iter().map(Commitment::calculate));
+  cache = hash_plus(&cache.to_bytes());
   let (mut alpha1, A) = alpha_rho(&mut *rng, &GENERATORS_PLUS, &aL, &aR);
 
   let y = hash_cache(&mut cache, &[A.compress().to_bytes()]);
@@ -371,12 +531,12 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
     let (H_L, H_R) = H_proof.split_at(aL.len());
 
     let mut L_i = LR_statements(&(&aL * yinvpow[aL.len()]), G_R, &bR, H_L, cL, *H);
-    L_i.push((dL, ED25519_BASEPOINT_POINT));
+    L_i.push((dL, G));
     let L_i = prove_multiexp(&L_i);
     L.push(L_i);
 
     let mut R_i = LR_statements(&(&aR * ypow[aR.len()]), G_L, &bL, H_R, cR, *H);
-    R_i.push((dR, ED25519_BASEPOINT_POINT));
+    R_i.push((dR, G));
     let R_i = prove_multiexp(&R_i);
     R.push(R_i);
 
@@ -400,17 +560,17 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
   let A1 = prove_multiexp(&[
     (r, G_proof[0]),
     (s, H_proof[0]),
-    (d, ED25519_BASEPOINT_POINT),
+    (d, G),
     ((r * y * b[0]) + (s * y * a[0]), *H),
   ]);
-  let B = prove_multiexp(&[(r * y * s, *H), (eta, ED25519_BASEPOINT_POINT)]);
+  let B = prove_multiexp(&[(r * y * s, *H), (eta, G)]);
   let e = hash_cache(&mut cache, &[A1.compress().to_bytes(), B.compress().to_bytes()]);
 
   let r1 = (a[0] * e) + r;
   let s1 = (b[0] * e) + s;
   let d1 = ((d * e) + eta) + (alpha1 * (e * e));
 
-  Bulletproofs::Plus {
+  Bulletproofs::Plus(PlusStruct {
     A: *A,
     A1: *A1,
     B: *B,
@@ -419,5 +579,5 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
     d1: *d1,
     L: L.drain(..).map(|L| *L).collect(),
     R: R.drain(..).map(|R| *R).collect(),
-  }
+  })
 }
