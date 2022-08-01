@@ -7,20 +7,12 @@ use rand_core::{RngCore, CryptoRng};
 use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as DalekPoint};
 
 use group::{ff::Field, Group};
-use dalek_ff_group::{ED25519_BASEPOINT_POINT, Scalar, EdwardsPoint};
+use dalek_ff_group::{ED25519_BASEPOINT_POINT as G, Scalar, EdwardsPoint};
 
-use multiexp::multiexp as const_multiexp;
-
-
-
-
-use curve25519_dalek::edwards::CompressedEdwardsY;
-use dalek_ff_group::ED25519_BASEPOINT_POINT as G;
-use std::cmp;
-use hex_literal::hex;
+use multiexp::{multiexp as multiexp_const, multiexp_vartime};
 
 fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
-  const_multiexp(pairs) * *INV_EIGHT
+  multiexp_const(pairs) * *INV_EIGHT
 }
 
 use crate::{
@@ -116,9 +108,11 @@ fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, ScalarVector) {
   (aL, aR)
 }
 
-fn hash_commitments(commitments: &[Commitment]) -> Scalar {
-  let V = commitments.iter().map(|c| EdwardsPoint(c.calculate()) * *INV_EIGHT).collect::<Vec<_>>();
-  hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>())
+fn hash_commitments<C: IntoIterator<Item = DalekPoint>>(
+  commitments: C,
+) -> (Scalar, Vec<EdwardsPoint>) {
+  let V = commitments.into_iter().map(|c| EdwardsPoint(c) * *INV_EIGHT).collect::<Vec<_>>();
+  (hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>()), V)
 }
 
 fn alpha_rho<R: RngCore + CryptoRng>(
@@ -169,49 +163,9 @@ lazy_static! {
 }
 
 // TRANSCRIPT_PLUS isn't a Scalar, so we need this alternative for the first hash
-fn hash_plus(mash: &[[u8; 32]]) -> Scalar {
-  let slice =
-    &[&*TRANSCRIPT_PLUS as &[u8], mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()]
-      .concat();
-  hash_to_scalar(slice)
+fn hash_plus(mash: &[u8]) -> Scalar {
+  hash_to_scalar(&[&*TRANSCRIPT_PLUS as &[u8], mash].concat())
 }
-
-// Functions used in the verify_bp
-// res = x^0+x^1+x^2 + ... + x^(pow-1)
-fn vector_power_sum(x: Scalar, pow: usize) -> Scalar {
-  debug_assert!(pow != 0);
-  if pow == 0 {
-    return Scalar::from(0u8);
-  }
-  if pow == 1 {
-    return Scalar::one();
-  }
-  let mut prev = x;
-  let mut res: Scalar = Scalar::from(1u8); 
-  for i in 1..pow {
-      //println!("index: {}",i);
-      res = res+prev;
-      prev = prev*x;
-  }
-res
-}
-
-// res = x^pow
-fn pow_sca(x: Scalar, pow: usize) -> Scalar {
-  if pow == 0 {
-    return Scalar::from(1u8);
-  }
-  if pow == 1 {
-    return x;
-  }
-  let mut res = x;
-  for i in 1..pow {
-      //println!("index: {}",i);
-    res = res*x;
-  }
-res
-}
-
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OriginalStruct {
@@ -229,178 +183,118 @@ pub struct OriginalStruct {
 }
 
 impl OriginalStruct {
-  #[must_use]
-  pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, V: Vec<EdwardsPoint>) -> bool {
+  pub(crate) fn verify<R: RngCore + CryptoRng>(
+    &self,
+    _rng: &mut R,
+    commitments: &[DalekPoint],
+  ) -> bool {
+    // Verify L and R are properly sized
+    if self.L.len() != self.R.len() {
+      return false;
+    }
 
-    //Verification on the vector sizes should be implemented here. It is very important to verify
-    //if the sizes correspond to the expected 64 bits value that we are rangeproofing.
+    let (logMN, M, MN) = MN(commitments.len());
+    if self.L.len() != logMN {
+      return false;
+    }
 
-    assert!( self.taux.is_canonical(),"taux is not canonical");
-    assert!( self.mu.is_canonical(),"mu is not canonical");
-    assert!( self.a.is_canonical(),"a is not canonical");
-    assert!( self.b.is_canonical(),"b is not canonical");
-    assert!( self.t.is_canonical(),"t is not canonical");
-
-    assert!( V.len()>=1, "V does not have at least one element");
-    assert!( self.L.len() == self.R.len(), "R and L have different sizes");
-    assert!( self.L.len() > 0, "Empty proof. L <= 0");
-
-
-    let maxM = 16; //Max outputs in bulletproofs 
-    let mut logM = 0;
-    let mut M = 0;
-    while M <= maxM && M < V.len() {M = 2<<logM;logM+=1;}
-    assert!( self.L.len() == 6+logM, "Proof is not the expected size");
-
-
-    M = 2usize.pow(self.L.len().try_into().unwrap())/N ;
-    let logN = 6;
-    let mut max_length = 0;
-    let mut nV = 0;
-    max_length = cmp::max(max_length,self.L.len());
-
-    assert!( max_length < 32,"At least one proof is too large");
-
-    let logM = max_length.clone();
-    let maxMN = M*N;// 1 << max_length as usize;
-    let MN = M*N;
-    let proofs_size = V.len();
-
-    nV = V.len() + 1;
-
-    let mut cache:Scalar = hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>());
+    // Rebuild all challenges
+    let (mut cache, commitments) = hash_commitments(commitments.iter().cloned());
     let y = hash_cache(&mut cache, &[self.A.compress().to_bytes(), self.S.compress().to_bytes()]);
-    assert!( y != Scalar::zero(), "scalar y is zero");
 
     let z = hash_to_scalar(&y.to_bytes());
     cache = z;
-    assert!( z != Scalar::zero(), "scalar z is zero");
 
-    let x = hash_cache(&mut cache, &[z.to_bytes(), self.T1.compress().to_bytes(), self.T2.compress().to_bytes()]);
-    hash_cache(&mut cache, &[z.to_bytes(), self.T1.compress().to_bytes(), self.T2.compress().to_bytes()]);
-    cache = x;
+    let x = hash_cache(
+      &mut cache,
+      &[z.to_bytes(), self.T1.compress().to_bytes(), self.T2.compress().to_bytes()],
+    );
 
-    let x_ip = hash_cache(&mut cache, &[x.to_bytes(), self.taux.to_bytes(), self.mu.to_bytes(), self.t.to_bytes()]);
-    assert!( x_ip != Scalar::zero(), "scalar x_ip is zero");
+    let x_ip = hash_cache(
+      &mut cache,
+      &[x.to_bytes(), self.taux.to_bytes(), self.mu.to_bytes(), self.t.to_bytes()],
+    );
 
-
-    let mut y0: Scalar = Scalar::from(0u8);
-    let mut y1: Scalar = Scalar::from(0u8);
-    let mut z1: Scalar = Scalar::from(0u8);
-    let mut z3: Scalar = Scalar::from(0u8);
-    let mut z4 = vec![Scalar::from(0u8); maxMN];
-    let mut z5 = vec![Scalar::from(0u8); maxMN];
-
-    let weight_y = Scalar::random(&mut *rng);
-    let weight_z = Scalar::random(&mut *rng);
-
-    y0 +=  -Scalar(self.taux)*weight_y;
-
-    let zpow = ScalarVector::powers(z,M+3);
-    let ip1y: Scalar = vector_power_sum(y,M*N);
-
-    let mut k:Scalar = -(z*z*ip1y);
-
-    let ip12: Scalar = inner_product(&ONE_N, &TWO_N);
-    for j in 1..(M+1) {
-        k = k - zpow[j+2] * ip12;
-        }
-
-    y1 += (Scalar(self.t)-(z*ip1y+k))*weight_y;
-
-    let mut rounds:i32 = self.L.len() as i32;
-
-    let mut w = Vec::<Scalar>::with_capacity(rounds as usize);
-    let mut w_inv = Vec::<Scalar>::with_capacity(rounds as usize);
-    let mut tmp:Scalar = Scalar::from(0u8);
-
-    for j in 0..rounds {
-        cache = hash_cache(&mut cache, &[self.L[j as usize].compress().to_bytes(), self.R[j as usize].compress().to_bytes()]);
-        w.push(cache);
-        w_inv.push(cache.invert().unwrap());
-    }
-     
-
-    let proof8_V = V.iter().map(|&x| x * Scalar::from(8u8) ).collect::<Vec<_>>();
-    let proof8_L = self.L.iter().map(|&x| EdwardsPoint(x) * Scalar::from(8u8) ).collect::<Vec<_>>();
-    let proof8_R = self.R.iter().map(|&x| EdwardsPoint(x) * Scalar::from(8u8) ).collect::<Vec<_>>();
-    let proof8_T1 = EdwardsPoint(self.T1) * Scalar::from(8u8);
-    let proof8_T2 = EdwardsPoint(self.T2) * Scalar::from(8u8);
-    let proof8_A = EdwardsPoint(self.A) * Scalar::from(8u8);
-    let proof8_S = EdwardsPoint(self.S) * Scalar::from(8u8);
-
-
-    let mut multiexp_data_vector = Vec::with_capacity(MN);
-
-    for j in 0..proof8_V.len() {
-        let tmp = zpow[j+2]*weight_y;
-        multiexp_data_vector.push((tmp, proof8_V[j]));
-        }
-        
-    multiexp_data_vector.push((x*weight_y,proof8_T1));
-    multiexp_data_vector.push((x*x*weight_y,proof8_T2));
-    multiexp_data_vector.push((weight_z,proof8_A));
-    multiexp_data_vector.push((x*weight_z,proof8_S));
-
-    let y_inv = y.invert().unwrap();
-    let yinvpow = ScalarVector::powers(y_inv, MN);
-
-    for i in 0..MN {
-    let mut index:i32= i as i32;
-    let mut g_scalar:Scalar = Scalar(self.a);
-    let mut h_scalar:Scalar = Scalar(self.b)*yinvpow[i];
-    for j in (0..rounds).rev() {
-        let mut J:i32 = (w.len() as i32)-(j as i32)-1i32;
-        let mut base_power:i32 = 2i32.pow(j as u32);
-        if index/base_power == 0 {
-            g_scalar = g_scalar * w_inv[J as usize];
-            h_scalar = h_scalar * w[J as usize];
-        }
-        else
-        {
-            g_scalar = g_scalar * w[J as usize];
-            h_scalar = h_scalar * w_inv[J as usize];
-            index -= base_power;
-        }
+    let mut w = Vec::with_capacity(logMN);
+    let mut winv = Vec::with_capacity(logMN);
+    for (L, R) in self.L.iter().zip(&self.R) {
+      w.push(hash_cache(&mut cache, &[L.compress().to_bytes(), R.compress().to_bytes()]));
+      winv.push(cache.invert().unwrap());
     }
 
-    g_scalar += z;
-    h_scalar -= (z* pow_sca(y,i as usize) + pow_sca(z,2+i/N as usize) * pow_sca(Scalar::from(2u8),i%N as usize)) * pow_sca(y_inv,i as usize);
+    // Convert the proof from * INV_EIGHT to its actual form
+    let normalize = |point: &DalekPoint| EdwardsPoint(point.mul_by_cofactor());
 
+    let L = self.L.iter().map(normalize).collect::<Vec<_>>();
+    let R = self.R.iter().map(normalize).collect::<Vec<_>>();
+    let T1 = normalize(&self.T1);
+    let T2 = normalize(&self.T2);
+    let A = normalize(&self.A);
+    let S = normalize(&self.S);
 
-    z4[i] -= g_scalar*weight_z;
-    z5[i] -= h_scalar*weight_z;
+    let commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
+
+    // Verify it
+    let mut proof = Vec::with_capacity(MN);
+    proof.push((-Scalar(self.taux) - Scalar(self.mu), G));
+
+    let zpow = ScalarVector::powers(z, M + 3);
+
+    {
+      let ip1y = ScalarVector::powers(y, M * N).sum();
+      let mut k = -(zpow[2] * ip1y);
+      for j in 1 ..= M {
+        k -= zpow[j + 2] * *IP12;
+      }
+      let z3 = (Scalar(self.t) - (Scalar(self.a) * Scalar(self.b))) * x_ip;
+      let y1 = Scalar(self.t) - ((z * ip1y) + k);
+      proof.push((z3 - y1, *H));
     }
 
-    z1 += Scalar(self.mu)*weight_z;
-    z3 += (Scalar(self.t)-Scalar(self.a)*Scalar(self.b))*x_ip*weight_z;
+    for (j, commitment) in commitments.iter().enumerate() {
+      proof.push((zpow[j + 2], *commitment));
+    }
 
-    for j in 0..proof8_L.len() {
-        tmp = w[j]*w[j]*weight_z;
-        multiexp_data_vector.push((tmp, proof8_L[j]));
-        tmp = w_inv[j]*w_inv[j]*weight_z;
-        multiexp_data_vector.push((tmp, proof8_R[j]));
+    proof.push((x, T1));
+    proof.push((x * x, T2));
+
+    proof.push((Scalar::one(), A));
+    proof.push((x, S));
+
+    {
+      let ypow = ScalarVector::powers(y, MN);
+      let yinv = y.invert().unwrap();
+      let yinvpow = ScalarVector::powers(yinv, MN);
+
+      let mut w_cache = vec![Scalar::zero(); MN];
+      w_cache[0] = winv[0];
+      w_cache[1] = w[0];
+      for j in 1 .. logMN {
+        let mut slots = (1 << (j + 1)) - 1;
+        while slots > 0 {
+          w_cache[slots] = w_cache[slots / 2] * w[j];
+          w_cache[slots - 1] = w_cache[slots / 2] * winv[j];
+          slots = slots.saturating_sub(2);
         }
+      }
 
-    multiexp_data_vector.push((y0-z1,G));
-    multiexp_data_vector.push((z3-y1,*H));
+      for i in 0 .. MN {
+        let g = (Scalar(self.a) * w_cache[i]) + z;
+        proof.push((-g, GENERATORS.G[i]));
 
-    //This is very inefficient. Send this to a table
-    let mut Gi = GENERATORS.G[.. (M*N)].to_vec();
-    let mut Hi = GENERATORS.H[.. (M*N)].to_vec();
-
-    for i in 0..(M*N) {
-    multiexp_data_vector.push((z4[i],Gi[i]));
-    multiexp_data_vector.push((z5[i],Hi[i]));
+        let mut h = Scalar(self.b) * yinvpow[i] * w_cache[(!i) & (MN - 1)];
+        h -= ((zpow[(i / N) + 2] * TWO_N[i % N]) + (z * ypow[i])) * yinvpow[i];
+        proof.push((-h, GENERATORS.H[i]));
+      }
     }
 
-    //Checks should be sent to a list for batch proofs
-    let res = const_multiexp(&multiexp_data_vector);
-    println!("res = {:02X?}",res.compress().to_bytes());
-    if res == EdwardsPoint::identity() { true } else { false }
-}
+    for i in 0 .. logMN {
+      proof.push((w[i] * w[i], L[i]));
+      proof.push((winv[i] * winv[i], R[i]));
+    }
 
-
+    multiexp_vartime(&proof).is_identity().into()
+  }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -429,7 +323,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
   let (logMN, M, MN) = MN(commitments.len());
 
   let (aL, aR) = bit_decompose(commitments);
-  let mut cache = hash_commitments(commitments);
+  let (mut cache, _) = hash_commitments(commitments.iter().map(Commitment::calculate));
   let (alpha, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
 
   let (sL, sR) =
@@ -543,7 +437,8 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
   let (logMN, M, MN) = MN(commitments.len());
 
   let (aL, aR) = bit_decompose(commitments);
-  let mut cache = hash_plus(&[hash_commitments(commitments).to_bytes()]);
+  let (mut cache, _) = hash_commitments(commitments.iter().map(Commitment::calculate));
+  cache = hash_plus(&cache.to_bytes());
   let (mut alpha1, A) = alpha_rho(&mut *rng, &GENERATORS_PLUS, &aL, &aR);
 
   let y = hash_cache(&mut cache, &[A.compress().to_bytes()]);
@@ -595,12 +490,12 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
     let (H_L, H_R) = H_proof.split_at(aL.len());
 
     let mut L_i = LR_statements(&(&aL * yinvpow[aL.len()]), G_R, &bR, H_L, cL, *H);
-    L_i.push((dL, ED25519_BASEPOINT_POINT));
+    L_i.push((dL, G));
     let L_i = prove_multiexp(&L_i);
     L.push(L_i);
 
     let mut R_i = LR_statements(&(&aR * ypow[aR.len()]), G_L, &bL, H_R, cR, *H);
-    R_i.push((dR, ED25519_BASEPOINT_POINT));
+    R_i.push((dR, G));
     let R_i = prove_multiexp(&R_i);
     R.push(R_i);
 
@@ -624,10 +519,10 @@ pub(crate) fn prove_plus<R: RngCore + CryptoRng>(
   let A1 = prove_multiexp(&[
     (r, G_proof[0]),
     (s, H_proof[0]),
-    (d, ED25519_BASEPOINT_POINT),
+    (d, G),
     ((r * y * b[0]) + (s * y * a[0]), *H),
   ]);
-  let B = prove_multiexp(&[(r * y * s, *H), (eta, ED25519_BASEPOINT_POINT)]);
+  let B = prove_multiexp(&[(r * y * s, *H), (eta, G)]);
   let e = hash_cache(&mut cache, &[A1.compress().to_bytes(), B.compress().to_bytes()]);
 
   let r1 = (a[0] * e) + r;

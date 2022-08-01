@@ -3,7 +3,6 @@
 use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::edwards::EdwardsPoint;
-use dalek_ff_group::{EdwardsPoint as ff_EP};
 
 use crate::{Commitment, wallet::TransactionError, serialize::*};
 
@@ -43,9 +42,13 @@ impl Bulletproofs {
   }
 
   #[must_use]
-  pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, V: Vec<ff_EP>) -> bool {
+  pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
+    if commitments.is_empty() || (commitments.len() > MAX_OUTPUTS) {
+      return false;
+    }
+
     match self {
-      Bulletproofs::Original(bp) => bp.verify(rng, V),
+      Bulletproofs::Original(bp) => bp.verify(rng, commitments),
       Bulletproofs::Plus(_) => unimplemented!("Bulletproofs+ verification isn't implemented"),
     }
   }

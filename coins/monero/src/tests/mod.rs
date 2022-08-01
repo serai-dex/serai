@@ -1,3 +1,3 @@
-//mod clsag;
-//mod address;
+mod clsag;
 mod bulletproofs;
+mod address;
