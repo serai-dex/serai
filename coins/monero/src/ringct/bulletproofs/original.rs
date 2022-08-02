@@ -241,21 +241,7 @@ impl OriginalStruct {
       let yinv = y.invert().unwrap();
       let yinvpow = ScalarVector::powers(yinv, MN);
 
-      let mut w_cache = vec![Scalar::zero(); MN];
-      w_cache[0] = winv[0];
-      w_cache[1] = w[0];
-      for j in 1 .. logMN {
-        let mut slots = (1 << (j + 1)) - 1;
-        while slots > 0 {
-          w_cache[slots] = w_cache[slots / 2] * w[j];
-          w_cache[slots - 1] = w_cache[slots / 2] * winv[j];
-          slots = slots.saturating_sub(2);
-        }
-      }
-
-      for w in &w_cache {
-        debug_assert!(!bool::from(w.is_zero()));
-      }
+      let w_cache = challenge_products(&w, &winv);
 
       for i in 0 .. MN {
         let g = (Scalar(self.a) * w_cache[i]) + z;

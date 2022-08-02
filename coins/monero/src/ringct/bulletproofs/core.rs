@@ -151,3 +151,24 @@ pub(crate) fn LR_statements(
 lazy_static! {
   pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), N);
 }
+
+pub(crate) fn challenge_products(w: &[Scalar], winv: &[Scalar]) -> Vec<Scalar> {
+  let mut products = vec![Scalar::zero(); 1 << w.len()];
+  products[0] = winv[0];
+  products[1] = w[0];
+  for j in 1 .. w.len() {
+    let mut slots = (1 << (j + 1)) - 1;
+    while slots > 0 {
+      products[slots] = products[slots / 2] * w[j];
+      products[slots - 1] = products[slots / 2] * winv[j];
+      slots = slots.saturating_sub(2);
+    }
+  }
+
+  // Sanity check as if the above failed to populate, it'd be critical
+  for w in &products {
+    debug_assert!(!bool::from(w.is_zero()));
+  }
+
+  products
+}

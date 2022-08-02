@@ -56,28 +56,35 @@ fn bulletproofs_vector() {
   ));
 }
 
-#[test]
-fn bulletproofs() {
-  // Create Bulletproofs for all possible output quantities
-  let mut verifier = BatchVerifier::new(0);
-  for i in 1 .. 17 {
-    let commitments = (1 ..= i)
-      .map(|i| Commitment::new(random_scalar(&mut OsRng), u64::try_from(i).unwrap()))
-      .collect::<Vec<_>>();
+macro_rules! bulletproofs_tests {
+  ($name: ident, $max: ident, $plus: literal) => {
+    #[test]
+    fn $name() {
+      // Create Bulletproofs for all possible output quantities
+      let mut verifier = BatchVerifier::new(16);
+      for i in 1 .. 17 {
+        let commitments = (1 ..= i)
+          .map(|i| Commitment::new(random_scalar(&mut OsRng), u64::try_from(i).unwrap()))
+          .collect::<Vec<_>>();
 
-    let bp = Bulletproofs::prove(&mut OsRng, &commitments, false).unwrap();
+        let bp = Bulletproofs::prove(&mut OsRng, &commitments, $plus).unwrap();
 
-    let commitments = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
-    assert!(bp.verify(&mut OsRng, &commitments));
-    assert!(bp.batch_verify(&mut OsRng, &mut verifier, i, &commitments));
-  }
-  assert!(verifier.verify_vartime());
+        let commitments = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
+        assert!(bp.verify(&mut OsRng, &commitments));
+        assert!(bp.batch_verify(&mut OsRng, &mut verifier, i, &commitments));
+      }
+      assert!(verifier.verify_vartime());
+    }
+
+    #[test]
+    fn $max() {
+      // Check Bulletproofs errors if we try to prove for too many outputs
+      assert!(
+        Bulletproofs::prove(&mut OsRng, &[Commitment::new(Scalar::zero(), 0); 17], $plus).is_err()
+      );
+    }
+  };
 }
 
-#[test]
-fn bulletproofs_max() {
-  // Check Bulletproofs errors if we try to prove for too many outputs
-  assert!(
-    Bulletproofs::prove(&mut OsRng, &[Commitment::new(Scalar::zero(), 0); 17], false).is_err()
-  );
-}
+bulletproofs_tests!(bulletproofs, bulletproofs_max, false);
+bulletproofs_tests!(bulletproofs_plus, bulletproofs_plus_max, true);

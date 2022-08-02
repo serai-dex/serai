@@ -20,8 +20,21 @@ lazy_static! {
 }
 
 // TRANSCRIPT isn't a Scalar, so we need this alternative for the first hash
-fn hash_plus(mash: &[u8]) -> Scalar {
-  hash_to_scalar(&[&*TRANSCRIPT as &[u8], mash].concat())
+fn hash_plus<C: IntoIterator<Item = DalekPoint>>(commitments: C) -> (Scalar, Vec<EdwardsPoint>) {
+  let (cache, commitments) = hash_commitments(commitments);
+  (hash_to_scalar(&[&*TRANSCRIPT as &[u8], &cache.to_bytes()].concat()), commitments)
+}
+
+// d[j*N+i] = z**(2*(j+1)) * 2**i
+fn d(z: Scalar, M: usize, MN: usize) -> (ScalarVector, ScalarVector) {
+  let zpow = ScalarVector::even_powers(z, 2 * M);
+  let mut d = vec![Scalar::zero(); MN];
+  for j in 0 .. M {
+    for i in 0 .. N {
+      d[(j * N) + i] = zpow[j] * TWO_N[i];
+    }
+  }
+  (zpow, ScalarVector(d))
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -44,29 +57,21 @@ impl PlusStruct {
     let (logMN, M, MN) = MN(commitments.len());
 
     let (aL, aR) = bit_decompose(commitments);
-    let (mut cache, _) = hash_commitments(commitments.iter().map(Commitment::calculate));
-    cache = hash_plus(&cache.to_bytes());
+    let (mut cache, _) = hash_plus(commitments.iter().map(Commitment::calculate));
     let (mut alpha1, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
 
     let y = hash_cache(&mut cache, &[A.compress().to_bytes()]);
     let mut cache = hash_to_scalar(&y.to_bytes());
     let z = cache;
 
-    let zpow = ScalarVector::even_powers(z, 2 * M);
-    // d[j*N+i] = z**(2*(j+1)) * 2**i
-    let mut d = vec![Scalar::zero(); MN];
-    for j in 0 .. M {
-      for i in 0 .. N {
-        d[(j * N) + i] = zpow[j] * TWO_N[i];
-      }
-    }
+    let (zpow, d) = d(z, M, MN);
 
     let aL1 = aL - z;
 
     let ypow = ScalarVector::powers(y, MN + 2);
     let mut y_for_d = ScalarVector(ypow.0[1 ..= MN].to_vec());
     y_for_d.0.reverse();
-    let aR1 = (aR + z) + (y_for_d * ScalarVector(d));
+    let aR1 = (aR + z) + (y_for_d * d);
 
     for (j, gamma) in commitments.iter().map(|c| Scalar(c.mask)).enumerate() {
       alpha1 += zpow[j] * ypow[MN + 1] * gamma;
@@ -151,12 +156,117 @@ impl PlusStruct {
   #[must_use]
   fn verify_core<ID: Copy, R: RngCore + CryptoRng>(
     &self,
-    _rng: &mut R,
-    _verifier: &mut BatchVerifier<ID, EdwardsPoint>,
-    _id: ID,
-    _commitments: &[DalekPoint],
+    rng: &mut R,
+    verifier: &mut BatchVerifier<ID, EdwardsPoint>,
+    id: ID,
+    commitments: &[DalekPoint],
   ) -> bool {
-    unimplemented!("Bulletproofs+ verification isn't implemented")
+    // Verify commitments are valid
+    if commitments.is_empty() || (commitments.len() > MAX_M) {
+      return false;
+    }
+
+    // Verify L and R are properly sized
+    if self.L.len() != self.R.len() {
+      return false;
+    }
+
+    let (logMN, M, MN) = MN(commitments.len());
+    if self.L.len() != logMN {
+      return false;
+    }
+
+    // Rebuild all challenges
+    let (mut cache, commitments) = hash_plus(commitments.iter().cloned());
+    let y = hash_cache(&mut cache, &[self.A.compress().to_bytes()]);
+    let yinv = y.invert().unwrap();
+    let z = hash_to_scalar(&y.to_bytes());
+    cache = z;
+
+    let mut w = Vec::with_capacity(logMN);
+    let mut winv = Vec::with_capacity(logMN);
+    for (L, R) in self.L.iter().zip(&self.R) {
+      w.push(hash_cache(&mut cache, &[L.compress().to_bytes(), R.compress().to_bytes()]));
+      winv.push(cache.invert().unwrap());
+    }
+
+    let e = hash_cache(&mut cache, &[self.A1.compress().to_bytes(), self.B.compress().to_bytes()]);
+
+    // Convert the proof from * INV_EIGHT to its actual form
+    let normalize = |point: &DalekPoint| EdwardsPoint(point.mul_by_cofactor());
+
+    let L = self.L.iter().map(normalize).collect::<Vec<_>>();
+    let R = self.R.iter().map(normalize).collect::<Vec<_>>();
+    let A = normalize(&self.A);
+    let A1 = normalize(&self.A1);
+    let B = normalize(&self.B);
+
+    let mut commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
+
+    // Verify it
+    let mut proof = Vec::with_capacity(logMN + 5 + (2 * (MN + logMN)));
+
+    let mut yMN = y;
+    for _ in 0 .. logMN {
+      yMN *= yMN;
+    }
+    let yMNy = yMN * y;
+
+    let (zpow, d) = d(z, M, MN);
+    let zsq = zpow[0];
+    assert_eq!(zsq, z * z);
+
+    let esq = e * e;
+    let minus_esq = -esq;
+    let commitment_weight = minus_esq * yMNy;
+    for (i, commitment) in commitments.drain(..).enumerate() {
+      proof.push((commitment_weight * zpow[i], commitment));
+    }
+
+    proof.push((Scalar::one(), -B));
+    proof.push((-e, A1));
+    proof.push((minus_esq, A));
+    proof.push((Scalar(self.d1), G));
+
+    let mut twoSixtyFourMinusOne = Scalar::from(2u8);
+    for _ in 0 .. 6 {
+      twoSixtyFourMinusOne *= twoSixtyFourMinusOne;
+    }
+    twoSixtyFourMinusOne -= Scalar::one();
+    let d_sum = zpow.sum() * twoSixtyFourMinusOne;
+
+    let y_sum = ScalarVector(ScalarVector::powers(y, MN + 1).0[1 ..].to_vec()).sum();
+    proof.push((
+      Scalar(self.r1 * y.0 * self.s1) + (esq * ((yMNy * z * d_sum) + ((zsq - z) * y_sum))),
+      *H,
+    ));
+
+    let w_cache = challenge_products(&w, &winv);
+
+    let mut e_r1_y = e * Scalar(self.r1);
+    let e_s1 = e * Scalar(self.s1);
+    let esq_z = esq * z;
+    let minus_esq_z = -esq_z;
+    let mut minus_esq_y = minus_esq * yMN;
+
+    for i in 0 .. MN {
+      proof.push((e_r1_y * w_cache[i] + esq_z, GENERATORS.G[i]));
+      proof.push((
+        (e_s1 * w_cache[(!i) & (MN - 1)]) + minus_esq_z + (minus_esq_y * d[i]),
+        GENERATORS.H[i],
+      ));
+
+      e_r1_y *= yinv;
+      minus_esq_y *= yinv;
+    }
+
+    for i in 0 .. logMN {
+      proof.push((minus_esq * w[i] * w[i], L[i]));
+      proof.push((minus_esq * winv[i] * winv[i], R[i]));
+    }
+
+    verifier.queue(rng, id, proof);
+    true
   }
 
   #[must_use]
