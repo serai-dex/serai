@@ -17,6 +17,13 @@ lazy_static! {
   static ref GENERATORS: Generators = generators_core(b"bulletproof_plus");
   static ref TRANSCRIPT: [u8; 32] =
     EdwardsPoint(raw_hash_to_point(hash(b"bulletproof_plus_transcript"))).compress().to_bytes();
+  static ref TWO_SIXTY_FOUR_MINUS_ONE: Scalar = {
+    let mut temp = Scalar::from(2u8);
+    for _ in 0 .. LOG_N {
+      temp *= temp;
+    }
+    temp - Scalar::one()
+  };
 }
 
 // TRANSCRIPT isn't a Scalar, so we need this alternative for the first hash
@@ -50,6 +57,12 @@ pub struct PlusStruct {
 }
 
 impl PlusStruct {
+  pub(crate) fn init() {
+    init();
+    let _ = &*GENERATORS;
+    let _ = &*TRANSCRIPT;
+  }
+
   pub(crate) fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     commitments: &[Commitment],
@@ -214,7 +227,6 @@ impl PlusStruct {
 
     let (zpow, d) = d(z, M, MN);
     let zsq = zpow[0];
-    assert_eq!(zsq, z * z);
 
     let esq = e * e;
     let minus_esq = -esq;
@@ -223,19 +235,16 @@ impl PlusStruct {
       proof.push((commitment_weight * zpow[i], commitment));
     }
 
+    // Invert B, instead of the Scalar, as the latter is only 2x as expensive yet enables reduction
+    // to a single addition under vartime for the first BP verified in the batch, which is expected
+    // to be much more significant
     proof.push((Scalar::one(), -B));
     proof.push((-e, A1));
     proof.push((minus_esq, A));
     proof.push((Scalar(self.d1), G));
 
-    let mut twoSixtyFourMinusOne = Scalar::from(2u8);
-    for _ in 0 .. 6 {
-      twoSixtyFourMinusOne *= twoSixtyFourMinusOne;
-    }
-    twoSixtyFourMinusOne -= Scalar::one();
-    let d_sum = zpow.sum() * twoSixtyFourMinusOne;
-
-    let y_sum = ScalarVector(ScalarVector::powers(y, MN + 1).0[1 ..].to_vec()).sum();
+    let d_sum = zpow.sum() * *TWO_SIXTY_FOUR_MINUS_ONE;
+    let y_sum = weighted_powers(y, MN).sum();
     proof.push((
       Scalar(self.r1 * y.0 * self.s1) + (esq * ((yMNy * z * d_sum) + ((zsq - z) * y_sum))),
       *H,
@@ -275,7 +284,7 @@ impl PlusStruct {
     rng: &mut R,
     commitments: &[DalekPoint],
   ) -> bool {
-    let mut verifier = BatchVerifier::new(4 + commitments.len() + 4 + (2 * (MAX_MN + 10)));
+    let mut verifier = BatchVerifier::new(1);
     if self.verify_core(rng, &mut verifier, (), commitments) {
       verifier.verify_vartime()
     } else {

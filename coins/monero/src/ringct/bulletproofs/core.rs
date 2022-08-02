@@ -29,6 +29,7 @@ pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {
 
 // Components common between variants
 pub(crate) const MAX_M: usize = 16;
+pub(crate) const LOG_N: usize = 6; // 2 << 6 == N
 pub(crate) const N: usize = 64;
 pub(crate) const MAX_MN: usize = MAX_M * N;
 
@@ -77,9 +78,6 @@ pub(crate) fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
 }
 
 pub(crate) fn MN(outputs: usize) -> (usize, usize, usize) {
-  let logN = 6;
-  debug_assert_eq!(N, 1 << logN);
-
   let mut logM = 0;
   let mut M;
   while {
@@ -89,7 +87,7 @@ pub(crate) fn MN(outputs: usize) -> (usize, usize, usize) {
     logM += 1;
   }
 
-  (logM + logN, M, M * N)
+  (logM + LOG_N, M, M * N)
 }
 
 pub(crate) fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, ScalarVector) {
@@ -150,6 +148,12 @@ pub(crate) fn LR_statements(
 
 lazy_static! {
   pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), N);
+}
+
+pub(crate) fn init() {
+  let _ = &*INV_EIGHT;
+  let _ = &*H;
+  let _ = &*TWO_N;
 }
 
 pub(crate) fn challenge_products(w: &[Scalar], winv: &[Scalar]) -> Vec<Scalar> {

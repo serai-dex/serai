@@ -32,6 +32,13 @@ pub struct OriginalStruct {
 }
 
 impl OriginalStruct {
+  pub(crate) fn init() {
+    init();
+    let _ = &*GENERATORS;
+    let _ = &*ONE_N;
+    let _ = &*IP12;
+  }
+
   pub(crate) fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     commitments: &[Commitment],
@@ -268,7 +275,7 @@ impl OriginalStruct {
     rng: &mut R,
     commitments: &[DalekPoint],
   ) -> bool {
-    let mut verifier = BatchVerifier::new(4 + commitments.len() + 4 + (2 * (MAX_MN + 10)));
+    let mut verifier = BatchVerifier::new(1);
     if self.verify_core(rng, &mut verifier, (), commitments) {
       verifier.verify_vartime()
     } else {

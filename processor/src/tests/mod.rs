@@ -111,7 +111,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
 #[tokio::test]
 async fn monero() {
-  let monero = Monero::new("http://127.0.0.1:18081".to_string());
+  let monero = Monero::new("http://127.0.0.1:18081".to_string()).await;
   let fee = monero.rpc.get_fee().await.unwrap();
   test_send(monero, fee).await;
 }

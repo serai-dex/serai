@@ -41,6 +41,14 @@ impl Bulletproofs {
     len + clawback
   }
 
+  pub fn init(plus: bool) {
+    if !plus {
+      OriginalStruct::init();
+    } else {
+      PlusStruct::init();
+    }
+  }
+
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: &[Commitment],

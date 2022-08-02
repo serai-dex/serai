@@ -34,7 +34,7 @@ pub enum Protocol {
 }
 
 impl Protocol {
-  pub(crate) fn ring_len(&self) -> usize {
+  pub fn ring_len(&self) -> usize {
     match self {
       Protocol::Unsupported => panic!("Unsupported protocol version"),
       Protocol::v14 => 11,
@@ -42,7 +42,7 @@ impl Protocol {
     }
   }
 
-  pub(crate) fn bp_plus(&self) -> bool {
+  pub fn bp_plus(&self) -> bool {
     match self {
       Protocol::Unsupported => panic!("Unsupported protocol version"),
       Protocol::v14 => false,
