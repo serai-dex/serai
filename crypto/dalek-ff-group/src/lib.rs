@@ -6,6 +6,7 @@ use core::{
   iter::{Iterator, Sum},
 };
 
+use zeroize::Zeroize;
 use subtle::{ConstantTimeEq, ConditionallySelectable};
 
 use rand_core::RngCore;
@@ -167,7 +168,7 @@ macro_rules! from_uint {
 }
 
 /// Wrapper around the dalek Scalar type
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct Scalar(pub DScalar);
 deref_borrow!(Scalar, DScalar);
 constant_time!(Scalar, DScalar);
@@ -285,7 +286,7 @@ macro_rules! dalek_group {
     $BASEPOINT_TABLE: ident
   ) => {
     /// Wrapper around the dalek Point type. For Ed25519, this is restricted to the prime subgroup
-    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Point(pub $DPoint);
     deref_borrow!($Point, $DPoint);
     constant_time!($Point, $DPoint);

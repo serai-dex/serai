@@ -1376,6 +1376,7 @@ dependencies = [
  "group",
  "rand_core 0.6.3",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -4592,6 +4593,7 @@ dependencies = [
  "thiserror",
  "tiny-keccak",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

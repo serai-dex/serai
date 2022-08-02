@@ -1,6 +1,8 @@
 use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as DalekPoint};
 
 use group::{ff::Field, Group};
@@ -47,11 +49,12 @@ impl OriginalStruct {
 
     let (aL, aR) = bit_decompose(commitments);
     let (mut cache, _) = hash_commitments(commitments.iter().map(Commitment::calculate));
-    let (alpha, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
 
     let (sL, sR) =
       ScalarVector((0 .. (MN * 2)).map(|_| Scalar::random(&mut *rng)).collect::<Vec<_>>()).split();
-    let (rho, S) = alpha_rho(&mut *rng, &GENERATORS, &sL, &sR);
+
+    let (mut alpha, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
+    let (mut rho, S) = alpha_rho(&mut *rng, &GENERATORS, &sL, &sR);
 
     let y = hash_cache(&mut cache, &[A.compress().to_bytes(), S.compress().to_bytes()]);
     let mut cache = hash_to_scalar(&y.to_bytes());
@@ -72,23 +75,33 @@ impl OriginalStruct {
     let r0 = (&(aR + z) * &yMN) + ScalarVector(zero_twos);
     let r1 = yMN * sR;
 
-    let t1 = inner_product(&l0, &r1) + inner_product(&l1, &r0);
-    let t2 = inner_product(&l1, &r1);
+    let (T1, T2, x, mut taux) = {
+      let t1 = inner_product(&l0, &r1) + inner_product(&l1, &r0);
+      let t2 = inner_product(&l1, &r1);
 
-    let tau1 = Scalar::random(&mut *rng);
-    let tau2 = Scalar::random(rng);
+      let mut tau1 = Scalar::random(&mut *rng);
+      let mut tau2 = Scalar::random(rng);
 
-    let T1 = prove_multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]);
-    let T2 = prove_multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]);
+      let T1 = prove_multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]);
+      let T2 = prove_multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]);
 
-    let x =
-      hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
+      let x =
+        hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
 
-    let mut taux = (tau2 * (x * x)) + (tau1 * x);
+      let taux = (tau2 * (x * x)) + (tau1 * x);
+
+      tau1.zeroize();
+      tau2.zeroize();
+      (T1, T2, x, taux)
+    };
+
+    let mu = (x * rho) + alpha;
+    alpha.zeroize();
+    rho.zeroize();
+
     for (i, gamma) in commitments.iter().map(|c| Scalar(c.mask)).enumerate() {
       taux += zpow[i + 2] * gamma;
     }
-    let mu = (x * rho) + alpha;
 
     let l = &l0 + &(l1 * x);
     let r = &r0 + &(r1 * x);

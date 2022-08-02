@@ -4,6 +4,8 @@
 use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 
+use subtle::{Choice, ConditionallySelectable};
+
 use curve25519_dalek::edwards::EdwardsPoint as DalekPoint;
 
 use group::{ff::Field, Group};
@@ -99,11 +101,12 @@ pub(crate) fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, Scalar
 
   for j in 0 .. M {
     for i in (0 .. N).rev() {
-      if (j < sv.len()) && ((sv[j][i / 8] & (1u8 << (i % 8))) != 0) {
-        aL.0[(j * N) + i] = Scalar::one();
-      } else {
-        aR.0[(j * N) + i] = -Scalar::one();
+      let mut bit = Choice::from(0);
+      if j < sv.len() {
+        bit = Choice::from((sv[j][i / 8] >> (i % 8)) & 1);
       }
+      aL.0[(j * N) + i] = Scalar::conditional_select(&Scalar::zero(), &Scalar::one(), bit);
+      aR.0[(j * N) + i] = Scalar::conditional_select(&-Scalar::one(), &Scalar::zero(), bit);
     }
   }
 
