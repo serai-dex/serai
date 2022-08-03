@@ -67,7 +67,7 @@ impl ClsagDetails {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 struct Interim {
   p: Scalar,
   c: Scalar,
@@ -77,7 +77,7 @@ struct Interim {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Debug)]
 pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
@@ -86,7 +86,6 @@ pub struct ClsagMultisig {
   // an extra round
   image: EdwardsPoint,
 
-  #[zeroize(skip)]
   details: Arc<RwLock<Option<ClsagDetails>>>,
 
   msg: Option<[u8; 32]>,
