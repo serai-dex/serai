@@ -337,12 +337,13 @@ impl SignableTransaction {
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
-      let offset = spend + input.key_offset;
+      let mut offset = spend + input.key_offset;
       if (&offset * &ED25519_BASEPOINT_TABLE) != input.key {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
       images.push(generate_key_image(offset));
+      offset.zeroize();
     }
     images.sort_by(key_image_sort);
 

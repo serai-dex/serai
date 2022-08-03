@@ -225,7 +225,7 @@ impl Clsag {
   // Single signer CLSAG
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
-    inputs: &[(Scalar, EdwardsPoint, ClsagInput)],
+    mut inputs: Vec<(Scalar, EdwardsPoint, ClsagInput)>,
     sum_outputs: Scalar,
     msg: [u8; 32],
   ) -> Vec<(Clsag, EdwardsPoint)> {
@@ -250,6 +250,8 @@ impl Clsag {
         nonce * hash_to_point(inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
       );
       clsag.s[usize::from(inputs[i].2.decoys.i)] = nonce - ((p * inputs[i].0) + c);
+      inputs[i].0.zeroize();
+      nonce.zeroize();
 
       res.push((clsag, pseudo_out));
     }
