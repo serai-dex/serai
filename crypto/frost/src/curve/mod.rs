@@ -55,9 +55,6 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   const GENERATOR: Self::G;
 
-  /// Securely generate a random nonce. H4 from the IETF draft
-  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F;
-
   /// Hash the message for the binding factor. H3 from the IETF draft
   // This doesn't actually need to be part of Curve as it does nothing with the curve
   // This also solely relates to FROST and with a proper Algorithm/HRAM, all projects using
@@ -71,8 +68,23 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft
   fn hash_binding_factor(binding: &[u8]) -> Self::F;
 
-  // The following methods would optimally be F:: and G:: yet developers can't control F/G
-  // They can control a trait they pass into this library
+  /// Securely generate a random nonce. H4 from the IETF draft
+  fn random_nonce<R: RngCore + CryptoRng>(mut secret: Self::F, rng: &mut R) -> Self::F {
+    let mut seed = vec![0; 32];
+    rng.fill_bytes(&mut seed);
+
+    let mut repr = secret.to_repr();
+    secret.zeroize();
+
+    seed.extend(repr.as_ref());
+    for i in repr.as_mut() {
+      *i = 0;
+    }
+
+    let res = Self::hash_to_F(b"nonce", &seed);
+    seed.zeroize();
+    res
+  }
 
   /// Field element from hash. Used during key gen and by other crates under Serai as a general
   /// utility
