@@ -1,5 +1,7 @@
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use transcript::Transcript;
 
 use group::{
@@ -42,15 +44,21 @@ where
     rng: &mut R,
     transcript: &mut T,
     generator: G,
-    private_key: G::Scalar,
-  ) -> SchnorrPoK<G> {
-    let nonce = G::Scalar::random(rng);
+    mut private_key: G::Scalar,
+  ) -> SchnorrPoK<G>
+  where
+    G::Scalar: Zeroize,
+  {
+    let mut nonce = G::Scalar::random(rng);
     #[allow(non_snake_case)]
     let R = generator * nonce;
-    SchnorrPoK {
+    let res = SchnorrPoK {
       R,
       s: nonce + (private_key * SchnorrPoK::hra(transcript, generator, R, generator * private_key)),
-    }
+    };
+    private_key.zeroize();
+    nonce.zeroize();
+    res
   }
 
   pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(

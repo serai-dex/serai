@@ -2,6 +2,8 @@
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use transcript::Transcript;
 
 use ff::{Field, PrimeField};
@@ -76,9 +78,12 @@ impl<G: PrimeGroup> DLEqProof<G> {
     rng: &mut R,
     transcript: &mut T,
     generators: &[G],
-    scalar: G::Scalar,
-  ) -> DLEqProof<G> {
-    let r = G::Scalar::random(rng);
+    mut scalar: G::Scalar,
+  ) -> DLEqProof<G>
+  where
+    G::Scalar: Zeroize,
+  {
+    let mut r = G::Scalar::random(rng);
 
     transcript.domain_separate(b"dleq");
     for generator in generators {
@@ -87,6 +92,9 @@ impl<G: PrimeGroup> DLEqProof<G> {
 
     let c = challenge(transcript);
     let s = r + (c * scalar);
+
+    scalar.zeroize();
+    r.zeroize();
 
     DLEqProof { c, s }
   }

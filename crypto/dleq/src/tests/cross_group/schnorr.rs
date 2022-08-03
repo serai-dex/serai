@@ -1,5 +1,7 @@
 use rand_core::OsRng;
 
+use zeroize::Zeroize;
+
 use group::{
   ff::{Field, PrimeFieldBits},
   prime::PrimeGroup,
@@ -12,7 +14,7 @@ use crate::cross_group::schnorr::SchnorrPoK;
 
 fn test_schnorr<G: PrimeGroup>()
 where
-  G::Scalar: PrimeFieldBits,
+  G::Scalar: PrimeFieldBits + Zeroize,
 {
   let private = G::Scalar::random(&mut OsRng);
 

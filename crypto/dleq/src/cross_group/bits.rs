@@ -1,5 +1,7 @@
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use transcript::Transcript;
 
 use group::{ff::PrimeFieldBits, prime::PrimeGroup};
@@ -75,8 +77,8 @@ pub(crate) struct Bits<G0: PrimeGroup, G1: PrimeGroup, const SIGNATURE: u8, cons
 impl<G0: PrimeGroup, G1: PrimeGroup, const SIGNATURE: u8, const RING_LEN: usize>
   Bits<G0, G1, SIGNATURE, RING_LEN>
 where
-  G0::Scalar: PrimeFieldBits,
-  G1::Scalar: PrimeFieldBits,
+  G0::Scalar: PrimeFieldBits + Zeroize,
+  G1::Scalar: PrimeFieldBits + Zeroize,
 {
   fn transcript<T: Transcript>(transcript: &mut T, i: usize, commitments: (G0, G1)) {
     transcript.domain_separate(b"bits");
@@ -106,8 +108,8 @@ where
     generators: (Generators<G0>, Generators<G1>),
     i: usize,
     pow_2: &mut (G0, G1),
-    bits: u8,
-    blinding_key: (G0::Scalar, G1::Scalar),
+    mut bits: u8,
+    blinding_key: &mut (G0::Scalar, G1::Scalar),
   ) -> Self {
     let mut commitments =
       ((generators.0.alt * blinding_key.0), (generators.1.alt * blinding_key.1));
@@ -125,6 +127,7 @@ where
       blinding_key,
       BitSignature::from(SIGNATURE).aos_form(),
     );
+    bits.zeroize();
 
     Self::shift(pow_2);
     Bits { commitments, signature }

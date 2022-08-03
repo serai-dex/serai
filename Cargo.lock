@@ -1539,6 +1539,7 @@ dependencies = [
  "multiexp",
  "rand_core 0.6.3",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]
