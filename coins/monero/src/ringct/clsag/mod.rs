@@ -228,10 +228,6 @@ impl Clsag {
     sum_outputs: Scalar,
     msg: [u8; 32],
   ) -> Vec<(Clsag, EdwardsPoint)> {
-    let nonce = random_scalar(rng);
-    let mut rand_source = [0; 64];
-    rng.fill_bytes(&mut rand_source);
-
     let mut res = Vec::with_capacity(inputs.len());
     let mut sum_pseudo_outs = Scalar::zero();
     for i in 0 .. inputs.len() {
@@ -242,8 +238,7 @@ impl Clsag {
         sum_pseudo_outs += mask;
       }
 
-      let mut rand_source = [0; 64];
-      rng.fill_bytes(&mut rand_source);
+      let mut nonce = random_scalar(rng);
       let (mut clsag, pseudo_out, p, c) = Clsag::sign_core(
         rng,
         &inputs[i].1,
