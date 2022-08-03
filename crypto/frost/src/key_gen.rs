@@ -218,7 +218,6 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
     }
 
     secret_share += *share;
-    share.zeroize();
 
     // This can be insecurely linearized from n * t to just n using the below sums for a given
     // stripe. Doing so uses naive addition which is subject to malleability. The only way to
@@ -226,6 +225,8 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
     // per sender and not as an aggregate of all senders, which also enables blame
     let mut values = exponential(params.i, &commitments[l]);
     values.push((-*share, C::GENERATOR));
+    share.zeroize();
+
     batch.queue(rng, *l, values);
   }
   batch.verify_with_vartime_blame().map_err(FrostError::InvalidCommitment)?;
