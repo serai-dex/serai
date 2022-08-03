@@ -166,11 +166,11 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
       continue;
     }
 
-    res.insert(l, polynomial(&coefficients, l).to_repr().as_ref().to_vec());
+    res.insert(l, polynomial(coefficients, l).to_repr().as_ref().to_vec());
   }
 
   // Calculate our own share
-  let share = polynomial(&coefficients, params.i());
+  let share = polynomial(coefficients, params.i());
 
   coefficients.zeroize();
 

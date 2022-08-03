@@ -292,13 +292,13 @@ impl SignableTransaction {
 
     let mut tx_outputs = Vec::with_capacity(outputs.len());
     let mut ecdh_info = Vec::with_capacity(outputs.len());
-    for o in 0 .. outputs.len() {
+    for output in &outputs {
       tx_outputs.push(Output {
         amount: 0,
-        key: outputs[o].dest,
-        view_tag: Some(outputs[o].view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
+        key: output.dest,
+        view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
-      ecdh_info.push(outputs[o].amount);
+      ecdh_info.push(output.amount);
     }
 
     (
