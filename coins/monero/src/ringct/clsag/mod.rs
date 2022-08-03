@@ -5,6 +5,8 @@ use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
+use subtle::{ConstantTimeEq, Choice, CtOption};
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   scalar::Scalar,
@@ -162,11 +164,12 @@ fn core(
   }
 
   // Perform the core loop
-  let mut c1 = None;
+  let mut c1 = CtOption::new(Scalar::zero(), Choice::from(0));
   for i in (start .. end).map(|i| i % n) {
-    if i == 0 {
-      c1 = Some(c);
-    }
+    // This will only execute once and shouldn't need to be constant time. Making it constant time
+    // removes the risk of branch prediction creating timing differences depending on ring index
+    // however
+    c1 = c1.or_else(|| CtOption::new(c, i.ct_eq(&0)));
 
     let c_p = mu_P * c;
     let c_c = mu_C * c;
