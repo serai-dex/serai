@@ -56,7 +56,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   }
 
   // Step 2: Provide a proof of knowledge
-  let r = C::F::random(rng);
+  let mut r = C::F::random(rng);
   serialized.extend(
     schnorr::sign::<C>(
       coefficients[0],
@@ -69,6 +69,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
     )
     .serialize(),
   );
+  r.zeroize();
 
   // Step 4: Broadcast
   (coefficients, commitments, serialized)
@@ -150,7 +151,7 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
-  coefficients: &[C::F],
+  coefficients: &mut Vec<C::F>,
   our_commitments: Vec<C::G>,
   commitments: HashMap<u16, Re>,
 ) -> Result<(C::F, HashMap<u16, Vec<C::G>>, HashMap<u16, Vec<u8>>), FrostError> {
@@ -171,13 +172,7 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   // Calculate our own share
   let share = polynomial(&coefficients, params.i());
 
-  // The secret shares are discarded here, not cleared. While any system which leaves its memory
-  // accessible is likely totally lost already, making the distinction meaningless when the key gen
-  // system acts as the signer system and therefore actively holds the signing key anyways, it
-  // should be overwritten with /dev/urandom in the name of security (which still doesn't meet
-  // requirements for secure data deletion yet those requirements expect hardware access which is
-  // far past what this library can reasonably counter)
-  // TODO: Zero out the coefficients
+  coefficients.zeroize();
 
   Ok((share, commitments, res))
 }
@@ -217,12 +212,13 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   };
 
   let mut batch = BatchVerifier::new(shares.len());
-  for (l, share) in &shares {
+  for (l, share) in shares.iter_mut() {
     if *l == params.i() {
       continue;
     }
 
-    secret_share += share;
+    secret_share += *share;
+    share.zeroize();
 
     // This can be insecurely linearized from n * t to just n using the below sums for a given
     // stripe. Doing so uses naive addition which is subject to malleability. The only way to
@@ -329,7 +325,7 @@ impl<C: Curve> SecretShareMachine<C> {
   /// is also expected at index i which is locally handled. Returns a byte vector representing a
   /// secret share for each other participant which should be encrypted before sending
   pub fn generate_secret_shares<Re: Read, R: RngCore + CryptoRng>(
-    self,
+    mut self,
     rng: &mut R,
     commitments: HashMap<u16, Re>,
   ) -> Result<(KeyMachine<C>, HashMap<u16, Vec<u8>>), FrostError> {
@@ -337,7 +333,7 @@ impl<C: Curve> SecretShareMachine<C> {
       rng,
       &self.params,
       &self.context,
-      &self.coefficients,
+      &mut self.coefficients,
       self.our_commitments.clone(),
       commitments,
     )?;

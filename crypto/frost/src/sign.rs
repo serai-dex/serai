@@ -132,10 +132,11 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
 
         // This could be further optimized with a multi-nonce proof.
         // See https://github.com/serai-dex/serai/issues/38
-        for nonce in nonces {
+        for mut nonce in nonces {
           DLEqProof::prove(&mut *rng, &mut transcript, generators, nonce)
             .serialize(&mut serialized)
             .unwrap();
+          nonce.zeroize();
         }
       }
 
@@ -292,16 +293,15 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
     }
   }
 
-  let share = params.algorithm.sign_share(
-    &params.view,
-    &Rs,
-    &our_preprocess
-      .nonces
-      .iter()
-      .map(|nonces| nonces[0] + (nonces[1] * B[&params.keys.params.i()].1))
-      .collect::<Vec<_>>(),
-    msg,
-  );
+  let mut nonces = our_preprocess
+    .nonces
+    .iter()
+    .map(|nonces| nonces[0] + (nonces[1] * B[&params.keys.params.i()].1))
+    .collect::<Vec<_>>();
+
+  let share = params.algorithm.sign_share(&params.view, &Rs, &nonces, msg);
+  nonces.zeroize();
+
   Ok((Package { B, Rs, share }, share.to_repr().as_ref().to_vec()))
 }
 

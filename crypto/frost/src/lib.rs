@@ -102,6 +102,7 @@ pub struct FrostView<C: Curve> {
   verification_shares: HashMap<u16, C::G>,
 }
 
+// Manually implement Drop due to https://github.com/RustCrypto/utils/issues/786
 impl<C: Curve> Drop for FrostView<C> {
   fn drop(&mut self) {
     self.zeroize()
