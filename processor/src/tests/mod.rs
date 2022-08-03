@@ -71,7 +71,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   for i in 1 ..= threshold {
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_height(0, height);
-    wallet.add_keys(&WalletKeys::new(Arc::try_unwrap(keys.remove(&i).take().unwrap()).unwrap(), 0));
+    wallet.add_keys(&WalletKeys::new(keys.remove(&i).unwrap(), 0));
     wallets.push(wallet);
   }
 

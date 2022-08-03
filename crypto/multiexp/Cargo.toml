@@ -9,6 +9,8 @@ keywords = ["multiexp", "ff", "group"]
 edition = "2021"
 
 [dependencies]
+zeroize = { version = "1.3", features = ["zeroize_derive"] }
+
 ff = "0.12"
 group = "0.12"
 

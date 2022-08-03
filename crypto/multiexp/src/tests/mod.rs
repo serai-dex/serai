@@ -2,6 +2,8 @@ use std::time::Instant;
 
 use rand_core::OsRng;
 
+use zeroize::Zeroize;
+
 use ff::{Field, PrimeFieldBits};
 use group::Group;
 
@@ -13,7 +15,7 @@ use crate::{straus, pippenger, multiexp, multiexp_vartime};
 #[allow(dead_code)]
 fn benchmark_internal<G: Group>(straus_bool: bool)
 where
-  G::Scalar: PrimeFieldBits,
+  G::Scalar: PrimeFieldBits + Zeroize,
 {
   let runs: usize = 20;
 
@@ -81,7 +83,7 @@ where
 
 fn test_multiexp<G: Group>()
 where
-  G::Scalar: PrimeFieldBits,
+  G::Scalar: PrimeFieldBits + Zeroize,
 {
   let mut pairs = Vec::with_capacity(1000);
   let mut sum = G::identity();

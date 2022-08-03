@@ -1,12 +1,14 @@
-use std::io::Cursor;
-
-use rand_core::{RngCore, CryptoRng};
+use zeroize::Zeroize;
 
 use sha2::{digest::Update, Digest, Sha256};
 
-use group::{ff::Field, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
 
 use elliptic_curve::{
+  generic_array::GenericArray,
   bigint::{Encoding, U384},
   hash2curve::{Expander, ExpandMsg, ExpandMsgXmd},
 };
@@ -22,7 +24,7 @@ macro_rules! kp_curve {
     $ID:      literal,
     $CONTEXT: literal
   ) => {
-    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
     impl Curve for $Curve {
       type F = $lib::Scalar;
@@ -30,13 +32,6 @@ macro_rules! kp_curve {
 
       const ID: &'static [u8] = $ID;
       const GENERATOR: Self::G = $lib::ProjectivePoint::GENERATOR;
-
-      fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
-        let mut seed = vec![0; 32];
-        rng.fill_bytes(&mut seed);
-        seed.extend(secret.to_bytes());
-        Self::hash_to_F(&[$CONTEXT as &[u8], b"nonce"].concat(), &seed)
-      }
 
       fn hash_msg(msg: &[u8]) -> Vec<u8> {
         (&Sha256::new().chain($CONTEXT).chain(b"digest").chain(msg).finalize()).to_vec()
@@ -58,17 +53,21 @@ macro_rules! kp_curve {
         let mut modulus = vec![0; 16];
         modulus.extend((Self::F::zero() - Self::F::one()).to_bytes());
         let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
-        Self::read_F(&mut Cursor::new(
-          &U384::from_be_slice(&{
-            let mut bytes = [0; 48];
-            ExpandMsgXmd::<Sha256>::expand_message(&[msg], dst, 48).unwrap().fill_bytes(&mut bytes);
-            bytes
-          })
-          .reduce(&modulus)
-          .unwrap()
-          .to_be_bytes()[16 ..],
-        ))
+
+        let mut unreduced = U384::from_be_bytes({
+          let mut bytes = [0; 48];
+          ExpandMsgXmd::<Sha256>::expand_message(&[msg], dst, 48).unwrap().fill_bytes(&mut bytes);
+          bytes
+        })
+        .reduce(&modulus)
         .unwrap()
+        .to_be_bytes();
+
+        let mut array = *GenericArray::from_slice(&unreduced[16 ..]);
+        let res = $lib::Scalar::from_repr(array).unwrap();
+        unreduced.zeroize();
+        array.zeroize();
+        res
       }
     }
 

@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc, collections::HashMap};
+use std::{marker::PhantomData, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -78,7 +78,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 fn sign_core<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   group_key: C::G,
-  keys: &HashMap<u16, Arc<FrostKeys<C>>>,
+  keys: &HashMap<u16, FrostKeys<C>>,
 ) {
   const MESSAGE: &[u8] = b"Hello, World!";
 
@@ -109,7 +109,7 @@ fn sign_with_offset<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 
   let offset = C::hash_to_F(b"FROST Test sign_with_offset", b"offset");
   for i in 1 ..= u16::try_from(keys.len()).unwrap() {
-    keys.insert(i, Arc::new(keys[&i].offset(offset)));
+    keys.insert(i, keys[&i].offset(offset));
   }
   let offset_key = group_key + (C::GENERATOR * offset);
 

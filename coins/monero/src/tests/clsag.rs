@@ -56,7 +56,7 @@ fn clsag() {
     let image = generate_key_image(secrets[0]);
     let (clsag, pseudo_out) = Clsag::sign(
       &mut OsRng,
-      &vec![(
+      vec![(
         secrets[0],
         image,
         ClsagInput::new(

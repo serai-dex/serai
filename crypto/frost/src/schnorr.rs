@@ -1,5 +1,7 @@
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use group::{
   ff::{Field, PrimeField},
   GroupEncoding,
@@ -26,11 +28,14 @@ impl<C: Curve> SchnorrSignature<C> {
 }
 
 pub(crate) fn sign<C: Curve>(
-  private_key: C::F,
-  nonce: C::F,
+  mut private_key: C::F,
+  mut nonce: C::F,
   challenge: C::F,
 ) -> SchnorrSignature<C> {
-  SchnorrSignature { R: C::GENERATOR * nonce, s: nonce + (private_key * challenge) }
+  let res = SchnorrSignature { R: C::GENERATOR * nonce, s: nonce + (private_key * challenge) };
+  private_key.zeroize();
+  nonce.zeroize();
+  res
 }
 
 #[must_use]

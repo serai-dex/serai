@@ -1,11 +1,13 @@
 use core::ops::{Add, Sub, Mul, Index};
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use group::ff::Field;
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 use multiexp::multiexp;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct ScalarVector(pub(crate) Vec<Scalar>);
 macro_rules! math_op {
   ($Op: ident, $op: ident, $f: expr) => {

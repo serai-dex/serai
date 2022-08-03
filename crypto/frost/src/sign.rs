@@ -1,11 +1,12 @@
 use core::fmt;
 use std::{
   io::{Read, Cursor},
-  sync::Arc,
   collections::HashMap,
 };
 
 use rand_core::{RngCore, CryptoRng};
+
+use zeroize::Zeroize;
 
 use transcript::Transcript;
 
@@ -25,7 +26,7 @@ use crate::{
 #[derive(Clone)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
   algorithm: A,
-  keys: Arc<FrostKeys<C>>,
+  keys: FrostKeys<C>,
   view: FrostView<C>,
 }
 
@@ -33,23 +34,25 @@ pub struct Params<C: Curve, A: Algorithm<C>> {
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
     algorithm: A,
-    keys: Arc<FrostKeys<C>>,
+    keys: FrostKeys<C>,
     included: &[u16],
   ) -> Result<Params<C, A>, FrostError> {
+    let params = keys.params();
+
     let mut included = included.to_vec();
     included.sort_unstable();
 
     // Included < threshold
-    if included.len() < usize::from(keys.params.t) {
+    if included.len() < usize::from(params.t) {
       Err(FrostError::InvalidSigningSet("not enough signers"))?;
     }
     // Invalid index
     if included[0] == 0 {
-      Err(FrostError::InvalidParticipantIndex(included[0], keys.params.n))?;
+      Err(FrostError::InvalidParticipantIndex(included[0], params.n))?;
     }
     // OOB index
-    if included[included.len() - 1] > keys.params.n {
-      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], keys.params.n))?;
+    if included[included.len() - 1] > params.n {
+      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], params.n))?;
     }
     // Same signer included multiple times
     for i in 0 .. included.len() - 1 {
@@ -58,7 +61,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
       }
     }
     // Not included
-    if !included.contains(&keys.params.i) {
+    if !included.contains(&params.i) {
       Err(FrostError::InvalidSigningSet("signing despite not being included"))?;
     }
 
@@ -67,7 +70,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   }
 
   pub fn multisig_params(&self) -> FrostParams {
-    self.keys.params
+    self.keys.params()
   }
 
   pub fn view(&self) -> FrostView<C> {
@@ -79,10 +82,18 @@ fn nonce_transcript<T: Transcript>() -> T {
   T::new(b"FROST_nonce_dleq")
 }
 
+#[derive(Zeroize)]
 pub(crate) struct PreprocessPackage<C: Curve> {
   pub(crate) nonces: Vec<[C::F; 2]>,
+  #[zeroize(skip)]
   pub(crate) commitments: Vec<Vec<[C::G; 2]>>,
   pub(crate) addendum: Vec<u8>,
+}
+
+impl<C: Curve> Drop for PreprocessPackage<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
 }
 
 // This library unifies the preprocessing step with signing due to security concerns and to provide
@@ -122,10 +133,11 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
 
         // This could be further optimized with a multi-nonce proof.
         // See https://github.com/serai-dex/serai/issues/38
-        for nonce in nonces {
+        for mut nonce in nonces {
           DLEqProof::prove(&mut *rng, &mut transcript, generators, nonce)
             .serialize(&mut serialized)
             .unwrap();
+          nonce.zeroize();
         }
       }
 
@@ -190,7 +202,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
         t.append_message(b"commitment_E", commitments[1].to_bytes().as_ref());
       };
 
-      if *l == params.keys.params.i {
+      if *l == params.keys.params().i {
         for nonce_commitments in &our_preprocess.commitments {
           for commitments in nonce_commitments {
             transcript(params.algorithm.transcript(), *commitments);
@@ -282,16 +294,15 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
     }
   }
 
-  let share = params.algorithm.sign_share(
-    &params.view,
-    &Rs,
-    &our_preprocess
-      .nonces
-      .iter()
-      .map(|nonces| nonces[0] + (nonces[1] * B[&params.keys.params.i()].1))
-      .collect::<Vec<_>>(),
-    msg,
-  );
+  let mut nonces = our_preprocess
+    .nonces
+    .iter()
+    .map(|nonces| nonces[0] + (nonces[1] * B[&params.keys.params().i()].1))
+    .collect::<Vec<_>>();
+
+  let share = params.algorithm.sign_share(&params.view, &Rs, &nonces, msg);
+  nonces.zeroize();
+
   Ok((Package { B, Rs, share }, share.to_repr().as_ref().to_vec()))
 }
 
@@ -397,7 +408,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a key for the specified curve in the specified multisig
   pub fn new(
     algorithm: A,
-    keys: Arc<FrostKeys<C>>,
+    keys: FrostKeys<C>,
     included: &[u16],
   ) -> Result<AlgorithmMachine<C, A>, FrostError> {
     Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })

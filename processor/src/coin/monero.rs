@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 
 use curve25519_dalek::scalar::Scalar;
@@ -57,7 +55,7 @@ impl OutputTrait for Output {
 
 #[derive(Debug)]
 pub struct SignableTransaction(
-  Arc<FrostKeys<Ed25519>>,
+  FrostKeys<Ed25519>,
   RecommendedTranscript,
   usize,
   MSignableTransaction,
@@ -137,14 +135,14 @@ impl Coin for Monero {
   async fn get_outputs(&self, block: &Self::Block, key: dfg::EdwardsPoint) -> Vec<Self::Output> {
     block
       .iter()
-      .flat_map(|tx| tx.scan(self.view_pair(key), true).not_locked())
+      .flat_map(|tx| tx.scan(&self.view_pair(key), true).not_locked())
       .map(Output::from)
       .collect()
   }
 
   async fn prepare_send(
     &self,
-    keys: Arc<FrostKeys<Ed25519>>,
+    keys: FrostKeys<Ed25519>,
     transcript: RecommendedTranscript,
     height: usize,
     mut inputs: Vec<Output>,
@@ -177,7 +175,7 @@ impl Coin for Monero {
       .clone()
       .multisig(
         &self.rpc,
-        (*transaction.0).clone(),
+        transaction.0.clone(),
         transaction.1.clone(),
         transaction.2,
         included.to_vec(),
@@ -235,7 +233,7 @@ impl Coin for Monero {
       .await
       .unwrap()
       .swap_remove(0)
-      .scan(self.empty_view_pair(), false)
+      .scan(&self.empty_view_pair(), false)
       .ignore_timelock();
 
     let amount = outputs[0].commitment.amount;

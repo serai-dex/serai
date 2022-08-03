@@ -1,5 +1,7 @@
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use transcript::Transcript;
 
 use group::{
@@ -19,14 +21,14 @@ use crate::{read_scalar, cross_group::read_point};
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct SchnorrPoK<G: PrimeGroup> {
+pub(crate) struct SchnorrPoK<G: PrimeGroup + Zeroize> {
   R: G,
   s: G::Scalar,
 }
 
-impl<G: PrimeGroup> SchnorrPoK<G>
+impl<G: PrimeGroup + Zeroize> SchnorrPoK<G>
 where
-  G::Scalar: PrimeFieldBits,
+  G::Scalar: PrimeFieldBits + Zeroize,
 {
   // Not hram due to the lack of m
   #[allow(non_snake_case)]
@@ -42,15 +44,18 @@ where
     rng: &mut R,
     transcript: &mut T,
     generator: G,
-    private_key: G::Scalar,
+    mut private_key: G::Scalar,
   ) -> SchnorrPoK<G> {
-    let nonce = G::Scalar::random(rng);
+    let mut nonce = G::Scalar::random(rng);
     #[allow(non_snake_case)]
     let R = generator * nonce;
-    SchnorrPoK {
+    let res = SchnorrPoK {
       R,
       s: nonce + (private_key * SchnorrPoK::hra(transcript, generator, R, generator * private_key)),
-    }
+    };
+    private_key.zeroize();
+    nonce.zeroize();
+    res
   }
 
   pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(

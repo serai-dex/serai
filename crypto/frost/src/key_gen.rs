@@ -6,6 +6,8 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use group::{
   ff::{Field, PrimeField},
   GroupEncoding,
@@ -15,7 +17,7 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
   curve::Curve,
-  FrostError, FrostParams, FrostKeys,
+  FrostError, FrostParams, FrostCore,
   schnorr::{self, SchnorrSignature},
   validate_map,
 };
@@ -54,7 +56,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   }
 
   // Step 2: Provide a proof of knowledge
-  let r = C::F::random(rng);
+  let mut r = C::F::random(rng);
   serialized.extend(
     schnorr::sign::<C>(
       coefficients[0],
@@ -67,6 +69,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
     )
     .serialize(),
   );
+  r.zeroize();
 
   // Step 4: Broadcast
   (coefficients, commitments, serialized)
@@ -148,7 +151,7 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
-  coefficients: Vec<C::F>,
+  coefficients: &mut Vec<C::F>,
   our_commitments: Vec<C::G>,
   commitments: HashMap<u16, Re>,
 ) -> Result<(C::F, HashMap<u16, Vec<C::G>>, HashMap<u16, Vec<u8>>), FrostError> {
@@ -163,19 +166,13 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
       continue;
     }
 
-    res.insert(l, polynomial(&coefficients, l).to_repr().as_ref().to_vec());
+    res.insert(l, polynomial(coefficients, l).to_repr().as_ref().to_vec());
   }
 
   // Calculate our own share
-  let share = polynomial(&coefficients, params.i());
+  let share = polynomial(coefficients, params.i());
 
-  // The secret shares are discarded here, not cleared. While any system which leaves its memory
-  // accessible is likely totally lost already, making the distinction meaningless when the key gen
-  // system acts as the signer system and therefore actively holds the signing key anyways, it
-  // should be overwritten with /dev/urandom in the name of security (which still doesn't meet
-  // requirements for secure data deletion yet those requirements expect hardware access which is
-  // far past what this library can reasonably counter)
-  // TODO: Zero out the coefficients
+  coefficients.zeroize();
 
   Ok((share, commitments, res))
 }
@@ -189,17 +186,17 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: FrostParams,
   mut secret_share: C::F,
-  commitments: HashMap<u16, Vec<C::G>>,
+  commitments: &mut HashMap<u16, Vec<C::G>>,
   mut serialized: HashMap<u16, Re>,
-) -> Result<FrostKeys<C>, FrostError> {
+) -> Result<FrostCore<C>, FrostError> {
   validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   // Step 2. Verify each share
   let mut shares = HashMap::new();
+  // TODO: Clear serialized
   for (l, share) in serialized.iter_mut() {
     shares.insert(*l, C::read_F(share).map_err(|_| FrostError::InvalidShare(*l))?);
   }
-  shares.insert(params.i(), secret_share);
 
   // Calculate the exponent for a given participant and apply it to a series of commitments
   // Initially used with the actual commitments to verify the secret share, later used with stripes
@@ -215,12 +212,12 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   };
 
   let mut batch = BatchVerifier::new(shares.len());
-  for (l, share) in &shares {
+  for (l, share) in shares.iter_mut() {
     if *l == params.i() {
       continue;
     }
 
-    secret_share += share;
+    secret_share += *share;
 
     // This can be insecurely linearized from n * t to just n using the below sums for a given
     // stripe. Doing so uses naive addition which is subject to malleability. The only way to
@@ -228,6 +225,8 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
     // per sender and not as an aggregate of all senders, which also enables blame
     let mut values = exponential(params.i, &commitments[l]);
     values.push((-*share, C::GENERATOR));
+    share.zeroize();
+
     batch.queue(rng, *l, values);
   }
   batch.verify_with_vartime_blame().map_err(FrostError::InvalidCommitment)?;
@@ -249,9 +248,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
   debug_assert_eq!(C::GENERATOR * secret_share, verification_shares[&params.i()]);
 
-  // TODO: Clear serialized and shares
-
-  Ok(FrostKeys { params, secret_share, group_key: stripes[0], verification_shares, offset: None })
+  Ok(FrostCore { params, secret_share, group_key: stripes[0], verification_shares })
 }
 
 pub struct KeyGenMachine<C: Curve> {
@@ -260,17 +257,35 @@ pub struct KeyGenMachine<C: Curve> {
   _curve: PhantomData<C>,
 }
 
+#[derive(Zeroize)]
 pub struct SecretShareMachine<C: Curve> {
+  #[zeroize(skip)]
   params: FrostParams,
   context: String,
   coefficients: Vec<C::F>,
+  #[zeroize(skip)]
   our_commitments: Vec<C::G>,
 }
 
+impl<C: Curve> Drop for SecretShareMachine<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
+}
+
+#[derive(Zeroize)]
 pub struct KeyMachine<C: Curve> {
+  #[zeroize(skip)]
   params: FrostParams,
   secret: C::F,
+  #[zeroize(skip)]
   commitments: HashMap<u16, Vec<C::G>>,
+}
+
+impl<C: Curve> Drop for KeyMachine<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
 }
 
 impl<C: Curve> KeyGenMachine<C> {
@@ -309,7 +324,7 @@ impl<C: Curve> SecretShareMachine<C> {
   /// is also expected at index i which is locally handled. Returns a byte vector representing a
   /// secret share for each other participant which should be encrypted before sending
   pub fn generate_secret_shares<Re: Read, R: RngCore + CryptoRng>(
-    self,
+    mut self,
     rng: &mut R,
     commitments: HashMap<u16, Re>,
   ) -> Result<(KeyMachine<C>, HashMap<u16, Vec<u8>>), FrostError> {
@@ -317,8 +332,8 @@ impl<C: Curve> SecretShareMachine<C> {
       rng,
       &self.params,
       &self.context,
-      self.coefficients,
-      self.our_commitments,
+      &mut self.coefficients,
+      self.our_commitments.clone(),
       commitments,
     )?;
     Ok((KeyMachine { params: self.params, secret, commitments }, shares))
@@ -333,10 +348,10 @@ impl<C: Curve> KeyMachine<C> {
   /// must report completion without issue before this key can be considered usable, yet you should
   /// wait for all participants to report as such
   pub fn complete<Re: Read, R: RngCore + CryptoRng>(
-    self,
+    mut self,
     rng: &mut R,
     shares: HashMap<u16, Re>,
-  ) -> Result<FrostKeys<C>, FrostError> {
-    complete_r2(rng, self.params, self.secret, self.commitments, shares)
+  ) -> Result<FrostCore<C>, FrostError> {
+    complete_r2(rng, self.params, self.secret, &mut self.commitments, shares)
   }
 }

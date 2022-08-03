@@ -101,7 +101,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       // Grab the largest output available
       let output = {
-        let mut outputs = tx.as_ref().unwrap().scan(view_pair, false).ignore_timelock();
+        let mut outputs = tx.as_ref().unwrap().scan(&view_pair, false).ignore_timelock();
         outputs.sort_by(|x, y| x.commitment.amount.cmp(&y.commitment.amount).reverse());
         outputs.swap_remove(0)
       };
@@ -126,7 +126,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       for i in (start + 1) .. (start + 9) {
         let tx = rpc.get_block_transactions(i).await.unwrap().swap_remove(0);
-        let output = tx.scan(view_pair, false).ignore_timelock().swap_remove(0);
+        let output = tx.scan(&view_pair, false).ignore_timelock().swap_remove(0);
         amount += output.commitment.amount;
         outputs.push(output);
       }
@@ -154,7 +154,7 @@ async fn send_core(test: usize, multisig: bool) {
               .clone()
               .multisig(
                 &rpc,
-                (*keys[&i]).clone(),
+                keys[&i].clone(),
                 RecommendedTranscript::new(b"Monero Serai Test Transaction"),
                 rpc.get_height().await.unwrap() - 10,
                 (1 ..= THRESHOLD).collect::<Vec<_>>(),

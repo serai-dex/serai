@@ -3,6 +3,8 @@ use std::io::Read;
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use group::{Group, GroupEncoding};
@@ -29,7 +31,7 @@ fn transcript() -> RecommendedTranscript {
 pub(crate) fn write_dleq<R: RngCore + CryptoRng>(
   rng: &mut R,
   H: EdwardsPoint,
-  x: Scalar,
+  mut x: Scalar,
 ) -> Vec<u8> {
   let mut res = Vec::with_capacity(64);
   DLEqProof::prove(
@@ -45,6 +47,7 @@ pub(crate) fn write_dleq<R: RngCore + CryptoRng>(
   )
   .serialize(&mut res)
   .unwrap();
+  x.zeroize();
   res
 }
 

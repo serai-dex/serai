@@ -1,3 +1,5 @@
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
@@ -39,7 +41,7 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
 #[allow(non_snake_case)]
 pub(crate) fn shared_key(
   uniqueness: Option<[u8; 32]>,
-  s: Scalar,
+  s: &Scalar,
   P: &EdwardsPoint,
   o: usize,
 ) -> (u8, Scalar) {
@@ -76,7 +78,7 @@ pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
   hash_to_scalar(&mask)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct ViewPair {
   pub spend: EdwardsPoint,
   pub view: Scalar,

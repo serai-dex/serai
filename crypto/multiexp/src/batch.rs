@@ -1,17 +1,20 @@
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use ff::{Field, PrimeFieldBits};
 use group::Group;
 
 use crate::{multiexp, multiexp_vartime};
 
 #[cfg(feature = "batch")]
-pub struct BatchVerifier<Id: Copy, G: Group>(Vec<(Id, Vec<(G::Scalar, G)>)>);
+#[derive(Clone, Zeroize)]
+pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(Vec<(Id, Vec<(G::Scalar, G)>)>);
 
 #[cfg(feature = "batch")]
-impl<Id: Copy, G: Group> BatchVerifier<Id, G>
+impl<Id: Copy + Zeroize, G: Group + Zeroize> BatchVerifier<Id, G>
 where
-  <G as Group>::Scalar: PrimeFieldBits,
+  <G as Group>::Scalar: PrimeFieldBits + Zeroize,
 {
   pub fn new(capacity: usize) -> BatchVerifier<Id, G> {
     BatchVerifier(Vec::with_capacity(capacity))
@@ -39,10 +42,17 @@ where
   }
 
   #[must_use]
-  pub fn verify(&self) -> bool {
-    multiexp(&self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
-      .is_identity()
-      .into()
+  pub fn verify_core(&self) -> bool {
+    let mut flat = self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>();
+    let res = multiexp(&flat).is_identity().into();
+    flat.zeroize();
+    res
+  }
+
+  pub fn verify(mut self) -> bool {
+    let res = self.verify_core();
+    self.zeroize();
+    res
   }
 
   #[must_use]
@@ -75,12 +85,10 @@ where
       .map(|(id, _)| *id)
   }
 
-  pub fn verify_with_vartime_blame(&self) -> Result<(), Id> {
-    if self.verify() {
-      Ok(())
-    } else {
-      Err(self.blame_vartime().unwrap())
-    }
+  pub fn verify_with_vartime_blame(mut self) -> Result<(), Id> {
+    let res = if self.verify_core() { Ok(()) } else { Err(self.blame_vartime().unwrap()) };
+    self.zeroize();
+    res
   }
 
   pub fn verify_vartime_with_vartime_blame(&self) -> Result<(), Id> {

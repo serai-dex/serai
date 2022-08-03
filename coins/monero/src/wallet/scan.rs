@@ -1,5 +1,7 @@
 use std::convert::TryFrom;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
@@ -11,7 +13,7 @@ use crate::{
   wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SpendableOutput {
   pub tx: [u8; 32],
   pub o: u8,
@@ -20,6 +22,7 @@ pub struct SpendableOutput {
   pub commitment: Commitment,
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct Timelocked(Timelock, Vec<SpendableOutput>);
 impl Timelocked {
   pub fn timelock(&self) -> Timelock {
@@ -76,7 +79,7 @@ impl SpendableOutput {
 }
 
 impl Transaction {
-  pub fn scan(&self, view: ViewPair, guaranteed: bool) -> Timelocked {
+  pub fn scan(&self, view: &ViewPair, guaranteed: bool) -> Timelocked {
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
     extra.extend(&self.prefix.extra);
@@ -103,7 +106,7 @@ impl Transaction {
       for pubkey in &pubkeys {
         let (view_tag, key_offset) = shared_key(
           Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
-          view.view,
+          &view.view,
           pubkey,
           o,
         );

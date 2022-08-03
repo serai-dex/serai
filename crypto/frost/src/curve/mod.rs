@@ -5,6 +5,8 @@ use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use ff::{PrimeField, PrimeFieldBits};
 use group::{Group, GroupOps, GroupEncoding, prime::PrimeGroup};
 
@@ -39,12 +41,12 @@ pub enum CurveError {
 // elliptic-curve exists, yet it doesn't really serve the same role, nor does it use &[u8]/Vec<u8>
 // It uses GenericArray which will hopefully be deprecated as Rust evolves and doesn't offer enough
 // advantages in the modern day to be worth the hassle -- Kayaba
-pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
+pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   /// Scalar field element type
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
-  type F: PrimeField + PrimeFieldBits;
+  type F: PrimeField + PrimeFieldBits + Zeroize;
   /// Group element type
-  type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup;
+  type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize;
 
   /// ID for this curve
   const ID: &'static [u8];
@@ -52,9 +54,6 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// Generator for the group
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   const GENERATOR: Self::G;
-
-  /// Securely generate a random nonce. H4 from the IETF draft
-  fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F;
 
   /// Hash the message for the binding factor. H3 from the IETF draft
   // This doesn't actually need to be part of Curve as it does nothing with the curve
@@ -69,8 +68,23 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft
   fn hash_binding_factor(binding: &[u8]) -> Self::F;
 
-  // The following methods would optimally be F:: and G:: yet developers can't control F/G
-  // They can control a trait they pass into this library
+  /// Securely generate a random nonce. H4 from the IETF draft
+  fn random_nonce<R: RngCore + CryptoRng>(mut secret: Self::F, rng: &mut R) -> Self::F {
+    let mut seed = vec![0; 32];
+    rng.fill_bytes(&mut seed);
+
+    let mut repr = secret.to_repr();
+    secret.zeroize();
+
+    seed.extend(repr.as_ref());
+    for i in repr.as_mut() {
+      *i = 0;
+    }
+
+    let res = Self::hash_to_F(b"nonce", &seed);
+    seed.zeroize();
+    res
+  }
 
   /// Field element from hash. Used during key gen and by other crates under Serai as a general
   /// utility
@@ -93,8 +107,14 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
   fn read_F<R: Read>(r: &mut R) -> Result<Self::F, CurveError> {
     let mut encoding = <Self::F as PrimeField>::Repr::default();
     r.read_exact(encoding.as_mut()).map_err(|_| CurveError::InvalidScalar)?;
+
     // ff mandates this is canonical
-    Option::<Self::F>::from(Self::F::from_repr(encoding)).ok_or(CurveError::InvalidScalar)
+    let res =
+      Option::<Self::F>::from(Self::F::from_repr(encoding)).ok_or(CurveError::InvalidScalar);
+    for b in encoding.as_mut() {
+      *b = 0;
+    }
+    res
   }
 
   #[allow(non_snake_case)]

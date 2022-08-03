@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashMap};
+use std::collections::HashMap;
 
 use rand_core::OsRng;
 
@@ -203,7 +203,7 @@ fn select_inputs_outputs<C: Coin>(
 pub struct Wallet<D: CoinDb, C: Coin> {
   db: D,
   coin: C,
-  keys: Vec<(Arc<FrostKeys<C::Curve>>, Vec<C::Output>)>,
+  keys: Vec<(FrostKeys<C::Curve>, Vec<C::Output>)>,
   pending: Vec<(usize, FrostKeys<C::Curve>)>,
 }
 
@@ -249,7 +249,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           //if b < self.pending[k].0 {
           //} else if b == self.pending[k].0 {
           if b <= self.pending[k].0 {
-            self.keys.push((Arc::new(self.pending.swap_remove(k).1), vec![]));
+            self.keys.push((self.pending.swap_remove(k).1, vec![]));
           } else {
             k += 1;
           }

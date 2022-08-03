@@ -1,3 +1,5 @@
+use zeroize::Zeroize;
+
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 pub(crate) mod hash_to_point;
@@ -11,8 +13,10 @@ use crate::{
   ringct::{clsag::Clsag, bulletproofs::Bulletproofs},
 };
 
-pub fn generate_key_image(secret: Scalar) -> EdwardsPoint {
-  secret * hash_to_point(&secret * &ED25519_BASEPOINT_TABLE)
+pub fn generate_key_image(mut secret: Scalar) -> EdwardsPoint {
+  let res = secret * hash_to_point(&secret * &ED25519_BASEPOINT_TABLE);
+  secret.zeroize();
+  res
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

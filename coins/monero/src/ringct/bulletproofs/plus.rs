@@ -1,6 +1,8 @@
 use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as DalekPoint};
 
 use group::ff::Field;
@@ -109,7 +111,7 @@ impl PlusStruct {
       let cL = weighted_inner_product(&aL, &bR, y);
       let cR = weighted_inner_product(&(&aR * ypow[aR.len()]), &bL, y);
 
-      let (dL, dR) = (Scalar::random(&mut *rng), Scalar::random(&mut *rng));
+      let (mut dL, mut dR) = (Scalar::random(&mut *rng), Scalar::random(&mut *rng));
 
       let (G_L, G_R) = G_proof.split_at(aL.len());
       let (H_L, H_R) = H_proof.split_at(aL.len());
@@ -134,12 +136,15 @@ impl PlusStruct {
       b = (bL * winv) + (bR * w);
 
       alpha1 += (dL * (w * w)) + (dR * (winv * winv));
+
+      dL.zeroize();
+      dR.zeroize();
     }
 
-    let r = Scalar::random(&mut *rng);
-    let s = Scalar::random(&mut *rng);
-    let d = Scalar::random(&mut *rng);
-    let eta = Scalar::random(rng);
+    let mut r = Scalar::random(&mut *rng);
+    let mut s = Scalar::random(&mut *rng);
+    let mut d = Scalar::random(&mut *rng);
+    let mut eta = Scalar::random(rng);
 
     let A1 = prove_multiexp(&[
       (r, G_proof[0]),
@@ -151,8 +156,13 @@ impl PlusStruct {
     let e = hash_cache(&mut cache, &[A1.compress().to_bytes(), B.compress().to_bytes()]);
 
     let r1 = (a[0] * e) + r;
+    r.zeroize();
     let s1 = (b[0] * e) + s;
+    s.zeroize();
     let d1 = ((d * e) + eta) + (alpha1 * (e * e));
+    d.zeroize();
+    eta.zeroize();
+    alpha1.zeroize();
 
     PlusStruct {
       A: *A,
@@ -167,7 +177,7 @@ impl PlusStruct {
   }
 
   #[must_use]
-  fn verify_core<ID: Copy, R: RngCore + CryptoRng>(
+  fn verify_core<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,
@@ -293,7 +303,7 @@ impl PlusStruct {
   }
 
   #[must_use]
-  pub(crate) fn batch_verify<ID: Copy, R: RngCore + CryptoRng>(
+  pub(crate) fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,

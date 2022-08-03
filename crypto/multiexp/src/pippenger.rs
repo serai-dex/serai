@@ -1,3 +1,5 @@
+use zeroize::Zeroize;
+
 use ff::PrimeFieldBits;
 use group::Group;
 
@@ -7,7 +9,7 @@ pub(crate) fn pippenger<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
 where
   G::Scalar: PrimeFieldBits,
 {
-  let bits = prep_bits(pairs, window);
+  let mut bits = prep_bits(pairs, window);
 
   let mut res = G::identity();
   for n in (0 .. bits[0].len()).rev() {
@@ -27,6 +29,7 @@ where
     }
   }
 
+  bits.zeroize();
   res
 }
 

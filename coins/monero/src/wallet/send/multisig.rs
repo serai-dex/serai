@@ -125,7 +125,7 @@ impl SignableTransaction {
         AlgorithmMachine::new(
           ClsagMultisig::new(transcript.clone(), input.key, inputs[i].clone())
             .map_err(TransactionError::MultisigError)?,
-          Arc::new(offset),
+          offset,
           &included,
         )
         .map_err(TransactionError::FrostError)?,
@@ -283,25 +283,18 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     }
 
     // Create the actual transaction
-    let output_masks;
-    let mut tx = {
+    let (mut tx, output_masks) = {
       let mut sorted_images = images.clone();
       sorted_images.sort_by(key_image_sort);
 
-      let commitments;
-      (commitments, output_masks) = self.signable.prepare_outputs(
-        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"tx_keys")),
+      self.signable.prepare_transaction(
+        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"transaction_keys_bulletproofs")),
         uniqueness(
-          &images
+          &sorted_images
             .iter()
             .map(|image| Input::ToKey { amount: 0, key_offsets: vec![], key_image: *image })
             .collect::<Vec<_>>(),
         ),
-      );
-
-      self.signable.prepare_transaction(
-        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"bulletproofs")),
-        &commitments,
       )
     };
 
@@ -338,7 +331,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       });
 
       *value.3.write().unwrap() = Some(ClsagDetails::new(
-        ClsagInput::new(value.1.commitment, value.2).map_err(|_| {
+        ClsagInput::new(value.1.commitment.clone(), value.2).map_err(|_| {
           panic!("Signing an input which isn't present in the ring we created for it")
         })?,
         mask,

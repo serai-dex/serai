@@ -4,6 +4,9 @@ use lazy_static::lazy_static;
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+use subtle::{ConstantTimeEq, Choice, CtOption};
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   scalar::Scalar,
@@ -45,7 +48,7 @@ pub enum ClsagError {
   InvalidC1,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
   pub commitment: Commitment,
@@ -161,11 +164,12 @@ fn core(
   }
 
   // Perform the core loop
-  let mut c1 = None;
+  let mut c1 = CtOption::new(Scalar::zero(), Choice::from(0));
   for i in (start .. end).map(|i| i % n) {
-    if i == 0 {
-      c1 = Some(c);
-    }
+    // This will only execute once and shouldn't need to be constant time. Making it constant time
+    // removes the risk of branch prediction creating timing differences depending on ring index
+    // however
+    c1 = c1.or_else(|| CtOption::new(c, i.ct_eq(&0)));
 
     let c_p = mu_P * c;
     let c_c = mu_C * c;
@@ -224,14 +228,10 @@ impl Clsag {
   // Single signer CLSAG
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
-    inputs: &[(Scalar, EdwardsPoint, ClsagInput)],
+    mut inputs: Vec<(Scalar, EdwardsPoint, ClsagInput)>,
     sum_outputs: Scalar,
     msg: [u8; 32],
   ) -> Vec<(Clsag, EdwardsPoint)> {
-    let nonce = random_scalar(rng);
-    let mut rand_source = [0; 64];
-    rng.fill_bytes(&mut rand_source);
-
     let mut res = Vec::with_capacity(inputs.len());
     let mut sum_pseudo_outs = Scalar::zero();
     for i in 0 .. inputs.len() {
@@ -242,8 +242,7 @@ impl Clsag {
         sum_pseudo_outs += mask;
       }
 
-      let mut rand_source = [0; 64];
-      rng.fill_bytes(&mut rand_source);
+      let mut nonce = random_scalar(rng);
       let (mut clsag, pseudo_out, p, c) = Clsag::sign_core(
         rng,
         &inputs[i].1,
@@ -254,6 +253,8 @@ impl Clsag {
         nonce * hash_to_point(inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
       );
       clsag.s[usize::from(inputs[i].2.decoys.i)] = nonce - ((p * inputs[i].0) + c);
+      inputs[i].0.zeroize();
+      nonce.zeroize();
 
       res.push((clsag, pseudo_out));
     }

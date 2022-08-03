@@ -38,7 +38,7 @@ fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
       generators,
       &ring,
       actual,
-      ring_keys[actual],
+      &mut ring_keys[actual],
       default.clone(),
     );
 

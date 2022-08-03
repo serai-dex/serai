@@ -1,5 +1,7 @@
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use transcript::Transcript;
 
 use group::{
@@ -46,15 +48,16 @@ impl<G0: PrimeGroup, G1: PrimeGroup> Re<G0, G1> {
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Aos<G0: PrimeGroup, G1: PrimeGroup, const RING_LEN: usize> {
+pub(crate) struct Aos<G0: PrimeGroup + Zeroize, G1: PrimeGroup + Zeroize, const RING_LEN: usize> {
   Re_0: Re<G0, G1>,
   s: [(G0::Scalar, G1::Scalar); RING_LEN],
 }
 
-impl<G0: PrimeGroup, G1: PrimeGroup, const RING_LEN: usize> Aos<G0, G1, RING_LEN>
+impl<G0: PrimeGroup + Zeroize, G1: PrimeGroup + Zeroize, const RING_LEN: usize>
+  Aos<G0, G1, RING_LEN>
 where
-  G0::Scalar: PrimeFieldBits,
-  G1::Scalar: PrimeFieldBits,
+  G0::Scalar: PrimeFieldBits + Zeroize,
+  G1::Scalar: PrimeFieldBits + Zeroize,
 {
   #[allow(non_snake_case)]
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
@@ -102,8 +105,8 @@ where
     transcript: T,
     generators: (Generators<G0>, Generators<G1>),
     ring: &[(G0, G1)],
-    actual: usize,
-    blinding_key: (G0::Scalar, G1::Scalar),
+    mut actual: usize,
+    blinding_key: &mut (G0::Scalar, G1::Scalar),
     mut Re_0: Re<G0, G1>,
   ) -> Self {
     // While it is possible to use larger values, it's not efficient to do so
@@ -113,7 +116,7 @@ where
 
     let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
 
-    let r = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
+    let mut r = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
     #[allow(non_snake_case)]
     let original_R = (generators.0.alt * r.0, generators.1.alt * r.1);
     #[allow(non_snake_case)]
@@ -135,6 +138,11 @@ where
       if i == actual {
         s[i] = (r.0 + (e.0 * blinding_key.0), r.1 + (e.1 * blinding_key.1));
         debug_assert_eq!(Self::R(generators, s[i], ring[actual], e), original_R);
+        actual.zeroize();
+        blinding_key.0.zeroize();
+        blinding_key.1.zeroize();
+        r.0.zeroize();
+        r.1.zeroize();
         break;
       // Generate a decoy response
       } else {

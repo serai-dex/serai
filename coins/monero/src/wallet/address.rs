@@ -2,6 +2,8 @@ use std::string::ToString;
 
 use thiserror::Error;
 
+use zeroize::Zeroize;
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   edwards::{EdwardsPoint, CompressedEdwardsY},
@@ -11,14 +13,14 @@ use base58_monero::base58::{encode_check, decode_check};
 
 use crate::wallet::ViewPair;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum Network {
   Mainnet,
   Testnet,
   Stagenet,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum AddressType {
   Standard,
   Integrated([u8; 8]),
@@ -35,7 +37,7 @@ impl AddressType {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct AddressMeta {
   pub network: Network,
   pub kind: AddressType,
@@ -91,7 +93,7 @@ impl AddressMeta {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Address {
   pub meta: AddressMeta,
   pub spend: EdwardsPoint,

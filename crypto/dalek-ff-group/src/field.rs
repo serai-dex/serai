@@ -3,6 +3,7 @@ use core::ops::{Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign};
 use rand_core::RngCore;
 
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
+
 use crypto_bigint::{Encoding, U256, U512};
 
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
@@ -12,7 +13,7 @@ use crate::{choice, constant_time, math_op, math, from_wrapper, from_uint};
 const FIELD_MODULUS: U256 =
   U256::from_be_hex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed");
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct FieldElement(U256);
 
 pub const SQRT_M1: FieldElement = FieldElement(U256::from_be_hex(

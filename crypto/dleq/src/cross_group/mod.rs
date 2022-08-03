@@ -1,6 +1,9 @@
 use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
+
+use zeroize::Zeroize;
+
 use digest::Digest;
 
 use transcript::Transcript;
@@ -73,8 +76,8 @@ pub enum DLEqError {
 // anyone who wants it
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct __DLEqProof<
-  G0: PrimeGroup,
-  G1: PrimeGroup,
+  G0: PrimeGroup + Zeroize,
+  G1: PrimeGroup + Zeroize,
   const SIGNATURE: u8,
   const RING_LEN: usize,
   const REMAINDER_RING_LEN: usize,
@@ -131,15 +134,15 @@ dleq!(EfficientLinearDLEq, BitSignature::EfficientLinear, false);
 dleq!(CompromiseLinearDLEq, BitSignature::CompromiseLinear, true);
 
 impl<
-    G0: PrimeGroup,
-    G1: PrimeGroup,
+    G0: PrimeGroup + Zeroize,
+    G1: PrimeGroup + Zeroize,
     const SIGNATURE: u8,
     const RING_LEN: usize,
     const REMAINDER_RING_LEN: usize,
   > __DLEqProof<G0, G1, SIGNATURE, RING_LEN, REMAINDER_RING_LEN>
 where
-  G0::Scalar: PrimeFieldBits,
-  G1::Scalar: PrimeFieldBits,
+  G0::Scalar: PrimeFieldBits + Zeroize,
+  G1::Scalar: PrimeFieldBits + Zeroize,
 {
   pub(crate) fn transcript<T: Transcript>(
     transcript: &mut T,
@@ -213,22 +216,27 @@ where
 
     let mut pow_2 = (generators.0.primary, generators.1.primary);
 
-    let raw_bits = f.0.to_le_bits();
+    let mut raw_bits = f.0.to_le_bits();
     let mut bits = Vec::with_capacity(capacity);
     let mut these_bits: u8 = 0;
-    for (i, bit) in raw_bits.iter().enumerate() {
+    // Needed to zero out the bits
+    #[allow(unused_assignments)]
+    for (i, mut raw_bit) in raw_bits.iter_mut().enumerate() {
       if i == capacity {
         break;
       }
 
-      let bit = *bit as u8;
+      let mut bit = *raw_bit as u8;
       debug_assert_eq!(bit | 1, 1);
+      *raw_bit = false;
 
       // Accumulate this bit
       these_bits |= bit << (i % bits_per_group);
+      bit = 0;
+
       if (i % bits_per_group) == (bits_per_group - 1) {
         let last = i == (capacity - 1);
-        let blinding_key = blinding_key(&mut *rng, last);
+        let mut blinding_key = blinding_key(&mut *rng, last);
         bits.push(Bits::prove(
           &mut *rng,
           transcript,
@@ -236,7 +244,7 @@ where
           i / bits_per_group,
           &mut pow_2,
           these_bits,
-          blinding_key,
+          &mut blinding_key,
         ));
         these_bits = 0;
       }
@@ -245,7 +253,7 @@ where
 
     let mut remainder = None;
     if capacity != ((capacity / bits_per_group) * bits_per_group) {
-      let blinding_key = blinding_key(&mut *rng, true);
+      let mut blinding_key = blinding_key(&mut *rng, true);
       remainder = Some(Bits::prove(
         &mut *rng,
         transcript,
@@ -253,9 +261,11 @@ where
         capacity / bits_per_group,
         &mut pow_2,
         these_bits,
-        blinding_key,
+        &mut blinding_key,
       ));
     }
+
+    these_bits.zeroize();
 
     let proof = __DLEqProof { bits, remainder, poks };
     debug_assert_eq!(

@@ -1,4 +1,4 @@
-use rand_core::{RngCore, CryptoRng};
+use zeroize::Zeroize;
 
 use sha2::{Digest, Sha512};
 
@@ -21,7 +21,7 @@ macro_rules! dalek_curve {
   ) => {
     use dalek_ff_group::{$Point, $POINT};
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
     impl Curve for $Curve {
       type F = Scalar;
@@ -29,13 +29,6 @@ macro_rules! dalek_curve {
 
       const ID: &'static [u8] = $ID;
       const GENERATOR: Self::G = $POINT;
-
-      fn random_nonce<R: RngCore + CryptoRng>(secret: Self::F, rng: &mut R) -> Self::F {
-        let mut seed = vec![0; 32];
-        rng.fill_bytes(&mut seed);
-        seed.extend(&secret.to_bytes());
-        Self::hash_to_F(b"nonce", &seed)
-      }
 
       fn hash_msg(msg: &[u8]) -> Vec<u8> {
         Sha512::new()

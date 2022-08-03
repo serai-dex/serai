@@ -7,6 +7,8 @@ use std::{
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   traits::{Identity, IsIdentity},
@@ -52,7 +54,7 @@ impl ClsagInput {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagDetails {
   input: ClsagInput,
   mask: Scalar,
@@ -195,7 +197,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     );
     self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
-    dfg::Scalar(nonces[0].0 - (p * view.secret_share().0))
+    nonces[0] - (dfg::Scalar(p) * view.secret_share())
   }
 
   #[must_use]
