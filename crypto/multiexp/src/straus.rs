@@ -1,3 +1,5 @@
+use zeroize::Zeroize;
+
 use ff::PrimeFieldBits;
 use group::Group;
 
@@ -5,9 +7,9 @@ use crate::{prep_bits, prep_tables};
 
 pub(crate) fn straus<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
 where
-  G::Scalar: PrimeFieldBits,
+  G::Scalar: PrimeFieldBits + Zeroize,
 {
-  let groupings = prep_bits(pairs, window);
+  let mut groupings = prep_bits(pairs, window);
   let tables = prep_tables(pairs, window);
 
   let mut res = G::identity();
@@ -20,6 +22,8 @@ where
       res += tables[s][usize::from(groupings[s][b])];
     }
   }
+
+  groupings.zeroize();
   res
 }
 

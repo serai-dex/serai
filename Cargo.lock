@@ -4642,6 +4642,7 @@ dependencies = [
  "group",
  "k256",
  "rand_core 0.6.3",
+ "zeroize",
 ]
 
 [[package]]

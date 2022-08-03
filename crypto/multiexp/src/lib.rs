@@ -1,3 +1,5 @@
+use zeroize::Zeroize;
+
 use ff::PrimeFieldBits;
 use group::Group;
 
@@ -24,13 +26,17 @@ where
   let mut groupings = vec![];
   for pair in pairs {
     let p = groupings.len();
-    let bits = pair.0.to_le_bits();
+    let mut bits = pair.0.to_le_bits();
     groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
 
-    for (i, bit) in bits.into_iter().enumerate() {
-      let bit = bit as u8;
+    #[allow(unused_assignments)]
+    for (i, mut raw_bit) in bits.iter_mut().enumerate() {
+      let mut bit = *raw_bit as u8;
       debug_assert_eq!(bit | 1, 1);
+      *raw_bit = false;
+
       groupings[p][i / w_usize] |= bit << (i % w_usize);
+      bit = 0;
     }
   }
 
@@ -156,7 +162,7 @@ fn algorithm(len: usize) -> Algorithm {
 // Performs a multiexp, automatically selecting the optimal algorithm based on amount of pairs
 pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G
 where
-  G::Scalar: PrimeFieldBits,
+  G::Scalar: PrimeFieldBits + Zeroize,
 {
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
