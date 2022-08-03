@@ -55,7 +55,7 @@ impl SendOutput {
   ) -> SendOutput {
     let r = random_scalar(rng);
     let (view_tag, shared_key) =
-      shared_key(Some(unique).filter(|_| output.0.meta.guaranteed), r, &output.0.view, o);
+      shared_key(Some(unique).filter(|_| output.0.meta.guaranteed), &r, &output.0.view, o);
 
     let spend = output.0.spend;
     SendOutput {
@@ -129,7 +129,8 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
     signable.push((
       spend + input.key_offset,
       generate_key_image(spend + input.key_offset),
-      ClsagInput::new(input.commitment, decoys[i].clone()).map_err(TransactionError::ClsagError)?,
+      ClsagInput::new(input.commitment.clone(), decoys[i].clone())
+        .map_err(TransactionError::ClsagError)?,
     ));
 
     tx.prefix.inputs.push(Input::ToKey {
@@ -168,7 +169,6 @@ pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
-  outputs: Vec<SendOutput>,
   fee: u64,
 }
 
@@ -253,80 +253,78 @@ impl SignableTransaction {
       Err(TransactionError::TooManyOutputs)?;
     }
 
-    Ok(SignableTransaction { protocol, inputs, payments, outputs: vec![], fee })
+    Ok(SignableTransaction { protocol, inputs, payments, fee })
   }
 
-  fn prepare_outputs<R: RngCore + CryptoRng>(
+  fn prepare_transaction<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
     uniqueness: [u8; 32],
-  ) -> (Vec<Commitment>, Scalar) {
+  ) -> (Transaction, Scalar) {
     // Shuffle the payments
     self.payments.shuffle(rng);
 
     // Actually create the outputs
-    self.outputs = Vec::with_capacity(self.payments.len() + 1);
-    for (o, output) in self.payments.iter().enumerate() {
-      self.outputs.push(SendOutput::new(rng, uniqueness, *output, o));
-    }
+    let outputs = self
+      .payments
+      .drain(..)
+      .enumerate()
+      .map(|(o, output)| SendOutput::new(rng, uniqueness, output, o))
+      .collect::<Vec<_>>();
 
-    let commitments = self.outputs.iter().map(|output| output.commitment).collect::<Vec<_>>();
+    let commitments = outputs.iter().map(|output| output.commitment.clone()).collect::<Vec<_>>();
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
-    (commitments, sum)
-  }
 
-  fn prepare_transaction<R: RngCore + CryptoRng>(
-    &self,
-    rng: &mut R,
-    commitments: &[Commitment],
-  ) -> Transaction {
     // Safe due to the constructor checking MAX_OUTPUTS
-    let bp = Bulletproofs::prove(rng, commitments, self.protocol.bp_plus()).unwrap();
+    let bp = Bulletproofs::prove(rng, &commitments, self.protocol.bp_plus()).unwrap();
 
     // Create the TX extra
     // TODO: Review this for canonicity with Monero
     let mut extra = vec![];
-    SubField::TxPublicKey(PublicKey { point: self.outputs[0].R.compress() })
+    SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
       .consensus_encode(&mut extra)
       .unwrap();
     SubField::AdditionalPublickKey(
-      self.outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect(),
+      outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect(),
     )
     .consensus_encode(&mut extra)
     .unwrap();
 
-    let mut tx_outputs = Vec::with_capacity(self.outputs.len());
-    let mut ecdh_info = Vec::with_capacity(self.outputs.len());
-    for o in 0 .. self.outputs.len() {
+    let mut tx_outputs = Vec::with_capacity(outputs.len());
+    let mut ecdh_info = Vec::with_capacity(outputs.len());
+    for o in 0 .. outputs.len() {
       tx_outputs.push(Output {
         amount: 0,
-        key: self.outputs[o].dest,
-        view_tag: Some(self.outputs[o].view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
+        key: outputs[o].dest,
+        view_tag: Some(outputs[o].view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
-      ecdh_info.push(self.outputs[o].amount);
+      ecdh_info.push(outputs[o].amount);
     }
 
-    Transaction {
-      prefix: TransactionPrefix {
-        version: 2,
-        timelock: Timelock::None,
-        inputs: vec![],
-        outputs: tx_outputs,
-        extra,
-      },
-      rct_signatures: RctSignatures {
-        base: RctBase {
-          fee: self.fee,
-          ecdh_info,
-          commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
+    (
+      Transaction {
+        prefix: TransactionPrefix {
+          version: 2,
+          timelock: Timelock::None,
+          inputs: vec![],
+          outputs: tx_outputs,
+          extra,
         },
-        prunable: RctPrunable::Clsag {
-          bulletproofs: vec![bp],
-          clsags: vec![],
-          pseudo_outs: vec![],
+        rct_signatures: RctSignatures {
+          base: RctBase {
+            fee: self.fee,
+            ecdh_info,
+            commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
+          },
+          prunable: RctPrunable::Clsag {
+            bulletproofs: vec![bp],
+            clsags: vec![],
+            pseudo_outs: vec![],
+          },
         },
       },
-    }
+      sum,
+    )
   }
 
   pub async fn sign<R: RngCore + CryptoRng>(
@@ -347,7 +345,7 @@ impl SignableTransaction {
     }
     images.sort_by(key_image_sort);
 
-    let (commitments, mask_sum) = self.prepare_outputs(
+    let (mut tx, mask_sum) = self.prepare_transaction(
       rng,
       uniqueness(
         &images
@@ -357,12 +355,10 @@ impl SignableTransaction {
       ),
     );
 
-    let mut tx = self.prepare_transaction(rng, &commitments);
-
     let signable =
       prepare_inputs(rng, rpc, self.protocol.ring_len(), &self.inputs, spend, &mut tx).await?;
 
-    let clsag_pairs = Clsag::sign(rng, &signable, mask_sum, tx.signature_hash());
+    let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash());
     match tx.rct_signatures.prunable {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
