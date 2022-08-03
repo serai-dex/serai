@@ -5,6 +5,8 @@ use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use ff::{PrimeField, PrimeFieldBits};
 use group::{Group, GroupOps, GroupEncoding, prime::PrimeGroup};
 
@@ -39,12 +41,12 @@ pub enum CurveError {
 // elliptic-curve exists, yet it doesn't really serve the same role, nor does it use &[u8]/Vec<u8>
 // It uses GenericArray which will hopefully be deprecated as Rust evolves and doesn't offer enough
 // advantages in the modern day to be worth the hassle -- Kayaba
-pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
+pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   /// Scalar field element type
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
-  type F: PrimeField + PrimeFieldBits;
+  type F: PrimeField + PrimeFieldBits + Zeroize;
   /// Group element type
-  type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup;
+  type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize;
 
   /// ID for this curve
   const ID: &'static [u8];

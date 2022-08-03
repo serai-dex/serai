@@ -7,6 +7,8 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use transcript::Transcript;
 
 use group::{
@@ -79,10 +81,18 @@ fn nonce_transcript<T: Transcript>() -> T {
   T::new(b"FROST_nonce_dleq")
 }
 
+#[derive(Zeroize)]
 pub(crate) struct PreprocessPackage<C: Curve> {
   pub(crate) nonces: Vec<[C::F; 2]>,
+  #[zeroize(skip)]
   pub(crate) commitments: Vec<Vec<[C::G; 2]>>,
   pub(crate) addendum: Vec<u8>,
+}
+
+impl<C: Curve> Drop for PreprocessPackage<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
 }
 
 // This library unifies the preprocessing step with signing due to security concerns and to provide

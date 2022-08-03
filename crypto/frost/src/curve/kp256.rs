@@ -2,6 +2,8 @@ use std::io::Cursor;
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use sha2::{digest::Update, Digest, Sha256};
 
 use group::{ff::Field, GroupEncoding};
@@ -22,7 +24,7 @@ macro_rules! kp_curve {
     $ID:      literal,
     $CONTEXT: literal
   ) => {
-    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
     impl Curve for $Curve {
       type F = $lib::Scalar;

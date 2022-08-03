@@ -6,6 +6,8 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use group::{
   ff::{Field, PrimeField},
   GroupEncoding,
@@ -148,7 +150,7 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
-  coefficients: Vec<C::F>,
+  coefficients: &[C::F],
   our_commitments: Vec<C::G>,
   commitments: HashMap<u16, Re>,
 ) -> Result<(C::F, HashMap<u16, Vec<C::G>>, HashMap<u16, Vec<u8>>), FrostError> {
@@ -189,7 +191,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: FrostParams,
   mut secret_share: C::F,
-  commitments: HashMap<u16, Vec<C::G>>,
+  commitments: &mut HashMap<u16, Vec<C::G>>,
   mut serialized: HashMap<u16, Re>,
 ) -> Result<FrostKeys<C>, FrostError> {
   validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
@@ -260,17 +262,35 @@ pub struct KeyGenMachine<C: Curve> {
   _curve: PhantomData<C>,
 }
 
+#[derive(Zeroize)]
 pub struct SecretShareMachine<C: Curve> {
+  #[zeroize(skip)]
   params: FrostParams,
   context: String,
   coefficients: Vec<C::F>,
+  #[zeroize(skip)]
   our_commitments: Vec<C::G>,
 }
 
+impl<C: Curve> Drop for SecretShareMachine<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
+}
+
+#[derive(Zeroize)]
 pub struct KeyMachine<C: Curve> {
+  #[zeroize(skip)]
   params: FrostParams,
   secret: C::F,
+  #[zeroize(skip)]
   commitments: HashMap<u16, Vec<C::G>>,
+}
+
+impl<C: Curve> Drop for KeyMachine<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
 }
 
 impl<C: Curve> KeyGenMachine<C> {
@@ -317,8 +337,8 @@ impl<C: Curve> SecretShareMachine<C> {
       rng,
       &self.params,
       &self.context,
-      self.coefficients,
-      self.our_commitments,
+      &self.coefficients,
+      self.our_commitments.clone(),
       commitments,
     )?;
     Ok((KeyMachine { params: self.params, secret, commitments }, shares))
@@ -333,10 +353,10 @@ impl<C: Curve> KeyMachine<C> {
   /// must report completion without issue before this key can be considered usable, yet you should
   /// wait for all participants to report as such
   pub fn complete<Re: Read, R: RngCore + CryptoRng>(
-    self,
+    mut self,
     rng: &mut R,
     shares: HashMap<u16, Re>,
   ) -> Result<FrostKeys<C>, FrostError> {
-    complete_r2(rng, self.params, self.secret, self.commitments, shares)
+    complete_r2(rng, self.params, self.secret, &mut self.commitments, shares)
   }
 }

@@ -1,5 +1,7 @@
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use sha2::{Digest, Sha512};
 
 use dalek_ff_group::Scalar;
@@ -21,7 +23,7 @@ macro_rules! dalek_curve {
   ) => {
     use dalek_ff_group::{$Point, $POINT};
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
     impl Curve for $Curve {
       type F = Scalar;

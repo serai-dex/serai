@@ -3,6 +3,8 @@ use std::{io::Read, collections::HashMap};
 
 use thiserror::Error;
 
+use zeroize::Zeroize;
+
 use group::{
   ff::{Field, PrimeField},
   GroupEncoding,
@@ -90,12 +92,20 @@ pub enum FrostError {
 }
 
 // View of keys passable to algorithm implementations
-#[derive(Clone)]
+#[derive(Clone, Zeroize)]
 pub struct FrostView<C: Curve> {
   group_key: C::G,
+  #[zeroize(skip)]
   included: Vec<u16>,
   secret_share: C::F,
+  #[zeroize(skip)]
   verification_shares: HashMap<u16, C::G>,
+}
+
+impl<C: Curve> Drop for FrostView<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
 }
 
 impl<C: Curve> FrostView<C> {
@@ -135,9 +145,10 @@ pub fn lagrange<F: PrimeField>(i: u16, included: &[u16]) -> F {
   num * denom.invert().unwrap()
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct FrostKeys<C: Curve> {
   /// FROST Parameters
+  #[zeroize(skip)]
   params: FrostParams,
 
   /// Secret share key
@@ -145,10 +156,17 @@ pub struct FrostKeys<C: Curve> {
   /// Group key
   group_key: C::G,
   /// Verification shares
+  #[zeroize(skip)]
   verification_shares: HashMap<u16, C::G>,
 
   /// Offset applied to these keys
   offset: Option<C::F>,
+}
+
+impl<C: Curve> Drop for FrostKeys<C> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
 }
 
 impl<C: Curve> FrostKeys<C> {
