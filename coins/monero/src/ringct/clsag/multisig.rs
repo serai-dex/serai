@@ -7,6 +7,8 @@ use std::{
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   traits::{Identity, IsIdentity},
@@ -52,7 +54,7 @@ impl ClsagInput {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagDetails {
   input: ClsagInput,
   mask: Scalar,
@@ -65,7 +67,7 @@ impl ClsagDetails {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 struct Interim {
   p: Scalar,
   c: Scalar,
@@ -75,7 +77,7 @@ struct Interim {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
@@ -84,6 +86,7 @@ pub struct ClsagMultisig {
   // an extra round
   image: EdwardsPoint,
 
+  #[zeroize(skip)]
   details: Arc<RwLock<Option<ClsagDetails>>>,
 
   msg: Option<[u8; 32]>,

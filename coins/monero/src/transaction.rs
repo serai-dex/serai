@@ -1,5 +1,7 @@
 use core::cmp::Ordering;
 
+use zeroize::Zeroize;
+
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
@@ -11,7 +13,6 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Input {
   Gen(u64),
-
   ToKey { amount: u64, key_offsets: Vec<u64>, key_image: EdwardsPoint },
 }
 
@@ -107,7 +108,7 @@ impl Output {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum Timelock {
   None,
   Block(usize),

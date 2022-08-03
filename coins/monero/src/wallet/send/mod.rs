@@ -3,6 +3,8 @@ use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 use rand::seq::SliceRandom;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 use monero::{consensus::Encodable, PublicKey, blockdata::transaction::SubField};
@@ -35,7 +37,7 @@ mod multisig;
 pub use multisig::TransactionMachine;
 
 #[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 struct SendOutput {
   R: EdwardsPoint,
   view_tag: u8,
@@ -161,7 +163,7 @@ impl Fee {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,

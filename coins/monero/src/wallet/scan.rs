@@ -1,5 +1,7 @@
 use std::convert::TryFrom;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
@@ -11,7 +13,7 @@ use crate::{
   wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SpendableOutput {
   pub tx: [u8; 32],
   pub o: u8,
@@ -20,6 +22,7 @@ pub struct SpendableOutput {
   pub commitment: Commitment,
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct Timelocked(Timelock, Vec<SpendableOutput>);
 impl Timelocked {
   pub fn timelock(&self) -> Timelock {

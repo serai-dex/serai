@@ -7,6 +7,8 @@ use std::{
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::{
   traits::Identity,
   scalar::Scalar,
@@ -34,6 +36,7 @@ use crate::{
   wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness},
 };
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct TransactionMachine {
   signable: SignableTransaction,
   i: u16,
@@ -42,10 +45,12 @@ pub struct TransactionMachine {
 
   decoys: Vec<Decoys>,
 
+  #[zeroize(skip)]
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
   clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>,
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct TransactionSignMachine {
   signable: SignableTransaction,
   i: u16,
@@ -54,12 +59,14 @@ pub struct TransactionSignMachine {
 
   decoys: Vec<Decoys>,
 
+  #[zeroize(skip)]
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
   clsags: Vec<AlgorithmSignMachine<Ed25519, ClsagMultisig>>,
 
   our_preprocess: Vec<u8>,
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct TransactionSignatureMachine {
   tx: Transaction,
   clsags: Vec<AlgorithmSignatureMachine<Ed25519, ClsagMultisig>>,

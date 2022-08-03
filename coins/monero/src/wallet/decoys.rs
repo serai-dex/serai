@@ -5,6 +5,8 @@ use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 use rand_distr::{Distribution, Gamma};
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
@@ -91,7 +93,7 @@ fn offset(ring: &[u64]) -> Vec<u64> {
   res
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Decoys {
   pub i: u8,
   pub offsets: Vec<u64>,

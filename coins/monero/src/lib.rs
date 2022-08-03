@@ -1,6 +1,8 @@
 use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 use tiny_keccak::{Hasher, Keccak};
 
 use curve25519_dalek::{
@@ -25,7 +27,7 @@ pub mod wallet;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 #[allow(non_camel_case_types)]
 pub enum Protocol {
   Unsupported,
@@ -61,7 +63,7 @@ lazy_static! {
 }
 
 #[allow(non_snake_case)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Commitment {
   pub mask: Scalar,
   pub amount: u64,

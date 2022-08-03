@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
   scalar::Scalar,
@@ -45,7 +46,7 @@ pub enum ClsagError {
   InvalidC1,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
   pub commitment: Commitment,
