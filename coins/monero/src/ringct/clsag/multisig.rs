@@ -198,7 +198,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     );
     self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
-    dfg::Scalar(nonces[0].0 - (p * view.secret_share().0))
+    nonces[0] - (dfg::Scalar(p) * view.secret_share())
   }
 
   #[must_use]

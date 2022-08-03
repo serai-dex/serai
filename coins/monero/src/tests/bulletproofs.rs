@@ -84,9 +84,11 @@ macro_rules! bulletproofs_tests {
     #[test]
     fn $max() {
       // Check Bulletproofs errors if we try to prove for too many outputs
-      assert!(
-        Bulletproofs::prove(&mut OsRng, &[Commitment::new(Scalar::zero(), 0); 17], $plus).is_err()
-      );
+      let mut commitments = vec![];
+      for _ in 0 .. 17 {
+        commitments.push(Commitment::new(Scalar::zero(), 0));
+      }
+      assert!(Bulletproofs::prove(&mut OsRng, &commitments, $plus).is_err());
     }
   };
 }

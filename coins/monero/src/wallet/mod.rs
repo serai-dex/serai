@@ -41,7 +41,7 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
 #[allow(non_snake_case)]
 pub(crate) fn shared_key(
   uniqueness: Option<[u8; 32]>,
-  s: Scalar,
+  s: &Scalar,
   P: &EdwardsPoint,
   o: usize,
 ) -> (u8, Scalar) {

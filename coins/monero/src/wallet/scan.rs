@@ -79,7 +79,7 @@ impl SpendableOutput {
 }
 
 impl Transaction {
-  pub fn scan(&self, view: ViewPair, guaranteed: bool) -> Timelocked {
+  pub fn scan(&self, view: &ViewPair, guaranteed: bool) -> Timelocked {
     let mut extra = vec![];
     write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
     extra.extend(&self.prefix.extra);
@@ -106,7 +106,7 @@ impl Transaction {
       for pubkey in &pubkeys {
         let (view_tag, key_offset) = shared_key(
           Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
-          view.view,
+          &view.view,
           pubkey,
           o,
         );
