@@ -107,8 +107,14 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   fn read_F<R: Read>(r: &mut R) -> Result<Self::F, CurveError> {
     let mut encoding = <Self::F as PrimeField>::Repr::default();
     r.read_exact(encoding.as_mut()).map_err(|_| CurveError::InvalidScalar)?;
+
     // ff mandates this is canonical
-    Option::<Self::F>::from(Self::F::from_repr(encoding)).ok_or(CurveError::InvalidScalar)
+    let res =
+      Option::<Self::F>::from(Self::F::from_repr(encoding)).ok_or(CurveError::InvalidScalar);
+    for b in encoding.as_mut() {
+      *b = 0;
+    }
+    res
   }
 
   #[allow(non_snake_case)]

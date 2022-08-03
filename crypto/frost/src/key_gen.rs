@@ -17,7 +17,7 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
   curve::Curve,
-  FrostError, FrostParams, FrostKeys,
+  FrostError, FrostParams, FrostCore,
   schnorr::{self, SchnorrSignature},
   validate_map,
 };
@@ -188,7 +188,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   mut secret_share: C::F,
   commitments: &mut HashMap<u16, Vec<C::G>>,
   mut serialized: HashMap<u16, Re>,
-) -> Result<FrostKeys<C>, FrostError> {
+) -> Result<FrostCore<C>, FrostError> {
   validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   // Step 2. Verify each share
@@ -250,7 +250,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
 
   // TODO: Clear serialized and shares
 
-  Ok(FrostKeys { params, secret_share, group_key: stripes[0], verification_shares, offset: None })
+  Ok(FrostCore { params, secret_share, group_key: stripes[0], verification_shares })
 }
 
 pub struct KeyGenMachine<C: Curve> {
@@ -353,7 +353,7 @@ impl<C: Curve> KeyMachine<C> {
     mut self,
     rng: &mut R,
     shares: HashMap<u16, Re>,
-  ) -> Result<FrostKeys<C>, FrostError> {
+  ) -> Result<FrostCore<C>, FrostError> {
     complete_r2(rng, self.params, self.secret, &mut self.commitments, shares)
   }
 }

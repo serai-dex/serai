@@ -1,4 +1,4 @@
-use std::{io::Cursor, sync::Arc, collections::HashMap};
+use std::{io::Cursor, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -6,7 +6,7 @@ use group::{ff::PrimeField, GroupEncoding};
 
 use crate::{
   curve::Curve,
-  FrostKeys,
+  FrostCore, FrostKeys,
   algorithm::{Schnorr, Hram},
   sign::{PreprocessPackage, SignMachine, SignatureMachine, AlgorithmMachine},
   tests::{clone_without, curve::test_curve, schnorr::test_schnorr, recover},
@@ -48,13 +48,13 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
       serialized.extend(share.to_bytes().as_ref());
     }
 
-    let these_keys = FrostKeys::<C>::deserialize(&mut Cursor::new(serialized)).unwrap();
+    let these_keys = FrostCore::<C>::deserialize(&mut Cursor::new(serialized)).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     assert_eq!(these_keys.params().i(), i);
     assert_eq!(these_keys.secret_share(), shares[usize::from(i - 1)]);
     assert_eq!(&hex::encode(these_keys.group_key().to_bytes().as_ref()), vectors.group_key);
-    keys.insert(i, these_keys);
+    keys.insert(i, FrostKeys::new(these_keys));
   }
 
   keys
@@ -86,7 +86,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       *i,
       AlgorithmMachine::new(
         Schnorr::<C, H>::new(),
-        Arc::new(keys[i].clone()),
+        keys[i].clone(),
         &vectors.included.to_vec().clone(),
       )
       .unwrap(),

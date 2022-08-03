@@ -1,11 +1,11 @@
-use std::{io::Cursor, sync::Arc, collections::HashMap};
+use std::{io::Cursor, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
 use group::ff::Field;
 
 use crate::{
-  Curve, FrostParams, FrostKeys, lagrange,
+  Curve, FrostParams, FrostCore, FrostKeys, lagrange,
   key_gen::KeyGenMachine,
   algorithm::Algorithm,
   sign::{PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
@@ -32,7 +32,7 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
   res
 }
 
-pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, Arc<FrostKeys<C>>> {
+pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, FrostCore<C>> {
   let mut machines = HashMap::new();
   let mut commitments = HashMap::new();
   for i in 1 ..= PARTICIPANTS {
@@ -82,9 +82,13 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, Ar
       }
       assert_eq!(group_key.unwrap(), these_keys.group_key());
 
-      (i, Arc::new(these_keys))
+      (i, these_keys)
     })
     .collect::<HashMap<_, _>>()
+}
+
+pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, FrostKeys<C>> {
+  core_gen(rng).drain().map(|(i, core)| (i, FrostKeys::new(core))).collect()
 }
 
 pub fn recover<C: Curve>(keys: &HashMap<u16, FrostKeys<C>>) -> C::F {
@@ -102,7 +106,7 @@ pub fn recover<C: Curve>(keys: &HashMap<u16, FrostKeys<C>>) -> C::F {
 pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   algorithm: A,
-  keys: &HashMap<u16, Arc<FrostKeys<C>>>,
+  keys: &HashMap<u16, FrostKeys<C>>,
 ) -> HashMap<u16, AlgorithmMachine<C, A>> {
   let mut included = vec![];
   while included.len() < usize::from(keys[&1].params().t()) {
