@@ -69,13 +69,22 @@ impl BitSignature {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Bits<G0: PrimeGroup, G1: PrimeGroup, const SIGNATURE: u8, const RING_LEN: usize> {
+pub(crate) struct Bits<
+  G0: PrimeGroup + Zeroize,
+  G1: PrimeGroup + Zeroize,
+  const SIGNATURE: u8,
+  const RING_LEN: usize,
+> {
   pub(crate) commitments: (G0, G1),
   signature: Aos<G0, G1, RING_LEN>,
 }
 
-impl<G0: PrimeGroup, G1: PrimeGroup, const SIGNATURE: u8, const RING_LEN: usize>
-  Bits<G0, G1, SIGNATURE, RING_LEN>
+impl<
+    G0: PrimeGroup + Zeroize,
+    G1: PrimeGroup + Zeroize,
+    const SIGNATURE: u8,
+    const RING_LEN: usize,
+  > Bits<G0, G1, SIGNATURE, RING_LEN>
 where
   G0::Scalar: PrimeFieldBits + Zeroize,
   G1::Scalar: PrimeFieldBits + Zeroize,

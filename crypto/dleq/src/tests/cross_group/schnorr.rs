@@ -12,7 +12,7 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use crate::cross_group::schnorr::SchnorrPoK;
 
-fn test_schnorr<G: PrimeGroup>()
+fn test_schnorr<G: PrimeGroup + Zeroize>()
 where
   G::Scalar: PrimeFieldBits + Zeroize,
 {

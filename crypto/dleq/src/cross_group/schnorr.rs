@@ -21,14 +21,14 @@ use crate::{read_scalar, cross_group::read_point};
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct SchnorrPoK<G: PrimeGroup> {
+pub(crate) struct SchnorrPoK<G: PrimeGroup + Zeroize> {
   R: G,
   s: G::Scalar,
 }
 
-impl<G: PrimeGroup> SchnorrPoK<G>
+impl<G: PrimeGroup + Zeroize> SchnorrPoK<G>
 where
-  G::Scalar: PrimeFieldBits,
+  G::Scalar: PrimeFieldBits + Zeroize,
 {
   // Not hram due to the lack of m
   #[allow(non_snake_case)]
@@ -45,10 +45,7 @@ where
     transcript: &mut T,
     generator: G,
     mut private_key: G::Scalar,
-  ) -> SchnorrPoK<G>
-  where
-    G::Scalar: Zeroize,
-  {
+  ) -> SchnorrPoK<G> {
     let mut nonce = G::Scalar::random(rng);
     #[allow(non_snake_case)]
     let R = generator * nonce;

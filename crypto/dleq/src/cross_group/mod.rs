@@ -76,8 +76,8 @@ pub enum DLEqError {
 // anyone who wants it
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct __DLEqProof<
-  G0: PrimeGroup,
-  G1: PrimeGroup,
+  G0: PrimeGroup + Zeroize,
+  G1: PrimeGroup + Zeroize,
   const SIGNATURE: u8,
   const RING_LEN: usize,
   const REMAINDER_RING_LEN: usize,
@@ -134,8 +134,8 @@ dleq!(EfficientLinearDLEq, BitSignature::EfficientLinear, false);
 dleq!(CompromiseLinearDLEq, BitSignature::CompromiseLinear, true);
 
 impl<
-    G0: PrimeGroup,
-    G1: PrimeGroup,
+    G0: PrimeGroup + Zeroize,
+    G1: PrimeGroup + Zeroize,
     const SIGNATURE: u8,
     const RING_LEN: usize,
     const REMAINDER_RING_LEN: usize,
