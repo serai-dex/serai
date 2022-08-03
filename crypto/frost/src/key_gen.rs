@@ -193,10 +193,10 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
 
   // Step 2. Verify each share
   let mut shares = HashMap::new();
+  // TODO: Clear serialized
   for (l, share) in serialized.iter_mut() {
     shares.insert(*l, C::read_F(share).map_err(|_| FrostError::InvalidShare(*l))?);
   }
-  shares.insert(params.i(), secret_share);
 
   // Calculate the exponent for a given participant and apply it to a series of commitments
   // Initially used with the actual commitments to verify the secret share, later used with stripes
@@ -247,8 +247,6 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   }
   // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
   debug_assert_eq!(C::GENERATOR * secret_share, verification_shares[&params.i()]);
-
-  // TODO: Clear serialized and shares
 
   Ok(FrostCore { params, secret_share, group_key: stripes[0], verification_shares })
 }
