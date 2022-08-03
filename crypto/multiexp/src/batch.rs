@@ -86,11 +86,7 @@ where
   }
 
   pub fn verify_with_vartime_blame(mut self) -> Result<(), Id> {
-    let res = if self.verify_core() {
-      Ok(())
-    } else {
-      Err(self.blame_vartime().unwrap())
-    };
+    let res = if self.verify_core() { Ok(()) } else { Err(self.blame_vartime().unwrap()) };
     self.zeroize();
     res
   }

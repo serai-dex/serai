@@ -1,4 +1,4 @@
-use std::{marker::Send, sync::Arc};
+use std::marker::Send;
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -57,7 +57,7 @@ pub trait Coin {
 
   async fn prepare_send(
     &self,
-    keys: Arc<FrostKeys<Self::Curve>>,
+    keys: FrostKeys<Self::Curve>,
     transcript: RecommendedTranscript,
     height: usize,
     inputs: Vec<Self::Output>,

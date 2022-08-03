@@ -168,7 +168,7 @@ impl OriginalStruct {
   }
 
   #[must_use]
-  fn verify_core<ID: Copy, R: RngCore + CryptoRng>(
+  fn verify_core<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,
@@ -297,7 +297,7 @@ impl OriginalStruct {
   }
 
   #[must_use]
-  pub(crate) fn batch_verify<ID: Copy, R: RngCore + CryptoRng>(
+  pub(crate) fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,

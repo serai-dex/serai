@@ -125,7 +125,7 @@ impl SignableTransaction {
         AlgorithmMachine::new(
           ClsagMultisig::new(transcript.clone(), input.key, inputs[i].clone())
             .map_err(TransactionError::MultisigError)?,
-          Arc::new(offset),
+          offset,
           &included,
         )
         .map_err(TransactionError::FrostError)?,

@@ -154,7 +154,7 @@ async fn send_core(test: usize, multisig: bool) {
               .clone()
               .multisig(
                 &rpc,
-                (*keys[&i]).clone(),
+                keys[&i].clone(),
                 RecommendedTranscript::new(b"Monero Serai Test Transaction"),
                 rpc.get_height().await.unwrap() - 10,
                 (1 ..= THRESHOLD).collect::<Vec<_>>(),
