@@ -13,7 +13,7 @@ contract Router is Schnorr {
     event Executed(bool success, bytes data);
 
     function execute(
-        Transaction[] memory transactions, 
+        Transaction[] calldata transactions, 
         uint8 parity,
         bytes32 px,
         bytes32 s,
@@ -30,7 +30,7 @@ contract Router is Schnorr {
     }
 
     function executeNoABIEncode(
-        Transaction[] memory transactions, 
+        Transaction[] calldata transactions, 
         uint8 parity,
         bytes32 px,
         bytes32 s,
