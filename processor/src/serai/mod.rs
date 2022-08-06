@@ -29,10 +29,7 @@ impl Config for SeraiConfig {
   type Extrinsic = UncheckedExtrinsic;
 }
 
-// TODO: https://github.com/paritytech/subxt/issues/602
-// const METADATA: &str = concat!(env!("OUT_DIR"), "serai.scale");
-#[subxt::subxt(runtime_metadata_path = "serai.scale")]
-mod runtime {}
+include!(concat!(env!("OUT_DIR"), "/runtime.rs"));
 
 pub(crate) type Events<'a> =
   EventSubscription<'a, Subscription<<SeraiConfig as Config>::Header>, SeraiConfig, runtime::Event>;

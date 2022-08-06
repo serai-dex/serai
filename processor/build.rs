@@ -1,7 +1,7 @@
 use std::{
   io::Write,
   env,
-  path::Path,
+  path::{Path, PathBuf},
   fs::{File, remove_file},
   process::Command,
 };
@@ -22,13 +22,10 @@ fn subxt(metadata: &Path) -> bool {
   true
 }
 
-fn main() {
-  // TODO: https://github.com/paritytech/subxt/issues/602
-  //let metadata = Path::new(&env::var("OUT_DIR").unwrap()).join("serai.scale");
-  let metadata = Path::new("serai.scale");
+fn metadata() -> PathBuf {
+  let metadata = Path::new(&env::var("OUT_DIR").unwrap()).join("serai.scale");
 
   let node = format!("../target/{}/serai-node", env::var("PROFILE").unwrap());
-
   // Re-run whenever a new Serai node version exists
   println!("cargo:rerun-if-changed={}", node);
 
@@ -37,7 +34,7 @@ fn main() {
 
   // If we can run subxt now (as a node is already running), do so
   if subxt(&metadata) {
-    return;
+    return metadata;
   }
 
   // Run a task, running it every 10 seconds for the specified amount of minutes
@@ -71,4 +68,28 @@ fn main() {
   if !metadata.exists() {
     panic!("failed to download metadata within 5 minutes");
   }
+
+  metadata
+}
+
+fn main() {
+  let metadata = metadata();
+
+  let runtime = Path::new(&env::var("OUT_DIR").unwrap()).join("runtime.rs");
+  let _ = remove_file(&runtime);
+  File::create(&runtime)
+    .unwrap()
+    .write_all(
+      &format!(
+        "
+          #[subxt::subxt(runtime_metadata_path = \"{}\")]
+          mod runtime {{}}
+        ",
+        metadata.display()
+      )
+      .as_bytes(),
+    )
+    .unwrap();
+
+  println!("cargo:rerun-if-changed={}", runtime.display());
 }
