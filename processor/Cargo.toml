@@ -32,10 +32,11 @@ frame-system = { git = "https://github.com/serai-dex/substrate" }
 in-instructions = { package = "serai-in-instructions", path = "../substrate/in-instructions" }
 serai-runtime = { path = "../substrate/runtime" }
 
+jsonrpsee-core = "0.15"
+jsonrpsee-http-client = "0.15"
 subxt = "0.22"
 
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
-jsonrpsee-core = "0.15"
 jsonrpsee-http-server = "0.15"
 
 [dev-dependencies]

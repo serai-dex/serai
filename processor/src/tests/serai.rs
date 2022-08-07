@@ -8,7 +8,6 @@ use crate::serai::Serai;
 
 #[tokio::test]
 async fn get_events() {
-  Serai::new().await;
 
   let mut rpc = RpcModule::new(());
   rpc
@@ -35,7 +34,8 @@ async fn get_events() {
     .start(rpc)
     .unwrap();
 
-  let mut batches = Serai::batches().await.unwrap();
+  let serai = Serai::new().await;
+  let mut batches = serai.batches().await.unwrap();
   loop {
     dbg!(batches.next().await.unwrap().unwrap());
   }

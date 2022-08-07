@@ -8,6 +8,9 @@ use subxt::{
   rpc::Subscription,
 };
 
+use jsonrpsee_core::client::ClientT;
+use jsonrpsee_http_client::HttpClientBuilder;
+
 use serai_runtime::{Address, Signature, UncheckedExtrinsic, Runtime};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -49,41 +52,27 @@ pub(crate) enum SeraiError {
 #[derive(Clone)]
 pub(crate) struct Serai(SeraiXt);
 
-static mut SERAI: Option<Serai> = None;
-
 impl Serai {
-  pub(crate) async fn new() {
-    unsafe {
-      SERAI = Some(Serai(ClientBuilder::new().build().await.unwrap().to_runtime_api::<SeraiXt>()));
-    }
+  pub(crate) async fn new() -> Self {
+    Serai(ClientBuilder::new().build().await.unwrap().to_runtime_api())
   }
 
+  // Doesn't use subxt as we can't have multiple connections through it yet a global subxt requires
+  // unsafe. Directly implementing this primitve allows us to not require multiple subxts
   pub(crate) async fn height() -> Result<u32, SeraiError> {
-    Ok(
-      unsafe { SERAI.as_ref().unwrap() }
-        .0
-        .client
-        .rpc()
-        .header(Some(
-          unsafe { SERAI.as_ref().unwrap() }
-            .0
-            .client
-            .rpc()
-            .block_hash(None) // TODO: Replace with finalized_head
-            .await
-            .map_err(|_| SeraiError::RpcError)?
-            .unwrap(),
-        ))
-        .await
-        .map_err(|_| SeraiError::RpcError)?
-        .unwrap()
-        .number,
-    )
+    let header: <SeraiConfig as Config>::Header = HttpClientBuilder::default()
+      .build("http://127.0.0.1:9933")
+      .map_err(|_| SeraiError::RpcError)?
+      // TODO: Replace with getFinalizedHead
+      .request("chain_getHeader", None)
+      .await
+      .map_err(|_| SeraiError::RpcError)?;
+    Ok(header.number)
   }
 
-  pub(crate) async fn batches() -> Result<Event<'static, Batch>, SeraiError> {
+  pub(crate) async fn batches(&self) -> Result<Event<Batch>, SeraiError> {
     Ok(
-      unsafe { SERAI.as_ref().unwrap() }
+      self
         .0
         .events()
         .subscribe()
