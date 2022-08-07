@@ -75,7 +75,7 @@ impl Serai {
       self
         .0
         .events()
-        .subscribe()
+        .subscribe() // TODO: subscribe_finalized
         .await
         .map_err(|_| SeraiError::RpcError)?
         .filter_events::<Filter<Batch>>(),

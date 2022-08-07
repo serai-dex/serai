@@ -8,7 +8,6 @@ use sp_inherents::{Error, InherentData, InherentIdentifier};
 use crate::{INHERENT_IDENTIFIER, PendingCoins, InherentError};
 
 pub async fn get_pending_coins() -> Option<PendingCoins> {
-  // TODO: Make this wss and reuse a connection
   let client = HttpClientBuilder::default().build("http://127.0.0.1:5134").ok()?;
   client.request("processor_coins", None).await.ok()?
 }

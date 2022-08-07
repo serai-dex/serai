@@ -188,60 +188,61 @@ pub mod pallet {
       }
 
       // Assumes that only not yet handled batches are provided as inherent data
-      let pending = data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap().unwrap();
-      // Match to be exhaustive
-      let coins = match call {
-        Call::execute { ref coins } => coins,
-        _ => Err(InherentError::UnrecognizedCall)?,
-      };
-
-      if coins.len() != pending.len() {
-        Err(InherentError::UnrecognizedCoins(
-          coins.len().try_into().unwrap(),
-          pending.len().try_into().unwrap(),
-        ))?;
-      }
-
-      for (c, both) in coins.iter().zip(&pending).enumerate() {
-        let c = c.try_into().unwrap();
-        match both {
-          (Some(coin), Some(pending)) => {
-            if coin.height > pending.height {
-              Err(InherentError::UnrecognizedHeight(coin.height, pending.height))?;
-            }
-
-            let prev = Heights::<T>::get(c);
-            if coin.height <= prev {
-              Err(InherentError::InvalidHeight(coin.height, prev))?;
-            }
-
-            if coin.batches.len() > pending.batches.len() {
-              Err(InherentError::UnrecognizedBatch(
-                c,
-                (coin.batches.len() - pending.batches.len()).try_into().unwrap(),
-              ))?;
-            }
-
-            let mut last_executed = Executed::<T>::get(c);
-            for (batch, pending) in coin.batches.iter().zip(&pending.batches) {
-              if batch.id != last_executed {
-                Err(InherentError::InvalidBatch(c))?;
-              }
-              last_executed += 1;
-
-              if *batch != pending.batch {
-                Err(InherentError::DifferentBatch(c, batch.id))?;
-              }
-            }
-          }
-
-          // TODO: Accept this if voted on by the validator set which does validate this coin
-          (Some(coin), None) => {
-            Err(InherentError::UnrecognizedBatch(c, coin.batches.len().try_into().unwrap()))?
-          }
-
-          (None, _) => (),
+      if let Some(pending) = data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap() {
+        // Match to be exhaustive
+        let coins = match call {
+          Call::execute { ref coins } => coins,
+          _ => Err(InherentError::UnrecognizedCall)?,
         };
+
+        if coins.len() != pending.len() {
+          Err(InherentError::UnrecognizedCoins(
+            coins.len().try_into().unwrap(),
+            pending.len().try_into().unwrap(),
+          ))?;
+        }
+
+        for (c, both) in coins.iter().zip(&pending).enumerate() {
+          let c = c.try_into().unwrap();
+          match both {
+            (Some(coin), Some(pending)) => {
+              if coin.height > pending.height {
+                Err(InherentError::UnrecognizedHeight(coin.height, pending.height))?;
+              }
+
+              let prev = Heights::<T>::get(c);
+              if coin.height <= prev {
+                Err(InherentError::InvalidHeight(coin.height, prev))?;
+              }
+
+              if coin.batches.len() > pending.batches.len() {
+                Err(InherentError::UnrecognizedBatch(
+                  c,
+                  (coin.batches.len() - pending.batches.len()).try_into().unwrap(),
+                ))?;
+              }
+
+              let mut last_executed = Executed::<T>::get(c);
+              for (batch, pending) in coin.batches.iter().zip(&pending.batches) {
+                if batch.id != last_executed {
+                  Err(InherentError::InvalidBatch(c))?;
+                }
+                last_executed += 1;
+
+                if *batch != pending.batch {
+                  Err(InherentError::DifferentBatch(c, batch.id))?;
+                }
+              }
+            }
+
+            // TODO: Accept this if voted on by the validator set which does validate this coin
+            (Some(coin), None) => {
+              Err(InherentError::UnrecognizedBatch(c, coin.batches.len().try_into().unwrap()))?
+            }
+
+            (None, _) => (),
+          };
+        }
       }
 
       Ok(())
