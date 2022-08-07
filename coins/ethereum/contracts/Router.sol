@@ -10,6 +10,8 @@ contract Router is Schnorr {
         bytes data;
     }
 
+    constructor() {}
+
     event Executed(bool success, bytes data);
 
     function execute(
@@ -18,15 +20,18 @@ contract Router is Schnorr {
         bytes32 px,
         bytes32 s,
         bytes32 e
-    ) public {
+    ) public returns (bool) {
         bytes32 message = keccak256(abi.encode(transactions));
         require(verify(parity, px, message, s, e));
+        bool allOk = true;
         for(uint256 i = 0; i < transactions.length; i++) {
                 (bool success, bytes memory returndata) = transactions[i].to.call{value: transactions[i].value}(
                     transactions[i].data
                 );
                 emit Executed(success, returndata);
+                allOk = success && allOk;
         }
+        return allOk;
     }
 
     function executeNoABIEncode(
