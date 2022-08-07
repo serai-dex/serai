@@ -8,11 +8,17 @@ edition = "2021"
 publish = false
 
 [dependencies]
+lazy_static = "1"
 async-trait = { version = "0.1", optional = true }
 thiserror = { version = "1", optional = true }
 
 scale = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
+
+futures = "0.3"
+serde = { version = "1", optional = true }
+jsonrpsee-core = { version = "0.15", optional = true }
+jsonrpsee-http-client = { version = "0.15", optional = true }
 
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-inherents = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -21,6 +27,8 @@ sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+tokio = "1"
+
 [features]
 std = [
   "async-trait",
@@ -28,6 +36,10 @@ std = [
 
 	"scale/std",
 	"scale-info/std",
+
+  "serde",
+  "jsonrpsee-core",
+  "jsonrpsee-http-client",
 
 	"sp-std/std",
 	"sp-inherents/std",

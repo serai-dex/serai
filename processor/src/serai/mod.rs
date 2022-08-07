@@ -46,16 +46,44 @@ pub(crate) enum SeraiError {
   RpcError,
 }
 
+#[derive(Clone)]
 pub(crate) struct Serai(SeraiXt);
 
+static mut SERAI: Option<Serai> = None;
+
 impl Serai {
-  pub(crate) async fn new() -> Serai {
-    Serai(ClientBuilder::new().build().await.unwrap().to_runtime_api::<SeraiXt>())
+  pub(crate) async fn new() {
+    unsafe {
+      SERAI = Some(Serai(ClientBuilder::new().build().await.unwrap().to_runtime_api::<SeraiXt>()));
+    }
   }
 
-  pub(crate) async fn batches(&self) -> Result<Event<Batch>, SeraiError> {
+  pub(crate) async fn height() -> Result<u32, SeraiError> {
     Ok(
-      self
+      unsafe { SERAI.as_ref().unwrap() }
+        .0
+        .client
+        .rpc()
+        .header(Some(
+          unsafe { SERAI.as_ref().unwrap() }
+            .0
+            .client
+            .rpc()
+            .block_hash(None) // TODO: Replace with finalized_head
+            .await
+            .map_err(|_| SeraiError::RpcError)?
+            .unwrap(),
+        ))
+        .await
+        .map_err(|_| SeraiError::RpcError)?
+        .unwrap()
+        .number,
+    )
+  }
+
+  pub(crate) async fn batches() -> Result<Event<'static, Batch>, SeraiError> {
+    Ok(
+      unsafe { SERAI.as_ref().unwrap() }
         .0
         .events()
         .subscribe()

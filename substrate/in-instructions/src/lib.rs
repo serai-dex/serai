@@ -2,6 +2,9 @@
 
 use scale::{Encode, Decode};
 
+#[cfg(feature = "std")]
+use serde::{Serialize, Deserialize};
+
 use sp_std::vec::Vec;
 use sp_inherents::{InherentData, InherentIdentifier, IsFatalError};
 
@@ -13,45 +16,51 @@ pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 // the odds of synchrony
 const DELAY: u32 = 2;
 
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct InInstruction {
-  destination: [u8; 32],
-  amount: u64,
-  data: Vec<u8>,
+  pub destination: [u8; 32],
+  pub amount: u64,
+  pub data: Vec<u8>,
 }
 
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct Coin<T> {
   // Coin's current height
   // Ideally, this would be the coin's current block hash, or a 32-byte hash of any global clock
   // We would be unable to validate those unless we can pass a HashMap with the inherent data
-  height: u32,
-  batches: Vec<T>,
+  pub height: u32,
+  pub batches: Vec<T>,
 }
 
 // None if the current block producer isn't operating over this coin or otherwise failed to get
 // data
 pub(crate) type GenericCoins<T> = Vec<Option<Coin<T>>>;
 
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct Batch {
-  id: u32,
-  instructions: Vec<InInstruction>,
+  pub id: u32,
+  pub instructions: Vec<InInstruction>,
 }
 
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
-pub(crate) struct PendingBatch {
+pub struct PendingBatch {
   // Height this batch was initially reported at
-  reported_at: u32,
-  batch: Batch,
+  pub reported_at: u32,
+  pub batch: Batch,
 }
 
 pub type Coins = GenericCoins<Batch>;
-pub(crate) type PendingCoins = GenericCoins<PendingBatch>;
+pub type PendingCoins = GenericCoins<PendingBatch>;
 
 #[derive(Encode, sp_runtime::RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Decode, thiserror::Error))]
 pub enum InherentError {
+  #[cfg_attr(feature = "std", error("connection error"))]
+  ConnectionError,
   #[cfg_attr(feature = "std", error("unrecognized call"))]
   UnrecognizedCall,
   #[cfg_attr(feature = "std", error("inherent has {0} coins despite us having {1}"))]
@@ -146,31 +155,34 @@ pub mod pallet {
     fn create_inherent(data: &InherentData) -> Option<Self::Call> {
       let current_block = <frame_system::Pallet<T>>::block_number();
 
-      let pending = data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap().unwrap();
-      let coins = pending
-        .iter()
-        // Map each Option<Coin<PendingBatch>>
-        .map(|coin| {
-          // to an Option<Coin<Batch>>
-          coin.clone().map(|coin| Coin {
-            height: coin.height,
-            // Only propose this batch if it's been queued for the delay period
-            batches: coin
-              .batches
-              .iter()
-              .filter_map(|batch| {
-                if (batch.reported_at + DELAY) <= current_block {
-                  Some(batch.batch.clone())
-                } else {
-                  None
-                }
+      if let Some(pending) = data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap() {
+        Some(Call::execute {
+          coins: pending
+            .iter()
+            // Map each Option<Coin<PendingBatch>>
+            .map(|coin| {
+              // to an Option<Coin<Batch>>
+              coin.clone().map(|coin| Coin {
+                height: coin.height,
+                // Only propose this batch if it's been queued for the delay period
+                batches: coin
+                  .batches
+                  .iter()
+                  .filter_map(|batch| {
+                    if (batch.reported_at + DELAY) <= current_block {
+                      Some(batch.batch.clone())
+                    } else {
+                      None
+                    }
+                  })
+                  .collect(),
               })
-              .collect(),
-          })
+            })
+            .collect(),
         })
-        .collect();
-
-      Some(Call::execute { coins })
+      } else {
+        None
+      }
     }
 
     fn check_inherent(call: &Self::Call, data: &InherentData) -> Result<(), Self::Error> {

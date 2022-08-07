@@ -28,10 +28,15 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25
 
 scale = { package = "parity-scale-codec", version = "3.0.0" }
 frame-system = { git = "https://github.com/serai-dex/substrate" }
+
+in-instructions = { package = "serai-in-instructions", path = "../substrate/in-instructions" }
 serai-runtime = { path = "../substrate/runtime" }
+
 subxt = "0.22"
 
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
+jsonrpsee-core = "0.15"
+jsonrpsee-http-server = "0.15"
 
 [dev-dependencies]
 rand_core = "0.6"
