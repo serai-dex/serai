@@ -59,8 +59,6 @@ pub type PendingCoins = GenericCoins<PendingBatch>;
 #[derive(Encode, sp_runtime::RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Decode, thiserror::Error))]
 pub enum InherentError {
-  #[cfg_attr(feature = "std", error("connection error"))]
-  ConnectionError,
   #[cfg_attr(feature = "std", error("unrecognized call"))]
   UnrecognizedCall,
   #[cfg_attr(feature = "std", error("inherent has {0} coins despite us having {1}"))]
@@ -155,8 +153,8 @@ pub mod pallet {
     fn create_inherent(data: &InherentData) -> Option<Self::Call> {
       let current_block = <frame_system::Pallet<T>>::block_number();
 
-      if let Some(pending) = data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap() {
-        Some(Call::execute {
+      let res =
+        data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap().map(|pending| Call::execute {
           coins: pending
             .iter()
             // Map each Option<Coin<PendingBatch>>
@@ -179,10 +177,8 @@ pub mod pallet {
               })
             })
             .collect(),
-        })
-      } else {
-        None
-      }
+        });
+      res
     }
 
     fn check_inherent(call: &Self::Call, data: &InherentData) -> Result<(), Self::Error> {
