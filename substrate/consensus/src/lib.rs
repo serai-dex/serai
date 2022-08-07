@@ -31,11 +31,11 @@ pub type FullClient =
 
 type Db = sp_trie::PrefixedMemoryDB<sp_runtime::traits::BlakeTwo256>;
 
-fn providers(
+async fn providers(
 ) -> (sp_timestamp::InherentDataProvider, serai_in_instructions::provider::InherentDataProvider) {
   (
     sp_timestamp::InherentDataProvider::from_system_time(),
-    serai_in_instructions::provider::InherentDataProvider::new(),
+    serai_in_instructions::provider::InherentDataProvider::new().await,
   )
 }
 
@@ -51,7 +51,7 @@ pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
     algorithm::AcceptAny,
     0,
     select_chain,
-    |_, _| async { Ok(providers()) },
+    |_, _| async { Ok(providers().await) },
     sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
@@ -110,7 +110,7 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     algorithm::AcceptAny,
     0, // Block to start checking inherents at
     select_chain.clone(),
-    move |_, _| async { Ok(providers()) },
+    move |_, _| async { Ok(providers().await) },
     sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
@@ -123,7 +123,7 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     network.clone(),
     network,
     None,
-    move |_, _| async { Ok(providers()) },
+    move |_, _| async { Ok(providers().await) },
     Duration::from_secs(6),
     Duration::from_secs(2),
   );
