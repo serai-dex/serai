@@ -78,7 +78,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
 
     seed.extend(repr.as_ref());
     for i in repr.as_mut() {
-      *i = 0;
+      i.zeroize();
     }
 
     let res = Self::hash_to_F(b"nonce", &seed);
@@ -112,7 +112,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
     let res =
       Option::<Self::F>::from(Self::F::from_repr(encoding)).ok_or(CurveError::InvalidScalar);
     for b in encoding.as_mut() {
-      *b = 0;
+      b.zeroize();
     }
     res
   }

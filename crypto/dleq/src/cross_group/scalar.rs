@@ -40,7 +40,7 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
 
     res1 += F0::from(bit.into());
     res2 += F1::from(bit.into());
-    bit = 0;
+    bit.zeroize();
   }
 
   (res1, res2)

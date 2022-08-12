@@ -36,7 +36,7 @@ where
       *raw_bit = false;
 
       groupings[p][i / w_usize] |= bit << (i % w_usize);
-      bit = 0;
+      bit.zeroize();
     }
   }
 

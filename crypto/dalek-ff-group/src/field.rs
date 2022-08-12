@@ -16,6 +16,10 @@ const FIELD_MODULUS: U256 =
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct FieldElement(U256);
 
+pub const EDWARDS_D: FieldElement = FieldElement(U256::from_be_hex(
+  "52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3",
+));
+
 pub const SQRT_M1: FieldElement = FieldElement(U256::from_be_hex(
   "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
 ));
@@ -113,8 +117,7 @@ impl PrimeField for FieldElement {
 
   const S: u32 = 2;
   fn is_odd(&self) -> Choice {
-    let bytes = self.to_repr();
-    (bytes[0] & 1).into()
+    (self.to_repr()[0] & 1).into()
   }
   fn multiplicative_generator() -> Self {
     2u64.into()
@@ -157,12 +160,21 @@ impl FieldElement {
 
 #[test]
 fn test_is_odd() {
-  assert_eq!(1, (-FieldElement::one().double()).is_odd().unwrap_u8());
-  assert_eq!(0, (-FieldElement::one()).is_odd().unwrap_u8());
-
   assert_eq!(0, FieldElement::zero().is_odd().unwrap_u8());
   assert_eq!(1, FieldElement::one().is_odd().unwrap_u8());
   assert_eq!(0, FieldElement::one().double().is_odd().unwrap_u8());
+
+  // 0 is even, yet the modulus is odd
+  // -1 moves to the even value before the modulus
+  assert_eq!(0, (-FieldElement::one()).is_odd().unwrap_u8());
+  assert_eq!(1, (-FieldElement::one().double()).is_odd().unwrap_u8());
+}
+
+fn test_edwards_d() {
+  let a = -FieldElement(U256::from_u32(121665));
+  let b = FieldElement(U256::from_u32(121666));
+
+  assert_eq!(EDWARDS_D, a * b.invert().unwrap());
 }
 
 #[test]
