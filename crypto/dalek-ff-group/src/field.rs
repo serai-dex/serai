@@ -16,6 +16,10 @@ const FIELD_MODULUS: U256 =
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct FieldElement(U256);
 
+pub const EDWARDS_D: FieldElement = FieldElement(U256::from_be_hex(
+  "52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3",
+));
+
 pub const SQRT_M1: FieldElement = FieldElement(U256::from_be_hex(
   "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
 ));
@@ -152,6 +156,14 @@ impl FieldElement {
     }
     res
   }
+}
+
+#[test]
+fn test_edwards_d() {
+  let a = -FieldElement(U256::from_u32(121665));
+  let b = FieldElement(U256::from_u32(121666));
+
+  assert_eq!(EDWARDS_D, a * b.invert().unwrap());
 }
 
 #[test]
