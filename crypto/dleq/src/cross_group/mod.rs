@@ -232,7 +232,7 @@ where
 
       // Accumulate this bit
       these_bits |= bit << (i % bits_per_group);
-      bit = 0;
+      bit.zeroize();
 
       if (i % bits_per_group) == (bits_per_group - 1) {
         let last = i == (capacity - 1);
