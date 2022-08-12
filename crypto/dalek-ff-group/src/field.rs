@@ -113,7 +113,8 @@ impl PrimeField for FieldElement {
 
   const S: u32 = 2;
   fn is_odd(&self) -> Choice {
-    unimplemented!()
+    let bytes = self.to_repr();
+    (bytes[0] & 1).into()
   }
   fn multiplicative_generator() -> Self {
     2u64.into()
@@ -152,6 +153,16 @@ impl FieldElement {
     }
     res
   }
+}
+
+#[test]
+fn test_is_odd() {
+  assert_eq!(1, (-FieldElement::one().double()).is_odd().unwrap_u8());
+  assert_eq!(0, (-FieldElement::one()).is_odd().unwrap_u8());
+
+  assert_eq!(0, FieldElement::zero().is_odd().unwrap_u8());
+  assert_eq!(1, FieldElement::one().is_odd().unwrap_u8());
+  assert_eq!(0, FieldElement::one().double().is_odd().unwrap_u8());
 }
 
 #[test]
