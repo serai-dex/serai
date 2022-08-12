@@ -379,7 +379,7 @@ impl Rpc {
       .map(|(i, out)| {
         Ok(Some([rpc_point(&out.key)?, rpc_point(&out.mask)?]).filter(|_| {
           match txs[i].prefix.timelock {
-            Timelock::Block(t_height) => (t_height <= height),
+            Timelock::Block(t_height) => t_height <= height,
             _ => false,
           }
         }))
