@@ -170,6 +170,7 @@ fn test_is_odd() {
   assert_eq!(1, (-FieldElement::one().double()).is_odd().unwrap_u8());
 }
 
+#[test]
 fn test_edwards_d() {
   let a = -FieldElement(U256::from_u32(121665));
   let b = FieldElement(U256::from_u32(121666));
