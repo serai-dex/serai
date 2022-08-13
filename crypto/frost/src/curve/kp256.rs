@@ -31,6 +31,7 @@ macro_rules! kp_curve {
       type G = $lib::ProjectivePoint;
 
       const ID: &'static [u8] = $ID;
+
       fn generator() -> Self::G {
         $lib::ProjectivePoint::GENERATOR
       }

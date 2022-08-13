@@ -28,6 +28,7 @@ macro_rules! dalek_curve {
       type G = $Point;
 
       const ID: &'static [u8] = $ID;
+
       fn generator() -> Self::G {
         $POINT
       }

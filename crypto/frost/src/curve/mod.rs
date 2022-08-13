@@ -27,8 +27,6 @@ pub use kp256::{P256, IetfP256Hram};
 /// Set of errors for curve-related operations, namely encoding and decoding
 #[derive(Clone, Error, Debug)]
 pub enum CurveError {
-  #[error("invalid length for data (expected {0}, got {0})")]
-  InvalidLength(usize, usize),
   #[error("invalid scalar")]
   InvalidScalar,
   #[error("invalid point")]
@@ -59,8 +57,8 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   // This doesn't actually need to be part of Curve as it does nothing with the curve
   // This also solely relates to FROST and with a proper Algorithm/HRAM, all projects using
   // aggregatable signatures over this curve will work without issue
-  // It is kept here as Curve + H{1, 2, 3} is effectively a ciphersuite according to the IETF draft
-  // and moving it to Schnorr would force all of them into being ciphersuite-specific
+  // It is kept here as Curve + H{1, 2, 3, 4} is effectively a ciphersuite according to the IETF
+  // draft and moving it to Schnorr would force all of them into being ciphersuite-specific
   // H2 is left to the Schnorr Algorithm as H2 is the H used in HRAM, which Schnorr further
   // modularizes
   fn hash_msg(msg: &[u8]) -> Vec<u8>;

@@ -2,7 +2,7 @@ use std::{marker::PhantomData, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::Field, GroupEncoding};
+use group::{ff::Field, Group, GroupEncoding};
 
 use crate::{
   Curve, FrostKeys,
@@ -29,7 +29,7 @@ pub(crate) fn core_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   assert!(!schnorr::verify::<C>(
     C::generator() * C::F::random(&mut *rng),
     C::F::random(rng),
-    &SchnorrSignature { R: C::identity(), s: C::F::zero() }
+    &SchnorrSignature { R: C::G::identity(), s: C::F::zero() }
   ));
 }
 
