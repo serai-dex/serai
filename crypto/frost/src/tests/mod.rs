@@ -14,6 +14,7 @@ use crate::{
 // Test suites for public usage
 pub mod curve;
 pub mod schnorr;
+pub mod promote;
 pub mod vectors;
 
 // Literal test definitions to run during `cargo test`

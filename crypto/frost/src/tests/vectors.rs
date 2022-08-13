@@ -9,7 +9,9 @@ use crate::{
   FrostCore, FrostKeys,
   algorithm::{Schnorr, Hram},
   sign::{PreprocessPackage, SignMachine, SignatureMachine, AlgorithmMachine},
-  tests::{clone_without, curve::test_curve, schnorr::test_schnorr, recover},
+  tests::{
+    clone_without, curve::test_curve, schnorr::test_schnorr, promote::test_promotion, recover,
+  },
 };
 
 pub struct Vectors {
@@ -66,6 +68,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   // Do basic tests before trying the vectors
   test_curve::<_, C>(&mut *rng);
   test_schnorr::<_, C>(rng);
+  test_promotion::<_, C>(rng);
 
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);

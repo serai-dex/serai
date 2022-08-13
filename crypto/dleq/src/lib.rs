@@ -60,7 +60,7 @@ pub enum DLEqError {
   InvalidProof,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct DLEqProof<G: PrimeGroup> {
   c: G::Scalar,
   s: G::Scalar,

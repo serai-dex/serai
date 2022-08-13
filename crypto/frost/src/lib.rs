@@ -14,7 +14,10 @@ mod schnorr;
 
 pub mod curve;
 use curve::Curve;
+
 pub mod key_gen;
+pub mod promote;
+
 pub mod algorithm;
 pub mod sign;
 

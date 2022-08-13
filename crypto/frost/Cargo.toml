@@ -27,7 +27,7 @@ p256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], opti
 k256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 dalek-ff-group = { path = "../dalek-ff-group", version = "0.1", optional = true }
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
+transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"], version = "0.1" }
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
