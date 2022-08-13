@@ -16,17 +16,20 @@ fn test_schnorr<G: PrimeGroup + Zeroize>()
 where
   G::Scalar: PrimeFieldBits + Zeroize,
 {
-  let private = G::Scalar::random(&mut OsRng);
-
   let transcript = RecommendedTranscript::new(b"Schnorr Test");
-  let mut batch = BatchVerifier::new(3);
-  SchnorrPoK::prove(&mut OsRng, &mut transcript.clone(), G::generator(), private).verify(
-    &mut OsRng,
-    &mut transcript.clone(),
-    G::generator(),
-    G::generator() * private,
-    &mut batch,
-  );
+
+  let mut batch = BatchVerifier::new(10);
+  for _ in 0 .. 10 {
+    let private = G::Scalar::random(&mut OsRng);
+    SchnorrPoK::prove(&mut OsRng, &mut transcript.clone(), G::generator(), private).verify(
+      &mut OsRng,
+      &mut transcript.clone(),
+      G::generator(),
+      G::generator() * private,
+      &mut batch,
+    );
+  }
+
   assert!(batch.verify_vartime());
 }
 

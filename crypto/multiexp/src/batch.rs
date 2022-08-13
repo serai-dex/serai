@@ -2,7 +2,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
 
-use ff::{Field, PrimeField, PrimeFieldBits};
+use ff::{Field, PrimeFieldBits};
 use group::Group;
 
 use crate::{multiexp, multiexp_vartime};
@@ -33,6 +33,12 @@ where
       let mut weight;
       while {
         // Generate a random scalar
+        weight = G::Scalar::random(&mut *rng);
+
+        // Clears half the bits, maintaining security, to minimize scalar additions
+        // Is not practically faster for whatever reason
+        /*
+        // Generate a random scalar
         let mut repr = G::Scalar::random(&mut *rng).to_repr();
 
         // Calculate the amount of bytes to clear. We want to clear less than half
@@ -55,6 +61,7 @@ where
           repr.as_mut().reverse();
           weight = G::Scalar::from_repr(repr).unwrap();
         }
+        */
 
         // Ensure it's non-zero, as a zero scalar would cause this item to pass no matter what
         weight.is_zero().into()
