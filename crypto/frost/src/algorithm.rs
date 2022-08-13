@@ -119,7 +119,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   }
 
   fn nonces(&self) -> Vec<Vec<C::G>> {
-    vec![vec![C::GENERATOR]]
+    vec![vec![C::generator()]]
   }
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(

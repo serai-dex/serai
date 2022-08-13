@@ -31,7 +31,9 @@ macro_rules! kp_curve {
       type G = $lib::ProjectivePoint;
 
       const ID: &'static [u8] = $ID;
-      const GENERATOR: Self::G = $lib::ProjectivePoint::GENERATOR;
+      fn generator() -> Self::G {
+        $lib::ProjectivePoint::GENERATOR
+      }
 
       fn hash_msg(msg: &[u8]) -> Vec<u8> {
         (&Sha256::new().chain($CONTEXT).chain(b"digest").chain(msg).finalize()).to_vec()

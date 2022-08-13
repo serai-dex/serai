@@ -330,7 +330,7 @@ impl<C: Curve> FrostKeys<C> {
 
   /// Returns the group key with any offset applied
   pub fn group_key(&self) -> C::G {
-    self.core.group_key + (C::GENERATOR * self.offset.unwrap_or_else(C::F::zero))
+    self.core.group_key + (C::generator() * self.offset.unwrap_or_else(C::F::zero))
   }
 
   /// Returns all participants' verification shares without any offsetting
@@ -354,7 +354,7 @@ impl<C: Curve> FrostKeys<C> {
 
     let offset_share = self.offset.unwrap_or_else(C::F::zero) *
       C::F::from(included.len().try_into().unwrap()).invert().unwrap();
-    let offset_verification_share = C::GENERATOR * offset_share;
+    let offset_verification_share = C::generator() * offset_share;
 
     Ok(FrostView {
       group_key: self.group_key(),

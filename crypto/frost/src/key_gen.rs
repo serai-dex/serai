@@ -50,7 +50,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
     // Step 1: Generate t random values to form a polynomial with
     coefficients.push(C::F::random(&mut *rng));
     // Step 3: Generate public commitments
-    commitments.push(C::GENERATOR * coefficients[i]);
+    commitments.push(C::generator() * coefficients[i]);
     // Serialize them for publication
     serialized.extend(commitments[i].to_bytes().as_ref());
   }
@@ -65,7 +65,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
       // There's no reason to spend the time and effort to make this deterministic besides a
       // general obsession with canonicity and determinism though
       r,
-      challenge::<C>(context, params.i(), (C::GENERATOR * r).to_bytes().as_ref(), &serialized),
+      challenge::<C>(context, params.i(), (C::generator() * r).to_bytes().as_ref(), &serialized),
     )
     .serialize(),
   );
@@ -224,7 +224,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
     // ensure that malleability isn't present is to use this n * t algorithm, which runs
     // per sender and not as an aggregate of all senders, which also enables blame
     let mut values = exponential(params.i, &commitments[l]);
-    values.push((-*share, C::GENERATOR));
+    values.push((-*share, C::generator()));
     share.zeroize();
 
     batch.queue(rng, *l, values);
@@ -246,7 +246,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
     verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes)));
   }
   // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
-  debug_assert_eq!(C::GENERATOR * secret_share, verification_shares[&params.i()]);
+  debug_assert_eq!(C::generator() * secret_share, verification_shares[&params.i()]);
 
   Ok(FrostCore { params, secret_share, group_key: stripes[0], verification_shares })
 }

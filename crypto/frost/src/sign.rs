@@ -267,7 +267,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
       // While further code edits would still be required for such a model (having the offset
       // communicated as a point along with only a single party applying the offset), this means it
       // wouldn't require a transcript change as well
-      rho_transcript.append_message(b"offset", (C::GENERATOR * offset).to_bytes().as_ref());
+      rho_transcript.append_message(b"offset", (C::generator() * offset).to_bytes().as_ref());
     }
 
     // Generate the per-signer binding factors

@@ -28,7 +28,9 @@ macro_rules! dalek_curve {
       type G = $Point;
 
       const ID: &'static [u8] = $ID;
-      const GENERATOR: Self::G = $POINT;
+      fn generator() -> Self::G {
+        $POINT
+      }
 
       fn hash_msg(msg: &[u8]) -> Vec<u8> {
         Sha512::new()

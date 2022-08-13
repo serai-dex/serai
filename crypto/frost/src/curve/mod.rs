@@ -53,7 +53,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
 
   /// Generator for the group
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
-  const GENERATOR: Self::G;
+  fn generator() -> Self::G;
 
   /// Hash the message for the binding factor. H3 from the IETF draft
   // This doesn't actually need to be part of Curve as it does nothing with the curve

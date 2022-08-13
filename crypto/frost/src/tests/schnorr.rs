@@ -16,7 +16,7 @@ pub(crate) fn core_sign<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let nonce = C::F::random(&mut *rng);
   let challenge = C::F::random(rng); // Doesn't bother to craft an HRAM
   assert!(schnorr::verify::<C>(
-    C::GENERATOR * private_key,
+    C::generator() * private_key,
     challenge,
     &schnorr::sign(private_key, nonce, challenge)
   ));
@@ -27,9 +27,9 @@ pub(crate) fn core_sign<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 // random
 pub(crate) fn core_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   assert!(!schnorr::verify::<C>(
-    C::GENERATOR * C::F::random(&mut *rng),
+    C::generator() * C::F::random(&mut *rng),
     C::F::random(rng),
-    &SchnorrSignature { R: C::GENERATOR * C::F::zero(), s: C::F::zero() }
+    &SchnorrSignature { R: C::identity(), s: C::F::zero() }
   ));
 }
 
@@ -46,7 +46,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 
   // Batch verify
   let triplets = (0 .. 5)
-    .map(|i| (u16::try_from(i + 1).unwrap(), C::GENERATOR * keys[i], challenges[i], sigs[i]))
+    .map(|i| (u16::try_from(i + 1).unwrap(), C::generator() * keys[i], challenges[i], sigs[i]))
     .collect::<Vec<_>>();
   schnorr::batch_verify(rng, &triplets).unwrap();
 
@@ -111,7 +111,7 @@ fn sign_with_offset<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   for i in 1 ..= u16::try_from(keys.len()).unwrap() {
     keys.insert(i, keys[&i].offset(offset));
   }
-  let offset_key = group_key + (C::GENERATOR * offset);
+  let offset_key = group_key + (C::generator() * offset);
 
   sign_core(rng, offset_key, &keys);
 }
