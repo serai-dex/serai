@@ -255,11 +255,19 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
       b"commitments",
       &C::hash_msg(params.algorithm.transcript().challenge(b"commitments").as_ref()),
     );
+
     // Include the offset, if one exists
     // While this isn't part of the FROST-expected rho transcript, the offset being here coincides
-    // with another specification
+    // with another specification (despite the transcript format being distinct)
     if let Some(offset) = params.keys.offset {
-      rho_transcript.append_message(b"offset", offset.to_repr().as_ref());
+      // Transcript as a point
+      // Under a coordinated model, the coordinater can be the only party to know the discrete log
+      // of the offset. This removes the ability for any signer to provide the discrete log,
+      // proving a key is related to another, slightly increasing security
+      // While further code edits would still be required for such a model (having the offset
+      // communicated as a point along with only a single party applying the offset), this means it
+      // wouldn't require a transcript change as well
+      rho_transcript.append_message(b"offset", (C::GENERATOR * offset).to_bytes().as_ref());
     }
 
     // Generate the per-signer binding factors
