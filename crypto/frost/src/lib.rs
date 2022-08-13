@@ -22,7 +22,7 @@ pub mod tests;
 
 // Validate a map of serialized values to have the expected included participants
 pub(crate) fn validate_map<T>(
-  map: &mut HashMap<u16, T>,
+  map: &HashMap<u16, T>,
   included: &[u16],
   ours: u16,
 ) -> Result<(), FrostError> {
@@ -169,6 +169,22 @@ impl<C: Curve> Debug for FrostCore<C> {
 }
 
 impl<C: Curve> FrostCore<C> {
+  pub(crate) fn new(
+    params: FrostParams,
+    secret_share: C::F,
+    verification_shares: HashMap<u16, C::G>,
+  ) -> FrostCore<C> {
+    #[cfg(debug_assertions)]
+    validate_map(&verification_shares, &(0 ..= params.n).collect::<Vec<_>>(), 0).unwrap();
+
+    let t = (1 ..= params.t).collect::<Vec<_>>();
+    FrostCore {
+      params,
+      secret_share,
+      group_key: t.iter().map(|i| verification_shares[i] * lagrange::<C::F>(*i, &t)).sum(),
+      verification_shares,
+    }
+  }
   pub fn params(&self) -> FrostParams {
     self.params
   }
@@ -197,7 +213,6 @@ impl<C: Curve> FrostCore<C> {
     serialized.extend(&self.params.n.to_be_bytes());
     serialized.extend(&self.params.i.to_be_bytes());
     serialized.extend(self.secret_share.to_repr().as_ref());
-    serialized.extend(self.group_key.to_bytes().as_ref());
     for l in 1 ..= self.params.n {
       serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
     }
@@ -235,8 +250,6 @@ impl<C: Curve> FrostCore<C> {
 
     let secret_share =
       C::read_F(cursor).map_err(|_| FrostError::InternalError("invalid secret share"))?;
-    let group_key =
-      C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid group key"))?;
 
     let mut verification_shares = HashMap::new();
     for l in 1 ..= n {
@@ -246,13 +259,11 @@ impl<C: Curve> FrostCore<C> {
       );
     }
 
-    Ok(FrostCore {
-      params: FrostParams::new(t, n, i)
-        .map_err(|_| FrostError::InternalError("invalid parameters"))?,
+    Ok(FrostCore::new(
+      FrostParams::new(t, n, i).map_err(|_| FrostError::InternalError("invalid parameters"))?,
       secret_share,
-      group_key,
       verification_shares,
-    })
+    ))
   }
 }
 
@@ -317,12 +328,14 @@ impl<C: Curve> FrostKeys<C> {
     self.core.secret_share
   }
 
+  /// Returns the group key with any offset applied
   pub fn group_key(&self) -> C::G {
     self.core.group_key + (C::GENERATOR * self.offset.unwrap_or_else(C::F::zero))
   }
 
+  /// Returns all participants' verification shares without any offsetting
   pub(crate) fn verification_shares(&self) -> HashMap<u16, C::G> {
-    self.core.verification_shares.clone()
+    self.core.verification_shares()
   }
 
   pub fn serialized_len(n: u16) -> usize {

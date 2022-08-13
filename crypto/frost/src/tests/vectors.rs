@@ -43,7 +43,6 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
     serialized.extend(u16::try_from(shares.len()).unwrap().to_be_bytes());
     serialized.extend(i.to_be_bytes());
     serialized.extend(shares[usize::from(i) - 1].to_repr().as_ref());
-    serialized.extend(&hex::decode(vectors.group_key).unwrap());
     for share in &verification_shares {
       serialized.extend(share.to_bytes().as_ref());
     }
