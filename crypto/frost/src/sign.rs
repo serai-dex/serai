@@ -176,7 +176,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
   msg: &[u8],
 ) -> Result<(Package<C>, Vec<u8>), FrostError> {
   let multisig_params = params.multisig_params();
-  validate_map(&mut commitments, &params.view.included, multisig_params.i)?;
+  validate_map(&commitments, &params.view.included, multisig_params.i)?;
 
   {
     // Domain separate FROST
@@ -320,7 +320,7 @@ fn complete<Re: Read, C: Curve, A: Algorithm<C>>(
   mut shares: HashMap<u16, Re>,
 ) -> Result<A::Signature, FrostError> {
   let params = sign_params.multisig_params();
-  validate_map(&mut shares, &sign_params.view.included, params.i)?;
+  validate_map(&shares, &sign_params.view.included, params.i)?;
 
   let mut responses = HashMap::new();
   let mut sum = C::F::zero();

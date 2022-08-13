@@ -83,7 +83,7 @@ fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   our_commitments: Vec<C::G>,
   mut serialized: HashMap<u16, Re>,
 ) -> Result<HashMap<u16, Vec<C::G>>, FrostError> {
-  validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
+  validate_map(&serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   let mut commitments = HashMap::new();
   commitments.insert(params.i, our_commitments);
@@ -189,7 +189,7 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   commitments: &mut HashMap<u16, Vec<C::G>>,
   mut serialized: HashMap<u16, Re>,
 ) -> Result<FrostCore<C>, FrostError> {
-  validate_map(&mut serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
+  validate_map(&serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   // Step 2. Verify each share
   let mut shares = HashMap::new();
