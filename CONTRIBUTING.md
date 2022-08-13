@@ -15,13 +15,17 @@ form of code and documentation.
 `dead_code`).
 - The CI must pass.
 
-- Don't use multiple newlines between sections of code.
 - Only use uppercase variable names when relevant to cryptography.
+
+- Put a space after comment markers.
+- Don't use multiple newlines between sections of code.
+- Have a newline before EOF.
 
 ### Guidelines
 
 - Comment code reasonably.
 - Include tests for new features.
+- Sign commits.
 
 ### Submission
 
