@@ -2,7 +2,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
 
-use ff::{Field, PrimeFieldBits};
+use ff::{Field, PrimeField, PrimeFieldBits};
 use group::Group;
 
 use crate::{multiexp, multiexp_vartime};
@@ -31,9 +31,32 @@ where
       G::Scalar::one()
     } else {
       let mut weight;
-      // Ensure it's non-zero, as a zero scalar would cause this item to pass no matter what
       while {
-        weight = G::Scalar::random(&mut *rng);
+        // Generate a random scalar
+        let mut repr = G::Scalar::random(&mut *rng).to_repr();
+
+        // Calculate the amount of bytes to clear. We want to clear less than half
+        let repr_len = repr.as_ref().len();
+        let unused_bits = (repr_len * 8) - usize::try_from(G::Scalar::CAPACITY).unwrap();
+        // Don't clear any partial bytes
+        let to_clear = (repr_len / 2) - ((unused_bits + 7) / 8);
+
+        // Clear a safe amount of bytes
+        for b in &mut repr.as_mut()[.. to_clear] {
+          *b = 0;
+        }
+
+        // Ensure these bits are used as the low bits so low scalars multiplied by this don't
+        // become large scalars
+        weight = G::Scalar::from_repr(repr).unwrap();
+        // Tests if any bit we supposedly just cleared is set, and if so, reverses it
+        // Not a security issue if this fails, just a minor performance hit at ~2^-120 odds
+        if weight.to_le_bits().iter().take(to_clear * 8).any(|bit| *bit) {
+          repr.as_mut().reverse();
+          weight = G::Scalar::from_repr(repr).unwrap();
+        }
+
+        // Ensure it's non-zero, as a zero scalar would cause this item to pass no matter what
         weight.is_zero().into()
       } {}
       weight
