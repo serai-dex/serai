@@ -1,3 +1,11 @@
+use crate::crypto::ProcessedSignature;
+use ethers::{
+  contract::ContractFactory, prelude::*, prelude::builders::ContractCall,
+  solc::artifacts::contract::ContractBytecode,
+};
+use eyre::{eyre, Result};
+use std::fs::File;
+use std::sync::Arc;
 use thiserror::Error;
 use eyre::{eyre, Result};
 
@@ -66,20 +74,46 @@ pub async fn call_router_execute(
   contract: &router_mod::Router<SignerMiddleware<Provider<Http>, LocalWallet>>,
   txs: Vec<router_mod::Transaction>,
   signature: &ProcessedSignature,
-) -> Result<()> {
-  if contract
-    .execute(
-      txs,
-      signature.parity + 27,
-      signature.px.to_bytes().into(),
-      signature.s.to_bytes().into(),
-      signature.e.to_bytes().into(),
-    )
-    .call()
-    .await?
-  {
-    Ok(())
-  } else {
-    Err(eyre!(EthereumError::VerificationError))
-  }
+) -> std::result::Result<
+  ContractCall<SignerMiddleware<Provider<Http>, LocalWallet>, bool>,
+  eyre::ErrReport,
+> {
+  let tx = contract.execute(
+    txs,
+    signature.parity + 27,
+    signature.px.to_bytes().into(),
+    signature.s.to_bytes().into(),
+    signature.e.to_bytes().into(),
+  );
+  let pending_tx = tx.send().await?;
+  let receipt = pending_tx.await?; //.map_err(|_e| eyre!(EthereumError::VerificationError))?;
+
+  println!("{:?}", receipt);
+
+  //Err(eyre!(EthereumError::VerificationError))
+  Ok(tx)
+}
+
+pub async fn call_router_execute_no_abi_encode(
+  contract: &router_mod::Router<SignerMiddleware<Provider<Http>, LocalWallet>>,
+  txs: Vec<router_mod::Transaction>,
+  signature: &ProcessedSignature,
+) -> std::result::Result<
+  ContractCall<SignerMiddleware<Provider<Http>, LocalWallet>, bool>,
+  eyre::ErrReport,
+> {
+  let tx = contract.execute_no_abi_encode(
+    txs,
+    signature.parity + 27,
+    signature.px.to_bytes().into(),
+    signature.s.to_bytes().into(),
+    signature.e.to_bytes().into(),
+  );
+  let pending_tx = tx.send().await?;
+  let receipt = pending_tx.await?; //.map_err(|_e| eyre!(EthereumError::VerificationError))?;
+
+  println!("{:?}", receipt);
+
+  //Err(eyre!(EthereumError::VerificationError))
+  Ok(tx)
 }
