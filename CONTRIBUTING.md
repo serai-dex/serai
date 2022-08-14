@@ -23,6 +23,7 @@ form of code and documentation.
 
 ### Guidelines
 
+- Sort inputs as core, std, third party, and then Serai.
 - Comment code reasonably.
 - Include tests for new features.
 - Sign commits.
