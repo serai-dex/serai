@@ -8,7 +8,7 @@ use crate::{
 #[cfg(any(test, feature = "ristretto"))]
 #[test]
 fn ristretto_vectors() {
-  test_with_vectors::<_, curve::Ristretto, curve::IetfRistrettoHram>(
+  test_with_vectors::<_, dalek_ff_group::RistrettoPoint, curve::IetfRistrettoHram>(
     &mut OsRng,
     Vectors {
       threshold: 2,
@@ -45,7 +45,7 @@ fn ristretto_vectors() {
 #[cfg(feature = "ed25519")]
 #[test]
 fn ed25519_vectors() {
-  test_with_vectors::<_, curve::Ed25519, curve::IetfEd25519Hram>(
+  test_with_vectors::<_, dalek_ff_group::EdwardsPoint, curve::IetfEd25519Hram>(
     &mut OsRng,
     Vectors {
       threshold: 2,

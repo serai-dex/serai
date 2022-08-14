@@ -2,7 +2,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
 
-use group::{
+use ::curve::group::{
   ff::{Field, PrimeField},
   GroupEncoding,
 };

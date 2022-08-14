@@ -1,5 +1,3 @@
-use zeroize::Zeroize;
-
 use sha2::{Digest, Sha512};
 
 use dalek_ff_group::Scalar;
@@ -8,30 +6,18 @@ use crate::{curve::Curve, algorithm::Hram};
 
 macro_rules! dalek_curve {
   (
-    $Curve:      ident,
-    $Hram:       ident,
     $Point:      ident,
-
-    $POINT: ident,
+    $Hram:       ident,
 
     $ID:      literal,
     $CONTEXT: literal,
     $chal:    literal,
     $digest:  literal,
   ) => {
-    use dalek_ff_group::{$Point, $POINT};
+    use dalek_ff_group::$Point;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-    pub struct $Curve;
-    impl Curve for $Curve {
-      type F = Scalar;
-      type G = $Point;
-
+    impl Curve for $Point {
       const ID: &'static [u8] = $ID;
-
-      fn generator() -> Self::G {
-        $POINT
-      }
 
       fn hash_msg(msg: &[u8]) -> Vec<u8> {
         Sha512::new()
@@ -53,10 +39,10 @@ macro_rules! dalek_curve {
 
     #[derive(Copy, Clone)]
     pub struct $Hram;
-    impl Hram<$Curve> for $Hram {
+    impl Hram<$Point> for $Hram {
       #[allow(non_snake_case)]
       fn hram(R: &$Point, A: &$Point, m: &[u8]) -> Scalar {
-        $Curve::hash_to_F($chal, &[&R.compress().to_bytes(), &A.compress().to_bytes(), m].concat())
+        $Point::hash_to_F($chal, &[&R.compress().to_bytes(), &A.compress().to_bytes(), m].concat())
       }
     }
   };
@@ -64,10 +50,8 @@ macro_rules! dalek_curve {
 
 #[cfg(any(test, feature = "ristretto"))]
 dalek_curve!(
-  Ristretto,
-  IetfRistrettoHram,
   RistrettoPoint,
-  RISTRETTO_BASEPOINT_POINT,
+  IetfRistrettoHram,
   b"ristretto",
   b"FROST-RISTRETTO255-SHA512-v5",
   b"chal",
@@ -75,13 +59,4 @@ dalek_curve!(
 );
 
 #[cfg(feature = "ed25519")]
-dalek_curve!(
-  Ed25519,
-  IetfEd25519Hram,
-  EdwardsPoint,
-  ED25519_BASEPOINT_POINT,
-  b"edwards25519",
-  b"",
-  b"",
-  b"",
-);
+dalek_curve!(EdwardsPoint, IetfEd25519Hram, b"edwards25519", b"", b"", b"",);

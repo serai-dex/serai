@@ -19,7 +19,7 @@ pub enum CurveError {
 }
 
 /// Curve trait ensuring access to a variety of ff/group APIs
-pub trait Curve: Clone + Copy + PartialEq + Eq + Debug {
+pub trait Curve: Zeroize + Clone + Copy + PartialEq + Eq + Debug {
   /// Scalar field element type
   type F: Zeroize + PrimeField + PrimeFieldBits;
   /// Group element type

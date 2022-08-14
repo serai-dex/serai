@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::Field, Group};
+use ::curve::group::{ff::Field, Group};
 
 use crate::{Curve, FrostCore, tests::core_gen};
 

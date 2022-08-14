@@ -4,15 +4,15 @@ use rand_core::OsRng;
 use crate::tests::vectors::{Vectors, test_with_vectors};
 
 #[cfg(feature = "secp256k1")]
-use crate::curve::{Secp256k1, NonIetfSecp256k1Hram};
+use crate::curve::IetfSecp256k1Hram;
 
 #[cfg(feature = "p256")]
-use crate::curve::{P256, IetfP256Hram};
+use crate::curve::IetfP256Hram;
 
 #[cfg(feature = "secp256k1")]
 #[test]
 fn secp256k1_non_ietf() {
-  test_with_vectors::<_, Secp256k1, NonIetfSecp256k1Hram>(
+  test_with_vectors::<_, k256::ProjectivePoint, IetfSecp256k1Hram>(
     &mut OsRng,
     Vectors {
       threshold: 2,
@@ -49,7 +49,7 @@ fn secp256k1_non_ietf() {
 #[cfg(feature = "p256")]
 #[test]
 fn p256_vectors() {
-  test_with_vectors::<_, P256, IetfP256Hram>(
+  test_with_vectors::<_, p256::ProjectivePoint, IetfP256Hram>(
     &mut OsRng,
     Vectors {
       threshold: 2,

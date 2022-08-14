@@ -2,7 +2,7 @@ use std::{marker::PhantomData, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::Field, Group, GroupEncoding};
+use ::curve::group::{ff::Field, Group, GroupEncoding};
 
 use crate::{
   Curve, FrostKeys,

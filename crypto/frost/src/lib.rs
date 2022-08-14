@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use zeroize::Zeroize;
 
-use group::{
+use ::curve::group::{
   ff::{Field, PrimeField},
   GroupEncoding,
 };
@@ -13,7 +13,7 @@ use group::{
 mod schnorr;
 
 pub mod curve;
-use curve::Curve;
+use crate::curve::Curve;
 
 pub mod key_gen;
 pub mod promote;

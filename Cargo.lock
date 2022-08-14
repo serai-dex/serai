@@ -4532,12 +4532,11 @@ dependencies = [
 name = "modular-frost"
 version = "0.2.0"
 dependencies = [
+ "composable-curve",
  "dalek-ff-group",
  "dleq",
  "elliptic-curve",
- "ff",
  "flexible-transcript",
- "group",
  "hex",
  "k256",
  "multiexp",

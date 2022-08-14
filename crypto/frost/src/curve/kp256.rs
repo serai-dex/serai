@@ -2,7 +2,7 @@ use zeroize::Zeroize;
 
 use sha2::{digest::Update, Digest, Sha256};
 
-use group::{
+use ::curve::group::{
   ff::{Field, PrimeField},
   GroupEncoding,
 };
@@ -18,23 +18,13 @@ use crate::{curve::Curve, algorithm::Hram};
 macro_rules! kp_curve {
   (
     $lib:   ident,
-    $Curve: ident,
     $Hram:  ident,
 
     $ID:      literal,
     $CONTEXT: literal
   ) => {
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-    pub struct $Curve;
-    impl Curve for $Curve {
-      type F = $lib::Scalar;
-      type G = $lib::ProjectivePoint;
-
+    impl Curve for $lib::ProjectivePoint {
       const ID: &'static [u8] = $ID;
-
-      fn generator() -> Self::G {
-        $lib::ProjectivePoint::GENERATOR
-      }
 
       fn hash_msg(msg: &[u8]) -> Vec<u8> {
         (&Sha256::new().chain($CONTEXT).chain(b"digest").chain(msg).finalize()).to_vec()
@@ -76,10 +66,10 @@ macro_rules! kp_curve {
 
     #[derive(Clone)]
     pub struct $Hram;
-    impl Hram<$Curve> for $Hram {
+    impl Hram<$lib::ProjectivePoint> for $Hram {
       #[allow(non_snake_case)]
       fn hram(R: &$lib::ProjectivePoint, A: &$lib::ProjectivePoint, m: &[u8]) -> $lib::Scalar {
-        $Curve::hash_to_F(
+        $lib::ProjectivePoint::hash_to_F(
           &[$CONTEXT as &[u8], b"chal"].concat(),
           &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat(),
         )
@@ -89,7 +79,7 @@ macro_rules! kp_curve {
 }
 
 #[cfg(feature = "p256")]
-kp_curve!(p256, P256, IetfP256Hram, b"P-256", b"FROST-P256-SHA256-v5");
+kp_curve!(p256, IetfP256Hram, b"P-256", b"FROST-P256-SHA256-v5");
 
 #[cfg(feature = "secp256k1")]
-kp_curve!(k256, Secp256k1, NonIetfSecp256k1Hram, b"secp256k1", b"FROST-secp256k1-SHA256-v7");
+kp_curve!(k256, IetfSecp256k1Hram, b"secp256k1", b"FROST-secp256k1-SHA256-v7");

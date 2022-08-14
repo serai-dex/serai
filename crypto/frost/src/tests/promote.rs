@@ -4,11 +4,9 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
 
-use group::Group;
-
 use crate::{
-  Curve, // FrostKeys,
-  promote::{GeneratorPromotion /* CurvePromote */},
+  Curve,
+  promote::GeneratorPromotion,
   tests::{clone_without, key_gen, schnorr::sign_core},
 };
 
@@ -18,15 +16,17 @@ struct AltFunctions<C: Curve> {
   _curve: PhantomData<C>,
 }
 
-impl<C: Curve> Curve for AltFunctions<C> {
+impl<C: Curve> ::curve::Curve for AltFunctions<C> {
   type F = C::F;
   type G = C::G;
-
-  const ID: &'static [u8] = b"alt_functions";
 
   fn generator() -> Self::G {
     C::generator()
   }
+}
+
+impl<C: Curve> Curve for AltFunctions<C> {
+  const ID: &'static [u8] = b"alt_functions";
 
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
     C::hash_msg(&[msg, b"alt"].concat())
@@ -60,15 +60,17 @@ struct AltGenerator<C: Curve> {
   _curve: PhantomData<C>,
 }
 
-impl<C: Curve> Curve for AltGenerator<C> {
+impl<C: Curve> ::curve::Curve for AltGenerator<C> {
   type F = C::F;
   type G = C::G;
-
-  const ID: &'static [u8] = b"alt_generator";
 
   fn generator() -> Self::G {
     C::G::generator() * C::hash_to_F(b"FROST_tests", b"generator")
   }
+}
+
+impl<C: Curve> Curve for AltGenerator<C> {
+  const ID: &'static [u8] = b"alt_generator";
 
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
     C::hash_msg(msg)

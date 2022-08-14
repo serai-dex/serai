@@ -10,7 +10,7 @@ use zeroize::Zeroize;
 
 use transcript::Transcript;
 
-use group::{
+use ::curve::group::{
   ff::{Field, PrimeField},
   Group, GroupEncoding,
 };
@@ -134,7 +134,7 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
         // This could be further optimized with a multi-nonce proof.
         // See https://github.com/serai-dex/serai/issues/38
         for mut nonce in nonces {
-          DLEqProof::prove(&mut *rng, &mut transcript, generators, nonce)
+          DLEqProof::<C>::prove(&mut *rng, &mut transcript, generators, nonce)
             .serialize(&mut serialized)
             .unwrap();
           nonce.zeroize();
@@ -229,7 +229,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
           if nonce_generators.len() >= 2 {
             let mut transcript = nonce_transcript::<A::Transcript>();
             for de in 0 .. 2 {
-              DLEqProof::deserialize(&mut cursor)
+              DLEqProof::<C>::deserialize(&mut cursor)
                 .map_err(|_| FrostError::InvalidCommitment(*l))?
                 .verify(
                   &mut transcript,

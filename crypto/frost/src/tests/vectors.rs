@@ -2,7 +2,7 @@ use std::{io::Cursor, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::PrimeField, GroupEncoding};
+use ::curve::group::{ff::PrimeField, GroupEncoding};
 
 use crate::{
   curve::Curve,

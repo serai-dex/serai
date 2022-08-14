@@ -7,7 +7,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::GroupEncoding;
+use ::curve::group::GroupEncoding;
 
 use transcript::{Transcript, RecommendedTranscript};
 use dleq::DLEqProof;

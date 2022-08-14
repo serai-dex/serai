@@ -19,8 +19,7 @@ hex = "0.4"
 
 sha2 = { version = "0.10", optional = true }
 
-ff = "0.12"
-group = "0.12"
+curve = { package = "composable-curve", path = "../curve", version = "0.12" }
 
 elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true }
 p256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
