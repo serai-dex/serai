@@ -45,14 +45,14 @@ pub trait Coin {
   const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
 
   // Doesn't have to take self, enables some level of caching which is pleasant
-  fn address(&self, key: <Self::Curve as Curve>::G) -> Self::Address;
+  fn address(&self, key: <Self::Curve as ::curve::Curve>::G) -> Self::Address;
 
   async fn get_height(&self) -> Result<usize, CoinError>;
   async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError>;
   async fn get_outputs(
     &self,
     block: &Self::Block,
-    key: <Self::Curve as Curve>::G,
+    key: <Self::Curve as ::curve::Curve>::G,
   ) -> Vec<Self::Output>;
 
   async fn prepare_send(

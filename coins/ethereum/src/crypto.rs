@@ -6,7 +6,7 @@ use k256::{
   AffinePoint, ProjectivePoint, Scalar, U256,
 };
 
-use frost::{algorithm::Hram, curve::Secp256k1};
+use frost::algorithm::Hram;
 
 pub fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).try_into().unwrap()
@@ -47,7 +47,7 @@ pub fn ecrecover(message: Scalar, v: u8, r: Scalar, s: Scalar) -> Option<[u8; 20
 
 #[derive(Clone, Default)]
 pub struct EthereumHram {}
-impl Hram<Secp256k1> for EthereumHram {
+impl Hram<ProjectivePoint> for EthereumHram {
   #[allow(non_snake_case)]
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
     let a_encoded_point = A.to_encoded_point(true);

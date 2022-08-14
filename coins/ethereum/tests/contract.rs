@@ -19,11 +19,10 @@ async fn test_ecrecover_hack() {
   use ethers::utils::keccak256;
   use frost::{
     algorithm::Schnorr,
-    curve::Secp256k1,
     tests::{algorithm_machines, key_gen, sign},
   };
   use k256::elliptic_curve::bigint::ArrayEncoding;
-  use k256::{Scalar, U256};
+  use k256::{U256, Scalar, ProjectivePoint};
   use rand_core::OsRng;
 
   let anvil = Anvil::new().spawn();
@@ -33,7 +32,7 @@ async fn test_ecrecover_hack() {
   let chain_id = provider.get_chainid().await.unwrap();
   let client = Arc::new(SignerMiddleware::new(provider, wallet));
 
-  let keys = key_gen::<_, Secp256k1>(&mut OsRng);
+  let keys = key_gen::<_, ProjectivePoint>(&mut OsRng);
   let group_key = keys[&1].group_key();
 
   const MESSAGE: &'static [u8] = b"Hello, World!";
@@ -44,7 +43,7 @@ async fn test_ecrecover_hack() {
 
   let sig = sign(
     &mut OsRng,
-    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, crypto::EthereumHram>::new(), &keys),
+    algorithm_machines(&mut OsRng, Schnorr::<ProjectivePoint, crypto::EthereumHram>::new(), &keys),
     full_message,
   );
   let mut processed_sig =

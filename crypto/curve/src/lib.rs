@@ -7,7 +7,11 @@ use zeroize::Zeroize;
 
 pub use group;
 pub use group::ff;
-use group::{ff::{PrimeField, PrimeFieldBits}, Group, GroupOps, GroupEncoding, prime::PrimeGroup};
+use group::{
+  ff::{PrimeField, PrimeFieldBits},
+  Group, GroupOps, GroupEncoding,
+  prime::PrimeGroup,
+};
 
 /// Set of errors for curve-related operations, namely encoding and decoding
 #[derive(Clone, Error, Debug)]
@@ -74,7 +78,10 @@ pub trait Curve: Zeroize + Clone + Copy + PartialEq + Eq + Debug {
   }
 }
 
-impl<G: Zeroize + PrimeGroup> Curve for G where G::Scalar: Zeroize + PrimeField + PrimeFieldBits {
+impl<G: Zeroize + PrimeGroup> Curve for G
+where
+  G::Scalar: Zeroize + PrimeField + PrimeFieldBits,
+{
   type F = G::Scalar;
   type G = G;
 

@@ -19,7 +19,7 @@ use curve25519_dalek::{
 use group::Group;
 
 use transcript::{Transcript, RecommendedTranscript};
-use frost::{curve::Ed25519, FrostError, FrostView, algorithm::Algorithm};
+use frost::{FrostError, FrostView, algorithm::Algorithm};
 use dalek_ff_group as dfg;
 
 use crate::{
@@ -124,7 +124,7 @@ impl ClsagMultisig {
   }
 }
 
-impl Algorithm<Ed25519> for ClsagMultisig {
+impl Algorithm<dfg::EdwardsPoint> for ClsagMultisig {
   type Transcript = RecommendedTranscript;
   type Signature = (Clsag, EdwardsPoint);
 
@@ -135,7 +135,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    view: &FrostView<Ed25519>,
+    view: &FrostView<dfg::EdwardsPoint>,
   ) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(Self::serialized_len());
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
@@ -145,7 +145,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn process_addendum<Re: Read>(
     &mut self,
-    view: &FrostView<Ed25519>,
+    view: &FrostView<dfg::EdwardsPoint>,
     l: u16,
     serialized: &mut Re,
   ) -> Result<(), FrostError> {
@@ -171,7 +171,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn sign_share(
     &mut self,
-    view: &FrostView<Ed25519>,
+    view: &FrostView<dfg::EdwardsPoint>,
     nonce_sums: &[Vec<dfg::EdwardsPoint>],
     nonces: &[dfg::Scalar],
     msg: &[u8],

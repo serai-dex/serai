@@ -33,6 +33,6 @@ pub enum SignError {
 // Generate a static view key for a given chain in a globally consistent manner
 // Doesn't consider the current group key to increase the simplicity of verifying Serai's status
 // Takes an index, k, for more modern privacy protocols which use multiple view keys
-pub fn view_key<C: Coin>(k: u64) -> <C::Curve as Curve>::F {
+pub fn view_key<C: Coin>(k: u64) -> <C::Curve as ::curve::Curve>::F {
   C::Curve::hash_to_F(b"Serai DEX View Key", &[C::ID, &k.to_le_bytes()].concat())
 }

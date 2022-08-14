@@ -17,7 +17,7 @@ use dalek_ff_group::Scalar;
 use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
 use frost::{
-  curve::Ed25519,
+  curve::dfg::EdwardsPoint,
   tests::{THRESHOLD, key_gen, sign},
 };
 
@@ -66,7 +66,7 @@ async fn send_core(test: usize, multisig: bool) {
   let mut spend_pub = &spend * &ED25519_BASEPOINT_TABLE;
 
   #[cfg(feature = "multisig")]
-  let keys = key_gen::<_, Ed25519>(&mut OsRng);
+  let keys = key_gen::<_, dfg::EdwardsPoint>(&mut OsRng);
 
   if multisig {
     #[cfg(not(feature = "multisig"))]

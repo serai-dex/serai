@@ -8,7 +8,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 #[cfg(feature = "multisig")]
 use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
-use frost::curve::Ed25519;
+use dalek_ff_group::EdwardsPoint;
 
 use crate::{
   Commitment, random_scalar,
@@ -80,7 +80,7 @@ fn clsag() {
 #[cfg(feature = "multisig")]
 #[test]
 fn clsag_multisig() -> Result<(), MultisigError> {
-  let keys = key_gen::<_, Ed25519>(&mut OsRng);
+  let keys = key_gen::<_, EdwardsPoint>(&mut OsRng);
 
   let randomness = random_scalar(&mut OsRng);
   let mut ring = vec![];

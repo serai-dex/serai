@@ -4,7 +4,7 @@ use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;
 use transcript::RecommendedTranscript;
-use frost::{curve::Ed25519, FrostKeys};
+use frost::FrostKeys;
 
 use monero_serai::{
   ringct::bulletproofs::Bulletproofs,
@@ -55,7 +55,7 @@ impl OutputTrait for Output {
 
 #[derive(Debug)]
 pub struct SignableTransaction(
-  FrostKeys<Ed25519>,
+  FrostKeys<dfg::EdwardsPoint>,
   RecommendedTranscript,
   usize,
   MSignableTransaction,
@@ -97,7 +97,7 @@ impl Monero {
 
 #[async_trait]
 impl Coin for Monero {
-  type Curve = Ed25519;
+  type Curve = dfg::EdwardsPoint;
 
   type Fee = Fee;
   type Transaction = Transaction;
@@ -142,7 +142,7 @@ impl Coin for Monero {
 
   async fn prepare_send(
     &self,
-    keys: FrostKeys<Ed25519>,
+    keys: FrostKeys<dfg::EdwardsPoint>,
     transcript: RecommendedTranscript,
     height: usize,
     mut inputs: Vec<Output>,

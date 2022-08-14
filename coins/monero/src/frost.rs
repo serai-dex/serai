@@ -34,7 +34,7 @@ pub(crate) fn write_dleq<R: RngCore + CryptoRng>(
   mut x: Scalar,
 ) -> Vec<u8> {
   let mut res = Vec::with_capacity(64);
-  DLEqProof::prove(
+  DLEqProof::<dfg::EdwardsPoint>::prove(
     rng,
     // Doesn't take in a larger transcript object due to the usage of this
     // Every prover would immediately write their own DLEq proof, when they can only do so in

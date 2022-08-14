@@ -13,9 +13,10 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, CompressedEdwardsY},
 };
 
+use dalek_ff_group as dfg;
+
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
-  curve::Ed25519,
   FrostError, FrostKeys,
   sign::{
     PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine, AlgorithmSignMachine,
@@ -43,7 +44,7 @@ pub struct TransactionMachine {
   decoys: Vec<Decoys>,
 
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
-  clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>,
+  clsags: Vec<AlgorithmMachine<dfg::EdwardsPoint, ClsagMultisig>>,
 }
 
 pub struct TransactionSignMachine {
@@ -55,21 +56,21 @@ pub struct TransactionSignMachine {
   decoys: Vec<Decoys>,
 
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
-  clsags: Vec<AlgorithmSignMachine<Ed25519, ClsagMultisig>>,
+  clsags: Vec<AlgorithmSignMachine<dfg::EdwardsPoint, ClsagMultisig>>,
 
   our_preprocess: Vec<u8>,
 }
 
 pub struct TransactionSignatureMachine {
   tx: Transaction,
-  clsags: Vec<AlgorithmSignatureMachine<Ed25519, ClsagMultisig>>,
+  clsags: Vec<AlgorithmSignatureMachine<dfg::EdwardsPoint, ClsagMultisig>>,
 }
 
 impl SignableTransaction {
   pub async fn multisig(
     self,
     rpc: &Rpc,
-    keys: FrostKeys<Ed25519>,
+    keys: FrostKeys<dfg::EdwardsPoint>,
     mut transcript: RecommendedTranscript,
     height: usize,
     mut included: Vec<u16>,

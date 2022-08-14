@@ -7534,6 +7534,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "blake2",
+ "composable-curve",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "flexible-transcript",
