@@ -4,10 +4,7 @@ use zeroize::Zeroize;
 
 use transcript::Transcript;
 
-use group::{
-  ff::{Field, PrimeFieldBits},
-  prime::PrimeGroup,
-};
+use curve::{ff::Field, group::GroupEncoding, Curve, CurveError};
 use multiexp::BatchVerifier;
 
 use crate::challenge;
@@ -15,43 +12,39 @@ use crate::challenge;
 #[cfg(feature = "serialize")]
 use std::io::{Read, Write};
 #[cfg(feature = "serialize")]
-use ff::PrimeField;
-#[cfg(feature = "serialize")]
-use crate::{read_scalar, cross_group::read_point};
+use curve::ff::PrimeField;
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct SchnorrPoK<G: PrimeGroup + Zeroize> {
-  R: G,
-  s: G::Scalar,
+pub(crate) struct SchnorrPoK<C: Curve> {
+  R: C::G,
+  s: C::F,
 }
 
-impl<G: PrimeGroup + Zeroize> SchnorrPoK<G>
-where
-  G::Scalar: PrimeFieldBits + Zeroize,
-{
+impl<C: Curve> SchnorrPoK<C> {
   // Not hram due to the lack of m
   #[allow(non_snake_case)]
-  fn hra<T: Transcript>(transcript: &mut T, generator: G, R: G, A: G) -> G::Scalar {
+  fn hra<T: Transcript>(transcript: &mut T, generator: C::G, R: C::G, A: C::G) -> C::F {
     transcript.domain_separate(b"schnorr_proof_of_knowledge");
     transcript.append_message(b"generator", generator.to_bytes().as_ref());
     transcript.append_message(b"nonce", R.to_bytes().as_ref());
     transcript.append_message(b"public_key", A.to_bytes().as_ref());
-    challenge(transcript)
+    challenge::<_, C>(transcript)
   }
 
   pub(crate) fn prove<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
     transcript: &mut T,
-    generator: G,
-    mut private_key: G::Scalar,
-  ) -> SchnorrPoK<G> {
-    let mut nonce = G::Scalar::random(rng);
+    generator: C::G,
+    mut private_key: C::F,
+  ) -> SchnorrPoK<C> {
+    let mut nonce = C::F::random(rng);
     #[allow(non_snake_case)]
     let R = generator * nonce;
     let res = SchnorrPoK {
       R,
-      s: nonce + (private_key * SchnorrPoK::hra(transcript, generator, R, generator * private_key)),
+      s: nonce +
+        (private_key * SchnorrPoK::<C>::hra(transcript, generator, R, generator * private_key)),
     };
     private_key.zeroize();
     nonce.zeroize();
@@ -62,16 +55,16 @@ where
     &self,
     rng: &mut R,
     transcript: &mut T,
-    generator: G,
-    public_key: G,
-    batch: &mut BatchVerifier<(), G>,
+    generator: C::G,
+    public_key: C::G,
+    batch: &mut BatchVerifier<(), C::G>,
   ) {
     batch.queue(
       rng,
       (),
       [
         (-self.s, generator),
-        (G::Scalar::one(), self.R),
+        (C::F::one(), self.R),
         (Self::hra(transcript, generator, self.R, public_key), public_key),
       ],
     );
@@ -84,7 +77,7 @@ where
   }
 
   #[cfg(feature = "serialize")]
-  pub fn deserialize<R: Read>(r: &mut R) -> std::io::Result<SchnorrPoK<G>> {
-    Ok(SchnorrPoK { R: read_point(r)?, s: read_scalar(r)? })
+  pub fn deserialize<R: Read>(r: &mut R) -> Result<SchnorrPoK<C>, CurveError> {
+    Ok(SchnorrPoK { R: C::read_G(r)?, s: C::read_F(r)? })
   }
 }

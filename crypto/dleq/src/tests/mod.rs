@@ -4,8 +4,7 @@ mod cross_group;
 use hex_literal::hex;
 use rand_core::OsRng;
 
-use ff::Field;
-use group::GroupEncoding;
+use curve::{ff::Field, group::GroupEncoding};
 
 use k256::{Scalar, ProjectivePoint};
 
@@ -40,7 +39,8 @@ fn test_dleq() {
 
   for i in 0 .. 5 {
     let key = Scalar::random(&mut OsRng);
-    let proof = DLEqProof::prove(&mut OsRng, &mut transcript(), &generators[.. i], key);
+    let proof =
+      DLEqProof::<ProjectivePoint>::prove(&mut OsRng, &mut transcript(), &generators[.. i], key);
 
     let mut keys = [ProjectivePoint::GENERATOR; 5];
     for k in 0 .. 5 {

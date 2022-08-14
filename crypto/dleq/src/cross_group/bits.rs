@@ -4,7 +4,10 @@ use zeroize::Zeroize;
 
 use transcript::Transcript;
 
-use group::{ff::PrimeFieldBits, prime::PrimeGroup};
+use curve::{
+  group::{Group, GroupEncoding},
+  Curve, CurveError,
+};
 use multiexp::BatchVerifier;
 
 use crate::cross_group::{
@@ -14,8 +17,6 @@ use crate::cross_group::{
 
 #[cfg(feature = "serialize")]
 use std::io::{Read, Write};
-#[cfg(feature = "serialize")]
-use crate::cross_group::read_point;
 
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum BitSignature {
@@ -58,7 +59,7 @@ impl BitSignature {
     2_usize.pow(self.bits() as u32)
   }
 
-  fn aos_form<G0: PrimeGroup, G1: PrimeGroup>(&self) -> Re<G0, G1> {
+  fn aos_form<C0: Curve, C1: Curve>(&self) -> Re<C0, C1> {
     match self {
       BitSignature::ClassicLinear => Re::e_default(),
       BitSignature::ConciseLinear => Re::e_default(),
@@ -69,34 +70,22 @@ impl BitSignature {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Bits<
-  G0: PrimeGroup + Zeroize,
-  G1: PrimeGroup + Zeroize,
-  const SIGNATURE: u8,
-  const RING_LEN: usize,
-> {
-  pub(crate) commitments: (G0, G1),
-  signature: Aos<G0, G1, RING_LEN>,
+pub(crate) struct Bits<C0: Curve, C1: Curve, const SIGNATURE: u8, const RING_LEN: usize> {
+  pub(crate) commitments: (C0::G, C1::G),
+  signature: Aos<C0, C1, RING_LEN>,
 }
 
-impl<
-    G0: PrimeGroup + Zeroize,
-    G1: PrimeGroup + Zeroize,
-    const SIGNATURE: u8,
-    const RING_LEN: usize,
-  > Bits<G0, G1, SIGNATURE, RING_LEN>
-where
-  G0::Scalar: PrimeFieldBits + Zeroize,
-  G1::Scalar: PrimeFieldBits + Zeroize,
+impl<C0: Curve, C1: Curve, const SIGNATURE: u8, const RING_LEN: usize>
+  Bits<C0, C1, SIGNATURE, RING_LEN>
 {
-  fn transcript<T: Transcript>(transcript: &mut T, i: usize, commitments: (G0, G1)) {
+  fn transcript<T: Transcript>(transcript: &mut T, i: usize, commitments: (C0::G, C1::G)) {
     transcript.domain_separate(b"bits");
     transcript.append_message(b"group", &u16::try_from(i).unwrap().to_le_bytes());
     transcript.append_message(b"commitment_0", commitments.0.to_bytes().as_ref());
     transcript.append_message(b"commitment_1", commitments.1.to_bytes().as_ref());
   }
 
-  fn ring(pow_2: (G0, G1), commitments: (G0, G1)) -> Vec<(G0, G1)> {
+  fn ring(pow_2: (C0::G, C1::G), commitments: (C0::G, C1::G)) -> Vec<(C0::G, C1::G)> {
     let mut res = vec![commitments; RING_LEN];
     for i in 1 .. RING_LEN {
       res[i] = (res[i - 1].0 - pow_2.0, res[i - 1].1 - pow_2.1);
@@ -104,7 +93,7 @@ where
     res
   }
 
-  fn shift(pow_2: &mut (G0, G1)) {
+  fn shift(pow_2: &mut (C0::G, C1::G)) {
     for _ in 0 .. BitSignature::from(SIGNATURE).bits() {
       pow_2.0 = pow_2.0.double();
       pow_2.1 = pow_2.1.double();
@@ -114,16 +103,16 @@ where
   pub(crate) fn prove<R: RngCore + CryptoRng, T: Clone + Transcript>(
     rng: &mut R,
     transcript: &mut T,
-    generators: (Generators<G0>, Generators<G1>),
+    generators: (Generators<C0::G>, Generators<C1::G>),
     i: usize,
-    pow_2: &mut (G0, G1),
+    pow_2: &mut (C0::G, C1::G),
     mut bits: u8,
-    blinding_key: &mut (G0::Scalar, G1::Scalar),
+    blinding_key: &mut (C0::F, C1::F),
   ) -> Self {
     let mut commitments =
       ((generators.0.alt * blinding_key.0), (generators.1.alt * blinding_key.1));
-    commitments.0 += pow_2.0 * G0::Scalar::from(bits.into());
-    commitments.1 += pow_2.1 * G1::Scalar::from(bits.into());
+    commitments.0 += pow_2.0 * C0::F::from(bits.into());
+    commitments.1 += pow_2.1 * C1::F::from(bits.into());
 
     Self::transcript(transcript, i, commitments);
 
@@ -146,10 +135,10 @@ where
     &self,
     rng: &mut R,
     transcript: &mut T,
-    generators: (Generators<G0>, Generators<G1>),
-    batch: &mut (BatchVerifier<(), G0>, BatchVerifier<(), G1>),
+    generators: (Generators<C0::G>, Generators<C1::G>),
+    batch: &mut (BatchVerifier<(), C0::G>, BatchVerifier<(), C1::G>),
     i: usize,
-    pow_2: &mut (G0, G1),
+    pow_2: &mut (C0::G, C1::G),
   ) -> Result<(), DLEqError> {
     Self::transcript(transcript, i, self.commitments);
 
@@ -173,9 +162,9 @@ where
   }
 
   #[cfg(feature = "serialize")]
-  pub(crate) fn deserialize<R: Read>(r: &mut R) -> std::io::Result<Self> {
+  pub(crate) fn deserialize<R: Read>(r: &mut R) -> Result<Self, CurveError> {
     Ok(Bits {
-      commitments: (read_point(r)?, read_point(r)?),
+      commitments: (C0::G::read_G(r)?, C1::G::read_G(r)?),
       signature: Aos::deserialize(r, BitSignature::from(SIGNATURE).aos_form())?,
     })
   }

@@ -1,6 +1,6 @@
-use ff::PrimeFieldBits;
-
 use zeroize::Zeroize;
+
+use curve::ff::PrimeFieldBits;
 
 /// Convert a uniform scalar into one usable on both fields, clearing the top bits as needed
 pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(

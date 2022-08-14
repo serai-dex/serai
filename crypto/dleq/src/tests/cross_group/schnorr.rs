@@ -2,9 +2,9 @@ use rand_core::OsRng;
 
 use zeroize::Zeroize;
 
-use group::{
+use curve::{
   ff::{Field, PrimeFieldBits},
-  prime::PrimeGroup,
+  group::prime::PrimeGroup,
 };
 use multiexp::BatchVerifier;
 
@@ -21,7 +21,7 @@ where
   let mut batch = BatchVerifier::new(10);
   for _ in 0 .. 10 {
     let private = G::Scalar::random(&mut OsRng);
-    SchnorrPoK::prove(&mut OsRng, &mut transcript.clone(), G::generator(), private).verify(
+    SchnorrPoK::<G>::prove(&mut OsRng, &mut transcript.clone(), G::generator(), private).verify(
       &mut OsRng,
       &mut transcript.clone(),
       G::generator(),

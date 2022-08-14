@@ -6,11 +6,16 @@ use zeroize::Zeroize;
 
 use transcript::Transcript;
 
-use ff::{Field, PrimeField};
-use group::prime::PrimeGroup;
+use curve::{
+  ff::{Field, PrimeField},
+  group::GroupEncoding,
+  Curve,
+};
 
 #[cfg(feature = "serialize")]
-use std::io::{self, ErrorKind, Error, Read, Write};
+use std::io::{self, Read, Write};
+#[cfg(feature = "serialize")]
+use curve::CurveError;
 
 #[cfg(feature = "experimental")]
 pub mod cross_group;
@@ -18,7 +23,7 @@ pub mod cross_group;
 #[cfg(test)]
 mod tests;
 
-pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
+pub(crate) fn challenge<T: Transcript, C: Curve>(transcript: &mut T) -> C::F {
   // From here, there are three ways to get a scalar under the ff/group API
   // 1: Scalar::random(ChaCha12Rng::from_seed(self.transcript.rng_seed(b"challenge")))
   // 2: Grabbing a UInt library to perform reduction by the modulus, then determining endianess
@@ -26,7 +31,7 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   // 3: Iterating over each byte and manually doubling/adding. This is simplest
 
   // Get a wide amount of bytes to safely reduce without bias
-  let target = ((usize::try_from(F::NUM_BITS).unwrap() + 7) / 8) * 2;
+  let target = ((usize::try_from(C::F::NUM_BITS).unwrap() + 7) / 8) * 2;
   let mut challenge_bytes = transcript.challenge(b"challenge").as_ref().to_vec();
   while challenge_bytes.len() < target {
     // Secure given transcripts updating on challenge
@@ -34,25 +39,14 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   }
   challenge_bytes.truncate(target);
 
-  let mut challenge = F::zero();
+  let mut challenge = C::F::zero();
   for b in challenge_bytes {
     for _ in 0 .. 8 {
       challenge = challenge.double();
     }
-    challenge += F::from(u64::from(b));
+    challenge += C::F::from(u64::from(b));
   }
   challenge
-}
-
-#[cfg(feature = "serialize")]
-fn read_scalar<R: Read, F: PrimeField>(r: &mut R) -> io::Result<F> {
-  let mut repr = F::Repr::default();
-  r.read_exact(repr.as_mut())?;
-  let scalar = F::from_repr(repr);
-  if scalar.is_none().into() {
-    Err(Error::new(ErrorKind::Other, "invalid scalar"))?;
-  }
-  Ok(scalar.unwrap())
 }
 
 #[derive(Debug)]
@@ -61,14 +55,14 @@ pub enum DLEqError {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct DLEqProof<G: PrimeGroup> {
-  c: G::Scalar,
-  s: G::Scalar,
+pub struct DLEqProof<C: Curve> {
+  c: C::F,
+  s: C::F,
 }
 
 #[allow(non_snake_case)]
-impl<G: PrimeGroup> DLEqProof<G> {
-  fn transcript<T: Transcript>(transcript: &mut T, generator: G, nonce: G, point: G) {
+impl<C: Curve> DLEqProof<C> {
+  fn transcript<T: Transcript>(transcript: &mut T, generator: C::G, nonce: C::G, point: C::G) {
     transcript.append_message(b"generator", generator.to_bytes().as_ref());
     transcript.append_message(b"nonce", nonce.to_bytes().as_ref());
     transcript.append_message(b"point", point.to_bytes().as_ref());
@@ -77,20 +71,17 @@ impl<G: PrimeGroup> DLEqProof<G> {
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
     transcript: &mut T,
-    generators: &[G],
-    mut scalar: G::Scalar,
-  ) -> DLEqProof<G>
-  where
-    G::Scalar: Zeroize,
-  {
-    let mut r = G::Scalar::random(rng);
+    generators: &[C::G],
+    mut scalar: C::F,
+  ) -> DLEqProof<C> {
+    let mut r = C::F::random(rng);
 
     transcript.domain_separate(b"dleq");
     for generator in generators {
       Self::transcript(transcript, *generator, *generator * r, *generator * scalar);
     }
 
-    let c = challenge(transcript);
+    let c = challenge::<_, C>(transcript);
     let s = r + (c * scalar);
 
     scalar.zeroize();
@@ -102,8 +93,8 @@ impl<G: PrimeGroup> DLEqProof<G> {
   pub fn verify<T: Transcript>(
     &self,
     transcript: &mut T,
-    generators: &[G],
-    points: &[G],
+    generators: &[C::G],
+    points: &[C::G],
   ) -> Result<(), DLEqError> {
     if generators.len() != points.len() {
       Err(DLEqError::InvalidProof)?;
@@ -114,7 +105,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
       Self::transcript(transcript, *generator, (*generator * self.s) - (*point * self.c), *point);
     }
 
-    if self.c != challenge(transcript) {
+    if self.c != challenge::<_, C>(transcript) {
       Err(DLEqError::InvalidProof)?;
     }
 
@@ -128,7 +119,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
   }
 
   #[cfg(feature = "serialize")]
-  pub fn deserialize<R: Read>(r: &mut R) -> io::Result<DLEqProof<G>> {
-    Ok(DLEqProof { c: read_scalar(r)?, s: read_scalar(r)? })
+  pub fn deserialize<R: Read>(r: &mut R) -> Result<DLEqProof<C>, CurveError> {
+    Ok(DLEqProof { c: C::read_F(r)?, s: C::read_F(r)? })
   }
 }

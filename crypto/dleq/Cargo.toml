@@ -16,8 +16,7 @@ digest = "0.10"
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
 
-ff = "0.12"
-group = "0.12"
+curve = { package = "composable-curve", path = "../curve", version = "0.12" }
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"], optional = true }
 

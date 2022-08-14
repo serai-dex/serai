@@ -1,8 +1,10 @@
 use hex_literal::hex;
 use rand_core::{RngCore, OsRng};
 
-use ff::{Field, PrimeField};
-use group::{Group, GroupEncoding};
+use curve::{
+  ff::{Field, PrimeField},
+  group::{Group, GroupEncoding},
+};
 
 use blake2::{Digest, Blake2b512};
 
@@ -80,7 +82,8 @@ macro_rules! test_dleq {
       let mut proofs = Vec::with_capacity(usize::try_from(runs).unwrap());
       let time = std::time::Instant::now();
       for _ in 0 .. runs {
-        proofs.push($type::prove(&mut OsRng, &mut transcript(), generators, key.clone()).0);
+        proofs
+          .push($type::<G0, G1>::prove(&mut OsRng, &mut transcript(), generators, key.clone()).0);
       }
       println!("{} had a average prove time of {}ms", $str, time.elapsed().as_millis() / runs);
 
@@ -156,8 +159,13 @@ fn test_rejection_sampling() {
 
   assert!(
     // Either would work
-    EfficientLinearDLEq::prove_without_bias(&mut OsRng, &mut transcript(), generators(), pow_2)
-      .is_none()
+    EfficientLinearDLEq::<G0, G1>::prove_without_bias(
+      &mut OsRng,
+      &mut transcript(),
+      generators(),
+      pow_2
+    )
+    .is_none()
   );
 }
 
@@ -171,9 +179,13 @@ fn test_remainder() {
   assert_eq!(keys.0 + Scalar::one(), Scalar::from(2u64).pow_vartime(&[255]));
   assert_eq!(keys.0, keys.1);
 
-  let (proof, res) =
-    ConciseLinearDLEq::prove_without_bias(&mut OsRng, &mut transcript(), generators, keys.0)
-      .unwrap();
+  let (proof, res) = ConciseLinearDLEq::<G0, G0>::prove_without_bias(
+    &mut OsRng,
+    &mut transcript(),
+    generators,
+    keys.0,
+  )
+  .unwrap();
   assert_eq!(keys, res);
 
   verify_and_deserialize!(

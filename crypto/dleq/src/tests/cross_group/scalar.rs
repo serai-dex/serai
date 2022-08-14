@@ -1,6 +1,6 @@
 use rand_core::OsRng;
 
-use ff::{Field, PrimeField};
+use curve::ff::{Field, PrimeField};
 
 use k256::Scalar as K256Scalar;
 use dalek_ff_group::Scalar as DalekScalar;

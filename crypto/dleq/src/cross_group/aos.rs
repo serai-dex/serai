@@ -4,11 +4,11 @@ use zeroize::Zeroize;
 
 use transcript::Transcript;
 
-use group::{
-  ff::{Field, PrimeFieldBits},
-  prime::PrimeGroup,
+use curve::{
+  ff::Field,
+  group::{Group, GroupEncoding},
+  Curve, CurveError,
 };
-
 use multiexp::BatchVerifier;
 
 use crate::cross_group::{
@@ -19,48 +19,41 @@ use crate::cross_group::{
 #[cfg(feature = "serialize")]
 use std::io::{Read, Write};
 #[cfg(feature = "serialize")]
-use ff::PrimeField;
-#[cfg(feature = "serialize")]
-use crate::{read_scalar, cross_group::read_point};
+use curve::ff::PrimeField;
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) enum Re<G0: PrimeGroup, G1: PrimeGroup> {
-  R(G0, G1),
+pub(crate) enum Re<C0: Curve, C1: Curve> {
+  R(C0::G, C1::G),
   // Merged challenges have a slight security reduction, yet one already applied to the scalar
   // being proven for, and this saves ~8kb. Alternatively, challenges could be redefined as a seed,
   // present here, which is then hashed for each of the two challenges, remaining unbiased/unique
   // while maintaining the bandwidth savings, yet also while adding 252 hashes for
   // Secp256k1/Ed25519
-  e(G0::Scalar),
+  e(C0::F),
 }
 
-impl<G0: PrimeGroup, G1: PrimeGroup> Re<G0, G1> {
+impl<C0: Curve, C1: Curve> Re<C0, C1> {
   #[allow(non_snake_case)]
-  pub(crate) fn R_default() -> Re<G0, G1> {
-    Re::R(G0::identity(), G1::identity())
+  pub(crate) fn R_default() -> Re<C0, C1> {
+    Re::R(C0::G::identity(), C1::G::identity())
   }
 
-  pub(crate) fn e_default() -> Re<G0, G1> {
-    Re::e(G0::Scalar::zero())
+  pub(crate) fn e_default() -> Re<C0, C1> {
+    Re::e(C0::F::zero())
   }
 }
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Aos<G0: PrimeGroup + Zeroize, G1: PrimeGroup + Zeroize, const RING_LEN: usize> {
-  Re_0: Re<G0, G1>,
-  s: [(G0::Scalar, G1::Scalar); RING_LEN],
+pub(crate) struct Aos<C0: Curve, C1: Curve, const RING_LEN: usize> {
+  Re_0: Re<C0, C1>,
+  s: [(C0::F, C1::F); RING_LEN],
 }
 
-impl<G0: PrimeGroup + Zeroize, G1: PrimeGroup + Zeroize, const RING_LEN: usize>
-  Aos<G0, G1, RING_LEN>
-where
-  G0::Scalar: PrimeFieldBits + Zeroize,
-  G1::Scalar: PrimeFieldBits + Zeroize,
-{
+impl<C0: Curve, C1: Curve, const RING_LEN: usize> Aos<C0, C1, RING_LEN> {
   #[allow(non_snake_case)]
-  fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
+  fn nonces<T: Transcript>(mut transcript: T, nonces: (C0::G, C1::G)) -> (C0::F, C1::F) {
     transcript.domain_separate(b"aos_membership_proof");
     transcript.append_message(b"ring_len", &u8::try_from(RING_LEN).unwrap().to_le_bytes());
     transcript.append_message(b"nonce_0", nonces.0.to_bytes().as_ref());
@@ -70,32 +63,32 @@ where
 
   #[allow(non_snake_case)]
   fn R(
-    generators: (Generators<G0>, Generators<G1>),
-    s: (G0::Scalar, G1::Scalar),
-    A: (G0, G1),
-    e: (G0::Scalar, G1::Scalar),
-  ) -> (G0, G1) {
+    generators: (Generators<C0::G>, Generators<C1::G>),
+    s: (C0::F, C1::F),
+    A: (C0::G, C1::G),
+    e: (C0::F, C1::F),
+  ) -> (C0::G, C1::G) {
     (((generators.0.alt * s.0) - (A.0 * e.0)), ((generators.1.alt * s.1) - (A.1 * e.1)))
   }
 
   #[allow(non_snake_case)]
   fn R_batch(
-    generators: (Generators<G0>, Generators<G1>),
-    s: (G0::Scalar, G1::Scalar),
-    A: (G0, G1),
-    e: (G0::Scalar, G1::Scalar),
-  ) -> (Vec<(G0::Scalar, G0)>, Vec<(G1::Scalar, G1)>) {
+    generators: (Generators<C0::G>, Generators<C1::G>),
+    s: (C0::F, C1::F),
+    A: (C0::G, C1::G),
+    e: (C0::F, C1::F),
+  ) -> (Vec<(C0::F, C0::G)>, Vec<(C1::F, C1::G)>) {
     (vec![(-s.0, generators.0.alt), (e.0, A.0)], vec![(-s.1, generators.1.alt), (e.1, A.1)])
   }
 
   #[allow(non_snake_case)]
   fn R_nonces<T: Transcript>(
     transcript: T,
-    generators: (Generators<G0>, Generators<G1>),
-    s: (G0::Scalar, G1::Scalar),
-    A: (G0, G1),
-    e: (G0::Scalar, G1::Scalar),
-  ) -> (G0::Scalar, G1::Scalar) {
+    generators: (Generators<C0::G>, Generators<C1::G>),
+    s: (C0::F, C1::F),
+    A: (C0::G, C1::G),
+    e: (C0::F, C1::F),
+  ) -> (C0::F, C1::F) {
     Self::nonces(transcript, Self::R(generators, s, A, e))
   }
 
@@ -103,20 +96,20 @@ where
   pub(crate) fn prove<R: RngCore + CryptoRng, T: Clone + Transcript>(
     rng: &mut R,
     transcript: T,
-    generators: (Generators<G0>, Generators<G1>),
-    ring: &[(G0, G1)],
+    generators: (Generators<C0::G>, Generators<C1::G>),
+    ring: &[(C0::G, C1::G)],
     mut actual: usize,
-    blinding_key: &mut (G0::Scalar, G1::Scalar),
-    mut Re_0: Re<G0, G1>,
+    blinding_key: &mut (C0::F, C1::F),
+    mut Re_0: Re<C0, C1>,
   ) -> Self {
     // While it is possible to use larger values, it's not efficient to do so
     // 2 + 2 == 2^2, yet 2 + 2 + 2 < 2^3
     debug_assert!((RING_LEN == 2) || (RING_LEN == 4));
     debug_assert_eq!(RING_LEN, ring.len());
 
-    let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
+    let mut s = [(C0::F::zero(), C1::F::zero()); RING_LEN];
 
-    let mut r = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
+    let mut r = (C0::F::random(&mut *rng), C1::F::random(&mut *rng));
     #[allow(non_snake_case)]
     let original_R = (generators.0.alt * r.0, generators.1.alt * r.1);
     #[allow(non_snake_case)]
@@ -146,7 +139,7 @@ where
         break;
       // Generate a decoy response
       } else {
-        s[i] = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
+        s[i] = (C0::F::random(&mut *rng), C1::F::random(&mut *rng));
       }
 
       R = Self::R(generators, s[i], ring[i], e);
@@ -160,9 +153,9 @@ where
     &self,
     rng: &mut R,
     transcript: T,
-    generators: (Generators<G0>, Generators<G1>),
-    batch: &mut (BatchVerifier<(), G0>, BatchVerifier<(), G1>),
-    ring: &[(G0, G1)],
+    generators: (Generators<C0::G>, Generators<C1::G>),
+    batch: &mut (BatchVerifier<(), C0::G>, BatchVerifier<(), C1::G>),
+    ring: &[(C0::G, C1::G)],
   ) -> Result<(), DLEqError> {
     debug_assert!((RING_LEN == 2) || (RING_LEN == 4));
     debug_assert_eq!(RING_LEN, ring.len());
@@ -178,8 +171,8 @@ where
 
         let mut statements =
           Self::R_batch(generators, *self.s.last().unwrap(), *ring.last().unwrap(), e);
-        statements.0.push((G0::Scalar::one(), R0_0));
-        statements.1.push((G1::Scalar::one(), R1_0));
+        statements.0.push((C0::F::one(), R0_0));
+        statements.1.push((C1::F::one(), R1_0));
         batch.0.queue(&mut *rng, (), statements.0);
         batch.1.queue(&mut *rng, (), statements.1);
       }
@@ -230,18 +223,18 @@ where
 
   #[allow(non_snake_case)]
   #[cfg(feature = "serialize")]
-  pub(crate) fn deserialize<R: Read>(r: &mut R, mut Re_0: Re<G0, G1>) -> std::io::Result<Self> {
+  pub(crate) fn deserialize<R: Read>(r: &mut R, mut Re_0: Re<C0, C1>) -> Result<Self, CurveError> {
     match Re_0 {
       Re::R(ref mut R0, ref mut R1) => {
-        *R0 = read_point(r)?;
-        *R1 = read_point(r)?
+        *R0 = C0::read_G(r)?;
+        *R1 = C1::read_G(r)?
       }
-      Re::e(ref mut e) => *e = read_scalar(r)?,
+      Re::e(ref mut e) => *e = C0::read_F(r)?,
     }
 
-    let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
+    let mut s = [(C0::F::zero(), C1::F::zero()); RING_LEN];
     for s in s.iter_mut() {
-      *s = (read_scalar(r)?, read_scalar(r)?);
+      *s = (C0::read_F(r)?, C1::read_F(r)?);
     }
 
     Ok(Aos { Re_0, s })

@@ -1,6 +1,6 @@
 use rand_core::OsRng;
 
-use group::{ff::Field, Group};
+use curve::{ff::Field, group::Group};
 
 use multiexp::BatchVerifier;
 
