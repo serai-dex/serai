@@ -12,14 +12,11 @@ use blake2::{digest::Update, Digest, Blake2b512};
 use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
 
 #[cfg(feature = "multisig")]
-use dalek_ff_group::Scalar;
+use dalek_ff_group::{Scalar, EdwardsPoint};
 #[cfg(feature = "multisig")]
 use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
-use frost::{
-  curve::dfg::EdwardsPoint,
-  tests::{THRESHOLD, key_gen, sign},
-};
+use frost::tests::{THRESHOLD, key_gen, sign};
 
 use monero_serai::{
   random_scalar,
@@ -66,7 +63,7 @@ async fn send_core(test: usize, multisig: bool) {
   let mut spend_pub = &spend * &ED25519_BASEPOINT_TABLE;
 
   #[cfg(feature = "multisig")]
-  let keys = key_gen::<_, dfg::EdwardsPoint>(&mut OsRng);
+  let keys = key_gen::<_, EdwardsPoint>(&mut OsRng);
 
   if multisig {
     #[cfg(not(feature = "multisig"))]
