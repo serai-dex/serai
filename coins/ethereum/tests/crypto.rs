@@ -1,18 +1,22 @@
+use ethereum_serai::crypto::*;
+use frost::{
+  algorithm::Schnorr,
+  curve::Secp256k1,
+  tests::{algorithm_machines, key_gen, sign},
+};
 use k256::{
+  ecdsa::{
+    recoverable::Signature,
+    signature::{Signer, Verifier},
+    SigningKey, VerifyingKey,
+  },
   elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, sec1::ToEncodedPoint},
   ProjectivePoint, Scalar, U256,
 };
-use frost::{curve::Secp256k1, Participant};
-
-use ethereum_serai::crypto::*;
+use rand_core::OsRng;
 
 #[test]
 fn test_ecrecover() {
-  use rand_core::OsRng;
-  use sha2::Sha256;
-  use sha3::{Digest, Keccak256};
-  use k256::ecdsa::{hazmat::SignPrimitive, signature::DigestVerifier, SigningKey, VerifyingKey};
-
   let private = SigningKey::random(&mut OsRng);
   let public = VerifyingKey::from(&private);
 

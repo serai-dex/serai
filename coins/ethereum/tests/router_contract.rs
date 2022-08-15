@@ -1,5 +1,3 @@
-use crate::utils::{generate_keys, hash_and_sign};
-
 use ethereum_serai::{
   router_contract::{call_router_execute, deploy_router_contract, router_mod},
 };
@@ -11,6 +9,9 @@ use ethers::{
   abi,
 };
 use std::{convert::TryFrom, collections::HashMap, sync::Arc, time::Duration};
+
+mod utils;
+use crate::utils::{generate_keys, hash_and_sign};
 
 #[tokio::test]
 async fn test_deploy_router_contract() {
