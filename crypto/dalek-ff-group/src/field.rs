@@ -156,6 +156,30 @@ impl FieldElement {
     }
     res
   }
+
+  pub fn sqrt_ratio_i(u: FieldElement, v: FieldElement) -> (Choice, FieldElement) {
+    let v3 = v.square() * v;
+    let v7 = v3.square() * v;
+    let mut r = (u * v3) *
+      (u * v7).pow((-FieldElement::from(5u8)) * FieldElement::from(8u8).invert().unwrap());
+    let check = (v) * r.square();
+    let i = SQRT_M1;
+
+    let correct_sign = check.ct_eq(&u);
+    let flipped_sign = check.ct_eq(&(-u));
+    let flipped_sign_i = check.ct_eq(&((-u) * i));
+
+    let r_prime = i * r;
+
+    r.conditional_assign(&r_prime, flipped_sign | flipped_sign_i);
+
+    let r_is_negative = r.is_odd();
+    r.conditional_assign(&(-r), r_is_negative);
+
+    let was_non_zero_square = correct_sign | flipped_sign;
+
+    (was_non_zero_square, r)
+  }
 }
 
 #[test]
@@ -183,4 +207,37 @@ fn test_mul() {
   assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one(), FieldElement::zero());
   assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one().double(), FieldElement::zero());
   assert_eq!(SQRT_M1.square(), -FieldElement::one());
+}
+
+#[test]
+fn test_sqrt_ratio_i() {
+  let zero = FieldElement::zero();
+  let one = FieldElement::one();
+  let two = one + one;
+  let three = two + one;
+
+  let (choice, sqrt) = FieldElement::sqrt_ratio_i(zero, zero);
+  assert_eq!(sqrt, zero);
+  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
+  assert_eq!(choice.unwrap_u8(), 1);
+
+  let (choice, sqrt) = FieldElement::sqrt_ratio_i(one, zero);
+  assert_eq!(sqrt, zero);
+  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
+  assert_eq!(choice.unwrap_u8(), 0);
+
+  let (choice, sqrt) = FieldElement::sqrt_ratio_i(two, one);
+  assert_eq!(sqrt.square(), two * SQRT_M1);
+  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
+  assert_eq!(choice.unwrap_u8(), 0);
+
+  let (choice, sqrt) = FieldElement::sqrt_ratio_i(three, one);
+  assert_eq!(sqrt.square(), three);
+  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
+  assert_eq!(choice.unwrap_u8(), 1);
+
+  let (choice, sqrt) = FieldElement::sqrt_ratio_i(one, three);
+  assert_eq!(sqrt.square() * three, one);
+  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
+  assert_eq!(choice.unwrap_u8(), 1);
 }
