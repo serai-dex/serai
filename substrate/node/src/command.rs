@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use sc_service::PartialComponents;
-use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
+use frame_benchmarking_cli::{ExtrinsicFactory, BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 
 use serai_runtime::Block;
@@ -9,7 +7,7 @@ use serai_runtime::Block;
 use crate::{
   chain_spec,
   cli::{Cli, Subcommand},
-  command_helper::{BenchmarkExtrinsicBuilder, inherent_benchmark_data},
+  command_helper::{RemarkBuilder, inherent_benchmark_data},
   service,
 };
 
@@ -103,11 +101,15 @@ pub fn run() -> sc_cli::Result<()> {
 
       BenchmarkCmd::Overhead(cmd) => {
         let client = service::new_partial(&config)?.client;
+        cmd.run(config, client.clone(), inherent_benchmark_data()?, &RemarkBuilder::new(client))
+      }
+
+      BenchmarkCmd::Extrinsic(cmd) => {
+        let PartialComponents { client, .. } = service::new_partial(&config)?;
         cmd.run(
-          config,
           client.clone(),
           inherent_benchmark_data()?,
-          Arc::new(BenchmarkExtrinsicBuilder::new(client)),
+          &ExtrinsicFactory(vec![Box::new(RemarkBuilder::new(client))]),
         )
       }
 
