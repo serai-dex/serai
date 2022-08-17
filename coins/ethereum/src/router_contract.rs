@@ -1,14 +1,25 @@
 use crate::crypto::{ProcessedSignature, PublicKey};
 use ethers::{contract::ContractFactory, prelude::*, solc::artifacts::contract::ContractBytecode};
 use eyre::Result;
-use std::fs::File;
-use std::sync::Arc;
+use std::{convert::From, fs::File, sync::Arc};
 
 abigen!(
   Router,
   "./artifacts/Router.sol/Router.json",
   event_derives(serde::Deserialize, serde::Serialize),
 );
+
+impl From<&PublicKey> for router_mod::PublicKey {
+  fn from(public_key: &PublicKey) -> Self {
+    router_mod::PublicKey { parity: public_key.parity, px: public_key.px.to_bytes().into() }
+  }
+}
+
+impl From<&ProcessedSignature> for router_mod::Signature {
+  fn from(signature: &ProcessedSignature) -> Self {
+    router_mod::Signature { s: signature.s.to_bytes().into(), e: signature.e.to_bytes().into() }
+  }
+}
 
 pub async fn deploy_router_contract(
   client: Arc<SignerMiddleware<Provider<Http>, LocalWallet>>,
@@ -27,10 +38,7 @@ pub async fn router_set_public_key(
   contract: &router_mod::Router<SignerMiddleware<Provider<Http>, LocalWallet>>,
   public_key: &PublicKey,
 ) -> std::result::Result<Option<TransactionReceipt>, eyre::ErrReport> {
-  let tx = contract.set_public_key(router_mod::PublicKey {
-    parity: public_key.parity,
-    px: public_key.px.to_bytes().into(),
-  });
+  let tx = contract.set_public_key(public_key.into());
   let pending_tx = tx.send().await?;
   let receipt = pending_tx.await?;
   Ok(receipt)
@@ -41,10 +49,7 @@ pub async fn router_update_public_key(
   public_key: &PublicKey,
   signature: &ProcessedSignature,
 ) -> std::result::Result<Option<TransactionReceipt>, eyre::ErrReport> {
-  let tx = contract.update_public_key(
-    router_mod::PublicKey { parity: public_key.parity, px: public_key.px.to_bytes().into() },
-    router_mod::Signature { s: signature.s.to_bytes().into(), e: signature.e.to_bytes().into() },
-  );
+  let tx = contract.update_public_key(public_key.into(), signature.into());
   let pending_tx = tx.send().await?;
   let receipt = pending_tx.await?;
   Ok(receipt)
@@ -55,10 +60,7 @@ pub async fn router_execute(
   txs: Vec<router_mod::Transaction>,
   signature: &ProcessedSignature,
 ) -> std::result::Result<Option<TransactionReceipt>, eyre::ErrReport> {
-  let tx = contract.execute(
-    txs,
-    router_mod::Signature { s: signature.s.to_bytes().into(), e: signature.e.to_bytes().into() },
-  );
+  let tx = contract.execute(txs, signature.into());
   let pending_tx = tx.send().await?;
   let receipt = pending_tx.await?;
   Ok(receipt)
