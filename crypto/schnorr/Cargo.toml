@@ -1,0 +1,23 @@
+[package]
+name = "modular-schnorr"
+version = "0.1.0"
+description = "Implementation of Schnorr signatures for ff/group"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+rand_core = "0.6"
+
+curve = { package = "composable-curve", path = "../curve", version = "0.12" }
+
+multiexp = { path = "../multiexp", version = "0.2", features = ["batch"], optional = true }
+
+[dev-dependencies]
+blake2 = "0.10"
+dalek-ff-group = { path = "../dalek-ff-group" }
+
+[features]
+std = []
+serialize = ["std"]
+batch = ["std", "multiexp"]

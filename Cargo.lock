@@ -4548,6 +4548,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "modular-schnorr"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "composable-curve",
+ "dalek-ff-group",
+ "multiexp",
+ "rand_core 0.6.3",
+]
+
+[[package]]
 name = "monero"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
