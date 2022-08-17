@@ -43,8 +43,14 @@ async fn test_router_execute() {
 
   let to = H160([0u8; 20]);
   let value = U256([0u64; 4]);
+  let gas = U256([1, 0, 0, 0]); // arbitrary
   let data = Bytes::from([0]);
-  let tx = router_mod::Transaction { to: to.clone(), value: value.clone(), data: data.clone() };
+  let tx = router_mod::Transaction {
+    to: to.clone(),
+    value: value.clone(),
+    gas: gas.clone(),
+    data: data.clone(),
+  };
   let txs = vec![tx];
 
   // try with wrong message
@@ -61,6 +67,7 @@ async fn test_router_execute() {
     abi::Token::Array(vec![abi::Token::Tuple(vec![
       abi::Token::Address(to),
       abi::Token::Uint(value),
+      abi::Token::Uint(gas),
       abi::Token::Bytes(data.to_vec()),
     ])]),
   ];

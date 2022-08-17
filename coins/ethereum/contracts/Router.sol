@@ -10,6 +10,9 @@ contract Router is Schnorr {
     // nonce is incremented for each batch of transactions executed
     uint256 nonce; 
 
+    // prevents re-entrancy
+    uint8 internal locked;
+
     struct PublicKey {
         uint8 parity;
         bytes32 px;
@@ -21,6 +24,7 @@ contract Router is Schnorr {
     struct Transaction {
         address to;
         uint256 value;
+        uint256 gas;
         bytes data;
     }
 
@@ -29,7 +33,7 @@ contract Router is Schnorr {
         bytes32 s;
     }
 
-    event Executed(bool success);
+    event Executed(uint256 nonce, uint256 index, bool success);
 
     constructor() {
         owner = msg.sender;
@@ -40,17 +44,29 @@ contract Router is Schnorr {
         _;
     }
 
+    modifier noReentrant() {
+        require(locked == 0, "no re-entrancy");
+        locked = 1;
+        _;
+        locked = 0;
+    }
+
     function getNonce() external view returns (uint256) {
         return nonce;
     }
 
+    // setPublicKey can be called by the contract owner to set the current public key,
+    // only if the public key has not been set.
     function setPublicKey(
         PublicKey memory _publicKey
     ) public onlyOwner {
+        require(publicKey.px == 0, "public key has already been set");
         publicKey.parity = _publicKey.parity;
         publicKey.px = _publicKey.px;
     }
 
+    // updatePublicKey validates the given Schnorr signature against the current public key,
+    // and if successful, updates the contract's public key to the given one.
     function updatePublicKey(
         PublicKey memory _publicKey,
         Signature memory sig
@@ -68,18 +84,18 @@ contract Router is Schnorr {
     function execute(
         Transaction[] calldata transactions, 
         Signature memory sig
-    ) public returns (bool) {
+    ) public noReentrant returns (bool) {
         bytes32 message = keccak256(abi.encode(nonce, transactions));
         require(verify(publicKey.parity, publicKey.px, message, sig.s, sig.e), "failed to verify signature");
-        nonce++;
         bool allOk = true;
         for(uint256 i = 0; i < transactions.length; i++) {
-                (bool success, ) = transactions[i].to.call{value: transactions[i].value}(
+                (bool success, ) = transactions[i].to.call{value: transactions[i].value, gas: transactions[i].gas}(
                     transactions[i].data
                 );
-                emit Executed(success);
+                emit Executed(nonce, i, success);
                 allOk = success && allOk;
         }
+        nonce++;
         return allOk;
     }
 }
