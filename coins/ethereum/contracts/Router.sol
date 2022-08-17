@@ -89,11 +89,11 @@ contract Router is Schnorr {
         require(verify(publicKey.parity, publicKey.px, message, sig.s, sig.e), "failed to verify signature");
         bool allOk = true;
         for(uint256 i = 0; i < transactions.length; i++) {
-                (bool success, ) = transactions[i].to.call{value: transactions[i].value, gas: transactions[i].gas}(
-                    transactions[i].data
-                );
-                emit Executed(nonce, i, success);
-                allOk = success && allOk;
+            (bool success, ) = transactions[i].to.call{value: transactions[i].value, gas: transactions[i].gas}(
+                transactions[i].data
+            );
+            emit Executed(nonce, i, success);
+            allOk = success && allOk;
         }
         nonce++;
         return allOk;

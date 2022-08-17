@@ -1,16 +1,19 @@
 use ethereum_serai::{crypto};
-use frost::{curve::Secp256k1, FrostKeys};
-use k256::ProjectivePoint;
+use frost::{
+  algorithm::Schnorr,
+  curve::Secp256k1,
+  FrostKeys,
+  tests::{algorithm_machines, key_gen, sign},
+};
+use k256::{elliptic_curve::bigint::ArrayEncoding, ProjectivePoint, Scalar, U256};
 use ethers::{
   prelude::*,
   utils::{keccak256},
 };
+use rand_core::OsRng;
 use std::collections::HashMap;
 
 pub async fn generate_keys() -> (HashMap<u16, FrostKeys<Secp256k1>>, ProjectivePoint) {
-  use frost::{tests::key_gen};
-  use rand_core::OsRng;
-
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
   let group_key = keys[&1].group_key();
   (keys, group_key)
@@ -22,13 +25,6 @@ pub async fn hash_and_sign(
   group_key: &ProjectivePoint,
   chain_id: ethers::prelude::U256,
 ) -> crypto::ProcessedSignature {
-  use frost::{
-    algorithm::Schnorr,
-    tests::{algorithm_machines, sign},
-  };
-  use k256::{elliptic_curve::bigint::ArrayEncoding, Scalar, U256};
-  use rand_core::OsRng;
-
   let hashed_message = keccak256(message);
   let chain_id = U256::from(Scalar::from(chain_id.as_u32()));
 
