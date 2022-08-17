@@ -17,7 +17,7 @@ pub struct PublicKey {
 
 impl PublicKey {
   #[allow(non_snake_case)]
-  fn new(A: &ProjectivePoint) -> PublicKey {
+  pub fn new(A: &ProjectivePoint) -> PublicKey {
     let encoded_pk = A.to_encoded_point(true);
     let px = &encoded_pk.as_ref()[1 .. 33];
     let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
@@ -106,9 +106,6 @@ pub fn process_signature_for_contract(
   A: &ProjectivePoint,
   chain_id: U256,
 ) -> ProcessedSignature {
-  // let encoded_pk = A.to_encoded_point(true);
-  // let px = &encoded_pk.as_ref()[1 .. 33];
-  // let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
   let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), &m].concat());
   ProcessedSignature {
     public_key: PublicKey::new(A),

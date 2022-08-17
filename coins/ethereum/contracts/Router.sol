@@ -40,10 +40,15 @@ contract Router is Schnorr {
         _;
     }
 
+    function getNonce() external view returns (uint256) {
+        return nonce;
+    }
+
     function setPublicKey(
         PublicKey memory _publicKey
     ) public onlyOwner {
-        publicKey.px = _publicKey;
+        publicKey.parity = _publicKey.parity;
+        publicKey.px = _publicKey.px;
     }
 
     function updatePublicKey(
@@ -65,7 +70,7 @@ contract Router is Schnorr {
         Signature memory sig
     ) public returns (bool) {
         bytes32 message = keccak256(abi.encode(nonce, transactions));
-        require(verify(parity, px, message, sig.s, sig.e), "failed to verify signature");
+        require(verify(publicKey.parity, publicKey.px, message, sig.s, sig.e), "failed to verify signature");
         nonce++;
         bool allOk = true;
         for(uint256 i = 0; i < transactions.length; i++) {

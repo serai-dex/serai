@@ -1,5 +1,6 @@
 use ethereum_serai::{
-  router_contract::{call_router_execute, deploy_router_contract, router_mod},
+  crypto::PublicKey,
+  router_contract::{router_execute, router_set_public_key, deploy_router_contract, router_mod},
 };
 use frost::{curve::Secp256k1, FrostKeys};
 use k256::ProjectivePoint;
@@ -19,18 +20,12 @@ async fn test_deploy_router_contract() {
   let wallet: LocalWallet = anvil.keys()[0].clone().into();
   let provider =
     Provider::<Http>::try_from(anvil.endpoint()).unwrap().interval(Duration::from_millis(10u64));
-  let chain_id = provider.get_chainid().await.unwrap();
   let client = Arc::new(SignerMiddleware::new(provider, wallet));
-
-  let (keys, group_key): (HashMap<u16, FrostKeys<Secp256k1>>, ProjectivePoint) =
-    generate_keys().await;
-  const MESSAGE: &'static [u8] = b"Hello, World!";
-  let processed_sig = hash_and_sign(MESSAGE, &keys, &group_key, chain_id).await;
-  let _contract = deploy_router_contract(client, &processed_sig.public_key).await.unwrap();
+  let _contract = deploy_router_contract(client).await.unwrap();
 }
 
 #[tokio::test]
-async fn test_call_router_execute() {
+async fn test_router_execute() {
   let (keys, group_key): (HashMap<u16, FrostKeys<Secp256k1>>, ProjectivePoint) =
     generate_keys().await;
 
@@ -41,6 +36,11 @@ async fn test_call_router_execute() {
   let chain_id = provider.get_chainid().await.unwrap();
   let client = Arc::new(SignerMiddleware::new(provider, wallet));
 
+  // deploy and set public key
+  let contract = deploy_router_contract(client.clone()).await.unwrap();
+  let public_key = PublicKey::new(&group_key);
+  router_set_public_key(&contract, &public_key).await.unwrap();
+
   let to = H160([0u8; 20]);
   let value = U256([0u64; 4]);
   let data = Bytes::from([0]);
@@ -50,19 +50,22 @@ async fn test_call_router_execute() {
   // try with wrong message
   const MESSAGE: &'static [u8] = b"Hello, World!";
   let processed_sig = hash_and_sign(MESSAGE, &keys, &group_key, chain_id).await;
-  let contract = deploy_router_contract(client.clone(), &processed_sig.public_key).await.unwrap();
-  let res = call_router_execute(&contract, txs.clone(), &processed_sig).await;
+  let res = router_execute(&contract, txs.clone(), &processed_sig).await;
   assert!(res.is_err()); // should revert as signature is for incorrect message
 
   // try w actual data
-  let tokens = vec![abi::Token::Array(vec![abi::Token::Tuple(vec![
-    abi::Token::Address(to),
-    abi::Token::Uint(value),
-    abi::Token::Bytes(data.to_vec()),
-  ])])];
+  let nonce_call = contract.get_nonce();
+  let nonce = nonce_call.call().await.unwrap();
+  let tokens = vec![
+    abi::Token::Uint(nonce),
+    abi::Token::Array(vec![abi::Token::Tuple(vec![
+      abi::Token::Address(to),
+      abi::Token::Uint(value),
+      abi::Token::Bytes(data.to_vec()),
+    ])]),
+  ];
   let encoded_calldata = abi::encode(&tokens);
   let processed_sig = hash_and_sign(&encoded_calldata, &keys, &group_key, chain_id).await;
-
-  let receipt = call_router_execute(&contract, txs.clone(), &processed_sig).await.unwrap().unwrap();
+  let receipt = router_execute(&contract, txs.clone(), &processed_sig).await.unwrap().unwrap();
   println!("gas used: {:?}", receipt.cumulative_gas_used);
 }
