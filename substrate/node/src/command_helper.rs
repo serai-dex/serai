@@ -14,18 +14,25 @@ use runtime::SystemCall;
 
 use crate::service::FullClient;
 
-pub struct BenchmarkExtrinsicBuilder {
+pub struct RemarkBuilder {
   client: Arc<FullClient>,
 }
 
-impl BenchmarkExtrinsicBuilder {
+impl RemarkBuilder {
   pub fn new(client: Arc<FullClient>) -> Self {
     Self { client }
   }
 }
 
-impl frame_benchmarking_cli::ExtrinsicBuilder for BenchmarkExtrinsicBuilder {
-  fn remark(&self, nonce: u32) -> std::result::Result<OpaqueExtrinsic, &'static str> {
+impl frame_benchmarking_cli::ExtrinsicBuilder for RemarkBuilder {
+  fn pallet(&self) -> &str {
+    "system"
+  }
+  fn extrinsic(&self) -> &str {
+    "remark"
+  }
+
+  fn build(&self, nonce: u32) -> std::result::Result<OpaqueExtrinsic, &'static str> {
     Ok(OpaqueExtrinsic::from(create_benchmark_extrinsic(
       self.client.as_ref(),
       Sr25519Keyring::Bob.pair(),
