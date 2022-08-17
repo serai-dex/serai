@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::marker::PhantomData;
+#[cfg(feature = "serialize")]
+use std::io::{self, Read, Write};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -8,15 +10,20 @@ use curve::{
   group::{ff::Field, Group},
   Curve,
 };
+#[cfg(feature = "serialize")]
+use curve::{
+  group::{ff::PrimeField, GroupEncoding},
+  CurveError,
+};
 
 #[cfg(feature = "batch")]
 use multiexp::BatchVerifier;
 
 pub trait Signature<C: Curve>: Sized + Clone + Copy {
-  /// Sign a msg with the provided nonce.
+  /// Sign a message with the provided nonce.
   fn sign_core(key: C::F, nonce: C::F, msg: &[u8]) -> Self;
 
-  /// Sign a msg with a randomly generated nonce.
+  /// Sign a message with a randomly generated nonce.
   fn sign_random_nonce<R: RngCore + CryptoRng>(rng: &mut R, key: C::F, msg: &[u8]) -> Self {
     Self::sign_core(key, C::F::random(rng), msg)
   }
@@ -29,7 +36,7 @@ pub trait Signature<C: Curve>: Sized + Clone + Copy {
      double-and-add-style schemes)
   The latter is the main objection at this time.
   */
-  /// Sign a msg with a deterministic nonce generated as H(x || m).
+  /// Sign a message with a deterministic nonce generated as H(x || m).
   // pub fn sign_deterministic_nonce<D: Digest>(key: C::F, msg: &[u8]) -> Self {}
 
   /// Alias to the preferred sign function, which is currently sign_random_nonce but may change to
@@ -41,6 +48,13 @@ pub trait Signature<C: Curve>: Sized + Clone + Copy {
   /// Verify a signature.
   #[must_use]
   fn verify(&self, key: C::G, msg: &[u8]) -> bool;
+
+  /// Serialize a signature.
+  #[cfg(feature = "serialize")]
+  fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+  /// Deserialize a signature.
+  #[cfg(feature = "serialize")]
+  fn deserialize<R: Read>(reader: &mut R) -> Result<Self, CurveError>;
 }
 
 /// A parameterizable HRAm to support a variety of signature specifications.
@@ -105,6 +119,18 @@ impl<C: Curve, H: Hram<C>> Signature<C> for Schnorr<C, H> {
     }
     accum.is_identity().into()
   }
+
+  #[cfg(feature = "serialize")]
+  fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(self.R.to_bytes().as_ref())?;
+    writer.write_all(self.s.to_repr().as_ref())?;
+    Ok(())
+  }
+
+  #[cfg(feature = "serialize")]
+  fn deserialize<R: Read>(reader: &mut R) -> Result<Self, CurveError> {
+    Ok(Self::new(C::read_G(reader)?, C::read_F(reader)?))
+  }
 }
 
 impl<C: Curve, H: Hram<C>> ClassicalSchnorr<C, H> {
@@ -123,5 +149,17 @@ impl<C: Curve, H: Hram<C>> Signature<C> for ClassicalSchnorr<C, H> {
   #[must_use]
   fn verify(&self, key: C::G, msg: &[u8]) -> bool {
     self.c == H::hram((C::generator() * self.s) + (key * self.c), key, msg)
+  }
+
+  #[cfg(feature = "serialize")]
+  fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(self.c.to_repr().as_ref())?;
+    writer.write_all(self.s.to_repr().as_ref())?;
+    Ok(())
+  }
+
+  #[cfg(feature = "serialize")]
+  fn deserialize<R: Read>(reader: &mut R) -> Result<Self, CurveError> {
+    Ok(Self::new(C::read_F(reader)?, C::read_F(reader)?))
   }
 }

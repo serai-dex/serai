@@ -5,13 +5,14 @@ use blake2::{Digest, Blake2b512};
 use curve::group::{ff::Field, Group, GroupEncoding};
 use dalek_ff_group::{Scalar, RistrettoPoint};
 
+#[cfg(feature = "batch")]
 use multiexp::BatchVerifier;
 
 use modular_schnorr::{Hram, Signature, Schnorr, ClassicalSchnorr};
 
 const MSG: &[u8] = b"Hello, World";
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct SimpleHram;
 impl Hram<RistrettoPoint> for SimpleHram {
   #[allow(non_snake_case)]
@@ -73,6 +74,25 @@ fn random_fails() {
     Scalar::random(&mut OsRng)
   )
   .verify(RistrettoPoint::random(&mut OsRng), MSG));
+}
+
+#[cfg(feature = "serialize")]
+#[test]
+fn serialize() {
+  let sig =
+    Schnorr::<RistrettoPoint, SimpleHram>::sign(&mut OsRng, Scalar::random(&mut OsRng), MSG);
+  let mut serialized = vec![];
+  sig.serialize(&mut serialized).unwrap();
+  assert_eq!(sig, Schnorr::deserialize(&mut std::io::Cursor::new(serialized)).unwrap());
+
+  let sig = ClassicalSchnorr::<RistrettoPoint, SimpleHram>::sign(
+    &mut OsRng,
+    Scalar::random(&mut OsRng),
+    MSG,
+  );
+  let mut serialized = vec![];
+  sig.serialize(&mut serialized).unwrap();
+  assert_eq!(sig, ClassicalSchnorr::deserialize(&mut std::io::Cursor::new(serialized)).unwrap());
 }
 
 #[cfg(feature = "batch")]

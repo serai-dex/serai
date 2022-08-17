@@ -1,6 +1,10 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 use core::fmt::Debug;
+
+#[cfg(feature = "serialize")]
 use std::io::Read;
 
+#[cfg(feature = "serialize")]
 use thiserror::Error;
 
 use zeroize::Zeroize;
@@ -9,11 +13,14 @@ pub use group;
 pub use group::ff;
 use group::{
   ff::{PrimeField, PrimeFieldBits},
-  Group, GroupOps, GroupEncoding,
+  Group, GroupOps,
   prime::PrimeGroup,
 };
+#[cfg(feature = "serialize")]
+use group::GroupEncoding;
 
 /// Set of errors for curve-related operations, namely encoding and decoding
+#[cfg(feature = "serialize")]
 #[derive(Clone, Error, Debug)]
 pub enum CurveError {
   #[error("invalid scalar")]
@@ -35,18 +42,21 @@ pub trait Curve: Zeroize + Clone + Copy + PartialEq + Eq + Debug {
   fn generator() -> Self::G;
 
   /// Length of a serialized Scalar field element
+  #[cfg(feature = "serialize")]
   #[allow(non_snake_case)]
   fn F_len() -> usize {
     <Self::F as PrimeField>::Repr::default().as_ref().len()
   }
 
   /// Length of a serialized group element
+  #[cfg(feature = "serialize")]
   #[allow(non_snake_case)]
   fn G_len() -> usize {
     <Self::G as GroupEncoding>::Repr::default().as_ref().len()
   }
 
   /// Read a canonical Scalar field element from a Reader
+  #[cfg(feature = "serialize")]
   #[allow(non_snake_case)]
   fn read_F<R: Read>(r: &mut R) -> Result<Self::F, CurveError> {
     let mut encoding = <Self::F as PrimeField>::Repr::default();
@@ -62,6 +72,7 @@ pub trait Curve: Zeroize + Clone + Copy + PartialEq + Eq + Debug {
   }
 
   /// Read a canonical, non-identity, group element from a Reader
+  #[cfg(feature = "serialize")]
   #[allow(non_snake_case)]
   fn read_G<R: Read>(r: &mut R) -> Result<Self::G, CurveError> {
     let mut encoding = <Self::G as GroupEncoding>::Repr::default();

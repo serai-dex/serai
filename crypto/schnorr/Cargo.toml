@@ -19,5 +19,5 @@ dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
 std = []
-serialize = ["std"]
+serialize = ["std", "curve/serialize"]
 batch = ["std", "multiexp"]
