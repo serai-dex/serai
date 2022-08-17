@@ -19,9 +19,14 @@ async fn test_deploy_router_contract() {
   let wallet: LocalWallet = anvil.keys()[0].clone().into();
   let provider =
     Provider::<Http>::try_from(anvil.endpoint()).unwrap().interval(Duration::from_millis(10u64));
+  let chain_id = provider.get_chainid().await.unwrap();
   let client = Arc::new(SignerMiddleware::new(provider, wallet));
 
-  let _contract = deploy_router_contract(client).await.unwrap();
+  let (keys, group_key): (HashMap<u16, FrostKeys<Secp256k1>>, ProjectivePoint) =
+    generate_keys().await;
+  const MESSAGE: &'static [u8] = b"Hello, World!";
+  let processed_sig = hash_and_sign(MESSAGE, &keys, &group_key, chain_id).await;
+  let _contract = deploy_router_contract(client, &processed_sig.public_key).await.unwrap();
 }
 
 #[tokio::test]
@@ -45,8 +50,7 @@ async fn test_call_router_execute() {
   // try with wrong message
   const MESSAGE: &'static [u8] = b"Hello, World!";
   let processed_sig = hash_and_sign(MESSAGE, &keys, &group_key, chain_id).await;
-
-  let contract = deploy_router_contract(client.clone()).await.unwrap();
+  let contract = deploy_router_contract(client.clone(), &processed_sig.public_key).await.unwrap();
   let res = call_router_execute(&contract, txs.clone(), &processed_sig).await;
   assert!(res.is_err()); // should revert as signature is for incorrect message
 
@@ -58,7 +62,7 @@ async fn test_call_router_execute() {
   ])])];
   let encoded_calldata = abi::encode(&tokens);
   let processed_sig = hash_and_sign(&encoded_calldata, &keys, &group_key, chain_id).await;
-  let contract = deploy_router_contract(client).await.unwrap();
+
   let receipt = call_router_execute(&contract, txs.clone(), &processed_sig).await.unwrap().unwrap();
   println!("gas used: {:?}", receipt.cumulative_gas_used);
 }

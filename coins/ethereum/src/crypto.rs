@@ -10,6 +10,21 @@ use k256::{
 
 use frost::{algorithm::Hram, curve::Secp256k1};
 
+pub struct PublicKey {
+  pub px: Scalar,
+  pub parity: u8,
+}
+
+impl PublicKey {
+  #[allow(non_snake_case)]
+  fn new(A: &ProjectivePoint) -> PublicKey {
+    let encoded_pk = A.to_encoded_point(true);
+    let px = &encoded_pk.as_ref()[1 .. 33];
+    let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
+    PublicKey { px: px_scalar, parity: &encoded_pk.as_ref()[0] + 25 }
+  }
+}
+
 pub fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
 }
@@ -63,10 +78,9 @@ impl Hram<Secp256k1> for EthereumHram {
 }
 
 pub struct ProcessedSignature {
-  pub s: Scalar,
-  pub px: Scalar,
-  pub parity: u8,
+  pub public_key: PublicKey,
   pub message: [u8; 32],
+  pub s: Scalar,
   pub e: Scalar,
 }
 
@@ -79,8 +93,8 @@ pub fn preprocess_signature_for_ecrecover(
   chain_id: U256,
 ) -> (Scalar, Scalar) {
   let processed_sig = process_signature_for_contract(m, R, s, A, chain_id);
-  let sr = processed_sig.s.mul(&processed_sig.px).negate();
-  let er = processed_sig.e.mul(&processed_sig.px).negate();
+  let sr = processed_sig.s.mul(&processed_sig.public_key.px).negate();
+  let er = processed_sig.e.mul(&processed_sig.public_key.px).negate();
   (sr, er)
 }
 
@@ -92,16 +106,15 @@ pub fn process_signature_for_contract(
   A: &ProjectivePoint,
   chain_id: U256,
 ) -> ProcessedSignature {
-  let encoded_pk = A.to_encoded_point(true);
-  let px = &encoded_pk.as_ref()[1 .. 33];
-  let px_scalar = Scalar::reduce(U256::from_be_slice(px));
+  // let encoded_pk = A.to_encoded_point(true);
+  // let px = &encoded_pk.as_ref()[1 .. 33];
+  // let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
   let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), &m].concat());
   ProcessedSignature {
-    s,
-    px: px_scalar,
-    parity: &encoded_pk.as_ref()[0] - 2,
+    public_key: PublicKey::new(A),
     #[allow(non_snake_case)]
     message: m,
+    s,
     e,
   }
 }

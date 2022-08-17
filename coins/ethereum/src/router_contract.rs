@@ -1,5 +1,5 @@
-use crate::crypto::ProcessedSignature;
-use ethers::{contract::ContractFactory, prelude::*, solc::artifacts::contract::ContractBytecode};
+use crate::crypto::{ProcessedSignature, PublicKey};
+use ethers::{abi, contract::ContractFactory, prelude::*, solc::artifacts::contract::ContractBytecode};
 use eyre::Result;
 use std::fs::File;
 use std::sync::Arc;
@@ -23,17 +23,25 @@ pub async fn deploy_router_contract(
   Ok(contract)
 }
 
-pub async fn call_router_execute(
+pub async fn router_set_public_key(
+  contract: &router_mod::Router<SignerMiddleware<Provider<Http>, LocalWallet>>,
+  public_key: &PublicKey,
+) -> std::result::Result<Option<TransactionReceipt>, eyre::ErrReport> {
+  let tx =
+    contract.set_public_key(router_mod::PublicKey { parity: public_key.parity, px: public_key.px });
+  let pending_tx = tx.send().await?;
+  let receipt = pending_tx.await?;
+  Ok(receipt)
+}
+
+pub async fn outer_execute(
   contract: &router_mod::Router<SignerMiddleware<Provider<Http>, LocalWallet>>,
   txs: Vec<router_mod::Transaction>,
   signature: &ProcessedSignature,
 ) -> std::result::Result<Option<TransactionReceipt>, eyre::ErrReport> {
   let tx = contract.execute(
     txs,
-    signature.parity + 27,
-    signature.px.to_bytes().into(),
-    signature.s.to_bytes().into(),
-    signature.e.to_bytes().into(),
+    router_mod::Signature { s: signature.e.to_bytes().into(), e: signature.s.to_bytes().into() },
   );
   let pending_tx = tx.send().await?;
   let receipt = pending_tx.await?;

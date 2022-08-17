@@ -29,8 +29,8 @@ pub async fn call_verify(
 ) -> Result<()> {
   if contract
     .verify(
-      params.parity + 27,
-      params.px.to_bytes().into(),
+      params.public_key.parity,
+      params.public_key.px.to_bytes().into(),
       params.message,
       params.s.to_bytes().into(),
       params.e.to_bytes().into(),
