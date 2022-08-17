@@ -177,9 +177,8 @@ impl PlusStruct {
   }
 
   #[must_use]
-  fn verify_core<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  fn verify_core<ID: Copy>(
     &self,
-    rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,
     id: ID,
     commitments: &[DalekPoint],
@@ -284,7 +283,7 @@ impl PlusStruct {
       proof.push((minus_esq * winv[i] * winv[i], R[i]));
     }
 
-    verifier.queue(rng, id, proof);
+    verifier.queue(id, proof);
     true
   }
 
@@ -295,21 +294,20 @@ impl PlusStruct {
     commitments: &[DalekPoint],
   ) -> bool {
     let mut verifier = BatchVerifier::new(1);
-    if self.verify_core(rng, &mut verifier, (), commitments) {
-      verifier.verify_vartime()
+    if self.verify_core(&mut verifier, (), commitments) {
+      verifier.verify_vartime(rng)
     } else {
       false
     }
   }
 
   #[must_use]
-  pub(crate) fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  pub(crate) fn batch_verify<ID: Copy>(
     &self,
-    rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,
     id: ID,
     commitments: &[DalekPoint],
   ) -> bool {
-    self.verify_core(rng, verifier, id, commitments)
+    self.verify_core(verifier, id, commitments)
   }
 }

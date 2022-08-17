@@ -107,6 +107,17 @@ fn test_ed25519() {
   test_multiexp::<EdwardsPoint>();
 }
 
+#[cfg(feature = "batch")]
+#[test]
+fn test_weighting() {
+  // Queue statements which sum to 0 yet in different groups
+  let mut verifier = crate::BatchVerifier::new(2);
+  verifier.queue(0, [(k256::Scalar::one(), ProjectivePoint::GENERATOR)]);
+  verifier.queue(1, [(-k256::Scalar::one(), ProjectivePoint::GENERATOR)]);
+  // Should fail
+  assert!(!verifier.verify_vartime(&mut OsRng));
+}
+
 #[ignore]
 #[test]
 fn benchmark() {

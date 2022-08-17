@@ -2,8 +2,6 @@
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
-
 use curve25519_dalek::edwards::EdwardsPoint;
 use multiexp::BatchVerifier;
 
@@ -75,16 +73,15 @@ impl Bulletproofs {
   }
 
   #[must_use]
-  pub fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  pub fn batch_verify<ID: Copy>(
     &self,
-    rng: &mut R,
     verifier: &mut BatchVerifier<ID, dalek_ff_group::EdwardsPoint>,
     id: ID,
     commitments: &[EdwardsPoint],
   ) -> bool {
     match self {
-      Bulletproofs::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
-      Bulletproofs::Plus(bp) => bp.batch_verify(rng, verifier, id, commitments),
+      Bulletproofs::Original(bp) => bp.batch_verify(verifier, id, commitments),
+      Bulletproofs::Plus(bp) => bp.batch_verify(verifier, id, commitments),
     }
   }
 

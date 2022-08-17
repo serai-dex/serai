@@ -76,9 +76,9 @@ macro_rules! bulletproofs_tests {
 
         let commitments = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
         assert!(bp.verify(&mut OsRng, &commitments));
-        assert!(bp.batch_verify(&mut OsRng, &mut verifier, i, &commitments));
+        assert!(bp.batch_verify(&mut verifier, i, &commitments));
       }
-      assert!(verifier.verify_vartime());
+      assert!(verifier.verify_vartime(&mut OsRng));
     }
 
     #[test]

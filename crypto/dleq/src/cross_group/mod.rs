@@ -323,18 +323,18 @@ impl<
     };
     let mut batch = (BatchVerifier::new(batch_capacity), BatchVerifier::new(batch_capacity));
 
-    self.poks.0.verify(&mut *rng, transcript, generators.0.primary, keys.0, &mut batch.0);
-    self.poks.1.verify(&mut *rng, transcript, generators.1.primary, keys.1, &mut batch.1);
+    self.poks.0.verify(ranscript, generators.0.primary, keys.0, &mut batch.0);
+    self.poks.1.verify(transcript, generators.1.primary, keys.1, &mut batch.1);
 
     let mut pow_2 = (generators.0.primary, generators.1.primary);
     for (i, bits) in self.bits.iter().enumerate() {
-      bits.verify(&mut *rng, transcript, generators, &mut batch, i, &mut pow_2)?;
+      bits.verify(transcript, generators, &mut batch, i, &mut pow_2)?;
     }
     if let Some(bit) = &self.remainder {
-      bit.verify(&mut *rng, transcript, generators, &mut batch, self.bits.len(), &mut pow_2)?;
+      bit.verify(transcript, generators, &mut batch, self.bits.len(), &mut pow_2)?;
     }
 
-    if (!batch.0.verify_vartime()) || (!batch.1.verify_vartime()) {
+    if (!batch.0.verify_vartime(&mut *rng)) || (!batch.1.verify_vartime(rng)) {
       Err(DLEqError::InvalidProof)?;
     }
 

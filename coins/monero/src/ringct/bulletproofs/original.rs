@@ -168,9 +168,8 @@ impl OriginalStruct {
   }
 
   #[must_use]
-  fn verify_core<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  fn verify_core<ID: Copy>(
     &self,
-    rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,
     id: ID,
     commitments: &[DalekPoint],
@@ -246,7 +245,7 @@ impl OriginalStruct {
 
     proof.push((x, T1));
     proof.push((x * x, T2));
-    verifier.queue(&mut *rng, id, proof);
+    verifier.queue(id, proof);
 
     proof = Vec::with_capacity(4 + (2 * (MN + logMN)));
     let z3 = (Scalar(self.t) - (Scalar(self.a) * Scalar(self.b))) * x_ip;
@@ -277,7 +276,7 @@ impl OriginalStruct {
       proof.push((w[i] * w[i], L[i]));
       proof.push((winv[i] * winv[i], R[i]));
     }
-    verifier.queue(rng, id, proof);
+    verifier.queue(id, proof);
 
     true
   }
@@ -289,21 +288,20 @@ impl OriginalStruct {
     commitments: &[DalekPoint],
   ) -> bool {
     let mut verifier = BatchVerifier::new(1);
-    if self.verify_core(rng, &mut verifier, (), commitments) {
-      verifier.verify_vartime()
+    if self.verify_core(&mut verifier, (), commitments) {
+      verifier.verify_vartime(rng)
     } else {
       false
     }
   }
 
   #[must_use]
-  pub(crate) fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  pub(crate) fn batch_verify<ID: Copy>(
     &self,
-    rng: &mut R,
     verifier: &mut BatchVerifier<ID, EdwardsPoint>,
     id: ID,
     commitments: &[DalekPoint],
   ) -> bool {
-    self.verify_core(rng, verifier, id, commitments)
+    self.verify_core(verifier, id, commitments)
   }
 }

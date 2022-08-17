@@ -65,8 +65,8 @@ pub(crate) fn batch_verify<C: Curve, R: RngCore + CryptoRng>(
     // -sG
     values[2].0 = -triple.3.s;
 
-    batch.queue(rng, triple.0, values);
+    batch.queue(triple.0, values);
   }
 
-  batch.verify_vartime_with_vartime_blame()
+  batch.verify_vartime_with_vartime_blame(rng)
 }

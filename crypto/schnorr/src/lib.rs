@@ -78,15 +78,14 @@ impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
   }
 
   #[cfg(feature = "batch")]
-  pub fn queue_batch_verification<R: RngCore + CryptoRng, Id: Copy>(
+  pub fn queue_batch_verification<Id: Copy>(
     &self,
-    rng: &mut R,
     verifier: &mut BatchVerifier<Id, C::G>,
     id: Id,
     key: C::G,
     msg: &[u8],
   ) {
-    verifier.queue(rng, id, self.verification_statements(key, msg));
+    verifier.queue(id, self.verification_statements(key, msg));
   }
 }
 
@@ -126,4 +125,3 @@ impl<C: Curve, H: Hram<C>> Signature<C> for ClassicalSchnorr<C, H> {
     self.c == H::hram((C::generator() * self.s) + (key * self.c), key, msg)
   }
 }
-

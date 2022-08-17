@@ -149,9 +149,8 @@ impl<C0: Curve, C1: Curve, const RING_LEN: usize> Aos<C0, C1, RING_LEN> {
   }
 
   // Assumes the ring has already been transcripted in some form. Critically insecure if it hasn't
-  pub(crate) fn verify<R: RngCore + CryptoRng, T: Clone + Transcript>(
+  pub(crate) fn verify<T: Clone + Transcript>(
     &self,
-    rng: &mut R,
     transcript: T,
     generators: (Generators<C0::G>, Generators<C1::G>),
     batch: &mut (BatchVerifier<(), C0::G>, BatchVerifier<(), C1::G>),
@@ -173,8 +172,8 @@ impl<C0: Curve, C1: Curve, const RING_LEN: usize> Aos<C0, C1, RING_LEN> {
           Self::R_batch(generators, *self.s.last().unwrap(), *ring.last().unwrap(), e);
         statements.0.push((C0::F::one(), R0_0));
         statements.1.push((C1::F::one(), R1_0));
-        batch.0.queue(&mut *rng, (), statements.0);
-        batch.1.queue(&mut *rng, (), statements.1);
+        batch.0.queue((), statements.0);
+        batch.1.queue((), statements.1);
       }
 
       Re::e(e_0) => {

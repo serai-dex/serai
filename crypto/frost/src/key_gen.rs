@@ -227,9 +227,9 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
     values.push((-*share, C::generator()));
     share.zeroize();
 
-    batch.queue(rng, *l, values);
+    batch.queue(*l, values);
   }
-  batch.verify_with_vartime_blame().map_err(FrostError::InvalidCommitment)?;
+  batch.verify_with_vartime_blame(rng).map_err(FrostError::InvalidCommitment)?;
 
   // Stripe commitments per t and sum them in advance. Calculating verification shares relies on
   // these sums so preprocessing them is a massive speedup

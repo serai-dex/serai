@@ -90,26 +90,19 @@ fn batch_verify() {
       &[MSG, &i.to_le_bytes()].concat(),
     ));
     sigs[i].queue_batch_verification(
-      &mut OsRng,
       &mut verifier,
       i,
       RistrettoPoint::generator() * keys[i],
       &[MSG, &i.to_le_bytes()].concat(),
     );
   }
-  assert!(verifier.verify_vartime());
+  assert!(verifier.verify_vartime(&mut OsRng));
 
   // Test invalid signatures don't batch verify
   Schnorr::<RistrettoPoint, SimpleHram>::new(
     RistrettoPoint::random(&mut OsRng),
     Scalar::random(&mut OsRng),
   )
-  .queue_batch_verification(
-    &mut OsRng,
-    &mut verifier,
-    5,
-    RistrettoPoint::random(&mut OsRng),
-    MSG,
-  );
-  assert_eq!(verifier.verify_vartime_with_vartime_blame().unwrap_err(), 5);
+  .queue_batch_verification(&mut verifier, 5, RistrettoPoint::random(&mut OsRng), MSG);
+  assert_eq!(verifier.verify_vartime_with_vartime_blame(&mut OsRng).unwrap_err(), 5);
 }

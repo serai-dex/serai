@@ -143,7 +143,6 @@ impl<C0: Curve, C1: Curve, const SIGNATURE: u8, const RING_LEN: usize>
     Self::transcript(transcript, i, self.commitments);
 
     self.signature.verify(
-      rng,
       transcript.clone(),
       generators,
       batch,

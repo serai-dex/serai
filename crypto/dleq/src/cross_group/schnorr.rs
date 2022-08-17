@@ -51,16 +51,14 @@ impl<C: Curve> SchnorrPoK<C> {
     res
   }
 
-  pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn verify<T: Transcript>(
     &self,
-    rng: &mut R,
     transcript: &mut T,
     generator: C::G,
     public_key: C::G,
     batch: &mut BatchVerifier<(), C::G>,
   ) {
     batch.queue(
-      rng,
       (),
       [
         (-self.s, generator),
