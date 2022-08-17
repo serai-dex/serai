@@ -12,8 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
 
       - name: Get nightly version to use
         id: nightly
@@ -29,12 +27,36 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
 
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Rust Cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/advisory-db
+          key: rust-advisory-db
+
+      - name: Install cargo
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install cargo deny
+        run: cargo install --locked cargo-deny
+
+      # Doesn't run on advisores due to their frequency and general irrelevancy
+      # The official recommendation is to continue when they fail, yet you can't
+      # even open an issue when they do, making it pointless to have here
+      - name: Run cargo deny
+        run: cargo deny -L error --all-features check bans licenses sources
+
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
