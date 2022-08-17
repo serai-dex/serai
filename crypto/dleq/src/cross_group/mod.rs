@@ -323,7 +323,7 @@ impl<
     };
     let mut batch = (BatchVerifier::new(batch_capacity), BatchVerifier::new(batch_capacity));
 
-    self.poks.0.verify(ranscript, generators.0.primary, keys.0, &mut batch.0);
+    self.poks.0.verify(transcript, generators.0.primary, keys.0, &mut batch.0);
     self.poks.1.verify(transcript, generators.1.primary, keys.1, &mut batch.1);
 
     let mut pow_2 = (generators.0.primary, generators.1.primary);

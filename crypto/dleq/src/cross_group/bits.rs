@@ -131,9 +131,8 @@ impl<C0: Curve, C1: Curve, const SIGNATURE: u8, const RING_LEN: usize>
     Bits { commitments, signature }
   }
 
-  pub(crate) fn verify<R: RngCore + CryptoRng, T: Clone + Transcript>(
+  pub(crate) fn verify<T: Clone + Transcript>(
     &self,
-    rng: &mut R,
     transcript: &mut T,
     generators: (Generators<C0::G>, Generators<C1::G>),
     batch: &mut (BatchVerifier<(), C0::G>, BatchVerifier<(), C1::G>),

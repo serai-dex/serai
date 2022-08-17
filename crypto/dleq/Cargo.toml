@@ -32,7 +32,7 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 
 [features]
 std = []
-serialize = ["std"]
+serialize = ["std", "curve/serialize"]
 experimental = ["std", "multiexp"]
 secure_capacity_difference = []
 
