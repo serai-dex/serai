@@ -183,6 +183,14 @@ impl FieldElement {
 }
 
 #[test]
+fn test_edwards_d() {
+  let a = -FieldElement(U256::from_u32(121665));
+  let b = FieldElement(U256::from_u32(121666));
+
+  assert_eq!(EDWARDS_D, a * b.invert().unwrap());
+}
+
+#[test]
 fn test_is_odd() {
   assert_eq!(0, FieldElement::zero().is_odd().unwrap_u8());
   assert_eq!(1, FieldElement::one().is_odd().unwrap_u8());
@@ -192,14 +200,6 @@ fn test_is_odd() {
   // -1 moves to the even value before the modulus
   assert_eq!(0, (-FieldElement::one()).is_odd().unwrap_u8());
   assert_eq!(1, (-FieldElement::one().double()).is_odd().unwrap_u8());
-}
-
-#[test]
-fn test_edwards_d() {
-  let a = -FieldElement(U256::from_u32(121665));
-  let b = FieldElement(U256::from_u32(121666));
-
-  assert_eq!(EDWARDS_D, a * b.invert().unwrap());
 }
 
 #[test]
