@@ -2,7 +2,7 @@ use core::ops::{Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign};
 
 use rand_core::RngCore;
 
-use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
+use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallyNegatable, ConditionallySelectable};
 
 use crypto_bigint::{Encoding, U256, U512};
 
@@ -47,6 +47,13 @@ impl Neg for FieldElement {
   type Output = Self;
   fn neg(self) -> Self::Output {
     Self(self.0.neg_mod(&FIELD_MODULUS))
+  }
+}
+
+impl<'a> Neg for &'a FieldElement {
+  type Output = FieldElement;
+  fn neg(self) -> Self::Output {
+    (*self).neg()
   }
 }
 
@@ -174,12 +181,38 @@ impl FieldElement {
     r.conditional_assign(&r_prime, flipped_sign | flipped_sign_i);
 
     let r_is_negative = r.is_odd();
-    r.conditional_assign(&(-r), r_is_negative);
+    r.conditional_negate(r_is_negative);
 
     let was_non_zero_square = correct_sign | flipped_sign;
 
     (was_non_zero_square, r)
   }
+}
+
+#[test]
+fn test_conditional_negate() {
+  let one = FieldElement::one();
+  let true_choice = choice(true);
+  let false_choice = choice(false);
+
+  let mut var = one;
+
+  var.conditional_negate(false_choice);
+  assert_eq!(var, FieldElement::one());
+
+  var.conditional_negate(true_choice);
+  assert_eq!(var, -FieldElement::one());
+
+  var.conditional_negate(false_choice);
+  assert_eq!(var, -FieldElement::one());
+}
+
+#[test]
+fn test_edwards_d() {
+  let a = -FieldElement(U256::from_u32(121665));
+  let b = FieldElement(U256::from_u32(121666));
+
+  assert_eq!(EDWARDS_D, a * b.invert().unwrap());
 }
 
 #[test]
@@ -192,14 +225,6 @@ fn test_is_odd() {
   // -1 moves to the even value before the modulus
   assert_eq!(0, (-FieldElement::one()).is_odd().unwrap_u8());
   assert_eq!(1, (-FieldElement::one().double()).is_odd().unwrap_u8());
-}
-
-#[test]
-fn test_edwards_d() {
-  let a = -FieldElement(U256::from_u32(121665));
-  let b = FieldElement(U256::from_u32(121666));
-
-  assert_eq!(EDWARDS_D, a * b.invert().unwrap());
 }
 
 #[test]
