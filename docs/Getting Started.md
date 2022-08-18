@@ -1,43 +1,59 @@
-# Clone Serai
+# Getting Started
+
+## Clone Serai
+```
+    git clone https://github.com/serai-dex/serai.git
+```
+
+## Build and Run Serai
+
+### Install Rust
+
+#### Linux
+```
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+#### Windows
+
+Use WSL2 and Linux instructions.
+
+
+#### Mac
 
 ```
-git clone https://github.com/serai-dex/serai.git
+    brew install rustup
 ```
 
-# Build and Run Serai
-
-- Ubuntu LTS or WSL2 w/ Docker (Other distributions may also work or docker can be used)
-    - Windows Guide: [https://dev.to/davidkou/running-docker-in-windows-subsystem-for-linux-wsl2-1k43](https://dev.to/davidkou/running-docker-in-windows-subsystem-for-linux-wsl2-1k43)
-    - [https://docs.docker.com/engine/install/ubuntu/](https://docs.docker.com/engine/install/ubuntu/)
-- Setup Rust & Dependencies (Assuming Linux or WSL2)
-  - Install Rust  `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-  
-## Install Solidity Compiler
+### Install Solidity Compiler
 ```
-     sudo pip3 install solc-select
-     solc-select install 0.8.16
-     solc-select use 0.8.16
+    sudo pip3 install solc-select
+    solc-select install 0.8.16
+    solc-select use 0.8.16
 ```
-## Install Other Dependencies
-```sudo apt-get install -y \
+### Install Other Dependencies
+```
+    sudo apt-get install -y \
     cmake \
     libboost-all-dev \
     pkg-config \
     libssl-dev
 ```
 
-## Build
+### Build
 ```
     cd serai
     cargo build --release
 ```
 
-## Run
+### Run
 ```
-./target/release/serai-node --chain dev
+    ./target/release/serai-node --chain dev
+    OR
+    ./target/release/serai-node --dev
 ```
 
-## Help
+### Help
 ```
-./target/release/serai-node --help
+    ./target/release/serai-node --help
 ```
