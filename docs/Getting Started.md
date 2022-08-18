@@ -6,7 +6,7 @@ git clone https://github.com/serai-dex/serai.git
 
 # Build and Run Serai
 
-- Ubuntu 18.04 native or WSL2 w/ Docker (Other distributions with docker may also work)
+- Ubuntu LTS or WSL2 w/ Docker (Other distributions may also work or docker can be used)
     - Windows Guide: [https://dev.to/davidkou/running-docker-in-windows-subsystem-for-linux-wsl2-1k43](https://dev.to/davidkou/running-docker-in-windows-subsystem-for-linux-wsl2-1k43)
     - [https://docs.docker.com/engine/install/ubuntu/](https://docs.docker.com/engine/install/ubuntu/)
 - Setup Rust & Dependencies (Assuming Linux or WSL2)
@@ -14,9 +14,9 @@ git clone https://github.com/serai-dex/serai.git
   
 ## Install Solidity Compiler
 ```
-     sudo add-apt-repository ppa:ethereum/ethereum \
-     sudo apt-get update \
-     sudo apt-get install solc
+     sudo pip3 install solc-select
+     solc-select install 0.8.16
+     solc-select use 0.8.16
 ```
 ## Install Other Dependencies
 ```sudo apt-get install -y \
