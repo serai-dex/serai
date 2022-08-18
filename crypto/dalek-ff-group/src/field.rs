@@ -165,27 +165,24 @@ impl FieldElement {
   }
 
   pub fn sqrt_ratio_i(u: FieldElement, v: FieldElement) -> (Choice, FieldElement) {
+    let i = SQRT_M1;
+
     let v3 = v.square() * v;
     let v7 = v3.square() * v;
     let mut r = (u * v3) *
       (u * v7).pow((-FieldElement::from(5u8)) * FieldElement::from(8u8).invert().unwrap());
-    let check = (v) * r.square();
-    let i = SQRT_M1;
 
+    let check = v * r.square();
     let correct_sign = check.ct_eq(&u);
     let flipped_sign = check.ct_eq(&(-u));
     let flipped_sign_i = check.ct_eq(&((-u) * i));
 
-    let r_prime = i * r;
-
-    r.conditional_assign(&r_prime, flipped_sign | flipped_sign_i);
+    r.conditional_assign(&(r * i), flipped_sign | flipped_sign_i);
 
     let r_is_negative = r.is_odd();
     r.conditional_negate(r_is_negative);
 
-    let was_non_zero_square = correct_sign | flipped_sign;
-
-    (was_non_zero_square, r)
+    (correct_sign | flipped_sign, r)
   }
 }
 
