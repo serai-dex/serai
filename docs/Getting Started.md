@@ -1,59 +1,67 @@
 # Getting Started
 
-## Clone Serai
+### System Dependencies
+
+##### Ubuntu
+
 ```
-git clone https://github.com/serai-dex/serai.git
+sudo apt-get install -y build-essential cmake clang-11 git curl python3-pip
 ```
 
-## Build and Run Serai
+### Install rustup
 
-### Install Rust
+##### Linux
 
-#### Linux
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-#### Windows
-
-Use WSL2 and Linux instructions.
-
-
-#### Mac
+##### macOS
 
 ```
 brew install rustup
 ```
 
-### Install Solidity Compiler
+### Install Rust
+
+```
+rustup update
+rustup toolchain install nightly
+rustup target add wasm32-unknown-unknown --toolchain nightly
+```
+
+### Install Solidity
+
 ```
 sudo pip3 install solc-select
 solc-select install 0.8.16
 solc-select use 0.8.16
 ```
-### Install Other Dependencies
+
+### Install foundry and anvil (for tests)
+
 ```
-sudo apt-get install -y \
-cmake \
-libboost-all-dev \
-pkg-config \
-libssl-dev
+cargo install --git https://github.com/foundry-rs/foundry --profile local --locked foundry-cli anvil
 ```
 
-### Build
+### Clone and Build Serai
+
 ```
+git clone https://github.com/serai-dex/serai
 cd serai
 cargo build --release
 ```
 
-### Run
+### Run Tests
+
+Running tests requires a Monero regtest node running in the background.
+
 ```
-./target/release/serai-node --chain dev
-OR
-./target/release/serai-node --dev
+cargo test --all-features
 ```
 
-### Help
+### Run Serai in Development Mode
+
 ```
-./target/release/serai-node --help
+./target/release/serai-node --dev
 ```
