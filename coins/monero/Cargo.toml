@@ -32,6 +32,8 @@ transcript = { package = "flexible-transcript", path = "../../crypto/transcript"
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["ed25519"], optional = true }
 dleq = { path = "../../crypto/dleq", features = ["serialize"], optional = true }
 
+monero-generators = { path = "generators" }
+
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -45,6 +47,9 @@ reqwest = { version = "0.11", features = ["json"] }
 [features]
 multisig = ["rand_chacha", "blake2", "transcript", "frost", "dleq"]
 
+[build-dependencies]
+dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
+monero-generators = { path = "generators" }
+
 [dev-dependencies]
-sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }

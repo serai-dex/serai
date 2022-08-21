@@ -12,8 +12,9 @@ use multiexp::BatchVerifier;
 
 use crate::{Commitment, ringct::bulletproofs::core::*};
 
+include!("../../../.generators/generators.rs");
+
 lazy_static! {
-  static ref GENERATORS: Generators = generators_core(b"bulletproof");
   static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); N]);
   static ref IP12: Scalar = inner_product(&ONE_N, &TWO_N);
 }
@@ -34,13 +35,6 @@ pub struct OriginalStruct {
 }
 
 impl OriginalStruct {
-  pub(crate) fn init() {
-    init();
-    let _ = &*GENERATORS;
-    let _ = &*ONE_N;
-    let _ = &*IP12;
-  }
-
   pub(crate) fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     commitments: &[Commitment],

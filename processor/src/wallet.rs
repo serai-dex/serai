@@ -86,7 +86,7 @@ impl CoinDb for MemCoinDb {
   fn add_output<O: Output>(&mut self, output: &O) -> bool {
     // This would be insecure as we're indexing by ID and this will replace the output as a whole
     // Multiple outputs may have the same ID in edge cases such as Monero, where outputs are ID'd
-    // by key image, not by hash + index
+    // by output key, not by hash + index
     // self.outputs.insert(output.id(), output).is_some()
     let id = output.id().as_ref().to_vec();
     if self.outputs.contains_key(&id) {

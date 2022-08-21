@@ -9,6 +9,7 @@ members = [
   "crypto/frost",
 
   "coins/ethereum",
+  "coins/monero/generators",
   "coins/monero",
 
   "processor",

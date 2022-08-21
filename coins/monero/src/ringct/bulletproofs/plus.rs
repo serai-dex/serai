@@ -15,8 +15,9 @@ use crate::{
   ringct::{hash_to_point::raw_hash_to_point, bulletproofs::core::*},
 };
 
+include!("../../../.generators/generators_plus.rs");
+
 lazy_static! {
-  static ref GENERATORS: Generators = generators_core(b"bulletproof_plus");
   static ref TRANSCRIPT: [u8; 32] =
     EdwardsPoint(raw_hash_to_point(hash(b"bulletproof_plus_transcript"))).compress().to_bytes();
 }
@@ -52,12 +53,6 @@ pub struct PlusStruct {
 }
 
 impl PlusStruct {
-  pub(crate) fn init() {
-    init();
-    let _ = &*GENERATORS;
-    let _ = &*TRANSCRIPT;
-  }
-
   pub(crate) fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     commitments: &[Commitment],

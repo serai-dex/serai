@@ -7,7 +7,6 @@ use transcript::RecommendedTranscript;
 use frost::{curve::Ed25519, FrostKeys};
 
 use monero_serai::{
-  ringct::bulletproofs::Bulletproofs,
   transaction::Transaction,
   rpc::Rpc,
   wallet::{
@@ -69,14 +68,7 @@ pub struct Monero {
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    let view = view_key::<Monero>(0).0;
-    let res = Monero { rpc: Rpc::new(url), view };
-
-    // Initialize Bulletproofs now to prevent the first call from taking several seconds
-    // TODO: Do this for both, unless we're sure we're only working on a single protocol
-    Bulletproofs::init(res.rpc.get_protocol().await.unwrap().bp_plus());
-
-    res
+    Monero { rpc: Rpc::new(url), view: view_key::<Monero>(0).0 }
   }
 
   fn view_pair(&self, spend: dfg::EdwardsPoint) -> ViewPair {

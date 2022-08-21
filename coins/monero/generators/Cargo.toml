@@ -1,0 +1,19 @@
+[package]
+name = "monero-generators"
+version = "0.1.0"
+description = "Monero's hash_to_point and generators"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+lazy_static = "1"
+
+subtle = "2.4"
+
+tiny-keccak = { version = "2", features = ["keccak"] }
+
+curve25519-dalek = { version = "3", features = ["std"] }
+
+group = { version = "0.12" }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group" }

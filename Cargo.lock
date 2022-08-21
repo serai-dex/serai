@@ -4584,6 +4584,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-generators"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek 3.2.0",
+ "dalek-ff-group",
+ "group",
+ "lazy_static",
+ "subtle",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "monero-serai"
 version = "0.1.0"
 dependencies = [
@@ -4600,6 +4612,7 @@ dependencies = [
  "modular-frost",
  "monero",
  "monero-epee-bin-serde",
+ "monero-generators",
  "multiexp",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4608,7 +4621,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.10.2",
  "subtle",
  "thiserror",
  "tiny-keccak",
