@@ -26,17 +26,20 @@ lazy_static! {
   static ref DISTRIBUTION: Mutex<Vec<u64>> = Mutex::new(Vec::with_capacity(3000000));
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn select_n<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &Rpc,
   height: usize,
   high: u64,
   per_second: f64,
+  real: &[u64],
   used: &mut HashSet<u64>,
   count: usize,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   let mut iters = 0;
   let mut confirmed = Vec::with_capacity(count);
+  // Retries on failure. Retries are obvious as decoys, yet should be minimal
   while confirmed.len() != count {
     let remaining = count - confirmed.len();
     let mut candidates = Vec::with_capacity(remaining);
@@ -73,9 +76,28 @@ async fn select_n<R: RngCore + CryptoRng>(
       }
     }
 
-    let outputs = rpc.get_outputs(&candidates, height).await?;
-    for i in 0 .. outputs.len() {
-      if let Some(output) = outputs[i] {
+    // If this is the first time we're requesting these outputs, include the real one as well
+    // Prevents the node we're connected to from having a list of known decoys and then seeing a
+    // TX which uses all of them, with one additional output (the true spend)
+    let mut real_indexes = HashSet::with_capacity(real.len());
+    if confirmed.is_empty() {
+      for real in real {
+        candidates.push(*real);
+      }
+      // Sort candidates so the real spends aren't the ones at the end
+      candidates.sort();
+      for real in real {
+        real_indexes.insert(candidates.binary_search(real).unwrap());
+      }
+    }
+
+    for (i, output) in rpc.get_unlocked_outputs(&candidates, height).await?.iter_mut().enumerate() {
+      // Don't include the real spend as a decoy, despite requesting it
+      if real_indexes.contains(&i) {
+        continue;
+      }
+
+      if let Some(output) = output.take() {
         confirmed.push((candidates[i], output));
       }
     }
@@ -115,12 +137,11 @@ impl Decoys {
     let decoy_count = ring_len - 1;
 
     // Convert the inputs in question to the raw output data
+    let mut real = Vec::with_capacity(inputs.len());
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
-      outputs.push((
-        rpc.get_o_indexes(input.tx).await?[usize::from(input.o)],
-        [input.key, input.commitment.calculate()],
-      ));
+      real.push(rpc.get_o_indexes(input.tx).await?[usize::from(input.o)]);
+      outputs.push((real[real.len() - 1], [input.key, input.commitment.calculate()]));
     }
 
     let distribution_len = {
@@ -162,7 +183,9 @@ impl Decoys {
     // We should almost never naturally generate an insane transaction, hence why this doesn't
     // bother with an overage
     let mut decoys =
-      select_n(rng, rpc, height, high, per_second, &mut used, inputs.len() * decoy_count).await?;
+      select_n(rng, rpc, height, high, per_second, &real, &mut used, inputs.len() * decoy_count)
+        .await?;
+    real.zeroize();
 
     let mut res = Vec::with_capacity(inputs.len());
     for o in outputs {
@@ -199,7 +222,8 @@ impl Decoys {
 
           // Select new outputs until we have a full sized ring again
           ring.extend(
-            select_n(rng, rpc, height, high, per_second, &mut used, ring_len - ring.len()).await?,
+            select_n(rng, rpc, height, high, per_second, &[], &mut used, ring_len - ring.len())
+              .await?,
           );
           ring.sort_by(|a, b| a.0.cmp(&b.0));
         }

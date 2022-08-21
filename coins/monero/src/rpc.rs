@@ -326,7 +326,7 @@ impl Rpc {
     Ok(distributions.result.distributions.swap_remove(0).distribution)
   }
 
-  pub async fn get_outputs(
+  pub async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
     height: usize,
@@ -370,6 +370,7 @@ impl Rpc {
           .collect::<Vec<_>>(),
       )
       .await?;
+
     // TODO: Support time based lock times. These shouldn't be needed, and it may be painful to
     // get the median time for the given height, yet we do need to in order to be complete
     outs
