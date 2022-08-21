@@ -7,7 +7,7 @@ use curve25519_dalek::{
 
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
-fn varint_len(varint: usize) -> usize {
+pub(crate) fn varint_len(varint: usize) -> usize {
   ((usize::try_from(usize::BITS - varint.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1
 }
 

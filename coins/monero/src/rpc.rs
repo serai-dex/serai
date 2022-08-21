@@ -17,9 +17,9 @@ use crate::{
 };
 
 #[derive(Deserialize, Debug)]
-struct EmptyResponse {}
+pub struct EmptyResponse {}
 #[derive(Deserialize, Debug)]
-struct JsonRpcResponse<T> {
+pub struct JsonRpcResponse<T> {
   result: T,
 }
 
