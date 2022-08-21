@@ -76,8 +76,14 @@ pub fn read_varint<R: io::Read>(r: &mut R) -> io::Result<u64> {
   let mut res = 0;
   while {
     let b = read_byte(r)?;
+    if (bits != 0) && (b == 0) {
+      Err(io::Error::new(io::ErrorKind::Other, "non-canonical varint"))?;
+    }
+    if ((bits + 7) > 64) && (b >= (1 << (64 - bits))) {
+      Err(io::Error::new(io::ErrorKind::Other, "varint overflow"))?;
+    }
+
     res += u64::from(b & (!VARINT_CONTINUATION_MASK)) << bits;
-    // TODO: Error if bits exceed u64
     bits += 7;
     b & VARINT_CONTINUATION_MASK == VARINT_CONTINUATION_MASK
   } {}
