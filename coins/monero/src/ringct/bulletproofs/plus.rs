@@ -19,13 +19,6 @@ lazy_static! {
   static ref GENERATORS: Generators = generators_core(b"bulletproof_plus");
   static ref TRANSCRIPT: [u8; 32] =
     EdwardsPoint(raw_hash_to_point(hash(b"bulletproof_plus_transcript"))).compress().to_bytes();
-  static ref TWO_SIXTY_FOUR_MINUS_ONE: Scalar = {
-    let mut temp = Scalar::from(2u8);
-    for _ in 0 .. LOG_N {
-      temp *= temp;
-    }
-    temp - Scalar::one()
-  };
 }
 
 // TRANSCRIPT isn't a Scalar, so we need this alternative for the first hash
@@ -253,7 +246,7 @@ impl PlusStruct {
     proof.push((minus_esq, A));
     proof.push((Scalar(self.d1), G));
 
-    let d_sum = zpow.sum() * *TWO_SIXTY_FOUR_MINUS_ONE;
+    let d_sum = zpow.sum() * Scalar::from(u64::MAX);
     let y_sum = weighted_powers(y, MN).sum();
     proof.push((
       Scalar(self.r1 * y.0 * self.s1) + (esq * ((yMNy * z * d_sum) + ((zsq - z) * y_sum))),
