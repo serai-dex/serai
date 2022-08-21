@@ -9,6 +9,7 @@ pub mod clsag;
 pub mod bulletproofs;
 
 use crate::{
+  Protocol,
   serialize::*,
   ringct::{clsag::Clsag, bulletproofs::Bulletproofs},
 };
@@ -86,8 +87,9 @@ impl RctPrunable {
     }
   }
 
-  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
-    1 + Bulletproofs::fee_weight(outputs) + (inputs * (Clsag::fee_weight(ring_len) + 32))
+  pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
+    1 + Bulletproofs::fee_weight(protocol.bp_plus(), outputs) +
+      (inputs * (Clsag::fee_weight(protocol.ring_len()) + 32))
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -142,8 +144,8 @@ pub struct RctSignatures {
 }
 
 impl RctSignatures {
-  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
-    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(ring_len, inputs, outputs)
+  pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
+    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(protocol, inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

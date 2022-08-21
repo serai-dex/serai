@@ -212,12 +212,8 @@ impl SignableTransaction {
     let extra = Extra::fee_weight(outputs);
 
     // Calculate the fee.
-    let mut fee = fee_rate.calculate(Transaction::fee_weight(
-      protocol.ring_len(),
-      inputs.len(),
-      outputs,
-      extra,
-    ));
+    let mut fee =
+      fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs, extra));
 
     // Make sure we have enough funds
     let in_amount = inputs.iter().map(|input| input.commitment.amount).sum::<u64>();
@@ -229,12 +225,9 @@ impl SignableTransaction {
     // If we have yet to add a change output, do so if it's economically viable
     if (!change) && change_address.is_some() && (in_amount != out_amount) {
       // Check even with the new fee, there's remaining funds
-      let change_fee = fee_rate.calculate(Transaction::fee_weight(
-        protocol.ring_len(),
-        inputs.len(),
-        outputs + 1,
-        extra,
-      )) - fee;
+      let change_fee =
+        fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs + 1, extra)) -
+          fee;
       if (out_amount + change_fee) < in_amount {
         change = true;
         out_amount += change_fee;

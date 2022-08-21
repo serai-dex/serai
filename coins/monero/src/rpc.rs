@@ -371,8 +371,7 @@ impl Rpc {
       )
       .await?;
 
-    // TODO: Support time based lock times. These shouldn't be needed, and it may be painful to
-    // get the median time for the given height, yet we do need to in order to be complete
+    // TODO: https://github.com/serai-dex/serai/issues/104
     outs
       .outs
       .iter()

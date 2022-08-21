@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
-  hash,
+  Protocol, hash,
   serialize::*,
   ringct::{RctPrunable, RctSignatures},
 };
@@ -193,9 +193,14 @@ pub struct Transaction {
 }
 
 impl Transaction {
-  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize, extra: usize) -> usize {
-    TransactionPrefix::fee_weight(ring_len, inputs, outputs, extra) +
-      RctSignatures::fee_weight(ring_len, inputs, outputs)
+  pub(crate) fn fee_weight(
+    protocol: Protocol,
+    inputs: usize,
+    outputs: usize,
+    extra: usize,
+  ) -> usize {
+    TransactionPrefix::fee_weight(protocol.ring_len(), inputs, outputs, extra) +
+      RctSignatures::fee_weight(protocol, inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
