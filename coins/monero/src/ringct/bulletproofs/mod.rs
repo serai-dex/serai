@@ -14,7 +14,9 @@ pub(crate) mod core;
 use self::core::LOG_N;
 
 pub(crate) mod original;
+pub use original::GENERATORS as BULLETPROOFS_GENERATORS;
 pub(crate) mod plus;
+pub use plus::GENERATORS as BULLETPROOFS_PLUS_GENERATORS;
 
 pub(crate) use self::original::OriginalStruct;
 pub(crate) use self::plus::PlusStruct;
@@ -118,7 +120,7 @@ impl Bulletproofs {
     }
   }
 
-  pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub(crate) fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     self.serialize_core(w, |points, w| write_raw_vec(write_point, points, w))
   }
 

@@ -127,7 +127,7 @@ impl Decoys {
     self.offsets.len()
   }
 
-  pub(crate) async fn select<R: RngCore + CryptoRng>(
+  pub async fn select<R: RngCore + CryptoRng>(
     rng: &mut R,
     rpc: &Rpc,
     ring_len: usize,

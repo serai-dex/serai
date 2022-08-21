@@ -55,13 +55,13 @@ impl ClsagInput {
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct ClsagDetails {
+pub(crate) struct ClsagDetails {
   input: ClsagInput,
   mask: Scalar,
 }
 
 impl ClsagDetails {
-  pub fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
+  pub(crate) fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
     ClsagDetails { input, mask }
   }
 }
@@ -111,10 +111,6 @@ impl ClsagMultisig {
     })
   }
 
-  pub const fn serialized_len() -> usize {
-    32 + (2 * 32)
-  }
-
   fn input(&self) -> ClsagInput {
     (*self.details.read().unwrap()).as_ref().unwrap().input.clone()
   }
@@ -137,7 +133,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     rng: &mut R,
     view: &FrostView<Ed25519>,
   ) -> Vec<u8> {
-    let mut serialized = Vec::with_capacity(Self::serialized_len());
+    let mut serialized = Vec::with_capacity(32 + (2 * 32));
     serialized.extend((view.secret_share().0 * self.H).compress().to_bytes());
     serialized.extend(write_dleq(rng, self.H, view.secret_share().0));
     serialized

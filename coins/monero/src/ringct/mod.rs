@@ -3,7 +3,7 @@ use zeroize::Zeroize;
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 pub(crate) mod hash_to_point;
-pub use hash_to_point::hash_to_point;
+pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 
 pub mod clsag;
 pub mod bulletproofs;
@@ -127,7 +127,7 @@ impl RctPrunable {
     })
   }
 
-  pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub(crate) fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
       RctPrunable::Clsag { bulletproofs, .. } => {

@@ -17,9 +17,9 @@ use crate::{
 };
 
 #[derive(Deserialize, Debug)]
-pub struct EmptyResponse {}
+struct EmptyResponse {}
 #[derive(Deserialize, Debug)]
-pub struct JsonRpcResponse<T> {
+struct JsonRpcResponse<T> {
   result: T,
 }
 
@@ -205,6 +205,7 @@ impl Rpc {
     txs.iter().cloned().collect::<Result<_, _>>()
   }
 
+  // TODO: Remove with https://github.com/serai-dex/serai/issues/25
   pub async fn get_transactions_possible(
     &self,
     hashes: &[[u8; 32]],
@@ -297,7 +298,7 @@ impl Rpc {
   ) -> Result<Vec<u64>, RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
-    pub struct Distribution {
+    struct Distribution {
       distribution: Vec<u64>,
     }
 
@@ -332,7 +333,7 @@ impl Rpc {
     height: usize,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
     #[derive(Deserialize, Debug)]
-    pub struct Out {
+    struct Out {
       key: String,
       mask: String,
       txid: String,

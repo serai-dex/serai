@@ -42,7 +42,7 @@ fn generators(prefix: &'static str, path: &str) {
       format!(
         "
           lazy_static! {{
-            static ref GENERATORS: Generators = Generators {{
+            pub static ref GENERATORS: Generators = Generators {{
               G: [
                 {}
               ],
