@@ -100,7 +100,7 @@ pub fn read_raw_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(
   len: usize,
   r: &mut R,
 ) -> io::Result<Vec<T>> {
-  let mut res = Vec::with_capacity(len);
+  let mut res = vec![];
   for _ in 0 .. len {
     res.push(f(r)?);
   }
