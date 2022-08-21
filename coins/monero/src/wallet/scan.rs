@@ -1,16 +1,14 @@
-use std::convert::TryFrom;
+use std::io::Cursor;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
-
 use crate::{
   Commitment,
-  serialize::{write_varint, read_byte, read_bytes, read_u64, read_scalar, read_point},
+  serialize::{read_byte, read_u64, read_bytes, read_scalar, read_point},
   transaction::{Timelock, Transaction},
-  wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask},
+  wallet::{ViewPair, Extra, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -72,34 +70,21 @@ impl SpendableOutput {
 
 impl Transaction {
   pub fn scan(&self, view: &ViewPair, guaranteed: bool) -> Timelocked {
-    let mut extra = vec![];
-    write_varint(&u64::try_from(self.prefix.extra.len()).unwrap(), &mut extra).unwrap();
-    extra.extend(&self.prefix.extra);
-    let extra = deserialize::<ExtraField>(&extra);
-
-    let pubkeys: Vec<EdwardsPoint>;
+    let extra = Extra::deserialize(&mut Cursor::new(&self.prefix.extra));
+    let keys;
     if let Ok(extra) = extra {
-      let mut m_pubkeys = vec![];
-      if let Some(key) = extra.tx_pubkey() {
-        m_pubkeys.push(key);
-      }
-      if let Some(keys) = extra.tx_additional_pubkeys() {
-        m_pubkeys.extend(&keys);
-      }
-
-      pubkeys = m_pubkeys.iter().filter_map(|key| key.point.decompress()).collect();
+      keys = extra.keys();
     } else {
       return Timelocked(self.prefix.timelock, vec![]);
     };
 
     let mut res = vec![];
     for (o, output) in self.prefix.outputs.iter().enumerate() {
-      // TODO: This may be replaceable by pubkeys[o]
-      for pubkey in &pubkeys {
+      for key in &keys {
         let (view_tag, key_offset) = shared_key(
           Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
           &view.view,
-          pubkey,
+          key,
           o,
         );
 

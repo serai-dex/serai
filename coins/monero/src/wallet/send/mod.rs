@@ -7,8 +7,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-use monero::{consensus::Encodable, PublicKey, blockdata::transaction::SubField};
-
 #[cfg(feature = "multisig")]
 use frost::FrostError;
 
@@ -24,8 +22,8 @@ use crate::{
   rpc::{Rpc, RpcError},
   wallet::{
     address::{AddressType, Address},
-    SpendableOutput, Decoys, key_image_sort, uniqueness, shared_key, commitment_mask,
-    amount_encryption,
+    SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness, shared_key,
+    commitment_mask, amount_encryption,
   },
 };
 #[cfg(feature = "multisig")]
@@ -210,9 +208,8 @@ impl SignableTransaction {
     }
     let outputs = payments.len() + (if change { 1 } else { 0 });
 
-    // Calculate the extra length.
-    // Type, length, value, with 1 field for the first key and 1 field for the rest
-    let extra = (outputs * (2 + 32)) - (outputs.saturating_sub(2) * 2);
+    // Calculate the extra length
+    let extra = Extra::fee_weight(outputs);
 
     // Calculate the fee.
     let mut fee = fee_rate.calculate(Transaction::fee_weight(
@@ -279,16 +276,18 @@ impl SignableTransaction {
     let bp = Bulletproofs::prove(rng, &commitments, self.protocol.bp_plus()).unwrap();
 
     // Create the TX extra
-    // TODO: Review this for canonicity with Monero
-    let mut extra = vec![];
-    SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
-      .consensus_encode(&mut extra)
-      .unwrap();
-    SubField::AdditionalPublickKey(
-      outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect(),
-    )
-    .consensus_encode(&mut extra)
-    .unwrap();
+    let extra = {
+      let mut extra = Extra::new(outputs.iter().map(|output| output.R).collect());
+
+      // Additionally include a random payment ID
+      let mut id = [0; 8];
+      rng.fill_bytes(&mut id);
+      extra.push(ExtraField::PaymentId(PaymentId::Encrypted(id)));
+
+      let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len()));
+      extra.serialize(&mut serialized).unwrap();
+      serialized
+    };
 
     let mut tx_outputs = Vec::with_capacity(outputs.len());
     let mut ecdh_info = Vec::with_capacity(outputs.len());

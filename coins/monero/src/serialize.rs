@@ -11,6 +11,10 @@ pub fn varint_len(varint: usize) -> usize {
   ((usize::try_from(usize::BITS - varint.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1
 }
 
+pub fn write_byte<W: io::Write>(byte: &u8, w: &mut W) -> io::Result<()> {
+  w.write_all(&[*byte])
+}
+
 pub fn write_varint<W: io::Write>(varint: &u64, w: &mut W) -> io::Result<()> {
   let mut varint = *varint;
   while {
@@ -19,7 +23,7 @@ pub fn write_varint<W: io::Write>(varint: &u64, w: &mut W) -> io::Result<()> {
     if varint != 0 {
       b |= VARINT_CONTINUATION_MASK;
     }
-    w.write_all(&[b])?;
+    write_byte(&b, w)?;
     varint != 0
   } {}
   Ok(())
