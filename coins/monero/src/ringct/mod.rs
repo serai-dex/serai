@@ -50,24 +50,18 @@ impl RctBase {
     outputs: usize,
     r: &mut R,
   ) -> std::io::Result<(RctBase, u8)> {
-    let mut rct_type = [0];
-    r.read_exact(&mut rct_type)?;
+    let rct_type = read_byte(r)?;
     Ok((
-      if rct_type[0] == 0 {
+      if rct_type == 0 {
         RctBase { fee: 0, ecdh_info: vec![], commitments: vec![] }
       } else {
         RctBase {
           fee: read_varint(r)?,
-          ecdh_info: (0 .. outputs)
-            .map(|_| {
-              let mut ecdh = [0; 8];
-              r.read_exact(&mut ecdh).map(|_| ecdh)
-            })
-            .collect::<Result<_, _>>()?,
+          ecdh_info: (0 .. outputs).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
           commitments: read_raw_vec(read_point, outputs, r)?,
         }
       },
-      rct_type[0],
+      rct_type,
     ))
   }
 }

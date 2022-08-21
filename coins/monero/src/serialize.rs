@@ -53,10 +53,18 @@ pub fn write_vec<T, W: io::Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   write_raw_vec(f, values, w)
 }
 
-pub fn read_byte<R: io::Read>(r: &mut R) -> io::Result<u8> {
-  let mut res = [0; 1];
+pub fn read_bytes<R: io::Read, const N: usize>(r: &mut R) -> io::Result<[u8; N]> {
+  let mut res = [0; N];
   r.read_exact(&mut res)?;
-  Ok(res[0])
+  Ok(res)
+}
+
+pub fn read_byte<R: io::Read>(r: &mut R) -> io::Result<u8> {
+  Ok(read_bytes::<_, 1>(r)?[0])
+}
+
+pub fn read_u64<R: io::Read>(r: &mut R) -> io::Result<u64> {
+  read_bytes(r).map(u64::from_le_bytes)
 }
 
 pub fn read_varint<R: io::Read>(r: &mut R) -> io::Result<u64> {
@@ -72,20 +80,14 @@ pub fn read_varint<R: io::Read>(r: &mut R) -> io::Result<u64> {
   Ok(res)
 }
 
-pub fn read_32<R: io::Read>(r: &mut R) -> io::Result<[u8; 32]> {
-  let mut res = [0; 32];
-  r.read_exact(&mut res)?;
-  Ok(res)
-}
-
 // TODO: https://github.com/serai-dex/serai/issues/25
 pub fn read_scalar<R: io::Read>(r: &mut R) -> io::Result<Scalar> {
-  Scalar::from_canonical_bytes(read_32(r)?)
+  Scalar::from_canonical_bytes(read_bytes(r)?)
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "unreduced scalar"))
 }
 
 pub fn read_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
-  let bytes = read_32(r)?;
+  let bytes = read_bytes(r)?;
   CompressedEdwardsY(bytes)
     .decompress()
     // Ban torsioned points, and points which are either unreduced or -0

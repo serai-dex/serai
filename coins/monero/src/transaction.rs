@@ -41,9 +41,7 @@ impl Input {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Input> {
-    let mut variant = [0];
-    r.read_exact(&mut variant)?;
-    Ok(match variant[0] {
+    Ok(match read_byte(r)? {
       255 => Input::Gen(read_varint(r)?),
       2 => Input::ToKey {
         amount: read_varint(r)?,
@@ -83,9 +81,7 @@ impl Output {
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Output> {
     let amount = read_varint(r)?;
-    let mut output_type = [0];
-    r.read_exact(&mut output_type)?;
-    let view_tag = match output_type[0] {
+    let view_tag = match read_byte(r)? {
       2 => false,
       3 => true,
       _ => Err(std::io::Error::new(
@@ -97,13 +93,7 @@ impl Output {
     Ok(Output {
       amount,
       key: read_point(r)?,
-      view_tag: if view_tag {
-        let mut view_tag = [0];
-        r.read_exact(&mut view_tag)?;
-        Some(view_tag[0])
-      } else {
-        None
-      },
+      view_tag: if view_tag { Some(read_byte(r)?) } else { None },
     })
   }
 }
@@ -191,11 +181,7 @@ impl TransactionPrefix {
       outputs: read_vec(Output::deserialize, r)?,
       extra: vec![],
     };
-
-    let len = read_varint(r)?;
-    prefix.extra.resize(len.try_into().unwrap(), 0);
-    r.read_exact(&mut prefix.extra)?;
-
+    prefix.extra = read_vec(read_byte, r)?;
     Ok(prefix)
   }
 }

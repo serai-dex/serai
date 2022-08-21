@@ -8,7 +8,7 @@ use monero::{consensus::deserialize, blockdata::transaction::ExtraField};
 
 use crate::{
   Commitment,
-  serialize::{write_varint, read_32, read_scalar, read_point},
+  serialize::{write_varint, read_byte, read_bytes, read_u64, read_scalar, read_point},
   transaction::{Timelock, Transaction},
   wallet::{ViewPair, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
@@ -61,19 +61,11 @@ impl SpendableOutput {
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
     Ok(SpendableOutput {
-      tx: read_32(r)?,
-      o: {
-        let mut o = [0; 1];
-        r.read_exact(&mut o)?;
-        o[0]
-      },
+      tx: read_bytes(r)?,
+      o: read_byte(r)?,
       key: read_point(r)?,
       key_offset: read_scalar(r)?,
-      commitment: Commitment::new(read_scalar(r)?, {
-        let mut amount = [0; 8];
-        r.read_exact(&mut amount)?;
-        u64::from_le_bytes(amount)
-      }),
+      commitment: Commitment::new(read_scalar(r)?, read_u64(r)?),
     })
   }
 }
