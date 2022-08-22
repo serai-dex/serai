@@ -19,7 +19,7 @@ pub async fn rpc() -> Rpc {
   }
 
   let addr = Address {
-    meta: AddressMeta { network: Network::Mainnet, kind: AddressType::Standard, guaranteed: false },
+    meta: AddressMeta { network: Network::Mainnet, kind: AddressType::Standard },
     spend: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
     view: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
   }

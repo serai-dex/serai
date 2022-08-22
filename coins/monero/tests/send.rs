@@ -79,7 +79,7 @@ async fn send_core(test: usize, multisig: bool) {
   }
 
   let view_pair = ViewPair { view, spend: spend_pub };
-  let addr = view_pair.address(Network::Mainnet, AddressType::Standard, false);
+  let addr = view_pair.address(Network::Mainnet, AddressType::Standard);
 
   let fee = rpc.get_fee().await.unwrap();
 

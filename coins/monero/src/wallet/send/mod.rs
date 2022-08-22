@@ -21,9 +21,8 @@ use crate::{
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{
-    address::{AddressType, Address},
-    SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness, shared_key,
-    commitment_mask, amount_encryption,
+    address::Address, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
+    uniqueness, shared_key, commitment_mask, amount_encryption,
   },
 };
 #[cfg(feature = "multisig")]
@@ -53,19 +52,20 @@ impl SendOutput {
   ) -> SendOutput {
     let r = random_scalar(rng);
     let (view_tag, shared_key) =
-      shared_key(Some(unique).filter(|_| output.0.meta.guaranteed), &r, &output.0.view, o);
+      shared_key(Some(unique).filter(|_| output.0.meta.kind.guaranteed()), &r, &output.0.view, o);
 
-    let spend = output.0.spend;
+    if output.0.meta.kind.payment_id().is_some() {
+      unimplemented!("integrated addresses aren't currently supported");
+    }
+
     SendOutput {
-      R: match output.0.meta.kind {
-        AddressType::Standard => &r * &ED25519_BASEPOINT_TABLE,
-        AddressType::Integrated(_) => {
-          unimplemented!("SendOutput::new doesn't support Integrated addresses")
-        }
-        AddressType::Subaddress => r * spend,
+      R: if !output.0.meta.kind.subaddress() {
+        &r * &ED25519_BASEPOINT_TABLE
+      } else {
+        r * output.0.spend
       },
       view_tag,
-      dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + spend),
+      dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
       commitment: Commitment::new(commitment_mask(shared_key), output.1),
       amount: amount_encryption(output.1, shared_key),
     }
@@ -179,10 +179,13 @@ impl SignableTransaction {
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure all addresses are valid
-    let test = |addr: Address| match addr.meta.kind {
-      AddressType::Standard => Ok(()),
-      AddressType::Integrated(..) => Err(TransactionError::InvalidAddress),
-      AddressType::Subaddress => Ok(()),
+    let test = |addr: Address| {
+      if addr.meta.kind.payment_id().is_some() {
+        // TODO
+        Err(TransactionError::InvalidAddress)
+      } else {
+        Ok(())
+      }
     };
 
     for payment in &payments {
