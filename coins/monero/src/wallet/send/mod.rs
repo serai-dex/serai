@@ -129,9 +129,9 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
-      spend + input.key_offset,
-      generate_key_image(spend + input.key_offset),
-      ClsagInput::new(input.commitment.clone(), decoys[i].clone())
+      spend + input.output.data.key_offset,
+      generate_key_image(spend + input.output.data.key_offset),
+      ClsagInput::new(input.commitment().clone(), decoys[i].clone())
         .map_err(TransactionError::ClsagError)?,
     ));
 
@@ -225,7 +225,7 @@ impl SignableTransaction {
       fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs, extra));
 
     // Make sure we have enough funds
-    let in_amount = inputs.iter().map(|input| input.commitment.amount).sum::<u64>();
+    let in_amount = inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
     let mut out_amount = payments.iter().map(|payment| payment.1).sum::<u64>() + fee;
     if in_amount < out_amount {
       Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
@@ -345,8 +345,8 @@ impl SignableTransaction {
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
-      let mut offset = spend + input.key_offset;
-      if (&offset * &ED25519_BASEPOINT_TABLE) != input.key {
+      let mut offset = spend + input.output.data.key_offset;
+      if (&offset * &ED25519_BASEPOINT_TABLE) != input.output.data.key {
         Err(TransactionError::WrongPrivateKey)?;
       }
 

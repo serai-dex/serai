@@ -8,6 +8,7 @@ use frost::{curve::Ed25519, FrostKeys};
 
 use monero_serai::{
   transaction::Transaction,
+  block::Block,
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
@@ -36,11 +37,11 @@ impl OutputTrait for Output {
   type Id = [u8; 32];
 
   fn id(&self) -> Self::Id {
-    self.0.key.compress().to_bytes()
+    self.0.output.data.key.compress().to_bytes()
   }
 
   fn amount(&self) -> u64 {
-    self.0.commitment.amount
+    self.0.commitment().amount
   }
 
   fn serialize(&self) -> Vec<u8> {
@@ -97,7 +98,7 @@ impl Coin for Monero {
 
   type Fee = Fee;
   type Transaction = Transaction;
-  type Block = Vec<Transaction>;
+  type Block = Block;
 
   type Output = Output;
   type SignableTransaction = SignableTransaction;
@@ -125,12 +126,25 @@ impl Coin for Monero {
   }
 
   async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError> {
-    self.rpc.get_block_transactions_possible(height).await.map_err(|_| CoinError::ConnectionError)
+    self.rpc.get_block(height).await.map_err(|_| CoinError::ConnectionError)
   }
 
-  async fn get_outputs(&self, block: &Self::Block, key: dfg::EdwardsPoint) -> Vec<Self::Output> {
-    let mut scanner = self.scanner(key);
-    block.iter().flat_map(|tx| scanner.scan(tx).not_locked()).map(Output::from).collect()
+  async fn get_outputs(
+    &self,
+    block: &Self::Block,
+    key: dfg::EdwardsPoint,
+  ) -> Result<Vec<Self::Output>, CoinError> {
+    Ok(
+      self
+        .scanner(key)
+        .scan(&self.rpc, block)
+        .await
+        .map_err(|_| CoinError::ConnectionError)?
+        .iter()
+        .flat_map(|outputs| outputs.not_locked())
+        .map(Output::from)
+        .collect(),
+    )
   }
 
   async fn prepare_send(
@@ -221,10 +235,13 @@ impl Coin for Monero {
     }
 
     let outputs = Self::empty_scanner()
-      .scan(&self.rpc.get_block_transactions_possible(height).await.unwrap().swap_remove(0))
+      .scan(&self.rpc, &self.rpc.get_block(height).await.unwrap())
+      .await
+      .unwrap()
+      .swap_remove(0)
       .ignore_timelock();
 
-    let amount = outputs[0].commitment.amount;
+    let amount = outputs[0].commitment().amount;
     let fee = 3000000000; // TODO
     let tx = MSignableTransaction::new(
       self.rpc.get_protocol().await.unwrap(),

@@ -100,11 +100,11 @@ impl SignableTransaction {
     for input in &self.inputs {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
       // transcript (such as the one used to create one time keys) to be unique
-      transcript.append_message(b"input_hash", &input.tx);
-      transcript.append_message(b"input_output_index", &[input.o]);
+      transcript.append_message(b"input_hash", &input.output.absolute.tx);
+      transcript.append_message(b"input_output_index", &[input.output.absolute.o]);
       // Not including this, with a doxxed list of payments, would allow brute forcing the inputs
       // to determine RNG seeds and therefore the true spends
-      transcript.append_message(b"input_shared_key", &input.key_offset.to_bytes());
+      transcript.append_message(b"input_shared_key", &input.output.data.key_offset.to_bytes());
     }
     for payment in &self.payments {
       transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
@@ -116,14 +116,14 @@ impl SignableTransaction {
 
     for (i, input) in self.inputs.iter().enumerate() {
       // Check this the right set of keys
-      let offset = keys.offset(dalek_ff_group::Scalar(input.key_offset));
-      if offset.group_key().0 != input.key {
+      let offset = keys.offset(dalek_ff_group::Scalar(input.output.data.key_offset));
+      if offset.group_key().0 != input.output.data.key {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
       clsags.push(
         AlgorithmMachine::new(
-          ClsagMultisig::new(transcript.clone(), input.key, inputs[i].clone())
+          ClsagMultisig::new(transcript.clone(), input.output.data.key, inputs[i].clone())
             .map_err(TransactionError::MultisigError)?,
           offset,
           &included,
@@ -331,7 +331,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       });
 
       *value.3.write().unwrap() = Some(ClsagDetails::new(
-        ClsagInput::new(value.1.commitment.clone(), value.2).map_err(|_| {
+        ClsagInput::new(value.1.commitment().clone(), value.2).map_err(|_| {
           panic!("Signing an input which isn't present in the ring we created for it")
         })?,
         mask,

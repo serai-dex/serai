@@ -8,22 +8,59 @@ use crate::{
   Commitment,
   serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point},
   transaction::{Timelock, Transaction},
+  block::Block,
+  rpc::{Rpc, RpcError},
   wallet::{PaymentId, Extra, Scanner, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct SpendableOutput {
+pub struct AbsoluteId {
   pub tx: [u8; 32],
   pub o: u8,
+}
 
+impl AbsoluteId {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(32 + 1);
+    res.extend(&self.tx);
+    res.push(self.o);
+    res
+  }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<AbsoluteId> {
+    Ok(AbsoluteId { tx: read_bytes(r)?, o: read_byte(r)? })
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct OutputData {
   pub key: EdwardsPoint,
-  // Absolute difference between the spend key and the key in this output, inclusive of any
-  // subaddress offset
+  // Absolute difference between the spend key and the key in this output
   pub key_offset: Scalar,
   pub commitment: Commitment,
+}
 
-  // Metadata to know how to process this output
+impl OutputData {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(32 + 32 + 40);
+    res.extend(self.key.compress().to_bytes());
+    res.extend(self.key_offset.to_bytes());
+    res.extend(self.commitment.mask.to_bytes());
+    res.extend(self.commitment.amount.to_le_bytes());
+    res
+  }
 
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<OutputData> {
+    Ok(OutputData {
+      key: read_point(r)?,
+      key_offset: read_scalar(r)?,
+      commitment: Commitment::new(read_scalar(r)?, read_u64(r)?),
+    })
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct Metadata {
   // Does not have to be an Option since the 0 subaddress is the main address
   pub subaddress: (u32, u32),
   // Can be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
@@ -35,14 +72,98 @@ pub struct SpendableOutput {
   pub payment_id: [u8; 8],
 }
 
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct Timelocked(Timelock, Vec<SpendableOutput>);
-impl Timelocked {
+impl Metadata {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(4 + 4 + 8);
+    res.extend(self.subaddress.0.to_le_bytes());
+    res.extend(self.subaddress.1.to_le_bytes());
+    res.extend(self.payment_id);
+    res
+  }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Metadata> {
+    Ok(Metadata { subaddress: (read_u32(r)?, read_u32(r)?), payment_id: read_bytes(r)? })
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct ReceivedOutput {
+  pub absolute: AbsoluteId,
+  pub data: OutputData,
+  pub metadata: Metadata,
+}
+
+impl ReceivedOutput {
+  pub fn commitment(&self) -> Commitment {
+    self.data.commitment.clone()
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = self.absolute.serialize();
+    serialized.extend(&self.data.serialize());
+    serialized.extend(&self.metadata.serialize());
+    serialized
+  }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<ReceivedOutput> {
+    Ok(ReceivedOutput {
+      absolute: AbsoluteId::deserialize(r)?,
+      data: OutputData::deserialize(r)?,
+      metadata: Metadata::deserialize(r)?,
+    })
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct SpendableOutput {
+  pub output: ReceivedOutput,
+  pub global_index: u64,
+}
+
+impl SpendableOutput {
+  pub async fn refresh_global_index(&mut self, rpc: &Rpc) -> Result<(), RpcError> {
+    self.global_index =
+      rpc.get_o_indexes(self.output.absolute.tx).await?[usize::from(self.output.absolute.o)];
+    Ok(())
+  }
+
+  pub async fn from(rpc: &Rpc, output: ReceivedOutput) -> Result<SpendableOutput, RpcError> {
+    let mut output = SpendableOutput { output, global_index: 0 };
+    output.refresh_global_index(rpc).await?;
+    Ok(output)
+  }
+
+  pub fn commitment(&self) -> Commitment {
+    self.output.commitment()
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = self.output.serialize();
+    serialized.extend(&self.global_index.to_le_bytes());
+    serialized
+  }
+
+  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
+    Ok(SpendableOutput { output: ReceivedOutput::deserialize(r)?, global_index: read_u64(r)? })
+  }
+}
+
+#[derive(Zeroize)]
+pub struct Timelocked<O: Clone + Zeroize>(Timelock, Vec<O>);
+impl<O: Clone + Zeroize> Drop for Timelocked<O> {
+  fn drop(&mut self) {
+    self.0.zeroize();
+    self.1.zeroize();
+  }
+}
+impl<O: Clone + Zeroize> ZeroizeOnDrop for Timelocked<O> {}
+
+impl<O: Clone + Zeroize> Timelocked<O> {
   pub fn timelock(&self) -> Timelock {
     self.0
   }
 
-  pub fn not_locked(&self) -> Vec<SpendableOutput> {
+  pub fn not_locked(&self) -> Vec<O> {
     if self.0 == Timelock::None {
       return self.1.clone();
     }
@@ -50,52 +171,18 @@ impl Timelocked {
   }
 
   /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked
-  pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<SpendableOutput>> {
+  pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<O>> {
     // If the Timelocks are comparable, return the outputs if they're now unlocked
     self.0.partial_cmp(&timelock).filter(|_| self.0 <= timelock).map(|_| self.1.clone())
   }
 
-  pub fn ignore_timelock(&self) -> Vec<SpendableOutput> {
+  pub fn ignore_timelock(&self) -> Vec<O> {
     self.1.clone()
   }
 }
 
-impl SpendableOutput {
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(32 + 1 + 32 + 32 + 40);
-
-    res.extend(&self.tx);
-    res.push(self.o);
-
-    res.extend(self.key.compress().to_bytes());
-    res.extend(self.key_offset.to_bytes());
-    res.extend(self.commitment.mask.to_bytes());
-    res.extend(self.commitment.amount.to_le_bytes());
-
-    res.extend(self.subaddress.0.to_le_bytes());
-    res.extend(self.subaddress.1.to_le_bytes());
-    res.extend(self.payment_id);
-
-    res
-  }
-
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
-    Ok(SpendableOutput {
-      tx: read_bytes(r)?,
-      o: read_byte(r)?,
-
-      key: read_point(r)?,
-      key_offset: read_scalar(r)?,
-      commitment: Commitment::new(read_scalar(r)?, read_u64(r)?),
-
-      subaddress: (read_u32(r)?, read_u32(r)?),
-      payment_id: read_bytes(r)?,
-    })
-  }
-}
-
 impl Scanner {
-  pub fn scan(&mut self, tx: &Transaction) -> Timelocked {
+  pub fn scan_stateless(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
     let extra = Extra::deserialize(&mut Cursor::new(&tx.prefix.extra));
     let keys;
     let extra = if let Ok(extra) = extra {
@@ -170,16 +257,16 @@ impl Scanner {
         }
 
         if commitment.amount != 0 {
-          res.push(SpendableOutput {
-            tx: tx.hash(),
-            o: o.try_into().unwrap(),
+          res.push(ReceivedOutput {
+            absolute: AbsoluteId { tx: tx.hash(), o: o.try_into().unwrap() },
 
-            key: output.key,
-            key_offset: key_offset + self.pair.subaddress(*subaddress.unwrap()),
-            commitment,
+            data: OutputData {
+              key: output.key,
+              key_offset: key_offset + self.pair.subaddress(*subaddress.unwrap()),
+              commitment,
+            },
 
-            subaddress: (0, 0),
-            payment_id,
+            metadata: Metadata { subaddress: (0, 0), payment_id },
           });
 
           if let Some(burning_bug) = self.burning_bug.as_mut() {
@@ -193,5 +280,42 @@ impl Scanner {
     }
 
     Timelocked(tx.prefix.timelock, res)
+  }
+
+  pub async fn scan(
+    &mut self,
+    rpc: &Rpc,
+    block: &Block,
+  ) -> Result<Vec<Timelocked<SpendableOutput>>, RpcError> {
+    let mut index = rpc.get_o_indexes(block.miner_tx.hash()).await?[0];
+    let mut txs = vec![block.miner_tx.clone()];
+    txs.extend(rpc.get_transactions(&block.txs).await?);
+
+    let map = |mut timelock: Timelocked<ReceivedOutput>, index| {
+      if timelock.1.is_empty() {
+        None
+      } else {
+        Some(Timelocked(
+          timelock.0,
+          timelock
+            .1
+            .drain(..)
+            .map(|output| SpendableOutput {
+              global_index: index + u64::from(output.absolute.o),
+              output,
+            })
+            .collect(),
+        ))
+      }
+    };
+
+    let mut res = vec![];
+    for tx in txs {
+      if let Some(timelock) = map(self.scan_stateless(&tx), index) {
+        res.push(timelock);
+      }
+      index += u64::try_from(tx.prefix.outputs.len()).unwrap();
+    }
+    Ok(res)
   }
 }

@@ -23,7 +23,7 @@ use frost::{
 
 use monero_serai::{
   random_scalar,
-  wallet::{ViewPair, Scanner, address::Network, SignableTransaction},
+  wallet::{address::Network, ViewPair, Scanner, SpendableOutput, SignableTransaction},
 };
 
 mod rpc;
@@ -98,13 +98,13 @@ async fn send_core(test: usize, multisig: bool) {
 
       // Grab the largest output available
       let output = {
-        let mut outputs = scanner.scan(tx.as_ref().unwrap()).ignore_timelock();
-        outputs.sort_by(|x, y| x.commitment.amount.cmp(&y.commitment.amount).reverse());
+        let mut outputs = scanner.scan_stateless(tx.as_ref().unwrap()).ignore_timelock();
+        outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount).reverse());
         outputs.swap_remove(0)
       };
       // Test creating a zero change output and a non-zero change output
-      amount = output.commitment.amount - u64::try_from(i).unwrap();
-      outputs.push(output);
+      amount = output.commitment().amount - u64::try_from(i).unwrap();
+      outputs.push(SpendableOutput::from(&rpc, output).await.unwrap());
 
     // Test spending multiple inputs
     } else if test == 1 {
@@ -122,9 +122,9 @@ async fn send_core(test: usize, multisig: bool) {
       }
 
       for i in (start + 1) .. (start + 9) {
-        let tx = rpc.get_block_transactions(i).await.unwrap().swap_remove(0);
-        let output = scanner.scan(&tx).ignore_timelock().swap_remove(0);
-        amount += output.commitment.amount;
+        let mut txs = scanner.scan(&rpc, &rpc.get_block(i).await.unwrap()).await.unwrap();
+        let output = txs.swap_remove(0).ignore_timelock().swap_remove(0);
+        amount += output.commitment().amount;
         outputs.push(output);
       }
     }

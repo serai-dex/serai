@@ -53,7 +53,7 @@ pub trait Coin {
     &self,
     block: &Self::Block,
     key: <Self::Curve as Curve>::G,
-  ) -> Vec<Self::Output>;
+  ) -> Result<Vec<Self::Output>, CoinError>;
 
   async fn prepare_send(
     &self,

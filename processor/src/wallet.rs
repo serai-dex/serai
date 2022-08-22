@@ -262,7 +262,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           self
             .coin
             .get_outputs(&block, keys.group_key())
-            .await
+            .await?
             .iter()
             .cloned()
             .filter(|output| self.db.add_output(output)),
