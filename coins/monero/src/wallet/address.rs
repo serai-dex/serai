@@ -4,14 +4,9 @@ use thiserror::Error;
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
-  edwards::{EdwardsPoint, CompressedEdwardsY},
-};
+use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use base58_monero::base58::{encode_check, decode_check};
-
-use crate::wallet::ViewPair;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum Network {
@@ -128,16 +123,6 @@ pub struct Address {
   pub meta: AddressMeta,
   pub spend: EdwardsPoint,
   pub view: EdwardsPoint,
-}
-
-impl ViewPair {
-  pub fn address(&self, network: Network, kind: AddressType) -> Address {
-    Address {
-      meta: AddressMeta { network, kind },
-      spend: self.spend,
-      view: &self.view * &ED25519_BASEPOINT_TABLE,
-    }
-  }
 }
 
 impl ToString for Address {

@@ -8,9 +8,7 @@ use crate::{
   Commitment,
   serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point},
   transaction::{Timelock, Transaction},
-  wallet::{
-    ViewPair, PaymentId, Extra, uniqueness, shared_key, amount_decryption, commitment_mask,
-  },
+  wallet::{PaymentId, Extra, Scanner, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -19,8 +17,12 @@ pub struct SpendableOutput {
   pub o: u8,
 
   pub key: EdwardsPoint,
+  // Absolute difference between the spend key and the key in this output, inclusive of any
+  // subaddress offset
   pub key_offset: Scalar,
   pub commitment: Commitment,
+
+  // Metadata to know how to process this output
 
   // Does not have to be an Option since the 0 subaddress is the main address
   pub subaddress: (u32, u32),
@@ -92,24 +94,24 @@ impl SpendableOutput {
   }
 }
 
-impl Transaction {
-  pub fn scan(&self, view: &ViewPair, guaranteed: bool) -> Timelocked {
-    let extra = Extra::deserialize(&mut Cursor::new(&self.prefix.extra));
+impl Scanner {
+  pub fn scan(&self, tx: &Transaction) -> Timelocked {
+    let extra = Extra::deserialize(&mut Cursor::new(&tx.prefix.extra));
     let keys;
     let extra = if let Ok(extra) = extra {
       keys = extra.keys();
       extra
     } else {
-      return Timelocked(self.prefix.timelock, vec![]);
+      return Timelocked(tx.prefix.timelock, vec![]);
     };
     let payment_id = extra.payment_id();
 
     let mut res = vec![];
-    for (o, output) in self.prefix.outputs.iter().enumerate() {
+    for (o, output) in tx.prefix.outputs.iter().enumerate() {
       for key in &keys {
         let (view_tag, key_offset, payment_id_xor) = shared_key(
-          Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
-          &view.view,
+          if self.guaranteed { Some(uniqueness(&tx.prefix.inputs)) } else { None },
+          &self.pair.view,
           key,
           o,
         );
@@ -128,7 +130,10 @@ impl Transaction {
         }
 
         // P - shared == spend
-        if (output.key - (&key_offset * &ED25519_BASEPOINT_TABLE)) != view.spend {
+        let subaddress = self
+          .subaddresses
+          .get(&(output.key - (&key_offset * &ED25519_BASEPOINT_TABLE)).compress());
+        if subaddress.is_none() {
           continue;
         }
 
@@ -140,7 +145,7 @@ impl Transaction {
           commitment.amount = output.amount;
         // Regular transaction
         } else {
-          let amount = match self.rct_signatures.base.ecdh_info.get(o) {
+          let amount = match tx.rct_signatures.base.ecdh_info.get(o) {
             Some(amount) => amount_decryption(*amount, key_offset),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
@@ -151,18 +156,18 @@ impl Transaction {
           commitment = Commitment::new(commitment_mask(key_offset), amount);
           // If this is a malicious commitment, move to the next output
           // Any other R value will calculate to a different spend key and are therefore ignorable
-          if Some(&commitment.calculate()) != self.rct_signatures.base.commitments.get(o) {
+          if Some(&commitment.calculate()) != tx.rct_signatures.base.commitments.get(o) {
             break;
           }
         }
 
         if commitment.amount != 0 {
           res.push(SpendableOutput {
-            tx: self.hash(),
+            tx: tx.hash(),
             o: o.try_into().unwrap(),
 
             key: output.key,
-            key_offset,
+            key_offset: key_offset + self.pair.subaddress(*subaddress.unwrap()),
             commitment,
 
             subaddress: (0, 0),
@@ -175,6 +180,6 @@ impl Transaction {
       }
     }
 
-    Timelocked(self.prefix.timelock, res)
+    Timelocked(tx.prefix.timelock, res)
   }
 }

@@ -1,6 +1,12 @@
+use std::collections::HashMap;
+
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
+use curve25519_dalek::{
+  constants::ED25519_BASEPOINT_TABLE,
+  scalar::Scalar,
+  edwards::{EdwardsPoint, CompressedEdwardsY},
+};
 
 use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
 
@@ -8,6 +14,7 @@ mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
 pub mod address;
+use address::{Network, AddressType, AddressMeta, Address};
 
 mod scan;
 pub use scan::SpendableOutput;
@@ -87,6 +94,101 @@ pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
 
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct ViewPair {
-  pub spend: EdwardsPoint,
-  pub view: Scalar,
+  spend: EdwardsPoint,
+  view: Scalar,
+}
+
+impl ViewPair {
+  pub fn new(spend: EdwardsPoint, view: Scalar) -> ViewPair {
+    ViewPair { spend, view }
+  }
+
+  pub(crate) fn subaddress(&self, index: (u32, u32)) -> Scalar {
+    if index == (0, 0) {
+      return Scalar::zero();
+    }
+
+    hash_to_scalar(
+      &[
+        b"SubAddr\0".as_ref(),
+        &self.view.to_bytes(),
+        &index.0.to_le_bytes(),
+        &index.1.to_le_bytes(),
+      ]
+      .concat(),
+    )
+  }
+}
+
+#[derive(Clone)]
+pub struct Scanner {
+  pair: ViewPair,
+  network: Network,
+  guaranteed: bool,
+  pub(crate) subaddresses: HashMap<CompressedEdwardsY, (u32, u32)>,
+}
+
+impl Zeroize for Scanner {
+  fn zeroize(&mut self) {
+    self.pair.zeroize();
+    self.network.zeroize();
+    self.guaranteed.zeroize();
+    for (mut key, mut value) in self.subaddresses.drain() {
+      key.zeroize();
+      value.zeroize();
+    }
+  }
+}
+
+impl Drop for Scanner {
+  fn drop(&mut self) {
+    self.zeroize();
+  }
+}
+
+impl ZeroizeOnDrop for Scanner {}
+
+impl Scanner {
+  pub fn from_view(pair: ViewPair, network: Network, guaranteed: bool) -> Scanner {
+    let mut subaddresses = HashMap::new();
+    subaddresses.insert(pair.spend.compress(), (0, 0));
+    Scanner { pair, network, guaranteed, subaddresses }
+  }
+
+  pub fn address(&self) -> Address {
+    Address::new(
+      AddressMeta {
+        network: self.network,
+        kind: if self.guaranteed {
+          AddressType::Featured(false, None, true)
+        } else {
+          AddressType::Standard
+        },
+      },
+      self.pair.spend,
+      &self.pair.view * &ED25519_BASEPOINT_TABLE,
+    )
+  }
+
+  pub fn subaddress(&mut self, index: (u32, u32)) -> Address {
+    if index == (0, 0) {
+      return self.address();
+    }
+
+    let spend = self.pair.spend + (&self.pair.subaddress(index) * &ED25519_BASEPOINT_TABLE);
+    self.subaddresses.insert(spend.compress(), index);
+
+    Address::new(
+      AddressMeta {
+        network: self.network,
+        kind: if self.guaranteed {
+          AddressType::Featured(true, None, true)
+        } else {
+          AddressType::Subaddress
+        },
+      },
+      spend,
+      self.pair.view * spend,
+    )
+  }
 }
