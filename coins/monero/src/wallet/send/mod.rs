@@ -47,35 +47,39 @@ impl SendOutput {
   fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     unique: [u8; 32],
-    output: (Address, u64),
-    o: usize,
-  ) -> SendOutput {
+    output: (usize, (Address, u64)),
+  ) -> (SendOutput, Option<[u8; 8]>) {
+    let o = output.0;
+    let output = output.1;
+
     let r = random_scalar(rng);
-    let (view_tag, shared_key) =
+    let (view_tag, shared_key, payment_id_xor) =
       shared_key(Some(unique).filter(|_| output.0.meta.kind.guaranteed()), &r, &output.0.view, o);
 
-    if output.0.meta.kind.payment_id().is_some() {
-      unimplemented!("integrated addresses aren't currently supported");
-    }
-
-    SendOutput {
-      R: if !output.0.meta.kind.subaddress() {
-        &r * &ED25519_BASEPOINT_TABLE
-      } else {
-        r * output.0.spend
+    (
+      SendOutput {
+        R: if !output.0.meta.kind.subaddress() {
+          &r * &ED25519_BASEPOINT_TABLE
+        } else {
+          r * output.0.spend
+        },
+        view_tag,
+        dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
+        commitment: Commitment::new(commitment_mask(shared_key), output.1),
+        amount: amount_encryption(output.1, shared_key),
       },
-      view_tag,
-      dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
-      commitment: Commitment::new(commitment_mask(shared_key), output.1),
-      amount: amount_encryption(output.1, shared_key),
-    }
+      output
+        .0
+        .payment_id()
+        .map(|id| (u64::from_le_bytes(id) ^ u64::from_le_bytes(payment_id_xor)).to_le_bytes()),
+    )
   }
 }
 
 #[derive(Clone, Error, Debug)]
 pub enum TransactionError {
-  #[error("invalid address")]
-  InvalidAddress,
+  #[error("multiple addresses with payment IDs")]
+  MultiplePaymentIds,
   #[error("no inputs")]
   NoInputs,
   #[error("no outputs")]
@@ -178,21 +182,23 @@ impl SignableTransaction {
     change_address: Option<Address>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
-    // Make sure all addresses are valid
-    let test = |addr: Address| {
-      if addr.meta.kind.payment_id().is_some() {
-        // TODO
-        Err(TransactionError::InvalidAddress)
-      } else {
-        Ok(())
+    // Make sure there's only one payment ID
+    {
+      let mut payment_ids = 0;
+      let mut count = |addr: Address| {
+        if addr.payment_id().is_some() {
+          payment_ids += 1
+        }
+      };
+      for payment in &payments {
+        count(payment.0);
       }
-    };
-
-    for payment in &payments {
-      test(payment.0)?;
-    }
-    if let Some(change) = change_address {
-      test(change)?;
+      if let Some(change) = change_address {
+        count(change);
+      }
+      if payment_ids > 1 {
+        Err(TransactionError::MultiplePaymentIds)?;
+      }
     }
 
     if inputs.is_empty() {
@@ -258,12 +264,23 @@ impl SignableTransaction {
     self.payments.shuffle(rng);
 
     // Actually create the outputs
-    let outputs = self
-      .payments
-      .drain(..)
-      .enumerate()
-      .map(|(o, output)| SendOutput::new(rng, uniqueness, output, o))
-      .collect::<Vec<_>>();
+    let mut outputs = Vec::with_capacity(self.payments.len());
+    let mut id = None;
+    for payment in self.payments.drain(..).enumerate() {
+      let (output, payment_id) = SendOutput::new(rng, uniqueness, payment);
+      outputs.push(output);
+      id = id.or(payment_id);
+    }
+
+    // Include a random payment ID if we don't actually have one
+    // It prevents transactions from leaking if they're sending to integrated addresses or not
+    let id = if let Some(id) = id {
+      id
+    } else {
+      let mut id = [0; 8];
+      rng.fill_bytes(&mut id);
+      id
+    };
 
     let commitments = outputs.iter().map(|output| output.commitment.clone()).collect::<Vec<_>>();
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
@@ -276,8 +293,6 @@ impl SignableTransaction {
       let mut extra = Extra::new(outputs.iter().map(|output| output.R).collect());
 
       // Additionally include a random payment ID
-      let mut id = [0; 8];
-      rng.fill_bytes(&mut id);
       extra.push(ExtraField::PaymentId(PaymentId::Encrypted(id)));
 
       let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len()));

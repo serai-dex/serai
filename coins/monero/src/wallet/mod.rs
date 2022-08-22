@@ -40,20 +40,24 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
   hash(&u)
 }
 
-// Hs("view_tag" || 8Ra || o) and Hs(8Ra || o) with uniqueness inclusion as an option
+// Hs("view_tag" || 8Ra || o), Hs(8Ra || o), and H(8Ra || 0x8d) with uniqueness inclusion in the
+// Scalar as an option
 #[allow(non_snake_case)]
 pub(crate) fn shared_key(
   uniqueness: Option<[u8; 32]>,
   s: &Scalar,
   P: &EdwardsPoint,
   o: usize,
-) -> (u8, Scalar) {
+) -> (u8, Scalar, [u8; 8]) {
   // 8Ra
   let mut output_derivation = (s * P).mul_by_cofactor().compress().to_bytes().to_vec();
   // || o
   write_varint(&o.try_into().unwrap(), &mut output_derivation).unwrap();
 
   let view_tag = hash(&[b"view_tag".as_ref(), &output_derivation].concat())[0];
+  let mut payment_id_xor = [0; 8];
+  payment_id_xor
+    .copy_from_slice(&hash(&[output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
 
   // uniqueness ||
   let shared_key = if let Some(uniqueness) = uniqueness {
@@ -62,13 +66,13 @@ pub(crate) fn shared_key(
     output_derivation
   };
 
-  (view_tag, hash_to_scalar(&shared_key))
+  (view_tag, hash_to_scalar(&shared_key), payment_id_xor)
 }
 
 pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
   let mut amount_mask = b"amount".to_vec();
   amount_mask.extend(key.to_bytes());
-  (amount ^ u64::from_le_bytes(hash(&amount_mask)[0 .. 8].try_into().unwrap())).to_le_bytes()
+  (amount ^ u64::from_le_bytes(hash(&amount_mask)[.. 8].try_into().unwrap())).to_le_bytes()
 }
 
 fn amount_decryption(amount: [u8; 8], key: Scalar) -> u64 {

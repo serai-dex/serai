@@ -81,7 +81,7 @@ impl Transaction {
     let mut res = vec![];
     for (o, output) in self.prefix.outputs.iter().enumerate() {
       for key in &keys {
-        let (view_tag, key_offset) = shared_key(
+        let (view_tag, key_offset, _) = shared_key(
           Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
           &view.view,
           key,
