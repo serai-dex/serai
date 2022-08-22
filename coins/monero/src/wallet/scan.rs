@@ -94,6 +94,14 @@ pub struct ReceivedOutput {
 }
 
 impl ReceivedOutput {
+  pub fn key(&self) -> EdwardsPoint {
+    self.data.key
+  }
+
+  pub fn key_offset(&self) -> Scalar {
+    self.data.key_offset
+  }
+
   pub fn commitment(&self) -> Commitment {
     self.data.commitment.clone()
   }
@@ -131,6 +139,14 @@ impl SpendableOutput {
     let mut output = SpendableOutput { output, global_index: 0 };
     output.refresh_global_index(rpc).await?;
     Ok(output)
+  }
+
+  pub fn key(&self) -> EdwardsPoint {
+    self.output.key()
+  }
+
+  pub fn key_offset(&self) -> Scalar {
+    self.output.key_offset()
   }
 
   pub fn commitment(&self) -> Commitment {
@@ -182,7 +198,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
 }
 
 impl Scanner {
-  pub fn scan_stateless(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
+  pub fn scan_transaction(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
     let extra = Extra::deserialize(&mut Cursor::new(&tx.prefix.extra));
     let keys;
     let extra = if let Ok(extra) = extra {
@@ -204,7 +220,7 @@ impl Scanner {
       }
 
       for key in &keys {
-        let (view_tag, key_offset, payment_id_xor) = shared_key(
+        let (view_tag, shared_key, payment_id_xor) = shared_key(
           if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix.inputs)) } else { None },
           &self.pair.view,
           key,
@@ -227,11 +243,17 @@ impl Scanner {
         // P - shared == spend
         let subaddress = self
           .subaddresses
-          .get(&(output.key - (&key_offset * &ED25519_BASEPOINT_TABLE)).compress());
+          .get(&(output.key - (&shared_key * &ED25519_BASEPOINT_TABLE)).compress());
         if subaddress.is_none() {
           continue;
         }
+        // If it has torsion, it'll substract the non-torsioned shared key to a torsioned key
+        // We will not have a torsioned key in our HashMap of keys, so we wouldn't identify it as
+        // ours
+        // If we did, it'd enable bypassing the included burning bug protection however
+        debug_assert!(output.key.is_torsion_free());
 
+        let key_offset = shared_key + self.pair.subaddress(*subaddress.unwrap());
         // Since we've found an output to us, get its amount
         let mut commitment = Commitment::zero();
 
@@ -241,14 +263,14 @@ impl Scanner {
         // Regular transaction
         } else {
           let amount = match tx.rct_signatures.base.ecdh_info.get(o) {
-            Some(amount) => amount_decryption(*amount, key_offset),
+            Some(amount) => amount_decryption(*amount, shared_key),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
             None => break,
           };
 
           // Rebuild the commitment to verify it
-          commitment = Commitment::new(commitment_mask(key_offset), amount);
+          commitment = Commitment::new(commitment_mask(shared_key), amount);
           // If this is a malicious commitment, move to the next output
           // Any other R value will calculate to a different spend key and are therefore ignorable
           if Some(&commitment.calculate()) != tx.rct_signatures.base.commitments.get(o) {
@@ -260,11 +282,7 @@ impl Scanner {
           res.push(ReceivedOutput {
             absolute: AbsoluteId { tx: tx.hash(), o: o.try_into().unwrap() },
 
-            data: OutputData {
-              key: output.key,
-              key_offset: key_offset + self.pair.subaddress(*subaddress.unwrap()),
-              commitment,
-            },
+            data: OutputData { key: output.key, key_offset, commitment },
 
             metadata: Metadata { subaddress: (0, 0), payment_id },
           });
@@ -311,7 +329,7 @@ impl Scanner {
 
     let mut res = vec![];
     for tx in txs {
-      if let Some(timelock) = map(self.scan_stateless(&tx), index) {
+      if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }
       index += u64::try_from(tx.prefix.outputs.len()).unwrap();

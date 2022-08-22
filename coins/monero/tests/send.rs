@@ -98,7 +98,7 @@ async fn send_core(test: usize, multisig: bool) {
 
       // Grab the largest output available
       let output = {
-        let mut outputs = scanner.scan_stateless(tx.as_ref().unwrap()).ignore_timelock();
+        let mut outputs = scanner.scan_transaction(tx.as_ref().unwrap()).ignore_timelock();
         outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount).reverse());
         outputs.swap_remove(0)
       };

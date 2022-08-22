@@ -141,7 +141,7 @@ impl Decoys {
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in inputs {
       real.push(input.global_index);
-      outputs.push((real[real.len() - 1], [input.output.data.key, input.commitment().calculate()]));
+      outputs.push((real[real.len() - 1], [input.key(), input.commitment().calculate()]));
     }
 
     let distribution_len = {

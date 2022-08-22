@@ -129,8 +129,8 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
-      spend + input.output.data.key_offset,
-      generate_key_image(spend + input.output.data.key_offset),
+      spend + input.key_offset(),
+      generate_key_image(spend + input.key_offset()),
       ClsagInput::new(input.commitment().clone(), decoys[i].clone())
         .map_err(TransactionError::ClsagError)?,
     ));
@@ -345,8 +345,8 @@ impl SignableTransaction {
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
-      let mut offset = spend + input.output.data.key_offset;
-      if (&offset * &ED25519_BASEPOINT_TABLE) != input.output.data.key {
+      let mut offset = spend + input.key_offset();
+      if (&offset * &ED25519_BASEPOINT_TABLE) != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
       }
 

@@ -165,7 +165,7 @@ impl Rpc {
       )
       .await?;
 
-    if txs.missed_tx.len() != 0 {
+    if !txs.missed_tx.is_empty() {
       Err(RpcError::TransactionsNotFound(
         txs.missed_tx.iter().map(|hash| hex::decode(&hash).unwrap().try_into().unwrap()).collect(),
       ))?;
