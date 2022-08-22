@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -124,18 +124,24 @@ impl ViewPair {
 pub struct Scanner {
   pair: ViewPair,
   network: Network,
-  guaranteed: bool,
   pub(crate) subaddresses: HashMap<CompressedEdwardsY, (u32, u32)>,
+  pub(crate) burning_bug: Option<HashSet<CompressedEdwardsY>>,
 }
 
 impl Zeroize for Scanner {
   fn zeroize(&mut self) {
     self.pair.zeroize();
     self.network.zeroize();
-    self.guaranteed.zeroize();
+
+    // These may not be effective, unfortunately
     for (mut key, mut value) in self.subaddresses.drain() {
       key.zeroize();
       value.zeroize();
+    }
+    if let Some(ref mut burning_bug) = self.burning_bug.take() {
+      for mut output in burning_bug.drain() {
+        output.zeroize();
+      }
     }
   }
 }
@@ -149,17 +155,23 @@ impl Drop for Scanner {
 impl ZeroizeOnDrop for Scanner {}
 
 impl Scanner {
-  pub fn from_view(pair: ViewPair, network: Network, guaranteed: bool) -> Scanner {
+  // For burning bug immune addresses (Featured Address w/ the Guaranteed feature), pass None
+  // For traditional Monero address, provide a HashSet of all historically scanned output keys
+  pub fn from_view(
+    pair: ViewPair,
+    network: Network,
+    burning_bug: Option<HashSet<CompressedEdwardsY>>,
+  ) -> Scanner {
     let mut subaddresses = HashMap::new();
     subaddresses.insert(pair.spend.compress(), (0, 0));
-    Scanner { pair, network, guaranteed, subaddresses }
+    Scanner { pair, network, subaddresses, burning_bug }
   }
 
   pub fn address(&self) -> Address {
     Address::new(
       AddressMeta {
         network: self.network,
-        kind: if self.guaranteed {
+        kind: if self.burning_bug.is_none() {
           AddressType::Featured(false, None, true)
         } else {
           AddressType::Standard
@@ -181,7 +193,7 @@ impl Scanner {
     Address::new(
       AddressMeta {
         network: self.network,
-        kind: if self.guaranteed {
+        kind: if self.burning_bug.is_none() {
           AddressType::Featured(true, None, true)
         } else {
           AddressType::Subaddress

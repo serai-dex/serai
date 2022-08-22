@@ -72,7 +72,7 @@ impl Monero {
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
-    Scanner::from_view(ViewPair::new(spend.0, self.view), Network::Mainnet, true)
+    Scanner::from_view(ViewPair::new(spend.0, self.view), Network::Mainnet, None)
   }
 
   #[cfg(test)]
@@ -81,7 +81,7 @@ impl Monero {
     Scanner::from_view(
       ViewPair::new(*dfg::EdwardsPoint::generator(), Scalar::one()),
       Network::Mainnet,
-      false,
+      Some(std::collections::HashSet::new()),
     )
   }
 
@@ -129,7 +129,7 @@ impl Coin for Monero {
   }
 
   async fn get_outputs(&self, block: &Self::Block, key: dfg::EdwardsPoint) -> Vec<Self::Output> {
-    let scanner = self.scanner(key);
+    let mut scanner = self.scanner(key);
     block.iter().flat_map(|tx| scanner.scan(tx).not_locked()).map(Output::from).collect()
   }
 

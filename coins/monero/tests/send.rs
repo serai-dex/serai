@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{sync::Mutex, collections::HashSet};
 #[cfg(feature = "multisig")]
 use std::collections::HashMap;
 
@@ -75,7 +75,7 @@ async fn send_core(test: usize, multisig: bool) {
   }
 
   let view_pair = ViewPair::new(spend_pub, view);
-  let scanner = Scanner::from_view(view_pair, Network::Mainnet, false);
+  let mut scanner = Scanner::from_view(view_pair, Network::Mainnet, Some(HashSet::new()));
   let addr = scanner.address();
 
   let fee = rpc.get_fee().await.unwrap();

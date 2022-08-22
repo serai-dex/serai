@@ -95,7 +95,7 @@ impl SpendableOutput {
 }
 
 impl Scanner {
-  pub fn scan(&self, tx: &Transaction) -> Timelocked {
+  pub fn scan(&mut self, tx: &Transaction) -> Timelocked {
     let extra = Extra::deserialize(&mut Cursor::new(&tx.prefix.extra));
     let keys;
     let extra = if let Ok(extra) = extra {
@@ -108,9 +108,17 @@ impl Scanner {
 
     let mut res = vec![];
     for (o, output) in tx.prefix.outputs.iter().enumerate() {
+      // https://github.com/serai-dex/serai/issues/102
+      let output_key_compressed = output.key.compress();
+      if let Some(burning_bug) = self.burning_bug.as_ref() {
+        if burning_bug.contains(&output_key_compressed) {
+          continue;
+        }
+      }
+
       for key in &keys {
         let (view_tag, key_offset, payment_id_xor) = shared_key(
-          if self.guaranteed { Some(uniqueness(&tx.prefix.inputs)) } else { None },
+          if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix.inputs)) } else { None },
           &self.pair.view,
           key,
           o,
@@ -173,6 +181,10 @@ impl Scanner {
             subaddress: (0, 0),
             payment_id,
           });
+
+          if let Some(burning_bug) = self.burning_bug.as_mut() {
+            burning_bug.insert(output_key_compressed);
+          }
         }
         // Break to prevent public keys from being included multiple times, triggering multiple
         // inclusions of the same output
