@@ -6,18 +6,31 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 
 use crate::{
   Commitment,
-  serialize::{read_byte, read_u64, read_bytes, read_scalar, read_point},
+  serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point},
   transaction::{Timelock, Transaction},
-  wallet::{ViewPair, Extra, uniqueness, shared_key, amount_decryption, commitment_mask},
+  wallet::{
+    ViewPair, PaymentId, Extra, uniqueness, shared_key, amount_decryption, commitment_mask,
+  },
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SpendableOutput {
   pub tx: [u8; 32],
   pub o: u8,
+
   pub key: EdwardsPoint,
   pub key_offset: Scalar,
   pub commitment: Commitment,
+
+  // Does not have to be an Option since the 0 subaddress is the main address
+  pub subaddress: (u32, u32),
+  // Can be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
+  // have this
+  // This will be gibberish if the payment ID wasn't intended for the recipient
+  // This will be [0xff; 8] if the transaction didn't have a payment ID
+  // 0xff was chosen as it'd be distinct from [0; 8], enabling atomically incrementing IDs (though
+  // they should be randomly generated)
+  pub payment_id: [u8; 8],
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -48,12 +61,19 @@ impl Timelocked {
 impl SpendableOutput {
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(32 + 1 + 32 + 32 + 40);
+
     res.extend(&self.tx);
     res.push(self.o);
+
     res.extend(self.key.compress().to_bytes());
     res.extend(self.key_offset.to_bytes());
     res.extend(self.commitment.mask.to_bytes());
     res.extend(self.commitment.amount.to_le_bytes());
+
+    res.extend(self.subaddress.0.to_le_bytes());
+    res.extend(self.subaddress.1.to_le_bytes());
+    res.extend(self.payment_id);
+
     res
   }
 
@@ -61,9 +81,13 @@ impl SpendableOutput {
     Ok(SpendableOutput {
       tx: read_bytes(r)?,
       o: read_byte(r)?,
+
       key: read_point(r)?,
       key_offset: read_scalar(r)?,
       commitment: Commitment::new(read_scalar(r)?, read_u64(r)?),
+
+      subaddress: (read_u32(r)?, read_u32(r)?),
+      payment_id: read_bytes(r)?,
     })
   }
 }
@@ -72,21 +96,30 @@ impl Transaction {
   pub fn scan(&self, view: &ViewPair, guaranteed: bool) -> Timelocked {
     let extra = Extra::deserialize(&mut Cursor::new(&self.prefix.extra));
     let keys;
-    if let Ok(extra) = extra {
+    let extra = if let Ok(extra) = extra {
       keys = extra.keys();
+      extra
     } else {
       return Timelocked(self.prefix.timelock, vec![]);
     };
+    let payment_id = extra.payment_id();
 
     let mut res = vec![];
     for (o, output) in self.prefix.outputs.iter().enumerate() {
       for key in &keys {
-        let (view_tag, key_offset, _) = shared_key(
+        let (view_tag, key_offset, payment_id_xor) = shared_key(
           Some(uniqueness(&self.prefix.inputs)).filter(|_| guaranteed),
           &view.view,
           key,
           o,
         );
+
+        let payment_id =
+          if let Some(PaymentId::Encrypted(id)) = payment_id.map(|id| id ^ payment_id_xor) {
+            id
+          } else {
+            [0xff; 8]
+          };
 
         if let Some(actual_view_tag) = output.view_tag {
           if actual_view_tag != view_tag {
@@ -127,9 +160,13 @@ impl Transaction {
           res.push(SpendableOutput {
             tx: self.hash(),
             o: o.try_into().unwrap(),
+
             key: output.key,
             key_offset,
             commitment,
+
+            subaddress: (0, 0),
+            payment_id,
           });
         }
         // Break to prevent public keys from being included multiple times, triggering multiple

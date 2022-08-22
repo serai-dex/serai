@@ -1,3 +1,4 @@
+use core::ops::BitXor;
 use std::io::{self, Read, Write};
 
 use zeroize::Zeroize;
@@ -13,6 +14,19 @@ use crate::serialize::{
 pub(crate) enum PaymentId {
   Unencrypted([u8; 32]),
   Encrypted([u8; 8]),
+}
+
+impl BitXor<[u8; 8]> for PaymentId {
+  type Output = PaymentId;
+
+  fn bitxor(self, bytes: [u8; 8]) -> PaymentId {
+    match self {
+      PaymentId::Unencrypted(_) => self,
+      PaymentId::Encrypted(id) => {
+        PaymentId::Encrypted((u64::from_le_bytes(id) ^ u64::from_le_bytes(bytes)).to_le_bytes())
+      }
+    }
+  }
 }
 
 impl PaymentId {
@@ -113,6 +127,15 @@ impl Extra {
       }
     }
     keys
+  }
+
+  pub(crate) fn payment_id(&self) -> Option<PaymentId> {
+    for field in &self.0 {
+      if let ExtraField::PaymentId(id) = field {
+        return Some(*id);
+      }
+    }
+    None
   }
 
   pub(crate) fn data(&self) -> Option<Vec<u8>> {

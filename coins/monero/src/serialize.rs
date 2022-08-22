@@ -71,6 +71,10 @@ pub(crate) fn read_u64<R: io::Read>(r: &mut R) -> io::Result<u64> {
   read_bytes(r).map(u64::from_le_bytes)
 }
 
+pub(crate) fn read_u32<R: io::Read>(r: &mut R) -> io::Result<u32> {
+  read_bytes(r).map(u32::from_le_bytes)
+}
+
 pub(crate) fn read_varint<R: io::Read>(r: &mut R) -> io::Result<u64> {
   let mut bits = 0;
   let mut res = 0;
