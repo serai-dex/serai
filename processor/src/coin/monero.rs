@@ -83,7 +83,7 @@ impl Monero {
 
   #[cfg(test)]
   fn empty_address(&self) -> Address {
-    self.empty_view_pair().address(Network::Mainnet, AddressType::Standard, false)
+    self.empty_view_pair().address(Network::Mainnet, AddressType::Standard)
   }
 }
 
@@ -113,7 +113,7 @@ impl Coin for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    self.view_pair(key).address(Network::Mainnet, AddressType::Standard, true)
+    self.view_pair(key).address(Network::Mainnet, AddressType::Featured(false, None, true))
   }
 
   async fn get_height(&self) -> Result<usize, CoinError> {
