@@ -1,0 +1,6 @@
+.vscode
+README.md
+docs
+Dockerfile
+.dockerignore
+Cargo.lock

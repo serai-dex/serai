@@ -1,0 +1,38 @@
+########################################################################################
+# Config
+########################################################################################
+version: "3.9"
+
+volumes:
+  serai:
+  serai-alice:
+  serai-bob:
+  serai-charlie:
+  serai-dave:
+  serai-eve:
+  serai-ferdie:
+
+########################################################################################
+# Services
+########################################################################################
+services:
+  profiles:
+    - _
+  _serai:
+    &serai_defaults
+  restart: unless-stopped
+  image: serai/serai-validator:latest
+  build:
+      context: .
+      target: serai-validator
+      args:
+        TAG: protonet-validator
+########################################################################################
+# Services
+########################################################################################
+serai:
+  &serai
+  <<: *serai_defaults
+hostname: serai
+profiles:
+  - custom
