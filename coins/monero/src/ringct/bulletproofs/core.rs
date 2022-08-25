@@ -37,7 +37,6 @@ pub(crate) fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
   multiexp_const(pairs) * *INV_EIGHT
 }
 
-// TODO: Have this take in other, multiplied by G, and do a single multiexp
 pub(crate) fn vector_exponent(
   generators: &Generators,
   a: &ScalarVector,
