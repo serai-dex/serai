@@ -7,19 +7,23 @@ wallet.
 
 ### Layout
 
-- `docs` - Documentation on the Serai protocol.
+- `docs`: Documentation on the Serai protocol.
 
-- `coins` - Various coin libraries intended for usage in Serai yet also by the
-  wider community. This means they will always support the functionality Serai
-  needs, yet won't disadvantage other use cases when possible.
-
-- `crypto` - A series of composable cryptographic libraries built around the
+- `crypto`: A series of composable cryptographic libraries built around the
   `ff`/`group` APIs achieving a variety of tasks. These range from generic
   infrastructure, to our IETF-compliant FROST implementation, to a DLEq proof as
   needed for Bitcoin-Monero atomic swaps.
 
-- `processor` - A generic chain processor to process data for Serai and process
+- `coins`: Various coin libraries intended for usage in Serai yet also by the
+  wider community. This means they will always support the functionality Serai
+  needs, yet won't disadvantage other use cases when possible.
+
+- `processor`: A generic chain processor to process data for Serai and process
   events from Serai, executing transactions as expected and needed.
+
+- `contracts`: Smart Contracts implementing Serai's functionality.
+
+- `substrate`: Substrate crates used to instantiate the Serai network.
 
 ### Links
 
