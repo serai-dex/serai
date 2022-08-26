@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.2.0"
+version = "0.2.1"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"
@@ -25,9 +25,9 @@ group = "0.12"
 elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true }
 p256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 k256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.1", optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
 
-transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"], version = "0.1" }
+transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"], version = "^0.1.3" }
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 

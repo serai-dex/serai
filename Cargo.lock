@@ -1528,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "dleq"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blake2",
  "dalek-ff-group",
@@ -4521,7 +4521,7 @@ dependencies = [
 
 [[package]]
 name = "modular-frost"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "dalek-ff-group",
  "dleq",
