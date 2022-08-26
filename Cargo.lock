@@ -1635,6 +1635,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed448-serai"
+version = "0.1.0"
+dependencies = [
+ "crypto-bigint",
+ "dalek-ff-group",
+ "digest 0.10.3",
+ "ff",
+ "generic-array 0.14.6",
+ "group",
+ "hex",
+ "hex-literal",
+ "lazy_static",
+ "rand_core 0.6.3",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "either"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

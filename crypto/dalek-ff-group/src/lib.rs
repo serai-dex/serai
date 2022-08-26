@@ -131,6 +131,8 @@ macro_rules! math {
   };
 }
 
+#[doc(hidden)]
+#[macro_export]
 macro_rules! math_neg {
   ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
     math!($Value, $Factor, $add, $sub, $mul);

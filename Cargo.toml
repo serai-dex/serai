@@ -3,6 +3,8 @@ members = [
   "crypto/transcript",
 
   "crypto/dalek-ff-group",
+  "crypto/ed448",
+
   "crypto/multiexp",
 
   "crypto/dleq",
