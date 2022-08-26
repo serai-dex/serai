@@ -3,6 +3,7 @@ name = "dleq"
 version = "0.1.1"
 description = "Implementation of single and cross-curve Discrete Log Equality proofs"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
