@@ -24,20 +24,20 @@ fn ristretto_vectors() {
       included: &[1, 3],
       nonces: &[
         [
-          "eb0dc12ae7b746d36e3f2de46ce3833a05b9d4af5434eeb8cafaefda76906d00",
-          "491e91aa9df514ef598d5e0c7c5cdd088fbde4965b96069d546c0f04f1822b03",
+          "1eaee906e0554a5e533415e971eefa909f3c614c7c75e27f381b0270a9afe308",
+          "16175fc2e7545baf7180e8f5b6e1e73c4f2769323cc76754bdd79fe93ab0bd0b",
         ],
         [
-          "abd12b8e6f255ee1e540eab029003a6e956567617720f61115f0941615892209",
-          "218e22625f93f262f025bd2d13c46ba722aa29fe585ceed66ff442d98fe4e509",
+          "48d78b8c2de1a515513f9d3fc464a19a72304fac522f17cc647706cb22c21403",
+          "5c0f10966b3f1386660a87de0fafd69decbe9ffae1a152a88b7d83bb4fb1c908",
         ],
       ],
       sig_shares: &[
-        "efae3a83437fa8cd96194aacc56a7eb841630c280da99e7764a81d1340323306",
-        "96ddc4582e45eabce46f07b9e9375f8b49d35d1510fd34ac02b1e79d6100a602",
+        "5ae13621ebeef844e39454eb3478a50c4531d25939e1065f44f5b04a8535090e",
+        "aa432dcf274a9441c205e76fe43497be99efe374f9853477bd5add2075f6970c",
       ],
-      sig: "7ec584cef9a383afb43883b73bcaa6313afe878bd5fe75a608311b866a76ec67".to_owned() +
-        "858cffdb71c4928a7b895165afa2dd438b366a3d1da6d323675905b1a132d908",
+      sig: "9c407badb8cacf10f306d94e31fb2a71d6a8398039802b4d80a1278472397206".to_owned() +
+        "17516e93f8d57a2ecffd43b83ab35db6de20b6ce32673bd601508e6bfa2ba10a",
     },
   );
 }
@@ -61,20 +61,20 @@ fn ed25519_vectors() {
       included: &[1, 3],
       nonces: &[
         [
-          "d9aad97e1a1127bb87702ce8d81d8c07c7cbca89e784868d8e3876ff6b459700",
-          "5063be2774520d08a5ccd7f1213fb1179a5fa292bf13bc91cb28e7bd4d4a690c",
+          "1c406170127e33142b8611bc02bf14d5909e49d5cb87150eff3ec9804212920c",
+          "5be4edde8b7acd79528721191626810c94fbc2bcc814b7a67d301fbd7fc16e07",
         ],
         [
-          "86961f3a429ac0c5696f49e6d796817ff653f83c07f34e9e1f4d4c8c515b7900",
-          "72225ec11c1315d9f1ea0e78b1160ed95800fadd0191d23fd2f2c90ac96cb307",
+          "795f87122f05b7efc4b1a52f435c3d28597411b1a6fec198ce9c818c5451c401",
+          "c9193aaef37bc074ea3286d0361c815f7201bf764cd9e7d8bb4eb5ecca840a09",
         ],
       ],
       sig_shares: &[
-        "caae171b83bff0c2c6f56a1276892918ba228146f6344b85d2ec6efeb6f16d0d",
-        "ea6fdbf61683cf5f1f742e1b91583f0f667f0369efd2e33399b96d5a3ff0300d",
+        "1f16a3989b4aa2cc3782a503331b9a21d7ba56c9c5455d06981b5425306c9d01",
+        "4c8f33c301c05871b434a686847d5818417a01e50a59e9e7fddaefde7d244207",
       ],
-      sig: "5da10008c13c04dd72328ba8e0f72b63cad43c3bf4b7eaada1c78225afbd977e".to_owned() +
-        "c74afdb47fdfadca0fcda18a28e8891220a284afe5072fb96ba6dc58f6e19e0a",
+      sig: "1aff2259ecb59cfcbb36ae77e02a9b134422abeae47cf7ff56c85fdf90932b18".to_owned() +
+        "6ba5d65b9d0afb3decb64b8ab798f239183558aed09e46ee95f64304ae90df08",
     },
   );
 }
