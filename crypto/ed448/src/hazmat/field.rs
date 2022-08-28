@@ -1,52 +1,19 @@
-use core::ops::{Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign};
-
-use lazy_static::lazy_static;
+use core::ops::Neg;
 
 use rand_core::RngCore;
 
-use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
+use subtle::{Choice, CtOption, ConstantTimeEq};
 
 use generic_array::{typenum::U57, GenericArray};
-use crypto_bigint::{Encoding, U512, U1024};
 
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
-use crate::{choice, constant_time, math_op, math, from_wrapper, from_uint};
-
-// 2**448 - 2**224 - 1
-lazy_static! {
-  pub static ref MODULUS: U512 = U512::from_be_hex(
-    "0000000000000000\
-fffffffffffffffffffffffffffffffffffffffffffffffffffffffe\
-ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-  )
-  .into();
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
-pub struct FieldElement(pub(crate) U512);
-
-constant_time!(FieldElement, U512);
-math!(
-  FieldElement,
-  FieldElement,
-  |x, y| U512::add_mod(&x, &y, &MODULUS),
-  |x, y| U512::sub_mod(&x, &y, &MODULUS),
-  |x, y| {
-    #[allow(non_snake_case)]
-    let WIDE_MODULUS: U1024 = U1024::from((U512::ZERO, *MODULUS));
-    let wide = U512::mul_wide(&x, &y);
-    U512::from_le_slice(
-      &U1024::from((wide.1, wide.0)).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 64],
-    )
-  }
-);
-from_uint!(FieldElement, U512);
+pub use crate::hazmat::backend::field::*;
 
 impl Neg for FieldElement {
-  type Output = Self;
-  fn neg(self) -> Self::Output {
-    Self(self.0.neg_mod(&MODULUS))
+  type Output = FieldElement;
+  fn neg(self) -> FieldElement {
+    *MODULUS - self
   }
 }
 
@@ -57,35 +24,16 @@ impl<'a> Neg for &'a FieldElement {
   }
 }
 
-impl FieldElement {
-  pub fn pow(&self, other: FieldElement) -> FieldElement {
-    let mut res = FieldElement(U512::ONE);
-    let mut m = *self;
-    for bit in other.to_le_bits() {
-      res *= FieldElement::conditional_select(&FieldElement(U512::ONE), &m, choice(bit));
-      m *= m;
-    }
-    res
-  }
-}
-
 impl Field for FieldElement {
-  fn random(mut rng: impl RngCore) -> Self {
-    let mut bytes = [0; 128];
-    rng.fill_bytes(&mut bytes);
-
-    #[allow(non_snake_case)]
-    let WIDE_MODULUS: U1024 = U1024::from((U512::ZERO, *MODULUS));
-    FieldElement(U512::from_le_slice(
-      &U1024::from_be_bytes(bytes).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 64],
-    ))
+  fn random(rng: impl RngCore) -> Self {
+    random(rng)
   }
 
   fn zero() -> Self {
-    Self(U512::ZERO)
+    *ZERO
   }
   fn one() -> Self {
-    Self(U512::ONE)
+    *ONE
   }
   fn square(&self) -> Self {
     *self * self
@@ -95,7 +43,7 @@ impl Field for FieldElement {
   }
 
   fn invert(&self) -> CtOption<Self> {
-    CtOption::new(self.pow(-FieldElement(U512::from(2u64))), !self.is_zero())
+    CtOption::new(self.pow(-*TWO), !self.is_zero())
   }
 
   fn sqrt(&self) -> CtOption<Self> {
@@ -103,7 +51,7 @@ impl Field for FieldElement {
   }
 
   fn is_zero(&self) -> Choice {
-    self.0.ct_eq(&U512::ZERO)
+    self.ct_eq(&ZERO)
   }
   fn cube(&self) -> Self {
     *self * self * self
@@ -118,13 +66,10 @@ impl PrimeField for FieldElement {
   const NUM_BITS: u32 = 448;
   const CAPACITY: u32 = 447;
   fn from_repr(bytes: Self::Repr) -> CtOption<Self> {
-    let res = Self(U512::from_le_slice(&[bytes.as_ref(), [0; 7].as_ref()].concat()));
-    CtOption::new(res, res.0.add_mod(&U512::ZERO, &MODULUS).ct_eq(&res.0))
+    from_repr(bytes)
   }
   fn to_repr(&self) -> Self::Repr {
-    let mut repr = Self::Repr::default();
-    repr.copy_from_slice(&self.0.to_le_bytes()[0 .. 57]);
-    repr
+    to_repr(self)
   }
 
   const S: u32 = 0;
@@ -149,9 +94,7 @@ impl PrimeFieldBits for FieldElement {
   }
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
-    let mut repr = [0; 56];
-    repr.copy_from_slice(&MODULUS.to_le_bytes()[.. 56]);
-    repr.into()
+    MODULUS.to_le_bits()
   }
 }
 

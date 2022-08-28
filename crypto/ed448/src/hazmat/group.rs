@@ -1,5 +1,5 @@
 use core::{
-  ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign, Div},
+  ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
   iter::Sum,
 };
 
@@ -9,20 +9,15 @@ use rand_core::RngCore;
 
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
 
-use crypto_bigint::{NonZero, U512};
-
 use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{Group, GroupEncoding, prime::PrimeGroup};
 
 use crate::{
   scalar::{Scalar, MODULUS as SCALAR_MODULUS},
-  field::{FieldElement, MODULUS as FIELD_MODULUS},
+  field::{FieldElement, Q_4},
 };
 
 lazy_static! {
-  static ref Q_4: FieldElement = FieldElement(
-    (FIELD_MODULUS.saturating_add(&U512::from(1u8))).div(NonZero::new(U512::from(4u8)).unwrap())
-  );
   static ref D: FieldElement = -FieldElement::from(39081u16);
 }
 
@@ -45,11 +40,11 @@ struct Point {
 }
 
 lazy_static! {
-  static ref G_Y: FieldElement = FieldElement(U512::from_be_hex(
-    "0000000000000000\
-693f46716eb6bc248876203756c9c7624bea73736ca3984087789c1e\
-05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14"
-  ));
+  static ref G_Y: FieldElement = FieldElement::from_repr(
+    hex_literal::hex!(
+      "14fa30f25b790898adc8d74e2c13bdfdc4397ce61cffd33ad7c2a0051e9c78874098a36c7373ea4b62c7c9563720768824bcb66e71463f6900"
+    ).into()
+  ).unwrap();
   static ref G: Point = Point { x: recover_x(*G_Y).unwrap(), y: *G_Y };
 }
 
@@ -224,7 +219,7 @@ impl MulAssign<&Scalar> for Point {
 
 impl Point {
   fn is_torsion_free(&self) -> Choice {
-    (*self * Scalar(*SCALAR_MODULUS)).is_identity()
+    (*self * *SCALAR_MODULUS).is_identity()
   }
 }
 
@@ -283,11 +278,11 @@ fn addition_multiplication_serialization() {
 #[test]
 fn torsion() {
   // Uses the originally suggested generator which had torsion
-  let old_y = FieldElement(U512::from_be_hex(
-    "0000000000000000\
-51fa169cb528fb724ca629dfaf793d4ffc91285fca77b228481c928c\
-75273b47f29a9a7cc5d5cf6744434d412e325f9425150432156c7912"
-  ));
+  let old_y = FieldElement::from_repr(
+    hex_literal::hex!(
+      "12796c1532041525945f322e414d434467cfd5c57c9a9af2473b27758c921c4828b277ca5f2891fc4f3d79afdf29a64c72fb28b59c16fa5100"
+    ).into()
+  ).unwrap();
   let old = Point { x: -recover_x(old_y).unwrap(), y: old_y };
   assert!(bool::from(!old.is_torsion_free()));
 }

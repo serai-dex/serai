@@ -1,7 +1,8 @@
 use subtle::Choice;
 
-pub(crate) use dalek_ff_group::{constant_time, math_op, math, from_wrapper, from_uint};
+pub(crate) use dalek_ff_group::{math_op, math};
 
+mod backend;
 pub mod scalar;
 pub mod field;
 pub mod group;

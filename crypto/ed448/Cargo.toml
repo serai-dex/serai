@@ -9,6 +9,7 @@ keywords = ["ed448", "decaf", "ff", "group"]
 edition = "2021"
 
 [dependencies]
+hex-literal = "0.3"
 lazy_static = "1"
 
 rand_core = "0.6"
@@ -21,12 +22,19 @@ ff = "0.12"
 group = "0.12"
 
 generic-array = "0.14"
-crypto-bigint = "0.4"
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
+num-traits = { version = "0.2", optional = true }
+num-bigint = { version = "0.4", features = ["rand"], optional = true }
+crypto-bigint = {version = "0.4", optional = true }
+
+dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 
 [dev-dependencies]
 hex = "0.4"
 
 [features]
 hazmat = []
+std = []
+constant-time = ["crypto-bigint"]
+variable-time = ["std", "num-traits", "num-bigint"]
+default = ["constant-time"]
