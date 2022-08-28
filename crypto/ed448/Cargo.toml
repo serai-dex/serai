@@ -25,5 +25,8 @@ crypto-bigint = "0.4"
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
 
+[dev-dependencies]
+hex = "0.4"
+
 [features]
 hazmat = []

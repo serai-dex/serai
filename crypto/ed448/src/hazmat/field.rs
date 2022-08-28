@@ -154,3 +154,14 @@ impl PrimeFieldBits for FieldElement {
     repr.into()
   }
 }
+
+#[test]
+fn repr() {
+  assert_eq!(FieldElement::from_repr(FieldElement::one().to_repr()).unwrap(), FieldElement::one());
+}
+
+#[test]
+fn one_two() {
+  assert_eq!(FieldElement::one() * FieldElement::one().double(), FieldElement::from(2u8));
+  assert_eq!(FieldElement::from_repr(FieldElement::from(2u8).to_repr()).unwrap(), FieldElement::from(2u8));
+}

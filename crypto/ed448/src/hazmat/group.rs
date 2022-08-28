@@ -243,3 +243,59 @@ impl GroupEncoding for Point {
 }
 
 impl PrimeGroup for Point {}
+
+#[test]
+fn identity() {
+  assert_eq!(Point::from_bytes(&Point::identity().to_bytes()).unwrap(), Point::identity());
+  assert_eq!(Point::identity() + Point::identity(), Point::identity());
+}
+
+#[test]
+fn addition_multiplication_serialization() {
+  let mut accum = Point::identity();
+  for x in 1 .. 10 {
+    accum += Point::generator();
+    let mul = Point::generator() * Scalar::from(x as u8);
+    assert_eq!(accum, mul);
+    assert_eq!(Point::from_bytes(&mul.to_bytes()).unwrap(), mul);
+  }
+}
+
+#[test]
+fn vector() {
+  use generic_array::GenericArray;
+
+  assert_eq!(
+    Point::generator().double(),
+    Point::from_bytes(
+      GenericArray::from_slice(
+        &hex::decode("\
+ed8693eacdfbeada6ba0cdd1beb2bcbb98302a3a8365650db8c4d88a\
+726de3b7d74d8835a0d76e03b0c2865020d659b38d04d74a63e905ae\
+80"
+        ).unwrap()
+      )
+    ).unwrap()
+  );
+
+  assert_eq!(
+    Point::generator() * Scalar::from_repr(
+      *GenericArray::from_slice(
+        &hex::decode("\
+6298e1eef3c379392caaed061ed8a31033c9e9e3420726f23b404158\
+a401cd9df24632adfe6b418dc942d8a091817dd8bd70e1c72ba52f3c\
+00"
+        ).unwrap()
+      )
+    ).unwrap(),
+    Point::from_bytes(
+      GenericArray::from_slice(
+        &hex::decode("\
+3832f82fda00ff5365b0376df705675b63d2a93c24c6e81d40801ba2\
+65632be10f443f95968fadb70d10786827f30dc001c8d0f9b7c1d1b0\
+00"
+        ).unwrap()
+      )
+    ).unwrap()
+  );
+}
