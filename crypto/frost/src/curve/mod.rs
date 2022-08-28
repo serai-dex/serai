@@ -24,6 +24,11 @@ pub use kp256::{Secp256k1, IetfSecp256k1Hram};
 #[cfg(feature = "p256")]
 pub use kp256::{P256, IetfP256Hram};
 
+#[cfg(feature = "unsafe-ed448")]
+mod ed448;
+#[cfg(feature = "unsafe-ed448")]
+pub use ed448::{Ed448, Ietf8032Ed448Hram, NonIetfEd448Hram};
+
 /// Set of errors for curve-related operations, namely encoding and decoding
 #[derive(Clone, Error, Debug)]
 pub enum CurveError {

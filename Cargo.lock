@@ -4535,7 +4535,9 @@ dependencies = [
  "p256",
  "rand_core 0.6.3",
  "sha2 0.10.2",
+ "sha3 0.10.2",
  "thiserror",
+ "unsafe-ed448",
  "zeroize",
 ]
 
