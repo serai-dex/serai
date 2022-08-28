@@ -11,12 +11,12 @@ pub struct Scalar(pub(crate) U512);
 
 // 2**446 - 13818066809895115352007386748515426880336692474882178609894547503885
 lazy_static! {
-  pub static ref MODULUS: Scalar = Scalar(
-    U512::from_be_hex(
-      "00000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffff7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3"
-    )
-  );
-
+  pub static ref MODULUS: Scalar = Scalar(U512::from_be_hex(concat!(
+    "00000000000000",
+    "00",
+    "3fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3",
+  )));
   static ref WIDE_MODULUS: U1024 = {
     let res = U1024::from((U512::ZERO, MODULUS.0));
     debug_assert_eq!(MODULUS.0.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 64]);

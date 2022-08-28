@@ -13,12 +13,12 @@ pub struct FieldElement(pub(crate) U512);
 
 // 2**448 - 2**224 - 1
 lazy_static! {
-  pub static ref MODULUS: FieldElement = FieldElement(
-    U512::from_be_hex(
-      "0000000000000000fffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-    )
-  );
-
+  pub static ref MODULUS: FieldElement = FieldElement(U512::from_be_hex(concat!(
+    "00000000000000",
+    "00",
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+    "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  )));
   static ref WIDE_MODULUS: U1024 = {
     let res = U1024::from((U512::ZERO, MODULUS.0));
     debug_assert_eq!(MODULUS.0.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 64]);

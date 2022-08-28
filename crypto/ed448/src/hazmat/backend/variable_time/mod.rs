@@ -26,7 +26,7 @@ macro_rules! field {
       CtOption::new(res.clone(), choice(res < *$MODULUS_INT))
     }
 
-    pub(crate) fn to_repr_inner(element: BigUint) ->  GenericArray<u8, U57> {
+    pub(crate) fn to_repr_inner(element: BigUint) -> GenericArray<u8, U57> {
       let mut raw = element.to_bytes_le();
       while raw.len() < 57 {
         raw.push(0);
@@ -45,16 +45,27 @@ macro_rules! field {
 
     impl ConditionallySelectable for $FieldName {
       fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-        if choice.into() { *b } else { *a }
+        if choice.into() {
+          *b
+        } else {
+          *a
+        }
       }
     }
 
     math!(
       $FieldName,
       $FieldName,
-      |x, y| to_repr_inner(&(from_repr_inner(x).unwrap() + from_repr_inner(y).unwrap()) % &*$MODULUS_INT),
-      |x, y| to_repr_inner(&((&from_repr_inner(x).unwrap() + &*$MODULUS_INT) - from_repr_inner(y).unwrap()) % &*$MODULUS_INT),
-      |x, y| to_repr_inner(&(from_repr_inner(x).unwrap() * from_repr_inner(y).unwrap()) % &*$MODULUS_INT)
+      |x, y| to_repr_inner(
+        &(from_repr_inner(x).unwrap() + from_repr_inner(y).unwrap()) % &*$MODULUS_INT
+      ),
+      |x, y| to_repr_inner(
+        &((&from_repr_inner(x).unwrap() + &*$MODULUS_INT) - from_repr_inner(y).unwrap()) %
+          &*$MODULUS_INT
+      ),
+      |x, y| to_repr_inner(
+        &(from_repr_inner(x).unwrap() * from_repr_inner(y).unwrap()) % &*$MODULUS_INT
+      )
     );
 
     impl From<u8> for $FieldName {
@@ -81,12 +92,17 @@ macro_rules! field {
     lazy_static! {
       pub(crate) static ref ZERO: $FieldName = $FieldName(to_repr_inner(BigUint::zero()));
       pub(crate) static ref ONE: $FieldName = $FieldName(to_repr_inner(BigUint::one()));
-      pub(crate) static ref TWO: $FieldName = $FieldName(to_repr_inner(BigUint::one() + BigUint::one()));
+      pub(crate) static ref TWO: $FieldName =
+        $FieldName(to_repr_inner(BigUint::one() + BigUint::one()));
     }
 
     impl $FieldName {
       pub fn pow(&self, other: $FieldName) -> $FieldName {
-        $FieldName(to_repr_inner(from_repr_inner(self.0).unwrap().modpow(&from_repr_inner(other.0).unwrap(), &$MODULUS_INT)))
+        $FieldName(to_repr_inner(
+          from_repr_inner(self.0)
+            .unwrap()
+            .modpow(&from_repr_inner(other.0).unwrap(), &$MODULUS_INT),
+        ))
       }
     }
 
@@ -106,5 +122,5 @@ macro_rules! field {
     pub(crate) fn to_repr(element: &$FieldName) -> GenericArray<u8, U57> {
       element.0
     }
-  }
+  };
 }

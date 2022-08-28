@@ -70,5 +70,5 @@ macro_rules! field {
       repr.copy_from_slice(&scalar.0.to_le_bytes()[.. 57]);
       repr
     }
-  }
+  };
 }

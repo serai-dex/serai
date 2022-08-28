@@ -7,9 +7,10 @@ use num_bigint::BigUint;
 use crate::field;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
-pub struct Scalar(pub(crate) GenericArray::<u8, U57>);
+pub struct Scalar(pub(crate) GenericArray<u8, U57>);
 
 // 2**446 - 13818066809895115352007386748515426880336692474882178609894547503885
+#[rustfmt::skip]
 lazy_static! {
   pub static ref MODULUS: Scalar = Scalar(
     hex_literal::hex!(

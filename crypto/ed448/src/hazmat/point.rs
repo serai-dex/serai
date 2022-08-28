@@ -42,12 +42,16 @@ pub struct Point {
   y: FieldElement,
 }
 
+#[rustfmt::skip]
 lazy_static! {
   static ref G_Y: FieldElement = FieldElement::from_repr(
     hex_literal::hex!(
       "14fa30f25b790898adc8d74e2c13bdfdc4397ce61cffd33ad7c2a0051e9c78874098a36c7373ea4b62c7c9563720768824bcb66e71463f6900"
-    ).into()
-  ).unwrap();
+    )
+    .into()
+  )
+  .unwrap();
+
   static ref G: Point = Point { x: recover_x(*G_Y).unwrap(), y: *G_Y };
 }
 
@@ -278,14 +282,16 @@ fn addition_multiplication_serialization() {
   }
 }
 
+#[rustfmt::skip]
 #[test]
 fn torsion() {
   // Uses the originally suggested generator which had torsion
   let old_y = FieldElement::from_repr(
     hex_literal::hex!(
       "12796c1532041525945f322e414d434467cfd5c57c9a9af2473b27758c921c4828b277ca5f2891fc4f3d79afdf29a64c72fb28b59c16fa5100"
-    ).into()
-  ).unwrap();
+    ).into(),
+  )
+  .unwrap();
   let old = Point { x: -recover_x(old_y).unwrap(), y: old_y };
   assert!(bool::from(!old.is_torsion_free()));
 }
@@ -296,35 +302,39 @@ fn vector() {
 
   assert_eq!(
     Point::generator().double(),
-    Point::from_bytes(
-      GenericArray::from_slice(
-        &hex::decode("\
+    Point::from_bytes(GenericArray::from_slice(
+      &hex::decode(
+        "\
 ed8693eacdfbeada6ba0cdd1beb2bcbb98302a3a8365650db8c4d88a\
 726de3b7d74d8835a0d76e03b0c2865020d659b38d04d74a63e905ae\
 80"
-        ).unwrap()
       )
-    ).unwrap()
+      .unwrap()
+    ))
+    .unwrap()
   );
 
   assert_eq!(
-    Point::generator() * Scalar::from_repr(
-      *GenericArray::from_slice(
-        &hex::decode("\
+    Point::generator() *
+      Scalar::from_repr(*GenericArray::from_slice(
+        &hex::decode(
+          "\
 6298e1eef3c379392caaed061ed8a31033c9e9e3420726f23b404158\
 a401cd9df24632adfe6b418dc942d8a091817dd8bd70e1c72ba52f3c\
 00"
-        ).unwrap()
-      )
-    ).unwrap(),
-    Point::from_bytes(
-      GenericArray::from_slice(
-        &hex::decode("\
+        )
+        .unwrap()
+      ))
+      .unwrap(),
+    Point::from_bytes(GenericArray::from_slice(
+      &hex::decode(
+        "\
 3832f82fda00ff5365b0376df705675b63d2a93c24c6e81d40801ba2\
 65632be10f443f95968fadb70d10786827f30dc001c8d0f9b7c1d1b0\
 00"
-        ).unwrap()
       )
-    ).unwrap()
+      .unwrap()
+    ))
+    .unwrap()
   );
 }
