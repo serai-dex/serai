@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 
 use rand_core::RngCore;
 
+use zeroize::Zeroize;
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
 
 use generic_array::{typenum::U57, GenericArray};
@@ -14,7 +15,7 @@ use ff::PrimeFieldBits;
 use dalek_ff_group::{constant_time, from_wrapper, from_uint};
 use crate::{choice, math_op, math};
 
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct FieldElement(pub(crate) U512);
 
 // 2**448 - 2**224 - 1

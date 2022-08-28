@@ -25,7 +25,7 @@ generic-array = "0.14"
 
 num-traits = { version = "0.2", optional = true }
 num-bigint = { version = "0.4", features = ["rand"], optional = true }
-crypto-bigint = {version = "0.4", optional = true }
+crypto-bigint = {version = "0.4", features = ["zeroize"], optional = true }
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 

@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 
 use rand_core::RngCore;
 
+use zeroize::Zeroize;
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
 
 use generic_array::{typenum::U57, GenericArray};
@@ -14,7 +15,7 @@ use ff::PrimeFieldBits;
 use dalek_ff_group::{constant_time, from_wrapper, from_uint};
 use crate::{choice, math_op, math};
 
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct Scalar(pub(crate) U512);
 
 // 2**446 - 13818066809895115352007386748515426880336692474882178609894547503885

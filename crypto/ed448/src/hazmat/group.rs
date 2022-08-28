@@ -7,6 +7,7 @@ use lazy_static::lazy_static;
 
 use rand_core::RngCore;
 
+use zeroize::Zeroize;
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
 
 use ff::{Field, PrimeField, PrimeFieldBits};
@@ -33,7 +34,7 @@ fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   })
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 struct Point {
   x: FieldElement,
   y: FieldElement,
