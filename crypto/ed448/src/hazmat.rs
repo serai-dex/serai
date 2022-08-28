@@ -1,6 +1,6 @@
 use subtle::Choice;
 
-pub(crate) use dalek_ff_group::{math_op, math};
+pub(crate) use dalek_ff_group::math;
 
 mod backend;
 pub mod scalar;

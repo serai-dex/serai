@@ -122,7 +122,7 @@ macro_rules! math_op {
 }
 
 #[doc(hidden)]
-#[macro_export]
+#[macro_export(local_inner_macros)]
 macro_rules! math {
   ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
     math_op!($Value, $Value, Add, add, AddAssign, add_assign, $add);
@@ -132,7 +132,7 @@ macro_rules! math {
 }
 
 #[doc(hidden)]
-#[macro_export]
+#[macro_export(local_inner_macros)]
 macro_rules! math_neg {
   ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
     math!($Value, $Factor, $add, $sub, $mul);
@@ -159,7 +159,7 @@ macro_rules! from_wrapper {
 }
 
 #[doc(hidden)]
-#[macro_export]
+#[macro_export(local_inner_macros)]
 macro_rules! from_uint {
   ($wrapper: ident, $inner: ident) => {
     from_wrapper!($wrapper, $inner, u8);
