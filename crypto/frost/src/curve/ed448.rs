@@ -57,6 +57,6 @@ pub struct NonIetfEd448Hram;
 impl Hram<Ed448> for NonIetfEd448Hram {
   #[allow(non_snake_case)]
   fn hram(R: &Point, A: &Point, m: &[u8]) -> Scalar {
-    Ietf8032Ed448Hram::hram(CONTEXT.as_ref(), R, A, m)
+    Ietf8032Ed448Hram::hram(&[CONTEXT.as_ref(), b"chal"].concat(), R, A, m)
   }
 }
