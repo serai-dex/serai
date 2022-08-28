@@ -21,7 +21,7 @@ lazy_static! {
   )));
   static ref WIDE_MODULUS: U1024 = {
     let res = U1024::from((U512::ZERO, MODULUS.0));
-    debug_assert_eq!(MODULUS.0.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 64]);
+    debug_assert_eq!(MODULUS.0.to_le_bytes()[..], res.to_le_bytes()[.. 64]);
     res
   };
 }
