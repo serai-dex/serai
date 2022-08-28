@@ -15,7 +15,6 @@ use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{Group, GroupEncoding, prime::PrimeGroup};
 
 use crate::{
-  choice,
   scalar::{Scalar, MODULUS as SCALAR_MODULUS},
   field::{FieldElement, MODULUS as FIELD_MODULUS},
 };
@@ -279,6 +278,18 @@ fn addition_multiplication_serialization() {
     assert_eq!(accum, mul);
     assert_eq!(Point::from_bytes(&mul.to_bytes()).unwrap(), mul);
   }
+}
+
+#[test]
+fn torsion() {
+  // Uses the originally suggested generator which had torsion
+  let old_y = FieldElement(U512::from_be_hex(
+    "0000000000000000\
+51fa169cb528fb724ca629dfaf793d4ffc91285fca77b228481c928c\
+75273b47f29a9a7cc5d5cf6744434d412e325f9425150432156c7912"
+  ));
+  let old = Point { x: -recover_x(old_y).unwrap(), y: old_y };
+  assert!(bool::from(!old.is_torsion_free()));
 }
 
 #[test]
