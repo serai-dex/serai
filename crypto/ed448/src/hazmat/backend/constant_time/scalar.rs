@@ -24,6 +24,16 @@ lazy_static! {
       "00000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffff7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3"
     )
   );
+
+  static ref WIDE_MODULUS: U1024 = {
+    let res = U1024::from((U512::ZERO, MODULUS.0));
+    debug_assert_eq!(MODULUS.0.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 64]);
+    res
+  };
+}
+
+fn reduce(x: U1024) -> U512 {
+  U512::from_le_slice(&x.reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 64])
 }
 
 constant_time!(Scalar, U512);
@@ -33,14 +43,8 @@ math!(
   |x, y| U512::add_mod(&x, &y, &MODULUS.0),
   |x, y| U512::sub_mod(&x, &y, &MODULUS.0),
   |x, y| {
-    #[allow(non_snake_case)]
-    let WIDE_MODULUS: U1024 = U1024::from((U512::ZERO, MODULUS.0));
-    debug_assert_eq!(MODULUS.0.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 64]);
-
     let wide = U512::mul_wide(&x, &y);
-    U512::from_le_slice(
-      &U1024::from((wide.1, wide.0)).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 64],
-    )
+    reduce(U1024::from((wide.1, wide.0)))
   }
 );
 from_uint!(Scalar, U512);
@@ -61,19 +65,16 @@ impl Scalar {
     }
     res
   }
+
+  pub fn wide_reduce(bytes: [u8; 114]) -> Scalar {
+    Scalar(reduce(U1024::from_le_slice(&[bytes.as_ref(), &[0; 14]].concat())))
+  }
 }
 
 pub(crate) fn random(mut rng: impl RngCore) -> Scalar {
   let mut bytes = [0; 128];
   rng.fill_bytes(&mut bytes);
-
-  #[allow(non_snake_case)]
-  let WIDE_MODULUS: U1024 = U1024::from((U512::ZERO, MODULUS.0));
-  debug_assert_eq!(MODULUS.0.to_le_bytes()[..], WIDE_MODULUS.to_le_bytes()[.. 64]);
-
-  Scalar(U512::from_le_slice(
-    &U1024::from_be_bytes(bytes).reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 64],
-  ))
+  Scalar(reduce(U1024::from_le_slice(bytes.as_ref())))
 }
 
 pub(crate) fn from_repr(bytes: GenericArray<u8, U57>) -> CtOption<Scalar> {

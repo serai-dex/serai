@@ -97,6 +97,10 @@ impl Scalar {
   pub fn pow(&self, other: Scalar) -> Scalar {
     Scalar(to_repr_inner(from_repr_inner(self.0).unwrap().modpow(&from_repr_inner(other.0).unwrap(), &MODULUS_INT)))
   }
+
+  pub fn wide_reduce(x: [u8; 114]) -> Scalar {
+    Scalar(to_repr_inner(&BigUint::from_bytes_le(x.as_ref()) % &*MODULUS_INT))
+  }
 }
 
 pub(crate) fn random(mut rng: impl RngCore) -> Scalar {
