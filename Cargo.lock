@@ -1645,7 +1645,6 @@ dependencies = [
  "generic-array 0.14.6",
  "group",
  "hex",
- "hex-literal",
  "lazy_static",
  "rand_core 0.6.3",
  "subtle",

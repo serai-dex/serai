@@ -35,8 +35,7 @@ fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
     x.conditional_negate(x.is_odd());
 
     let xsq = x.square();
-    let ysq = y.square();
-    CtOption::new(x, (xsq + ysq - FieldElement::one() - (*D * xsq * ysq)).is_zero())
+    CtOption::new(x, (xsq + ysq).ct_eq(&(FieldElement::one() + (*D * xsq * ysq))))
   })
 }
 
@@ -223,7 +222,7 @@ impl GroupEncoding for Point {
     // Parse y, recover x
     FieldElement::from_repr(bytes).and_then(|y| {
       recover_x(y).and_then(|mut x| {
-        x.conditional_negate(x.is_odd().ct_eq(&Choice::from(sign)));
+        x.conditional_negate(x.is_odd().ct_eq(&!Choice::from(sign)));
         let not_negative_zero = !(x.is_zero() & sign);
         let point = Point { x, y };
         CtOption::new(point, not_negative_zero & point.is_torsion_free())
@@ -238,7 +237,7 @@ impl GroupEncoding for Point {
   fn to_bytes(&self) -> Self::Repr {
     let mut bytes = self.y.to_repr();
     let mut_ref: &mut [u8] = bytes.as_mut();
-    mut_ref[56] |= self.x.is_odd().unwrap_u8();
+    mut_ref[56] |= self.x.is_odd().unwrap_u8() << 7;
     bytes
   }
 }
