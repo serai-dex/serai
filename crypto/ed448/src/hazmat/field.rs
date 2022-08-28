@@ -140,17 +140,17 @@ impl PrimeField for FieldElement {
 }
 
 impl PrimeFieldBits for FieldElement {
-  type ReprBits = [u8; 57];
+  type ReprBits = [u8; 56];
 
   fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
-    let mut repr = [0; 57];
-    repr.copy_from_slice(&self.to_repr());
+    let mut repr = [0; 56];
+    repr.copy_from_slice(&self.to_repr()[.. 56]);
     repr.into()
   }
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
-    let mut repr = [0; 57];
-    repr.copy_from_slice(&MODULUS.to_le_bytes());
+    let mut repr = [0; 56];
+    repr.copy_from_slice(&MODULUS.to_le_bytes()[.. 56]);
     repr.into()
   }
 }

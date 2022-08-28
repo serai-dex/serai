@@ -175,10 +175,30 @@ impl<'a> Sum<&'a Point> for Point {
 impl Mul<Scalar> for Point {
   type Output = Point;
   fn mul(self, other: Scalar) -> Point {
+    // Precompute the optimal amount that's a multiple of 2
+    let mut table = [Point::identity(); 16];
+    table[1] = self;
+    for i in 2 .. 16 {
+      table[i] = table[i - 1] + self;
+    }
+
     let mut res = Self::identity();
-    for bit in other.to_le_bits().iter().rev() {
-      res += res;
-      res += Self::conditional_select(&Self::identity(), &Self::generator(), choice(*bit));
+    let mut bits = 0;
+    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+      bits <<= 1;
+      let bit = *bit as u8;
+      assert_eq!(bit | 1, 1);
+      bits |= bit;
+
+      if ((i + 1) % 4) == 0 {
+        if i != 3 {
+          for _ in 0 .. 4 {
+            res += res;
+          }
+        }
+        res += table[usize::from(bits)];
+        bits = 0;
+      }
     }
     res
   }
