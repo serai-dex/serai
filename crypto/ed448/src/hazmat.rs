@@ -5,7 +5,7 @@ pub(crate) use dalek_ff_group::{math_op, math};
 mod backend;
 pub mod scalar;
 pub mod field;
-pub mod group;
+pub mod point;
 
 // Convert a boolean to a Choice in a *presumably* constant time manner
 pub(crate) fn choice(value: bool) -> Choice {
