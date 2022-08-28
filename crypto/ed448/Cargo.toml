@@ -1,11 +1,11 @@
 [package]
-name = "ed448-serai"
+name = "unsafe-ed448"
 version = "0.1.0"
-description = "Constant time unaudited implementation of ed448 in Rust"
+description = "Unaudited, effectively unusable, implementation of Ed448 in Rust"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = ["ed448", "decaf", "ff", "group"]
+keywords = ["ed448", "ff", "group"]
 edition = "2021"
 
 [dependencies]
