@@ -24,13 +24,15 @@ lazy_static! {
 
 fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   let ysq = y.square();
-  ((*D * ysq) - FieldElement::one()).invert().and_then(|inverted| {
+  #[allow(non_snake_case)]
+  let D_ysq = *D * ysq;
+  (D_ysq - FieldElement::one()).invert().and_then(|inverted| {
     let temp = (ysq - FieldElement::one()) * inverted;
     let mut x = temp.pow(*Q_4);
     x.conditional_negate(x.is_odd());
 
     let xsq = x.square();
-    CtOption::new(x, (xsq + ysq).ct_eq(&(FieldElement::one() + (*D * xsq * ysq))))
+    CtOption::new(x, (xsq + ysq).ct_eq(&(FieldElement::one() + (xsq * D_ysq))))
   })
 }
 
