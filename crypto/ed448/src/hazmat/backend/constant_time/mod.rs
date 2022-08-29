@@ -17,7 +17,7 @@ macro_rules! field {
     use ff::PrimeFieldBits;
 
     use dalek_ff_group::{constant_time, from_uint};
-    use crate::{choice, math};
+    use $crate::{choice, math};
 
     fn reduce(x: U1024) -> U512 {
       U512::from_le_slice(&x.reduce(&$WIDE_MODULUS).unwrap().to_le_bytes()[.. 64])

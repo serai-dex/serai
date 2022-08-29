@@ -16,7 +16,7 @@ macro_rules! field {
     use num_traits::identities::{Zero, One};
     use num_bigint::RandBigInt;
 
-    use crate::{choice, math};
+    use $crate::{choice, math};
 
     pub(crate) fn from_repr_inner(bytes: GenericArray<u8, U57>) -> CtOption<BigUint> {
       let res = BigUint::from_bytes_le(bytes.as_ref());

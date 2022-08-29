@@ -127,7 +127,7 @@ fn ed448_non_ietf() {
         "00" +
         "cbf7ef509f708697d1ddbc64289cfa27f4e36bf66ab34e04b84c2d31" +
         "c06c85ebbfc9c643c0b43f8486719ffadf86083a63704b39b7e32616" +
-        "00"
+        "00",
     },
   );
 }

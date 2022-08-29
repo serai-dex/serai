@@ -112,6 +112,7 @@ impl Neg for Point {
 
 impl Sub for Point {
   type Output = Point;
+  #[allow(clippy::suspicious_arithmetic_impl)]
   fn sub(self, other: Self) -> Self {
     self + other.neg()
   }
@@ -243,7 +244,7 @@ impl GroupEncoding for Point {
     // Parse y, recover x
     FieldElement::from_repr(bytes).and_then(|y| {
       recover_x(y).and_then(|mut x| {
-        x.conditional_negate(x.is_odd().ct_eq(&!Choice::from(sign)));
+        x.conditional_negate(x.is_odd().ct_eq(&!sign));
         let not_negative_zero = !(x.is_zero() & sign);
         let point = Point { x, y };
         CtOption::new(point, not_negative_zero & point.is_torsion_free())
