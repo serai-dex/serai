@@ -79,22 +79,34 @@ macro_rules! field {
 
     impl From<u8> for $FieldName {
       fn from(x: u8) -> $FieldName {
-        $FieldName(to_repr_inner(BigUint::from(x)))
+        let mut repr = GenericArray::default();
+        let slice: &mut [u8] = repr.as_mut();
+        slice[0] = x;
+        $FieldName(repr)
       }
     }
     impl From<u16> for $FieldName {
       fn from(x: u16) -> $FieldName {
-        $FieldName(to_repr_inner(BigUint::from(x)))
+        let mut repr = GenericArray::default();
+        let slice: &mut [u8] = repr.as_mut();
+        slice[.. 2].copy_from_slice(&x.to_le_bytes());
+        $FieldName(repr)
       }
     }
     impl From<u32> for $FieldName {
       fn from(x: u32) -> $FieldName {
-        $FieldName(to_repr_inner(BigUint::from(x)))
+        let mut repr = GenericArray::default();
+        let slice: &mut [u8] = repr.as_mut();
+        slice[.. 4].copy_from_slice(&x.to_le_bytes());
+        $FieldName(repr)
       }
     }
     impl From<u64> for $FieldName {
       fn from(x: u64) -> $FieldName {
-        $FieldName(to_repr_inner(BigUint::from(x)))
+        let mut repr = GenericArray::default();
+        let slice: &mut [u8] = repr.as_mut();
+        slice[.. 8].copy_from_slice(&x.to_le_bytes());
+        $FieldName(repr)
       }
     }
 
@@ -124,8 +136,10 @@ macro_rules! field {
     }
 
     pub(crate) fn from_repr(bytes: GenericArray<u8, U57>) -> CtOption<$FieldName> {
-      let opt = Option::from(from_repr_inner(bytes)).map(|x| $FieldName(to_repr_inner(x)));
-      CtOption::new(opt.unwrap_or(*ZERO), choice(opt.is_some()))
+      CtOption::new(
+        $FieldName(bytes),
+        from_repr_inner(bytes).is_some() & (!bytes.ct_eq(&MODULUS.0)),
+      )
     }
 
     pub(crate) fn to_repr(element: &$FieldName) -> GenericArray<u8, U57> {
