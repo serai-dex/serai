@@ -8,7 +8,7 @@ use crypto_bigint::{Encoding, U256, U512};
 
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
-use crate::{choice, constant_time, math_op, math, from_wrapper, from_uint};
+use crate::{choice, constant_time, math, from_uint};
 
 const FIELD_MODULUS: U256 =
   U256::from_be_hex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed");

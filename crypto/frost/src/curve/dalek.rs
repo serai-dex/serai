@@ -2,6 +2,7 @@ use zeroize::Zeroize;
 
 use sha2::{Digest, Sha512};
 
+use group::Group;
 use dalek_ff_group::Scalar;
 
 use crate::{curve::Curve, algorithm::Hram};
@@ -12,13 +13,11 @@ macro_rules! dalek_curve {
     $Hram:       ident,
     $Point:      ident,
 
-    $POINT: ident,
-
     $ID:      literal,
     $CONTEXT: literal,
     $chal: literal,
   ) => {
-    use dalek_ff_group::{$Point, $POINT};
+    use dalek_ff_group::$Point;
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
@@ -35,7 +34,7 @@ macro_rules! dalek_curve {
       const ID: &'static [u8] = $ID;
 
       fn generator() -> Self::G {
-        $POINT
+        $Point::generator()
       }
 
       fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
@@ -69,7 +68,6 @@ dalek_curve!(
   Ristretto,
   IetfRistrettoHram,
   RistrettoPoint,
-  RISTRETTO_BASEPOINT_POINT,
   b"ristretto",
   b"FROST-RISTRETTO255-SHA512-v8",
   b"chal",
@@ -80,7 +78,6 @@ dalek_curve!(
   Ed25519,
   IetfEd25519Hram,
   EdwardsPoint,
-  ED25519_BASEPOINT_POINT,
   b"edwards25519",
   b"FROST-ED25519-SHA512-v8",
   b"",

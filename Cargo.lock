@@ -4493,6 +4493,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
 
 [[package]]
+name = "minimal-ed448"
+version = "0.1.0"
+dependencies = [
+ "crypto-bigint",
+ "dalek-ff-group",
+ "digest 0.10.3",
+ "ff",
+ "generic-array 0.14.6",
+ "group",
+ "hex",
+ "hex-literal",
+ "lazy_static",
+ "rand_core 0.6.3",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4531,10 +4549,12 @@ dependencies = [
  "group",
  "hex",
  "k256",
+ "minimal-ed448",
  "multiexp",
  "p256",
  "rand_core 0.6.3",
  "sha2 0.10.2",
+ "sha3 0.10.2",
  "thiserror",
  "zeroize",
 ]
