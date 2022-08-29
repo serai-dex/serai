@@ -165,10 +165,16 @@ impl SubAssign<&Point> for Point {
 
 impl Group for Point {
   type Scalar = Scalar;
-  // Ideally, this would be cryptographically secure, yet that's not a bound on the trait
-  // k256 also does this
-  fn random(rng: impl RngCore) -> Self {
-    Self::generator() * Scalar::random(rng)
+  fn random(mut rng: impl RngCore) -> Self {
+    loop {
+      let mut bytes = FieldElement::random(&mut rng).to_repr();
+      let mut_ref: &mut [u8] = bytes.as_mut();
+      mut_ref[56] |= u8::try_from(rng.next_u32() % 2).unwrap() << 7;
+      let opt = Self::from_bytes(&bytes);
+      if opt.is_some().into() {
+        return opt.unwrap();
+      }
+    }
   }
   fn identity() -> Self {
     Point { x: FieldElement::zero(), y: FieldElement::one(), z: FieldElement::one() }
@@ -377,4 +383,9 @@ a401cd9df24632adfe6b418dc942d8a091817dd8bd70e1c72ba52f3c\
     ))
     .unwrap()
   );
+}
+
+#[test]
+fn random() {
+  Point::random(&mut rand_core::OsRng);
 }

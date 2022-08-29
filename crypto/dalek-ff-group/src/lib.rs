@@ -311,10 +311,15 @@ macro_rules! dalek_group {
 
     impl Group for $Point {
       type Scalar = Scalar;
-      // Ideally, this would be cryptographically secure, yet that's not a bound on the trait
-      // k256 also does this
-      fn random(rng: impl RngCore) -> Self {
-        &$BASEPOINT_TABLE * Scalar::random(rng)
+      fn random(mut rng: impl RngCore) -> Self {
+        loop {
+          let mut bytes = field::FieldElement::random(&mut rng).to_repr();
+          bytes[31] |= u8::try_from(rng.next_u32() % 2).unwrap() << 7;
+          let opt = Self::from_bytes(&bytes);
+          if opt.is_some().into() {
+            return opt.unwrap();
+          }
+        }
       }
       fn identity() -> Self {
         Self($DPoint::identity())
