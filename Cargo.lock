@@ -1369,7 +1369,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "crypto-bigint",
  "curve25519-dalek 3.2.0",
