@@ -1,7 +1,7 @@
 [package]
-name = "unsafe-ed448"
+name = "minimal-ed448"
 version = "0.1.0"
-description = "Unaudited, effectively unusable, implementation of Ed448 in Rust"
+description = "Unaudited, inefficient implementation of Ed448 in Rust"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]

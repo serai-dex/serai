@@ -3,7 +3,7 @@ use zeroize::Zeroize;
 use sha3::{digest::ExtendableOutput, Shake256};
 
 use group::{Group, GroupEncoding};
-use unsafe_ed448::{scalar::Scalar, point::Point};
+use minimal_ed448::{scalar::Scalar, point::Point};
 
 use crate::{curve::Curve, algorithm::Hram};
 

@@ -1,8 +1,9 @@
-# Unsafe Ed448
+# Minimal Ed448
 
-Barebones implementation of Ed448 bound to the ff/group API, rejecting torsion.
-This should not be used and was only done so another library under Serai could
-confirm its completion. Any usage of this library requires the `hazmat` feature.
+Inefficient, barebones implementation of Ed448 bound to the ff/group API,
+rejecting torsion to achieve a PrimeGroup definition. This likely should not be
+used and was only done so another library under Serai could confirm its
+completion. It is minimally tested, yet should be correct for what it has.
+Multiple functions remain unimplemented.
 
-constant time and no_std with unusable performance. variable time and std with
-barely usable (in a PoC environment) performance. Do not use this.
+constant time and no_std.

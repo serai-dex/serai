@@ -47,7 +47,6 @@ fn ed448_8032_vector() {
   ));
 }
 
-#[ignore]
 #[test]
 fn ed448_non_ietf() {
   test_with_vectors::<_, Ed448, NonIetfEd448Hram>(

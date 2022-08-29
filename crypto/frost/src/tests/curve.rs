@@ -19,6 +19,9 @@ fn keys_serialization<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   }
 }
 
+// Test successful multiexp, with enough pairs to trigger its variety of algorithms
+// Multiexp has its own tests, yet only against k256 and Ed25519 (which should be sufficient
+// as-is to prove multiexp), and this doesn't hurt
 pub fn test_multiexp<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let mut pairs = Vec::with_capacity(1000);
   let mut sum = C::G::identity();
@@ -35,10 +38,6 @@ pub fn test_multiexp<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 pub fn test_curve<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   // TODO: Test the Curve functions themselves
 
-  // Test successful multiexp, with enough pairs to trigger its variety of algorithms
-  // Multiexp has its own tests, yet only against k256 and Ed25519 (which should be sufficient
-  // as-is to prove multiexp), and this doesn't hurt
-  #[cfg(not(feature = "unsafe-ed448"))]
   test_multiexp::<_, C>(rng);
 
   // Test FROST key generation and serialization of FrostCore works as expected
