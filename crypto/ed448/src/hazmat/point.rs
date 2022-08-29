@@ -89,6 +89,7 @@ impl ConditionallySelectable for Point {
 impl Add for Point {
   type Output = Point;
   fn add(self, other: Self) -> Self {
+    // 12 muls, 7 additions, 4 negations
     let xcp = self.x * other.x;
     let ycp = self.y * other.y;
     let zcp = self.z * other.z;
@@ -104,7 +105,7 @@ impl Add for Point {
     Point {
       x: zcp * F * ((self.x + self.y) * (other.x + other.y) - xcp - ycp),
       y: zcp * G_ * (ycp - xcp),
-      z: F * G_
+      z: F * G_,
     }
   }
 }
@@ -179,7 +180,16 @@ impl Group for Point {
     self.ct_eq(&Self::identity())
   }
   fn double(&self) -> Self {
-    *self + self
+    // 7 muls, 7 additions, 4 negations
+    let xsq = self.x.square();
+    let ysq = self.y.square();
+    let zsq = self.z.square();
+    let xy = self.x + self.y;
+    #[allow(non_snake_case)]
+    let F = xsq + ysq;
+    #[allow(non_snake_case)]
+    let J = F - zsq.double();
+    Point { x: J * (xy.square() - xsq - ysq), y: F * (xsq - ysq), z: F * J }
   }
 }
 
@@ -220,7 +230,7 @@ impl Mul<Scalar> for Point {
       if ((i + 1) % 4) == 0 {
         if i != 3 {
           for _ in 0 .. 4 {
-            res += res;
+            res = res.double();
           }
         }
         res += table[usize::from(bits)];
