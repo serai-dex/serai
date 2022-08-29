@@ -29,7 +29,7 @@ elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true 
 p256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 k256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 
-unsafe-ed448 = { path = "../ed448", version = "0.1", features = ["hazmat", "variable-time"], default-features = false, optional = true }
+unsafe-ed448 = { path = "../ed448", version = "0.1", features = ["hazmat"], default-features = false, optional = true }
 
 transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"], version = "^0.1.3" }
 

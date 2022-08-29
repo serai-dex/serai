@@ -22,10 +22,7 @@ ff = "0.12"
 group = "0.12"
 
 generic-array = "0.14"
-
-num-traits = { version = "0.2", optional = true }
-num-bigint = { version = "0.4", features = ["rand"], optional = true }
-crypto-bigint = {version = "0.4", features = ["zeroize"], optional = true }
+crypto-bigint = {version = "0.4", features = ["zeroize"] }
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 
@@ -34,7 +31,3 @@ hex = "0.4"
 
 [features]
 hazmat = []
-std = []
-constant-time = ["crypto-bigint"]
-variable-time = ["std", "num-traits", "num-bigint"]
-default = ["constant-time"]
