@@ -13,6 +13,9 @@ macro_rules! field {
 
     use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
+    // Needed to publish for some reason? Yet not actually needed
+    #[allow(unused_imports)]
+    use dalek_ff_group::{from_wrapper, math_op};
     use dalek_ff_group::{constant_time, from_uint, math};
 
     fn reduce(x: U1024) -> U512 {
