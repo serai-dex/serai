@@ -17,7 +17,7 @@ macro_rules! field {
     use ff::PrimeFieldBits;
 
     use dalek_ff_group::{constant_time, from_uint};
-    use $crate::{choice, math};
+    use $crate::math;
 
     fn reduce(x: U1024) -> U512 {
       U512::from_le_slice(&x.reduce(&$WIDE_MODULUS).unwrap().to_le_bytes()[.. 64])
@@ -44,11 +44,29 @@ macro_rules! field {
 
     impl $FieldName {
       pub fn pow(&self, other: $FieldName) -> $FieldName {
+        let mut table = [*ONE; 16];
+        table[1] = *self;
+        for i in 2 .. 16 {
+          table[i] = table[i - 1] * self;
+        }
+
         let mut res = *ONE;
-        let mut m = *self;
-        for bit in other.to_le_bits() {
-          res *= $FieldName::conditional_select(&ONE, &m, choice(bit));
-          m *= m;
+        let mut bits = 0;
+        for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+          bits <<= 1;
+          let bit = *bit as u8;
+          assert_eq!(bit | 1, 1);
+          bits |= bit;
+
+          if ((i + 1) % 4) == 0 {
+            if i != 3 {
+              for _ in 0 .. 4 {
+                res *= res;
+              }
+            }
+            res *= table[usize::from(bits)];
+            bits = 0;
+          }
         }
         res
       }

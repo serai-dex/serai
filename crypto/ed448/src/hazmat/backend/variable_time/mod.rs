@@ -1,5 +1,14 @@
+use subtle::Choice;
+
 pub(crate) mod scalar;
 pub(crate) mod field;
+
+// Convert a boolean to a Choice in a *presumably* constant time manner
+pub(crate) fn choice(value: bool) -> Choice {
+  let bit = value as u8;
+  debug_assert_eq!(bit | 1, 1);
+  Choice::from(bit)
+}
 
 #[doc(hidden)]
 #[macro_export]
@@ -16,7 +25,7 @@ macro_rules! field {
     use num_traits::identities::{Zero, One};
     use num_bigint::RandBigInt;
 
-    use $crate::{choice, math};
+    use $crate::{hazmat::backend::variable_time::choice, math};
 
     pub(crate) fn from_repr_inner(bytes: GenericArray<u8, U57>) -> CtOption<BigUint> {
       let res = BigUint::from_bytes_le(bytes.as_ref());

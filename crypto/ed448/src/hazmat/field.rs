@@ -111,3 +111,13 @@ fn one_two() {
     FieldElement::from(2u8)
   );
 }
+
+#[test]
+fn pow() {
+  assert_eq!(FieldElement::one().pow(FieldElement::one()), FieldElement::one());
+  let two = FieldElement::one().double();
+  assert_eq!(two.pow(two), two.double());
+
+  let three = two + FieldElement::one();
+  assert_eq!(three.pow(three), three * three * three);
+}

@@ -35,6 +35,7 @@ group = { opt-level = 3 }
 
 crypto-bigint = { opt-level = 3 }
 dalek-ff-group = { opt-level = 3 }
+unsafe-ed448 = { opt-level = 3 }
 
 multiexp = { opt-level = 3 }
 
