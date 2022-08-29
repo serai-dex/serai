@@ -4,7 +4,7 @@ use zeroize::Zeroize;
 
 use crypto_bigint::{U512, U1024};
 
-use crate::field;
+pub use crate::field;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct Scalar(pub(crate) U512);
@@ -24,10 +24,15 @@ lazy_static! {
   };
 }
 
-field!(Scalar, MODULUS, WIDE_MODULUS);
+field!(Scalar, MODULUS, WIDE_MODULUS, 446);
 
 impl Scalar {
   pub fn wide_reduce(bytes: [u8; 114]) -> Scalar {
     Scalar(reduce(U1024::from_le_slice(&[bytes.as_ref(), &[0; 14]].concat())))
   }
+}
+
+#[test]
+fn invert() {
+  assert_eq!(Scalar::one().invert().unwrap(), Scalar::one());
 }

@@ -26,10 +26,39 @@ lazy_static! {
   };
 }
 
-field!(FieldElement, MODULUS, WIDE_MODULUS);
+field!(FieldElement, MODULUS, WIDE_MODULUS, 448);
 
 lazy_static! {
   pub(crate) static ref Q_4: FieldElement = FieldElement(
     MODULUS.0.saturating_add(&U512::ONE).div(NonZero::new(TWO.0.saturating_add(&TWO.0)).unwrap())
   );
+}
+
+#[test]
+fn repr() {
+  assert_eq!(FieldElement::from_repr(FieldElement::one().to_repr()).unwrap(), FieldElement::one());
+}
+
+#[test]
+fn one_two() {
+  assert_eq!(FieldElement::one() * FieldElement::one().double(), FieldElement::from(2u8));
+  assert_eq!(
+    FieldElement::from_repr(FieldElement::from(2u8).to_repr()).unwrap(),
+    FieldElement::from(2u8)
+  );
+}
+
+#[test]
+fn pow() {
+  assert_eq!(FieldElement::one().pow(FieldElement::one()), FieldElement::one());
+  let two = FieldElement::one().double();
+  assert_eq!(two.pow(two), two.double());
+
+  let three = two + FieldElement::one();
+  assert_eq!(three.pow(three), three * three * three);
+}
+
+#[test]
+fn invert() {
+  assert_eq!(FieldElement::one().invert().unwrap(), FieldElement::one());
 }
