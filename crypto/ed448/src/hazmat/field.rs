@@ -121,3 +121,8 @@ fn pow() {
   let three = two + FieldElement::one();
   assert_eq!(three.pow(three), three * three * three);
 }
+
+#[test]
+fn invert() {
+  assert_eq!(FieldElement::one().invert().unwrap(), FieldElement::one());
+}

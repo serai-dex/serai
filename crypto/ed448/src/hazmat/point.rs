@@ -36,10 +36,11 @@ fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   })
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, Debug, Zeroize)]
 pub struct Point {
   x: FieldElement,
   y: FieldElement,
+  z: FieldElement,
 }
 
 #[rustfmt::skip]
@@ -52,20 +53,35 @@ lazy_static! {
   )
   .unwrap();
 
-  static ref G: Point = Point { x: recover_x(*G_Y).unwrap(), y: *G_Y };
+  static ref G: Point = Point { x: recover_x(*G_Y).unwrap(), y: *G_Y, z: FieldElement::one() };
 }
 
 impl ConstantTimeEq for Point {
   fn ct_eq(&self, other: &Self) -> Choice {
-    self.x.ct_eq(&other.x) & self.y.ct_eq(&other.y)
+    let x1 = self.x * other.z;
+    let x2 = other.x * self.z;
+
+    let y1 = self.y * other.z;
+    let y2 = other.y * self.z;
+
+    x1.ct_eq(&x2) & y1.ct_eq(&y2)
   }
 }
+
+impl PartialEq for Point {
+  fn eq(&self, other: &Point) -> bool {
+    self.ct_eq(other).into()
+  }
+}
+
+impl Eq for Point {}
 
 impl ConditionallySelectable for Point {
   fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
     Point {
       x: FieldElement::conditional_select(&a.x, &b.x, choice),
       y: FieldElement::conditional_select(&a.y, &b.y, choice),
+      z: FieldElement::conditional_select(&a.z, &b.z, choice),
     }
   }
 }
@@ -73,13 +89,22 @@ impl ConditionallySelectable for Point {
 impl Add for Point {
   type Output = Point;
   fn add(self, other: Self) -> Self {
-    let y3 = self.y * other.y;
-    let x3 = self.x * other.x;
-    let dxy3 = *D * x3 * y3;
+    let xcp = self.x * other.x;
+    let ycp = self.y * other.y;
+    let zcp = self.z * other.z;
+    #[allow(non_snake_case)]
+    let B = zcp.square();
+    #[allow(non_snake_case)]
+    let E = *D * xcp * ycp;
+    #[allow(non_snake_case)]
+    let F = B - E;
+    #[allow(non_snake_case)]
+    let G_ = B + E;
+
     Point {
-      x: ((self.x * other.y) + (other.x * self.y)) *
-        (FieldElement::one() + dxy3).invert().unwrap_or(FieldElement::zero()),
-      y: (y3 - x3) * (FieldElement::one() - dxy3).invert().unwrap_or(FieldElement::zero()),
+      x: zcp * F * ((self.x + self.y) * (other.x + other.y) - xcp - ycp),
+      y: zcp * G_ * (ycp - xcp),
+      z: F * G_
     }
   }
 }
@@ -106,7 +131,7 @@ impl AddAssign<&Point> for Point {
 impl Neg for Point {
   type Output = Point;
   fn neg(self) -> Self {
-    Point { x: -self.x, y: self.y }
+    Point { x: -self.x, y: self.y, z: self.z }
   }
 }
 
@@ -145,7 +170,7 @@ impl Group for Point {
     Self::generator() * Scalar::random(rng)
   }
   fn identity() -> Self {
-    Point { x: FieldElement::zero(), y: FieldElement::one() }
+    Point { x: FieldElement::zero(), y: FieldElement::one(), z: FieldElement::one() }
   }
   fn generator() -> Self {
     *G
@@ -246,7 +271,7 @@ impl GroupEncoding for Point {
       recover_x(y).and_then(|mut x| {
         x.conditional_negate(x.is_odd().ct_eq(&!sign));
         let not_negative_zero = !(x.is_zero() & sign);
-        let point = Point { x, y };
+        let point = Point { x, y, z: FieldElement::one() };
         CtOption::new(point, not_negative_zero & point.is_torsion_free())
       })
     })
@@ -257,9 +282,13 @@ impl GroupEncoding for Point {
   }
 
   fn to_bytes(&self) -> Self::Repr {
-    let mut bytes = self.y.to_repr();
+    let z = self.z.invert().unwrap();
+    let x = self.x * z;
+    let y = self.y * z;
+
+    let mut bytes = y.to_repr();
     let mut_ref: &mut [u8] = bytes.as_mut();
-    mut_ref[56] |= self.x.is_odd().unwrap_u8() << 7;
+    mut_ref[56] |= x.is_odd().unwrap_u8() << 7;
     bytes
   }
 }
@@ -293,7 +322,7 @@ fn torsion() {
     ).into(),
   )
   .unwrap();
-  let old = Point { x: -recover_x(old_y).unwrap(), y: old_y };
+  let old = Point { x: -recover_x(old_y).unwrap(), y: old_y, z: FieldElement::one() };
   assert!(bool::from(!old.is_torsion_free()));
 }
 
