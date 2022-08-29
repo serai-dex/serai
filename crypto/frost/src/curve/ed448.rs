@@ -30,11 +30,11 @@ impl Curve for Ed448 {
   }
 
   fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
-    Self::hash(b"", CONTEXT.as_ref(), dst, data).as_ref().to_vec()
+    Self::hash(b"", CONTEXT, dst, data).as_ref().to_vec()
   }
 
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    Scalar::wide_reduce(Self::hash(b"", CONTEXT.as_ref(), dst, data))
+    Scalar::wide_reduce(Self::hash(b"", CONTEXT, dst, data))
   }
 }
 
@@ -57,6 +57,6 @@ pub struct NonIetfEd448Hram;
 impl Hram<Ed448> for NonIetfEd448Hram {
   #[allow(non_snake_case)]
   fn hram(R: &Point, A: &Point, m: &[u8]) -> Scalar {
-    Ietf8032Ed448Hram::hram(&[CONTEXT.as_ref(), b"chal"].concat(), R, A, m)
+    Ietf8032Ed448Hram::hram(&[CONTEXT, b"chal"].concat(), R, A, m)
   }
 }
