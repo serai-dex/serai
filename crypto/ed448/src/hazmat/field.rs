@@ -72,7 +72,7 @@ impl PrimeField for FieldElement {
     to_repr(self)
   }
 
-  const S: u32 = 0;
+  const S: u32 = 1;
   fn is_odd(&self) -> Choice {
     (self.to_repr()[0] & 1).into()
   }

@@ -63,8 +63,8 @@ impl Field for Scalar {
 
 impl PrimeField for Scalar {
   type Repr = GenericArray<u8, U57>;
-  const NUM_BITS: u32 = 456;
-  const CAPACITY: u32 = 455;
+  const NUM_BITS: u32 = 446;
+  const CAPACITY: u32 = 445;
   fn from_repr(bytes: Self::Repr) -> CtOption<Self> {
     from_repr(bytes)
   }
@@ -72,7 +72,7 @@ impl PrimeField for Scalar {
     to_repr(self)
   }
 
-  const S: u32 = 0;
+  const S: u32 = 1;
   fn is_odd(&self) -> Choice {
     (self.to_repr()[0] & 1).into()
   }
@@ -85,11 +85,11 @@ impl PrimeField for Scalar {
 }
 
 impl PrimeFieldBits for Scalar {
-  type ReprBits = [u8; 57];
+  type ReprBits = [u8; 56];
 
   fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
-    let mut repr = [0; 57];
-    repr.copy_from_slice(&self.to_repr());
+    let mut repr = [0; 56];
+    repr.copy_from_slice(&self.to_repr()[.. 56]);
     repr.into()
   }
 
