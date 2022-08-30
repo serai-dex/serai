@@ -19,8 +19,8 @@ runs:
       shell: bash
       run: |
         pip3 install solc-select
-        solc-select install 0.8.9
-        solc-select use 0.8.9
+        solc-select install 0.8.16
+        solc-select use 0.8.16
 
     - name: Install Rust
       uses: ./.github/actions/cached-rust
