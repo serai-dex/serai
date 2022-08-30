@@ -110,7 +110,10 @@ pub(crate) fn read_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
 }
 
 pub(crate) fn read_torsion_free_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
-  read_point(r).ok().filter(|point| point.is_torsion_free()).ok_or(io::Error::new(io::ErrorKind::Other, "invalid point"))
+  read_point(r)
+    .ok()
+    .filter(|point| point.is_torsion_free())
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))
 }
 
 pub(crate) fn read_raw_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(
