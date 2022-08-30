@@ -1,13 +1,13 @@
 use core::ops::BitXor;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Write, Cursor};
 
 use zeroize::Zeroize;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::serialize::{
-  read_byte, read_bytes, read_varint, read_point, read_vec, write_byte, write_varint, write_point,
-  write_vec,
+  varint_len, read_byte, read_bytes, read_varint, read_point, read_vec, write_byte, write_varint,
+  write_point, write_vec,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
@@ -30,7 +30,7 @@ impl BitXor<[u8; 8]> for PaymentId {
 }
 
 impl PaymentId {
-  fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       PaymentId::Unencrypted(id) => {
         w.write_all(&[0])?;
@@ -53,11 +53,11 @@ impl PaymentId {
   }
 }
 
+// Doesn't bother with padding nor MinerGate
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) enum ExtraField {
-  Padding(Vec<u8>),
   PublicKey(EdwardsPoint),
-  PaymentId(PaymentId), // Technically Nonce, an arbitrary data field, yet solely used as PaymentId
+  Nonce(Vec<u8>),
   MergeMining(usize, [u8; 32]),
   PublicKeys(Vec<EdwardsPoint>),
 }
@@ -65,19 +65,13 @@ pub(crate) enum ExtraField {
 impl ExtraField {
   fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      ExtraField::Padding(data) => {
-        w.write_all(&[0])?;
-        write_vec(write_byte, data, w)?;
-      }
       ExtraField::PublicKey(key) => {
         w.write_all(&[1])?;
         w.write_all(&key.compress().to_bytes())?;
       }
-      ExtraField::PaymentId(id) => {
+      ExtraField::Nonce(data) => {
         w.write_all(&[2])?;
-        let mut buf = Vec::with_capacity(1 + 8);
-        id.serialize(&mut buf)?;
-        write_vec(write_byte, &buf, w)?;
+        write_vec(write_byte, data, w)?;
       }
       ExtraField::MergeMining(height, merkle) => {
         w.write_all(&[3])?;
@@ -94,15 +88,14 @@ impl ExtraField {
 
   fn deserialize<R: Read>(r: &mut R) -> io::Result<ExtraField> {
     Ok(match read_byte(r)? {
-      0 => {
-        let res = read_vec(read_byte, r)?;
-        if res.len() > 255 {
-          Err(io::Error::new(io::ErrorKind::Other, "too long padding"))?;
-        }
-        ExtraField::Padding(res)
-      }
       1 => ExtraField::PublicKey(read_point(r)?),
-      2 => ExtraField::PaymentId(PaymentId::deserialize(r)?),
+      2 => ExtraField::Nonce({
+        let nonce = read_vec(read_byte, r)?;
+        if nonce.len() > 255 {
+          Err(io::Error::new(io::ErrorKind::Other, "too long nonce"))?;
+        }
+        nonce
+      }),
       3 => ExtraField::MergeMining(
         usize::try_from(read_varint(r)?)
           .map_err(|_| io::Error::new(io::ErrorKind::Other, "varint for height exceeds usize"))?,
@@ -131,16 +124,22 @@ impl Extra {
 
   pub(crate) fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
-      if let ExtraField::PaymentId(id) = field {
-        return Some(*id);
+      if let ExtraField::Nonce(data) = field {
+        return PaymentId::deserialize(&mut Cursor::new(data)).ok();
       }
     }
     None
   }
 
   pub(crate) fn data(&self) -> Option<Vec<u8>> {
+    let mut first = true;
     for field in &self.0 {
-      if let ExtraField::Padding(data) = field {
+      if let ExtraField::Nonce(data) = field {
+        // Skip the first Nonce, which should be the payment ID
+        if first {
+          first = false;
+          continue;
+        }
         return Some(data.clone());
       }
     }
@@ -162,9 +161,16 @@ impl Extra {
     self.0.push(field);
   }
 
-  pub(crate) fn fee_weight(outputs: usize) -> usize {
-    // PublicKey, key, PublicKeys, length, additional keys, PaymentId, length, encrypted, ID
-    33 + 2 + (outputs.saturating_sub(1) * 32) + 11
+  #[rustfmt::skip]
+  pub(crate) fn fee_weight(outputs: usize, data: Option<&Vec<u8>>) -> usize {
+    // PublicKey, key
+    (1 + 32) +
+    // PublicKeys, length, additional keys
+    (1 + 1 + (outputs.saturating_sub(1) * 32)) +
+    // PaymentId (Nonce), length, encrypted, ID
+    (1 + 1 + 1 + 8) +
+    // Nonce, length, data (if existant)
+    data.map(|v| 1 + varint_len(v.len()) + v.len()).unwrap_or(0)
   }
 
   pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {

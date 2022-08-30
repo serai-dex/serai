@@ -6,7 +6,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 
 use crate::{
   Commitment,
-  serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point},
+  serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point, read_raw_vec},
   transaction::{Timelock, Transaction},
   block::Block,
   rpc::{Rpc, RpcError},
@@ -69,19 +69,38 @@ pub struct Metadata {
   // 0xff was chosen as it'd be distinct from [0; 8], enabling atomically incrementing IDs (though
   // they should be randomly generated)
   pub payment_id: [u8; 8],
+  // Arbitrary data
+  pub arbitrary_data: Option<Vec<u8>>,
 }
 
 impl Metadata {
   pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(4 + 4 + 8);
+    let mut res = Vec::with_capacity(4 + 4 + 8 + 1);
     res.extend(self.subaddress.0.to_le_bytes());
     res.extend(self.subaddress.1.to_le_bytes());
     res.extend(self.payment_id);
+    if let Some(data) = self.arbitrary_data.as_ref() {
+      res.extend(&[1, u8::try_from(data.len()).unwrap()]);
+      res.extend(data);
+    } else {
+      res.extend(&[0]);
+    }
     res
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Metadata> {
-    Ok(Metadata { subaddress: (read_u32(r)?, read_u32(r)?), payment_id: read_bytes(r)? })
+    Ok(Metadata {
+      subaddress: (read_u32(r)?, read_u32(r)?),
+      payment_id: read_bytes(r)?,
+      arbitrary_data: {
+        if read_byte(r)? == 1 {
+          let len = read_byte(r)?;
+          Some(read_raw_vec(read_byte, usize::from(len), r)?)
+        } else {
+          None
+        }
+      },
+    })
   }
 }
 
@@ -251,13 +270,15 @@ impl Scanner {
         if subaddress.is_none() {
           continue;
         }
+        let subaddress = *subaddress.unwrap();
+
         // If it has torsion, it'll substract the non-torsioned shared key to a torsioned key
         // We will not have a torsioned key in our HashMap of keys, so we wouldn't identify it as
         // ours
         // If we did though, it'd enable bypassing the included burning bug protection
         debug_assert!(output_key.is_torsion_free());
 
-        let key_offset = shared_key + self.pair.subaddress(*subaddress.unwrap());
+        let key_offset = shared_key + self.pair.subaddress(subaddress);
         // Since we've found an output to us, get its amount
         let mut commitment = Commitment::zero();
 
@@ -288,7 +309,7 @@ impl Scanner {
 
             data: OutputData { key: output_key, key_offset, commitment },
 
-            metadata: Metadata { subaddress: (0, 0), payment_id },
+            metadata: Metadata { subaddress: subaddress, payment_id, arbitrary_data: extra.data() },
           });
 
           if let Some(burning_bug) = self.burning_bug.as_mut() {

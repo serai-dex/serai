@@ -88,6 +88,8 @@ pub enum TransactionError {
   NoChange,
   #[error("too many outputs")]
   TooManyOutputs,
+  #[error("too much data")]
+  TooMuchData,
   #[error("not enough funds (in {0}, out {1})")]
   NotEnoughFunds(u64, u64),
   #[error("wrong spend private key")]
@@ -171,6 +173,7 @@ pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
+  data: Option<Vec<u8>>,
   fee: u64,
 }
 
@@ -180,6 +183,7 @@ impl SignableTransaction {
     inputs: Vec<SpendableOutput>,
     mut payments: Vec<(Address, u64)>,
     change_address: Option<Address>,
+    data: Option<Vec<u8>>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure there's only one payment ID
@@ -208,6 +212,10 @@ impl SignableTransaction {
       Err(TransactionError::NoOutputs)?;
     }
 
+    if data.as_ref().map(|v| v.len()).unwrap_or(0) > 255 {
+      Err(TransactionError::TooMuchData)?;
+    }
+
     // TODO TX MAX SIZE
 
     // If we don't have two outputs, as required by Monero, add a second
@@ -218,7 +226,7 @@ impl SignableTransaction {
     let outputs = payments.len() + (if change { 1 } else { 0 });
 
     // Calculate the extra length
-    let extra = Extra::fee_weight(outputs);
+    let extra = Extra::fee_weight(outputs, data.as_ref());
 
     // Calculate the fee.
     let mut fee =
@@ -252,7 +260,7 @@ impl SignableTransaction {
       Err(TransactionError::TooManyOutputs)?;
     }
 
-    Ok(SignableTransaction { protocol, inputs, payments, fee })
+    Ok(SignableTransaction { protocol, inputs, payments, data, fee })
   }
 
   fn prepare_transaction<R: RngCore + CryptoRng>(
@@ -292,10 +300,16 @@ impl SignableTransaction {
     let extra = {
       let mut extra = Extra::new(outputs.iter().map(|output| output.R).collect());
 
-      // Additionally include a random payment ID
-      extra.push(ExtraField::PaymentId(PaymentId::Encrypted(id)));
+      let mut id_vec = Vec::with_capacity(1 + 8);
+      PaymentId::Encrypted(id).serialize(&mut id_vec).unwrap();
+      extra.push(ExtraField::Nonce(id_vec));
 
-      let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len()));
+      // Include data if present
+      if let Some(data) = self.data.take() {
+        extra.push(ExtraField::Nonce(data));
+      }
+
+      let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len(), self.data.as_ref()));
       extra.serialize(&mut serialized).unwrap();
       serialized
     };

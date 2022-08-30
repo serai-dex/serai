@@ -134,6 +134,7 @@ async fn send_core(test: usize, multisig: bool) {
       outputs,
       vec![(addr, amount - 10000000000)],
       Some(addr),
+      None,
       fee,
     )
     .unwrap();
