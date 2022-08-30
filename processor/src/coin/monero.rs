@@ -199,7 +199,7 @@ impl Coin for Monero {
 
     Ok((
       tx.hash().to_vec(),
-      tx.prefix.outputs.iter().map(|output| output.key.compress().to_bytes()).collect(),
+      tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect(),
     ))
   }
 

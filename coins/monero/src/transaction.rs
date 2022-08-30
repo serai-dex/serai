@@ -2,7 +2,7 @@ use core::cmp::Ordering;
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use crate::{
   Protocol, hash,
@@ -46,7 +46,7 @@ impl Input {
       2 => Input::ToKey {
         amount: read_varint(r)?,
         key_offsets: read_vec(read_varint, r)?,
-        key_image: read_point(r)?,
+        key_image: read_torsion_free_point(r)?,
       },
       _ => Err(std::io::Error::new(
         std::io::ErrorKind::Other,
@@ -60,7 +60,7 @@ impl Input {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
   pub amount: u64,
-  pub key: EdwardsPoint,
+  pub key: CompressedEdwardsY,
   pub view_tag: Option<u8>,
 }
 
@@ -72,7 +72,7 @@ impl Output {
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.amount, w)?;
     w.write_all(&[2 + (if self.view_tag.is_some() { 1 } else { 0 })])?;
-    write_point(&self.key, w)?;
+    w.write_all(&self.key.to_bytes())?;
     if let Some(view_tag) = self.view_tag {
       w.write_all(&[view_tag])?;
     }
@@ -92,7 +92,7 @@ impl Output {
 
     Ok(Output {
       amount,
-      key: read_point(r)?,
+      key: CompressedEdwardsY(read_bytes(r)?),
       view_tag: if view_tag { Some(read_byte(r)?) } else { None },
     })
   }

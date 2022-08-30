@@ -65,8 +65,7 @@ pub struct Metadata {
   pub subaddress: (u32, u32),
   // Can be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
   // have this
-  // This will be gibberish if the payment ID wasn't intended for the recipient
-  // This will be [0xff; 8] if the transaction didn't have a payment ID
+  // This will be gibberish if the payment ID wasn't intended for the recipient or wasn't included
   // 0xff was chosen as it'd be distinct from [0; 8], enabling atomically incrementing IDs (though
   // they should be randomly generated)
   pub payment_id: [u8; 8],
@@ -211,13 +210,18 @@ impl Scanner {
 
     let mut res = vec![];
     for (o, output) in tx.prefix.outputs.iter().enumerate() {
-      // https://github.com/serai-dex/serai/issues/102
-      let output_key_compressed = output.key.compress();
+      // https://github.com/serai-dex/serai/issues/106
       if let Some(burning_bug) = self.burning_bug.as_ref() {
-        if burning_bug.contains(&output_key_compressed) {
+        if burning_bug.contains(&output.key) {
           continue;
         }
       }
+
+      let output_key = output.key.decompress();
+      if output_key.is_none() {
+        continue;
+      }
+      let output_key = output_key.unwrap();
 
       for key in &keys {
         let (view_tag, shared_key, payment_id_xor) = shared_key(
@@ -231,7 +235,7 @@ impl Scanner {
           if let Some(PaymentId::Encrypted(id)) = payment_id.map(|id| id ^ payment_id_xor) {
             id
           } else {
-            [0xff; 8]
+            payment_id_xor
           };
 
         if let Some(actual_view_tag) = output.view_tag {
@@ -243,15 +247,15 @@ impl Scanner {
         // P - shared == spend
         let subaddress = self
           .subaddresses
-          .get(&(output.key - (&shared_key * &ED25519_BASEPOINT_TABLE)).compress());
+          .get(&(output_key - (&shared_key * &ED25519_BASEPOINT_TABLE)).compress());
         if subaddress.is_none() {
           continue;
         }
         // If it has torsion, it'll substract the non-torsioned shared key to a torsioned key
         // We will not have a torsioned key in our HashMap of keys, so we wouldn't identify it as
         // ours
-        // If we did, it'd enable bypassing the included burning bug protection however
-        debug_assert!(output.key.is_torsion_free());
+        // If we did though, it'd enable bypassing the included burning bug protection
+        debug_assert!(output_key.is_torsion_free());
 
         let key_offset = shared_key + self.pair.subaddress(*subaddress.unwrap());
         // Since we've found an output to us, get its amount
@@ -282,13 +286,13 @@ impl Scanner {
           res.push(ReceivedOutput {
             absolute: AbsoluteId { tx: tx.hash(), o: o.try_into().unwrap() },
 
-            data: OutputData { key: output.key, key_offset, commitment },
+            data: OutputData { key: output_key, key_offset, commitment },
 
             metadata: Metadata { subaddress: (0, 0), payment_id },
           });
 
           if let Some(burning_bug) = self.burning_bug.as_mut() {
-            burning_bug.insert(output_key_compressed);
+            burning_bug.insert(output.key);
           }
         }
         // Break to prevent public keys from being included multiple times, triggering multiple

@@ -305,7 +305,7 @@ impl SignableTransaction {
     for output in &outputs {
       tx_outputs.push(Output {
         amount: 0,
-        key: output.dest,
+        key: output.dest.compress(),
         view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
       ecdh_info.push(output.amount);

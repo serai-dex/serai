@@ -104,9 +104,13 @@ pub(crate) fn read_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
   let bytes = read_bytes(r)?;
   CompressedEdwardsY(bytes)
     .decompress()
-    // Ban torsioned points, and points which are either unreduced or -0
-    .filter(|point| point.is_torsion_free() && (point.compress().to_bytes() == bytes))
+    // Ban points which are either unreduced or -0
+    .filter(|point| point.compress().to_bytes() == bytes)
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))
+}
+
+pub(crate) fn read_torsion_free_point<R: io::Read>(r: &mut R) -> io::Result<EdwardsPoint> {
+  read_point(r).ok().filter(|point| point.is_torsion_free()).ok_or(io::Error::new(io::ErrorKind::Other, "invalid point"))
 }
 
 pub(crate) fn read_raw_vec<R: io::Read, T, F: Fn(&mut R) -> io::Result<T>>(
