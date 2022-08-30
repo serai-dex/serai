@@ -309,7 +309,7 @@ impl Scanner {
 
             data: OutputData { key: output_key, key_offset, commitment },
 
-            metadata: Metadata { subaddress: subaddress, payment_id, arbitrary_data: extra.data() },
+            metadata: Metadata { subaddress, payment_id, arbitrary_data: extra.data() },
           });
 
           if let Some(burning_bug) = self.burning_bug.as_mut() {
