@@ -1,18 +1,16 @@
 FROM docker.io/paritytech/ci-linux:production as builder
 LABEL description="STAGE 1: Build"
 
-ENV HOME=/home/root
-
 # Add files for build
-ADD substrate $HOME/serai/substrate
-ADD processor $HOME/serai/processor
-ADD coins $HOME/serai/coins
-ADD crypto $HOME/serai/crypto
-ADD contracts $HOME/serai/contracts
-ADD Cargo.toml $HOME/serai
-ADD AGPL-3.0 $HOME/serai
+ADD substrate /serai/substrate
+ADD processor /serai/processor
+ADD coins /serai/coins
+ADD crypto /serai/crypto
+ADD contracts /serai/contracts
+ADD Cargo.toml /serai
+ADD AGPL-3.0 /serai
 
-WORKDIR $HOME/serai
+WORKDIR /serai
 
 # Update Rust
 RUN rustup update
@@ -27,15 +25,15 @@ RUN cargo build --release
 
 # Mount for Cache
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/home/root/serai/target
+    --mount=type=cache,target=/serai/target
 
 
-FROM docker.io/library/ubuntu:20.04
+FROM docker.io/library/alpine:latest
 LABEL description="STAGE 2: Copy and Run"
 
 # Copy necessary files to run node
-COPY --from=builder /home/root/serai/target/release /serai
-COPY --from=builder /home/root/serai/AGPL-3.0 /serai
+COPY --from=builder /serai/target/release /serai
+COPY --from=builder /serai/AGPL-3.0 /serai
 
 WORKDIR /serai
 
