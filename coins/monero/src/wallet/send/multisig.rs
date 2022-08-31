@@ -5,7 +5,7 @@ use std::{
 };
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
+use rand_chacha::ChaCha20Rng;
 
 use curve25519_dalek::{
   traits::Identity,
@@ -140,7 +140,7 @@ impl SignableTransaction {
     let decoys = Decoys::select(
       // Using a seeded RNG with a specific height, committed to above, should make these decoys
       // committed to. They'll also be committed to later via the TX message as a whole
-      &mut ChaCha12Rng::from_seed(transcript.rng_seed(b"decoys")),
+      &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
       rpc,
       self.protocol.ring_len(),
       height,
@@ -288,7 +288,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       sorted_images.sort_by(key_image_sort);
 
       self.signable.prepare_transaction(
-        &mut ChaCha12Rng::from_seed(self.transcript.rng_seed(b"transaction_keys_bulletproofs")),
+        &mut ChaCha20Rng::from_seed(self.transcript.rng_seed(b"transaction_keys_bulletproofs")),
         uniqueness(
           &sorted_images
             .iter()
@@ -312,7 +312,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     }
     sorted.sort_by(|x, y| key_image_sort(&x.0, &y.0));
 
-    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks"));
+    let mut rng = ChaCha20Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks"));
     let mut sum_pseudo_outs = Scalar::zero();
     while !sorted.is_empty() {
       let value = sorted.remove(0);
