@@ -8,7 +8,7 @@ use crypto_bigint::{Encoding, U256, U512};
 
 use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
-use crate::{choice, constant_time, math, from_uint};
+use crate::{constant_time, math, from_uint};
 
 const FIELD_MODULUS: U256 =
   U256::from_be_hex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed");
@@ -155,11 +155,29 @@ impl FieldElement {
   }
 
   pub fn pow(&self, other: FieldElement) -> FieldElement {
+    let mut table = [FieldElement(U256::ONE); 16];
+    table[1] = *self;
+    for i in 2 .. 16 {
+      table[i] = table[i - 1] * self;
+    }
+
     let mut res = FieldElement(U256::ONE);
-    let mut m = *self;
-    for bit in other.to_le_bits() {
-      res *= FieldElement::conditional_select(&FieldElement(U256::ONE), &m, choice(bit));
-      m *= m;
+    let mut bits = 0;
+    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+      bits <<= 1;
+      let bit = *bit as u8;
+      assert_eq!(bit | 1, 1);
+      bits |= bit;
+
+      if ((i + 1) % 4) == 0 {
+        if i != 3 {
+          for _ in 0 .. 4 {
+            res *= res;
+          }
+        }
+        res *= table[usize::from(bits)];
+        bits = 0;
+      }
     }
     res
   }
