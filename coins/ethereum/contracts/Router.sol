@@ -1,9 +1,10 @@
 //SPDX-License-Identifier: AGPLv3
 pragma solidity ^0.8.0;
 
+import "./ReentrancyGuard.sol";
 import "./Schnorr.sol";
 
-contract Router is Schnorr {
+contract Router is Schnorr, ReentrancyGuard {
     // contract owner
     address owner;
 
@@ -44,13 +45,6 @@ contract Router is Schnorr {
         _;
     }
 
-    modifier noReentrant() {
-        require(locked == 0, "no re-entrancy");
-        locked = 1;
-        _;
-        locked = 0;
-    }
-
     function getNonce() external view returns (uint256) {
         return nonce;
     }
@@ -84,7 +78,7 @@ contract Router is Schnorr {
     function execute(
         Transaction[] calldata transactions, 
         Signature memory sig
-    ) public noReentrant returns (bool) {
+    ) public nonReentrant returns (bool) {
         bytes32 message = keccak256(abi.encode(nonce, transactions));
         require(verify(publicKey.parity, publicKey.px, message, sig.s, sig.e), "failed to verify signature");
         bool allOk = true;
