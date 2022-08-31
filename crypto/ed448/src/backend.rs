@@ -6,10 +6,10 @@ macro_rules! field {
 
     use rand_core::RngCore;
 
-    use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
+    use subtle::{Choice, CtOption, ConstantTimeEq, ConstantTimeLess, ConditionallySelectable};
 
     use generic_array::{typenum::U57, GenericArray};
-    use crypto_bigint::Encoding;
+    use crypto_bigint::{Integer, Encoding};
 
     use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
@@ -38,7 +38,7 @@ macro_rules! field {
     impl Neg for $FieldName {
       type Output = $FieldName;
       fn neg(self) -> $FieldName {
-        *$MODULUS - self
+        $MODULUS - self
       }
     }
 
@@ -49,21 +49,15 @@ macro_rules! field {
       }
     }
 
-    lazy_static! {
-      pub(crate) static ref ZERO: $FieldName = $FieldName(U512::ZERO);
-      pub(crate) static ref ONE: $FieldName = $FieldName(U512::ONE);
-      pub(crate) static ref TWO: $FieldName = $FieldName(U512::ONE.saturating_add(&U512::ONE));
-    }
-
     impl $FieldName {
       pub fn pow(&self, other: $FieldName) -> $FieldName {
-        let mut table = [*ONE; 16];
+        let mut table = [Self(U512::ONE); 16];
         table[1] = *self;
         for i in 2 .. 16 {
           table[i] = table[i - 1] * self;
         }
 
-        let mut res = *ONE;
+        let mut res = Self(U512::ONE);
         let mut bits = 0;
         for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
           bits <<= 1;
@@ -93,20 +87,21 @@ macro_rules! field {
       }
 
       fn zero() -> Self {
-        *ZERO
+        Self(U512::ZERO)
       }
       fn one() -> Self {
-        *ONE
+        Self(U512::ONE)
       }
       fn square(&self) -> Self {
         *self * self
       }
       fn double(&self) -> Self {
-        *self + self
+        $FieldName((self.0 << 1).reduce(&$MODULUS.0).unwrap())
       }
 
       fn invert(&self) -> CtOption<Self> {
-        CtOption::new(self.pow(-*TWO), !self.is_zero())
+        const NEG_2: $FieldName = Self($MODULUS.0.saturating_sub(&U512::from_u8(2)));
+        CtOption::new(self.pow(NEG_2), !self.is_zero())
       }
 
       fn sqrt(&self) -> CtOption<Self> {
@@ -114,10 +109,10 @@ macro_rules! field {
       }
 
       fn is_zero(&self) -> Choice {
-        self.ct_eq(&ZERO)
+        self.0.ct_eq(&U512::ZERO)
       }
       fn cube(&self) -> Self {
-        *self * self * self
+        self.square() * self
       }
       fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
         unimplemented!()
@@ -130,7 +125,7 @@ macro_rules! field {
       const CAPACITY: u32 = $NUM_BITS - 1;
       fn from_repr(bytes: Self::Repr) -> CtOption<Self> {
         let res = $FieldName(U512::from_le_slice(&[bytes.as_ref(), [0; 7].as_ref()].concat()));
-        CtOption::new(res, res.0.add_mod(&U512::ZERO, &$MODULUS.0).ct_eq(&res.0))
+        CtOption::new(res, res.0.ct_lt(&$MODULUS.0))
       }
       fn to_repr(&self) -> Self::Repr {
         let mut repr = GenericArray::<u8, U57>::default();
@@ -141,7 +136,7 @@ macro_rules! field {
       // True for both the Ed448 Scalar field and FieldElement field
       const S: u32 = 1;
       fn is_odd(&self) -> Choice {
-        (self.to_repr()[0] & 1).into()
+        self.0.is_odd()
       }
       fn multiplicative_generator() -> Self {
         unimplemented!()

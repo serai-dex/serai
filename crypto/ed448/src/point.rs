@@ -10,25 +10,32 @@ use rand_core::RngCore;
 use zeroize::Zeroize;
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
 
+use crypto_bigint::U512;
+
 use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{Group, GroupEncoding, prime::PrimeGroup};
 
 use crate::{
   scalar::{Scalar, MODULUS as SCALAR_MODULUS},
-  field::{FieldElement, Q_4},
+  field::{FieldElement, MODULUS as FIELD_MODULUS, Q_4},
 };
 
-lazy_static! {
-  static ref D: FieldElement = -FieldElement::from(39081u16);
-}
+const D: FieldElement = FieldElement(FIELD_MODULUS.0.saturating_sub(&U512::from_u16(39081)));
+
+const G_Y: FieldElement = FieldElement(U512::from_be_hex(concat!(
+  "00000000000000",
+  "00",
+  "693f46716eb6bc248876203756c9c7624bea73736ca3984087789c1e",
+  "05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14",
+)));
 
 fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   let ysq = y.square();
   #[allow(non_snake_case)]
-  let D_ysq = *D * ysq;
+  let D_ysq = D * ysq;
   (D_ysq - FieldElement::one()).invert().and_then(|inverted| {
     let temp = (ysq - FieldElement::one()) * inverted;
-    let mut x = temp.pow(*Q_4);
+    let mut x = temp.pow(Q_4);
     x.conditional_negate(x.is_odd());
 
     let xsq = x.square();
@@ -43,17 +50,8 @@ pub struct Point {
   z: FieldElement,
 }
 
-#[rustfmt::skip]
 lazy_static! {
-  static ref G_Y: FieldElement = FieldElement::from_repr(
-    hex_literal::hex!(
-      "14fa30f25b790898adc8d74e2c13bdfdc4397ce61cffd33ad7c2a0051e9c78874098a36c7373ea4b62c7c9563720768824bcb66e71463f6900"
-    )
-    .into()
-  )
-  .unwrap();
-
-  static ref G: Point = Point { x: recover_x(*G_Y).unwrap(), y: *G_Y, z: FieldElement::one() };
+  static ref G: Point = Point { x: recover_x(G_Y).unwrap(), y: G_Y, z: FieldElement::one() };
 }
 
 impl ConstantTimeEq for Point {
@@ -96,7 +94,7 @@ impl Add for Point {
     #[allow(non_snake_case)]
     let B = zcp.square();
     #[allow(non_snake_case)]
-    let E = *D * xcp * ycp;
+    let E = D * xcp * ycp;
     #[allow(non_snake_case)]
     let F = B - E;
     #[allow(non_snake_case)]
@@ -268,7 +266,7 @@ impl MulAssign<&Scalar> for Point {
 
 impl Point {
   pub fn is_torsion_free(&self) -> Choice {
-    (*self * *SCALAR_MODULUS).is_identity()
+    (*self * SCALAR_MODULUS).is_identity()
   }
 }
 

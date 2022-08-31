@@ -1,10 +1,6 @@
-use core::ops::Div;
-
-use lazy_static::lazy_static;
-
 use zeroize::Zeroize;
 
-use crypto_bigint::{NonZero, U512, U1024};
+use crypto_bigint::{U512, U1024};
 
 use crate::field;
 
@@ -12,27 +8,26 @@ use crate::field;
 pub struct FieldElement(pub(crate) U512);
 
 // 2**448 - 2**224 - 1
-lazy_static! {
-  pub static ref MODULUS: FieldElement = FieldElement(U512::from_be_hex(concat!(
-    "00000000000000",
-    "00",
-    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
-    "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  )));
-  static ref WIDE_MODULUS: U1024 = {
-    let res = U1024::from((U512::ZERO, MODULUS.0));
-    debug_assert_eq!(MODULUS.0.to_le_bytes()[..], res.to_le_bytes()[.. 64]);
-    res
-  };
-}
+pub const MODULUS: FieldElement = FieldElement(U512::from_be_hex(concat!(
+  "00000000000000",
+  "00",
+  "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+)));
+
+const WIDE_MODULUS: U1024 = U1024::from_be_hex(concat!(
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "00000000000000",
+  "00",
+  "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+));
+
+pub(crate) const Q_4: FieldElement =
+  FieldElement(MODULUS.0.saturating_add(&U512::ONE).wrapping_div(&U512::from_u8(4)));
 
 field!(FieldElement, MODULUS, WIDE_MODULUS, 448);
-
-lazy_static! {
-  pub(crate) static ref Q_4: FieldElement = FieldElement(
-    MODULUS.0.saturating_add(&U512::ONE).div(NonZero::new(TWO.0.saturating_add(&TWO.0)).unwrap())
-  );
-}
 
 #[test]
 fn repr() {

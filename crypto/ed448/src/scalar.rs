@@ -1,5 +1,3 @@
-use lazy_static::lazy_static;
-
 use zeroize::Zeroize;
 
 use crypto_bigint::{U512, U1024};
@@ -10,19 +8,21 @@ pub use crate::field;
 pub struct Scalar(pub(crate) U512);
 
 // 2**446 - 13818066809895115352007386748515426880336692474882178609894547503885
-lazy_static! {
-  pub static ref MODULUS: Scalar = Scalar(U512::from_be_hex(concat!(
-    "00000000000000",
-    "00",
-    "3fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-    "7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3",
-  )));
-  static ref WIDE_MODULUS: U1024 = {
-    let res = U1024::from((U512::ZERO, MODULUS.0));
-    debug_assert_eq!(MODULUS.0.to_le_bytes()[..], res.to_le_bytes()[.. 64]);
-    res
-  };
-}
+pub const MODULUS: Scalar = Scalar(U512::from_be_hex(concat!(
+  "00000000000000",
+  "00",
+  "3fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3",
+)));
+
+const WIDE_MODULUS: U1024 = U1024::from_be_hex(concat!(
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "00000000000000",
+  "00",
+  "3fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3",
+));
 
 field!(Scalar, MODULUS, WIDE_MODULUS, 446);
 

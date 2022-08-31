@@ -9,7 +9,6 @@ keywords = ["ed448", "ff", "group"]
 edition = "2021"
 
 [dependencies]
-hex-literal = "0.3"
 lazy_static = "1"
 
 rand_core = "0.6"
@@ -27,4 +26,5 @@ crypto-bigint = { version = "0.4", features = ["zeroize"] }
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 
 [dev-dependencies]
+hex-literal = "0.3"
 hex = "0.4"
