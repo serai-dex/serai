@@ -1,10 +1,7 @@
-########################################################################################
-# Config
-########################################################################################
 version: "3.9"
 
 volumes:
-  serai:
+  serai-base:
   serai-alice:
   serai-bob:
   serai-charlie:
@@ -12,27 +9,47 @@ volumes:
   serai-eve:
   serai-ferdie:
 
-########################################################################################
-# Services
-########################################################################################
+# Consensus Services
 services:
-  profiles:
-    - _
+
   _serai:
     &serai_defaults
-  restart: unless-stopped
-  image: serai/serai-validator:latest
-  build:
+    restart: unless-stopped
+    profiles:
+      - _
+    image: serai/serai:latest
+    build:
       context: .
-      target: serai-validator
+      dockerfile: ./deploy/serai/Dockerfile
       args:
-        TAG: protonet-validator
-########################################################################################
-# Services
-########################################################################################
-serai:
-  &serai
-  <<: *serai_defaults
-hostname: serai
-profiles:
-  - custom
+        TAG: serai
+
+  serai-base:
+    &serai
+    <<: *serai_defaults
+    hostname: baseserai
+    profiles:
+      - base
+    ports:
+      - 30333
+      - 9615
+      - 9933
+      - 9944
+
+  # Processor Services
+
+  # Coin Services
+  bitcoin:
+    profiles:
+      - single-coins
+      - cluster-sm-coins
+      - cluster-lg-coins
+      - coins
+      - bitcoin
+    build:
+      dockerfile: ./coins/bitcoin/Dockerfile
+      context: .
+    restart: unless-stopped
+    volumes:
+      - "./coins/bitcoin/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh

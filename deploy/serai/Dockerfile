@@ -2,12 +2,16 @@ FROM docker.io/paritytech/ci-linux:production as builder
 LABEL description="STAGE 1: Build"
 
 ENV HOME=/home/root
+
+# Add files for build
 ADD substrate $HOME/serai/substrate
 ADD processor $HOME/serai/processor
 ADD coins $HOME/serai/coins
 ADD crypto $HOME/serai/crypto
 ADD contracts $HOME/serai/contracts
 ADD Cargo.toml $HOME/serai
+ADD AGPL-3.0 $HOME/serai
+
 WORKDIR $HOME/serai
 
 # Update Rust
@@ -31,8 +35,9 @@ LABEL description="STAGE 2: Copy and Run"
 
 # Copy necessary files to run node
 COPY --from=builder /home/root/serai/target/release /serai
+COPY --from=builder /home/root/serai/AGPL-3.0 /serai
 
 WORKDIR /serai
 
 # Run node
-CMD ./serai-node
+CMD echo $TYPE && ./serai-node --chain $CHAIN --name $NAME $VALIDATOR
