@@ -244,7 +244,7 @@ impl PrimeField for Scalar {
 
   const S: u32 = 2;
   fn is_odd(&self) -> Choice {
-    unimplemented!()
+    choice(self.to_le_bits()[0])
   }
   fn multiplicative_generator() -> Self {
     2u64.into()

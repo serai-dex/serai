@@ -207,8 +207,8 @@ impl FieldElement {
 #[test]
 fn test_conditional_negate() {
   let one = FieldElement::one();
-  let true_choice = choice(true);
-  let false_choice = choice(false);
+  let true_choice = 1.into();
+  let false_choice = 0.into();
 
   let mut var = one;
 
