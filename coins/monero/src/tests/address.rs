@@ -26,7 +26,7 @@ const SUB_VIEW: [u8; 32] = hex!("9bc2b464de90d058468522098d5610c5019c45fd1711a95
 const SUBADDRESS: &'static str =
   "8C5zHM5ud8nGC4hC2ULiBLSWx9infi8JUUmWEat4fcTf8J4H38iWYVdFmPCA9UmfLTZxD43RsyKnGEdZkoGij6csDeUnbEB";
 
-const FEATURED_JSON: &'static str = include_str!("featured_addresses.json");
+const FEATURED_JSON: &'static str = include_str!("vectors/featured_addresses.json");
 
 #[test]
 fn standard_address() {
