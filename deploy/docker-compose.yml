@@ -27,6 +27,7 @@ services:
   _serai:
     &serai_defaults
     restart: unless-stopped
+    image: serai:dev
     profiles:
       - _
     build:
