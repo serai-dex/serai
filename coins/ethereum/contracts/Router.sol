@@ -6,13 +6,10 @@ import "./Schnorr.sol";
 
 contract Router is Schnorr, ReentrancyGuard {
     // contract owner
-    address owner;
+    address public owner;
 
     // nonce is incremented for each batch of transactions executed
-    uint256 nonce; 
-
-    // prevents re-entrancy
-    uint8 internal locked;
+    uint256 public nonce; 
 
     struct PublicKey {
         uint8 parity;
@@ -20,7 +17,7 @@ contract Router is Schnorr, ReentrancyGuard {
     }
 
     // current aggregated validator public key 
-    PublicKey publicKey;
+    PublicKey public publicKey;
 
     struct Transaction {
         address to;
@@ -34,14 +31,20 @@ contract Router is Schnorr, ReentrancyGuard {
         bytes32 s;
     }
 
-    event Executed(uint256 nonce, uint256 index, bool success);
+    // success is a uint256 representing a bitfield of transaction successes
+    event Executed(uint256 nonce, uint256 success);
+
+    error Unauthorized();
+    error PublicKeyAlreadySet();
+    error VerificationError();
+
 
     constructor() {
         owner = msg.sender;
     }
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "must be called by the contract owner");
+        if(msg.sender != owner) revert Unauthorized();
         _;
     }
 
@@ -54,7 +57,7 @@ contract Router is Schnorr, ReentrancyGuard {
     function setPublicKey(
         PublicKey memory _publicKey
     ) public onlyOwner {
-        require(publicKey.px == 0, "public key has already been set");
+        if(publicKey.px != 0) revert PublicKeyAlreadySet();
         publicKey.parity = _publicKey.parity;
         publicKey.px = _publicKey.px;
     }
@@ -65,8 +68,8 @@ contract Router is Schnorr, ReentrancyGuard {
         PublicKey memory _publicKey,
         Signature memory sig
     ) public {
-        bytes32 message = keccak256(abi.encode(_publicKey.parity, _publicKey.px));
-        require(verify(publicKey.parity, publicKey.px, message, sig.s, sig.e), "failed to verify signature");
+        bytes32 message = keccak256(abi.encodePacked(_publicKey.parity, _publicKey.px));
+        if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
         publicKey = _publicKey;
     }
 
@@ -80,16 +83,21 @@ contract Router is Schnorr, ReentrancyGuard {
         Signature memory sig
     ) public nonReentrant returns (bool) {
         bytes32 message = keccak256(abi.encode(nonce, transactions));
-        require(verify(publicKey.parity, publicKey.px, message, sig.s, sig.e), "failed to verify signature");
-        bool allOk = true;
+        if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
+
+        uint256 successes;
+
         for(uint256 i = 0; i < transactions.length; i++) {
             (bool success, ) = transactions[i].to.call{value: transactions[i].value, gas: transactions[i].gas}(
                 transactions[i].data
             );
-            emit Executed(nonce, i, success);
-            allOk = success && allOk;
+            assembly {
+                successes := or(successes, shl(i, success))
+            }
         }
+
+        emit Executed(nonce, successes);
         nonce++;
-        return allOk;
+        return successes != 0;
     }
 }

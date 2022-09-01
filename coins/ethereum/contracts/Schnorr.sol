@@ -10,14 +10,14 @@ contract Schnorr {
   // parity := public key y-coord parity (27 or 28)
   // px := public key x-coord
   // message := 32-byte message
-  // s := schnorr signature
   // e := schnorr signature challenge
+  // s := schnorr signature
   function verify(
     uint8 parity,
     bytes32 px,
     bytes32 message,
-    bytes32 s,
-    bytes32 e
+    bytes32 e,
+    bytes32 s
   ) public view returns (bool) {
     // ecrecover = (m, v, r, s);
     bytes32 sp = bytes32(Q - mulmod(uint256(s), uint256(px), Q));

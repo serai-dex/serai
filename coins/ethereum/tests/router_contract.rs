@@ -43,7 +43,7 @@ async fn test_router_execute() {
 
   let to = H160([0u8; 20]);
   let value = U256([0u64; 4]);
-  let gas = U256([1, 0, 0, 0]); // arbitrary
+  let gas = U256::from(7000000); // arbitrary
   let data = Bytes::from([0]);
   let tx = router_mod::Transaction {
     to: to.clone(),
@@ -75,4 +75,5 @@ async fn test_router_execute() {
   let processed_sig = hash_and_sign(&encoded_calldata, &keys, &group_key, chain_id).await;
   let receipt = router_execute(&contract, txs.clone(), &processed_sig).await.unwrap().unwrap();
   println!("gas used: {:?}", receipt.cumulative_gas_used);
+  println!("logs: {:?}", receipt.logs);
 }
