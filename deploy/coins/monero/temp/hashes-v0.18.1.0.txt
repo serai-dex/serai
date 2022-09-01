@@ -1,0 +1,48 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA256
+
+# This GPG-signed message exists to confirm the SHA256 sums of Monero binaries.
+#
+# Please verify the signature against the key for binaryFate in the
+# source code repository (/utils/gpg_keys).
+#
+#
+## CLI
+0ea5ddb0630d6657810d38b1968ae76ba8e54806f46a2cc9bd02602f999aa741  monero-android-armv7-v0.18.1.0.tar.bz2
+ca8c9daeaee758d482d5cde94912d33b2f62656719c821b2a496fd81c0d52a79  monero-android-armv8-v0.18.1.0.tar.bz2
+1076d260b8b8fe513653916dabfa3c3790030836750d3af6bca56fc138a06af1  monero-freebsd-x64-v0.18.1.0.tar.bz2
+ecba059a2dbbef9f059e37c0f329df037501752dd871719b41104c5d4c6d358b  monero-linux-armv7-v0.18.1.0.tar.bz2
+69e2bba6d5bd8fcf4986f59f232fdfd33b4ae2ce0959fd59567b153b923e057e  monero-linux-armv8-v0.18.1.0.tar.bz2
+9318e522a5cf95bc856772f15d7507fdef2c028e01f70d020078ad5e208f1304  monero-linux-x64-v0.18.1.0.tar.bz2
+3d54dc813116955537a4a5ae4a0a3943d9d32842e076c223ea096551db438158  monero-linux-x86-v0.18.1.0.tar.bz2
+065766f5799c6b972145e2b27830a584c18f64bdd276f31801493b7ef9e51b3c  monero-mac-armv8-v0.18.1.0.tar.bz2
+da87ac5c713f17985cd57bcd007ec76ffe75123cb546cd655edb14fdd8c3d745  monero-mac-x64-v0.18.1.0.tar.bz2
+d0e2b3255163ec0499de42639cc86cf4ddae0bc5fa65aa7377ff9c40305da8fd  monero-win-x64-v0.18.1.0.zip
+ed18233503b6135a29732a79b261b50aced24b99686843bc11e7e9fb2d50cf42  monero-win-x86-v0.18.1.0.zip
+0e4cb82d5f0c455536526c9f3105d1c8f683d4c0ad18a69972c0863944b01328  monero-source-v0.18.1.0.tar.bz2
+#
+## GUI
+9b2c8978f96e8c9662373b427ef320ccd9d652d346435a8487a756bf55cf43ff  monero-gui-install-win-x64-v0.18.1.0.exe
+6c993b622516d85555d8962767b39c79a3b3614cbdf0ab9f62fa07e3826498d0  monero-gui-linux-x64-v0.18.1.0.tar.bz2
+0b06351b370863dce8fff9d8659a8235b98505c61c7e4f5af23843b161d92186  monero-gui-mac-x64-v0.18.1.0.dmg
+39c4290a01072cc8fe8eabaa2c61598421a72eac6011eccd16a2a63e89323fa2  monero-gui-win-x64-v0.18.1.0.zip
+ecb33e329af5cf671b562a0c14a562a7b061736a0f75733dc862b29e9176797c  monero-gui-source-v0.18.1.0.tar.bz2
+#
+#
+# ~binaryFate
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCAAdFiEEgaxZH+nEtlxYBq/D8K9NRioL35IFAmL04d8ACgkQ8K9NRioL
+35II+A/+J2z+VbOIc4ZZdHRuwOchGcyyafpmtQM3JqSNCtlo3y2973yuUSWen26T
+MSkwsOIinGxsRllAdTyoJPTvv0Ohl2vVqbigAvrtuti9h0C75mX1AdBY7C2ot37L
+6flWDcBdE1VJOsZqPpUj6MsF8738H/n1z4KAjA5WZB7bJerHB3bFu4J5TjUFmhM1
+Uf+uH28V7hJUd3sWAe6okbJWsexfLdof1jvpg5sH7Mb2XhP6C8bJVDVXYzDOZoan
+zYB9IcBAP9pY9xp6F1M33n5Un+75ShyyTrGjRc8Fbbgr/SpsTZZ5YKwoVAEnMH3K
+AEOLFDZEhzO4j0BoyeV/K9q6bzSSsrbyo1yQ38UWT3yCJYpQJWKmFJHvMz0/N1xH
+pMpuc5otmRiYddB/PgRp+uKzQzq6ye1LYh3PmvU8b9yaE+2XxqXR8cTUNid0E5gQ
+iXZjuLD06nDCtSe7m2Duj9W39PeB3M+kALU27KOjcio7WG0H2O0TJqVyBnBbviYi
+PpCa5sBbr9NxdgRLWEaFfynaVa7ls3NkaO9ipN0tRJ6uUuAxuEgzBRpL+cYHK+fo
+ZD223xP8Z33ZF+DIe6D+sCDW/UJNGCK3PBuDSQrzXSQkysQj2+mcQ9JNFIkY+Xm2
+SvDIaTuLAZLo6DXxzPPBuKB1iYWh0LUmAMaCOM220j/eKq9Y5yA=
+=M0wB
+-----END PGP SIGNATURE-----
