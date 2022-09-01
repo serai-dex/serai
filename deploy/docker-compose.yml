@@ -1,6 +1,4 @@
 version: "3.9"
-
-
 volumes:
   serai-base:
   serai-alice:
@@ -26,7 +24,6 @@ volumes:
 # Example: docker compose --profile bitcoin up
 
 services:
-
   _serai:
     &serai_defaults
     restart: unless-stopped
