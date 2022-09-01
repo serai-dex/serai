@@ -37,20 +37,98 @@ services:
       dockerfile: ./deploy/serai/Dockerfile
       args:
         TAG: serai
-
-  serai-base:
-    &serai
-    <<: *serai_defaults
-    hostname: baseserai
-    profiles:
-      - base
-    environment:
-      CHAIN: dev
     entrypoint: /scripts/entry-dev.sh
     volumes:
       - "./serai/scripts:/scripts"
 
+  serai-base:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-base
+    profiles:
+      - base
+    environment:
+      CHAIN: dev
+      NAME: base
 
+  serai-alice:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-alice
+    profiles:
+      - alice
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Alice
+      VALIDATOR: true
+
+  serai-bob:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-bob
+    profiles:
+      - bob
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Bob
+
+  serai-charlie:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-charlie
+    profiles:
+      - charlie
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Charlie
+
+  serai-dave:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-dave
+    profiles:
+      - dave
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Dave
+
+  serai-eve:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-eve
+    profiles:
+      - eve
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Eve
+
+  serai-ferdie:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-ferdie
+    profiles:
+      - ferdie
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Ferdie
   # Processor Services
 
   # Coin Services
