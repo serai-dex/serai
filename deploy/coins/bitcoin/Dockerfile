@@ -5,16 +5,10 @@ ENV BITCOIN_VERSION=23.0
 ENV GLIBC_VERSION=2.28-r0
 ENV BITCOIN_DATA=/home/bitcoin/.bitcoin
 
-WORKDIR /opt/bitcoin
-
-RUN wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub \
-	&& wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-${GLIBC_VERSION}.apk \
-	&& wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-bin-${GLIBC_VERSION}.apk
+WORKDIR /home/bitcoin
 
 RUN apk update \
-	&& apk --no-cache add ca-certificates gnupg bash su-exec \
-	&& apk --no-cache add glibc-${GLIBC_VERSION}.apk \
-	&& apk --no-cache add glibc-bin-${GLIBC_VERSION}.apk
+	&& apk --no-cache add ca-certificates gnupg bash su-exec 
 
 # Get Binary
 RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz \
@@ -35,18 +29,21 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
 	&& grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256sum -c
 
 # Prepare Image
-	RUN mkdir bitcoin \
-	&& tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz --strip-components=1 -C bitcoin \
-	&& mkdir /root/.bitcoin \
-	&& mv bitcoin/bin/* /usr/local/bin/ \
-	&& mv bitcoin/lib/* /usr/local/lib/ \
-	&& mv bitcoin/share/* /usr/local/share/ \
-	&& apk del wget ca-certificates \
-	&& rm -rf bitcoin* \
-	&& rm -rf glibc-*
+RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
 
-RUN adduser -S bitcoin
+# Prepare Image
+FROM ubuntu:latest as image
+WORKDIR /home/bitcoin
+COPY --from=builder /home/bitcoin/* .
+
+RUN ls
+
+RUN mv bin/* /bin \
+&& mv lib/* /lib \
+&& mv share/* /share
+
 COPY ./scripts /scripts
+
 
 EXPOSE 8332 8333 18332 18333 18443 18444
 VOLUME ["/home/bitcoin/.bitcoin"]
