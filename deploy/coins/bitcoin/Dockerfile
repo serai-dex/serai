@@ -36,14 +36,11 @@ FROM ubuntu:latest as image
 WORKDIR /home/bitcoin
 COPY --from=builder /home/bitcoin/* .
 
-RUN ls
-
 RUN mv bin/* /bin \
 && mv lib/* /lib \
 && mv share/* /share
 
 COPY ./scripts /scripts
-
 
 EXPOSE 8332 8333 18332 18333 18443 18444
 VOLUME ["/home/bitcoin/.bitcoin"]

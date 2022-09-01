@@ -28,14 +28,17 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/serai/target
 
 
-FROM docker.io/library/alpine:latest
+FROM ubuntu:latest as image
 LABEL description="STAGE 2: Copy and Run"
 
-# Copy necessary files to run node
-COPY --from=builder /serai/target/release /serai
-COPY --from=builder /serai/AGPL-3.0 /serai
+WORKDIR /home/serai
 
-WORKDIR /serai
+
+# Copy necessary files to run node
+COPY --from=builder /serai/target/release/* /bin/
+COPY --from=builder /serai/AGPL-3.0 .
 
 # Run node
-CMD echo $TYPE && ./serai-node --chain $CHAIN --name $NAME $VALIDATOR
+
+EXPOSE 30333 9615 9933 9944
+CMD ["serai-node"]

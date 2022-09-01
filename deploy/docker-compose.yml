@@ -32,9 +32,8 @@ services:
     restart: unless-stopped
     profiles:
       - _
-    image: serai/serai:latest
     build:
-      context: .
+      context: ../
       dockerfile: ./deploy/serai/Dockerfile
       args:
         TAG: serai
@@ -45,11 +44,12 @@ services:
     hostname: baseserai
     profiles:
       - base
-    ports:
-      - 30333
-      - 9615
-      - 9933
-      - 9944
+    environment:
+      CHAIN: dev
+    entrypoint: /scripts/entry-dev.sh
+    volumes:
+      - "./serai/scripts:/scripts"
+
 
   # Processor Services
 
