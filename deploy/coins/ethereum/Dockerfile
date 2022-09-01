@@ -1,24 +1,14 @@
-# Configure Environment
-FROM alpine:latest
+# Prepare Environment
+FROM alpine:latest as builder
 
 ENV GETH_VERSION=1.10.23
-ENV GLIBC_VERSION=2.28-r0
 
-WORKDIR /opt/ethereum
-
-# Get Binary
-RUN wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub \
-	&& wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-${GLIBC_VERSION}.apk \
-	&& wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-bin-${GLIBC_VERSION}.apk
+WORKDIR /home/ethereum
 
 RUN apk update \
-	&& apk --no-cache add ca-certificates gnupg bash su-exec \
-	&& apk --no-cache add glibc-${GLIBC_VERSION}.apk \
-	&& apk --no-cache add glibc-bin-${GLIBC_VERSION}.apk
+	&& apk --no-cache add ca-certificates gnupg bash su-exec
 
-RUN mkdir ethereum \
-    && cd ethereum
-
+# Get Binary
 RUN wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-d901d853.tar.gz\
 	&& wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-d901d853.tar.gz.asc
 
@@ -31,15 +21,15 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
 	&& gpg --verify geth-linux-amd64-${GETH_VERSION}-d901d853.tar.gz.asc geth-linux-amd64-${GETH_VERSION}-d901d853.tar.gz
 
 # Prepare Image
-RUN tar xzvf geth-linux-amd64-${GETH_VERSION}-d901d853.tar.gz \
-	&& mkdir /root/.ethereum \
-	&& mv geth-linux-amd64-${GETH_VERSION}-d901d853/* /usr/local/bin/ \
-	&& apk del wget ca-certificates \
-    && cd .. \
-	&& rm -rf ethereum* \
-	&& rm -rf glibc-*
+RUN tar xzvf geth-linux-amd64-${GETH_VERSION}-d901d853.tar.gz
 
-RUN adduser -S ethereum
+# Prepare Image
+FROM ubuntu:latest as image
+
+WORKDIR /home/ethereum
+COPY --from=builder /home/ethereum/* .
+RUN mv * /bin/
+COPY ./scripts /scripts
 
 EXPOSE 8545 8546 30303 30303/udp
 
