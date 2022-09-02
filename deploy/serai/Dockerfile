@@ -27,18 +27,16 @@ RUN cargo build --release
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/serai/target
 
-
+# Prepare Image
 FROM ubuntu:latest as image
 LABEL description="STAGE 2: Copy and Run"
 
 WORKDIR /home/serai
-
 
 # Copy necessary files to run node
 COPY --from=builder /serai/target/release/* /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
 # Run node
-
 EXPOSE 30333 9615 9933 9944
 CMD ["serai-node"]
