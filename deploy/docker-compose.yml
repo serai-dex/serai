@@ -13,7 +13,7 @@ volumes:
     # ------------------------------------------------------------
     # Profiles:
     # base - single node, unidentified
-    # coins - node clients for coins only (XMR, BTC, ETH)
+    # coins - node clients for coins only (BTC, ETH, XMR)
     # cluster-sm - Alice, Bob, Charlie
     # cluter-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
     # cluster-coins-sm - cluster-sm with coins
@@ -130,21 +130,6 @@ services:
   # Processor Services
 
   # Coin Services
-  monero:
-    profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
-      - coins
-      - monero
-    build:
-      context: ./coins/monero/
-    restart: unless-stopped
-    volumes:
-      - "./coins/monero/temp:/temp"
-      - "./coins/monero/scripts:/scripts"
-    entrypoint: /scripts/entry-dev.sh
-
   bitcoin:
     profiles:
       - single-coins
@@ -171,4 +156,19 @@ services:
     restart: unless-stopped
     volumes:
       - "./coins/ethereum/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
+  monero:
+    profiles:
+      - single-coins
+      - cluster-coins-sm
+      - cluster-coins-lg
+      - coins
+      - monero
+    build:
+      context: ./coins/monero/
+    restart: unless-stopped
+    volumes:
+      - "./coins/monero/temp:/temp"
+      - "./coins/monero/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
