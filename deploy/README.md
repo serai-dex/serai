@@ -25,7 +25,7 @@ You can supply one or more profiles to the docker compose command to orchestrate
 
 ## Orchestration Approach
 ### Builds
-The Serai node is the only piece of our infrastructure that we compile locally and for it first build, it can take 10 minutes or more to complete the image. Images for external coins use download binaries, verifying the signatures and checksums of the build. Overall the standard image build process looks like:
+The Serai node is the only piece of our infrastructure that we compile locally and for the first build, it can take 10 minutes or more to complete the image. Images for external coins download binaries, then verify the signatures and checksums of the build. Overall the standard image build process looks like:
 
 **Stage 1 -- Builder**
 * Configure environment.
