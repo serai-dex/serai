@@ -18,5 +18,3 @@ while true; do
 done
 
 # Create wallet from PRIV_KEY in monero wallet
-
-

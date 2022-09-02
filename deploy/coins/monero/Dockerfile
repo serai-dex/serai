@@ -40,6 +40,3 @@ EXPOSE 18080 18081
 VOLUME /home/monero/.bitmonero
 
 CMD ["monerod"]
-
-
-

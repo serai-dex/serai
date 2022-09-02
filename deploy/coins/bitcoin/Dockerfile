@@ -31,7 +31,6 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
 # Prepare Image
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
 
-# Prepare Image
 FROM ubuntu:latest as image
 WORKDIR /home/bitcoin
 COPY --from=builder /home/bitcoin/* .
