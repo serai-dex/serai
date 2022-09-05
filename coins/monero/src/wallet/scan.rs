@@ -22,7 +22,7 @@ pub struct AbsoluteId {
 impl AbsoluteId {
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(32 + 1);
-    res.extend(&self.tx);
+    res.extend(self.tx);
     res.push(self.o);
     res
   }
@@ -80,10 +80,10 @@ impl Metadata {
     res.extend(self.subaddress.1.to_le_bytes());
     res.extend(self.payment_id);
     if let Some(data) = self.arbitrary_data.as_ref() {
-      res.extend(&[1, u8::try_from(data.len()).unwrap()]);
+      res.extend([1, u8::try_from(data.len()).unwrap()]);
       res.extend(data);
     } else {
-      res.extend(&[0]);
+      res.extend([0]);
     }
     res
   }
@@ -173,7 +173,7 @@ impl SpendableOutput {
 
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = self.output.serialize();
-    serialized.extend(&self.global_index.to_le_bytes());
+    serialized.extend(self.global_index.to_le_bytes());
     serialized
   }
 

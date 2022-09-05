@@ -43,8 +43,8 @@ impl ClsagInput {
       // Doesn't include global output indexes as CLSAG doesn't care and won't be affected by it
       // They're just a unreliable reference to this data which will be included in the message
       // if in use
-      ring.extend(&pair[0].compress().to_bytes());
-      ring.extend(&pair[1].compress().to_bytes());
+      ring.extend(pair[0].compress().to_bytes());
+      ring.extend(pair[1].compress().to_bytes());
     }
     transcript.append_message(b"ring", &ring);
 

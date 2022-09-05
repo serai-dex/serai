@@ -160,14 +160,14 @@ impl Rpc {
       .rpc_call(
         "get_transactions",
         Some(json!({
-          "txs_hashes": hashes.iter().map(|hash| hex::encode(&hash)).collect::<Vec<_>>()
+          "txs_hashes": hashes.iter().map(hex::encode).collect::<Vec<_>>()
         })),
       )
       .await?;
 
     if !txs.missed_tx.is_empty() {
       Err(RpcError::TransactionsNotFound(
-        txs.missed_tx.iter().map(|hash| hex::decode(&hash).unwrap().try_into().unwrap()).collect(),
+        txs.missed_tx.iter().map(|hash| hex::decode(hash).unwrap().try_into().unwrap()).collect(),
       ))?;
     }
 

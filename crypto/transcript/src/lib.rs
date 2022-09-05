@@ -60,7 +60,7 @@ pub struct DigestTranscript<D: SecureDigest>(D);
 
 impl<D: SecureDigest> DigestTranscript<D> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
-    self.0.update(&[kind.as_u8()]);
+    self.0.update([kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
     self.0.update(u64::try_from(value.len()).unwrap().to_le_bytes());
     self.0.update(value);

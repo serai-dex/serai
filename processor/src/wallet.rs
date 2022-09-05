@@ -108,7 +108,7 @@ impl CoinDb for MemCoinDb {
 fn select_inputs<C: Coin>(inputs: &mut Vec<C::Output>) -> (Vec<C::Output>, u64) {
   // Sort to ensure determinism. Inefficient, yet produces the most legible code to be optimized
   // later
-  inputs.sort_by(|a, b| a.amount().cmp(&b.amount()));
+  inputs.sort_by_key(|a| a.amount());
 
   // Select the maximum amount of outputs possible
   let res = inputs.split_off(inputs.len() - C::MAX_INPUTS.min(inputs.len()));

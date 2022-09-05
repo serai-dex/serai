@@ -277,7 +277,7 @@ impl Transaction {
     serialized.clear();
 
     self.rct_signatures.prunable.signature_serialize(&mut serialized).unwrap();
-    sig_hash.extend(&hash(&serialized));
+    sig_hash.extend(hash(&serialized));
 
     hash(&sig_hash)
   }

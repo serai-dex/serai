@@ -212,9 +212,9 @@ impl<C: Curve> FrostCore<C> {
     let mut serialized = Vec::with_capacity(FrostCore::<C>::serialized_len(self.params.n));
     serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
     serialized.extend(C::ID);
-    serialized.extend(&self.params.t.to_be_bytes());
-    serialized.extend(&self.params.n.to_be_bytes());
-    serialized.extend(&self.params.i.to_be_bytes());
+    serialized.extend(self.params.t.to_be_bytes());
+    serialized.extend(self.params.n.to_be_bytes());
+    serialized.extend(self.params.i.to_be_bytes());
     serialized.extend(self.secret_share.to_repr().as_ref());
     for l in 1 ..= self.params.n {
       serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
