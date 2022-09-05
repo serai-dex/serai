@@ -70,16 +70,12 @@ impl<C: Curve> Curve for AltGenerator<C> {
     C::G::generator() * C::hash_to_F(b"FROST_tests", b"generator")
   }
 
-  fn hash_msg(msg: &[u8]) -> Vec<u8> {
-    C::hash_msg(msg)
+  fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
+    C::hash_to_vec(&[b"FROST_tests_alt", dst].concat(), data)
   }
 
-  fn hash_binding_factor(binding: &[u8]) -> Self::F {
-    C::hash_binding_factor(binding)
-  }
-
-  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-    C::hash_to_F(dst, msg)
+  fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
+    C::hash_to_F(&[b"FROST_tests_alt", dst].concat(), data)
   }
 }
 

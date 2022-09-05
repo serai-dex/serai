@@ -1,6 +1,6 @@
 use zeroize::Zeroize;
 
-use sha2::{digest::Update, Digest, Sha256};
+use sha2::{Digest, Sha256};
 
 use group::{
   ff::{Field, PrimeField},
@@ -26,6 +26,12 @@ macro_rules! kp_curve {
   ) => {
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
+    impl $Curve {
+      fn hash(dst: &[u8], data: &[u8]) -> Sha256 {
+        Sha256::new().chain_update(&[$CONTEXT.as_ref(), dst, data].concat())
+      }
+    }
+
     impl Curve for $Curve {
       type F = $lib::Scalar;
       type G = $lib::ProjectivePoint;
@@ -36,17 +42,13 @@ macro_rules! kp_curve {
         $lib::ProjectivePoint::GENERATOR
       }
 
-      fn hash_msg(msg: &[u8]) -> Vec<u8> {
-        (&Sha256::new().chain($CONTEXT).chain(b"digest").chain(msg).finalize()).to_vec()
-      }
-
-      fn hash_binding_factor(binding: &[u8]) -> Self::F {
-        Self::hash_to_F(&[$CONTEXT as &[u8], b"rho"].concat(), binding)
+      fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
+        Self::hash(dst, data).finalize().to_vec()
       }
 
       fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-        let mut dst = dst;
-        let oversize = Sha256::digest([b"H2C-OVERSIZE-DST-", dst].concat());
+        let mut dst = &[$CONTEXT, dst].concat();
+        let oversize = Sha256::digest([b"H2C-OVERSIZE-DST-".as_ref(), dst].concat()).to_vec();
         if dst.len() > 255 {
           dst = &oversize;
         }
@@ -79,17 +81,14 @@ macro_rules! kp_curve {
     impl Hram<$Curve> for $Hram {
       #[allow(non_snake_case)]
       fn hram(R: &$lib::ProjectivePoint, A: &$lib::ProjectivePoint, m: &[u8]) -> $lib::Scalar {
-        $Curve::hash_to_F(
-          &[$CONTEXT as &[u8], b"chal"].concat(),
-          &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat(),
-        )
+        $Curve::hash_to_F(b"chal", &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat())
       }
     }
   };
 }
 
 #[cfg(feature = "p256")]
-kp_curve!(p256, P256, IetfP256Hram, b"P-256", b"FROST-P256-SHA256-v5");
+kp_curve!(p256, P256, IetfP256Hram, b"P-256", b"FROST-P256-SHA256-v8");
 
 #[cfg(feature = "secp256k1")]
-kp_curve!(k256, Secp256k1, NonIetfSecp256k1Hram, b"secp256k1", b"FROST-secp256k1-SHA256-v7");
+kp_curve!(k256, Secp256k1, IetfSecp256k1Hram, b"secp256k1", b"FROST-secp256k1-SHA256-v8");

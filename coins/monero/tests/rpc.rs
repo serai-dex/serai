@@ -4,13 +4,9 @@ use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
 
 use serde_json::json;
 
-use monero::{
-  network::Network,
-  util::{key::PublicKey, address::Address},
-};
-
 use monero_serai::{
   Protocol, random_scalar,
+  wallet::address::{Network, AddressType, AddressMeta, Address},
   rpc::{EmptyResponse, RpcError, Rpc},
 };
 
@@ -22,11 +18,11 @@ pub async fn rpc() -> Rpc {
     return rpc;
   }
 
-  let addr = Address::standard(
-    Network::Mainnet,
-    PublicKey { point: (&random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE).compress() },
-    PublicKey { point: (&random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE).compress() },
-  )
+  let addr = Address {
+    meta: AddressMeta { network: Network::Mainnet, kind: AddressType::Standard },
+    spend: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
+    view: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
+  }
   .to_string();
 
   // Mine 20 blocks to ensure decoy availability

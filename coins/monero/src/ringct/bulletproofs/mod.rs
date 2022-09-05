@@ -11,9 +11,12 @@ use crate::{Commitment, wallet::TransactionError, serialize::*};
 
 pub(crate) mod scalar_vector;
 pub(crate) mod core;
+use self::core::LOG_N;
 
 pub(crate) mod original;
+pub use original::GENERATORS as BULLETPROOFS_GENERATORS;
 pub(crate) mod plus;
+pub use plus::GENERATORS as BULLETPROOFS_PLUS_GENERATORS;
 
 pub(crate) use self::original::OriginalStruct;
 pub(crate) use self::plus::PlusStruct;
@@ -28,27 +31,23 @@ pub enum Bulletproofs {
 }
 
 impl Bulletproofs {
-  // TODO
-  pub(crate) fn fee_weight(outputs: usize) -> usize {
-    let proofs = 6 + usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
-    let len = (9 + (2 * proofs)) * 32;
+  pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
+    let fields = if plus { 6 } else { 9 };
 
-    let mut clawback = 0;
-    let padded = 1 << (proofs - 6);
-    if padded > 2 {
-      const BP_BASE: usize = 368;
-      clawback = ((BP_BASE * padded) - len) * 4 / 5;
-    }
+    #[allow(non_snake_case)]
+    let mut LR_len = usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
+    let padded_outputs = 1 << LR_len;
+    LR_len += LOG_N;
 
-    len + clawback
-  }
-
-  pub fn init(plus: bool) {
-    if !plus {
-      OriginalStruct::init();
-    } else {
-      PlusStruct::init();
-    }
+    let len = (fields + (2 * LR_len)) * 32;
+    len +
+      if padded_outputs <= 2 {
+        0
+      } else {
+        let base = ((fields + (2 * (LOG_N + 1))) * 32) / 2;
+        let size = (fields + (2 * LR_len)) * 32;
+        ((base * padded_outputs) - size) * 4 / 5
+      }
   }
 
   pub fn prove<R: RngCore + CryptoRng>(
@@ -121,7 +120,7 @@ impl Bulletproofs {
     }
   }
 
-  pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub(crate) fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     self.serialize_core(w, |points, w| write_raw_vec(write_point, points, w))
   }
 

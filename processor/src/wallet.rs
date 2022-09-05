@@ -86,7 +86,7 @@ impl CoinDb for MemCoinDb {
   fn add_output<O: Output>(&mut self, output: &O) -> bool {
     // This would be insecure as we're indexing by ID and this will replace the output as a whole
     // Multiple outputs may have the same ID in edge cases such as Monero, where outputs are ID'd
-    // by key image, not by hash + index
+    // by output key, not by hash + index
     // self.outputs.insert(output.id(), output).is_some()
     let id = output.id().as_ref().to_vec();
     if self.outputs.contains_key(&id) {
@@ -108,7 +108,7 @@ impl CoinDb for MemCoinDb {
 fn select_inputs<C: Coin>(inputs: &mut Vec<C::Output>) -> (Vec<C::Output>, u64) {
   // Sort to ensure determinism. Inefficient, yet produces the most legible code to be optimized
   // later
-  inputs.sort_by(|a, b| a.amount().cmp(&b.amount()));
+  inputs.sort_by_key(|a| a.amount());
 
   // Select the maximum amount of outputs possible
   let res = inputs.split_off(inputs.len() - C::MAX_INPUTS.min(inputs.len()));
@@ -262,7 +262,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           self
             .coin
             .get_outputs(&block, keys.group_key())
-            .await
+            .await?
             .iter()
             .cloned()
             .filter(|output| self.db.add_output(output)),

@@ -2,6 +2,7 @@ use zeroize::Zeroize;
 
 use sha2::{Digest, Sha512};
 
+use group::Group;
 use dalek_ff_group::Scalar;
 
 use crate::{curve::Curve, algorithm::Hram};
@@ -12,17 +13,20 @@ macro_rules! dalek_curve {
     $Hram:       ident,
     $Point:      ident,
 
-    $POINT: ident,
-
     $ID:      literal,
     $CONTEXT: literal,
-    $chal:    literal,
-    $digest:  literal,
+    $chal: literal,
   ) => {
-    use dalek_ff_group::{$Point, $POINT};
+    use dalek_ff_group::$Point;
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
+    impl $Curve {
+      fn hash(dst: &[u8], data: &[u8]) -> Sha512 {
+        Sha512::new().chain_update(&[$CONTEXT.as_ref(), dst, data].concat())
+      }
+    }
+
     impl Curve for $Curve {
       type F = Scalar;
       type G = $Point;
@@ -30,24 +34,15 @@ macro_rules! dalek_curve {
       const ID: &'static [u8] = $ID;
 
       fn generator() -> Self::G {
-        $POINT
+        $Point::generator()
       }
 
-      fn hash_msg(msg: &[u8]) -> Vec<u8> {
-        Sha512::new()
-          .chain_update($CONTEXT)
-          .chain_update($digest)
-          .chain_update(msg)
-          .finalize()
-          .to_vec()
+      fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
+        Self::hash(dst, data).finalize().to_vec()
       }
 
-      fn hash_binding_factor(binding: &[u8]) -> Self::F {
-        Self::hash_to_F(b"rho", binding)
-      }
-
-      fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-        Scalar::from_hash(Sha512::new().chain_update($CONTEXT).chain_update(dst).chain_update(msg))
+      fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
+        Scalar::from_hash(Self::hash(dst, data))
       }
     }
 
@@ -56,7 +51,13 @@ macro_rules! dalek_curve {
     impl Hram<$Curve> for $Hram {
       #[allow(non_snake_case)]
       fn hram(R: &$Point, A: &$Point, m: &[u8]) -> Scalar {
-        $Curve::hash_to_F($chal, &[&R.compress().to_bytes(), &A.compress().to_bytes(), m].concat())
+        let mut hash = Sha512::new();
+        if $chal.len() != 0 {
+          hash.update(&[$CONTEXT.as_ref(), $chal].concat());
+        }
+        Scalar::from_hash(
+          hash.chain_update(&[&R.compress().to_bytes(), &A.compress().to_bytes(), m].concat()),
+        )
       }
     }
   };
@@ -67,11 +68,9 @@ dalek_curve!(
   Ristretto,
   IetfRistrettoHram,
   RistrettoPoint,
-  RISTRETTO_BASEPOINT_POINT,
   b"ristretto",
-  b"FROST-RISTRETTO255-SHA512-v5",
+  b"FROST-RISTRETTO255-SHA512-v8",
   b"chal",
-  b"digest",
 );
 
 #[cfg(feature = "ed25519")]
@@ -79,9 +78,7 @@ dalek_curve!(
   Ed25519,
   IetfEd25519Hram,
   EdwardsPoint,
-  ED25519_BASEPOINT_POINT,
   b"edwards25519",
-  b"",
-  b"",
+  b"FROST-ED25519-SHA512-v8",
   b"",
 );

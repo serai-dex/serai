@@ -138,12 +138,9 @@ impl Rpc {
     Ok(self.rpc_call::<Option<()>, HeightResponse>("get_height", None).await?.height)
   }
 
-  async fn get_transactions_core(
-    &self,
-    hashes: &[[u8; 32]],
-  ) -> Result<(Vec<Result<Transaction, RpcError>>, Vec<[u8; 32]>), RpcError> {
+  pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
     if hashes.is_empty() {
-      return Ok((vec![], vec![]));
+      return Ok(vec![]);
     }
 
     #[derive(Deserialize, Debug)]
@@ -163,54 +160,39 @@ impl Rpc {
       .rpc_call(
         "get_transactions",
         Some(json!({
-          "txs_hashes": hashes.iter().map(|hash| hex::encode(&hash)).collect::<Vec<_>>()
+          "txs_hashes": hashes.iter().map(hex::encode).collect::<Vec<_>>()
         })),
       )
       .await?;
 
-    Ok((
-      txs
-        .txs
-        .iter()
-        .map(|res| {
-          let tx = Transaction::deserialize(&mut std::io::Cursor::new(
-            rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex }).unwrap(),
-          ))
-          .map_err(|_| {
-            RpcError::InvalidTransaction(hex::decode(&res.tx_hash).unwrap().try_into().unwrap())
-          })?;
-
-          // https://github.com/monero-project/monero/issues/8311
-          if res.as_hex.is_empty() {
-            match tx.prefix.inputs.get(0) {
-              Some(Input::Gen { .. }) => (),
-              _ => Err(RpcError::PrunedTransaction)?,
-            }
-          }
-
-          Ok(tx)
-        })
-        .collect(),
-      txs.missed_tx.iter().map(|hash| hex::decode(&hash).unwrap().try_into().unwrap()).collect(),
-    ))
-  }
-
-  pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
-    let (txs, missed) = self.get_transactions_core(hashes).await?;
-    if !missed.is_empty() {
-      Err(RpcError::TransactionsNotFound(missed))?;
+    if !txs.missed_tx.is_empty() {
+      Err(RpcError::TransactionsNotFound(
+        txs.missed_tx.iter().map(|hash| hex::decode(hash).unwrap().try_into().unwrap()).collect(),
+      ))?;
     }
-    // This will clone several KB and is accordingly inefficient
-    // TODO: Optimize
-    txs.iter().cloned().collect::<Result<_, _>>()
-  }
 
-  pub async fn get_transactions_possible(
-    &self,
-    hashes: &[[u8; 32]],
-  ) -> Result<Vec<Transaction>, RpcError> {
-    let (txs, _) = self.get_transactions_core(hashes).await?;
-    Ok(txs.iter().cloned().filter_map(|tx| tx.ok()).collect())
+    txs
+      .txs
+      .iter()
+      .map(|res| {
+        let tx = Transaction::deserialize(&mut std::io::Cursor::new(
+          rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex }).unwrap(),
+        ))
+        .map_err(|_| {
+          RpcError::InvalidTransaction(hex::decode(&res.tx_hash).unwrap().try_into().unwrap())
+        })?;
+
+        // https://github.com/monero-project/monero/issues/8311
+        if res.as_hex.is_empty() {
+          match tx.prefix.inputs.get(0) {
+            Some(Input::Gen { .. }) => (),
+            _ => Err(RpcError::PrunedTransaction)?,
+          }
+        }
+
+        Ok(tx)
+      })
+      .collect()
   }
 
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {
@@ -237,30 +219,11 @@ impl Rpc {
     )
   }
 
-  async fn get_block_transactions_core(
-    &self,
-    height: usize,
-    possible: bool,
-  ) -> Result<Vec<Transaction>, RpcError> {
+  pub async fn get_block_transactions(&self, height: usize) -> Result<Vec<Transaction>, RpcError> {
     let block = self.get_block(height).await?;
     let mut res = vec![block.miner_tx];
-    res.extend(if possible {
-      self.get_transactions_possible(&block.txs).await?
-    } else {
-      self.get_transactions(&block.txs).await?
-    });
+    res.extend(self.get_transactions(&block.txs).await?);
     Ok(res)
-  }
-
-  pub async fn get_block_transactions(&self, height: usize) -> Result<Vec<Transaction>, RpcError> {
-    self.get_block_transactions_core(height, false).await
-  }
-
-  pub async fn get_block_transactions_possible(
-    &self,
-    height: usize,
-  ) -> Result<Vec<Transaction>, RpcError> {
-    self.get_block_transactions_core(height, true).await
   }
 
   pub async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
@@ -297,7 +260,7 @@ impl Rpc {
   ) -> Result<Vec<u64>, RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
-    pub struct Distribution {
+    struct Distribution {
       distribution: Vec<u64>,
     }
 
@@ -326,13 +289,13 @@ impl Rpc {
     Ok(distributions.result.distributions.swap_remove(0).distribution)
   }
 
-  pub async fn get_outputs(
+  pub async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
     height: usize,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
     #[derive(Deserialize, Debug)]
-    pub struct Out {
+    struct Out {
       key: String,
       mask: String,
       txid: String,
@@ -370,8 +333,8 @@ impl Rpc {
           .collect::<Vec<_>>(),
       )
       .await?;
-    // TODO: Support time based lock times. These shouldn't be needed, and it may be painful to
-    // get the median time for the given height, yet we do need to in order to be complete
+
+    // TODO: https://github.com/serai-dex/serai/issues/104
     outs
       .outs
       .iter()

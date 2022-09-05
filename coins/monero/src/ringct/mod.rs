@@ -3,12 +3,13 @@ use zeroize::Zeroize;
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 pub(crate) mod hash_to_point;
-pub use hash_to_point::hash_to_point;
+pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 
 pub mod clsag;
 pub mod bulletproofs;
 
 use crate::{
+  Protocol,
   serialize::*,
   ringct::{clsag::Clsag, bulletproofs::Bulletproofs},
 };
@@ -50,24 +51,18 @@ impl RctBase {
     outputs: usize,
     r: &mut R,
   ) -> std::io::Result<(RctBase, u8)> {
-    let mut rct_type = [0];
-    r.read_exact(&mut rct_type)?;
+    let rct_type = read_byte(r)?;
     Ok((
-      if rct_type[0] == 0 {
+      if rct_type == 0 {
         RctBase { fee: 0, ecdh_info: vec![], commitments: vec![] }
       } else {
         RctBase {
           fee: read_varint(r)?,
-          ecdh_info: (0 .. outputs)
-            .map(|_| {
-              let mut ecdh = [0; 8];
-              r.read_exact(&mut ecdh).map(|_| ecdh)
-            })
-            .collect::<Result<_, _>>()?,
+          ecdh_info: (0 .. outputs).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
           commitments: read_raw_vec(read_point, outputs, r)?,
         }
       },
-      rct_type[0],
+      rct_type,
     ))
   }
 }
@@ -92,8 +87,9 @@ impl RctPrunable {
     }
   }
 
-  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
-    1 + Bulletproofs::fee_weight(outputs) + (inputs * (Clsag::fee_weight(ring_len) + 32))
+  pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
+    1 + Bulletproofs::fee_weight(protocol.bp_plus(), outputs) +
+      (inputs * (Clsag::fee_weight(protocol.ring_len()) + 32))
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -131,7 +127,7 @@ impl RctPrunable {
     })
   }
 
-  pub fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub(crate) fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     match self {
       RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
       RctPrunable::Clsag { bulletproofs, .. } => {
@@ -148,8 +144,8 @@ pub struct RctSignatures {
 }
 
 impl RctSignatures {
-  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize) -> usize {
-    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(ring_len, inputs, outputs)
+  pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
+    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(protocol, inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {

@@ -51,9 +51,9 @@ pub enum ClsagError {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
-  pub commitment: Commitment,
+  pub(crate) commitment: Commitment,
   // True spend index, offsets, and ring
-  pub decoys: Decoys,
+  pub(crate) decoys: Decoys,
 }
 
 impl ClsagInput {

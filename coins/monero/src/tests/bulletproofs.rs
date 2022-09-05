@@ -57,12 +57,7 @@ fn bulletproofs_vector() {
 }
 
 macro_rules! bulletproofs_tests {
-  ($init: ident, $name: ident, $max: ident, $plus: literal) => {
-    #[test]
-    fn $init() {
-      Bulletproofs::init($plus);
-    }
-
+  ($name: ident, $max: ident, $plus: literal) => {
     #[test]
     fn $name() {
       // Create Bulletproofs for all possible output quantities
@@ -93,5 +88,5 @@ macro_rules! bulletproofs_tests {
   };
 }
 
-bulletproofs_tests!(bulletproofs_init, bulletproofs, bulletproofs_max, false);
-bulletproofs_tests!(bulletproofs_plus_init, bulletproofs_plus, bulletproofs_plus_max, true);
+bulletproofs_tests!(bulletproofs, bulletproofs_max, false);
+bulletproofs_tests!(bulletproofs_plus, bulletproofs_plus_max, true);

@@ -2,10 +2,10 @@ use core::cmp::Ordering;
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use crate::{
-  hash,
+  Protocol, hash,
   serialize::*,
   ringct::{RctPrunable, RctSignatures},
 };
@@ -41,14 +41,12 @@ impl Input {
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Input> {
-    let mut variant = [0];
-    r.read_exact(&mut variant)?;
-    Ok(match variant[0] {
+    Ok(match read_byte(r)? {
       255 => Input::Gen(read_varint(r)?),
       2 => Input::ToKey {
         amount: read_varint(r)?,
         key_offsets: read_vec(read_varint, r)?,
-        key_image: read_point(r)?,
+        key_image: read_torsion_free_point(r)?,
       },
       _ => Err(std::io::Error::new(
         std::io::ErrorKind::Other,
@@ -62,7 +60,7 @@ impl Input {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
   pub amount: u64,
-  pub key: EdwardsPoint,
+  pub key: CompressedEdwardsY,
   pub view_tag: Option<u8>,
 }
 
@@ -74,7 +72,7 @@ impl Output {
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.amount, w)?;
     w.write_all(&[2 + (if self.view_tag.is_some() { 1 } else { 0 })])?;
-    write_point(&self.key, w)?;
+    w.write_all(&self.key.to_bytes())?;
     if let Some(view_tag) = self.view_tag {
       w.write_all(&[view_tag])?;
     }
@@ -83,9 +81,7 @@ impl Output {
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Output> {
     let amount = read_varint(r)?;
-    let mut output_type = [0];
-    r.read_exact(&mut output_type)?;
-    let view_tag = match output_type[0] {
+    let view_tag = match read_byte(r)? {
       2 => false,
       3 => true,
       _ => Err(std::io::Error::new(
@@ -96,14 +92,8 @@ impl Output {
 
     Ok(Output {
       amount,
-      key: read_point(r)?,
-      view_tag: if view_tag {
-        let mut view_tag = [0];
-        r.read_exact(&mut view_tag)?;
-        Some(view_tag[0])
-      } else {
-        None
-      },
+      key: CompressedEdwardsY(read_bytes(r)?),
+      view_tag: if view_tag { Some(read_byte(r)?) } else { None },
     })
   }
 }
@@ -191,11 +181,7 @@ impl TransactionPrefix {
       outputs: read_vec(Output::deserialize, r)?,
       extra: vec![],
     };
-
-    let len = read_varint(r)?;
-    prefix.extra.resize(len.try_into().unwrap(), 0);
-    r.read_exact(&mut prefix.extra)?;
-
+    prefix.extra = read_vec(read_byte, r)?;
     Ok(prefix)
   }
 }
@@ -207,9 +193,14 @@ pub struct Transaction {
 }
 
 impl Transaction {
-  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize, extra: usize) -> usize {
-    TransactionPrefix::fee_weight(ring_len, inputs, outputs, extra) +
-      RctSignatures::fee_weight(ring_len, inputs, outputs)
+  pub(crate) fn fee_weight(
+    protocol: Protocol,
+    inputs: usize,
+    outputs: usize,
+    extra: usize,
+  ) -> usize {
+    TransactionPrefix::fee_weight(protocol.ring_len(), inputs, outputs, extra) +
+      RctSignatures::fee_weight(protocol, inputs, outputs)
   }
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -286,7 +277,7 @@ impl Transaction {
     serialized.clear();
 
     self.rct_signatures.prunable.signature_serialize(&mut serialized).unwrap();
-    sig_hash.extend(&hash(&serialized));
+    sig_hash.extend(hash(&serialized));
 
     hash(&sig_hash)
   }

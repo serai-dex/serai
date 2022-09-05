@@ -6,10 +6,12 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use tiny_keccak::{Hasher, Keccak};
 
 use curve25519_dalek::{
-  constants::{ED25519_BASEPOINT_POINT, ED25519_BASEPOINT_TABLE},
+  constants::ED25519_BASEPOINT_TABLE,
   scalar::Scalar,
-  edwards::{EdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY},
+  edwards::{EdwardsPoint, EdwardsBasepointTable},
 };
+
+pub use monero_generators::H;
 
 #[cfg(feature = "multisig")]
 pub mod frost;
@@ -54,11 +56,6 @@ impl Protocol {
 }
 
 lazy_static! {
-  static ref H: EdwardsPoint =
-    CompressedEdwardsY(hash(&ED25519_BASEPOINT_POINT.compress().to_bytes()))
-      .decompress()
-      .unwrap()
-      .mul_by_cofactor();
   static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H);
 }
 

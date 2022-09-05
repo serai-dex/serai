@@ -13,10 +13,9 @@ use dalek_ff_group::{Scalar, EdwardsPoint};
 
 use multiexp::multiexp as multiexp_const;
 
-use crate::{
-  H as DALEK_H, Commitment, hash, hash_to_scalar as dalek_hash,
-  ringct::hash_to_point::raw_hash_to_point, serialize::write_varint,
-};
+pub(crate) use monero_generators::Generators;
+
+use crate::{H as DALEK_H, Commitment, hash_to_scalar as dalek_hash};
 pub(crate) use crate::ringct::bulletproofs::scalar_vector::*;
 
 // Bring things into ff/group
@@ -33,35 +32,11 @@ pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {
 pub(crate) const MAX_M: usize = 16;
 pub(crate) const LOG_N: usize = 6; // 2 << 6 == N
 pub(crate) const N: usize = 64;
-pub(crate) const MAX_MN: usize = MAX_M * N;
-
-pub(crate) struct Generators {
-  pub(crate) G: Vec<EdwardsPoint>,
-  pub(crate) H: Vec<EdwardsPoint>,
-}
-
-pub(crate) fn generators_core(prefix: &'static [u8]) -> Generators {
-  let mut res = Generators { G: Vec::with_capacity(MAX_MN), H: Vec::with_capacity(MAX_MN) };
-  for i in 0 .. MAX_MN {
-    let i = 2 * i;
-
-    let mut even = (*H).compress().to_bytes().to_vec();
-    even.extend(prefix);
-    let mut odd = even.clone();
-
-    write_varint(&i.try_into().unwrap(), &mut even).unwrap();
-    write_varint(&(i + 1).try_into().unwrap(), &mut odd).unwrap();
-    res.H.push(EdwardsPoint(raw_hash_to_point(hash(&even))));
-    res.G.push(EdwardsPoint(raw_hash_to_point(hash(&odd))));
-  }
-  res
-}
 
 pub(crate) fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
   multiexp_const(pairs) * *INV_EIGHT
 }
 
-// TODO: Have this take in other, multiplied by G, and do a single multiexp
 pub(crate) fn vector_exponent(
   generators: &Generators,
   a: &ScalarVector,
@@ -151,12 +126,6 @@ pub(crate) fn LR_statements(
 
 lazy_static! {
   pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), N);
-}
-
-pub(crate) fn init() {
-  let _ = &*INV_EIGHT;
-  let _ = &*H;
-  let _ = &*TWO_N;
 }
 
 pub(crate) fn challenge_products(w: &[Scalar], winv: &[Scalar]) -> Vec<Scalar> {

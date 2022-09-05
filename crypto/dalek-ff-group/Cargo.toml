@@ -1,6 +1,6 @@
 [package]
 name = "dalek-ff-group"
-version = "0.1.2"
+version = "0.1.4"
 description = "ff/group bindings around curve25519-dalek"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"

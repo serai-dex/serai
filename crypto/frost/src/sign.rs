@@ -253,7 +253,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
     // protocol
     rho_transcript.append_message(
       b"commitments",
-      &C::hash_msg(params.algorithm.transcript().challenge(b"commitments").as_ref()),
+      &C::hash_commitments(params.algorithm.transcript().challenge(b"commitments").as_ref()),
     );
 
     // Include the offset, if one exists

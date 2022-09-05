@@ -63,7 +63,7 @@ fn test_ecrecover_hack() {
 
   const MESSAGE: &'static [u8] = b"Hello, World!";
   let hashed_message = keccak256(MESSAGE);
-  let chain_id = U256::from(Scalar::ONE);
+  let chain_id = U256::ONE;
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 

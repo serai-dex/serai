@@ -23,16 +23,8 @@ impl BlockHeader {
       major_version: read_varint(r)?,
       minor_version: read_varint(r)?,
       timestamp: read_varint(r)?,
-      previous: {
-        let mut previous = [0; 32];
-        r.read_exact(&mut previous)?;
-        previous
-      },
-      nonce: {
-        let mut nonce = [0; 4];
-        r.read_exact(&mut nonce)?;
-        u32::from_le_bytes(nonce)
-      },
+      previous: read_bytes(r)?,
+      nonce: read_bytes(r).map(u32::from_le_bytes)?,
     })
   }
 }
@@ -59,12 +51,7 @@ impl Block {
     Ok(Block {
       header: BlockHeader::deserialize(r)?,
       miner_tx: Transaction::deserialize(r)?,
-      txs: (0 .. read_varint(r)?)
-        .map(|_| {
-          let mut tx = [0; 32];
-          r.read_exact(&mut tx).map(|_| tx)
-        })
-        .collect::<Result<_, _>>()?,
+      txs: (0 .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
     })
   }
 }

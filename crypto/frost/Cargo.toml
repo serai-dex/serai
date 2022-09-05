@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.2.0"
+version = "0.2.1"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"
@@ -18,16 +18,20 @@ zeroize = { version = "1.3", features = ["zeroize_derive"] }
 hex = "0.4"
 
 sha2 = { version = "0.10", optional = true }
+sha3 = { version = "0.10", optional = true }
 
 ff = "0.12"
 group = "0.12"
 
+dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
+
 elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true }
 p256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 k256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.1", optional = true }
 
-transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"], version = "0.1" }
+minimal-ed448 = { path = "../ed448", version = "0.1", optional = true }
+
+transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"], version = "^0.1.3" }
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
@@ -38,10 +42,12 @@ sha2 = "0.10"
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
-curves = ["sha2"] # All officially denoted curves use the SHA2 family of hashes
-kp256 = ["elliptic-curve", "curves"]
-p256 = ["kp256", "dep:p256"]
-secp256k1 = ["kp256", "k256"]
-dalek = ["curves", "dalek-ff-group"]
+dalek = ["sha2", "dalek-ff-group"]
 ed25519 = ["dalek"]
 ristretto = ["dalek"]
+
+kp256 = ["sha2", "elliptic-curve"]
+p256 = ["kp256", "dep:p256"]
+secp256k1 = ["kp256", "k256"]
+
+ed448 = ["sha3", "minimal-ed448"]

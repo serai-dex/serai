@@ -5,7 +5,7 @@ use std::{
 };
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
+use rand_chacha::ChaCha20Rng;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -43,8 +43,8 @@ impl ClsagInput {
       // Doesn't include global output indexes as CLSAG doesn't care and won't be affected by it
       // They're just a unreliable reference to this data which will be included in the message
       // if in use
-      ring.extend(&pair[0].compress().to_bytes());
-      ring.extend(&pair[1].compress().to_bytes());
+      ring.extend(pair[0].compress().to_bytes());
+      ring.extend(pair[1].compress().to_bytes());
     }
     transcript.append_message(b"ring", &ring);
 
@@ -111,7 +111,7 @@ impl ClsagMultisig {
     })
   }
 
-  pub const fn serialized_len() -> usize {
+  pub(crate) const fn serialized_len() -> usize {
     32 + (2 * 32)
   }
 
@@ -181,7 +181,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     // process even if they have access to commitments (specifically, the ring index being signed
     // for, along with the mask which should not only require knowing the shared keys yet also the
     // input commitment masks)
-    let mut rng = ChaCha12Rng::from_seed(self.transcript.rng_seed(b"decoy_responses"));
+    let mut rng = ChaCha20Rng::from_seed(self.transcript.rng_seed(b"decoy_responses"));
 
     self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
 

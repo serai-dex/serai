@@ -1,0 +1,6 @@
+Serai crates are licensed under one of two licenses, either MIT or AGPL-3.0,
+depending on the crate in question. Each crate declares their license in their
+`Cargo.toml` and includes a `LICENSE` file detailing its status. Additionally,
+a full copy of the AGPL-3.0 License is included in the root of this repository
+as a reference text. This copy should be provided with any distribution of a
+crate licensed under the AGPL-3.0, as per its terms.

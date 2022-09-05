@@ -7,8 +7,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-use monero::{consensus::Encodable, PublicKey, blockdata::transaction::SubField};
-
 #[cfg(feature = "multisig")]
 use frost::FrostError;
 
@@ -23,9 +21,8 @@ use crate::{
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{
-    address::{AddressType, Address},
-    SpendableOutput, Decoys, key_image_sort, uniqueness, shared_key, commitment_mask,
-    amount_encryption,
+    address::Address, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
+    uniqueness, shared_key, commitment_mask, amount_encryption,
   },
 };
 #[cfg(feature = "multisig")]
@@ -50,34 +47,39 @@ impl SendOutput {
   fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     unique: [u8; 32],
-    output: (Address, u64),
-    o: usize,
-  ) -> SendOutput {
-    let r = random_scalar(rng);
-    let (view_tag, shared_key) =
-      shared_key(Some(unique).filter(|_| output.0.meta.guaranteed), &r, &output.0.view, o);
+    output: (usize, (Address, u64)),
+  ) -> (SendOutput, Option<[u8; 8]>) {
+    let o = output.0;
+    let output = output.1;
 
-    let spend = output.0.spend;
-    SendOutput {
-      R: match output.0.meta.kind {
-        AddressType::Standard => &r * &ED25519_BASEPOINT_TABLE,
-        AddressType::Integrated(_) => {
-          unimplemented!("SendOutput::new doesn't support Integrated addresses")
-        }
-        AddressType::Subaddress => r * spend,
+    let r = random_scalar(rng);
+    let (view_tag, shared_key, payment_id_xor) =
+      shared_key(Some(unique).filter(|_| output.0.meta.kind.guaranteed()), &r, &output.0.view, o);
+
+    (
+      SendOutput {
+        R: if !output.0.meta.kind.subaddress() {
+          &r * &ED25519_BASEPOINT_TABLE
+        } else {
+          r * output.0.spend
+        },
+        view_tag,
+        dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
+        commitment: Commitment::new(commitment_mask(shared_key), output.1),
+        amount: amount_encryption(output.1, shared_key),
       },
-      view_tag,
-      dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + spend),
-      commitment: Commitment::new(commitment_mask(shared_key), output.1),
-      amount: amount_encryption(output.1, shared_key),
-    }
+      output
+        .0
+        .payment_id()
+        .map(|id| (u64::from_le_bytes(id) ^ u64::from_le_bytes(payment_id_xor)).to_le_bytes()),
+    )
   }
 }
 
 #[derive(Clone, Error, Debug)]
 pub enum TransactionError {
-  #[error("invalid address")]
-  InvalidAddress,
+  #[error("multiple addresses with payment IDs")]
+  MultiplePaymentIds,
   #[error("no inputs")]
   NoInputs,
   #[error("no outputs")]
@@ -86,6 +88,8 @@ pub enum TransactionError {
   NoChange,
   #[error("too many outputs")]
   TooManyOutputs,
+  #[error("too much data")]
+  TooMuchData,
   #[error("not enough funds (in {0}, out {1})")]
   NotEnoughFunds(u64, u64),
   #[error("wrong spend private key")]
@@ -127,9 +131,9 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 
   for (i, input) in inputs.iter().enumerate() {
     signable.push((
-      spend + input.key_offset,
-      generate_key_image(spend + input.key_offset),
-      ClsagInput::new(input.commitment.clone(), decoys[i].clone())
+      spend + input.key_offset(),
+      generate_key_image(spend + input.key_offset()),
+      ClsagInput::new(input.commitment().clone(), decoys[i].clone())
         .map_err(TransactionError::ClsagError)?,
     ));
 
@@ -169,6 +173,7 @@ pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,
   payments: Vec<(Address, u64)>,
+  data: Option<Vec<u8>>,
   fee: u64,
 }
 
@@ -178,20 +183,26 @@ impl SignableTransaction {
     inputs: Vec<SpendableOutput>,
     mut payments: Vec<(Address, u64)>,
     change_address: Option<Address>,
+    data: Option<Vec<u8>>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
-    // Make sure all addresses are valid
-    let test = |addr: Address| match addr.meta.kind {
-      AddressType::Standard => Ok(()),
-      AddressType::Integrated(..) => Err(TransactionError::InvalidAddress),
-      AddressType::Subaddress => Ok(()),
-    };
-
-    for payment in &payments {
-      test(payment.0)?;
-    }
-    if let Some(change) = change_address {
-      test(change)?;
+    // Make sure there's only one payment ID
+    {
+      let mut payment_ids = 0;
+      let mut count = |addr: Address| {
+        if addr.payment_id().is_some() {
+          payment_ids += 1
+        }
+      };
+      for payment in &payments {
+        count(payment.0);
+      }
+      if let Some(change) = change_address {
+        count(change);
+      }
+      if payment_ids > 1 {
+        Err(TransactionError::MultiplePaymentIds)?;
+      }
     }
 
     if inputs.is_empty() {
@@ -199,6 +210,10 @@ impl SignableTransaction {
     }
     if payments.is_empty() {
       Err(TransactionError::NoOutputs)?;
+    }
+
+    if data.as_ref().map(|v| v.len()).unwrap_or(0) > 255 {
+      Err(TransactionError::TooMuchData)?;
     }
 
     // TODO TX MAX SIZE
@@ -210,20 +225,15 @@ impl SignableTransaction {
     }
     let outputs = payments.len() + (if change { 1 } else { 0 });
 
-    // Calculate the extra length.
-    // Type, length, value, with 1 field for the first key and 1 field for the rest
-    let extra = (outputs * (2 + 32)) - (outputs.saturating_sub(2) * 2);
+    // Calculate the extra length
+    let extra = Extra::fee_weight(outputs, data.as_ref());
 
     // Calculate the fee.
-    let mut fee = fee_rate.calculate(Transaction::fee_weight(
-      protocol.ring_len(),
-      inputs.len(),
-      outputs,
-      extra,
-    ));
+    let mut fee =
+      fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs, extra));
 
     // Make sure we have enough funds
-    let in_amount = inputs.iter().map(|input| input.commitment.amount).sum::<u64>();
+    let in_amount = inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
     let mut out_amount = payments.iter().map(|payment| payment.1).sum::<u64>() + fee;
     if in_amount < out_amount {
       Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
@@ -232,12 +242,9 @@ impl SignableTransaction {
     // If we have yet to add a change output, do so if it's economically viable
     if (!change) && change_address.is_some() && (in_amount != out_amount) {
       // Check even with the new fee, there's remaining funds
-      let change_fee = fee_rate.calculate(Transaction::fee_weight(
-        protocol.ring_len(),
-        inputs.len(),
-        outputs + 1,
-        extra,
-      )) - fee;
+      let change_fee =
+        fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs + 1, extra)) -
+          fee;
       if (out_amount + change_fee) < in_amount {
         change = true;
         out_amount += change_fee;
@@ -253,7 +260,7 @@ impl SignableTransaction {
       Err(TransactionError::TooManyOutputs)?;
     }
 
-    Ok(SignableTransaction { protocol, inputs, payments, fee })
+    Ok(SignableTransaction { protocol, inputs, payments, data, fee })
   }
 
   fn prepare_transaction<R: RngCore + CryptoRng>(
@@ -265,12 +272,23 @@ impl SignableTransaction {
     self.payments.shuffle(rng);
 
     // Actually create the outputs
-    let outputs = self
-      .payments
-      .drain(..)
-      .enumerate()
-      .map(|(o, output)| SendOutput::new(rng, uniqueness, output, o))
-      .collect::<Vec<_>>();
+    let mut outputs = Vec::with_capacity(self.payments.len());
+    let mut id = None;
+    for payment in self.payments.drain(..).enumerate() {
+      let (output, payment_id) = SendOutput::new(rng, uniqueness, payment);
+      outputs.push(output);
+      id = id.or(payment_id);
+    }
+
+    // Include a random payment ID if we don't actually have one
+    // It prevents transactions from leaking if they're sending to integrated addresses or not
+    let id = if let Some(id) = id {
+      id
+    } else {
+      let mut id = [0; 8];
+      rng.fill_bytes(&mut id);
+      id
+    };
 
     let commitments = outputs.iter().map(|output| output.commitment.clone()).collect::<Vec<_>>();
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
@@ -279,23 +297,29 @@ impl SignableTransaction {
     let bp = Bulletproofs::prove(rng, &commitments, self.protocol.bp_plus()).unwrap();
 
     // Create the TX extra
-    // TODO: Review this for canonicity with Monero
-    let mut extra = vec![];
-    SubField::TxPublicKey(PublicKey { point: outputs[0].R.compress() })
-      .consensus_encode(&mut extra)
-      .unwrap();
-    SubField::AdditionalPublickKey(
-      outputs[1 ..].iter().map(|output| PublicKey { point: output.R.compress() }).collect(),
-    )
-    .consensus_encode(&mut extra)
-    .unwrap();
+    let extra = {
+      let mut extra = Extra::new(outputs.iter().map(|output| output.R).collect());
+
+      let mut id_vec = Vec::with_capacity(1 + 8);
+      PaymentId::Encrypted(id).serialize(&mut id_vec).unwrap();
+      extra.push(ExtraField::Nonce(id_vec));
+
+      // Include data if present
+      if let Some(data) = self.data.take() {
+        extra.push(ExtraField::Nonce(data));
+      }
+
+      let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len(), self.data.as_ref()));
+      extra.serialize(&mut serialized).unwrap();
+      serialized
+    };
 
     let mut tx_outputs = Vec::with_capacity(outputs.len());
     let mut ecdh_info = Vec::with_capacity(outputs.len());
     for output in &outputs {
       tx_outputs.push(Output {
         amount: 0,
-        key: output.dest,
+        key: output.dest.compress(),
         view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
       ecdh_info.push(output.amount);
@@ -335,8 +359,8 @@ impl SignableTransaction {
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
-      let mut offset = spend + input.key_offset;
-      if (&offset * &ED25519_BASEPOINT_TABLE) != input.key {
+      let mut offset = spend + input.key_offset();
+      if (&offset * &ED25519_BASEPOINT_TABLE) != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
