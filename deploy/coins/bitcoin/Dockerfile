@@ -21,7 +21,8 @@ RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${B
 # Verify Binary
 # For the PGP keys of builders and developers, refer to 
 # https://github.com/bitcoin/bitcoin/tree/master/contrib/builder-keys
-# Serai recognizes a handselected reduced set of keys from the list, prefixes -- 
+# Serai recognizes the trusted set of keys from
+# https://github.com/bitcoin/bitcoin/blob/master/contrib/verify-commits/trusted-keys
 # marco -- B8B3
 # laanwj -- 71A3
 # fanquake -- E777
