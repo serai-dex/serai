@@ -39,7 +39,6 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
 # if above threshold continue
 # else exit code 2
 RUN { err="$( { gpg --verify --status-fd 1 --verify SHA256SUMS.asc SHA256SUMS; } 2>&1 >&3 3>&- )"; } 3>&1; num="$(echo $err | grep -o 'Good signature' | wc -l)" \
-	&& echo $num \
 	&& if (($num > ${SIG_REQ} )); then echo "Signatures found: $num. Above threshold of ${SIG_REQ}!"; else exit 2; fi
 
 RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256sum -c
