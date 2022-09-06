@@ -32,7 +32,7 @@ RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${B
 ENV KEYS  B8B3F1C0E58C15DB6A81D30C3648A882F4316B9B 71A3B16735405025D447E8F274810B012346C9A6 E777299FC265DD04793070EB944D35F9AC3DB76A
 ENV KEYS2 152812300785C96444D3334D17565732E08E5E41 6B002C6EA3F91B1B0DF0C9BC8F617F1200A6D25C D1DBF2C4B96F2DEBF4C16654410108112E7EA81F
 
-# Use footprints to get keys from servers. 2 Different servers used.
+# Use hardcoded prints to get keys from servers. 2 Different servers used.
 RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
 	&& gpg --keyserver hkp://keys.openpgp.org:80 --recv-keys ${KEYS2}
 
