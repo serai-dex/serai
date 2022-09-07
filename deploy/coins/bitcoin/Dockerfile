@@ -11,7 +11,6 @@ WORKDIR /home/bitcoin
 RUN apk update \
 	&& apk --no-cache add ca-certificates gnupg bash su-exec 
 
-SHELL ["/bin/bash", "-c"]
 # Get Binary
 # TODO: When bitcoin.org publishes 23.0, retrieve checksums from there.
 RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz \
