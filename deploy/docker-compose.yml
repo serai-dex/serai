@@ -1,4 +1,19 @@
 version: "3.9"
+name: serai-dev
+  # ------------------------------------------------------------
+  # Services
+  # ------------------------------------------------------------
+  # Profiles:
+  # base - single node, unidentified
+  # coins - node clients for coins only (BTC, ETH, XMR)
+  # cluster-sm - Alice, Bob, Charlie
+  # cluster-coins-sm - cluster-sm with coins
+  # cluter-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
+  # cluster-coins-lg - cluster-lg with coins
+  # monero - full node monero only
+  # bitcoin - full node bitcoin only
+  # ethereum - full node ethereum only
+  # Example: docker compose --profile bitcoin up
 volumes:
   serai-base:
   serai-alice:
@@ -8,22 +23,9 @@ volumes:
   serai-eve:
   serai-ferdie:
 
-    # ------------------------------------------------------------
-    # Services
-    # ------------------------------------------------------------
-    # Profiles:
-    # base - single node, unidentified
-    # coins - node clients for coins only (BTC, ETH, XMR)
-    # cluster-sm - Alice, Bob, Charlie
-    # cluster-coins-sm - cluster-sm with coins
-    # cluter-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
-    # cluster-coins-lg - cluster-lg with coins
-    # monero - full node monero only
-    # bitcoin - full node bitcoin only
-    # ethereum - full node ethereum only
-    # Example: docker compose --profile bitcoin up
 
 services:
+
   _serai:
     &serai_defaults
     restart: unless-stopped
