@@ -17,7 +17,7 @@ do
 	sleep 5
 done
 
-bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS createwallet "serai" false false $RPC_PASS false false true &&
+bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS createwallet "miner" false false $RPC_PASS false false true &&
 bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS walletpassphrase $RPC_PASS 60 &&
 bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS importprivkey $PRIV_KEY
 

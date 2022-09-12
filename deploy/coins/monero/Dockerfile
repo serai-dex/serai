@@ -17,8 +17,8 @@ RUN apk update \
 # Get Binary
 RUN wget https://downloads.getmonero.org/cli/monero-linux-x64-v${MONERO_VERSION}.tar.bz2
 
-# Verify Binary -- fingerprints from https://github.com/monero-project/monero-site/issues/811
-ENV KEYS F0AF4D462A0BDF92 7455C5E3C0CDCEB9
+# Verify Binary -- fingerprint from https://github.com/monero-project/monero-site/issues/1949
+ENV KEYS F0AF4D462A0BDF92
 RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-sigs-only --receive-keys ${KEYS}
 
 ADD ./temp/hashes-v${MONERO_VERSION}.txt .
