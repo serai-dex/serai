@@ -1,8 +1,7 @@
 # Prepare Environment
 FROM alpine:latest as builder
 
-ENV GETH_VERSION=1.10.23
-ENV GETH_COMMIT=d901d853
+ENV GETH_VERSION=1.10.23-d901d853
 
 WORKDIR /home/ethereum
 
@@ -10,8 +9,8 @@ RUN apk update \
 	&& apk --no-cache add ca-certificates gnupg bash su-exec
 
 # Get Binary
-RUN wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz\
-	&& wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc
+RUN wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}.tar.gz\
+	&& wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}.tar.gz.asc
 
 # Verify Binary
 # refer to https://geth.ethereum.org/downloads/#openpgp_signatures
@@ -19,10 +18,10 @@ RUN wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_
 ENV KEYS F9585DE6 C2FF8BBF 9BA28146 7B9E2481 D2A67EAC E058A81C 05A5DDF0 1CCB7DD2
 
 RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
-	&& gpg --verify geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz
+	&& gpg --verify geth-linux-amd64-${GETH_VERSION}.tar.gz.asc geth-linux-amd64-${GETH_VERSION}.tar.gz
 
 # Prepare Image
-RUN tar xzvf geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz
+RUN tar xzvf geth-linux-amd64-${GETH_VERSION}.tar.gz
 
 # Prepare Image
 FROM ubuntu:latest as image
