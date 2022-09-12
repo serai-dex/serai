@@ -1,0 +1,176 @@
+version: "3.9"
+name: serai-dev
+  # ------------------------------------------------------------
+  # Services
+  # ------------------------------------------------------------
+  # Profiles:
+  # base - single node, unidentified
+  # coins - node clients for coins only (BTC, ETH, XMR)
+  # cluster-sm - Alice, Bob, Charlie
+  # cluster-coins-sm - cluster-sm with coins
+  # cluter-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
+  # cluster-coins-lg - cluster-lg with coins
+  # monero - full node monero only
+  # bitcoin - full node bitcoin only
+  # ethereum - full node ethereum only
+  # Example: docker compose --profile bitcoin up
+volumes:
+  serai-base:
+  serai-alice:
+  serai-bob:
+  serai-charlie:
+  serai-dave:
+  serai-eve:
+  serai-ferdie:
+
+
+services:
+
+  _serai:
+    &serai_defaults
+    restart: unless-stopped
+    image: serai:dev
+    profiles:
+      - _
+    build:
+      context: ../
+      dockerfile: ./deploy/serai/Dockerfile
+      args:
+        TAG: serai
+    entrypoint: /scripts/entry-dev.sh
+    volumes:
+      - "./serai/scripts:/scripts"
+
+  serai-base:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-base
+    profiles:
+      - base
+    environment:
+      CHAIN: dev
+      NAME: base
+
+  serai-alice:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-alice
+    profiles:
+      - alice
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Alice
+      VALIDATOR: true
+
+  serai-bob:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-bob
+    profiles:
+      - bob
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Bob
+
+  serai-charlie:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-charlie
+    profiles:
+      - charlie
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Charlie
+
+  serai-dave:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-dave
+    profiles:
+      - dave
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Dave
+
+  serai-eve:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-eve
+    profiles:
+      - eve
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Eve
+
+  serai-ferdie:
+    &serai
+    <<: *serai_defaults
+    hostname: serai-ferdie
+    profiles:
+      - ferdie
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: dev
+      NAME: Ferdie
+  # Processor Services
+
+  # Coin Services
+  bitcoin:
+    profiles:
+      - single-coins
+      - cluster-coins-sm
+      - cluster-coins-lg
+      - coins
+      - bitcoin
+    build:
+      context: ./coins/bitcoin/
+    restart: unless-stopped
+    volumes:
+      - "./coins/bitcoin/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
+  ethereum:
+    profiles:
+      - single-coins
+      - cluster-coins-sm
+      - cluster-coins-lg
+      - coins
+      - ethereum
+    build:
+      context: ./coins/ethereum/
+    restart: unless-stopped
+    volumes:
+      - "./coins/ethereum/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
+  monero:
+    profiles:
+      - single-coins
+      - cluster-coins-sm
+      - cluster-coins-lg
+      - coins
+      - monero
+    build:
+      context: ./coins/monero/
+    restart: unless-stopped
+    volumes:
+      - "./coins/monero/temp:/temp"
+      - "./coins/monero/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
