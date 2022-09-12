@@ -15,7 +15,7 @@ RUN wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_
 # Verify Binary
 # refer to https://geth.ethereum.org/downloads/#openpgp_signatures
 # for the PGP keys of builders and developers
-ENV KEYS F9585DE6 C2FF8BBF 9BA28146 7B9E2481 D2A67EAC E058A81C 05A5DDF0 1CCB7DD2
+ENV KEYS 9BA28146 E058A81C 05A5DDF0 1CCB7DD2
 
 RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
 	&& gpg --verify geth-linux-amd64-${GETH_VERSION}.tar.gz.asc geth-linux-amd64-${GETH_VERSION}.tar.gz
