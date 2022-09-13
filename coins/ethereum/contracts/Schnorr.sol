@@ -26,7 +26,7 @@ contract Schnorr {
     require(sp != 0);
     // the ecrecover precompile implementation checks that the `r` and `s`
     // inputs are non-zero (in this case, `px` and `ep`), thus we don't need to
-    // check if they're zero.will make me 
+    // check if they're zero.
     address R = ecrecover(sp, parity, px, ep);
     require(R != address(0), "ecrecover failed");
     return e == keccak256(
