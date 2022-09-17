@@ -14,11 +14,15 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: Get nightly version to use
+        id: nightly
+        run: echo "::set-output name=version::$(cat .github/nightly-version)"
+
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
         with:
-          # Clippy requires nightly for some reason
-          rust-toolchain: nightly
+          # Clippy requires nightly due to serai-runtime requiring it
+          rust-toolchain: ${{ steps.nightly.outputs.version }}
           rust-components: clippy
 
       - name: Run Clippy
@@ -42,13 +46,17 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Get nightly version to use
+        id: nightly
+        run: echo "::set-output name=version::$(cat .github/nightly-version)"
+
       # Doesn't grab the cache as it's not needed
       - name: Install rustfmt
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: ${{ steps.nightly.outputs.version }}
           profile: minimal
           components: rustfmt
 
       - name: Run rustfmt
-        run: cargo +nightly fmt -- --check
+        run: cargo fmt -- --check
