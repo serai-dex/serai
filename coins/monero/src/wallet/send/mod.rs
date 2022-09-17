@@ -223,7 +223,7 @@ impl SignableTransaction {
     if change && change_address.is_none() {
       Err(TransactionError::NoChange)?;
     }
-    let outputs = payments.len() + (if change { 1 } else { 0 });
+    let outputs = payments.len() + usize::from(change);
 
     // Calculate the extra length
     let extra = Extra::fee_weight(outputs, data.as_ref());

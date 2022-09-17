@@ -128,7 +128,8 @@ fn ed448_non_ietf() {
         "e7c423399b36a33ece81aaa75e419a9dc4387edc99682f9e4742c9b1",
         "a9c2392cfe30510fd33f069a42dde987544dabd7ad307a62ae1c6b13",
         "00"
-      ).to_string()
+      )
+      .to_string(),
     },
   );
 }

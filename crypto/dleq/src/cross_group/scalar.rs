@@ -34,9 +34,8 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
     res1 = res1.double();
     res2 = res2.double();
 
-    let mut bit = *raw_bit as u8;
-    debug_assert_eq!(bit | 1, 1);
-    *raw_bit = false;
+    let mut bit = u8::from(*raw_bit);
+    *raw_bit = 0;
 
     res1 += F0::from(bit.into());
     res2 += F1::from(bit.into());

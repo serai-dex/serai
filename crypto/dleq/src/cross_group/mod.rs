@@ -226,8 +226,7 @@ where
         break;
       }
 
-      let mut bit = *raw_bit as u8;
-      debug_assert_eq!(bit | 1, 1);
+      let mut bit = u8::from(*raw_bit);
       *raw_bit = false;
 
       // Accumulate this bit
@@ -246,7 +245,7 @@ where
           these_bits,
           &mut blinding_key,
         ));
-        these_bits = 0;
+        these_bits.zeroize();
       }
     }
     debug_assert_eq!(bits.len(), capacity / bits_per_group);

@@ -37,9 +37,7 @@ pub mod field;
 
 // Convert a boolean to a Choice in a *presumably* constant time manner
 fn choice(value: bool) -> Choice {
-  let bit = value as u8;
-  debug_assert_eq!(bit | 1, 1);
-  Choice::from(bit)
+  Choice::from(u8::from(value))
 }
 
 macro_rules! deref_borrow {

@@ -227,8 +227,7 @@ impl Mul<Scalar> for Point {
     let mut bits = 0;
     for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
       bits <<= 1;
-      let bit = *bit as u8;
-      assert_eq!(bit | 1, 1);
+      let bit = u8::from(*bit);
       bits |= bit;
 
       if ((i + 1) % 4) == 0 {
@@ -320,7 +319,7 @@ fn addition_multiplication_serialization() {
   let mut accum = Point::identity();
   for x in 1 .. 10 {
     accum += Point::generator();
-    let mul = Point::generator() * Scalar::from(x as u8);
+    let mul = Point::generator() * Scalar::from(u8::try_from(x).unwrap());
     assert_eq!(accum, mul);
     assert_eq!(Point::from_bytes(&mul.to_bytes()).unwrap(), mul);
   }
