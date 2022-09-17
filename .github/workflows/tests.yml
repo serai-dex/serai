@@ -59,4 +59,4 @@ jobs:
           components: rustfmt
 
       - name: Run rustfmt
-        run: cargo fmt -- --check
+        run: cargo +${{ steps.nightly.outputs.version }} fmt -- --check
