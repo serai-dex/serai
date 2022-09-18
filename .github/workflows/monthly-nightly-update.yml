@@ -23,9 +23,11 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "<>"
 
+          git checkout -b $(date +"nightly-%Y-%m")
+
           git add .github/nightly-version
           git commit -m "Update nightly"
-          git push -u origin $(date +"nightly-%Y-%m")
+          git push -u origin
 
           echo "::set-output name=commit::$(git rev-parse HEAD)"
 
