@@ -25,7 +25,7 @@ jobs:
 
           git add .github/nightly-version
           git commit -m "Update nightly"
-          git push origin $(date +"nightly-%Y-%m")
+          git push -u origin $(date +"nightly-%Y-%m")
 
           echo "::set-output name=commit::$(git rev-parse HEAD)"
 
