@@ -10,9 +10,9 @@ abigen!(
   event_derives(serde::Deserialize, serde::Serialize),
 );
 
-pub async fn deploy_schnorr_verifier_contract(
-  client: Arc<SignerMiddleware<Provider<Http>, LocalWallet>>,
-) -> Result<Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>> {
+pub async fn deploy_schnorr_verifier_contract<M: Middleware + 'static>(
+  client: Arc<M>,
+) -> Result<Schnorr<M>> {
   let path = "./artifacts/Schnorr.sol/Schnorr.json";
   let artifact: ContractBytecode = serde_json::from_reader(File::open(path).unwrap()).unwrap();
   let abi = artifact.abi.unwrap();
@@ -23,8 +23,8 @@ pub async fn deploy_schnorr_verifier_contract(
   Ok(contract)
 }
 
-pub async fn call_verify(
-  contract: &Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
+pub async fn call_verify<M: Middleware + 'static>(
+  contract: &Schnorr<M>,
   params: &ProcessedSignature,
 ) -> Result<()> {
   if contract
