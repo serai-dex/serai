@@ -11,22 +11,22 @@ contract Router is Schnorr, ReentrancyGuard {
     // nonce is incremented for each batch of transactions executed
     uint256 public nonce; 
 
-    struct PublicKey {
+    struct RPublicKey {
         uint8 parity;
         bytes32 px;
     }
 
     // current aggregated validator public key 
-    PublicKey public publicKey;
+    RPublicKey public publicKey;
 
-    struct Transaction {
+    struct RTransaction {
         address to;
         uint256 value;
         uint256 gas;
         bytes data;
     }
 
-    struct Signature {
+    struct RSignature {
         bytes32 e;
         bytes32 s;
     }
@@ -51,7 +51,7 @@ contract Router is Schnorr, ReentrancyGuard {
     // setPublicKey can be called by the contract owner to set the current public key,
     // only if the public key has not been set.
     function setPublicKey(
-        PublicKey memory _publicKey
+        RPublicKey memory _publicKey
     ) public onlyOwner {
         if(publicKey.px != 0) revert PublicKeyAlreadySet();
         publicKey.parity = _publicKey.parity;
@@ -61,8 +61,8 @@ contract Router is Schnorr, ReentrancyGuard {
     // updatePublicKey validates the given Schnorr signature against the current public key,
     // and if successful, updates the contract's public key to the given one.
     function updatePublicKey(
-        PublicKey memory _publicKey,
-        Signature memory sig
+        RPublicKey memory _publicKey,
+        RSignature memory sig
     ) public {
         bytes32 message = keccak256(abi.encodePacked(_publicKey.parity, _publicKey.px));
         if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
@@ -75,8 +75,8 @@ contract Router is Schnorr, ReentrancyGuard {
     // if any of the executed transactions fail, this function will return false but *not* revert.
     // if all the executed transactions succeed, this function returns true.
     function execute(
-        Transaction[] calldata transactions, 
-        Signature memory sig
+        RTransaction[] calldata transactions, 
+        RSignature memory sig
     ) public nonReentrant returns (bool) {
         bytes32 message = keccak256(abi.encode(nonce, transactions));
         if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
