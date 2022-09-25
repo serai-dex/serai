@@ -1,0 +1,94 @@
+replicaCount: 1
+
+image:
+  repository: serai
+  pullPolicy: IfNotPresent
+  tag: "dev"
+  ports:
+    - name: port1
+      containerPort: 30333
+      protocol: TCP
+    - name: port2
+      containerPort: 9615
+      protocol: TCP
+    - name: port3
+      containerPort: 9933
+      protocol: TCP
+    - name: port4
+      containerPort: 9944
+      protocol: TCP
+
+  volumeMounts:
+    - mountPath: /scripts
+      name: configmap-volume
+  envVariables:
+  - name: CHAIN
+    value: dev 
+  - name: NAME
+    value: base
+  - name: VALIDATOR
+    value: 
+  args:
+    - bash 
+    - /scripts/entry-dev.sh
+
+volumes:
+  - configMap:
+      defaultMode: 420
+      name: configmap
+    name: configmap-volume
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  ports:
+    - name: port1
+      port: 30333
+      targetPort: port1
+      protocol: TCP
+    - name: port2
+      port: 9615
+      targetPort: port2
+      protocol: TCP
+    - name: port3
+      port: 9933
+      targetPort: port3
+      protocol: TCP
+    - name: port4
+      port: 9944
+      targetPort: port4
+      protocol: TCP
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+resources: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

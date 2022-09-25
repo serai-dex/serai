@@ -1,0 +1,62 @@
+replicaCount: 1
+
+image:
+  repository: serai-dev-ethereum
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+  ports:
+    - name: rpc
+      containerPort: 8545
+      protocol: TCP
+  volumeMounts:
+    - mountPath: /scripts
+      name: configmap-volume
+  args:
+    - bash 
+    - /scripts/entry-dev.sh
+
+volumes:
+  - configMap:
+      defaultMode: 420
+      name: configmap
+    name: configmap-volume
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  #fsGroup: 2000
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8545
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+resources: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
