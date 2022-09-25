@@ -133,9 +133,7 @@ impl ToString for Address {
     if let AddressType::Featured(subaddress, payment_id, guaranteed) = self.meta.kind {
       // Technically should be a VarInt, yet we don't have enough features it's needed
       data.push(
-        (if subaddress { 1 } else { 0 }) +
-          ((if payment_id.is_some() { 1 } else { 0 }) << 1) +
-          ((if guaranteed { 1 } else { 0 }) << 2),
+        u8::from(subaddress) + (u8::from(payment_id.is_some()) << 1) + (u8::from(guaranteed) << 2),
       );
     }
     if let Some(id) = self.meta.kind.payment_id() {

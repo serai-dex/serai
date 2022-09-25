@@ -61,8 +61,7 @@ macro_rules! field {
         let mut bits = 0;
         for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
           bits <<= 1;
-          let bit = *bit as u8;
-          assert_eq!(bit | 1, 1);
+          let bit = u8::from(*bit);
           bits |= bit;
 
           if ((i + 1) % 4) == 0 {

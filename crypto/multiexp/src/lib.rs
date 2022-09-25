@@ -31,8 +31,7 @@ where
 
     #[allow(unused_assignments)]
     for (i, mut raw_bit) in bits.iter_mut().enumerate() {
-      let mut bit = *raw_bit as u8;
-      debug_assert_eq!(bit | 1, 1);
+      let mut bit = u8::from(*raw_bit);
       *raw_bit = false;
 
       groupings[p][i / w_usize] |= bit << (i % w_usize);

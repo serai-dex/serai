@@ -71,7 +71,7 @@ impl Output {
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(&self.amount, w)?;
-    w.write_all(&[2 + (if self.view_tag.is_some() { 1 } else { 0 })])?;
+    w.write_all(&[2 + u8::from(self.view_tag.is_some())])?;
     w.write_all(&self.key.to_bytes())?;
     if let Some(view_tag) = self.view_tag {
       w.write_all(&[view_tag])?;
