@@ -84,4 +84,3 @@ delete-cluster-coins-lg: delete-cluster-lg delete-coins
 delete-all-charts: delete-cluster-coins-lg
 
 check-dependencies: check-helm check-kubectl
-	
