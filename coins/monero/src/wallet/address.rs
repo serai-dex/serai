@@ -15,6 +15,8 @@ pub enum Network {
   Stagenet,
 }
 
+/// The address type, supporting the officially documented addresses, along with
+/// [Featured Addresses](https://gist.github.com/kayabaNerve/01c50bbc35441e0bbdcee63a9d823789).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum AddressType {
   Standard,

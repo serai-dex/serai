@@ -189,6 +189,7 @@ impl TransactionPrefix {
   }
 }
 
+/// Monero transaction. For version 1, rct_signatures still contains an accurate fee value.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
@@ -296,6 +297,7 @@ impl Transaction {
     }
   }
 
+  /// Calculate the hash of this transaction as needed for signing it.
   pub fn signature_hash(&self) -> [u8; 32] {
     let mut serialized = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);

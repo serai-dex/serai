@@ -6,6 +6,9 @@ license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 hex-literal = "0.3"
 lazy_static = "1"

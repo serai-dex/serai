@@ -8,6 +8,9 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ed448", "ff", "group"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 lazy_static = "1"
 

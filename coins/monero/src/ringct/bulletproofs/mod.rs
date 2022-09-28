@@ -23,6 +23,7 @@ pub(crate) use self::plus::PlusStruct;
 
 pub(crate) const MAX_OUTPUTS: usize = self::core::MAX_M;
 
+/// Bulletproofs enum, supporting the original and plus formulations.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproofs {
@@ -50,6 +51,7 @@ impl Bulletproofs {
       }
   }
 
+  /// Prove the list of commitments are within [0 .. 2^64).
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: &[Commitment],
@@ -65,6 +67,7 @@ impl Bulletproofs {
     })
   }
 
+  /// Verify the given Bulletproofs.
   #[must_use]
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     match self {
@@ -73,6 +76,9 @@ impl Bulletproofs {
     }
   }
 
+  /// Accumulate the verification for the given Bulletproofs into the specified BatchVerifier.
+  /// Returns false if the Bulletproofs aren't sane, without mutating the BatchVerifier.
+  /// Returns true if the Bulletproofs are sane, regardless of their validity.
   #[must_use]
   pub fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
@@ -128,6 +134,7 @@ impl Bulletproofs {
     self.serialize_core(w, |points, w| write_vec(write_point, points, w))
   }
 
+  /// Deserialize non-plus Bulletproofs.
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
     Ok(Bulletproofs::Original(OriginalStruct {
       A: read_point(r)?,
@@ -144,6 +151,7 @@ impl Bulletproofs {
     }))
   }
 
+  /// Deserialize Bulletproofs+.
   pub fn deserialize_plus<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
     Ok(Bulletproofs::Plus(PlusStruct {
       A: read_point(r)?,

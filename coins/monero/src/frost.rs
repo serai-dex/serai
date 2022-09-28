@@ -14,13 +14,9 @@ use dalek_ff_group as dfg;
 use dleq::DLEqProof;
 
 #[derive(Clone, Error, Debug)]
-pub enum MultisigError {
-  #[error("internal error ({0})")]
-  InternalError(String),
+pub(crate) enum MultisigError {
   #[error("invalid discrete log equality proof")]
   InvalidDLEqProof(u16),
-  #[error("invalid key image {0}")]
-  InvalidKeyImage(u16),
 }
 
 fn transcript() -> RecommendedTranscript {

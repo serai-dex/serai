@@ -34,6 +34,7 @@ use crate::{
   wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness},
 };
 
+/// FROST signing machine to produce a signed transaction.
 pub struct TransactionMachine {
   signable: SignableTransaction,
   i: u16,
@@ -66,6 +67,8 @@ pub struct TransactionSignatureMachine {
 }
 
 impl SignableTransaction {
+  /// Create a FROST signing machine out of this signable transaction.
+  /// The height is the Monero blockchain height to synchronize around.
   pub async fn multisig(
     self,
     rpc: &Rpc,
@@ -123,8 +126,7 @@ impl SignableTransaction {
 
       clsags.push(
         AlgorithmMachine::new(
-          ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone())
-            .map_err(TransactionError::MultisigError)?,
+          ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone()),
           offset,
           &included,
         )
