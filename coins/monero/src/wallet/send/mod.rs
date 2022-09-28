@@ -334,6 +334,7 @@ impl SignableTransaction {
           outputs: tx_outputs,
           extra,
         },
+        signatures: vec![],
         rct_signatures: RctSignatures {
           base: RctBase {
             fee: self.fee,

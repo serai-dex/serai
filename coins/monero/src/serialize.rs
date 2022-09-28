@@ -94,7 +94,12 @@ pub(crate) fn read_varint<R: io::Read>(r: &mut R) -> io::Result<u64> {
   Ok(res)
 }
 
-// TODO: https://github.com/serai-dex/serai/issues/25
+// All scalar fields supported by monero-serai are checked to be canonical for valid transactions
+// While from_bytes_mod_order would be more flexible, it's not currently needed and would be
+// inaccurate to include now. While casting a wide net may be preferable, it'd also be inaccurate
+// for now. There's also further edge cases as noted by
+// https://github.com/monero-project/monero/issues/8438, where some scalars had an archaic
+// reduction applied
 pub(crate) fn read_scalar<R: io::Read>(r: &mut R) -> io::Result<Scalar> {
   Scalar::from_canonical_bytes(read_bytes(r)?)
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "unreduced scalar"))

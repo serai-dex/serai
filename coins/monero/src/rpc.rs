@@ -195,6 +195,10 @@ impl Rpc {
       .collect()
   }
 
+  pub async fn get_transaction(&self, tx: [u8; 32]) -> Result<Transaction, RpcError> {
+    self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
+  }
+
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
