@@ -4608,9 +4608,9 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha3 0.10.5",
  "subtle",
  "thiserror",
- "tiny-keccak",
  "tokio",
  "zeroize",
 ]

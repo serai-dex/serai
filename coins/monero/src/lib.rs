@@ -17,7 +17,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use tiny_keccak::{Hasher, Keccak};
+use sha3::{Digest, Keccak256};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -109,12 +109,8 @@ pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
   Scalar::from_bytes_mod_order_wide(&r)
 }
 
-pub fn hash(data: &[u8]) -> [u8; 32] {
-  let mut keccak = Keccak::v256();
-  keccak.update(data);
-  let mut res = [0; 32];
-  keccak.finalize(&mut res);
-  res
+pub(crate) fn hash(data: &[u8]) -> [u8; 32] {
+  Keccak256::digest(data).into()
 }
 
 /// Hash the provided data to a scalar via keccak256(data) % l.
