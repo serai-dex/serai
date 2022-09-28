@@ -120,8 +120,7 @@ fn clsag_multisig() -> Result<(), MultisigError> {
           .unwrap(),
           mask_sum,
         )))),
-      )
-      .unwrap(),
+      ),
       &keys,
     ),
     &[1; 32],

@@ -115,6 +115,7 @@ fn offset(ring: &[u64]) -> Vec<u64> {
   res
 }
 
+/// Decoy data, containing the actual member as well (at index `i`).
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Decoys {
   pub i: u8,
@@ -127,6 +128,7 @@ impl Decoys {
     self.offsets.len()
   }
 
+  /// Select decoys using the same distribution as Monero.
   pub async fn select<R: RngCore + CryptoRng>(
     rng: &mut R,
     rpc: &Rpc,

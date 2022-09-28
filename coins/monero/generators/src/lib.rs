@@ -25,6 +25,7 @@ fn hash(data: &[u8]) -> [u8; 32] {
 }
 
 lazy_static! {
+  /// Monero alternate generator `H`, used for amounts in Pedersen commitments.
   pub static ref H: DalekPoint =
     CompressedEdwardsY(hash(&ED25519_BASEPOINT_POINT.compress().to_bytes()))
       .decompress()
@@ -36,20 +37,22 @@ const MAX_M: usize = 16;
 const N: usize = 64;
 const MAX_MN: usize = MAX_M * N;
 
+/// Container struct for Bulletproofs(+) generators.
 #[allow(non_snake_case)]
 pub struct Generators {
   pub G: [EdwardsPoint; MAX_MN],
   pub H: [EdwardsPoint; MAX_MN],
 }
 
-pub fn bulletproofs_generators(prefix: &'static [u8]) -> Generators {
+/// Generate generators as needed for Bulletproofs(+), as Monero does.
+pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
   let mut res =
     Generators { G: [EdwardsPoint::identity(); MAX_MN], H: [EdwardsPoint::identity(); MAX_MN] };
   for i in 0 .. MAX_MN {
     let i = 2 * i;
 
     let mut even = H.compress().to_bytes().to_vec();
-    even.extend(prefix);
+    even.extend(dst);
     let mut odd = even.clone();
 
     write_varint(&i.try_into().unwrap(), &mut even).unwrap();
