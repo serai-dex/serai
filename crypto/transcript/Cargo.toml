@@ -8,6 +8,9 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["transcript"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 digest = "0.10"
 

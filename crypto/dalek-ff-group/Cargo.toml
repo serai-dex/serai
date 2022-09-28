@@ -8,6 +8,9 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["curve25519", "ed25519", "ristretto", "dalek", "group"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 rand_core = "0.6"
 digest = "0.10"
