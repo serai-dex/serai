@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
 use core::fmt::{self, Debug};
 use std::{io::Read, sync::Arc, collections::HashMap};
 
