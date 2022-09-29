@@ -16,8 +16,7 @@ runs:
   using: "composite"
   steps:
     - name: Install Protobuf
-      shell: bash
-      run: apt install protobuf-compiler
+      uses: arduino/setup-protoc@v1
 
     - name: Install solc
       shell: bash
