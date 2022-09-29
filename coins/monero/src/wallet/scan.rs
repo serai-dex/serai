@@ -196,8 +196,7 @@ impl SpendableOutput {
 pub struct Timelocked<O: Clone + Zeroize>(Timelock, Vec<O>);
 impl<O: Clone + Zeroize> Drop for Timelocked<O> {
   fn drop(&mut self) {
-    self.0.zeroize();
-    self.1.zeroize();
+    self.zeroize();
   }
 }
 impl<O: Clone + Zeroize> ZeroizeOnDrop for Timelocked<O> {}

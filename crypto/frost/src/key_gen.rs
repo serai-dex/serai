@@ -6,7 +6,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use group::{
   ff::{Field, PrimeField},
@@ -272,6 +272,7 @@ impl<C: Curve> Drop for SecretShareMachine<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for SecretShareMachine<C> {}
 
 #[derive(Zeroize)]
 pub struct KeyMachine<C: Curve> {
@@ -287,6 +288,7 @@ impl<C: Curve> Drop for KeyMachine<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for KeyMachine<C> {}
 
 impl<C: Curve> KeyGenMachine<C> {
   /// Creates a new machine to generate a key for the specified curve in the specified multisig
