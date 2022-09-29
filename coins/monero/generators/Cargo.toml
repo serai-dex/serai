@@ -18,5 +18,5 @@ tiny-keccak = { version = "2", features = ["keccak"] }
 
 curve25519-dalek = { version = "3", features = ["std"] }
 
-group = { version = "0.12" }
-dalek-ff-group = { path = "../../../crypto/dalek-ff-group" }
+group = "0.12"
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.1.4" }
