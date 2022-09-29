@@ -119,10 +119,6 @@ impl Timelock {
     }
   }
 
-  pub(crate) fn fee_weight() -> usize {
-    8
-  }
-
   fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(
       &match self {
