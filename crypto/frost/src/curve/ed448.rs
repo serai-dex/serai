@@ -7,7 +7,7 @@ use minimal_ed448::{scalar::Scalar, point::Point};
 
 use crate::{curve::Curve, algorithm::Hram};
 
-const CONTEXT: &[u8] = b"FROST-ED448-SHAKE256-v8";
+const CONTEXT: &[u8] = b"FROST-ED448-SHAKE256-v10";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Ed448;

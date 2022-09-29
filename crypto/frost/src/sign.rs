@@ -191,7 +191,10 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
     // Parse the commitments
     for l in &params.view.included {
       {
-        params.algorithm.transcript().append_message(b"participant", &l.to_be_bytes());
+        params
+          .algorithm
+          .transcript()
+          .append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
       }
 
       // While this doesn't note which nonce/basepoint this is for, those are expected to be
@@ -274,7 +277,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
     // Generate the per-signer binding factors
     for (l, commitments) in B.iter_mut() {
       let mut rho_transcript = rho_transcript.clone();
-      rho_transcript.append_message(b"participant", &l.to_be_bytes());
+      rho_transcript.append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
       commitments.1 = C::hash_binding_factor(rho_transcript.challenge(b"rho").as_ref());
     }
 
@@ -365,6 +368,7 @@ fn complete<Re: Read, C: Curve, A: Algorithm<C>>(
   Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
 }
 
+/// Trait for the initial state machine of a two-round signing protocol.
 pub trait PreprocessMachine {
   type Signature: Clone + PartialEq + fmt::Debug;
   type SignMachine: SignMachine<Self::Signature>;
@@ -374,6 +378,7 @@ pub trait PreprocessMachine {
   fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R) -> (Self::SignMachine, Vec<u8>);
 }
 
+/// Trait for the second machine of a two-round signing protocol.
 pub trait SignMachine<S> {
   type SignatureMachine: SignatureMachine<S>;
 
@@ -387,6 +392,7 @@ pub trait SignMachine<S> {
   ) -> Result<(Self::SignatureMachine, Vec<u8>), FrostError>;
 }
 
+/// Trait for the final machine of a two-round signing protocol.
 pub trait SignatureMachine<S> {
   /// Complete signing.
   /// Takes in everyone elses' shares. Returns the signature.
@@ -398,11 +404,13 @@ pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
 }
 
+/// Next step of the state machine for the signing process.
 pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
   preprocess: PreprocessPackage<C>,
 }
 
+/// Final step of the state machine for the signing process.
 pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
   sign: Package<C>,

@@ -249,12 +249,14 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   Ok(FrostCore { params, secret_share, group_key: stripes[0], verification_shares })
 }
 
+/// State machine to begin the key generation protocol.
 pub struct KeyGenMachine<C: Curve> {
   params: FrostParams,
   context: String,
   _curve: PhantomData<C>,
 }
 
+/// Advancement of the key generation state machine.
 #[derive(Zeroize)]
 pub struct SecretShareMachine<C: Curve> {
   #[zeroize(skip)]
@@ -272,6 +274,7 @@ impl<C: Curve> Drop for SecretShareMachine<C> {
 }
 impl<C: Curve> ZeroizeOnDrop for SecretShareMachine<C> {}
 
+/// Final step of the key generation protocol.
 #[derive(Zeroize)]
 pub struct KeyMachine<C: Curve> {
   #[zeroize(skip)]

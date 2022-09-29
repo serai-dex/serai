@@ -86,47 +86,47 @@ fn ed448_non_ietf() {
       nonces: &[
         [
           concat!(
-            "f770bcb22f3c0acac7f09d3b757f13f31b53489776ede2cff944b4c0",
-            "cd28bb7dfbd33809e87201e152beeb552292eb748efa5267fa2dcd20",
+            "06f2e15b05d29a50f0686a890259f4dcf66147a80809ed9e50926f5f",
+            "173fe23a0627561efa003724dc270effc47a30bc4d80aba30725401d",
             "00"
           ),
           concat!(
-            "d3196c7f14b1a99f1715053c00fa3a30b0fe9cbeb461068c262b1714",
-            "78458a15598cc1c33cd415a766577996a6efcc520c411abf0280c816",
+            "e0482e611c34f191d1c13a09bc8bbf4bda68db4de32aa7908849b02b",
+            "a912cfba46c805e2d8560ab9437e343e1dde6b481a2bae527e111b2c",
             "00"
           ),
         ],
         [
           concat!(
-            "9172a7cea56b7f564ed93116adf078ee013e4160e2687489ea580bc6",
-            "f034f10e58db0b0cdf98bf1d3c85b2eb1f30b8b6df57b3611d205d2e",
+            "295c56447c070157e6bc3c83ed2afca194569e07d0ad27d28a40dec2",
+            "c4107c07d507db20da1be62ea6976b8e53ab5d26e225c663f2e71511",
             "00"
           ),
           concat!(
-            "3b60b4dc036b21441620a36c84b0ec780267a9275b411a495b182dc6",
-            "bfc812d1a21d93142d375b7ed80314d1693b61c1f42e20c575a4530e",
+            "b97303a6c5ab12b6ad310834361033a19d99dfdf93109da721da35c3",
+            "abbc5f29df33b3402692bef9f005bb8ea00af5ba20cc688360fd8831",
             "00"
           ),
         ],
       ],
       sig_shares: &[
         concat!(
-          "95aeb18a46bac9e239d8eb51a7168da25a000d8a6938e26446c36e5d",
-          "b88eff9523e0b09934558ddc8b2679bf2f10ed66415df1eb6e38a507",
+          "5b65641e27007ec71509c6af5cf8527eb01fee5b2b07d8beecf6646e",
+          "b7e7e27d85119b74f895b56ba7561834a1b0c42639b122160a0b6208",
           "00"
         ),
         concat!(
-          "521672ae547cd95b94a9be55b72a0dfb6938715230304d39017f5a54",
-          "f1333a96da50a0759eea78bdb6b670c8243dbe706cd388763fe4c50b",
+          "821b7ac04d7c01d970b0b3ba4ae8f737a5bac934aed1600b1cad7601",
+          "1c240629bce6a4671a1b6f572cec708ec161a72a5ca04e50eabdfc25",
           "00"
         ),
       ],
       sig: concat!(
-        "f1c2605fc0b724696dff10d2df0ac28939f40dc3d9ba864605462355",
-        "c139229de643a6580e5807994cfcab0796644571c501cab00e85056a",
+        "c7ad7ad9fcfeef9d1492361ba641400bd3a3c8335a83cdffbdd8867d",
+        "2849bb4419dcc3e594baa731081a1a00cd3dea9219a81ecba4646e95",
         "00",
-        "e7c423399b36a33ece81aaa75e419a9dc4387edc99682f9e4742c9b1",
-        "a9c2392cfe30510fd33f069a42dde987544dabd7ad307a62ae1c6b13",
+        "dd80dede747c7fa086b9796aa7e04ab655dab790d9d838ca08a4db6f",
+        "d30be9a641f83fdc12b124c3d34289c262126c5195517166f4c85e2e",
         "00"
       )
       .to_string(),

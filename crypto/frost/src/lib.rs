@@ -11,7 +11,7 @@
 //!
 //! This library offers ciphersuites compatible with the
 //! [IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
-//! 8 is supported.
+//! 10 is supported.
 
 use core::fmt::{self, Debug};
 use std::{io::Read, sync::Arc, collections::HashMap};
@@ -111,6 +111,7 @@ impl FrostParams {
   }
 }
 
+/// Various errors possible during key generation/signing.
 #[derive(Copy, Clone, Error, Debug)]
 pub enum FrostError {
   #[error("a parameter was 0 (required {0}, participants {1})")]

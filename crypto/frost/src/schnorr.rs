@@ -11,6 +11,7 @@ use multiexp::BatchVerifier;
 
 use crate::Curve;
 
+/// A Schnorr signature of the form (R, s) where s = r + cx.
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SchnorrSignature<C: Curve> {
