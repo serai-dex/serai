@@ -15,7 +15,7 @@ lazy_static = "1"
 
 subtle = "2.4"
 
-tiny-keccak = { version = "2", features = ["keccak"] }
+sha3 = "0.10"
 
 curve25519-dalek = { version = "3", features = ["std"] }
 

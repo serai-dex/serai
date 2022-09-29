@@ -4579,8 +4579,8 @@ dependencies = [
  "dalek-ff-group",
  "group",
  "lazy_static",
+ "sha3 0.10.5",
  "subtle",
- "tiny-keccak",
 ]
 
 [[package]]

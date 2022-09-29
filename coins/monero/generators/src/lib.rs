@@ -4,7 +4,7 @@
 
 use lazy_static::lazy_static;
 
-use tiny_keccak::{Hasher, Keccak};
+use sha3::{Digest, Keccak256};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_POINT,
@@ -21,11 +21,7 @@ mod hash_to_point;
 pub use hash_to_point::hash_to_point;
 
 fn hash(data: &[u8]) -> [u8; 32] {
-  let mut keccak = Keccak::v256();
-  keccak.update(data);
-  let mut res = [0; 32];
-  keccak.finalize(&mut res);
-  res
+  Keccak256::digest(data).into()
 }
 
 lazy_static! {
