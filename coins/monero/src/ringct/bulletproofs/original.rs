@@ -12,7 +12,7 @@ use multiexp::BatchVerifier;
 
 use crate::{Commitment, ringct::bulletproofs::core::*};
 
-include!("../../../.generators/generators.rs");
+include!(concat!(env!("OUT_DIR"), "/generators.rs"));
 
 lazy_static! {
   static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); N]);

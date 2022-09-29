@@ -15,7 +15,7 @@ use crate::{
   ringct::{hash_to_point::raw_hash_to_point, bulletproofs::core::*},
 };
 
-include!("../../../.generators/generators_plus.rs");
+include!(concat!(env!("OUT_DIR"), "/generators_plus.rs"));
 
 lazy_static! {
   static ref TRANSCRIPT: [u8; 32] =
