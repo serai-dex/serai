@@ -11,10 +11,13 @@ use crate::{
   sign::{PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
 
-// Test suites for public usage
+/// Curve tests.
 pub mod curve;
+/// Schnorr signature tests.
 pub mod schnorr;
+/// Promotion tests.
 pub mod promote;
+/// Vectorized test suite to ensure consistency.
 pub mod vectors;
 
 // Literal test definitions to run during `cargo test`

@@ -1,4 +1,17 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
+//! A modular implementation of FROST for any curve with a ff/group API.
+//! Additionally, custom algorithms may be specified so any signature reducible to
+//! Schnorr-like may be used with FROST.
+//!
+//! A Schnorr algorithm is provided, of the form (R, s) where `s = r + cx`, which
+//! allows specifying the challenge format. This is intended to easily allow
+//! integrating with existing systems.
+//!
+//! This library offers ciphersuites compatible with the
+//! [IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
+//! 8 is supported.
 
 use core::fmt::{self, Debug};
 use std::{io::Read, sync::Arc, collections::HashMap};
@@ -14,15 +27,21 @@ use group::{
 
 mod schnorr;
 
+/// Curve trait and provided curves/HRAMs, forming various ciphersuites.
 pub mod curve;
 use curve::Curve;
 
+/// Distributed key generation protocol.
 pub mod key_gen;
+/// Promote keys between curves.
 pub mod promote;
 
+/// Algorithm for the signing process.
 pub mod algorithm;
+/// Threshold signing protocol.
 pub mod sign;
 
+/// Tests for application-provided curves and algorithms.
 pub mod tests;
 
 // Validate a map of serialized values to have the expected included participants
@@ -292,7 +311,7 @@ impl<C: Curve> Drop for FrostKeys<C> {
 }
 impl<C: Curve> ZeroizeOnDrop for FrostKeys<C> {}
 
-// View of keys passable to algorithm implementations
+/// View of keys passed to algorithm implementations.
 #[derive(Clone, Zeroize)]
 pub struct FrostView<C: Curve> {
   group_key: C::G,
