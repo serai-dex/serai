@@ -1370,7 +1370,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "crypto-bigint",
  "curve25519-dalek 3.2.0",
@@ -4496,7 +4496,7 @@ checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
 
 [[package]]
 name = "minimal-ed448"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crypto-bigint",
  "dalek-ff-group",
@@ -4541,7 +4541,7 @@ dependencies = [
 
 [[package]]
 name = "modular-frost"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "dalek-ff-group",
  "dleq",
@@ -4585,7 +4585,7 @@ dependencies = [
 
 [[package]]
 name = "monero-serai"
-version = "0.1.0"
+version = "0.1.0-alpha"
 dependencies = [
  "base58-monero",
  "blake2",
@@ -4652,7 +4652,7 @@ dependencies = [
 
 [[package]]
 name = "multiexp"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "dalek-ff-group",
  "ff",

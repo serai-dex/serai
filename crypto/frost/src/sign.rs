@@ -6,7 +6,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use transcript::Transcript;
 
@@ -55,7 +55,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
       Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], params.n))?;
     }
     // Same signer included multiple times
-    for i in 0 .. included.len() - 1 {
+    for i in 0 .. (included.len() - 1) {
       if included[i] == included[i + 1] {
         Err(FrostError::DuplicatedIndex(included[i]))?;
       }
@@ -95,6 +95,7 @@ impl<C: Curve> Drop for PreprocessPackage<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for PreprocessPackage<C> {}
 
 // This library unifies the preprocessing step with signing due to security concerns and to provide
 // a simpler UX

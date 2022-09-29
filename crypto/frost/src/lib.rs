@@ -3,7 +3,7 @@ use std::{io::Read, sync::Arc, collections::HashMap};
 
 use thiserror::Error;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use group::{
   ff::{Field, PrimeField},
@@ -160,6 +160,7 @@ impl<C: Curve> Drop for FrostCore<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for FrostCore<C> {}
 
 impl<C: Curve> Debug for FrostCore<C> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -287,6 +288,7 @@ impl<C: Curve> Drop for FrostKeys<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for FrostKeys<C> {}
 
 // View of keys passable to algorithm implementations
 #[derive(Clone, Zeroize)]
@@ -304,6 +306,7 @@ impl<C: Curve> Drop for FrostView<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for FrostView<C> {}
 
 impl<C: Curve> FrostKeys<C> {
   pub fn new(core: FrostCore<C>) -> FrostKeys<C> {

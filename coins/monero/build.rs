@@ -1,7 +1,8 @@
 use std::{
   io::Write,
+  env,
   path::Path,
-  fs::{File, DirBuilder, remove_file},
+  fs::{File, remove_file},
 };
 
 use dalek_ff_group::EdwardsPoint;
@@ -33,8 +34,7 @@ fn generators(prefix: &'static str, path: &str) {
   let mut H_str = "".to_string();
   serialize(&mut H_str, &generators.H);
 
-  DirBuilder::new().recursive(true).create(".generators").unwrap();
-  let path = Path::new(".generators").join(path);
+  let path = Path::new(&env::var("OUT_DIR").unwrap()).join(path);
   let _ = remove_file(&path);
   File::create(&path)
     .unwrap()
@@ -60,7 +60,6 @@ fn generators(prefix: &'static str, path: &str) {
 }
 
 fn main() {
-  // For some reason, filtering off .generators does not work. This prevents re-building overall
   println!("cargo:rerun-if-changed=build.rs");
 
   generators("bulletproof", "generators.rs");
