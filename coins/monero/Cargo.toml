@@ -3,6 +3,7 @@ name = "monero-serai"
 version = "0.1.0-alpha"
 description = "A modern Monero transaction library"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
