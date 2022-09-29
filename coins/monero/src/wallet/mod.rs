@@ -167,6 +167,7 @@ impl Scanner {
   /// When a new scanner is created, ALL saved output keys must be passed in to be secure.
   /// If None is passed, a modified shared key derivation is used which is immune to the burning
   /// bug (specifically the Guaranteed feature from Featured Addresses).
+  // TODO: Should this take in a DB access handle to ensure output keys are saved?
   pub fn from_view(
     pair: ViewPair,
     network: Network,

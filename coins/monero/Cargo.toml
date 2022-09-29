@@ -1,6 +1,6 @@
 [package]
 name = "monero-serai"
-version = "0.1.0"
+version = "0.1.0-alpha"
 description = "A modern Monero transaction library"
 license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
