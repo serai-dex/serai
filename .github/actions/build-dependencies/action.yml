@@ -15,6 +15,9 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Install Protobuf
+      uses: arduino/setup-protoc@v1
+
     - name: Install solc
       shell: bash
       run: |

@@ -94,6 +94,12 @@ pub fn run() -> sc_cli::Result<()> {
 
       BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.client),
 
+      #[cfg(not(feature = "runtime-benchmarks"))]
+      BenchmarkCmd::Storage(_) => {
+        Err("Storage benchmarking can be enabled with `--features runtime-benchmarks`.".into())
+      }
+
+      #[cfg(feature = "runtime-benchmarks")]
       BenchmarkCmd::Storage(cmd) => {
         let PartialComponents { client, backend, .. } = service::new_partial(&config)?;
         cmd.run(config, client, backend.expose_db(), backend.expose_storage())
@@ -101,7 +107,13 @@ pub fn run() -> sc_cli::Result<()> {
 
       BenchmarkCmd::Overhead(cmd) => {
         let client = service::new_partial(&config)?.client;
-        cmd.run(config, client.clone(), inherent_benchmark_data()?, &RemarkBuilder::new(client))
+        cmd.run(
+          config,
+          client.clone(),
+          inherent_benchmark_data()?,
+          vec![],
+          &RemarkBuilder::new(client),
+        )
       }
 
       BenchmarkCmd::Extrinsic(cmd) => {
@@ -109,6 +121,7 @@ pub fn run() -> sc_cli::Result<()> {
         cmd.run(
           client.clone(),
           inherent_benchmark_data()?,
+          vec![],
           &ExtrinsicFactory(vec![Box::new(RemarkBuilder::new(client))]),
         )
       }
