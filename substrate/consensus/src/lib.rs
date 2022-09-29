@@ -39,7 +39,7 @@ pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
 ) -> Result<sc_pow::PowImportQueue<Block, Db>, sp_consensus::Error> {
   let pow_block_import = Box::new(sc_pow::PowBlockImport::new(
     client.clone(),
-    client.clone(),
+    client,
     algorithm::AcceptAny,
     0,
     select_chain,
