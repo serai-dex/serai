@@ -34,12 +34,17 @@ pub(crate) mod frost;
 
 mod serialize;
 
+/// RingCT structs and functionality.
 pub mod ringct;
 
+/// Transaction structs.
 pub mod transaction;
+/// Block structs.
 pub mod block;
 
+/// Monero daemon RPC interface.
 pub mod rpc;
+/// Wallet functionality, enabling scanning and sending transactions.
 pub mod wallet;
 
 #[cfg(test)]

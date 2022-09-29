@@ -8,27 +8,27 @@ use transcript::Transcript;
 use crate::{Curve, FrostError, FrostView, schnorr};
 pub use schnorr::SchnorrSignature;
 
-/// Algorithm to use FROST with
+/// Algorithm to use FROST with.
 pub trait Algorithm<C: Curve>: Clone {
   type Transcript: Transcript + Clone + Debug;
-  /// The resulting type of the signatures this algorithm will produce
+  /// The resulting type of the signatures this algorithm will produce.
   type Signature: Clone + PartialEq + Debug;
 
-  /// Obtain a mutable borrow of the underlying transcript
+  /// Obtain a mutable borrow of the underlying transcript.
   fn transcript(&mut self) -> &mut Self::Transcript;
 
-  /// Obtain the list of nonces to generate, as specified by the basepoints to create commitments
-  /// against per-nonce. These are not committed to by FROST on the underlying transcript
+  /// Obtain the list of nonces to generate, as specified by the basepoints to create commitments.
+  /// against per-nonce. These are not committed to by FROST on the underlying transcript.
   fn nonces(&self) -> Vec<Vec<C::G>>;
 
-  /// Generate an addendum to FROST"s preprocessing stage
+  /// Generate an addendum to FROST"s preprocessing stage.
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
     params: &FrostView<C>,
   ) -> Vec<u8>;
 
-  /// Proccess the addendum for the specified participant. Guaranteed to be ordered
+  /// Proccess the addendum for the specified participant. Guaranteed to be ordered.
   fn process_addendum<Re: Read>(
     &mut self,
     params: &FrostView<C>,
@@ -36,10 +36,10 @@ pub trait Algorithm<C: Curve>: Clone {
     reader: &mut Re,
   ) -> Result<(), FrostError>;
 
-  /// Sign a share with the given secret/nonce
+  /// Sign a share with the given secret/nonce.
   /// The secret will already have been its lagrange coefficient applied so it is the necessary
-  /// key share
-  /// The nonce will already have been processed into the combined form d + (e * p)
+  /// key share.
+  /// The nonce will already have been processed into the combined form d + (e * p).
   fn sign_share(
     &mut self,
     params: &FrostView<C>,
@@ -48,12 +48,12 @@ pub trait Algorithm<C: Curve>: Clone {
     msg: &[u8],
   ) -> C::F;
 
-  /// Verify a signature
+  /// Verify a signature.
   #[must_use]
   fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature>;
 
   /// Verify a specific share given as a response. Used to determine blame if signature
-  /// verification fails
+  /// verification fails.
   #[must_use]
   fn verify_share(&self, verification_share: C::G, nonces: &[Vec<C::G>], share: C::F) -> bool;
 }
@@ -84,8 +84,8 @@ impl Transcript for IetfTranscript {
 }
 
 pub trait Hram<C: Curve>: Clone {
-  /// HRAM function to generate a challenge
-  /// H2 from the IETF draft despite having a different argument set (not pre-formatted)
+  /// HRAM function to generate a challenge.
+  /// H2 from the IETF draft, despite having a different argument set (not being pre-formatted).
   #[allow(non_snake_case)]
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F;
 }
@@ -109,7 +109,7 @@ impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
   }
 }
 
-/// Implementation of Schnorr signatures for use with FROST
+/// Implementation of Schnorr signatures for use with FROST.
 impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   type Transcript = IetfTranscript;
   type Signature = SchnorrSignature<C>;

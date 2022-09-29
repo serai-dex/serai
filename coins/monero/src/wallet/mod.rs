@@ -13,6 +13,7 @@ use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
 mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
+/// Address encoding and decoding functionality.
 pub mod address;
 use address::{Network, AddressType, AddressMeta, Address};
 

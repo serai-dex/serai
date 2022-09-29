@@ -31,23 +31,23 @@ pub use pallet_balances::Call as BalancesCall;
 use pallet_transaction_payment::CurrencyAdapter;
 use pallet_contracts::{migration, DefaultContractAccessWeight};
 
-/// An index to a block
+/// An index to a block.
 pub type BlockNumber = u32;
 
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain
+/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
 
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
-/// to the public key of our transaction signing scheme
+/// to the public key of our transaction signing scheme.
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
-/// Balance of an account
+/// Balance of an account.
 pub type Balance = u64;
 
-/// Index of a transaction in the chain, for a given account
+/// Index of a transaction in the chain, for a given account.
 pub type Index = u32;
 
-/// A hash of some data used by the chain
+/// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
 
 pub mod opaque {
@@ -79,7 +79,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
-/// Measured in blocks
+/// Measured in blocks.
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;

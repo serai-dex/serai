@@ -17,7 +17,7 @@ use crate::{
   FrostError, FrostCore, FrostKeys, validate_map,
 };
 
-/// Promote a set of keys to another Curve definition
+/// Promote a set of keys to another Curve definition.
 pub trait CurvePromote<C2: Curve> {
   #[doc(hidden)]
   #[allow(non_snake_case)]
@@ -86,7 +86,7 @@ pub struct GeneratorPromotion<C1: Curve, C2: Curve> {
   _c2: PhantomData<C2>,
 }
 
-/// Promote a set of keys from one generator to another
+/// Promote a set of keys from one generator to another.
 // The linear DLEq proofs are much more efficient than an exponential key gen
 impl<C1: Curve, C2: Curve> GeneratorPromotion<C1, C2>
 where

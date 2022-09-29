@@ -5,7 +5,9 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 pub(crate) mod hash_to_point;
 pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 
+/// CLSAG struct, along with signing and verifying functionality.
 pub mod clsag;
+/// Bulletproofs(+) structs, along with proving and verifying functionality.
 pub mod bulletproofs;
 
 use crate::{

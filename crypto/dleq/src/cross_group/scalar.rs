@@ -2,7 +2,7 @@ use ff::PrimeFieldBits;
 
 use zeroize::Zeroize;
 
-/// Convert a uniform scalar into one usable on both fields, clearing the top bits as needed
+/// Convert a uniform scalar into one usable on both fields, clearing the top bits as needed.
 pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   mut scalar: F0,
 ) -> (F0, F1) {
@@ -45,7 +45,7 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   (res1, res2)
 }
 
-/// Helper to convert a scalar between fields. Returns None if the scalar isn't mutually valid
+/// Helper to convert a scalar between fields. Returns None if the scalar isn't mutually valid.
 pub fn scalar_convert<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   mut scalar: F0,
 ) -> Option<F1> {
@@ -56,7 +56,7 @@ pub fn scalar_convert<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   res
 }
 
-/// Create a mutually valid scalar from bytes via bit truncation to not introduce bias
+/// Create a mutually valid scalar from bytes via bit truncation to not introduce bias.
 pub fn mutual_scalar_from_bytes<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   bytes: &[u8],
 ) -> (F0, F1) {

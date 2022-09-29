@@ -22,7 +22,7 @@ use crate::{
   curve::Curve, FrostError, FrostParams, FrostKeys, FrostView, algorithm::Algorithm, validate_map,
 };
 
-/// Pairing of an Algorithm with a FrostKeys instance and this specific signing set
+/// Pairing of an Algorithm with a FrostKeys instance and this specific signing set.
 #[derive(Clone)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
   algorithm: A,
@@ -369,20 +369,17 @@ pub trait PreprocessMachine {
   type Signature: Clone + PartialEq + fmt::Debug;
   type SignMachine: SignMachine<Self::Signature>;
 
-  /// Perform the preprocessing round required in order to sign
-  /// Returns a byte vector which must be transmitted to all parties selected for this signing
-  /// process, over an authenticated channel
+  /// Perform the preprocessing round required in order to sign.
+  /// Returns a byte vector to be broadcast to all participants, over an authenticated channel.
   fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R) -> (Self::SignMachine, Vec<u8>);
 }
 
 pub trait SignMachine<S> {
   type SignatureMachine: SignatureMachine<S>;
 
-  /// Sign a message
-  /// Takes in the participant's commitments, which are expected to be in a Vec where participant
-  /// index = Vec index. None is expected at index 0 to allow for this. None is also expected at
-  /// index i which is locally handled. Returns a byte vector representing a share of the signature
-  /// for every other participant to receive, over an authenticated channel
+  /// Sign a message.
+  /// Takes in the participants' preprocesses. Returns a byte vector representing a signature share
+  /// to be broadcast to all participants, over an authenticated channel.
   fn sign<Re: Read>(
     self,
     commitments: HashMap<u16, Re>,
@@ -391,14 +388,12 @@ pub trait SignMachine<S> {
 }
 
 pub trait SignatureMachine<S> {
-  /// Complete signing
-  /// Takes in everyone elses' shares submitted to us as a Vec, expecting participant index =
-  /// Vec index with None at index 0 and index i. Returns a byte vector representing the serialized
-  /// signature
+  /// Complete signing.
+  /// Takes in everyone elses' shares. Returns the signature.
   fn complete<Re: Read>(self, shares: HashMap<u16, Re>) -> Result<S, FrostError>;
 }
 
-/// State machine which manages signing for an arbitrary signature algorithm
+/// State machine which manages signing for an arbitrary signature algorithm.
 pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
 }
@@ -414,7 +409,7 @@ pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
 }
 
 impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
-  /// Creates a new machine to generate a key for the specified curve in the specified multisig
+  /// Creates a new machine to generate a signature with the specified keys.
   pub fn new(
     algorithm: A,
     keys: FrostKeys<C>,

@@ -167,7 +167,7 @@ macro_rules! from_uint {
   };
 }
 
-/// Wrapper around the dalek Scalar type
+/// Wrapper around the dalek Scalar type.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct Scalar(pub DScalar);
 deref_borrow!(Scalar, DScalar);
@@ -176,12 +176,12 @@ math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
 from_uint!(Scalar, DScalar);
 
 impl Scalar {
-  /// Perform wide reduction on a 64-byte array to create a Scalar without bias
+  /// Perform wide reduction on a 64-byte array to create a Scalar without bias.
   pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Scalar {
     Self(DScalar::from_bytes_mod_order_wide(bytes))
   }
 
-  /// Derive a Scalar without bias from a digest via wide reduction
+  /// Derive a Scalar without bias from a digest via wide reduction.
   pub fn from_hash<D: Digest<OutputSize = U64>>(hash: D) -> Scalar {
     let mut output = [0u8; 64];
     output.copy_from_slice(&hash.finalize());
@@ -287,7 +287,7 @@ macro_rules! dalek_group {
     $BASEPOINT_POINT: ident,
     $BASEPOINT_TABLE: ident
   ) => {
-    /// Wrapper around the dalek Point type. For Ed25519, this is restricted to the prime subgroup
+    /// Wrapper around the dalek Point type. For Ed25519, this is restricted to the prime subgroup.
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Point(pub $DPoint);
     deref_borrow!($Point, $DPoint);
@@ -355,7 +355,7 @@ macro_rules! dalek_group {
     impl PrimeGroup for $Point {}
 
     /// Wrapper around the dalek Table type, offering efficient multiplication against the
-    /// basepoint
+    /// basepoint.
     pub struct $Table(pub $DTable);
     deref_borrow!($Table, $DTable);
     pub const $BASEPOINT_TABLE: $Table = $Table(constants::$BASEPOINT_TABLE);
