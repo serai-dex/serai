@@ -45,7 +45,7 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for RemarkBuilder {
 pub fn create_benchmark_extrinsic(
   client: &FullClient,
   sender: sp_core::sr25519::Pair,
-  call: runtime::Call,
+  call: runtime::RuntimeCall,
   nonce: u32,
 ) -> runtime::UncheckedExtrinsic {
   let extra = (
