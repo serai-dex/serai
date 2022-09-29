@@ -1,6 +1,6 @@
 [package]
 name = "monero-serai"
-version = "0.1.0-alpha"
+version = "0.1.1-alpha"
 description = "A modern Monero transaction library"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"

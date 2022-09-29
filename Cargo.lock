@@ -4585,7 +4585,7 @@ dependencies = [
 
 [[package]]
 name = "monero-serai"
-version = "0.1.0-alpha"
+version = "0.1.1-alpha"
 dependencies = [
  "base58-monero",
  "blake2",
