@@ -10,7 +10,7 @@ use zeroize::Zeroize;
 use subtle::{ConstantTimeEq, ConditionallySelectable};
 
 use rand_core::RngCore;
-use digest::{consts::U64, Digest};
+use digest::{consts::U64, Digest, HashMarker};
 
 use subtle::{Choice, CtOption};
 
@@ -182,7 +182,7 @@ impl Scalar {
   }
 
   /// Derive a Scalar without bias from a digest via wide reduction.
-  pub fn from_hash<D: Digest<OutputSize = U64>>(hash: D) -> Scalar {
+  pub fn from_hash<D: Digest<OutputSize = U64> + HashMarker>(hash: D) -> Scalar {
     let mut output = [0u8; 64];
     output.copy_from_slice(&hash.finalize());
     let res = Scalar(DScalar::from_bytes_mod_order_wide(&output));

@@ -4,7 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
 
-use digest::Digest;
+use digest::{Digest, HashMarker};
 
 use transcript::Transcript;
 
@@ -280,8 +280,8 @@ where
   /// to safely and securely generate a Scalar, without risk of failure, nor bias.
   /// It also ensures a lack of determinable relation between keys, guaranteeing security in the
   /// currently expected use case for this, atomic swaps, where each swap leaks the key. Knowing
-  pub fn prove<R: RngCore + CryptoRng, T: Clone + Transcript, D: Digest>(
   /// the relationship between keys would allow breaking all swaps after just one.
+  pub fn prove<R: RngCore + CryptoRng, T: Clone + Transcript, D: Digest + HashMarker>(
     rng: &mut R,
     transcript: &mut T,
     generators: (Generators<G0>, Generators<G1>),
