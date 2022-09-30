@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.2.1"
+version = "0.2.3"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"
@@ -8,12 +8,16 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["frost", "multisig", "threshold"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 thiserror = "1"
 
 rand_core = "0.6"
 
-zeroize = { version = "1.3", features = ["zeroize_derive"] }
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
 
 hex = "0.4"
 
@@ -39,7 +43,7 @@ dleq = { path = "../dleq", version = "0.1", features = ["serialize"] }
 
 [dev-dependencies]
 sha2 = "0.10"
-dalek-ff-group = { path = "../dalek-ff-group" }
+dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 
 [features]
 dalek = ["sha2", "dalek-ff-group"]

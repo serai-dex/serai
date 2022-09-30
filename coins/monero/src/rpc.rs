@@ -59,6 +59,10 @@ impl Rpc {
     Rpc(daemon)
   }
 
+  /// Perform a RPC call to the specific method with the provided parameters (JSON-encoded).
+  /// This is NOT a JSON-RPC call, which requires setting a method of "json_rpc" and properly
+  /// formatting the request.
+  // TODO: Offer jsonrpc_call
   pub async fn rpc_call<Params: Serialize + Debug, Response: DeserializeOwned + Debug>(
     &self,
     method: &str,
@@ -73,6 +77,7 @@ impl Rpc {
     self.call_tail(method, builder).await
   }
 
+  /// Perform a binary call to the specified method with the provided parameters.
   pub async fn bin_call<Response: DeserializeOwned + Debug>(
     &self,
     method: &str,
@@ -99,6 +104,7 @@ impl Rpc {
     })
   }
 
+  /// Get the active blockchain protocol version.
   pub async fn get_protocol(&self) -> Result<Protocol, RpcError> {
     #[derive(Deserialize, Debug)]
     struct ProtocolResponse {
@@ -195,6 +201,10 @@ impl Rpc {
       .collect()
   }
 
+  pub async fn get_transaction(&self, tx: [u8; 32]) -> Result<Transaction, RpcError> {
+    self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
+  }
+
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
@@ -226,6 +236,7 @@ impl Rpc {
     Ok(res)
   }
 
+  /// Get the output indexes of the specified transaction.
   pub async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
     #[derive(Serialize, Debug)]
     struct Request {
@@ -252,7 +263,8 @@ impl Rpc {
     Ok(indexes.o_indexes)
   }
 
-  // from and to are inclusive
+  /// Get the output distribution, from the specified height to the specified height (both
+  /// inclusive).
   pub async fn get_output_distribution(
     &self,
     from: usize,
@@ -289,6 +301,8 @@ impl Rpc {
     Ok(distributions.result.distributions.swap_remove(0).distribution)
   }
 
+  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if they're
+  /// unlocked.
   pub async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
@@ -350,6 +364,9 @@ impl Rpc {
       .collect()
   }
 
+  /// Get the currently estimated fee from the node. This may be manipulated to unsafe levels and
+  /// MUST be sanity checked.
+  // TODO: Take a sanity check argument
   pub async fn get_fee(&self) -> Result<Fee, RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]

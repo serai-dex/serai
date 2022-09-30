@@ -31,7 +31,7 @@ frame-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 # These dependencies are used for the node template's RPCs
-jsonrpsee = { version = "0.14.0", features = ["server"] }
+jsonrpsee = { version = "0.15.1", features = ["server"] }
 sc-rpc = { git = "https://github.com/serai-dex/substrate" }
 sp-api = { git = "https://github.com/serai-dex/substrate" }
 sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
@@ -54,4 +54,8 @@ substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate.g
 
 [features]
 default = []
-runtime-benchmarks = ["serai-runtime/runtime-benchmarks"]
+runtime-benchmarks = [
+  "frame-benchmarking/runtime-benchmarks",
+  "frame-benchmarking-cli/runtime-benchmarks",
+  "serai-runtime/runtime-benchmarks"
+]

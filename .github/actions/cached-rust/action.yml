@@ -22,7 +22,8 @@ runs:
           ~/.cargo/registry
           ~/.cargo/git
           ./target
-        key: ${{ runner.os }}-${{ runner.arch }}-rust-${{ inputs.toolchain }}
+        key: ${{ runner.os }}-${{ runner.arch }}-rust-${{ steps.install-rust.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-rust-${{ steps.install-rust.outputs.rustc_hash }}-
 
     - name: Install Rust
       uses: actions-rs/toolchain@v1

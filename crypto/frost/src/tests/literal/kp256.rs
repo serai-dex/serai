@@ -27,20 +27,20 @@ fn secp256k1_vectors() {
       included: &[1, 3],
       nonces: &[
         [
-          "95f352cf568508bce96ef3cb816bf9229eb521ca9c2aff6a4fe8b86bf49ae16f",
-          "c675aea50ff2510ae6b0fcb55432b97ad0b55a28b959bacb0e8b466dbf43dd26",
+          "36d5c4185c40b02b5e4673e2531a10e6ff9883840a68ec08dbeb896467e21355",
+          "7b3f573ca0a28f9f94522be4748df0ed04de8a83085aff4be7b01aa53fb6ac1b",
         ],
         [
-          "b5089ebf363630d3477711005173c1419f4f40514f7287b4ca6ff110967a2d70",
-          "5e50ce9975cfc6164e85752f52094b11091fdbca846a9c245fdbfa4bab1ae28c",
+          "ba4f8b8e587b2c9fc61a6156885f0bc67654b5e068c9e7749f75c09a98f17c13",
+          "316de06639051ac7869e5ac4458eda1fef90ce93fa3c490556c4192e4fa550d0",
         ],
       ],
       sig_shares: &[
-        "280c44c6c37cd64c7f5a552ae8416a57d21c115cab524dbff5fbcebbf5c0019d",
-        "e372bca35133a80ca140dcac2125c966b763a934678f40e09fb8b0ae9d4aee1b",
+        "f9ee00d5ac0c746b751dde99f71d86f8f0300a81bd0336ca6649ef597239e13f",
+        "61048ca334ac6a6cb59d6b3ea2b25b7098e204adc09e2f88b024531b081d1d6f",
       ],
-      sig: "0364b02292a4b0e61f849f4d6fac0e67c2f698a21e1cba9e4a5b8fa535f2f9310d".to_owned() +
-        "0b7f016a14b07e59209b31d7096733bfced0ddaa6398ee64d5e220ddc2d4ae77",
+      sig: "023cf76388f92d403aa937af2e3cb3e7a2350e40400c16a282e330af2c60eeb85a".to_owned() +
+        "5af28d78e0b8ded82abb49d899cfe26ace633248ce58c617569be3e7aa20bd6d",
     },
   );
 }
@@ -64,20 +64,20 @@ fn p256_vectors() {
       included: &[1, 3],
       nonces: &[
         [
-          "e9165dad654fc20a9e31ca6f32ac032ec327b551a50e8ac5cf25f5c4c9e20757",
-          "e9059a232598a0fba0e495a687580e624ab425337c3221246fb2c716905bc9e7",
+          "9aa66350b0f72b27ce4668323b4280cd49709177ed8373977c22a75546c9995d",
+          "bd8b05d7fd0ff5a5ed65b1f105478f7718a981741fa8fa9b55ac6d3c8fc59a05",
         ],
         [
-          "b9d136e29eb758bd77cb83c317ac4e336cf8cda830c089deddf6d5ec81da9884",
-          "5261e2d00ce227e67bb9b38990294e2c82970f335b2e6d9f1d07a72ba43d01f0",
+          "4c1aec8e84c496b80af98415fada2e6a4b1f902d4bc6c9682699b8aeffd97419",
+          "eeaf5ef7af01e55050fb8acafc9c9306ef1cc13214677ba33e7bc51e8677e892",
         ],
       ],
       sig_shares: &[
-        "bdaa275f10ca57e3a3a9a7a0d95aeabb517897d8482873a8f9713d458f94756f",
-        "0e8fd85386939e8974a8748e66641df0fe043323c52487a2b10b8a397897de21",
+        "ec5b8ab47d55903698492a07bb322ab6e7d3cf32581dcedf43c4fa18b46f3e10",
+        "c97da3580560e88725a8e393d46fee18ecd2e00148e5e303d4a510fae9c11da5",
       ],
-      sig: "03c41521412528dce484c35b6b9b7cc8150102ab3e4bdf858d702270c05098e6c6".to_owned() +
-        "cc39ffb2975df66d18521c2f3fbf08ac4f7ccafc0d4cfb4baa7cc77f082c5390",
+      sig: "036b3eba585ff5d40df29893fb6f60572803aef97800cfaaaa5cf0f0f19d8237f7".to_owned() +
+        "b5d92e0d82b678bcbdf20d9b8fa218d017bfb485f9ec135e24b04050a1cd3664",
     },
   );
 }

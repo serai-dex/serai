@@ -13,6 +13,7 @@ use crate::{
   wallet::{PaymentId, Extra, Scanner, uniqueness, shared_key, amount_decryption, commitment_mask},
 };
 
+/// An absolute output ID, defined as its transaction hash and output index.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct AbsoluteId {
   pub tx: [u8; 32],
@@ -32,10 +33,11 @@ impl AbsoluteId {
   }
 }
 
+/// The data contained with an output.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct OutputData {
   pub key: EdwardsPoint,
-  // Absolute difference between the spend key and the key in this output
+  /// Absolute difference between the spend key and the key in this output
   pub key_offset: Scalar,
   pub commitment: Commitment,
 }
@@ -59,17 +61,18 @@ impl OutputData {
   }
 }
 
+/// The metadata for an output.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Metadata {
   // Does not have to be an Option since the 0 subaddress is the main address
+  /// The subaddress this output was sent to.
   pub subaddress: (u32, u32),
-  // Can be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
-  // have this
-  // This will be gibberish if the payment ID wasn't intended for the recipient or wasn't included
-  // 0xff was chosen as it'd be distinct from [0; 8], enabling atomically incrementing IDs (though
-  // they should be randomly generated)
+  /// The payment ID included with this output.
+  /// This will be gibberish if the payment ID wasn't intended for the recipient or wasn't included.
+  // Could be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
+  // have this making it simplest for it to be as-is.
   pub payment_id: [u8; 8],
-  // Arbitrary data
+  /// Arbitrary data encoded in TX extra.
   pub arbitrary_data: Option<Vec<u8>>,
 }
 
@@ -104,6 +107,7 @@ impl Metadata {
   }
 }
 
+/// A received output, defined as its absolute ID, data, and metadara.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ReceivedOutput {
   pub absolute: AbsoluteId,
@@ -140,6 +144,9 @@ impl ReceivedOutput {
   }
 }
 
+/// A spendable output, defined as a received output and its index on the Monero blockchain.
+/// This index is dependent on the Monero blockchain and will only be known once the output is
+/// included within a block. This may change if there's a reorganization.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SpendableOutput {
   pub output: ReceivedOutput,
@@ -147,6 +154,8 @@ pub struct SpendableOutput {
 }
 
 impl SpendableOutput {
+  /// Update the spendable output's global index. This is intended to be called if a
+  /// re-organization occurred.
   pub async fn refresh_global_index(&mut self, rpc: &Rpc) -> Result<(), RpcError> {
     self.global_index =
       rpc.get_o_indexes(self.output.absolute.tx).await?[usize::from(self.output.absolute.o)];
@@ -182,12 +191,12 @@ impl SpendableOutput {
   }
 }
 
+/// A collection of timelocked outputs, either received or spendable.
 #[derive(Zeroize)]
 pub struct Timelocked<O: Clone + Zeroize>(Timelock, Vec<O>);
 impl<O: Clone + Zeroize> Drop for Timelocked<O> {
   fn drop(&mut self) {
-    self.0.zeroize();
-    self.1.zeroize();
+    self.zeroize();
   }
 }
 impl<O: Clone + Zeroize> ZeroizeOnDrop for Timelocked<O> {}
@@ -197,6 +206,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
     self.0
   }
 
+  /// Return the outputs if they're not timelocked, or an empty vector if they are.
   pub fn not_locked(&self) -> Vec<O> {
     if self.0 == Timelock::None {
       return self.1.clone();
@@ -204,7 +214,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
     vec![]
   }
 
-  /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked
+  /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked.
   pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<O>> {
     // If the Timelocks are comparable, return the outputs if they're now unlocked
     self.0.partial_cmp(&timelock).filter(|_| self.0 <= timelock).map(|_| self.1.clone())
@@ -216,6 +226,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
 }
 
 impl Scanner {
+  /// Scan a transaction to discover the received outputs.
   pub fn scan_transaction(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
     let extra = Extra::deserialize(&mut Cursor::new(&tx.prefix.extra));
     let keys;
@@ -325,6 +336,11 @@ impl Scanner {
     Timelocked(tx.prefix.timelock, res)
   }
 
+  /// Scan a block to obtain its spendable outputs. Its the presence in a block giving these
+  /// transactions their global index, and this must be batched as asking for the index of specific
+  /// transactions is a dead giveaway for which transactions you successfully scanned. This
+  /// function obtains the output indexes for the miner transaction, incrementing from there
+  /// instead.
   pub async fn scan(
     &mut self,
     rpc: &Rpc,

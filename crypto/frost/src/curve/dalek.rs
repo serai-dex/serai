@@ -9,6 +9,8 @@ use crate::{curve::Curve, algorithm::Hram};
 
 macro_rules! dalek_curve {
   (
+    $feature: literal,
+
     $Curve:      ident,
     $Hram:       ident,
     $Point:      ident,
@@ -19,6 +21,7 @@ macro_rules! dalek_curve {
   ) => {
     use dalek_ff_group::$Point;
 
+    #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
     impl $Curve {
@@ -46,6 +49,7 @@ macro_rules! dalek_curve {
       }
     }
 
+    #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Copy, Clone)]
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {
@@ -65,20 +69,22 @@ macro_rules! dalek_curve {
 
 #[cfg(any(test, feature = "ristretto"))]
 dalek_curve!(
+  "ristretto",
   Ristretto,
   IetfRistrettoHram,
   RistrettoPoint,
   b"ristretto",
-  b"FROST-RISTRETTO255-SHA512-v8",
+  b"FROST-RISTRETTO255-SHA512-v10",
   b"chal",
 );
 
 #[cfg(feature = "ed25519")]
 dalek_curve!(
+  "ed25519",
   Ed25519,
   IetfEd25519Hram,
   EdwardsPoint,
   b"edwards25519",
-  b"FROST-ED25519-SHA512-v8",
+  b"FROST-ED25519-SHA512-v10",
   b"",
 );

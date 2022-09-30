@@ -17,7 +17,7 @@ use crate::{
   FrostError, FrostCore, FrostKeys, validate_map,
 };
 
-/// Promote a set of keys to another Curve definition
+/// Promote a set of keys to another Curve definition.
 pub trait CurvePromote<C2: Curve> {
   #[doc(hidden)]
   #[allow(non_snake_case)]
@@ -60,6 +60,7 @@ fn transcript<G: GroupEncoding>(key: G, i: u16) -> RecommendedTranscript {
   transcript
 }
 
+/// Proof of valid promotion to another generator.
 #[derive(Clone, Copy)]
 pub struct GeneratorProof<C: Curve> {
   share: C::G,
@@ -80,18 +81,21 @@ impl<C: Curve> GeneratorProof<C> {
   }
 }
 
+/// Promote a set of keys from one curve to another, where the elliptic curve is the same.
+/// Since the Curve trait additionally specifies a generator, this provides an O(n) way to update
+/// the generator used with keys. The key generation protocol itself is exponential.
 pub struct GeneratorPromotion<C1: Curve, C2: Curve> {
   base: FrostKeys<C1>,
   proof: GeneratorProof<C1>,
   _c2: PhantomData<C2>,
 }
 
-/// Promote a set of keys from one generator to another
-// The linear DLEq proofs are much more efficient than an exponential key gen
 impl<C1: Curve, C2: Curve> GeneratorPromotion<C1, C2>
 where
   C2: Curve<F = C1::F, G = C1::G>,
 {
+  /// Begin promoting keys from one curve to another. Returns a proof this share was properly
+  /// promoted.
   pub fn promote<R: RngCore + CryptoRng>(
     rng: &mut R,
     base: FrostKeys<C1>,
@@ -110,6 +114,7 @@ where
     (GeneratorPromotion { base, proof, _c2: PhantomData::<C2> }, proof)
   }
 
+  /// Complete promotion by taking in the proofs from all other participants.
   pub fn complete(
     self,
     proofs: &HashMap<u16, GeneratorProof<C1>>,

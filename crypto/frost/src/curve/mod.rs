@@ -29,7 +29,7 @@ mod ed448;
 #[cfg(feature = "ed448")]
 pub use ed448::{Ed448, Ietf8032Ed448Hram, NonIetfEd448Hram};
 
-/// Set of errors for curve-related operations, namely encoding and decoding
+/// Set of errors for curve-related operations, namely encoding and decoding.
 #[derive(Clone, Error, Debug)]
 pub enum CurveError {
   #[error("invalid scalar")]
@@ -38,23 +38,23 @@ pub enum CurveError {
   InvalidPoint,
 }
 
-/// Unified trait to manage a field/group
+/// Unified trait to manage an elliptic curve.
 // This should be moved into its own crate if the need for generic cryptography over ff/group
 // continues, which is the exact reason ff/group exists (to provide a generic interface)
 // elliptic-curve exists, yet it doesn't really serve the same role, nor does it use &[u8]/Vec<u8>
 // It uses GenericArray which will hopefully be deprecated as Rust evolves and doesn't offer enough
 // advantages in the modern day to be worth the hassle -- Kayaba
 pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
-  /// Scalar field element type
+  /// Scalar field element type.
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
   type F: PrimeField + PrimeFieldBits + Zeroize;
-  /// Group element type
+  /// Group element type.
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize;
 
-  /// ID for this curve
+  /// ID for this curve.
   const ID: &'static [u8];
 
-  /// Generator for the group
+  /// Generator for the group.
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   fn generator() -> Self::G;
 
@@ -66,22 +66,22 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   #[allow(non_snake_case)]
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
 
-  /// Hash the message for the binding factor. H4 from the IETF draft
+  /// Hash the message for the binding factor. H4 from the IETF draft.
   fn hash_msg(msg: &[u8]) -> Vec<u8> {
     Self::hash_to_vec(b"msg", msg)
   }
 
-  /// Hash the commitments for the binding factor. H5 from the IETF draft
+  /// Hash the commitments for the binding factor. H5 from the IETF draft.
   fn hash_commitments(commitments: &[u8]) -> Vec<u8> {
     Self::hash_to_vec(b"com", commitments)
   }
 
-  /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft
+  /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft.
   fn hash_binding_factor(binding: &[u8]) -> Self::F {
     Self::hash_to_F(b"rho", binding)
   }
 
-  /// Securely generate a random nonce. H3 from the IETF draft
+  /// Securely generate a random nonce. H3 from the IETF draft.
   fn random_nonce<R: RngCore + CryptoRng>(mut secret: Self::F, rng: &mut R) -> Self::F {
     let mut seed = vec![0; 32];
     rng.fill_bytes(&mut seed);

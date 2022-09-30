@@ -17,11 +17,12 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 use frame_support::{
-  traits::{OnRuntimeUpgrade, ConstU8, ConstU32, ConstU64},
+  traits::{ConstU8, ConstU32, ConstU64},
   weights::{
     constants::{RocksDbWeight, ExtrinsicBaseWeight, BlockExecutionWeight, WEIGHT_PER_SECOND},
-    IdentityFee, Weight, DispatchClass,
+    IdentityFee, Weight,
   },
+  dispatch::DispatchClass,
   parameter_types, construct_runtime,
 };
 pub use frame_system::Call as SystemCall;
@@ -29,25 +30,25 @@ pub use frame_system::Call as SystemCall;
 pub use pallet_timestamp::Call as TimestampCall;
 pub use pallet_balances::Call as BalancesCall;
 use pallet_transaction_payment::CurrencyAdapter;
-use pallet_contracts::{migration, DefaultContractAccessWeight};
+use pallet_contracts::DefaultContractAccessWeight;
 
-/// An index to a block
+/// An index to a block.
 pub type BlockNumber = u32;
 
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain
+/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
 
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
-/// to the public key of our transaction signing scheme
+/// to the public key of our transaction signing scheme.
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
-/// Balance of an account
+/// Balance of an account.
 pub type Balance = u64;
 
-/// Index of a transaction in the chain, for a given account
+/// Index of a transaction in the chain, for a given account.
 pub type Index = u32;
 
-/// A hash of some data used by the chain
+/// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
 
 pub mod opaque {
@@ -79,7 +80,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
-/// Measured in blocks
+/// Measured in blocks.
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
@@ -96,7 +97,7 @@ const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(10);
 
 /// We allow for 2 seconds of compute with a 6 second average block time.
-const MAXIMUM_BLOCK_WEIGHT: Weight = 2 * WEIGHT_PER_SECOND;
+const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_ref_time(2 * WEIGHT_PER_SECOND.ref_time());
 
 // Prints debug output of the `contracts` pallet to stdout if the node is
 // started with `-lruntime::contracts=debug`.
@@ -156,15 +157,15 @@ impl frame_system::Config for Runtime {
   type BlockWeights = BlockWeights;
   type BlockLength = BlockLength;
   type AccountId = AccountId;
-  type Call = Call;
+  type RuntimeCall = RuntimeCall;
   type Lookup = AccountIdLookup<AccountId, ()>;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
   type Hashing = BlakeTwo256;
   type Header = Header;
-  type Event = Event;
-  type Origin = Origin;
+  type RuntimeOrigin = RuntimeOrigin;
+  type RuntimeEvent = RuntimeEvent;
   type BlockHashCount = BlockHashCount;
   type DbWeight = RocksDbWeight;
   type Version = Version;
@@ -195,7 +196,7 @@ impl pallet_balances::Config for Runtime {
   type MaxReserves = ();
   type ReserveIdentifier = [u8; 8];
   type Balance = Balance;
-  type Event = Event;
+  type RuntimeEvent = RuntimeEvent;
   type DustRemoval = ();
   type ExistentialDeposit = ConstU64<500>;
   type AccountStore = System;
@@ -203,7 +204,7 @@ impl pallet_balances::Config for Runtime {
 }
 
 impl pallet_transaction_payment::Config for Runtime {
-  type Event = Event;
+  type RuntimeEvent = RuntimeEvent;
   type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
   type OperationalFeeMultiplier = ConstU8<5>;
   type WeightToFee = IdentityFee<Balance>;
@@ -215,8 +216,8 @@ impl pallet_contracts::Config for Runtime {
   type Time = Timestamp;
   type Randomness = RandomnessCollectiveFlip;
   type Currency = Balances;
-  type Event = Event;
-  type Call = Call;
+  type RuntimeEvent = RuntimeEvent;
+  type RuntimeCall = RuntimeCall;
 
   /// The safest default is to allow no calls at all.
   ///
@@ -238,15 +239,7 @@ impl pallet_contracts::Config for Runtime {
   type ContractAccessWeight = DefaultContractAccessWeight<BlockWeights>;
 
   type MaxCodeLen = ConstU32<{ 128 * 1024 }>;
-  type RelaxedMaxCodeLen = ConstU32<{ 256 * 1024 }>;
   type MaxStorageKeyLen = ConstU32<128>;
-}
-
-pub struct Migrations;
-impl OnRuntimeUpgrade for Migrations {
-  fn on_runtime_upgrade() -> Weight {
-    migration::migrate::<Runtime>()
-  }
 }
 
 pub type Address = sp_runtime::MultiAddress<AccountId, ()>;
@@ -262,8 +255,9 @@ pub type SignedExtra = (
   frame_system::CheckWeight<Runtime>,
   pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
 );
-pub type UncheckedExtrinsic = generic::UncheckedExtrinsic<Address, Call, Signature, SignedExtra>;
-pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
+pub type UncheckedExtrinsic =
+  generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 pub type Executive = frame_executive::Executive<
   Runtime,
   Block,
@@ -410,7 +404,7 @@ sp_api::impl_runtime_apis! {
         origin,
         dest,
         value,
-        gas_limit,
+        Weight::from_ref_time(gas_limit),
         storage_deposit_limit,
         input_data,
         CONTRACTS_DEBUG_OUTPUT
@@ -429,7 +423,7 @@ sp_api::impl_runtime_apis! {
       Contracts::bare_instantiate(
         origin,
         value,
-        gas_limit,
+        Weight::from_ref_time(gas_limit),
         storage_deposit_limit,
         code,
         data,
@@ -451,67 +445,6 @@ sp_api::impl_runtime_apis! {
       key: Vec<u8>,
     ) -> pallet_contracts_primitives::GetStorageResult {
       Contracts::get_storage(address, key)
-    }
-  }
-
-  #[cfg(feature = "runtime-benchmarks")]
-  impl frame_benchmarking::Benchmark<Block> for Runtime {
-    fn benchmark_metadata(extra: bool) -> (
-      Vec<frame_benchmarking::BenchmarkList>,
-      Vec<frame_support::traits::StorageInfo>,
-    ) {
-      use frame_benchmarking::{baseline, Benchmarking, BenchmarkList};
-      use frame_support::traits::StorageInfoTrait;
-      use frame_system_benchmarking::Pallet as SystemBench;
-      use baseline::Pallet as BaselineBench;
-
-      let mut list = Vec::<BenchmarkList>::new();
-      list_benchmarks!(list, extra);
-
-      let storage_info = AllPalletsWithSystem::storage_info();
-
-      (list, storage_info)
-    }
-
-    fn dispatch_benchmark(
-      config: frame_benchmarking::BenchmarkConfig
-    ) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, sp_runtime::RuntimeString> {
-      use frame_benchmarking::{baseline, Benchmarking, BenchmarkBatch, TrackedStorageKey};
-
-      use frame_system_benchmarking::Pallet as SystemBench;
-      use baseline::Pallet as BaselineBench;
-
-      impl frame_system_benchmarking::Config for Runtime {}
-      impl baseline::Config for Runtime {}
-
-      let whitelist: Vec<TrackedStorageKey> = vec![
-        // Block Number
-        hex_literal::hex!(
-          "26aa394eea5630e07c48ae0c9558cef702a5c1b19ab7a04f536c519aca4983ac"
-        ).to_vec().into(),
-        // Total Issuance
-        hex_literal::hex!(
-          "c2261276cc9d1f8598ea4b6a74b15c2f57c875e4cff74148e4628f264b974c80"
-        ).to_vec().into(),
-        // Execution Phase
-        hex_literal::hex!(
-          "26aa394eea5630e07c48ae0c9558cef7ff553b5a9862a516939d82b3d3d8661a"
-        ).to_vec().into(),
-        // Event Count
-        hex_literal::hex!(
-          "26aa394eea5630e07c48ae0c9558cef70a98fdbe9ce6c55837576c60c7af3850"
-        ).to_vec().into(),
-        // System Events
-        hex_literal::hex!(
-          "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7"
-        ).to_vec().into(),
-      ];
-
-      let mut batches = Vec::<BenchmarkBatch>::new();
-      let params = (&config, &whitelist);
-      add_benchmarks!(params, batches);
-
-      Ok(batches)
     }
   }
 }

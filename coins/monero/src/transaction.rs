@@ -2,12 +2,15 @@ use core::cmp::Ordering;
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
+use curve25519_dalek::{
+  scalar::Scalar,
+  edwards::{EdwardsPoint, CompressedEdwardsY},
+};
 
 use crate::{
   Protocol, hash,
   serialize::*,
-  ringct::{RctPrunable, RctSignatures},
+  ringct::{RctBase, RctPrunable, RctSignatures},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -116,10 +119,6 @@ impl Timelock {
     }
   }
 
-  pub(crate) fn fee_weight() -> usize {
-    8
-  }
-
   fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     write_varint(
       &match self {
@@ -186,9 +185,11 @@ impl TransactionPrefix {
   }
 }
 
+/// Monero transaction. For version 1, rct_signatures still contains an accurate fee value.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
+  pub signatures: Vec<(Scalar, Scalar)>,
   pub rct_signatures: RctSignatures,
 }
 
@@ -205,13 +206,42 @@ impl Transaction {
 
   pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
     self.prefix.serialize(w)?;
-    self.rct_signatures.serialize(w)
+    if self.prefix.version == 1 {
+      for sig in &self.signatures {
+        write_scalar(&sig.0, w)?;
+        write_scalar(&sig.1, w)?;
+      }
+      Ok(())
+    } else if self.prefix.version == 2 {
+      self.rct_signatures.serialize(w)
+    } else {
+      panic!("Serializing a transaction with an unknown version");
+    }
   }
 
   pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Transaction> {
     let prefix = TransactionPrefix::deserialize(r)?;
-    Ok(Transaction {
-      rct_signatures: RctSignatures::deserialize(
+    let mut signatures = vec![];
+    let mut rct_signatures = RctSignatures {
+      base: RctBase { fee: 0, ecdh_info: vec![], commitments: vec![] },
+      prunable: RctPrunable::Null,
+    };
+
+    if prefix.version == 1 {
+      for _ in 0 .. prefix.inputs.len() {
+        signatures.push((read_scalar(r)?, read_scalar(r)?));
+      }
+      rct_signatures.base.fee = prefix
+        .inputs
+        .iter()
+        .map(|input| match input {
+          Input::Gen(..) => 0,
+          Input::ToKey { amount, .. } => *amount,
+        })
+        .sum::<u64>()
+        .saturating_sub(prefix.outputs.iter().map(|output| output.amount).sum());
+    } else if prefix.version == 2 {
+      rct_signatures = RctSignatures::deserialize(
         prefix
           .inputs
           .iter()
@@ -222,9 +252,12 @@ impl Transaction {
           .collect(),
         prefix.outputs.len(),
         r,
-      )?,
-      prefix,
-    })
+      )?;
+    } else {
+      Err(std::io::Error::new(std::io::ErrorKind::Other, "Tried to deserialize unknown version"))?;
+    }
+
+    Ok(Transaction { prefix, signatures, rct_signatures })
   }
 
   pub fn hash(&self) -> [u8; 32] {
@@ -260,6 +293,7 @@ impl Transaction {
     }
   }
 
+  /// Calculate the hash of this transaction as needed for signing it.
   pub fn signature_hash(&self) -> [u8; 32] {
     let mut serialized = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);

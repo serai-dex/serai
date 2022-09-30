@@ -3,7 +3,6 @@ use std::{marker::Sync, sync::Arc, time::Duration};
 use substrate_prometheus_endpoint::Registry;
 
 use sc_consensus_pow as sc_pow;
-use sc_client_api::call_executor::ExecutorProvider;
 use sc_executor::NativeElseWasmExecutor;
 use sc_service::TaskManager;
 
@@ -40,12 +39,11 @@ pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
 ) -> Result<sc_pow::PowImportQueue<Block, Db>, sp_consensus::Error> {
   let pow_block_import = Box::new(sc_pow::PowBlockImport::new(
     client.clone(),
-    client.clone(),
+    client,
     algorithm::AcceptAny,
     0,
     select_chain,
     |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
-    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
   sc_pow::import_queue(
@@ -97,8 +95,6 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     None,
   );
 
-  let can_author_with = sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone());
-
   let pow_block_import = Box::new(sc_pow::PowBlockImport::new(
     client.clone(),
     client.clone(),
@@ -106,7 +102,6 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     0, // Block to start checking inherents at
     select_chain.clone(),
     move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
-    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
   let (worker, worker_task) = sc_pow::start_mining_worker(
@@ -121,7 +116,6 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     move |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
     Duration::from_secs(6),
     Duration::from_secs(2),
-    can_author_with,
   );
 
   task_manager.spawn_essential_handle().spawn_blocking("pow", None, worker_task);

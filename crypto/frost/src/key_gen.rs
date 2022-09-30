@@ -6,7 +6,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use group::{
   ff::{Field, PrimeField},
@@ -178,10 +178,8 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
 }
 
 /// Finishes round 2 and returns both the secret share and the serialized public key.
-/// This key is not usable until all parties confirm they have completed the protocol without
-/// issue, yet simply confirming protocol completion without issue is enough to confirm the same
-/// key was generated as long as a lack of duplicated commitments was also confirmed when they were
-/// broadcasted initially
+/// This key MUST NOT be considered usable until all parties confirm they have completed the
+/// protocol without issue.
 fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: FrostParams,
@@ -251,12 +249,14 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   Ok(FrostCore { params, secret_share, group_key: stripes[0], verification_shares })
 }
 
+/// State machine to begin the key generation protocol.
 pub struct KeyGenMachine<C: Curve> {
   params: FrostParams,
   context: String,
   _curve: PhantomData<C>,
 }
 
+/// Advancement of the key generation state machine.
 #[derive(Zeroize)]
 pub struct SecretShareMachine<C: Curve> {
   #[zeroize(skip)]
@@ -272,7 +272,9 @@ impl<C: Curve> Drop for SecretShareMachine<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for SecretShareMachine<C> {}
 
+/// Final step of the key generation protocol.
 #[derive(Zeroize)]
 pub struct KeyMachine<C: Curve> {
   #[zeroize(skip)]
@@ -287,17 +289,19 @@ impl<C: Curve> Drop for KeyMachine<C> {
     self.zeroize()
   }
 }
+impl<C: Curve> ZeroizeOnDrop for KeyMachine<C> {}
 
 impl<C: Curve> KeyGenMachine<C> {
-  /// Creates a new machine to generate a key for the specified curve in the specified multisig
-  // The context string must be unique among multisigs
+  /// Creates a new machine to generate a key for the specified curve in the specified multisig.
+  // The context string should be unique among multisigs.
   pub fn new(params: FrostParams, context: String) -> KeyGenMachine<C> {
     KeyGenMachine { params, context, _curve: PhantomData }
   }
 
-  /// Start generating a key according to the FROST DKG spec
+  /// Start generating a key according to the FROST DKG spec.
   /// Returns a serialized list of commitments to be sent to all parties over an authenticated
-  /// channel. If any party submits multiple sets of commitments, they MUST be treated as malicious
+  /// channel. If any party submits multiple sets of commitments, they MUST be treated as
+  /// malicious.
   pub fn generate_coefficients<R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
@@ -318,11 +322,9 @@ impl<C: Curve> KeyGenMachine<C> {
 }
 
 impl<C: Curve> SecretShareMachine<C> {
-  /// Continue generating a key
-  /// Takes in everyone else's commitments, which are expected to be in a Vec where participant
-  /// index = Vec index. An empty vector is expected at index 0 to allow for this. An empty vector
-  /// is also expected at index i which is locally handled. Returns a byte vector representing a
-  /// secret share for each other participant which should be encrypted before sending
+  /// Continue generating a key.
+  /// Takes in everyone else's commitments. Returns a HashMap of byte vectors representing secret
+  /// shares. These MUST be encrypted and only then sent to their respective participants.
   pub fn generate_secret_shares<Re: Read, R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
@@ -341,12 +343,10 @@ impl<C: Curve> SecretShareMachine<C> {
 }
 
 impl<C: Curve> KeyMachine<C> {
-  /// Complete key generation
-  /// Takes in everyone elses' shares submitted to us as a Vec, expecting participant index =
-  /// Vec index with an empty vector at index 0 and index i. Returns a byte vector representing the
-  /// group's public key, while setting a valid secret share inside the machine. > t participants
-  /// must report completion without issue before this key can be considered usable, yet you should
-  /// wait for all participants to report as such
+  /// Complete key generation.
+  /// Takes in everyone elses' shares submitted to us. Returns a FrostCore object representing the
+  /// generated keys. Successful protocol completion MUST be confirmed by all parties before these
+  /// keys may be safely used.
   pub fn complete<Re: Read, R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,

@@ -17,6 +17,8 @@ use crate::{curve::Curve, algorithm::Hram};
 
 macro_rules! kp_curve {
   (
+    $feature: literal,
+
     $lib:   ident,
     $Curve: ident,
     $Hram:  ident,
@@ -24,6 +26,7 @@ macro_rules! kp_curve {
     $ID:      literal,
     $CONTEXT: literal
   ) => {
+    #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
     impl $Curve {
@@ -76,6 +79,7 @@ macro_rules! kp_curve {
       }
     }
 
+    #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Clone)]
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {
@@ -88,7 +92,14 @@ macro_rules! kp_curve {
 }
 
 #[cfg(feature = "p256")]
-kp_curve!(p256, P256, IetfP256Hram, b"P-256", b"FROST-P256-SHA256-v8");
+kp_curve!("p256", p256, P256, IetfP256Hram, b"P-256", b"FROST-P256-SHA256-v10");
 
 #[cfg(feature = "secp256k1")]
-kp_curve!(k256, Secp256k1, IetfSecp256k1Hram, b"secp256k1", b"FROST-secp256k1-SHA256-v8");
+kp_curve!(
+  "secp256k1",
+  k256,
+  Secp256k1,
+  IetfSecp256k1Hram,
+  b"secp256k1",
+  b"FROST-secp256k1-SHA256-v10"
+);

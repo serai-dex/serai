@@ -7,7 +7,7 @@ use dalek_ff_group::field::FieldElement;
 
 use crate::hash;
 
-#[allow(dead_code)]
+/// Monero's hash to point function, as named `ge_fromfe_frombytes_vartime`.
 pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   #[allow(non_snake_case)]
   let A = FieldElement::from(486662u64);

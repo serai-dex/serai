@@ -1,6 +1,6 @@
 [package]
 name = "minimal-ed448"
-version = "0.1.0"
+version = "0.1.1"
 description = "Unaudited, inefficient implementation of Ed448 in Rust"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai"
@@ -8,13 +8,17 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ed448", "ff", "group"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 lazy_static = "1"
 
 rand_core = "0.6"
 digest = "0.10"
 
-zeroize = { version = "1.3", features = ["zeroize_derive"] }
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
 subtle = "2.4"
 
 ff = "0.12"

@@ -28,6 +28,7 @@ lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();
 }
 
+/// Errors returned when CLSAG signing fails.
 #[derive(Clone, Error, Debug)]
 pub enum ClsagError {
   #[error("internal error ({0})")]
@@ -48,6 +49,7 @@ pub enum ClsagError {
   InvalidC1,
 }
 
+/// Input being signed for.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
@@ -189,6 +191,7 @@ fn core(
   ((D, c * mu_P, c * mu_C), c1.unwrap_or(c))
 }
 
+/// CLSAG signature, as used in Monero.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Clsag {
   pub D: EdwardsPoint,
@@ -225,7 +228,9 @@ impl Clsag {
     (Clsag { D, s, c1 }, pseudo_out, p, c * z)
   }
 
-  // Single signer CLSAG
+  /// Generate CLSAG signatures for the given inputs.
+  /// inputs is of the form (private key, key image, input).
+  /// sum_outputs is for the sum of the outputs' commitment masks.
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
     mut inputs: Vec<(Scalar, EdwardsPoint, ClsagInput)>,
@@ -262,6 +267,7 @@ impl Clsag {
     res
   }
 
+  /// Verify the CLSAG signature against the given Transaction data.
   pub fn verify(
     &self,
     ring: &[[EdwardsPoint; 2]],

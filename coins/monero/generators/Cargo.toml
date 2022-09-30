@@ -1,19 +1,24 @@
 [package]
 name = "monero-generators"
-version = "0.1.0"
+version = "0.1.1"
 description = "Monero's hash_to_point and generators"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 lazy_static = "1"
 
 subtle = "2.4"
 
-tiny-keccak = { version = "2", features = ["keccak"] }
+sha3 = "0.10"
 
 curve25519-dalek = { version = "3", features = ["std"] }
 
-group = { version = "0.12" }
-dalek-ff-group = { path = "../../../crypto/dalek-ff-group" }
+group = "0.12"
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.1.4" }

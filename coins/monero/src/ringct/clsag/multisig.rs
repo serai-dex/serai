@@ -23,7 +23,7 @@ use frost::{curve::Ed25519, FrostError, FrostView, algorithm::Algorithm};
 use dalek_ff_group as dfg;
 
 use crate::{
-  frost::{MultisigError, write_dleq, read_dleq},
+  frost::{write_dleq, read_dleq},
   ringct::{
     hash_to_point,
     clsag::{ClsagInput, Clsag},
@@ -54,6 +54,7 @@ impl ClsagInput {
   }
 }
 
+/// CLSAG Input and the mask to use for it.
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagDetails {
   input: ClsagInput,
@@ -76,6 +77,7 @@ struct Interim {
   pseudo_out: EdwardsPoint,
 }
 
+/// FROST algorithm for producing a CLSAG signature.
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct ClsagMultisig {
@@ -97,8 +99,8 @@ impl ClsagMultisig {
     transcript: RecommendedTranscript,
     output_key: EdwardsPoint,
     details: Arc<RwLock<Option<ClsagDetails>>>,
-  ) -> Result<ClsagMultisig, MultisigError> {
-    Ok(ClsagMultisig {
+  ) -> ClsagMultisig {
+    ClsagMultisig {
       transcript,
 
       H: hash_to_point(output_key),
@@ -108,7 +110,7 @@ impl ClsagMultisig {
 
       msg: None,
       interim: None,
-    })
+    }
   }
 
   pub(crate) const fn serialized_len() -> usize {

@@ -1,10 +1,15 @@
 [package]
 name = "monero-serai"
-version = "0.1.0"
+version = "0.1.1-alpha"
 description = "A modern Monero transaction library"
 license = "MIT"
+repository = "https://github.com/serai-dex/serai"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 hex-literal = "0.3"
@@ -16,23 +21,23 @@ rand_chacha = { version = "0.3", optional = true }
 rand = "0.8"
 rand_distr = "0.4"
 
-zeroize = { version = "1.3", features = ["zeroize_derive"] }
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
 subtle = "2.4"
 
-tiny-keccak = { version = "2", features = ["keccak"] }
+sha3 = "0.10"
 blake2 = { version = "0.10", optional = true }
 
 curve25519-dalek = { version = "3", features = ["std"] }
 
 group = { version = "0.12" }
-dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
-multiexp = { path = "../../crypto/multiexp", features = ["batch"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
+multiexp = { path = "../../crypto/multiexp", version = "0.2", features = ["batch"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", features = ["recommended"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", features = ["ed25519"], optional = true }
-dleq = { path = "../../crypto/dleq", features = ["serialize"], optional = true }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.1", features = ["recommended"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.2", features = ["ed25519"], optional = true }
+dleq = { path = "../../crypto/dleq", version = "0.1", features = ["serialize"], optional = true }
 
-monero-generators = { path = "generators" }
+monero-generators = { path = "generators", version = "0.1" }
 
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
@@ -47,8 +52,8 @@ reqwest = { version = "0.11", features = ["json"] }
 multisig = ["rand_chacha", "blake2", "transcript", "frost", "dleq"]
 
 [build-dependencies]
-dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
-monero-generators = { path = "generators" }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
+monero-generators = { path = "generators", version = "0.1" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

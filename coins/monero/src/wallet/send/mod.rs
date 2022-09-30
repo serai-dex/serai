@@ -25,8 +25,6 @@ use crate::{
     uniqueness, shared_key, commitment_mask, amount_encryption,
   },
 };
-#[cfg(feature = "multisig")]
-use crate::frost::MultisigError;
 
 #[cfg(feature = "multisig")]
 mod multisig;
@@ -103,9 +101,6 @@ pub enum TransactionError {
   #[cfg(feature = "multisig")]
   #[error("frost error {0}")]
   FrostError(FrostError),
-  #[cfg(feature = "multisig")]
-  #[error("multisig error {0}")]
-  MultisigError(MultisigError),
 }
 
 async fn prepare_inputs<R: RngCore + CryptoRng>(
@@ -156,6 +151,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   Ok(signable)
 }
 
+/// Fee struct, defined as a per-unit cost and a mask for rounding purposes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Fee {
   pub per_weight: u64,
@@ -168,6 +164,7 @@ impl Fee {
   }
 }
 
+/// A signable transaction, either in a single-signer or multisig context.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SignableTransaction {
   protocol: Protocol,
@@ -178,6 +175,10 @@ pub struct SignableTransaction {
 }
 
 impl SignableTransaction {
+  /// Create a signable transaction. If the change address is specified, leftover funds will be
+  /// sent to it. If the change address isn't specified, up to 16 outputs may be specified, using
+  /// any leftover funds as a bonus to the fee. The optional data field will be embedded in TX
+  /// extra.
   pub fn new(
     protocol: Protocol,
     inputs: Vec<SpendableOutput>,
@@ -334,6 +335,7 @@ impl SignableTransaction {
           outputs: tx_outputs,
           extra,
         },
+        signatures: vec![],
         rct_signatures: RctSignatures {
           base: RctBase {
             fee: self.fee,
@@ -351,6 +353,7 @@ impl SignableTransaction {
     )
   }
 
+  /// Sign this transaction.
   pub async fn sign<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,

@@ -13,6 +13,7 @@ use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
 mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
+/// Address encoding and decoding functionality.
 pub mod address;
 use address::{Network, AddressType, AddressMeta, Address};
 
@@ -92,6 +93,7 @@ pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
   hash_to_scalar(&mask)
 }
 
+/// The private view key and public spend key, enabling scanning transactions.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct ViewPair {
   spend: EdwardsPoint,
@@ -120,6 +122,10 @@ impl ViewPair {
   }
 }
 
+/// Transaction scanner.
+/// This scanner is capable of generating subaddresses, additionally scanning for them once they've
+/// been explicitly generated. If the burning bug is attempted, any secondary outputs will be
+/// ignored.
 #[derive(Clone)]
 pub struct Scanner {
   pair: ViewPair,
@@ -155,8 +161,14 @@ impl Drop for Scanner {
 impl ZeroizeOnDrop for Scanner {}
 
 impl Scanner {
-  // For burning bug immune addresses (Featured Address w/ the Guaranteed feature), pass None
-  // For traditional Monero address, provide a HashSet of all historically scanned output keys
+  /// Create a Scanner from a ViewPair.
+  /// The network is used for generating subaddresses.
+  /// burning_bug is a HashSet of used keys, intended to prevent key reuse which would burn funds.
+  /// When an output is successfully scanned, the output key MUST be saved to disk.
+  /// When a new scanner is created, ALL saved output keys must be passed in to be secure.
+  /// If None is passed, a modified shared key derivation is used which is immune to the burning
+  /// bug (specifically the Guaranteed feature from Featured Addresses).
+  // TODO: Should this take in a DB access handle to ensure output keys are saved?
   pub fn from_view(
     pair: ViewPair,
     network: Network,
@@ -167,6 +179,7 @@ impl Scanner {
     Scanner { pair, network, subaddresses, burning_bug }
   }
 
+  /// Return the main address for this view pair.
   pub fn address(&self) -> Address {
     Address::new(
       AddressMeta {
@@ -182,6 +195,7 @@ impl Scanner {
     )
   }
 
+  /// Return the specified subaddress for this view pair.
   pub fn subaddress(&mut self, index: (u32, u32)) -> Address {
     if index == (0, 0) {
       return self.address();

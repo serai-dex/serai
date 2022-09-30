@@ -5,7 +5,9 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 pub(crate) mod hash_to_point;
 pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 
+/// CLSAG struct, along with signing and verifying functionality.
 pub mod clsag;
+/// Bulletproofs(+) structs, along with proving and verifying functionality.
 pub mod bulletproofs;
 
 use crate::{
@@ -14,6 +16,7 @@ use crate::{
   ringct::{clsag::Clsag, bulletproofs::Bulletproofs},
 };
 
+/// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
 pub fn generate_key_image(mut secret: Scalar) -> EdwardsPoint {
   let res = secret * hash_to_point(&secret * &ED25519_BASEPOINT_TABLE);
   secret.zeroize();
@@ -74,6 +77,7 @@ pub enum RctPrunable {
 }
 
 impl RctPrunable {
+  /// RCT Type byte for a given RctPrunable struct.
   pub fn rct_type(&self) -> u8 {
     match self {
       RctPrunable::Null => 0,
