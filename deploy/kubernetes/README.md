@@ -13,7 +13,7 @@ make deploy-cluster-sm
 make delete-cluster-sm
 ```
 
-All commands are assumed to be ran from the helm folder, not the serai root folder.
+All commands are assumed to be ran from the kubernetes folder, not the serai root folder.
 
 ### Profiles:
 * deploy-base - single node, named base

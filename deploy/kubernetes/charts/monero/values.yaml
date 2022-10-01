@@ -24,19 +24,17 @@ volumes:
       name: configmap
     name: configmap-volume
 
+configMapFile: "entry-dev.sh"
+
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
 
 serviceAccount:
-  create: true
-  annotations: {}
+  create: false
   name: ""
 
 podAnnotations: {}
 
 podSecurityContext: {}
-  # fsGroup: 2000
 
 securityContext: {}
 

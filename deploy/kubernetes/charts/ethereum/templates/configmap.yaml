@@ -3,5 +3,5 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-configmap
 data:
-  entry-dev.sh: |-
-{{ .Files.Get "extra/entry-dev.sh" | indent 4}}
+  entry-dev.sh: |
+{{ .Values.configMapFile | b64dec | indent 4}}
