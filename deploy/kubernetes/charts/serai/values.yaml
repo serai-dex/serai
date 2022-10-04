@@ -5,16 +5,16 @@ image:
   pullPolicy: IfNotPresent
   tag: "dev"
   ports:
-    - name: prometheus
+    - name: p2p
       containerPort: 30333
       protocol: TCP
-    - name: rpc
+    - name: prometheus
       containerPort: 9615
       protocol: TCP
-    - name: port3
+    - name: rpc
       containerPort: 9933
       protocol: TCP
-    - name: port4
+    - name: ws
       containerPort: 9944
       protocol: TCP
 
@@ -55,21 +55,21 @@ securityContext: {}
 service:
   type: ClusterIP
   ports:
-    - name: prometheus
+    - name: p2p
       port: 30333
-      targetPort: port1
+      targetPort: p2p
+      protocol: TCP
+    - name: prometheus
+      port: 9615
+      targetPort: prometheus
       protocol: TCP
     - name: rpc
-      port: 9615
+      port: 9933
       targetPort: rpc
       protocol: TCP
-    - name: port3
-      port: 9933
-      targetPort: port3
-      protocol: TCP
-    - name: port4
+    - name: ws
       port: 9944
-      targetPort: port4
+      targetPort: ws
       protocol: TCP
 
 ingress:
