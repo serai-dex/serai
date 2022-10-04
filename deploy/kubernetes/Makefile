@@ -31,7 +31,7 @@ deploy-ethereum:
 	
 deploy-monero:
 	@docker compose -f ../docker-compose.yml --profile monero build --quiet
-	@(cat ../coins/monero/scripts/entry-dev.sh | base64 -w 0 -) | xargs -I % helm upgrade --install monero-daemon charts/monero/ --values charts/monero/values.yaml --set configMapFile=%
+	@(cat ../coins/monero/scripts/entry-dev.sh | base64 -w 0 -) | xargs -I % \helm upgrade --install monero-daemon charts/monero/ --values charts/monero/values.yaml --set configMapFile=%
 
 deploy-cluster-sm:
 	@docker compose -f ../docker-compose.yml --profile cluster-sm build --quiet

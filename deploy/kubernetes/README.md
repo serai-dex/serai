@@ -26,9 +26,13 @@ All commands are assumed to be ran from the kubernetes folder, not the serai roo
 * deploy-bitcoin - full node bitcoin only
 * deploy-ethereum - full node ethereum only
 
-## Requirements
+## Requirements for Ubuntu (version >= 18.04)
 * Local built images of serai and coins, please follow the Instructions [here](../README.md)
-* Running kubernetes cluster
+* Running kubernetes cluster (version >= 1.19)
+* Curl tool, if not installed
+```bash
+sudo apt-get -y install curl
+```
 * Make tool, if not installed
 ```bash
 sudo apt-get -y install make
