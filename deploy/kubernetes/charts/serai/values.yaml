@@ -5,10 +5,10 @@ image:
   pullPolicy: IfNotPresent
   tag: "dev"
   ports:
-    - name: port1
+    - name: prometheus
       containerPort: 30333
       protocol: TCP
-    - name: port2
+    - name: rpc
       containerPort: 9615
       protocol: TCP
     - name: port3
@@ -55,13 +55,13 @@ securityContext: {}
 service:
   type: ClusterIP
   ports:
-    - name: port1
+    - name: prometheus
       port: 30333
       targetPort: port1
       protocol: TCP
-    - name: port2
+    - name: rpc
       port: 9615
-      targetPort: port2
+      targetPort: rpc
       protocol: TCP
     - name: port3
       port: 9933
