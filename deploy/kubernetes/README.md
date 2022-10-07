@@ -8,7 +8,7 @@ We utilize Makefile to easily orchestrate various pieces of the infrastructure o
 ```bash
 make deploy-cluster-sm
 ```
-**Example to delete:** `make delete-<Profile_Name>`
+**Example to delete:** `make -i delete-<Profile_Name>`
 ```bash
 make delete-cluster-sm
 ```
