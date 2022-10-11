@@ -13,8 +13,8 @@ bitcoind -regtest -txindex -fallbackfee=0.000001 -rpcuser=$RPC_USER -rpcpassword
 # give time to bitcoind to start
 while true
 do
-	bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS generatetoaddress 100 $MINER && break
-	sleep 5
+    bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS generatetoaddress 100 $MINER && break
+    sleep 5
 done
 
 bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS createwallet "miner" false false $RPC_PASS false false true &&
@@ -24,6 +24,6 @@ bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS importprivkey $PR
 # mine a new block every BLOCK_TIME
 while true
 do
-	bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS generatetoaddress 1 $MINER
-	sleep $BLOCK_TIME
+    bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS generatetoaddress 1 $MINER
+    sleep $BLOCK_TIME
 done
