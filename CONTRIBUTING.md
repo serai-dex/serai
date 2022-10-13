@@ -17,6 +17,7 @@ form of code and documentation.
 
 - Only use uppercase variable names when relevant to cryptography.
 
+- Use a two-space ident when possible.
 - Put a space after comment markers.
 - Don't use multiple newlines between sections of code.
 - Have a newline before EOF.

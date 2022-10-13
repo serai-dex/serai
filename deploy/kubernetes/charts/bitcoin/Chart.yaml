@@ -1,0 +1,5 @@
+apiVersion: v2
+name: bitcoin
+description: A Helm chart for bitcoin-daemon
+type: application
+version: 0.1.0
