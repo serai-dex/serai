@@ -48,7 +48,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
 
   for i in 0 .. t {
     // Step 1: Generate t random values to form a polynomial with
-    coefficients.push(C::F::random(&mut *rng));
+    coefficients.push(C::random_F(&mut *rng));
     // Step 3: Generate public commitments
     commitments.push(C::generator() * coefficients[i]);
     // Serialize them for publication
@@ -56,7 +56,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   }
 
   // Step 2: Provide a proof of knowledge
-  let mut r = C::F::random(rng);
+  let mut r = C::random_F(rng);
   serialized.extend(
     schnorr::sign::<C>(
       coefficients[0],

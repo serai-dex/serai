@@ -4578,8 +4578,10 @@ dependencies = [
  "multiexp",
  "p256",
  "rand_core 0.6.4",
+ "serde_json",
  "sha2 0.10.6",
  "sha3 0.10.5",
+ "subtle",
  "thiserror",
  "zeroize",
 ]

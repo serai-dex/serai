@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::Field, Group};
+use group::Group;
 
 use crate::{Curve, FrostCore, tests::core_gen};
 
@@ -27,7 +27,7 @@ pub fn test_multiexp<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let mut sum = C::G::identity();
   for _ in 0 .. 10 {
     for _ in 0 .. 100 {
-      pairs.push((C::F::random(&mut *rng), C::generator() * C::F::random(&mut *rng)));
+      pairs.push((C::random_F(&mut *rng), C::generator() * C::random_F(&mut *rng)));
       sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
     }
     assert_eq!(multiexp::multiexp(&pairs), sum);

@@ -3,7 +3,7 @@ use std::io::Cursor;
 use rand_core::OsRng;
 
 use crate::{
-  curve::{Curve, Ed448, Ietf8032Ed448Hram, NonIetfEd448Hram},
+  curve::{Curve, Ed448, Ietf8032Ed448Hram, IetfEd448Hram},
   schnorr::{SchnorrSignature, verify},
   tests::vectors::{Vectors, test_with_vectors},
 };
@@ -48,88 +48,12 @@ fn ed448_8032_vector() {
 }
 
 #[test]
-fn ed448_non_ietf() {
-  test_with_vectors::<_, Ed448, NonIetfEd448Hram>(
+fn ed448_vectors() {
+  test_with_vectors::<_, Ed448, IetfEd448Hram>(
     &mut OsRng,
-    Vectors {
-      threshold: 2,
-      shares: &[
-        concat!(
-          "4a2b2f5858a932ad3d3b18bd16e76ced3070d72fd79ae4402df201f5",
-          "25e754716a1bc1b87a502297f2a99d89ea054e0018eb55d39562fd01",
-          "00"
-        ),
-        concat!(
-          "2503d56c4f516444a45b080182b8a2ebbe4d9b2ab509f25308c88c0e",
-          "a7ccdc44e2ef4fc4f63403a11b116372438a1e287265cadeff1fcb07",
-          "00"
-        ),
-        concat!(
-          "00db7a8146f995db0a7cf844ed89d8e94c2b5f259378ff66e39d1728",
-          "28b264185ac4decf7219e4aa4478285b9c0eef4fccdf3eea69dd980d",
-          "00"
-        ),
-      ],
-      group_secret: concat!(
-        "6298e1eef3c379392caaed061ed8a31033c9e9e3420726f23b404158",
-        "a401cd9df24632adfe6b418dc942d8a091817dd8bd70e1c72ba52f3c",
-        "00"
-      ),
-      group_key: concat!(
-        "3832f82fda00ff5365b0376df705675b63d2a93c24c6e81d40801ba2",
-        "65632be10f443f95968fadb70d10786827f30dc001c8d0f9b7c1d1b0",
-        "00"
-      ),
-
-      msg: "74657374",
-      included: &[1, 3],
-      nonces: &[
-        [
-          concat!(
-            "06f2e15b05d29a50f0686a890259f4dcf66147a80809ed9e50926f5f",
-            "173fe23a0627561efa003724dc270effc47a30bc4d80aba30725401d",
-            "00"
-          ),
-          concat!(
-            "e0482e611c34f191d1c13a09bc8bbf4bda68db4de32aa7908849b02b",
-            "a912cfba46c805e2d8560ab9437e343e1dde6b481a2bae527e111b2c",
-            "00"
-          ),
-        ],
-        [
-          concat!(
-            "295c56447c070157e6bc3c83ed2afca194569e07d0ad27d28a40dec2",
-            "c4107c07d507db20da1be62ea6976b8e53ab5d26e225c663f2e71511",
-            "00"
-          ),
-          concat!(
-            "b97303a6c5ab12b6ad310834361033a19d99dfdf93109da721da35c3",
-            "abbc5f29df33b3402692bef9f005bb8ea00af5ba20cc688360fd8831",
-            "00"
-          ),
-        ],
-      ],
-      sig_shares: &[
-        concat!(
-          "5b65641e27007ec71509c6af5cf8527eb01fee5b2b07d8beecf6646e",
-          "b7e7e27d85119b74f895b56ba7561834a1b0c42639b122160a0b6208",
-          "00"
-        ),
-        concat!(
-          "821b7ac04d7c01d970b0b3ba4ae8f737a5bac934aed1600b1cad7601",
-          "1c240629bce6a4671a1b6f572cec708ec161a72a5ca04e50eabdfc25",
-          "00"
-        ),
-      ],
-      sig: concat!(
-        "c7ad7ad9fcfeef9d1492361ba641400bd3a3c8335a83cdffbdd8867d",
-        "2849bb4419dcc3e594baa731081a1a00cd3dea9219a81ecba4646e95",
-        "00",
-        "dd80dede747c7fa086b9796aa7e04ab655dab790d9d838ca08a4db6f",
-        "d30be9a641f83fdc12b124c3d34289c262126c5195517166f4c85e2e",
-        "00"
-      )
-      .to_string(),
-    },
+    Vectors::from(
+      serde_json::from_str::<serde_json::Value>(include_str!("vectors/frost-ed448-shake256.json"))
+        .unwrap(),
+    ),
   );
 }

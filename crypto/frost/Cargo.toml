@@ -18,6 +18,7 @@ thiserror = "1"
 rand_core = "0.6"
 
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
+subtle = "2"
 
 hex = "0.4"
 
@@ -44,6 +45,7 @@ dleq = { path = "../dleq", version = "0.1", features = ["serialize"] }
 [dev-dependencies]
 sha2 = "0.10"
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
+serde_json = "1"
 
 [features]
 dalek = ["sha2", "dalek-ff-group"]

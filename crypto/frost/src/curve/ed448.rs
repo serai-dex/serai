@@ -7,7 +7,7 @@ use minimal_ed448::{scalar::Scalar, point::Point};
 
 use crate::{curve::Curve, algorithm::Hram};
 
-const CONTEXT: &[u8] = b"FROST-ED448-SHAKE256-v10";
+const CONTEXT: &[u8] = b"FROST-ED448-SHAKE256-v11";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Ed448;
@@ -53,8 +53,8 @@ impl Ietf8032Ed448Hram {
 }
 
 #[derive(Copy, Clone)]
-pub struct NonIetfEd448Hram;
-impl Hram<Ed448> for NonIetfEd448Hram {
+pub struct IetfEd448Hram;
+impl Hram<Ed448> for IetfEd448Hram {
   #[allow(non_snake_case)]
   fn hram(R: &Point, A: &Point, m: &[u8]) -> Scalar {
     Ietf8032Ed448Hram::hram(&[], R, A, m)

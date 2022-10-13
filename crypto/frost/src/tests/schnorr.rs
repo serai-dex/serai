@@ -12,9 +12,9 @@ use crate::{
 };
 
 pub(crate) fn core_sign<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
-  let private_key = C::F::random(&mut *rng);
-  let nonce = C::F::random(&mut *rng);
-  let challenge = C::F::random(rng); // Doesn't bother to craft an HRAM
+  let private_key = C::random_F(&mut *rng);
+  let nonce = C::random_F(&mut *rng);
+  let challenge = C::random_F(rng); // Doesn't bother to craft an HRAm
   assert!(schnorr::verify::<C>(
     C::generator() * private_key,
     challenge,
@@ -27,8 +27,8 @@ pub(crate) fn core_sign<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 // random
 pub(crate) fn core_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   assert!(!schnorr::verify::<C>(
-    C::generator() * C::F::random(&mut *rng),
-    C::F::random(rng),
+    C::generator() * C::random_F(&mut *rng),
+    C::random_F(rng),
     &SchnorrSignature { R: C::G::identity(), s: C::F::zero() }
   ));
 }
@@ -39,9 +39,9 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let mut challenges = vec![];
   let mut sigs = vec![];
   for i in 0 .. 5 {
-    keys.push(C::F::random(&mut *rng));
-    challenges.push(C::F::random(&mut *rng));
-    sigs.push(schnorr::sign::<C>(keys[i], C::F::random(&mut *rng), challenges[i]));
+    keys.push(C::random_F(&mut *rng));
+    challenges.push(C::random_F(&mut *rng));
+    sigs.push(schnorr::sign::<C>(keys[i], C::random_F(&mut *rng), challenges[i]));
   }
 
   // Batch verify
@@ -66,7 +66,7 @@ pub(crate) fn core_batch_verify<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   // Make sure a completely invalid signature fails when included
   for i in 0 .. 5 {
     let mut triplets = triplets.clone();
-    triplets[i].3.s = C::F::random(&mut *rng);
+    triplets[i].3.s = C::random_F(&mut *rng);
     if let Err(blame) = schnorr::batch_verify(rng, &triplets) {
       assert_eq!(blame, u16::try_from(i + 1).unwrap());
     } else {
