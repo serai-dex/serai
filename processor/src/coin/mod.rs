@@ -55,6 +55,9 @@ pub trait Coin {
     key: <Self::Curve as Curve>::G,
   ) -> Result<Vec<Self::Output>, CoinError>;
 
+  // TODO: Remove
+  async fn is_confirmed(&self, tx: &[u8], height: usize) -> Result<bool, CoinError>;
+
   async fn prepare_send(
     &self,
     keys: FrostKeys<Self::Curve>,

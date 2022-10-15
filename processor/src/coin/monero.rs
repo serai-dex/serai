@@ -147,6 +147,12 @@ impl Coin for Monero {
     )
   }
 
+  async fn is_confirmed(&self, tx: &[u8], height: usize) -> Result<bool, CoinError> {
+    let tx_height =
+      self.rpc.get_transaction_height(tx).await.map_err(|_| CoinError::ConnectionError)?;
+    Ok((height.saturating_sub(tx_height) + 1) >= 10)
+  }
+
   async fn prepare_send(
     &self,
     keys: FrostKeys<Ed25519>,
