@@ -16,7 +16,7 @@ WORKDIR /serai
 RUN rustup update
 
 # Install Solc @ 0.8.16
-RUN pip3 install solc-select
+RUN pip3 install solc-select==0.2.1
 RUN solc-select install 0.8.16
 RUN solc-select use 0.8.16
 
