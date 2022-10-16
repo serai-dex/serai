@@ -431,6 +431,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })
   }
 
+  #[cfg(any(test, feature = "tests"))]
   pub(crate) fn unsafe_override_preprocess(
     self,
     preprocess: PreprocessPackage<C>,

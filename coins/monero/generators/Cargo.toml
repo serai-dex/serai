@@ -3,7 +3,7 @@ name = "monero-generators"
 version = "0.1.1"
 description = "Monero's hash_to_point and generators"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/generators"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 

@@ -3,6 +3,7 @@ name = "serai-node"
 version = "0.1.0"
 description = "Serai network node, built over Substrate"
 license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/node"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false

@@ -35,7 +35,7 @@ pub struct Vectors {
 #[cfg(test)]
 impl From<serde_json::Value> for Vectors {
   fn from(value: serde_json::Value) -> Vectors {
-    let to_str = |value: &serde_json::Value| dbg!(value).as_str().unwrap().to_string();
+    let to_str = |value: &serde_json::Value| value.as_str().unwrap().to_string();
     Vectors {
       threshold: u16::from_str(value["config"]["NUM_PARTICIPANTS"].as_str().unwrap()).unwrap(),
 

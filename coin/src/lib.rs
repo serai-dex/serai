@@ -6,7 +6,11 @@ use thiserror::Error;
 use transcript::RecommendedTranscript;
 use frost::{curve::Curve, FrostKeys, sign::PreprocessMachine};
 
+pub(crate) mod utils;
+
+#[cfg(feature = "monero")]
 pub mod monero;
+#[cfg(feature = "monero")]
 pub use self::monero::Monero;
 
 #[derive(Clone, Error, Debug)]
@@ -47,19 +51,22 @@ pub trait Coin {
   // Doesn't have to take self, enables some level of caching which is pleasant
   fn address(&self, key: <Self::Curve as Curve>::G) -> Self::Address;
 
-  async fn get_height(&self) -> Result<usize, CoinError>;
-  async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError>;
+  async fn get_latest_block_number(&self) -> Result<usize, CoinError>;
+  async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError>;
   async fn get_outputs(
     &self,
     block: &Self::Block,
     key: <Self::Curve as Curve>::G,
   ) -> Result<Vec<Self::Output>, CoinError>;
 
+  // TODO: Remove
+  async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError>;
+
   async fn prepare_send(
     &self,
     keys: FrostKeys<Self::Curve>,
     transcript: RecommendedTranscript,
-    height: usize,
+    block_number: usize,
     inputs: Vec<Self::Output>,
     payments: &[(Self::Address, u64)],
     fee: Self::Fee,
@@ -76,9 +83,12 @@ pub trait Coin {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
 
-  #[cfg(test)]
+  #[cfg(any(test, feature = "test"))]
+  async fn get_fee(&self) -> Self::Fee;
+
+  #[cfg(any(test, feature = "test"))]
   async fn mine_block(&self);
 
-  #[cfg(test)]
+  #[cfg(any(test, feature = "test"))]
   async fn test_send(&self, key: Self::Address);
 }

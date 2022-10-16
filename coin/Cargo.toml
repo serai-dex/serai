@@ -1,0 +1,47 @@
+[package]
+name = "serai-coin"
+version = "0.1.0"
+description = "An abstract interface representing a coin, along with implementations for various coins."
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/coin"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+async-trait = "0.1"
+thiserror = "1"
+
+curve25519-dalek = { version = "3", features = ["std"] }
+
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
+dalek-ff-group = { path = "../crypto/dalek-ff-group" }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["secp256k1", "ed25519"] }
+
+monero-serai = { path = "../coins/monero", features = ["multisig"] }
+
+# Test Dependencies
+rand_core = { version = "0.6", optional = true }
+
+group = { version = "0.12", optional = true }
+
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+
+[dev-dependencies]
+rand_core = "0.6"
+
+group = "0.12"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+monero = []
+monero_test = ["rand_core", "group", "serde", "serde_json"]
+test = ["monero_test"]
