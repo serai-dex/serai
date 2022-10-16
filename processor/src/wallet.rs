@@ -234,6 +234,11 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     self.coin.address(self.keys[self.keys.len() - 1].0.group_key())
   }
 
+  // TODO: Remove
+  pub async fn is_confirmed(&mut self, tx: &[u8]) -> Result<bool, CoinError> {
+    self.coin.is_confirmed(tx, self.scanned_height + C::CONFIRMATIONS)
+  }
+
   pub async fn poll(&mut self) -> Result<(), CoinError> {
     if self.coin.get_height().await? < C::CONFIRMATIONS {
       return Ok(());
