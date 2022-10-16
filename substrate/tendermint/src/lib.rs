@@ -100,8 +100,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   #[async_recursion::async_recursion]
   async fn broadcast(&mut self, data: Data<N::Block>) -> Option<N::Block> {
+    let step = data.step();
     let msg = Message { sender: self.proposer, number: self.number, round: self.round, data };
     let res = self.message(msg.clone()).await.unwrap();
+    self.step = step; // TODO: Before or after the above handling call?
     self.network.write().await.broadcast(msg).await;
     res
   }
@@ -122,13 +124,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   // 11-13
   async fn round(&mut self, round: Round) {
+    // Clear timeouts
+    self.timeouts = HashMap::new();
+
     // Correct the start time
     for _ in self.round.0 .. round.0 {
       self.start_time = self.timeout(Step::Precommit);
     }
 
     self.round = round;
-    self.step = Step::Propose;
     self.round_propose().await;
   }
 
@@ -142,8 +146,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     self.locked = None;
     self.valid = None;
-
-    self.timeouts = HashMap::new();
 
     self.round(Round(0)).await;
   }
@@ -179,7 +181,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           timeouts: HashMap::new(),
         };
-        dbg!("Proposing");
         machine.round_propose().await;
 
         loop {
@@ -191,18 +192,18 @@ impl<N: Network + 'static> TendermintMachine<N> {
           };
 
           // Propose timeout
-          if t1 {
-            todo!()
+          if t1 && (machine.step == Step::Propose) {
+            debug_assert!(machine.broadcast(Data::Prevote(None)).await.is_none());
           }
 
           // Prevote timeout
-          if t2 {
-            todo!()
+          if t2 && (machine.step == Step::Prevote) {
+            debug_assert!(machine.broadcast(Data::Precommit(None)).await.is_none());
           }
 
           // Precommit timeout
           if t3 {
-            todo!()
+            machine.round(Round(machine.round.0 + 1)).await;
           }
 
           // If there's a message, handle it
@@ -288,7 +289,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     } else if msg.round.0 > self.round.0 {
       // 55-56
       if self.log.round_participation(self.round) > self.weights.fault_thresold() {
-        self.round(msg.round);
+        self.round(msg.round).await;
       } else {
         return Ok(None);
       }
@@ -316,7 +317,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 })))
                 .await
                 .is_none());
-              self.step = Step::Prevote;
             } else {
               Err(TendermintError::Malicious(msg.sender))?;
             }
@@ -333,7 +333,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 self.locked.as_ref().map(|locked| locked.1.id()) == Some(block.id()))))
               .await
               .is_none());
-            self.step = Step::Prevote;
           }
         }
       }
@@ -350,10 +349,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // 44-46
       if weight > self.weights.threshold() {
         debug_assert!(self.broadcast(Data::Precommit(None)).await.is_none());
-        self.step = Step::Precommit;
       }
     }
 
+    // 36-43
     if (self.valid.is_none()) && ((self.step == Step::Prevote) || (self.step == Step::Precommit)) {
       if let Some(proposal) = proposal {
         debug_assert!(matches!(proposal, Data::Proposal(..)));
@@ -362,7 +361,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
             self.valid = Some((self.round, block.clone()));
             if self.step == Step::Prevote {
               self.locked = self.valid.clone();
-              self.step = Step::Precommit;
               return Ok(self.broadcast(Data::Precommit(Some(block.id()))).await);
             }
           }
