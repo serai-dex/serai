@@ -6,11 +6,7 @@ use thiserror::Error;
 use transcript::RecommendedTranscript;
 use frost::{curve::Curve, FrostKeys, sign::PreprocessMachine};
 
-pub(crate) mod utils;
-
-#[cfg(feature = "monero")]
 pub mod monero;
-#[cfg(feature = "monero")]
 pub use self::monero::Monero;
 
 #[derive(Clone, Error, Debug)]
@@ -83,12 +79,12 @@ pub trait Coin {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   async fn mine_block(&self);
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   async fn test_send(&self, key: Self::Address);
 }

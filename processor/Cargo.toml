@@ -20,17 +20,22 @@ thiserror = "1"
 
 group = "0.12"
 
+curve25519-dalek = { version = "3", features = ["std"] }
+
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
+dalek-ff-group = { path = "../crypto/dalek-ff-group" }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
-serai-coin = { path = "../coin", features = ["monero"] }
+monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 [dev-dependencies]
+rand_core = "0.6"
+
 hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519", "tests"] }
-
-serai-coin = { path = "../coin", features = ["monero", "test"] }
