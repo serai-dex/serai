@@ -2,19 +2,22 @@ use std::{sync::Arc, collections::HashMap};
 
 use crate::{ext::*, Round, Step, Data, Message, TendermintError};
 
-pub(crate) struct MessageLog<V: ValidatorId, B: Block, N: Network<V, B>> {
+pub(crate) struct MessageLog<N: Network> {
   network: Arc<N>,
-  precommitted: HashMap<V, B::Id>,
-  log: HashMap<Round, HashMap<V, HashMap<Step, Data<B>>>>,
+  precommitted: HashMap<N::ValidatorId, <N::Block as Block>::Id>,
+  log: HashMap<Round, HashMap<N::ValidatorId, HashMap<Step, Data<N::Block>>>>,
 }
 
-impl<V: ValidatorId, B: Block, N: Network<V, B>> MessageLog<V, B, N> {
-  pub(crate) fn new(network: Arc<N>) -> MessageLog<V, B, N> {
+impl<N: Network> MessageLog<N> {
+  pub(crate) fn new(network: Arc<N>) -> MessageLog<N> {
     MessageLog { network, precommitted: HashMap::new(), log: HashMap::new() }
   }
 
   // Returns true if it's a new message
-  pub(crate) fn log(&mut self, msg: Message<V, B>) -> Result<bool, TendermintError<V>> {
+  pub(crate) fn log(
+    &mut self,
+    msg: Message<N::ValidatorId, N::Block>,
+  ) -> Result<bool, TendermintError<N::ValidatorId>> {
     let round = self.log.entry(msg.round).or_insert_with(HashMap::new);
     let msgs = round.entry(msg.sender).or_insert_with(HashMap::new);
 
@@ -43,7 +46,7 @@ impl<V: ValidatorId, B: Block, N: Network<V, B>> MessageLog<V, B, N> {
 
   // For a given round, return the participating weight for this step, and the weight agreeing with
   // the data.
-  pub(crate) fn message_instances(&self, round: Round, data: Data<B>) -> (u64, u64) {
+  pub(crate) fn message_instances(&self, round: Round, data: Data<N::Block>) -> (u64, u64) {
     let mut participating = 0;
     let mut weight = 0;
     for (participant, msgs) in &self.log[&round] {
@@ -77,8 +80,17 @@ impl<V: ValidatorId, B: Block, N: Network<V, B>> MessageLog<V, B, N> {
   }
 
   // Check if consensus has been reached on a specific piece of data
-  pub(crate) fn has_consensus(&self, round: Round, data: Data<B>) -> bool {
+  pub(crate) fn has_consensus(&self, round: Round, data: Data<N::Block>) -> bool {
     let (_, weight) = self.message_instances(round, data);
     weight >= self.network.threshold()
+  }
+
+  pub(crate) fn get(
+    &self,
+    round: Round,
+    sender: N::ValidatorId,
+    step: Step,
+  ) -> Option<&Data<N::Block>> {
+    self.log.get(&round).and_then(|round| round.get(&sender).and_then(|msgs| msgs.get(&step)))
   }
 }

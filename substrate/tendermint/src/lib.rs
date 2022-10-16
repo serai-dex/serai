@@ -3,12 +3,6 @@ use ext::*;
 
 mod message_log;
 
-// Type aliases which are distinct according to the type system
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub(crate) struct BlockNumber(u32);
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub(crate) struct Round(u32);
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Step {
   Propose,
@@ -57,13 +51,6 @@ use tokio::{
   task::{JoinHandle, spawn},
   sync::mpsc,
 };
-
-type ValidatorId = u16;
-const VALIDATORS: ValidatorId = 5;
-
-fn proposer(number: u32, round: u32) -> ValidatorId {
-  ValidatorId::try_from((number + round) % u32::try_from(VALIDATORS).unwrap()).unwrap()
-}
 
 #[derive(Debug)]
 struct TendermintMachine {
