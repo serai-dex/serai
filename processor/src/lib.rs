@@ -6,6 +6,7 @@ use thiserror::Error;
 use frost::{curve::Curve, FrostError};
 
 pub use serai_coin as coin;
+use coin::CoinError;
 
 mod wallet;
 
