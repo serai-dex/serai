@@ -4,6 +4,8 @@ use std::{
   collections::HashMap,
 };
 
+use parity_scale_codec::{Encode, Decode};
+
 use tokio::{
   task::{JoinHandle, yield_now},
   sync::{
@@ -18,14 +20,14 @@ use ext::*;
 mod message_log;
 use message_log::MessageLog;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 enum Step {
   Propose,
   Prevote,
   Precommit,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Encode, Decode)]
 enum Data<B: Block> {
   Proposal(Option<Round>, B),
   Prevote(Option<B::Id>),
@@ -42,7 +44,7 @@ impl<B: Block> Data<B> {
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Encode, Decode)]
 pub struct Message<V: ValidatorId, B: Block> {
   sender: V,
 
@@ -52,7 +54,7 @@ pub struct Message<V: ValidatorId, B: Block> {
   data: Data<B>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum TendermintError<V: ValidatorId> {
   Malicious(V),
   Temporal,

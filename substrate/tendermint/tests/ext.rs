@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use parity_scale_codec::{Encode, Decode};
+
 use tokio::sync::RwLock;
 
 use tendermint_machine::{ext::*, Message, TendermintMachine, TendermintHandle};
@@ -45,7 +47,7 @@ impl Weights for TestWeights {
   }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Encode, Decode)]
 struct TestBlock {
   id: TestBlockId,
   valid: Result<(), BlockError>,

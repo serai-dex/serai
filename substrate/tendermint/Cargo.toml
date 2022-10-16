@@ -8,6 +8,8 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+parity-scale-codec = { version = "3.2", features = ["derive"] }
+
 async-recursion = "1.0"
 async-trait = "0.1"
 tokio = { version = "1", features = ["macros", "rt", "sync"] }

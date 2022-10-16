@@ -1,15 +1,23 @@
 use core::{hash::Hash, fmt::Debug};
 use std::sync::Arc;
 
+use parity_scale_codec::{Encode, Decode};
+
 use crate::Message;
 
-pub trait ValidatorId: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug {}
-impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug> ValidatorId for V {}
+pub trait ValidatorId:
+  Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + Encode + Decode
+{
+}
+impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + Encode + Decode> ValidatorId
+  for V
+{
+}
 
 // Type aliases which are distinct according to the type system
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct BlockNumber(pub u32);
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct Round(pub u16);
 
 pub trait SignatureScheme {
@@ -40,7 +48,7 @@ pub trait Weights: Send + Sync {
   fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum BlockError {
   // Invalid behavior entirely
   Fatal,
@@ -48,8 +56,8 @@ pub enum BlockError {
   Temporal,
 }
 
-pub trait Block: Send + Sync + Clone + PartialEq + Debug {
-  type Id: Send + Sync + Copy + Clone + PartialEq + Debug;
+pub trait Block: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {
+  type Id: Send + Sync + Copy + Clone + PartialEq + Debug + Encode + Decode;
 
   fn id(&self) -> Self::Id;
 }
