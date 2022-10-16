@@ -48,6 +48,9 @@ pub trait Network: Send + Sync {
   type Weights: Weights<ValidatorId = Self::ValidatorId>;
   type Block: Block;
 
+  // Block time in seconds
+  const BLOCK_TIME: u32;
+
   fn weights(&self) -> Arc<Self::Weights>;
 
   async fn broadcast(&mut self, msg: Message<Self::ValidatorId, Self::Block>);

@@ -45,6 +45,8 @@ impl Network for TestNetwork {
   type Weights = TestWeights;
   type Block = TestBlock;
 
+  const BLOCK_TIME: u32 = 1;
+
   fn weights(&self) -> Arc<TestWeights> {
     Arc::new(TestWeights)
   }

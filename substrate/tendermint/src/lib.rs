@@ -1,4 +1,8 @@
-use std::{sync::Arc, time::Instant, collections::HashMap};
+use std::{
+  sync::Arc,
+  time::{Instant, Duration},
+  collections::HashMap,
+};
 
 use tokio::{
   task::{JoinHandle, yield_now},
@@ -60,6 +64,7 @@ pub struct TendermintMachine<N: Network> {
   proposer: N::ValidatorId,
 
   number: BlockNumber,
+  start_time: Instant,
   personal_proposal: N::Block,
 
   log: MessageLog<N>,
@@ -81,7 +86,16 @@ pub struct TendermintHandle<N: Network> {
 
 impl<N: Network + 'static> TendermintMachine<N> {
   fn timeout(&self, step: Step) -> Instant {
-    todo!()
+    let mut round_time = Duration::from_secs(N::BLOCK_TIME.into());
+    round_time *= (self.round.0 + 1).into();
+    let step_time = round_time / 3;
+
+    let offset = match step {
+      Step::Propose => step_time,
+      Step::Prevote => step_time * 2,
+      Step::Precommit => step_time * 3,
+    };
+    self.start_time + offset
   }
 
   #[async_recursion::async_recursion]
@@ -108,6 +122,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   // 11-13
   async fn round(&mut self, round: Round) {
+    // Correct the start time
+    for _ in self.round.0 .. round.0 {
+      self.start_time = self.timeout(Step::Precommit);
+    }
+
     self.round = round;
     self.step = Step::Propose;
     self.round_propose().await;
@@ -116,6 +135,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   // 1-9
   async fn reset(&mut self, proposal: N::Block) {
     self.number.0 += 1;
+    self.start_time = Instant::now();
     self.personal_proposal = proposal;
 
     self.log = MessageLog::new(self.network.read().await.weights());
@@ -147,6 +167,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           proposer,
 
           number,
+          start_time: Instant::now(),
           personal_proposal: proposal,
 
           log: MessageLog::new(weights),
