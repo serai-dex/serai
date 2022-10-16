@@ -17,6 +17,7 @@ members = [
   "processor",
 
   "substrate/runtime",
+  "substrate/tendermint",
   "substrate/consensus",
   "substrate/node",
 

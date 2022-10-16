@@ -1,0 +1,11 @@
+[package]
+name = "tendermint-machine"
+version = "0.1.0"
+description = "An implementation of the Tendermint state machine in Rust"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tendermint"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+tokio = "1"
