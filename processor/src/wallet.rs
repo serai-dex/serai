@@ -236,7 +236,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
   // TODO: Remove
   pub async fn is_confirmed(&mut self, tx: &[u8]) -> Result<bool, CoinError> {
-    self.coin.is_confirmed(tx, self.scanned_height + C::CONFIRMATIONS)
+    self.coin.is_confirmed(tx, self.scanned_height() + C::CONFIRMATIONS).await
   }
 
   pub async fn poll(&mut self) -> Result<(), CoinError> {
