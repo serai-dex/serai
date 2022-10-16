@@ -12,18 +12,16 @@ pub struct BlockNumber(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Round(pub u16);
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum BlockError {
-  // Invalid behavior entirely
-  Fatal,
-  // Potentially valid behavior dependent on unsynchronized state
-  Temporal,
-}
+pub trait SignatureScheme {
+  type ValidatorId: ValidatorId;
+  type Signature: Clone + Copy + PartialEq;
+  type AggregateSignature: Clone + PartialEq;
 
-pub trait Block: Send + Sync + Clone + PartialEq + Debug {
-  type Id: Send + Sync + Copy + Clone + PartialEq + Debug;
-
-  fn id(&self) -> Self::Id;
+  fn sign(&self, msg: &[u8]) -> Self::Signature;
+  #[must_use]
+  fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: Self::Signature) -> bool;
+  // Intended to be a BLS signature, a Schnorr signature half-aggregation, or a Vec<Signature>.
+  fn aggregate(signatures: &[Self::Signature]) -> Self::AggregateSignature;
 }
 
 pub trait Weights: Send + Sync {
@@ -42,15 +40,31 @@ pub trait Weights: Send + Sync {
   fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId;
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BlockError {
+  // Invalid behavior entirely
+  Fatal,
+  // Potentially valid behavior dependent on unsynchronized state
+  Temporal,
+}
+
+pub trait Block: Send + Sync + Clone + PartialEq + Debug {
+  type Id: Send + Sync + Copy + Clone + PartialEq + Debug;
+
+  fn id(&self) -> Self::Id;
+}
+
 #[async_trait::async_trait]
 pub trait Network: Send + Sync {
   type ValidatorId: ValidatorId;
+  type SignatureScheme: SignatureScheme;
   type Weights: Weights<ValidatorId = Self::ValidatorId>;
   type Block: Block;
 
   // Block time in seconds
   const BLOCK_TIME: u32;
 
+  fn signature_scheme(&self) -> Arc<Self::SignatureScheme>;
   fn weights(&self) -> Arc<Self::Weights>;
 
   async fn broadcast(&mut self, msg: Message<Self::ValidatorId, Self::Block>);

@@ -7,17 +7,25 @@ use tendermint_machine::{ext::*, Message, TendermintMachine, TendermintHandle};
 type TestValidatorId = u16;
 type TestBlockId = u32;
 
-#[derive(Clone, PartialEq, Debug)]
-struct TestBlock {
-  id: TestBlockId,
-  valid: Result<(), BlockError>,
-}
+struct TestSignatureScheme(u16);
+impl SignatureScheme for TestSignatureScheme {
+  type ValidatorId = TestValidatorId;
+  type Signature = [u8; 32];
+  type AggregateSignature = Vec<[u8; 32]>;
 
-impl Block for TestBlock {
-  type Id = TestBlockId;
+  fn sign(&self, msg: &[u8]) -> [u8; 32] {
+    let mut sig = [0; 32];
+    sig[.. 2].copy_from_slice(&self.0.to_le_bytes());
+    sig[2 .. (2 + 30.min(msg.len()))].copy_from_slice(msg);
+    sig
+  }
 
-  fn id(&self) -> TestBlockId {
-    self.id
+  fn verify(&self, validator: u16, msg: &[u8], sig: [u8; 32]) -> bool {
+    (sig[.. 2] == validator.to_le_bytes()) && (&sig[2 ..] == &[msg, &[0; 30]].concat()[.. 30])
+  }
+
+  fn aggregate(sigs: &[[u8; 32]]) -> Vec<[u8; 32]> {
+    sigs.to_vec()
   }
 }
 
@@ -37,22 +45,41 @@ impl Weights for TestWeights {
   }
 }
 
-struct TestNetwork(Arc<RwLock<Vec<TendermintHandle<Self>>>>);
+#[derive(Clone, PartialEq, Debug)]
+struct TestBlock {
+  id: TestBlockId,
+  valid: Result<(), BlockError>,
+}
+
+impl Block for TestBlock {
+  type Id = TestBlockId;
+
+  fn id(&self) -> TestBlockId {
+    self.id
+  }
+}
+
+struct TestNetwork(u16, Arc<RwLock<Vec<TendermintHandle<Self>>>>);
 
 #[async_trait::async_trait]
 impl Network for TestNetwork {
   type ValidatorId = TestValidatorId;
+  type SignatureScheme = TestSignatureScheme;
   type Weights = TestWeights;
   type Block = TestBlock;
 
   const BLOCK_TIME: u32 = 1;
+
+  fn signature_scheme(&self) -> Arc<TestSignatureScheme> {
+    Arc::new(TestSignatureScheme(self.0))
+  }
 
   fn weights(&self) -> Arc<TestWeights> {
     Arc::new(TestWeights)
   }
 
   async fn broadcast(&mut self, msg: Message<TestValidatorId, Self::Block>) {
-    for handle in self.0.write().await.iter_mut() {
+    for handle in self.1.write().await.iter_mut() {
       handle.messages.send(msg.clone()).await.unwrap();
     }
   }
@@ -79,9 +106,10 @@ impl TestNetwork {
     {
       let mut write = arc.write().await;
       for i in 0 .. validators {
+        let i = u16::try_from(i).unwrap();
         write.push(TendermintMachine::new(
-          TestNetwork(arc.clone()),
-          u16::try_from(i).unwrap(),
+          TestNetwork(i, arc.clone()),
+          i,
           BlockNumber(1),
           TestBlock { id: 1, valid: Ok(()) },
         ));
