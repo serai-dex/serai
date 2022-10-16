@@ -7498,23 +7498,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 
 [[package]]
-name = "serai-coin"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "curve25519-dalek 3.2.0",
- "dalek-ff-group",
- "flexible-transcript",
- "group",
- "modular-frost",
- "monero-serai",
- "rand_core 0.6.4",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "serai-consensus"
 version = "0.1.0"
 dependencies = [
@@ -7604,13 +7587,17 @@ name = "serai-processor"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "curve25519-dalek 3.2.0",
+ "dalek-ff-group",
  "flexible-transcript",
  "futures",
  "group",
  "hex",
  "modular-frost",
+ "monero-serai",
  "rand_core 0.6.4",
- "serai-coin",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]

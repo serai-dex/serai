@@ -17,7 +17,10 @@ use monero_serai::{
   },
 };
 
-use crate::{CoinError, Output as OutputTrait, Coin, utils::additional_key};
+use crate::{
+  additional_key,
+  coin::{CoinError, Output as OutputTrait, Coin},
+};
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -74,7 +77,7 @@ impl Monero {
     Scanner::from_view(ViewPair::new(spend.0, self.view), Network::Mainnet, None)
   }
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   fn empty_scanner() -> Scanner {
     use group::Group;
     Scanner::from_view(
@@ -84,7 +87,7 @@ impl Monero {
     )
   }
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   fn empty_address() -> Address {
     Self::empty_scanner().address()
   }
@@ -206,12 +209,12 @@ impl Coin for Monero {
     Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
     self.rpc.get_fee().await.unwrap()
   }
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   async fn mine_block(&self) {
     #[derive(serde::Deserialize, Debug)]
     struct EmptyResponse {}
@@ -231,7 +234,7 @@ impl Coin for Monero {
       .unwrap();
   }
 
-  #[cfg(any(test, feature = "test"))]
+  #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
     use rand_core::OsRng;
 
