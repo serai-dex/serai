@@ -72,24 +72,6 @@ impl<N: Network> MessageLog<N> {
     weight
   }
 
-  // Get the participation in a given round for a given step.
-  pub(crate) fn participation(&self, round: Round, step: Step) -> u64 {
-    let (participating, _) = self.message_instances(
-      round,
-      match step {
-        Step::Propose => panic!("Checking for participation on Propose"),
-        Step::Prevote => Data::Prevote(None),
-        Step::Precommit => Data::Precommit(None),
-      },
-    );
-    participating
-  }
-
-  // Check if there's been a BFT level of participation
-  pub(crate) fn has_participation(&self, round: Round, step: Step) -> bool {
-    self.participation(round, step) >= self.weights.threshold()
-  }
-
   // Check if consensus has been reached on a specific piece of data
   pub(crate) fn has_consensus(&self, round: Round, data: Data<N::Block>) -> bool {
     let (_, weight) = self.message_instances(round, data);

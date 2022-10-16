@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::RwLock;
 
 use tendermint_machine::{ext::*, Message, TendermintMachine, TendermintHandle};
 
@@ -87,7 +87,6 @@ impl TestNetwork {
         ));
       }
     }
-    dbg!("Created all machines");
     arc
   }
 }

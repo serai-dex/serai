@@ -124,15 +124,18 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   // 11-13
   async fn round(&mut self, round: Round) {
-    // Clear timeouts
-    self.timeouts = HashMap::new();
+    dbg!(round);
 
     // Correct the start time
     for _ in self.round.0 .. round.0 {
       self.start_time = self.timeout(Step::Precommit);
     }
 
+    // Clear timeouts
+    self.timeouts = HashMap::new();
+
     self.round = round;
+    self.step = Step::Propose;
     self.round_propose().await;
   }
 
@@ -151,6 +154,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   // 10
+  #[allow(clippy::new_ret_no_self)]
   pub fn new(
     network: N,
     proposer: N::ValidatorId,
@@ -284,6 +288,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     }
 
     // Else, check if we need to jump ahead
+    #[allow(clippy::comparison_chain)]
     if msg.round.0 < self.round.0 {
       return Ok(None);
     } else if msg.round.0 > self.round.0 {
