@@ -10445,6 +10445,7 @@ version = "0.1.0"
 dependencies = [
  "async-recursion",
  "async-trait",
+ "parity-scale-codec",
  "tokio",
 ]
 
