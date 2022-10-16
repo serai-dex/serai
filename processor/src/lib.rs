@@ -3,7 +3,7 @@ use std::{marker::Send, io::Cursor, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{curve::Curve, FrostError};
+use frost::FrostError;
 
 pub use serai_coin as coin;
 use coin::CoinError;
