@@ -124,7 +124,7 @@ impl TestNetwork {
 #[tokio::test]
 async fn test() {
   TestNetwork::new(4).await;
-  loop {
+  for _ in 0 .. 100 {
     tokio::task::yield_now().await;
   }
 }
