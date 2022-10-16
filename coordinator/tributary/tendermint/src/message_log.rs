@@ -80,6 +80,7 @@ impl<N: Network> MessageLog<N> {
     weight
   }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/message_log.rs
   // Check if a supermajority of nodes have participated on a specific step
   pub(crate) fn has_participation(&self, round: RoundNumber, step: Step) -> bool {
     let mut participating = 0;
@@ -91,6 +92,8 @@ impl<N: Network> MessageLog<N> {
     participating >= self.weights.threshold()
   }
 
+=======
+>>>>>>> a0bc9dc3 (Misc cleanup):substrate/tendermint/src/message_log.rs
   // Check if consensus has been reached on a specific piece of data
   pub(crate) fn has_consensus(&self, round: RoundNumber, data: DataFor<N>) -> bool {
     let (_, weight) = self.message_instances(round, data);
