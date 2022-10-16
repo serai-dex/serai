@@ -21,7 +21,7 @@ runs:
     - name: Install solc
       shell: bash
       run: |
-        pip3 install solc-select
+        pip3 install solc-select==0.2.1
         solc-select install 0.8.16
         solc-select use 0.8.16
 
