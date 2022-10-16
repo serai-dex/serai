@@ -3,14 +3,14 @@ use std::{sync::Arc, collections::HashMap};
 use crate::{ext::*, Round, Step, Data, Message, TendermintError};
 
 pub(crate) struct MessageLog<N: Network> {
-  network: Arc<N>,
+  weights: Arc<N::Weights>,
   precommitted: HashMap<N::ValidatorId, <N::Block as Block>::Id>,
   log: HashMap<Round, HashMap<N::ValidatorId, HashMap<Step, Data<N::Block>>>>,
 }
 
 impl<N: Network> MessageLog<N> {
-  pub(crate) fn new(network: Arc<N>) -> MessageLog<N> {
-    MessageLog { network, precommitted: HashMap::new(), log: HashMap::new() }
+  pub(crate) fn new(weights: Arc<N::Weights>) -> MessageLog<N> {
+    MessageLog { weights, precommitted: HashMap::new(), log: HashMap::new() }
   }
 
   // Returns true if it's a new message
@@ -51,7 +51,7 @@ impl<N: Network> MessageLog<N> {
     let mut weight = 0;
     for (participant, msgs) in &self.log[&round] {
       if let Some(msg) = msgs.get(&data.step()) {
-        let validator_weight = self.network.weight(*participant);
+        let validator_weight = self.weights.weight(*participant);
         participating += validator_weight;
         if &data == msg {
           weight += validator_weight;
@@ -59,6 +59,17 @@ impl<N: Network> MessageLog<N> {
       }
     }
     (participating, weight)
+  }
+
+  // Get the participation in a given round
+  pub(crate) fn round_participation(&self, round: Round) -> u64 {
+    let mut weight = 0;
+    if let Some(round) = self.log.get(&round) {
+      for participant in round.keys() {
+        weight += self.weights.weight(*participant);
+      }
+    };
+    weight
   }
 
   // Get the participation in a given round for a given step.
@@ -76,13 +87,13 @@ impl<N: Network> MessageLog<N> {
 
   // Check if there's been a BFT level of participation
   pub(crate) fn has_participation(&self, round: Round, step: Step) -> bool {
-    self.participation(round, step) >= self.network.threshold()
+    self.participation(round, step) >= self.weights.threshold()
   }
 
   // Check if consensus has been reached on a specific piece of data
   pub(crate) fn has_consensus(&self, round: Round, data: Data<N::Block>) -> bool {
     let (_, weight) = self.message_instances(round, data);
-    weight >= self.network.threshold()
+    weight >= self.weights.threshold()
   }
 
   pub(crate) fn get(

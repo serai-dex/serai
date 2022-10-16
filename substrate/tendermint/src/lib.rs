@@ -1,7 +1,18 @@
+use std::{sync::Arc, time::Instant, collections::HashMap};
+
+use tokio::{
+  task::{JoinHandle, yield_now},
+  sync::{
+    RwLock,
+    mpsc::{self, error::TryRecvError},
+  },
+};
+
 pub mod ext;
 use ext::*;
 
 mod message_log;
+use message_log::MessageLog;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Step {
@@ -10,9 +21,9 @@ enum Step {
   Precommit,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum Data<B: Block> {
-  Proposal(Option<u32>, B),
+  Proposal(Option<Round>, B),
   Prevote(Option<B::Id>),
   Precommit(Option<B::Id>),
 }
@@ -27,8 +38,8 @@ impl<B: Block> Data<B> {
   }
 }
 
-#[derive(Clone, PartialEq)]
-struct Message<V: ValidatorId, B: Block> {
+#[derive(Clone, PartialEq, Debug)]
+pub struct Message<V: ValidatorId, B: Block> {
   sender: V,
 
   number: BlockNumber,
@@ -38,158 +49,155 @@ struct Message<V: ValidatorId, B: Block> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum TendermintError<V: ValidatorId> {
+pub enum TendermintError<V: ValidatorId> {
   Malicious(V),
-  Offline(V),
   Temporal,
 }
 
-/*
-use std::collections::HashMap;
+pub struct TendermintMachine<N: Network> {
+  network: Arc<RwLock<N>>,
+  weights: Arc<N::Weights>,
+  proposer: N::ValidatorId,
 
-use tokio::{
-  task::{JoinHandle, spawn},
-  sync::mpsc,
-};
+  number: BlockNumber,
+  personal_proposal: N::Block,
 
-#[derive(Debug)]
-struct TendermintMachine {
-  proposer: ValidatorId,
-  personal_proposal: Option<Block>,
-
-  number: u32,
-
-  log_map: HashMap<u32, HashMap<ValidatorId, HashMap<Step, Data>>>,
-  precommitted: HashMap<ValidatorId, Hash>,
-
-  round: u32,
+  log: MessageLog<N>,
+  round: Round,
   step: Step,
-  locked: Option<(u32, Block)>,
-  valid: Option<(u32, Block)>,
 
-  timeouts: Arc<RwLock<HashMap<Step, Instant>>>, // TODO: Remove Arc RwLock
+  locked: Option<(Round, N::Block)>,
+  valid: Option<(Round, N::Block)>,
+
+  timeouts: HashMap<Step, Instant>,
 }
 
-#[derive(Debug)]
-struct TendermintHandle {
-  block: Arc<RwLock<Option<Block>>>,
-  messages: mpsc::Sender<Message>,
-  broadcast: mpsc::Receiver<Message>,
-  handle: JoinHandle<()>,
+pub struct TendermintHandle<N: Network> {
+  // Messages received
+  pub messages: mpsc::Sender<Message<N::ValidatorId, N::Block>>,
+  // Async task executing the machine
+  pub handle: JoinHandle<()>,
 }
 
-impl TendermintMachine {
-  fn broadcast(&self, data: Data) -> Option<Block> {
+impl<N: Network + 'static> TendermintMachine<N> {
+  fn timeout(&self, step: Step) -> Instant {
+    todo!()
+  }
+
+  #[async_recursion::async_recursion]
+  async fn broadcast(&mut self, data: Data<N::Block>) -> Option<N::Block> {
     let msg = Message { sender: self.proposer, number: self.number, round: self.round, data };
-    let res = self.message(msg).unwrap();
-    self.broadcast.send(msg).unwrap();
+    let res = self.message(msg.clone()).await.unwrap();
+    self.network.write().await.broadcast(msg).await;
     res
   }
 
   // 14-21
-  fn round_propose(&mut self) {
-    // This will happen if it's a new block and propose hasn't been called yet
-    if self.personal_proposal.is_none() {
-      // Ensure it's actually a new block. Else, the caller failed to provide necessary data yet
-      // is still executing the machine
-      debug_assert_eq!(self.round, 0);
-      return;
-    }
-
-    if proposer(self.number, self.round) == self.proposer {
-      let (round, block) = if let Some((round, block)) = self.valid {
-        (Some(round), block)
+  async fn round_propose(&mut self) {
+    if self.weights.proposer(self.number, self.round) == self.proposer {
+      let (round, block) = if let Some((round, block)) = &self.valid {
+        (Some(*round), block.clone())
       } else {
-        (None, self.personal_proposal.unwrap())
+        (None, self.personal_proposal.clone())
       };
-      debug_assert!(self.broadcast(Data::Proposal(round, block)).is_none());
+      debug_assert!(self.broadcast(Data::Proposal(round, block)).await.is_none());
     } else {
-      self.timeouts.write().unwrap().insert(Step::Propose, self.timeout(Step::Propose));
+      self.timeouts.insert(Step::Propose, self.timeout(Step::Propose));
     }
   }
 
   // 11-13
-  fn round(&mut self, round: u32) {
+  async fn round(&mut self, round: Round) {
     self.round = round;
     self.step = Step::Propose;
-    self.round_propose();
-  }
-
-  /// Called whenever a new block occurs
-  fn propose(&mut self, block: Block) {
-    self.personal_proposal = Some(block);
-    self.round_propose();
+    self.round_propose().await;
   }
 
   // 1-9
-  fn reset(&mut self) {
-    self.personal_proposal = None;
+  async fn reset(&mut self, proposal: N::Block) {
+    self.number.0 += 1;
+    self.personal_proposal = proposal;
 
-    self.number += 1;
-
-    self.log_map = HashMap::new();
-    self.precommitted = HashMap::new();
+    self.log = MessageLog::new(self.network.read().await.weights());
 
     self.locked = None;
     self.valid = None;
 
-    self.round(0);
+    self.timeouts = HashMap::new();
+
+    self.round(Round(0)).await;
   }
 
   // 10
-  pub fn new(proposer: ValidatorId, number: u32) -> TendermintHandle {
-    let block = Arc::new(RwLock::new(None));
+  pub fn new(
+    network: N,
+    proposer: N::ValidatorId,
+    number: BlockNumber,
+    proposal: N::Block,
+  ) -> TendermintHandle<N> {
     let (msg_send, mut msg_recv) = mpsc::channel(100); // Backlog to accept. Currently arbitrary
-    let (broadcast_send, broadcast_recv) = mpsc::channel(5);
     TendermintHandle {
-      block: block.clone(),
       messages: msg_send,
-      broadcast: broadcast_recv,
-      handle: tokio::spawn(async {
-        let machine = TendermintMachine {
+      handle: tokio::spawn(async move {
+        let weights = network.weights();
+        let network = Arc::new(RwLock::new(network));
+        let mut machine = TendermintMachine {
+          network,
+          weights: weights.clone(),
           proposer,
-          personal_proposal: None,
 
           number,
+          personal_proposal: proposal,
 
-          log_map: HashMap::new(),
-          precommitted: HashMap::new(),
+          log: MessageLog::new(weights),
+          round: Round(0),
+          step: Step::Propose,
 
           locked: None,
           valid: None,
 
-          round: 0,
-          step: Step::Propose,
+          timeouts: HashMap::new(),
         };
+        dbg!("Proposing");
+        machine.round_propose().await;
 
         loop {
-          if self.personal_proposal.is_none() {
-            let block = block.lock().unwrap();
-            if block.is_some() {
-              self.personal_proposal = Some(block.take());
-            } else {
-              tokio::yield_now().await;
-              continue;
-            }
-          }
-
+          // Check if any timeouts have been triggered
           let now = Instant::now();
           let (t1, t2, t3) = {
-            let timeouts = self.timeouts.read().unwrap();
-            let ready = |step| timeouts.get(step).unwrap_or(now) < now;
+            let ready = |step| machine.timeouts.get(&step).unwrap_or(&now) < &now;
             (ready(Step::Propose), ready(Step::Prevote), ready(Step::Precommit))
           };
 
-          if t1 { // Propose timeout
-          }
-          if t2 { // Prevote timeout
-          }
-          if t3 { // Precommit timeout
+          // Propose timeout
+          if t1 {
+            todo!()
           }
 
-          match recv.try_recv() {
-            Ok(msg) => machine.message(msg),
-            Err(TryRecvError::Empty) => tokio::yield_now().await,
+          // Prevote timeout
+          if t2 {
+            todo!()
+          }
+
+          // Precommit timeout
+          if t3 {
+            todo!()
+          }
+
+          // If there's a message, handle it
+          match msg_recv.try_recv() {
+            Ok(msg) => match machine.message(msg).await {
+              Ok(None) => (),
+              Ok(Some(block)) => {
+                let proposal = machine.network.write().await.add_block(block);
+                machine.reset(proposal).await
+              }
+              Err(TendermintError::Malicious(validator)) => {
+                machine.network.write().await.slash(validator).await
+              }
+              Err(TendermintError::Temporal) => (),
+            },
+            Err(TryRecvError::Empty) => yield_now().await,
             Err(TryRecvError::Disconnected) => break,
           }
         }
@@ -198,32 +206,27 @@ impl TendermintMachine {
   }
 
   // 49-54
-  fn check_committed(&mut self, round_num: u32) -> Option<Block> {
-    let proposer = proposer(self.number, round_num);
-    // Safe as we only check for rounds which we received a message for
-    let round = self.log_map[&round_num];
+  fn check_committed(&mut self, round: Round) -> Option<N::Block> {
+    let proposer = self.weights.proposer(self.number, round);
 
     // Get the proposal
-    if let Some(proposal) = round.get(&proposer).map(|p| p.get(&Step::Propose)).flatten() {
+    if let Some(proposal) = self.log.get(round, proposer, Step::Propose) {
       // Destructure
       debug_assert!(matches!(proposal, Data::Proposal(..)));
       if let Data::Proposal(_, block) = proposal {
         // Check if it has gotten a sufficient amount of precommits
         let (participants, weight) =
-          self.message_instances(round_num, Data::Precommit(Some(block.hash)));
+          self.log.message_instances(round, Data::Precommit(Some(block.id())));
 
-        let threshold = ((VALIDATORS / 3) * 2) + 1;
-        if weight >= threshold.into() {
-          self.reset();
-          return Some(*block);
+        let threshold = self.weights.threshold();
+        if weight >= threshold {
+          return Some(block.clone());
         }
 
         // 47-48
-        if participants >= threshold.into() {
-          let map = self.timeouts.write().unwrap();
-          if !map.contains_key(Step::Precommit) {
-            map.insert(Step::Precommit, self.timeout(Step::Precommit));
-          }
+        if participants >= threshold {
+          let timeout = self.timeout(Step::Precommit);
+          self.timeouts.entry(Step::Precommit).or_insert(timeout);
         }
       }
     }
@@ -231,16 +234,21 @@ impl TendermintMachine {
     None
   }
 
-  fn message(&mut self, msg: Message) -> Result<Option<Block>, TendermintError> {
+  async fn message(
+    &mut self,
+    msg: Message<N::ValidatorId, N::Block>,
+  ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
     if msg.number != self.number {
       Err(TendermintError::Temporal)?;
     }
 
-    if matches!(msg.data, Data::Proposal(..)) && (msg.sender != proposer(msg.height, msg.round)) {
+    if matches!(msg.data, Data::Proposal(..)) &&
+      (msg.sender != self.weights.proposer(msg.number, msg.round))
+    {
       Err(TendermintError::Malicious(msg.sender))?;
     };
 
-    if !self.log(msg)? {
+    if !self.log.log(msg.clone())? {
       return Ok(None);
     }
 
@@ -254,36 +262,38 @@ impl TendermintMachine {
     }
 
     // Else, check if we need to jump ahead
-    let round = self.log_map[&self.round];
-    if msg.round < self.round {
+    if msg.round.0 < self.round.0 {
       return Ok(None);
-    } else if msg.round > self.round {
+    } else if msg.round.0 > self.round.0 {
       // 55-56
-      // TODO: Move to weight
-      if round.len() > ((VALIDATORS / 3) + 1).into() {
+      if self.log.round_participation(self.round) > self.weights.fault_thresold() {
         self.round(msg.round);
       } else {
         return Ok(None);
       }
     }
 
+    let proposal = self
+      .log
+      .get(self.round, self.weights.proposer(self.number, self.round), Step::Propose)
+      .cloned();
     if self.step == Step::Propose {
-      if let Some(proposal) =
-        round.get(&proposer(self.number, self.round)).map(|p| p.get(&Step::Propose)).flatten()
-      {
+      if let Some(proposal) = &proposal {
         debug_assert!(matches!(proposal, Data::Proposal(..)));
         if let Data::Proposal(vr, block) = proposal {
           if let Some(vr) = vr {
             // 28-33
-            let vr = *vr;
-            if (vr < self.round) && self.has_consensus(vr, Data::Prevote(Some(block.hash))) {
+            if (vr.0 < self.round.0) && self.log.has_consensus(*vr, Data::Prevote(Some(block.id())))
+            {
               debug_assert!(self
-                .broadcast(Data::Prevote(Some(block.hash).filter(|_| {
+                .broadcast(Data::Prevote(Some(block.id()).filter(|_| {
                   self
                     .locked
-                    .map(|(round, value)| (round <= vr) || (block == &value))
+                    .as_ref()
+                    .map(|(round, value)| (round.0 <= vr.0) || (block.id() == value.id()))
                     .unwrap_or(true)
                 })))
+                .await
                 .is_none());
               self.step = Step::Prevote;
             } else {
@@ -291,11 +301,16 @@ impl TendermintMachine {
             }
           } else {
             // 22-27
-            valid(&block).map_err(|_| TendermintError::Malicious(msg.sender))?;
+            self
+              .network
+              .write()
+              .await
+              .validate(block)
+              .map_err(|_| TendermintError::Malicious(msg.sender))?;
             debug_assert!(self
-              .broadcast(Data::Prevote(Some(block.hash).filter(
-                |_| self.locked.is_none() || self.locked.map(|locked| &locked.1) == Some(block)
-              )))
+              .broadcast(Data::Prevote(Some(block.id()).filter(|_| self.locked.is_none() ||
+                self.locked.as_ref().map(|locked| locked.1.id()) == Some(block.id()))))
+              .await
               .is_none());
             self.step = Step::Prevote;
           }
@@ -304,23 +319,36 @@ impl TendermintMachine {
     }
 
     if self.step == Step::Prevote {
-      let (participation, weight) = self.message_instances(self.round, Data::Prevote(None));
+      let (participation, weight) = self.log.message_instances(self.round, Data::Prevote(None));
       // 34-35
-      if participation > (((VALIDATORS / 3) * 2) + 1).into() {
-        let map = self.timeouts.write().unwrap();
-        if !map.contains_key(Step::Prevote) {
-          map.insert(Step::Prevote, self.timeout(Step::Prevote))
-        }
+      if participation > self.weights.threshold() {
+        let timeout = self.timeout(Step::Prevote);
+        self.timeouts.entry(Step::Prevote).or_insert(timeout);
       }
 
       // 44-46
-      if (weight > (((VALIDATORS / 3) * 2) + 1).into()) && first {
-        debug_assert!(self.broadcast(Data::Precommit(None)).is_none());
+      if weight > self.weights.threshold() {
+        debug_assert!(self.broadcast(Data::Precommit(None)).await.is_none());
         self.step = Step::Precommit;
+      }
+    }
+
+    if (self.valid.is_none()) && ((self.step == Step::Prevote) || (self.step == Step::Precommit)) {
+      if let Some(proposal) = proposal {
+        debug_assert!(matches!(proposal, Data::Proposal(..)));
+        if let Data::Proposal(_, block) = proposal {
+          if self.log.has_consensus(self.round, Data::Prevote(Some(block.id()))) {
+            self.valid = Some((self.round, block.clone()));
+            if self.step == Step::Prevote {
+              self.locked = self.valid.clone();
+              self.step = Step::Precommit;
+              return Ok(self.broadcast(Data::Precommit(Some(block.id()))).await);
+            }
+          }
+        }
       }
     }
 
     Ok(None)
   }
 }
-*/
