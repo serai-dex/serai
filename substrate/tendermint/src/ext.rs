@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use parity_scale_codec::{Encode, Decode};
 
-use crate::Message;
+use crate::SignedMessage;
 
 pub trait ValidatorId:
   Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + Encode + Decode
@@ -20,10 +20,10 @@ pub struct BlockNumber(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct Round(pub u16);
 
-pub trait SignatureScheme {
+pub trait SignatureScheme: Send + Sync {
   type ValidatorId: ValidatorId;
-  type Signature: Clone + Copy + PartialEq;
-  type AggregateSignature: Clone + PartialEq;
+  type Signature: Send + Sync + Clone + Copy + PartialEq + Debug + Encode + Decode;
+  type AggregateSignature: Send + Sync + Clone + PartialEq + Debug + Encode + Decode;
 
   fn sign(&self, msg: &[u8]) -> Self::Signature;
   #[must_use]
@@ -65,7 +65,7 @@ pub trait Block: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {
 #[async_trait::async_trait]
 pub trait Network: Send + Sync {
   type ValidatorId: ValidatorId;
-  type SignatureScheme: SignatureScheme;
+  type SignatureScheme: SignatureScheme<ValidatorId = Self::ValidatorId>;
   type Weights: Weights<ValidatorId = Self::ValidatorId>;
   type Block: Block;
 
@@ -75,7 +75,14 @@ pub trait Network: Send + Sync {
   fn signature_scheme(&self) -> Arc<Self::SignatureScheme>;
   fn weights(&self) -> Arc<Self::Weights>;
 
-  async fn broadcast(&mut self, msg: Message<Self::ValidatorId, Self::Block>);
+  async fn broadcast(
+    &mut self,
+    msg: SignedMessage<
+      Self::ValidatorId,
+      Self::Block,
+      <Self::SignatureScheme as SignatureScheme>::Signature,
+    >,
+  );
 
   // TODO: Should this take a verifiable reason?
   async fn slash(&mut self, validator: Self::ValidatorId);

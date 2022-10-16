@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use std::{
   sync::Arc,
   time::{Instant, Duration},
@@ -54,6 +56,12 @@ pub struct Message<V: ValidatorId, B: Block> {
   data: Data<B>,
 }
 
+#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+pub struct SignedMessage<V: ValidatorId, B: Block, S: Clone + PartialEq + Debug + Encode + Decode> {
+  msg: Message<V, B>,
+  sig: S,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum TendermintError<V: ValidatorId> {
   Malicious(V),
@@ -62,6 +70,7 @@ pub enum TendermintError<V: ValidatorId> {
 
 pub struct TendermintMachine<N: Network> {
   network: Arc<RwLock<N>>,
+  signer: Arc<N::SignatureScheme>,
   weights: Arc<N::Weights>,
   proposer: N::ValidatorId,
 
@@ -81,7 +90,9 @@ pub struct TendermintMachine<N: Network> {
 
 pub struct TendermintHandle<N: Network> {
   // Messages received
-  pub messages: mpsc::Sender<Message<N::ValidatorId, N::Block>>,
+  pub messages: mpsc::Sender<
+    SignedMessage<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
+  >,
   // Async task executing the machine
   pub handle: JoinHandle<()>,
 }
@@ -106,7 +117,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
     let msg = Message { sender: self.proposer, number: self.number, round: self.round, data };
     let res = self.message(msg.clone()).await.unwrap();
     self.step = step; // TODO: Before or after the above handling call?
-    self.network.write().await.broadcast(msg).await;
+
+    let sig = self.signer.sign(&msg.encode());
+    self.network.write().await.broadcast(SignedMessage { msg, sig }).await;
     res
   }
 
@@ -167,10 +180,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
     TendermintHandle {
       messages: msg_send,
       handle: tokio::spawn(async move {
+        let signer = network.signature_scheme();
         let weights = network.weights();
         let network = Arc::new(RwLock::new(network));
         let mut machine = TendermintMachine {
           network,
+          signer,
           weights: weights.clone(),
           proposer,
 
@@ -214,17 +229,24 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           // If there's a message, handle it
           match msg_recv.try_recv() {
-            Ok(msg) => match machine.message(msg).await {
-              Ok(None) => (),
-              Ok(Some(block)) => {
-                let proposal = machine.network.write().await.add_block(block);
-                machine.reset(proposal).await
+            Ok(msg) => {
+              if !machine.signer.verify(msg.msg.sender, &msg.msg.encode(), msg.sig) {
+                yield_now().await;
+                continue;
               }
-              Err(TendermintError::Malicious(validator)) => {
-                machine.network.write().await.slash(validator).await
+
+              match machine.message(msg.msg).await {
+                Ok(None) => (),
+                Ok(Some(block)) => {
+                  let proposal = machine.network.write().await.add_block(block);
+                  machine.reset(proposal).await
+                }
+                Err(TendermintError::Malicious(validator)) => {
+                  machine.network.write().await.slash(validator).await
+                }
+                Err(TendermintError::Temporal) => (),
               }
-              Err(TendermintError::Temporal) => (),
-            },
+            }
             Err(TryRecvError::Empty) => yield_now().await,
             Err(TryRecvError::Disconnected) => break,
           }

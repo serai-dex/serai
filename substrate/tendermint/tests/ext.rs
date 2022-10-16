@@ -4,7 +4,7 @@ use parity_scale_codec::{Encode, Decode};
 
 use tokio::sync::RwLock;
 
-use tendermint_machine::{ext::*, Message, TendermintMachine, TendermintHandle};
+use tendermint_machine::{ext::*, SignedMessage, TendermintMachine, TendermintHandle};
 
 type TestValidatorId = u16;
 type TestBlockId = u32;
@@ -80,7 +80,7 @@ impl Network for TestNetwork {
     Arc::new(TestWeights)
   }
 
-  async fn broadcast(&mut self, msg: Message<TestValidatorId, Self::Block>) {
+  async fn broadcast(&mut self, msg: SignedMessage<TestValidatorId, Self::Block, [u8; 32]>) {
     for handle in self.1.write().await.iter_mut() {
       handle.messages.send(msg.clone()).await.unwrap();
     }
