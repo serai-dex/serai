@@ -1,13 +1,17 @@
 [package]
 name = "serai-coin"
 version = "0.1.0"
-description = "Abstract interface to represent a coin"
+description = "An abstract interface representing a coin, along with implementations for various coins."
 license = "MIT"
-repository = "https://github.com/serai-dex/serai"
+repository = "https://github.com/serai-dex/serai/tree/develop/coin"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 async-trait = "0.1"
@@ -38,4 +42,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [features]
-test = ["rand_core", "group", "serde", "serde_json"]
+monero = []
+monero_test = ["rand_core", "group", "serde", "serde_json"]
+test = ["monero_test"]

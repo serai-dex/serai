@@ -3,11 +3,15 @@ name = "serai-processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 async-trait = "0.1"
@@ -17,9 +21,9 @@ thiserror = "1"
 group = "0.12"
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
-frost = { package = "modular-frost", path = "../crypto/frost", features = ["secp256k1", "ed25519"] }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
-serai-coin = { path = "../coin" }
+serai-coin = { path = "../coin", features = ["monero"] }
 
 [dev-dependencies]
 hex = "0.4"
@@ -27,4 +31,6 @@ hex = "0.4"
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 
-serai-coin = { path = "../coin", features = ["test"] }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519", "tests"] }
+
+serai-coin = { path = "../coin", features = ["monero", "test"] }

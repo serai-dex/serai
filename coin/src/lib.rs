@@ -8,7 +8,9 @@ use frost::{curve::Curve, FrostKeys, sign::PreprocessMachine};
 
 pub(crate) mod utils;
 
+#[cfg(feature = "monero")]
 pub mod monero;
+#[cfg(feature = "monero")]
 pub use self::monero::Monero;
 
 #[derive(Clone, Error, Debug)]

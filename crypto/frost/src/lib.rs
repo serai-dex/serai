@@ -42,6 +42,7 @@ pub mod algorithm;
 pub mod sign;
 
 /// Tests for application-provided curves and algorithms.
+#[cfg(any(test, feature = "tests"))]
 pub mod tests;
 
 // Validate a map of serialized values to have the expected included participants
@@ -215,6 +216,7 @@ impl<C: Curve> FrostCore<C> {
     self.params
   }
 
+  #[cfg(any(test, feature = "tests"))]
   pub(crate) fn secret_share(&self) -> C::F {
     self.secret_share
   }
