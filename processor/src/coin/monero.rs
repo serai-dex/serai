@@ -54,12 +54,13 @@ impl OutputTrait for Output {
 }
 
 #[derive(Debug)]
-pub struct SignableTransaction(
-  FrostKeys<Ed25519>,
-  RecommendedTranscript,
-  usize,
-  MSignableTransaction,
-);
+pub struct SignableTransaction {
+  keys: FrostKeys<Ed25519>,
+  transcript: RecommendedTranscript,
+  // Monero height, defined as the length of the chain
+  height: usize,
+  actual: MSignableTransaction,
+}
 
 #[derive(Clone, Debug)]
 pub struct Monero {
@@ -121,12 +122,13 @@ impl Coin for Monero {
     self.scanner(key).address()
   }
 
-  async fn get_height(&self) -> Result<usize, CoinError> {
-    self.rpc.get_height().await.map_err(|_| CoinError::ConnectionError)
+  async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
+    // Monero defines height as chain length, so subtract 1 for block number
+    Ok(self.rpc.get_height().await.map_err(|_| CoinError::ConnectionError)? - 1)
   }
 
-  async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError> {
-    self.rpc.get_block(height).await.map_err(|_| CoinError::ConnectionError)
+  async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
+    self.rpc.get_block(number).await.map_err(|_| CoinError::ConnectionError)
   }
 
   async fn get_outputs(
@@ -147,27 +149,27 @@ impl Coin for Monero {
     )
   }
 
-  async fn is_confirmed(&self, tx: &[u8], height: usize) -> Result<bool, CoinError> {
-    let tx_height =
-      self.rpc.get_transaction_height(tx).await.map_err(|_| CoinError::ConnectionError)?;
-    Ok((height.saturating_sub(tx_height) + 1) >= 10)
+  async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
+    let tx_block_number =
+      self.rpc.get_transaction_block_number(tx).await.map_err(|_| CoinError::ConnectionError)?;
+    Ok((self.get_latest_block_number().await?.saturating_sub(tx_block_number) + 1) >= 10)
   }
 
   async fn prepare_send(
     &self,
     keys: FrostKeys<Ed25519>,
     transcript: RecommendedTranscript,
-    height: usize,
+    block_number: usize,
     mut inputs: Vec<Output>,
     payments: &[(Address, u64)],
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
     let spend = keys.group_key();
-    Ok(SignableTransaction(
+    Ok(SignableTransaction {
       keys,
       transcript,
-      height,
-      MSignableTransaction::new(
+      height: block_number + 1,
+      actual: MSignableTransaction::new(
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
@@ -176,7 +178,7 @@ impl Coin for Monero {
         fee,
       )
       .map_err(|_| CoinError::ConnectionError)?,
-    ))
+    })
   }
 
   async fn attempt_send(
@@ -185,13 +187,13 @@ impl Coin for Monero {
     included: &[u16],
   ) -> Result<Self::TransactionMachine, CoinError> {
     transaction
-      .3
+      .actual
       .clone()
       .multisig(
         &self.rpc,
-        transaction.0.clone(),
-        transaction.1.clone(),
-        transaction.2,
+        transaction.keys.clone(),
+        transaction.transcript.clone(),
+        transaction.height,
         included.to_vec(),
       )
       .await
@@ -231,7 +233,7 @@ impl Coin for Monero {
   async fn test_send(&self, address: Self::Address) {
     use rand_core::OsRng;
 
-    let height = self.get_height().await.unwrap();
+    let new_block = self.get_latest_block_number().await.unwrap() + 1;
 
     self.mine_block().await;
     for _ in 0 .. 7 {
@@ -239,7 +241,7 @@ impl Coin for Monero {
     }
 
     let outputs = Self::empty_scanner()
-      .scan(&self.rpc, &self.rpc.get_block(height).await.unwrap())
+      .scan(&self.rpc, &self.rpc.get_block(new_block).await.unwrap())
       .await
       .unwrap()
       .swap_remove(0)

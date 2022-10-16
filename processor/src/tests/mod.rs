@@ -59,9 +59,9 @@ impl Network for LocalNetwork {
 }
 
 async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
-  // Mine a block so there's a confirmed height
+  // Mine blocks so there's a confirmed block
   coin.mine_block().await;
-  let height = coin.get_height().await.unwrap();
+  let latest = coin.get_latest_block_number().await.unwrap();
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
   let threshold = keys[&1].params().t();
@@ -70,13 +70,13 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   let mut wallets = vec![];
   for i in 1 ..= threshold {
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
-    wallet.acknowledge_height(0, height);
+    wallet.acknowledge_block(0, latest);
     wallet.add_keys(&WalletKeys::new(keys.remove(&i).unwrap(), 0));
     wallets.push(wallet);
   }
 
-  // Get the chain to a height where blocks have sufficient confirmations
-  while (height + C::CONFIRMATIONS) > coin.get_height().await.unwrap() {
+  // Get the chain to a length where blocks have sufficient confirmations
+  while (latest + (C::CONFIRMATIONS - 1)) > coin.get_latest_block_number().await.unwrap() {
     coin.mine_block().await;
   }
 
@@ -91,8 +91,8 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   for (network, wallet) in networks.iter_mut().zip(wallets.iter_mut()) {
     wallet.poll().await.unwrap();
 
-    let height = coin.get_height().await.unwrap();
-    wallet.acknowledge_height(1, height - 10);
+    let latest = coin.get_latest_block_number().await.unwrap();
+    wallet.acknowledge_block(1, latest - (C::CONFIRMATIONS - 1));
     let signable = wallet
       .prepare_sends(1, vec![(wallet.address(), 10000000000)], fee)
       .await

@@ -206,7 +206,7 @@ impl Rpc {
     self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
   }
 
-  pub async fn get_transaction_height(&self, tx: &[u8]) -> Result<usize, RpcError> {
+  pub async fn get_transaction_block_number(&self, tx: &[u8]) -> Result<usize, RpcError> {
     let txs: TransactionsResponse =
       self.rpc_call("get_transactions", Some(json!({ "txs_hashes": [hex::encode(tx)] }))).await?;
 

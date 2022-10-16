@@ -47,8 +47,8 @@ pub trait Coin {
   // Doesn't have to take self, enables some level of caching which is pleasant
   fn address(&self, key: <Self::Curve as Curve>::G) -> Self::Address;
 
-  async fn get_height(&self) -> Result<usize, CoinError>;
-  async fn get_block(&self, height: usize) -> Result<Self::Block, CoinError>;
+  async fn get_latest_block_number(&self) -> Result<usize, CoinError>;
+  async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError>;
   async fn get_outputs(
     &self,
     block: &Self::Block,
@@ -56,13 +56,13 @@ pub trait Coin {
   ) -> Result<Vec<Self::Output>, CoinError>;
 
   // TODO: Remove
-  async fn is_confirmed(&self, tx: &[u8], height: usize) -> Result<bool, CoinError>;
+  async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError>;
 
   async fn prepare_send(
     &self,
     keys: FrostKeys<Self::Curve>,
     transcript: RecommendedTranscript,
-    height: usize,
+    block_number: usize,
     inputs: Vec<Self::Output>,
     payments: &[(Self::Address, u64)],
     fee: Self::Fee,
