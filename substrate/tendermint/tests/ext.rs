@@ -26,14 +26,14 @@ impl Weights for TestWeights {
   type ValidatorId = TestValidatorId;
 
   fn total_weight(&self) -> u64 {
-    5
+    4
   }
   fn weight(&self, id: TestValidatorId) -> u64 {
-    [1, 1, 1, 1, 1][usize::try_from(id).unwrap()]
+    [1; 4][usize::try_from(id).unwrap()]
   }
 
   fn proposer(&self, number: BlockNumber, round: Round) -> TestValidatorId {
-    TestValidatorId::try_from((number.0 + u32::from(round.0)) % 5).unwrap()
+    TestValidatorId::try_from((number.0 + u32::from(round.0)) % 4).unwrap()
   }
 }
 
