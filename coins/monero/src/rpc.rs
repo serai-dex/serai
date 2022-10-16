@@ -43,6 +43,8 @@ pub enum RpcError {
   InternalError(String),
   #[error("connection error")]
   ConnectionError,
+  #[error("invalid node")]
+  InvalidNode,
   #[error("transactions not found")]
   TransactionsNotFound(Vec<[u8; 32]>),
   #[error("invalid point ({0})")]
@@ -54,7 +56,11 @@ pub enum RpcError {
 }
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
-  hex::decode(value).map_err(|_| RpcError::InternalError("Monero returned invalid hex".to_string()))
+  hex::decode(value).map_err(|_| RpcError::InvalidNode)
+}
+
+fn hash_hex(hash: &str) -> Result<[u8; 32], RpcError> {
+  rpc_hex(hash)?.try_into().map_err(|_| RpcError::InvalidNode)
 }
 
 fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
@@ -174,7 +180,7 @@ impl Rpc {
 
     if !txs.missed_tx.is_empty() {
       Err(RpcError::TransactionsNotFound(
-        txs.missed_tx.iter().map(|hash| hex::decode(hash).unwrap().try_into().unwrap()).collect(),
+        txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
       ))?;
     }
 
@@ -182,11 +188,12 @@ impl Rpc {
       .txs
       .iter()
       .map(|res| {
-        let tx = Transaction::deserialize(&mut std::io::Cursor::new(
-          rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex }).unwrap(),
-        ))
-        .map_err(|_| {
-          RpcError::InvalidTransaction(hex::decode(&res.tx_hash).unwrap().try_into().unwrap())
+        let tx = Transaction::deserialize(&mut std::io::Cursor::new(rpc_hex(
+          if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex },
+        )?))
+        .map_err(|_| match hash_hex(&res.tx_hash) {
+          Ok(hash) => RpcError::InvalidTransaction(hash),
+          Err(err) => err,
         })?;
 
         // https://github.com/monero-project/monero/issues/8311
@@ -212,7 +219,7 @@ impl Rpc {
 
     if !txs.missed_tx.is_empty() {
       Err(RpcError::TransactionsNotFound(
-        txs.missed_tx.iter().map(|hash| hex::decode(hash).unwrap().try_into().unwrap()).collect(),
+        txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
       ))?;
     }
 
