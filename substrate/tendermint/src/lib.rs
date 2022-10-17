@@ -16,6 +16,7 @@ use tokio::{
   },
 };
 
+/// Traits and types of the external network being integrated with to provide consensus over.
 pub mod ext;
 use ext::*;
 
@@ -59,7 +60,7 @@ impl<B: Block, S: Signature> Data<B, S> {
 }
 
 #[derive(Clone, PartialEq, Debug, Encode, Decode)]
-pub struct Message<V: ValidatorId, B: Block, S: Signature> {
+struct Message<V: ValidatorId, B: Block, S: Signature> {
   sender: V,
 
   number: BlockNumber,
@@ -68,18 +69,20 @@ pub struct Message<V: ValidatorId, B: Block, S: Signature> {
   data: Data<B, S>,
 }
 
+/// A signed Tendermint consensus message to be broadcast to the other validators.
 #[derive(Clone, PartialEq, Debug, Encode, Decode)]
 pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
   msg: Message<V, B, S>,
   sig: S,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
-pub enum TendermintError<V: ValidatorId> {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TendermintError<V: ValidatorId> {
   Malicious(V),
   Temporal,
 }
 
+/// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
   network: Arc<RwLock<N>>,
   signer: Arc<N::SignatureScheme>,
@@ -100,19 +103,21 @@ pub struct TendermintMachine<N: Network> {
   timeouts: HashMap<Step, Instant>,
 }
 
+/// A handle to an asynchronous task, along with a channel to inform of it of messages received.
 pub struct TendermintHandle<N: Network> {
-  // Messages received
+  /// Channel to send messages received from the P2P layer.
   pub messages: mpsc::Sender<
     SignedMessage<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   >,
-  // Async task executing the machine
+  /// Handle for the asynchronous task executing the machine. The task will automatically exit
+  /// when the channel is dropped.
   pub handle: JoinHandle<()>,
 }
 
 impl<N: Network + 'static> TendermintMachine<N> {
   fn timeout(&self, step: Step) -> Instant {
     let mut round_time = Duration::from_secs(N::BLOCK_TIME.into());
-    round_time *= (self.round.0 + 1).into();
+    round_time *= self.round.0 + 1;
     let step_time = round_time / 3;
 
     let offset = match step {
@@ -183,6 +188,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.round(Round(0)).await;
   }
 
+  /// Create a new Tendermint machine, for the specified proposer, from the specified block, with
+  /// the specified block as the one to propose next, returning a handle for the machine.
   // 10
   #[allow(clippy::new_ret_no_self)]
   pub fn new(
@@ -262,10 +269,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
                     sigs.push(sig);
                   }
 
-                  let proposal = machine.network.write().await.add_block(
-                    block,
-                    Commit { validators, signature: N::SignatureScheme::aggregate(&sigs) },
-                  );
+                  let commit =
+                    Commit { validators, signature: N::SignatureScheme::aggregate(&sigs) };
+                  debug_assert!(machine.network.read().await.verify_commit(block.id(), &commit));
+                  let proposal = machine.network.write().await.add_block(block, commit);
                   machine.reset(proposal).await
                 }
                 Err(TendermintError::Malicious(validator)) => {
@@ -385,12 +392,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
             }
           } else {
             // 22-27
-            self
-              .network
-              .write()
-              .await
-              .validate(block)
-              .map_err(|_| TendermintError::Malicious(msg.sender))?;
+            self.network.write().await.validate(block).map_err(|e| match e {
+              BlockError::Temporal => TendermintError::Temporal,
+              BlockError::Fatal => TendermintError::Malicious(msg.sender),
+            })?;
             debug_assert!(self
               .broadcast(Data::Prevote(Some(block.id()).filter(|_| self.locked.is_none() ||
                 self.locked.as_ref().map(|locked| locked.1.id()) == Some(block.id()))))

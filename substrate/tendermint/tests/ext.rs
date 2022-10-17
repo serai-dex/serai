@@ -32,7 +32,12 @@ impl SignatureScheme for TestSignatureScheme {
   }
 
   #[must_use]
-  fn verify_aggregate(&self, msg: &[u8], signers: &[TestValidatorId], sigs: Vec<[u8; 32]>) -> bool {
+  fn verify_aggregate(
+    &self,
+    msg: &[u8],
+    signers: &[TestValidatorId],
+    sigs: &Vec<[u8; 32]>,
+  ) -> bool {
     assert_eq!(signers.len(), sigs.len());
     for sig in signers.iter().zip(sigs.iter()) {
       assert!(self.verify(*sig.0, msg, *sig.1));
@@ -53,7 +58,7 @@ impl Weights for TestWeights {
   }
 
   fn proposer(&self, number: BlockNumber, round: Round) -> TestValidatorId {
-    TestValidatorId::try_from((number.0 + u32::from(round.0)) % 4).unwrap()
+    TestValidatorId::try_from((number.0 + u64::from(round.0)) % 4).unwrap()
   }
 }
 
@@ -108,7 +113,7 @@ impl Network for TestNetwork {
   fn add_block(&mut self, block: TestBlock, commit: Commit<TestSignatureScheme>) -> TestBlock {
     dbg!("Adding ", &block);
     assert!(block.valid.is_ok());
-    assert!(self.verify_commit(block.id(), commit));
+    assert!(self.verify_commit(block.id(), &commit));
     TestBlock { id: block.id + 1, valid: Ok(()) }
   }
 }
