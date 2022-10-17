@@ -117,8 +117,13 @@ impl<N: Network> MessageLog<N> {
   }
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/message_log.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/message_log.rs
   // Check if a supermajority of nodes have participated on a specific step
   pub(crate) fn has_participation(&self, round: RoundNumber, step: Step) -> bool {
+=======
+  // Check if a supermajority of nodes have participated on a specific step
+  pub(crate) fn has_participation(&self, round: Round, step: Step) -> bool {
+>>>>>>> 8b6eb117 (Litany of bug fixes):substrate/tendermint/src/message_log.rs
     let mut participating = 0;
     for (participant, msgs) in &self.log[&round] {
       if msgs.get(&step).is_some() {
@@ -128,8 +133,11 @@ impl<N: Network> MessageLog<N> {
     participating >= self.weights.threshold()
   }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/message_log.rs
 =======
 >>>>>>> a0bc9dc3 (Misc cleanup):substrate/tendermint/src/message_log.rs
+=======
+>>>>>>> 8b6eb117 (Litany of bug fixes):substrate/tendermint/src/message_log.rs
   // Check if consensus has been reached on a specific piece of data
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/message_log.rs
   pub(crate) fn has_consensus(&self, round: RoundNumber, data: DataFor<N>) -> bool {
