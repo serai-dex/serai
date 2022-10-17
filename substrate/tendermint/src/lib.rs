@@ -29,14 +29,26 @@ enum Step {
   Precommit,
 }
 
-#[derive(Clone, PartialEq, Debug, Encode, Decode)]
-enum Data<B: Block> {
+#[derive(Clone, Debug, Encode, Decode)]
+enum Data<B: Block, S: Signature> {
   Proposal(Option<Round>, B),
   Prevote(Option<B::Id>),
-  Precommit(Option<B::Id>),
+  Precommit(Option<(B::Id, S)>),
 }
 
-impl<B: Block> Data<B> {
+impl<B: Block, S: Signature> PartialEq for Data<B, S> {
+  fn eq(&self, other: &Data<B, S>) -> bool {
+    match (self, other) {
+      (Data::Proposal(r, b), Data::Proposal(r2, b2)) => (r == r2) && (b == b2),
+      (Data::Prevote(i), Data::Prevote(i2)) => i == i2,
+      (Data::Precommit(None), Data::Precommit(None)) => true,
+      (Data::Precommit(Some((i, _))), Data::Precommit(Some((i2, _)))) => i == i2,
+      _ => false,
+    }
+  }
+}
+
+impl<B: Block, S: Signature> Data<B, S> {
   fn step(&self) -> Step {
     match self {
       Data::Proposal(..) => Step::Propose,
@@ -47,18 +59,18 @@ impl<B: Block> Data<B> {
 }
 
 #[derive(Clone, PartialEq, Debug, Encode, Decode)]
-pub struct Message<V: ValidatorId, B: Block> {
+pub struct Message<V: ValidatorId, B: Block, S: Signature> {
   sender: V,
 
   number: BlockNumber,
   round: Round,
 
-  data: Data<B>,
+  data: Data<B, S>,
 }
 
 #[derive(Clone, PartialEq, Debug, Encode, Decode)]
-pub struct SignedMessage<V: ValidatorId, B: Block, S: Clone + PartialEq + Debug + Encode + Decode> {
-  msg: Message<V, B>,
+pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
+  msg: Message<V, B, S>,
   sig: S,
 }
 
@@ -112,7 +124,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   #[async_recursion::async_recursion]
-  async fn broadcast(&mut self, data: Data<N::Block>) -> Option<N::Block> {
+  async fn broadcast(
+    &mut self,
+    data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
+  ) -> Option<N::Block> {
     let step = data.step();
     let msg = Message { sender: self.proposer, number: self.number, round: self.round, data };
     let res = self.message(msg.clone()).await.unwrap();
@@ -238,7 +253,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
               match machine.message(msg.msg).await {
                 Ok(None) => (),
                 Ok(Some(block)) => {
-                  let proposal = machine.network.write().await.add_block(block);
+                  let sigs = machine
+                    .log
+                    .precommitted
+                    .iter()
+                    .filter_map(|(k, (id, sig))| {
+                      Some((*k, sig.clone())).filter(|_| id == &block.id())
+                    })
+                    .collect();
+                  let proposal = machine.network.write().await.add_block(block, sigs);
                   machine.reset(proposal).await
                 }
                 Err(TendermintError::Malicious(validator)) => {
@@ -265,8 +288,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
       debug_assert!(matches!(proposal, Data::Proposal(..)));
       if let Data::Proposal(_, block) = proposal {
         // Check if it has gotten a sufficient amount of precommits
-        let (participants, weight) =
-          self.log.message_instances(round, Data::Precommit(Some(block.id())));
+        let (participants, weight) = self
+          .log
+          .message_instances(round, Data::Precommit(Some((block.id(), self.signer.sign(&[])))));
 
         let threshold = self.weights.threshold();
         if weight >= threshold {
@@ -286,8 +310,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   async fn message(
     &mut self,
-    msg: Message<N::ValidatorId, N::Block>,
+    msg: Message<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
+    if let Data::Precommit(Some((id, sig))) = &msg.data {
+      if !self.signer.verify(msg.sender, &id.encode(), sig.clone()) {
+        Err(TendermintError::Malicious(msg.sender))?;
+      }
+    }
+
     if msg.number != self.number {
       Err(TendermintError::Temporal)?;
     }
@@ -390,7 +420,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
             self.valid = Some((self.round, block.clone()));
             if self.step == Step::Prevote {
               self.locked = self.valid.clone();
-              return Ok(self.broadcast(Data::Precommit(Some(block.id()))).await);
+              return Ok(
+                self
+                  .broadcast(Data::Precommit(Some((
+                    block.id(),
+                    self.signer.sign(&block.id().encode()),
+                  ))))
+                  .await,
+              );
             }
           }
         }

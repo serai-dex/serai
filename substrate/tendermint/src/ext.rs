@@ -14,6 +14,9 @@ impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + Encode + De
 {
 }
 
+pub trait Signature: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {}
+impl<S: Send + Sync + Clone + PartialEq + Debug + Encode + Decode> Signature for S {}
+
 // Type aliases which are distinct according to the type system
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct BlockNumber(pub u32);
@@ -22,14 +25,12 @@ pub struct Round(pub u16);
 
 pub trait SignatureScheme: Send + Sync {
   type ValidatorId: ValidatorId;
-  type Signature: Send + Sync + Clone + Copy + PartialEq + Debug + Encode + Decode;
-  type AggregateSignature: Send + Sync + Clone + PartialEq + Debug + Encode + Decode;
+  type Signature: Signature;
+  type AggregateSignature: Signature;
 
   fn sign(&self, msg: &[u8]) -> Self::Signature;
   #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: Self::Signature) -> bool;
-  // Intended to be a BLS signature, a Schnorr signature half-aggregation, or a Vec<Signature>.
-  fn aggregate(signatures: &[Self::Signature]) -> Self::AggregateSignature;
 }
 
 pub trait Weights: Send + Sync {
@@ -89,5 +90,9 @@ pub trait Network: Send + Sync {
 
   fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
   // Add a block and return the proposal for the next one
-  fn add_block(&mut self, block: Self::Block) -> Self::Block;
+  fn add_block(
+    &mut self,
+    block: Self::Block,
+    sigs: Vec<(Self::ValidatorId, <Self::SignatureScheme as SignatureScheme>::Signature)>,
+  ) -> Self::Block;
 }
