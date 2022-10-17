@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use tendermint_machine::{ext::*, SignedMessage, TendermintMachine, TendermintHandle};
 
 type TestValidatorId = u16;
-type TestBlockId = u32;
+type TestBlockId = [u8; 4];
 
 struct TestSignatureScheme(u16);
 impl SignatureScheme for TestSignatureScheme {
@@ -114,7 +114,7 @@ impl Network for TestNetwork {
     dbg!("Adding ", &block);
     assert!(block.valid.is_ok());
     assert!(self.verify_commit(block.id(), &commit));
-    TestBlock { id: block.id + 1, valid: Ok(()) }
+    TestBlock { id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(), valid: Ok(()) }
   }
 }
 
@@ -129,7 +129,7 @@ impl TestNetwork {
           TestNetwork(i, arc.clone()),
           i,
           BlockNumber(1),
-          TestBlock { id: 1, valid: Ok(()) },
+          TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
         ));
       }
     }

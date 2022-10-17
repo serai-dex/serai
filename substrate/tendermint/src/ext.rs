@@ -104,7 +104,7 @@ pub enum BlockError {
 /// Trait representing a Block.
 pub trait Block: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {
   // Type used to identify blocks. Presumably a cryptographic hash of the block.
-  type Id: Send + Sync + Copy + Clone + PartialEq + Debug + Encode + Decode;
+  type Id: Send + Sync + Copy + Clone + PartialEq + AsRef<[u8]> + Debug + Encode + Decode;
 
   /// Return the deterministic, unique ID for this block.
   fn id(&self) -> Self::Id;

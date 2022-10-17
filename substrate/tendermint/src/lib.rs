@@ -301,6 +301,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Check if it has gotten a sufficient amount of precommits
         let (participants, weight) = self
           .log
+          // Use a junk signature since message equality is irrelevant to the signature
           .message_instances(round, Data::Precommit(Some((block.id(), self.signer.sign(&[])))));
 
         let threshold = self.weights.threshold();
@@ -324,7 +325,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     msg: Message<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
     if let Data::Precommit(Some((id, sig))) = &msg.data {
-      if !self.signer.verify(msg.sender, &id.encode(), sig.clone()) {
+      if !self.signer.verify(msg.sender, id.as_ref(), sig.clone()) {
         Err(TendermintError::Malicious(msg.sender))?;
       }
     }
@@ -433,7 +434,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 self
                   .broadcast(Data::Precommit(Some((
                     block.id(),
-                    self.signer.sign(&block.id().encode()),
+                    self.signer.sign(block.id().as_ref()),
                   ))))
                   .await,
               );
