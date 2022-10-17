@@ -22,8 +22,22 @@ impl SignatureScheme for TestSignatureScheme {
     sig
   }
 
+  #[must_use]
   fn verify(&self, validator: u16, msg: &[u8], sig: [u8; 32]) -> bool {
     (sig[.. 2] == validator.to_le_bytes()) && (&sig[2 ..] == &[msg, &[0; 30]].concat()[.. 30])
+  }
+
+  fn aggregate(sigs: &[[u8; 32]]) -> Vec<[u8; 32]> {
+    sigs.to_vec()
+  }
+
+  #[must_use]
+  fn verify_aggregate(&self, msg: &[u8], signers: &[TestValidatorId], sigs: Vec<[u8; 32]>) -> bool {
+    assert_eq!(signers.len(), sigs.len());
+    for sig in signers.iter().zip(sigs.iter()) {
+      assert!(self.verify(*sig.0, msg, *sig.1));
+    }
+    true
   }
 }
 
@@ -91,12 +105,10 @@ impl Network for TestNetwork {
     block.valid
   }
 
-  fn add_block(&mut self, block: TestBlock, sigs: Vec<(u16, [u8; 32])>) -> TestBlock {
+  fn add_block(&mut self, block: TestBlock, commit: Commit<TestSignatureScheme>) -> TestBlock {
     dbg!("Adding ", &block);
     assert!(block.valid.is_ok());
-    for sig in sigs {
-      assert!(TestSignatureScheme(u16::MAX).verify(sig.0, &block.id().encode(), sig.1));
-    }
+    assert!(self.verify_commit(block.id(), commit));
     TestBlock { id: block.id + 1, valid: Ok(()) }
   }
 }

@@ -31,6 +31,21 @@ pub trait SignatureScheme: Send + Sync {
   fn sign(&self, msg: &[u8]) -> Self::Signature;
   #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: Self::Signature) -> bool;
+
+  fn aggregate(sigs: &[Self::Signature]) -> Self::AggregateSignature;
+  #[must_use]
+  fn verify_aggregate(
+    &self,
+    msg: &[u8],
+    signers: &[Self::ValidatorId],
+    sig: Self::AggregateSignature,
+  ) -> bool;
+}
+
+#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+pub struct Commit<S: SignatureScheme> {
+  pub validators: Vec<S::ValidatorId>,
+  pub signature: S::AggregateSignature,
 }
 
 pub trait Weights: Send + Sync {
@@ -76,6 +91,21 @@ pub trait Network: Send + Sync {
   fn signature_scheme(&self) -> Arc<Self::SignatureScheme>;
   fn weights(&self) -> Arc<Self::Weights>;
 
+  #[must_use]
+  fn verify_commit(
+    &self,
+    id: <Self::Block as Block>::Id,
+    commit: Commit<Self::SignatureScheme>,
+  ) -> bool {
+    if !self.signature_scheme().verify_aggregate(&id.encode(), &commit.validators, commit.signature)
+    {
+      return false;
+    }
+
+    let weights = self.weights();
+    commit.validators.iter().map(|v| weights.weight(*v)).sum::<u64>() >= weights.threshold()
+  }
+
   async fn broadcast(
     &mut self,
     msg: SignedMessage<
@@ -90,9 +120,6 @@ pub trait Network: Send + Sync {
 
   fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
   // Add a block and return the proposal for the next one
-  fn add_block(
-    &mut self,
-    block: Self::Block,
-    sigs: Vec<(Self::ValidatorId, <Self::SignatureScheme as SignatureScheme>::Signature)>,
-  ) -> Self::Block;
+  fn add_block(&mut self, block: Self::Block, commit: Commit<Self::SignatureScheme>)
+    -> Self::Block;
 }

@@ -253,15 +253,19 @@ impl<N: Network + 'static> TendermintMachine<N> {
               match machine.message(msg.msg).await {
                 Ok(None) => (),
                 Ok(Some(block)) => {
-                  let sigs = machine
-                    .log
-                    .precommitted
-                    .iter()
-                    .filter_map(|(k, (id, sig))| {
-                      Some((*k, sig.clone())).filter(|_| id == &block.id())
-                    })
-                    .collect();
-                  let proposal = machine.network.write().await.add_block(block, sigs);
+                  let mut validators = vec![];
+                  let mut sigs = vec![];
+                  for (v, sig) in machine.log.precommitted.iter().filter_map(|(k, (id, sig))| {
+                    Some((*k, sig.clone())).filter(|_| id == &block.id())
+                  }) {
+                    validators.push(v);
+                    sigs.push(sig);
+                  }
+
+                  let proposal = machine.network.write().await.add_block(
+                    block,
+                    Commit { validators, signature: N::SignatureScheme::aggregate(&sigs) },
+                  );
                   machine.reset(proposal).await
                 }
                 Err(TendermintError::Malicious(validator)) => {
@@ -400,13 +404,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if self.step == Step::Prevote {
       let (participation, weight) = self.log.message_instances(self.round, Data::Prevote(None));
       // 34-35
-      if participation > self.weights.threshold() {
+      if participation >= self.weights.threshold() {
         let timeout = self.timeout(Step::Prevote);
         self.timeouts.entry(Step::Prevote).or_insert(timeout);
       }
 
       // 44-46
-      if weight > self.weights.threshold() {
+      if weight >= self.weights.threshold() {
         debug_assert!(self.broadcast(Data::Precommit(None)).await.is_none());
       }
     }
