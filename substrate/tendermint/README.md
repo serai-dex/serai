@@ -41,12 +41,3 @@ The included pseudocode segments can be minimally described as follows:
 61-64 on timeout prevote
 65-67 on timeout precommit
 ```
-
-Remaining:
-
-```
-36-43 First proposal with prevotes -> precommit Some
-57-60 on timeout propose
-61-64 on timeout prevote
-65-67 on timeout precommit
-```
