@@ -166,6 +166,7 @@ pub trait Network: Send + Sync {
 
   /// Trigger a slash for the validator in question who was definitively malicious.
   /// The exact process of triggering a slash is undefined and left to the network as a whole.
+  // TODO: This is spammed right now.
   async fn slash(&mut self, validator: Self::ValidatorId);
 
   /// Validate a block.
