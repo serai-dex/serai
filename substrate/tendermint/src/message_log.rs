@@ -85,6 +85,17 @@ impl<N: Network> MessageLog<N> {
     weight
   }
 
+  // Check if a supermajority of nodes have participated on a specific step
+  pub(crate) fn has_participation(&self, round: Round, step: Step) -> bool {
+    let mut participating = 0;
+    for (participant, msgs) in &self.log[&round] {
+      if msgs.get(&step).is_some() {
+        participating += self.weights.weight(*participant);
+      }
+    }
+    participating >= self.weights.threshold()
+  }
+
   // Check if consensus has been reached on a specific piece of data
   pub(crate) fn has_consensus(
     &self,
