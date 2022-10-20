@@ -76,7 +76,18 @@ where
   type Error = Error;
   type Transaction = TransactionFor<C, B>;
 
-  async fn check_block(&mut self, block: BlockCheckParams<B>) -> Result<ImportResult, Self::Error> {
+  async fn check_block(
+    &mut self,
+    mut block: BlockCheckParams<B>,
+  ) -> Result<ImportResult, Self::Error> {
+    let info = self.client.info();
+    if (info.best_hash != block.parent_hash) || ((info.best_number + 1u16.into()) != block.number) {
+      Err(Error::Other("non-sequential import".into()))?;
+    }
+
+    block.allow_missing_state = false;
+    block.allow_missing_parent = false;
+
     self.inner.check_block(block).await.map_err(Into::into)
   }
 
@@ -85,11 +96,6 @@ where
     mut block: BlockImportParams<B, Self::Transaction>,
     new_cache: HashMap<CacheKeyId, Vec<u8>>,
   ) -> Result<ImportResult, Self::Error> {
-    let parent_hash = *block.header.parent_hash();
-    if self.client.info().best_hash != parent_hash {
-      Err(Error::Other("non-sequential import".into()))?;
-    }
-
     if let Some(body) = block.body.clone() {
       if let Some(justifications) = block.justifications {
         let mut iter = justifications.iter();
@@ -111,7 +117,7 @@ where
         self
           .check_inherents(
             B::new(block.header.clone(), body),
-            self.providers.create_inherent_data_providers(parent_hash, ()).await?,
+            self.providers.create_inherent_data_providers(*block.header.parent_hash(), ()).await?,
           )
           .await?;
       }
