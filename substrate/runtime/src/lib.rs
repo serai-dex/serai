@@ -6,6 +6,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+<<<<<<< HEAD
 // Re-export all components
 pub use serai_primitives as primitives;
 
@@ -31,6 +32,16 @@ pub use pallet_authority_discovery as authority_discovery;
 
 // Actually used by the runtime
 use sp_core::OpaqueMetadata;
+=======
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+pub use sp_core::sr25519::Signature;
+use sp_runtime::{
+  create_runtime_str, generic, impl_opaque_keys,
+  traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+  transaction_validity::{TransactionSource, TransactionValidity},
+  ApplyExtrinsicResult, Perbill,
+};
+>>>>>>> 3c6ea6e5 (Replace MultiSignature with sr25519::Signature)
 use sp_std::prelude::*;
 
 use sp_version::RuntimeVersion;
@@ -64,8 +75,20 @@ use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 /// An index to a block.
 pub type BlockNumber = u64;
 
+<<<<<<< HEAD
 /// Nonce of a transaction in the chain, for a given account.
 pub type Nonce = u32;
+=======
+/// Some way of identifying an account on the chain. We intentionally make it equivalent
+/// to the public key of our transaction signing scheme.
+pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+
+/// Balance of an account.
+pub type Balance = u64;
+
+/// Index of a transaction in the chain, for a given account.
+pub type Index = u32;
+>>>>>>> 3c6ea6e5 (Replace MultiSignature with sr25519::Signature)
 
 /// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
