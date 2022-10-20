@@ -46,7 +46,7 @@ pub trait SignatureScheme: Send + Sync {
   fn sign(&self, msg: &[u8]) -> Self::Signature;
   /// Verify a signature from the validator in question.
   #[must_use]
-  fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: Self::Signature) -> bool;
+  fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool;
 
   /// Aggregate signatures.
   fn aggregate(sigs: &[Self::Signature]) -> Self::AggregateSignature;
@@ -54,8 +54,8 @@ pub trait SignatureScheme: Send + Sync {
   #[must_use]
   fn verify_aggregate(
     &self,
-    msg: &[u8],
     signers: &[Self::ValidatorId],
+    msg: &[u8],
     sig: &Self::AggregateSignature,
   ) -> bool;
 }
@@ -142,8 +142,8 @@ pub trait Network: Send + Sync {
     commit: &Commit<Self::SignatureScheme>,
   ) -> bool {
     if !self.signature_scheme().verify_aggregate(
-      &commit_msg(commit.round, id.as_ref()),
       &commit.validators,
+      &commit_msg(commit.round, id.as_ref()),
       &commit.signature,
     ) {
       return false;

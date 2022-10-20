@@ -1,8 +1,11 @@
-use std::{sync::Arc, time::SystemTime};
+use std::{
+  sync::Arc,
+  time::{SystemTime, Duration},
+};
 
 use parity_scale_codec::{Encode, Decode};
 
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{ext::*, SignedMessage, TendermintMachine, TendermintHandle};
 
@@ -23,7 +26,7 @@ impl SignatureScheme for TestSignatureScheme {
   }
 
   #[must_use]
-  fn verify(&self, validator: u16, msg: &[u8], sig: [u8; 32]) -> bool {
+  fn verify(&self, validator: u16, msg: &[u8], sig: &[u8; 32]) -> bool {
     (sig[.. 2] == validator.to_le_bytes()) && (&sig[2 ..] == &[msg, &[0; 30]].concat()[.. 30])
   }
 
@@ -34,13 +37,13 @@ impl SignatureScheme for TestSignatureScheme {
   #[must_use]
   fn verify_aggregate(
     &self,
-    msg: &[u8],
     signers: &[TestValidatorId],
+    msg: &[u8],
     sigs: &Vec<[u8; 32]>,
   ) -> bool {
     assert_eq!(signers.len(), sigs.len());
     for sig in signers.iter().zip(sigs.iter()) {
-      assert!(self.verify(*sig.0, msg, *sig.1));
+      assert!(self.verify(*sig.0, msg, sig.1));
     }
     true
   }
@@ -140,7 +143,7 @@ impl TestNetwork {
 #[tokio::test]
 async fn test() {
   TestNetwork::new(4).await;
-  for _ in 0 .. 100 {
-    tokio::task::yield_now().await;
+  for _ in 0 .. 10 {
+    sleep(Duration::from_secs(1)).await;
   }
 }

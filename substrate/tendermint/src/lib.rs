@@ -278,7 +278,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           loop {
             match msg_recv.try_recv() {
               Ok(msg) => {
-                if !machine.signer.verify(msg.msg.sender, &msg.msg.encode(), msg.sig) {
+                if !machine.signer.verify(msg.msg.sender, &msg.msg.encode(), &msg.sig) {
                   continue;
                 }
                 machine.queue.push((false, msg.msg));
@@ -345,7 +345,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
     // Verify the signature if this is a precommit
     if let Data::Precommit(Some((id, sig))) = &msg.data {
-      if !self.signer.verify(msg.sender, &commit_msg(msg.round, id.as_ref()), sig.clone()) {
+      if !self.signer.verify(msg.sender, &commit_msg(msg.round, id.as_ref()), sig) {
         // Since we verified this validator actually sent the message, they're malicious
         Err(TendermintError::Malicious(msg.sender))?;
       }
