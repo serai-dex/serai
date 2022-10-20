@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::SystemTime};
 
 use parity_scale_codec::{Encode, Decode};
 
@@ -128,7 +128,7 @@ impl TestNetwork {
         write.push(TendermintMachine::new(
           TestNetwork(i, arc.clone()),
           i,
-          BlockNumber(1),
+          (BlockNumber(1), SystemTime::now()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
         ));
       }

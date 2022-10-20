@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use parity_scale_codec::{Encode, Decode};
 
-use crate::SignedMessage;
+use crate::{SignedMessage, commit_msg};
 
 /// An alias for a series of traits required for a type to be usable as a validator ID,
 /// automatically implemented for all types satisfying those traits.
@@ -64,6 +64,8 @@ pub trait SignatureScheme: Send + Sync {
 /// a valid commit.
 #[derive(Clone, PartialEq, Debug, Encode, Decode)]
 pub struct Commit<S: SignatureScheme> {
+  /// Round which created this commit.
+  pub round: Round,
   /// Validators participating in the signature.
   pub validators: Vec<S::ValidatorId>,
   /// Aggregate signature.
@@ -140,7 +142,7 @@ pub trait Network: Send + Sync {
     commit: &Commit<Self::SignatureScheme>,
   ) -> bool {
     if !self.signature_scheme().verify_aggregate(
-      &id.encode(),
+      &commit_msg(commit.round, id.as_ref()),
       &commit.validators,
       &commit.signature,
     ) {

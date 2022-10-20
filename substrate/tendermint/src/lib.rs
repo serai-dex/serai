@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use std::{
   sync::Arc,
-  time::{Instant, Duration},
+  time::{SystemTime, Instant, Duration},
   collections::HashMap,
 };
 
@@ -14,6 +14,7 @@ use tokio::{
     RwLock,
     mpsc::{self, error::TryRecvError},
   },
+  time::sleep,
 };
 
 /// Traits and types of the external network being integrated with to provide consensus over.
@@ -22,6 +23,10 @@ use ext::*;
 
 mod message_log;
 use message_log::MessageLog;
+
+pub(crate) fn commit_msg(round: Round, id: &[u8]) -> Vec<u8> {
+  [&round.0.to_le_bytes(), id].concat().to_vec()
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 enum Step {
@@ -163,8 +168,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   fn round(&mut self, round: Round) -> bool {
-    dbg!(round);
-
     // Correct the start time
     for _ in self.round.0 .. round.0 {
       self.start_time = self.timeout(Step::Precommit);
@@ -181,9 +184,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   // 53-54
   async fn reset(&mut self, proposal: N::Block) {
+    // Wait for the next block interval
+    let round_end = self.timeout(Step::Precommit);
+    sleep(round_end - Instant::now()).await;
+
     self.number.0 += 1;
-    self.start_time = Instant::now();
+    self.start_time = round_end;
     self.personal_proposal = proposal;
+
+    self.queue = self.queue.drain(..).filter(|msg| msg.1.number == self.number).collect();
 
     self.log = MessageLog::new(self.network.read().await.weights());
 
@@ -199,9 +208,17 @@ impl<N: Network + 'static> TendermintMachine<N> {
   pub fn new(
     network: N,
     proposer: N::ValidatorId,
-    number: BlockNumber,
+    start: (BlockNumber, SystemTime),
     proposal: N::Block,
   ) -> TendermintHandle<N> {
+    // Convert the start time to an instant
+    // This is imprecise yet should be precise enough
+    let start_time = {
+      let instant_now = Instant::now();
+      let sys_now = SystemTime::now();
+      instant_now - sys_now.duration_since(start.1).unwrap_or(Duration::ZERO)
+    };
+
     let (msg_send, mut msg_recv) = mpsc::channel(100); // Backlog to accept. Currently arbitrary
     TendermintHandle {
       messages: msg_send,
@@ -216,9 +233,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
           weights: weights.clone(),
           proposer,
 
-          number,
-          // TODO: Use a non-local start time
-          start_time: Instant::now(),
+          number: start.0,
+          start_time,
           personal_proposal: proposal,
 
           queue: vec![],
@@ -295,7 +311,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
                   sigs.push(sig);
                 }
 
-                let commit = Commit { validators, signature: N::SignatureScheme::aggregate(&sigs) };
+                let commit = Commit {
+                  round: msg.round,
+                  validators,
+                  signature: N::SignatureScheme::aggregate(&sigs),
+                };
                 debug_assert!(machine.network.read().await.verify_commit(block.id(), &commit));
 
                 let proposal = machine.network.write().await.add_block(block, commit);
@@ -325,7 +345,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
     // Verify the signature if this is a precommit
     if let Data::Precommit(Some((id, sig))) = &msg.data {
-      if !self.signer.verify(msg.sender, id.as_ref(), sig.clone()) {
+      if !self.signer.verify(msg.sender, &commit_msg(msg.round, id.as_ref()), sig.clone()) {
         // Since we verified this validator actually sent the message, they're malicious
         Err(TendermintError::Malicious(msg.sender))?;
       }
@@ -469,7 +489,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             self.locked = Some((self.round, block.id()));
             self.broadcast(Data::Precommit(Some((
               block.id(),
-              self.signer.sign(block.id().as_ref()),
+              self.signer.sign(&commit_msg(self.round, block.id().as_ref())),
             ))));
             return Ok(None);
           }
