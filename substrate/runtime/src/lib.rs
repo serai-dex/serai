@@ -19,7 +19,7 @@ use sp_version::RuntimeVersion;
 use frame_support::{
   traits::{ConstU8, ConstU32, ConstU64},
   weights::{
-    constants::{RocksDbWeight, ExtrinsicBaseWeight, BlockExecutionWeight, WEIGHT_PER_SECOND},
+    constants::{RocksDbWeight, WEIGHT_PER_SECOND},
     IdentityFee, Weight,
   },
   dispatch::DispatchClass,
@@ -91,13 +91,6 @@ pub fn native_version() -> NativeVersion {
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
-/// We assume that ~10% of the block weight is consumed by `on_initialize` handlers.
-/// This is used to limit the maximal weight of a single extrinsic.
-const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(10);
-
-/// We allow for 2 seconds of compute with a 6 second average block time.
-const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_ref_time(2 * WEIGHT_PER_SECOND.ref_time());
-
 // Unit = the base number of indivisible units for balances
 const UNIT: Balance = 1_000_000_000_000;
 const MILLIUNIT: Balance = 1_000_000_000;
@@ -116,24 +109,10 @@ parameter_types! {
   pub BlockLength: frame_system::limits::BlockLength =
     frame_system::limits::BlockLength::max_with_normal_ratio(1024 * 1024, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: frame_system::limits::BlockWeights =
-    frame_system::limits::BlockWeights::builder()
-      .base_block(BlockExecutionWeight::get())
-      .for_class(DispatchClass::all(), |weights| {
-        weights.base_extrinsic = ExtrinsicBaseWeight::get();
-      })
-      .for_class(DispatchClass::Normal, |weights| {
-        weights.max_total = Some(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT);
-      })
-      .for_class(DispatchClass::Operational, |weights| {
-        weights.max_total = Some(MAXIMUM_BLOCK_WEIGHT);
-        // Operational transactions have some extra reserved space, so that they
-        // are included even if block reached `MAXIMUM_BLOCK_WEIGHT`.
-        weights.reserved = Some(
-          MAXIMUM_BLOCK_WEIGHT - NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT
-        );
-      })
-      .avg_block_initialization(AVERAGE_ON_INITIALIZE_RATIO)
-      .build_or_panic();
+    frame_system::limits::BlockWeights::with_sensible_defaults(
+      (2u64 * WEIGHT_PER_SECOND).set_proof_size(u64::MAX),
+      NORMAL_DISPATCH_RATIO,
+    );
 
   pub const DepositPerItem: Balance = deposit(1, 0);
   pub const DepositPerByte: Balance = deposit(0, 1);
