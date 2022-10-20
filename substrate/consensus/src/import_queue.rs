@@ -134,4 +134,3 @@ where
     self.inner.import_block(block, new_cache).await.map_err(Into::into)
   }
 }
-
