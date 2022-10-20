@@ -5,11 +5,12 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+pub use sp_core::sr25519::Signature;
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys,
   traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, MultiSignature, Perbill,
+  ApplyExtrinsicResult, Perbill,
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -33,9 +34,6 @@ use pallet_transaction_payment::CurrencyAdapter;
 
 /// An index to a block.
 pub type BlockNumber = u32;
-
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
-pub type Signature = MultiSignature;
 
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
