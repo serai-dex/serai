@@ -13,11 +13,24 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+async-trait = "0.1"
+
 sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
+sp-inherents = { git = "https://github.com/serai-dex/substrate" }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }
+sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
+sp-api = { git = "https://github.com/serai-dex/substrate" }
+
+sp-consensus = { git = "https://github.com/serai-dex/substrate" }
+sc-consensus = { git = "https://github.com/serai-dex/substrate" }
+
+tendermint-machine = { path = "../tendermint" }
+
+# --
+
 sp-trie = { git = "https://github.com/serai-dex/substrate" }
 sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus = { git = "https://github.com/serai-dex/substrate" }
-sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
 sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
 sc-consensus-pow = { git = "https://github.com/serai-dex/substrate" }
@@ -26,12 +39,10 @@ sp-consensus-pow = { git = "https://github.com/serai-dex/substrate" }
 sc-network = { git = "https://github.com/serai-dex/substrate" }
 sc-service = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
 sc-executor = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 
 substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate" }
 
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
-sp-api = { git = "https://github.com/serai-dex/substrate" }
 
 serai-runtime = { path = "../runtime" }
 

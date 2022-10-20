@@ -9,7 +9,10 @@ use sc_service::TaskManager;
 use serai_runtime::{self, opaque::Block, RuntimeApi};
 
 mod algorithm;
-mod tendermint;
+
+mod signature_scheme;
+mod import;
+//mod tendermint;
 
 pub struct ExecutorDispatch;
 impl sc_executor::NativeExecutionDispatch for ExecutorDispatch {

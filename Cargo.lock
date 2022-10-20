@@ -7426,6 +7426,7 @@ checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 name = "serai-consensus"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "sc-basic-authorship",
  "sc-client-api",
  "sc-consensus",
@@ -7436,13 +7437,17 @@ dependencies = [
  "sc-transaction-pool",
  "serai-runtime",
  "sp-api",
+ "sp-application-crypto",
+ "sp-blockchain",
  "sp-consensus",
  "sp-consensus-pow",
  "sp-core",
+ "sp-inherents",
  "sp-runtime",
  "sp-timestamp",
  "sp-trie",
  "substrate-prometheus-endpoint",
+ "tendermint-machine",
  "tokio",
 ]
 
