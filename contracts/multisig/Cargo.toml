@@ -3,9 +3,19 @@ name = "serai-multisig"
 version = "0.1.0"
 description = "An ink! tracker for Serai's current multisig"
 license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/contracts/multisig"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+name = "serai_multisig"
+path = "lib.rs"
+crate-type = ["cdylib"]
 
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
@@ -21,11 +31,6 @@ serai-extension = { path = "../extension", default-features = false }
 
 [dev-dependencies]
 lazy_static = "1"
-
-[lib]
-name = "serai_multisig"
-path = "lib.rs"
-crate-type = ["cdylib"]
 
 [features]
 default = ["std"]

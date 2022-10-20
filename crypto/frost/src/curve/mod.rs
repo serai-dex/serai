@@ -6,8 +6,9 @@ use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
+use subtle::ConstantTimeEq;
 
-use ff::{PrimeField, PrimeFieldBits};
+use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{Group, GroupOps, GroupEncoding, prime::PrimeGroup};
 
 #[cfg(any(test, feature = "dalek"))]
@@ -27,7 +28,7 @@ pub use kp256::{P256, IetfP256Hram};
 #[cfg(feature = "ed448")]
 mod ed448;
 #[cfg(feature = "ed448")]
-pub use ed448::{Ed448, Ietf8032Ed448Hram, NonIetfEd448Hram};
+pub use ed448::{Ed448, Ietf8032Ed448Hram, IetfEd448Hram};
 
 /// Set of errors for curve-related operations, namely encoding and decoding.
 #[derive(Clone, Error, Debug)]
@@ -49,7 +50,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
   type F: PrimeField + PrimeFieldBits + Zeroize;
   /// Group element type.
-  type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize;
+  type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize + ConstantTimeEq;
 
   /// ID for this curve.
   const ID: &'static [u8];
@@ -81,6 +82,16 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
     Self::hash_to_F(b"rho", binding)
   }
 
+  #[allow(non_snake_case)]
+  fn random_F<R: RngCore + CryptoRng>(rng: &mut R) -> Self::F {
+    let mut res;
+    while {
+      res = Self::F::random(&mut *rng);
+      res.ct_eq(&Self::F::zero()).into()
+    } {}
+    res
+  }
+
   /// Securely generate a random nonce. H3 from the IETF draft.
   fn random_nonce<R: RngCore + CryptoRng>(mut secret: Self::F, rng: &mut R) -> Self::F {
     let mut seed = vec![0; 32];
@@ -89,12 +100,18 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
     let mut repr = secret.to_repr();
     secret.zeroize();
 
-    seed.extend(repr.as_ref());
+    let mut res;
+    while {
+      seed.extend(repr.as_ref());
+      res = Self::hash_to_F(b"nonce", &seed);
+      res.ct_eq(&Self::F::zero()).into()
+    } {
+      rng.fill_bytes(&mut seed);
+    }
+
     for i in repr.as_mut() {
       i.zeroize();
     }
-
-    let res = Self::hash_to_F(b"nonce", &seed);
     seed.zeroize();
     res
   }

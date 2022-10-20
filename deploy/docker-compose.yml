@@ -8,7 +8,7 @@ name: serai-dev
   # coins - node clients for coins only (BTC, ETH, XMR)
   # cluster-sm - Alice, Bob, Charlie
   # cluster-coins-sm - cluster-sm with coins
-  # cluter-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
+  # cluster-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
   # cluster-coins-lg - cluster-lg with coins
   # monero - full node monero only
   # bitcoin - full node bitcoin only
@@ -42,7 +42,6 @@ services:
       - "./serai/scripts:/scripts"
 
   serai-base:
-    &serai
     <<: *serai_defaults
     hostname: serai-base
     profiles:
@@ -52,7 +51,6 @@ services:
       NAME: base
 
   serai-alice:
-    &serai
     <<: *serai_defaults
     hostname: serai-alice
     profiles:
@@ -67,7 +65,6 @@ services:
       VALIDATOR: true
 
   serai-bob:
-    &serai
     <<: *serai_defaults
     hostname: serai-bob
     profiles:
@@ -81,7 +78,6 @@ services:
       NAME: Bob
 
   serai-charlie:
-    &serai
     <<: *serai_defaults
     hostname: serai-charlie
     profiles:
@@ -95,7 +91,6 @@ services:
       NAME: Charlie
 
   serai-dave:
-    &serai
     <<: *serai_defaults
     hostname: serai-dave
     profiles:
@@ -107,7 +102,6 @@ services:
       NAME: Dave
 
   serai-eve:
-    &serai
     <<: *serai_defaults
     hostname: serai-eve
     profiles:
@@ -119,7 +113,6 @@ services:
       NAME: Eve
 
   serai-ferdie:
-    &serai
     <<: *serai_defaults
     hostname: serai-ferdie
     profiles:
@@ -171,6 +164,5 @@ services:
       context: ./coins/monero/
     restart: unless-stopped
     volumes:
-      - "./coins/monero/temp:/temp"
       - "./coins/monero/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh

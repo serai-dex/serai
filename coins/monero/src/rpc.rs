@@ -23,12 +23,28 @@ pub struct JsonRpcResponse<T> {
   result: T,
 }
 
+#[derive(Deserialize, Debug)]
+struct TransactionResponse {
+  tx_hash: String,
+  block_height: usize,
+  as_hex: String,
+  pruned_as_hex: String,
+}
+#[derive(Deserialize, Debug)]
+struct TransactionsResponse {
+  #[serde(default)]
+  missed_tx: Vec<String>,
+  txs: Vec<TransactionResponse>,
+}
+
 #[derive(Clone, Error, Debug)]
 pub enum RpcError {
   #[error("internal error ({0})")]
   InternalError(String),
   #[error("connection error")]
   ConnectionError,
+  #[error("invalid node")]
+  InvalidNode,
   #[error("transactions not found")]
   TransactionsNotFound(Vec<[u8; 32]>),
   #[error("invalid point ({0})")]
@@ -40,7 +56,11 @@ pub enum RpcError {
 }
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
-  hex::decode(value).map_err(|_| RpcError::InternalError("Monero returned invalid hex".to_string()))
+  hex::decode(value).map_err(|_| RpcError::InvalidNode)
+}
+
+fn hash_hex(hash: &str) -> Result<[u8; 32], RpcError> {
+  rpc_hex(hash)?.try_into().map_err(|_| RpcError::InvalidNode)
 }
 
 fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
@@ -149,19 +169,6 @@ impl Rpc {
       return Ok(vec![]);
     }
 
-    #[derive(Deserialize, Debug)]
-    struct TransactionResponse {
-      tx_hash: String,
-      as_hex: String,
-      pruned_as_hex: String,
-    }
-    #[derive(Deserialize, Debug)]
-    struct TransactionsResponse {
-      #[serde(default)]
-      missed_tx: Vec<String>,
-      txs: Vec<TransactionResponse>,
-    }
-
     let txs: TransactionsResponse = self
       .rpc_call(
         "get_transactions",
@@ -173,7 +180,7 @@ impl Rpc {
 
     if !txs.missed_tx.is_empty() {
       Err(RpcError::TransactionsNotFound(
-        txs.missed_tx.iter().map(|hash| hex::decode(hash).unwrap().try_into().unwrap()).collect(),
+        txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
       ))?;
     }
 
@@ -181,11 +188,12 @@ impl Rpc {
       .txs
       .iter()
       .map(|res| {
-        let tx = Transaction::deserialize(&mut std::io::Cursor::new(
-          rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex }).unwrap(),
-        ))
-        .map_err(|_| {
-          RpcError::InvalidTransaction(hex::decode(&res.tx_hash).unwrap().try_into().unwrap())
+        let tx = Transaction::deserialize(&mut std::io::Cursor::new(rpc_hex(
+          if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex },
+        )?))
+        .map_err(|_| match hash_hex(&res.tx_hash) {
+          Ok(hash) => RpcError::InvalidTransaction(hash),
+          Err(err) => err,
         })?;
 
         // https://github.com/monero-project/monero/issues/8311
@@ -203,6 +211,19 @@ impl Rpc {
 
   pub async fn get_transaction(&self, tx: [u8; 32]) -> Result<Transaction, RpcError> {
     self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
+  }
+
+  pub async fn get_transaction_block_number(&self, tx: &[u8]) -> Result<usize, RpcError> {
+    let txs: TransactionsResponse =
+      self.rpc_call("get_transactions", Some(json!({ "txs_hashes": [hex::encode(tx)] }))).await?;
+
+    if !txs.missed_tx.is_empty() {
+      Err(RpcError::TransactionsNotFound(
+        txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
+      ))?;
+    }
+
+    Ok(txs.txs[0].block_height)
   }
 
   pub async fn get_block(&self, height: usize) -> Result<Block, RpcError> {

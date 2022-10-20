@@ -3,6 +3,7 @@ name = "serai-node"
 version = "0.1.0"
 description = "Serai network node, built over Substrate"
 license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/node"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
@@ -11,7 +12,7 @@ publish = false
 name = "serai-node"
 
 [dependencies]
-clap = { version = "3.1.18", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 
 sc-cli = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
 sp-core = { git = "https://github.com/serai-dex/substrate" }
@@ -31,7 +32,7 @@ frame-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 # These dependencies are used for the node template's RPCs
-jsonrpsee = { version = "0.15.1", features = ["server"] }
+jsonrpsee = { version = "0.15", features = ["server"] }
 sc-rpc = { git = "https://github.com/serai-dex/substrate" }
 sp-api = { git = "https://github.com/serai-dex/substrate" }
 sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
@@ -39,7 +40,6 @@ sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
 sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
-pallet-contracts-rpc = { git = "https://github.com/serai-dex/substrate", package = "pallet-contracts-rpc" }
 
 # These dependencies are used for runtime benchmarking
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }

@@ -74,7 +74,7 @@ dalek_curve!(
   IetfRistrettoHram,
   RistrettoPoint,
   b"ristretto",
-  b"FROST-RISTRETTO255-SHA512-v10",
+  b"FROST-RISTRETTO255-SHA512-v11",
   b"chal",
 );
 
@@ -85,6 +85,6 @@ dalek_curve!(
   IetfEd25519Hram,
   EdwardsPoint,
   b"edwards25519",
-  b"FROST-ED25519-SHA512-v10",
+  b"FROST-ED25519-SHA512-v11",
   b"",
 );

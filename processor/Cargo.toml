@@ -3,35 +3,39 @@ name = "serai-processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/processor"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 async-trait = "0.1"
 rand_core = "0.6"
 thiserror = "1"
 
-hex = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-
-sha3 = "0.10"
-blake2 = "0.10"
-
 group = "0.12"
-k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
+
 curve25519-dalek = { version = "3", features = ["std"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
-frost = { package = "modular-frost", path = "../crypto/frost", features = ["secp256k1", "ed25519"] }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 [dev-dependencies]
-group = "0.12"
+rand_core = "0.6"
+
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
+
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519", "tests"] }

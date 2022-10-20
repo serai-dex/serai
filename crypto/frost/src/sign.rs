@@ -7,6 +7,7 @@ use std::{
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
+use subtle::ConstantTimeEq;
 
 use transcript::Transcript;
 
@@ -97,8 +98,6 @@ impl<C: Curve> Drop for PreprocessPackage<C> {
 }
 impl<C: Curve> ZeroizeOnDrop for PreprocessPackage<C> {}
 
-// This library unifies the preprocessing step with signing due to security concerns and to provide
-// a simpler UX
 fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   params: &mut Params<C, A>,
@@ -202,14 +201,20 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
       // consistency. While this is suboptimal, it maintains IETF compliance, and Algorithm is
       // documented accordingly
       let transcript = |t: &mut A::Transcript, commitments: [C::G; 2]| {
+        if commitments[0].ct_eq(&C::G::identity()).into() ||
+          commitments[1].ct_eq(&C::G::identity()).into()
+        {
+          Err(FrostError::InvalidCommitment(*l))?;
+        }
         t.append_message(b"commitment_D", commitments[0].to_bytes().as_ref());
         t.append_message(b"commitment_E", commitments[1].to_bytes().as_ref());
+        Ok(())
       };
 
       if *l == params.keys.params().i {
         for nonce_commitments in &our_preprocess.commitments {
           for commitments in nonce_commitments {
-            transcript(params.algorithm.transcript(), *commitments);
+            transcript(params.algorithm.transcript(), *commitments).unwrap();
           }
         }
 
@@ -227,7 +232,7 @@ fn sign_with_share<Re: Read, C: Curve, A: Algorithm<C>>(
           commitments.push(Vec::with_capacity(nonce_generators.len()));
           for _ in 0 .. nonce_generators.len() {
             commitments[n].push(read_D_E::<_, C>(&mut cursor, *l)?);
-            transcript(params.algorithm.transcript(), commitments[n][commitments[n].len() - 1]);
+            transcript(params.algorithm.transcript(), commitments[n][commitments[n].len() - 1])?;
           }
 
           if nonce_generators.len() >= 2 {
@@ -426,6 +431,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })
   }
 
+  #[cfg(any(test, feature = "tests"))]
   pub(crate) fn unsafe_override_preprocess(
     self,
     preprocess: PreprocessPackage<C>,

@@ -3,8 +3,14 @@ name = "ethereum-serai"
 version = "0.1.0"
 description = "An Ethereum library supporting Schnorr signing and on-chain verification"
 license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/ethereum"
 authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabethjbinks@gmail.com>"]
 edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 hex-literal = "0.3"
@@ -24,8 +30,8 @@ eyre = "0.6"
 
 ethers = { version = "0.14", features = ["abigen", "ethers-solc"] }
 
-[dev-dependencies]
-tokio = { version = "1", features = ["macros"] }
-
 [build-dependencies]
 ethers-solc = "0.14"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
