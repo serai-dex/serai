@@ -15,6 +15,12 @@ use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFull
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sc_client_api::{BlockBackend, Backend};
 
+<<<<<<< HEAD
+=======
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sc_executor::NativeElseWasmExecutor;
+use sc_client_api::Backend;
+>>>>>>> b8bff650 (Move the node over to the new SelectChain)
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{opaque::Block, RuntimeApi};
@@ -30,11 +36,15 @@ pub type Executor = WasmExecutor<
 >;
 
 type FullBackend = sc_service::TFullBackend<Block>;
+<<<<<<< HEAD
 pub type FullClient = TFullClient<Block, RuntimeApi, Executor>;
 
 type SelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 type GrandpaBlockImport = grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, SelectChain>;
 type BabeBlockImport = sc_consensus_babe::BabeBlockImport<Block, FullClient, GrandpaBlockImport>;
+=======
+type FullSelectChain = serai_consensus::TendermintSelectChain<Block, FullBackend>;
+>>>>>>> b8bff650 (Move the node over to the new SelectChain)
 
 type PartialComponents = sc_service::PartialComponents<
   FullClient,
@@ -92,8 +102,6 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     telemetry
   });
 
-  let select_chain = sc_consensus::LongestChain::new(backend.clone());
-
   let transaction_pool = sc_transaction_pool::BasicPool::new_full(
     config.transaction_pool.clone(),
     config.role.is_authority().into(),
@@ -102,6 +110,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     client.clone(),
   );
 
+<<<<<<< HEAD
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
     &client,
@@ -136,6 +145,12 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   // We don't have anything to do with it though
   // This won't grow in size, so forgetting this isn't a disastrous memleak
   std::mem::forget(babe_handle);
+=======
+  let import_queue =
+    serai_consensus::import_queue(&task_manager, client.clone(), config.prometheus_registry())?;
+
+  let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
+>>>>>>> b8bff650 (Move the node over to the new SelectChain)
 
   Ok(sc_service::PartialComponents {
     client,
@@ -243,6 +258,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     telemetry: telemetry.as_mut(),
   })?;
 
+<<<<<<< HEAD
   if let sc_service::config::Role::Authority { .. } = &role {
     let slot_duration = babe_link.config().slot_duration();
     let babe_config = sc_consensus_babe::BabeParams {
@@ -328,6 +344,15 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
         shared_voter_state,
         offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
       })?,
+=======
+  if role.is_authority() {
+    serai_consensus::authority(
+      &task_manager,
+      client,
+      network,
+      transaction_pool,
+      prometheus_registry.as_ref(),
+>>>>>>> b8bff650 (Move the node over to the new SelectChain)
     );
   }
 
