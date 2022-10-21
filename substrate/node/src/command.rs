@@ -117,7 +117,7 @@ pub fn run() -> sc_cli::Result<()> {
       }
 
       BenchmarkCmd::Extrinsic(cmd) => {
-        let PartialComponents { client, .. } = service::new_partial(&config)?;
+        let client = service::new_partial(&config)?.client;
         cmd.run(
           client.clone(),
           inherent_benchmark_data()?,
