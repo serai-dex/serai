@@ -1,21 +1,23 @@
-use std::{marker::Sync, sync::Arc, time::Duration};
+use std::sync::Arc;
+
+use sp_api::TransactionFor;
+use sp_consensus::Error;
+
+use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
+use sc_service::{TaskManager, TFullClient};
 
 use substrate_prometheus_endpoint::Registry;
 
-use sc_consensus_pow as sc_pow;
-use sc_executor::NativeElseWasmExecutor;
-use sc_service::TaskManager;
-
 use serai_runtime::{self, opaque::Block, RuntimeApi};
 
-mod algorithm;
-
 mod signature_scheme;
-mod import;
-//mod tendermint;
+mod weights;
+
+mod import_queue;
+use import_queue::TendermintImportQueue;
 
 pub struct ExecutorDispatch;
-impl sc_executor::NativeExecutionDispatch for ExecutorDispatch {
+impl NativeExecutionDispatch for ExecutorDispatch {
   #[cfg(feature = "runtime-benchmarks")]
   type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
   #[cfg(not(feature = "runtime-benchmarks"))]
@@ -25,41 +27,40 @@ impl sc_executor::NativeExecutionDispatch for ExecutorDispatch {
     serai_runtime::api::dispatch(method, data)
   }
 
-  fn native_version() -> sc_executor::NativeVersion {
+  fn native_version() -> NativeVersion {
     serai_runtime::native_version()
   }
 }
 
-pub type FullClient =
-  sc_service::TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
+pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
-type Db = sp_trie::PrefixedMemoryDB<sp_runtime::traits::BlakeTwo256>;
-
-pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
+pub fn import_queue(
   task_manager: &TaskManager,
   client: Arc<FullClient>,
-  select_chain: S,
   registry: Option<&Registry>,
-) -> Result<sc_pow::PowImportQueue<Block, Db>, sp_consensus::Error> {
-  let pow_block_import = Box::new(sc_pow::PowBlockImport::new(
+) -> Result<TendermintImportQueue<Block, TransactionFor<FullClient, Block>>, Error> {
+  Ok(import_queue::import_queue(
     client.clone(),
     client,
-    algorithm::AcceptAny,
-    0,
-    select_chain,
-    |_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) },
-  ));
-
-  sc_pow::import_queue(
-    pow_block_import,
-    None,
-    algorithm::AcceptAny,
+    Arc::new(|_, _| async { Ok(()) }),
     &task_manager.spawn_essential_handle(),
     registry,
-  )
+  ))
 }
 
-// Produce a block every 5 seconds
+// If we're an authority, produce blocks
+pub fn authority(
+  task_manager: &TaskManager,
+  client: Arc<FullClient>,
+  network: Arc<sc_network::NetworkService<Block, <Block as sp_runtime::traits::Block>::Hash>>,
+  pool: Arc<sc_transaction_pool::FullPool<Block, FullClient>>,
+  registry: Option<&Registry>,
+) {
+  todo!()
+}
+
+/*
+// Produce a block every 6 seconds
 async fn produce<
   Block: sp_api::BlockT<Hash = sp_core::H256>,
   Algorithm: sc_pow::PowAlgorithm<Block, Difficulty = sp_core::U256> + Send + Sync + 'static,
@@ -126,3 +127,4 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
 
   task_manager.spawn_essential_handle().spawn("producer", None, produce(worker));
 }
+*/
