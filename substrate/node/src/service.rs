@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_executor::NativeElseWasmExecutor;
+use sc_client_api::Backend;
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
 pub(crate) use serai_consensus::{ExecutorDispatch, FullClient};
 
 type FullBackend = sc_service::TFullBackend<Block>;
-type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
+type FullSelectChain = serai_consensus::TendermintSelectChain<Block, FullBackend>;
 
 type PartialComponents = sc_service::PartialComponents<
   FullClient,
@@ -55,8 +56,6 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     telemetry
   });
 
-  let select_chain = sc_consensus::LongestChain::new(backend.clone());
-
   let transaction_pool = sc_transaction_pool::BasicPool::new_full(
     config.transaction_pool.clone(),
     config.role.is_authority().into(),
@@ -65,12 +64,10 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     client.clone(),
   );
 
-  let import_queue = serai_consensus::import_queue(
-    &task_manager,
-    client.clone(),
-    select_chain.clone(),
-    config.prometheus_registry(),
-  )?;
+  let import_queue =
+    serai_consensus::import_queue(&task_manager, client.clone(), config.prometheus_registry())?;
+
+  let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
 
   Ok(sc_service::PartialComponents {
     client,
@@ -153,7 +150,6 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       client,
       network,
       transaction_pool,
-      select_chain,
       prometheus_registry.as_ref(),
     );
   }
