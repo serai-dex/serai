@@ -42,7 +42,7 @@ pub fn import_queue(
   Ok(import_queue::import_queue(
     client.clone(),
     client,
-    Arc::new(|_, _| async { Ok(()) }),
+    Arc::new(|_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) }),
     &task_manager.spawn_essential_handle(),
     registry,
   ))

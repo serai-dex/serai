@@ -13,41 +13,40 @@ name = "serai-node"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+jsonrpsee = { version = "0.15", features = ["server"] }
 
-sc-cli = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
 sp-core = { git = "https://github.com/serai-dex/substrate" }
-sc-executor = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
-sc-service = { git = "https://github.com/serai-dex/substrate", features = ["wasmtime"] }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }
+sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
+sp-inherents = { git = "https://github.com/serai-dex/substrate" }
+sp-keyring = { git = "https://github.com/serai-dex/substrate" }
+sp-api = { git = "https://github.com/serai-dex/substrate" }
+sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
+sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
+
+sc-cli = { git = "https://github.com/serai-dex/substrate" }
+sc-executor = { git = "https://github.com/serai-dex/substrate" }
+sc-service = { git = "https://github.com/serai-dex/substrate" }
 sc-telemetry = { git = "https://github.com/serai-dex/substrate" }
 sc-keystore = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
 sc-consensus = { git = "https://github.com/serai-dex/substrate" }
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
-sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
-sp-inherents = { git = "https://github.com/serai-dex/substrate" }
-sp-keyring = { git = "https://github.com/serai-dex/substrate" }
+
 frame-system = { git = "https://github.com/serai-dex/substrate" }
+frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
+frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-# These dependencies are used for the node template's RPCs
-jsonrpsee = { version = "0.15", features = ["server"] }
 sc-rpc = { git = "https://github.com/serai-dex/substrate" }
-sp-api = { git = "https://github.com/serai-dex/substrate" }
 sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
-sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
-sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
+
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
-# These dependencies are used for runtime benchmarking
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
-frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate" }
-
-# Local dependencies
-serai-consensus = { path = "../consensus" }
 serai-runtime = { path = "../runtime" }
+serai-consensus = { path = "../consensus" }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate.git" }
@@ -57,5 +56,6 @@ default = []
 runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
   "frame-benchmarking-cli/runtime-benchmarks",
+
   "serai-runtime/runtime-benchmarks"
 ]

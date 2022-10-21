@@ -2592,21 +2592,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "frame-system-benchmarking"
-version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-core",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "frame-system-rpc-runtime-api"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
@@ -6578,31 +6563,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-consensus-pow"
-version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
-dependencies = [
- "async-trait",
- "futures",
- "futures-timer",
- "log",
- "parity-scale-codec",
- "parking_lot 0.12.1",
- "sc-client-api",
- "sc-consensus",
- "sp-api",
- "sp-block-builder",
- "sp-blockchain",
- "sp-consensus",
- "sp-consensus-pow",
- "sp-core",
- "sp-inherents",
- "sp-runtime",
- "substrate-prometheus-endpoint",
- "thiserror",
-]
-
-[[package]]
 name = "sc-executor"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
@@ -7430,7 +7390,6 @@ dependencies = [
  "sc-basic-authorship",
  "sc-client-api",
  "sc-consensus",
- "sc-consensus-pow",
  "sc-executor",
  "sc-network",
  "sc-service",
@@ -7440,12 +7399,10 @@ dependencies = [
  "sp-application-crypto",
  "sp-blockchain",
  "sp-consensus",
- "sp-consensus-pow",
  "sp-core",
  "sp-inherents",
  "sp-runtime",
  "sp-timestamp",
- "sp-trie",
  "substrate-prometheus-endpoint",
  "tendermint-machine",
  "tokio",
@@ -7539,7 +7496,6 @@ dependencies = [
  "frame-executive",
  "frame-support",
  "frame-system",
- "frame-system-benchmarking",
  "frame-system-rpc-runtime-api",
  "hex-literal",
  "pallet-balances",
@@ -7946,18 +7902,6 @@ dependencies = [
  "sp-std",
  "sp-version",
  "thiserror",
-]
-
-[[package]]
-name = "sp-consensus-pow"
-version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
-dependencies = [
- "parity-scale-codec",
- "sp-api",
- "sp-core",
- "sp-runtime",
- "sp-std",
 ]
 
 [[package]]
