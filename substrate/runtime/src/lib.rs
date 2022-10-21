@@ -76,12 +76,17 @@ use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 pub type BlockNumber = u64;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /// Nonce of a transaction in the chain, for a given account.
 pub type Nonce = u32;
 =======
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+=======
+/// Account ID type, equivalent to a public key
+pub type AccountId = sp_core::sr25519::Public;
+>>>>>>> 0a58d669 (Minor tweaks)
 
 /// Balance of an account.
 pub type Balance = u64;

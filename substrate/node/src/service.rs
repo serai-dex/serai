@@ -19,8 +19,11 @@ use sc_client_api::{BlockBackend, Backend};
 =======
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_executor::NativeElseWasmExecutor;
+<<<<<<< HEAD
 use sc_client_api::Backend;
 >>>>>>> b8bff650 (Move the node over to the new SelectChain)
+=======
+>>>>>>> 0a58d669 (Minor tweaks)
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{opaque::Block, RuntimeApi};
@@ -171,7 +174,12 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     mut task_manager,
     import_queue,
     keystore_container,
+<<<<<<< HEAD
     select_chain,
+=======
+    select_chain: _,
+    other: mut telemetry,
+>>>>>>> 0a58d669 (Minor tweaks)
     transaction_pool,
     other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
   } = new_partial(&config)?;
