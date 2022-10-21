@@ -25,7 +25,7 @@ sp-api = { git = "https://github.com/serai-dex/substrate" }
 sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 sc-consensus = { git = "https://github.com/serai-dex/substrate" }
 
-tendermint-machine = { path = "../tendermint" }
+tendermint-machine = { path = "../tendermint", features = ["substrate"] }
 
 # --
 
