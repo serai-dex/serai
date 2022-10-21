@@ -38,11 +38,17 @@ frame-system = { git = "https://github.com/serai-dex/substrate", default-feature
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-executive = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
+<<<<<<< HEAD
 
 serai-primitives = { path = "../primitives", default-features = false }
 
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+=======
+
+pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-randomness-collective-flip = { git = "https://github.com/serai-dex/substrate", default-features = false }
+>>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-assets = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -91,6 +97,7 @@ std = [
   "frame-support/std",
   "frame-executive/std",
 
+<<<<<<< HEAD
   "serai-primitives/std",
 
   "pallet-timestamp/std",
@@ -108,12 +115,26 @@ std = [
   "pallet-grandpa/std",
 
   "pallet-authority-discovery/std",
+=======
+  "pallet-timestamp/std",
+  "pallet-randomness-collective-flip/std",
+  "pallet-balances/std",
+  "pallet-transaction-payment/std",
+
+	"pallet-contracts/std",
+	"pallet-contracts-primitives/std",
+>>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
 
   "frame-system-rpc-runtime-api/std",
   "pallet-transaction-payment-rpc-runtime-api/std",
 ]
 
 runtime-benchmarks = [
+<<<<<<< HEAD
+=======
+  "hex-literal",
+
+>>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
   "sp-runtime/runtime-benchmarks",
 
   "frame-system/runtime-benchmarks",

@@ -3177,6 +3177,7 @@ dependencies = [
 [[package]]
 name = "frame-system-rpc-runtime-api"
 version = "4.0.0-dev"
+<<<<<<< HEAD
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
 dependencies = [
  "parity-scale-codec",
@@ -3198,6 +3199,9 @@ dependencies = [
 [[package]]
 name = "frost-schnorrkel"
 version = "0.1.0"
+=======
+source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
+>>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
 dependencies = [
  "ciphersuite",
  "flexible-transcript",
@@ -7604,6 +7608,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "sc-consensus-babe"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
@@ -7717,6 +7722,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
 name = "sc-executor"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
@@ -8656,7 +8663,6 @@ dependencies = [
  "sc-basic-authorship",
  "sc-client-api",
  "sc-consensus",
- "sc-consensus-pow",
  "sc-executor",
  "sc-network",
  "sc-service",
@@ -8666,12 +8672,10 @@ dependencies = [
  "sp-application-crypto",
  "sp-blockchain",
  "sp-consensus",
- "sp-consensus-pow",
  "sp-core",
  "sp-inherents",
  "sp-runtime",
  "sp-timestamp",
- "sp-trie",
  "substrate-prometheus-endpoint",
  "tendermint-machine",
  "tokio",
@@ -9479,6 +9483,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "sp-consensus-babe"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
@@ -9528,6 +9533,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
 name = "sp-core"
 version = "21.0.0"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
