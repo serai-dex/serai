@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_executor::NativeElseWasmExecutor;
-use sc_client_api::Backend;
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
@@ -88,7 +87,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     mut task_manager,
     import_queue,
     keystore_container,
-    select_chain,
+    select_chain: _,
     other: mut telemetry,
     transaction_pool,
   } = new_partial(&config)?;

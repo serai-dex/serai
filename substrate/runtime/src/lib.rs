@@ -35,9 +35,6 @@ use pallet_transaction_payment::CurrencyAdapter;
 /// An index to a block.
 pub type BlockNumber = u32;
 
-/// Signature type
-pub type Signature = sp_core::sr25519::Signature;
-
 /// Account ID type, equivalent to a public key
 pub type AccountId = sp_core::sr25519::Public;
 
