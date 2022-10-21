@@ -37,6 +37,7 @@ use sc_consensus::{
   ForkChoiceStrategy,
   BlockCheckParams,
   BlockImportParams,
+  Verifier,
   ImportResult,
   BlockImport,
   JustificationImport,
@@ -217,4 +218,170 @@ impl<
 
     Ok(())
   }
+}
+
+#[async_trait]
+impl<
+    B: Block,
+    Be: Backend<B> + 'static,
+    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
+    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    CIDP: CreateInherentDataProviders<B, ()> + 'static,
+  > BlockImport<B> for TendermintImport<B, Be, C, I, CIDP>
+where
+  I::Error: Into<Error>,
+{
+  type Error = Error;
+  type Transaction = TransactionFor<C, B>;
+
+  // TODO: Is there a DoS where you send a block without justifications, causing it to error,
+  // yet adding it to the blacklist in the process preventing further syncing?
+  async fn check_block(
+    &mut self,
+    mut block: BlockCheckParams<B>,
+  ) -> Result<ImportResult, Self::Error> {
+    self.verify_order(block.parent_hash, block.number)?;
+
+    // Does not verify origin here as origin only applies to unfinalized blocks
+    // We don't have context on if this block has justifications or not
+
+    block.allow_missing_state = false;
+    block.allow_missing_parent = false;
+
+    self.inner.write().await.check_block(block).await.map_err(Into::into)
+  }
+
+  async fn import_block(
+    &mut self,
+    mut block: BlockImportParams<B, TransactionFor<C, B>>,
+    new_cache: HashMap<CacheKeyId, Vec<u8>>,
+  ) -> Result<ImportResult, Self::Error> {
+    self.check(&mut block).await?;
+    self.inner.write().await.import_block(block, new_cache).await.map_err(Into::into)
+  }
+}
+
+#[async_trait]
+impl<
+    B: Block,
+    Be: Backend<B> + 'static,
+    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
+    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    CIDP: CreateInherentDataProviders<B, ()> + 'static,
+  > JustificationImport<B> for TendermintImport<B, Be, C, I, CIDP>
+{
+  type Error = Error;
+
+  async fn on_start(&mut self) -> Vec<(B::Hash, <B::Header as Header>::Number)> {
+    vec![]
+  }
+
+  async fn import_justification(
+    &mut self,
+    hash: B::Hash,
+    _: <B::Header as Header>::Number,
+    justification: Justification,
+  ) -> Result<(), Error> {
+    self.verify_justification(hash, &justification)?;
+    self
+      .client
+      .finalize_block(BlockId::Hash(hash), Some(justification), true)
+      .map_err(|_| Error::InvalidJustification)
+  }
+}
+
+#[async_trait]
+impl<
+    B: Block,
+    Be: Backend<B> + 'static,
+    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
+    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    CIDP: CreateInherentDataProviders<B, ()> + 'static,
+  > Verifier<B> for TendermintImport<B, Be, C, I, CIDP>
+{
+  async fn verify(
+    &mut self,
+    mut block: BlockImportParams<B, ()>,
+  ) -> Result<(BlockImportParams<B, ()>, Option<Vec<(CacheKeyId, Vec<u8>)>>), String> {
+    self.check(&mut block).await.map_err(|e| format!("{}", e))?;
+    Ok((block, None))
+  }
+}
+
+#[async_trait]
+impl<
+    B: Block,
+    Be: Backend<B> + 'static,
+    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
+    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    CIDP: CreateInherentDataProviders<B, ()> + 'static,
+  > Network for TendermintImport<B, Be, C, I, CIDP>
+{
+  type ValidatorId = u16;
+  type SignatureScheme = TendermintSigner;
+  type Weights = TendermintWeights;
+  type Block = B;
+
+  const BLOCK_TIME: u32 = { (serai_runtime::MILLISECS_PER_BLOCK / 1000) as u32 };
+
+  fn signature_scheme(&self) -> Arc<TendermintSigner> {
+    todo!()
+  }
+
+  fn weights(&self) -> Arc<TendermintWeights> {
+    Arc::new(TendermintWeights)
+  }
+
+  async fn broadcast(&mut self, msg: SignedMessage<u16, Self::Block, Signature>) {
+    todo!()
+  }
+
+  async fn slash(&mut self, validator: u16) {
+    todo!()
+  }
+
+  fn validate(&mut self, block: &B) -> Result<(), BlockError> {
+    todo!()
+    // self.check_block().map_err(|_| BlockError::Temporal)?;
+    // self.import_block().map_err(|_| BlockError::Temporal)?;
+    // Ok(())
+  }
+
+  fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
+    todo!()
+  }
+}
+
+pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
+
+pub fn import_queue<
+  B: Block,
+  Be: Backend<B> + 'static,
+  C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
+  I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+  CIDP: CreateInherentDataProviders<B, ()> + 'static,
+>(
+  client: Arc<C>,
+  inner: I,
+  providers: Arc<CIDP>,
+  spawner: &impl sp_core::traits::SpawnEssentialNamed,
+  registry: Option<&Registry>,
+) -> TendermintImportQueue<B, TransactionFor<C, B>>
+where
+  I::Error: Into<Error>,
+{
+  let import = TendermintImport {
+    _block: PhantomData,
+    _backend: PhantomData,
+
+    importing_block: Arc::new(RwLock::new(None)),
+
+    client,
+    inner: Arc::new(AsyncRwLock::new(inner)),
+    providers,
+  };
+  let boxed = Box::new(import.clone());
+
+  // TODO: Fully read BasicQueue in otder to understand it
+  BasicQueue::new(import, boxed.clone(), Some(boxed), spawner, registry)
 }
