@@ -1,4 +1,16 @@
 use std::{marker::PhantomData, sync::Arc, collections::HashMap};
+// The Tendermint machine will call add_block for any block which is committed to, regardless of
+// validity. To determine validity, it expects a validate function, which Substrate doesn't
+// directly offer, and an add function. In order to comply with Serai's modified view of inherent
+// transactions, validate MUST check inherents, yet add_block must not.
+//
+// In order to acquire a validate function, any block proposed by a legitimate proposer is
+// imported. This performs full validation and makes the block available as a tip. While this would
+// be incredibly unsafe thanks to the unchecked inherents, it's defined as a tip with less work,
+// despite being a child of some parent. This means it won't be moved to nor operated on by the
+// node.
+//
+// When Tendermint completes, the block is finalized, setting it as the tip regardless of work.
 
 use sp_core::Decode;
 use sp_inherents::CreateInherentDataProviders;
@@ -19,6 +31,7 @@ use sc_consensus::{
 use tendermint_machine::ext::*;
 
 use crate::signature_scheme::TendermintSigner;
+const CONSENSUS_ID: [u8; 4] = *b"tend";
 
 struct TendermintBlockImport<
   B: Block,
@@ -47,21 +60,6 @@ impl<
     todo!()
   }
 }
-
-// The Tendermint machine will call add_block for any block which is committed to, regardless of
-// validity. To determine validity, it expects a validate function, which Substrate doesn't
-// directly offer, and an add function. In order to comply with Serai's modified view of inherent
-// transactions, validate MUST check inherents, yet add_block must not.
-//
-// In order to acquire a validate function, any block proposed by a legitimate proposer is
-// imported. This performs full validation and makes the block available as a tip. While this would
-// be incredibly unsafe thanks to the unchecked inherents, it's defined as a tip with less work,
-// despite being a child of some parent. This means it won't be moved to nor operated on by the
-// node.
-//
-// When Tendermint completes, the block is finalized, setting it as the tip regardless of work.
-
-const CONSENSUS_ID: [u8; 4] = *b"tend";
 
 #[async_trait::async_trait]
 impl<
