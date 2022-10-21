@@ -16,6 +16,9 @@ mod weights;
 mod import_queue;
 use import_queue::TendermintImportQueue;
 
+mod select_chain;
+pub use select_chain::TendermintSelectChain;
+
 pub struct ExecutorDispatch;
 impl NativeExecutionDispatch for ExecutorDispatch {
   #[cfg(feature = "runtime-benchmarks")]
