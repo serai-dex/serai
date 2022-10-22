@@ -1,7 +1,6 @@
 use std::{
   marker::PhantomData,
   sync::{Arc, RwLock},
-  cmp::Ordering,
   time::Duration,
 };
 
@@ -162,7 +161,7 @@ where
   }
 
   // Errors if the justification isn't valid
-  fn verify_justification(
+  pub(crate) fn verify_justification(
     &self,
     hash: B::Hash,
     justification: &Justification,
@@ -192,7 +191,7 @@ where
         }
         self.verify_justification(block.header.hash(), next.unwrap())?;
 
-        block.finalized = true; // TODO: Is this setting valid?
+        block.finalized = true;
       }
     }
     Ok(())
@@ -271,32 +270,6 @@ where
       .await
       .expect("Failed to crate a new block proposal")
       .block
-  }
-
-  pub(crate) fn import_justification_actual(
-    &mut self,
-    number: <B::Header as Header>::Number,
-    hash: B::Hash,
-    justification: Justification,
-  ) -> Result<(), Error> {
-    let info = self.client.info();
-    match info.best_number.cmp(&number) {
-      Ordering::Greater => return Ok(()),
-      Ordering::Equal => {
-        if info.best_hash == hash {
-          return Ok(());
-        } else {
-          Err(Error::InvalidJustification)?
-        }
-      }
-      Ordering::Less => (),
-    }
-
-    self.verify_justification(hash, &justification)?;
-    self
-      .client
-      .finalize_block(BlockId::Hash(hash), Some(justification), true)
-      .map_err(|_| Error::InvalidJustification)
   }
 }
 
@@ -379,13 +352,16 @@ where
   }
 
   async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
+    let hash = block.hash();
+    let justification = (CONSENSUS_ID, commit.encode());
+    debug_assert!(self.verify_justification(hash, &justification).is_ok());
+
     self
-      .import_justification_actual(
-        *block.header().number(),
-        block.hash(),
-        (CONSENSUS_ID, commit.encode()),
-      )
+      .client
+      .finalize_block(BlockId::Hash(hash), Some(justification), true)
+      .map_err(|_| Error::InvalidJustification)
       .unwrap();
+
     self.get_proposal(block.header()).await
   }
 }

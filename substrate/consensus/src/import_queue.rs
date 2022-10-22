@@ -109,9 +109,10 @@ where
   };
 
   let boxed = Box::new(import.clone());
+  // Use None for the justification importer since justifications always come with blocks
+  // Therefore, they're never imported after the fact, mandating a importer
+  let queue = || BasicQueue::new(import.clone(), boxed.clone(), None, spawner, registry);
 
-  let queue =
-    || BasicQueue::new(import.clone(), boxed.clone(), Some(boxed.clone()), spawner, registry);
   *futures::executor::block_on(import.queue.write()) = Some(queue());
   (authority, queue())
 }

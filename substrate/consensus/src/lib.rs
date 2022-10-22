@@ -15,7 +15,6 @@ mod weights;
 
 mod tendermint;
 mod block_import;
-mod justification_import;
 mod verifier;
 
 mod import_queue;
