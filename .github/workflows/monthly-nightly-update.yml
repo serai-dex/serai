@@ -28,7 +28,7 @@ jobs:
           git commit -m "Update nightly"
           git push -u origin $(date +"nightly-%Y-%m")
 
-          echo "::set-output name=commit::$(git rev-parse HEAD)"
+          echo "name=commit::$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Pull Request
         uses: actions/github-script@v6

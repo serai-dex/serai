@@ -34,7 +34,7 @@ runs:
     - name: Get nightly version to use
       id: nightly
       shell: bash
-      run: echo "::set-output name=version::$(cat .github/nightly-version)"
+      run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
     - name: Install WASM toolchain
       uses: actions-rs/toolchain@v1

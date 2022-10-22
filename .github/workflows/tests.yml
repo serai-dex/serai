@@ -17,7 +17,7 @@ jobs:
 
       - name: Get nightly version to use
         id: nightly
-        run: echo "::set-output name=version::$(cat .github/nightly-version)"
+        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
@@ -49,7 +49,7 @@ jobs:
 
       - name: Get nightly version to use
         id: nightly
-        run: echo "::set-output name=version::$(cat .github/nightly-version)"
+        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       # Doesn't grab the cache as it's not needed
       - name: Install rustfmt
