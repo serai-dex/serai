@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, future::Future};
 
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_executor::NativeElseWasmExecutor;
@@ -19,7 +19,9 @@ type PartialComponents = sc_service::PartialComponents<
   Option<Telemetry>,
 >;
 
-pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceError> {
+pub fn new_partial(
+  config: &Configuration,
+) -> Result<(impl Future<Output = ()>, PartialComponents), ServiceError> {
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
@@ -63,38 +65,44 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     client.clone(),
   );
 
-  let import_queue = serai_consensus::import_queue(
+  let (authority, import_queue) = serai_consensus::import_queue(
     &task_manager,
     client.clone(),
     transaction_pool.clone(),
     config.prometheus_registry(),
-  )?;
+  );
 
   let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
 
-  Ok(sc_service::PartialComponents {
-    client,
-    backend,
-    task_manager,
-    import_queue,
-    keystore_container,
-    select_chain,
-    transaction_pool,
-    other: telemetry,
-  })
+  Ok((
+    authority,
+    sc_service::PartialComponents {
+      client,
+      backend,
+      task_manager,
+      import_queue,
+      keystore_container,
+      select_chain,
+      transaction_pool,
+      other: telemetry,
+    },
+  ))
 }
 
-pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
-  let sc_service::PartialComponents {
-    client,
-    backend,
-    mut task_manager,
-    import_queue,
-    keystore_container,
-    select_chain: _,
-    other: mut telemetry,
-    transaction_pool,
-  } = new_partial(&config)?;
+pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
+  let (
+    authority,
+    sc_service::PartialComponents {
+      client,
+      backend,
+      mut task_manager,
+      import_queue,
+      keystore_container,
+      select_chain: _,
+      other: mut telemetry,
+      transaction_pool,
+    },
+  ) = new_partial(&config)?;
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter) =
     sc_service::build_network(sc_service::BuildNetworkParams {
@@ -116,9 +124,6 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     );
   }
 
-  let role = config.role.clone();
-  let prometheus_registry = config.prometheus_registry().cloned();
-
   let rpc_extensions_builder = {
     let client = client.clone();
     let pool = transaction_pool.clone();
@@ -132,6 +137,8 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       .map_err(Into::into)
     })
   };
+
+  let is_authority = config.role.is_authority();
 
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
@@ -147,14 +154,8 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     telemetry: telemetry.as_mut(),
   })?;
 
-  if role.is_authority() {
-    serai_consensus::authority(
-      &task_manager,
-      client,
-      network,
-      transaction_pool,
-      prometheus_registry.as_ref(),
-    );
+  if is_authority {
+    authority.await;
   }
 
   network_starter.start_network();

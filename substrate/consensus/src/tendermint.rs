@@ -28,7 +28,7 @@ use sc_client_api::{Backend, Finalizer};
 
 use tendermint_machine::{
   ext::{BlockError, Commit, Network},
-  SignedMessage,
+  SignedMessage, TendermintHandle,
 };
 
 use crate::{
@@ -45,13 +45,16 @@ pub(crate) struct TendermintImport<
   I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
   CIDP: CreateInherentDataProviders<B, ()> + 'static,
   E: Send + Sync + Environment<B> + 'static,
-> {
+> where
+  TransactionFor<C, B>: Send + Sync + 'static,
+{
   _block: PhantomData<B>,
   _backend: PhantomData<Be>,
 
   importing_block: Arc<RwLock<Option<B::Hash>>>,
+  pub(crate) machine: Arc<RwLock<Option<TendermintHandle<Self>>>>,
 
-  client: Arc<C>,
+  pub(crate) client: Arc<C>,
   pub(crate) inner: Arc<AsyncRwLock<I>>,
   providers: Arc<CIDP>,
 
@@ -67,6 +70,8 @@ impl<
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
   > Clone for TendermintImport<B, Be, C, I, CIDP, E>
+where
+  TransactionFor<C, B>: Send + Sync + 'static,
 {
   fn clone(&self) -> Self {
     TendermintImport {
@@ -74,6 +79,7 @@ impl<
       _backend: PhantomData,
 
       importing_block: self.importing_block.clone(),
+      machine: self.machine.clone(),
 
       client: self.client.clone(),
       inner: self.inner.clone(),
@@ -107,6 +113,7 @@ where
       _backend: PhantomData,
 
       importing_block: Arc::new(RwLock::new(None)),
+      machine: Arc::new(RwLock::new(None)),
 
       client,
       inner: Arc::new(AsyncRwLock::new(inner)),
@@ -233,28 +240,28 @@ where
     Ok(())
   }
 
-  async fn get_proposal(&mut self, block: &B) -> B {
-    let inherent_data = match self.providers.create_inherent_data_providers(block.hash(), ()).await
-    {
-      Ok(providers) => match providers.create_inherent_data() {
-        Ok(data) => Some(data),
+  pub(crate) async fn get_proposal(&mut self, header: &B::Header) -> B {
+    let inherent_data =
+      match self.providers.create_inherent_data_providers(header.hash(), ()).await {
+        Ok(providers) => match providers.create_inherent_data() {
+          Ok(data) => Some(data),
+          Err(err) => {
+            warn!(target: "tendermint", "Failed to create inherent data: {}", err);
+            None
+          }
+        },
         Err(err) => {
-          warn!(target: "tendermint", "Failed to create inherent data: {}", err);
+          warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
           None
         }
-      },
-      Err(err) => {
-        warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
-        None
       }
-    }
-    .unwrap_or_else(InherentData::new);
+      .unwrap_or_else(InherentData::new);
 
     let proposer = self
       .env
       .write()
       .await
-      .init(block.header())
+      .init(header)
       .await
       .expect("Failed to create a proposer for the new block");
     // TODO: Production time, size limit
@@ -355,6 +362,6 @@ where
 
   async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
     self.import_justification_actual(block.hash(), (CONSENSUS_ID, commit.encode())).unwrap();
-    self.get_proposal(&block).await
+    self.get_proposal(block.header()).await
   }
 }

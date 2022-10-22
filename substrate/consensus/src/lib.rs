@@ -1,7 +1,6 @@
-use std::sync::Arc;
+use std::{sync::Arc, future::Future};
 
 use sp_api::TransactionFor;
-use sp_consensus::Error;
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
@@ -50,8 +49,8 @@ pub fn import_queue(
   client: Arc<FullClient>,
   pool: Arc<FullPool<Block, FullClient>>,
   registry: Option<&Registry>,
-) -> Result<TendermintImportQueue<Block, TransactionFor<FullClient, Block>>, Error> {
-  Ok(import_queue::import_queue(
+) -> (impl Future<Output = ()>, TendermintImportQueue<Block, TransactionFor<FullClient, Block>>) {
+  import_queue::import_queue(
     client.clone(),
     client.clone(),
     Arc::new(|_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) }),
@@ -64,18 +63,7 @@ pub fn import_queue(
     ),
     &task_manager.spawn_essential_handle(),
     registry,
-  ))
-}
-
-// If we're an authority, produce blocks
-pub fn authority(
-  task_manager: &TaskManager,
-  client: Arc<FullClient>,
-  network: Arc<sc_network::NetworkService<Block, <Block as sp_runtime::traits::Block>::Hash>>,
-  pool: Arc<FullPool<Block, FullClient>>,
-  registry: Option<&Registry>,
-) {
-  todo!()
+  )
 }
 
 /*

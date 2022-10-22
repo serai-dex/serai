@@ -9,13 +9,11 @@ use sp_blockchain::HeaderBackend;
 use sp_api::{TransactionFor, ProvideRuntimeApi};
 
 use sp_consensus::{Error, Environment};
-use sc_consensus::{BlockImport, JustificationImport, BasicQueue};
+use sc_consensus::{BlockImport, JustificationImport};
 
 use sc_client_api::{Backend, Finalizer};
 
 use crate::tendermint::TendermintImport;
-
-pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
 
 #[async_trait]
 impl<

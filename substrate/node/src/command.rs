@@ -60,23 +60,23 @@ pub fn run() -> sc_cli::Result<()> {
 
     Some(Subcommand::CheckBlock(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?;
+        service::new_partial(&config)?.1;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
     Some(Subcommand::ExportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.1;
       Ok((cmd.run(client, config.database), task_manager))
     }),
 
     Some(Subcommand::ExportState(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.1;
       Ok((cmd.run(client, config.chain_spec), task_manager))
     }),
 
     Some(Subcommand::ImportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?;
+        service::new_partial(&config)?.1;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
@@ -85,14 +85,15 @@ pub fn run() -> sc_cli::Result<()> {
     }
 
     Some(Subcommand::Revert(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, backend, .. } = service::new_partial(&config)?;
+      let PartialComponents { client, task_manager, backend, .. } =
+        service::new_partial(&config)?.1;
       Ok((cmd.run(client, backend, None), task_manager))
     }),
 
     Some(Subcommand::Benchmark(cmd)) => cli.create_runner(cmd)?.sync_run(|config| match cmd {
       BenchmarkCmd::Pallet(cmd) => cmd.run::<Block, service::ExecutorDispatch>(config),
 
-      BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.client),
+      BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.1.client),
 
       #[cfg(not(feature = "runtime-benchmarks"))]
       BenchmarkCmd::Storage(_) => {
@@ -101,12 +102,12 @@ pub fn run() -> sc_cli::Result<()> {
 
       #[cfg(feature = "runtime-benchmarks")]
       BenchmarkCmd::Storage(cmd) => {
-        let PartialComponents { client, backend, .. } = service::new_partial(&config)?;
+        let PartialComponents { client, backend, .. } = service::new_partial(&config)?.1;
         cmd.run(config, client, backend.expose_db(), backend.expose_storage())
       }
 
       BenchmarkCmd::Overhead(cmd) => {
-        let client = service::new_partial(&config)?.client;
+        let client = service::new_partial(&config)?.1.client;
         cmd.run(
           config,
           client.clone(),
@@ -117,7 +118,7 @@ pub fn run() -> sc_cli::Result<()> {
       }
 
       BenchmarkCmd::Extrinsic(cmd) => {
-        let client = service::new_partial(&config)?.client;
+        let client = service::new_partial(&config)?.1.client;
         cmd.run(
           client.clone(),
           inherent_benchmark_data()?,
@@ -134,7 +135,7 @@ pub fn run() -> sc_cli::Result<()> {
     }
 
     None => cli.create_runner(&cli.run)?.run_node_until_exit(|config| async {
-      service::new_full(config).map_err(sc_cli::Error::Service)
+      service::new_full(config).await.map_err(sc_cli::Error::Service)
     }),
   }
 }
