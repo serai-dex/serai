@@ -7,9 +7,9 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys,
-  traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+  traits::{IdentityLookup, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, MultiSignature, Perbill,
+  ApplyExtrinsicResult, Perbill,
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -19,7 +19,7 @@ use sp_version::RuntimeVersion;
 use frame_support::{
   traits::{ConstU8, ConstU32, ConstU64},
   weights::{
-    constants::{RocksDbWeight, ExtrinsicBaseWeight, BlockExecutionWeight, WEIGHT_PER_SECOND},
+    constants::{RocksDbWeight, WEIGHT_PER_SECOND},
     IdentityFee, Weight,
   },
   dispatch::DispatchClass,
@@ -30,17 +30,15 @@ pub use frame_system::Call as SystemCall;
 pub use pallet_timestamp::Call as TimestampCall;
 pub use pallet_balances::Call as BalancesCall;
 use pallet_transaction_payment::CurrencyAdapter;
-use pallet_contracts::DefaultContractAccessWeight;
 
 /// An index to a block.
 pub type BlockNumber = u32;
 
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
-pub type Signature = MultiSignature;
+/// Signature type
+pub type Signature = sp_core::sr25519::Signature;
 
-/// Some way of identifying an account on the chain. We intentionally make it equivalent
-/// to the public key of our transaction signing scheme.
-pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+/// Account ID type, equivalent to a public key
+pub type AccountId = sp_core::sr25519::Public;
 
 /// Balance of an account.
 pub type Balance = u64;
@@ -92,17 +90,6 @@ pub fn native_version() -> NativeVersion {
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
-/// We assume that ~10% of the block weight is consumed by `on_initialize` handlers.
-/// This is used to limit the maximal weight of a single extrinsic.
-const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(10);
-
-/// We allow for 2 seconds of compute with a 6 second average block time.
-const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_ref_time(2 * WEIGHT_PER_SECOND.ref_time());
-
-// Prints debug output of the `contracts` pallet to stdout if the node is
-// started with `-lruntime::contracts=debug`.
-const CONTRACTS_DEBUG_OUTPUT: bool = true;
-
 // Unit = the base number of indivisible units for balances
 const UNIT: Balance = 1_000_000_000_000;
 const MILLIUNIT: Balance = 1_000_000_000;
@@ -115,30 +102,16 @@ parameter_types! {
   pub const BlockHashCount: BlockNumber = 2400;
   pub const Version: RuntimeVersion = VERSION;
 
-  pub const SS58Prefix: u8 = 42; // TODO: Remove
+  pub const SS58Prefix: u8 = 42; // TODO: Remove for Bech32m
 
   // 1 MB block size limit
   pub BlockLength: frame_system::limits::BlockLength =
     frame_system::limits::BlockLength::max_with_normal_ratio(1024 * 1024, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: frame_system::limits::BlockWeights =
-    frame_system::limits::BlockWeights::builder()
-      .base_block(BlockExecutionWeight::get())
-      .for_class(DispatchClass::all(), |weights| {
-        weights.base_extrinsic = ExtrinsicBaseWeight::get();
-      })
-      .for_class(DispatchClass::Normal, |weights| {
-        weights.max_total = Some(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT);
-      })
-      .for_class(DispatchClass::Operational, |weights| {
-        weights.max_total = Some(MAXIMUM_BLOCK_WEIGHT);
-        // Operational transactions have some extra reserved space, so that they
-        // are included even if block reached `MAXIMUM_BLOCK_WEIGHT`.
-        weights.reserved = Some(
-          MAXIMUM_BLOCK_WEIGHT - NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT
-        );
-      })
-      .avg_block_initialization(AVERAGE_ON_INITIALIZE_RATIO)
-      .build_or_panic();
+    frame_system::limits::BlockWeights::with_sensible_defaults(
+      (2u64 * WEIGHT_PER_SECOND).set_proof_size(u64::MAX),
+      NORMAL_DISPATCH_RATIO,
+    );
 
   pub const DepositPerItem: Balance = deposit(1, 0);
   pub const DepositPerByte: Balance = deposit(0, 1);
@@ -158,7 +131,7 @@ impl frame_system::Config for Runtime {
   type BlockLength = BlockLength;
   type AccountId = AccountId;
   type RuntimeCall = RuntimeCall;
-  type Lookup = AccountIdLookup<AccountId, ()>;
+  type Lookup = IdentityLookup<AccountId>;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
@@ -177,7 +150,7 @@ impl frame_system::Config for Runtime {
 
   type AccountData = pallet_balances::AccountData<Balance>;
   type SystemWeightInfo = ();
-  type SS58Prefix = SS58Prefix; // TODO: Remove
+  type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
@@ -219,12 +192,6 @@ impl pallet_contracts::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type RuntimeCall = RuntimeCall;
 
-  /// The safest default is to allow no calls at all.
-  ///
-  /// Runtimes should whitelist dispatchables that are allowed to be called from contracts
-  /// and make sure they are stable. Dispatchables exposed to contracts are not allowed to
-  /// change because that would break already deployed contracts. The `Call` structure itself
-  /// is not allowed to change the indices of existing pallets, too.
   type CallFilter = frame_support::traits::Nothing;
   type DepositPerItem = DepositPerItem;
   type DepositPerByte = DepositPerByte;
@@ -236,13 +203,12 @@ impl pallet_contracts::Config for Runtime {
   type DeletionWeightLimit = DeletionWeightLimit;
   type Schedule = Schedule;
   type AddressGenerator = pallet_contracts::DefaultAddressGenerator;
-  type ContractAccessWeight = DefaultContractAccessWeight<BlockWeights>;
 
   type MaxCodeLen = ConstU32<{ 128 * 1024 }>;
   type MaxStorageKeyLen = ConstU32<128>;
 }
 
-pub type Address = sp_runtime::MultiAddress<AccountId, ()>;
+pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedExtra = (
@@ -386,65 +352,6 @@ sp_api::impl_runtime_apis! {
       len: u32,
     ) -> pallet_transaction_payment::FeeDetails<Balance> {
       TransactionPayment::query_fee_details(uxt, len)
-    }
-  }
-
-  impl pallet_contracts_rpc_runtime_api::ContractsApi<Block, AccountId, Balance, BlockNumber, Hash>
-      for Runtime
-  {
-    fn call(
-      origin: AccountId,
-      dest: AccountId,
-      value: Balance,
-      gas_limit: u64,
-      storage_deposit_limit: Option<Balance>,
-      input_data: Vec<u8>,
-    ) -> pallet_contracts_primitives::ContractExecResult<Balance> {
-      Contracts::bare_call(
-        origin,
-        dest,
-        value,
-        Weight::from_ref_time(gas_limit),
-        storage_deposit_limit,
-        input_data,
-        CONTRACTS_DEBUG_OUTPUT
-      )
-    }
-
-    fn instantiate(
-      origin: AccountId,
-      value: Balance,
-      gas_limit: u64,
-      storage_deposit_limit: Option<Balance>,
-      code: pallet_contracts_primitives::Code<Hash>,
-      data: Vec<u8>,
-      salt: Vec<u8>,
-    ) -> pallet_contracts_primitives::ContractInstantiateResult<AccountId, Balance> {
-      Contracts::bare_instantiate(
-        origin,
-        value,
-        Weight::from_ref_time(gas_limit),
-        storage_deposit_limit,
-        code,
-        data,
-        salt,
-        CONTRACTS_DEBUG_OUTPUT
-      )
-    }
-
-    fn upload_code(
-      origin: AccountId,
-      code: Vec<u8>,
-      storage_deposit_limit: Option<Balance>,
-    ) -> pallet_contracts_primitives::CodeUploadResult<Hash, Balance> {
-      Contracts::bare_upload_code(origin, code, storage_deposit_limit)
-    }
-
-    fn get_storage(
-      address: AccountId,
-      key: Vec<u8>,
-    ) -> pallet_contracts_primitives::GetStorageResult {
-      Contracts::get_storage(address, key)
     }
   }
 }
