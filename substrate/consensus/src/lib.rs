@@ -14,11 +14,18 @@ use serai_runtime::{self, opaque::Block, RuntimeApi};
 mod signature_scheme;
 mod weights;
 
+mod tendermint;
+mod block_import;
+mod justification_import;
+mod verifier;
+
 mod import_queue;
 use import_queue::TendermintImportQueue;
 
 mod select_chain;
 pub use select_chain::TendermintSelectChain;
+
+const CONSENSUS_ID: [u8; 4] = *b"tend";
 
 pub struct ExecutorDispatch;
 impl NativeExecutionDispatch for ExecutorDispatch {
@@ -72,29 +79,6 @@ pub fn authority(
 }
 
 /*
-// Produce a block every 6 seconds
-async fn produce<
-  Block: sp_api::BlockT<Hash = sp_core::H256>,
-  Algorithm: sc_pow::PowAlgorithm<Block, Difficulty = sp_core::U256> + Send + Sync + 'static,
-  C: sp_api::ProvideRuntimeApi<Block> + 'static,
-  Link: sc_consensus::JustificationSyncLink<Block> + 'static,
-  P: Send + 'static,
->(
-  worker: sc_pow::MiningHandle<Block, Algorithm, C, Link, P>,
-) where
-  sp_api::TransactionFor<C, Block>: Send + 'static,
-{
-  loop {
-    let worker_clone = worker.clone();
-    std::thread::spawn(move || {
-      tokio::runtime::Runtime::new().unwrap().handle().block_on(async {
-        worker_clone.submit(vec![]).await;
-      });
-    });
-    tokio::time::sleep(Duration::from_secs(6)).await;
-  }
-}
-
 // If we're an authority, produce blocks
 pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
   task_manager: &TaskManager,
