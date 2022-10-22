@@ -36,9 +36,9 @@ where
   async fn import_justification(
     &mut self,
     hash: B::Hash,
-    _: <B::Header as Header>::Number,
+    number: <B::Header as Header>::Number,
     justification: Justification,
   ) -> Result<(), Error> {
-    self.import_justification_actual(hash, justification)
+    self.import_justification_actual(number, hash, justification)
   }
 }

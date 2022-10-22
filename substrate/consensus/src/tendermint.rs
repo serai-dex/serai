@@ -1,6 +1,7 @@
 use std::{
   marker::PhantomData,
   sync::{Arc, RwLock},
+  cmp::Ordering,
   time::Duration,
 };
 
@@ -274,9 +275,23 @@ where
 
   pub(crate) fn import_justification_actual(
     &mut self,
+    number: <B::Header as Header>::Number,
     hash: B::Hash,
     justification: Justification,
   ) -> Result<(), Error> {
+    let info = self.client.info();
+    match info.best_number.cmp(&number) {
+      Ordering::Greater => return Ok(()),
+      Ordering::Equal => {
+        if info.best_hash == hash {
+          return Ok(());
+        } else {
+          Err(Error::InvalidJustification)?
+        }
+      }
+      Ordering::Less => (),
+    }
+
     self.verify_justification(hash, &justification)?;
     self
       .client
@@ -337,7 +352,10 @@ where
     let (header, body) = block.clone().deconstruct();
     *self.importing_block.write().unwrap() = Some(hash);
     self.queue.write().await.as_mut().unwrap().import_blocks(
-      BlockOrigin::NetworkBroadcast,
+      // We do not want this block, which hasn't been confirmed, to be broadcast over the net
+      // Substrate will generate notifications unless it's Genesis, which this isn't, InitialSync,
+      // which changes telemtry behavior, or File, which is... close enough
+      BlockOrigin::File,
       vec![IncomingBlock {
         hash,
         header: Some(header),
@@ -361,7 +379,13 @@ where
   }
 
   async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
-    self.import_justification_actual(block.hash(), (CONSENSUS_ID, commit.encode())).unwrap();
+    self
+      .import_justification_actual(
+        *block.header().number(),
+        block.hash(),
+        (CONSENSUS_ID, commit.encode()),
+      )
+      .unwrap();
     self.get_proposal(block.header()).await
   }
 }
