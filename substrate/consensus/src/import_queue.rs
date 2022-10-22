@@ -34,7 +34,7 @@ use sp_runtime::{
 use sp_blockchain::HeaderBackend;
 use sp_api::{BlockId, TransactionFor, ProvideRuntimeApi};
 
-use sp_consensus::{Error, CacheKeyId, Proposer, Environment};
+use sp_consensus::{Error, CacheKeyId, BlockOrigin, Proposer, Environment};
 #[rustfmt::skip] // rustfmt doesn't know how to handle this line
 use sc_consensus::{
   ForkChoiceStrategy,
@@ -44,9 +44,11 @@ use sc_consensus::{
   ImportResult,
   BlockImport,
   JustificationImport,
+  import_queue::IncomingBlock,
   BasicQueue,
 };
 
+use sc_service::ImportQueue;
 use sc_client_api::{Backend, Finalizer};
 
 use substrate_prometheus_endpoint::Registry;
@@ -59,6 +61,8 @@ use tendermint_machine::{
 use crate::{signature_scheme::TendermintSigner, weights::TendermintWeights};
 
 const CONSENSUS_ID: [u8; 4] = *b"tend";
+
+pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
 
 struct TendermintImport<
   B: Block,
@@ -78,6 +82,7 @@ struct TendermintImport<
   providers: Arc<CIDP>,
 
   env: Arc<AsyncRwLock<E>>,
+  queue: Arc<RwLock<Option<TendermintImportQueue<B, TransactionFor<C, B>>>>>,
 }
 
 impl<
@@ -101,6 +106,7 @@ impl<
       providers: self.providers.clone(),
 
       env: self.env.clone(),
+      queue: self.queue.clone(),
     }
   }
 }
@@ -113,6 +119,8 @@ impl<
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
   > TendermintImport<B, Be, C, I, CIDP, E>
+where
+  TransactionFor<C, B>: Send + Sync + 'static,
 {
   async fn check_inherents(
     &self,
@@ -286,6 +294,7 @@ impl<
   > BlockImport<B> for TendermintImport<B, Be, C, I, CIDP, E>
 where
   I::Error: Into<Error>,
+  TransactionFor<C, B>: Send + Sync + 'static,
 {
   type Error = Error;
   type Transaction = TransactionFor<C, B>;
@@ -326,6 +335,8 @@ impl<
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
   > JustificationImport<B> for TendermintImport<B, Be, C, I, CIDP, E>
+where
+  TransactionFor<C, B>: Send + Sync + 'static,
 {
   type Error = Error;
 
@@ -352,6 +363,8 @@ impl<
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
   > Verifier<B> for TendermintImport<B, Be, C, I, CIDP, E>
+where
+  TransactionFor<C, B>: Send + Sync + 'static,
 {
   async fn verify(
     &mut self,
@@ -371,6 +384,8 @@ impl<
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
   > Network for TendermintImport<B, Be, C, I, CIDP, E>
+where
+  TransactionFor<C, B>: Send + Sync + 'static,
 {
   type ValidatorId = u16;
   type SignatureScheme = TendermintSigner;
@@ -396,10 +411,27 @@ impl<
   }
 
   fn validate(&mut self, block: &B) -> Result<(), BlockError> {
+    let hash = block.hash();
+    let (header, body) = block.clone().deconstruct();
+    *self.importing_block.write().unwrap() = Some(hash);
+    self.queue.write().unwrap().as_mut().unwrap().import_blocks(
+      BlockOrigin::NetworkBroadcast,
+      vec![IncomingBlock {
+        hash,
+        header: Some(header),
+        body: Some(body),
+        indexed_body: None,
+        justifications: None,
+        origin: None,
+        allow_missing_state: false,
+        skip_execution: false,
+        // TODO: Only set to true if block was rejected due to its inherents
+        import_existing: true,
+        state: None,
+      }],
+    );
     todo!()
-    // self.check_block().map_err(|_| BlockError::Temporal)?;
-    // self.import_block().map_err(|_| BlockError::Temporal)?;
-    // Ok(())
+    // self.queue.poll_actions
   }
 
   async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
@@ -407,8 +439,6 @@ impl<
     self.get_proposal(&block).await
   }
 }
-
-pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
 
 pub fn import_queue<
   B: Block,
@@ -427,6 +457,7 @@ pub fn import_queue<
 ) -> TendermintImportQueue<B, TransactionFor<C, B>>
 where
   I::Error: Into<Error>,
+  TransactionFor<C, B>: Send + Sync + 'static,
 {
   let import = TendermintImport {
     _block: PhantomData,
@@ -439,9 +470,12 @@ where
     providers,
 
     env: Arc::new(AsyncRwLock::new(env)),
+    queue: Arc::new(RwLock::new(None)),
   };
   let boxed = Box::new(import.clone());
 
-  // TODO: Fully read BasicQueue in otder to understand it
-  BasicQueue::new(import, boxed.clone(), Some(boxed), spawner, registry)
+  let queue =
+    || BasicQueue::new(import.clone(), boxed.clone(), Some(boxed.clone()), spawner, registry);
+  *import.queue.write().unwrap() = Some(queue());
+  queue()
 }
