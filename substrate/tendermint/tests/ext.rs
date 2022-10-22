@@ -109,7 +109,7 @@ impl Network for TestNetwork {
     todo!()
   }
 
-  fn validate(&mut self, block: &TestBlock) -> Result<(), BlockError> {
+  async fn validate(&mut self, block: &TestBlock) -> Result<(), BlockError> {
     block.valid
   }
 

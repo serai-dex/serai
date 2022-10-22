@@ -13,7 +13,10 @@
 
 use std::{
   marker::PhantomData,
+  pin::Pin,
   sync::{Arc, RwLock},
+  task::{Poll, Context},
+  future::Future,
   time::Duration,
   collections::HashMap,
 };
@@ -22,7 +25,7 @@ use async_trait::async_trait;
 
 use log::warn;
 
-use tokio::sync::RwLock as AsyncRwLock;
+use tokio::{sync::RwLock as AsyncRwLock, runtime::Handle};
 
 use sp_core::{Encode, Decode};
 use sp_application_crypto::sr25519::Signature;
@@ -45,6 +48,9 @@ use sc_consensus::{
   BlockImport,
   JustificationImport,
   import_queue::IncomingBlock,
+  BlockImportStatus,
+  BlockImportError,
+  Link,
   BasicQueue,
 };
 
@@ -82,7 +88,7 @@ struct TendermintImport<
   providers: Arc<CIDP>,
 
   env: Arc<AsyncRwLock<E>>,
-  queue: Arc<RwLock<Option<TendermintImportQueue<B, TransactionFor<C, B>>>>>,
+  queue: Arc<AsyncRwLock<Option<TendermintImportQueue<B, TransactionFor<C, B>>>>>,
 }
 
 impl<
@@ -375,6 +381,46 @@ where
   }
 }
 
+// Custom helpers for ImportQueue in order to obtain the result of a block's importing
+struct ValidateLink<B: Block>(Option<(B::Hash, bool)>);
+impl<B: Block> Link<B> for ValidateLink<B> {
+  fn blocks_processed(
+    &mut self,
+    imported: usize,
+    count: usize,
+    results: Vec<(
+      Result<BlockImportStatus<<B::Header as Header>::Number>, BlockImportError>,
+      B::Hash,
+    )>,
+  ) {
+    assert_eq!(imported, 1);
+    assert_eq!(count, 1);
+    self.0 = Some((results[0].1, results[0].0.is_ok()));
+  }
+}
+
+struct ImportFuture<'a, B: Block, T: Send>(B::Hash, RwLock<&'a mut TendermintImportQueue<B, T>>);
+impl<'a, B: Block, T: Send> ImportFuture<'a, B, T> {
+  fn new(hash: B::Hash, queue: &'a mut TendermintImportQueue<B, T>) -> ImportFuture<B, T> {
+    ImportFuture(hash, RwLock::new(queue))
+  }
+}
+
+impl<'a, B: Block, T: Send> Future for ImportFuture<'a, B, T> {
+  type Output = bool;
+
+  fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+    let mut link = ValidateLink(None);
+    self.1.write().unwrap().poll_actions(ctx, &mut link);
+    if let Some(res) = link.0 {
+      assert_eq!(res.0, self.0);
+      Poll::Ready(res.1)
+    } else {
+      Poll::Pending
+    }
+  }
+}
+
 #[async_trait]
 impl<
     B: Block,
@@ -410,11 +456,11 @@ where
     todo!()
   }
 
-  fn validate(&mut self, block: &B) -> Result<(), BlockError> {
+  async fn validate(&mut self, block: &B) -> Result<(), BlockError> {
     let hash = block.hash();
     let (header, body) = block.clone().deconstruct();
     *self.importing_block.write().unwrap() = Some(hash);
-    self.queue.write().unwrap().as_mut().unwrap().import_blocks(
+    self.queue.write().await.as_mut().unwrap().import_blocks(
       BlockOrigin::NetworkBroadcast,
       vec![IncomingBlock {
         hash,
@@ -430,8 +476,12 @@ where
         state: None,
       }],
     );
-    todo!()
-    // self.queue.poll_actions
+
+    if ImportFuture::new(hash, self.queue.write().await.as_mut().unwrap()).await {
+      Ok(())
+    } else {
+      todo!()
+    }
   }
 
   async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
@@ -470,12 +520,12 @@ where
     providers,
 
     env: Arc::new(AsyncRwLock::new(env)),
-    queue: Arc::new(RwLock::new(None)),
+    queue: Arc::new(AsyncRwLock::new(None)),
   };
   let boxed = Box::new(import.clone());
 
   let queue =
     || BasicQueue::new(import.clone(), boxed.clone(), Some(boxed.clone()), spawner, registry);
-  *import.queue.write().unwrap() = Some(queue());
+  *Handle::current().block_on(import.queue.write()) = Some(queue());
   queue()
 }

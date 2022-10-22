@@ -436,7 +436,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // 22-33
       if self.step == Step::Propose {
         // Delay error handling (triggering a slash) until after we vote.
-        let (valid, err) = match self.network.write().await.validate(block) {
+        let (valid, err) = match self.network.write().await.validate(block).await {
           Ok(_) => (true, Ok(None)),
           Err(BlockError::Temporal) => (false, Ok(None)),
           Err(BlockError::Fatal) => (false, Err(TendermintError::Malicious(proposer))),
@@ -478,7 +478,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // being set, or only being set historically, means this has yet to be run
 
         if self.log.has_consensus(self.round, Data::Prevote(Some(block.id()))) {
-          match self.network.write().await.validate(block) {
+          match self.network.write().await.validate(block).await {
             Ok(_) => (),
             Err(BlockError::Temporal) => (),
             Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,

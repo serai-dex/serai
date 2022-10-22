@@ -180,7 +180,7 @@ pub trait Network: Send + Sync {
   async fn slash(&mut self, validator: Self::ValidatorId);
 
   /// Validate a block.
-  fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
+  async fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
   /// Add a block, returning the proposal for the next one. It's possible a block, which was never
   /// validated or even failed validation, may be passed here if a supermajority of validators did
   /// consider it valid and created a commit for it. This deviates from the paper which will have a
