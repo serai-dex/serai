@@ -4,6 +4,7 @@ use tendermint_machine::ext::{BlockNumber, Round, Weights};
 
 const VALIDATORS: usize = 1;
 
+// TODO: Move to sp_session
 pub(crate) struct TendermintWeights;
 impl Weights for TendermintWeights {
   type ValidatorId = u16;

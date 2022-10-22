@@ -10,6 +10,14 @@ pub(crate) struct TendermintSigner {
   lookup: Vec<Public>,
 }
 
+impl TendermintSigner {
+  pub(crate) fn new() -> TendermintSigner {
+    // TODO
+    let keys = Pair::from_string("//Alice", None).unwrap();
+    TendermintSigner { lookup: vec![keys.public()], keys }
+  }
+}
+
 impl SignatureScheme for TendermintSigner {
   type ValidatorId = u16;
   type Signature = Signature;

@@ -21,7 +21,7 @@ use async_trait::async_trait;
 
 use tokio::sync::RwLock as AsyncRwLock;
 
-use sp_core::Decode;
+use sp_core::{Encode, Decode};
 use sp_application_crypto::sr25519::Signature;
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::{
@@ -109,7 +109,8 @@ impl<
     block: B,
     providers: CIDP::InherentDataProviders,
   ) -> Result<(), Error> {
-    todo!()
+    // TODO
+    Ok(())
   }
 
   // Ensure this is part of a sequential import
@@ -218,6 +219,18 @@ impl<
 
     Ok(())
   }
+
+  fn import_justification_actual(
+    &mut self,
+    hash: B::Hash,
+    justification: Justification,
+  ) -> Result<(), Error> {
+    self.verify_justification(hash, &justification)?;
+    self
+      .client
+      .finalize_block(BlockId::Hash(hash), Some(justification), true)
+      .map_err(|_| Error::InvalidJustification)
+  }
 }
 
 #[async_trait]
@@ -282,11 +295,7 @@ impl<
     _: <B::Header as Header>::Number,
     justification: Justification,
   ) -> Result<(), Error> {
-    self.verify_justification(hash, &justification)?;
-    self
-      .client
-      .finalize_block(BlockId::Hash(hash), Some(justification), true)
-      .map_err(|_| Error::InvalidJustification)
+    self.import_justification_actual(hash, justification)
   }
 }
 
@@ -325,7 +334,7 @@ impl<
   const BLOCK_TIME: u32 = { (serai_runtime::MILLISECS_PER_BLOCK / 1000) as u32 };
 
   fn signature_scheme(&self) -> Arc<TendermintSigner> {
-    todo!()
+    Arc::new(TendermintSigner::new())
   }
 
   fn weights(&self) -> Arc<TendermintWeights> {
@@ -333,7 +342,7 @@ impl<
   }
 
   async fn broadcast(&mut self, msg: SignedMessage<u16, Self::Block, Signature>) {
-    todo!()
+    // TODO
   }
 
   async fn slash(&mut self, validator: u16) {
@@ -348,6 +357,8 @@ impl<
   }
 
   fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
+    self.import_justification_actual(block.hash(), (CONSENSUS_ID, commit.encode())).unwrap();
+    // Next block proposal
     todo!()
   }
 }
