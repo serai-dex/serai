@@ -8856,9 +8856,15 @@ dependencies = [
  "sc-consensus-babe",
  "sc-consensus-grandpa",
  "sc-executor",
+<<<<<<< HEAD
  "sc-network",
  "sc-network-common",
  "sc-offchain",
+=======
+ "sc-keystore",
+ "sc-network",
+ "sc-rpc",
+>>>>>>> 8a682cd2 (Announce blocks)
  "sc-rpc-api",
  "sc-service",
  "sc-telemetry",

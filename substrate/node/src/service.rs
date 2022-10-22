@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 use std::{boxed::Box, sync::Arc};
 =======
 use std::{sync::Arc, future::Future};
@@ -41,6 +42,19 @@ pub type Executor = WasmExecutor<ExtendedHostFunctions<SubstrateHostFunctions, (
 pub type Executor = WasmExecutor<
   ExtendedHostFunctions<SubstrateHostFunctions, frame_benchmarking::benchmarking::HostFunctions>,
 >;
+=======
+use std::{sync::{Arc, RwLock}, future::Future};
+
+use sp_core::H256;
+
+use sc_executor::NativeElseWasmExecutor;
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sc_network::{NetworkService, NetworkBlock};
+use sc_telemetry::{Telemetry, TelemetryWorker};
+
+use serai_runtime::{self, opaque::Block, RuntimeApi};
+pub(crate) use serai_consensus::{ExecutorDispatch, Announce, FullClient};
+>>>>>>> 8a682cd2 (Announce blocks)
 
 type FullBackend = sc_service::TFullBackend<Block>;
 <<<<<<< HEAD
@@ -69,6 +83,7 @@ type PartialComponents = sc_service::PartialComponents<
 >;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 fn create_inherent_data_providers(
   slot_duration: SlotDuration,
 ) -> (BabeInherent, TimestampInherent) {
@@ -76,9 +91,26 @@ fn create_inherent_data_providers(
   (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
 =======
+=======
+#[derive(Clone)]
+pub struct NetworkAnnounce(Arc<RwLock<Option<Arc<NetworkService<Block, H256>>>>>);
+impl NetworkAnnounce {
+  fn new() -> NetworkAnnounce {
+    NetworkAnnounce(Arc::new(RwLock::new(None)))
+  }
+}
+impl Announce<Block> for NetworkAnnounce {
+  fn announce(&self, hash: H256) {
+    if let Some(network) = self.0.read().unwrap().as_ref() {
+      network.announce_block(hash, None);
+    }
+  }
+}
+
+>>>>>>> 8a682cd2 (Announce blocks)
 pub fn new_partial(
   config: &Configuration,
-) -> Result<(impl Future<Output = ()>, PartialComponents), ServiceError> {
+) -> Result<((NetworkAnnounce, impl Future<Output = ()>), PartialComponents), ServiceError> {
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
@@ -129,6 +161,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
     &client,
@@ -169,10 +202,14 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
 =======
   let import_queue = serai_consensus::import_queue(
 =======
+=======
+  let announce = NetworkAnnounce::new();
+>>>>>>> 8a682cd2 (Announce blocks)
   let (authority, import_queue) = serai_consensus::import_queue(
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
     &task_manager,
     client.clone(),
+    announce.clone(),
     transaction_pool.clone(),
     config.prometheus_registry(),
 <<<<<<< HEAD
@@ -216,7 +253,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   } = new_partial(&config)?;
 =======
   Ok((
-    authority,
+    (announce, authority),
     sc_service::PartialComponents {
       client,
       backend,
@@ -232,7 +269,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
 
 pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
   let (
-    authority,
+    (announce, authority),
     sc_service::PartialComponents {
       client,
       backend,
@@ -272,6 +309,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       block_announce_validator_builder: None,
       warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
     })?;
+  *announce.0.write().unwrap() = Some(network.clone());
 
   if config.offchain_worker.enabled {
     task_manager.spawn_handle().spawn(
