@@ -4,6 +4,7 @@ use sp_core::Pair as PairTrait;
 
 use sc_service::ChainType;
 
+<<<<<<< HEAD
 use serai_runtime::{
   primitives::*, tokens::primitives::ADDRESS as TOKENS_ADDRESS, WASM_BINARY, opaque::SessionKeys,
   BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
@@ -32,6 +33,22 @@ fn testnet_genesis(
 
   RuntimeGenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
+=======
+use sp_runtime::traits::Verify;
+use sp_core::{Pair as PairTrait, sr25519::Pair};
+
+use serai_runtime::{WASM_BINARY, AccountId, Signature, GenesisConfig, SystemConfig, BalancesConfig};
+
+pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
+
+fn insecure_pair_from_name(name: &'static str) -> Pair {
+  Pair::from_string(&format!("//{}", name), None).unwrap()
+}
+
+fn account_id_from_name(name: &'static str) -> AccountId {
+  insecure_pair_from_name(name).public()
+}
+>>>>>>> 4bfc8d79 (Reduce chain_spec and use more accurate naming)
 
     balances: BalancesConfig {
       balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
@@ -88,6 +105,7 @@ pub fn development_config() -> Result<ChainSpec, &'static str> {
         wasm_binary,
         &["Alice"],
         vec![
+<<<<<<< HEAD
           account_from_name("Alice"),
           account_from_name("Bob"),
           account_from_name("Charlie"),
@@ -132,6 +150,20 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
           account_from_name("Dave"),
           account_from_name("Eve"),
           account_from_name("Ferdie"),
+=======
+          account_id_from_name("Alice"),
+          account_id_from_name("Bob"),
+          account_id_from_name("Charlie"),
+          account_id_from_name("Dave"),
+          account_id_from_name("Eve"),
+          account_id_from_name("Ferdie"),
+          account_id_from_name("Alice//stash"),
+          account_id_from_name("Bob//stash"),
+          account_id_from_name("Charlie//stash"),
+          account_id_from_name("Dave//stash"),
+          account_id_from_name("Eve//stash"),
+          account_id_from_name("Ferdie//stash"),
+>>>>>>> 4bfc8d79 (Reduce chain_spec and use more accurate naming)
         ],
       )
     },
