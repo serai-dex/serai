@@ -198,7 +198,6 @@ where
           Err(Error::InvalidJustification)?;
         }
         self.verify_justification(block.header.hash(), next.unwrap())?;
-
         block.finalized = true;
       }
     }
@@ -332,6 +331,7 @@ where
   async fn validate(&mut self, block: &B) -> Result<(), BlockError> {
     let hash = block.hash();
     let (header, body) = block.clone().deconstruct();
+    let parent = *header.parent_hash();
     *self.importing_block.write().unwrap() = Some(hash);
     self.queue.write().await.as_mut().unwrap().import_blocks(
       // We do not want this block, which hasn't been confirmed, to be broadcast over the net
@@ -353,11 +353,12 @@ where
       }],
     );
 
-    if ImportFuture::new(hash, self.queue.write().await.as_mut().unwrap()).await {
-      Ok(())
-    } else {
+    if !ImportFuture::new(hash, self.queue.write().await.as_mut().unwrap()).await {
       todo!()
     }
+    assert_eq!(self.client.info().best_hash, parent);
+
+    Ok(())
   }
 
   async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
