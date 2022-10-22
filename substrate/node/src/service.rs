@@ -114,6 +114,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   );
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
     &client,
@@ -151,6 +152,14 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
 =======
   let import_queue =
     serai_consensus::import_queue(&task_manager, client.clone(), config.prometheus_registry())?;
+=======
+  let import_queue = serai_consensus::import_queue(
+    &task_manager,
+    client.clone(),
+    transaction_pool.clone(),
+    config.prometheus_registry(),
+  )?;
+>>>>>>> bf5bdb89 (Implement block proposal logic)
 
   let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
 >>>>>>> b8bff650 (Move the node over to the new SelectChain)

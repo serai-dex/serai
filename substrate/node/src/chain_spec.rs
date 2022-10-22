@@ -5,6 +5,7 @@ use sp_core::Pair as PairTrait;
 use sc_service::ChainType;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 use serai_runtime::{
   primitives::*, tokens::primitives::ADDRESS as TOKENS_ADDRESS, WASM_BINARY, opaque::SessionKeys,
   BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
@@ -35,9 +36,11 @@ fn testnet_genesis(
     system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
 =======
 use sp_runtime::traits::Verify;
+=======
+>>>>>>> bf5bdb89 (Implement block proposal logic)
 use sp_core::{Pair as PairTrait, sr25519::Pair};
 
-use serai_runtime::{WASM_BINARY, AccountId, Signature, GenesisConfig, SystemConfig, BalancesConfig};
+use serai_runtime::{WASM_BINARY, AccountId, GenesisConfig, SystemConfig, BalancesConfig};
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 

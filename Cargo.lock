@@ -8660,6 +8660,7 @@ name = "serai-consensus"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "log",
  "sc-basic-authorship",
  "sc-client-api",
  "sc-consensus",
