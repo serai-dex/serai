@@ -1,5 +1,6 @@
 use std::{sync::Arc, future::Future};
 
+use sp_runtime::traits::Block as BlockTrait;
 use sp_api::TransactionFor;
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
@@ -43,15 +44,21 @@ impl NativeExecutionDispatch for ExecutorDispatch {
 
 pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
-pub fn import_queue(
+pub trait Announce<B: BlockTrait>: Send + Sync + Clone + 'static {
+  fn announce(&self, hash: B::Hash);
+}
+
+pub fn import_queue<A: Announce<Block>>(
   task_manager: &TaskManager,
   client: Arc<FullClient>,
+  announce: A,
   pool: Arc<FullPool<Block, FullClient>>,
   registry: Option<&Registry>,
 ) -> (impl Future<Output = ()>, TendermintImportQueue<Block, TransactionFor<FullClient, Block>>) {
   import_queue::import_queue(
     client.clone(),
     client.clone(),
+    announce,
     Arc::new(|_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) }),
     sc_basic_authorship::ProposerFactory::new(
       task_manager.spawn_handle(),

@@ -7450,6 +7450,7 @@ dependencies = [
  "sc-consensus",
  "sc-executor",
  "sc-keystore",
+ "sc-network",
  "sc-rpc",
  "sc-rpc-api",
  "sc-service",

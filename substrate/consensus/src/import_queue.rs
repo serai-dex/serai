@@ -21,7 +21,7 @@ use substrate_prometheus_endpoint::Registry;
 
 use tendermint_machine::{ext::BlockNumber, TendermintMachine};
 
-use crate::tendermint::TendermintImport;
+use crate::{tendermint::TendermintImport, Announce};
 
 pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
 
@@ -78,9 +78,11 @@ pub fn import_queue<
   I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
   CIDP: CreateInherentDataProviders<B, ()> + 'static,
   E: Send + Sync + Environment<B> + 'static,
+  A: Announce<B>,
 >(
   client: Arc<C>,
   inner: I,
+  announce: A,
   providers: Arc<CIDP>,
   env: E,
   spawner: &impl sp_core::traits::SpawnEssentialNamed,
@@ -90,7 +92,7 @@ where
   I::Error: Into<Error>,
   TransactionFor<C, B>: Send + Sync + 'static,
 {
-  let import = TendermintImport::new(client, inner, providers, env);
+  let import = TendermintImport::new(client, inner, announce, providers, env);
 
   let authority = {
     let machine_clone = import.machine.clone();

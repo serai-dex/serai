@@ -36,6 +36,7 @@ use crate::{
   signature_scheme::TendermintSigner,
   weights::TendermintWeights,
   import_queue::{ImportFuture, TendermintImportQueue},
+  Announce,
 };
 
 pub(crate) struct TendermintImport<
@@ -45,6 +46,7 @@ pub(crate) struct TendermintImport<
   I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
   CIDP: CreateInherentDataProviders<B, ()> + 'static,
   E: Send + Sync + Environment<B> + 'static,
+  A: Announce<B>,
 > where
   TransactionFor<C, B>: Send + Sync + 'static,
 {
@@ -56,6 +58,7 @@ pub(crate) struct TendermintImport<
 
   pub(crate) client: Arc<C>,
   pub(crate) inner: Arc<AsyncRwLock<I>>,
+  announce: A,
   providers: Arc<CIDP>,
 
   env: Arc<AsyncRwLock<E>>,
@@ -69,7 +72,8 @@ impl<
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
-  > Clone for TendermintImport<B, Be, C, I, CIDP, E>
+    A: Announce<B>,
+  > Clone for TendermintImport<B, Be, C, I, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
 {
@@ -83,6 +87,7 @@ where
 
       client: self.client.clone(),
       inner: self.inner.clone(),
+      announce: self.announce.clone(),
       providers: self.providers.clone(),
 
       env: self.env.clone(),
@@ -98,16 +103,18 @@ impl<
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
-  > TendermintImport<B, Be, C, I, CIDP, E>
+    A: Announce<B>,
+  > TendermintImport<B, Be, C, I, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
 {
   pub(crate) fn new(
     client: Arc<C>,
     inner: I,
+    announce: A,
     providers: Arc<CIDP>,
     env: E,
-  ) -> TendermintImport<B, Be, C, I, CIDP, E> {
+  ) -> TendermintImport<B, Be, C, I, CIDP, E, A> {
     TendermintImport {
       _block: PhantomData,
       _backend: PhantomData,
@@ -117,6 +124,7 @@ where
 
       client,
       inner: Arc::new(AsyncRwLock::new(inner)),
+      announce,
       providers,
 
       env: Arc::new(AsyncRwLock::new(env)),
@@ -281,7 +289,8 @@ impl<
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
-  > Network for TendermintImport<B, Be, C, I, CIDP, E>
+    A: Announce<B>,
+  > Network for TendermintImport<B, Be, C, I, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
 {
@@ -361,6 +370,7 @@ where
       .finalize_block(BlockId::Hash(hash), Some(justification), true)
       .map_err(|_| Error::InvalidJustification)
       .unwrap();
+    self.announce.announce(hash);
 
     self.get_proposal(block.header()).await
   }

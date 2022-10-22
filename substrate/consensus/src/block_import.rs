@@ -12,7 +12,7 @@ use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImpor
 
 use sc_client_api::{Backend, Finalizer};
 
-use crate::tendermint::TendermintImport;
+use crate::{tendermint::TendermintImport, Announce};
 
 #[async_trait]
 impl<
@@ -22,7 +22,8 @@ impl<
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
-  > BlockImport<B> for TendermintImport<B, Be, C, I, CIDP, E>
+    A: Announce<B>,
+  > BlockImport<B> for TendermintImport<B, Be, C, I, CIDP, E, A>
 where
   I::Error: Into<Error>,
   TransactionFor<C, B>: Send + Sync + 'static,
