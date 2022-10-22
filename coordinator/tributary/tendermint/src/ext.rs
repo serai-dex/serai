@@ -268,6 +268,7 @@ pub trait Network: Send + Sync {
 
   /// Validate a block.
   async fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
 
   /// Add a block, returning the proposal for the next one.
   ///
@@ -277,6 +278,13 @@ pub trait Network: Send + Sync {
   /// This deviates from the paper which will have a local node refuse to decide on a block it
   /// considers invalid. This library acknowledges the network did decide on it, leaving handling
   /// of it to the network, and outside of this scope.
+=======
+  /// Add a block, returning the proposal for the next one. It's possible a block, which was never
+  /// validated or even failed validation, may be passed here if a supermajority of validators did
+  /// consider it valid and created a commit for it. This deviates from the paper which will have a
+  /// local node refuse to decide on a block it considers invalid. This library acknowledges the
+  /// network did decide on it, leaving handling of it to the network, and outside of this scope.
+>>>>>>> 193281e3 (Get the result of block importing):substrate/tendermint/src/ext.rs
   async fn add_block(
     &mut self,
     block: Self::Block,
