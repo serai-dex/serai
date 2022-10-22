@@ -186,6 +186,9 @@ pub trait Network: Send + Sync {
   /// consider it valid and created a commit for it. This deviates from the paper which will have a
   /// local node refuse to decide on a block it considers invalid. This library acknowledges the
   /// network did decide on it, leaving handling of it to the network, and outside of this scope.
-  fn add_block(&mut self, block: Self::Block, commit: Commit<Self::SignatureScheme>)
-    -> Self::Block;
+  async fn add_block(
+    &mut self,
+    block: Self::Block,
+    commit: Commit<Self::SignatureScheme>,
+  ) -> Self::Block;
 }

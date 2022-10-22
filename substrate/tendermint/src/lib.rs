@@ -318,7 +318,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 };
                 debug_assert!(machine.network.read().await.verify_commit(block.id(), &commit));
 
-                let proposal = machine.network.write().await.add_block(block, commit);
+                let proposal = machine.network.write().await.add_block(block, commit).await;
                 machine.reset(proposal).await;
               }
               Err(TendermintError::Malicious(validator)) => {

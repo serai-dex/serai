@@ -14,24 +14,27 @@
 use std::{
   marker::PhantomData,
   sync::{Arc, RwLock},
+  time::Duration,
   collections::HashMap,
 };
 
 use async_trait::async_trait;
 
+use log::warn;
+
 use tokio::sync::RwLock as AsyncRwLock;
 
 use sp_core::{Encode, Decode};
 use sp_application_crypto::sr25519::Signature;
-use sp_inherents::CreateInherentDataProviders;
+use sp_inherents::{InherentData, InherentDataProvider, CreateInherentDataProviders};
 use sp_runtime::{
   traits::{Header, Block},
-  Justification,
+  Digest, Justification,
 };
 use sp_blockchain::HeaderBackend;
 use sp_api::{BlockId, TransactionFor, ProvideRuntimeApi};
 
-use sp_consensus::{Error, CacheKeyId};
+use sp_consensus::{Error, CacheKeyId, Proposer, Environment};
 #[rustfmt::skip] // rustfmt doesn't know how to handle this line
 use sc_consensus::{
   ForkChoiceStrategy,
@@ -63,6 +66,7 @@ struct TendermintImport<
   C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
   I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
   CIDP: CreateInherentDataProviders<B, ()> + 'static,
+  E: Send + Sync + Environment<B> + 'static,
 > {
   _block: PhantomData<B>,
   _backend: PhantomData<Be>,
@@ -72,6 +76,8 @@ struct TendermintImport<
   client: Arc<C>,
   inner: Arc<AsyncRwLock<I>>,
   providers: Arc<CIDP>,
+
+  env: Arc<AsyncRwLock<E>>,
 }
 
 impl<
@@ -80,7 +86,8 @@ impl<
     C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  > Clone for TendermintImport<B, Be, C, I, CIDP>
+    E: Send + Sync + Environment<B> + 'static,
+  > Clone for TendermintImport<B, Be, C, I, CIDP, E>
 {
   fn clone(&self) -> Self {
     TendermintImport {
@@ -92,6 +99,8 @@ impl<
       client: self.client.clone(),
       inner: self.inner.clone(),
       providers: self.providers.clone(),
+
+      env: self.env.clone(),
     }
   }
 }
@@ -102,7 +111,8 @@ impl<
     C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  > TendermintImport<B, Be, C, I, CIDP>
+    E: Send + Sync + Environment<B> + 'static,
+  > TendermintImport<B, Be, C, I, CIDP, E>
 {
   async fn check_inherents(
     &self,
@@ -240,7 +250,8 @@ impl<
     C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  > BlockImport<B> for TendermintImport<B, Be, C, I, CIDP>
+    E: Send + Sync + Environment<B> + 'static,
+  > BlockImport<B> for TendermintImport<B, Be, C, I, CIDP, E>
 where
   I::Error: Into<Error>,
 {
@@ -281,7 +292,8 @@ impl<
     C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  > JustificationImport<B> for TendermintImport<B, Be, C, I, CIDP>
+    E: Send + Sync + Environment<B> + 'static,
+  > JustificationImport<B> for TendermintImport<B, Be, C, I, CIDP, E>
 {
   type Error = Error;
 
@@ -306,7 +318,8 @@ impl<
     C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  > Verifier<B> for TendermintImport<B, Be, C, I, CIDP>
+    E: Send + Sync + Environment<B> + 'static,
+  > Verifier<B> for TendermintImport<B, Be, C, I, CIDP, E>
 {
   async fn verify(
     &mut self,
@@ -324,7 +337,8 @@ impl<
     C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
     I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  > Network for TendermintImport<B, Be, C, I, CIDP>
+    E: Send + Sync + Environment<B> + 'static,
+  > Network for TendermintImport<B, Be, C, I, CIDP, E>
 {
   type ValidatorId = u16;
   type SignatureScheme = TendermintSigner;
@@ -356,10 +370,38 @@ impl<
     // Ok(())
   }
 
-  fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
-    self.import_justification_actual(block.hash(), (CONSENSUS_ID, commit.encode())).unwrap();
-    // Next block proposal
-    todo!()
+  async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
+    let hash = block.hash();
+    self.import_justification_actual(hash, (CONSENSUS_ID, commit.encode())).unwrap();
+
+    let inherent_data = match self.providers.create_inherent_data_providers(hash, ()).await {
+      Ok(providers) => match providers.create_inherent_data() {
+        Ok(data) => Some(data),
+        Err(err) => {
+          warn!(target: "tendermint", "Failed to create inherent data: {}", err);
+          None
+        }
+      },
+      Err(err) => {
+        warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
+        None
+      }
+    }
+    .unwrap_or_else(InherentData::new);
+
+    let proposer = self
+      .env
+      .write()
+      .await
+      .init(block.header())
+      .await
+      .expect("Failed to create a proposer for the new block");
+    // TODO: Production time, size limit
+    let proposal = proposer
+      .propose(inherent_data, Digest::default(), Duration::from_secs(1), None)
+      .await
+      .expect("Failed to crate a new block proposal");
+    proposal.block
   }
 }
 
@@ -371,10 +413,12 @@ pub fn import_queue<
   C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
   I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
   CIDP: CreateInherentDataProviders<B, ()> + 'static,
+  E: Send + Sync + Environment<B> + 'static,
 >(
   client: Arc<C>,
   inner: I,
   providers: Arc<CIDP>,
+  env: E,
   spawner: &impl sp_core::traits::SpawnEssentialNamed,
   registry: Option<&Registry>,
 ) -> TendermintImportQueue<B, TransactionFor<C, B>>
@@ -390,6 +434,8 @@ where
     client,
     inner: Arc::new(AsyncRwLock::new(inner)),
     providers,
+
+    env: Arc::new(AsyncRwLock::new(env)),
   };
   let boxed = Box::new(import.clone());
 

@@ -1,9 +1,8 @@
 use sc_service::ChainType;
 
-use sp_runtime::traits::Verify;
 use sp_core::{Pair as PairTrait, sr25519::Pair};
 
-use serai_runtime::{WASM_BINARY, AccountId, Signature, GenesisConfig, SystemConfig, BalancesConfig};
+use serai_runtime::{WASM_BINARY, AccountId, GenesisConfig, SystemConfig, BalancesConfig};
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 

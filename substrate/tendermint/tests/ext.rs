@@ -113,7 +113,11 @@ impl Network for TestNetwork {
     block.valid
   }
 
-  fn add_block(&mut self, block: TestBlock, commit: Commit<TestSignatureScheme>) -> TestBlock {
+  async fn add_block(
+    &mut self,
+    block: TestBlock,
+    commit: Commit<TestSignatureScheme>,
+  ) -> TestBlock {
     dbg!("Adding ", &block);
     assert!(block.valid.is_ok());
     assert!(self.verify_commit(block.id(), &commit));

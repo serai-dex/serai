@@ -4,6 +4,7 @@ use sp_api::TransactionFor;
 use sp_consensus::Error;
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
+use sc_transaction_pool::FullPool;
 use sc_service::{TaskManager, TFullClient};
 
 use substrate_prometheus_endpoint::Registry;
@@ -40,12 +41,20 @@ pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Exec
 pub fn import_queue(
   task_manager: &TaskManager,
   client: Arc<FullClient>,
+  pool: Arc<FullPool<Block, FullClient>>,
   registry: Option<&Registry>,
 ) -> Result<TendermintImportQueue<Block, TransactionFor<FullClient, Block>>, Error> {
   Ok(import_queue::import_queue(
     client.clone(),
-    client,
+    client.clone(),
     Arc::new(|_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) }),
+    sc_basic_authorship::ProposerFactory::new(
+      task_manager.spawn_handle(),
+      client,
+      pool,
+      registry,
+      None,
+    ),
     &task_manager.spawn_essential_handle(),
     registry,
   ))
@@ -56,7 +65,7 @@ pub fn authority(
   task_manager: &TaskManager,
   client: Arc<FullClient>,
   network: Arc<sc_network::NetworkService<Block, <Block as sp_runtime::traits::Block>::Hash>>,
-  pool: Arc<sc_transaction_pool::FullPool<Block, FullClient>>,
+  pool: Arc<FullPool<Block, FullClient>>,
   registry: Option<&Registry>,
 ) {
   todo!()
