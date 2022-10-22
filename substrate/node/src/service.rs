@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 use std::{boxed::Box, sync::Arc};
+=======
+use std::{sync::Arc, future::Future};
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
 
 use futures::stream::StreamExt;
 
@@ -64,12 +68,21 @@ type PartialComponents = sc_service::PartialComponents<
   ),
 >;
 
+<<<<<<< HEAD
 fn create_inherent_data_providers(
   slot_duration: SlotDuration,
 ) -> (BabeInherent, TimestampInherent) {
   let timestamp = TimestampInherent::from_system_time();
   (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
+=======
+pub fn new_partial(
+  config: &Configuration,
+) -> Result<(impl Future<Output = ()>, PartialComponents), ServiceError> {
+  if config.keystore_remote.is_some() {
+    return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
+  }
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
 
 pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceError> {
   let telemetry = config
@@ -115,6 +128,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
     &client,
@@ -154,16 +168,24 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     serai_consensus::import_queue(&task_manager, client.clone(), config.prometheus_registry())?;
 =======
   let import_queue = serai_consensus::import_queue(
+=======
+  let (authority, import_queue) = serai_consensus::import_queue(
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
     &task_manager,
     client.clone(),
     transaction_pool.clone(),
     config.prometheus_registry(),
+<<<<<<< HEAD
   )?;
 >>>>>>> bf5bdb89 (Implement block proposal logic)
+=======
+  );
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
 
   let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
 >>>>>>> b8bff650 (Move the node over to the new SelectChain)
 
+<<<<<<< HEAD
   Ok(sc_service::PartialComponents {
     client,
     backend,
@@ -192,6 +214,37 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     transaction_pool,
     other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
   } = new_partial(&config)?;
+=======
+  Ok((
+    authority,
+    sc_service::PartialComponents {
+      client,
+      backend,
+      task_manager,
+      import_queue,
+      keystore_container,
+      select_chain,
+      transaction_pool,
+      other: telemetry,
+    },
+  ))
+}
+
+pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
+  let (
+    authority,
+    sc_service::PartialComponents {
+      client,
+      backend,
+      mut task_manager,
+      import_queue,
+      keystore_container,
+      select_chain: _,
+      other: mut telemetry,
+      transaction_pool,
+    },
+  ) = new_partial(&config)?;
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
 
   let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
@@ -238,7 +291,11 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     );
   }
 
+<<<<<<< HEAD
   let rpc_builder = {
+=======
+  let rpc_extensions_builder = {
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
     let client = client.clone();
     let pool = transaction_pool.clone();
 
@@ -252,6 +309,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     })
   };
 
+<<<<<<< HEAD
   let enable_grandpa = !config.disable_grandpa;
   let role = config.role.clone();
   let force_authoring = config.force_authoring;
@@ -259,6 +317,9 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   let prometheus_registry = config.prometheus_registry().cloned();
 
   let keystore = keystore_container.keystore();
+=======
+  let is_authority = config.role.is_authority();
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
 
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     config,
@@ -275,6 +336,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     telemetry: telemetry.as_mut(),
   })?;
 
+<<<<<<< HEAD
 <<<<<<< HEAD
   if let sc_service::config::Role::Authority { .. } = &role {
     let slot_duration = babe_link.config().slot_duration();
@@ -371,6 +433,10 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       prometheus_registry.as_ref(),
 >>>>>>> b8bff650 (Move the node over to the new SelectChain)
     );
+=======
+  if is_authority {
+    authority.await;
+>>>>>>> 9b0dca06 (Provide a way to create the machine)
   }
 
   network_starter.start_network();
