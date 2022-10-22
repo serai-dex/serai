@@ -230,6 +230,38 @@ impl<
     Ok(())
   }
 
+  async fn get_proposal(&mut self, block: &B) -> B {
+    let inherent_data = match self.providers.create_inherent_data_providers(block.hash(), ()).await
+    {
+      Ok(providers) => match providers.create_inherent_data() {
+        Ok(data) => Some(data),
+        Err(err) => {
+          warn!(target: "tendermint", "Failed to create inherent data: {}", err);
+          None
+        }
+      },
+      Err(err) => {
+        warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
+        None
+      }
+    }
+    .unwrap_or_else(InherentData::new);
+
+    let proposer = self
+      .env
+      .write()
+      .await
+      .init(block.header())
+      .await
+      .expect("Failed to create a proposer for the new block");
+    // TODO: Production time, size limit
+    proposer
+      .propose(inherent_data, Digest::default(), Duration::from_secs(1), None)
+      .await
+      .expect("Failed to crate a new block proposal")
+      .block
+  }
+
   fn import_justification_actual(
     &mut self,
     hash: B::Hash,
@@ -371,37 +403,8 @@ impl<
   }
 
   async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
-    let hash = block.hash();
-    self.import_justification_actual(hash, (CONSENSUS_ID, commit.encode())).unwrap();
-
-    let inherent_data = match self.providers.create_inherent_data_providers(hash, ()).await {
-      Ok(providers) => match providers.create_inherent_data() {
-        Ok(data) => Some(data),
-        Err(err) => {
-          warn!(target: "tendermint", "Failed to create inherent data: {}", err);
-          None
-        }
-      },
-      Err(err) => {
-        warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
-        None
-      }
-    }
-    .unwrap_or_else(InherentData::new);
-
-    let proposer = self
-      .env
-      .write()
-      .await
-      .init(block.header())
-      .await
-      .expect("Failed to create a proposer for the new block");
-    // TODO: Production time, size limit
-    let proposal = proposer
-      .propose(inherent_data, Digest::default(), Duration::from_secs(1), None)
-      .await
-      .expect("Failed to crate a new block proposal");
-    proposal.block
+    self.import_justification_actual(block.hash(), (CONSENSUS_ID, commit.encode())).unwrap();
+    self.get_proposal(&block).await
   }
 }
 
