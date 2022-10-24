@@ -57,5 +57,8 @@ where
   ) -> Result<ImportResult, Self::Error> {
     self.check(&mut block).await?;
     self.client.import_block(block, new_cache).await.map_err(Into::into)
+
+    // TODO: If we're a validator who just successfully synced a block, recreate the tendermint
+    // machine with the new height
   }
 }
