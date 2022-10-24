@@ -36,6 +36,7 @@ WORKDIR /home/serai
 # Copy necessary files to run node
 COPY --from=builder /serai/target/release/* /bin/
 COPY --from=builder /serai/AGPL-3.0 .
+COPY deploy/serai/scripts /scripts
 
 # Run node
 EXPOSE 30333 9615 9933 9944
