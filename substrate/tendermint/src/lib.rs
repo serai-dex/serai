@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use std::{
   sync::Arc,
-  time::{SystemTime, Instant, Duration},
+  time::{UNIX_EPOCH, SystemTime, Instant, Duration},
   collections::HashMap,
 };
 
@@ -24,8 +24,8 @@ use ext::*;
 mod message_log;
 use message_log::MessageLog;
 
-pub(crate) fn commit_msg(round: Round, id: &[u8]) -> Vec<u8> {
-  [&round.0.to_le_bytes(), id].concat().to_vec()
+pub(crate) fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
+  [&end_time.to_le_bytes(), id].concat().to_vec()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
@@ -95,6 +95,7 @@ pub struct TendermintMachine<N: Network> {
   proposer: N::ValidatorId,
 
   number: BlockNumber,
+  canonical_start_time: u64,
   start_time: Instant,
   personal_proposal: N::Block,
 
@@ -126,9 +127,21 @@ pub struct TendermintHandle<N: Network> {
 }
 
 impl<N: Network + 'static> TendermintMachine<N> {
+  // Get the canonical end time for a given round, represented as seconds since the epoch
+  // While we have the Instant already in end_time, converting it to a SystemTime would be lossy,
+  // potentially enough to cause a consensus failure. Independently tracking this variable ensures
+  // that won't happen
+  fn canonical_end_time(&self, round: Round) -> u64 {
+    let mut time = self.canonical_start_time;
+    for r in 0 .. u64::from(round.0 + 1) {
+      time += (r + 1) * u64::from(N::BLOCK_TIME);
+    }
+    time
+  }
+
   fn timeout(&self, step: Step) -> Instant {
     let mut round_time = Duration::from_secs(N::BLOCK_TIME.into());
-    round_time *= self.round.0.wrapping_add(1);
+    round_time *= self.round.0 + 1;
     let step_time = round_time / 3;
 
     let offset = match step {
@@ -193,6 +206,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     sleep(round_end.saturating_duration_since(Instant::now())).await;
 
     self.number.0 += 1;
+    self.canonical_start_time = self.canonical_end_time(end_round);
     self.start_time = round_end;
     self.personal_proposal = proposal;
 
@@ -213,7 +227,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   pub fn new(
     network: N,
     proposer: N::ValidatorId,
-    start: (BlockNumber, SystemTime),
+    start: (BlockNumber, u64),
     proposal: N::Block,
   ) -> TendermintHandle<N> {
     // Convert the start time to an instant
@@ -221,7 +235,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
     let start_time = {
       let instant_now = Instant::now();
       let sys_now = SystemTime::now();
-      instant_now - sys_now.duration_since(start.1).unwrap_or(Duration::ZERO)
+      instant_now -
+        sys_now
+          .duration_since(UNIX_EPOCH + Duration::from_secs(start.1))
+          .unwrap_or(Duration::ZERO)
     };
 
     let (msg_send, mut msg_recv) = mpsc::channel(100); // Backlog to accept. Currently arbitrary
@@ -239,6 +256,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           proposer,
 
           number: start.0,
+          canonical_start_time: start.1,
           start_time,
           personal_proposal: proposal,
 
@@ -318,7 +336,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 }
 
                 let commit = Commit {
-                  round: msg.round,
+                  end_time: machine.canonical_end_time(msg.round),
                   validators,
                   signature: N::SignatureScheme::aggregate(&sigs),
                 };
@@ -349,9 +367,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
     &mut self,
     msg: Message<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
-    // Verify the signature if this is a precommit
+    // Verify the end time and signature if this is a precommit
     if let Data::Precommit(Some((id, sig))) = &msg.data {
-      if !self.signer.verify(msg.sender, &commit_msg(msg.round, id.as_ref()), sig) {
+      if !self.signer.verify(
+        msg.sender,
+        &commit_msg(self.canonical_end_time(msg.round), id.as_ref()),
+        sig,
+      ) {
         // Since we verified this validator actually sent the message, they're malicious
         Err(TendermintError::Malicious(msg.sender))?;
       }
@@ -495,7 +517,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
             self.locked = Some((self.round, block.id()));
             self.broadcast(Data::Precommit(Some((
               block.id(),
-              self.signer.sign(&commit_msg(self.round, block.id().as_ref())),
+              self
+                .signer
+                .sign(&commit_msg(self.canonical_end_time(self.round), block.id().as_ref())),
             ))));
             return Ok(None);
           }

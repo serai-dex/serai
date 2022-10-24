@@ -64,8 +64,8 @@ pub trait SignatureScheme: Send + Sync {
 /// a valid commit.
 #[derive(Clone, PartialEq, Debug, Encode, Decode)]
 pub struct Commit<S: SignatureScheme> {
-  /// Round which created this commit.
-  pub round: Round,
+  /// End time of the round, used as the start time of next round.
+  pub end_time: u64,
   /// Validators participating in the signature.
   pub validators: Vec<S::ValidatorId>,
   /// Aggregate signature.
@@ -151,7 +151,7 @@ pub trait Network: Send + Sync {
   ) -> bool {
     if !self.signature_scheme().verify_aggregate(
       &commit.validators,
-      &commit_msg(commit.round, id.as_ref()),
+      &commit_msg(commit.end_time, id.as_ref()),
       &commit.signature,
     ) {
       return false;

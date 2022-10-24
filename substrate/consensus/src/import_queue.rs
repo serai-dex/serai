@@ -3,9 +3,9 @@ use std::{
   sync::{Arc, RwLock},
   task::{Poll, Context},
   future::Future,
-  time::SystemTime,
 };
 
+use sp_core::Decode;
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::{Header, Block};
 use sp_api::{BlockId, TransactionFor};
@@ -18,9 +18,14 @@ use sc_client_api::Backend;
 
 use substrate_prometheus_endpoint::Registry;
 
-use tendermint_machine::{ext::BlockNumber, TendermintMachine};
+use tendermint_machine::{
+  ext::{BlockNumber, Commit},
+  TendermintMachine,
+};
 
 use crate::{
+  CONSENSUS_ID,
+  signature_scheme::TendermintSigner,
   tendermint::{TendermintClient, TendermintImport},
   Announce,
 };
@@ -98,12 +103,31 @@ where
   let authority = {
     let machine_clone = import.machine.clone();
     let mut import_clone = import.clone();
+    let best = import.client.info().best_number;
     async move {
       *machine_clone.write().unwrap() = Some(TendermintMachine::new(
         import_clone.clone(),
         // TODO
         0,
-        (BlockNumber(1), SystemTime::now()),
+        (
+          // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
+          match best.try_into() {
+            Ok(best) => BlockNumber(best),
+            Err(_) => panic!("BlockNumber exceeded u64"),
+          },
+          Commit::<TendermintSigner>::decode(
+            &mut import_clone
+              .client
+              .justifications(&BlockId::Number(best))
+              .unwrap()
+              .unwrap()
+              .get(CONSENSUS_ID)
+              .unwrap()
+              .as_ref(),
+          )
+          .unwrap()
+          .end_time,
+        ),
         import_clone
           .get_proposal(&import_clone.client.header(BlockId::Number(0u8.into())).unwrap().unwrap())
           .await,

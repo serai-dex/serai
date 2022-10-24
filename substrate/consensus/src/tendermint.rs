@@ -24,7 +24,7 @@ use sp_consensus::{Error, BlockOrigin, Proposer, Environment};
 use sc_consensus::{ForkChoiceStrategy, BlockImportParams, BlockImport, import_queue::IncomingBlock};
 
 use sc_service::ImportQueue;
-use sc_client_api::{Backend, Finalizer};
+use sc_client_api::{BlockBackend, Backend, Finalizer};
 
 use tendermint_machine::{
   ext::{BlockError, Commit, Network},
@@ -43,6 +43,7 @@ pub trait TendermintClient<B: Block, Be: Backend<B> + 'static>:
   Send
   + Sync
   + HeaderBackend<B>
+  + BlockBackend<B>
   + BlockImport<B, Transaction = TransactionFor<Self, B>>
   + Finalizer<B, Be>
   + ProvideRuntimeApi<B>
@@ -55,6 +56,7 @@ impl<
     C: Send
       + Sync
       + HeaderBackend<B>
+      + BlockBackend<B>
       + BlockImport<B, Transaction = TransactionFor<C, B>>
       + Finalizer<B, Be>
       + ProvideRuntimeApi<B>
@@ -379,8 +381,8 @@ where
       let info = self.client.info();
       assert_eq!(info.best_hash, parent);
       assert_eq!(info.finalized_hash, parent);
-      assert_eq!(info.best_number, number - 1);
-      assert_eq!(info.finalized_number, number - 1);
+      assert_eq!(info.best_number, number - 1u8.into());
+      assert_eq!(info.finalized_number, number - 1u8.into());
     }
 
     Ok(())
