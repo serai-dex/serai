@@ -162,6 +162,7 @@ impl TestNetwork {
       let mut write = arc.write().await;
       for i in 0 .. validators {
         let i = u16::try_from(i).unwrap();
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
         let TendermintHandle { messages, synced_block, synced_block_result, machine } =
           TendermintMachine::new(
             TestNetwork(i, arc.clone()),
@@ -172,6 +173,14 @@ impl TestNetwork {
           .await;
         tokio::task::spawn(machine.run());
         write.push((messages, synced_block, synced_block_result));
+=======
+        write.push(TendermintMachine::new(
+          TestNetwork(i, arc.clone()),
+          i,
+          (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
+          TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
+        ));
+>>>>>>> 9b8f2f44 (More misc bug fixes):substrate/tendermint/tests/ext.rs
       }
     }
     arc
