@@ -105,6 +105,7 @@ pub struct TendermintMachine<N: Network> {
 
   log: MessageLog<N>,
   round: Round,
+  end_time: HashMap<Round, Instant>,
   step: Step,
 
   locked: Option<(Round, <N::Block as Block>::Id)>,
@@ -169,8 +170,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   fn round(&mut self, round: Round) -> bool {
     // Correct the start time
-    for _ in self.round.0 .. round.0 {
-      self.start_time = self.timeout(Step::Precommit);
+    for r in self.round.0 .. round.0 {
+      let end = self.timeout(Step::Precommit);
+      self.end_time.insert(Round(r), end);
+      self.start_time = end;
     }
 
     // 11-13
@@ -178,15 +181,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.timeouts = HashMap::new();
 
     self.round = round;
+    self.end_time.insert(round, self.timeout(Step::Precommit));
     self.step = Step::Propose;
     self.round_propose()
   }
 
   // 53-54
-  async fn reset(&mut self, proposal: N::Block) {
+  async fn reset(&mut self, end_round: Round, proposal: N::Block) {
     // Wait for the next block interval
-    let round_end = self.timeout(Step::Precommit);
-    sleep(round_end - Instant::now()).await;
+    let round_end = self.end_time[&end_round];
+    sleep(round_end.saturating_duration_since(Instant::now())).await;
 
     self.number.0 += 1;
     self.start_time = round_end;
@@ -195,6 +199,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.queue = self.queue.drain(..).filter(|msg| msg.1.number == self.number).collect();
 
     self.log = MessageLog::new(self.network.read().await.weights());
+    self.end_time = HashMap::new();
 
     self.locked = None;
     self.valid = None;
@@ -241,6 +246,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           log: MessageLog::new(weights),
           round: Round(0),
+          end_time: HashMap::new(),
           step: Step::Propose,
 
           locked: None,
@@ -319,7 +325,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 debug_assert!(machine.network.read().await.verify_commit(block.id(), &commit));
 
                 let proposal = machine.network.write().await.add_block(block, commit).await;
-                machine.reset(proposal).await;
+                machine.reset(msg.round, proposal).await;
               }
               Err(TendermintError::Malicious(validator)) => {
                 machine.network.write().await.slash(validator).await;
