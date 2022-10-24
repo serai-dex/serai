@@ -3,6 +3,7 @@ use std::{
   sync::{Arc, RwLock},
   task::{Poll, Context},
   future::Future,
+  time::{UNIX_EPOCH, SystemTime},
 };
 
 use sp_core::Decode;
@@ -126,7 +127,7 @@ where
           )
           .map(|commit| commit.end_time)
           // TODO: Genesis start time
-          .unwrap_or(0),
+          .unwrap_or_else(|_| SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()),
         ),
         import_clone
           .get_proposal(&import_clone.client.header(BlockId::Number(0u8.into())).unwrap().unwrap())

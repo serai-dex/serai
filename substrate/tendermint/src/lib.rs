@@ -367,6 +367,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
     &mut self,
     msg: Message<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
+    if msg.number != self.number {
+      Err(TendermintError::Temporal)?;
+    }
+
     // Verify the end time and signature if this is a precommit
     if let Data::Precommit(Some((id, sig))) = &msg.data {
       if !self.signer.verify(
@@ -377,10 +381,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Since we verified this validator actually sent the message, they're malicious
         Err(TendermintError::Malicious(msg.sender))?;
       }
-    }
-
-    if msg.number != self.number {
-      Err(TendermintError::Temporal)?;
     }
 
     // Only let the proposer propose

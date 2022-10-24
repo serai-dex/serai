@@ -1,6 +1,6 @@
 use std::{
   sync::Arc,
-  time::{SystemTime, Duration},
+  time::{UNIX_EPOCH, SystemTime, Duration},
 };
 
 use parity_scale_codec::{Encode, Decode};
@@ -104,7 +104,7 @@ impl Network for TestNetwork {
     }
   }
 
-  async fn slash(&mut self, validator: TestValidatorId) {
+  async fn slash(&mut self, _: TestValidatorId) {
     dbg!("Slash");
     todo!()
   }
@@ -135,7 +135,7 @@ impl TestNetwork {
         write.push(TendermintMachine::new(
           TestNetwork(i, arc.clone()),
           i,
-          (BlockNumber(1), SystemTime::now()),
+          (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
         ));
       }
