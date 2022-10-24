@@ -1,4 +1,7 @@
-use std::{sync::{Arc, RwLock}, future::Future};
+use std::{
+  sync::{Arc, RwLock},
+  future::Future,
+};
 
 use sp_core::H256;
 

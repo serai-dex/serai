@@ -120,13 +120,13 @@ where
               .client
               .justifications(&BlockId::Number(best))
               .unwrap()
-              .unwrap()
-              .get(CONSENSUS_ID)
-              .unwrap()
+              .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
+              .unwrap_or_default()
               .as_ref(),
           )
-          .unwrap()
-          .end_time,
+          .map(|commit| commit.end_time)
+          // TODO: Genesis start time
+          .unwrap_or(0),
         ),
         import_clone
           .get_proposal(&import_clone.client.header(BlockId::Number(0u8.into())).unwrap().unwrap())

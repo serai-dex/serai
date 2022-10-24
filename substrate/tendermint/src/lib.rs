@@ -272,7 +272,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           timeouts: HashMap::new(),
         };
-        machine.round_propose();
+        machine.round(Round(0));
 
         loop {
           // Check if any timeouts have been triggered
