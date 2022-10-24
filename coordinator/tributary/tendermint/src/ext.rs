@@ -122,7 +122,11 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
 /// The list of validators have weight exceeding the threshold for a valid commit.
 #[derive(PartialEq, Debug, Encode, Decode)]
 pub struct Commit<S: SignatureScheme> {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// End time of the round which created this commit, used as the start time of the next block.
+=======
+  /// End time of the round, used as the start time of next round.
+>>>>>>> a7f48047 (Move Commit from including the round to including the round's end_time):substrate/tendermint/src/ext.rs
   pub end_time: u64,
   /// Validators participating in the signature.
   pub validators: Vec<S::ValidatorId>,
