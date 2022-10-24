@@ -39,11 +39,34 @@ use crate::{
   Announce,
 };
 
+pub trait TendermintClient<B: Block, Be: Backend<B> + 'static>:
+  Send
+  + Sync
+  + HeaderBackend<B>
+  + BlockImport<B, Transaction = TransactionFor<Self, B>>
+  + Finalizer<B, Be>
+  + ProvideRuntimeApi<B>
+  + 'static
+{
+}
+impl<
+    B: Send + Sync + Block + 'static,
+    Be: Send + Sync + Backend<B> + 'static,
+    C: Send
+      + Sync
+      + HeaderBackend<B>
+      + BlockImport<B, Transaction = TransactionFor<C, B>>
+      + Finalizer<B, Be>
+      + ProvideRuntimeApi<B>
+      + 'static,
+  > TendermintClient<B, Be> for C
+{
+}
+
 pub(crate) struct TendermintImport<
   B: Block,
   Be: Backend<B> + 'static,
-  C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
-  I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+  C: TendermintClient<B, Be>,
   CIDP: CreateInherentDataProviders<B, ()> + 'static,
   E: Send + Sync + Environment<B> + 'static,
   A: Announce<B>,
@@ -57,7 +80,6 @@ pub(crate) struct TendermintImport<
   pub(crate) machine: Arc<RwLock<Option<TendermintHandle<Self>>>>,
 
   pub(crate) client: Arc<C>,
-  pub(crate) inner: Arc<AsyncRwLock<I>>,
   announce: A,
   providers: Arc<CIDP>,
 
@@ -68,12 +90,11 @@ pub(crate) struct TendermintImport<
 impl<
     B: Block,
     Be: Backend<B> + 'static,
-    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
-    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    C: TendermintClient<B, Be>,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
     A: Announce<B>,
-  > Clone for TendermintImport<B, Be, C, I, CIDP, E, A>
+  > Clone for TendermintImport<B, Be, C, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
 {
@@ -86,7 +107,6 @@ where
       machine: self.machine.clone(),
 
       client: self.client.clone(),
-      inner: self.inner.clone(),
       announce: self.announce.clone(),
       providers: self.providers.clone(),
 
@@ -99,22 +119,20 @@ where
 impl<
     B: Block,
     Be: Backend<B> + 'static,
-    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
-    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    C: TendermintClient<B, Be>,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
     A: Announce<B>,
-  > TendermintImport<B, Be, C, I, CIDP, E, A>
+  > TendermintImport<B, Be, C, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
 {
   pub(crate) fn new(
     client: Arc<C>,
-    inner: I,
     announce: A,
     providers: Arc<CIDP>,
     env: E,
-  ) -> TendermintImport<B, Be, C, I, CIDP, E, A> {
+  ) -> TendermintImport<B, Be, C, CIDP, E, A> {
     TendermintImport {
       _block: PhantomData,
       _backend: PhantomData,
@@ -123,7 +141,6 @@ where
       machine: Arc::new(RwLock::new(None)),
 
       client,
-      inner: Arc::new(AsyncRwLock::new(inner)),
       announce,
       providers,
 
@@ -284,12 +301,11 @@ where
 impl<
     B: Block,
     Be: Backend<B> + 'static,
-    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
-    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    C: TendermintClient<B, Be>,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
     A: Announce<B>,
-  > Network for TendermintImport<B, Be, C, I, CIDP, E, A>
+  > Network for TendermintImport<B, Be, C, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
 {

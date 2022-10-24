@@ -1,27 +1,29 @@
 use std::{
   pin::Pin,
   sync::{Arc, RwLock},
-  task::{Poll, /* Wake, Waker, */ Context},
+  task::{Poll, Context},
   future::Future,
   time::SystemTime,
 };
 
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::{Header, Block};
-use sp_blockchain::HeaderBackend;
-use sp_api::{BlockId, TransactionFor, ProvideRuntimeApi};
+use sp_api::{BlockId, TransactionFor};
 
 use sp_consensus::{Error, Environment};
-use sc_consensus::{BlockImport, BlockImportStatus, BlockImportError, Link, BasicQueue};
+use sc_consensus::{BlockImportStatus, BlockImportError, BlockImport, Link, BasicQueue};
 
 use sc_service::ImportQueue;
-use sc_client_api::{Backend, Finalizer};
+use sc_client_api::Backend;
 
 use substrate_prometheus_endpoint::Registry;
 
 use tendermint_machine::{ext::BlockNumber, TendermintMachine};
 
-use crate::{tendermint::TendermintImport, Announce};
+use crate::{
+  tendermint::{TendermintClient, TendermintImport},
+  Announce,
+};
 
 pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
 
@@ -74,14 +76,12 @@ impl<'a, B: Block, T: Send> Future for ImportFuture<'a, B, T> {
 pub fn import_queue<
   B: Block,
   Be: Backend<B> + 'static,
-  C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
-  I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+  C: TendermintClient<B, Be>,
   CIDP: CreateInherentDataProviders<B, ()> + 'static,
   E: Send + Sync + Environment<B> + 'static,
   A: Announce<B>,
 >(
   client: Arc<C>,
-  inner: I,
   announce: A,
   providers: Arc<CIDP>,
   env: E,
@@ -89,10 +89,11 @@ pub fn import_queue<
   registry: Option<&Registry>,
 ) -> (impl Future<Output = ()>, TendermintImportQueue<B, TransactionFor<C, B>>)
 where
-  I::Error: Into<Error>,
   TransactionFor<C, B>: Send + Sync + 'static,
+  Arc<C>: BlockImport<B, Transaction = TransactionFor<C, B>>,
+  <Arc<C> as BlockImport<B>>::Error: Into<Error>,
 {
-  let import = TendermintImport::new(client, inner, announce, providers, env);
+  let import = TendermintImport::new(client, announce, providers, env);
 
   let authority = {
     let machine_clone = import.machine.clone();

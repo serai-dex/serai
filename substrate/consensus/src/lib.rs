@@ -57,7 +57,6 @@ pub fn import_queue<A: Announce<Block>>(
 ) -> (impl Future<Output = ()>, TendermintImportQueue<Block, TransactionFor<FullClient, Block>>) {
   import_queue::import_queue(
     client.clone(),
-    client.clone(),
     announce,
     Arc::new(|_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) }),
     sc_basic_authorship::ProposerFactory::new(

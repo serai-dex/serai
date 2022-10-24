@@ -1,32 +1,34 @@
-use std::collections::HashMap;
+use std::{sync::Arc, collections::HashMap};
 
 use async_trait::async_trait;
 
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::Block;
-use sp_blockchain::HeaderBackend;
-use sp_api::{TransactionFor, ProvideRuntimeApi};
+use sp_api::TransactionFor;
 
 use sp_consensus::{Error, CacheKeyId, Environment};
 use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport};
 
-use sc_client_api::{Backend, Finalizer};
+use sc_client_api::Backend;
 
-use crate::{tendermint::TendermintImport, Announce};
+use crate::{
+  tendermint::{TendermintClient, TendermintImport},
+  Announce,
+};
 
 #[async_trait]
 impl<
     B: Block,
     Be: Backend<B> + 'static,
-    C: Send + Sync + HeaderBackend<B> + Finalizer<B, Be> + ProvideRuntimeApi<B> + 'static,
-    I: Send + Sync + BlockImport<B, Transaction = TransactionFor<C, B>> + 'static,
+    C: TendermintClient<B, Be>,
     CIDP: CreateInherentDataProviders<B, ()> + 'static,
     E: Send + Sync + Environment<B> + 'static,
     A: Announce<B>,
-  > BlockImport<B> for TendermintImport<B, Be, C, I, CIDP, E, A>
+  > BlockImport<B> for TendermintImport<B, Be, C, CIDP, E, A>
 where
-  I::Error: Into<Error>,
   TransactionFor<C, B>: Send + Sync + 'static,
+  Arc<C>: BlockImport<B, Transaction = TransactionFor<C, B>>,
+  <Arc<C> as BlockImport<B>>::Error: Into<Error>,
 {
   type Error = Error;
   type Transaction = TransactionFor<C, B>;
@@ -45,7 +47,7 @@ where
     block.allow_missing_state = false;
     block.allow_missing_parent = false;
 
-    self.inner.write().await.check_block(block).await.map_err(Into::into)
+    self.client.check_block(block).await.map_err(Into::into)
   }
 
   async fn import_block(
@@ -54,6 +56,6 @@ where
     new_cache: HashMap<CacheKeyId, Vec<u8>>,
   ) -> Result<ImportResult, Self::Error> {
     self.check(&mut block).await?;
-    self.inner.write().await.import_block(block, new_cache).await.map_err(Into::into)
+    self.client.import_block(block, new_cache).await.map_err(Into::into)
   }
 }
