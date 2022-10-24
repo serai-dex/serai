@@ -1,5 +1,6 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 use std::{boxed::Box, sync::Arc};
 =======
 use std::{sync::Arc, future::Future};
@@ -44,6 +45,12 @@ pub type Executor = WasmExecutor<
 >;
 =======
 use std::{sync::{Arc, RwLock}, future::Future};
+=======
+use std::{
+  sync::{Arc, RwLock},
+  future::Future,
+};
+>>>>>>> 05be5c14 (Misc bug fixes)
 
 use sp_core::H256;
 
