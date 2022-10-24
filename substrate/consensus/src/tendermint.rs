@@ -348,6 +348,7 @@ where
     let hash = block.hash();
     let (header, body) = block.clone().deconstruct();
     let parent = *header.parent_hash();
+    let number = *header.number();
     *self.importing_block.write().unwrap() = Some(hash);
     self.queue.write().await.as_mut().unwrap().import_blocks(
       // We do not want this block, which hasn't been confirmed, to be broadcast over the net
@@ -372,7 +373,15 @@ where
     if !ImportFuture::new(hash, self.queue.write().await.as_mut().unwrap()).await {
       todo!()
     }
-    assert_eq!(self.client.info().best_hash, parent);
+
+    // Sanity checks that a child block can have less work than its parent
+    {
+      let info = self.client.info();
+      assert_eq!(info.best_hash, parent);
+      assert_eq!(info.finalized_hash, parent);
+      assert_eq!(info.best_number, number - 1);
+      assert_eq!(info.finalized_number, number - 1);
+    }
 
     Ok(())
   }
