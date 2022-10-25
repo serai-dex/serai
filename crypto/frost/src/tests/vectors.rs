@@ -150,7 +150,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       let machine = machine.unsafe_override_preprocess(PreprocessPackage {
         nonces: vec![nonces],
         commitments: vec![these_commitments.clone()],
-        addendum: vec![],
+        addendum: (),
       });
 
       commitments.insert(

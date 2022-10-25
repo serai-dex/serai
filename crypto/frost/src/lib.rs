@@ -14,11 +14,7 @@
 //! 10 is supported.
 
 use core::fmt::{self, Debug};
-use std::{
-  io::{self, Read, Write},
-  sync::Arc,
-  collections::HashMap,
-};
+use std::{io::Read, sync::Arc, collections::HashMap};
 
 use thiserror::Error;
 
@@ -43,26 +39,12 @@ pub mod promote;
 /// Algorithm for the signing process.
 pub mod algorithm;
 /// Threshold signing protocol.
+mod nonce;
 pub mod sign;
 
 /// Tests for application-provided curves and algorithms.
-#[cfg(any(test, feature = "tests"))]
-pub mod tests;
-
-/// (De)serialize a message.
-pub trait Serializable: Sized {
-  fn read<R: Read>(reader: &mut R, params: FrostParams) -> io::Result<Self>;
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
-}
-
-impl Serializable for () {
-  fn read<R: Read>(_: &mut R, _: FrostParams) -> io::Result<Self> {
-    Ok(())
-  }
-  fn write<W: Write>(&self, _: &mut W) -> io::Result<()> {
-    Ok(())
-  }
-}
+//#[cfg(any(test, feature = "tests"))]
+//pub mod tests;
 
 // Validate a map of serialized values to have the expected included participants
 pub(crate) fn validate_map<T>(
@@ -155,6 +137,8 @@ pub enum FrostError {
   InvalidCommitment(u16),
   #[error("invalid proof of knowledge (participant {0})")]
   InvalidProofOfKnowledge(u16),
+  #[error("invalid addendum (participant {0})")]
+  InvalidAddendum(u16),
   #[error("invalid share (participant {0})")]
   InvalidShare(u16),
 

@@ -1,4 +1,5 @@
 use core::{marker::PhantomData, fmt::Debug};
+use std::io::{self, Read, Write};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -6,37 +7,57 @@ use zeroize::Zeroize;
 
 use transcript::Transcript;
 
-use crate::{Curve, Serializable, FrostError, FrostView, schnorr};
+use crate::{Curve, FrostError, FrostView, schnorr};
 pub use schnorr::SchnorrSignature;
+
+/// Serialize an addendum to a writer.
+pub trait AddendumSerialize {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+}
+
+impl AddendumSerialize for () {
+  fn write<W: Write>(&self, _: &mut W) -> io::Result<()> {
+    Ok(())
+  }
+}
+
+/// Trait alias for the requirements to be used as an addendum.
+pub trait Addendum: Clone + PartialEq + Debug + Zeroize + AddendumSerialize {}
+impl<A: Clone + PartialEq + Debug + Zeroize + AddendumSerialize> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
 pub trait Algorithm<C: Curve>: Clone {
   /// The transcript format this algorithm uses. This likely should NOT be the IETF-compatible
   /// transcript included in this crate.
   type Transcript: Clone + Debug + Transcript;
+  /// Serializable addendum, used in algorithms requiring more data than just the nonces.
+  type Addendum: Addendum;
   /// The resulting type of the signatures this algorithm will produce.
   type Signature: Clone + PartialEq + Debug;
 
   /// Obtain a mutable borrow of the underlying transcript.
   fn transcript(&mut self) -> &mut Self::Transcript;
 
-  /// Obtain the list of nonces to generate, as specified by the basepoints to create commitments.
-  /// against per-nonce. These are not committed to by FROST on the underlying transcript.
+  /// Obtain the list of nonces to generate, as specified by the generators to create commitments
+  /// against per-nonce
   fn nonces(&self) -> Vec<Vec<C::G>>;
+
+  /// Read an addendum from a reader.
+  fn read_addendum<R: Read>(&self, reader: &mut R) -> io::Result<Self::Addendum>;
 
   /// Generate an addendum to FROST"s preprocessing stage.
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
     params: &FrostView<C>,
-  ) -> Vec<u8>;
+  ) -> Self::Addendum;
 
-  /// Proccess the addendum for the specified participant. Guaranteed to be ordered.
-  fn process_addendum<Re: Read>(
+  /// Proccess the addendum for the specified participant. Guaranteed to be called in order.
+  fn process_addendum(
     &mut self,
     params: &FrostView<C>,
     l: u16,
-    reader: &mut Re,
+    reader: Self::Addendum,
   ) -> Result<(), FrostError>;
 
   /// Sign a share with the given secret/nonce.
@@ -117,6 +138,7 @@ impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
 
 impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
   type Transcript = IetfTranscript;
+  type Addendum = ();
   type Signature = SchnorrSignature<C>;
 
   fn transcript(&mut self) -> &mut Self::Transcript {
@@ -127,20 +149,15 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     vec![vec![C::generator()]]
   }
 
-  fn preprocess_addendum<R: RngCore + CryptoRng>(
-    &mut self,
-    _: &mut R,
-    _: &FrostView<C>,
-  ) -> Vec<u8> {
-    vec![]
+  fn read_addendum<R: Read>(&self, _: &mut R) -> io::Result<Self::Addendum> {
+    Ok(())
   }
 
-  fn process_addendum<Re: Read>(
-    &mut self,
-    _: &FrostView<C>,
-    _: u16,
-    _: &mut Re,
-  ) -> Result<(), FrostError> {
+  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &FrostView<C>) -> () {
+    ()
+  }
+
+  fn process_addendum(&mut self, _: &FrostView<C>, _: u16, _: ()) -> Result<(), FrostError> {
     Ok(())
   }
 

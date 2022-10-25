@@ -17,7 +17,7 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 
 use crate::{
   curve::Curve,
-  Serializable, FrostError, FrostParams, FrostCore,
+  FrostError, FrostParams, FrostCore,
   schnorr::{self, SchnorrSignature},
   validate_map,
 };
@@ -37,8 +37,8 @@ fn challenge<C: Curve>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
 /// Commitments message to be broadcast to all other parties.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Commitments<C: Curve>(Vec<C::G>, Vec<u8>, SchnorrSignature<C>);
-impl<C: Curve> Serializable for Commitments<C> {
-  fn read<R: Read>(reader: &mut R, params: FrostParams) -> io::Result<Self> {
+impl<C: Curve> Commitments<C> {
+  pub fn read<R: Read>(reader: &mut R, params: FrostParams) -> io::Result<Self> {
     let mut commitments = Vec::with_capacity(params.t().into());
     let mut serialized = Vec::with_capacity(usize::from(params.t()) * C::G_len());
     for _ in 0 .. params.t() {
@@ -52,7 +52,7 @@ impl<C: Curve> Serializable for Commitments<C> {
     Ok(Commitments(commitments, serialized, SchnorrSignature::read(reader)?))
   }
 
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&self.1)?;
     self.2.write(writer)
   }
@@ -144,15 +144,22 @@ fn polynomial<F: PrimeField>(coefficients: &[F], l: u16) -> F {
 /// authenticated channel.
 #[derive(Clone, PartialEq, Debug, Zeroize)]
 pub struct SecretShare<C: Curve>(C::F);
-impl<C: Curve> Serializable for SecretShare<C> {
-  fn read<R: Read>(reader: &mut R, _: FrostParams) -> io::Result<Self> {
+impl<C: Curve> SecretShare<C> {
+  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
     Ok(SecretShare(C::read_F(reader)?))
   }
 
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.0.to_repr().as_ref())
   }
 }
+
+impl<C: Curve> Drop for SecretShare<C> {
+  fn drop(&mut self) {
+    self.zeroize();
+  }
+}
+impl<C: Curve> ZeroizeOnDrop for SecretShare<C> {}
 
 // Calls round 1, step 5 and implements round 2, step 1 of FROST key generation
 // Returns our secret share part, commitments for the next step, and a vector for each

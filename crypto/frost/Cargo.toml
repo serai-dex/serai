@@ -40,7 +40,7 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
-dleq = { path = "../dleq", version = "0.1", features = ["serialize"] }
+dleq = { path = "../dleq", version = "^0.1.2", features = ["serialize"] }
 
 [dev-dependencies]
 sha2 = "0.10"

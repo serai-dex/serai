@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 use group::ff::Field;
 
 use crate::{
-  Curve, Serializable, FrostParams, FrostCore, FrostKeys, lagrange,
+  Curve, FrostParams, FrostCore, FrostKeys, lagrange,
   key_gen::KeyGenMachine,
   algorithm::Algorithm,
   sign::{PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
@@ -40,15 +40,6 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
   res
 }
 
-fn reserialize<T: PartialEq + Debug + Serializable>(t: T) -> T {
-  let mut buf = vec![];
-  t.write(&mut buf).unwrap();
-  let res =
-    T::read(&mut Cursor::new(&buf), FrostParams { t: THRESHOLD, n: PARTICIPANTS, i: 0 }).unwrap();
-  assert_eq!(t, res);
-  res
-}
-
 /// Generate FROST keys (as FrostCore objects) for tests.
 pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, FrostCore<C>> {
   let mut machines = HashMap::new();
@@ -60,7 +51,13 @@ pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, F
     );
     let (machine, these_commitments) = machine.generate_coefficients(rng);
     machines.insert(i, machine);
-    commitments.insert(i, reserialize(these_commitments));
+
+    let mut buf = vec![];
+    these_commitments.write(&mut buf);
+    commitments.insert(
+      i,
+      Commitments::read(&mut &buf, FrostParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 }).unwrap(),
+    );
   }
 
   let mut secret_shares = HashMap::new();
@@ -69,7 +66,14 @@ pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, F
     .map(|(l, machine)| {
       let (machine, mut shares) =
         machine.generate_secret_shares(rng, clone_without(&commitments, &l)).unwrap();
-      let shares = shares.drain().map(|(k, v)| (k, reserialize(v))).collect::<HashMap<_, _>>();
+      let shares = shares
+        .drain()
+        .map(|(l, share)| {
+          let mut buf = vec![];
+          share.write(&mut buf);
+          (l, SecretShare::<C>::read(&mut &buf))
+        })
+        .collect::<HashMap<_, _>>();
       secret_shares.insert(l, shares);
       (l, machine)
     })
