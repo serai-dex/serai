@@ -38,6 +38,8 @@ services:
       args:
         TAG: serai
     entrypoint: /scripts/entry-dev.sh
+    volumes:
+      - "./serai/scripts:/scripts"
 
   serai-base:
     <<: *serai_defaults
