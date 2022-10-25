@@ -14,7 +14,11 @@
 //! 10 is supported.
 
 use core::fmt::{self, Debug};
-use std::{io::Read, sync::Arc, collections::HashMap};
+use std::{
+  io::{self, Read, Write},
+  sync::Arc,
+  collections::HashMap,
+};
 
 use thiserror::Error;
 
@@ -44,6 +48,21 @@ pub mod sign;
 /// Tests for application-provided curves and algorithms.
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
+
+/// (De)serialize a message.
+pub trait Serializable: Sized {
+  fn read<R: Read>(reader: &mut R, params: FrostParams) -> io::Result<Self>;
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+}
+
+impl Serializable for () {
+  fn read<R: Read>(_: &mut R, _: FrostParams) -> io::Result<Self> {
+    Ok(())
+  }
+  fn write<W: Write>(&self, _: &mut W) -> io::Result<()> {
+    Ok(())
+  }
+}
 
 // Validate a map of serialized values to have the expected included participants
 pub(crate) fn validate_map<T>(

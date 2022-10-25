@@ -1,18 +1,19 @@
 use core::{marker::PhantomData, fmt::Debug};
-use std::io::Read;
 
 use rand_core::{RngCore, CryptoRng};
 
+use zeroize::Zeroize;
+
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, FrostView, schnorr};
+use crate::{Curve, Serializable, FrostError, FrostView, schnorr};
 pub use schnorr::SchnorrSignature;
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
 pub trait Algorithm<C: Curve>: Clone {
   /// The transcript format this algorithm uses. This likely should NOT be the IETF-compatible
   /// transcript included in this crate.
-  type Transcript: Transcript + Clone + Debug;
+  type Transcript: Clone + Debug + Transcript;
   /// The resulting type of the signatures this algorithm will produce.
   type Signature: Clone + PartialEq + Debug;
 
