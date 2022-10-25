@@ -17,8 +17,19 @@ use crate::{
   FrostError, FrostParams, FrostKeys, FrostView,
   algorithm::{AddendumSerialize, Addendum, Algorithm},
   validate_map,
-  nonce::*,
 };
+
+pub(crate) use crate::nonce::*;
+
+/// Trait enabling reading signature shares.
+pub trait Readable: Sized {
+  fn read<R: Read>(reader: &mut R) -> io::Result<Self>;
+}
+
+/// Trait enabling writing preprocesses and signature shares.
+pub trait Writable {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+}
 
 /// Pairing of an Algorithm with a FrostKeys instance and this specific signing set.
 #[derive(Clone)]
@@ -77,12 +88,12 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct Preprocess<C: Curve, A: Addendum> {
-  commitments: Commitments<C>,
-  addendum: A,
+  pub(crate) commitments: Commitments<C>,
+  pub(crate) addendum: A,
 }
 
-impl<C: Curve, A: Addendum> Preprocess<C, A> {
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     self.commitments.write(writer)?;
     self.addendum.write(writer)
   }
@@ -128,12 +139,13 @@ struct SignData<C: Curve> {
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct SignatureShare<C: Curve>(C::F);
-impl<C: Curve> SignatureShare<C> {
-  pub fn read<R: Read, Context>(reader: &mut R) -> io::Result<Self> {
+impl<C: Curve> Readable for SignatureShare<C> {
+  fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
     Ok(SignatureShare(C::read_F(reader)?))
   }
-
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+}
+impl<C: Curve> Writable for SignatureShare<C> {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.0.to_repr().as_ref())
   }
 }
@@ -287,7 +299,7 @@ fn complete<C: Curve, A: Algorithm<C>>(
 
 /// Trait for the initial state machine of a two-round signing protocol.
 pub trait PreprocessMachine {
-  type Preprocess: Clone + PartialEq;
+  type Preprocess: Clone + PartialEq + Writable;
   type Signature: Clone + PartialEq + fmt::Debug;
   type SignMachine: SignMachine<Self::Signature, Preprocess = Self::Preprocess>;
 
@@ -299,8 +311,8 @@ pub trait PreprocessMachine {
 
 /// Trait for the second machine of a two-round signing protocol.
 pub trait SignMachine<S> {
-  type Preprocess: Clone + PartialEq;
-  type SignatureShare: Clone + PartialEq;
+  type Preprocess: Clone + PartialEq + Writable;
+  type SignatureShare: Clone + PartialEq + Readable + Writable;
   type SignatureMachine: SignatureMachine<S, SignatureShare = Self::SignatureShare>;
 
   /// Read a Preprocess message.
@@ -318,7 +330,7 @@ pub trait SignMachine<S> {
 
 /// Trait for the final machine of a two-round signing protocol.
 pub trait SignatureMachine<S> {
-  type SignatureShare: Clone + PartialEq;
+  type SignatureShare: Clone + PartialEq + Readable + Writable;
 
   /// Complete signing.
   /// Takes in everyone elses' shares. Returns the signature.

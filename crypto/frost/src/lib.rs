@@ -43,8 +43,8 @@ mod nonce;
 pub mod sign;
 
 /// Tests for application-provided curves and algorithms.
-//#[cfg(any(test, feature = "tests"))]
-//pub mod tests;
+#[cfg(any(test, feature = "tests"))]
+pub mod tests;
 
 // Validate a map of serialized values to have the expected included participants
 pub(crate) fn validate_map<T>(

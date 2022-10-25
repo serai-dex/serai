@@ -1,5 +1,4 @@
-use core::fmt::Debug;
-use std::{io::Cursor, collections::HashMap};
+use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -7,9 +6,9 @@ use group::ff::Field;
 
 use crate::{
   Curve, FrostParams, FrostCore, FrostKeys, lagrange,
-  key_gen::KeyGenMachine,
+  key_gen::{SecretShare, Commitments as KGCommitments, KeyGenMachine},
   algorithm::Algorithm,
-  sign::{PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
+  sign::{Readable, Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
 
 /// Curve tests.
@@ -52,12 +51,15 @@ pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, F
     let (machine, these_commitments) = machine.generate_coefficients(rng);
     machines.insert(i, machine);
 
-    let mut buf = vec![];
-    these_commitments.write(&mut buf);
-    commitments.insert(
-      i,
-      Commitments::read(&mut &buf, FrostParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 }).unwrap(),
-    );
+    commitments.insert(i, {
+      let mut buf = vec![];
+      these_commitments.write(&mut buf).unwrap();
+      KGCommitments::read::<&[u8]>(
+        &mut buf.as_ref(),
+        FrostParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 },
+      )
+      .unwrap()
+    });
   }
 
   let mut secret_shares = HashMap::new();
@@ -70,8 +72,8 @@ pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, F
         .drain()
         .map(|(l, share)| {
           let mut buf = vec![];
-          share.write(&mut buf);
-          (l, SecretShare::<C>::read(&mut &buf))
+          share.write(&mut buf).unwrap();
+          (l, SecretShare::<C>::read::<&[u8]>(&mut buf.as_ref()).unwrap())
         })
         .collect::<HashMap<_, _>>();
       secret_shares.insert(l, shares);
@@ -169,7 +171,11 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     .drain()
     .map(|(i, machine)| {
       let (machine, preprocess) = machine.preprocess(rng);
-      commitments.insert(i, Cursor::new(preprocess));
+      commitments.insert(i, {
+        let mut buf = vec![];
+        preprocess.write(&mut buf).unwrap();
+        machine.read_preprocess::<&[u8]>(&mut buf.as_ref()).unwrap()
+      });
       (i, machine)
     })
     .collect::<HashMap<_, _>>();
@@ -179,7 +185,14 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     .drain()
     .map(|(i, machine)| {
       let (machine, share) = machine.sign(clone_without(&commitments, &i), msg).unwrap();
-      shares.insert(i, Cursor::new(share));
+      shares.insert(i, {
+        let mut buf = vec![];
+        share.write(&mut buf).unwrap();
+        <M::SignMachine as SignMachine<M::Signature>>::SignatureShare::read::<&[u8]>(
+          &mut buf.as_ref(),
+        )
+        .unwrap()
+      });
       (i, machine)
     })
     .collect::<HashMap<_, _>>();
