@@ -153,9 +153,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     Ok(())
   }
 
-  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &FrostView<C>) -> () {
-    ()
-  }
+  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &FrostView<C>) {}
 
   fn process_addendum(&mut self, _: &FrostView<C>, _: u16, _: ()) -> Result<(), FrostError> {
     Ok(())

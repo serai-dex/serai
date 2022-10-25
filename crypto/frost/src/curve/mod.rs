@@ -122,7 +122,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
 
     // ff mandates this is canonical
     let res = Option::<Self::F>::from(Self::F::from_repr(encoding))
-      .ok_or(io::Error::new(io::ErrorKind::Other, "non-canonical scalar"));
+      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "non-canonical scalar"));
     for b in encoding.as_mut() {
       b.zeroize();
     }
@@ -135,7 +135,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
     r.read_exact(encoding.as_mut())?;
 
     let point = Option::<Self::G>::from(Self::G::from_bytes(&encoding))
-      .ok_or(io::Error::new(io::ErrorKind::Other, "invalid point"))?;
+      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))?;
     // Ban the identity, per the FROST spec, and non-canonical points
     if (point.is_identity().into()) || (point.to_bytes().as_ref() != encoding.as_ref()) {
       Err(io::Error::new(io::ErrorKind::Other, "non-canonical or identity point"))?;

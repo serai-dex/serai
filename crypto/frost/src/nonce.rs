@@ -106,7 +106,7 @@ impl<C: Curve> NonceCommitments<C> {
         dleq
           .verify(
             &mut dleq_transcript::<T>(),
-            &generators,
+            generators,
             &commitments.iter().map(|commitments| commitments.0[i]).collect::<Vec<_>>(),
           )
           .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid DLEq proof"))?;
@@ -194,33 +194,36 @@ impl<C: Curve> Commitments<C> {
   }
 }
 
-pub(crate) struct BindingFactor<C: Curve>(
-  pub(crate) HashMap<u16, (Commitments<C>, Option<Vec<C::F>>)>,
-);
+#[derive(Zeroize)]
+pub(crate) struct IndividualBinding<C: Curve> {
+  commitments: Commitments<C>,
+  binding_factors: Option<Vec<C::F>>,
+}
+
+pub(crate) struct BindingFactor<C: Curve>(pub(crate) HashMap<u16, IndividualBinding<C>>);
 
 impl<C: Curve> Zeroize for BindingFactor<C> {
   fn zeroize(&mut self) {
-    for (mut validator, mut commitments) in self.0.drain() {
+    for (mut validator, mut binding) in self.0.drain() {
       validator.zeroize();
-      commitments.0.zeroize();
-      commitments.1.zeroize();
+      binding.zeroize();
     }
   }
 }
 
 impl<C: Curve> BindingFactor<C> {
   pub(crate) fn insert(&mut self, i: u16, commitments: Commitments<C>) {
-    self.0.insert(i, (commitments, None));
+    self.0.insert(i, IndividualBinding { commitments, binding_factors: None });
   }
 
   pub(crate) fn calculate_binding_factors<T: Clone + Transcript>(&mut self, transcript: &mut T) {
-    for (l, commitments) in self.0.iter_mut() {
+    for (l, binding) in self.0.iter_mut() {
       let mut transcript = transcript.clone();
       transcript.append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
       // It *should* be perfectly fine to reuse a binding factor for multiple nonces
       // This generates a binding factor per nonce just to ensure it never comes up as a question
-      commitments.1 = Some(
-        (0 .. commitments.0.nonces.len())
+      binding.binding_factors = Some(
+        (0 .. binding.commitments.nonces.len())
           .map(|_| C::hash_binding_factor(transcript.challenge(b"rho").as_ref()))
           .collect(),
       );
@@ -228,14 +231,14 @@ impl<C: Curve> BindingFactor<C> {
   }
 
   pub(crate) fn binding_factors(&self, i: u16) -> &[C::F] {
-    self.0[&i].1.as_ref().unwrap()
+    self.0[&i].binding_factors.as_ref().unwrap()
   }
 
   // Get the bound nonces for a specific party
   pub(crate) fn bound(&self, l: u16) -> Vec<Vec<C::G>> {
     let mut res = vec![];
     for (i, (nonce, rho)) in
-      self.0[&l].0.nonces.iter().zip(self.binding_factors(l).iter()).enumerate()
+      self.0[&l].commitments.nonces.iter().zip(self.binding_factors(l).iter()).enumerate()
     {
       res.push(vec![]);
       for generator in &nonce.generators {
@@ -255,9 +258,10 @@ impl<C: Curve> BindingFactor<C> {
         let mut D = C::G::identity();
         let mut statements = Vec::with_capacity(self.0.len());
         #[allow(non_snake_case)]
-        for (commitments, binding) in self.0.values() {
+        for IndividualBinding { commitments, binding_factors } in self.0.values() {
           D += commitments.nonces[n].generators[g].0[0];
-          statements.push((binding.clone().unwrap()[n], commitments.nonces[n].generators[g].0[1]));
+          statements
+            .push((binding_factors.as_ref().unwrap()[n], commitments.nonces[n].generators[g].0[1]));
         }
         nonces[n].push(D + multiexp_vartime(&statements));
       }

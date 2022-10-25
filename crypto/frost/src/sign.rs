@@ -75,7 +75,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   }
 }
 
-#[derive(Clone, PartialEq, Zeroize)]
+#[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct Preprocess<C: Curve, A: Addendum> {
   commitments: Commitments<C>,
   addendum: A,

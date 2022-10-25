@@ -35,7 +35,7 @@ fn challenge<C: Curve>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
 }
 
 /// Commitments message to be broadcast to all other parties.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Commitments<C: Curve>(Vec<C::G>, Vec<u8>, SchnorrSignature<C>);
 impl<C: Curve> Commitments<C> {
   pub fn read<R: Read>(reader: &mut R, params: FrostParams) -> io::Result<Self> {
@@ -142,7 +142,7 @@ fn polynomial<F: PrimeField>(coefficients: &[F], l: u16) -> F {
 
 /// Secret share, to be sent only to the party it's intended for, over an encrypted and
 /// authenticated channel.
-#[derive(Clone, PartialEq, Debug, Zeroize)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct SecretShare<C: Curve>(C::F);
 impl<C: Curve> SecretShare<C> {
   pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
