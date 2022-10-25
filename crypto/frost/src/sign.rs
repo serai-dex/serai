@@ -26,6 +26,15 @@ pub trait Writable {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
 }
 
+impl<T: Writable> Writable for Vec<T> {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    for w in self {
+      w.write(writer)?;
+    }
+    Ok(())
+  }
+}
+
 /// Pairing of an Algorithm with a FrostKeys instance and this specific signing set.
 #[derive(Clone)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
@@ -84,7 +93,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct Preprocess<C: Curve, A: Addendum> {
   pub(crate) commitments: Commitments<C>,
-  pub(crate) addendum: A,
+  pub addendum: A,
 }
 
 impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {

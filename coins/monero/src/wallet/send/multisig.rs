@@ -1,5 +1,5 @@
 use std::{
-  io::{Read, Cursor},
+  io::{self, Read},
   sync::{Arc, RwLock},
   collections::HashMap,
 };
@@ -7,26 +7,22 @@ use std::{
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use curve25519_dalek::{
-  traits::Identity,
-  scalar::Scalar,
-  edwards::{EdwardsPoint, CompressedEdwardsY},
-};
+use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::EdwardsPoint};
 
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Ed25519,
   FrostError, FrostKeys,
   sign::{
-    PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine, AlgorithmSignMachine,
-    AlgorithmSignatureMachine,
+    Writable, Preprocess, SignatureShare, PreprocessMachine, SignMachine, SignatureMachine,
+    AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
   },
 };
 
 use crate::{
   random_scalar,
   ringct::{
-    clsag::{ClsagInput, ClsagDetails, ClsagMultisig},
+    clsag::{ClsagInput, ClsagDetails, ClsagAddendum, ClsagMultisig},
     RctPrunable,
   },
   transaction::{Input, Transaction},
@@ -58,7 +54,7 @@ pub struct TransactionSignMachine {
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
   clsags: Vec<AlgorithmSignMachine<Ed25519, ClsagMultisig>>,
 
-  our_preprocess: Vec<u8>,
+  our_preprocess: Vec<Preprocess<Ed25519, ClsagAddendum>>,
 }
 
 pub struct TransactionSignatureMachine {
@@ -166,28 +162,26 @@ impl SignableTransaction {
 }
 
 impl PreprocessMachine for TransactionMachine {
+  type Preprocess = Vec<Preprocess<Ed25519, ClsagAddendum>>;
   type Signature = Transaction;
   type SignMachine = TransactionSignMachine;
 
   fn preprocess<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-  ) -> (TransactionSignMachine, Vec<u8>) {
+  ) -> (TransactionSignMachine, Self::Preprocess) {
     // Iterate over each CLSAG calling preprocess
-    let mut serialized = Vec::with_capacity(
-      // D_{G, H}, E_{G, H}, DLEqs, key image addendum
-      self.clsags.len() * ((2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len()),
-    );
+    let mut preprocesses = Vec::with_capacity(self.clsags.len());
     let clsags = self
       .clsags
       .drain(..)
       .map(|clsag| {
         let (clsag, preprocess) = clsag.preprocess(rng);
-        serialized.extend(&preprocess);
+        preprocesses.push(preprocess);
         clsag
       })
       .collect();
-    let our_preprocess = serialized.clone();
+    let our_preprocess = preprocesses.clone();
 
     // We could add further entropy here, and previous versions of this library did so
     // As of right now, the multisig's key, the inputs being spent, and the FROST data itself
@@ -212,33 +206,35 @@ impl PreprocessMachine for TransactionMachine {
 
         our_preprocess,
       },
-      serialized,
+      preprocesses,
     )
   }
 }
 
 impl SignMachine<Transaction> for TransactionSignMachine {
+  type Preprocess = Vec<Preprocess<Ed25519, ClsagAddendum>>;
+  type SignatureShare = Vec<SignatureShare<Ed25519>>;
   type SignatureMachine = TransactionSignatureMachine;
 
-  fn sign<Re: Read>(
+  fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess> {
+    self.clsags.iter().map(|clsag| clsag.read_preprocess(reader)).collect()
+  }
+
+  fn sign(
     mut self,
-    mut commitments: HashMap<u16, Re>,
+    mut commitments: HashMap<u16, Self::Preprocess>,
     msg: &[u8],
-  ) -> Result<(TransactionSignatureMachine, Vec<u8>), FrostError> {
+  ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
     if !msg.is_empty() {
       Err(FrostError::InternalError(
         "message was passed to the TransactionMachine when it generates its own",
       ))?;
     }
 
-    // FROST commitments and their DLEqs, and the image and its DLEq
-    const CLSAG_LEN: usize = (2 * (32 + 32)) + (2 * (32 + 32)) + ClsagMultisig::serialized_len();
-
     // Convert the unified commitments to a Vec of the individual commitments
     let mut images = vec![EdwardsPoint::identity(); self.clsags.len()];
     let mut commitments = (0 .. self.clsags.len())
       .map(|c| {
-        let mut buf = [0; CLSAG_LEN];
         self
           .included
           .iter()
@@ -248,31 +244,27 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // transcripts cloned from this TX's initial premise's transcript. For our TX
             // transcript to have the CLSAG data for entropy, it'll have to be added ourselves here
             self.transcript.append_message(b"participant", &(*l).to_be_bytes());
-            if *l == self.i {
-              buf.copy_from_slice(self.our_preprocess.drain(.. CLSAG_LEN).as_slice());
+
+            let preprocess = if *l == self.i {
+              self.our_preprocess[c].clone()
             } else {
-              commitments
-                .get_mut(l)
-                .ok_or(FrostError::MissingParticipant(*l))?
-                .read_exact(&mut buf)
-                .map_err(|_| FrostError::InvalidCommitment(*l))?;
+              commitments.get_mut(l).ok_or(FrostError::MissingParticipant(*l))?[c].clone()
+            };
+
+            {
+              let mut buf = vec![];
+              preprocess.write(&mut buf).unwrap();
+              self.transcript.append_message(b"preprocess", &buf);
             }
-            self.transcript.append_message(b"preprocess", &buf);
 
             // While here, calculate the key image
             // Clsag will parse/calculate/validate this as needed, yet doing so here as well
             // provides the easiest API overall, as this is where the TX is (which needs the key
             // images in its message), along with where the outputs are determined (where our
             // outputs may need these in order to guarantee uniqueness)
-            images[c] += CompressedEdwardsY(
-              buf[(CLSAG_LEN - 96) .. (CLSAG_LEN - 64)]
-                .try_into()
-                .map_err(|_| FrostError::InvalidCommitment(*l))?,
-            )
-            .decompress()
-            .ok_or(FrostError::InvalidCommitment(*l))?;
+            images[c] += preprocess.addendum.key_image.0;
 
-            Ok((*l, Cursor::new(buf)))
+            Ok((*l, preprocess))
           })
           .collect::<Result<HashMap<_, _>, _>>()
       })
@@ -346,37 +338,39 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     let msg = tx.signature_hash();
 
     // Iterate over each CLSAG calling sign
-    let mut serialized = Vec::with_capacity(self.clsags.len() * 32);
+    let mut shares = Vec::with_capacity(self.clsags.len());
     let clsags = self
       .clsags
       .drain(..)
       .map(|clsag| {
         let (clsag, share) = clsag.sign(commitments.remove(0), &msg)?;
-        serialized.extend(&share);
+        shares.push(share);
         Ok(clsag)
       })
       .collect::<Result<_, _>>()?;
 
-    Ok((TransactionSignatureMachine { tx, clsags }, serialized))
+    Ok((TransactionSignatureMachine { tx, clsags }, shares))
   }
 }
 
 impl SignatureMachine<Transaction> for TransactionSignatureMachine {
-  fn complete<Re: Read>(self, mut shares: HashMap<u16, Re>) -> Result<Transaction, FrostError> {
+  type SignatureShare = Vec<SignatureShare<Ed25519>>;
+
+  fn read_signature_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare> {
+    self.clsags.iter().map(|clsag| clsag.read_signature_share(reader)).collect()
+  }
+
+  fn complete(
+    mut self,
+    shares: HashMap<u16, Self::SignatureShare>,
+  ) -> Result<Transaction, FrostError> {
     let mut tx = self.tx;
     match tx.rct_signatures.prunable {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
-        for clsag in self.clsags {
+        for (c, clsag) in self.clsags.drain(..).enumerate() {
           let (clsag, pseudo_out) = clsag.complete(
-            shares
-              .iter_mut()
-              .map(|(l, shares)| {
-                let mut buf = [0; 32];
-                shares.read_exact(&mut buf).map_err(|_| FrostError::InvalidShare(*l))?;
-                Ok((*l, Cursor::new(buf)))
-              })
-              .collect::<Result<HashMap<_, _>, _>>()?,
+            shares.iter().map(|(l, shares)| (*l, shares[c].clone())).collect::<HashMap<_, _>>(),
           )?;
           clsags.push(clsag);
           pseudo_outs.push(pseudo_out);

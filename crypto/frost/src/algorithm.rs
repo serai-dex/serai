@@ -42,15 +42,15 @@ pub trait Algorithm<C: Curve>: Clone {
   /// against per-nonce
   fn nonces(&self) -> Vec<Vec<C::G>>;
 
-  /// Read an addendum from a reader.
-  fn read_addendum<R: Read>(&self, reader: &mut R) -> io::Result<Self::Addendum>;
-
   /// Generate an addendum to FROST"s preprocessing stage.
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
     params: &FrostView<C>,
   ) -> Self::Addendum;
+
+  /// Read an addendum from a reader.
+  fn read_addendum<R: Read>(&self, reader: &mut R) -> io::Result<Self::Addendum>;
 
   /// Proccess the addendum for the specified participant. Guaranteed to be called in order.
   fn process_addendum(
@@ -149,11 +149,11 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     vec![vec![C::generator()]]
   }
 
+  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &FrostView<C>) {}
+
   fn read_addendum<R: Read>(&self, _: &mut R) -> io::Result<Self::Addendum> {
     Ok(())
   }
-
-  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &FrostView<C>) {}
 
   fn process_addendum(&mut self, _: &FrostView<C>, _: u16, _: ()) -> Result<(), FrostError> {
     Ok(())
