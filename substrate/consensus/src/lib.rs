@@ -11,8 +11,7 @@ use substrate_prometheus_endpoint::Registry;
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
 
-mod signature_scheme;
-mod weights;
+mod validators;
 
 mod tendermint;
 mod block_import;

@@ -33,8 +33,7 @@ use tendermint_machine::{
 
 use crate::{
   CONSENSUS_ID,
-  signature_scheme::TendermintSigner,
-  weights::TendermintWeights,
+  validators::TendermintValidators,
   import_queue::{ImportFuture, TendermintImportQueue},
   Announce,
 };
@@ -197,7 +196,7 @@ where
       Err(Error::InvalidJustification)?;
     }
 
-    let commit: Commit<TendermintSigner> =
+    let commit: Commit<TendermintValidators> =
       Commit::decode(&mut justification.1.as_ref()).map_err(|_| Error::InvalidJustification)?;
     if !self.verify_commit(hash, &commit) {
       Err(Error::InvalidJustification)?;
@@ -312,18 +311,18 @@ where
   TransactionFor<C, B>: Send + Sync + 'static,
 {
   type ValidatorId = u16;
-  type SignatureScheme = TendermintSigner;
-  type Weights = TendermintWeights;
+  type SignatureScheme = TendermintValidators;
+  type Weights = TendermintValidators;
   type Block = B;
 
   const BLOCK_TIME: u32 = { (serai_runtime::MILLISECS_PER_BLOCK / 1000) as u32 };
 
-  fn signature_scheme(&self) -> Arc<TendermintSigner> {
-    Arc::new(TendermintSigner::new())
+  fn signature_scheme(&self) -> Arc<TendermintValidators> {
+    Arc::new(TendermintValidators::new())
   }
 
-  fn weights(&self) -> Arc<TendermintWeights> {
-    Arc::new(TendermintWeights)
+  fn weights(&self) -> Arc<TendermintValidators> {
+    Arc::new(TendermintValidators::new())
   }
 
   async fn broadcast(&mut self, msg: SignedMessage<u16, Self::Block, Signature>) {
@@ -391,7 +390,7 @@ where
     Ok(())
   }
 
-  async fn add_block(&mut self, block: B, commit: Commit<TendermintSigner>) -> B {
+  async fn add_block(&mut self, block: B, commit: Commit<TendermintValidators>) -> B {
     let hash = block.hash();
     let justification = (CONSENSUS_ID, commit.encode());
     debug_assert!(self.verify_justification(hash, &justification).is_ok());

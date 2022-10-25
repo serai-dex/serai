@@ -26,7 +26,7 @@ use tendermint_machine::{
 
 use crate::{
   CONSENSUS_ID,
-  signature_scheme::TendermintSigner,
+  validators::TendermintValidators,
   tendermint::{TendermintClient, TendermintImport},
   Announce,
 };
@@ -116,7 +116,7 @@ where
             Ok(best) => BlockNumber(best),
             Err(_) => panic!("BlockNumber exceeded u64"),
           },
-          Commit::<TendermintSigner>::decode(
+          Commit::<TendermintValidators>::decode(
             &mut import_clone
               .client
               .justifications(&BlockId::Number(best))

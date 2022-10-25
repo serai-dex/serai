@@ -1,24 +1,27 @@
+// TODO: This should be built around pallet_sessions (and pallet_staking?).
+
 use sp_application_crypto::{
   RuntimePublic as PublicTrait, Pair as PairTrait,
   sr25519::{Public, Pair, Signature},
 };
 
-use tendermint_machine::ext::SignatureScheme;
+use tendermint_machine::ext::{BlockNumber, Round, Weights, SignatureScheme};
 
-pub(crate) struct TendermintSigner {
-  keys: Pair,
-  lookup: Vec<Public>,
+const VALIDATORS: usize = 1;
+
+pub(crate) struct TendermintValidators {
+  keys: Pair, // sp_keystore
+  lookup: Vec<Public>, // sessions
 }
 
-impl TendermintSigner {
-  pub(crate) fn new() -> TendermintSigner {
-    // TODO
+impl TendermintValidators {
+  pub(crate) fn new() -> TendermintValidators {
     let keys = Pair::from_string("//Alice", None).unwrap();
-    TendermintSigner { lookup: vec![keys.public()], keys }
+    TendermintValidators { lookup: vec![keys.public()], keys }
   }
 }
 
-impl SignatureScheme for TendermintSigner {
+impl SignatureScheme for TendermintValidators {
   type ValidatorId = u16;
   type Signature = Signature;
   type AggregateSignature = Vec<Signature>;
@@ -45,5 +48,20 @@ impl SignatureScheme for TendermintSigner {
       }
     }
     true
+  }
+}
+
+impl Weights for TendermintValidators {
+  type ValidatorId = u16;
+
+  fn total_weight(&self) -> u64 {
+    VALIDATORS.try_into().unwrap()
+  }
+  fn weight(&self, id: u16) -> u64 {
+    [1; VALIDATORS][usize::try_from(id).unwrap()]
+  }
+
+  fn proposer(&self, number: BlockNumber, round: Round) -> u16 {
+    u16::try_from((number.0 + u64::from(round.0)) % u64::try_from(VALIDATORS).unwrap()).unwrap()
   }
 }
