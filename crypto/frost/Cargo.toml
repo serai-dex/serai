@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.2.4"
+version = "0.3.0"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"

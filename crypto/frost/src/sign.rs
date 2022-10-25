@@ -21,11 +21,6 @@ use crate::{
 
 pub(crate) use crate::nonce::*;
 
-/// Trait enabling reading signature shares.
-pub trait Readable: Sized {
-  fn read<R: Read>(reader: &mut R) -> io::Result<Self>;
-}
-
 /// Trait enabling writing preprocesses and signature shares.
 pub trait Writable {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
@@ -139,11 +134,6 @@ struct SignData<C: Curve> {
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct SignatureShare<C: Curve>(C::F);
-impl<C: Curve> Readable for SignatureShare<C> {
-  fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
-    Ok(SignatureShare(C::read_F(reader)?))
-  }
-}
 impl<C: Curve> Writable for SignatureShare<C> {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.0.to_repr().as_ref())
@@ -312,7 +302,7 @@ pub trait PreprocessMachine {
 /// Trait for the second machine of a two-round signing protocol.
 pub trait SignMachine<S> {
   type Preprocess: Clone + PartialEq + Writable;
-  type SignatureShare: Clone + PartialEq + Readable + Writable;
+  type SignatureShare: Clone + PartialEq + Writable;
   type SignatureMachine: SignatureMachine<S, SignatureShare = Self::SignatureShare>;
 
   /// Read a Preprocess message.
@@ -330,7 +320,10 @@ pub trait SignMachine<S> {
 
 /// Trait for the final machine of a two-round signing protocol.
 pub trait SignatureMachine<S> {
-  type SignatureShare: Clone + PartialEq + Readable + Writable;
+  type SignatureShare: Clone + PartialEq + Writable;
+
+  /// Read a Signature Share message.
+  fn read_signature_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare>;
 
   /// Complete signing.
   /// Takes in everyone elses' shares. Returns the signature.
@@ -413,6 +406,11 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
 impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSignatureMachine<C, A> {
   type SignatureShare = SignatureShare<C>;
+
+  fn read_signature_share<R: Read>(&self, reader: &mut R) -> io::Result<SignatureShare<C>> {
+    Ok(SignatureShare(C::read_F(reader)?))
+  }
+
   fn complete(self, shares: HashMap<u16, SignatureShare<C>>) -> Result<A::Signature, FrostError> {
     complete(&self.params, self.sign, shares)
   }

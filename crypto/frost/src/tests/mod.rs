@@ -8,7 +8,7 @@ use crate::{
   Curve, FrostParams, FrostCore, FrostKeys, lagrange,
   key_gen::{SecretShare, Commitments as KGCommitments, KeyGenMachine},
   algorithm::Algorithm,
-  sign::{Readable, Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
+  sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
 
 /// Curve tests.
@@ -188,10 +188,7 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
       shares.insert(i, {
         let mut buf = vec![];
         share.write(&mut buf).unwrap();
-        <M::SignMachine as SignMachine<M::Signature>>::SignatureShare::read::<&[u8]>(
-          &mut buf.as_ref(),
-        )
-        .unwrap()
+        machine.read_signature_share::<&[u8]>(&mut buf.as_ref()).unwrap()
       });
       (i, machine)
     })

@@ -11,8 +11,8 @@ use crate::{
   FrostCore, FrostKeys,
   algorithm::{Schnorr, Hram},
   sign::{
-    Nonce, GeneratorCommitments, NonceCommitments, Commitments, Readable, Writable, Preprocess,
-    PreprocessData, SignatureShare, SignMachine, SignatureMachine, AlgorithmMachine,
+    Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess,
+    PreprocessData, SignMachine, SignatureMachine, AlgorithmMachine,
   },
   tests::{
     clone_without, curve::test_curve, schnorr::test_schnorr, promote::test_promotion, recover,
@@ -198,7 +198,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       assert_eq!(share, hex::decode(&vectors.sig_shares[c]).unwrap());
       c += 1;
 
-      shares.insert(*i, SignatureShare::read::<&[u8]>(&mut share.as_ref()).unwrap());
+      shares.insert(*i, machine.read_signature_share::<&[u8]>(&mut share.as_ref()).unwrap());
       (i, machine)
     })
     .collect::<HashMap<_, _>>();
