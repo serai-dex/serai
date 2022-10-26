@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.2.4"
+version = "0.3.0"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
@@ -40,7 +40,7 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
-dleq = { path = "../dleq", version = "0.1", features = ["serialize"] }
+dleq = { path = "../dleq", version = "^0.1.2", features = ["serialize"] }
 
 [dev-dependencies]
 sha2 = "0.10"

@@ -1,7 +1,5 @@
 use core::fmt::Debug;
-use std::io::Read;
-
-use thiserror::Error;
+use std::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -29,15 +27,6 @@ pub use kp256::{P256, IetfP256Hram};
 mod ed448;
 #[cfg(feature = "ed448")]
 pub use ed448::{Ed448, Ietf8032Ed448Hram, IetfEd448Hram};
-
-/// Set of errors for curve-related operations, namely encoding and decoding.
-#[derive(Clone, Error, Debug)]
-pub enum CurveError {
-  #[error("invalid scalar")]
-  InvalidScalar,
-  #[error("invalid point")]
-  InvalidPoint,
-}
 
 /// Unified trait to manage an elliptic curve.
 // This should be moved into its own crate if the need for generic cryptography over ff/group
@@ -127,13 +116,13 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   }
 
   #[allow(non_snake_case)]
-  fn read_F<R: Read>(r: &mut R) -> Result<Self::F, CurveError> {
+  fn read_F<R: Read>(r: &mut R) -> io::Result<Self::F> {
     let mut encoding = <Self::F as PrimeField>::Repr::default();
-    r.read_exact(encoding.as_mut()).map_err(|_| CurveError::InvalidScalar)?;
+    r.read_exact(encoding.as_mut())?;
 
     // ff mandates this is canonical
-    let res =
-      Option::<Self::F>::from(Self::F::from_repr(encoding)).ok_or(CurveError::InvalidScalar);
+    let res = Option::<Self::F>::from(Self::F::from_repr(encoding))
+      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "non-canonical scalar"));
     for b in encoding.as_mut() {
       b.zeroize();
     }
@@ -141,15 +130,15 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   }
 
   #[allow(non_snake_case)]
-  fn read_G<R: Read>(r: &mut R) -> Result<Self::G, CurveError> {
+  fn read_G<R: Read>(r: &mut R) -> io::Result<Self::G> {
     let mut encoding = <Self::G as GroupEncoding>::Repr::default();
-    r.read_exact(encoding.as_mut()).map_err(|_| CurveError::InvalidPoint)?;
+    r.read_exact(encoding.as_mut())?;
 
-    let point =
-      Option::<Self::G>::from(Self::G::from_bytes(&encoding)).ok_or(CurveError::InvalidPoint)?;
+    let point = Option::<Self::G>::from(Self::G::from_bytes(&encoding))
+      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))?;
     // Ban the identity, per the FROST spec, and non-canonical points
     if (point.is_identity().into()) || (point.to_bytes().as_ref() != encoding.as_ref()) {
-      Err(CurveError::InvalidPoint)?;
+      Err(io::Error::new(io::ErrorKind::Other, "non-canonical or identity point"))?;
     }
     Ok(point)
   }

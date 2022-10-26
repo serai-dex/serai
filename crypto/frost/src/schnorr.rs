@@ -1,3 +1,5 @@
+use std::io::{self, Read, Write};
+
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
@@ -9,7 +11,7 @@ use group::{
 
 use multiexp::BatchVerifier;
 
-use crate::Curve;
+use crate::curve::Curve;
 
 /// A Schnorr signature of the form (R, s) where s = r + cx.
 #[allow(non_snake_case)]
@@ -20,11 +22,13 @@ pub struct SchnorrSignature<C: Curve> {
 }
 
 impl<C: Curve> SchnorrSignature<C> {
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(C::G_len() + C::F_len());
-    res.extend(self.R.to_bytes().as_ref());
-    res.extend(self.s.to_repr().as_ref());
-    res
+  pub(crate) fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+    Ok(SchnorrSignature { R: C::read_G(reader)?, s: C::read_F(reader)? })
+  }
+
+  pub(crate) fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(self.R.to_bytes().as_ref())?;
+    writer.write_all(self.s.to_repr().as_ref())
   }
 }
 

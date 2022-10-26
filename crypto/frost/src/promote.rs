@@ -12,10 +12,7 @@ use group::GroupEncoding;
 use transcript::{Transcript, RecommendedTranscript};
 use dleq::DLEqProof;
 
-use crate::{
-  curve::{CurveError, Curve},
-  FrostError, FrostCore, FrostKeys, validate_map,
-};
+use crate::{curve::Curve, FrostError, FrostCore, FrostKeys, validate_map};
 
 /// Promote a set of keys to another Curve definition.
 pub trait CurvePromote<C2: Curve> {
@@ -73,11 +70,8 @@ impl<C: Curve> GeneratorProof<C> {
     self.proof.serialize(writer)
   }
 
-  pub fn deserialize<R: Read>(reader: &mut R) -> Result<GeneratorProof<C>, CurveError> {
-    Ok(GeneratorProof {
-      share: C::read_G(reader)?,
-      proof: DLEqProof::deserialize(reader).map_err(|_| CurveError::InvalidScalar)?,
-    })
+  pub fn deserialize<R: Read>(reader: &mut R) -> io::Result<GeneratorProof<C>> {
+    Ok(GeneratorProof { share: C::read_G(reader)?, proof: DLEqProof::deserialize(reader)? })
   }
 }
 

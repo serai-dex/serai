@@ -7,8 +7,8 @@ use group::GroupEncoding;
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Curve,
-  FrostKeys,
-  sign::{PreprocessMachine, SignMachine, SignatureMachine},
+  FrostError, FrostKeys,
+  sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
 };
 
 use crate::{
@@ -343,10 +343,44 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
       self.coin.attempt_send(prepared, &included).await.map_err(SignError::CoinError)?;
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);
-    let commitments = network.round(commitments).await.map_err(SignError::NetworkError)?;
+    let commitments = network
+      .round({
+        let mut buf = vec![];
+        commitments.write(&mut buf).unwrap();
+        buf
+      })
+      .await
+      .map_err(SignError::NetworkError)?
+      .drain()
+      .map(|(validator, preprocess)| {
+        Ok((
+          validator,
+          attempt
+            .read_preprocess::<&[u8]>(&mut preprocess.as_ref())
+            .map_err(|_| SignError::FrostError(FrostError::InvalidPreprocess(validator)))?,
+        ))
+      })
+      .collect::<Result<HashMap<_, _>, _>>()?;
 
     let (attempt, share) = attempt.sign(commitments, b"").map_err(SignError::FrostError)?;
-    let shares = network.round(share).await.map_err(SignError::NetworkError)?;
+    let shares = network
+      .round({
+        let mut buf = vec![];
+        share.write(&mut buf).unwrap();
+        buf
+      })
+      .await
+      .map_err(SignError::NetworkError)?
+      .drain()
+      .map(|(validator, share)| {
+        Ok((
+          validator,
+          attempt
+            .read_share::<&[u8]>(&mut share.as_ref())
+            .map_err(|_| SignError::FrostError(FrostError::InvalidShare(validator)))?,
+        ))
+      })
+      .collect::<Result<HashMap<_, _>, _>>()?;
 
     let tx = attempt.complete(shares).map_err(SignError::FrostError)?;
 

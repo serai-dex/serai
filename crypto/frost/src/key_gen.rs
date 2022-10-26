@@ -1,6 +1,6 @@
 use std::{
   marker::PhantomData,
-  io::{Read, Cursor},
+  io::{self, Read, Write},
   collections::HashMap,
 };
 
@@ -34,101 +34,97 @@ fn challenge<C: Curve>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
   C::hash_to_F(DST, &transcript)
 }
 
+/// Commitments message to be broadcast to all other parties.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Commitments<C: Curve>(Vec<C::G>, Vec<u8>, SchnorrSignature<C>);
+impl<C: Curve> Commitments<C> {
+  pub fn read<R: Read>(reader: &mut R, params: FrostParams) -> io::Result<Self> {
+    let mut commitments = Vec::with_capacity(params.t().into());
+    let mut serialized = Vec::with_capacity(usize::from(params.t()) * C::G_len());
+    for _ in 0 .. params.t() {
+      let mut buf = <C::G as GroupEncoding>::Repr::default();
+      reader.read_exact(buf.as_mut())?;
+
+      commitments.push(C::read_G(&mut buf.as_ref())?);
+      serialized.extend(buf.as_ref());
+    }
+
+    Ok(Commitments(commitments, serialized, SchnorrSignature::read(reader)?))
+  }
+
+  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&self.1)?;
+    self.2.write(writer)
+  }
+}
+
 // Implements steps 1 through 3 of round 1 of FROST DKG. Returns the coefficients, commitments, and
-// the serialized commitments to be broadcasted over an authenticated channel to all parties
+// the commitments to be broadcasted over an authenticated channel to all parties
 fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
-) -> (Vec<C::F>, Vec<C::G>, Vec<u8>) {
+) -> (Vec<C::F>, Vec<C::G>, Commitments<C>) {
   let t = usize::from(params.t);
   let mut coefficients = Vec::with_capacity(t);
   let mut commitments = Vec::with_capacity(t);
-  let mut serialized = Vec::with_capacity((C::G_len() * t) + C::G_len() + C::F_len());
+  let mut serialized = Vec::with_capacity(t * C::G_len());
 
   for i in 0 .. t {
     // Step 1: Generate t random values to form a polynomial with
     coefficients.push(C::random_F(&mut *rng));
     // Step 3: Generate public commitments
     commitments.push(C::generator() * coefficients[i]);
-    // Serialize them for publication
     serialized.extend(commitments[i].to_bytes().as_ref());
   }
 
   // Step 2: Provide a proof of knowledge
   let mut r = C::random_F(rng);
-  serialized.extend(
-    schnorr::sign::<C>(
-      coefficients[0],
-      // This could be deterministic as the PoK is a singleton never opened up to cooperative
-      // discussion
-      // There's no reason to spend the time and effort to make this deterministic besides a
-      // general obsession with canonicity and determinism though
-      r,
-      challenge::<C>(context, params.i(), (C::generator() * r).to_bytes().as_ref(), &serialized),
-    )
-    .serialize(),
+  let sig = schnorr::sign::<C>(
+    coefficients[0],
+    // This could be deterministic as the PoK is a singleton never opened up to cooperative
+    // discussion
+    // There's no reason to spend the time and effort to make this deterministic besides a
+    // general obsession with canonicity and determinism though
+    r,
+    challenge::<C>(context, params.i(), (C::generator() * r).to_bytes().as_ref(), &serialized),
   );
   r.zeroize();
 
   // Step 4: Broadcast
-  (coefficients, commitments, serialized)
+  (coefficients, commitments.clone(), Commitments(commitments, serialized, sig))
 }
 
 // Verify the received data from the first round of key generation
-fn verify_r1<Re: Read, R: RngCore + CryptoRng, C: Curve>(
+fn verify_r1<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
   our_commitments: Vec<C::G>,
-  mut serialized: HashMap<u16, Re>,
+  mut msgs: HashMap<u16, Commitments<C>>,
 ) -> Result<HashMap<u16, Vec<C::G>>, FrostError> {
-  validate_map(&serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
-
-  let mut commitments = HashMap::new();
-  commitments.insert(params.i, our_commitments);
+  validate_map(&msgs, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   let mut signatures = Vec::with_capacity(usize::from(params.n() - 1));
-  for l in 1 ..= params.n() {
-    if l == params.i {
-      continue;
-    }
-
-    let invalid = FrostError::InvalidCommitment(l);
-
-    // Read the entire list of commitments as the key we're providing a PoK for (A) and the message
-    #[allow(non_snake_case)]
-    let mut Am = vec![0; usize::from(params.t()) * C::G_len()];
-    serialized.get_mut(&l).unwrap().read_exact(&mut Am).map_err(|_| invalid)?;
-
-    let mut these_commitments = vec![];
-    let mut cursor = Cursor::new(&Am);
-    for _ in 0 .. usize::from(params.t()) {
-      these_commitments.push(C::read_G(&mut cursor).map_err(|_| invalid)?);
-    }
-
-    // Don't bother validating our own proof of knowledge
-    if l != params.i() {
-      let cursor = serialized.get_mut(&l).unwrap();
-      #[allow(non_snake_case)]
-      let R = C::read_G(cursor).map_err(|_| FrostError::InvalidProofOfKnowledge(l))?;
-      let s = C::read_F(cursor).map_err(|_| FrostError::InvalidProofOfKnowledge(l))?;
-
+  let mut commitments = msgs
+    .drain()
+    .map(|(l, msg)| {
       // Step 5: Validate each proof of knowledge
       // This is solely the prep step for the latter batch verification
       signatures.push((
         l,
-        these_commitments[0],
-        challenge::<C>(context, l, R.to_bytes().as_ref(), &Am),
-        SchnorrSignature::<C> { R, s },
+        msg.0[0],
+        challenge::<C>(context, l, msg.2.R.to_bytes().as_ref(), &msg.1),
+        msg.2,
       ));
-    }
 
-    commitments.insert(l, these_commitments);
-  }
+      (l, msg.0)
+    })
+    .collect::<HashMap<_, _>>();
 
   schnorr::batch_verify(rng, &signatures).map_err(FrostError::InvalidProofOfKnowledge)?;
 
+  commitments.insert(params.i, our_commitments);
   Ok(commitments)
 }
 
@@ -144,18 +140,39 @@ fn polynomial<F: PrimeField>(coefficients: &[F], l: u16) -> F {
   share
 }
 
-// Implements round 1, step 5 and round 2, step 1 of FROST key generation
+/// Secret share, to be sent only to the party it's intended for, over an encrypted and
+/// authenticated channel.
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub struct SecretShare<C: Curve>(C::F);
+impl<C: Curve> SecretShare<C> {
+  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+    Ok(SecretShare(C::read_F(reader)?))
+  }
+
+  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(self.0.to_repr().as_ref())
+  }
+}
+
+impl<C: Curve> Drop for SecretShare<C> {
+  fn drop(&mut self) {
+    self.zeroize();
+  }
+}
+impl<C: Curve> ZeroizeOnDrop for SecretShare<C> {}
+
+// Calls round 1, step 5 and implements round 2, step 1 of FROST key generation
 // Returns our secret share part, commitments for the next step, and a vector for each
 // counterparty to receive
-fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
+fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: &FrostParams,
   context: &str,
   coefficients: &mut Vec<C::F>,
   our_commitments: Vec<C::G>,
-  commitments: HashMap<u16, Re>,
-) -> Result<(C::F, HashMap<u16, Vec<C::G>>, HashMap<u16, Vec<u8>>), FrostError> {
-  let commitments = verify_r1::<_, _, C>(rng, params, context, our_commitments, commitments)?;
+  msgs: HashMap<u16, Commitments<C>>,
+) -> Result<(C::F, HashMap<u16, Vec<C::G>>, HashMap<u16, SecretShare<C>>), FrostError> {
+  let commitments = verify_r1::<_, C>(rng, params, context, our_commitments, msgs)?;
 
   // Step 1: Generate secret shares for all other parties
   let mut res = HashMap::new();
@@ -166,7 +183,7 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
       continue;
     }
 
-    res.insert(l, polynomial(coefficients, l).to_repr().as_ref().to_vec());
+    res.insert(l, SecretShare(polynomial(coefficients, l)));
   }
 
   // Calculate our own share
@@ -177,24 +194,17 @@ fn generate_key_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   Ok((share, commitments, res))
 }
 
-/// Finishes round 2 and returns both the secret share and the serialized public key.
-/// This key MUST NOT be considered usable until all parties confirm they have completed the
-/// protocol without issue.
-fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
+// Finishes round 2 and returns the keys.
+// This key MUST NOT be considered usable until all parties confirm they have completed the
+// protocol without issue.
+fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: FrostParams,
   mut secret_share: C::F,
   commitments: &mut HashMap<u16, Vec<C::G>>,
-  mut serialized: HashMap<u16, Re>,
+  mut shares: HashMap<u16, SecretShare<C>>,
 ) -> Result<FrostCore<C>, FrostError> {
-  validate_map(&serialized, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
-
-  // Step 2. Verify each share
-  let mut shares = HashMap::new();
-  // TODO: Clear serialized
-  for (l, share) in serialized.iter_mut() {
-    shares.insert(*l, C::read_F(share).map_err(|_| FrostError::InvalidShare(*l))?);
-  }
+  validate_map(&shares, &(1 ..= params.n()).collect::<Vec<_>>(), params.i())?;
 
   // Calculate the exponent for a given participant and apply it to a series of commitments
   // Initially used with the actual commitments to verify the secret share, later used with stripes
@@ -210,22 +220,18 @@ fn complete_r2<Re: Read, R: RngCore + CryptoRng, C: Curve>(
   };
 
   let mut batch = BatchVerifier::new(shares.len());
-  for (l, share) in shares.iter_mut() {
-    if *l == params.i() {
-      continue;
-    }
-
-    secret_share += *share;
+  for (l, mut share) in shares.drain() {
+    secret_share += share.0;
 
     // This can be insecurely linearized from n * t to just n using the below sums for a given
     // stripe. Doing so uses naive addition which is subject to malleability. The only way to
     // ensure that malleability isn't present is to use this n * t algorithm, which runs
     // per sender and not as an aggregate of all senders, which also enables blame
-    let mut values = exponential(params.i, &commitments[l]);
-    values.push((-*share, C::generator()));
+    let mut values = exponential(params.i, &commitments[&l]);
+    values.push((-share.0, C::generator()));
     share.zeroize();
 
-    batch.queue(rng, *l, values);
+    batch.queue(rng, l, values);
   }
   batch.verify_with_vartime_blame().map_err(FrostError::InvalidCommitment)?;
 
@@ -299,14 +305,14 @@ impl<C: Curve> KeyGenMachine<C> {
   }
 
   /// Start generating a key according to the FROST DKG spec.
-  /// Returns a serialized list of commitments to be sent to all parties over an authenticated
+  /// Returns a commitments message to be sent to all parties over an authenticated
   /// channel. If any party submits multiple sets of commitments, they MUST be treated as
   /// malicious.
   pub fn generate_coefficients<R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-  ) -> (SecretShareMachine<C>, Vec<u8>) {
-    let (coefficients, our_commitments, serialized) =
+  ) -> (SecretShareMachine<C>, Commitments<C>) {
+    let (coefficients, our_commitments, commitments) =
       generate_key_r1::<_, C>(rng, &self.params, &self.context);
 
     (
@@ -316,21 +322,21 @@ impl<C: Curve> KeyGenMachine<C> {
         coefficients,
         our_commitments,
       },
-      serialized,
+      commitments,
     )
   }
 }
 
 impl<C: Curve> SecretShareMachine<C> {
   /// Continue generating a key.
-  /// Takes in everyone else's commitments. Returns a HashMap of byte vectors representing secret
-  /// shares. These MUST be encrypted and only then sent to their respective participants.
-  pub fn generate_secret_shares<Re: Read, R: RngCore + CryptoRng>(
+  /// Takes in everyone else's commitments. Returns a HashMap of secret shares.
+  /// These MUST be encrypted and only then sent to their respective participants.
+  pub fn generate_secret_shares<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    commitments: HashMap<u16, Re>,
-  ) -> Result<(KeyMachine<C>, HashMap<u16, Vec<u8>>), FrostError> {
-    let (secret, commitments, shares) = generate_key_r2::<_, _, C>(
+    commitments: HashMap<u16, Commitments<C>>,
+  ) -> Result<(KeyMachine<C>, HashMap<u16, SecretShare<C>>), FrostError> {
+    let (secret, commitments, shares) = generate_key_r2::<_, C>(
       rng,
       &self.params,
       &self.context,
@@ -347,10 +353,10 @@ impl<C: Curve> KeyMachine<C> {
   /// Takes in everyone elses' shares submitted to us. Returns a FrostCore object representing the
   /// generated keys. Successful protocol completion MUST be confirmed by all parties before these
   /// keys may be safely used.
-  pub fn complete<Re: Read, R: RngCore + CryptoRng>(
+  pub fn complete<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    shares: HashMap<u16, Re>,
+    shares: HashMap<u16, SecretShare<C>>,
   ) -> Result<FrostCore<C>, FrostError> {
     complete_r2(rng, self.params, self.secret, &mut self.commitments, shares)
   }
