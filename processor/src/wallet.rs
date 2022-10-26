@@ -357,7 +357,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           validator,
           attempt
             .read_preprocess::<&[u8]>(&mut preprocess.as_ref())
-            .map_err(|_| SignError::FrostError(FrostError::InvalidShare(validator)))?,
+            .map_err(|_| SignError::FrostError(FrostError::InvalidPreprocess(validator)))?,
         ))
       })
       .collect::<Result<HashMap<_, _>, _>>()?;
@@ -376,7 +376,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         Ok((
           validator,
           attempt
-            .read_signature_share::<&[u8]>(&mut share.as_ref())
+            .read_share::<&[u8]>(&mut share.as_ref())
             .map_err(|_| SignError::FrostError(FrostError::InvalidShare(validator)))?,
         ))
       })

@@ -356,8 +356,8 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 impl SignatureMachine<Transaction> for TransactionSignatureMachine {
   type SignatureShare = Vec<SignatureShare<Ed25519>>;
 
-  fn read_signature_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare> {
-    self.clsags.iter().map(|clsag| clsag.read_signature_share(reader)).collect()
+  fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare> {
+    self.clsags.iter().map(|clsag| clsag.read_share(reader)).collect()
   }
 
   fn complete(

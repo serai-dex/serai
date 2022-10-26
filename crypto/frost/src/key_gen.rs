@@ -194,9 +194,9 @@ fn generate_key_r2<R: RngCore + CryptoRng, C: Curve>(
   Ok((share, commitments, res))
 }
 
-/// Finishes round 2 and returns both the secret share and the serialized public key.
-/// This key MUST NOT be considered usable until all parties confirm they have completed the
-/// protocol without issue.
+// Finishes round 2 and returns the keys.
+// This key MUST NOT be considered usable until all parties confirm they have completed the
+// protocol without issue.
 fn complete_r2<R: RngCore + CryptoRng, C: Curve>(
   rng: &mut R,
   params: FrostParams,
@@ -329,8 +329,8 @@ impl<C: Curve> KeyGenMachine<C> {
 
 impl<C: Curve> SecretShareMachine<C> {
   /// Continue generating a key.
-  /// Takes in everyone else's commitments. Returns a HashMap of byte vectors representing secret
-  /// shares. These MUST be encrypted and only then sent to their respective participants.
+  /// Takes in everyone else's commitments. Returns a HashMap of secret shares.
+  /// These MUST be encrypted and only then sent to their respective participants.
   pub fn generate_secret_shares<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,

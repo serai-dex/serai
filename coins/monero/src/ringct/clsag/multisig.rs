@@ -207,7 +207,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
         &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)],
         &[view.verification_share(l), addendum.key_image],
       )
-      .map_err(|_| FrostError::InvalidCommitment(l))?;
+      .map_err(|_| FrostError::InvalidPreprocess(l))?;
 
     self
       .transcript

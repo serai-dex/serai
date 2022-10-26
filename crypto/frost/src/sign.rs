@@ -90,6 +90,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   }
 }
 
+/// Preprocess for an instance of the FROST signing protocol.
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct Preprocess<C: Curve, A: Addendum> {
   pub(crate) commitments: Commitments<C>,
@@ -120,15 +121,12 @@ fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   params: &mut Params<C, A>,
 ) -> (PreprocessData<C, A::Addendum>, Preprocess<C, A::Addendum>) {
-  let mut serialized = Vec::with_capacity(2 * C::G_len());
   let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
     &mut *rng,
     params.view().secret_share(),
     &params.algorithm.nonces(),
   );
-
   let addendum = params.algorithm.preprocess_addendum(rng, &params.view);
-  addendum.write(&mut serialized).unwrap();
 
   let preprocess = Preprocess { commitments, addendum };
   (PreprocessData { nonces, preprocess: preprocess.clone() }, preprocess)
@@ -141,6 +139,7 @@ struct SignData<C: Curve> {
   share: C::F,
 }
 
+/// Share of a signature produced via FROST.
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct SignatureShare<C: Curve>(C::F);
 impl<C: Curve> Writable for SignatureShare<C> {
@@ -298,28 +297,35 @@ fn complete<C: Curve, A: Algorithm<C>>(
 
 /// Trait for the initial state machine of a two-round signing protocol.
 pub trait PreprocessMachine {
+  /// Preprocess message for this machine.
   type Preprocess: Clone + PartialEq + Writable;
+  /// Signature produced by this machine.
   type Signature: Clone + PartialEq + fmt::Debug;
+  /// SignMachine this PreprocessMachine turns into.
   type SignMachine: SignMachine<Self::Signature, Preprocess = Self::Preprocess>;
 
   /// Perform the preprocessing round required in order to sign.
-  /// Returns a byte vector to be broadcast to all participants, over an authenticated channel.
+  /// Returns a preprocess message to be broadcast to all participants, over an authenticated
+  /// channel.
   fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R)
     -> (Self::SignMachine, Self::Preprocess);
 }
 
 /// Trait for the second machine of a two-round signing protocol.
 pub trait SignMachine<S> {
+  /// Preprocess message for this machine.
   type Preprocess: Clone + PartialEq + Writable;
+  /// SignatureShare message for this machine.
   type SignatureShare: Clone + PartialEq + Writable;
+  /// SignatureMachine this SignMachine turns into.
   type SignatureMachine: SignatureMachine<S, SignatureShare = Self::SignatureShare>;
 
   /// Read a Preprocess message.
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess>;
 
   /// Sign a message.
-  /// Takes in the participants' preprocesses. Returns a byte vector representing a signature share
-  /// to be broadcast to all participants, over an authenticated channel.
+  /// Takes in the participants' preprocess messages. Returns the signature share to be broadcast
+  /// to all participants, over an authenticated channel.
   fn sign(
     self,
     commitments: HashMap<u16, Self::Preprocess>,
@@ -329,10 +335,11 @@ pub trait SignMachine<S> {
 
 /// Trait for the final machine of a two-round signing protocol.
 pub trait SignatureMachine<S> {
+  /// SignatureShare message for this machine.
   type SignatureShare: Clone + PartialEq + Writable;
 
   /// Read a Signature Share message.
-  fn read_signature_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare>;
+  fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare>;
 
   /// Complete signing.
   /// Takes in everyone elses' shares. Returns the signature.
@@ -416,7 +423,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSignatureMachine<C, A> {
   type SignatureShare = SignatureShare<C>;
 
-  fn read_signature_share<R: Read>(&self, reader: &mut R) -> io::Result<SignatureShare<C>> {
+  fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<SignatureShare<C>> {
     Ok(SignatureShare(C::read_F(reader)?))
   }
 

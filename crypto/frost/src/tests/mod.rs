@@ -188,7 +188,7 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
       shares.insert(i, {
         let mut buf = vec![];
         share.write(&mut buf).unwrap();
-        machine.read_signature_share::<&[u8]>(&mut buf.as_ref()).unwrap()
+        machine.read_share::<&[u8]>(&mut buf.as_ref()).unwrap()
       });
       (i, machine)
     })
