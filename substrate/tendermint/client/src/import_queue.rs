@@ -6,7 +6,7 @@ use std::{
   time::{UNIX_EPOCH, SystemTime},
 };
 
-use sp_core::{Decode, sr25519::Public};
+use sp_core::Decode;
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::{Header, Block};
 use sp_api::{BlockId, TransactionFor};
@@ -19,12 +19,12 @@ use sc_client_api::Backend;
 
 use substrate_prometheus_endpoint::Registry;
 
-use frame_support::traits::ValidatorSet;
-
 use tendermint_machine::{
   ext::{BlockNumber, Commit},
   TendermintMachine,
 };
+
+use sp_tendermint::TendermintApi;
 
 use crate::{
   CONSENSUS_ID,
@@ -100,7 +100,7 @@ where
   TransactionFor<C, B>: Send + Sync + 'static,
   Arc<C>: BlockImport<B, Transaction = TransactionFor<C, B>>,
   <Arc<C> as BlockImport<B>>::Error: Into<Error>,
-  C::Api: ValidatorSet<Public>,
+  C::Api: TendermintApi<B>,
 {
   let import = TendermintImport::new(client, announce, providers, env);
 
@@ -119,7 +119,7 @@ where
             Ok(best) => BlockNumber(best),
             Err(_) => panic!("BlockNumber exceeded u64"),
           },
-          Commit::<TendermintValidators<B, C>>::decode(
+          Commit::<TendermintValidators<B, Be, C>>::decode(
             &mut import_clone
               .client
               .justifications(&BlockId::Number(best))

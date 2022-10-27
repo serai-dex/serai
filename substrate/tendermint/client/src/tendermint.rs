@@ -10,10 +10,7 @@ use log::warn;
 
 use tokio::sync::RwLock as AsyncRwLock;
 
-use sp_core::{
-  Encode, Decode,
-  sr25519::{Public, Signature},
-};
+use sp_core::{Encode, Decode, sr25519::Signature};
 use sp_inherents::{InherentData, InherentDataProvider, CreateInherentDataProviders};
 use sp_runtime::{
   traits::{Header, Block},
@@ -28,12 +25,12 @@ use sc_consensus::{ForkChoiceStrategy, BlockImportParams, BlockImport, import_qu
 use sc_service::ImportQueue;
 use sc_client_api::{BlockBackend, Backend, Finalizer};
 
-use frame_support::traits::ValidatorSet;
-
 use tendermint_machine::{
   ext::{BlockError, Commit, Network},
   SignedMessage, TendermintHandle,
 };
+
+use sp_tendermint::TendermintApi;
 
 use crate::{
   CONSENSUS_ID,
@@ -53,7 +50,7 @@ pub trait TendermintClient<B: Block, Be: Backend<B> + 'static>:
   + 'static
 where
   TransactionFor<Self, B>: Send + Sync + 'static,
-  Self::Api: ValidatorSet<Public>,
+  Self::Api: TendermintApi<B>,
 {
 }
 impl<
@@ -70,7 +67,7 @@ impl<
   > TendermintClient<B, Be> for C
 where
   TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: ValidatorSet<Public>,
+  C::Api: TendermintApi<B>,
 {
 }
 
@@ -83,12 +80,12 @@ pub(crate) struct TendermintImport<
   A: Announce<B>,
 > where
   TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: ValidatorSet<Public>,
+  C::Api: TendermintApi<B>,
 {
   _block: PhantomData<B>,
   _backend: PhantomData<Be>,
 
-  validators: Arc<TendermintValidators<B, C>>,
+  validators: Arc<TendermintValidators<B, Be, C>>,
 
   importing_block: Arc<RwLock<Option<B::Hash>>>,
   pub(crate) machine: Arc<RwLock<Option<TendermintHandle<Self>>>>,
@@ -111,7 +108,7 @@ impl<
   > Clone for TendermintImport<B, Be, C, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: ValidatorSet<Public>,
+  C::Api: TendermintApi<B>,
 {
   fn clone(&self) -> Self {
     TendermintImport {
@@ -143,7 +140,7 @@ impl<
   > TendermintImport<B, Be, C, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: ValidatorSet<Public>,
+  C::Api: TendermintApi<B>,
 {
   pub(crate) fn new(
     client: Arc<C>,
@@ -155,7 +152,7 @@ where
       _block: PhantomData,
       _backend: PhantomData,
 
-      validators: TendermintValidators::new(client),
+      validators: Arc::new(TendermintValidators::new(client.clone())),
 
       importing_block: Arc::new(RwLock::new(None)),
       machine: Arc::new(RwLock::new(None)),
@@ -215,7 +212,7 @@ where
       Err(Error::InvalidJustification)?;
     }
 
-    let commit: Commit<TendermintValidators<B, C>> =
+    let commit: Commit<TendermintValidators<B, Be, C>> =
       Commit::decode(&mut justification.1.as_ref()).map_err(|_| Error::InvalidJustification)?;
     if !self.verify_commit(hash, &commit) {
       Err(Error::InvalidJustification)?;
@@ -328,20 +325,20 @@ impl<
   > Network for TendermintImport<B, Be, C, CIDP, E, A>
 where
   TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: ValidatorSet<Public>,
+  C::Api: TendermintApi<B>,
 {
   type ValidatorId = u16;
-  type SignatureScheme = TendermintValidators<B, C>;
-  type Weights = TendermintValidators<B, C>;
+  type SignatureScheme = TendermintValidators<B, Be, C>;
+  type Weights = TendermintValidators<B, Be, C>;
   type Block = B;
 
   const BLOCK_TIME: u32 = { (serai_runtime::MILLISECS_PER_BLOCK / 1000) as u32 };
 
-  fn signature_scheme(&self) -> Arc<TendermintValidators<B, C>> {
+  fn signature_scheme(&self) -> Arc<TendermintValidators<B, Be, C>> {
     self.validators.clone()
   }
 
-  fn weights(&self) -> Arc<TendermintValidators<B, C>> {
+  fn weights(&self) -> Arc<TendermintValidators<B, Be, C>> {
     self.validators.clone()
   }
 
@@ -410,7 +407,7 @@ where
     Ok(())
   }
 
-  async fn add_block(&mut self, block: B, commit: Commit<TendermintValidators<B, C>>) -> B {
+  async fn add_block(&mut self, block: B, commit: Commit<TendermintValidators<B, Be, C>>) -> B {
     let hash = block.hash();
     let justification = (CONSENSUS_ID, commit.encode());
     debug_assert!(self.verify_justification(hash, &justification).is_ok());

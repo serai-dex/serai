@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use sp_core::sr25519::Public;
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::Block;
 use sp_api::TransactionFor;
@@ -12,7 +11,7 @@ use sc_consensus::{BlockImportParams, BlockImport, Verifier};
 
 use sc_client_api::Backend;
 
-use frame_support::traits::ValidatorSet;
+use sp_tendermint::TendermintApi;
 
 use crate::{
   tendermint::{TendermintClient, TendermintImport},
@@ -32,7 +31,7 @@ where
   TransactionFor<C, B>: Send + Sync + 'static,
   Arc<C>: BlockImport<B, Transaction = TransactionFor<C, B>>,
   <Arc<C> as BlockImport<B>>::Error: Into<Error>,
-  C::Api: ValidatorSet<Public>,
+  C::Api: TendermintApi<B>,
 {
   async fn verify(
     &mut self,

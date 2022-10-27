@@ -361,6 +361,16 @@ sp_api::impl_runtime_apis! {
     }
   }
 
+  impl sp_tendermint::TendermintApi<Block> for Runtime {
+    fn current_session() -> u32 {
+      Tendermint::session()
+    }
+
+    fn validators() -> Vec<Public> {
+      Session::validators()
+    }
+  }
+
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
     fn account_nonce(account: AccountId) -> Index {
       System::account_nonce(account)

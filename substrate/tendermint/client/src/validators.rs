@@ -8,11 +8,15 @@ use sp_application_crypto::{
 
 use sp_runtime::traits::Block;
 use sp_staking::SessionIndex;
-use sp_api::ProvideRuntimeApi;
+use sp_api::{BlockId, TransactionFor};
 
-use frame_support::traits::ValidatorSet;
+use sc_client_api::Backend;
 
 use tendermint_machine::ext::{BlockNumber, Round, Weights, SignatureScheme};
+
+use sp_tendermint::TendermintApi;
+
+use crate::tendermint::TendermintClient;
 
 struct TendermintValidatorsStruct {
   session: SessionIndex,
@@ -25,17 +29,21 @@ struct TendermintValidatorsStruct {
 }
 
 impl TendermintValidatorsStruct {
-  fn from_module<B: Block, C: Send + Sync + ProvideRuntimeApi<B>>(
-    client: C,
+  fn from_module<B: Block, Be: Backend<B> + 'static, C: TendermintClient<B, Be>>(
+    client: &Arc<C>,
   ) -> TendermintValidatorsStruct
   where
-    C::Api: ValidatorSet<Public>,
+    TransactionFor<C, B>: Send + Sync + 'static,
+    C::Api: TendermintApi<B>,
   {
-    let validators = client.runtime_api().validators();
+    let last = client.info().best_hash;
+    let api = client.runtime_api();
+    let session = api.current_session(&BlockId::Hash(last)).unwrap();
+    let validators = api.validators(&BlockId::Hash(last)).unwrap();
     assert_eq!(validators.len(), 1);
     let keys = Pair::from_string("//Alice", None).unwrap();
     TendermintValidatorsStruct {
-      session: client.runtime_api().session_index(),
+      session,
 
       // TODO
       total_weight: validators.len().try_into().unwrap(),
@@ -48,27 +56,42 @@ impl TendermintValidatorsStruct {
 }
 
 // Wrap every access of the validators struct in something which forces calling refresh
-struct Refresh<B: Block, C: Send + Sync + ProvideRuntimeApi<B>> {
+struct Refresh<B: Block, Be: Backend<B> + 'static, C: TendermintClient<B, Be>>
+where
+  TransactionFor<C, B>: Send + Sync + 'static,
+  C::Api: TendermintApi<B>,
+{
   _block: PhantomData<B>,
-  client: C,
+  _backend: PhantomData<Be>,
+
+  client: Arc<C>,
   _refresh: Arc<RwLock<TendermintValidatorsStruct>>,
 }
-impl<B: Block, C: Send + Sync + ProvideRuntimeApi<B>> Refresh<B, C>
+
+impl<B: Block, Be: Backend<B> + 'static, C: TendermintClient<B, Be>> Refresh<B, Be, C>
 where
-  C::Api: ValidatorSet<Public>,
+  TransactionFor<C, B>: Send + Sync + 'static,
+  C::Api: TendermintApi<B>,
 {
   // If the session has changed, re-create the struct with the data on it
   fn refresh(&self) {
     let session = self._refresh.read().unwrap().session;
-    if session != self.client.runtime_api().session_index() {
-      *self._refresh.write().unwrap() = TendermintValidatorsStruct::from_module(self.client);
+    if session !=
+      self
+        .client
+        .runtime_api()
+        .current_session(&BlockId::Hash(self.client.info().best_hash))
+        .unwrap()
+    {
+      *self._refresh.write().unwrap() = TendermintValidatorsStruct::from_module(&self.client);
     }
   }
 }
 
-impl<B: Block, C: Send + Sync + ProvideRuntimeApi<B>> Deref for Refresh<B, C>
+impl<B: Block, Be: Backend<B> + 'static, C: TendermintClient<B, Be>> Deref for Refresh<B, Be, C>
 where
-  C::Api: ValidatorSet<Public>,
+  TransactionFor<C, B>: Send + Sync + 'static,
+  C::Api: TendermintApi<B>,
 {
   type Target = RwLock<TendermintValidatorsStruct>;
   fn deref(&self) -> &RwLock<TendermintValidatorsStruct> {
@@ -77,25 +100,36 @@ where
   }
 }
 
-pub(crate) struct TendermintValidators<B: Block, C: Send + Sync + ProvideRuntimeApi<B>>(
-  Refresh<B, C>,
-);
-impl<B: Block, C: Send + Sync + ProvideRuntimeApi<B>> TendermintValidators<B, C>
+pub(crate) struct TendermintValidators<
+  B: Block,
+  Be: Backend<B> + 'static,
+  C: TendermintClient<B, Be>,
+>(Refresh<B, Be, C>)
 where
-  C::Api: ValidatorSet<Public>,
+  TransactionFor<C, B>: Send + Sync + 'static,
+  C::Api: TendermintApi<B>;
+
+impl<B: Block, Be: Backend<B> + 'static, C: TendermintClient<B, Be>> TendermintValidators<B, Be, C>
+where
+  TransactionFor<C, B>: Send + Sync + 'static,
+  C::Api: TendermintApi<B>,
 {
-  pub(crate) fn new(client: C) -> TendermintValidators<B, C> {
+  pub(crate) fn new(client: Arc<C>) -> TendermintValidators<B, Be, C> {
     TendermintValidators(Refresh {
       _block: PhantomData,
+      _backend: PhantomData,
+
+      _refresh: Arc::new(RwLock::new(TendermintValidatorsStruct::from_module(&client))),
       client,
-      _refresh: Arc::new(RwLock::new(TendermintValidatorsStruct::from_module())),
     })
   }
 }
 
-impl<B: Block, C: Send + Sync + ProvideRuntimeApi<B>> SignatureScheme for TendermintValidators<B, C>
+impl<B: Block, Be: Backend<B> + 'static, C: TendermintClient<B, Be>> SignatureScheme
+  for TendermintValidators<B, Be, C>
 where
-  C::Api: ValidatorSet<Public>,
+  TransactionFor<C, B>: Send + Sync + 'static,
+  C::Api: TendermintApi<B>,
 {
   type ValidatorId = u16;
   type Signature = Signature;
@@ -126,9 +160,11 @@ where
   }
 }
 
-impl<B: Block, C: Send + Sync + ProvideRuntimeApi<B>> Weights for TendermintValidators<B, C>
+impl<B: Block, Be: Backend<B> + 'static, C: TendermintClient<B, Be>> Weights
+  for TendermintValidators<B, Be, C>
 where
-  C::Api: ValidatorSet<Public>,
+  TransactionFor<C, B>: Send + Sync + 'static,
+  C::Api: TendermintApi<B>,
 {
   type ValidatorId = u16;
 

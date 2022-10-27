@@ -30,6 +30,8 @@ sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 sp-api = { git = "https://github.com/serai-dex/substrate" }
 sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 
+sp-tendermint = { path = "../primitives" }
+
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
 sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
 sc-executor = { git = "https://github.com/serai-dex/substrate" }
@@ -43,6 +45,6 @@ pallet-session = { git = "https://github.com/serai-dex/substrate" }
 
 substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate" }
 
-tendermint-machine = { path = "../tendermint", features = ["substrate"] }
+tendermint-machine = { path = "../machine", features = ["substrate"] }
 
-serai-runtime = { path = "../runtime" }
+serai-runtime = { path = "../../runtime" }

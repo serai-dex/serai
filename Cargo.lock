@@ -5115,6 +5115,8 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-application-crypto",
+ "sp-core",
+ "sp-std",
 ]
 
 [[package]]
@@ -7439,6 +7441,7 @@ dependencies = [
  "sp-inherents",
  "sp-runtime",
  "sp-staking",
+ "sp-tendermint",
  "sp-timestamp",
  "substrate-prometheus-endpoint",
  "tendermint-machine",
@@ -7558,6 +7561,7 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-std",
+ "sp-tendermint",
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
@@ -8315,6 +8319,15 @@ dependencies = [
  "sp-externalities",
  "sp-io",
  "sp-runtime-interface",
+ "sp-std",
+]
+
+[[package]]
+name = "sp-tendermint"
+version = "0.1.0"
+dependencies = [
+ "sp-api",
+ "sp-core",
  "sp-std",
 ]
 
