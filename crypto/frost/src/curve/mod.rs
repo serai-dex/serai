@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::Zeroize;
 use subtle::ConstantTimeEq;
 
-use digest::Digest;
+use digest::{core_api::BlockSizeUser, Digest};
 
 use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{Group, GroupOps, GroupEncoding, prime::PrimeGroup};
@@ -43,7 +43,7 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   /// Group element type.
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize + ConstantTimeEq;
   /// Hash algorithm used with this curve.
-  type H: Digest;
+  type H: Clone + BlockSizeUser + Digest;
 
   /// ID for this curve.
   const ID: &'static [u8];

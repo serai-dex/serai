@@ -23,8 +23,11 @@ subtle = "2"
 hex = "0.4"
 
 digest = "0.10"
+hkdf = "0.12"
 sha2 = { version = "0.10", optional = true }
 sha3 = { version = "0.10", optional = true }
+
+chacha20 = { version = "0.9", features = ["zeroize"] }
 
 ff = "0.12"
 group = "0.12"

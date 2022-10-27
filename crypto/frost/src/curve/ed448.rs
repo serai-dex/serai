@@ -1,8 +1,8 @@
 use zeroize::Zeroize;
 
 use digest::{
-  typenum::U114, Update, Output, OutputSizeUser, FixedOutput, ExtendableOutput, XofReader,
-  HashMarker, Digest,
+  typenum::U114, core_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
+  ExtendableOutput, XofReader, HashMarker, Digest,
 };
 use sha3::Shake256;
 
@@ -14,8 +14,14 @@ use crate::{curve::Curve, algorithm::Hram};
 const CONTEXT: &[u8] = b"FROST-ED448-SHAKE256-v11";
 
 // Re-define Shake256 as a traditional Digest to meet API expectations
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Shake256_114(Shake256);
+impl BlockSizeUser for Shake256_114 {
+  type BlockSize = <Shake256 as BlockSizeUser>::BlockSize;
+  fn block_size() -> usize {
+    Shake256::block_size()
+  }
+}
 impl OutputSizeUser for Shake256_114 {
   type OutputSize = U114;
   fn output_size() -> usize {

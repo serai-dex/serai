@@ -73,7 +73,7 @@ pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, F
         .map(|(l, share)| {
           let mut buf = vec![];
           share.write(&mut buf).unwrap();
-          (l, SecretShare::<C>::read::<&[u8]>(&mut buf.as_ref()).unwrap())
+          (l, SecretShare::<C::F>::read::<&[u8]>(&mut buf.as_ref()).unwrap())
         })
         .collect::<HashMap<_, _>>();
       secret_shares.insert(l, shares);
