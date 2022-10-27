@@ -31,6 +31,7 @@ members = [
   "processor",
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   "coordinator/tributary/tendermint",
   "coordinator/tributary",
   "coordinator",
@@ -49,12 +50,20 @@ members = [
   "substrate/runtime",
 =======
   "substrate/tendermint",
+=======
+  "substrate/tendermint/machine",
+  "substrate/tendermint/primitives",
+  "substrate/tendermint/client",
+  "substrate/tendermint/pallet",
+>>>>>>> 66f7663c (Redo Tendermint folder structure)
 
-  "substrate/pallet-tendermint",
   "substrate/runtime",
+<<<<<<< HEAD
 
   "substrate/consensus",
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
+=======
+>>>>>>> 66f7663c (Redo Tendermint folder structure)
   "substrate/node",
 
   "substrate/client",
