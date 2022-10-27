@@ -3,8 +3,6 @@ use std::io::{self, Read, Write};
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
-
 use transcript::Transcript;
 
 use crate::{Curve, FrostError, FrostView, schnorr};
@@ -22,8 +20,8 @@ impl AddendumSerialize for () {
 }
 
 /// Trait alias for the requirements to be used as an addendum.
-pub trait Addendum: Clone + PartialEq + Debug + Zeroize + AddendumSerialize {}
-impl<A: Clone + PartialEq + Debug + Zeroize + AddendumSerialize> Addendum for A {}
+pub trait Addendum: Clone + PartialEq + Debug + AddendumSerialize {}
+impl<A: Clone + PartialEq + Debug + AddendumSerialize> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
 pub trait Algorithm<C: Curve>: Clone {

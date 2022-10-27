@@ -91,7 +91,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
 }
 
 /// Preprocess for an instance of the FROST signing protocol.
-#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Preprocess<C: Curve, A: Addendum> {
   pub(crate) commitments: Commitments<C>,
   pub addendum: A,
@@ -107,6 +107,7 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
 #[derive(Zeroize)]
 pub(crate) struct PreprocessData<C: Curve, A: Addendum> {
   pub(crate) nonces: Vec<Nonce<C>>,
+  #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A>,
 }
 
@@ -140,7 +141,7 @@ struct SignData<C: Curve> {
 }
 
 /// Share of a signature produced via FROST.
-#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SignatureShare<C: Curve>(C::F);
 impl<C: Curve> Writable for SignatureShare<C> {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {

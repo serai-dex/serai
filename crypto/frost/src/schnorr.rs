@@ -15,7 +15,7 @@ use crate::curve::Curve;
 
 /// A Schnorr signature of the form (R, s) where s = r + cx.
 #[allow(non_snake_case)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct SchnorrSignature<C: Curve> {
   pub R: C::G,
   pub s: C::F,
