@@ -24,28 +24,20 @@ macro_rules! dalek_curve {
     #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
-    impl $Curve {
-      fn hash(dst: &[u8], data: &[u8]) -> Sha512 {
-        Sha512::new().chain_update(&[$CONTEXT.as_ref(), dst, data].concat())
-      }
-    }
-
     impl Curve for $Curve {
       type F = Scalar;
       type G = $Point;
+      type H = Sha512;
 
       const ID: &'static [u8] = $ID;
+      const CONTEXT: &'static [u8] = $CONTEXT;
 
       fn generator() -> Self::G {
         $Point::generator()
       }
 
-      fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
-        Self::hash(dst, data).finalize().to_vec()
-      }
-
       fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-        Scalar::from_hash(Self::hash(dst, data))
+        Scalar::from_bytes_mod_order_wide(&Self::hash_to_vec(dst, data).try_into().unwrap())
       }
     }
 

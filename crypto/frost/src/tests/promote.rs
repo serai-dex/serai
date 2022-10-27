@@ -63,8 +63,10 @@ struct AltGenerator<C: Curve> {
 impl<C: Curve> Curve for AltGenerator<C> {
   type F = C::F;
   type G = C::G;
+  type H = C::H;
 
   const ID: &'static [u8] = b"alt_generator";
+  const CONTEXT: &'static [u8] = C::CONTEXT;
 
   fn generator() -> Self::G {
     C::G::generator() * C::hash_to_F(b"FROST_tests", b"generator")

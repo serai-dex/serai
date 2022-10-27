@@ -6,6 +6,8 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::Zeroize;
 use subtle::ConstantTimeEq;
 
+use digest::Digest;
+
 use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{Group, GroupOps, GroupEncoding, prime::PrimeGroup};
 
@@ -40,16 +42,22 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   type F: PrimeField + PrimeFieldBits + Zeroize;
   /// Group element type.
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize + ConstantTimeEq;
+  /// Hash algorithm used with this curve.
+  type H: Digest;
 
   /// ID for this curve.
   const ID: &'static [u8];
+  /// Context string for this curve.
+  const CONTEXT: &'static [u8];
 
   /// Generator for the group.
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   fn generator() -> Self::G;
 
   /// Hash the given dst and data to a byte vector. Used to instantiate H4 and H5.
-  fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8>;
+  fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
+    Self::H::digest(&[Self::CONTEXT, dst, data].concat()).as_ref().to_vec()
+  }
 
   /// Field element from hash. Used during key gen and by other crates under Serai as a general
   /// utility. Used to instantiate H1 and H3.

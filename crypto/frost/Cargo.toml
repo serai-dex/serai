@@ -22,6 +22,7 @@ subtle = "2"
 
 hex = "0.4"
 
+digest = "0.10"
 sha2 = { version = "0.10", optional = true }
 sha3 = { version = "0.10", optional = true }
 

@@ -29,24 +29,16 @@ macro_rules! kp_curve {
     #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Curve;
-    impl $Curve {
-      fn hash(dst: &[u8], data: &[u8]) -> Sha256 {
-        Sha256::new().chain_update(&[$CONTEXT.as_ref(), dst, data].concat())
-      }
-    }
-
     impl Curve for $Curve {
       type F = $lib::Scalar;
       type G = $lib::ProjectivePoint;
+      type H = Sha256;
 
       const ID: &'static [u8] = $ID;
+      const CONTEXT: &'static [u8] = $CONTEXT;
 
       fn generator() -> Self::G {
         $lib::ProjectivePoint::GENERATOR
-      }
-
-      fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
-        Self::hash(dst, data).finalize().to_vec()
       }
 
       fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
