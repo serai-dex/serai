@@ -23,6 +23,7 @@ sp-std = { git = "https://github.com/serai-dex/substrate", default-features = fa
 sp-version = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-inherents = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-offchain = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-transaction-pool = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-block-builder = { git = "https://github.com/serai-dex/substrate", default-features = false}
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -61,6 +62,7 @@ std = [
   "sp-version/std",
   "sp-inherents/std",
   "sp-offchain/std",
+  "sp-session/std",
   "sp-transaction-pool/std",
   "sp-block-builder/std",
   "sp-runtime/std",

@@ -7,7 +7,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use sp_core::OpaqueMetadata;
 pub use sp_core::sr25519::{Public, Signature};
 use sp_runtime::{
-  create_runtime_str, generic, impl_opaque_keys,
+  create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
   traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
@@ -346,6 +346,18 @@ sp_api::impl_runtime_apis! {
   impl sp_offchain::OffchainWorkerApi<Block> for Runtime {
     fn offchain_worker(header: &<Block as BlockT>::Header) {
       Executive::offchain_worker(header)
+    }
+  }
+
+  impl sp_session::SessionKeys<Block> for Runtime {
+    fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
+      opaque::SessionKeys::generate(seed)
+    }
+
+    fn decode_session_keys(
+      encoded: Vec<u8>,
+    ) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
+      opaque::SessionKeys::decode_into_raw_public_keys(&encoded)
     }
   }
 

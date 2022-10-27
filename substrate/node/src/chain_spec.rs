@@ -1,8 +1,12 @@
 use sc_service::ChainType;
 
 use sp_core::{Pair as PairTrait, sr25519::Pair};
+use pallet_tendermint::crypto::Public;
 
-use serai_runtime::{WASM_BINARY, AccountId, GenesisConfig, SystemConfig, BalancesConfig};
+use serai_runtime::{
+  WASM_BINARY, AccountId, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig,
+  SessionConfig,
+};
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
@@ -15,12 +19,16 @@ fn account_id_from_name(name: &'static str) -> AccountId {
 }
 
 fn testnet_genesis(wasm_binary: &[u8], endowed_accounts: Vec<AccountId>) -> GenesisConfig {
+  let alice = account_id_from_name("Alice");
   GenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec() },
     balances: BalancesConfig {
       balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
     },
     transaction_payment: Default::default(),
+    session: SessionConfig {
+      keys: vec![(alice, alice, SessionKeys { tendermint: Public::from(alice) })],
+    },
   }
 }
 

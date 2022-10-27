@@ -16,6 +16,7 @@ clap = { version = "4", features = ["derive"] }
 jsonrpsee = { version = "0.15", features = ["server"] }
 
 sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
 sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
 sp-inherents = { git = "https://github.com/serai-dex/substrate" }
@@ -46,6 +47,7 @@ sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
+pallet-tendermint = { path = "../pallet-tendermint", default-features = false }
 serai-runtime = { path = "../runtime" }
 serai-consensus = { path = "../consensus" }
 
