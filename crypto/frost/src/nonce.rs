@@ -165,7 +165,7 @@ impl<C: Curve> Commitments<C> {
       // committed to as their entire series per-nonce, not as isolates
       if let Some(dleqs) = &nonce.dleqs {
         let mut transcript_dleq = |label, dleq: &DLEqProof<C::G>| {
-          let mut buf = Vec::with_capacity(C::G_len() + C::F_len());
+          let mut buf = vec![];
           dleq.serialize(&mut buf).unwrap();
           t.append_message(label, &buf);
         };

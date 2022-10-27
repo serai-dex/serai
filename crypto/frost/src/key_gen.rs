@@ -40,7 +40,7 @@ pub struct Commitments<C: Curve>(Vec<C::G>, Vec<u8>, SchnorrSignature<C>);
 impl<C: Curve> Commitments<C> {
   pub fn read<R: Read>(reader: &mut R, params: FrostParams) -> io::Result<Self> {
     let mut commitments = Vec::with_capacity(params.t().into());
-    let mut serialized = Vec::with_capacity(usize::from(params.t()) * C::G_len());
+    let mut serialized = vec![];
     for _ in 0 .. params.t() {
       let mut buf = <C::G as GroupEncoding>::Repr::default();
       reader.read_exact(buf.as_mut())?;
@@ -68,7 +68,7 @@ fn generate_key_r1<R: RngCore + CryptoRng, C: Curve>(
   let t = usize::from(params.t);
   let mut coefficients = Vec::with_capacity(t);
   let mut commitments = Vec::with_capacity(t);
-  let mut serialized = Vec::with_capacity(t * C::G_len());
+  let mut serialized = vec![];
 
   for i in 0 .. t {
     // Step 1: Generate t random values to form a polynomial with

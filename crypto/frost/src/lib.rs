@@ -232,12 +232,8 @@ impl<C: Curve> FrostCore<C> {
     self.verification_shares.clone()
   }
 
-  pub fn serialized_len(n: u16) -> usize {
-    8 + C::ID.len() + (3 * 2) + C::F_len() + C::G_len() + (usize::from(n) * C::G_len())
-  }
-
   pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = Vec::with_capacity(FrostCore::<C>::serialized_len(self.params.n));
+    let mut serialized = vec![];
     serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
     serialized.extend(C::ID);
     serialized.extend(self.params.t.to_be_bytes());
@@ -250,19 +246,19 @@ impl<C: Curve> FrostCore<C> {
     serialized
   }
 
-  pub fn deserialize<R: Read>(cursor: &mut R) -> Result<FrostCore<C>, FrostError> {
+  pub fn deserialize<R: Read>(reader: &mut R) -> Result<FrostCore<C>, FrostError> {
     {
       let missing = FrostError::InternalError("FrostCore serialization is missing its curve");
       let different = FrostError::InternalError("deserializing FrostCore for another curve");
 
       let mut id_len = [0; 4];
-      cursor.read_exact(&mut id_len).map_err(|_| missing)?;
+      reader.read_exact(&mut id_len).map_err(|_| missing)?;
       if u32::try_from(C::ID.len()).unwrap().to_be_bytes() != id_len {
         Err(different)?;
       }
 
       let mut id = vec![0; C::ID.len()];
-      cursor.read_exact(&mut id).map_err(|_| missing)?;
+      reader.read_exact(&mut id).map_err(|_| missing)?;
       if id != C::ID {
         Err(different)?;
       }
@@ -271,7 +267,7 @@ impl<C: Curve> FrostCore<C> {
     let (t, n, i) = {
       let mut read_u16 = || {
         let mut value = [0; 2];
-        cursor
+        reader
           .read_exact(&mut value)
           .map_err(|_| FrostError::InternalError("missing participant quantities"))?;
         Ok(u16::from_be_bytes(value))
@@ -280,13 +276,13 @@ impl<C: Curve> FrostCore<C> {
     };
 
     let secret_share =
-      C::read_F(cursor).map_err(|_| FrostError::InternalError("invalid secret share"))?;
+      C::read_F(reader).map_err(|_| FrostError::InternalError("invalid secret share"))?;
 
     let mut verification_shares = HashMap::new();
     for l in 1 ..= n {
       verification_shares.insert(
         l,
-        C::read_G(cursor).map_err(|_| FrostError::InternalError("invalid verification share"))?,
+        C::read_G(reader).map_err(|_| FrostError::InternalError("invalid verification share"))?,
       );
     }
 
@@ -369,10 +365,6 @@ impl<C: Curve> FrostKeys<C> {
   /// Returns all participants' verification shares without any offsetting.
   pub(crate) fn verification_shares(&self) -> HashMap<u16, C::G> {
     self.core.verification_shares()
-  }
-
-  pub fn serialized_len(n: u16) -> usize {
-    FrostCore::<C>::serialized_len(n)
   }
 
   pub fn serialize(&self) -> Vec<u8> {

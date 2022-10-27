@@ -106,16 +106,6 @@ pub trait Curve: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   }
 
   #[allow(non_snake_case)]
-  fn F_len() -> usize {
-    <Self::F as PrimeField>::Repr::default().as_ref().len()
-  }
-
-  #[allow(non_snake_case)]
-  fn G_len() -> usize {
-    <Self::G as GroupEncoding>::Repr::default().as_ref().len()
-  }
-
-  #[allow(non_snake_case)]
   fn read_F<R: Read>(r: &mut R) -> io::Result<Self::F> {
     let mut encoding = <Self::F as PrimeField>::Repr::default();
     r.read_exact(encoding.as_mut())?;
