@@ -3,7 +3,7 @@ name = "pallet-tendermint"
 version = "0.1.0"
 description = "Tendermint pallet for Substrate"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/pallet-tendermint"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tendermint/pallet"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
@@ -12,7 +12,6 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-
 parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 

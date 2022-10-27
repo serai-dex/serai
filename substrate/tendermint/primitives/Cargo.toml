@@ -1,0 +1,12 @@
+[package]
+name = "sp-tendermint"
+version = "0.1.0"
+description = "Substrate primitives for Tendermint"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tendermint/primitives"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
