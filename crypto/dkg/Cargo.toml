@@ -1,0 +1,9 @@
+[package]
+name = "dkg"
+version = "0.0.0"
+description = "Distributed key generation over ff/group"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["dkg", "multisig", "threshold", "ff", "group"]
+edition = "2021"
