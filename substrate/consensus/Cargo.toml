@@ -38,6 +38,7 @@ sc-service = { git = "https://github.com/serai-dex/substrate" }
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
 sc-consensus = { git = "https://github.com/serai-dex/substrate" }
 
+frame-support = { git = "https://github.com/serai-dex/substrate" }
 pallet-session = { git = "https://github.com/serai-dex/substrate" }
 
 substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate" }
