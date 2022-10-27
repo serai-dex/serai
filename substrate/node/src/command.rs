@@ -29,7 +29,7 @@ impl SubstrateCli for Cli {
   }
 
   fn support_url() -> String {
-    "serai.exchange".to_string()
+    "https://github.com/serai-dex/serai/issues/new".to_string()
   }
 
   fn copyright_start_year() -> i32 {
