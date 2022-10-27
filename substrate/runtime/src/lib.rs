@@ -4,11 +4,11 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
-pub use sp_core::sr25519::Signature;
+use sp_core::OpaqueMetadata;
+pub use sp_core::sr25519::{Public, Signature};
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys,
-  traits::{IdentityLookup, BlakeTwo256, Block as BlockT},
+  traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
@@ -32,11 +32,13 @@ pub use pallet_timestamp::Call as TimestampCall;
 pub use pallet_balances::Call as BalancesCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
+use pallet_session::PeriodicSessions;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
 /// Account ID type, equivalent to a public key
-pub type AccountId = sp_core::sr25519::Public;
+pub type AccountId = Public;
 
 /// Balance of an account.
 pub type Balance = u64;
@@ -57,9 +59,13 @@ pub mod opaque {
   pub type BlockId = generic::BlockId<Block>;
 
   impl_opaque_keys! {
-    pub struct SessionKeys {}
+    pub struct SessionKeys {
+      pub tendermint: Tendermint,
+    }
   }
 }
+
+use opaque::SessionKeys;
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
@@ -206,6 +212,30 @@ impl pallet_contracts::Config for Runtime {
   type MaxStorageKeyLen = ConstU32<128>;
 }
 
+impl pallet_tendermint::Config for Runtime {}
+
+const SESSION_LENGTH: BlockNumber = 5 * DAYS;
+type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
+
+pub struct IdentityValidatorIdOf;
+impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
+  fn convert(key: Public) -> Option<Public> {
+    Some(key)
+  }
+}
+
+impl pallet_session::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type ValidatorId = AccountId;
+  type ValidatorIdOf = IdentityValidatorIdOf;
+  type ShouldEndSession = Sessions;
+  type NextSessionRotation = Sessions;
+  type SessionManager = ();
+  type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+  type Keys = SessionKeys;
+  type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+}
+
 pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
@@ -242,6 +272,8 @@ construct_runtime!(
     Balances: pallet_balances,
     TransactionPayment: pallet_transaction_payment,
     Contracts: pallet_contracts,
+    Session: pallet_session,
+    Tendermint: pallet_tendermint,
   }
 );
 
@@ -314,18 +346,6 @@ sp_api::impl_runtime_apis! {
   impl sp_offchain::OffchainWorkerApi<Block> for Runtime {
     fn offchain_worker(header: &<Block as BlockT>::Header) {
       Executive::offchain_worker(header)
-    }
-  }
-
-  impl sp_session::SessionKeys<Block> for Runtime {
-    fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
-      opaque::SessionKeys::generate(seed)
-    }
-
-    fn decode_session_keys(
-      encoded: Vec<u8>,
-    ) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
-      opaque::SessionKeys::decode_into_raw_public_keys(&encoded)
     }
   }
 

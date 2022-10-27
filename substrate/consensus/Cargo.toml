@@ -24,6 +24,7 @@ sp-core = { git = "https://github.com/serai-dex/substrate" }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
 sp-inherents = { git = "https://github.com/serai-dex/substrate" }
 sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
+sp-staking = { git = "https://github.com/serai-dex/substrate" }
 sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
 sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 sp-api = { git = "https://github.com/serai-dex/substrate" }
@@ -36,6 +37,8 @@ sc-network = { git = "https://github.com/serai-dex/substrate" }
 sc-service = { git = "https://github.com/serai-dex/substrate" }
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
 sc-consensus = { git = "https://github.com/serai-dex/substrate" }
+
+pallet-session = { git = "https://github.com/serai-dex/substrate" }
 
 substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate" }
 

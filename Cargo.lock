@@ -5086,6 +5086,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-session"
+version = "4.0.0-dev"
+source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "impl-trait-for-tuples",
+ "log",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-session",
+ "sp-staking",
+ "sp-std",
+ "sp-trie",
+]
+
+[[package]]
+name = "pallet-tendermint"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-application-crypto",
+]
+
+[[package]]
 name = "pallet-timestamp"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
@@ -7389,6 +7421,7 @@ dependencies = [
  "async-trait",
  "futures",
  "log",
+ "pallet-session",
  "sc-basic-authorship",
  "sc-client-api",
  "sc-consensus",
@@ -7404,6 +7437,7 @@ dependencies = [
  "sp-core",
  "sp-inherents",
  "sp-runtime",
+ "sp-staking",
  "sp-timestamp",
  "substrate-prometheus-endpoint",
  "tendermint-machine",
@@ -7505,18 +7539,20 @@ dependencies = [
  "pallet-contracts",
  "pallet-contracts-primitives",
  "pallet-randomness-collective-flip",
+ "pallet-session",
+ "pallet-tendermint",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "scale-info",
  "sp-api",
+ "sp-application-crypto",
  "sp-block-builder",
  "sp-core",
  "sp-inherents",
  "sp-offchain",
  "sp-runtime",
- "sp-session",
  "sp-std",
  "sp-transaction-pool",
  "sp-version",
