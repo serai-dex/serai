@@ -593,6 +593,7 @@ sp_api::impl_runtime_apis! {
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   impl sp_consensus_babe::BabeApi<Block> for Runtime {
     fn configuration() -> sp_consensus_babe::BabeConfiguration {
       use support::traits::Get;
@@ -664,6 +665,18 @@ sp_api::impl_runtime_apis! {
 =======
 =======
 >>>>>>> fa7a03bf (Update node to use pallet sessions)
+=======
+  impl sp_tendermint::TendermintApi<Block> for Runtime {
+    fn current_session() -> u32 {
+      Tendermint::session()
+    }
+
+    fn validators() -> Vec<Public> {
+      Session::validators()
+    }
+  }
+
+>>>>>>> 5c08fa97 (TendermintApi, compilation fixes)
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
     fn account_nonce(account: AccountId) -> Index {
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)

@@ -11,3 +11,12 @@ edition = "2021"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+[features]
+std = ["sp-core/std", "sp-std/std", "sp-api/std"]
+default = ["std"]

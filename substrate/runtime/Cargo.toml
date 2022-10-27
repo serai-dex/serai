@@ -43,6 +43,8 @@ sp-block-builder = { git = "https://github.com/serai-dex/substrate", default-fea
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+sp-tendermint = { path = "../tendermint/primitives", default-features = false }
+
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-executive = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -73,7 +75,7 @@ pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-featu
 pallet-authority-discovery = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
-pallet-tendermint = { path = "../pallet-tendermint", default-features = false }
+pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -113,6 +115,8 @@ std = [
 
   "sp-runtime/std",
   "sp-api/std",
+
+  "sp-tendermint/std",
 
   "frame-system/std",
   "frame-support/std",

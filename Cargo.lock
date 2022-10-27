@@ -5944,6 +5944,8 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-application-crypto",
+ "sp-core",
+ "sp-std",
 ]
 
 [[package]]
@@ -8712,6 +8714,7 @@ dependencies = [
  "sp-inherents",
  "sp-runtime",
  "sp-staking",
+ "sp-tendermint",
  "sp-timestamp",
  "substrate-prometheus-endpoint",
  "tendermint-machine",
@@ -9063,6 +9066,7 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-std",
+ "sp-tendermint",
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
@@ -9943,6 +9947,31 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+=======
+name = "sp-tasks"
+version = "4.0.0-dev"
+source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
+dependencies = [
+ "log",
+ "sp-core",
+ "sp-externalities",
+ "sp-io",
+ "sp-runtime-interface",
+ "sp-std",
+]
+
+[[package]]
+name = "sp-tendermint"
+version = "0.1.0"
+dependencies = [
+ "sp-api",
+ "sp-core",
+ "sp-std",
+]
+
+[[package]]
+>>>>>>> 5c08fa97 (TendermintApi, compilation fixes)
 name = "sp-timestamp"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
