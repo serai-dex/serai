@@ -7,6 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 // Re-export all components
 pub use serai_primitives as primitives;
 
@@ -38,6 +39,13 @@ pub use sp_core::sr25519::Signature;
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys,
   traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+=======
+use sp_core::OpaqueMetadata;
+pub use sp_core::sr25519::{Public, Signature};
+use sp_runtime::{
+  create_runtime_str, generic, impl_opaque_keys,
+  traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
@@ -72,6 +80,8 @@ use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 
+use pallet_session::PeriodicSessions;
+
 /// An index to a block.
 pub type BlockNumber = u64;
 
@@ -85,8 +95,12 @@ pub type Nonce = u32;
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 =======
 /// Account ID type, equivalent to a public key
+<<<<<<< HEAD
 pub type AccountId = sp_core::sr25519::Public;
 >>>>>>> 0a58d669 (Minor tweaks)
+=======
+pub type AccountId = Public;
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
 
 /// Balance of an account.
 pub type Balance = u64;
@@ -109,9 +123,13 @@ pub mod opaque {
 
   impl_opaque_keys! {
     pub struct SessionKeys {
+<<<<<<< HEAD
       pub babe: Babe,
       pub grandpa: Grandpa,
       pub authority_discovery: AuthorityDiscovery,
+=======
+      pub tendermint: Tendermint,
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
     }
   }
 }
@@ -382,6 +400,34 @@ impl authority_discovery::Config for Runtime {
   type MaxAuthorities = MaxAuthorities;
 }
 
+<<<<<<< HEAD
+=======
+impl pallet_tendermint::Config for Runtime {}
+
+const SESSION_LENGTH: BlockNumber = 5 * DAYS;
+type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
+
+pub struct IdentityValidatorIdOf;
+impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
+  fn convert(key: Public) -> Option<Public> {
+    Some(key)
+  }
+}
+
+impl pallet_session::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type ValidatorId = AccountId;
+  type ValidatorIdOf = IdentityValidatorIdOf;
+  type ShouldEndSession = Sessions;
+  type NextSessionRotation = Sessions;
+  type SessionManager = ();
+  type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+  type Keys = SessionKeys;
+  type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+}
+
+pub type Address = AccountId;
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedExtra = (
@@ -406,6 +452,7 @@ pub type Executive = frame_executive::Executive<
 >;
 
 construct_runtime!(
+<<<<<<< HEAD
   pub enum Runtime {
     System: system,
 
@@ -425,6 +472,21 @@ construct_runtime!(
     Grandpa: grandpa,
 
     AuthorityDiscovery: authority_discovery,
+=======
+  pub enum Runtime where
+    Block = Block,
+    NodeBlock = Block,
+    UncheckedExtrinsic = UncheckedExtrinsic
+  {
+    System: frame_system,
+    RandomnessCollectiveFlip: pallet_randomness_collective_flip,
+    Timestamp: pallet_timestamp,
+    Balances: pallet_balances,
+    TransactionPayment: pallet_transaction_payment,
+    Contracts: pallet_contracts,
+    Session: pallet_session,
+    Tendermint: pallet_tendermint,
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
   }
 );
 
@@ -514,6 +576,7 @@ sp_api::impl_runtime_apis! {
     }
   }
 
+<<<<<<< HEAD
   impl sp_session::SessionKeys<Block> for Runtime {
     fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
       opaque::SessionKeys::generate(seed)
@@ -594,6 +657,10 @@ sp_api::impl_runtime_apis! {
 
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Nonce> for Runtime {
     fn account_nonce(account: PublicKey) -> Nonce {
+=======
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
+    fn account_nonce(account: AccountId) -> Index {
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
       System::account_nonce(account)
     }
   }

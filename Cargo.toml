@@ -30,6 +30,7 @@ members = [
   "processor/messages",
   "processor",
 
+<<<<<<< HEAD
   "coordinator/tributary/tendermint",
   "coordinator/tributary",
   "coordinator",
@@ -46,6 +47,14 @@ members = [
   "substrate/validator-sets/pallet",
 
   "substrate/runtime",
+=======
+  "substrate/tendermint",
+
+  "substrate/pallet-tendermint",
+  "substrate/runtime",
+
+  "substrate/consensus",
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
   "substrate/node",
 
   "substrate/client",

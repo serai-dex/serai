@@ -5915,6 +5915,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-session"
+version = "4.0.0-dev"
+source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "impl-trait-for-tuples",
+ "log",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-session",
+ "sp-staking",
+ "sp-std",
+ "sp-trie",
+]
+
+[[package]]
+name = "pallet-tendermint"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-application-crypto",
+]
+
+[[package]]
 name = "pallet-timestamp"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
@@ -8662,6 +8694,7 @@ dependencies = [
  "async-trait",
  "futures",
  "log",
+ "pallet-session",
  "sc-basic-authorship",
  "sc-client-api",
  "sc-consensus",
@@ -8677,6 +8710,7 @@ dependencies = [
  "sp-core",
  "sp-inherents",
  "sp-runtime",
+ "sp-staking",
  "sp-timestamp",
  "substrate-prometheus-endpoint",
  "tendermint-machine",
@@ -8988,8 +9022,16 @@ dependencies = [
  "pallet-authority-discovery",
  "pallet-babe",
  "pallet-balances",
+<<<<<<< HEAD
  "pallet-grandpa",
  "pallet-session",
+=======
+ "pallet-contracts",
+ "pallet-contracts-primitives",
+ "pallet-randomness-collective-flip",
+ "pallet-session",
+ "pallet-tendermint",
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -9000,7 +9042,11 @@ dependencies = [
  "serai-tokens-pallet",
  "serai-validator-sets-pallet",
  "sp-api",
+<<<<<<< HEAD
  "sp-authority-discovery",
+=======
+ "sp-application-crypto",
+>>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
  "sp-block-builder",
  "sp-consensus-babe",
  "sp-consensus-grandpa",
@@ -9008,7 +9054,6 @@ dependencies = [
  "sp-inherents",
  "sp-offchain",
  "sp-runtime",
- "sp-session",
  "sp-std",
  "sp-transaction-pool",
  "sp-version",
