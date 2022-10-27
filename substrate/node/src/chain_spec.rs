@@ -39,8 +39,12 @@ use sp_runtime::traits::Verify;
 =======
 >>>>>>> bf5bdb89 (Implement block proposal logic)
 use sp_core::{Pair as PairTrait, sr25519::Pair};
+use pallet_tendermint::crypto::Public;
 
-use serai_runtime::{WASM_BINARY, AccountId, GenesisConfig, SystemConfig, BalancesConfig};
+use serai_runtime::{
+  WASM_BINARY, AccountId, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig,
+  SessionConfig,
+};
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
@@ -53,10 +57,18 @@ fn account_id_from_name(name: &'static str) -> AccountId {
 }
 >>>>>>> 4bfc8d79 (Reduce chain_spec and use more accurate naming)
 
+<<<<<<< HEAD
+=======
+fn testnet_genesis(wasm_binary: &[u8], endowed_accounts: Vec<AccountId>) -> GenesisConfig {
+  let alice = account_id_from_name("Alice");
+  GenesisConfig {
+    system: SystemConfig { code: wasm_binary.to_vec() },
+>>>>>>> fa7a03bf (Update node to use pallet sessions)
     balances: BalancesConfig {
       balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
     },
     transaction_payment: Default::default(),
+<<<<<<< HEAD
 
     assets: AssetsConfig {
       assets: [Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero]
@@ -91,6 +103,11 @@ fn account_id_from_name(name: &'static str) -> AccountId {
     grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
 
     authority_discovery: AuthorityDiscoveryConfig { keys: vec![], _config: PhantomData },
+=======
+    session: SessionConfig {
+      keys: vec![(alice, alice, SessionKeys { tendermint: Public::from(alice) })],
+    },
+>>>>>>> fa7a03bf (Update node to use pallet sessions)
   }
 }
 

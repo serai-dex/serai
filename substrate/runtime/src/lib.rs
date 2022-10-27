@@ -43,7 +43,7 @@ use sp_runtime::{
 use sp_core::OpaqueMetadata;
 pub use sp_core::sr25519::{Public, Signature};
 use sp_runtime::{
-  create_runtime_str, generic, impl_opaque_keys,
+  create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
   traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
   transaction_validity::{TransactionSource, TransactionValidity},
@@ -577,6 +577,9 @@ sp_api::impl_runtime_apis! {
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> fa7a03bf (Update node to use pallet sessions)
   impl sp_session::SessionKeys<Block> for Runtime {
     fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
       opaque::SessionKeys::generate(seed)
@@ -589,6 +592,7 @@ sp_api::impl_runtime_apis! {
     }
   }
 
+<<<<<<< HEAD
   impl sp_consensus_babe::BabeApi<Block> for Runtime {
     fn configuration() -> sp_consensus_babe::BabeConfiguration {
       use support::traits::Get;
@@ -658,6 +662,8 @@ sp_api::impl_runtime_apis! {
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Nonce> for Runtime {
     fn account_nonce(account: PublicKey) -> Nonce {
 =======
+=======
+>>>>>>> fa7a03bf (Update node to use pallet sessions)
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
     fn account_nonce(account: AccountId) -> Index {
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)

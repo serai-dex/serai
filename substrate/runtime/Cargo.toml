@@ -32,7 +32,11 @@ sp-authority-discovery = { git = "https://github.com/serai-dex/substrate", defau
 
 =======
 sp-offchain = { git = "https://github.com/serai-dex/substrate", default-features = false }
+<<<<<<< HEAD
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
+=======
+sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+>>>>>>> fa7a03bf (Update node to use pallet sessions)
 sp-transaction-pool = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-block-builder = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -99,7 +103,11 @@ std = [
 
 =======
   "sp-offchain/std",
+<<<<<<< HEAD
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
+=======
+  "sp-session/std",
+>>>>>>> fa7a03bf (Update node to use pallet sessions)
   "sp-transaction-pool/std",
   "sp-block-builder/std",
 

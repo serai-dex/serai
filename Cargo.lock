@@ -8881,6 +8881,11 @@ dependencies = [
  "frame-benchmarking-cli",
  "futures",
  "jsonrpsee",
+<<<<<<< HEAD
+=======
+ "pallet-tendermint",
+ "pallet-transaction-payment",
+>>>>>>> fa7a03bf (Update node to use pallet sessions)
  "pallet-transaction-payment-rpc",
  "sc-authority-discovery",
  "sc-basic-authorship",
@@ -8906,6 +8911,7 @@ dependencies = [
  "sc-transaction-pool-api",
  "serai-runtime",
  "sp-api",
+ "sp-application-crypto",
  "sp-block-builder",
  "sp-blockchain",
  "sp-consensus-babe",
@@ -9054,6 +9060,7 @@ dependencies = [
  "sp-inherents",
  "sp-offchain",
  "sp-runtime",
+ "sp-session",
  "sp-std",
  "sp-transaction-pool",
  "sp-version",
