@@ -178,6 +178,9 @@ where
 
   // TODO
   fn proposer(&self, number: BlockNumber, round: Round) -> u16 {
-    u16::try_from(number.0 + u64::from(round.0)).unwrap()
+    u16::try_from(
+      (number.0 + u64::from(round.0)) % u64::try_from(self.0.read().unwrap().lookup.len()).unwrap(),
+    )
+    .unwrap()
   }
 }
