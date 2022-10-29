@@ -6,8 +6,8 @@ use group::GroupEncoding;
 
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
-  curve::Curve,
-  FrostError, FrostKeys,
+  curve::{Ciphersuite, Curve},
+  FrostError, ThresholdKeys,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
 };
 
@@ -17,12 +17,12 @@ use crate::{
 };
 
 pub struct WalletKeys<C: Curve> {
-  keys: FrostKeys<C>,
+  keys: ThresholdKeys<C>,
   creation_block: usize,
 }
 
 impl<C: Curve> WalletKeys<C> {
-  pub fn new(keys: FrostKeys<C>, creation_block: usize) -> WalletKeys<C> {
+  pub fn new(keys: ThresholdKeys<C>, creation_block: usize) -> WalletKeys<C> {
     WalletKeys { keys, creation_block }
   }
 
@@ -34,13 +34,13 @@ impl<C: Curve> WalletKeys<C> {
   // system, there are potentially other benefits to binding this to a specific group key
   // It's no longer possible to influence group key gen to key cancel without breaking the hash
   // function as well, although that degree of influence means key gen is broken already
-  fn bind(&self, chain: &[u8]) -> FrostKeys<C> {
+  fn bind(&self, chain: &[u8]) -> ThresholdKeys<C> {
     const DST: &[u8] = b"Serai Processor Wallet Chain Bind";
     let mut transcript = RecommendedTranscript::new(DST);
     transcript.append_message(b"chain", chain);
     transcript.append_message(b"curve", C::ID);
     transcript.append_message(b"group_key", self.keys.group_key().to_bytes().as_ref());
-    self.keys.offset(C::hash_to_F(DST, &transcript.challenge(b"offset")))
+    self.keys.offset(<C as Ciphersuite>::hash_to_F(DST, &transcript.challenge(b"offset")))
   }
 }
 
@@ -203,8 +203,8 @@ fn select_inputs_outputs<C: Coin>(
 pub struct Wallet<D: CoinDb, C: Coin> {
   db: D,
   coin: C,
-  keys: Vec<(FrostKeys<C::Curve>, Vec<C::Output>)>,
-  pending: Vec<(usize, FrostKeys<C::Curve>)>,
+  keys: Vec<(ThresholdKeys<C::Curve>, Vec<C::Output>)>,
+  pending: Vec<(usize, ThresholdKeys<C::Curve>)>,
 }
 
 impl<D: CoinDb, C: Coin> Wallet<D, C> {
@@ -344,11 +344,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);
     let commitments = network
-      .round({
-        let mut buf = vec![];
-        commitments.write(&mut buf).unwrap();
-        buf
-      })
+      .round(commitments.serialize())
       .await
       .map_err(SignError::NetworkError)?
       .drain()
@@ -364,11 +360,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     let (attempt, share) = attempt.sign(commitments, b"").map_err(SignError::FrostError)?;
     let shares = network
-      .round({
-        let mut buf = vec![];
-        share.write(&mut buf).unwrap();
-        buf
-      })
+      .round(share.serialize())
       .await
       .map_err(SignError::NetworkError)?
       .drain()

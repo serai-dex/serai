@@ -14,8 +14,8 @@ use group::{ff::PrimeField, GroupEncoding};
 
 use crate::{
   curve::Curve,
-  FrostError, FrostParams, FrostKeys, FrostView,
-  algorithm::{AddendumSerialize, Addendum, Algorithm},
+  FrostError, ThresholdParams, ThresholdKeys, ThresholdView,
+  algorithm::{WriteAddendum, Addendum, Algorithm},
   validate_map,
 };
 
@@ -24,6 +24,12 @@ pub(crate) use crate::nonce::*;
 /// Trait enabling writing preprocesses and signature shares.
 pub trait Writable {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+
+  fn serialize(&self) -> Vec<u8> {
+    let mut buf = vec![];
+    self.write(&mut buf).unwrap();
+    buf
+  }
 }
 
 impl<T: Writable> Writable for Vec<T> {
@@ -35,18 +41,18 @@ impl<T: Writable> Writable for Vec<T> {
   }
 }
 
-/// Pairing of an Algorithm with a FrostKeys instance and this specific signing set.
+/// Pairing of an Algorithm with a ThresholdKeys instance and this specific signing set.
 #[derive(Clone)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
   algorithm: A,
-  keys: FrostKeys<C>,
-  view: FrostView<C>,
+  keys: ThresholdKeys<C>,
+  view: ThresholdView<C>,
 }
 
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
     algorithm: A,
-    keys: FrostKeys<C>,
+    keys: ThresholdKeys<C>,
     included: &[u16],
   ) -> Result<Params<C, A>, FrostError> {
     let params = keys.params();
@@ -55,16 +61,16 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
     included.sort_unstable();
 
     // Included < threshold
-    if included.len() < usize::from(params.t) {
+    if included.len() < usize::from(params.t()) {
       Err(FrostError::InvalidSigningSet("not enough signers"))?;
     }
     // Invalid index
     if included[0] == 0 {
-      Err(FrostError::InvalidParticipantIndex(included[0], params.n))?;
+      Err(FrostError::InvalidParticipantIndex(included[0], params.n()))?;
     }
     // OOB index
-    if included[included.len() - 1] > params.n {
-      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], params.n))?;
+    if included[included.len() - 1] > params.n() {
+      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], params.n()))?;
     }
     // Same signer included multiple times
     for i in 0 .. (included.len() - 1) {
@@ -73,7 +79,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
       }
     }
     // Not included
-    if !included.contains(&params.i) {
+    if !included.contains(&params.i()) {
       Err(FrostError::InvalidSigningSet("signing despite not being included"))?;
     }
 
@@ -81,17 +87,17 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
     Ok(Params { algorithm, view: keys.view(&included).unwrap(), keys })
   }
 
-  pub fn multisig_params(&self) -> FrostParams {
+  pub fn multisig_params(&self) -> ThresholdParams {
     self.keys.params()
   }
 
-  pub fn view(&self) -> FrostView<C> {
+  pub fn view(&self) -> ThresholdView<C> {
     self.view.clone()
   }
 }
 
 /// Preprocess for an instance of the FROST signing protocol.
-#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Preprocess<C: Curve, A: Addendum> {
   pub(crate) commitments: Commitments<C>,
   pub addendum: A,
@@ -107,6 +113,7 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
 #[derive(Zeroize)]
 pub(crate) struct PreprocessData<C: Curve, A: Addendum> {
   pub(crate) nonces: Vec<Nonce<C>>,
+  #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A>,
 }
 
@@ -140,7 +147,7 @@ struct SignData<C: Curve> {
 }
 
 /// Share of a signature produced via FROST.
-#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SignatureShare<C: Curve>(C::F);
 impl<C: Curve> Writable for SignatureShare<C> {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -158,7 +165,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
   msg: &[u8],
 ) -> Result<(SignData<C>, SignatureShare<C>), FrostError> {
   let multisig_params = params.multisig_params();
-  validate_map(&preprocesses, &params.view.included, multisig_params.i)?;
+  validate_map(&preprocesses, &params.view.included(), multisig_params.i())?;
 
   {
     // Domain separate FROST
@@ -167,10 +174,10 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
 
   let nonces = params.algorithm.nonces();
   #[allow(non_snake_case)]
-  let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(params.view.included.len()));
+  let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(params.view.included().len()));
   {
     // Parse the preprocesses
-    for l in &params.view.included {
+    for l in &params.view.included() {
       {
         params
           .algorithm
@@ -178,7 +185,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
           .append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
       }
 
-      if *l == params.keys.params().i {
+      if *l == params.keys.params().i() {
         let commitments = our_preprocess.preprocess.commitments.clone();
         commitments.transcript(params.algorithm.transcript());
 
@@ -216,7 +223,7 @@ fn sign_with_share<C: Curve, A: Algorithm<C>>(
     // Include the offset, if one exists
     // While this isn't part of the FROST-expected rho transcript, the offset being here coincides
     // with another specification (despite the transcript format being distinct)
-    if let Some(offset) = params.keys.offset {
+    if let Some(offset) = params.keys.current_offset() {
       // Transcript as a point
       // Under a coordinated model, the coordinater can be the only party to know the discrete log
       // of the offset. This removes the ability for any signer to provide the discrete log,
@@ -262,7 +269,7 @@ fn complete<C: Curve, A: Algorithm<C>>(
   mut shares: HashMap<u16, SignatureShare<C>>,
 ) -> Result<A::Signature, FrostError> {
   let params = sign_params.multisig_params();
-  validate_map(&shares, &sign_params.view.included, params.i)?;
+  validate_map(&shares, &sign_params.view.included(), params.i())?;
 
   let mut responses = HashMap::new();
   responses.insert(params.i(), sign.share);
@@ -275,13 +282,14 @@ fn complete<C: Curve, A: Algorithm<C>>(
   // Perform signature validation instead of individual share validation
   // For the success route, which should be much more frequent, this should be faster
   // It also acts as an integrity check of this library's signing function
-  if let Some(sig) = sign_params.algorithm.verify(sign_params.view.group_key, &sign.Rs, sum) {
+  if let Some(sig) = sign_params.algorithm.verify(sign_params.view.group_key(), &sign.Rs, sum) {
     return Ok(sig);
   }
 
   // Find out who misbehaved. It may be beneficial to randomly sort this to have detection be
   // within n / 2 on average, and not gameable to n, though that should be minor
-  for l in &sign_params.view.included {
+  // TODO
+  for l in &sign_params.view.included() {
     if !sign_params.algorithm.verify_share(
       sign_params.view.verification_share(*l),
       &sign.B.bound(*l),
@@ -367,7 +375,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a signature with the specified keys.
   pub fn new(
     algorithm: A,
-    keys: FrostKeys<C>,
+    keys: ThresholdKeys<C>,
     included: &[u16],
   ) -> Result<AlgorithmMachine<C, A>, FrostError> {
     Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })

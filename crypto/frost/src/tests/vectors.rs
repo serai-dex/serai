@@ -6,17 +6,17 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::{ff::PrimeField, GroupEncoding};
 
+use dkg::tests::{test_ciphersuite as test_dkg};
+
 use crate::{
   curve::Curve,
-  FrostCore, FrostKeys,
+  ThresholdCore, ThresholdKeys,
   algorithm::{Schnorr, Hram},
   sign::{
     Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess,
     PreprocessData, SignMachine, SignatureMachine, AlgorithmMachine,
   },
-  tests::{
-    clone_without, curve::test_curve, schnorr::test_schnorr, promote::test_promotion, recover,
-  },
+  tests::{clone_without, recover_key, curve::test_curve},
 };
 
 pub struct Vectors {
@@ -76,8 +76,8 @@ impl From<serde_json::Value> for Vectors {
   }
 }
 
-// Load these vectors into FrostKeys using a custom serialization it'll deserialize
-fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKeys<C>> {
+// Load these vectors into ThresholdKeys using a custom serialization it'll deserialize
+fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, ThresholdKeys<C>> {
   let shares = vectors
     .shares
     .iter()
@@ -87,7 +87,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
 
   let mut keys = HashMap::new();
   for i in 1 ..= u16::try_from(shares.len()).unwrap() {
-    // Manually re-implement the serialization for FrostCore to import this data
+    // Manually re-implement the serialization for ThresholdCore to import this data
     let mut serialized = vec![];
     serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
     serialized.extend(C::ID);
@@ -99,13 +99,13 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, FrostKe
       serialized.extend(share.to_bytes().as_ref());
     }
 
-    let these_keys = FrostCore::<C>::deserialize::<&[u8]>(&mut serialized.as_ref()).unwrap();
+    let these_keys = ThresholdCore::<C>::deserialize::<&[u8]>(&mut serialized.as_ref()).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     assert_eq!(these_keys.params().i(), i);
     assert_eq!(these_keys.secret_share(), shares[usize::from(i - 1)]);
     assert_eq!(hex::encode(these_keys.group_key().to_bytes().as_ref()), vectors.group_key);
-    keys.insert(i, FrostKeys::new(these_keys));
+    keys.insert(i, ThresholdKeys::new(these_keys));
   }
 
   keys
@@ -117,17 +117,18 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 ) {
   // Do basic tests before trying the vectors
   test_curve::<_, C>(&mut *rng);
-  test_schnorr::<_, C>(&mut *rng);
-  test_promotion::<_, C>(rng);
+
+  // Test the DKG
+  test_dkg::<_, C>(&mut *rng);
 
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
   let group_key =
-    C::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref()).unwrap();
+    <C as Curve>::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref()).unwrap();
   let secret =
     C::read_F::<&[u8]>(&mut hex::decode(&vectors.group_secret).unwrap().as_ref()).unwrap();
   assert_eq!(C::generator() * secret, group_key);
-  assert_eq!(recover(&keys), secret);
+  assert_eq!(recover_key(&keys), secret);
 
   let mut machines = vec![];
   for i in &vectors.included {

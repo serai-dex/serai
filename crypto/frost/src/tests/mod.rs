@@ -2,21 +2,16 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::ff::Field;
+pub use dkg::tests::{key_gen, recover_key};
 
 use crate::{
-  Curve, FrostParams, FrostCore, FrostKeys, lagrange,
-  key_gen::{SecretShare, Commitments as KGCommitments, KeyGenMachine},
+  Curve, ThresholdKeys,
   algorithm::Algorithm,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
 
 /// Curve tests.
 pub mod curve;
-/// Schnorr signature tests.
-pub mod schnorr;
-/// Promotion tests.
-pub mod promote;
 /// Vectorized test suite to ensure consistency.
 pub mod vectors;
 
@@ -39,102 +34,11 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
   res
 }
 
-/// Generate FROST keys (as FrostCore objects) for tests.
-pub fn core_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, FrostCore<C>> {
-  let mut machines = HashMap::new();
-  let mut commitments = HashMap::new();
-  for i in 1 ..= PARTICIPANTS {
-    let machine = KeyGenMachine::<C>::new(
-      FrostParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
-      "FROST Test key_gen".to_string(),
-    );
-    let (machine, these_commitments) = machine.generate_coefficients(rng);
-    machines.insert(i, machine);
-
-    commitments.insert(i, {
-      let mut buf = vec![];
-      these_commitments.write(&mut buf).unwrap();
-      KGCommitments::read::<&[u8]>(
-        &mut buf.as_ref(),
-        FrostParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 },
-      )
-      .unwrap()
-    });
-  }
-
-  let mut secret_shares = HashMap::new();
-  let mut machines = machines
-    .drain()
-    .map(|(l, machine)| {
-      let (machine, mut shares) =
-        machine.generate_secret_shares(rng, clone_without(&commitments, &l)).unwrap();
-      let shares = shares
-        .drain()
-        .map(|(l, share)| {
-          let mut buf = vec![];
-          share.write(&mut buf).unwrap();
-          (l, SecretShare::<C>::read::<&[u8]>(&mut buf.as_ref()).unwrap())
-        })
-        .collect::<HashMap<_, _>>();
-      secret_shares.insert(l, shares);
-      (l, machine)
-    })
-    .collect::<HashMap<_, _>>();
-
-  let mut verification_shares = None;
-  let mut group_key = None;
-  machines
-    .drain()
-    .map(|(i, machine)| {
-      let mut our_secret_shares = HashMap::new();
-      for (l, shares) in &secret_shares {
-        if i == *l {
-          continue;
-        }
-        our_secret_shares.insert(*l, shares[&i].clone());
-      }
-      let these_keys = machine.complete(rng, our_secret_shares).unwrap();
-
-      // Verify the verification_shares are agreed upon
-      if verification_shares.is_none() {
-        verification_shares = Some(these_keys.verification_shares());
-      }
-      assert_eq!(verification_shares.as_ref().unwrap(), &these_keys.verification_shares());
-
-      // Verify the group keys are agreed upon
-      if group_key.is_none() {
-        group_key = Some(these_keys.group_key());
-      }
-      assert_eq!(group_key.unwrap(), these_keys.group_key());
-
-      (i, these_keys)
-    })
-    .collect::<HashMap<_, _>>()
-}
-
-/// Generate FROST keys for tests.
-pub fn key_gen<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) -> HashMap<u16, FrostKeys<C>> {
-  core_gen(rng).drain().map(|(i, core)| (i, FrostKeys::new(core))).collect()
-}
-
-/// Recover the secret from a collection of keys.
-pub fn recover<C: Curve>(keys: &HashMap<u16, FrostKeys<C>>) -> C::F {
-  let first = keys.values().next().expect("no keys provided");
-  assert!(keys.len() >= first.params().t().into(), "not enough keys provided");
-  let included = keys.keys().cloned().collect::<Vec<_>>();
-
-  let group_private = keys.iter().fold(C::F::zero(), |accum, (i, keys)| {
-    accum + (keys.secret_share() * lagrange::<C::F>(*i, &included))
-  });
-  assert_eq!(C::generator() * group_private, first.group_key(), "failed to recover keys");
-  group_private
-}
-
 /// Spawn algorithm machines for a random selection of signers, each executing the given algorithm.
 pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   algorithm: A,
-  keys: &HashMap<u16, FrostKeys<C>>,
+  keys: &HashMap<u16, ThresholdKeys<C>>,
 ) -> HashMap<u16, AlgorithmMachine<C, A>> {
   let mut included = vec![];
   while included.len() < usize::from(keys[&1].params().t()) {

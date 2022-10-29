@@ -23,8 +23,8 @@ use dalek_ff_group as dfg;
 use dleq::DLEqProof;
 use frost::{
   curve::Ed25519,
-  FrostError, FrostView,
-  algorithm::{AddendumSerialize, Algorithm},
+  FrostError, ThresholdView,
+  algorithm::{WriteAddendum, Algorithm},
 };
 
 use crate::ringct::{
@@ -80,7 +80,7 @@ pub struct ClsagAddendum {
   dleq: DLEqProof<dfg::EdwardsPoint>,
 }
 
-impl AddendumSerialize for ClsagAddendum {
+impl WriteAddendum for ClsagAddendum {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.key_image.compress().to_bytes().as_ref())?;
     self.dleq.serialize(writer)
@@ -154,7 +154,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    view: &FrostView<Ed25519>,
+    view: &ThresholdView<Ed25519>,
   ) -> ClsagAddendum {
     ClsagAddendum {
       key_image: dfg::EdwardsPoint(self.H * view.secret_share().0),
@@ -188,7 +188,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn process_addendum(
     &mut self,
-    view: &FrostView<Ed25519>,
+    view: &ThresholdView<Ed25519>,
     l: u16,
     addendum: ClsagAddendum,
   ) -> Result<(), FrostError> {
@@ -223,7 +223,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn sign_share(
     &mut self,
-    view: &FrostView<Ed25519>,
+    view: &ThresholdView<Ed25519>,
     nonce_sums: &[Vec<dfg::EdwardsPoint>],
     nonces: &[dfg::Scalar],
     msg: &[u8],

@@ -15,7 +15,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use transcript::Transcript;
 
@@ -34,13 +34,19 @@ fn dleq_transcript<T: Transcript>() -> T {
 // This is considered a single nonce as r = d + be
 #[derive(Clone, Zeroize)]
 pub(crate) struct Nonce<C: Curve>(pub(crate) [C::F; 2]);
+impl<C: Curve> Drop for Nonce<C> {
+  fn drop(&mut self) {
+    self.zeroize();
+  }
+}
+impl<C: Curve> ZeroizeOnDrop for Nonce<C> {}
 
 // Commitments to a specific generator for this nonce
-#[derive(Copy, Clone, PartialEq, Eq, Zeroize)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub(crate) struct GeneratorCommitments<C: Curve>(pub(crate) [C::G; 2]);
 impl<C: Curve> GeneratorCommitments<C> {
   fn read<R: Read>(reader: &mut R) -> io::Result<GeneratorCommitments<C>> {
-    Ok(GeneratorCommitments([C::read_G(reader)?, C::read_G(reader)?]))
+    Ok(GeneratorCommitments([<C as Curve>::read_G(reader)?, <C as Curve>::read_G(reader)?]))
   }
 
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -50,7 +56,7 @@ impl<C: Curve> GeneratorCommitments<C> {
 }
 
 // A single nonce's commitments and relevant proofs
-#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct NonceCommitments<C: Curve> {
   // Called generators as these commitments are indexed by generator
   pub(crate) generators: Vec<GeneratorCommitments<C>>,
@@ -130,7 +136,7 @@ impl<C: Curve> NonceCommitments<C> {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Commitments<C: Curve> {
   // Called nonces as these commitments are indexed by nonce
   pub(crate) nonces: Vec<NonceCommitments<C>>,
@@ -165,7 +171,7 @@ impl<C: Curve> Commitments<C> {
       // committed to as their entire series per-nonce, not as isolates
       if let Some(dleqs) = &nonce.dleqs {
         let mut transcript_dleq = |label, dleq: &DLEqProof<C::G>| {
-          let mut buf = Vec::with_capacity(C::G_len() + C::F_len());
+          let mut buf = vec![];
           dleq.serialize(&mut buf).unwrap();
           t.append_message(label, &buf);
         };
@@ -194,22 +200,12 @@ impl<C: Curve> Commitments<C> {
   }
 }
 
-#[derive(Zeroize)]
 pub(crate) struct IndividualBinding<C: Curve> {
   commitments: Commitments<C>,
   binding_factors: Option<Vec<C::F>>,
 }
 
 pub(crate) struct BindingFactor<C: Curve>(pub(crate) HashMap<u16, IndividualBinding<C>>);
-
-impl<C: Curve> Zeroize for BindingFactor<C> {
-  fn zeroize(&mut self) {
-    for (mut validator, mut binding) in self.0.drain() {
-      validator.zeroize();
-      binding.zeroize();
-    }
-  }
-}
 
 impl<C: Curve> BindingFactor<C> {
   pub(crate) fn insert(&mut self, i: u16, commitments: Commitments<C>) {
