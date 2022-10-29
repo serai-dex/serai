@@ -36,7 +36,7 @@ pub use kp256::P256;
 #[cfg(feature = "ed448")]
 mod ed448;
 #[cfg(feature = "ed448")]
-pub use ed448::Ed448;
+pub use ed448::*;
 
 /// Unified trait defining a ciphersuite around an elliptic curve.
 pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {

@@ -1,6 +1,6 @@
 [package]
 name = "ciphersuite"
-version = "0.0.0"
+version = "0.1.0"
 description = "Ciphersuites built around ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite"
