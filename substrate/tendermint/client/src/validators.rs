@@ -49,7 +49,7 @@ impl TendermintValidatorsStruct {
       total_weight: validators.len().try_into().unwrap(),
       weights: vec![1; validators.len()],
 
-      lookup: vec![keys.public()],
+      lookup: validators,
       keys,
     }
   }
