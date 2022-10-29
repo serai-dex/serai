@@ -897,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "ciphersuite"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dalek-ff-group",
  "digest 0.10.5",
@@ -1655,7 +1655,23 @@ dependencies = [
 
 [[package]]
 name = "dkg"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "chacha20 0.9.0",
+ "ciphersuite",
+ "digest 0.10.5",
+ "dleq",
+ "flexible-transcript",
+ "group",
+ "hex",
+ "hkdf",
+ "multiexp",
+ "rand_core 0.6.4",
+ "schnorr-signatures",
+ "subtle",
+ "thiserror",
+ "zeroize",
+]
 
 [[package]]
 name = "dleq"
