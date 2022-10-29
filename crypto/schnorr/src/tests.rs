@@ -11,7 +11,7 @@ pub(crate) fn core_sign<C: Ciphersuite>() {
   let private_key = C::random_nonzero_F(&mut OsRng);
   let nonce = C::random_nonzero_F(&mut OsRng);
   let challenge = C::random_nonzero_F(&mut OsRng); // Doesn't bother to craft an HRAm
-  assert!(SchnorrSignature::sign::<C>(private_key, nonce, challenge)
+  assert!(SchnorrSignature::<C>::sign(private_key, nonce, challenge)
     .verify(C::generator() * private_key, challenge));
 }
 
@@ -19,7 +19,7 @@ pub(crate) fn core_sign<C: Ciphersuite>() {
 // This verifies invalid signatures don't pass, using zero signatures, which should effectively be
 // random
 pub(crate) fn core_verify<C: Ciphersuite>() {
-  assert!(!SchnorrSignature { R: C::G::identity(), s: C::F::zero() }
+  assert!(!SchnorrSignature::<C> { R: C::G::identity(), s: C::F::zero() }
     .verify(C::generator() * C::random_nonzero_F(&mut OsRng), C::random_nonzero_F(&mut OsRng)));
 }
 
@@ -31,14 +31,14 @@ pub(crate) fn core_batch_verify<C: Ciphersuite>() {
   for i in 0 .. 5 {
     keys.push(C::random_nonzero_F(&mut OsRng));
     challenges.push(C::random_nonzero_F(&mut OsRng));
-    sigs.push(SchnorrSignature::sign::<C>(keys[i], C::random_nonzero_F(&mut OsRng), challenges[i]));
+    sigs.push(SchnorrSignature::<C>::sign(keys[i], C::random_nonzero_F(&mut OsRng), challenges[i]));
   }
 
   // Batch verify
   {
     let mut batch = BatchVerifier::new(5);
-    for (i, sig) in &sigs.enumerate() {
-      sig.batch_verify(&mut OsRng, batch, i, C::generator() * keys[i], challenges[i]);
+    for (i, sig) in sigs.iter().enumerate() {
+      sig.batch_verify(&mut OsRng, &mut batch, i, C::generator() * keys[i], challenges[i]);
     }
     batch.verify_with_vartime_blame().unwrap();
   }
@@ -47,14 +47,14 @@ pub(crate) fn core_batch_verify<C: Ciphersuite>() {
   // This test will fail if unique factors aren't used per-signature, hence its inclusion
   {
     let mut batch = BatchVerifier::new(5);
-    for (i, sig) in sigs.clone().drain(..).enumerate() {
+    for (i, mut sig) in sigs.clone().drain(..).enumerate() {
       if i == 1 {
         sig.s += C::F::one();
       }
       if i == 2 {
         sig.s -= C::F::one();
       }
-      sig.batch_verify(&mut OsRng, batch, i, C::generator() * keys[i], challenges[i]);
+      sig.batch_verify(&mut OsRng, &mut batch, i, C::generator() * keys[i], challenges[i]);
     }
     if let Err(blame) = batch.verify_with_vartime_blame() {
       assert!((blame == 1) || (blame == 2));
