@@ -13,8 +13,8 @@ use crate::{
   ThresholdCore, ThresholdKeys,
   algorithm::{Schnorr, Hram},
   sign::{
-    Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess,
-    PreprocessData, SignMachine, SignatureMachine, AlgorithmMachine,
+    Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess, SignMachine,
+    SignatureMachine, AlgorithmMachine,
   },
   tests::{clone_without, recover_key, curve::test_curve},
 };
@@ -154,9 +154,9 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       ];
       c += 1;
       let these_commitments = [C::generator() * nonces[0], C::generator() * nonces[1]];
-      let machine = machine.unsafe_override_preprocess(PreprocessData {
-        nonces: vec![Nonce(nonces)],
-        preprocess: Preprocess {
+      let machine = machine.unsafe_override_preprocess(
+        vec![Nonce(nonces)],
+        Preprocess {
           commitments: Commitments {
             nonces: vec![NonceCommitments {
               generators: vec![GeneratorCommitments(these_commitments)],
@@ -165,7 +165,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
           },
           addendum: (),
         },
-      });
+      );
 
       commitments.insert(
         *i,

@@ -42,12 +42,19 @@ impl<T: Writable> Writable for Vec<T> {
 }
 
 /// Pairing of an Algorithm with a ThresholdKeys instance and this specific signing set.
-#[derive(Clone)]
+#[derive(Clone, Zeroize)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
+  #[zeroize(skip)]
   algorithm: A,
   keys: ThresholdKeys<C>,
   view: ThresholdView<C>,
 }
+impl<C: Curve, A: Algorithm<C>> Drop for Params<C, A> {
+  fn drop(&mut self) {
+    self.zeroize()
+  }
+}
+impl<C: Curve, A: Algorithm<C>> ZeroizeOnDrop for Params<C, A> {}
 
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
@@ -110,199 +117,6 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
   }
 }
 
-#[derive(Zeroize)]
-pub(crate) struct PreprocessData<C: Curve, A: Addendum> {
-  pub(crate) nonces: Vec<Nonce<C>>,
-  #[zeroize(skip)]
-  pub(crate) preprocess: Preprocess<C, A>,
-}
-
-impl<C: Curve, A: Addendum> Drop for PreprocessData<C, A> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
-}
-impl<C: Curve, A: Addendum> ZeroizeOnDrop for PreprocessData<C, A> {}
-
-fn preprocess<R: RngCore + CryptoRng, C: Curve, A: Algorithm<C>>(
-  rng: &mut R,
-  params: &mut Params<C, A>,
-) -> (PreprocessData<C, A::Addendum>, Preprocess<C, A::Addendum>) {
-  let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
-    &mut *rng,
-    params.view().secret_share(),
-    &params.algorithm.nonces(),
-  );
-  let addendum = params.algorithm.preprocess_addendum(rng, &params.view);
-
-  let preprocess = Preprocess { commitments, addendum };
-  (PreprocessData { nonces, preprocess: preprocess.clone() }, preprocess)
-}
-
-#[allow(non_snake_case)]
-struct SignData<C: Curve> {
-  B: BindingFactor<C>,
-  Rs: Vec<Vec<C::G>>,
-  share: C::F,
-}
-
-/// Share of a signature produced via FROST.
-#[derive(Clone, PartialEq, Eq)]
-pub struct SignatureShare<C: Curve>(C::F);
-impl<C: Curve> Writable for SignatureShare<C> {
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(self.0.to_repr().as_ref())
-  }
-}
-
-// Has every signer perform the role of the signature aggregator
-// Step 1 was already deprecated by performing nonce generation as needed
-// Step 2 is simply the broadcast round from step 1
-fn sign_with_share<C: Curve, A: Algorithm<C>>(
-  params: &mut Params<C, A>,
-  mut our_preprocess: PreprocessData<C, A::Addendum>,
-  mut preprocesses: HashMap<u16, Preprocess<C, A::Addendum>>,
-  msg: &[u8],
-) -> Result<(SignData<C>, SignatureShare<C>), FrostError> {
-  let multisig_params = params.multisig_params();
-  validate_map(&preprocesses, &params.view.included(), multisig_params.i())?;
-
-  {
-    // Domain separate FROST
-    params.algorithm.transcript().domain_separate(b"FROST");
-  }
-
-  let nonces = params.algorithm.nonces();
-  #[allow(non_snake_case)]
-  let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(params.view.included().len()));
-  {
-    // Parse the preprocesses
-    for l in &params.view.included() {
-      {
-        params
-          .algorithm
-          .transcript()
-          .append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
-      }
-
-      if *l == params.keys.params().i() {
-        let commitments = our_preprocess.preprocess.commitments.clone();
-        commitments.transcript(params.algorithm.transcript());
-
-        let addendum = our_preprocess.preprocess.addendum.clone();
-        {
-          let mut buf = vec![];
-          addendum.write(&mut buf).unwrap();
-          params.algorithm.transcript().append_message(b"addendum", &buf);
-        }
-
-        B.insert(*l, commitments);
-        params.algorithm.process_addendum(&params.view, *l, addendum)?;
-      } else {
-        let preprocess = preprocesses.remove(l).unwrap();
-        preprocess.commitments.transcript(params.algorithm.transcript());
-        {
-          let mut buf = vec![];
-          preprocess.addendum.write(&mut buf).unwrap();
-          params.algorithm.transcript().append_message(b"addendum", &buf);
-        }
-
-        B.insert(*l, preprocess.commitments);
-        params.algorithm.process_addendum(&params.view, *l, preprocess.addendum)?;
-      }
-    }
-
-    // Re-format into the FROST-expected rho transcript
-    let mut rho_transcript = A::Transcript::new(b"FROST_rho");
-    rho_transcript.append_message(b"message", &C::hash_msg(msg));
-    rho_transcript.append_message(
-      b"preprocesses",
-      &C::hash_commitments(params.algorithm.transcript().challenge(b"preprocesses").as_ref()),
-    );
-
-    // Include the offset, if one exists
-    // While this isn't part of the FROST-expected rho transcript, the offset being here coincides
-    // with another specification (despite the transcript format being distinct)
-    if let Some(offset) = params.keys.current_offset() {
-      // Transcript as a point
-      // Under a coordinated model, the coordinater can be the only party to know the discrete log
-      // of the offset. This removes the ability for any signer to provide the discrete log,
-      // proving a key is related to another, slightly increasing security
-      // While further code edits would still be required for such a model (having the offset
-      // communicated as a point along with only a single party applying the offset), this means it
-      // wouldn't require a transcript change as well
-      rho_transcript.append_message(b"offset", (C::generator() * offset).to_bytes().as_ref());
-    }
-
-    // Generate the per-signer binding factors
-    B.calculate_binding_factors(&mut rho_transcript);
-
-    // Merge the rho transcript back into the global one to ensure its advanced, while
-    // simultaneously committing to everything
-    params
-      .algorithm
-      .transcript()
-      .append_message(b"rho_transcript", rho_transcript.challenge(b"merge").as_ref());
-  }
-
-  #[allow(non_snake_case)]
-  let Rs = B.nonces(&nonces);
-
-  let our_binding_factors = B.binding_factors(multisig_params.i());
-  let mut nonces = our_preprocess
-    .nonces
-    .iter()
-    .enumerate()
-    .map(|(n, nonces)| nonces.0[0] + (nonces.0[1] * our_binding_factors[n]))
-    .collect::<Vec<_>>();
-  our_preprocess.nonces.zeroize();
-
-  let share = params.algorithm.sign_share(&params.view, &Rs, &nonces, msg);
-  nonces.zeroize();
-
-  Ok((SignData { B, Rs, share }, SignatureShare(share)))
-}
-
-fn complete<C: Curve, A: Algorithm<C>>(
-  sign_params: &Params<C, A>,
-  sign: SignData<C>,
-  mut shares: HashMap<u16, SignatureShare<C>>,
-) -> Result<A::Signature, FrostError> {
-  let params = sign_params.multisig_params();
-  validate_map(&shares, &sign_params.view.included(), params.i())?;
-
-  let mut responses = HashMap::new();
-  responses.insert(params.i(), sign.share);
-  let mut sum = sign.share;
-  for (l, share) in shares.drain() {
-    responses.insert(l, share.0);
-    sum += share.0;
-  }
-
-  // Perform signature validation instead of individual share validation
-  // For the success route, which should be much more frequent, this should be faster
-  // It also acts as an integrity check of this library's signing function
-  if let Some(sig) = sign_params.algorithm.verify(sign_params.view.group_key(), &sign.Rs, sum) {
-    return Ok(sig);
-  }
-
-  // Find out who misbehaved. It may be beneficial to randomly sort this to have detection be
-  // within n / 2 on average, and not gameable to n, though that should be minor
-  // TODO
-  for l in &sign_params.view.included() {
-    if !sign_params.algorithm.verify_share(
-      sign_params.view.verification_share(*l),
-      &sign.B.bound(*l),
-      responses[l],
-    ) {
-      Err(FrostError::InvalidShare(*l))?;
-    }
-  }
-
-  // If everyone has a valid share and there were enough participants, this should've worked
-  Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
-}
-
 /// Trait for the initial state machine of a two-round signing protocol.
 pub trait PreprocessMachine {
   /// Preprocess message for this machine.
@@ -317,6 +131,63 @@ pub trait PreprocessMachine {
   /// channel.
   fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R)
     -> (Self::SignMachine, Self::Preprocess);
+}
+
+/// State machine which manages signing for an arbitrary signature algorithm.
+pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
+  params: Params<C, A>,
+}
+
+impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
+  /// Creates a new machine to generate a signature with the specified keys.
+  pub fn new(
+    algorithm: A,
+    keys: ThresholdKeys<C>,
+    included: &[u16],
+  ) -> Result<AlgorithmMachine<C, A>, FrostError> {
+    Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })
+  }
+
+  #[cfg(any(test, feature = "tests"))]
+  pub(crate) fn unsafe_override_preprocess(
+    self,
+    nonces: Vec<Nonce<C>>,
+    preprocess: Preprocess<C, A::Addendum>,
+  ) -> AlgorithmSignMachine<C, A> {
+    AlgorithmSignMachine { params: self.params, nonces, preprocess }
+  }
+}
+
+impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
+  type Preprocess = Preprocess<C, A::Addendum>;
+  type Signature = A::Signature;
+  type SignMachine = AlgorithmSignMachine<C, A>;
+
+  fn preprocess<R: RngCore + CryptoRng>(
+    self,
+    rng: &mut R,
+  ) -> (Self::SignMachine, Preprocess<C, A::Addendum>) {
+    let mut params = self.params;
+
+    let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
+      &mut *rng,
+      params.view().secret_share(),
+      &params.algorithm.nonces(),
+    );
+    let addendum = params.algorithm.preprocess_addendum(rng, &params.view);
+
+    let preprocess = Preprocess { commitments, addendum };
+    (AlgorithmSignMachine { params, nonces, preprocess: preprocess.clone() }, preprocess)
+  }
+}
+
+/// Share of a signature produced via FROST.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SignatureShare<C: Curve>(C::F);
+impl<C: Curve> Writable for SignatureShare<C> {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(self.0.to_repr().as_ref())
+  }
 }
 
 /// Trait for the second machine of a two-round signing protocol.
@@ -341,69 +212,23 @@ pub trait SignMachine<S> {
   ) -> Result<(Self::SignatureMachine, Self::SignatureShare), FrostError>;
 }
 
-/// Trait for the final machine of a two-round signing protocol.
-pub trait SignatureMachine<S> {
-  /// SignatureShare message for this machine.
-  type SignatureShare: Clone + PartialEq + Writable;
-
-  /// Read a Signature Share message.
-  fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare>;
-
-  /// Complete signing.
-  /// Takes in everyone elses' shares. Returns the signature.
-  fn complete(self, shares: HashMap<u16, Self::SignatureShare>) -> Result<S, FrostError>;
-}
-
-/// State machine which manages signing for an arbitrary signature algorithm.
-pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
-  params: Params<C, A>,
-}
-
 /// Next step of the state machine for the signing process.
 pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
-  preprocess: PreprocessData<C, A::Addendum>,
+  pub(crate) nonces: Vec<Nonce<C>>,
+  pub(crate) preprocess: Preprocess<C, A::Addendum>,
 }
-
-/// Final step of the state machine for the signing process.
-pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
-  params: Params<C, A>,
-  sign: SignData<C>,
-}
-
-impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
-  /// Creates a new machine to generate a signature with the specified keys.
-  pub fn new(
-    algorithm: A,
-    keys: ThresholdKeys<C>,
-    included: &[u16],
-  ) -> Result<AlgorithmMachine<C, A>, FrostError> {
-    Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })
-  }
-
-  #[cfg(any(test, feature = "tests"))]
-  pub(crate) fn unsafe_override_preprocess(
-    self,
-    preprocess: PreprocessData<C, A::Addendum>,
-  ) -> AlgorithmSignMachine<C, A> {
-    AlgorithmSignMachine { params: self.params, preprocess }
+impl<C: Curve, A: Algorithm<C>> Zeroize for AlgorithmSignMachine<C, A> {
+  fn zeroize(&mut self) {
+    self.nonces.zeroize()
   }
 }
-
-impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
-  type Preprocess = Preprocess<C, A::Addendum>;
-  type Signature = A::Signature;
-  type SignMachine = AlgorithmSignMachine<C, A>;
-
-  fn preprocess<R: RngCore + CryptoRng>(
-    self,
-    rng: &mut R,
-  ) -> (Self::SignMachine, Preprocess<C, A::Addendum>) {
-    let mut params = self.params;
-    let (preprocess, public) = preprocess::<R, C, A>(rng, &mut params);
-    (AlgorithmSignMachine { params, preprocess }, public)
+impl<C: Curve, A: Algorithm<C>> Drop for AlgorithmSignMachine<C, A> {
+  fn drop(&mut self) {
+    self.zeroize()
   }
 }
+impl<C: Curve, A: Algorithm<C>> ZeroizeOnDrop for AlgorithmSignMachine<C, A> {}
 
 impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachine<C, A> {
   type Preprocess = Preprocess<C, A::Addendum>;
@@ -418,14 +243,137 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
   }
 
   fn sign(
-    self,
-    commitments: HashMap<u16, Preprocess<C, A::Addendum>>,
+    mut self,
+    mut preprocesses: HashMap<u16, Preprocess<C, A::Addendum>>,
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, SignatureShare<C>), FrostError> {
-    let mut params = self.params;
-    let (sign, public) = sign_with_share(&mut params, self.preprocess, commitments, msg)?;
-    Ok((AlgorithmSignatureMachine { params, sign }, public))
+    let multisig_params = self.params.multisig_params();
+    validate_map(&preprocesses, &self.params.view.included(), multisig_params.i())?;
+
+    {
+      // Domain separate FROST
+      self.params.algorithm.transcript().domain_separate(b"FROST");
+    }
+
+    let nonces = self.params.algorithm.nonces();
+    #[allow(non_snake_case)]
+    let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(self.params.view.included().len()));
+    {
+      // Parse the preprocesses
+      for l in &self.params.view.included() {
+        {
+          self
+            .params
+            .algorithm
+            .transcript()
+            .append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
+        }
+
+        if *l == self.params.keys.params().i() {
+          let commitments = self.preprocess.commitments.clone();
+          commitments.transcript(self.params.algorithm.transcript());
+
+          let addendum = self.preprocess.addendum.clone();
+          {
+            let mut buf = vec![];
+            addendum.write(&mut buf).unwrap();
+            self.params.algorithm.transcript().append_message(b"addendum", &buf);
+          }
+
+          B.insert(*l, commitments);
+          self.params.algorithm.process_addendum(&self.params.view, *l, addendum)?;
+        } else {
+          let preprocess = preprocesses.remove(l).unwrap();
+          preprocess.commitments.transcript(self.params.algorithm.transcript());
+          {
+            let mut buf = vec![];
+            preprocess.addendum.write(&mut buf).unwrap();
+            self.params.algorithm.transcript().append_message(b"addendum", &buf);
+          }
+
+          B.insert(*l, preprocess.commitments);
+          self.params.algorithm.process_addendum(&self.params.view, *l, preprocess.addendum)?;
+        }
+      }
+
+      // Re-format into the FROST-expected rho transcript
+      let mut rho_transcript = A::Transcript::new(b"FROST_rho");
+      rho_transcript.append_message(b"message", &C::hash_msg(msg));
+      rho_transcript.append_message(
+        b"preprocesses",
+        &C::hash_commitments(
+          self.params.algorithm.transcript().challenge(b"preprocesses").as_ref(),
+        ),
+      );
+
+      // Include the offset, if one exists
+      // While this isn't part of the FROST-expected rho transcript, the offset being here
+      // coincides with another specification (despite the transcript format still being distinct)
+      if let Some(offset) = self.params.keys.current_offset() {
+        // Transcript as a point
+        // Under a coordinated model, the coordinater can be the only party to know the discrete
+        // log of the offset. This removes the ability for any signer to provide the discrete log,
+        // proving a key is related to another, slightly increasing security
+        // While further code edits would still be required for such a model (having the offset
+        // communicated as a point along with only a single party applying the offset), this means
+        // it wouldn't require a transcript change as well
+        rho_transcript.append_message(b"offset", (C::generator() * offset).to_bytes().as_ref());
+      }
+
+      // Generate the per-signer binding factors
+      B.calculate_binding_factors(&mut rho_transcript);
+
+      // Merge the rho transcript back into the global one to ensure its advanced, while
+      // simultaneously committing to everything
+      self
+        .params
+        .algorithm
+        .transcript()
+        .append_message(b"rho_transcript", rho_transcript.challenge(b"merge").as_ref());
+    }
+
+    #[allow(non_snake_case)]
+    let Rs = B.nonces(&nonces);
+
+    let our_binding_factors = B.binding_factors(multisig_params.i());
+    let mut nonces = self
+      .nonces
+      .iter()
+      .enumerate()
+      .map(|(n, nonces)| nonces.0[0] + (nonces.0[1] * our_binding_factors[n]))
+      .collect::<Vec<_>>();
+    self.nonces.zeroize();
+
+    let share = self.params.algorithm.sign_share(&self.params.view, &Rs, &nonces, msg);
+    nonces.zeroize();
+
+    Ok((
+      AlgorithmSignatureMachine { params: self.params.clone(), B, Rs, share },
+      SignatureShare(share),
+    ))
   }
+}
+
+/// Trait for the final machine of a two-round signing protocol.
+pub trait SignatureMachine<S> {
+  /// SignatureShare message for this machine.
+  type SignatureShare: Clone + PartialEq + Writable;
+
+  /// Read a Signature Share message.
+  fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare>;
+
+  /// Complete signing.
+  /// Takes in everyone elses' shares. Returns the signature.
+  fn complete(self, shares: HashMap<u16, Self::SignatureShare>) -> Result<S, FrostError>;
+}
+
+/// Final step of the state machine for the signing process.
+#[allow(non_snake_case)]
+pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
+  params: Params<C, A>,
+  B: BindingFactor<C>,
+  Rs: Vec<Vec<C::G>>,
+  share: C::F,
 }
 
 impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSignatureMachine<C, A> {
@@ -435,7 +383,42 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     Ok(SignatureShare(C::read_F(reader)?))
   }
 
-  fn complete(self, shares: HashMap<u16, SignatureShare<C>>) -> Result<A::Signature, FrostError> {
-    complete(&self.params, self.sign, shares)
+  fn complete(
+    self,
+    mut shares: HashMap<u16, SignatureShare<C>>,
+  ) -> Result<A::Signature, FrostError> {
+    let params = self.params.multisig_params();
+    validate_map(&shares, &self.params.view.included(), params.i())?;
+
+    let mut responses = HashMap::new();
+    responses.insert(params.i(), self.share);
+    let mut sum = self.share;
+    for (l, share) in shares.drain() {
+      responses.insert(l, share.0);
+      sum += share.0;
+    }
+
+    // Perform signature validation instead of individual share validation
+    // For the success route, which should be much more frequent, this should be faster
+    // It also acts as an integrity check of this library's signing function
+    if let Some(sig) = self.params.algorithm.verify(self.params.view.group_key(), &self.Rs, sum) {
+      return Ok(sig);
+    }
+
+    // Find out who misbehaved. It may be beneficial to randomly sort this to have detection be
+    // within n / 2 on average, and not gameable to n, though that should be minor
+    // TODO
+    for l in &self.params.view.included() {
+      if !self.params.algorithm.verify_share(
+        self.params.view.verification_share(*l),
+        &self.B.bound(*l),
+        responses[l],
+      ) {
+        Err(FrostError::InvalidShare(*l))?;
+      }
+    }
+
+    // If everyone has a valid share and there were enough participants, this should've worked
+    Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
   }
 }
