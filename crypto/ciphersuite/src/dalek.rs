@@ -17,7 +17,6 @@ macro_rules! dalek_curve {
   ) => {
     use dalek_ff_group::$Point;
 
-    #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Ciphersuite;
     impl Ciphersuite for $Ciphersuite {

@@ -20,7 +20,6 @@ macro_rules! kp_curve {
     $Ciphersuite: ident,
     $ID:          literal
   ) => {
-    #[cfg_attr(docsrs, doc(cfg(feature = $feature)))]
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Ciphersuite;
     impl Ciphersuite for $Ciphersuite {
