@@ -896,6 +896,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ciphersuite"
+version = "0.0.0"
+dependencies = [
+ "dalek-ff-group",
+ "digest 0.10.5",
+ "elliptic-curve",
+ "group",
+ "k256",
+ "minimal-ed448",
+ "p256",
+ "rand_core 0.6.4",
+ "sha2 0.10.6",
+ "sha3",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "clang-sys"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

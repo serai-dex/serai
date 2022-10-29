@@ -4,6 +4,7 @@ members = [
 
   "crypto/dalek-ff-group",
   "crypto/ed448",
+  "crypto/ciphersuite",
 
   "crypto/multiexp",
 
