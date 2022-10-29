@@ -1,6 +1,6 @@
 [package]
 name = "minimal-ed448"
-version = "0.1.1"
+version = "0.1.2"
 description = "Unaudited, inefficient implementation of Ed448 in Rust"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ed448"
