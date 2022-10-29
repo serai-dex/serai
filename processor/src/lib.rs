@@ -3,10 +3,7 @@ use std::{marker::Send, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{
-  curve::{Ciphersuite, Curve},
-  FrostError,
-};
+use frost::{curve::Ciphersuite, FrostError};
 
 mod coin;
 use coin::{CoinError, Coin};
@@ -39,5 +36,8 @@ pub enum SignError {
 // Takes an index, k, to support protocols which use multiple secondary keys
 // Presumably a view key
 pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
-  C::Curve::hash_to_F(b"Serai DEX Additional Key", &[C::ID, &k.to_le_bytes()].concat())
+  <C::Curve as Ciphersuite>::hash_to_F(
+    b"Serai DEX Additional Key",
+    &[C::ID, &k.to_le_bytes()].concat(),
+  )
 }
