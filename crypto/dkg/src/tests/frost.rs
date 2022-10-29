@@ -22,15 +22,14 @@ pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
     let (machine, these_commitments) = machine.generate_coefficients(rng);
     machines.insert(i, machine);
 
-    commitments.insert(i, {
-      let mut buf = vec![];
-      these_commitments.write(&mut buf).unwrap();
+    commitments.insert(
+      i,
       Commitments::read::<&[u8]>(
-        &mut buf.as_ref(),
+        &mut these_commitments.serialize().as_ref(),
         ThresholdParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 },
       )
-      .unwrap()
-    });
+      .unwrap(),
+    );
   }
 
   let mut secret_shares = HashMap::new();
@@ -42,9 +41,7 @@ pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
       let shares = shares
         .drain()
         .map(|(l, share)| {
-          let mut buf = vec![];
-          share.write(&mut buf).unwrap();
-          (l, SecretShare::<C::F>::read::<&[u8]>(&mut buf.as_ref()).unwrap())
+          (l, SecretShare::<C::F>::read::<&[u8]>(&mut share.serialize().as_ref()).unwrap())
         })
         .collect::<HashMap<_, _>>();
       secret_shares.insert(l, shares);

@@ -81,6 +81,12 @@ impl<C: Ciphersuite> Commitments<C> {
     writer.write_all(&self.cached_msg)?;
     self.sig.write(writer)
   }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut buf = vec![];
+    self.write(&mut buf).unwrap();
+    buf
+  }
 }
 
 /// State machine to begin the key generation protocol.
@@ -193,6 +199,12 @@ impl<F: PrimeField> SecretShare<F> {
 
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.0.as_ref())
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut buf = vec![];
+    self.write(&mut buf).unwrap();
+    buf
   }
 }
 
