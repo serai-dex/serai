@@ -902,6 +902,7 @@ dependencies = [
  "dalek-ff-group",
  "digest 0.10.5",
  "elliptic-curve",
+ "ff",
  "group",
  "k256",
  "minimal-ed448",

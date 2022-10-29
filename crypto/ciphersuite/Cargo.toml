@@ -22,6 +22,7 @@ digest = "0.10"
 sha2 = { version = "0.10", optional = true }
 sha3 = { version = "0.10", optional = true }
 
+ff = { version = "0.12", features = ["bits"] }
 group = "0.12"
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
