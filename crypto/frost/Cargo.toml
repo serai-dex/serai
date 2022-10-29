@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.3.0"
+version = "0.4.1"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
@@ -30,7 +30,7 @@ chacha20 = { version = "0.9", features = ["zeroize"] }
 group = "0.12"
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
-minimal-ed448 = { path = "../ed448", version = "0.1", optional = true }
+minimal-ed448 = { path = "../ed448", version = "^0.1.2", optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
 

@@ -31,7 +31,7 @@ elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true 
 p256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 k256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 
-minimal-ed448 = { path = "../ed448", version = "0.1", optional = true }
+minimal-ed448 = { path = "../ed448", version = "^0.1.2", optional = true }
 
 [features]
 std = []
