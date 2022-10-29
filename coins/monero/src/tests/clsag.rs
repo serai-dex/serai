@@ -19,10 +19,7 @@ use crate::{
   },
 };
 #[cfg(feature = "multisig")]
-use crate::{
-  frost::MultisigError,
-  ringct::clsag::{ClsagDetails, ClsagMultisig},
-};
+use crate::ringct::clsag::{ClsagDetails, ClsagMultisig};
 
 #[cfg(feature = "multisig")]
 use frost::tests::{key_gen, algorithm_machines, sign};
@@ -79,7 +76,7 @@ fn clsag() {
 
 #[cfg(feature = "multisig")]
 #[test]
-fn clsag_multisig() -> Result<(), MultisigError> {
+fn clsag_multisig() {
   let keys = key_gen::<_, Ed25519>(&mut OsRng);
 
   let randomness = random_scalar(&mut OsRng);
@@ -125,6 +122,4 @@ fn clsag_multisig() -> Result<(), MultisigError> {
     ),
     &[1; 32],
   );
-
-  Ok(())
 }

@@ -34,7 +34,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
 multiexp = { path = "../../crypto/multiexp", version = "0.2", features = ["batch"] }
 
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.1", features = ["recommended"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.2", features = ["ed25519"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.3", features = ["ed25519"], optional = true }
 dleq = { path = "../../crypto/dleq", version = "0.1", features = ["serialize"], optional = true }
 
 monero-generators = { path = "generators", version = "0.1" }
@@ -55,7 +55,7 @@ monero-generators = { path = "generators", version = "0.1" }
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.2", features = ["ed25519", "tests"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.3", features = ["ed25519", "tests"] }
 
 [features]
 multisig = ["rand_chacha", "blake2", "transcript", "frost", "dleq"]
