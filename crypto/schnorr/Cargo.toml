@@ -25,6 +25,3 @@ multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 [dev-dependencies]
 dalek-ff-group = { path =  "../dalek-ff-group", version = "^0.1.2" }
 ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["ristretto"] }
-
-[features]
-std = []
