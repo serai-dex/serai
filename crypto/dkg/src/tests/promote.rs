@@ -9,7 +9,7 @@ use group::Group;
 use ciphersuite::Ciphersuite;
 
 use crate::{
-  promote::GeneratorPromotion,
+  promote::{GeneratorPromotion, GeneratorProof},
   tests::{clone_without, key_gen, recover_key},
 };
 
@@ -41,9 +41,10 @@ pub(crate) fn test_generator_promotion<R: RngCore + CryptoRng, C: Ciphersuite>(r
   let mut promotions = HashMap::new();
   let mut proofs = HashMap::new();
   for (i, keys) in &keys {
-    let promotion = GeneratorPromotion::<_, AltGenerator<C>>::promote(&mut *rng, keys.clone());
-    promotions.insert(*i, promotion.0);
-    proofs.insert(*i, promotion.1);
+    let (promotion, proof) =
+      GeneratorPromotion::<_, AltGenerator<C>>::promote(&mut *rng, keys.clone());
+    promotions.insert(*i, promotion);
+    proofs.insert(*i, GeneratorProof::<C>::read::<&[u8]>(&mut proof.serialize().as_ref()).unwrap());
   }
 
   let new_group_key = AltGenerator::<C>::generator() * recover_key(&keys);
