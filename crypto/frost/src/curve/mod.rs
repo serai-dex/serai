@@ -12,7 +12,7 @@ use group::{
   Group,
 };
 
-use ciphersuite::Ciphersuite;
+pub use ciphersuite::Ciphersuite;
 
 #[cfg(any(feature = "ristretto", feature = "ed25519"))]
 mod dalek;

@@ -344,11 +344,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);
     let commitments = network
-      .round({
-        let mut buf = vec![];
-        commitments.write(&mut buf).unwrap();
-        buf
-      })
+      .round(commitments.serialize())
       .await
       .map_err(SignError::NetworkError)?
       .drain()
@@ -364,11 +360,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     let (attempt, share) = attempt.sign(commitments, b"").map_err(SignError::FrostError)?;
     let shares = network
-      .round({
-        let mut buf = vec![];
-        share.write(&mut buf).unwrap();
-        buf
-      })
+      .round(share.serialize())
       .await
       .map_err(SignError::NetworkError)?
       .drain()

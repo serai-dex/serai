@@ -24,6 +24,12 @@ pub(crate) use crate::nonce::*;
 /// Trait enabling writing preprocesses and signature shares.
 pub trait Writable {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+
+  fn serialize(&self) -> Vec<u8> {
+    let mut buf = vec![];
+    self.write(&mut buf).unwrap();
+    buf
+  }
 }
 
 impl<T: Writable> Writable for Vec<T> {
