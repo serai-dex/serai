@@ -23,7 +23,7 @@ use dalek_ff_group as dfg;
 use dleq::DLEqProof;
 use frost::{
   curve::Ed25519,
-  FrostError, FrostView,
+  FrostError, ThresholdView,
   algorithm::{AddendumSerialize, Algorithm},
 };
 
@@ -154,7 +154,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    view: &FrostView<Ed25519>,
+    view: &ThresholdView<Ed25519>,
   ) -> ClsagAddendum {
     ClsagAddendum {
       key_image: dfg::EdwardsPoint(self.H * view.secret_share().0),
@@ -188,7 +188,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn process_addendum(
     &mut self,
-    view: &FrostView<Ed25519>,
+    view: &ThresholdView<Ed25519>,
     l: u16,
     addendum: ClsagAddendum,
   ) -> Result<(), FrostError> {
@@ -223,7 +223,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn sign_share(
     &mut self,
-    view: &FrostView<Ed25519>,
+    view: &ThresholdView<Ed25519>,
     nonce_sums: &[Vec<dfg::EdwardsPoint>],
     nonces: &[dfg::Scalar],
     msg: &[u8],
