@@ -897,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "ciphersuite"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "dalek-ff-group",
  "digest 0.10.5",
@@ -4572,23 +4572,18 @@ name = "modular-frost"
 version = "0.3.0"
 dependencies = [
  "chacha20 0.9.0",
+ "ciphersuite",
  "dalek-ff-group",
  "digest 0.10.5",
  "dleq",
- "elliptic-curve",
- "ff",
  "flexible-transcript",
  "group",
  "hex",
  "hkdf",
- "k256",
  "minimal-ed448",
  "multiexp",
- "p256",
  "rand_core 0.6.4",
  "serde_json",
- "sha2 0.10.6",
- "sha3",
  "subtle",
  "thiserror",
  "zeroize",

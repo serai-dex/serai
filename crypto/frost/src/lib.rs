@@ -290,7 +290,8 @@ impl<C: Curve> FrostCore<C> {
     for l in 1 ..= n {
       verification_shares.insert(
         l,
-        C::read_G(reader).map_err(|_| FrostError::InternalError("invalid verification share"))?,
+        <C as Curve>::read_G(reader)
+          .map_err(|_| FrostError::InternalError("invalid verification share"))?,
       );
     }
 

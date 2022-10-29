@@ -96,9 +96,8 @@ pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
 
     let point = Option::<Self::G>::from(Self::G::from_bytes(&encoding))
       .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))?;
-    // Ban the identity, per the FROST spec, and non-canonical points
-    if (point.is_identity().into()) || (point.to_bytes().as_ref() != encoding.as_ref()) {
-      Err(io::Error::new(io::ErrorKind::Other, "non-canonical or identity point"))?;
+    if point.to_bytes().as_ref() != encoding.as_ref() {
+      Err(io::Error::new(io::ErrorKind::Other, "non-canonical point"))?;
     }
     Ok(point)
   }

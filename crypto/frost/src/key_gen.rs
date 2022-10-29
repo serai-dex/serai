@@ -37,7 +37,7 @@ fn challenge<C: Curve>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
   transcript.extend(l.to_be_bytes());
   transcript.extend(R);
   transcript.extend(Am);
-  C::hash_to_F(DST, &transcript)
+  <C as Curve>::hash_to_F(DST, &transcript)
 }
 
 /// Commitments message to be broadcast to all other parties.
@@ -64,7 +64,7 @@ impl<C: Curve> Commitments<C> {
     let mut read_G = || -> io::Result<C::G> {
       let mut buf = <C::G as GroupEncoding>::Repr::default();
       reader.read_exact(buf.as_mut())?;
-      let point = C::read_G(&mut buf.as_ref())?;
+      let point = <C as Curve>::read_G(&mut buf.as_ref())?;
       cached_msg.extend(buf.as_ref());
       Ok(point)
     };
@@ -111,7 +111,7 @@ impl<C: Curve> KeyGenMachine<C> {
 
     for i in 0 .. t {
       // Step 1: Generate t random values to form a polynomial with
-      coefficients.push(C::random_F(&mut *rng));
+      coefficients.push(C::random_nonzero_F(&mut *rng));
       // Step 3: Generate public commitments
       commitments.push(C::generator() * coefficients[i]);
       cached_msg.extend(commitments[i].to_bytes().as_ref());
@@ -121,12 +121,12 @@ impl<C: Curve> KeyGenMachine<C> {
     // It would probably be perfectly fine to use one of our polynomial elements, yet doing so
     // puts the integrity of FROST at risk. While there's almost no way it could, as it's used in
     // an ECDH with validated group elemnents, better to avoid any questions on it
-    let enc_key = C::random_F(&mut *rng);
+    let enc_key = C::random_nonzero_F(&mut *rng);
     let pub_enc_key = C::generator() * enc_key;
     cached_msg.extend(pub_enc_key.to_bytes().as_ref());
 
     // Step 2: Provide a proof of knowledge
-    let mut r = C::random_F(rng);
+    let mut r = C::random_nonzero_F(rng);
     let sig = schnorr::sign::<C>(
       coefficients[0],
       // This could be deterministic as the PoK is a singleton never opened up to cooperative

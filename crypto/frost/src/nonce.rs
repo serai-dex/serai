@@ -46,7 +46,7 @@ impl<C: Curve> ZeroizeOnDrop for Nonce<C> {}
 pub(crate) struct GeneratorCommitments<C: Curve>(pub(crate) [C::G; 2]);
 impl<C: Curve> GeneratorCommitments<C> {
   fn read<R: Read>(reader: &mut R) -> io::Result<GeneratorCommitments<C>> {
-    Ok(GeneratorCommitments([C::read_G(reader)?, C::read_G(reader)?]))
+    Ok(GeneratorCommitments([<C as Curve>::read_G(reader)?, <C as Curve>::read_G(reader)?]))
   }
 
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {

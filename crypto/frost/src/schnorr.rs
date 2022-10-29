@@ -23,7 +23,7 @@ pub struct SchnorrSignature<C: Curve> {
 
 impl<C: Curve> SchnorrSignature<C> {
   pub(crate) fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
-    Ok(SchnorrSignature { R: C::read_G(reader)?, s: C::read_F(reader)? })
+    Ok(SchnorrSignature { R: <C as Curve>::read_G(reader)?, s: C::read_F(reader)? })
   }
 
   pub(crate) fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {

@@ -1,7 +1,9 @@
 use rand_core::OsRng;
 
+use ciphersuite::Ciphersuite;
+
 use crate::{
-  curve::{Curve, Ed448, Ietf8032Ed448Hram, IetfEd448Hram},
+  curve::{Ed448, Ietf8032Ed448Hram, IetfEd448Hram},
   schnorr::{SchnorrSignature, verify},
   tests::vectors::{Vectors, test_with_vectors},
 };

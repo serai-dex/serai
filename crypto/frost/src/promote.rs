@@ -71,7 +71,10 @@ impl<C: Curve> GeneratorProof<C> {
   }
 
   pub fn deserialize<R: Read>(reader: &mut R) -> io::Result<GeneratorProof<C>> {
-    Ok(GeneratorProof { share: C::read_G(reader)?, proof: DLEqProof::deserialize(reader)? })
+    Ok(GeneratorProof {
+      share: <C as Curve>::read_G(reader)?,
+      proof: DLEqProof::deserialize(reader)?,
+    })
   }
 }
 

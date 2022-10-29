@@ -123,7 +123,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
   let group_key =
-    C::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref()).unwrap();
+    <C as Curve>::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref()).unwrap();
   let secret =
     C::read_F::<&[u8]>(&mut hex::decode(&vectors.group_secret).unwrap().as_ref()).unwrap();
   assert_eq!(C::generator() * secret, group_key);

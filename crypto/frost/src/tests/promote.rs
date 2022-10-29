@@ -6,6 +6,8 @@ use zeroize::Zeroize;
 
 use group::Group;
 
+use ciphersuite::Ciphersuite;
+
 use crate::{
   Curve, // FrostKeys,
   promote::{GeneratorPromotion /* CurvePromote */},
@@ -60,25 +62,24 @@ struct AltGenerator<C: Curve> {
   _curve: PhantomData<C>,
 }
 
-impl<C: Curve> Curve for AltGenerator<C> {
+impl<C: Curve> Ciphersuite for AltGenerator<C> {
   type F = C::F;
   type G = C::G;
   type H = C::H;
 
   const ID: &'static [u8] = b"alt_generator";
-  const CONTEXT: &'static [u8] = C::CONTEXT;
 
   fn generator() -> Self::G {
-    C::G::generator() * C::hash_to_F(b"FROST_tests", b"generator")
-  }
-
-  fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
-    C::hash_to_vec(&[b"FROST_tests_alt", dst].concat(), data)
+    C::G::generator() * <C as Curve>::hash_to_F(b"FROST_tests", b"generator")
   }
 
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    C::hash_to_F(&[b"FROST_tests_alt", dst].concat(), data)
+    <C as Curve>::hash_to_F(&[b"FROST_tests_alt", dst].concat(), data)
   }
+}
+
+impl<C: Curve> Curve for AltGenerator<C> {
+  const CONTEXT: &'static [u8] = b"alt context";
 }
 
 // Test promotion of FROST keys to another generator
