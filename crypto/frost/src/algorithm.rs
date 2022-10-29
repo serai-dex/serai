@@ -8,20 +8,20 @@ use transcript::Transcript;
 use crate::{Curve, FrostError, ThresholdView};
 pub use schnorr::SchnorrSignature;
 
-/// Serialize an addendum to a writer.
-pub trait AddendumSerialize {
+/// Write an addendum to a writer.
+pub trait WriteAddendum {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
 }
 
-impl AddendumSerialize for () {
+impl WriteAddendum for () {
   fn write<W: Write>(&self, _: &mut W) -> io::Result<()> {
     Ok(())
   }
 }
 
 /// Trait alias for the requirements to be used as an addendum.
-pub trait Addendum: Clone + PartialEq + Debug + AddendumSerialize {}
-impl<A: Clone + PartialEq + Debug + AddendumSerialize> Addendum for A {}
+pub trait Addendum: Clone + PartialEq + Debug + WriteAddendum {}
+impl<A: Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
 pub trait Algorithm<C: Curve>: Clone {

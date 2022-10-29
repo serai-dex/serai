@@ -15,7 +15,7 @@ use group::{ff::PrimeField, GroupEncoding};
 use crate::{
   curve::Curve,
   FrostError, ThresholdParams, ThresholdKeys, ThresholdView,
-  algorithm::{AddendumSerialize, Addendum, Algorithm},
+  algorithm::{WriteAddendum, Addendum, Algorithm},
   validate_map,
 };
 

@@ -24,7 +24,7 @@ use dleq::DLEqProof;
 use frost::{
   curve::Ed25519,
   FrostError, ThresholdView,
-  algorithm::{AddendumSerialize, Algorithm},
+  algorithm::{WriteAddendum, Algorithm},
 };
 
 use crate::ringct::{
@@ -80,7 +80,7 @@ pub struct ClsagAddendum {
   dleq: DLEqProof<dfg::EdwardsPoint>,
 }
 
-impl AddendumSerialize for ClsagAddendum {
+impl WriteAddendum for ClsagAddendum {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.key_image.compress().to_bytes().as_ref())?;
     self.dleq.serialize(writer)
