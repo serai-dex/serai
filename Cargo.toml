@@ -8,6 +8,7 @@ members = [
 
   "crypto/multiexp",
 
+  "crypto/schnorr",
   "crypto/dleq",
   "crypto/dkg",
   "crypto/frost",

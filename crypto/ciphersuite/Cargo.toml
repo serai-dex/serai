@@ -1,6 +1,6 @@
 [package]
 name = "ciphersuite"
-version = "0.1.0"
+version = "0.1.1"
 description = "Ciphersuites built around ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite"
@@ -45,3 +45,5 @@ p256 = ["kp256", "dep:p256"]
 secp256k1 = ["kp256", "k256"]
 
 ed448 = ["sha3", "minimal-ed448"]
+
+default = ["std"]

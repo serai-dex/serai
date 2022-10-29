@@ -7328,6 +7328,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "schnorr-signatures"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "dalek-ff-group",
+ "group",
+ "multiexp",
+ "rand_core 0.6.4",
+ "zeroize",
+]
+
+[[package]]
 name = "schnorrkel"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
