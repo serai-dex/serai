@@ -11,9 +11,10 @@ use crate::{ThresholdCore, ThresholdKeys, lagrange};
 /// FROST generation test.
 pub mod frost;
 use frost::frost_gen;
+
 // Promotion test.
-#[cfg(test)]
 mod promote;
+use promote::test_generator_promotion;
 
 // Literal test definitions to run during `cargo test`
 #[cfg(test)]
@@ -63,4 +64,10 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
     .collect();
   assert_eq!(C::generator() * recover_key(&res), res[&1].group_key());
   res
+}
+
+/// Run the test suite on a ciphersuite.
+pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Ciphersuite>(rng: &mut R) {
+  key_gen::<_, C>(rng);
+  test_generator_promotion::<_, C>(rng);
 }

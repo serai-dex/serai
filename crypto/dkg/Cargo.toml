@@ -39,12 +39,4 @@ schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.1.
 dleq = { path = "../dleq", version = "^0.1.2", features = ["serialize"] }
 
 [features]
-ed25519 = ["ciphersuite/ed25519"]
-ristretto = ["ciphersuite/ristretto"]
-
-secp256k1 = ["ciphersuite/secp256k1"]
-p256 = ["ciphersuite/p256"]
-
-ed448 = ["ciphersuite/ed448"]
-
 tests = []

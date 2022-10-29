@@ -5,7 +5,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, FrostView, schnorr};
+use crate::{Curve, FrostError, ThresholdView};
 pub use schnorr::SchnorrSignature;
 
 /// Serialize an addendum to a writer.
@@ -44,7 +44,7 @@ pub trait Algorithm<C: Curve>: Clone {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    params: &FrostView<C>,
+    params: &ThresholdView<C>,
   ) -> Self::Addendum;
 
   /// Read an addendum from a reader.
@@ -53,7 +53,7 @@ pub trait Algorithm<C: Curve>: Clone {
   /// Proccess the addendum for the specified participant. Guaranteed to be called in order.
   fn process_addendum(
     &mut self,
-    params: &FrostView<C>,
+    params: &ThresholdView<C>,
     l: u16,
     reader: Self::Addendum,
   ) -> Result<(), FrostError>;
@@ -64,7 +64,7 @@ pub trait Algorithm<C: Curve>: Clone {
   /// The nonce will already have been processed into the combined form d + (e * p).
   fn sign_share(
     &mut self,
-    params: &FrostView<C>,
+    params: &ThresholdView<C>,
     nonce_sums: &[Vec<C::G>],
     nonces: &[C::F],
     msg: &[u8],
@@ -147,44 +147,36 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     vec![vec![C::generator()]]
   }
 
-  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &FrostView<C>) {}
+  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &ThresholdView<C>) {}
 
   fn read_addendum<R: Read>(&self, _: &mut R) -> io::Result<Self::Addendum> {
     Ok(())
   }
 
-  fn process_addendum(&mut self, _: &FrostView<C>, _: u16, _: ()) -> Result<(), FrostError> {
+  fn process_addendum(&mut self, _: &ThresholdView<C>, _: u16, _: ()) -> Result<(), FrostError> {
     Ok(())
   }
 
   fn sign_share(
     &mut self,
-    params: &FrostView<C>,
+    params: &ThresholdView<C>,
     nonce_sums: &[Vec<C::G>],
     nonces: &[C::F],
     msg: &[u8],
   ) -> C::F {
     let c = H::hram(&nonce_sums[0][0], &params.group_key(), msg);
     self.c = Some(c);
-    schnorr::sign::<C>(params.secret_share(), nonces[0], c).s
+    SchnorrSignature::<C>::sign(params.secret_share(), nonces[0], c).s
   }
 
   #[must_use]
   fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature> {
     let sig = SchnorrSignature { R: nonces[0][0], s: sum };
-    if schnorr::verify::<C>(group_key, self.c.unwrap(), &sig) {
-      Some(sig)
-    } else {
-      None
-    }
+    Some(sig).filter(|sig| sig.verify(group_key, self.c.unwrap()))
   }
 
   #[must_use]
   fn verify_share(&self, verification_share: C::G, nonces: &[Vec<C::G>], share: C::F) -> bool {
-    schnorr::verify::<C>(
-      verification_share,
-      self.c.unwrap(),
-      &SchnorrSignature { R: nonces[0][0], s: share },
-    )
+    SchnorrSignature::<C> { R: nonces[0][0], s: share }.verify(verification_share, self.c.unwrap())
   }
 }

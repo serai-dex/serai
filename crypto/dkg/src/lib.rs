@@ -198,6 +198,10 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     self.params
   }
 
+  pub fn secret_share(&self) -> C::F {
+    self.secret_share
+  }
+
   pub fn group_key(&self) -> C::G {
     self.group_key
   }
@@ -314,7 +318,6 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
   /// Offset the keys by a given scalar to allow for account and privacy schemes.
   /// This offset is ephemeral and will not be included when these keys are serialized.
   /// Keys offset multiple times will form a new offset of their sum.
-  /// Not IETF compliant.
   pub fn offset(&self, offset: C::F) -> ThresholdKeys<C> {
     let mut res = self.clone();
     // Carry any existing offset
@@ -324,11 +327,16 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     res
   }
 
+  /// Returns the current offset in-use for these keys.
+  pub fn current_offset(&self) -> Option<C::F> {
+    self.offset
+  }
+
   pub fn params(&self) -> ThresholdParams {
     self.core.params
   }
 
-  pub(crate) fn secret_share(&self) -> C::F {
+  pub fn secret_share(&self) -> C::F {
     self.core.secret_share
   }
 

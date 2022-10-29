@@ -2,23 +2,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::Group;
 
-use crate::{Curve, FrostCore, tests::core_gen};
-
-// Test generation of FROST keys
-fn key_generation<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
-  // This alone verifies the verification shares and group key are agreed upon as expected
-  core_gen::<_, C>(rng);
-}
-
-// Test serialization of generated keys
-fn keys_serialization<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
-  for (_, keys) in core_gen::<_, C>(rng) {
-    assert_eq!(
-      &FrostCore::<C>::deserialize::<&[u8]>(&mut keys.serialize().as_ref()).unwrap(),
-      &keys
-    );
-  }
-}
+use crate::Curve;
 
 // Test successful multiexp, with enough pairs to trigger its variety of algorithms
 // Multiexp has its own tests, yet only against k256 and Ed25519 (which should be sufficient
@@ -40,8 +24,4 @@ pub fn test_curve<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   // TODO: Test the Curve functions themselves
 
   test_multiexp::<_, C>(rng);
-
-  // Test FROST key generation and serialization of FrostCore works as expected
-  key_generation::<_, C>(rng);
-  keys_serialization::<_, C>(rng);
 }

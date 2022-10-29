@@ -38,7 +38,10 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.1.0" }
 dleq = { path = "../dleq", version = "^0.1.2", features = ["serialize"] }
+
+dkg = { path = "../dkg", version = "0.1.0" }
 
 [dev-dependencies]
 serde_json = "1"
@@ -52,4 +55,4 @@ p256 = ["ciphersuite/p256"]
 
 ed448 = ["minimal-ed448", "ciphersuite/ed448"]
 
-tests = []
+tests = ["dkg/tests"]

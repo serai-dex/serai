@@ -2,9 +2,10 @@ use rand_core::OsRng;
 
 use ciphersuite::Ciphersuite;
 
+use schnorr::SchnorrSignature;
+
 use crate::{
   curve::{Ed448, Ietf8032Ed448Hram, IetfEd448Hram},
-  schnorr::{SchnorrSignature, verify},
   tests::vectors::{Vectors, test_with_vectors},
 };
 
@@ -39,11 +40,9 @@ fn ed448_8032_vector() {
   let R = Ed448::read_G::<&[u8]>(&mut sig.as_ref()).unwrap();
   let s = Ed448::read_F::<&[u8]>(&mut &sig[57 ..]).unwrap();
 
-  assert!(verify(
-    A,
-    Ietf8032Ed448Hram::hram(&context, &R, &A, &msg),
-    &SchnorrSignature::<Ed448> { R, s }
-  ));
+  assert!(
+    SchnorrSignature::<Ed448> { R, s }.verify(A, Ietf8032Ed448Hram::hram(&context, &R, &A, &msg))
+  );
 }
 
 #[test]
