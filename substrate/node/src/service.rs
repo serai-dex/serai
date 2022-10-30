@@ -1,16 +1,25 @@
-use std::sync::Arc;
+use std::{boxed::Box, sync::Arc, error::Error};
 
-use sc_executor::NativeElseWasmExecutor;
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sp_runtime::traits::{Block as BlockTrait};
+use sp_inherents::CreateInherentDataProviders;
+use sp_consensus::DisableProofRecording;
+use sp_api::ProvideRuntimeApi;
+
+use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
+use sc_transaction_pool::FullPool;
+use sc_network::NetworkService;
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
+
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
-use serai_runtime::{self, opaque::Block, RuntimeApi};
-pub(crate) use serai_consensus::{
-  TendermintImport, TendermintAuthority, ExecutorDispatch, FullClient, TendermintValidatorFirm,
+pub(crate) use sc_tendermint::{
+  TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
+  TendermintSelectChain, import_queue,
 };
+use serai_runtime::{self, MILLISECS_PER_BLOCK, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
-type FullSelectChain = serai_consensus::TendermintSelectChain<Block, FullBackend>;
+type FullSelectChain = TendermintSelectChain<Block, FullBackend>;
 
 type PartialComponents = sc_service::PartialComponents<
   FullClient,
@@ -20,6 +29,59 @@ type PartialComponents = sc_service::PartialComponents<
   sc_transaction_pool::FullPool<Block, FullClient>,
   Option<Telemetry>,
 >;
+
+pub struct ExecutorDispatch;
+impl NativeExecutionDispatch for ExecutorDispatch {
+  #[cfg(feature = "runtime-benchmarks")]
+  type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
+  #[cfg(not(feature = "runtime-benchmarks"))]
+  type ExtendHostFunctions = ();
+
+  fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
+    serai_runtime::api::dispatch(method, data)
+  }
+
+  fn native_version() -> NativeVersion {
+    serai_runtime::native_version()
+  }
+}
+
+pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
+
+pub struct Cidp;
+#[async_trait::async_trait]
+impl CreateInherentDataProviders<Block, ()> for Cidp {
+  type InherentDataProviders = (sp_timestamp::InherentDataProvider,);
+  async fn create_inherent_data_providers(
+    &self,
+    _: <Block as BlockTrait>::Hash,
+    _: (),
+  ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
+    Ok((sp_timestamp::InherentDataProvider::from_system_time(),))
+  }
+}
+
+pub struct TendermintValidatorFirm;
+impl TendermintClientMinimal for TendermintValidatorFirm {
+  const BLOCK_TIME_IN_SECONDS: u32 = { (MILLISECS_PER_BLOCK / 1000) as u32 };
+
+  type Block = Block;
+  type Backend = sc_client_db::Backend<Block>;
+  type Api = <FullClient as ProvideRuntimeApi<Block>>::Api;
+  type Client = FullClient;
+}
+
+impl TendermintValidator for TendermintValidatorFirm {
+  type CIDP = Cidp;
+  type Environment = sc_basic_authorship::ProposerFactory<
+    FullPool<Block, FullClient>,
+    Self::Backend,
+    Self::Client,
+    DisableProofRecording,
+  >;
+
+  type Network = Arc<NetworkService<Block, <Block as BlockTrait>::Hash>>;
+}
 
 pub fn new_partial(
   config: &Configuration,
@@ -67,13 +129,13 @@ pub fn new_partial(
     client.clone(),
   );
 
-  let (authority, import_queue) = serai_consensus::import_queue(
+  let (authority, import_queue) = import_queue(
     &task_manager.spawn_essential_handle(),
     client.clone(),
     config.prometheus_registry(),
   );
 
-  let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
+  let select_chain = TendermintSelectChain::new(backend.clone());
 
   Ok((
     authority,
@@ -161,7 +223,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       "tendermint",
       None,
       TendermintAuthority::new(authority).authority(
-        serai_consensus::Cidp,
+        Cidp,
         sc_basic_authorship::ProposerFactory::new(
           task_manager.spawn_handle(),
           client,

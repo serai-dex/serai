@@ -7322,6 +7322,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc_tendermint"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "log",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-executor",
+ "sc-network",
+ "sc-network-gossip",
+ "sc-service",
+ "sc-transaction-pool",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-staking",
+ "sp-tendermint",
+ "substrate-prometheus-endpoint",
+ "tendermint-machine",
+ "tokio",
+]
+
+[[package]]
 name = "scale-info"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7526,40 +7554,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 
 [[package]]
-name = "serai-consensus"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "frame-support",
- "futures",
- "log",
- "pallet-session",
- "sc-basic-authorship",
- "sc-client-api",
- "sc-client-db",
- "sc-consensus",
- "sc-executor",
- "sc-network",
- "sc-network-gossip",
- "sc-service",
- "sc-transaction-pool",
- "serai-runtime",
- "sp-api",
- "sp-application-crypto",
- "sp-blockchain",
- "sp-consensus",
- "sp-core",
- "sp-inherents",
- "sp-runtime",
- "sp-staking",
- "sp-tendermint",
- "sp-timestamp",
- "substrate-prometheus-endpoint",
- "tendermint-machine",
- "tokio",
-]
-
-[[package]]
 name = "serai-extension"
 version = "0.1.0"
 dependencies = [
@@ -7587,6 +7581,7 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "clap 4.0.18",
  "frame-benchmarking",
  "frame-benchmarking-cli",
@@ -7598,6 +7593,7 @@ dependencies = [
  "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
+ "sc-client-db",
  "sc-consensus",
  "sc-executor",
  "sc-keystore",
@@ -7608,12 +7604,13 @@ dependencies = [
  "sc-telemetry",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
- "serai-consensus",
+ "sc_tendermint",
  "serai-runtime",
  "sp-api",
  "sp-application-crypto",
  "sp-block-builder",
  "sp-blockchain",
+ "sp-consensus",
  "sp-core",
  "sp-inherents",
  "sp-keyring",

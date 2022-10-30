@@ -12,28 +12,33 @@ publish = false
 name = "serai-node"
 
 [dependencies]
+async-trait = "0.1"
+
 clap = { version = "4", features = ["derive"] }
 jsonrpsee = { version = "0.15", features = ["server"] }
 
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
-sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
-sp-inherents = { git = "https://github.com/serai-dex/substrate" }
 sp-keyring = { git = "https://github.com/serai-dex/substrate" }
-sp-api = { git = "https://github.com/serai-dex/substrate" }
+sp-inherents = { git = "https://github.com/serai-dex/substrate" }
+sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
+sp-api = { git = "https://github.com/serai-dex/substrate" }
 sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
+sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 
 sc-keystore = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
-sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
+sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
 sc-executor = { git = "https://github.com/serai-dex/substrate" }
 sc-service = { git = "https://github.com/serai-dex/substrate" }
+sc-client-db = { git = "https://github.com/serai-dex/substrate" }
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
 sc-network = { git = "https://github.com/serai-dex/substrate" }
 sc-consensus = { git = "https://github.com/serai-dex/substrate" }
+
 sc-telemetry = { git = "https://github.com/serai-dex/substrate" }
 sc-cli = { git = "https://github.com/serai-dex/substrate" }
 
@@ -50,7 +55,7 @@ pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate
 
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 serai-runtime = { path = "../runtime" }
-serai-consensus = { path = "../tendermint/client" }
+sc_tendermint = { path = "../tendermint/client" }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate.git" }
