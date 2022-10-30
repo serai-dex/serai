@@ -18,8 +18,8 @@ use sc_consensus::{ForkChoiceStrategy, BlockImportParams};
 use tendermint_machine::ext::{Commit, Network};
 
 use crate::{
-  CONSENSUS_ID, types::TendermintValidator, validators::TendermintValidators,
-  import_queue::TendermintImportQueue, authority::TendermintAuthority,
+  CONSENSUS_ID, TendermintValidator, validators::TendermintValidators, TendermintImportQueue,
+  authority::TendermintAuthority,
 };
 
 pub struct TendermintImport<T: TendermintValidator> {

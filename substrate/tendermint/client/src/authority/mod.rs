@@ -34,9 +34,14 @@ use tendermint_machine::{
 };
 
 use crate::{
-  CONSENSUS_ID, types::TendermintValidator, validators::TendermintValidators,
-  import_queue::ImportFuture, tendermint::TendermintImport, gossip::TendermintGossip,
+  CONSENSUS_ID, TendermintValidator, validators::TendermintValidators, tendermint::TendermintImport,
 };
+
+mod gossip;
+use gossip::TendermintGossip;
+
+mod import_future;
+use import_future::ImportFuture;
 
 // Data for an active validator
 // This is distinct as even when we aren't an authority, we still create stubbed Authority objects

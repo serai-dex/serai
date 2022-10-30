@@ -15,7 +15,7 @@ use tendermint_machine::ext::{BlockNumber, Round, Weights, SignatureScheme};
 
 use sp_tendermint::TendermintApi;
 
-use crate::types::TendermintClient;
+use crate::TendermintClient;
 
 struct TendermintValidatorsStruct {
   session: SessionIndex,

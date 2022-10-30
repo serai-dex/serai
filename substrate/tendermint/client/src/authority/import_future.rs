@@ -1,22 +1,17 @@
 use std::{
   pin::Pin,
-  sync::{Arc, RwLock},
+  sync::RwLock,
   task::{Poll, Context},
   future::Future,
 };
 
 use sp_runtime::traits::{Header, Block};
 
-use sp_consensus::Error;
-use sc_consensus::{BlockImportStatus, BlockImportError, BlockImport, Link, BasicQueue};
+use sc_consensus::{BlockImportStatus, BlockImportError, Link};
 
 use sc_service::ImportQueue;
 
-use substrate_prometheus_endpoint::Registry;
-
-use crate::{types::TendermintValidator, TendermintImport};
-
-pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
+use crate::TendermintImportQueue;
 
 // Custom helpers for ImportQueue in order to obtain the result of a block's importing
 struct ValidateLink<B: Block>(Option<(B::Hash, bool)>);
@@ -62,24 +57,4 @@ impl<'a, B: Block, T: Send> Future for ImportFuture<'a, B, T> {
       Poll::Pending
     }
   }
-}
-
-pub fn import_queue<T: TendermintValidator>(
-  spawner: &impl sp_core::traits::SpawnEssentialNamed,
-  client: Arc<T::Client>,
-  registry: Option<&Registry>,
-) -> (TendermintImport<T>, TendermintImportQueue<T::Block, T::BackendTransaction>)
-where
-  Arc<T::Client>: BlockImport<T::Block, Transaction = T::BackendTransaction>,
-  <Arc<T::Client> as BlockImport<T::Block>>::Error: Into<Error>,
-{
-  let import = TendermintImport::<T>::new(client);
-
-  let boxed = Box::new(import.clone());
-  // Use None for the justification importer since justifications always come with blocks
-  // Therefore, they're never imported after the fact, which is what mandates an importer
-  let queue = || BasicQueue::new(import.clone(), boxed.clone(), None, spawner, registry);
-
-  *futures::executor::block_on(import.queue.write()) = Some(queue());
-  (import.clone(), queue())
 }
