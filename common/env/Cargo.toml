@@ -1,7 +1,11 @@
 [package]
 name = "serai-env"
 version = "0.1.0"
+<<<<<<< HEAD:common/env/Cargo.toml
 description = "A common library for Serai apps to access environment variables"
+=======
+description = "Tendermint primitives for Substrate"
+>>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node):substrate/tendermint/primitives/Cargo.toml
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/common/env"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]

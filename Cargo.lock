@@ -8437,6 +8437,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc_tendermint"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "log",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-executor",
+ "sc-network",
+ "sc-network-gossip",
+ "sc-service",
+ "sc-transaction-pool",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-staking",
+ "sp-tendermint",
+ "substrate-prometheus-endpoint",
+ "tendermint-machine",
+ "tokio",
+]
+
+[[package]]
 name = "scale-info"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8703,6 +8731,7 @@ checksum = "f638d531eccd6e23b980caf34876660d38e265409d8e99b397ab71eb3612fad0"
 
 [[package]]
 <<<<<<< HEAD
+<<<<<<< HEAD
 name = "send_wrapper"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8744,6 +8773,9 @@ dependencies = [
 
 [[package]]
 name = "serai-client"
+=======
+name = "serai-extension"
+>>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
 version = "0.1.0"
 dependencies = [
  "bitcoin",
@@ -8900,7 +8932,12 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
+<<<<<<< HEAD
  "clap",
+=======
+ "async-trait",
+ "clap 4.0.18",
+>>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "futures",
@@ -8918,6 +8955,7 @@ dependencies = [
  "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
+ "sc-client-db",
  "sc-consensus",
  "sc-consensus-babe",
  "sc-consensus-grandpa",
@@ -8936,12 +8974,20 @@ dependencies = [
  "sc-telemetry",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
+<<<<<<< HEAD
+=======
+ "sc_tendermint",
+>>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
  "serai-runtime",
  "sp-api",
  "sp-application-crypto",
  "sp-block-builder",
  "sp-blockchain",
+<<<<<<< HEAD
  "sp-consensus-babe",
+=======
+ "sp-consensus",
+>>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
  "sp-core",
  "sp-inherents",
  "sp-io",
