@@ -2,45 +2,25 @@ use std::{sync::Arc, collections::HashMap};
 
 use async_trait::async_trait;
 
-use sp_inherents::CreateInherentDataProviders;
-use sp_runtime::traits::Block;
-use sp_api::TransactionFor;
-
-use sp_consensus::{Error, CacheKeyId, Environment};
+use sp_consensus::{Error, CacheKeyId};
 use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport};
 
-use sc_client_api::Backend;
-
-use sp_tendermint::TendermintApi;
-
-use crate::{
-  tendermint::{TendermintClient, TendermintImport},
-  Announce,
-};
+use crate::{types::TendermintAuthor, tendermint::TendermintImport};
 
 #[async_trait]
-impl<
-    B: Block,
-    Be: Backend<B> + 'static,
-    C: TendermintClient<B, Be>,
-    CIDP: CreateInherentDataProviders<B, ()> + 'static,
-    E: Send + Sync + Environment<B> + 'static,
-    A: Announce<B>,
-  > BlockImport<B> for TendermintImport<B, Be, C, CIDP, E, A>
+impl<T: TendermintAuthor> BlockImport<T::Block> for TendermintImport<T>
 where
-  TransactionFor<C, B>: Send + Sync + 'static,
-  Arc<C>: BlockImport<B, Transaction = TransactionFor<C, B>>,
-  <Arc<C> as BlockImport<B>>::Error: Into<Error>,
-  C::Api: TendermintApi<B>,
+  Arc<T::Client>: BlockImport<T::Block, Transaction = T::BackendTransaction>,
+  <Arc<T::Client> as BlockImport<T::Block>>::Error: Into<Error>,
 {
   type Error = Error;
-  type Transaction = TransactionFor<C, B>;
+  type Transaction = T::BackendTransaction;
 
   // TODO: Is there a DoS where you send a block without justifications, causing it to error,
   // yet adding it to the blacklist in the process preventing further syncing?
   async fn check_block(
     &mut self,
-    mut block: BlockCheckParams<B>,
+    mut block: BlockCheckParams<T::Block>,
   ) -> Result<ImportResult, Self::Error> {
     self.verify_order(block.parent_hash, block.number)?;
 
@@ -55,7 +35,7 @@ where
 
   async fn import_block(
     &mut self,
-    mut block: BlockImportParams<B, TransactionFor<C, B>>,
+    mut block: BlockImportParams<T::Block, Self::Transaction>,
     new_cache: HashMap<CacheKeyId, Vec<u8>>,
   ) -> Result<ImportResult, Self::Error> {
     self.check(&mut block).await?;

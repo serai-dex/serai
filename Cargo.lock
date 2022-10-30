@@ -7536,6 +7536,7 @@ dependencies = [
  "pallet-session",
  "sc-basic-authorship",
  "sc-client-api",
+ "sc-client-db",
  "sc-consensus",
  "sc-executor",
  "sc-network",

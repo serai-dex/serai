@@ -1,7 +1,9 @@
-use std::{sync::Arc, future::Future};
+use std::{marker::PhantomData, boxed::Box, sync::Arc, future::Future, error::Error};
 
 use sp_runtime::traits::Block as BlockTrait;
-use sp_api::TransactionFor;
+use sp_inherents::CreateInherentDataProviders;
+use sp_consensus::DisableProofRecording;
+use sp_api::{TransactionFor, ProvideRuntimeApi};
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
@@ -10,6 +12,9 @@ use sc_service::{TaskManager, TFullClient};
 use substrate_prometheus_endpoint::Registry;
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
+
+mod types;
+use types::{TendermintClientMinimal, TendermintAuthor};
 
 mod validators;
 
@@ -49,6 +54,39 @@ pub trait Announce<B: BlockTrait>: Send + Sync + Clone + 'static {
   fn announce(&self, hash: B::Hash);
 }
 
+struct Cidp;
+#[async_trait::async_trait]
+impl CreateInherentDataProviders<Block, ()> for Cidp {
+  type InherentDataProviders = (sp_timestamp::InherentDataProvider,);
+  async fn create_inherent_data_providers(
+    &self,
+    _: <Block as BlockTrait>::Hash,
+    _: (),
+  ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
+    Ok((sp_timestamp::InherentDataProvider::from_system_time(),))
+  }
+}
+
+struct TendermintAuthorFirm<A: Announce<Block>>(PhantomData<A>);
+impl<A: Announce<Block>> TendermintClientMinimal for TendermintAuthorFirm<A> {
+  type Block = Block;
+  type Backend = sc_client_db::Backend<Block>;
+  type Api = <FullClient as ProvideRuntimeApi<Block>>::Api;
+  type Client = FullClient;
+}
+
+impl<A: Announce<Block>> TendermintAuthor for TendermintAuthorFirm<A> {
+  type CIDP = Cidp;
+  type Environment = sc_basic_authorship::ProposerFactory<
+    FullPool<Block, FullClient>,
+    Self::Backend,
+    Self::Client,
+    DisableProofRecording,
+  >;
+
+  type Announce = A;
+}
+
 pub fn import_queue<A: Announce<Block>>(
   task_manager: &TaskManager,
   client: Arc<FullClient>,
@@ -56,10 +94,10 @@ pub fn import_queue<A: Announce<Block>>(
   pool: Arc<FullPool<Block, FullClient>>,
   registry: Option<&Registry>,
 ) -> (impl Future<Output = ()>, TendermintImportQueue<Block, TransactionFor<FullClient, Block>>) {
-  import_queue::import_queue(
+  import_queue::import_queue::<TendermintAuthorFirm<A>>(
     client.clone(),
     announce,
-    Arc::new(|_, _| async { Ok(sp_timestamp::InherentDataProvider::from_system_time()) }),
+    Arc::new(Cidp),
     sc_basic_authorship::ProposerFactory::new(
       task_manager.spawn_handle(),
       client,

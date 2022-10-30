@@ -8,15 +8,14 @@ use std::{
 };
 
 use sp_core::Decode;
-use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::{Header, Block};
-use sp_api::{BlockId, TransactionFor};
+use sp_api::BlockId;
 
-use sp_consensus::{Error, Environment};
+use sp_consensus::Error;
 use sc_consensus::{BlockImportStatus, BlockImportError, BlockImport, Link, BasicQueue};
 
 use sc_service::ImportQueue;
-use sc_client_api::Backend;
+use sc_client_api::{HeaderBackend, BlockBackend};
 
 use substrate_prometheus_endpoint::Registry;
 
@@ -25,13 +24,9 @@ use tendermint_machine::{
   TendermintMachine,
 };
 
-use sp_tendermint::TendermintApi;
-
 use crate::{
-  CONSENSUS_ID,
-  validators::TendermintValidators,
-  tendermint::{TendermintClient, TendermintImport},
-  Announce,
+  CONSENSUS_ID, types::TendermintAuthor, validators::TendermintValidators,
+  tendermint::TendermintImport,
 };
 
 pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
@@ -82,28 +77,19 @@ impl<'a, B: Block, T: Send> Future for ImportFuture<'a, B, T> {
   }
 }
 
-pub fn import_queue<
-  B: Block,
-  Be: Backend<B> + 'static,
-  C: TendermintClient<B, Be>,
-  CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  E: Send + Sync + Environment<B> + 'static,
-  A: Announce<B>,
->(
-  client: Arc<C>,
-  announce: A,
-  providers: Arc<CIDP>,
-  env: E,
+pub fn import_queue<T: TendermintAuthor>(
+  client: Arc<T::Client>,
+  announce: T::Announce,
+  providers: Arc<T::CIDP>,
+  env: T::Environment,
   spawner: &impl sp_core::traits::SpawnEssentialNamed,
   registry: Option<&Registry>,
-) -> (impl Future<Output = ()>, TendermintImportQueue<B, TransactionFor<C, B>>)
+) -> (impl Future<Output = ()>, TendermintImportQueue<T::Block, T::BackendTransaction>)
 where
-  TransactionFor<C, B>: Send + Sync + 'static,
-  Arc<C>: BlockImport<B, Transaction = TransactionFor<C, B>>,
-  <Arc<C> as BlockImport<B>>::Error: Into<Error>,
-  C::Api: TendermintApi<B>,
+  Arc<T::Client>: BlockImport<T::Block, Transaction = T::BackendTransaction>,
+  <Arc<T::Client> as BlockImport<T::Block>>::Error: Into<Error>,
 {
-  let import = TendermintImport::new(client, announce, providers, env);
+  let import = TendermintImport::<T>::new(client, announce, providers, env);
 
   let authority = {
     let machine_clone = import.machine.clone();
@@ -120,7 +106,7 @@ where
             Ok(best) => BlockNumber(best + 1),
             Err(_) => panic!("BlockNumber exceeded u64"),
           },
-          Commit::<TendermintValidators<B, Be, C>>::decode(
+          Commit::<TendermintValidators<T>>::decode(
             &mut import_clone
               .client
               .justifications(&BlockId::Number(best))

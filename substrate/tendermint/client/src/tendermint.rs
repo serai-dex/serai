@@ -17,103 +17,48 @@ use sp_runtime::{
   Digest, Justification,
 };
 use sp_blockchain::HeaderBackend;
-use sp_api::{BlockId, TransactionFor, ProvideRuntimeApi};
+use sp_api::BlockId;
 
 use sp_consensus::{Error, BlockOrigin, Proposer, Environment};
-use sc_consensus::{ForkChoiceStrategy, BlockImportParams, BlockImport, import_queue::IncomingBlock};
+use sc_consensus::{ForkChoiceStrategy, BlockImportParams, import_queue::IncomingBlock};
 
 use sc_service::ImportQueue;
-use sc_client_api::{BlockBackend, Backend, Finalizer};
+use sc_client_api::Finalizer;
 
 use tendermint_machine::{
   ext::{BlockError, Commit, Network},
   SignedMessage, TendermintHandle,
 };
 
-use sp_tendermint::TendermintApi;
-
 use crate::{
   CONSENSUS_ID,
+  types::TendermintAuthor,
   validators::TendermintValidators,
   import_queue::{ImportFuture, TendermintImportQueue},
   Announce,
 };
 
-pub trait TendermintClient<B: Block, Be: Backend<B> + 'static>:
-  Send
-  + Sync
-  + HeaderBackend<B>
-  + BlockBackend<B>
-  + BlockImport<B, Transaction = TransactionFor<Self, B>>
-  + Finalizer<B, Be>
-  + ProvideRuntimeApi<B>
-  + 'static
-where
-  TransactionFor<Self, B>: Send + Sync + 'static,
-  Self::Api: TendermintApi<B>,
-{
-}
-impl<
-    B: Send + Sync + Block + 'static,
-    Be: Send + Sync + Backend<B> + 'static,
-    C: Send
-      + Sync
-      + HeaderBackend<B>
-      + BlockBackend<B>
-      + BlockImport<B, Transaction = TransactionFor<C, B>>
-      + Finalizer<B, Be>
-      + ProvideRuntimeApi<B>
-      + 'static,
-  > TendermintClient<B, Be> for C
-where
-  TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: TendermintApi<B>,
-{
-}
+pub(crate) struct TendermintImport<T: TendermintAuthor> {
+  _ta: PhantomData<T>,
 
-pub(crate) struct TendermintImport<
-  B: Block,
-  Be: Backend<B> + 'static,
-  C: TendermintClient<B, Be>,
-  CIDP: CreateInherentDataProviders<B, ()> + 'static,
-  E: Send + Sync + Environment<B> + 'static,
-  A: Announce<B>,
-> where
-  TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: TendermintApi<B>,
-{
-  _block: PhantomData<B>,
-  _backend: PhantomData<Be>,
+  validators: Arc<TendermintValidators<T>>,
 
-  validators: Arc<TendermintValidators<B, Be, C>>,
-
-  importing_block: Arc<RwLock<Option<B::Hash>>>,
+  importing_block: Arc<RwLock<Option<<T::Block as Block>::Hash>>>,
   pub(crate) machine: Arc<RwLock<Option<TendermintHandle<Self>>>>,
 
-  pub(crate) client: Arc<C>,
-  announce: A,
-  providers: Arc<CIDP>,
+  pub(crate) client: Arc<T::Client>,
+  announce: T::Announce,
+  providers: Arc<T::CIDP>,
 
-  env: Arc<AsyncRwLock<E>>,
-  pub(crate) queue: Arc<AsyncRwLock<Option<TendermintImportQueue<B, TransactionFor<C, B>>>>>,
+  env: Arc<AsyncRwLock<T::Environment>>,
+  pub(crate) queue:
+    Arc<AsyncRwLock<Option<TendermintImportQueue<T::Block, T::BackendTransaction>>>>,
 }
 
-impl<
-    B: Block,
-    Be: Backend<B> + 'static,
-    C: TendermintClient<B, Be>,
-    CIDP: CreateInherentDataProviders<B, ()> + 'static,
-    E: Send + Sync + Environment<B> + 'static,
-    A: Announce<B>,
-  > Clone for TendermintImport<B, Be, C, CIDP, E, A>
-where
-  TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: TendermintApi<B>,
-{
+impl<T: TendermintAuthor> Clone for TendermintImport<T> {
   fn clone(&self) -> Self {
     TendermintImport {
-      _block: PhantomData,
-      _backend: PhantomData,
+      _ta: PhantomData,
 
       validators: self.validators.clone(),
 
@@ -130,27 +75,15 @@ where
   }
 }
 
-impl<
-    B: Block,
-    Be: Backend<B> + 'static,
-    C: TendermintClient<B, Be>,
-    CIDP: CreateInherentDataProviders<B, ()> + 'static,
-    E: Send + Sync + Environment<B> + 'static,
-    A: Announce<B>,
-  > TendermintImport<B, Be, C, CIDP, E, A>
-where
-  TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: TendermintApi<B>,
-{
+impl<T: TendermintAuthor> TendermintImport<T> {
   pub(crate) fn new(
-    client: Arc<C>,
-    announce: A,
-    providers: Arc<CIDP>,
-    env: E,
-  ) -> TendermintImport<B, Be, C, CIDP, E, A> {
+    client: Arc<T::Client>,
+    announce: T::Announce,
+    providers: Arc<T::CIDP>,
+    env: T::Environment,
+  ) -> TendermintImport<T> {
     TendermintImport {
-      _block: PhantomData,
-      _backend: PhantomData,
+      _ta: PhantomData,
 
       validators: Arc::new(TendermintValidators::new(client.clone())),
 
@@ -168,8 +101,8 @@ where
 
   async fn check_inherents(
     &self,
-    block: B,
-    providers: CIDP::InherentDataProviders,
+    block: T::Block,
+    providers: <T::CIDP as CreateInherentDataProviders<T::Block, ()>>::InherentDataProviders,
   ) -> Result<(), Error> {
     // TODO
     Ok(())
@@ -178,8 +111,8 @@ where
   // Ensure this is part of a sequential import
   pub(crate) fn verify_order(
     &self,
-    parent: B::Hash,
-    number: <B::Header as Header>::Number,
+    parent: <T::Block as Block>::Hash,
+    number: <<T::Block as Block>::Header as Header>::Number,
   ) -> Result<(), Error> {
     let info = self.client.info();
     if (info.best_hash != parent) || ((info.best_number + 1u16.into()) != number) {
@@ -193,7 +126,7 @@ where
   // Tendermint's propose message could be rewritten as a seal OR Tendermint could produce blocks
   // which this checks the proposer slot for, and then tells the Tendermint machine
   // While those would be more seamless with Substrate, there's no actual benefit to doing so
-  fn verify_origin(&self, hash: B::Hash) -> Result<(), Error> {
+  fn verify_origin(&self, hash: <T::Block as Block>::Hash) -> Result<(), Error> {
     if let Some(tm_hash) = *self.importing_block.read().unwrap() {
       if hash == tm_hash {
         return Ok(());
@@ -205,14 +138,14 @@ where
   // Errors if the justification isn't valid
   pub(crate) fn verify_justification(
     &self,
-    hash: B::Hash,
+    hash: <T::Block as Block>::Hash,
     justification: &Justification,
   ) -> Result<(), Error> {
     if justification.0 != CONSENSUS_ID {
       Err(Error::InvalidJustification)?;
     }
 
-    let commit: Commit<TendermintValidators<B, Be, C>> =
+    let commit: Commit<TendermintValidators<T>> =
       Commit::decode(&mut justification.1.as_ref()).map_err(|_| Error::InvalidJustification)?;
     if !self.verify_commit(hash, &commit) {
       Err(Error::InvalidJustification)?;
@@ -223,7 +156,10 @@ where
   // Verifies the justifications aren't malformed, not that the block is justified
   // Errors if justifications is neither empty nor a sinlge Tendermint justification
   // If the block does have a justification, finalized will be set to true
-  fn verify_justifications<T>(&self, block: &mut BlockImportParams<B, T>) -> Result<(), Error> {
+  fn verify_justifications<BT>(
+    &self,
+    block: &mut BlockImportParams<T::Block, BT>,
+  ) -> Result<(), Error> {
     if !block.finalized {
       if let Some(justifications) = &block.justifications {
         let mut iter = justifications.iter();
@@ -238,7 +174,10 @@ where
     Ok(())
   }
 
-  pub(crate) async fn check<T>(&self, block: &mut BlockImportParams<B, T>) -> Result<(), Error> {
+  pub(crate) async fn check<BT>(
+    &self,
+    block: &mut BlockImportParams<T::Block, BT>,
+  ) -> Result<(), Error> {
     if block.finalized {
       if block.fork_choice.is_none() {
         // Since we alw1ays set the fork choice, this means something else marked the block as
@@ -261,7 +200,7 @@ where
       if let Some(body) = block.body.clone() {
         self
           .check_inherents(
-            B::new(block.header.clone(), body),
+            T::Block::new(block.header.clone(), body),
             self.providers.create_inherent_data_providers(*block.header.parent_hash(), ()).await?,
           )
           .await?;
@@ -281,7 +220,7 @@ where
     Ok(())
   }
 
-  pub(crate) async fn get_proposal(&mut self, header: &B::Header) -> B {
+  pub(crate) async fn get_proposal(&mut self, header: &<T::Block as Block>::Header) -> T::Block {
     let inherent_data =
       match self.providers.create_inherent_data_providers(header.hash(), ()).await {
         Ok(providers) => match providers.create_inherent_data() {
@@ -315,30 +254,19 @@ where
 }
 
 #[async_trait]
-impl<
-    B: Block,
-    Be: Backend<B> + 'static,
-    C: TendermintClient<B, Be>,
-    CIDP: CreateInherentDataProviders<B, ()> + 'static,
-    E: Send + Sync + Environment<B> + 'static,
-    A: Announce<B>,
-  > Network for TendermintImport<B, Be, C, CIDP, E, A>
-where
-  TransactionFor<C, B>: Send + Sync + 'static,
-  C::Api: TendermintApi<B>,
-{
+impl<T: TendermintAuthor> Network for TendermintImport<T> {
   type ValidatorId = u16;
-  type SignatureScheme = TendermintValidators<B, Be, C>;
-  type Weights = TendermintValidators<B, Be, C>;
-  type Block = B;
+  type SignatureScheme = TendermintValidators<T>;
+  type Weights = TendermintValidators<T>;
+  type Block = T::Block;
 
   const BLOCK_TIME: u32 = { (serai_runtime::MILLISECS_PER_BLOCK / 1000) as u32 };
 
-  fn signature_scheme(&self) -> Arc<TendermintValidators<B, Be, C>> {
+  fn signature_scheme(&self) -> Arc<TendermintValidators<T>> {
     self.validators.clone()
   }
 
-  fn weights(&self) -> Arc<TendermintValidators<B, Be, C>> {
+  fn weights(&self) -> Arc<TendermintValidators<T>> {
     self.validators.clone()
   }
 
@@ -362,7 +290,7 @@ where
   // the node.
   //
   // When Tendermint completes, the block is finalized, setting it as the tip regardless of work.
-  async fn validate(&mut self, block: &B) -> Result<(), BlockError> {
+  async fn validate(&mut self, block: &T::Block) -> Result<(), BlockError> {
     let hash = block.hash();
     let (header, body) = block.clone().deconstruct();
     let parent = *header.parent_hash();
@@ -407,7 +335,11 @@ where
     Ok(())
   }
 
-  async fn add_block(&mut self, block: B, commit: Commit<TendermintValidators<B, Be, C>>) -> B {
+  async fn add_block(
+    &mut self,
+    block: T::Block,
+    commit: Commit<TendermintValidators<T>>,
+  ) -> T::Block {
     let hash = block.hash();
     let justification = (CONSENSUS_ID, commit.encode());
     debug_assert!(self.verify_justification(hash, &justification).is_ok());
