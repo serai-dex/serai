@@ -8,14 +8,15 @@ use sp_consensus::Environment;
 use sc_consensus::BlockImport;
 
 use sc_client_api::{BlockBackend, Backend, Finalizer};
+use sc_network::NetworkBlock;
 use sc_network_gossip::Network;
 
 use sp_tendermint::TendermintApi;
 
-use crate::Announce;
-
 /// Trait consolidating all generics required by sc_tendermint for processing.
 pub trait TendermintClient: Send + Sync + 'static {
+  const BLOCK_TIME_IN_SECONDS: u32;
+
   type Block: Block;
   type Backend: Backend<Self::Block> + 'static;
 
@@ -40,6 +41,8 @@ pub trait TendermintClient: Send + Sync + 'static {
 
 /// Trait implementable on firm types to automatically provide a full TendermintClient impl.
 pub trait TendermintClientMinimal: Send + Sync + 'static {
+  const BLOCK_TIME_IN_SECONDS: u32;
+
   type Block: Block;
   type Backend: Backend<Self::Block> + 'static;
   type Api: ApiExt<Self::Block> + TendermintApi<Self::Block>;
@@ -58,6 +61,8 @@ where
   <T::Client as ProvideRuntimeApi<T::Block>>::Api: TendermintApi<T::Block>,
   TransactionFor<T::Client, T::Block>: Send + Sync + 'static,
 {
+  const BLOCK_TIME_IN_SECONDS: u32 = T::BLOCK_TIME_IN_SECONDS;
+
   type Block = T::Block;
   type Backend = T::Backend;
 
@@ -72,6 +77,10 @@ pub trait TendermintValidator: TendermintClient {
   type CIDP: CreateInherentDataProviders<Self::Block, ()> + 'static;
   type Environment: Send + Sync + Environment<Self::Block> + 'static;
 
-  type Network: Clone + Send + Sync + Network<Self::Block> + 'static;
-  type Announce: Announce<Self::Block>;
+  type Network: Clone
+    + Send
+    + Sync
+    + Network<Self::Block>
+    + NetworkBlock<<Self::Block as Block>::Hash, <<Self::Block as Block>::Header as Header>::Number>
+    + 'static;
 }

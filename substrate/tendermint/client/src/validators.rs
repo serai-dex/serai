@@ -79,7 +79,7 @@ impl<T: TendermintClient> Deref for Refresh<T> {
   }
 }
 
-pub(crate) struct TendermintValidators<T: TendermintClient>(Refresh<T>);
+pub struct TendermintValidators<T: TendermintClient>(Refresh<T>);
 
 impl<T: TendermintClient> TendermintValidators<T> {
   pub(crate) fn new(client: Arc<T::Client>) -> TendermintValidators<T> {

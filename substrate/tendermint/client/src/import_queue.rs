@@ -14,10 +14,7 @@ use sc_service::ImportQueue;
 
 use substrate_prometheus_endpoint::Registry;
 
-use crate::{
-  types::TendermintValidator,
-  tendermint::{TendermintImport, TendermintAuthority},
-};
+use crate::{types::TendermintValidator, TendermintImport};
 
 pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
 
@@ -68,25 +65,21 @@ impl<'a, B: Block, T: Send> Future for ImportFuture<'a, B, T> {
 }
 
 pub fn import_queue<T: TendermintValidator>(
-  client: Arc<T::Client>,
-  announce: T::Announce,
-  providers: Arc<T::CIDP>,
-  env: T::Environment,
   spawner: &impl sp_core::traits::SpawnEssentialNamed,
+  client: Arc<T::Client>,
   registry: Option<&Registry>,
-) -> (TendermintAuthority<T>, TendermintImportQueue<T::Block, T::BackendTransaction>)
+) -> (TendermintImport<T>, TendermintImportQueue<T::Block, T::BackendTransaction>)
 where
   Arc<T::Client>: BlockImport<T::Block, Transaction = T::BackendTransaction>,
   <Arc<T::Client> as BlockImport<T::Block>>::Error: Into<Error>,
 {
-  let import = TendermintImport::<T>::new(client, announce, providers, env);
-  let authority = TendermintAuthority(import.clone());
+  let import = TendermintImport::<T>::new(client);
 
   let boxed = Box::new(import.clone());
   // Use None for the justification importer since justifications always come with blocks
-  // Therefore, they're never imported after the fact, mandating a importer
+  // Therefore, they're never imported after the fact, which is what mandates an importer
   let queue = || BasicQueue::new(import.clone(), boxed.clone(), None, spawner, registry);
 
   *futures::executor::block_on(import.queue.write()) = Some(queue());
-  (authority, queue())
+  (import.clone(), queue())
 }

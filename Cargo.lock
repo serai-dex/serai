@@ -7595,6 +7595,7 @@ dependencies = [
  "pallet-tendermint",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
+ "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
  "sc-consensus",

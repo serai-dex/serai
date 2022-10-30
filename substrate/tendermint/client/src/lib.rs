@@ -1,16 +1,14 @@
-use std::{marker::PhantomData, boxed::Box, sync::Arc, error::Error};
+use std::{boxed::Box, sync::Arc, error::Error};
 
 use sp_runtime::traits::Block as BlockTrait;
 use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
-use sp_api::{TransactionFor, ProvideRuntimeApi};
+use sp_api::ProvideRuntimeApi;
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
 use sc_network::NetworkService;
-use sc_service::{TaskManager, TFullClient};
-
-use substrate_prometheus_endpoint::Registry;
+use sc_service::TFullClient;
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
 
@@ -19,14 +17,16 @@ use types::{TendermintClientMinimal, TendermintValidator};
 
 mod validators;
 
-mod tendermint;
-pub use tendermint::TendermintAuthority;
+pub(crate) mod tendermint;
+pub use tendermint::TendermintImport;
 mod block_import;
 
 mod import_queue;
-use import_queue::TendermintImportQueue;
+pub use import_queue::{TendermintImportQueue, import_queue};
 
 pub(crate) mod gossip;
+pub(crate) mod authority;
+pub use authority::TendermintAuthority;
 
 mod select_chain;
 pub use select_chain::TendermintSelectChain;
@@ -51,10 +51,6 @@ impl NativeExecutionDispatch for ExecutorDispatch {
 
 pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
-pub trait Announce<B: BlockTrait>: Send + Sync + Clone + 'static {
-  fn announce(&self, hash: B::Hash);
-}
-
 pub struct Cidp;
 #[async_trait::async_trait]
 impl CreateInherentDataProviders<Block, ()> for Cidp {
@@ -68,15 +64,17 @@ impl CreateInherentDataProviders<Block, ()> for Cidp {
   }
 }
 
-pub struct TendermintValidatorFirm<A: Announce<Block>>(PhantomData<A>);
-impl<A: Announce<Block>> TendermintClientMinimal for TendermintValidatorFirm<A> {
+pub struct TendermintValidatorFirm;
+impl TendermintClientMinimal for TendermintValidatorFirm {
+  const BLOCK_TIME_IN_SECONDS: u32 = { (serai_runtime::MILLISECS_PER_BLOCK / 1000) as u32 };
+
   type Block = Block;
   type Backend = sc_client_db::Backend<Block>;
   type Api = <FullClient as ProvideRuntimeApi<Block>>::Api;
   type Client = FullClient;
 }
 
-impl<A: Announce<Block>> TendermintValidator for TendermintValidatorFirm<A> {
+impl TendermintValidator for TendermintValidatorFirm {
   type CIDP = Cidp;
   type Environment = sc_basic_authorship::ProposerFactory<
     FullPool<Block, FullClient>,
@@ -86,33 +84,6 @@ impl<A: Announce<Block>> TendermintValidator for TendermintValidatorFirm<A> {
   >;
 
   type Network = Arc<NetworkService<Block, <Block as BlockTrait>::Hash>>;
-  type Announce = A;
-}
-
-pub fn import_queue<A: Announce<Block>>(
-  task_manager: &TaskManager,
-  client: Arc<FullClient>,
-  announce: A,
-  pool: Arc<FullPool<Block, FullClient>>,
-  registry: Option<&Registry>,
-) -> (
-  TendermintAuthority<TendermintValidatorFirm<A>>,
-  TendermintImportQueue<Block, TransactionFor<FullClient, Block>>,
-) {
-  import_queue::import_queue::<TendermintValidatorFirm<A>>(
-    client.clone(),
-    announce,
-    Arc::new(Cidp),
-    sc_basic_authorship::ProposerFactory::new(
-      task_manager.spawn_handle(),
-      client,
-      pool,
-      registry,
-      None,
-    ),
-    &task_manager.spawn_essential_handle(),
-    registry,
-  )
 }
 
 /*

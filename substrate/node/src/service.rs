@@ -1,15 +1,12 @@
-use std::sync::{Arc, RwLock};
-
-use sp_core::H256;
+use std::sync::Arc;
 
 use sc_executor::NativeElseWasmExecutor;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
-use sc_network::{NetworkService, NetworkBlock};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
 pub(crate) use serai_consensus::{
-  TendermintAuthority, ExecutorDispatch, Announce, FullClient, TendermintValidatorFirm,
+  TendermintImport, TendermintAuthority, ExecutorDispatch, FullClient, TendermintValidatorFirm,
 };
 
 type FullBackend = sc_service::TFullBackend<Block>;
@@ -24,30 +21,9 @@ type PartialComponents = sc_service::PartialComponents<
   Option<Telemetry>,
 >;
 
-#[derive(Clone)]
-pub struct NetworkAnnounce(Arc<RwLock<Option<Arc<NetworkService<Block, H256>>>>>);
-impl NetworkAnnounce {
-  fn new() -> NetworkAnnounce {
-    NetworkAnnounce(Arc::new(RwLock::new(None)))
-  }
-}
-impl Announce<Block> for NetworkAnnounce {
-  fn announce(&self, hash: H256) {
-    if let Some(network) = self.0.read().unwrap().as_ref() {
-      network.announce_block(hash, None);
-    }
-  }
-}
-
 pub fn new_partial(
   config: &Configuration,
-) -> Result<
-  (
-    (NetworkAnnounce, TendermintAuthority<TendermintValidatorFirm<NetworkAnnounce>>),
-    PartialComponents,
-  ),
-  ServiceError,
-> {
+) -> Result<(TendermintImport<TendermintValidatorFirm>, PartialComponents), ServiceError> {
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
@@ -91,19 +67,16 @@ pub fn new_partial(
     client.clone(),
   );
 
-  let announce = NetworkAnnounce::new();
   let (authority, import_queue) = serai_consensus::import_queue(
-    &task_manager,
+    &task_manager.spawn_essential_handle(),
     client.clone(),
-    announce.clone(),
-    transaction_pool.clone(),
     config.prometheus_registry(),
   );
 
   let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
 
   Ok((
-    (announce, authority),
+    authority,
     sc_service::PartialComponents {
       client,
       backend,
@@ -119,7 +92,7 @@ pub fn new_partial(
 
 pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
   let (
-    (announce, authority),
+    authority,
     sc_service::PartialComponents {
       client,
       backend,
@@ -142,7 +115,6 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       block_announce_validator_builder: None,
       warp_sync: None,
     })?;
-  *announce.0.write().unwrap() = Some(network.clone());
 
   if config.offchain_worker.enabled {
     sc_service::build_offchain_workers(
@@ -169,6 +141,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
 
   let is_authority = config.role.is_authority();
 
+  let registry = config.prometheus_registry().cloned();
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
     client: client.clone(),
@@ -187,7 +160,18 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     task_manager.spawn_essential_handle().spawn(
       "tendermint",
       None,
-      authority.validate(network, None),
+      TendermintAuthority::new(authority).authority(
+        serai_consensus::Cidp,
+        sc_basic_authorship::ProposerFactory::new(
+          task_manager.spawn_handle(),
+          client,
+          transaction_pool,
+          registry.as_ref(),
+          telemetry.map(|telemtry| telemtry.handle()),
+        ),
+        network,
+        None,
+      ),
     );
   }
 

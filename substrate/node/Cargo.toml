@@ -27,6 +27,7 @@ sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
 
 sc-keystore = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
+sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
 sc-executor = { git = "https://github.com/serai-dex/substrate" }
 sc-service = { git = "https://github.com/serai-dex/substrate" }

@@ -1,159 +1,38 @@
 use std::{
   marker::PhantomData,
   sync::{Arc, RwLock},
-  time::{UNIX_EPOCH, SystemTime, Duration},
 };
 
-use async_trait::async_trait;
+use tokio::sync::RwLock as AsyncRwLock;
 
-use log::warn;
-
-use tokio::{sync::RwLock as AsyncRwLock, task::yield_now};
-
-use sp_core::{Encode, Decode, sr25519::Signature};
-use sp_inherents::{InherentData, InherentDataProvider, CreateInherentDataProviders};
+use sp_core::Decode;
 use sp_runtime::{
   traits::{Header, Block},
-  Digest, Justification,
+  Justification,
 };
 use sp_blockchain::HeaderBackend;
-use sp_api::BlockId;
 
-use sp_consensus::{Error, BlockOrigin, Proposer, Environment};
-use sc_consensus::{ForkChoiceStrategy, BlockImportParams, import_queue::IncomingBlock};
+use sp_consensus::Error;
+use sc_consensus::{ForkChoiceStrategy, BlockImportParams};
 
-use sc_service::ImportQueue;
-use sc_client_api::{BlockBackend, Finalizer};
-use sc_network_gossip::GossipEngine;
-
-use substrate_prometheus_endpoint::Registry;
-
-use tendermint_machine::{
-  ext::{BlockError, BlockNumber, Commit, Network},
-  SignedMessage, TendermintMachine,
-};
+use tendermint_machine::ext::{Commit, Network};
 
 use crate::{
-  CONSENSUS_ID,
-  types::TendermintValidator,
-  validators::TendermintValidators,
-  import_queue::{ImportFuture, TendermintImportQueue},
-  gossip::TendermintGossip,
-  Announce,
+  CONSENSUS_ID, types::TendermintValidator, validators::TendermintValidators,
+  import_queue::TendermintImportQueue, authority::TendermintAuthority,
 };
 
-pub(crate) struct TendermintImport<T: TendermintValidator> {
+pub struct TendermintImport<T: TendermintValidator> {
   _ta: PhantomData<T>,
 
-  validators: Arc<TendermintValidators<T>>,
+  pub(crate) validators: Arc<TendermintValidators<T>>,
 
-  number: Arc<RwLock<u64>>,
-  gossip_queue: Arc<RwLock<Vec<SignedMessage<u16, T::Block, Signature>>>>,
-  importing_block: Arc<RwLock<Option<<T::Block as Block>::Hash>>>,
+  pub(crate) providers: Arc<AsyncRwLock<Option<T::CIDP>>>,
+  pub(crate) importing_block: Arc<RwLock<Option<<T::Block as Block>::Hash>>>,
 
   pub(crate) client: Arc<T::Client>,
-  announce: T::Announce,
-  providers: Arc<T::CIDP>,
-
-  env: Arc<AsyncRwLock<T::Environment>>,
   pub(crate) queue:
     Arc<AsyncRwLock<Option<TendermintImportQueue<T::Block, T::BackendTransaction>>>>,
-}
-
-pub struct TendermintAuthority<T: TendermintValidator>(pub(crate) TendermintImport<T>);
-impl<T: TendermintValidator> TendermintAuthority<T> {
-  pub async fn validate(mut self, network: T::Network, registry: Option<&Registry>) {
-    let info = self.0.client.info();
-
-    // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
-    let last_number = match info.best_number.try_into() {
-      Ok(best) => BlockNumber(best),
-      Err(_) => panic!("BlockNumber exceeded u64"),
-    };
-    let last_time = Commit::<TendermintValidators<T>>::decode(
-      &mut self
-        .0
-        .client
-        .justifications(&BlockId::Hash(info.best_hash))
-        .unwrap()
-        .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
-        .unwrap_or_default()
-        .as_ref(),
-    )
-    .map(|commit| commit.end_time)
-    // TODO: Genesis start time + BLOCK_TIME
-    .unwrap_or_else(|_| SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
-
-    let proposal = self
-      .0
-      .get_proposal(&self.0.client.header(BlockId::Hash(info.best_hash)).unwrap().unwrap())
-      .await;
-
-    *self.0.number.write().unwrap() = last_number.0 + 1;
-    let mut gossip = GossipEngine::new(
-      network,
-      "tendermint",
-      Arc::new(TendermintGossip::new(self.0.number.clone(), self.0.validators.clone())),
-      registry,
-    );
-
-    let handle = TendermintMachine::new(
-      self.0.clone(),
-      // TODO
-      0, // ValidatorId
-      (last_number, last_time),
-      proposal,
-    );
-
-    let mut last_number = last_number.0 + 1;
-    let mut recv = gossip
-      .messages_for(TendermintGossip::<TendermintValidators<T>>::topic::<T::Block>(last_number));
-    'outer: loop {
-      // Send out any queued messages
-      let mut queue = self.0.gossip_queue.write().unwrap().drain(..).collect::<Vec<_>>();
-      for msg in queue.drain(..) {
-        gossip.gossip_message(
-          TendermintGossip::<TendermintValidators<T>>::topic::<T::Block>(msg.number().0),
-          msg.encode(),
-          false,
-        );
-      }
-
-      // Handle any received messages
-      // Makes sure to handle all pending messages before acquiring the out-queue lock again
-      'inner: loop {
-        match recv.try_next() {
-          Ok(Some(msg)) => handle
-            .messages
-            .send(match SignedMessage::decode(&mut msg.message.as_ref()) {
-              Ok(msg) => msg,
-              Err(e) => {
-                warn!("couldn't decode valid message: {}", e);
-                continue;
-              }
-            })
-            .await
-            .unwrap(),
-          Ok(None) => break 'outer,
-          // No messages available
-          Err(_) => {
-            // Check if we the block updated and should be listening on a different topic
-            let curr = *self.0.number.read().unwrap();
-            if last_number != curr {
-              last_number = curr;
-              // TODO: Will this return existing messages on the new height? Or will those have been
-              // ignored and are now gone?
-              recv = gossip.messages_for(TendermintGossip::<TendermintValidators<T>>::topic::<
-                T::Block,
-              >(last_number));
-            }
-            yield_now().await;
-            break 'inner;
-          }
-        }
-      }
-    }
-  }
 }
 
 impl<T: TendermintValidator> Clone for TendermintImport<T> {
@@ -163,50 +42,31 @@ impl<T: TendermintValidator> Clone for TendermintImport<T> {
 
       validators: self.validators.clone(),
 
-      number: self.number.clone(),
-      gossip_queue: self.gossip_queue.clone(),
+      providers: self.providers.clone(),
       importing_block: self.importing_block.clone(),
 
       client: self.client.clone(),
-      announce: self.announce.clone(),
-      providers: self.providers.clone(),
-
-      env: self.env.clone(),
       queue: self.queue.clone(),
     }
   }
 }
 
 impl<T: TendermintValidator> TendermintImport<T> {
-  pub(crate) fn new(
-    client: Arc<T::Client>,
-    announce: T::Announce,
-    providers: Arc<T::CIDP>,
-    env: T::Environment,
-  ) -> TendermintImport<T> {
+  pub(crate) fn new(client: Arc<T::Client>) -> TendermintImport<T> {
     TendermintImport {
       _ta: PhantomData,
 
       validators: Arc::new(TendermintValidators::new(client.clone())),
 
-      number: Arc::new(RwLock::new(0)),
-      gossip_queue: Arc::new(RwLock::new(vec![])),
+      providers: Arc::new(AsyncRwLock::new(None)),
       importing_block: Arc::new(RwLock::new(None)),
 
       client,
-      announce,
-      providers,
-
-      env: Arc::new(AsyncRwLock::new(env)),
       queue: Arc::new(AsyncRwLock::new(None)),
     }
   }
 
-  async fn check_inherents(
-    &self,
-    block: T::Block,
-    providers: <T::CIDP as CreateInherentDataProviders<T::Block, ()>>::InherentDataProviders,
-  ) -> Result<(), Error> {
+  async fn check_inherents(&self, block: T::Block) -> Result<(), Error> {
     // TODO
     Ok(())
   }
@@ -250,7 +110,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
 
     let commit: Commit<TendermintValidators<T>> =
       Commit::decode(&mut justification.1.as_ref()).map_err(|_| Error::InvalidJustification)?;
-    if !self.verify_commit(hash, &commit) {
+    if !TendermintAuthority::new(self.clone()).verify_commit(hash, &commit) {
       Err(Error::InvalidJustification)?;
     }
     Ok(())
@@ -282,10 +142,10 @@ impl<T: TendermintValidator> TendermintImport<T> {
     block: &mut BlockImportParams<T::Block, BT>,
   ) -> Result<(), Error> {
     if block.finalized {
-      if block.fork_choice.is_none() {
+      if block.fork_choice != Some(ForkChoiceStrategy::Custom(false)) {
         // Since we alw1ays set the fork choice, this means something else marked the block as
         // finalized, which shouldn't be possible. Ensuring nothing else is setting blocks as
-        // finalized ensures our security
+        // finalized helps ensure our security
         panic!("block was finalized despite not setting the fork choice");
       }
       return Ok(());
@@ -301,12 +161,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
     if !block.finalized {
       self.verify_origin(block.header.hash())?;
       if let Some(body) = block.body.clone() {
-        self
-          .check_inherents(
-            T::Block::new(block.header.clone(), body),
-            self.providers.create_inherent_data_providers(*block.header.parent_hash(), ()).await?,
-          )
-          .await?;
+        self.check_inherents(T::Block::new(block.header.clone(), body)).await?;
       }
     }
 
@@ -321,140 +176,5 @@ impl<T: TendermintValidator> TendermintImport<T> {
     }
 
     Ok(())
-  }
-
-  pub(crate) async fn get_proposal(&mut self, header: &<T::Block as Block>::Header) -> T::Block {
-    let inherent_data =
-      match self.providers.create_inherent_data_providers(header.hash(), ()).await {
-        Ok(providers) => match providers.create_inherent_data() {
-          Ok(data) => Some(data),
-          Err(err) => {
-            warn!(target: "tendermint", "Failed to create inherent data: {}", err);
-            None
-          }
-        },
-        Err(err) => {
-          warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
-          None
-        }
-      }
-      .unwrap_or_else(InherentData::new);
-
-    let proposer = self
-      .env
-      .write()
-      .await
-      .init(header)
-      .await
-      .expect("Failed to create a proposer for the new block");
-    // TODO: Production time, size limit
-    proposer
-      .propose(inherent_data, Digest::default(), Duration::from_secs(1), None)
-      .await
-      .expect("Failed to crate a new block proposal")
-      .block
-  }
-}
-
-#[async_trait]
-impl<T: TendermintValidator> Network for TendermintImport<T> {
-  type ValidatorId = u16;
-  type SignatureScheme = TendermintValidators<T>;
-  type Weights = TendermintValidators<T>;
-  type Block = T::Block;
-
-  const BLOCK_TIME: u32 = { (serai_runtime::MILLISECS_PER_BLOCK / 1000) as u32 };
-
-  fn signature_scheme(&self) -> Arc<TendermintValidators<T>> {
-    self.validators.clone()
-  }
-
-  fn weights(&self) -> Arc<TendermintValidators<T>> {
-    self.validators.clone()
-  }
-
-  async fn broadcast(&mut self, msg: SignedMessage<u16, Self::Block, Signature>) {
-    self.gossip_queue.write().unwrap().push(msg);
-  }
-
-  async fn slash(&mut self, validator: u16) {
-    todo!()
-  }
-
-  // The Tendermint machine will call add_block for any block which is committed to, regardless of
-  // validity. To determine validity, it expects a validate function, which Substrate doesn't
-  // directly offer, and an add function. In order to comply with Serai's modified view of inherent
-  // transactions, validate MUST check inherents, yet add_block must not.
-  //
-  // In order to acquire a validate function, any block proposed by a legitimate proposer is
-  // imported. This performs full validation and makes the block available as a tip. While this
-  // would be incredibly unsafe thanks to the unchecked inherents, it's defined as a tip with less
-  // work, despite being a child of some parent. This means it won't be moved to nor operated on by
-  // the node.
-  //
-  // When Tendermint completes, the block is finalized, setting it as the tip regardless of work.
-  async fn validate(&mut self, block: &T::Block) -> Result<(), BlockError> {
-    let hash = block.hash();
-    let (header, body) = block.clone().deconstruct();
-    let parent = *header.parent_hash();
-    let number = *header.number();
-
-    let mut queue_write = self.queue.write().await;
-    *self.importing_block.write().unwrap() = Some(hash);
-
-    queue_write.as_mut().unwrap().import_blocks(
-      // We do not want this block, which hasn't been confirmed, to be broadcast over the net
-      // Substrate will generate notifications unless it's Genesis, which this isn't, InitialSync,
-      // which changes telemtry behavior, or File, which is... close enough
-      BlockOrigin::File,
-      vec![IncomingBlock {
-        hash,
-        header: Some(header),
-        body: Some(body),
-        indexed_body: None,
-        justifications: None,
-        origin: None,
-        allow_missing_state: false,
-        skip_execution: false,
-        // TODO: Only set to true if block was rejected due to its inherents
-        import_existing: true,
-        state: None,
-      }],
-    );
-
-    if !ImportFuture::new(hash, queue_write.as_mut().unwrap()).await {
-      todo!()
-    }
-
-    // Sanity checks that a child block can have less work than its parent
-    {
-      let info = self.client.info();
-      assert_eq!(info.best_hash, parent);
-      assert_eq!(info.finalized_hash, parent);
-      assert_eq!(info.best_number, number - 1u8.into());
-      assert_eq!(info.finalized_number, number - 1u8.into());
-    }
-
-    Ok(())
-  }
-
-  async fn add_block(
-    &mut self,
-    block: T::Block,
-    commit: Commit<TendermintValidators<T>>,
-  ) -> T::Block {
-    let hash = block.hash();
-    let justification = (CONSENSUS_ID, commit.encode());
-    debug_assert!(self.verify_justification(hash, &justification).is_ok());
-
-    self
-      .client
-      .finalize_block(BlockId::Hash(hash), Some(justification), true)
-      .map_err(|_| Error::InvalidJustification)
-      .unwrap();
-    *self.number.write().unwrap() += 1;
-    self.announce.announce(hash);
-
-    self.get_proposal(block.header()).await
   }
 }
