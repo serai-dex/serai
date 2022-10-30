@@ -24,9 +24,15 @@ curve25519-dalek = { version = "3", features = ["std"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
-frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519","secp256k1"] }
 
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
+
+bitcoincore-rpc = "0.16.0"
+bitcoincore-rpc-json = "0.16.0"
+
+k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
+sha2 = { version = "0.10" }
 
 [dev-dependencies]
 rand_core = "0.6"
