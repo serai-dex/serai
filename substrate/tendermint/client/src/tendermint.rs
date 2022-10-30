@@ -78,7 +78,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
     number: <<T::Block as Block>::Header as Header>::Number,
   ) -> Result<(), Error> {
     let info = self.client.info();
-    if (info.best_hash != parent) || ((info.best_number + 1u16.into()) != number) {
+    if (info.finalized_hash != parent) || ((info.finalized_number + 1u16.into()) != number) {
       Err(Error::Other("non-sequential import".into()))?;
     }
     Ok(())

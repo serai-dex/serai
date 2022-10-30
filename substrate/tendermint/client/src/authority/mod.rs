@@ -72,10 +72,10 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     let info = self.import.client.info();
 
     (
-      info.best_hash,
+      info.finalized_hash,
       (
         // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
-        match info.best_number.try_into() {
+        match info.finalized_number.try_into() {
           Ok(best) => BlockNumber(best),
           Err(_) => panic!("BlockNumber exceeded u64"),
         },
@@ -85,7 +85,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
           &mut self
             .import
             .client
-            .justifications(&BlockId::Hash(info.best_hash))
+            .justifications(&BlockId::Hash(info.finalized_hash))
             .unwrap()
             .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
             .unwrap_or_default()

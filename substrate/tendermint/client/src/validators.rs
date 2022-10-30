@@ -29,7 +29,7 @@ struct TendermintValidatorsStruct {
 
 impl TendermintValidatorsStruct {
   fn from_module<T: TendermintClient>(client: &Arc<T::Client>) -> TendermintValidatorsStruct {
-    let last = client.info().best_hash;
+    let last = client.info().finalized_hash;
     let api = client.runtime_api();
     let session = api.current_session(&BlockId::Hash(last)).unwrap();
     let validators = api.validators(&BlockId::Hash(last)).unwrap();
@@ -63,7 +63,7 @@ impl<T: TendermintClient> Refresh<T> {
       self
         .client
         .runtime_api()
-        .current_session(&BlockId::Hash(self.client.info().best_hash))
+        .current_session(&BlockId::Hash(self.client.info().finalized_hash))
         .unwrap()
     {
       *self._refresh.write().unwrap() = TendermintValidatorsStruct::from_module::<T>(&self.client);
