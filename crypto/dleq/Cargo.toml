@@ -1,6 +1,6 @@
 [package]
 name = "dleq"
-version = "0.1.1"
+version = "0.1.2"
 description = "Implementation of single and cross-curve Discrete Log Equality proofs"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dleq"
@@ -15,7 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 thiserror = "1"
 rand_core = "0.6"
 
-zeroize = "1.3"
+zeroize = { version = "1.3", features = ["zeroize_derive"] }
 
 digest = "0.10"
 

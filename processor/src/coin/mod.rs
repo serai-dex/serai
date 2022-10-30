@@ -4,7 +4,11 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use transcript::RecommendedTranscript;
-use frost::{curve::Curve, FrostKeys, sign::PreprocessMachine};
+use frost::{
+  curve::{Ciphersuite, Curve},
+  ThresholdKeys,
+  sign::PreprocessMachine,
+};
 
 pub mod bitcoin;
 pub use self::bitcoin::Bitcoin;
@@ -48,14 +52,14 @@ pub trait Coin {
   const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
 
   // Doesn't have to take self, enables some level of caching which is pleasant
-  fn address(&self, key: <Self::Curve as Curve>::G) -> Self::Address;
+  fn address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError>;
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError>;
   async fn get_outputs(
     &self,
     block: &Self::Block,
-    key: <Self::Curve as Curve>::G,
+    key: <Self::Curve as Ciphersuite>::G,
   ) -> Result<Vec<Self::Output>, CoinError>;
 
   // TODO: Remove
@@ -63,7 +67,7 @@ pub trait Coin {
 
   async fn prepare_send(
     &self,
-    keys: FrostKeys<Self::Curve>,
+    keys: ThresholdKeys<Self::Curve>,
     transcript: RecommendedTranscript,
     block_number: usize,
     inputs: Vec<Self::Output>,

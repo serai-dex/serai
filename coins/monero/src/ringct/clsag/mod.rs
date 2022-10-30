@@ -22,7 +22,7 @@ use crate::{
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::{ClsagDetails, ClsagMultisig};
+pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 
 lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();
