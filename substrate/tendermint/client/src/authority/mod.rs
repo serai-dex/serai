@@ -9,7 +9,7 @@ use log::warn;
 
 use tokio::task::yield_now;
 
-use sp_core::{Encode, Decode, sr25519::Signature};
+use sp_core::{Encode, Decode};
 use sp_inherents::{InherentData, InherentDataProvider, CreateInherentDataProviders};
 use sp_runtime::{
   traits::{Header, Block},
@@ -29,7 +29,7 @@ use sc_network_gossip::GossipEngine;
 use substrate_prometheus_endpoint::Registry;
 
 use tendermint_machine::{
-  ext::{BlockError, BlockNumber, Commit, Network},
+  ext::{BlockError, BlockNumber, Commit, SignatureScheme, Network},
   SignedMessage, TendermintMachine,
 };
 
@@ -51,7 +51,11 @@ struct ActiveAuthority<T: TendermintValidator> {
   // Block whose gossip is being tracked
   number: Arc<RwLock<u64>>,
   // Outgoing message queue, placed here as the GossipEngine itself can't be
-  gossip_queue: Arc<RwLock<Vec<SignedMessage<u16, T::Block, Signature>>>>,
+  gossip_queue: Arc<
+    RwLock<
+      Vec<SignedMessage<u16, T::Block, <TendermintValidators<T> as SignatureScheme>::Signature>>,
+    >,
+  >,
 
   // Block producer
   env: T::Environment,
@@ -188,18 +192,13 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     };
 
     // Start receiving messages about the Tendermint process for this block
-    let mut recv = gossip
-      .messages_for(TendermintGossip::<TendermintValidators<T>>::topic::<T::Block>(last_number));
+    let mut recv = gossip.messages_for(TendermintGossip::<T>::topic(last_number));
 
     'outer: loop {
       // Send out any queued messages
       let mut queue = gossip_queue.write().unwrap().drain(..).collect::<Vec<_>>();
       for msg in queue.drain(..) {
-        gossip.gossip_message(
-          TendermintGossip::<TendermintValidators<T>>::topic::<T::Block>(msg.number().0),
-          msg.encode(),
-          false,
-        );
+        gossip.gossip_message(TendermintGossip::<T>::topic(msg.number().0), msg.encode(), false);
       }
 
       // Handle any received messages
@@ -232,9 +231,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
               last_number = curr;
               // TODO: Will this return existing messages on the new height? Or will those have
               // been ignored and are now gone?
-              recv = gossip.messages_for(TendermintGossip::<TendermintValidators<T>>::topic::<
-                T::Block,
-              >(last_number));
+              recv = gossip.messages_for(TendermintGossip::<T>::topic(last_number));
             }
 
             // If there are no messages available, yield to not hog the thread, then return to the
@@ -265,7 +262,10 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     self.import.validators.clone()
   }
 
-  async fn broadcast(&mut self, msg: SignedMessage<u16, Self::Block, Signature>) {
+  async fn broadcast(
+    &mut self,
+    msg: SignedMessage<u16, Self::Block, <TendermintValidators<T> as SignatureScheme>::Signature>,
+  ) {
     self.active.as_mut().unwrap().gossip_queue.write().unwrap().push(msg);
   }
 

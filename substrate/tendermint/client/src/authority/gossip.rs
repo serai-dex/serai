@@ -1,41 +1,49 @@
 use std::sync::{Arc, RwLock};
 
-use sp_core::{Decode, sr25519::Signature};
+use sp_core::Decode;
 use sp_runtime::traits::{Hash, Header, Block};
 
 use sc_network::PeerId;
 use sc_network_gossip::{Validator, ValidatorContext, ValidationResult};
 
-use tendermint_machine::{SignedMessage, ext::SignatureScheme};
+use tendermint_machine::{ext::SignatureScheme, SignedMessage};
+
+use crate::{TendermintValidator, validators::TendermintValidators};
 
 #[derive(Clone)]
-pub struct TendermintGossip<S: SignatureScheme<ValidatorId = u16, Signature = Signature>> {
+pub(crate) struct TendermintGossip<T: TendermintValidator> {
   number: Arc<RwLock<u64>>,
-  signature_scheme: Arc<S>,
+  signature_scheme: Arc<TendermintValidators<T>>,
 }
 
-impl<S: SignatureScheme<ValidatorId = u16, Signature = Signature>> TendermintGossip<S> {
-  pub(crate) fn new(number: Arc<RwLock<u64>>, signature_scheme: Arc<S>) -> TendermintGossip<S> {
+impl<T: TendermintValidator> TendermintGossip<T> {
+  pub(crate) fn new(
+    number: Arc<RwLock<u64>>,
+    signature_scheme: Arc<TendermintValidators<T>>,
+  ) -> Self {
     TendermintGossip { number, signature_scheme }
   }
 
-  pub(crate) fn topic<B: Block>(number: u64) -> B::Hash {
-    <<B::Header as Header>::Hashing as Hash>::hash(
+  pub(crate) fn topic(number: u64) -> <T::Block as Block>::Hash {
+    <<<T::Block as Block>::Header as Header>::Hashing as Hash>::hash(
       &[b"Tendermint Block Topic".as_ref(), &number.to_le_bytes()].concat(),
     )
   }
 }
 
-impl<B: Block, S: SignatureScheme<ValidatorId = u16, Signature = Signature>> Validator<B>
-  for TendermintGossip<S>
-{
+impl<T: TendermintValidator> Validator<T::Block> for TendermintGossip<T> {
   fn validate(
     &self,
-    _: &mut dyn ValidatorContext<B>,
+    _: &mut dyn ValidatorContext<T::Block>,
     _: &PeerId,
     data: &[u8],
-  ) -> ValidationResult<B::Hash> {
-    let msg = match SignedMessage::<u16, B, Signature>::decode(&mut &*data) {
+  ) -> ValidationResult<<T::Block as Block>::Hash> {
+    let msg = match SignedMessage::<
+      u16,
+      T::Block,
+      <TendermintValidators<T> as SignatureScheme>::Signature,
+    >::decode(&mut &*data)
+    {
       Ok(msg) => msg,
       Err(_) => return ValidationResult::Discard,
     };
@@ -48,6 +56,6 @@ impl<B: Block, S: SignatureScheme<ValidatorId = u16, Signature = Signature>> Val
       return ValidationResult::Discard;
     }
 
-    ValidationResult::ProcessAndKeep(Self::topic::<B>(msg.number().0))
+    ValidationResult::ProcessAndKeep(Self::topic(msg.number().0))
   }
 }
