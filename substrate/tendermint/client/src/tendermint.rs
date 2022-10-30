@@ -30,7 +30,7 @@ use substrate_prometheus_endpoint::Registry;
 
 use tendermint_machine::{
   ext::{BlockError, BlockNumber, Commit, Network},
-  SignedMessage, TendermintMachine, TendermintHandle,
+  SignedMessage, TendermintMachine,
 };
 
 use crate::{
@@ -50,7 +50,6 @@ pub(crate) struct TendermintImport<T: TendermintValidator> {
   number: Arc<RwLock<u64>>,
   gossip_queue: Arc<RwLock<Vec<SignedMessage<u16, T::Block, Signature>>>>,
   importing_block: Arc<RwLock<Option<<T::Block as Block>::Hash>>>,
-  pub(crate) machine: Arc<RwLock<Option<TendermintHandle<Self>>>>,
 
   pub(crate) client: Arc<T::Client>,
   announce: T::Announce,
@@ -167,7 +166,6 @@ impl<T: TendermintValidator> Clone for TendermintImport<T> {
       number: self.number.clone(),
       gossip_queue: self.gossip_queue.clone(),
       importing_block: self.importing_block.clone(),
-      machine: self.machine.clone(),
 
       client: self.client.clone(),
       announce: self.announce.clone(),
@@ -194,7 +192,6 @@ impl<T: TendermintValidator> TendermintImport<T> {
       number: Arc::new(RwLock::new(0)),
       gossip_queue: Arc::new(RwLock::new(vec![])),
       importing_block: Arc::new(RwLock::new(None)),
-      machine: Arc::new(RwLock::new(None)),
 
       client,
       announce,
