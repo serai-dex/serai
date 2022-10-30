@@ -1,6 +1,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 use std::{boxed::Box, sync::Arc};
 =======
 use std::{sync::Arc, future::Future};
@@ -51,6 +52,9 @@ use std::{
   future::Future,
 };
 >>>>>>> 05be5c14 (Misc bug fixes)
+=======
+use std::sync::{Arc, RwLock};
+>>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
 
 use sp_core::H256;
 
@@ -60,8 +64,14 @@ use sc_network::{NetworkService, NetworkBlock};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
+<<<<<<< HEAD
 pub(crate) use serai_consensus::{ExecutorDispatch, Announce, FullClient};
 >>>>>>> 8a682cd2 (Announce blocks)
+=======
+pub(crate) use serai_consensus::{
+  TendermintAuthority, ExecutorDispatch, Announce, FullClient, TendermintValidatorFirm,
+};
+>>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
 
 type FullBackend = sc_service::TFullBackend<Block>;
 <<<<<<< HEAD
@@ -117,7 +127,13 @@ impl Announce<Block> for NetworkAnnounce {
 >>>>>>> 8a682cd2 (Announce blocks)
 pub fn new_partial(
   config: &Configuration,
-) -> Result<((NetworkAnnounce, impl Future<Output = ()>), PartialComponents), ServiceError> {
+) -> Result<
+  (
+    (NetworkAnnounce, TendermintAuthority<TendermintValidatorFirm<NetworkAnnounce>>),
+    PartialComponents,
+  ),
+  ServiceError,
+> {
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
@@ -480,8 +496,12 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     );
 =======
   if is_authority {
+<<<<<<< HEAD
     authority.await;
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
+=======
+    authority.validate().await;
+>>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
   }
 
   network_starter.start_network();
