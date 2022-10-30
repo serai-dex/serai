@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use sp_consensus::{Error, CacheKeyId};
 use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport};
 
-use crate::{types::TendermintAuthor, tendermint::TendermintImport};
+use crate::{types::TendermintValidator, tendermint::TendermintImport};
 
 #[async_trait]
-impl<T: TendermintAuthor> BlockImport<T::Block> for TendermintImport<T>
+impl<T: TendermintValidator> BlockImport<T::Block> for TendermintImport<T>
 where
   Arc<T::Client>: BlockImport<T::Block, Transaction = T::BackendTransaction>,
   <Arc<T::Client> as BlockImport<T::Block>>::Error: Into<Error>,

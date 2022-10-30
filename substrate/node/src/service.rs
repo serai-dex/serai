@@ -1,7 +1,4 @@
-use std::{
-  sync::{Arc, RwLock},
-  future::Future,
-};
+use std::sync::{Arc, RwLock};
 
 use sp_core::H256;
 
@@ -11,7 +8,9 @@ use sc_network::{NetworkService, NetworkBlock};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
-pub(crate) use serai_consensus::{ExecutorDispatch, Announce, FullClient};
+pub(crate) use serai_consensus::{
+  TendermintAuthority, ExecutorDispatch, Announce, FullClient, TendermintValidatorFirm,
+};
 
 type FullBackend = sc_service::TFullBackend<Block>;
 type FullSelectChain = serai_consensus::TendermintSelectChain<Block, FullBackend>;
@@ -42,7 +41,13 @@ impl Announce<Block> for NetworkAnnounce {
 
 pub fn new_partial(
   config: &Configuration,
-) -> Result<((NetworkAnnounce, impl Future<Output = ()>), PartialComponents), ServiceError> {
+) -> Result<
+  (
+    (NetworkAnnounce, TendermintAuthority<TendermintValidatorFirm<NetworkAnnounce>>),
+    PartialComponents,
+  ),
+  ServiceError,
+> {
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
@@ -179,7 +184,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   })?;
 
   if is_authority {
-    authority.await;
+    authority.validate().await;
   }
 
   network_starter.start_network();

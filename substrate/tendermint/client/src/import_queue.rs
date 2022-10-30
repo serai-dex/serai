@@ -1,32 +1,22 @@
 use std::{
-  convert::TryInto,
   pin::Pin,
   sync::{Arc, RwLock},
   task::{Poll, Context},
   future::Future,
-  time::{UNIX_EPOCH, SystemTime},
 };
 
-use sp_core::Decode;
 use sp_runtime::traits::{Header, Block};
-use sp_api::BlockId;
 
 use sp_consensus::Error;
 use sc_consensus::{BlockImportStatus, BlockImportError, BlockImport, Link, BasicQueue};
 
 use sc_service::ImportQueue;
-use sc_client_api::{HeaderBackend, BlockBackend};
 
 use substrate_prometheus_endpoint::Registry;
 
-use tendermint_machine::{
-  ext::{BlockNumber, Commit},
-  TendermintMachine,
-};
-
 use crate::{
-  CONSENSUS_ID, types::TendermintAuthor, validators::TendermintValidators,
-  tendermint::TendermintImport,
+  types::TendermintValidator,
+  tendermint::{TendermintImport, TendermintAuthority},
 };
 
 pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
@@ -77,54 +67,20 @@ impl<'a, B: Block, T: Send> Future for ImportFuture<'a, B, T> {
   }
 }
 
-pub fn import_queue<T: TendermintAuthor>(
+pub fn import_queue<T: TendermintValidator>(
   client: Arc<T::Client>,
   announce: T::Announce,
   providers: Arc<T::CIDP>,
   env: T::Environment,
   spawner: &impl sp_core::traits::SpawnEssentialNamed,
   registry: Option<&Registry>,
-) -> (impl Future<Output = ()>, TendermintImportQueue<T::Block, T::BackendTransaction>)
+) -> (TendermintAuthority<T>, TendermintImportQueue<T::Block, T::BackendTransaction>)
 where
   Arc<T::Client>: BlockImport<T::Block, Transaction = T::BackendTransaction>,
   <Arc<T::Client> as BlockImport<T::Block>>::Error: Into<Error>,
 {
   let import = TendermintImport::<T>::new(client, announce, providers, env);
-
-  let authority = {
-    let machine_clone = import.machine.clone();
-    let mut import_clone = import.clone();
-    let best = import.client.info().best_number;
-    async move {
-      *machine_clone.write().unwrap() = Some(TendermintMachine::new(
-        import_clone.clone(),
-        // TODO
-        0,
-        (
-          // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
-          match TryInto::<u64>::try_into(best) {
-            Ok(best) => BlockNumber(best + 1),
-            Err(_) => panic!("BlockNumber exceeded u64"),
-          },
-          Commit::<TendermintValidators<T>>::decode(
-            &mut import_clone
-              .client
-              .justifications(&BlockId::Number(best))
-              .unwrap()
-              .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
-              .unwrap_or_default()
-              .as_ref(),
-          )
-          .map(|commit| commit.end_time)
-          // TODO: Genesis start time
-          .unwrap_or_else(|_| SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()),
-        ),
-        import_clone
-          .get_proposal(&import_clone.client.header(BlockId::Number(0u8.into())).unwrap().unwrap())
-          .await,
-      ));
-    }
-  };
+  let authority = TendermintAuthority(import.clone());
 
   let boxed = Box::new(import.clone());
   // Use None for the justification importer since justifications always come with blocks

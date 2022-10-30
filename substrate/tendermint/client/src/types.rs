@@ -67,7 +67,7 @@ where
 }
 
 /// Trait consolidating additional generics required by sc_tendermint for authoring.
-pub trait TendermintAuthor: TendermintClient {
+pub trait TendermintValidator: TendermintClient {
   type CIDP: CreateInherentDataProviders<Self::Block, ()> + 'static;
   type Environment: Send + Sync + Environment<Self::Block> + 'static;
 

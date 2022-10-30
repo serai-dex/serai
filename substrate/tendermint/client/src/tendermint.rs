@@ -1,7 +1,7 @@
 use std::{
   marker::PhantomData,
   sync::{Arc, RwLock},
-  time::Duration,
+  time::{UNIX_EPOCH, SystemTime, Duration},
 };
 
 use async_trait::async_trait;
@@ -23,22 +23,22 @@ use sp_consensus::{Error, BlockOrigin, Proposer, Environment};
 use sc_consensus::{ForkChoiceStrategy, BlockImportParams, import_queue::IncomingBlock};
 
 use sc_service::ImportQueue;
-use sc_client_api::Finalizer;
+use sc_client_api::{BlockBackend, Finalizer};
 
 use tendermint_machine::{
-  ext::{BlockError, Commit, Network},
-  SignedMessage, TendermintHandle,
+  ext::{BlockError, BlockNumber, Commit, Network},
+  SignedMessage, TendermintMachine, TendermintHandle,
 };
 
 use crate::{
   CONSENSUS_ID,
-  types::TendermintAuthor,
+  types::TendermintValidator,
   validators::TendermintValidators,
   import_queue::{ImportFuture, TendermintImportQueue},
   Announce,
 };
 
-pub(crate) struct TendermintImport<T: TendermintAuthor> {
+pub(crate) struct TendermintImport<T: TendermintValidator> {
   _ta: PhantomData<T>,
 
   validators: Arc<TendermintValidators<T>>,
@@ -55,7 +55,46 @@ pub(crate) struct TendermintImport<T: TendermintAuthor> {
     Arc<AsyncRwLock<Option<TendermintImportQueue<T::Block, T::BackendTransaction>>>>,
 }
 
-impl<T: TendermintAuthor> Clone for TendermintImport<T> {
+pub struct TendermintAuthority<T: TendermintValidator>(pub(crate) TendermintImport<T>);
+impl<T: TendermintValidator> TendermintAuthority<T> {
+  pub async fn validate(mut self) {
+    let info = self.0.client.info();
+
+    // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
+    let start_number = match TryInto::<u64>::try_into(info.best_number) {
+      Ok(best) => BlockNumber(best + 1),
+      Err(_) => panic!("BlockNumber exceeded u64"),
+    };
+    let start_time = Commit::<TendermintValidators<T>>::decode(
+      &mut self
+        .0
+        .client
+        .justifications(&BlockId::Hash(info.best_hash))
+        .unwrap()
+        .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
+        .unwrap_or_default()
+        .as_ref(),
+    )
+    .map(|commit| commit.end_time)
+    // TODO: Genesis start time
+    .unwrap_or_else(|_| SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
+
+    let proposal = self
+      .0
+      .get_proposal(&self.0.client.header(BlockId::Hash(info.best_hash)).unwrap().unwrap())
+      .await;
+
+    *self.0.machine.write().unwrap() = Some(TendermintMachine::new(
+      self.0.clone(),
+      // TODO
+      0, // ValidatorId
+      (start_number, start_time),
+      proposal,
+    ));
+  }
+}
+
+impl<T: TendermintValidator> Clone for TendermintImport<T> {
   fn clone(&self) -> Self {
     TendermintImport {
       _ta: PhantomData,
@@ -75,7 +114,7 @@ impl<T: TendermintAuthor> Clone for TendermintImport<T> {
   }
 }
 
-impl<T: TendermintAuthor> TendermintImport<T> {
+impl<T: TendermintValidator> TendermintImport<T> {
   pub(crate) fn new(
     client: Arc<T::Client>,
     announce: T::Announce,
@@ -254,7 +293,7 @@ impl<T: TendermintAuthor> TendermintImport<T> {
 }
 
 #[async_trait]
-impl<T: TendermintAuthor> Network for TendermintImport<T> {
+impl<T: TendermintValidator> Network for TendermintImport<T> {
   type ValidatorId = u16;
   type SignatureScheme = TendermintValidators<T>;
   type Weights = TendermintValidators<T>;
