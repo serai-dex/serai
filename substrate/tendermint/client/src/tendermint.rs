@@ -61,11 +61,11 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     let info = self.0.client.info();
 
     // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
-    let start_number = match TryInto::<u64>::try_into(info.best_number) {
-      Ok(best) => BlockNumber(best + 1),
+    let last_number = match info.best_number.try_into() {
+      Ok(best) => BlockNumber(best),
       Err(_) => panic!("BlockNumber exceeded u64"),
     };
-    let start_time = Commit::<TendermintValidators<T>>::decode(
+    let last_time = Commit::<TendermintValidators<T>>::decode(
       &mut self
         .0
         .client
@@ -76,7 +76,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         .as_ref(),
     )
     .map(|commit| commit.end_time)
-    // TODO: Genesis start time
+    // TODO: Genesis start time + BLOCK_TIME
     .unwrap_or_else(|_| SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
 
     let proposal = self
@@ -88,7 +88,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       self.0.clone(),
       // TODO
       0, // ValidatorId
-      (start_number, start_time),
+      (last_number, last_time),
       proposal,
     ));
   }

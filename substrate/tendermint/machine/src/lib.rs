@@ -242,24 +242,32 @@ impl<N: Network + 'static> TendermintMachine<N> {
   pub fn new(
     network: N,
     proposer: N::ValidatorId,
-    start: (BlockNumber, u64),
+    last: (BlockNumber, u64),
     proposal: N::Block,
   ) -> TendermintHandle<N> {
-    // Convert the start time to an instant
-    // This is imprecise yet should be precise enough
-    let start_time = {
-      let instant_now = Instant::now();
-      let sys_now = SystemTime::now();
-      instant_now -
-        sys_now
-          .duration_since(UNIX_EPOCH + Duration::from_secs(start.1))
-          .unwrap_or(Duration::ZERO)
-    };
-
     let (msg_send, mut msg_recv) = mpsc::channel(100); // Backlog to accept. Currently arbitrary
     TendermintHandle {
       messages: msg_send,
       handle: tokio::spawn(async move {
+        let last_end = UNIX_EPOCH + Duration::from_secs(last.1);
+
+        // If the last block hasn't ended yet, sleep until it has
+        {
+          let now = SystemTime::now();
+          if last_end > now {
+            sleep(last_end.duration_since(now).unwrap_or(Duration::ZERO)).await;
+          }
+        }
+
+        // Convert the last time to an instant
+        // This is imprecise yet should be precise enough, given this library only has
+        // second accuracy
+        let last_time = {
+          let instant_now = Instant::now();
+          let sys_now = SystemTime::now();
+          instant_now - sys_now.duration_since(last_end).unwrap_or(Duration::ZERO)
+        };
+
         let signer = network.signature_scheme();
         let weights = network.weights();
         let network = Arc::new(RwLock::new(network));
@@ -270,9 +278,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
           weights: weights.clone(),
           proposer,
 
-          number: start.0,
-          canonical_start_time: start.1,
-          start_time,
+          number: BlockNumber(last.0.0 + 1),
+          canonical_start_time: last.1,
+          // The end time of the last block is the start time for this one
+          // The Commit explicitly contains the end time, so loading the last commit will provide
+          // this. The only exception is for the genesis block, which doesn't have a commit
+          // Using the genesis time in place will cause this block to be created immediately after
+          // it, without the standard amount of separation (so their times will be equivalent or
+          // minimally offset)
+          // For callers wishing to avoid this, they should pass (0, GENESIS + BLOCK_TIME)
+          start_time: last_time,
           personal_proposal: proposal,
 
           queue: vec![],
