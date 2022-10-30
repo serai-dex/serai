@@ -3,7 +3,7 @@ use std::{sync::Arc, collections::HashMap};
 use async_trait::async_trait;
 
 use sp_consensus::{Error, CacheKeyId};
-use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport};
+use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport, Verifier};
 
 use crate::{types::TendermintValidator, tendermint::TendermintImport};
 
@@ -43,5 +43,20 @@ where
 
     // TODO: If we're a validator who just successfully synced a block, recreate the tendermint
     // machine with the new height
+  }
+}
+
+#[async_trait]
+impl<T: TendermintValidator> Verifier<T::Block> for TendermintImport<T>
+where
+  Arc<T::Client>: BlockImport<T::Block, Transaction = T::BackendTransaction>,
+  <Arc<T::Client> as BlockImport<T::Block>>::Error: Into<Error>,
+{
+  async fn verify(
+    &mut self,
+    mut block: BlockImportParams<T::Block, ()>,
+  ) -> Result<(BlockImportParams<T::Block, ()>, Option<Vec<(CacheKeyId, Vec<u8>)>>), String> {
+    self.check(&mut block).await.map_err(|e| format!("{}", e))?;
+    Ok((block, None))
   }
 }

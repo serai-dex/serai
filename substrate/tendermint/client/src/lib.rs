@@ -22,7 +22,6 @@ mod validators;
 mod tendermint;
 pub use tendermint::TendermintAuthority;
 mod block_import;
-mod verifier;
 
 mod import_queue;
 use import_queue::TendermintImportQueue;
