@@ -497,11 +497,19 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
 =======
   if is_authority {
 <<<<<<< HEAD
+<<<<<<< HEAD
     authority.await;
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
 =======
     authority.validate().await;
 >>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
+=======
+    task_manager.spawn_essential_handle().spawn(
+      "tendermint",
+      None,
+      authority.validate(network, None),
+    );
+>>>>>>> 6c54289f (Connect the Tendermint machine to a GossipEngine)
   }
 
   network_starter.start_network();
