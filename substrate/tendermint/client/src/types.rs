@@ -8,6 +8,7 @@ use sp_consensus::Environment;
 use sc_consensus::BlockImport;
 
 use sc_client_api::{BlockBackend, Backend, Finalizer};
+use sc_network_gossip::Network;
 
 use sp_tendermint::TendermintApi;
 
@@ -71,5 +72,6 @@ pub trait TendermintValidator: TendermintClient {
   type CIDP: CreateInherentDataProviders<Self::Block, ()> + 'static;
   type Environment: Send + Sync + Environment<Self::Block> + 'static;
 
+  type Network: Clone + Send + Sync + Network<Self::Block> + 'static;
   type Announce: Announce<Self::Block>;
 }

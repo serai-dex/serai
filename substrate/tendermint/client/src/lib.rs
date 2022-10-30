@@ -7,6 +7,7 @@ use sp_api::{TransactionFor, ProvideRuntimeApi};
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
+use sc_network::NetworkService;
 use sc_service::{TaskManager, TFullClient};
 
 use substrate_prometheus_endpoint::Registry;
@@ -26,7 +27,7 @@ mod verifier;
 mod import_queue;
 use import_queue::TendermintImportQueue;
 
-mod gossip;
+pub(crate) mod gossip;
 
 mod select_chain;
 pub use select_chain::TendermintSelectChain;
@@ -85,6 +86,7 @@ impl<A: Announce<Block>> TendermintValidator for TendermintValidatorFirm<A> {
     DisableProofRecording,
   >;
 
+  type Network = Arc<NetworkService<Block, <Block as BlockTrait>::Hash>>;
   type Announce = A;
 }
 

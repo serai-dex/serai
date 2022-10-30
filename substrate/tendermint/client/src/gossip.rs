@@ -9,9 +9,21 @@ use sc_network_gossip::{Validator, ValidatorContext, ValidationResult};
 use tendermint_machine::{SignedMessage, ext::SignatureScheme};
 
 #[derive(Clone)]
-struct TendermintGossip<S: SignatureScheme<ValidatorId = u16, Signature = Signature>> {
+pub struct TendermintGossip<S: SignatureScheme<ValidatorId = u16, Signature = Signature>> {
   number: Arc<RwLock<u64>>,
   signature_scheme: Arc<S>,
+}
+
+impl<S: SignatureScheme<ValidatorId = u16, Signature = Signature>> TendermintGossip<S> {
+  pub(crate) fn new(number: Arc<RwLock<u64>>, signature_scheme: Arc<S>) -> TendermintGossip<S> {
+    TendermintGossip { number, signature_scheme }
+  }
+
+  pub(crate) fn topic<B: Block>(number: u64) -> B::Hash {
+    <<B::Header as Header>::Hashing as Hash>::hash(
+      &[b"Tendermint Block Topic".as_ref(), &number.to_le_bytes()].concat(),
+    )
+  }
 }
 
 impl<B: Block, S: SignatureScheme<ValidatorId = u16, Signature = Signature>> Validator<B>
@@ -36,8 +48,6 @@ impl<B: Block, S: SignatureScheme<ValidatorId = u16, Signature = Signature>> Val
       return ValidationResult::Discard;
     }
 
-    ValidationResult::ProcessAndKeep(<<B::Header as Header>::Hashing as Hash>::hash(
-      &[b"Tendermint Topic".as_ref(), &msg.number().0.to_le_bytes()].concat(),
-    ))
+    ValidationResult::ProcessAndKeep(Self::topic::<B>(msg.number().0))
   }
 }

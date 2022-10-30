@@ -184,7 +184,11 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   })?;
 
   if is_authority {
-    authority.validate().await;
+    task_manager.spawn_essential_handle().spawn(
+      "tendermint",
+      None,
+      authority.validate(network, None),
+    );
   }
 
   network_starter.start_network();
