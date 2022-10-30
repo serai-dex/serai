@@ -1,0 +1,14 @@
+[core]
+core_host = "0.0.0.0"
+core_port = "1337"
+
+[chains]
+chain_btc = true
+chain_btc_rpc = ""
+chain_eth = true
+chain_eth_rpc = ""
+chain_xmr = true
+chain_xmr_rpc = ""
+
+[health]
+logger = "debug"

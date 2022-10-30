@@ -9,6 +9,7 @@ use std::time::Duration;
 use clap::{value_t, App, Arg};
 
 use crate::core::CoordinatorConfig;
+use crate::core::CoreProcess;
 
 #[tokio::main]
 async fn main() {
@@ -27,9 +28,9 @@ async fn main() {
                 .default_value("Development"),
         )
         .arg(
-            Arg::with_name("config")
-                .short("c")
-                .long("config")
+            Arg::with_name("config_dir")
+                .short("cd")
+                .long("config_dir")
                 .help(
                     "The path that the coordinator can find relevant config files.
                      Default: ./config/")
@@ -39,17 +40,17 @@ async fn main() {
         .get_matches();
 
     // Load Config / Chains
-    let path_arg = args.value_of("config").unwrap();
-    let result = CoordinatorConfig::new(String::from(path_arg));
-    let config = match result {
-        Ok(config) => config,
-        Err(err) => {
-            println!("Error loading config: {}", err);
-            return;
-        }
-    };
+    let path_arg = args.value_of("config_dir").unwrap();
+    let config = CoordinatorConfig::new(String::from(path_arg)).unwrap();
 
-    // Setup Logger
+    // Processes then use configs to create themselves
+
+    // Start Core Process
+    tokio::spawn(async move {
+        let core_process = CoreProcess::new(config);
+        core_process.start();
+    });
+
 
     // Initial Heartbeat to Processors
     //  * version check
@@ -60,8 +61,6 @@ async fn main() {
     // Start Health Monitor
 
     // Start Network Broker
-
-    // Start Persistence
 
     // Hang on cli
 
