@@ -6879,6 +6879,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-network-gossip"
+version = "0.10.0-dev"
+source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
+dependencies = [
+ "ahash",
+ "futures",
+ "futures-timer",
+ "libp2p",
+ "log",
+ "lru 0.7.8",
+ "sc-network-common",
+ "sc-peerset",
+ "sp-runtime",
+ "substrate-prometheus-endpoint",
+ "tracing",
+]
+
+[[package]]
 name = "sc-network-light"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
@@ -7521,6 +7539,7 @@ dependencies = [
  "sc-consensus",
  "sc-executor",
  "sc-network",
+ "sc-network-gossip",
  "sc-service",
  "sc-transaction-pool",
  "serai-runtime",

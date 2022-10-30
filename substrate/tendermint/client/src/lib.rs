@@ -20,6 +20,8 @@ mod verifier;
 mod import_queue;
 use import_queue::TendermintImportQueue;
 
+mod gossip;
+
 mod select_chain;
 pub use select_chain::TendermintSelectChain;
 

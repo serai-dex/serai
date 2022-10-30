@@ -81,6 +81,21 @@ pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
   sig: S,
 }
 
+impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
+  /// Number of the block this message is attempting to add to the chain.
+  pub fn number(&self) -> BlockNumber {
+    self.msg.number
+  }
+
+  #[must_use]
+  pub fn verify_signature<Scheme: SignatureScheme<ValidatorId = V, Signature = S>>(
+    &self,
+    signer: &Arc<Scheme>,
+  ) -> bool {
+    signer.verify(self.msg.sender, &self.msg.encode(), &self.sig)
+  }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum TendermintError<V: ValidatorId> {
   Malicious(V),
@@ -302,7 +317,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           loop {
             match msg_recv.try_recv() {
               Ok(msg) => {
-                if !machine.signer.verify(msg.msg.sender, &msg.msg.encode(), &msg.sig) {
+                if !msg.verify_signature(&machine.signer) {
                   continue;
                 }
                 machine.queue.push((false, msg.msg));
