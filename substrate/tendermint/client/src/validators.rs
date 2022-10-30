@@ -24,8 +24,8 @@ struct TendermintValidatorsStruct {
   total_weight: u64,
   weights: Vec<u64>,
 
-  keys: Pair,          // TODO: sp_keystore
-  lookup: Vec<Public>, // TODO: sessions
+  keys: Pair, // TODO: sp_keystore
+  lookup: Vec<Public>,
 }
 
 impl TendermintValidatorsStruct {

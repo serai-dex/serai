@@ -1,4 +1,5 @@
 use std::{
+  convert::TryInto,
   pin::Pin,
   sync::{Arc, RwLock},
   task::{Poll, Context},
@@ -115,8 +116,8 @@ where
         0,
         (
           // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
-          match best.try_into() {
-            Ok(best) => BlockNumber(best),
+          match TryInto::<u64>::try_into(best) {
+            Ok(best) => BlockNumber(best + 1),
             Err(_) => panic!("BlockNumber exceeded u64"),
           },
           Commit::<TendermintValidators<B, Be, C>>::decode(

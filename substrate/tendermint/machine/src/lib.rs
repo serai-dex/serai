@@ -157,7 +157,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   fn timeout(&self, step: Step) -> Instant {
     let mut round_time = Duration::from_secs(N::BLOCK_TIME.into());
     round_time *= self.round.0 + 1;
-    let step_time = round_time / 3;
+    let step_time = round_time / 3; // TODO: Non-uniform timeouts
 
     let offset = match step {
       Step::Propose => step_time,
