@@ -1,7 +1,6 @@
 use std::{str::FromStr, collections::HashMap};
 
 use async_trait::async_trait;
-
 use curve25519_dalek::scalar::Scalar as OtherScalar;
 
 use dalek_ff_group as dfg;
@@ -17,7 +16,6 @@ use monero_serai::{
     SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
-
 
 use bitcoincore_rpc::{bitcoin::{self, hashes::hex::FromHex}, Auth, Client, RpcApi };
 use bitcoin::util::address::Address;
@@ -51,11 +49,9 @@ impl Hram<Secp256k1> for BitcoinHram {
     data.update(&m[..]);
 
     let res_data = data.finalize();
-    let scalar_test  = Scalar::from_uint_reduced(U256::from_be_slice(&res_data));
-    return scalar_test;
+    Scalar::from_uint_reduced(U256::from_be_slice(&res_data))
   }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -252,7 +248,6 @@ impl Coin for Bitcoin {
   }
 }
 
-
 #[test]
 fn test_signing() {
   use frost::{
@@ -269,7 +264,6 @@ fn test_signing() {
     dbg!(id);
     dbg!(one_key);
   }
-
 
   let _group_key = keys[&1].group_key();
   
