@@ -67,6 +67,12 @@ where
   }
 }
 
+/// Tendermint's Select Chain, where the best chain is defined as the most recently finalized
+/// block.
+///
+/// leaves panics on call due to not being applicable under Tendermint. Any provided answer would
+/// have conflicts best left unraised.
+//
 // SelectChain, while provided by Substrate and part of PartialComponents, isn't used by Substrate
 // It's common between various block-production/finality crates, yet Substrate as a system doesn't
 // rely on it, which is good, because its definition is explicitly incompatible with Tendermint

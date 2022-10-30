@@ -22,6 +22,7 @@ use crate::{
   authority::TendermintAuthority,
 };
 
+/// Tendermint import handler.
 pub struct TendermintImport<T: TendermintValidator> {
   _ta: PhantomData<T>,
 

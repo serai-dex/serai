@@ -79,6 +79,7 @@ impl<T: TendermintClient> Deref for Refresh<T> {
   }
 }
 
+/// Tendermint validators observer, providing data on the active validators.
 pub struct TendermintValidators<T: TendermintClient>(Refresh<T>);
 
 impl<T: TendermintClient> TendermintValidators<T> {

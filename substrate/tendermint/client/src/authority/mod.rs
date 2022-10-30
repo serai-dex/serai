@@ -62,12 +62,14 @@ struct ActiveAuthority<T: TendermintValidator> {
   announce: T::Network,
 }
 
+/// Tendermint Authority. Participates in the block proposal and voting process.
 pub struct TendermintAuthority<T: TendermintValidator> {
   import: TendermintImport<T>,
   active: Option<ActiveAuthority<T>>,
 }
 
 impl<T: TendermintValidator> TendermintAuthority<T> {
+  /// Create a new TendermintAuthority.
   pub fn new(import: TendermintImport<T>) -> Self {
     Self { import, active: None }
   }

@@ -102,6 +102,8 @@ pub trait TendermintValidator: TendermintClient {
 
 pub type TendermintImportQueue<Block, Transaction> = BasicQueue<Block, Transaction>;
 
+/// Create an import queue, additionally returning the Tendermint Import object iself, enabling
+/// creating an author later as well.
 pub fn import_queue<T: TendermintValidator>(
   spawner: &impl sp_core::traits::SpawnEssentialNamed,
   client: Arc<T::Client>,
