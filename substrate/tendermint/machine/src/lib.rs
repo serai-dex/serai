@@ -278,7 +278,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           weights: weights.clone(),
           proposer,
 
-          number: BlockNumber(last.0.0 + 1),
+          number: BlockNumber(last.0 .0 + 1),
           canonical_start_time: last.1,
           // The end time of the last block is the start time for this one
           // The Commit explicitly contains the end time, so loading the last commit will provide
