@@ -2,6 +2,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 use std::{boxed::Box, sync::Arc};
 =======
 use std::{sync::Arc, future::Future};
@@ -57,10 +58,12 @@ use std::sync::{Arc, RwLock};
 >>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
 
 use sp_core::H256;
+=======
+use std::sync::Arc;
+>>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
 
 use sc_executor::NativeElseWasmExecutor;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
-use sc_network::{NetworkService, NetworkBlock};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{self, opaque::Block, RuntimeApi};
@@ -69,7 +72,7 @@ pub(crate) use serai_consensus::{ExecutorDispatch, Announce, FullClient};
 >>>>>>> 8a682cd2 (Announce blocks)
 =======
 pub(crate) use serai_consensus::{
-  TendermintAuthority, ExecutorDispatch, Announce, FullClient, TendermintValidatorFirm,
+  TendermintImport, TendermintAuthority, ExecutorDispatch, FullClient, TendermintValidatorFirm,
 };
 >>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
 
@@ -101,6 +104,7 @@ type PartialComponents = sc_service::PartialComponents<
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 fn create_inherent_data_providers(
   slot_duration: SlotDuration,
 ) -> (BabeInherent, TimestampInherent) {
@@ -125,15 +129,11 @@ impl Announce<Block> for NetworkAnnounce {
 }
 
 >>>>>>> 8a682cd2 (Announce blocks)
+=======
+>>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
 pub fn new_partial(
   config: &Configuration,
-) -> Result<
-  (
-    (NetworkAnnounce, TendermintAuthority<TendermintValidatorFirm<NetworkAnnounce>>),
-    PartialComponents,
-  ),
-  ServiceError,
-> {
+) -> Result<(TendermintImport<TendermintValidatorFirm>, PartialComponents), ServiceError> {
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
@@ -185,6 +185,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
     &client,
@@ -231,9 +232,11 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   let (authority, import_queue) = serai_consensus::import_queue(
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
     &task_manager,
+=======
+  let (authority, import_queue) = serai_consensus::import_queue(
+    &task_manager.spawn_essential_handle(),
+>>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
     client.clone(),
-    announce.clone(),
-    transaction_pool.clone(),
     config.prometheus_registry(),
 <<<<<<< HEAD
   )?;
@@ -276,7 +279,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   } = new_partial(&config)?;
 =======
   Ok((
-    (announce, authority),
+    authority,
     sc_service::PartialComponents {
       client,
       backend,
@@ -292,7 +295,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
 
 pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
   let (
-    (announce, authority),
+    authority,
     sc_service::PartialComponents {
       client,
       backend,
@@ -332,7 +335,6 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       block_announce_validator_builder: None,
       warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
     })?;
-  *announce.0.write().unwrap() = Some(network.clone());
 
   if config.offchain_worker.enabled {
     task_manager.spawn_handle().spawn(
@@ -382,6 +384,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   let is_authority = config.role.is_authority();
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
 
+  let registry = config.prometheus_registry().cloned();
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     config,
     backend,
@@ -507,7 +510,18 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     task_manager.spawn_essential_handle().spawn(
       "tendermint",
       None,
-      authority.validate(network, None),
+      TendermintAuthority::new(authority).authority(
+        serai_consensus::Cidp,
+        sc_basic_authorship::ProposerFactory::new(
+          task_manager.spawn_handle(),
+          client,
+          transaction_pool,
+          registry.as_ref(),
+          telemetry.map(|telemtry| telemtry.handle()),
+        ),
+        network,
+        None,
+      ),
     );
 >>>>>>> 6c54289f (Connect the Tendermint machine to a GossipEngine)
   }

@@ -8911,7 +8911,10 @@ dependencies = [
  "pallet-transaction-payment",
 >>>>>>> fa7a03bf (Update node to use pallet sessions)
  "pallet-transaction-payment-rpc",
+<<<<<<< HEAD
  "sc-authority-discovery",
+=======
+>>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
  "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
