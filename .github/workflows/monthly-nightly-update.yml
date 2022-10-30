@@ -17,7 +17,6 @@ jobs:
         run: echo $(date +"nightly-%Y-%m"-01) > .github/nightly-version
 
       - name: Create the commit
-        id: commit
         run: |
           git config user.name "GitHub Actions"
           git config user.email "<>"
@@ -27,8 +26,6 @@ jobs:
           git add .github/nightly-version
           git commit -m "Update nightly"
           git push -u origin $(date +"nightly-%Y-%m")
-
-          echo "::set-output name=commit::$(git rev-parse HEAD)"
 
       - name: Pull Request
         uses: actions/github-script@v6

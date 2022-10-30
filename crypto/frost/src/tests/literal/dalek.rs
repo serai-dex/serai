@@ -5,7 +5,7 @@ use crate::{
   tests::vectors::{Vectors, test_with_vectors},
 };
 
-#[cfg(any(test, feature = "ristretto"))]
+#[cfg(feature = "ristretto")]
 #[test]
 fn ristretto_vectors() {
   test_with_vectors::<_, curve::Ristretto, curve::IetfRistrettoHram>(
