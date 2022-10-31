@@ -38,6 +38,14 @@ solc-select install 0.8.16
 solc-select use 0.8.16
 ```
 
+### Install Solidity Compiler Version Manager
+
+```
+cargo install svm-rs
+svm install 0.8.16
+svm use 0.8.16
+```
+
 ### Install foundry and anvil (for tests)
 
 ```
