@@ -5,6 +5,8 @@ Bitcoin, Ethereum, Monero, DAI, and USDC, offering a liquidity pool trading
 experience. Funds are stored in an economically secured threshold multisig
 wallet.
 
+###[Getting Started](docs/Getting%20Started.md)
+
 ### Layout
 
 - `docs`: Documentation on the Serai protocol.
