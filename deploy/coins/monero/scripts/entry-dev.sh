@@ -5,10 +5,10 @@ RPC_PASS="${RPC_PASS:=seraidex}"
 BLOCK_TIME=${BLOCK_TIME:=5}
 
 # Run Monero
-monerod --regtest --rpc-login ${RPC_USER}:${RPC_PASS} \
---rpc-access-control-origins * --confirm-external-bind \
+# TODO: Restore Auth
+monerod --regtest --rpc-access-control-origins * --confirm-external-bind \
 --rpc-bind-ip=0.0.0.0 --offline --fixed-difficulty=1 \
---non-interactive --mining-threads 1 --bg-mining-enable --detach
+--non-interactive --mining-threads 1 --detach
 
 # give time to monerod to start
 while true; do
