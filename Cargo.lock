@@ -7328,6 +7328,7 @@ dependencies = [
  "async-trait",
  "futures",
  "log",
+ "sc-block-builder",
  "sc-client-api",
  "sc-consensus",
  "sc-executor",
@@ -8884,6 +8885,7 @@ dependencies = [
  "async-trait",
  "parity-scale-codec",
  "sp-runtime",
+ "thiserror",
  "tokio",
 ]
 

@@ -37,6 +37,7 @@ sc-network = { git = "https://github.com/serai-dex/substrate" }
 sc-network-gossip = { git = "https://github.com/serai-dex/substrate" }
 sc-service = { git = "https://github.com/serai-dex/substrate" }
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
+sc-block-builder = { git = "https://github.com/serai-dex/substrate" }
 sc-consensus = { git = "https://github.com/serai-dex/substrate" }
 
 substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate" }

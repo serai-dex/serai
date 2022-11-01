@@ -2,6 +2,7 @@ use core::{hash::Hash, fmt::Debug};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use thiserror::Error;
 
 use parity_scale_codec::{Encode, Decode};
 
@@ -97,12 +98,14 @@ pub trait Weights: Send + Sync {
 }
 
 /// Simplified error enum representing a block's validity.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error, Encode, Decode)]
 pub enum BlockError {
   /// Malformed block which is wholly invalid.
+  #[error("invalid block")]
   Fatal,
   /// Valid block by syntax, with semantics which may or may not be valid yet are locally
   /// considered invalid. If a block fails to validate with this, a slash will not be triggered.
+  #[error("invalid block under local view")]
   Temporal,
 }
 

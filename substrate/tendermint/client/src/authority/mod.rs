@@ -10,7 +10,6 @@ use log::warn;
 use tokio::task::yield_now;
 
 use sp_core::{Encode, Decode};
-use sp_inherents::{InherentData, InherentDataProvider, CreateInherentDataProviders};
 use sp_runtime::{
   traits::{Header, Block},
   Digest,
@@ -105,29 +104,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
   }
 
   pub(crate) async fn get_proposal(&mut self, header: &<T::Block as Block>::Header) -> T::Block {
-    let inherent_data = match self
-      .import
-      .providers
-      .read()
-      .await
-      .as_ref()
-      .unwrap()
-      .create_inherent_data_providers(header.hash(), ())
-      .await
-    {
-      Ok(providers) => match providers.create_inherent_data() {
-        Ok(data) => Some(data),
-        Err(err) => {
-          warn!(target: "tendermint", "Failed to create inherent data: {}", err);
-          None
-        }
-      },
-      Err(err) => {
-        warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
-        None
-      }
-    }
-    .unwrap_or_else(InherentData::new);
+    let parent = *header.parent_hash();
 
     let proposer = self
       .active
@@ -137,9 +114,15 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       .init(header)
       .await
       .expect("Failed to create a proposer for the new block");
-    // TODO: Production time, size limit
+
     proposer
-      .propose(inherent_data, Digest::default(), Duration::from_secs(1), None)
+      .propose(
+        self.import.inherent_data(parent).await,
+        Digest::default(),
+        // TODO: Production time, size limit
+        Duration::from_secs(1),
+        None,
+      )
       .await
       .expect("Failed to crate a new block proposal")
       .block
@@ -316,9 +299,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
       }],
     );
 
-    if !ImportFuture::new(hash, queue_write.as_mut().unwrap()).await {
-      todo!()
-    }
+    ImportFuture::new(hash, queue_write.as_mut().unwrap()).await?;
 
     // Sanity checks that a child block can have less work than its parent
     {

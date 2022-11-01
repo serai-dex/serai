@@ -3,6 +3,8 @@ use std::{
   sync::{Arc, RwLock},
 };
 
+use log::warn;
+
 use tokio::sync::RwLock as AsyncRwLock;
 
 use sp_core::Decode;
@@ -10,12 +12,16 @@ use sp_runtime::{
   traits::{Header, Block},
   Justification,
 };
+use sp_inherents::{InherentData, InherentDataProvider, CreateInherentDataProviders};
 use sp_blockchain::HeaderBackend;
+use sp_api::{BlockId, ProvideRuntimeApi};
 
 use sp_consensus::Error;
 use sc_consensus::{ForkChoiceStrategy, BlockImportParams};
 
-use tendermint_machine::ext::{Commit, Network};
+use sc_block_builder::BlockBuilderApi;
+
+use tendermint_machine::ext::{BlockError, Commit, Network};
 
 use crate::{
   CONSENSUS_ID, TendermintValidator, validators::TendermintValidators, TendermintImportQueue,
@@ -67,9 +73,46 @@ impl<T: TendermintValidator> TendermintImport<T> {
     }
   }
 
+  pub(crate) async fn inherent_data(&self, parent: <T::Block as Block>::Hash) -> InherentData {
+    match self
+      .providers
+      .read()
+      .await
+      .as_ref()
+      .unwrap()
+      .create_inherent_data_providers(parent, ())
+      .await
+    {
+      Ok(providers) => match providers.create_inherent_data() {
+        Ok(data) => Some(data),
+        Err(err) => {
+          warn!(target: "tendermint", "Failed to create inherent data: {}", err);
+          None
+        }
+      },
+      Err(err) => {
+        warn!(target: "tendermint", "Failed to create inherent data providers: {}", err);
+        None
+      }
+    }
+    .unwrap_or_else(InherentData::new)
+  }
+
   async fn check_inherents(&self, block: T::Block) -> Result<(), Error> {
-    // TODO
-    Ok(())
+    let inherent_data = self.inherent_data(*block.header().parent_hash()).await;
+    let err = self
+      .client
+      .runtime_api()
+      .check_inherents(&BlockId::Hash(self.client.info().finalized_hash), block, inherent_data)
+      .map_err(|_| Error::Other(BlockError::Fatal.into()))?;
+
+    if err.ok() {
+      Ok(())
+    } else if err.fatal_error() {
+      Err(Error::Other(BlockError::Fatal.into()))
+    } else {
+      Err(Error::Other(BlockError::Temporal.into()))
+    }
   }
 
   // Ensure this is part of a sequential import

@@ -8,9 +8,11 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+async-trait = "0.1"
+thiserror = "1"
+
 parity-scale-codec = { version = "3.2", features = ["derive"] }
 
-async-trait = "0.1"
 tokio = { version = "1", features = ["macros", "sync", "time", "rt"] }
 
 sp-runtime = { git = "https://github.com/serai-dex/substrate", optional = true }

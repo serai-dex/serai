@@ -7,6 +7,7 @@ use sp_api::{StateBackend, StateBackendFor, TransactionFor, ApiExt, ProvideRunti
 use sp_consensus::{Error, Environment};
 
 use sc_client_api::{BlockBackend, Backend, Finalizer};
+use sc_block_builder::BlockBuilderApi;
 use sc_consensus::{BlockImport, BasicQueue};
 use sc_network::NetworkBlock;
 use sc_network_gossip::Network;
@@ -43,7 +44,9 @@ pub trait TendermintClient: Send + Sync + 'static {
     Transaction = Self::BackendTransaction,
   >;
   // Client::Api
-  type Api: ApiExt<Self::Block, StateBackend = Self::StateBackend> + TendermintApi<Self::Block>;
+  type Api: ApiExt<Self::Block, StateBackend = Self::StateBackend>
+    + BlockBuilderApi<Self::Block>
+    + TendermintApi<Self::Block>;
   type Client: Send
     + Sync
     + HeaderBackend<Self::Block>
@@ -60,7 +63,7 @@ pub trait TendermintClientMinimal: Send + Sync + 'static {
 
   type Block: Block;
   type Backend: Backend<Self::Block> + 'static;
-  type Api: ApiExt<Self::Block> + TendermintApi<Self::Block>;
+  type Api: ApiExt<Self::Block> + BlockBuilderApi<Self::Block> + TendermintApi<Self::Block>;
   type Client: Send
     + Sync
     + HeaderBackend<Self::Block>
@@ -73,7 +76,8 @@ pub trait TendermintClientMinimal: Send + Sync + 'static {
 
 impl<T: TendermintClientMinimal> TendermintClient for T
 where
-  <T::Client as ProvideRuntimeApi<T::Block>>::Api: TendermintApi<T::Block>,
+  <T::Client as ProvideRuntimeApi<T::Block>>::Api:
+    BlockBuilderApi<T::Block> + TendermintApi<T::Block>,
   TransactionFor<T::Client, T::Block>: Send + Sync + 'static,
 {
   const BLOCK_TIME_IN_SECONDS: u32 = T::BLOCK_TIME_IN_SECONDS;
