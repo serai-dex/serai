@@ -41,7 +41,7 @@ pub trait Curve: Ciphersuite {
 
   /// Hash the given dst and data to a byte vector. Used to instantiate H4 and H5.
   fn hash_to_vec(dst: &[u8], data: &[u8]) -> Vec<u8> {
-    Self::H::digest(&[Self::CONTEXT, dst, data].concat()).as_ref().to_vec()
+    Self::H::digest([Self::CONTEXT, dst, data].concat()).as_ref().to_vec()
   }
 
   /// Field element from hash. Used during key gen and by other crates under Serai as a general

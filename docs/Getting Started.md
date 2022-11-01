@@ -1,11 +1,11 @@
 # Getting Started
-
+## Run Serai Node Locally
 ### System Dependencies
 
 ##### Ubuntu
 
 ```
-sudo apt-get install -y build-essential cmake clang-11 git curl python3-pip protobuf-compiler
+sudo apt-get install -y build-essential cmake clang-11 git curl python3-pip protobuf-compiler libssl-dev pkg-config
 ```
 
 ### Install rustup
@@ -38,6 +38,14 @@ solc-select install 0.8.16
 solc-select use 0.8.16
 ```
 
+### Install Solidity Compiler Version Manager
+
+```
+cargo install svm-rs
+svm install 0.8.16
+svm use 0.8.16
+```
+
 ### Install foundry and anvil (for tests)
 
 ```
@@ -65,3 +73,11 @@ cargo test --all-features
 ```
 ./target/release/serai-node --dev
 ```
+
+## Run Serai with Orchestration
+
+In the deploy directory, you can find our orchestration components for running the entire infrastructure of Serai in a local environment using Docker Compose or Kubernetes.
+
+[Run Serai with Docker Compose](../deploy/README.md)
+
+[Run Serai with Kubernetes](../deploy/kubernetes/README.md)
