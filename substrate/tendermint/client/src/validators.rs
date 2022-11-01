@@ -1,6 +1,8 @@
 use core::{marker::PhantomData, ops::Deref};
 use std::sync::{Arc, RwLock};
 
+use async_trait::async_trait;
+
 use sp_application_crypto::{
   RuntimePublic as PublicTrait, Pair as PairTrait,
   sr25519::{Public, Pair, Signature},
@@ -92,12 +94,13 @@ impl<T: TendermintClient> TendermintValidators<T> {
   }
 }
 
+#[async_trait]
 impl<T: TendermintClient> SignatureScheme for TendermintValidators<T> {
   type ValidatorId = u16;
   type Signature = Signature;
   type AggregateSignature = Vec<Signature>;
 
-  fn sign(&self, msg: &[u8]) -> Signature {
+  async fn sign(&self, msg: &[u8]) -> Signature {
     self.0.read().unwrap().keys.sign(msg)
   }
 
