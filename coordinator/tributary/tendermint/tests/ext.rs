@@ -18,16 +18,25 @@ use tendermint_machine::{
 type TestValidatorId = u16;
 type TestBlockId = [u8; 4];
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 struct TestSigner(u16);
 #[async_trait]
 impl Signer for TestSigner {
+=======
+struct TestSignatureScheme(u16);
+#[async_trait]
+impl SignatureScheme for TestSignatureScheme {
+>>>>>>> 2947ef08 (Make sign asynchronous):substrate/tendermint/machine/tests/ext.rs
   type ValidatorId = TestValidatorId;
   type Signature = [u8; 32];
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
   async fn validator_id(&self) -> Option<TestValidatorId> {
     Some(self.0)
   }
 
+=======
+>>>>>>> 2947ef08 (Make sign asynchronous):substrate/tendermint/machine/tests/ext.rs
   async fn sign(&self, msg: &[u8]) -> [u8; 32] {
     let mut sig = [0; 32];
     sig[.. 2].copy_from_slice(&self.0.to_le_bytes());

@@ -4,6 +4,8 @@ use std::{sync::Arc, collections::HashSet};
 use async_trait::async_trait;
 use thiserror::Error;
 
+use async_trait::async_trait;
+
 use parity_scale_codec::{Encode, Decode};
 
 use crate::{SignedMessageFor, commit_msg};
@@ -62,6 +64,7 @@ impl<S: Signer> Signer for Arc<S> {
 }
 
 /// A signature scheme used by validators.
+#[async_trait]
 pub trait SignatureScheme: Send + Sync {
   // Type used to identify validators.
   type ValidatorId: ValidatorId;
@@ -73,9 +76,14 @@ pub trait SignatureScheme: Send + Sync {
   /// It could even be a threshold signature scheme, though that's currently unexpected.
   type AggregateSignature: Signature;
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// Type representing a signer of this scheme.
   type Signer: Signer<ValidatorId = Self::ValidatorId, Signature = Self::Signature>;
 
+=======
+  /// Sign a signature with the current validator's private key.
+  async fn sign(&self, msg: &[u8]) -> Self::Signature;
+>>>>>>> 2947ef08 (Make sign asynchronous):substrate/tendermint/machine/src/ext.rs
   /// Verify a signature from the validator in question.
   #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool;
