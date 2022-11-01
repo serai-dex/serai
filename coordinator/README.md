@@ -47,13 +47,14 @@ Topics:
 Within the coordinator we have managers, each manager will be responsible for one or more producers, and may be responsible for one or more consumers, all running on separate threads. If a manager is responsible for a consumer, it likely produces or creates its own data. Through initialization, the manager will create the appropriate Kafka producers and consumers, and then start them on their own threads. The manager will then start a supervisor thread that will monitor the health of the manager, restarting  or gracefully stopping other systems   that may have failed.
 
 
-## Common Module
+## Core Module
 
 ### Requirements
 
 * Traits for common functionality.
 * Common types for common functionality.
 * Configuration loading and management.
+* Logger setup, management, and consumption.
 
 
 ### Configurations
@@ -98,7 +99,18 @@ The module will provide a manager with an initialization method that requires th
 ### Requirements
 
 * Deterministically form signature parties to sign outgoing transactions.
-* 
+
+### Keygen
+
+To form a multisignature vault after validators have been elected to be a part of an upcoming set update, the coordinator will send this list of validators and the corresponding set and coin to the keygen processor. The coordinator will then form secure connections to each set member and send the keygen party to the validators. The validators will then sign the keygen party and send the signed keygen party back to the keygen processor. Once the processor has received the required number of signatures, it will send the succesfully generated public keys to the coordinator. The coordinator will then send the key and necessary metadata to the serai layer for publishing. The serai layer will then publish a vault update in the blockchain that will be considered active after the set succesfully updates. 
+
+### Party Formation
+
+Signing party, use last Serai blockhash to randomly select the threshold amount of validators needed to sign the transaction. The coordinator will then send a message with this list to the processor to start the transaction signing procedure. The coordinator will then wait for the processor to sign the transaction. the coordinator will monitor the transaction, and report the output hash once the threshold amount of validators have signed the transaction.
+
+```
+let rng = Chacha20Rng::from_seed(block_hash); loop { rng.next_u64() % VALIDATOR_COUNT + 1; }
+```
 
 ## Connection Module
 
