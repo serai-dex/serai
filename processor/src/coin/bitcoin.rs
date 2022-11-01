@@ -52,16 +52,14 @@ pub struct BitcoinHram {}
 
 impl Hram<Secp256k1> for BitcoinHram {
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
-    println!("HRAM called");
-
-    print_keys(&A, "4. Public Keys".to_string());
-    print_keys(&R, "1. R Keys".to_string());
+    //print_keys(&A, "4. Public Keys".to_string());
+    //print_keys(&R, "1. R Keys".to_string());
 
     let (R,offset) = make_even(*R);
     dbg!(offset);
     
-    print_keys(&A, "5. Public Keys".to_string());
-    print_keys(&R, "2. R Keys".to_string());
+    //print_keys(&A, "5. Public Keys".to_string());
+    //print_keys(&R, "2. R Keys".to_string());
 
     let r_encoded_point = R.to_encoded_point(true);
     let a_encoded_point = A.to_encoded_point(true);
@@ -294,7 +292,7 @@ fn test_signing() {
 
   let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
 
-  print_keys(&keys[&1].group_key(), "1. Public Keys".to_string());
+  //print_keys(&keys[&1].group_key(), "1. Public Keys".to_string());
 
   for i in 1 ..= keys.len() as u16 {
     let (_, offset) = make_even(keys[&i].group_key());
@@ -304,14 +302,14 @@ fn test_signing() {
     let new_key = keys[&i].offset(Scalar::from(offset));
     dbg!(offset);
 
-    print_keys(&new_key.group_key(), "2. Public Keys".to_string());
+    //print_keys(&new_key.group_key(), "2. Public Keys".to_string());
     
     if let Some(x) = keys.get_mut(&i) {
       *x = new_key;
     }
   }
 
-  print_keys(&keys[&1].group_key(), "3. Public Keys".to_string());
+  //print_keys(&keys[&1].group_key(), "3. Public Keys".to_string());
 
   const MESSAGE: &'static [u8] = b"Hello, World!";
 
@@ -324,7 +322,7 @@ fn test_signing() {
   (_sig.R, offset) = make_even(_sig.R);
   _sig.s += Scalar::from(offset);
 
-  print_keys(&_sig.R, "3. R Keys".to_string());
+  //print_keys(&_sig.R, "3. R Keys".to_string());
 
   let sign_serialized = &_sig.serialize()[1..65];
   let sig = secp256k1::schnorr::Signature::from_slice(sign_serialized).unwrap();
