@@ -1,6 +1,8 @@
 use core::{hash::Hash, fmt::Debug};
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use parity_scale_codec::{Encode, Decode};
 
 use crate::{SignedMessage, commit_msg};
@@ -31,6 +33,7 @@ pub struct BlockNumber(pub u64);
 pub struct Round(pub u32);
 
 /// A signature scheme used by validators.
+#[async_trait]
 pub trait SignatureScheme: Send + Sync {
   // Type used to identify validators.
   type ValidatorId: ValidatorId;
@@ -43,7 +46,7 @@ pub trait SignatureScheme: Send + Sync {
   type AggregateSignature: Signature;
 
   /// Sign a signature with the current validator's private key.
-  fn sign(&self, msg: &[u8]) -> Self::Signature;
+  async fn sign(&self, msg: &[u8]) -> Self::Signature;
   /// Verify a signature from the validator in question.
   #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool;
@@ -121,7 +124,7 @@ impl<B: sp_runtime::traits::Block> Block for B {
 }
 
 /// Trait representing the distributed system Tendermint is providing consensus over.
-#[async_trait::async_trait]
+#[async_trait]
 pub trait Network: Send + Sync {
   // Type used to identify validators.
   type ValidatorId: ValidatorId;

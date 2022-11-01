@@ -157,7 +157,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
   fn timeout(&self, step: Step) -> Instant {
     let mut round_time = Duration::from_secs(N::BLOCK_TIME.into());
     round_time *= self.round.0 + 1;
-    let step_time = round_time / 3; // TODO: Non-uniform timeouts
+    // TODO: Non-uniform timeouts. Proposal has to validate the block which will take much longer
+    // than any other step
+    let step_time = round_time / 3;
 
     let offset = match step {
       Step::Propose => step_time,
@@ -382,7 +384,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             }
 
             if broadcast {
-              let sig = machine.signer.sign(&msg.encode());
+              let sig = machine.signer.sign(&msg.encode()).await;
               machine.network.write().await.broadcast(SignedMessage { msg, sig }).await;
             }
           }
@@ -435,10 +437,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
       if let Some(Data::Proposal(_, block)) = self.log.get(msg.round, proposer, Step::Propose) {
         // Check if it has gotten a sufficient amount of precommits
         // Use a junk signature since message equality disregards the signature
-        if self
-          .log
-          .has_consensus(msg.round, Data::Precommit(Some((block.id(), self.signer.sign(&[])))))
-        {
+        if self.log.has_consensus(
+          msg.round,
+          Data::Precommit(Some((block.id(), self.signer.sign(&[]).await))),
+        ) {
           return Ok(Some(block.clone()));
         }
       }
@@ -549,7 +551,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
               block.id(),
               self
                 .signer
-                .sign(&commit_msg(self.canonical_end_time(self.round), block.id().as_ref())),
+                .sign(&commit_msg(self.canonical_end_time(self.round), block.id().as_ref()))
+                .await,
             ))));
             return Ok(None);
           }

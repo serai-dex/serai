@@ -3,6 +3,8 @@ use std::{
   time::{UNIX_EPOCH, SystemTime, Duration},
 };
 
+use async_trait::async_trait;
+
 use parity_scale_codec::{Encode, Decode};
 
 use tokio::{sync::RwLock, time::sleep};
@@ -13,12 +15,13 @@ type TestValidatorId = u16;
 type TestBlockId = [u8; 4];
 
 struct TestSignatureScheme(u16);
+#[async_trait]
 impl SignatureScheme for TestSignatureScheme {
   type ValidatorId = TestValidatorId;
   type Signature = [u8; 32];
   type AggregateSignature = Vec<[u8; 32]>;
 
-  fn sign(&self, msg: &[u8]) -> [u8; 32] {
+  async fn sign(&self, msg: &[u8]) -> [u8; 32] {
     let mut sig = [0; 32];
     sig[.. 2].copy_from_slice(&self.0.to_le_bytes());
     sig[2 .. (2 + 30.min(msg.len()))].copy_from_slice(&msg[.. 30.min(msg.len())]);
@@ -81,7 +84,7 @@ impl Block for TestBlock {
 
 struct TestNetwork(u16, Arc<RwLock<Vec<TendermintHandle<Self>>>>);
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Network for TestNetwork {
   type ValidatorId = TestValidatorId;
   type SignatureScheme = TestSignatureScheme;
