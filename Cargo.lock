@@ -526,9 +526,9 @@ checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bitcoin"
-version = "0.29.1"
+version = "0.29.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cb36de3b18ad25f396f9168302e36fb7e1e8923298ab3127da252d288d5af9d"
+checksum = "0694ea59225b0c5f3cb405ff3f670e4828358ed26aec49dc352f730f0cb1a8a3"
 dependencies = [
  "bech32 0.9.1",
  "bitcoin_hashes",
@@ -7498,11 +7498,12 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.24.0"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7649a0b3ffb32636e60c7ce0d70511eda9c52c658cd0634e194d5a19943aeff"
+checksum = "ff55dc09d460954e9ef2fa8a7ced735a964be9981fd50e870b2b3b0705e14964"
 dependencies = [
  "bitcoin_hashes",
+ "rand 0.8.5",
  "secp256k1-sys",
  "serde",
 ]
@@ -7676,6 +7677,8 @@ name = "serai-processor"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bitcoin",
+ "bitcoin_hashes",
  "bitcoincore-rpc",
  "bitcoincore-rpc-json",
  "curve25519-dalek 3.2.0",
@@ -7688,6 +7691,7 @@ dependencies = [
  "modular-frost",
  "monero-serai",
  "rand_core 0.6.4",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2 0.10.6",

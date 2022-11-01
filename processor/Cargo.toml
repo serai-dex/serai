@@ -33,6 +33,10 @@ bitcoincore-rpc-json = "0.16.0"
 
 k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
 sha2 = { version = "0.10" }
+bitcoin = "0.29.2"
+hex = "0.4"
+bitcoin_hashes = "0.11.0"
+secp256k1 = {version = "0.24.1", features = ["global-context", "rand-std"] }
 
 [dev-dependencies]
 rand_core = "0.6"

@@ -6,7 +6,10 @@ use curve25519_dalek::scalar::Scalar as OtherScalar;
 use dalek_ff_group as dfg;
 use group::GroupEncoding;
 use transcript::RecommendedTranscript;
-use frost::{curve::Ed25519, FrostKeys};
+use frost::{
+  curve::{Ed25519, Curve, Ciphersuite},
+  ThresholdKeys,
+};
 
 use monero_serai::{
   transaction::Transaction,
@@ -17,7 +20,10 @@ use monero_serai::{
   },
 };
 
-use bitcoincore_rpc::{bitcoin::{self, hashes::hex::FromHex}, Auth, Client, RpcApi };
+use bitcoincore_rpc::{
+  bitcoin::{self, hashes::hex::FromHex},
+  Auth, Client, RpcApi,
+};
 use bitcoin::util::address::Address;
 use sha2::{Digest, Sha256};
 
@@ -26,17 +32,37 @@ use crate::{
   coin::{CoinError, Output as OutputTrait, Coin},
 };
 
-use frost::{algorithm::Hram,curve::Secp256k1};
+use frost::{algorithm::Hram, curve::Secp256k1};
 use k256::{
-  elliptic_curve::{ ops::Reduce, sec1::ToEncodedPoint},
-  ProjectivePoint, U256, Scalar
+  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, sec1::Tag},
+  ProjectivePoint, U256, Scalar,
 };
+
+fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
+  let mut c = 0;
+  while key.to_encoded_point(true).tag() == Tag::CompressedOddY {
+    key += Secp256k1::generator();
+    c += 1;
+  }
+  (key, c)
+}
 
 #[derive(Clone, Default)]
 pub struct BitcoinHram {}
 
 impl Hram<Secp256k1> for BitcoinHram {
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
+    println!("HRAM called");
+
+    print_keys(&A, "4. Public Keys".to_string());
+    print_keys(&R, "1. R Keys".to_string());
+
+    let (R,offset) = make_even(*R);
+    dbg!(offset);
+    
+    print_keys(&A, "5. Public Keys".to_string());
+    print_keys(&R, "2. R Keys".to_string());
+
     let r_encoded_point = R.to_encoded_point(true);
     let a_encoded_point = A.to_encoded_point(true);
     let mut data = Sha256::new();
@@ -45,11 +71,12 @@ impl Hram<Secp256k1> for BitcoinHram {
     data.update(tag_hash);
     data.update(tag_hash);
     data.update(r_encoded_point.x().to_owned().unwrap());
-    data.update(a_encoded_point.x().to_owned().unwrap());//&a_encoded_point.to_owned().to_bytes()[1 ..]
+    data.update(a_encoded_point.x().to_owned().unwrap()); //&a_encoded_point.to_owned().to_bytes()[1 ..]
     data.update(&m[..]);
 
     let res_data = data.finalize();
-    Scalar::from_uint_reduced(U256::from_be_slice(&res_data))
+    let res = Scalar::from_uint_reduced(U256::from_be_slice(&res_data));
+    return res;
   }
 }
 
@@ -83,25 +110,25 @@ impl OutputTrait for Output {
 
 #[derive(Debug)]
 pub struct SignableTransaction {
-  keys: FrostKeys<Ed25519>,
+  keys: ThresholdKeys<Ed25519>,
   transcript: RecommendedTranscript,
   // - height, defined as the length of the chain
   height: usize,
   actual: MSignableTransaction,
 }
 
-#[derive( Debug)]
+#[derive(Debug)]
 pub struct Bitcoin {
-  pub(crate)  rpc: Client,
+  pub(crate) rpc: Client,
   view: OtherScalar,
 }
 
 impl Bitcoin {
   pub async fn new(url: String) -> Bitcoin {
-    Bitcoin {rpc: Client::new(&url,
-      Auth::UserPass("serai".to_string(),
-      "seraidex".to_string())).unwrap(),
-        view: additional_key::<Bitcoin>(0).0, }
+    Bitcoin {
+      rpc: Client::new(&url, Auth::UserPass("serai".to_string(), "seraidex".to_string())).unwrap(),
+      view: additional_key::<Bitcoin>(0).0,
+    }
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
@@ -121,11 +148,11 @@ impl Bitcoin {
 
   #[cfg(test)]
   fn empty_address() -> Address {
-    let address: bitcoin::util::address::Address = bitcoin::util::address::Address::from_str("32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf").unwrap();
+    let address: bitcoin::util::address::Address =
+      bitcoin::util::address::Address::from_str("32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf").unwrap();
     return address;
   }
 }
-
 
 //Todo: Delete it later
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -140,14 +167,13 @@ impl Fee {
   }
 }
 
-
 #[async_trait]
 impl Coin for Bitcoin {
   type Curve = Ed25519;
 
   type Fee = Fee;
   type Transaction = Transaction;
-  type Block = bitcoin::Block;//Block;
+  type Block = bitcoin::Block; //Block;
 
   type Output = Output;
   type SignableTransaction = SignableTransaction;
@@ -158,25 +184,24 @@ impl Coin for Bitcoin {
   const ID: &'static [u8] = b"Bitcoin";
   const CONFIRMATIONS: usize = 10;
 
-  
   const MAX_INPUTS: usize = 128;
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    
-    let address: Self::Address = Self::Address::from_str("32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf").unwrap();
+    let address: Self::Address =
+      Self::Address::from_str("32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf").unwrap();
     return address;
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
     // - defines height as chain length, so subtract 1 for block number
     let block_result = self.rpc.get_block_count().map_err(|_| CoinError::ConnectionError);
-        let block_number = match block_result {
-            Ok(val) => Ok(val as usize),
-            Err(_) => return Err(CoinError::ConnectionError),
-        };
+    let block_number = match block_result {
+      Ok(val) => Ok(val as usize),
+      Err(_) => return Err(CoinError::ConnectionError),
+    };
 
-        return block_number;
+    return block_number;
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
@@ -195,7 +220,7 @@ impl Coin for Bitcoin {
 
   async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
     let txid_str = String::from_utf8(tx.to_vec()).unwrap();
-    let txid = bitcoin::Txid::from_hex(&txid_str).unwrap();//sha256d::Hash::from_hex(txid)?;
+    let txid = bitcoin::Txid::from_hex(&txid_str).unwrap(); //sha256d::Hash::from_hex(txid)?;
     let res1 = self.rpc.get_transaction(&txid, Option::Some(true)).unwrap();
     let tx_block_number = res1.info.blockheight.unwrap() as usize;
 
@@ -204,7 +229,7 @@ impl Coin for Bitcoin {
 
   async fn prepare_send(
     &self,
-    keys: FrostKeys<Ed25519>,
+    keys: ThresholdKeys<Ed25519>,
     transcript: RecommendedTranscript,
     block_number: usize,
     mut inputs: Vec<Output>,
@@ -235,75 +260,78 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
-    Self::Fee{per_weight:36, mask: 66}
+    Self::Fee { per_weight: 36, mask: 66 }
   }
 
   #[cfg(test)]
-  async fn mine_block(&self) {
-  }
+  async fn mine_block(&self) {}
 
   #[cfg(test)]
-  async fn test_send(&self, address: Self::Address) {
-    
-  }
+  async fn test_send(&self, address: Self::Address) {}
 }
+
+fn print_keys(key:&ProjectivePoint, tag: String) {
+  println!("Tag : {}", tag);
+  let key_encoded = key.to_encoded_point(false);
+  dbg!(hex::encode(key_encoded.x().to_owned().unwrap()));
+  dbg!(hex::encode(key_encoded.y().to_owned().unwrap()));
+}
+
+extern crate bitcoin_hashes;
+use secp256k1::Message;
+use bitcoin_hashes::sha256;
+use bitcoin_hashes::Hash;
 
 #[test]
 fn test_signing() {
   use frost::{
-    algorithm::Hram, 
+    algorithm::Hram,
     curve::Secp256k1,
     algorithm::Schnorr,
     tests::{algorithm_machines, key_gen, sign},
   };
   use rand_core::OsRng;
 
-  let keys = key_gen::<_, Secp256k1>(&mut OsRng);
-  let new_keys : HashMap<u16, FrostKeys<Secp256k1>> = HashMap::new();
-  for (id, one_key) in &keys {
-    dbg!(id);
-    dbg!(one_key);
-  }
+  let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
 
-  let _group_key = keys[&1].group_key();
-  
-  let group_encoded_key = _group_key.to_encoded_point(false);
-  dbg!(hex::encode(group_encoded_key.y().to_owned().unwrap()));
-  let y_key = group_encoded_key.y().to_owned().unwrap();
-  if y_key[31] % 2 == 0 {
-    println!("1Y is even");
-  }
-  else {
-    println!("1Y is odd");
-  }
-  let mut n = 1;
+  print_keys(&keys[&1].group_key(), "1. Public Keys".to_string());
 
-  let mut all_keys = keys[&1].clone();
-  while n < 100 {
-
-    all_keys = all_keys.offset(Scalar::ONE).clone();
-    let group_encoded_key = all_keys.group_key().to_encoded_point(false);
-    dbg!(hex::encode(group_encoded_key.y().to_owned().unwrap()));
-    let y_key = group_encoded_key.y().to_owned().unwrap();
-    if y_key[31] % 2 == 0 {
-      println!("2Y is even");
+  for i in 1 ..= keys.len() as u16 {
+    let (_, offset) = make_even(keys[&i].group_key());
+    if offset == 0 {
+      break;
     }
-    else {
-      println!("2Y is odd");
-    }
-    n += 1;
-  }
-  
-  //while(True) {
-  //  keys[&1].offset(offset)
-  //  break;
-  //}
-  
-  const MESSAGE: &'static [u8] = b"Hello, World!";
+    let new_key = keys[&i].offset(Scalar::from(offset));
+    dbg!(offset);
 
-  let _sig = sign(
+    print_keys(&new_key.group_key(), "2. Public Keys".to_string());
+    
+    if let Some(x) = keys.get_mut(&i) {
+      *x = new_key;
+    }
+  }
+
+  print_keys(&keys[&1].group_key(), "3. Public Keys".to_string());
+
+  const MESSAGE: &'static [u8] = b"Hello World!";
+
+  let mut _sig = sign(
     &mut OsRng,
-    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys),
+    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys), //&keys),
     MESSAGE,
   );
+  let mut offset = 0;
+  (_sig.R, offset) = make_even(_sig.R);
+  _sig.s += Scalar::from(offset);
+
+  print_keys(&_sig.R, "3. R Keys".to_string());
+
+  let sign_serialized = &_sig.serialize()[1..65];
+  let sig = secp256k1::schnorr::Signature::from_slice(sign_serialized).unwrap();
+  let msg = Message::from(sha256::Hash::hash(&MESSAGE));
+
+  let R_compressed_key = _sig.R.to_encoded_point(true);
+  let pubkey = secp256k1::XOnlyPublicKey::from_slice(&R_compressed_key.x().to_owned().unwrap()).unwrap();
+  let _res = sig.verify(&msg, &pubkey).unwrap();
+  dbg!(_res);
 }
