@@ -313,7 +313,7 @@ fn test_signing() {
 
   print_keys(&keys[&1].group_key(), "3. Public Keys".to_string());
 
-  const MESSAGE: &'static [u8] = b"Hello World!";
+  const MESSAGE: &'static [u8] = b"Hello, World!";
 
   let mut _sig = sign(
     &mut OsRng,
