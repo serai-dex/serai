@@ -62,6 +62,6 @@ impl Ciphersuite for Ed448 {
   }
 
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    Scalar::wide_reduce(Self::H::digest(&[dst, data].concat()).as_ref().try_into().unwrap())
+    Scalar::wide_reduce(Self::H::digest([dst, data].concat()).as_ref().try_into().unwrap())
   }
 }

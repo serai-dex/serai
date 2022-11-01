@@ -21,7 +21,7 @@ impl Ietf8032Ed448Hram {
   pub fn hram(context: &[u8], R: &Point, A: &Point, m: &[u8]) -> Scalar {
     Scalar::wide_reduce(
       Shake256_114::digest(
-        &[
+        [
           &[b"SigEd448".as_ref(), &[0, u8::try_from(context.len()).unwrap()]].concat(),
           context,
           &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat(),
