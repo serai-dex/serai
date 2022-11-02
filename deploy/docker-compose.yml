@@ -46,7 +46,7 @@ services:
     profiles:
       - base
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: base
 
   serai-alice:
@@ -59,7 +59,7 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: alice
       VALIDATOR: true
 
@@ -73,7 +73,7 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: bob
       VALIDATOR: true
 
@@ -87,7 +87,7 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: charlie
       VALIDATOR: true
 
@@ -99,7 +99,7 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: dave
 
   serai-eve:
@@ -110,7 +110,7 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: eve
 
   serai-ferdie:
@@ -121,7 +121,7 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: ferdie
 
   # Processor Services
