@@ -1,8 +1,8 @@
 # Serai
 
-Serai is a decentralization execution layer whose validators form multisig
-wallets for various connected networks, offering secure decentralized custody of
-foreign assets to applications built on it.
+Serai is a decentralized execution layer whose validators form multisig wallets
+for various connected networks, offering secure decentralized custody of foreign
+assets to applications built on it.
 
 Serai is exemplified by Serai DEX, an automated-market-maker (AMM) decentralized
 exchange, allowing swapping BTC, ETH, USDC, DAI, and XMR. It is the premier
