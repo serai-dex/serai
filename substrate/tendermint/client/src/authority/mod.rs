@@ -135,6 +135,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     providers: T::CIDP,
     env: T::Environment,
     network: T::Network,
+    validator: (u16, T::Keystore),
     registry: Option<&Registry>,
   ) {
     let (best_hash, last) = self.get_last();
@@ -164,16 +165,15 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         env,
         announce: network,
       });
+      let (validator, keys) = validator;
+      self.import.validators.set_keys(keys).await;
 
       let proposal = self
         .get_proposal(&self.import.client.header(BlockId::Hash(best_hash)).unwrap().unwrap())
         .await;
 
-      TendermintMachine::new(
-        self, // We no longer need self, so let TendermintMachine become its owner
-        0,    // TODO: ValidatorId
-        last, proposal,
-      )
+      // We no longer need self, so let TendermintMachine become its owner
+      TendermintMachine::new(self, validator, last, proposal)
     };
 
     // Start receiving messages about the Tendermint process for this block

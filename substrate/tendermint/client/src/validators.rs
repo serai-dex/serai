@@ -3,10 +3,14 @@ use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 
+use tokio::sync::RwLock as AsyncRwLock;
+
+use sp_core::Decode;
 use sp_application_crypto::{
-  RuntimePublic as PublicTrait, Pair as PairTrait,
-  sr25519::{Public, Pair, Signature},
+  RuntimePublic as PublicTrait,
+  sr25519::{Public, Signature},
 };
+use sp_keystore::CryptoStore;
 
 use sp_staking::SessionIndex;
 use sp_api::{BlockId, ProvideRuntimeApi};
@@ -17,7 +21,7 @@ use tendermint_machine::ext::{BlockNumber, Round, Weights, SignatureScheme};
 
 use sp_tendermint::TendermintApi;
 
-use crate::TendermintClient;
+use crate::{KEY_TYPE_ID, TendermintClient};
 
 struct TendermintValidatorsStruct {
   session: SessionIndex,
@@ -25,19 +29,18 @@ struct TendermintValidatorsStruct {
   total_weight: u64,
   weights: Vec<u64>,
 
-  keys: Pair, // TODO: sp_keystore
   lookup: Vec<Public>,
 }
 
 impl TendermintValidatorsStruct {
-  fn from_module<T: TendermintClient>(client: &Arc<T::Client>) -> TendermintValidatorsStruct {
+  fn from_module<T: TendermintClient>(client: &Arc<T::Client>) -> Self {
     let last = client.info().finalized_hash;
     let api = client.runtime_api();
     let session = api.current_session(&BlockId::Hash(last)).unwrap();
     let validators = api.validators(&BlockId::Hash(last)).unwrap();
     assert_eq!(validators.len(), 1);
-    let keys = Pair::from_string("//Alice", None).unwrap();
-    TendermintValidatorsStruct {
+
+    Self {
       session,
 
       // TODO
@@ -45,7 +48,6 @@ impl TendermintValidatorsStruct {
       weights: vec![1; validators.len()],
 
       lookup: validators,
-      keys,
     }
   }
 }
@@ -82,15 +84,25 @@ impl<T: TendermintClient> Deref for Refresh<T> {
 }
 
 /// Tendermint validators observer, providing data on the active validators.
-pub struct TendermintValidators<T: TendermintClient>(Refresh<T>);
+pub struct TendermintValidators<T: TendermintClient>(
+  Refresh<T>,
+  Arc<AsyncRwLock<Option<T::Keystore>>>,
+);
 
 impl<T: TendermintClient> TendermintValidators<T> {
   pub(crate) fn new(client: Arc<T::Client>) -> TendermintValidators<T> {
-    TendermintValidators(Refresh {
-      _tc: PhantomData,
-      _refresh: Arc::new(RwLock::new(TendermintValidatorsStruct::from_module::<T>(&client))),
-      client,
-    })
+    TendermintValidators(
+      Refresh {
+        _tc: PhantomData,
+        _refresh: Arc::new(RwLock::new(TendermintValidatorsStruct::from_module::<T>(&client))),
+        client,
+      },
+      Arc::new(AsyncRwLock::new(None)),
+    )
+  }
+
+  pub(crate) async fn set_keys(&self, keys: T::Keystore) {
+    *self.1.write().await = Some(keys);
   }
 }
 
@@ -101,7 +113,20 @@ impl<T: TendermintClient> SignatureScheme for TendermintValidators<T> {
   type AggregateSignature = Vec<Signature>;
 
   async fn sign(&self, msg: &[u8]) -> Signature {
-    self.0.read().unwrap().keys.sign(msg)
+    let read = self.1.read().await;
+    let keys = read.as_ref().unwrap();
+    let key = {
+      let pubs = keys.sr25519_public_keys(KEY_TYPE_ID).await;
+      if pubs.is_empty() {
+        keys.sr25519_generate_new(KEY_TYPE_ID, None).await.unwrap()
+      } else {
+        pubs[0]
+      }
+    };
+    Signature::decode(
+      &mut keys.sign_with(KEY_TYPE_ID, &key.into(), msg).await.unwrap().unwrap().as_ref(),
+    )
+    .unwrap()
   }
 
   fn verify(&self, validator: u16, msg: &[u8], sig: &Signature) -> bool {
