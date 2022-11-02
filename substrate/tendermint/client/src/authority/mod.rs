@@ -10,6 +10,7 @@ use log::warn;
 use tokio::task::yield_now;
 
 use sp_core::{Encode, Decode};
+use sp_keystore::CryptoStore;
 use sp_runtime::{
   traits::{Header, Block},
   Digest,
@@ -132,10 +133,10 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
   /// as it will not return until the P2P stack shuts down.
   pub async fn authority(
     mut self,
+    validator: (u16, Arc<dyn CryptoStore>),
     providers: T::CIDP,
     env: T::Environment,
     network: T::Network,
-    validator: (u16, T::Keystore),
     registry: Option<&Registry>,
   ) {
     let (best_hash, last) = self.get_last();

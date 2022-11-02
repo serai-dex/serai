@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use sp_core::crypto::KeyTypeId;
-use sp_keystore::CryptoStore;
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::{Header, Block};
 use sp_blockchain::HeaderBackend;
@@ -58,8 +57,6 @@ pub trait TendermintClient: Send + Sync + 'static {
     + Finalizer<Self::Block, Self::Backend>
     + ProvideRuntimeApi<Self::Block, Api = Self::Api>
     + 'static;
-
-  type Keystore: CryptoStore;
 }
 
 /// Trait implementable on firm types to automatically provide a full TendermintClient impl.
@@ -77,8 +74,6 @@ pub trait TendermintClientMinimal: Send + Sync + 'static {
     + Finalizer<Self::Block, Self::Backend>
     + ProvideRuntimeApi<Self::Block, Api = Self::Api>
     + 'static;
-
-  type Keystore: CryptoStore;
 }
 
 impl<T: TendermintClientMinimal> TendermintClient for T
@@ -96,8 +91,6 @@ where
   type StateBackend = StateBackendFor<T::Client, T::Block>;
   type Api = <T::Client as ProvideRuntimeApi<T::Block>>::Api;
   type Client = T::Client;
-
-  type Keystore = T::Keystore;
 }
 
 /// Trait consolidating additional generics required by sc_tendermint for authoring.

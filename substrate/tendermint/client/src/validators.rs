@@ -85,7 +85,7 @@ impl<T: TendermintClient> Deref for Refresh<T> {
 /// Tendermint validators observer, providing data on the active validators.
 pub struct TendermintValidators<T: TendermintClient>(
   Refresh<T>,
-  Arc<AsyncRwLock<Option<T::Keystore>>>,
+  Arc<AsyncRwLock<Option<Arc<dyn CryptoStore>>>>,
 );
 
 impl<T: TendermintClient> TendermintValidators<T> {
@@ -99,7 +99,7 @@ impl<T: TendermintClient> TendermintValidators<T> {
     )
   }
 
-  pub(crate) async fn set_keys(&self, keys: T::Keystore) {
+  pub(crate) async fn set_keys(&self, keys: Arc<dyn CryptoStore>) {
     *self.1.write().await = Some(keys);
   }
 }
