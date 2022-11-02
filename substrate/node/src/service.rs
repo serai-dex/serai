@@ -598,6 +598,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       "tendermint",
       None,
       TendermintAuthority::new(authority).authority(
+        (0, keystore_container.keystore()),
         Cidp,
         sc_basic_authorship::ProposerFactory::new(
           task_manager.spawn_handle(),
