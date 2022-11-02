@@ -1,7 +1,4 @@
-use std::{
-  marker::PhantomData,
-  sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use log::warn;
 
@@ -30,8 +27,6 @@ use crate::{
 
 /// Tendermint import handler.
 pub struct TendermintImport<T: TendermintValidator> {
-  _ta: PhantomData<T>,
-
   pub(crate) validators: Arc<TendermintValidators<T>>,
 
   pub(crate) providers: Arc<AsyncRwLock<Option<T::CIDP>>>,
@@ -45,8 +40,6 @@ pub struct TendermintImport<T: TendermintValidator> {
 impl<T: TendermintValidator> Clone for TendermintImport<T> {
   fn clone(&self) -> Self {
     TendermintImport {
-      _ta: PhantomData,
-
       validators: self.validators.clone(),
 
       providers: self.providers.clone(),
@@ -61,8 +54,6 @@ impl<T: TendermintValidator> Clone for TendermintImport<T> {
 impl<T: TendermintValidator> TendermintImport<T> {
   pub(crate) fn new(client: Arc<T::Client>) -> TendermintImport<T> {
     TendermintImport {
-      _ta: PhantomData,
-
       validators: Arc::new(TendermintValidators::new(client.clone())),
 
       providers: Arc::new(AsyncRwLock::new(None)),

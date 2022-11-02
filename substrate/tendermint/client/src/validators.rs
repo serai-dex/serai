@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, ops::Deref};
+use core::ops::Deref;
 use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
@@ -54,7 +54,6 @@ impl TendermintValidatorsStruct {
 
 // Wrap every access of the validators struct in something which forces calling refresh
 struct Refresh<T: TendermintClient> {
-  _tc: PhantomData<T>,
   client: Arc<T::Client>,
   _refresh: Arc<RwLock<TendermintValidatorsStruct>>,
 }
@@ -93,7 +92,6 @@ impl<T: TendermintClient> TendermintValidators<T> {
   pub(crate) fn new(client: Arc<T::Client>) -> TendermintValidators<T> {
     TendermintValidators(
       Refresh {
-        _tc: PhantomData,
         _refresh: Arc::new(RwLock::new(TendermintValidatorsStruct::from_module::<T>(&client))),
         client,
       },
