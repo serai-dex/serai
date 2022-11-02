@@ -263,7 +263,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     self.active.as_mut().unwrap().gossip_queue.write().unwrap().push(msg);
   }
 
-  async fn slash(&mut self, validator: u16) {
+  async fn slash(&mut self, _validator: u16) {
     todo!()
   }
 
