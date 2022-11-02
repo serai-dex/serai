@@ -382,7 +382,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   ))
 }
 
-pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
+pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
   let (
     authority,
     sc_service::PartialComponents {
@@ -398,6 +398,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   ) = new_partial(&config)?;
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
 
+<<<<<<< HEAD
   let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
     grandpa::protocol_standard_name(&client.block_hash(0).unwrap().unwrap(), &config.chain_spec);
@@ -414,6 +415,19 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   ));
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+=======
+  if config.role.is_authority() {
+    // Block size + 1 KiB
+    let mut cfg = sc_service::config::NonDefaultSetConfig::new(
+      sc_tendermint::PROTOCOL_NAME.into(),
+      (1024 * 1024) + 1024,
+    );
+    cfg.allow_non_reserved(25, 25);
+    config.network.extra_sets.push(cfg);
+  }
+
+  let (network, system_rpc_tx, tx_handler_controller, network_starter) =
+>>>>>>> 38cee041 (Fix handling of the GossipEngine)
     sc_service::build_network(sc_service::BuildNetworkParams {
       config: &config,
       net_config,
