@@ -19,7 +19,11 @@ fn account_id_from_name(name: &'static str) -> AccountId {
 }
 
 fn testnet_genesis(wasm_binary: &[u8], endowed_accounts: Vec<AccountId>) -> GenesisConfig {
-  let alice = account_id_from_name("Alice");
+  let session_key = |name| {
+    let key = account_id_from_name(name);
+    (key, key, SessionKeys { tendermint: Public::from(key) })
+  };
+
   GenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec() },
     balances: BalancesConfig {
@@ -27,7 +31,7 @@ fn testnet_genesis(wasm_binary: &[u8], endowed_accounts: Vec<AccountId>) -> Gene
     },
     transaction_payment: Default::default(),
     session: SessionConfig {
-      keys: vec![(alice, alice, SessionKeys { tendermint: Public::from(alice) })],
+      keys: vec![session_key("Alice"), session_key("Bob"), session_key("Charlie")],
     },
   }
 }

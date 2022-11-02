@@ -1,9 +1,11 @@
 use std::{boxed::Box, sync::Arc, error::Error};
 
+use sp_keystore::SyncCryptoStore;
 use sp_runtime::traits::{Block as BlockTrait};
 use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
-use sp_api::ProvideRuntimeApi;
+use sp_api::{BlockId, ProvideRuntimeApi};
+use sp_tendermint::TendermintApi;
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
@@ -219,23 +221,44 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
   })?;
 
   if is_authority {
-    task_manager.spawn_essential_handle().spawn(
-      "tendermint",
-      None,
-      TendermintAuthority::new(authority).authority(
-        (0, keystore_container.keystore()),
-        Cidp,
-        sc_basic_authorship::ProposerFactory::new(
-          task_manager.spawn_handle(),
-          client,
-          transaction_pool,
-          registry.as_ref(),
-          telemetry.map(|telemtry| telemtry.handle()),
-        ),
-        network,
-        None,
-      ),
-    );
+    let keys = keystore_container.sync_keystore();
+    let key = SyncCryptoStore::sr25519_public_keys(&*keys, sc_tendermint::KEY_TYPE_ID)
+      .get(0)
+      .cloned()
+      .unwrap_or_else(|| {
+        SyncCryptoStore::sr25519_generate_new(&*keys, sc_tendermint::KEY_TYPE_ID, None).unwrap()
+      });
+
+    let mut spawned = false;
+    let mut validators =
+      client.runtime_api().validators(&BlockId::Hash(client.chain_info().finalized_hash)).unwrap();
+    for (i, validator) in validators.drain(..).enumerate() {
+      if validator == key {
+        task_manager.spawn_essential_handle().spawn(
+          "tendermint",
+          None,
+          TendermintAuthority::new(authority).authority(
+            (u16::try_from(i).unwrap(), keystore_container.keystore()),
+            Cidp,
+            sc_basic_authorship::ProposerFactory::new(
+              task_manager.spawn_handle(),
+              client,
+              transaction_pool,
+              registry.as_ref(),
+              telemetry.map(|telemtry| telemtry.handle()),
+            ),
+            network,
+            None,
+          ),
+        );
+        spawned = true;
+        break;
+      }
+    }
+
+    if !spawned {
+      log::warn!("authority role yet not a validator");
+    }
   }
 
   network_starter.start_network();

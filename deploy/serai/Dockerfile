@@ -26,11 +26,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/serai/target/release/build \
     --mount=type=cache,target=/serai/target/release/deps \
     --mount=type=cache,target=/serai/target/release/.fingerprint \
-    --mount=type=cache,target=/serai/target/release/incremental \ 
+    --mount=type=cache,target=/serai/target/release/incremental \
     --mount=type=cache,target=/serai/target/release/wbuild \
     --mount=type=cache,target=/serai/target/release/lib* \
     cargo build --release
-
 
 # Prepare Image
 FROM ubuntu:latest as image

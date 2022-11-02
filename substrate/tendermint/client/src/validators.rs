@@ -38,7 +38,6 @@ impl TendermintValidatorsStruct {
     let api = client.runtime_api();
     let session = api.current_session(&BlockId::Hash(last)).unwrap();
     let validators = api.validators(&BlockId::Hash(last)).unwrap();
-    assert_eq!(validators.len(), 1);
 
     Self {
       session,

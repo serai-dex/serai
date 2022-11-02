@@ -28,8 +28,8 @@ pub use block_import::TendermintSelectChain;
 pub(crate) mod authority;
 pub use authority::TendermintAuthority;
 
-const CONSENSUS_ID: [u8; 4] = *b"tend";
-const KEY_TYPE_ID: KeyTypeId = KeyTypeId(CONSENSUS_ID);
+pub const CONSENSUS_ID: [u8; 4] = *b"tend";
+pub const KEY_TYPE_ID: KeyTypeId = KeyTypeId(CONSENSUS_ID);
 
 /// Trait consolidating all generics required by sc_tendermint for processing.
 pub trait TendermintClient: Send + Sync + 'static {
