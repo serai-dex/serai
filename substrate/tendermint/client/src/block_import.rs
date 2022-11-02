@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use sp_api::BlockId;
 use sp_runtime::traits::Block;
-use sp_blockchain::{HeaderBackend, Backend as BlockchainBackend};
+use sp_blockchain::{BlockStatus, HeaderBackend, Backend as BlockchainBackend};
 use sp_consensus::{Error, CacheKeyId, SelectChain};
 
 use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport, Verifier};
@@ -28,6 +28,9 @@ where
     &mut self,
     mut block: BlockCheckParams<T::Block>,
   ) -> Result<ImportResult, Self::Error> {
+    if self.client.status(BlockId::Hash(block.hash)).unwrap() == BlockStatus::InChain {
+      return Ok(ImportResult::AlreadyInChain);
+    }
     self.verify_order(block.parent_hash, block.number)?;
 
     // Does not verify origin here as origin only applies to unfinalized blocks
