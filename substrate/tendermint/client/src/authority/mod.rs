@@ -78,6 +78,11 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
   fn get_last(&self) -> (<T::Block as Block>::Hash, (BlockNumber, u64)) {
     let info = self.import.client.info();
 
+    // TODO: Genesis start time + BLOCK_TIME
+    let mut fake_genesis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    // Round up to the nearest 5s increment
+    fake_genesis += 5 - (fake_genesis % 5);
+
     (
       info.finalized_hash,
       (
@@ -99,8 +104,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
             .as_ref(),
         )
         .map(|commit| commit.end_time)
-        // TODO: Genesis start time + BLOCK_TIME
-        .unwrap_or_else(|_| SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()),
+        .unwrap_or(fake_genesis),
       ),
     )
   }
@@ -189,9 +193,11 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       }
 
       // Handle any received messages
-      // This inner loop enables handling all pending messages before  acquiring the out-queue lock
+      // This inner loop enables handling all pending messages before acquiring the out-queue lock
       // again
-      futures::poll!(&mut gossip);
+      // TODO: Move to a select model. The disadvantage of this is we'll more frequently acquire
+      // the above lock, despite lack of reason to do so
+      let _ = futures::poll!(&mut gossip);
       'inner: loop {
         match recv.try_next() {
           Ok(Some(msg)) => handle
