@@ -103,7 +103,11 @@ services:
       - serai
     environment:
       CHAIN: local
+<<<<<<< HEAD
       NAME: node
+=======
+      NAME: base
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
 
   serai-alice:
     <<: *serai_defaults
@@ -114,10 +118,14 @@ services:
       - cluster-lg
     environment:
 <<<<<<< HEAD
+<<<<<<< HEAD
       CHAIN: local
 =======
       CHAIN: dev
 >>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
+=======
+      CHAIN: local
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: alice
       VALIDATOR: true
 
@@ -130,10 +138,14 @@ services:
       - cluster-lg
     environment:
 <<<<<<< HEAD
+<<<<<<< HEAD
       CHAIN: local
 =======
       CHAIN: dev
 >>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
+=======
+      CHAIN: local
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: bob
       VALIDATOR: true
 
@@ -146,10 +158,14 @@ services:
       - cluster-lg
     environment:
 <<<<<<< HEAD
+<<<<<<< HEAD
       CHAIN: local
 =======
       CHAIN: dev
 >>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
+=======
+      CHAIN: local
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: charlie
       VALIDATOR: true
 
@@ -161,10 +177,14 @@ services:
       - cluster-lg
     environment:
 <<<<<<< HEAD
+<<<<<<< HEAD
       CHAIN: local
 =======
       CHAIN: dev
 >>>>>>> 2182b664 (Correct Serai d-f names in Docker)
+=======
+      CHAIN: local
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: dave
 
   serai-eve:
@@ -175,10 +195,14 @@ services:
       - cluster-lg
     environment:
 <<<<<<< HEAD
+<<<<<<< HEAD
       CHAIN: local
 =======
       CHAIN: dev
 >>>>>>> 2182b664 (Correct Serai d-f names in Docker)
+=======
+      CHAIN: local
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: eve
 
   serai-ferdie:
@@ -189,10 +213,14 @@ services:
       - cluster-lg
     environment:
 <<<<<<< HEAD
+<<<<<<< HEAD
       CHAIN: local
       NAME: ferdie
 =======
       CHAIN: dev
+=======
+      CHAIN: local
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: ferdie
 
   # Processor Services

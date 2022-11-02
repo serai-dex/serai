@@ -41,7 +41,11 @@ impl SubstrateCli for Cli {
 
   fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
     match id {
+<<<<<<< HEAD
       "dev" | "devnet" => Ok(Box::new(chain_spec::development_config()?)),
+=======
+      "dev" => Ok(Box::new(chain_spec::development_config()?)),
+>>>>>>> 083198ec (Make the dev profile a local testnet profile)
       "local" => Ok(Box::new(chain_spec::testnet_config()?)),
       _ => panic!("Unknown network ID"),
     }
