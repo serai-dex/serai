@@ -160,7 +160,11 @@ services:
       - dave
       - cluster-lg
     environment:
+<<<<<<< HEAD
       CHAIN: local
+=======
+      CHAIN: dev
+>>>>>>> 2182b664 (Correct Serai d-f names in Docker)
       NAME: dave
 
   serai-eve:
@@ -170,7 +174,11 @@ services:
       - eve
       - cluster-lg
     environment:
+<<<<<<< HEAD
       CHAIN: local
+=======
+      CHAIN: dev
+>>>>>>> 2182b664 (Correct Serai d-f names in Docker)
       NAME: eve
 
   serai-ferdie:
@@ -185,7 +193,7 @@ services:
       NAME: ferdie
 =======
       CHAIN: dev
-      NAME: Ferdie
+      NAME: ferdie
 
   # Processor Services
 
