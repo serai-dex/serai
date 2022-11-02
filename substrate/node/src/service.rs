@@ -154,7 +154,7 @@ pub fn new_partial(
   ))
 }
 
-pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
+pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
   let (
     authority,
     sc_service::PartialComponents {
@@ -168,6 +168,16 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       transaction_pool,
     },
   ) = new_partial(&config)?;
+
+  if config.role.is_authority() {
+    // Block size + 1 KiB
+    let mut cfg = sc_service::config::NonDefaultSetConfig::new(
+      sc_tendermint::PROTOCOL_NAME.into(),
+      (1024 * 1024) + 1024,
+    );
+    cfg.allow_non_reserved(25, 25);
+    config.network.extra_sets.push(cfg);
+  }
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter) =
     sc_service::build_network(sc_service::BuildNetworkParams {

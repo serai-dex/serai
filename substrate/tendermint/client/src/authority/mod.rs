@@ -34,7 +34,8 @@ use tendermint_machine::{
 };
 
 use crate::{
-  CONSENSUS_ID, TendermintValidator, validators::TendermintValidators, tendermint::TendermintImport,
+  CONSENSUS_ID, PROTOCOL_NAME, TendermintValidator, validators::TendermintValidators,
+  tendermint::TendermintImport,
 };
 
 mod gossip;
@@ -150,7 +151,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     // Create the gossip network
     let mut gossip = GossipEngine::new(
       network.clone(),
-      "tendermint",
+      PROTOCOL_NAME,
       Arc::new(TendermintGossip::new(number.clone(), self.import.validators.clone())),
       registry,
     );
@@ -190,6 +191,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       // Handle any received messages
       // This inner loop enables handling all pending messages before  acquiring the out-queue lock
       // again
+      futures::poll!(&mut gossip);
       'inner: loop {
         match recv.try_next() {
           Ok(Some(msg)) => handle
