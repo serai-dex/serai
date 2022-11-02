@@ -11,6 +11,7 @@ volumes:
   serai-ferdie:
 
 services:
+<<<<<<< HEAD
   # Coin services
 
   bitcoin:
@@ -78,6 +79,8 @@ services:
 
   # Serai services
 
+=======
+>>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
   _serai:
     &serai_defaults
     restart: unless-stopped
@@ -110,7 +113,11 @@ services:
       - cluster-sm
       - cluster-lg
     environment:
+<<<<<<< HEAD
       CHAIN: local
+=======
+      CHAIN: dev
+>>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
       NAME: alice
       VALIDATOR: true
 
@@ -122,7 +129,11 @@ services:
       - cluster-sm
       - cluster-lg
     environment:
+<<<<<<< HEAD
       CHAIN: local
+=======
+      CHAIN: dev
+>>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
       NAME: bob
       VALIDATOR: true
 
@@ -134,7 +145,11 @@ services:
       - cluster-sm
       - cluster-lg
     environment:
+<<<<<<< HEAD
       CHAIN: local
+=======
+      CHAIN: dev
+>>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
       NAME: charlie
       VALIDATOR: true
 
@@ -165,5 +180,57 @@ services:
       - ferdie
       - cluster-lg
     environment:
+<<<<<<< HEAD
       CHAIN: local
       NAME: ferdie
+=======
+      CHAIN: dev
+      NAME: Ferdie
+
+  # Processor Services
+
+  # Coin Services
+  bitcoin:
+    profiles:
+      - single-coins
+      - cluster-coins-sm
+      - cluster-coins-lg
+      - coins
+      - bitcoin
+    build:
+      context: ./coins/bitcoin/
+    restart: unless-stopped
+    volumes:
+      - "./coins/bitcoin/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
+  ethereum:
+    profiles:
+      - single-coins
+      - cluster-coins-sm
+      - cluster-coins-lg
+      - coins
+      - ethereum
+    build:
+      context: ./coins/ethereum/
+    restart: unless-stopped
+    volumes:
+      - "./coins/ethereum/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
+  monero:
+    profiles:
+      - single-coins
+      - cluster-coins-sm
+      - cluster-coins-lg
+      - coins
+      - monero
+    build:
+      context: ./coins/monero/
+    restart: unless-stopped
+    volumes:
+      - "./coins/monero/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+    ports:
+      - "18081:18081"
+>>>>>>> e3fc3f28 (Configure node for a multi-node testnet)

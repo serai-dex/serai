@@ -14,6 +14,8 @@ name = "serai-node"
 [dependencies]
 async-trait = "0.1"
 
+log = "0.4"
+
 clap = { version = "4", features = ["derive"] }
 jsonrpsee = { version = "0.15", features = ["server"] }
 
@@ -62,6 +64,7 @@ pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate
 =======
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
+sp-keystore = { git = "https://github.com/serai-dex/substrate" }
 sp-keyring = { git = "https://github.com/serai-dex/substrate" }
 sp-inherents = { git = "https://github.com/serai-dex/substrate" }
 sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
@@ -96,6 +99,7 @@ sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
+sp-tendermint = { path = "../tendermint/primitives" }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 serai-runtime = { path = "../runtime" }
 <<<<<<< HEAD

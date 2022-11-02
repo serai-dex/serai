@@ -8945,7 +8945,11 @@ dependencies = [
  "futures",
  "jsonrpsee",
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+ "log",
+>>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
  "pallet-tendermint",
  "pallet-transaction-payment",
 >>>>>>> fa7a03bf (Update node to use pallet sessions)
@@ -8994,7 +8998,9 @@ dependencies = [
  "sp-inherents",
  "sp-io",
  "sp-keyring",
+ "sp-keystore",
  "sp-runtime",
+ "sp-tendermint",
  "sp-timestamp",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
