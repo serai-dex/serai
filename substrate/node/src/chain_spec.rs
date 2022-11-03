@@ -45,7 +45,7 @@ pub fn development_config() -> Result<ChainSpec, &'static str> {
     // Name
     "Development Network",
     // ID
-    "dev",
+    "devnet",
     ChainType::Development,
     || {
       testnet_genesis(
