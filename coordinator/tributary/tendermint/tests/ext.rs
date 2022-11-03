@@ -19,6 +19,7 @@ type TestValidatorId = u16;
 type TestBlockId = [u8; 4];
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 struct TestSigner(u16);
 #[async_trait]
 impl Signer for TestSigner {
@@ -29,6 +30,17 @@ impl SignatureScheme for TestSignatureScheme {
 >>>>>>> 2947ef08 (Make sign asynchronous):substrate/tendermint/machine/tests/ext.rs
   type ValidatorId = TestValidatorId;
   type Signature = [u8; 32];
+=======
+struct TestSigner(u16);
+#[async_trait]
+impl Signer for TestSigner {
+  type ValidatorId = TestValidatorId;
+  type Signature = [u8; 32];
+
+  async fn validator_id(&self) -> TestValidatorId {
+    self.0
+  }
+>>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/tests/ext.rs
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
   async fn validator_id(&self) -> Option<TestValidatorId> {
@@ -128,6 +140,13 @@ impl Network for TestNetwork {
 
   fn signature_scheme(&self) -> TestSignatureScheme {
     TestSignatureScheme
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
+=======
+  }
+
+  fn weights(&self) -> TestWeights {
+    TestWeights
+>>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/tests/ext.rs
   }
 
   fn weights(&self) -> TestWeights {
@@ -185,7 +204,6 @@ impl TestNetwork {
 =======
         write.push(TendermintMachine::new(
           TestNetwork(i, arc.clone()),
-          i,
           (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
         ));

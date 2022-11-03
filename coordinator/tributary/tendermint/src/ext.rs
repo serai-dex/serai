@@ -64,8 +64,35 @@ impl<S: Signer> Signer for Arc<S> {
   }
 }
 
-/// A signature scheme used by validators.
+/// A signer for a validator.
 #[async_trait]
+pub trait Signer: Send + Sync {
+  // Type used to identify validators.
+  type ValidatorId: ValidatorId;
+  /// Signature type.
+  type Signature: Signature;
+
+  /// Returns the validator's current ID.
+  async fn validator_id(&self) -> Self::ValidatorId;
+  /// Sign a signature with the current validator's private key.
+  async fn sign(&self, msg: &[u8]) -> Self::Signature;
+}
+
+#[async_trait]
+impl<S: Signer> Signer for Arc<S> {
+  type ValidatorId = S::ValidatorId;
+  type Signature = S::Signature;
+
+  async fn validator_id(&self) -> Self::ValidatorId {
+    self.as_ref().validator_id().await
+  }
+
+  async fn sign(&self, msg: &[u8]) -> Self::Signature {
+    self.as_ref().sign(msg).await
+  }
+}
+
+/// A signature scheme used by validators.
 pub trait SignatureScheme: Send + Sync {
   // Type used to identify validators.
   type ValidatorId: ValidatorId;
@@ -78,6 +105,7 @@ pub trait SignatureScheme: Send + Sync {
   type AggregateSignature: Signature;
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// Type representing a signer of this scheme.
   type Signer: Signer<ValidatorId = Self::ValidatorId, Signature = Self::Signature>;
 
@@ -85,6 +113,11 @@ pub trait SignatureScheme: Send + Sync {
   /// Sign a signature with the current validator's private key.
   async fn sign(&self, msg: &[u8]) -> Self::Signature;
 >>>>>>> 2947ef08 (Make sign asynchronous):substrate/tendermint/machine/src/ext.rs
+=======
+  /// Type representing a signer of this scheme.
+  type Signer: Signer<ValidatorId = Self::ValidatorId, Signature = Self::Signature>;
+
+>>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/src/ext.rs
   /// Verify a signature from the validator in question.
   #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool;
@@ -126,10 +159,16 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
   }
 }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
 /// A commit for a specific block.
 ///
 /// The list of validators have weight exceeding the threshold for a valid commit.
 #[derive(PartialEq, Debug, Encode, Decode)]
+=======
+/// A commit for a specific block. The list of validators have weight exceeding the threshold for
+/// a valid commit.
+#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+>>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/src/ext.rs
 pub struct Commit<S: SignatureScheme> {
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// End time of the round which created this commit, used as the start time of the next block.
@@ -190,6 +229,22 @@ impl<W: Weights> Weights for Arc<W> {
   }
 }
 
+impl<W: Weights> Weights for Arc<W> {
+  type ValidatorId = W::ValidatorId;
+
+  fn total_weight(&self) -> u64 {
+    self.as_ref().total_weight()
+  }
+
+  fn weight(&self, validator: Self::ValidatorId) -> u64 {
+    self.as_ref().weight(validator)
+  }
+
+  fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId {
+    self.as_ref().proposer(number, round)
+  }
+}
+
 /// Simplified error enum representing a block's validity.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error, Encode, Decode)]
 pub enum BlockError {
@@ -229,11 +284,14 @@ pub trait Network: Send + Sync {
   /// Network latency time in seconds.
   const LATENCY_TIME: u32;
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// The block time is defined as the processing time plus three times the latency.
   fn block_time() -> u32 {
     Self::BLOCK_PROCESSING_TIME + (3 * Self::LATENCY_TIME)
   }
 
+=======
+>>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/src/ext.rs
   /// Return a handle on the signer in use, usable for the entire lifetime of the machine.
   fn signer(&self) -> <Self::SignatureScheme as SignatureScheme>::Signer;
   /// Return a handle on the signing scheme in use, usable for the entire lifetime of the machine.
