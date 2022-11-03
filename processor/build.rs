@@ -9,7 +9,7 @@ use std::{
 #[must_use]
 fn subxt(metadata: &Path) -> bool {
   let mut subxt = Command::new("subxt");
-  subxt.args(&["metadata", "-f", "bytes"]);
+  subxt.args(["metadata", "-f", "bytes"]);
   if !subxt.status().unwrap().success() {
     return false;
   }
@@ -80,7 +80,7 @@ fn main() {
   File::create(&runtime)
     .unwrap()
     .write_all(
-      &format!(
+      format!(
         "
           #[subxt::subxt(runtime_metadata_path = \"{}\")]
           mod runtime {{}}

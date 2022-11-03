@@ -30,18 +30,17 @@ SCALE.
   - Enums are prefixed by an ordinal byte of their type, followed by their
 actual values.
   - Vectors are prefixed by their length.
-  - In Instruction fields are numbered and sequentially encoded, allowing
-omission, each prefixed by an ordinal byte. This is due to its fields being more
-frequently omitted than not, making their presence what's notable.
-  - All other types have their fields sequentially encoded with no markers.
+  - Structs have their fields sequentially encoded without additional markers.
 
 Certain fields may be omitted depending on the network in question.
 
 ### In Instructions
 
-  - `origin` (Address):  Address from the network of origin which sent funds in.
-  - `target` (Address):  The ink! contract to transfer the incoming funds to.
-  - `data`   (Vec\<u8>): The data to call `target` with.
+  - `target` (Address):          The ink! contract to transfer the incoming
+funds to.
+  - `data`   (Vec\<u8>):         The data to call `target` with.
+  - `origin` (Option\<Address>): Address from the network of origin which sent
+funds in.
 
 Networks may automatically provide `origin`. If they do, the instruction may
 still provide `origin`, overriding the automatically provided value. If no

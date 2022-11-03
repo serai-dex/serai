@@ -7706,6 +7706,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-instructions"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "thiserror",
+]
+
+[[package]]
 name = "serai-multisig"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,16 @@
+[package]
+name = "serai-instructions"
+version = "0.1.0"
+description = "Serai instructions library, enabling encoding and decoding"
+license = "MIT"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+thiserror = { version = "1", optional = true }
+
+scale = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
+
+[features]
+std = ["thiserror", "scale/std"]
+default = ["std"]
