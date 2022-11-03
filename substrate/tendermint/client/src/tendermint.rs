@@ -27,7 +27,7 @@ use crate::{
 
 /// Tendermint import handler.
 pub struct TendermintImport<T: TendermintValidator> {
-  pub(crate) validators: Arc<TendermintValidators<T>>,
+  pub(crate) validators: TendermintValidators<T>,
 
   pub(crate) providers: Arc<AsyncRwLock<Option<T::CIDP>>>,
   pub(crate) importing_block: Arc<RwLock<Option<<T::Block as Block>::Hash>>>,
@@ -54,7 +54,7 @@ impl<T: TendermintValidator> Clone for TendermintImport<T> {
 impl<T: TendermintValidator> TendermintImport<T> {
   pub(crate) fn new(client: Arc<T::Client>) -> TendermintImport<T> {
     TendermintImport {
-      validators: Arc::new(TendermintValidators::new(client.clone())),
+      validators: TendermintValidators::new(client.clone()),
 
       providers: Arc::new(AsyncRwLock::new(None)),
       importing_block: Arc::new(RwLock::new(None)),

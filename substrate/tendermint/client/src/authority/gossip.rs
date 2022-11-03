@@ -13,14 +13,11 @@ use crate::{TendermintValidator, validators::TendermintValidators};
 #[derive(Clone)]
 pub(crate) struct TendermintGossip<T: TendermintValidator> {
   number: Arc<RwLock<u64>>,
-  signature_scheme: Arc<TendermintValidators<T>>,
+  signature_scheme: TendermintValidators<T>,
 }
 
 impl<T: TendermintValidator> TendermintGossip<T> {
-  pub(crate) fn new(
-    number: Arc<RwLock<u64>>,
-    signature_scheme: Arc<TendermintValidators<T>>,
-  ) -> Self {
+  pub(crate) fn new(number: Arc<RwLock<u64>>, signature_scheme: TendermintValidators<T>) -> Self {
     TendermintGossip { number, signature_scheme }
   }
 

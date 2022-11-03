@@ -3,8 +3,6 @@ use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 
-use tokio::sync::RwLock as AsyncRwLock;
-
 use sp_core::Decode;
 use sp_application_crypto::{
   RuntimePublic as PublicTrait,
@@ -17,7 +15,7 @@ use sp_api::{BlockId, ProvideRuntimeApi};
 
 use sc_client_api::HeaderBackend;
 
-use tendermint_machine::ext::{BlockNumber, Round, Weights, SignatureScheme};
+use tendermint_machine::ext::{BlockNumber, Round, Weights, Signer, SignatureScheme};
 
 use sp_tendermint::TendermintApi;
 
@@ -82,49 +80,81 @@ impl<T: TendermintClient> Deref for Refresh<T> {
 }
 
 /// Tendermint validators observer, providing data on the active validators.
-pub struct TendermintValidators<T: TendermintClient>(
-  Refresh<T>,
-  Arc<AsyncRwLock<Option<Arc<dyn CryptoStore>>>>,
-);
+pub struct TendermintValidators<T: TendermintClient>(Refresh<T>);
+impl<T: TendermintClient> Clone for TendermintValidators<T> {
+  fn clone(&self) -> Self {
+    Self(Refresh { _refresh: self.0._refresh.clone(), client: self.0.client.clone() })
+  }
+}
 
 impl<T: TendermintClient> TendermintValidators<T> {
   pub(crate) fn new(client: Arc<T::Client>) -> TendermintValidators<T> {
-    TendermintValidators(
-      Refresh {
-        _refresh: Arc::new(RwLock::new(TendermintValidatorsStruct::from_module::<T>(&client))),
-        client,
-      },
-      Arc::new(AsyncRwLock::new(None)),
-    )
+    TendermintValidators(Refresh {
+      _refresh: Arc::new(RwLock::new(TendermintValidatorsStruct::from_module::<T>(&client))),
+      client,
+    })
   }
+}
 
-  pub(crate) async fn set_keys(&self, keys: Arc<dyn CryptoStore>) {
-    *self.1.write().await = Some(keys);
+pub struct TendermintSigner<T: TendermintClient>(
+  pub(crate) Arc<dyn CryptoStore>,
+  pub(crate) TendermintValidators<T>,
+);
+
+impl<T: TendermintClient> Clone for TendermintSigner<T> {
+  fn clone(&self) -> Self {
+    Self(self.0.clone(), self.1.clone())
+  }
+}
+
+impl<T: TendermintClient> TendermintSigner<T> {
+  async fn get_public_key(&self) -> Public {
+    let pubs = self.0.sr25519_public_keys(KEY_TYPE_ID).await;
+    if pubs.is_empty() {
+      self.0.sr25519_generate_new(KEY_TYPE_ID, None).await.unwrap()
+    } else {
+      pubs[0]
+    }
   }
 }
 
 #[async_trait]
+impl<T: TendermintClient> Signer for TendermintSigner<T> {
+  type ValidatorId = u16;
+  type Signature = Signature;
+
+  async fn validator_id(&self) -> u16 {
+    let key = self.get_public_key().await;
+    for (i, k) in (*self.1 .0).read().unwrap().lookup.iter().enumerate() {
+      if k == &key {
+        return u16::try_from(i).unwrap();
+      }
+    }
+    // TODO: Enable switching between being a validator and not being one, likely be returning
+    // Option<u16> here. Non-validators should be able to simply not broadcast when they think
+    // they have messages.
+    panic!("not a validator");
+  }
+
+  async fn sign(&self, msg: &[u8]) -> Signature {
+    Signature::decode(
+      &mut self
+        .0
+        .sign_with(KEY_TYPE_ID, &self.get_public_key().await.into(), msg)
+        .await
+        .unwrap()
+        .unwrap()
+        .as_ref(),
+    )
+    .unwrap()
+  }
+}
+
 impl<T: TendermintClient> SignatureScheme for TendermintValidators<T> {
   type ValidatorId = u16;
   type Signature = Signature;
   type AggregateSignature = Vec<Signature>;
-
-  async fn sign(&self, msg: &[u8]) -> Signature {
-    let read = self.1.read().await;
-    let keys = read.as_ref().unwrap();
-    let key = {
-      let pubs = keys.sr25519_public_keys(KEY_TYPE_ID).await;
-      if pubs.is_empty() {
-        keys.sr25519_generate_new(KEY_TYPE_ID, None).await.unwrap()
-      } else {
-        pubs[0]
-      }
-    };
-    Signature::decode(
-      &mut keys.sign_with(KEY_TYPE_ID, &key.into(), msg).await.unwrap().unwrap().as_ref(),
-    )
-    .unwrap()
-  }
+  type Signer = TendermintSigner<T>;
 
   fn verify(&self, validator: u16, msg: &[u8], sig: &Signature) -> bool {
     self.0.read().unwrap().lookup[usize::try_from(validator).unwrap()].verify(&msg, sig)

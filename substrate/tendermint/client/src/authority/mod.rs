@@ -34,7 +34,8 @@ use tendermint_machine::{
 };
 
 use crate::{
-  CONSENSUS_ID, PROTOCOL_NAME, TendermintValidator, validators::TendermintValidators,
+  CONSENSUS_ID, PROTOCOL_NAME, TendermintValidator,
+  validators::{TendermintSigner, TendermintValidators},
   tendermint::TendermintImport,
 };
 
@@ -49,6 +50,8 @@ use import_future::ImportFuture;
 // as it's only Authority which implements tendermint_machine::ext::Network. Network has
 // verify_commit provided, and even non-authorities have to verify commits
 struct ActiveAuthority<T: TendermintValidator> {
+  signer: TendermintSigner<T>,
+
   // Block whose gossip is being tracked
   number: Arc<RwLock<u64>>,
   // Outgoing message queue, placed here as the GossipEngine itself can't be
@@ -138,7 +141,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
   /// as it will not return until the P2P stack shuts down.
   pub async fn authority(
     mut self,
-    validator: (u16, Arc<dyn CryptoStore>),
+    keys: Arc<dyn CryptoStore>,
     providers: T::CIDP,
     env: T::Environment,
     network: T::Network,
@@ -165,21 +168,21 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       // Set this struct as active
       *self.import.providers.write().await = Some(providers);
       self.active = Some(ActiveAuthority {
+        signer: TendermintSigner(keys, self.import.validators.clone()),
+
         number: number.clone(),
         gossip_queue: gossip_queue.clone(),
 
         env,
         announce: network,
       });
-      let (validator, keys) = validator;
-      self.import.validators.set_keys(keys).await;
 
       let proposal = self
         .get_proposal(&self.import.client.header(BlockId::Hash(best_hash)).unwrap().unwrap())
         .await;
 
       // We no longer need self, so let TendermintMachine become its owner
-      TendermintMachine::new(self, validator, last, proposal)
+      TendermintMachine::new(self, last, proposal)
     };
 
     // Start receiving messages about the Tendermint process for this block
@@ -248,11 +251,15 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
 
   const BLOCK_TIME: u32 = T::BLOCK_TIME_IN_SECONDS;
 
-  fn signature_scheme(&self) -> Arc<TendermintValidators<T>> {
+  fn signer(&self) -> TendermintSigner<T> {
+    self.active.as_ref().unwrap().signer.clone()
+  }
+
+  fn signature_scheme(&self) -> TendermintValidators<T> {
     self.import.validators.clone()
   }
 
-  fn weights(&self) -> Arc<TendermintValidators<T>> {
+  fn weights(&self) -> TendermintValidators<T> {
     self.import.validators.clone()
   }
 
