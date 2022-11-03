@@ -19,8 +19,8 @@ async-trait = "0.1"
 rand_core = "0.6"
 thiserror = "1"
 
+# Elliptic curve cryptography
 group = "0.12"
-
 curve25519-dalek = { version = "3", features = ["std"] }
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
@@ -31,15 +31,16 @@ monero-serai = { path = "../coins/monero", features = ["multisig"] }
 # Substrate
 scale = { package = "parity-scale-codec", version = "3.0.0" }
 frame-system = { git = "https://github.com/serai-dex/substrate" }
+subxt = "0.24"
 
-in-instructions = { package = "serai-in-instructions", path = "../substrate/in-instructions" }
-serai-runtime = { path = "../substrate/runtime" }
-
+# JSON-RPC
 jsonrpsee-core = "0.15"
 jsonrpsee-http-client = "0.15"
-subxt = "0.22"
-
 jsonrpsee-http-server = "0.15"
+
+# Serai
+in-instructions = { package = "serai-in-instructions", path = "../substrate/in-instructions" }
+serai-runtime = { path = "../substrate/runtime" }
 
 [dev-dependencies]
 rand_core = "0.6"

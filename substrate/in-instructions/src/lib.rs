@@ -89,7 +89,7 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config: frame_system::Config<BlockNumber = u32> {
-    type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
   #[pallet::event]
@@ -153,32 +153,30 @@ pub mod pallet {
     fn create_inherent(data: &InherentData) -> Option<Self::Call> {
       let current_block = <frame_system::Pallet<T>>::block_number();
 
-      let res =
-        data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap().map(|pending| Call::execute {
-          coins: pending
-            .iter()
-            // Map each Option<Coin<PendingBatch>>
-            .map(|coin| {
-              // to an Option<Coin<Batch>>
-              coin.clone().map(|coin| Coin {
-                height: coin.height,
-                // Only propose this batch if it's been queued for the delay period
-                batches: coin
-                  .batches
-                  .iter()
-                  .filter_map(|batch| {
-                    if (batch.reported_at + DELAY) <= current_block {
-                      Some(batch.batch.clone())
-                    } else {
-                      None
-                    }
-                  })
-                  .collect(),
-              })
+      data.get_data::<PendingCoins>(&INHERENT_IDENTIFIER).unwrap().map(|pending| Call::execute {
+        coins: pending
+          .iter()
+          // Map each Option<Coin<PendingBatch>>
+          .map(|coin| {
+            // to an Option<Coin<Batch>>
+            coin.clone().map(|coin| Coin {
+              height: coin.height,
+              // Only propose this batch if it's been queued for the delay period
+              batches: coin
+                .batches
+                .iter()
+                .filter_map(|batch| {
+                  if (batch.reported_at + DELAY) <= current_block {
+                    Some(batch.batch.clone())
+                  } else {
+                    None
+                  }
+                })
+                .collect(),
             })
-            .collect(),
-        });
-      res
+          })
+          .collect(),
+      })
     }
 
     fn check_inherent(call: &Self::Call, data: &InherentData) -> Result<(), Self::Error> {

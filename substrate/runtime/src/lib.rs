@@ -209,7 +209,7 @@ impl pallet_contracts::Config for Runtime {
 }
 
 impl serai_in_instructions::pallet::Config for Runtime {
-  type Event = Event;
+  type RuntimeEvent = RuntimeEvent;
 }
 
 pub type Address = AccountId;

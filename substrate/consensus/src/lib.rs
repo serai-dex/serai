@@ -52,7 +52,6 @@ pub fn import_queue<S: sp_consensus::SelectChain<Block> + 'static>(
     0,
     select_chain,
     |_, _| async { Ok(providers().await) },
-    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
   sc_pow::import_queue(
@@ -111,7 +110,6 @@ pub fn authority<S: sp_consensus::SelectChain<Block> + 'static>(
     0, // Block to start checking inherents at
     select_chain.clone(),
     move |_, _| async { Ok(providers().await) },
-    sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
   ));
 
   let (worker, worker_task) = sc_pow::start_mining_worker(

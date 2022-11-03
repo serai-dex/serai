@@ -82,7 +82,6 @@ std = [
 
 	"pallet-contracts/std",
 	"pallet-contracts-primitives/std",
-	"pallet-contracts-rpc-runtime-api/std",
 
 	"serai-in-instructions/std",
 ]
