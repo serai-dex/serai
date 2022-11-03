@@ -3,6 +3,8 @@ use std::{
   collections::HashMap,
 };
 
+use async_trait::async_trait;
+
 use rand_core::OsRng;
 
 use crate::{
@@ -55,7 +57,7 @@ impl Network for LocalNetwork {
   }
 }
 
-async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
+pub(crate) async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
   let latest = coin.get_latest_block_number().await.unwrap();

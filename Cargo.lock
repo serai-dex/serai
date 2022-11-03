@@ -7771,6 +7771,7 @@ dependencies = [
  "async-trait",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
+ "flexible-transcript",
  "frame-system",
  "futures",
  "group",

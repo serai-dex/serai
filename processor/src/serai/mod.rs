@@ -2,10 +2,10 @@ use thiserror::Error;
 
 use frame_system::Config as SysConfig;
 use subxt::{
-  Config, ClientBuilder,
-  extrinsic::BaseExtrinsicParams,
+  tx::BaseExtrinsicParams,
   events::{EventSubscription, FilterEvents},
   rpc::Subscription,
+  Config, OnlineClient,
 };
 
 use jsonrpsee_core::client::ClientT;
@@ -30,18 +30,20 @@ impl Config for SeraiConfig {
   type Signature = Signature;
 
   type Extrinsic = UncheckedExtrinsic;
+  type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, ()>;
 }
 
 include!(concat!(env!("OUT_DIR"), "/runtime.rs"));
 
-pub(crate) type Events<'a> =
-  EventSubscription<'a, Subscription<<SeraiConfig as Config>::Header>, SeraiConfig, runtime::Event>;
+pub(crate) type Events = EventSubscription<
+  SeraiConfig,
+  OnlineClient<SeraiConfig>,
+  Subscription<<SeraiConfig as Config>::Header>,
+>;
 pub(crate) type Filter<T> = (T,);
-pub(crate) type Event<'a, T> = FilterEvents<'a, Events<'a>, SeraiConfig, Filter<T>>;
+pub(crate) type Event<'a, T> = FilterEvents<'a, Events, SeraiConfig, Filter<T>>;
 
 pub(crate) type Batch = runtime::in_instructions::events::Batch;
-
-type SeraiXt = runtime::RuntimeApi<SeraiConfig, BaseExtrinsicParams<SeraiConfig, ()>>;
 
 #[derive(Clone, Error, Debug)]
 pub(crate) enum SeraiError {
@@ -50,11 +52,11 @@ pub(crate) enum SeraiError {
 }
 
 #[derive(Clone)]
-pub(crate) struct Serai(SeraiXt);
+pub(crate) struct Serai(OnlineClient<SeraiConfig>);
 
 impl Serai {
   pub(crate) async fn new() -> Self {
-    Serai(ClientBuilder::new().build().await.unwrap().to_runtime_api())
+    Serai(OnlineClient::<SeraiConfig>::from_url("ws://127.0.0.1:9944").await.unwrap())
   }
 
   // Doesn't use subxt as we can't have multiple connections through it yet a global subxt requires
