@@ -65,12 +65,10 @@ use std::sync::Arc;
 =======
 use std::{boxed::Box, sync::Arc, error::Error};
 
-use sp_keystore::SyncCryptoStore;
 use sp_runtime::traits::{Block as BlockTrait};
 use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
-use sp_api::{BlockId, ProvideRuntimeApi};
-use sp_tendermint::TendermintApi;
+use sp_api::ProvideRuntimeApi;
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
@@ -605,17 +603,24 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     authority.await;
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
 =======
     authority.validate().await;
 >>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
 =======
+=======
+>>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
     task_manager.spawn_essential_handle().spawn(
       "tendermint",
       None,
       TendermintAuthority::new(authority).authority(
+<<<<<<< HEAD
         (0, keystore_container.keystore()),
+=======
+        keystore_container.keystore(),
+>>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
         Cidp,
         sc_basic_authorship::ProposerFactory::new(
           task_manager.spawn_handle(),
@@ -628,6 +633,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
         None,
       ),
     );
+<<<<<<< HEAD
 >>>>>>> 6c54289f (Connect the Tendermint machine to a GossipEngine)
 =======
     let keys = keystore_container.sync_keystore();
@@ -669,6 +675,8 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       log::warn!("authority role yet not a validator");
     }
 >>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
+=======
+>>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
   }
 
   network_starter.start_network();
