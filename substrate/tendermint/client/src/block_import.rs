@@ -47,6 +47,9 @@ where
     mut block: BlockImportParams<T::Block, Self::Transaction>,
     new_cache: HashMap<CacheKeyId, Vec<u8>>,
   ) -> Result<ImportResult, Self::Error> {
+    if self.client.status(BlockId::Hash(block.hash)).unwrap() == BlockStatus::InChain {
+      return Ok(ImportResult::AlreadyInChain);
+    }
     self.check(&mut block).await?;
     self.client.import_block(block, new_cache).await.map_err(Into::into)
 
