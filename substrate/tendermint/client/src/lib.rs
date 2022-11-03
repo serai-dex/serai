@@ -10,7 +10,9 @@ use sp_consensus::{Error, Environment};
 use sc_client_api::{BlockBackend, Backend, Finalizer};
 use sc_block_builder::BlockBuilderApi;
 use sc_consensus::{BlockImport, BasicQueue};
-use sc_network::NetworkBlock;
+
+use sc_network_common::config::NonDefaultSetConfig;
+use sc_network::{ProtocolName, NetworkBlock};
 use sc_network_gossip::Network;
 
 use sp_tendermint::TendermintApi;
@@ -29,8 +31,25 @@ pub(crate) mod authority;
 pub use authority::TendermintAuthority;
 
 pub const CONSENSUS_ID: [u8; 4] = *b"tend";
-pub const KEY_TYPE_ID: KeyTypeId = KeyTypeId(CONSENSUS_ID);
-pub const PROTOCOL_NAME: &str = "/serai/tendermint/1";
+pub(crate) const KEY_TYPE_ID: KeyTypeId = KeyTypeId(CONSENSUS_ID);
+
+const PROTOCOL_NAME: &str = "/tendermint/1";
+
+fn protocol_name<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> ProtocolName {
+  let mut name = format!("/{}", hex::encode(genesis.as_ref()));
+  if let Some(fork) = fork {
+    name += &format!("/{}", fork);
+  }
+  name += PROTOCOL_NAME;
+  name.into()
+}
+
+pub fn set_config<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> NonDefaultSetConfig {
+  // TODO: 1 MiB Block Size + 1 KiB
+  let mut cfg = NonDefaultSetConfig::new(protocol_name(genesis, fork), (1024 * 1024) + 1024);
+  cfg.allow_non_reserved(25, 25);
+  cfg
+}
 
 /// Trait consolidating all generics required by sc_tendermint for processing.
 pub trait TendermintClient: Send + Sync + 'static {

@@ -168,13 +168,10 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   ) = new_partial(&config)?;
 
   if config.role.is_authority() {
-    // Block size + 1 KiB
-    let mut cfg = sc_service::config::NonDefaultSetConfig::new(
-      sc_tendermint::PROTOCOL_NAME.into(),
-      (1024 * 1024) + 1024,
-    );
-    cfg.allow_non_reserved(25, 25);
-    config.network.extra_sets.push(cfg);
+    config.network.extra_sets.push(sc_tendermint::set_config(
+      client.block_hash(0).unwrap().unwrap(),
+      config.chain_spec.fork_id(),
+    ));
   }
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter) =

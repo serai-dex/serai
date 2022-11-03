@@ -15,6 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 async-trait = "0.1"
 
+hex = "0.4"
 log = "0.4"
 
 futures = "0.3"
@@ -34,6 +35,7 @@ sp-tendermint = { path = "../primitives" }
 
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
 sc-executor = { git = "https://github.com/serai-dex/substrate" }
+sc-network-common = { git = "https://github.com/serai-dex/substrate" }
 sc-network = { git = "https://github.com/serai-dex/substrate" }
 sc-network-gossip = { git = "https://github.com/serai-dex/substrate" }
 sc-service = { git = "https://github.com/serai-dex/substrate" }
