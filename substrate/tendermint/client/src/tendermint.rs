@@ -176,6 +176,16 @@ impl<T: TendermintValidator> TendermintImport<T> {
     &self,
     block: &mut BlockImportParams<T::Block, BT>,
   ) -> Result<(), Error> {
+    if block.finalized {
+      if block.fork_choice != Some(ForkChoiceStrategy::Custom(false)) {
+        // Since we alw1ays set the fork choice, this means something else marked the block as
+        // finalized, which shouldn't be possible. Ensuring nothing else is setting blocks as
+        // finalized helps ensure our security
+        panic!("block was finalized despite not setting the fork choice");
+      }
+      return Ok(());
+    }
+
     // Set the block as a worse choice
     block.fork_choice = Some(ForkChoiceStrategy::Custom(false));
 
