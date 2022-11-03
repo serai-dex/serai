@@ -3,15 +3,30 @@ use std::{marker::PhantomData, sync::Arc, collections::HashMap};
 use async_trait::async_trait;
 
 use sp_api::BlockId;
-use sp_runtime::traits::Block;
+use sp_runtime::traits::{Header, Block};
 use sp_blockchain::{BlockStatus, HeaderBackend, Backend as BlockchainBackend};
 use sp_consensus::{Error, CacheKeyId, SelectChain};
 
 use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport, Verifier};
 
-use sc_client_api::Backend;
+use sc_client_api::{Backend, BlockBackend};
 
 use crate::{TendermintValidator, tendermint::TendermintImport};
+
+impl<T: TendermintValidator> TendermintImport<T> {
+  fn check_already_in_chain(&self, hash: <T::Block as Block>::Hash) -> bool {
+    let id = BlockId::Hash(hash);
+    // If it's in chain, with justifications, return it's already on chain
+    // If it's in chain, without justifications, continue the block import process to import its
+    // justifications
+    if (self.client.status(id).unwrap() == BlockStatus::InChain) &&
+      self.client.justifications(&id).unwrap().is_some()
+    {
+      return true;
+    }
+    false
+  }
+}
 
 #[async_trait]
 impl<T: TendermintValidator> BlockImport<T::Block> for TendermintImport<T>
@@ -28,7 +43,7 @@ where
     &mut self,
     mut block: BlockCheckParams<T::Block>,
   ) -> Result<ImportResult, Self::Error> {
-    if self.client.status(BlockId::Hash(block.hash)).unwrap() == BlockStatus::InChain {
+    if self.check_already_in_chain(block.hash) {
       return Ok(ImportResult::AlreadyInChain);
     }
     self.verify_order(block.parent_hash, block.number)?;
@@ -47,9 +62,10 @@ where
     mut block: BlockImportParams<T::Block, Self::Transaction>,
     new_cache: HashMap<CacheKeyId, Vec<u8>>,
   ) -> Result<ImportResult, Self::Error> {
-    if self.client.status(BlockId::Hash(block.hash)).unwrap() == BlockStatus::InChain {
+    if self.check_already_in_chain(block.header.hash()) {
       return Ok(ImportResult::AlreadyInChain);
     }
+
     self.check(&mut block).await?;
     self.client.import_block(block, new_cache).await.map_err(Into::into)
 
@@ -68,6 +84,10 @@ where
     &mut self,
     mut block: BlockImportParams<T::Block, ()>,
   ) -> Result<(BlockImportParams<T::Block, ()>, Option<Vec<(CacheKeyId, Vec<u8>)>>), String> {
+    if self.check_already_in_chain(block.header.hash()) {
+      return Ok((block, None));
+    }
+
     self.check(&mut block).await.map_err(|e| format!("{}", e))?;
     Ok((block, None))
   }
