@@ -76,6 +76,8 @@ use sc_network::NetworkService;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 >>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
 
+use sc_client_api::BlockBackend;
+
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 <<<<<<< HEAD
