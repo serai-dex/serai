@@ -55,4 +55,11 @@ impl<T: TendermintValidator> Validator<T::Block> for TendermintGossip<T> {
 
     ValidationResult::ProcessAndKeep(Self::topic(msg.number().0))
   }
+
+  fn message_expired<'a>(
+    &'a self,
+  ) -> Box<dyn FnMut(<T::Block as Block>::Hash, &[u8]) -> bool + 'a> {
+    let number = self.number.clone();
+    Box::new(move |topic, _| topic != Self::topic(*number.read().unwrap()))
+  }
 }
