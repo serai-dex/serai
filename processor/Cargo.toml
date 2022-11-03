@@ -39,7 +39,7 @@ jsonrpsee-http-client = "0.15"
 jsonrpsee-http-server = "0.15"
 
 # Serai
-in-instructions = { package = "serai-in-instructions", path = "../substrate/in-instructions" }
+in-instructions = { package = "serai-in-instructions", path = "../substrate/in-instructions/pallet" }
 serai-runtime = { path = "../substrate/runtime" }
 
 [dev-dependencies]

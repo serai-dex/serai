@@ -40,7 +40,7 @@ pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", d
 pallet-contracts-primitives = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-contracts = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-serai-in-instructions = { path = "../in-instructions", default-features = false }
+serai-in-instructions = { path = "../in-instructions/pallet", default-features = false }
 
 # Used for the node template's RPCs
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
