@@ -10,6 +10,8 @@ use sc_transaction_pool::FullPool;
 use sc_network::NetworkService;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
+use sc_client_api::BlockBackend;
+
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 pub(crate) use sc_tendermint::{
