@@ -1,6 +1,9 @@
 mod core;
 mod health;
 mod observer;
+mod kafka;
+mod aes;
+mod crypt;
 
 use std::thread;
 use std::io::Write;
@@ -63,5 +66,14 @@ async fn main() {
     // Start Network Broker
 
     // Hang on cli
+
+    // Kafka Test
+    //kafka::start();
+
+    // AES Encrypt Test
+    //aes::start();
+
+    // Magic Crypt Test
+    crypt::start();
 
 }
