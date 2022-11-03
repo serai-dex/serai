@@ -10,10 +10,7 @@ use parity_scale_codec::{Encode, Decode};
 
 use tokio::{
   task::{JoinHandle, yield_now},
-  sync::{
-    RwLock,
-    mpsc::{self, error::TryRecvError},
-  },
+  sync::mpsc::{self, error::TryRecvError},
   time::sleep,
 };
 
@@ -90,7 +87,7 @@ impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
   #[must_use]
   pub fn verify_signature<Scheme: SignatureScheme<ValidatorId = V, Signature = S>>(
     &self,
-    signer: &Arc<Scheme>,
+    signer: &Scheme,
   ) -> bool {
     signer.verify(self.msg.sender, &self.msg.encode(), &self.sig)
   }
@@ -104,10 +101,12 @@ enum TendermintError<V: ValidatorId> {
 
 /// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
-  network: Arc<RwLock<N>>,
-  signer: Arc<N::SignatureScheme>,
+  network: N,
+  signer: <N::SignatureScheme as SignatureScheme>::Signer,
+  validators: N::SignatureScheme,
   weights: Arc<N::Weights>,
-  proposer: N::ValidatorId,
+
+  validator_id: N::ValidatorId,
 
   number: BlockNumber,
   canonical_start_time: u64,
@@ -178,13 +177,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.step = step;
     self.queue.push((
       true,
-      Message { sender: self.proposer, number: self.number, round: self.round, data },
+      Message { sender: self.validator_id, number: self.number, round: self.round, data },
     ));
   }
 
   // 14-21
   fn round_propose(&mut self) -> bool {
-    if self.weights.proposer(self.number, self.round) == self.proposer {
+    if self.weights.proposer(self.number, self.round) == self.validator_id {
       let (round, block) = self
         .valid
         .clone()
@@ -222,6 +221,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
     let round_end = self.end_time[&end_round];
     sleep(round_end.saturating_duration_since(Instant::now())).await;
 
+    self.validator_id = self.signer.validator_id().await;
+
     self.number.0 += 1;
     self.canonical_start_time = self.canonical_end_time(end_round);
     self.start_time = round_end;
@@ -229,7 +230,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     self.queue = self.queue.drain(..).filter(|msg| msg.1.number == self.number).collect();
 
-    self.log = MessageLog::new(self.network.read().await.weights());
+    self.log = MessageLog::new(self.weights.clone());
     self.end_time = HashMap::new();
 
     self.locked = None;
@@ -241,12 +242,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   /// Create a new Tendermint machine, for the specified proposer, from the specified block, with
   /// the specified block as the one to propose next, returning a handle for the machine.
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(
-    network: N,
-    proposer: N::ValidatorId,
-    last: (BlockNumber, u64),
-    proposal: N::Block,
-  ) -> TendermintHandle<N> {
+  pub fn new(network: N, last: (BlockNumber, u64), proposal: N::Block) -> TendermintHandle<N> {
     let (msg_send, mut msg_recv) = mpsc::channel(100); // Backlog to accept. Currently arbitrary
     TendermintHandle {
       messages: msg_send,
@@ -270,15 +266,18 @@ impl<N: Network + 'static> TendermintMachine<N> {
           instant_now - sys_now.duration_since(last_end).unwrap_or(Duration::ZERO)
         };
 
-        let signer = network.signature_scheme();
-        let weights = network.weights();
-        let network = Arc::new(RwLock::new(network));
+        let signer = network.signer();
+        let validators = network.signature_scheme();
+        let weights = Arc::new(network.weights());
+        let validator_id = signer.validator_id().await;
         // 01-10
         let mut machine = TendermintMachine {
           network,
           signer,
+          validators,
           weights: weights.clone(),
-          proposer,
+
+          validator_id,
 
           number: BlockNumber(last.0 .0 + 1),
           canonical_start_time: last.1,
@@ -334,7 +333,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           loop {
             match msg_recv.try_recv() {
               Ok(msg) => {
-                if !msg.verify_signature(&machine.signer) {
+                if !msg.verify_signature(&machine.validators) {
                   continue;
                 }
                 machine.queue.push((false, msg.msg));
@@ -372,20 +371,20 @@ impl<N: Network + 'static> TendermintMachine<N> {
                   validators,
                   signature: N::SignatureScheme::aggregate(&sigs),
                 };
-                debug_assert!(machine.network.read().await.verify_commit(block.id(), &commit));
+                debug_assert!(machine.network.verify_commit(block.id(), &commit));
 
-                let proposal = machine.network.write().await.add_block(block, commit).await;
+                let proposal = machine.network.add_block(block, commit).await;
                 machine.reset(msg.round, proposal).await;
               }
               Err(TendermintError::Malicious(validator)) => {
-                machine.network.write().await.slash(validator).await;
+                machine.network.slash(validator).await;
               }
               Err(TendermintError::Temporal) => (),
             }
 
             if broadcast {
               let sig = machine.signer.sign(&msg.encode()).await;
-              machine.network.write().await.broadcast(SignedMessage { msg, sig }).await;
+              machine.network.broadcast(SignedMessage { msg, sig }).await;
             }
           }
 
@@ -405,7 +404,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     // Verify the end time and signature if this is a precommit
     if let Data::Precommit(Some((id, sig))) = &msg.data {
-      if !self.signer.verify(
+      if !self.validators.verify(
         msg.sender,
         &commit_msg(self.canonical_end_time(msg.round), id.as_ref()),
         sig,
@@ -496,7 +495,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // 22-33
       if self.step == Step::Propose {
         // Delay error handling (triggering a slash) until after we vote.
-        let (valid, err) = match self.network.write().await.validate(block).await {
+        let (valid, err) = match self.network.validate(block).await {
           Ok(_) => (true, Ok(None)),
           Err(BlockError::Temporal) => (false, Ok(None)),
           Err(BlockError::Fatal) => (false, Err(TendermintError::Malicious(proposer))),
@@ -538,7 +537,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // being set, or only being set historically, means this has yet to be run
 
         if self.log.has_consensus(self.round, Data::Prevote(Some(block.id()))) {
-          match self.network.write().await.validate(block).await {
+          match self.network.validate(block).await {
             Ok(_) => (),
             Err(BlockError::Temporal) => (),
             Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,

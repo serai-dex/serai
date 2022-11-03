@@ -33,8 +33,35 @@ pub struct BlockNumber(pub u64);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct Round(pub u32);
 
-/// A signature scheme used by validators.
+/// A signer for a validator.
 #[async_trait]
+pub trait Signer: Send + Sync {
+  // Type used to identify validators.
+  type ValidatorId: ValidatorId;
+  /// Signature type.
+  type Signature: Signature;
+
+  /// Returns the validator's current ID.
+  async fn validator_id(&self) -> Self::ValidatorId;
+  /// Sign a signature with the current validator's private key.
+  async fn sign(&self, msg: &[u8]) -> Self::Signature;
+}
+
+#[async_trait]
+impl<S: Signer> Signer for Arc<S> {
+  type ValidatorId = S::ValidatorId;
+  type Signature = S::Signature;
+
+  async fn validator_id(&self) -> Self::ValidatorId {
+    self.as_ref().validator_id().await
+  }
+
+  async fn sign(&self, msg: &[u8]) -> Self::Signature {
+    self.as_ref().sign(msg).await
+  }
+}
+
+/// A signature scheme used by validators.
 pub trait SignatureScheme: Send + Sync {
   // Type used to identify validators.
   type ValidatorId: ValidatorId;
@@ -46,8 +73,9 @@ pub trait SignatureScheme: Send + Sync {
   /// It could even be a threshold signature scheme, though that's currently unexpected.
   type AggregateSignature: Signature;
 
-  /// Sign a signature with the current validator's private key.
-  async fn sign(&self, msg: &[u8]) -> Self::Signature;
+  /// Type representing a signer of this scheme.
+  type Signer: Signer<ValidatorId = Self::ValidatorId, Signature = Self::Signature>;
+
   /// Verify a signature from the validator in question.
   #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool;
@@ -62,6 +90,31 @@ pub trait SignatureScheme: Send + Sync {
     msg: &[u8],
     sig: &Self::AggregateSignature,
   ) -> bool;
+}
+
+impl<S: SignatureScheme> SignatureScheme for Arc<S> {
+  type ValidatorId = S::ValidatorId;
+  type Signature = S::Signature;
+  type AggregateSignature = S::AggregateSignature;
+  type Signer = S::Signer;
+
+  fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool {
+    self.as_ref().verify(validator, msg, sig)
+  }
+
+  fn aggregate(sigs: &[Self::Signature]) -> Self::AggregateSignature {
+    S::aggregate(sigs)
+  }
+
+  #[must_use]
+  fn verify_aggregate(
+    &self,
+    signers: &[Self::ValidatorId],
+    msg: &[u8],
+    sig: &Self::AggregateSignature,
+  ) -> bool {
+    self.as_ref().verify_aggregate(signers, msg, sig)
+  }
 }
 
 /// A commit for a specific block. The list of validators have weight exceeding the threshold for
@@ -95,6 +148,22 @@ pub trait Weights: Send + Sync {
 
   /// Weighted round robin function.
   fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId;
+}
+
+impl<W: Weights> Weights for Arc<W> {
+  type ValidatorId = W::ValidatorId;
+
+  fn total_weight(&self) -> u64 {
+    self.as_ref().total_weight()
+  }
+
+  fn weight(&self, validator: Self::ValidatorId) -> u64 {
+    self.as_ref().weight(validator)
+  }
+
+  fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId {
+    self.as_ref().proposer(number, round)
+  }
 }
 
 /// Simplified error enum representing a block's validity.
@@ -141,11 +210,12 @@ pub trait Network: Send + Sync {
   // Block time in seconds
   const BLOCK_TIME: u32;
 
-  /// Return the signature scheme in use. The instance is expected to have the validators' public
-  /// keys, along with an instance of the private key of the current validator.
-  fn signature_scheme(&self) -> Arc<Self::SignatureScheme>;
-  /// Return a reference to the validators' weights.
-  fn weights(&self) -> Arc<Self::Weights>;
+  /// Return a handle on the signer in use, usable for the entire lifetime of the machine.
+  fn signer(&self) -> <Self::SignatureScheme as SignatureScheme>::Signer;
+  /// Return a handle on the signing scheme in use, usable for the entire lifetime of the machine.
+  fn signature_scheme(&self) -> Self::SignatureScheme;
+  /// Return a handle on the validators' weights, usable for the entire lifetime of the machine.
+  fn weights(&self) -> Self::Weights;
 
   /// Verify a commit for a given block. Intended for use when syncing or when not an active
   /// validator.

@@ -14,12 +14,15 @@ use tendermint_machine::{ext::*, SignedMessage, TendermintMachine, TendermintHan
 type TestValidatorId = u16;
 type TestBlockId = [u8; 4];
 
-struct TestSignatureScheme(u16);
+struct TestSigner(u16);
 #[async_trait]
-impl SignatureScheme for TestSignatureScheme {
+impl Signer for TestSigner {
   type ValidatorId = TestValidatorId;
   type Signature = [u8; 32];
-  type AggregateSignature = Vec<[u8; 32]>;
+
+  async fn validator_id(&self) -> TestValidatorId {
+    self.0
+  }
 
   async fn sign(&self, msg: &[u8]) -> [u8; 32] {
     let mut sig = [0; 32];
@@ -27,6 +30,14 @@ impl SignatureScheme for TestSignatureScheme {
     sig[2 .. (2 + 30.min(msg.len()))].copy_from_slice(&msg[.. 30.min(msg.len())]);
     sig
   }
+}
+
+struct TestSignatureScheme;
+impl SignatureScheme for TestSignatureScheme {
+  type ValidatorId = TestValidatorId;
+  type Signature = [u8; 32];
+  type AggregateSignature = Vec<[u8; 32]>;
+  type Signer = TestSigner;
 
   #[must_use]
   fn verify(&self, validator: u16, msg: &[u8], sig: &[u8; 32]) -> bool {
@@ -93,12 +104,16 @@ impl Network for TestNetwork {
 
   const BLOCK_TIME: u32 = 1;
 
-  fn signature_scheme(&self) -> Arc<TestSignatureScheme> {
-    Arc::new(TestSignatureScheme(self.0))
+  fn signer(&self) -> TestSigner {
+    TestSigner(self.0)
   }
 
-  fn weights(&self) -> Arc<TestWeights> {
-    Arc::new(TestWeights)
+  fn signature_scheme(&self) -> TestSignatureScheme {
+    TestSignatureScheme
+  }
+
+  fn weights(&self) -> TestWeights {
+    TestWeights
   }
 
   async fn broadcast(&mut self, msg: SignedMessage<TestValidatorId, Self::Block, [u8; 32]>) {
@@ -137,7 +152,6 @@ impl TestNetwork {
         let i = u16::try_from(i).unwrap();
         write.push(TendermintMachine::new(
           TestNetwork(i, arc.clone()),
-          i,
           (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
         ));
