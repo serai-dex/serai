@@ -13,6 +13,8 @@ use multiexp::BatchVerifier;
 
 use ciphersuite::Ciphersuite;
 
+pub mod aggregate;
+
 #[cfg(test)]
 mod tests;
 
