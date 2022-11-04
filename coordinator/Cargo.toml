@@ -46,5 +46,7 @@ smol = "1.2.4"
 
 aes = "0.8.2"
 magic-crypt = "3.1.12"
+cbc = "0.1.2"
+hex-literal = "0.3.4"
 
 [workspace]

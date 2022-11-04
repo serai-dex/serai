@@ -1,3 +1,4 @@
+mod crypt;
 
 use std::{thread, time::Duration};
 
@@ -9,6 +10,9 @@ use rdkafka::{
 };
 
 pub fn start() {
+  //let encrypted_string = crypt::encrypt("Hello World");
+  //let decrypted_string = crypt::decrypt(&encrypted_string);
+
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     //for auth
@@ -20,14 +24,17 @@ pub fn start() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-  consumer.subscribe(&["rust"]).expect("topic subscribe failed");
+  consumer.subscribe(&["test_topic"]).expect("topic subscribe failed");
 
   thread::spawn(move || loop {
     for msg_result in consumer.iter() {
       let msg = msg_result.unwrap();
       let key: &str = msg.key_view().unwrap().unwrap();
       let value = msg.payload().unwrap();
-      let user: User = serde_json::from_slice(value).expect("failed to deserialize JSON to User");
+      let encrypted_string = std::str::from_utf8(&value).unwrap();
+      let decrypted_string = crypt::decrypt(&encrypted_string);
+      let user: User = serde_json::from_str(&decrypted_string).expect("failed to deserialize JSON to User");
+      //println!("{}", decrypted_string);
       println!(
         "received key {} with value {:?} in offset {:?} from partition {}",
         key,
@@ -55,8 +62,10 @@ pub fn start() {
 
     let user_json = serde_json::to_string_pretty(&user).expect("json serialization failed");
 
+    let encrypted_user = crypt::encrypt(&user_json);
+
     producer
-      .send(BaseRecord::to("rust").key(&format!("user-{}", i)).payload(&user_json))
+      .send(BaseRecord::to("test_topic").key(&format!("user-{}", i)).payload(&encrypted_user))
       .expect("failed to send message");
 
     thread::sleep(Duration::from_secs(3));

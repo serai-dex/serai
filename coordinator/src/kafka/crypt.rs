@@ -20,3 +20,27 @@ pub fn start() {
   //assert_eq!("DS/2U8royDnJDiNY2ps3f6ZoTbpZo8ZtUGYLGEjwLDQ=", base64);
   //assert_eq!("http://magiclen.org", mc.decrypt_base64_to_string(&base64).unwrap());
 }
+
+pub fn encrypt(msg: &str) -> std::string::String {
+  let mc = new_magic_crypt!("magickey", 256);
+
+  //println!("Initial String:");
+  //println!("{}", msg);
+
+  let encrypted_string = mc.encrypt_str_to_base64(msg);
+
+  //println!("Encrypted String:");
+  //println!("{}", encrypted_string);
+
+  return encrypted_string;
+}
+
+pub fn decrypt(encrypted_string: &str) -> std::string::String {
+  let mc = new_magic_crypt!("magickey", 256);
+
+  let decrypted_string = mc.decrypt_base64_to_string(&encrypted_string).unwrap();
+  //println!("Decrypted String:");
+  //println!("{}", decrypted_string);
+
+  return decrypted_string;
+}
