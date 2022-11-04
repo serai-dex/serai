@@ -12,6 +12,7 @@ use rdkafka::{
 pub fn start() {
   //let encrypted_string = crypt::encrypt("Hello World");
   //let decrypted_string = crypt::decrypt(&encrypted_string);
+  crypt::setKey("magickey");
 
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
