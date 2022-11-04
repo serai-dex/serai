@@ -3215,6 +3215,7 @@ name = "frame-system-rpc-runtime-api"
 version = "4.0.0-dev"
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
 =======
 source = "git+https://github.com/serai-dex/substrate#b62e1a4a520caa986bf7d5fefa24b1f8694b3667"
@@ -3242,6 +3243,9 @@ version = "0.1.0"
 =======
 source = "git+https://github.com/serai-dex/substrate#176b4e8cfc110f339d88ebd414602bc3833da3c3"
 >>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
+=======
+source = "git+https://github.com/serai-dex/substrate#b62e1a4a520caa986bf7d5fefa24b1f8694b3667"
+>>>>>>> c31a55cc (cargo update (tendermint))
 dependencies = [
  "ciphersuite",
  "flexible-transcript",
@@ -7785,6 +7789,7 @@ dependencies = [
 
 [[package]]
 <<<<<<< HEAD
+<<<<<<< HEAD
 name = "sc-consensus-babe"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
@@ -7900,6 +7905,8 @@ dependencies = [
 [[package]]
 =======
 >>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
+=======
+>>>>>>> c31a55cc (cargo update (tendermint))
 name = "sc-executor"
 version = "0.10.0-dev"
 <<<<<<< HEAD
@@ -9944,6 +9951,7 @@ dependencies = [
 
 [[package]]
 <<<<<<< HEAD
+<<<<<<< HEAD
 name = "sp-consensus-babe"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
@@ -9995,6 +10003,8 @@ dependencies = [
 [[package]]
 =======
 >>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
+=======
+>>>>>>> c31a55cc (cargo update (tendermint))
 name = "sp-core"
 <<<<<<< HEAD
 version = "21.0.0"
