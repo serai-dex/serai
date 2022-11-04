@@ -1,6 +1,6 @@
 mod crypt;
 
-use std::{thread, time::Duration};
+use std::{thread, time::Duration, collections::HashMap};
 
 use rdkafka::{
   consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance},
@@ -9,10 +9,21 @@ use rdkafka::{
   ClientConfig, ClientContext, Message, Offset,
 };
 
+pub struct EncryptedMessage{
+  //pub counter_parties: HashMap<String, String>,
+  //pub encrpy_to: String,
+  //pub decrypt_from: String,
+}
+
+impl SeraiCrypt for EncryptedMessage{
+  
+}
+
 pub fn start() {
   //let encrypted_string = crypt::encrypt("Hello World");
   //let decrypted_string = crypt::decrypt(&encrypted_string);
-  crypt::setKey("magickey");
+  let encrypted_message = EncryptedMessage { };
+  EncryptedMessage::setKey("magickey");
 
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -33,7 +44,7 @@ pub fn start() {
       let key: &str = msg.key_view().unwrap().unwrap();
       let value = msg.payload().unwrap();
       let encrypted_string = std::str::from_utf8(&value).unwrap();
-      let decrypted_string = crypt::decrypt(&encrypted_string);
+      let decrypted_string = EncryptedMessage::decrypt(&encrypted_string);
       let user: User = serde_json::from_str(&decrypted_string).expect("failed to deserialize JSON to User");
       //println!("{}", decrypted_string);
       println!(
@@ -63,7 +74,7 @@ pub fn start() {
 
     let user_json = serde_json::to_string_pretty(&user).expect("json serialization failed");
 
-    let encrypted_user = crypt::encrypt(&user_json);
+    let encrypted_user = EncryptedMessage::encrypt(&user_json);
 
     producer
       .send(BaseRecord::to("test_topic").key(&format!("user-{}", i)).payload(&encrypted_user))
@@ -74,6 +85,8 @@ pub fn start() {
 }
 
 use serde::{Deserialize, Serialize};
+
+use self::crypt::SeraiCrypt;
 #[derive(Serialize, Deserialize, Debug)]
 struct User {
   id: i32,
