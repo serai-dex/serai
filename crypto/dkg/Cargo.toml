@@ -31,7 +31,7 @@ group = "0.12"
 
 ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
 
-transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"], version = "^0.1.3" }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 

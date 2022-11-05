@@ -41,7 +41,7 @@ impl ClsagInput {
     // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
     // Ring index
-    transcript.append_message(b"ring_index", &[self.decoys.i]);
+    transcript.append_message(b"ring_index", [self.decoys.i]);
 
     // Ring
     let mut ring = vec![];
@@ -52,7 +52,7 @@ impl ClsagInput {
       ring.extend(pair[0].compress().to_bytes());
       ring.extend(pair[1].compress().to_bytes());
     }
-    transcript.append_message(b"ring", &ring);
+    transcript.append_message(b"ring", ring);
 
     // Doesn't include the commitment's parts as the above ring + index includes the commitment
     // The only potential malleability would be if the G/H relationship is known breaking the
@@ -195,10 +195,10 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     if self.image.is_identity() {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
-      self.transcript.append_message(b"mask", &self.mask().to_bytes());
+      self.transcript.append_message(b"mask", self.mask().to_bytes());
     }
 
-    self.transcript.append_message(b"participant", &l.to_be_bytes());
+    self.transcript.append_message(b"participant", l.to_be_bytes());
 
     addendum
       .dleq
@@ -211,7 +211,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
     self
       .transcript
-      .append_message(b"key_image_share", addendum.key_image.compress().to_bytes().as_ref());
+      .append_message(b"key_image_share", addendum.key_image.compress().to_bytes());
     self.image += addendum.key_image.0;
 
     Ok(())

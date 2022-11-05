@@ -90,24 +90,24 @@ impl SignableTransaction {
     // Include the height we're using for our data
     // The data itself will be included, making this unnecessary, yet a lot of this is technically
     // unnecessary. Anything which further increases security at almost no cost should be followed
-    transcript.append_message(b"height", &u64::try_from(height).unwrap().to_le_bytes());
+    transcript.append_message(b"height", u64::try_from(height).unwrap().to_le_bytes());
     // Also include the spend_key as below only the key offset is included, so this transcripts the
     // sum product
     // Useful as transcripting the sum product effectively transcripts the key image, further
     // guaranteeing the one time properties noted below
-    transcript.append_message(b"spend_key", &keys.group_key().0.compress().to_bytes());
+    transcript.append_message(b"spend_key", keys.group_key().0.compress().to_bytes());
     for input in &self.inputs {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
       // transcript (such as the one used to create one time keys) to be unique
-      transcript.append_message(b"input_hash", &input.output.absolute.tx);
-      transcript.append_message(b"input_output_index", &[input.output.absolute.o]);
+      transcript.append_message(b"input_hash", input.output.absolute.tx);
+      transcript.append_message(b"input_output_index", [input.output.absolute.o]);
       // Not including this, with a doxxed list of payments, would allow brute forcing the inputs
       // to determine RNG seeds and therefore the true spends
-      transcript.append_message(b"input_shared_key", &input.key_offset().to_bytes());
+      transcript.append_message(b"input_shared_key", input.key_offset().to_bytes());
     }
     for payment in &self.payments {
       transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
-      transcript.append_message(b"payment_amount", &payment.1.to_le_bytes());
+      transcript.append_message(b"payment_amount", payment.1.to_le_bytes());
     }
 
     // Sort included before cloning it around
@@ -243,7 +243,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // While each CLSAG will do this as they need to for security, they have their own
             // transcripts cloned from this TX's initial premise's transcript. For our TX
             // transcript to have the CLSAG data for entropy, it'll have to be added ourselves here
-            self.transcript.append_message(b"participant", &(*l).to_be_bytes());
+            self.transcript.append_message(b"participant", (*l).to_be_bytes());
 
             let preprocess = if *l == self.i {
               self.our_preprocess[c].clone()
@@ -254,7 +254,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             {
               let mut buf = vec![];
               preprocess.write(&mut buf).unwrap();
-              self.transcript.append_message(b"preprocess", &buf);
+              self.transcript.append_message(b"preprocess", buf);
             }
 
             // While here, calculate the key image

@@ -70,9 +70,9 @@ pub struct DLEqProof<G: PrimeGroup> {
 #[allow(non_snake_case)]
 impl<G: PrimeGroup> DLEqProof<G> {
   fn transcript<T: Transcript>(transcript: &mut T, generator: G, nonce: G, point: G) {
-    transcript.append_message(b"generator", generator.to_bytes().as_ref());
-    transcript.append_message(b"nonce", nonce.to_bytes().as_ref());
-    transcript.append_message(b"point", point.to_bytes().as_ref());
+    transcript.append_message(b"generator", generator.to_bytes());
+    transcript.append_message(b"nonce", nonce.to_bytes());
+    transcript.append_message(b"point", point.to_bytes());
   }
 
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(

@@ -29,8 +29,8 @@ pub trait CiphersuitePromote<C2: Ciphersuite> {
 
 fn transcript<G: GroupEncoding>(key: G, i: u16) -> RecommendedTranscript {
   let mut transcript = RecommendedTranscript::new(b"FROST Generator Update");
-  transcript.append_message(b"group_key", key.to_bytes().as_ref());
-  transcript.append_message(b"participant", &i.to_be_bytes());
+  transcript.append_message(b"group_key", key.to_bytes());
+  transcript.append_message(b"participant", i.to_be_bytes());
   transcript
 }
 

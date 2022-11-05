@@ -162,8 +162,8 @@ impl<C: Curve> Commitments<C> {
   pub(crate) fn transcript<T: Transcript>(&self, t: &mut T) {
     for nonce in &self.nonces {
       for commitments in &nonce.generators {
-        t.append_message(b"commitment_D", commitments.0[0].to_bytes().as_ref());
-        t.append_message(b"commitment_E", commitments.0[1].to_bytes().as_ref());
+        t.append_message(b"commitment_D", commitments.0[0].to_bytes());
+        t.append_message(b"commitment_E", commitments.0[1].to_bytes());
       }
 
       // Transcripting the DLEqs implicitly transcripts the exact generators used for this nonce
@@ -215,7 +215,7 @@ impl<C: Curve> BindingFactor<C> {
   pub(crate) fn calculate_binding_factors<T: Clone + Transcript>(&mut self, transcript: &mut T) {
     for (l, binding) in self.0.iter_mut() {
       let mut transcript = transcript.clone();
-      transcript.append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
+      transcript.append_message(b"participant", C::F::from(u64::from(*l)).to_repr());
       // It *should* be perfectly fine to reuse a binding factor for multiple nonces
       // This generates a binding factor per nonce just to ensure it never comes up as a question
       binding.binding_factors = Some(

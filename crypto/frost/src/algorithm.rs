@@ -93,8 +93,8 @@ impl Transcript for IetfTranscript {
 
   fn domain_separate(&mut self, _: &[u8]) {}
 
-  fn append_message(&mut self, _: &'static [u8], message: &[u8]) {
-    self.0.extend(message);
+  fn append_message<M: AsRef<[u8]>>(&mut self, _: &'static [u8], message: M) {
+    self.0.extend(message.as_ref());
   }
 
   fn challenge(&mut self, _: &'static [u8]) -> Vec<u8> {

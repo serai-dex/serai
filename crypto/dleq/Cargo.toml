@@ -19,7 +19,7 @@ zeroize = { version = "1.3", features = ["zeroize_derive"] }
 
 digest = "0.10"
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.1" }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2" }
 
 ff = "0.12"
 group = "0.12"

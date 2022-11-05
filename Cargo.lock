@@ -2406,7 +2406,7 @@ dependencies = [
 
 [[package]]
 name = "flexible-transcript"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "blake2",
  "digest 0.10.5",
