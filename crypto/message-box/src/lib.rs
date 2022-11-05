@@ -36,16 +36,40 @@ pub enum MessageError {
 
 /// A Secure Message, defined as being not only encrypted yet authenticated.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SecureMessage(Vec<u8>);
+pub struct SecureMessage {
+  iv: XNonce,
+  ciphertext: Vec<u8>,
+  sig: SchnorrSignature<Ristretto>,
+}
+
 impl SecureMessage {
   /// Create a new SecureMessage from bytes.
   pub fn new(bytes: Vec<u8>) -> Result<SecureMessage, MessageError> {
-    Ok(SecureMessage(bytes))
+    let mut cursor = Cursor::new(bytes);
+
+    let mut iv = XNonce::default();
+    cursor.read_exact(&mut iv).map_err(|_| MessageError::Incomplete)?;
+
+    let sig =
+      SchnorrSignature::<Ristretto>::read(&mut cursor).map_err(|_| MessageError::Incomplete)?;
+
+    let mut ciphertext = vec![];
+    cursor.read_to_end(&mut ciphertext).unwrap();
+
+    Ok(SecureMessage { iv, ciphertext, sig })
   }
 
   /// Serialize a message to a byte vector.
   pub fn serialize(&self) -> Vec<u8> {
-    self.0.clone()
+    let mut res = vec![];
+    res.extend(self.iv);
+    // Write the sig before the ciphertext since it's of a fixed length
+    // This enables reading the ciphertext without length prefixing within this library
+    // While the communication method likely will, if length prefixing was done with this library,
+    // it'd likely happen twice. Hence why this library avoids doing it
+    self.sig.write(&mut res).unwrap();
+    res.extend(&self.ciphertext);
+    res
   }
 }
 
@@ -223,29 +247,20 @@ impl MessageBox {
     sig.write(&mut res).unwrap();
     res.extend(&msg);
 
-    SecureMessage(res)
+    SecureMessage { iv, ciphertext: msg, sig }
   }
 
   /// Decrypt a message, returning the contained byte vector.
-  pub fn decrypt(&self, from: &'static str, msg: SecureMessage) -> Result<Vec<u8>, MessageError> {
-    let mut cursor = Cursor::new(msg.0);
-
-    let mut iv = XNonce::default();
-    cursor.read_exact(&mut iv).map_err(|_| MessageError::Incomplete)?;
-
-    let sig =
-      SchnorrSignature::<Ristretto>::read(&mut cursor).map_err(|_| MessageError::Incomplete)?;
-
-    let mut msg = vec![];
-    cursor.read_to_end(&mut msg).unwrap();
-
-    if !sig.verify(
+  pub fn decrypt(&self, from: &'static str, msg: SecureMessage) -> Vec<u8> {
+    if !msg.sig.verify(
       self.pub_keys[from],
-      signature_challenge(self.our_name, sig.R, self.pub_keys[from], &iv, &msg),
+      signature_challenge(self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),
     ) {
       panic!("unauthorized/unintended message entered into an authenticated system");
     }
 
-    Ok(msg)
+    let mut res = msg.ciphertext.clone();
+    XChaCha20::new(&self.enc_keys[from], &msg.iv).apply_keystream(res.as_mut());
+    res
   }
 }
