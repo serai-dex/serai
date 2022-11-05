@@ -1,8 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{
+use core::{
   cmp::Ordering,
+  fmt::{Debug, Formatter},
+};
+use std::{
   io::{Read, Cursor},
   collections::HashMap,
 };
@@ -24,8 +27,29 @@ use chacha20::{
 
 use schnorr::SchnorrSignature;
 
-pub struct SecureMessage(Vec<u8>);
+/// Error from creating/decrypting a message.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+pub enum MessageError {
+  #[error("message was incomplete")]
+  Incomplete,
+}
 
+/// A Secure Message, defined as being not only encrypted yet authenticated.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SecureMessage(Vec<u8>);
+impl SecureMessage {
+  /// Create a new SecureMessage from bytes.
+  pub fn new(bytes: Vec<u8>) -> Result<SecureMessage, MessageError> {
+    Ok(SecureMessage(bytes))
+  }
+
+  /// Serialize a message to a byte vector.
+  pub fn serialize(&self) -> Vec<u8> {
+    self.0.clone()
+  }
+}
+
+/// Generate a key pair
 pub fn key_gen() -> (Scalar, RistrettoPoint) {
   let mut scalar;
   while {
@@ -63,6 +87,7 @@ fn signature_challenge(
   Scalar::from_bytes_mod_order_wide(&transcript.challenge(b"challenge").into())
 }
 
+/// MessageBox. A box enabling encrypting and decrypting messages to/from various other peers.
 pub struct MessageBox {
   our_name: &'static str,
   our_key: Scalar,
@@ -77,6 +102,17 @@ pub struct MessageBox {
 
   pub_keys: HashMap<&'static str, RistrettoPoint>,
   enc_keys: HashMap<&'static str, Key>,
+}
+
+impl Debug for MessageBox {
+  fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt
+      .debug_struct("MessageBox")
+      .field("our_name", &self.our_name)
+      .field("our_public_key", &self.our_public_key)
+      .field("pub_keys", &self.pub_keys)
+      .finish()
+  }
 }
 
 impl Zeroize for MessageBox {
@@ -99,13 +135,8 @@ impl Drop for MessageBox {
 }
 impl ZeroizeOnDrop for MessageBox {}
 
-#[derive(Error, Debug)]
-pub enum MessageError {
-  #[error("message was incomplete")]
-  Incomplete,
-}
-
 impl MessageBox {
+  /// Create a new message box with our identity and the identities of our peers.
   pub fn new(
     our_name: &'static str,
     our_key: Scalar,
@@ -165,6 +196,7 @@ impl MessageBox {
     }
   }
 
+  /// Encrypt a message to be sent to another party.
   pub fn encrypt(&self, to: &'static str, mut msg: Vec<u8>) -> SecureMessage {
     let mut iv = XNonce::default();
     OsRng.fill_bytes(iv.as_mut());
@@ -194,6 +226,7 @@ impl MessageBox {
     SecureMessage(res)
   }
 
+  /// Decrypt a message, returning the contained byte vector.
   pub fn decrypt(&self, from: &'static str, msg: SecureMessage) -> Result<Vec<u8>, MessageError> {
     let mut cursor = Cursor::new(msg.0);
 
