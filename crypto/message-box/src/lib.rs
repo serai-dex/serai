@@ -103,8 +103,6 @@ impl ZeroizeOnDrop for MessageBox {}
 pub enum MessageError {
   #[error("message was incomplete")]
   Incomplete,
-  #[error("invalid signature")]
-  InvalidSignature,
 }
 
 impl MessageBox {
@@ -212,7 +210,7 @@ impl MessageBox {
       self.pub_keys[from],
       signature_challenge(self.our_name, sig.R, self.pub_keys[from], &iv, &msg),
     ) {
-      Err(MessageError::InvalidSignature)?;
+      panic!("unauthorized/unintended message entered into an authenticated system");
     }
 
     Ok(msg)
