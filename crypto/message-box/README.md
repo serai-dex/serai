@@ -26,7 +26,7 @@ hashed with context to create an encryption key used bidirectionally.
 
 Messages are encrypted with XChaCha20.
 
-### Authentication
+### Sender Authentication
 
 While XChaCha20Poly1305 would offer authentication for a minimal surcharge (16
 bytes), it isn't asymmetric. Either service being compromised would allow
@@ -37,3 +37,9 @@ appreciated.
 
 Accordingly, Schnorr signatures over Ristretto are used to authenticate the
 sender.
+
+### Receiver Authentication
+
+The receiver's name is embedded into the sender's signature challenge. If
+another service attempts to process the message, it'll fail to verify the
+signature.
