@@ -210,6 +210,9 @@ impl MessageBox {
         // Then it was to use a transcript for a structured hash, as we have a transcript available
         // And then it was why *not* add additional fields
         {
+          // Uses 64-bytes so the input matches the output length, since the full output is needed
+          // to perform wide reduction (though a similarly sized output could also be rehashed
+          // to perform rejection sampling)
           let mut bytes = [0; 64];
           OsRng.fill_bytes(&mut bytes);
           transcript.append_message(b"rng", &bytes);
@@ -226,15 +229,40 @@ impl MessageBox {
     OsRng.fill_bytes(iv.as_mut());
     XChaCha20::new(&self.enc_keys[to], &iv).apply_keystream(msg.as_mut());
 
-    let nonce = {
+    let mut nonce = {
       let mut transcript = transcript();
       transcript.domain_separate(b"nonce");
-      transcript.append_message(b"additional_entropy", &self.additional_entropy);
+
+      // Transcript everything committed to in the challenge
+      // This would create a secure, deterministic nonce scheme, so long as the private key is also
+      // hashed in order to ensure that it isn't based off of public data alone
+      // THe private key is indirectly included via the below additional entropy, ensuring a lack
+      // of potential for nonce reuse
       transcript.append_message(b"to", to.as_bytes());
       transcript.append_message(b"public_key", &self.our_public_key.to_bytes());
       transcript.append_message(b"iv", &iv);
       transcript.append_message(b"message", &msg);
-      Scalar::from_bytes_mod_order_wide(&transcript.challenge(b"nonce").into())
+
+      // Transcript entropy
+      // While this could be fully deterministic, anyone who recovers the entropy can recover the
+      // nonce and therefore the private key. While recovering additional_entropy should be as
+      // difficult as recovering our_key, this entropy binds the nonce's recoverability lifespan
+      // to the lifetime of this specific entropy and this specific nonce
+      let mut entropy = [0; 64];
+      OsRng.fill_bytes(&mut entropy);
+      transcript.append_message(b"entropy", &entropy);
+      entropy.zeroize();
+
+      // Not only does this include the private key, making this a valid deterministic nonce
+      // scheme, it includes entropy from the start of the program's lifetime (hedging against a
+      // RNG which has decreased in entropy), binding the nonce's recoverability to the lifespan of
+      // this program
+      transcript.append_message(b"additional_entropy", &self.additional_entropy);
+
+      let mut nonce = transcript.challenge(b"nonce").into();
+      let res = Scalar::from_bytes_mod_order_wide(&nonce);
+      nonce.zeroize();
+      res
     };
 
     let sig = SchnorrSignature::<Ristretto>::sign(
@@ -242,6 +270,7 @@ impl MessageBox {
       nonce,
       signature_challenge(to, RistrettoPoint::generator() * nonce, self.our_public_key, &iv, &msg),
     );
+    nonce.zeroize();
 
     let mut res = iv.to_vec();
     sig.write(&mut res).unwrap();
