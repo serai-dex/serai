@@ -1,13 +1,12 @@
-use std::{str::FromStr, collections::HashMap};
+use std::{str::FromStr};
 
 use async_trait::async_trait;
 use curve25519_dalek::scalar::Scalar as OtherScalar;
 
 use dalek_ff_group as dfg;
-use group::GroupEncoding;
 use transcript::RecommendedTranscript;
 use frost::{
-  curve::{Ed25519, Curve, Ciphersuite},
+  curve::{Ed25519, Ciphersuite},
   ThresholdKeys,
 };
 
@@ -45,37 +44,6 @@ fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
     c += 1;
   }
   (key, c)
-}
-
-#[derive(Clone, Default)]
-pub struct BitcoinHram {}
-
-impl Hram<Secp256k1> for BitcoinHram {
-  fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
-    //print_keys(&A, "4. Public Keys".to_string());
-    //print_keys(&R, "1. R Keys".to_string());
-
-    let (R,offset) = make_even(*R);
-    dbg!(offset);
-    
-    //print_keys(&A, "5. Public Keys".to_string());
-    //print_keys(&R, "2. R Keys".to_string());
-
-    let r_encoded_point = R.to_encoded_point(true);
-    let a_encoded_point = A.to_encoded_point(true);
-    let mut data = Sha256::new();
-    let tag = b"BIP0340/challenge";
-    let tag_hash = Sha256::digest(tag);
-    data.update(tag_hash);
-    data.update(tag_hash);
-    data.update(r_encoded_point.x().to_owned().unwrap());
-    data.update(a_encoded_point.x().to_owned().unwrap()); //&a_encoded_point.to_owned().to_bytes()[1 ..]
-    data.update(&m[..]);
-
-    let res_data = data.finalize();
-    let res = Scalar::from_uint_reduced(U256::from_be_slice(&res_data));
-    return res;
-  }
 }
 
 #[derive(Clone, Debug)]
@@ -268,22 +236,33 @@ impl Coin for Bitcoin {
   async fn test_send(&self, address: Self::Address) {}
 }
 
-fn print_keys(key:&ProjectivePoint, tag: String) {
-  println!("Tag : {}", tag);
-  let key_encoded = key.to_encoded_point(false);
-  dbg!(hex::encode(key_encoded.x().to_owned().unwrap()));
-  dbg!(hex::encode(key_encoded.y().to_owned().unwrap()));
-}
+#[derive(Clone, Default)]
+pub struct BitcoinHram {}
 
-extern crate bitcoin_hashes;
-use secp256k1::Message;
-use bitcoin_hashes::sha256;
-use bitcoin_hashes::Hash;
+impl Hram<Secp256k1> for BitcoinHram {
+  fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
+    let (R, offset) = make_even(*R);
+
+    let r_encoded_point = R.to_encoded_point(true);
+    let a_encoded_point = A.to_encoded_point(true);
+    let tag = b"BIP0340/challenge";
+    let tag_hash = Sha256::digest(tag);
+    let mut data = Sha256::new();
+    data.update(tag_hash);
+    data.update(tag_hash);
+    data.update(r_encoded_point.x().to_owned().unwrap());
+    data.update(a_encoded_point.x().to_owned().unwrap());
+    data.update(&m[..]);
+
+    Scalar::from_uint_reduced(U256::from_be_slice(&data.finalize()))
+  }
+}
 
 #[test]
 fn test_signing() {
+  use secp256k1::Message;
+  use bitcoin_hashes::{sha256, Hash};
   use frost::{
-    algorithm::Hram,
     curve::Secp256k1,
     algorithm::Schnorr,
     tests::{algorithm_machines, key_gen, sign},
@@ -291,45 +270,27 @@ fn test_signing() {
   use rand_core::OsRng;
 
   let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
-
-  //print_keys(&keys[&1].group_key(), "1. Public Keys".to_string());
-
-  for i in 1 ..= keys.len() as u16 {
-    let (_, offset) = make_even(keys[&i].group_key());
-    if offset == 0 {
-      break;
-    }
-    let new_key = keys[&i].offset(Scalar::from(offset));
-    dbg!(offset);
-
-    //print_keys(&new_key.group_key(), "2. Public Keys".to_string());
-    
-    if let Some(x) = keys.get_mut(&i) {
-      *x = new_key;
-    }
-  }
-
-  //print_keys(&keys[&1].group_key(), "3. Public Keys".to_string());
-
   const MESSAGE: &'static [u8] = b"Hello, World!";
+
+  for (_, one_key) in keys.iter_mut() {
+    let (_, offset) = make_even(one_key.group_key());
+    *one_key = one_key.offset(Scalar::from(offset));
+  }
 
   let mut _sig = sign(
     &mut OsRng,
     algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys), //&keys),
-    MESSAGE,
+    &Sha256::digest(MESSAGE),
   );
+  
   let mut offset = 0;
   (_sig.R, offset) = make_even(_sig.R);
   _sig.s += Scalar::from(offset);
 
-  //print_keys(&_sig.R, "3. R Keys".to_string());
-
-  let sign_serialized = &_sig.serialize()[1..65];
-  let sig = secp256k1::schnorr::Signature::from_slice(sign_serialized).unwrap();
+  let sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1..65]).unwrap();
   let msg = Message::from(sha256::Hash::hash(&MESSAGE));
-
-  let R_compressed_key = _sig.R.to_encoded_point(true);
-  let pubkey = secp256k1::XOnlyPublicKey::from_slice(&R_compressed_key.x().to_owned().unwrap()).unwrap();
+  let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true);
+  let pubkey =
+    secp256k1::XOnlyPublicKey::from_slice(&pubkey_compressed.x().to_owned().unwrap()).unwrap();
   let _res = sig.verify(&msg, &pubkey).unwrap();
-  dbg!(_res);
 }
