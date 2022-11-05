@@ -209,9 +209,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       )
       .map_err(|_| FrostError::InvalidPreprocess(l))?;
 
-    self
-      .transcript
-      .append_message(b"key_image_share", addendum.key_image.compress().to_bytes());
+    self.transcript.append_message(b"key_image_share", addendum.key_image.compress().to_bytes());
     self.image += addendum.key_image.0;
 
     Ok(())
