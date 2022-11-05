@@ -41,12 +41,16 @@ fn transcript() -> RecommendedTranscript {
 
 #[allow(non_snake_case)]
 fn signature_challenge(
+  recipient: &'static str,
   R: RistrettoPoint,
   A: RistrettoPoint,
   iv: &XNonce,
   enc_msg: &[u8],
 ) -> Scalar {
   let mut transcript = transcript();
+
+  transcript.domain_separate(b"recipient");
+  transcript.append_message(b"name", recipient.as_bytes());
 
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", &R.to_bytes());
@@ -60,6 +64,7 @@ fn signature_challenge(
 }
 
 pub struct MessageBox {
+  our_name: &'static str,
   our_key: Scalar,
   // Optimization for later transcripting
   our_public_key: RistrettoPoint,
@@ -137,6 +142,7 @@ impl MessageBox {
         .collect(),
       pub_keys: keys,
 
+      our_name,
       our_key,
       our_public_key: RistrettoPoint::generator() * our_key,
 
@@ -170,7 +176,9 @@ impl MessageBox {
       let mut transcript = transcript();
       transcript.domain_separate(b"nonce");
       transcript.append_message(b"additional_entropy", &self.additional_entropy);
+      transcript.append_message(b"to", to.as_bytes());
       transcript.append_message(b"public_key", &self.our_public_key.to_bytes());
+      transcript.append_message(b"iv", &iv);
       transcript.append_message(b"message", &msg);
       Scalar::from_bytes_mod_order_wide(&transcript.challenge(b"nonce").into())
     };
@@ -178,7 +186,7 @@ impl MessageBox {
     let sig = SchnorrSignature::<Ristretto>::sign(
       self.our_key,
       nonce,
-      signature_challenge(RistrettoPoint::generator() * nonce, self.our_public_key, &iv, &msg),
+      signature_challenge(to, RistrettoPoint::generator() * nonce, self.our_public_key, &iv, &msg),
     );
 
     let mut res = iv.to_vec();
@@ -200,8 +208,10 @@ impl MessageBox {
     let mut msg = vec![];
     cursor.read_to_end(&mut msg).unwrap();
 
-    if !sig.verify(self.pub_keys[from], signature_challenge(sig.R, self.pub_keys[from], &iv, &msg))
-    {
+    if !sig.verify(
+      self.pub_keys[from],
+      signature_challenge(self.our_name, sig.R, self.pub_keys[from], &iv, &msg),
+    ) {
       Err(MessageError::InvalidSignature)?;
     }
 
