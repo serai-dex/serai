@@ -101,11 +101,11 @@ fn signature_challenge(
   transcript.append_message(b"name", recipient.as_bytes());
 
   transcript.domain_separate(b"signature");
-  transcript.append_message(b"nonce", &R.to_bytes());
-  transcript.append_message(b"public_key", &A.to_bytes());
+  transcript.append_message(b"nonce", R.to_bytes());
+  transcript.append_message(b"public_key", A.to_bytes());
 
   transcript.domain_separate(b"message");
-  transcript.append_message(b"iv", iv.as_ref());
+  transcript.append_message(b"iv", iv);
   transcript.append_message(b"encrypted_message", enc_msg);
 
   Scalar::from_bytes_mod_order_wide(&transcript.challenge(b"challenge").into())
@@ -183,7 +183,7 @@ impl MessageBox {
           transcript.append_message(b"name_a", name_a.as_bytes());
           transcript.append_message(b"name_b", name_b.as_bytes());
 
-          transcript.append_message(b"shared_key", &(*other_key * our_key).to_bytes());
+          transcript.append_message(b"shared_key", (*other_key * our_key).to_bytes());
           let shared_key = transcript.challenge(b"encryption_key");
 
           let mut key = Key::default();
@@ -201,8 +201,13 @@ impl MessageBox {
 
       additional_entropy: {
         let mut transcript = transcript();
-        transcript.domain_separate(b"key_hash");
-        transcript.append_message(b"private_key", &our_key.to_bytes());
+        transcript.domain_separate(b"additional_entropy");
+
+        {
+          let mut key_bytes = our_key.to_bytes();
+          transcript.append_message(b"private_key", key_bytes.as_ref());
+          key_bytes.zeroize();
+        }
 
         // This is exceptionally redundant and arguably pointless
         // The initial idea was to use the private_key as additional entropy
@@ -215,10 +220,11 @@ impl MessageBox {
           // to perform rejection sampling)
           let mut bytes = [0; 64];
           OsRng.fill_bytes(&mut bytes);
-          transcript.append_message(b"rng", &bytes);
+          transcript.append_message(b"rng", bytes.as_ref());
+          bytes.zeroize();
         }
 
-        transcript.challenge(b"key_hash").into()
+        transcript.challenge(b"entropy").into()
       },
     }
   }
@@ -239,8 +245,8 @@ impl MessageBox {
       // THe private key is indirectly included via the below additional entropy, ensuring a lack
       // of potential for nonce reuse
       transcript.append_message(b"to", to.as_bytes());
-      transcript.append_message(b"public_key", &self.our_public_key.to_bytes());
-      transcript.append_message(b"iv", &iv);
+      transcript.append_message(b"public_key", self.our_public_key.to_bytes());
+      transcript.append_message(b"iv", iv);
       transcript.append_message(b"message", &msg);
 
       // Transcript entropy
@@ -250,14 +256,14 @@ impl MessageBox {
       // to the lifetime of this specific entropy and this specific nonce
       let mut entropy = [0; 64];
       OsRng.fill_bytes(&mut entropy);
-      transcript.append_message(b"entropy", &entropy);
+      transcript.append_message(b"entropy", entropy.as_ref());
       entropy.zeroize();
 
       // Not only does this include the private key, making this a valid deterministic nonce
       // scheme, it includes entropy from the start of the program's lifetime (hedging against a
       // RNG which has decreased in entropy), binding the nonce's recoverability to the lifespan of
       // this program
-      transcript.append_message(b"additional_entropy", &self.additional_entropy);
+      transcript.append_message(b"additional_entropy", self.additional_entropy.as_ref());
 
       let mut nonce = transcript.challenge(b"nonce").into();
       let res = Scalar::from_bytes_mod_order_wide(&nonce);
