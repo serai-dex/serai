@@ -10,4 +10,4 @@ integrating with existing systems.
 
 This library offers ciphersuites compatible with the
 [IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
-10 is supported.
+11 is supported.
