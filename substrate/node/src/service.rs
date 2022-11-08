@@ -109,13 +109,21 @@ pub(crate) use sc_tendermint::{
 use serai_runtime::{self, MILLISECS_PER_BLOCK, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
+<<<<<<< HEAD
 type FullSelectChain = TendermintSelectChain<Block, FullBackend>;
 >>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
+=======
+pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
+>>>>>>> 16a2c9a2 (Correct protocol name handling)
 
 type PartialComponents = sc_service::PartialComponents<
   FullClient,
   FullBackend,
+<<<<<<< HEAD
   SelectChain,
+=======
+  TendermintSelectChain<Block, FullBackend>,
+>>>>>>> 16a2c9a2 (Correct protocol name handling)
   sc_consensus::DefaultImportQueue<Block, FullClient>,
   sc_transaction_pool::FullPool<Block, FullClient>,
   (
@@ -173,8 +181,6 @@ impl NativeExecutionDispatch for ExecutorDispatch {
     serai_runtime::native_version()
   }
 }
-
-pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
 pub struct Cidp;
 #[async_trait::async_trait]
@@ -399,6 +405,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
     grandpa::protocol_standard_name(&client.block_hash(0).unwrap().unwrap(), &config.chain_spec);
@@ -421,6 +428,15 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       client.block_hash(0).unwrap().unwrap(),
       config.chain_spec.fork_id(),
     ));
+=======
+  let is_authority = config.role.is_authority();
+  let tendermint_protocol = sc_tendermint::protocol_name(
+    client.block_hash(0).unwrap().unwrap(),
+    config.chain_spec.fork_id(),
+  );
+  if is_authority {
+    config.network.extra_sets.push(sc_tendermint::set_config(tendermint_protocol.clone()));
+>>>>>>> 16a2c9a2 (Correct protocol name handling)
   }
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter) =
@@ -473,6 +489,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   };
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   let enable_grandpa = !config.disable_grandpa;
   let role = config.role.clone();
   let force_authoring = config.force_authoring;
@@ -484,6 +501,8 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   let is_authority = config.role.is_authority();
 >>>>>>> 9b0dca06 (Provide a way to create the machine)
 
+=======
+>>>>>>> 16a2c9a2 (Correct protocol name handling)
   let registry = config.prometheus_registry().cloned();
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     config,
@@ -616,8 +635,12 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       None,
       TendermintAuthority::new(authority).authority(
 <<<<<<< HEAD
+<<<<<<< HEAD
         (0, keystore_container.keystore()),
 =======
+=======
+        tendermint_protocol,
+>>>>>>> 16a2c9a2 (Correct protocol name handling)
         keystore_container.keystore(),
 >>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
         Cidp,
