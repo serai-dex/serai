@@ -49,6 +49,8 @@ impl<T: TendermintValidator> Validator<T::Block> for TendermintGossip<T> {
       return ValidationResult::Discard;
     }
 
+    // Verify the signature here so we don't carry invalid messages in our gossip layer
+    // This will cause double verification of the signature, yet that's a minimal cost
     if !msg.verify_signature(&self.signature_scheme) {
       return ValidationResult::Discard;
     }
