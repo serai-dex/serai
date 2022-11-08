@@ -26,7 +26,7 @@ use sc_consensus::import_queue::IncomingBlock;
 
 use sc_service::ImportQueue;
 use sc_client_api::{BlockBackend, Finalizer};
-use sc_network::NetworkBlock;
+use sc_network::{ProtocolName, NetworkBlock};
 use sc_network_gossip::GossipEngine;
 
 use substrate_prometheus_endpoint::Registry;
@@ -37,7 +37,7 @@ use tendermint_machine::{
 };
 
 use crate::{
-  CONSENSUS_ID, PROTOCOL_NAME, TendermintValidator,
+  CONSENSUS_ID, TendermintValidator,
   validators::{TendermintSigner, TendermintValidators},
   tendermint::TendermintImport,
 };
@@ -142,6 +142,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
   /// as it will not return until the P2P stack shuts down.
   pub async fn authority(
     mut self,
+    protocol: ProtocolName,
     keys: Arc<dyn CryptoStore>,
     providers: T::CIDP,
     env: T::Environment,
@@ -158,7 +159,6 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     // Create the gossip network
     let mut gossip = GossipEngine::new(
       network.clone(),
-      PROTOCOL_NAME,
       protocol,
       Arc::new(TendermintGossip::new(number.clone(), self.import.validators.clone())),
       registry,

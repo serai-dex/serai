@@ -21,12 +21,12 @@ pub(crate) use sc_tendermint::{
 use serai_runtime::{self, MILLISECS_PER_BLOCK, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
-type FullSelectChain = TendermintSelectChain<Block, FullBackend>;
+pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
 type PartialComponents = sc_service::PartialComponents<
   FullClient,
   FullBackend,
-  FullSelectChain,
+  TendermintSelectChain<Block, FullBackend>,
   sc_consensus::DefaultImportQueue<Block, FullClient>,
   sc_transaction_pool::FullPool<Block, FullClient>,
   Option<Telemetry>,
@@ -47,8 +47,6 @@ impl NativeExecutionDispatch for ExecutorDispatch {
     serai_runtime::native_version()
   }
 }
-
-pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
 pub struct Cidp;
 #[async_trait::async_trait]
@@ -169,11 +167,13 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     },
   ) = new_partial(&config)?;
 
-  if config.role.is_authority() {
-    config.network.extra_sets.push(sc_tendermint::set_config(
-      client.block_hash(0).unwrap().unwrap(),
-      config.chain_spec.fork_id(),
-    ));
+  let is_authority = config.role.is_authority();
+  let tendermint_protocol = sc_tendermint::protocol_name(
+    client.block_hash(0).unwrap().unwrap(),
+    config.chain_spec.fork_id(),
+  );
+  if is_authority {
+    config.network.extra_sets.push(sc_tendermint::set_config(tendermint_protocol.clone()));
   }
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter) =
@@ -210,8 +210,6 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     })
   };
 
-  let is_authority = config.role.is_authority();
-
   let registry = config.prometheus_registry().cloned();
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
@@ -232,6 +230,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       "tendermint",
       None,
       TendermintAuthority::new(authority).authority(
+        tendermint_protocol,
         keystore_container.keystore(),
         Cidp,
         sc_basic_authorship::ProposerFactory::new(

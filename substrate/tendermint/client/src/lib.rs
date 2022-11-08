@@ -35,7 +35,7 @@ pub(crate) const KEY_TYPE_ID: KeyTypeId = KeyTypeId(CONSENSUS_ID);
 
 const PROTOCOL_NAME: &str = "/tendermint/1";
 
-fn protocol_name<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> ProtocolName {
+pub fn protocol_name<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> ProtocolName {
   let mut name = format!("/{}", hex::encode(genesis.as_ref()));
   if let Some(fork) = fork {
     name += &format!("/{}", fork);
@@ -44,9 +44,9 @@ fn protocol_name<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> Protoc
   name.into()
 }
 
-pub fn set_config<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> NonDefaultSetConfig {
+pub fn set_config(protocol: ProtocolName) -> NonDefaultSetConfig {
   // TODO: 1 MiB Block Size + 1 KiB
-  let mut cfg = NonDefaultSetConfig::new(protocol_name(genesis, fork), (1024 * 1024) + 1024);
+  let mut cfg = NonDefaultSetConfig::new(protocol, (1024 * 1024) + 1024);
   cfg.allow_non_reserved(25, 25);
   cfg
 }
