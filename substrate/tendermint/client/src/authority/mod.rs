@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use log::{warn, error};
 
 use futures::{
-  StreamExt,
+  SinkExt, StreamExt,
   channel::mpsc::{self, UnboundedSender},
 };
 
@@ -170,7 +170,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     let (gossip_tx, mut gossip_rx) = mpsc::unbounded();
 
     // Create the Tendermint machine
-    let handle = {
+    let mut handle = {
       // Set this struct as active
       *self.import.providers.write().await = Some(providers);
       self.active = Some(ActiveAuthority {

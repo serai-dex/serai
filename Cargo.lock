@@ -8893,6 +8893,7 @@ name = "tendermint-machine"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
  "parity-scale-codec",
  "sp-runtime",
  "thiserror",

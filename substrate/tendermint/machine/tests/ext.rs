@@ -7,9 +7,10 @@ use async_trait::async_trait;
 
 use parity_scale_codec::{Encode, Decode};
 
+use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
-use tendermint_machine::{ext::*, SignedMessage, TendermintMachine, TendermintHandle};
+use tendermint_machine::{ext::*, SignedMessage, MessageSender, TendermintMachine, TendermintHandle};
 
 type TestValidatorId = u16;
 type TestBlockId = [u8; 4];
@@ -93,7 +94,7 @@ impl Block for TestBlock {
   }
 }
 
-struct TestNetwork(u16, Arc<RwLock<Vec<TendermintHandle<Self>>>>);
+struct TestNetwork(u16, Arc<RwLock<Vec<MessageSender<Self>>>>);
 
 #[async_trait]
 impl Network for TestNetwork {
@@ -117,8 +118,8 @@ impl Network for TestNetwork {
   }
 
   async fn broadcast(&mut self, msg: SignedMessage<TestValidatorId, Self::Block, [u8; 32]>) {
-    for handle in self.1.write().await.iter_mut() {
-      handle.messages.send(msg.clone()).await.unwrap();
+    for messages in self.1.write().await.iter_mut() {
+      messages.send(msg.clone()).await.unwrap();
     }
   }
 
@@ -144,17 +145,20 @@ impl Network for TestNetwork {
 }
 
 impl TestNetwork {
-  async fn new(validators: usize) -> Arc<RwLock<Vec<TendermintHandle<Self>>>> {
+  async fn new(validators: usize) -> Arc<RwLock<Vec<MessageSender<Self>>>> {
     let arc = Arc::new(RwLock::new(vec![]));
     {
       let mut write = arc.write().await;
       for i in 0 .. validators {
         let i = u16::try_from(i).unwrap();
-        write.push(TendermintMachine::new(
+        let TendermintHandle { messages, machine } = TendermintMachine::new(
           TestNetwork(i, arc.clone()),
           (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
-        ));
+        )
+        .await;
+        tokio::task::spawn(machine.run());
+        write.push(messages);
       }
     }
     arc
