@@ -233,6 +233,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
         tendermint_protocol,
         keystore_container.keystore(),
         Cidp,
+        task_manager.spawn_essential_handle(),
         sc_basic_authorship::ProposerFactory::new(
           task_manager.spawn_handle(),
           client,

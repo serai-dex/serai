@@ -285,7 +285,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         let weights = Arc::new(network.weights());
         let validator_id = signer.validator_id().await;
         // 01-10
-        TendermintMachine {
+        let mut machine = TendermintMachine {
           network,
           signer,
           validators,
@@ -317,7 +317,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
           valid: None,
 
           timeouts: HashMap::new(),
-        }
+        };
+        machine.round(Round(0));
+        machine
       },
     }
   }

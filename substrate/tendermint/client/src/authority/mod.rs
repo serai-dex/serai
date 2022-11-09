@@ -12,7 +12,7 @@ use futures::{
   channel::mpsc::{self, UnboundedSender},
 };
 
-use sp_core::{Encode, Decode};
+use sp_core::{Encode, Decode, traits::SpawnEssentialNamed};
 use sp_keystore::CryptoStore;
 use sp_runtime::{
   traits::{Header, Block},
@@ -33,7 +33,7 @@ use substrate_prometheus_endpoint::Registry;
 
 use tendermint_machine::{
   ext::{BlockError, BlockNumber, Commit, SignatureScheme, Network},
-  SignedMessage, TendermintMachine,
+  SignedMessage, TendermintMachine, TendermintHandle,
 };
 
 use crate::{
@@ -140,11 +140,13 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
 
   /// Act as a network authority, proposing and voting on blocks. This should be spawned on a task
   /// as it will not return until the P2P stack shuts down.
+  #[allow(clippy::too_many_arguments)]
   pub async fn authority(
     mut self,
     protocol: ProtocolName,
     keys: Arc<dyn CryptoStore>,
     providers: T::CIDP,
+    spawner: impl SpawnEssentialNamed,
     env: T::Environment,
     network: T::Network,
     registry: Option<&Registry>,
@@ -170,7 +172,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     let (gossip_tx, mut gossip_rx) = mpsc::unbounded();
 
     // Create the Tendermint machine
-    let mut handle = {
+    let TendermintHandle { mut messages, machine } = {
       // Set this struct as active
       *self.import.providers.write().await = Some(providers);
       self.active = Some(ActiveAuthority {
@@ -188,8 +190,9 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         .await;
 
       // We no longer need self, so let TendermintMachine become its owner
-      TendermintMachine::new(self, last, proposal)
+      TendermintMachine::new(self, last, proposal).await
     };
+    spawner.spawn_essential("machine", Some("tendermint"), Box::pin(machine.run()));
 
     // Start receiving messages about the Tendermint process for this block
     let mut recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number));
@@ -222,19 +225,17 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Received a message
         msg = recv.next() => {
           if let Some(msg) = msg {
-            handle
-              .messages
-              .send(match SignedMessage::decode(&mut msg.message.as_ref()) {
-                Ok(msg) => msg,
-                Err(e) => {
-                  // This is guaranteed to be valid thanks to to the gossip validator, assuming
-                  // that pipeline is correct. That's why this doesn't panic
-                  error!(target: "tendermint", "Couldn't decode valid message: {}", e);
-                  continue;
-                }
-              })
-              .await
-            .unwrap()
+            messages.send(match SignedMessage::decode(&mut msg.message.as_ref()) {
+          Ok(msg) => msg,
+          Err(e) => {
+            // This is guaranteed to be valid thanks to to the gossip validator, assuming
+              // that pipeline is correct. That's why this doesn't panic
+              error!(target: "tendermint", "Couldn't decode valid message: {}", e);
+              continue;
+            }
+          })
+          .await
+        .unwrap()
           } else {
             break;
           }
