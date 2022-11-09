@@ -27,6 +27,9 @@ use chacha20::{
 
 use schnorr::SchnorrSignature;
 
+#[cfg(test)]
+mod tests;
+
 /// Error from creating/decrypting a message.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum MessageError {
