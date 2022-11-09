@@ -340,11 +340,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
         })
         .fuse()
       };
-      tokio::pin! {
-        let propose_timeout = timeout_future(Step::Propose);
-        let prevote_timeout = timeout_future(Step::Prevote);
-        let precommit_timeout = timeout_future(Step::Precommit);
-      };
+      let propose_timeout = timeout_future(Step::Propose);
+      let prevote_timeout = timeout_future(Step::Prevote);
+      let precommit_timeout = timeout_future(Step::Precommit);
+      futures::pin_mut!(propose_timeout, prevote_timeout, precommit_timeout);
 
       // Also create a future for if the queue has a message
       // Does not pop_front as if another message has higher priority, its future will be handled
