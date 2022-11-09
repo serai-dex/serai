@@ -1,9 +1,18 @@
 use std::collections::HashMap;
 
-use crate::{key_gen, MessageBox};
+use crate::{MessageBox, key_gen};
 
 const A: &'static str = "A";
 const B: &'static str = "B";
+
+#[test]
+pub fn re_export() {
+  use crate::key::*;
+
+  let (private, public) = key_gen();
+  assert_eq!(private, PrivateKey::from_repr(private.to_repr()).unwrap());
+  assert_eq!(public, PublicKey::from_bytes(&public.to_bytes()).unwrap());
+}
 
 #[test]
 pub fn message_box() {

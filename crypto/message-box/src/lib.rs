@@ -30,6 +30,20 @@ use schnorr::SchnorrSignature;
 #[cfg(test)]
 mod tests;
 
+/// Private Key for a Message Box.
+pub type PrivateKey = Scalar;
+/// Public Key for a Message Box.
+pub type PublicKey = RistrettoPoint;
+
+/// Types and traits for handling the keys, intended to be used as `key::*`.
+pub mod key {
+  pub use group::ff::PrimeField;
+  pub use group::GroupEncoding;
+
+  pub use crate::PrivateKey;
+  pub use crate::PublicKey;
+}
+
 /// Error from creating/decrypting a message.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum MessageError {
