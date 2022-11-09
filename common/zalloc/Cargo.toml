@@ -1,0 +1,12 @@
+[package]
+name = "zalloc"
+version = "0.1.0"
+description = "A global allocator wrapper zeroizing memory on dealloc"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/common/zalloc"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[dependencies]
+zeroize = "1.5"
