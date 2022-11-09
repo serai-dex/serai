@@ -644,6 +644,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
         keystore_container.keystore(),
 >>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
         Cidp,
+        task_manager.spawn_essential_handle(),
         sc_basic_authorship::ProposerFactory::new(
           task_manager.spawn_handle(),
           client,
