@@ -66,6 +66,7 @@ async fn main() {
     // Hang on cli
 
     // Kafka Test
-    kafka::start();
+    //kafka::start();
+    kafka::create_message_box();
 
 }

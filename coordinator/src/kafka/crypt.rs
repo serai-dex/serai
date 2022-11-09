@@ -2,7 +2,7 @@ use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use std::env;
 
 pub trait SeraiCrypt {
-  fn setKey(encrypt_key: &str) {
+  fn set_key(encrypt_key: &str) {
     let key = "ENCRYPT_KEY";
     env::set_var(key, encrypt_key);
   }

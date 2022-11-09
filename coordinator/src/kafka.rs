@@ -1,7 +1,7 @@
 mod crypt;
 
 use std::{thread, time::Duration, collections::HashMap};
-
+use std::env;
 use rdkafka::{
   consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance},
   message::ToBytes,
@@ -9,21 +9,73 @@ use rdkafka::{
   ClientConfig, ClientContext, Message, Offset,
 };
 
-pub struct EncryptedMessage{
+use k256::{
+  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, sec1::Tag},
+  ProjectivePoint, U256,
+  sha2::{Digest, Sha256},
+};
+
+use frost::{
+  curve::Secp256k1,
+  algorithm::Schnorr,
+  tests::{algorithm_machines, key_gen, sign},
+};
+
+use rand_core::OsRng;
+
+use message_box::MessageBox;
+use dalek_ff_group::{Scalar, RistrettoPoint};
+use k256::elliptic_curve::Group;
+use dalek_ff_group::dalek::ristretto::RistrettoPoint as OtherRistrettoPoint;
+
+pub struct EncryptedMessage {
   //pub counter_parties: HashMap<String, String>,
   //pub encrpy_to: String,
   //pub decrypt_from: String,
 }
 
-impl SeraiCrypt for EncryptedMessage{
-  
+impl SeraiCrypt for EncryptedMessage {}
+
+pub fn create_message_box() {
+  // our_name: static string
+  let our_name = "serai_message";
+
+  // Use message box lib to create private/public keys
+  let key_gen = message_box::key_gen();
+
+  // our_key: Scalar
+  let our_key = key_gen.0;
+
+  // pub_keys: HashMap<&'static str, RistrettoPoint>,
+  let mut pub_keys = HashMap::new();
+
+  // Used to query pub key in message box
+  let pub_key_query = "key";
+
+  // Insert query name and pub key (RistrettoPoint)
+  pub_keys.insert(pub_key_query, key_gen.1);
+
+  // Using our_name, our_key, & pub key, initialize a message box
+  let message_box = MessageBox::new(our_name, our_key, pub_keys);
+  //dbg!(&message_box);
+
+  // Create message to be encrypted
+  let message = "Message to be encrypted";
+  let message_as_vec = message.as_bytes().to_vec();
+
+  // Pass pub key query & message for encryption
+  let secure_message = message_box.encrypt(pub_key_query, message_as_vec);
+  //dbg!(&secure_message);
+
+  // Pass pub key query and secure message to decrypt
+  let res = message_box.decrypt(pub_key_query, secure_message);
+  //dbg!(res);
 }
 
 pub fn start() {
-  //let encrypted_string = crypt::encrypt("Hello World");
-  //let decrypted_string = crypt::decrypt(&encrypted_string);
-  let encrypted_message = EncryptedMessage { };
-  EncryptedMessage::setKey("magickey");
+  // Set an encryption key used for decrypting messages as environment variable
+  let key = "ENCRYPT_KEY";
+  env::set_var(key, "magickey");
 
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -32,7 +84,7 @@ pub fn start() {
     .set("sasl.mechanisms", "PLAIN")
     .set("sasl.username", "<update>")
     .set("sasl.password", "<update>")*/
-    .set("group.id", "my_consumer_group")
+    .set("group.id", "serai")
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
@@ -43,9 +95,11 @@ pub fn start() {
       let msg = msg_result.unwrap();
       let key: &str = msg.key_view().unwrap().unwrap();
       let value = msg.payload().unwrap();
+      // let message_box = MessageBox::new(&static str , dalek_ff_group::Scalar, HashMap<&static str, dalek_ff_group::RistrettoPoint>);
       let encrypted_string = std::str::from_utf8(&value).unwrap();
       let decrypted_string = EncryptedMessage::decrypt(&encrypted_string);
-      let user: User = serde_json::from_str(&decrypted_string).expect("failed to deserialize JSON to User");
+      let user: User =
+        serde_json::from_str(&decrypted_string).expect("failed to deserialize JSON to User");
       //println!("{}", decrypted_string);
       println!(
         "received key {} with value {:?} in offset {:?} from partition {}",
@@ -66,6 +120,15 @@ pub fn start() {
     .set("sasl.password", "<update>")*/
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
+
+  // let msg_box = MessageBox {
+  //   our_name: val,
+  //   our_key: val,
+  //   our_public_key: val,
+  //   additional_entropy: val,
+  //   pub_keys: val,
+  //   enc_keys: val
+  // };
 
   for i in 1..100 {
     println!("sending message");
