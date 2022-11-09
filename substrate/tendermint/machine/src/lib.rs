@@ -8,7 +8,7 @@ use std::{
 
 use parity_scale_codec::{Encode, Decode};
 
-use futures::{task::Poll, StreamExt, channel::mpsc};
+use futures::{task::Poll, future, StreamExt, channel::mpsc};
 
 use tokio::time::sleep;
 
@@ -324,24 +324,34 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     'outer: loop {
       // Check if any timeouts have been triggered
-      let now = Instant::now();
-      let (t1, t2, t3) = {
-        let ready = |step| self.timeouts.get(&step).unwrap_or(&now) < &now;
-        (ready(Step::Propose), ready(Step::Prevote), ready(Step::Precommit))
+      let timeout_future = |step| {
+        let timeout = self.timeouts.get(&step).copied();
+        async move {
+          if let Some(timeout) = timeout {
+            sleep(timeout.saturating_duration_since(Instant::now())).await
+          } else {
+            future::pending::<()>().await
+          }
+        }
+      };
+      tokio::pin! {
+        let propose_timeout = timeout_future(Step::Propose);
+        let prevote_timeout = timeout_future(Step::Prevote);
+        let precommit_timeout = timeout_future(Step::Precommit);
       };
 
       // Propose timeout
-      if t1 && (self.step == Step::Propose) {
+      if futures::poll!(&mut propose_timeout).is_ready() && (self.step == Step::Propose) {
         self.broadcast(Data::Prevote(None));
       }
 
       // Prevote timeout
-      if t2 && (self.step == Step::Prevote) {
+      if futures::poll!(&mut prevote_timeout).is_ready() && (self.step == Step::Prevote) {
         self.broadcast(Data::Precommit(None));
       }
 
       // Precommit timeout
-      if t3 {
+      if futures::poll!(&mut precommit_timeout).is_ready() {
         self.round(Round(self.round.0.wrapping_add(1)));
       }
 
