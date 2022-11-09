@@ -4517,6 +4517,7 @@ dependencies = [
  "dalek-ff-group",
  "flexible-transcript",
  "group",
+ "hex",
  "rand_core 0.6.4",
  "schnorr-signatures",
  "thiserror",
