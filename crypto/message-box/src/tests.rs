@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{MessageBox, key_gen};
+use crate::{SecureMessage, MessageBox, key_gen};
 
 const A: &'static str = "A";
 const B: &'static str = "B";
@@ -30,5 +30,6 @@ pub fn message_box() {
 
   let msg = b"Hello, world!".to_vec();
   let enc = a_box.encrypt(B, msg.clone());
+  assert_eq!(enc, SecureMessage::new(enc.serialize()).unwrap());
   assert_eq!(msg, b_box.decrypt(A, enc))
 }
