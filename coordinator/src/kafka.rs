@@ -9,24 +9,7 @@ use rdkafka::{
   ClientConfig, ClientContext, Message, Offset,
 };
 
-use k256::{
-  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, sec1::Tag},
-  ProjectivePoint, U256,
-  sha2::{Digest, Sha256},
-};
-
-use frost::{
-  curve::Secp256k1,
-  algorithm::Schnorr,
-  tests::{algorithm_machines, key_gen, sign},
-};
-
-use rand_core::OsRng;
-
 use message_box::MessageBox;
-use dalek_ff_group::{Scalar, RistrettoPoint};
-use k256::elliptic_curve::Group;
-use dalek_ff_group::dalek::ristretto::RistrettoPoint as OtherRistrettoPoint;
 
 pub struct EncryptedMessage {
   //pub counter_parties: HashMap<String, String>,
