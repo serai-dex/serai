@@ -10,10 +10,14 @@ use parity_scale_codec::{Encode, Decode};
 use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 use tendermint_machine::{
   ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
   TendermintMachine, TendermintHandle,
 };
+=======
+use tendermint_machine::{ext::*, SignedMessage, MessageSender, TendermintMachine, TendermintHandle};
+>>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
 
 type TestValidatorId = u16;
 type TestBlockId = [u8; 4];
@@ -118,11 +122,15 @@ impl Block for TestBlock {
   }
 }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 #[allow(clippy::type_complexity)]
 struct TestNetwork(
   u16,
   Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>,
 );
+=======
+struct TestNetwork(u16, Arc<RwLock<Vec<MessageSender<Self>>>>);
+>>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
 
 #[async_trait]
 impl Network for TestNetwork {
@@ -153,8 +161,13 @@ impl Network for TestNetwork {
     TestWeights
   }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
   async fn broadcast(&mut self, msg: SignedMessageFor<Self>) {
     for (messages, _, _) in self.1.write().await.iter_mut() {
+=======
+  async fn broadcast(&mut self, msg: SignedMessage<TestValidatorId, Self::Block, [u8; 32]>) {
+    for messages in self.1.write().await.iter_mut() {
+>>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
       messages.send(msg.clone()).await.unwrap();
     }
   }
@@ -181,15 +194,20 @@ impl Network for TestNetwork {
 }
 
 impl TestNetwork {
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
   async fn new(
     validators: usize,
   ) -> Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>
   {
+=======
+  async fn new(validators: usize) -> Arc<RwLock<Vec<MessageSender<Self>>>> {
+>>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
     let arc = Arc::new(RwLock::new(vec![]));
     {
       let mut write = arc.write().await;
       for i in 0 .. validators {
         let i = u16::try_from(i).unwrap();
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
         let TendermintHandle { messages, synced_block, synced_block_result, machine } =
           TendermintMachine::new(
@@ -208,6 +226,16 @@ impl TestNetwork {
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
         ));
 >>>>>>> 9b8f2f44 (More misc bug fixes):substrate/tendermint/tests/ext.rs
+=======
+        let TendermintHandle { messages, machine } = TendermintMachine::new(
+          TestNetwork(i, arc.clone()),
+          (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
+          TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
+        )
+        .await;
+        tokio::task::spawn(machine.run());
+        write.push(messages);
+>>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
       }
     }
     arc
