@@ -222,7 +222,7 @@ impl MessageBox {
     }
   }
 
-  /// Encrypt a message to be sent to another party.
+  /// Encrypt bytes to be sent to another party.
   pub fn encrypt_bytes(&self, to: &'static str, mut msg: Vec<u8>) -> SecureMessage {
     let mut iv = XNonce::default();
     OsRng.fill_bytes(iv.as_mut());
@@ -287,8 +287,8 @@ impl MessageBox {
       panic!("unauthorized/unintended message entered into an authenticated system");
     }
 
-    let mut res = msg.ciphertext.clone();
-    XChaCha20::new(&self.enc_keys[from], &msg.iv).apply_keystream(res.as_mut());
-    res
+    let SecureMessage { iv, mut ciphertext, .. } = msg;
+    XChaCha20::new(&self.enc_keys[from], &iv).apply_keystream(ciphertext.as_mut());
+    ciphertext
   }
 }
