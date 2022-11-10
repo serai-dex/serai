@@ -2,6 +2,7 @@ mod core;
 mod health;
 mod observer;
 mod kafka;
+mod message_box_example;
 
 use std::thread;
 use std::io::Write;
@@ -66,7 +67,5 @@ async fn main() {
     // Hang on cli
 
     // Kafka Test
-    //kafka::start();
-    kafka::create_message_box();
-
+    kafka::start();
 }

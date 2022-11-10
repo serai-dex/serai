@@ -1,5 +1,3 @@
-mod crypt;
-
 use std::{thread, time::Duration, collections::HashMap};
 use std::env;
 use rdkafka::{
@@ -11,54 +9,31 @@ use rdkafka::{
 
 use message_box::MessageBox;
 
-pub struct EncryptedMessage {
-  //pub counter_parties: HashMap<String, String>,
-  //pub encrpy_to: String,
-  //pub decrypt_from: String,
-}
-
-impl SeraiCrypt for EncryptedMessage {}
-
-pub fn create_message_box() {
-  // our_name: static string
-  let our_name = "serai_message";
-
-  // Use message box lib to create private/public keys
-  let key_gen = message_box::key_gen();
-
-  // our_key: Scalar
-  let our_key = key_gen.0;
-
-  // pub_keys: HashMap<&'static str, RistrettoPoint>,
-  let mut pub_keys = HashMap::new();
-
-  // Used to query pub key in message box
-  let pub_key_query = "key";
-
-  // Insert query name and pub key (RistrettoPoint)
-  pub_keys.insert(pub_key_query, key_gen.1);
-
-  // Using our_name, our_key, & pub key, initialize a message box
-  let message_box = MessageBox::new(our_name, our_key, pub_keys);
-  //dbg!(&message_box);
-
-  // Create message to be encrypted
-  let message = "Message to be encrypted";
-  let message_as_vec = message.as_bytes().to_vec();
-
-  // Pass pub key query & message for encryption
-  let secure_message = message_box.encrypt(pub_key_query, message_as_vec);
-  //dbg!(&secure_message);
-
-  // Pass pub key query and secure message to decrypt
-  let res = message_box.decrypt(pub_key_query, secure_message);
-  //dbg!(res);
-}
+const A: &'static str = "A";
+const B: &'static str = "B";
 
 pub fn start() {
+  // Create 2 priv / pub key pairs
+  let (a_priv, a_pub) = message_box::key_gen();
+  let (b_priv, b_pub) = message_box::key_gen();
+
+  // Create a HashMap of each pair using service name and public key
+  let mut a_others = HashMap::new();
+  a_others.insert(B, b_pub);
+
+  let mut b_others = HashMap::new();
+  b_others.insert(A, a_pub);
+
+  // Initialize a MessageBox for each service
+  let a_box = MessageBox::new(A, a_priv, a_others);
+  let b_box = MessageBox::new(B, b_priv, b_others);
+
   // Set an encryption key used for decrypting messages as environment variable
-  let key = "ENCRYPT_KEY";
-  env::set_var(key, "magickey");
+  let MESSAGE_BOX_A = "MESSAGE_BOX_A";
+  env::set_var(MESSAGE_BOX_A, a_box);
+
+  let MESSAGE_BOX_B = "MESSAGE_BOX_B";
+  env::set_var(MESSAGE_BOX_B, b_box);
 
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -80,7 +55,7 @@ pub fn start() {
       let value = msg.payload().unwrap();
       // let message_box = MessageBox::new(&static str , dalek_ff_group::Scalar, HashMap<&static str, dalek_ff_group::RistrettoPoint>);
       let encrypted_string = std::str::from_utf8(&value).unwrap();
-      let decrypted_string = EncryptedMessage::decrypt(&encrypted_string);
+      let decrypted_string = String::from_utf8(b_box.decrypt(A, &encrypted_string).unwrap());
       let user: User =
         serde_json::from_str(&decrypted_string).expect("failed to deserialize JSON to User");
       //println!("{}", decrypted_string);
@@ -104,15 +79,6 @@ pub fn start() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  // let msg_box = MessageBox {
-  //   our_name: val,
-  //   our_key: val,
-  //   our_public_key: val,
-  //   additional_entropy: val,
-  //   pub_keys: val,
-  //   enc_keys: val
-  // };
-
   for i in 1..100 {
     println!("sending message");
 
@@ -120,10 +86,11 @@ pub fn start() {
 
     let user_json = serde_json::to_string_pretty(&user).expect("json serialization failed");
 
-    let encrypted_user = EncryptedMessage::encrypt(&user_json);
+    let msg = user_json.as_bytes().to_vec();
+    let enc = a_box.encrypt(B, msg.clone());
 
     producer
-      .send(BaseRecord::to("test_topic").key(&format!("user-{}", i)).payload(&encrypted_user))
+      .send(BaseRecord::to("test_topic").key(&format!("user-{}", i)).payload(&enc))
       .expect("failed to send message");
 
     thread::sleep(Duration::from_secs(3));
