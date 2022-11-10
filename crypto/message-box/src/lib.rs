@@ -5,10 +5,7 @@ use core::{
   cmp::Ordering,
   fmt::{Debug, Formatter},
 };
-use std::{
-  io::{Read, Cursor},
-  collections::HashMap,
-};
+use std::{io::Read, collections::HashMap};
 
 use thiserror::Error;
 
@@ -26,6 +23,8 @@ use chacha20::{
 };
 
 use schnorr::SchnorrSignature;
+
+use serde::{Serializer, Serialize, de::Error, Deserializer, Deserialize};
 
 #[cfg(test)]
 mod tests;
@@ -52,28 +51,55 @@ pub enum MessageError {
 }
 
 /// A Secure Message, defined as being not only encrypted yet authenticated.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct SecureMessage {
+  #[serde(serialize_with = "serialize_iv")]
+  #[serde(deserialize_with = "deserialize_iv")]
   iv: XNonce,
   ciphertext: Vec<u8>,
+  #[serde(serialize_with = "serialize_sig")]
+  #[serde(deserialize_with = "deserialize_sig")]
   sig: SchnorrSignature<Ristretto>,
 }
 
+fn serialize_iv<S: Serializer>(iv: &XNonce, serializer: S) -> Result<S::Ok, S::Error> {
+  <[u8; 24]>::from(*iv).serialize(serializer)
+}
+
+fn deserialize_iv<'de, D: Deserializer<'de>>(deserializer: D) -> Result<XNonce, D::Error> {
+  Ok(<[u8; 24]>::deserialize(deserializer)?.into())
+}
+
+fn serialize_sig<S: Serializer>(
+  sig: &SchnorrSignature<Ristretto>,
+  serializer: S,
+) -> Result<S::Ok, S::Error> {
+  sig.serialize().serialize(serializer)
+}
+
+fn deserialize_sig<'de, D: Deserializer<'de>>(
+  deserializer: D,
+) -> Result<SchnorrSignature<Ristretto>, D::Error> {
+  SchnorrSignature::<Ristretto>::read::<&[u8]>(&mut Vec::<u8>::deserialize(deserializer)?.as_ref())
+    .map_err(|_| D::Error::custom("invalid signature"))
+}
+
 impl SecureMessage {
-  /// Create a new SecureMessage from bytes.
-  pub fn new(bytes: Vec<u8>) -> Result<SecureMessage, MessageError> {
-    let mut cursor = Cursor::new(bytes);
-
+  pub fn read<R: Read>(reader: &mut R) -> Result<SecureMessage, MessageError> {
     let mut iv = XNonce::default();
-    cursor.read_exact(&mut iv).map_err(|_| MessageError::Incomplete)?;
+    reader.read_exact(&mut iv).map_err(|_| MessageError::Incomplete)?;
 
-    let sig =
-      SchnorrSignature::<Ristretto>::read(&mut cursor).map_err(|_| MessageError::Incomplete)?;
+    let sig = SchnorrSignature::<Ristretto>::read(reader).map_err(|_| MessageError::Incomplete)?;
 
     let mut ciphertext = vec![];
-    cursor.read_to_end(&mut ciphertext).unwrap();
+    reader.read_to_end(&mut ciphertext).unwrap();
 
     Ok(SecureMessage { iv, ciphertext, sig })
+  }
+
+  /// Create a new SecureMessage from bytes.
+  pub fn new(bytes: Vec<u8>) -> Result<SecureMessage, MessageError> {
+    Self::read::<&[u8]>(&mut bytes.as_ref())
   }
 
   /// Serialize a message to a byte vector.

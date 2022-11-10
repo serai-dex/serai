@@ -31,5 +31,6 @@ pub fn message_box() {
   let msg = b"Hello, world!".to_vec();
   let enc = a_box.encrypt(B, msg.clone());
   assert_eq!(enc, SecureMessage::new(enc.serialize()).unwrap());
-  assert_eq!(msg, b_box.decrypt(A, enc))
+  assert_eq!(enc, serde_json::from_str(&serde_json::to_string(&enc).unwrap()).unwrap());
+  assert_eq!(msg, b_box.decrypt(A, enc));
 }

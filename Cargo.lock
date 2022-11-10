@@ -4520,6 +4520,8 @@ dependencies = [
  "hex",
  "rand_core 0.6.4",
  "schnorr-signatures",
+ "serde",
+ "serde_json",
  "thiserror",
  "zeroize",
 ]
