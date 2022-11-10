@@ -33,4 +33,6 @@ pub fn message_box() {
   assert_eq!(enc, SecureMessage::new(enc.serialize()).unwrap());
   assert_eq!(enc, serde_json::from_str(&serde_json::to_string(&enc).unwrap()).unwrap());
   assert_eq!(msg, b_box.decrypt(A, enc));
+
+  assert_eq!(msg, b_box.decrypt_from_bytes(A, a_box.encrypt_to_bytes(B, msg.clone())).unwrap());
 }
