@@ -223,7 +223,7 @@ impl MessageBox {
   }
 
   /// Encrypt a message to be sent to another party.
-  pub fn encrypt(&self, to: &'static str, mut msg: Vec<u8>) -> SecureMessage {
+  pub fn encrypt_bytes(&self, to: &'static str, mut msg: Vec<u8>) -> SecureMessage {
     let mut iv = XNonce::default();
     OsRng.fill_bytes(iv.as_mut());
     XChaCha20::new(&self.enc_keys[to], &iv).apply_keystream(msg.as_mut());
@@ -279,7 +279,7 @@ impl MessageBox {
   }
 
   /// Decrypt a message, returning the contained byte vector.
-  pub fn decrypt(&self, from: &'static str, msg: SecureMessage) -> Vec<u8> {
+  pub fn decrypt_to_bytes(&self, from: &'static str, msg: SecureMessage) -> Vec<u8> {
     if !msg.sig.verify(
       self.pub_keys[from],
       signature_challenge(self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),

@@ -92,7 +92,7 @@ impl rdkafka::message::ToBytes for SecureMessageBytes {
 impl MessageBox {
   /// Encrypt a message and serialize it.
   pub fn encrypt_to_bytes(&self, to: &'static str, msg: Vec<u8>) -> SecureMessageBytes {
-    SecureMessageBytes(self.encrypt(to, msg).serialize())
+    SecureMessageBytes(self.encrypt_bytes(to, msg).serialize())
   }
 
   /// Deserialize a message and decrypt it.
@@ -101,7 +101,7 @@ impl MessageBox {
     from: &'static str,
     msg: SecureMessageBytes,
   ) -> Result<Vec<u8>, MessageError> {
-    SecureMessage::new(msg.0).map(|msg| self.decrypt(from, msg))
+    SecureMessage::new(msg.0).map(|msg| self.decrypt_to_bytes(from, msg))
   }
 
   /// Encrypt a message, serialize it, and base64 encode it.

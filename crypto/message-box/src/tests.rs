@@ -29,10 +29,10 @@ pub fn message_box() {
   let b_box = MessageBox::new(B, b_priv, b_others);
 
   let msg = b"Hello, world!".to_vec();
-  let enc = a_box.encrypt(B, msg.clone());
+  let enc = a_box.encrypt_bytes(B, msg.clone());
   assert_eq!(enc, SecureMessage::new(enc.serialize()).unwrap());
   assert_eq!(enc, serde_json::from_str(&serde_json::to_string(&enc).unwrap()).unwrap());
-  assert_eq!(msg, b_box.decrypt(A, enc));
+  assert_eq!(msg, b_box.decrypt_to_bytes(A, enc));
 
   assert_eq!(msg, b_box.decrypt_from_bytes(A, a_box.encrypt_to_bytes(B, msg.clone())).unwrap());
 
