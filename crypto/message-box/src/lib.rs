@@ -1,14 +1,10 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use core::{
   cmp::Ordering,
   fmt::{Debug, Formatter},
 };
-use std::{
-  io::{Read, Cursor},
-  collections::HashMap,
-};
+use std::collections::HashMap;
 
 use thiserror::Error;
 
@@ -27,50 +23,47 @@ use chacha20::{
 
 use schnorr::SchnorrSignature;
 
+pub use serde::{Serialize, Deserialize};
+
+mod ser;
+use ser::*;
+
+#[cfg(test)]
+mod tests;
+
+/// Private Key for a Message Box.
+pub type PrivateKey = Scalar;
+/// Public Key for a Message Box.
+pub type PublicKey = RistrettoPoint;
+
+/// Types and traits for handling the keys, intended to be used as `key::*`.
+pub mod key {
+  pub use group::ff::PrimeField;
+  pub use group::GroupEncoding;
+
+  pub use crate::PrivateKey;
+  pub use crate::PublicKey;
+}
+
 /// Error from creating/decrypting a message.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum MessageError {
   #[error("message was incomplete")]
   Incomplete,
+  #[error("invalid encoding")]
+  InvalidEncoding,
 }
 
 /// A Secure Message, defined as being not only encrypted yet authenticated.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct SecureMessage {
+  #[serde(serialize_with = "serialize_iv")]
+  #[serde(deserialize_with = "deserialize_iv")]
   iv: XNonce,
   ciphertext: Vec<u8>,
+  #[serde(serialize_with = "serialize_sig")]
+  #[serde(deserialize_with = "deserialize_sig")]
   sig: SchnorrSignature<Ristretto>,
-}
-
-impl SecureMessage {
-  /// Create a new SecureMessage from bytes.
-  pub fn new(bytes: Vec<u8>) -> Result<SecureMessage, MessageError> {
-    let mut cursor = Cursor::new(bytes);
-
-    let mut iv = XNonce::default();
-    cursor.read_exact(&mut iv).map_err(|_| MessageError::Incomplete)?;
-
-    let sig =
-      SchnorrSignature::<Ristretto>::read(&mut cursor).map_err(|_| MessageError::Incomplete)?;
-
-    let mut ciphertext = vec![];
-    cursor.read_to_end(&mut ciphertext).unwrap();
-
-    Ok(SecureMessage { iv, ciphertext, sig })
-  }
-
-  /// Serialize a message to a byte vector.
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = vec![];
-    res.extend(self.iv);
-    // Write the sig before the ciphertext since it's of a fixed length
-    // This enables reading the ciphertext without length prefixing within this library
-    // While the communication method likely will, if length prefixing was done with this library,
-    // it'd likely happen twice. Hence why this library avoids doing it
-    self.sig.write(&mut res).unwrap();
-    res.extend(&self.ciphertext);
-    res
-  }
 }
 
 /// Generate a key pair
@@ -229,8 +222,8 @@ impl MessageBox {
     }
   }
 
-  /// Encrypt a message to be sent to another party.
-  pub fn encrypt(&self, to: &'static str, mut msg: Vec<u8>) -> SecureMessage {
+  /// Encrypt bytes to be sent to another party.
+  pub fn encrypt_bytes(&self, to: &'static str, mut msg: Vec<u8>) -> SecureMessage {
     let mut iv = XNonce::default();
     OsRng.fill_bytes(iv.as_mut());
     XChaCha20::new(&self.enc_keys[to], &iv).apply_keystream(msg.as_mut());
@@ -286,7 +279,7 @@ impl MessageBox {
   }
 
   /// Decrypt a message, returning the contained byte vector.
-  pub fn decrypt(&self, from: &'static str, msg: SecureMessage) -> Vec<u8> {
+  pub fn decrypt_to_bytes(&self, from: &'static str, msg: SecureMessage) -> Vec<u8> {
     if !msg.sig.verify(
       self.pub_keys[from],
       signature_challenge(self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),
@@ -294,8 +287,8 @@ impl MessageBox {
       panic!("unauthorized/unintended message entered into an authenticated system");
     }
 
-    let mut res = msg.ciphertext.clone();
-    XChaCha20::new(&self.enc_keys[from], &msg.iv).apply_keystream(res.as_mut());
-    res
+    let SecureMessage { iv, mut ciphertext, .. } = msg;
+    XChaCha20::new(&self.enc_keys[from], &iv).apply_keystream(ciphertext.as_mut());
+    ciphertext
   }
 }

@@ -4512,13 +4512,18 @@ dependencies = [
 name = "message-box"
 version = "0.1.0"
 dependencies = [
+ "base64 0.13.1",
+ "bincode",
  "chacha20 0.9.0",
  "ciphersuite",
  "dalek-ff-group",
  "flexible-transcript",
  "group",
+ "hex",
  "rand_core 0.6.4",
  "schnorr-signatures",
+ "serde",
+ "serde_json",
  "thiserror",
  "zeroize",
 ]
