@@ -1,6 +1,6 @@
-#[cfg(any(test, feature = "dalek"))]
+#[cfg(any(feature = "ristretto", feature = "ed25519"))]
 mod dalek;
-#[cfg(feature = "kp256")]
+#[cfg(any(feature = "secp256k1", feature = "p256"))]
 mod kp256;
 #[cfg(feature = "ed448")]
 mod ed448;

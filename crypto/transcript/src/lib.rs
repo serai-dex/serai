@@ -18,7 +18,7 @@ pub trait Transcript {
   fn domain_separate(&mut self, label: &'static [u8]);
 
   /// Append a message to the transcript.
-  fn append_message(&mut self, label: &'static [u8], message: &[u8]);
+  fn append_message<M: AsRef<[u8]>>(&mut self, label: &'static [u8], message: M);
 
   /// Produce a challenge. This MUST update the transcript as it does so, preventing the same
   /// challenge from being generated multiple times.
@@ -77,13 +77,13 @@ impl<D: Clone + SecureDigest> Transcript for DigestTranscript<D> {
     res
   }
 
-  fn domain_separate(&mut self, label: &[u8]) {
+  fn domain_separate(&mut self, label: &'static [u8]) {
     self.append(DigestTranscriptMember::Domain, label);
   }
 
-  fn append_message(&mut self, label: &'static [u8], message: &[u8]) {
+  fn append_message<M: AsRef<[u8]>>(&mut self, label: &'static [u8], message: M) {
     self.append(DigestTranscriptMember::Label, label);
-    self.append(DigestTranscriptMember::Value, message);
+    self.append(DigestTranscriptMember::Value, message.as_ref());
   }
 
   fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge {

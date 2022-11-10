@@ -52,8 +52,8 @@ impl<G: PrimeGroup> Generators<G> {
 
   fn transcript<T: Transcript>(&self, transcript: &mut T) {
     transcript.domain_separate(b"generators");
-    transcript.append_message(b"primary", self.primary.to_bytes().as_ref());
-    transcript.append_message(b"alternate", self.alt.to_bytes().as_ref());
+    transcript.append_message(b"primary", self.primary.to_bytes());
+    transcript.append_message(b"alternate", self.alt.to_bytes());
   }
 }
 
@@ -153,8 +153,8 @@ where
     generators.0.transcript(transcript);
     generators.1.transcript(transcript);
     transcript.domain_separate(b"points");
-    transcript.append_message(b"point_0", keys.0.to_bytes().as_ref());
-    transcript.append_message(b"point_1", keys.1.to_bytes().as_ref());
+    transcript.append_message(b"point_0", keys.0.to_bytes());
+    transcript.append_message(b"point_1", keys.1.to_bytes());
   }
 
   pub(crate) fn blinding_key<R: RngCore + CryptoRng, F: PrimeField>(

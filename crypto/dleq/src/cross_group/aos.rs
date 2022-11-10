@@ -62,9 +62,9 @@ where
   #[allow(non_snake_case)]
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {
     transcript.domain_separate(b"aos_membership_proof");
-    transcript.append_message(b"ring_len", &u8::try_from(RING_LEN).unwrap().to_le_bytes());
-    transcript.append_message(b"nonce_0", nonces.0.to_bytes().as_ref());
-    transcript.append_message(b"nonce_1", nonces.1.to_bytes().as_ref());
+    transcript.append_message(b"ring_len", u8::try_from(RING_LEN).unwrap().to_le_bytes());
+    transcript.append_message(b"nonce_0", nonces.0.to_bytes());
+    transcript.append_message(b"nonce_1", nonces.1.to_bytes());
     mutual_scalar_from_bytes(transcript.challenge(b"challenge").as_ref())
   }
 

@@ -33,9 +33,6 @@ use curve25519_dalek::{
 
 pub use monero_generators::H;
 
-#[cfg(feature = "multisig")]
-pub(crate) mod frost;
-
 mod serialize;
 
 /// RingCT structs and functionality.

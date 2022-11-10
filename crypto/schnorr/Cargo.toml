@@ -1,0 +1,30 @@
+[package]
+name = "schnorr-signatures"
+version = "0.1.0"
+description = "Minimal Schnorr signatures crate hosting common code"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/schnorr"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["schnorr", "ff", "group"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rand_core = "0.6"
+
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
+
+digest = "0.10"
+
+group = "0.12"
+ciphersuite = { path = "../ciphersuite", version = "0.1" }
+
+multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
+
+[dev-dependencies]
+blake2 = "0.10"
+dalek-ff-group = { path =  "../dalek-ff-group", version = "^0.1.2" }
+ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["ristretto"] }

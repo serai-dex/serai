@@ -160,7 +160,8 @@ fn algorithm(len: usize) -> Algorithm {
   }
 }
 
-// Performs a multiexp, automatically selecting the optimal algorithm based on amount of pairs
+/// Performs a multiexponentation, automatically selecting the optimal algorithm based on the
+/// amount of pairs.
 pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G
 where
   G::Scalar: PrimeFieldBits + Zeroize,
@@ -173,6 +174,8 @@ where
   }
 }
 
+/// Performs a multiexponentation in variable time, automatically selecting the optimal algorithm
+/// based on the amount of pairs.
 pub fn multiexp_vartime<G: Group>(pairs: &[(G::Scalar, G)]) -> G
 where
   G::Scalar: PrimeFieldBits,

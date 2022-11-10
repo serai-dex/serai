@@ -42,6 +42,8 @@ services:
       args:
         TAG: serai
     entrypoint: /scripts/entry-dev.sh
+    volumes:
+      - "./serai/scripts:/scripts"
 
   serai-base:
     <<: *serai_defaults
@@ -213,3 +215,5 @@ services:
     volumes:
       - "./coins/monero/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
+    ports:
+      - "18081:18081"

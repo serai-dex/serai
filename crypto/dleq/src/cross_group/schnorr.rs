@@ -30,13 +30,13 @@ impl<G: PrimeGroup + Zeroize> SchnorrPoK<G>
 where
   G::Scalar: PrimeFieldBits + Zeroize,
 {
-  // Not hram due to the lack of m
+  // Not HRAm due to the lack of m
   #[allow(non_snake_case)]
   fn hra<T: Transcript>(transcript: &mut T, generator: G, R: G, A: G) -> G::Scalar {
     transcript.domain_separate(b"schnorr_proof_of_knowledge");
-    transcript.append_message(b"generator", generator.to_bytes().as_ref());
-    transcript.append_message(b"nonce", R.to_bytes().as_ref());
-    transcript.append_message(b"public_key", A.to_bytes().as_ref());
+    transcript.append_message(b"generator", generator.to_bytes());
+    transcript.append_message(b"nonce", R.to_bytes());
+    transcript.append_message(b"public_key", A.to_bytes());
     challenge(transcript)
   }
 

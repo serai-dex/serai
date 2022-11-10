@@ -4,11 +4,16 @@ members = [
 
   "crypto/dalek-ff-group",
   "crypto/ed448",
+  "crypto/ciphersuite",
 
   "crypto/multiexp",
 
+  "crypto/schnorr",
   "crypto/dleq",
+  "crypto/dkg",
   "crypto/frost",
+
+  "crypto/message-box",
 
   "coins/ethereum",
   "coins/monero/generators",
