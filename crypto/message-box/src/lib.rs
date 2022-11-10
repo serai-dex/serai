@@ -50,6 +50,8 @@ pub mod key {
 pub enum MessageError {
   #[error("message was incomplete")]
   Incomplete,
+  #[error("invalid encoding")]
+  InvalidEncoding,
 }
 
 /// A Secure Message, defined as being not only encrypted yet authenticated.

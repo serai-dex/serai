@@ -35,4 +35,12 @@ pub fn message_box() {
   assert_eq!(msg, b_box.decrypt(A, enc));
 
   assert_eq!(msg, b_box.decrypt_from_bytes(A, a_box.encrypt_to_bytes(B, msg.clone())).unwrap());
+
+  {
+    #[allow(deprecated)]
+    let enc = a_box.encrypt_to_string(B, msg.clone());
+    #[allow(deprecated)]
+    let dec = b_box.decrypt_from_str(A, &enc).unwrap();
+    assert_eq!(msg, dec);
+  }
 }

@@ -103,4 +103,19 @@ impl MessageBox {
   ) -> Result<Vec<u8>, MessageError> {
     SecureMessage::new(msg.0).map(|msg| self.decrypt(from, msg))
   }
+
+  /// Encrypt a message, serialize it, and base64 encode it.
+  #[deprecated(note = "use encrypt_to_bytes")]
+  pub fn encrypt_to_string(&self, to: &'static str, msg: Vec<u8>) -> String {
+    base64::encode(self.encrypt_to_bytes(to, msg).0)
+  }
+
+  /// Base64 decode the given string, deserialize it as a message, and decrypt it.
+  #[deprecated(note = "use decrypt_from_bytes")]
+  pub fn decrypt_from_str(&self, from: &'static str, msg: &str) -> Result<Vec<u8>, MessageError> {
+    self.decrypt_from_bytes(
+      from,
+      SecureMessageBytes(base64::decode(msg).map_err(|_| MessageError::InvalidEncoding)?),
+    )
+  }
 }

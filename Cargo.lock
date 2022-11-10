@@ -4513,6 +4513,7 @@ dependencies = [
 name = "message-box"
 version = "0.1.0"
 dependencies = [
+ "base64 0.13.1",
  "chacha20 0.9.0",
  "ciphersuite",
  "dalek-ff-group",
