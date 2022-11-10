@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{BorshSerialize, BorshDeserialize, SecureMessage, MessageBox, key_gen};
+use crate::{Serialize, Deserialize, SecureMessage, MessageBox, key_gen};
 
 const A: &'static str = "A";
 const B: &'static str = "B";
@@ -14,7 +14,7 @@ pub fn re_export() {
   assert_eq!(public, PublicKey::from_bytes(&public.to_bytes()).unwrap());
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 struct TestMessage {
   msg: String,
 }

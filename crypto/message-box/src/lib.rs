@@ -23,10 +23,10 @@ use chacha20::{
 
 use schnorr::SchnorrSignature;
 
-use serde::{Serialize, Deserialize};
+pub use serde::{Serialize, Deserialize};
 
 mod ser;
-pub use ser::*;
+use ser::*;
 
 #[cfg(test)]
 mod tests;

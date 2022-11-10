@@ -32,8 +32,7 @@ chacha20 = { version = "0.9", features = ["zeroize"] }
 schnorr = { package = "schnorr-signatures", path = "../schnorr" }
 
 serde = { version = "1", features = ["derive"] }
-borsh-derive = "0.9"
-borsh = "0.9"
+bincode = "1"
 
 [dev-dependencies]
 serde_json = "1"
