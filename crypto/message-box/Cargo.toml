@@ -17,6 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 thiserror = "1"
 
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zalloc = { path = "../../common/zalloc" }
 rand_core = "0.6"
 
 hex = "0.4"

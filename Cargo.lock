@@ -4523,6 +4523,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "zalloc",
  "zeroize",
 ]
 
