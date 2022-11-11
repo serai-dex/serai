@@ -46,6 +46,21 @@ impl PrivateKey {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct PublicKey(RistrettoPoint);
 
+/// Generate a key pair
+pub fn key_gen() -> (PrivateKey, PublicKey) {
+  let mut scalar;
+  while {
+    scalar = Zeroizing::new(Scalar::random(&mut OsRng));
+    scalar.is_zero().into()
+  } {}
+  let public = RistrettoPoint::generator() * scalar.deref();
+  (PrivateKey(scalar), PublicKey(public))
+}
+
+fn transcript() -> RecommendedTranscript {
+  RecommendedTranscript::new(b"MessageBox")
+}
+
 /// Error from creating/decrypting a message.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum MessageError {
@@ -65,21 +80,6 @@ pub struct SecureMessage {
   #[serde(serialize_with = "serialize_sig")]
   #[serde(deserialize_with = "deserialize_sig")]
   sig: SchnorrSignature<Ristretto>,
-}
-
-/// Generate a key pair
-pub fn key_gen() -> (PrivateKey, PublicKey) {
-  let mut scalar;
-  while {
-    scalar = Zeroizing::new(Scalar::random(&mut OsRng));
-    scalar.is_zero().into()
-  } {}
-  let public = RistrettoPoint::generator() * scalar.deref();
-  (PrivateKey(scalar), PublicKey(public))
-}
-
-fn transcript() -> RecommendedTranscript {
-  RecommendedTranscript::new(b"MessageBox")
 }
 
 #[allow(non_snake_case)]
@@ -155,46 +155,43 @@ impl Drop for MessageBox {
 impl ZeroizeOnDrop for MessageBox {}
 
 impl MessageBox {
+  pub fn add(&mut self, name: &'static str, key: RistrettoPoint) {
+    self.pub_keys.insert(name, key);
+
+    let mut transcript = transcript();
+    transcript.domain_separate(b"encryption_keys");
+
+    // We could make these encryption keys directional, yet the sender is clearly established
+    // by the Ristretto signature
+    let (name_a, name_b) = match self.our_name.cmp(name) {
+      Ordering::Less => (self.our_name, name),
+      Ordering::Equal => panic!("encrypting to ourself"),
+      Ordering::Greater => (name, self.our_name),
+    };
+    transcript.append_message(b"name_a", name_a.as_bytes());
+    transcript.append_message(b"name_b", name_b.as_bytes());
+
+    transcript.append_message(b"shared_key", (key * self.our_key.0.deref()).to_bytes());
+    let mut shared_key = transcript.challenge(b"encryption_key");
+
+    let mut key = Key::default();
+    key.copy_from_slice(&shared_key[.. 32]);
+    shared_key.zeroize();
+    self.enc_keys.insert(name, key);
+  }
+
+  pub fn remove(&mut self, name: &'static str) {
+    self.pub_keys.remove(name);
+    self.enc_keys.remove(name);
+  }
+
   /// Create a new message box with our identity and the identities of our peers.
   pub fn new(
     our_name: &'static str,
     our_key: PrivateKey,
     mut keys: HashMap<&'static str, PublicKey>,
   ) -> MessageBox {
-    let keys = keys
-      .drain()
-      .map(|(name, key)| (name, key.0))
-      .collect::<HashMap<&'static str, RistrettoPoint>>();
-
-    MessageBox {
-      enc_keys: keys
-        .iter()
-        .map(|(other_name, other_key)| {
-          let mut transcript = transcript();
-          transcript.domain_separate(b"encryption_keys");
-
-          // We could make these encryption keys directional, yet the sender is clearly established
-          // by the Ristretto signature
-          let (name_a, name_b) = match our_name.cmp(other_name) {
-            Ordering::Less => (our_name, *other_name),
-            Ordering::Equal => panic!("encrypting to ourself"),
-            Ordering::Greater => (*other_name, our_name),
-          };
-          transcript.append_message(b"name_a", name_a.as_bytes());
-          transcript.append_message(b"name_b", name_b.as_bytes());
-
-          transcript.append_message(b"shared_key", (*other_key * our_key.0.deref()).to_bytes());
-          let shared_key = transcript.challenge(b"encryption_key");
-
-          let mut key = Key::default();
-          debug_assert_eq!(key.len(), 32);
-          key.copy_from_slice(&shared_key[.. 32]);
-
-          (*other_name, key)
-        })
-        .collect(),
-      pub_keys: keys,
-
+    let mut res = MessageBox {
       additional_entropy: {
         let mut transcript = transcript();
         transcript.domain_separate(b"additional_entropy");
@@ -226,7 +223,15 @@ impl MessageBox {
       our_name,
       our_public_key: RistrettoPoint::generator() * our_key.0.deref(),
       our_key,
+
+      enc_keys: HashMap::new(),
+      pub_keys: HashMap::new(),
+    };
+
+    for (name, key) in keys.drain().map(|(name, key)| (name, key.0)) {
+      res.add(name, key);
     }
+    res
   }
 
   /// Encrypt bytes to be sent to another party.
