@@ -342,7 +342,10 @@ pub trait Network: Send + Sync {
   /// Trigger a slash for the validator in question who was definitively malicious.
   ///
   /// The exact process of triggering a slash is undefined and left to the network as a whole.
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   // TODO: We need to provide some evidence for this.
+=======
+>>>>>>> dbcddb2f (Don't spam slash):substrate/tendermint/machine/src/ext.rs
   async fn slash(&mut self, validator: Self::ValidatorId);
 
   /// Validate a block.
