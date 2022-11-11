@@ -59,7 +59,7 @@ impl PrivateKey {
 pub struct PublicKey(RistrettoPoint);
 impl PublicKey {
   /// Parse a Public Key from a string. Panics if an invalid key is used.
-  pub fn from_string(str: String) -> Self {
+  pub fn from_str(str: &str) -> Self {
     Self::from_bytes(&hex::decode(str).unwrap().try_into().unwrap()).unwrap()
   }
 
