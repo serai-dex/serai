@@ -43,12 +43,25 @@ impl PrivateKey {
   pub unsafe fn inner(&self) -> &Zeroizing<Scalar> {
     &self.0
   }
+
+  /// Parse a Private Key from a string.
+  pub fn from_string(mut str: String) -> PrivateKey {
+    let mut bytes = hex::decode::<&str>(str.as_ref()).unwrap().try_into().unwrap();
+    str.zeroize();
+    let res = PrivateKey(Zeroizing::new(Scalar::from_repr(bytes).unwrap()));
+    bytes.zeroize();
+    res
+  }
 }
 
 /// Public Key for a Message Box.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct PublicKey(RistrettoPoint);
 impl PublicKey {
+  /// Parse a Public Key from a string. Panics if an invalid key is used.
+  pub fn from_string(str: String) -> Self {
+    Self::from_bytes(&hex::decode(str).unwrap().try_into().unwrap()).unwrap()
+  }
 
   /// Serialize a Public Key to bytes.
   pub fn to_bytes(&self) -> [u8; 32] {
