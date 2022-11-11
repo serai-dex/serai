@@ -130,8 +130,9 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       .propose(
         self.import.inherent_data(parent).await,
         Digest::default(),
-        // TODO: Production time, size limit
-        Duration::from_secs(1),
+        // Assumes a block cannot take longer to download than it'll take to process
+        Duration::from_secs((T::BLOCK_PROCESSING_TIME_IN_SECONDS / 2).into()),
+        // TODO: Size limit
         None,
       )
       .await
@@ -253,7 +254,8 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
   type Weights = TendermintValidators<T>;
   type Block = T::Block;
 
-  const BLOCK_TIME: u32 = T::BLOCK_TIME_IN_SECONDS;
+  const BLOCK_PROCESSING_TIME: u32 = T::BLOCK_PROCESSING_TIME_IN_SECONDS;
+  const LATENCY_TIME: u32 = T::LATENCY_TIME_IN_SECONDS;
 
   fn signer(&self) -> TendermintSigner<T> {
     self.active.as_ref().unwrap().signer.clone()

@@ -207,8 +207,16 @@ pub trait Network: Send + Sync {
   /// Type used for ordered blocks of information.
   type Block: Block;
 
-  // Block time in seconds
-  const BLOCK_TIME: u32;
+  /// Maximum block processing time in seconds. This should include both the actual processing time
+  /// and the time to download the block.
+  const BLOCK_PROCESSING_TIME: u32;
+  /// Network latency time in seconds.
+  const LATENCY_TIME: u32;
+
+  /// The block time is defined as the processing time plus three times the latency.
+  fn block_time() -> u32 {
+    Self::BLOCK_PROCESSING_TIME + (3 * Self::LATENCY_TIME)
+  }
 
   /// Return a handle on the signer in use, usable for the entire lifetime of the machine.
   fn signer(&self) -> <Self::SignatureScheme as SignatureScheme>::Signer;

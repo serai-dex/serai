@@ -155,23 +155,22 @@ impl<N: Network + 'static> TendermintMachine<N> {
   fn canonical_end_time(&self, round: Round) -> u64 {
     let mut time = self.canonical_start_time;
     for r in 0 .. u64::from(round.0 + 1) {
-      time += (r + 1) * u64::from(N::BLOCK_TIME);
+      time += (r + 1) * u64::from(N::block_time());
     }
     time
   }
 
   fn timeout(&self, step: Step) -> Instant {
-    let mut round_time = Duration::from_secs(N::BLOCK_TIME.into());
-    round_time *= self.round.0 + 1;
-    // TODO: Non-uniform timeouts. Proposal has to validate the block which will take much longer
-    // than any other step
-    let step_time = round_time / 3;
-
-    let offset = match step {
-      Step::Propose => step_time,
-      Step::Prevote => step_time * 2,
-      Step::Precommit => step_time * 3,
-    };
+    let adjusted_block = N::BLOCK_PROCESSING_TIME * (self.round.0 + 1);
+    let adjusted_latency = N::LATENCY_TIME * (self.round.0 + 1);
+    let offset = Duration::from_secs(
+      (match step {
+        Step::Propose => adjusted_block + adjusted_latency,
+        Step::Prevote => adjusted_block + (2 * adjusted_latency),
+        Step::Precommit => adjusted_block + (3 * adjusted_latency),
+      })
+      .into(),
+    );
     self.start_time + offset
   }
 
@@ -301,7 +300,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           // Using the genesis time in place will cause this block to be created immediately
           // after it, without the standard amount of separation (so their times will be
           // equivalent or minimally offset)
-          // For callers wishing to avoid this, they should pass (0, GENESIS + BLOCK_TIME)
+          // For callers wishing to avoid this, they should pass (0, GENESIS + N::block_time())
           start_time: last_time,
           personal_proposal: proposal,
 

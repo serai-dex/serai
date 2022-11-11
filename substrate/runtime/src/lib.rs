@@ -79,11 +79,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   state_version: 1,
 };
 
-pub const MILLISECS_PER_BLOCK: u64 = 6000;
-pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+pub const TARGET_BLOCK_TIME: u64 = 6000;
 
 /// Measured in blocks.
-pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
+pub const MINUTES: BlockNumber = 60_000 / (TARGET_BLOCK_TIME as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
@@ -164,7 +163,7 @@ impl pallet_randomness_collective_flip::Config for Runtime {}
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
   type OnTimestampSet = ();
-  type MinimumPeriod = ConstU64<{ SLOT_DURATION / 2 }>;
+  type MinimumPeriod = ConstU64<{ TARGET_BLOCK_TIME / 2 }>;
   type WeightInfo = ();
 }
 

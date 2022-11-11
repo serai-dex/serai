@@ -53,7 +53,8 @@ pub fn set_config(protocol: ProtocolName) -> NonDefaultSetConfig {
 
 /// Trait consolidating all generics required by sc_tendermint for processing.
 pub trait TendermintClient: Send + Sync + 'static {
-  const BLOCK_TIME_IN_SECONDS: u32;
+  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32;
+  const LATENCY_TIME_IN_SECONDS: u32;
 
   type Block: Block;
   type Backend: Backend<Self::Block> + 'static;
@@ -81,7 +82,8 @@ pub trait TendermintClient: Send + Sync + 'static {
 
 /// Trait implementable on firm types to automatically provide a full TendermintClient impl.
 pub trait TendermintClientMinimal: Send + Sync + 'static {
-  const BLOCK_TIME_IN_SECONDS: u32;
+  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32;
+  const LATENCY_TIME_IN_SECONDS: u32;
 
   type Block: Block;
   type Backend: Backend<Self::Block> + 'static;
@@ -102,7 +104,8 @@ where
     BlockBuilderApi<T::Block> + TendermintApi<T::Block>,
   TransactionFor<T::Client, T::Block>: Send + Sync + 'static,
 {
-  const BLOCK_TIME_IN_SECONDS: u32 = T::BLOCK_TIME_IN_SECONDS;
+  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = T::BLOCK_PROCESSING_TIME_IN_SECONDS;
+  const LATENCY_TIME_IN_SECONDS: u32 = T::LATENCY_TIME_IN_SECONDS;
 
   type Block = T::Block;
   type Backend = T::Backend;

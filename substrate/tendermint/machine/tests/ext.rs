@@ -103,7 +103,8 @@ impl Network for TestNetwork {
   type Weights = TestWeights;
   type Block = TestBlock;
 
-  const BLOCK_TIME: u32 = 1;
+  const BLOCK_PROCESSING_TIME: u32 = 2;
+  const LATENCY_TIME: u32 = 1;
 
   fn signer(&self) -> TestSigner {
     TestSigner(self.0)
@@ -168,7 +169,5 @@ impl TestNetwork {
 #[tokio::test]
 async fn test() {
   TestNetwork::new(4).await;
-  for _ in 0 .. 10 {
-    sleep(Duration::from_secs(1)).await;
-  }
+  sleep(Duration::from_secs(30)).await;
 }
