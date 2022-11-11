@@ -16,4 +16,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 zeroize = "1.5"
 
 [features]
-allocator = []
+# Commented for now as it requires nightly and we don't use nightly
+# allocator = []
