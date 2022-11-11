@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use std::{
   sync::Arc,
   time::{UNIX_EPOCH, SystemTime, Instant, Duration},
-  collections::{VecDeque, HashMap},
+  collections::{VecDeque, HashSet, HashMap},
 };
 
 use parity_scale_codec::{Encode, Decode};
@@ -121,6 +121,7 @@ pub struct TendermintMachine<N: Network> {
   >,
 
   log: MessageLog<N>,
+  slashes: HashSet<N::ValidatorId>,
   round: Round,
   end_time: HashMap<Round, Instant>,
   step: Step,
@@ -239,12 +240,20 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.queue = self.queue.drain(..).filter(|msg| msg.number == self.number).collect();
 
     self.log = MessageLog::new(self.weights.clone());
+    self.slashes = HashSet::new();
     self.end_time = HashMap::new();
 
     self.locked = None;
     self.valid = None;
 
     self.round(Round(0));
+  }
+
+  async fn slash(&mut self, validator: N::ValidatorId) {
+    if !self.slashes.contains(&validator) {
+      self.slashes.insert(validator);
+      self.network.slash(validator).await;
+    }
   }
 
   /// Create a new Tendermint machine, from the specified point, with the specified block as the
@@ -308,6 +317,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           msg_recv,
 
           log: MessageLog::new(weights),
+          slashes: HashSet::new(),
           round: Round(0),
           end_time: HashMap::new(),
           step: Step::Propose,
@@ -364,6 +374,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
           // never attempt to add a timeout after this timeout has expired
           self.timeouts.remove(&Step::Propose);
           if self.step == Step::Propose {
+            // Slash the validator for not proposing when they should've
+            self.slash(self.weights.proposer(self.number, self.round)).await;
             self.broadcast(Data::Prevote(None));
           }
           None
@@ -425,7 +437,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             self.reset(msg.round, proposal).await;
           }
           Err(TendermintError::Malicious(validator)) => {
-            self.network.slash(validator).await;
+            self.slash(validator).await;
           }
           Err(TendermintError::Temporal) => (),
         }
