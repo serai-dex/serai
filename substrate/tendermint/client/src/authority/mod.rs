@@ -132,8 +132,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         Digest::default(),
         // Assumes a block cannot take longer to download than it'll take to process
         Duration::from_secs((T::BLOCK_PROCESSING_TIME_IN_SECONDS / 2).into()),
-        // TODO: Size limit
-        None,
+        Some(T::PROPOSED_BLOCK_SIZE_LIMIT),
       )
       .await
       .expect("Failed to crate a new block proposal")

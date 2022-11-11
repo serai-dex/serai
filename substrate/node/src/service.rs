@@ -18,7 +18,7 @@ pub(crate) use sc_tendermint::{
   TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
   TendermintSelectChain, import_queue,
 };
-use serai_runtime::{self, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
+use serai_runtime::{self, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
 pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
@@ -63,6 +63,10 @@ impl CreateInherentDataProviders<Block, ()> for Cidp {
 
 pub struct TendermintValidatorFirm;
 impl TendermintClientMinimal for TendermintValidatorFirm {
+  // TODO: This is passed directly to propose, which warns not to use the hard limit as finalize
+  // may grow the block. We don't use storage proofs and use the Executive finalize_block. Is that
+  // guaranteed not to grow the block?
+  const PROPOSED_BLOCK_SIZE_LIMIT: usize = { BLOCK_SIZE as usize };
   // 3 seconds
   const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 1000) as u32 };
   // 1 second
@@ -178,7 +182,10 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     config.chain_spec.fork_id(),
   );
   if is_authority {
-    config.network.extra_sets.push(sc_tendermint::set_config(tendermint_protocol.clone()));
+    config
+      .network
+      .extra_sets
+      .push(sc_tendermint::set_config(tendermint_protocol.clone(), BLOCK_SIZE.into()));
   }
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter) =

@@ -44,15 +44,20 @@ pub fn protocol_name<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> Pr
   name.into()
 }
 
-pub fn set_config(protocol: ProtocolName) -> NonDefaultSetConfig {
-  // TODO: 1 MiB Block Size + 1 KiB
-  let mut cfg = NonDefaultSetConfig::new(protocol, (1024 * 1024) + 1024);
+pub fn set_config(protocol: ProtocolName, block_size: u64) -> NonDefaultSetConfig {
+  // The extra 512 bytes is for the additional data part of Tendermint
+  // Even with BLS, that should just be 161 bytes in the worst case, for a perfect messaging scheme
+  // While 256 bytes would suffice there, it's unknown if any LibP2P overhead exists nor if
+  // anything here will be perfect. Considering this is miniscule compared to the block size, it's
+  // better safe than sorry.
+  let mut cfg = NonDefaultSetConfig::new(protocol, block_size + 512);
   cfg.allow_non_reserved(25, 25);
   cfg
 }
 
 /// Trait consolidating all generics required by sc_tendermint for processing.
 pub trait TendermintClient: Send + Sync + 'static {
+  const PROPOSED_BLOCK_SIZE_LIMIT: usize;
   const BLOCK_PROCESSING_TIME_IN_SECONDS: u32;
   const LATENCY_TIME_IN_SECONDS: u32;
 
@@ -82,6 +87,7 @@ pub trait TendermintClient: Send + Sync + 'static {
 
 /// Trait implementable on firm types to automatically provide a full TendermintClient impl.
 pub trait TendermintClientMinimal: Send + Sync + 'static {
+  const PROPOSED_BLOCK_SIZE_LIMIT: usize;
   const BLOCK_PROCESSING_TIME_IN_SECONDS: u32;
   const LATENCY_TIME_IN_SECONDS: u32;
 
@@ -104,6 +110,7 @@ where
     BlockBuilderApi<T::Block> + TendermintApi<T::Block>,
   TransactionFor<T::Client, T::Block>: Send + Sync + 'static,
 {
+  const PROPOSED_BLOCK_SIZE_LIMIT: usize = T::PROPOSED_BLOCK_SIZE_LIMIT;
   const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = T::BLOCK_PROCESSING_TIME_IN_SECONDS;
   const LATENCY_TIME_IN_SECONDS: u32 = T::LATENCY_TIME_IN_SECONDS;
 

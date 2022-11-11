@@ -81,6 +81,9 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   state_version: 1,
 };
 
+// 1 MB
+pub const BLOCK_SIZE: u32 = 1024 * 1024;
+// 6 seconds
 pub const TARGET_BLOCK_TIME: u64 = 6000;
 
 /// Measured in blocks.
@@ -111,7 +114,7 @@ parameter_types! {
 
   // 1 MB block size limit
   pub BlockLength: frame_system::limits::BlockLength =
-    frame_system::limits::BlockLength::max_with_normal_ratio(1024 * 1024, NORMAL_DISPATCH_RATIO);
+    frame_system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: frame_system::limits::BlockWeights =
     frame_system::limits::BlockWeights::with_sensible_defaults(
       (2u64 * WEIGHT_PER_SECOND).set_proof_size(u64::MAX),
