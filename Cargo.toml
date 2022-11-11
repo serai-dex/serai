@@ -1,5 +1,7 @@
 [workspace]
 members = [
+  "common/zalloc",
+
   "crypto/transcript",
 
   "crypto/dalek-ff-group",
