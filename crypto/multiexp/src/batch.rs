@@ -7,19 +7,21 @@ use group::Group;
 
 use crate::{multiexp, multiexp_vartime};
 
-#[cfg(feature = "batch")]
+/// A batch verifier intended to verify a series of statements are each equivalent to zero.
 #[derive(Clone, Zeroize)]
 pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(Vec<(Id, Vec<(G::Scalar, G)>)>);
 
-#[cfg(feature = "batch")]
 impl<Id: Copy + Zeroize, G: Group + Zeroize> BatchVerifier<Id, G>
 where
   <G as Group>::Scalar: PrimeFieldBits + Zeroize,
 {
+  /// Create a new batch verifier, expected to verify the following amount of statements.
+  /// This is a size hint and is not required to be accurate.
   pub fn new(capacity: usize) -> BatchVerifier<Id, G> {
     BatchVerifier(Vec::with_capacity(capacity))
   }
 
+  /// Queue a statement for batch verification.
   pub fn queue<R: RngCore + CryptoRng, I: IntoIterator<Item = (G::Scalar, G)>>(
     &mut self,
     rng: &mut R,
@@ -71,6 +73,7 @@ where
     self.0.push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
   }
 
+  /// Perform batch verification, returning a boolean of if the statements equaled zero.
   #[must_use]
   pub fn verify_core(&self) -> bool {
     let mut flat = self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>();
@@ -79,12 +82,14 @@ where
     res
   }
 
+  /// Perform batch verification, zeroizing the statements verified.
   pub fn verify(mut self) -> bool {
     let res = self.verify_core();
     self.zeroize();
     res
   }
 
+  /// Perform batch verification in variable time.
   #[must_use]
   pub fn verify_vartime(&self) -> bool {
     multiexp_vartime(&self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
@@ -92,6 +97,9 @@ where
       .into()
   }
 
+  /// Perform a binary search to identify which statement does not equal 0, returning None if all
+  /// statements do. This function will only return the ID of one invalid statement, even if
+  /// multiple are invalid.
   // A constant time variant may be beneficial for robust protocols
   pub fn blame_vartime(&self) -> Option<Id> {
     let mut slice = self.0.as_slice();
@@ -115,12 +123,16 @@ where
       .map(|(id, _)| *id)
   }
 
+  /// Perform constant time batch verification, and if verification fails, identify one faulty
+  /// statement in variable time.
   pub fn verify_with_vartime_blame(mut self) -> Result<(), Id> {
     let res = if self.verify_core() { Ok(()) } else { Err(self.blame_vartime().unwrap()) };
     self.zeroize();
     res
   }
 
+  /// Perform variable time batch verification, and if verification fails, identify one faulty
+  /// statement in variable time.
   pub fn verify_vartime_with_vartime_blame(&self) -> Result<(), Id> {
     if self.verify_vartime() {
       Ok(())

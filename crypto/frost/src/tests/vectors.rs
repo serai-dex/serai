@@ -1,7 +1,10 @@
+use core::ops::Deref;
+
 use std::collections::HashMap;
 #[cfg(test)]
 use std::str::FromStr;
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use group::{ff::PrimeField, GroupEncoding};
@@ -103,7 +106,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, Thresho
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     assert_eq!(these_keys.params().i(), i);
-    assert_eq!(these_keys.secret_share(), shares[usize::from(i - 1)]);
+    assert_eq!(these_keys.secret_share().deref(), &shares[usize::from(i - 1)]);
     assert_eq!(hex::encode(these_keys.group_key().to_bytes().as_ref()), vectors.group_key);
     keys.insert(i, ThresholdKeys::new(these_keys));
   }
@@ -148,12 +151,15 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   let mut machines = machines
     .drain(..)
     .map(|(i, machine)| {
-      let nonces = [
-        C::read_F::<&[u8]>(&mut hex::decode(&vectors.nonces[c][0]).unwrap().as_ref()).unwrap(),
-        C::read_F::<&[u8]>(&mut hex::decode(&vectors.nonces[c][1]).unwrap().as_ref()).unwrap(),
-      ];
+      let nonce = |i| {
+        Zeroizing::new(
+          C::read_F::<&[u8]>(&mut hex::decode(&vectors.nonces[c][i]).unwrap().as_ref()).unwrap(),
+        )
+      };
+      let nonces = [nonce(0), nonce(1)];
       c += 1;
-      let these_commitments = [C::generator() * nonces[0], C::generator() * nonces[1]];
+      let these_commitments =
+        [C::generator() * nonces[0].deref(), C::generator() * nonces[1].deref()];
       let machine = machine.unsafe_override_preprocess(
         vec![Nonce(nonces)],
         Preprocess {

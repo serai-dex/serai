@@ -8,6 +8,7 @@
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
 // When multiple D, E pairs are provided, a DLEq proof is also provided to confirm their integrity
 
+use core::ops::Deref;
 use std::{
   io::{self, Read, Write},
   collections::HashMap,
@@ -15,7 +16,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
@@ -33,13 +34,7 @@ fn dleq_transcript<T: Transcript>() -> T {
 // Each nonce is actually a pair of random scalars, notated as d, e under the FROST paper
 // This is considered a single nonce as r = d + be
 #[derive(Clone, Zeroize)]
-pub(crate) struct Nonce<C: Curve>(pub(crate) [C::F; 2]);
-impl<C: Curve> Drop for Nonce<C> {
-  fn drop(&mut self) {
-    self.zeroize();
-  }
-}
-impl<C: Curve> ZeroizeOnDrop for Nonce<C> {}
+pub(crate) struct Nonce<C: Curve>(pub(crate) [Zeroizing<C::F>; 2]);
 
 // Commitments to a specific generator for this nonce
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -70,16 +65,20 @@ pub(crate) struct NonceCommitments<C: Curve> {
 impl<C: Curve> NonceCommitments<C> {
   pub(crate) fn new<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
-    mut secret_share: C::F,
+    secret_share: &Zeroizing<C::F>,
     generators: &[C::G],
   ) -> (Nonce<C>, NonceCommitments<C>) {
-    let nonce =
-      Nonce([C::random_nonce(secret_share, &mut *rng), C::random_nonce(secret_share, &mut *rng)]);
-    secret_share.zeroize();
+    let nonce = Nonce::<C>([
+      C::random_nonce(secret_share, &mut *rng),
+      C::random_nonce(secret_share, &mut *rng),
+    ]);
 
     let mut commitments = Vec::with_capacity(generators.len());
     for generator in generators {
-      commitments.push(GeneratorCommitments([*generator * nonce.0[0], *generator * nonce.0[1]]));
+      commitments.push(GeneratorCommitments([
+        *generator * nonce.0[0].deref(),
+        *generator * nonce.0[1].deref(),
+      ]));
     }
 
     let mut dleqs = None;
@@ -91,7 +90,7 @@ impl<C: Curve> NonceCommitments<C> {
         // TODO: At least include a challenge from the existing transcript
         DLEqProof::prove(&mut *rng, &mut dleq_transcript::<T>(), generators, nonce)
       };
-      dleqs = Some([dleq(nonce.0[0]), dleq(nonce.0[1])]);
+      dleqs = Some([dleq(&nonce.0[0]), dleq(&nonce.0[1])]);
     }
 
     (nonce, NonceCommitments { generators: commitments, dleqs })
@@ -145,7 +144,7 @@ pub(crate) struct Commitments<C: Curve> {
 impl<C: Curve> Commitments<C> {
   pub(crate) fn new<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
-    secret_share: C::F,
+    secret_share: &Zeroizing<C::F>,
     planned_nonces: &[Vec<C::G>],
   ) -> (Vec<Nonce<C>>, Commitments<C>) {
     let mut nonces = vec![];

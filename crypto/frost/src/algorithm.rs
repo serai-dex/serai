@@ -1,6 +1,7 @@
 use core::{marker::PhantomData, fmt::Debug};
 use std::io::{self, Read, Write};
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
@@ -66,7 +67,7 @@ pub trait Algorithm<C: Curve>: Clone {
     &mut self,
     params: &ThresholdView<C>,
     nonce_sums: &[Vec<C::G>],
-    nonces: &[C::F],
+    nonces: Vec<Zeroizing<C::F>>,
     msg: &[u8],
   ) -> C::F;
 
@@ -161,12 +162,12 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     &mut self,
     params: &ThresholdView<C>,
     nonce_sums: &[Vec<C::G>],
-    nonces: &[C::F],
+    mut nonces: Vec<Zeroizing<C::F>>,
     msg: &[u8],
   ) -> C::F {
     let c = H::hram(&nonce_sums[0][0], &params.group_key(), msg);
     self.c = Some(c);
-    SchnorrSignature::<C>::sign(params.secret_share(), nonces[0], c).s
+    SchnorrSignature::<C>::sign(params.secret_share(), nonces.swap_remove(0), c).s
   }
 
   #[must_use]

@@ -1,6 +1,8 @@
+use core::ops::Deref;
+
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
@@ -44,18 +46,17 @@ where
     rng: &mut R,
     transcript: &mut T,
     generator: G,
-    mut private_key: G::Scalar,
+    private_key: &Zeroizing<G::Scalar>,
   ) -> SchnorrPoK<G> {
-    let mut nonce = G::Scalar::random(rng);
+    let nonce = Zeroizing::new(G::Scalar::random(rng));
     #[allow(non_snake_case)]
-    let R = generator * nonce;
-    let res = SchnorrPoK {
+    let R = generator * nonce.deref();
+    SchnorrPoK {
       R,
-      s: nonce + (private_key * SchnorrPoK::hra(transcript, generator, R, generator * private_key)),
-    };
-    private_key.zeroize();
-    nonce.zeroize();
-    res
+      s: (SchnorrPoK::hra(transcript, generator, R, generator * private_key.deref()) *
+        private_key.deref()) +
+        nonce.deref(),
+    }
   }
 
   pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(
