@@ -1,7 +1,5 @@
 [workspace]
 members = [
-  "common/zalloc",
-
   "crypto/transcript",
 
   "crypto/dalek-ff-group",
@@ -15,7 +13,8 @@ members = [
   "crypto/dkg",
   "crypto/frost",
 
-  "crypto/message-box",
+  "common/zalloc",
+  "common/message-box",
 
   "coins/ethereum",
   "coins/monero/generators",

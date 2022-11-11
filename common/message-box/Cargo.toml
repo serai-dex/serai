@@ -17,20 +17,20 @@ rustdoc-args = ["--cfg", "docsrs"]
 thiserror = "1"
 
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
-zalloc = { path = "../../common/zalloc" }
+zalloc = { path = "../zalloc" }
 rand_core = "0.6"
 
 hex = "0.4"
 base64 = "0.13"
 
 group = "0.12"
-dalek-ff-group = { path = "../dalek-ff-group" }
-ciphersuite = { path = "../ciphersuite", features = ["ristretto"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
+ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
 
-transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"] }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", features = ["recommended"] }
 chacha20 = { version = "0.9", features = ["zeroize"] }
 
-schnorr = { package = "schnorr-signatures", path = "../schnorr" }
+schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
 
 serde = { version = "1", features = ["derive"] }
 bincode = "1"
