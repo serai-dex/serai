@@ -148,6 +148,16 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   state_version: 1,
 };
 
+<<<<<<< HEAD
+=======
+pub const TARGET_BLOCK_TIME: u64 = 6000;
+
+/// Measured in blocks.
+pub const MINUTES: BlockNumber = 60_000 / (TARGET_BLOCK_TIME as BlockNumber);
+pub const HOURS: BlockNumber = MINUTES * 60;
+pub const DAYS: BlockNumber = HOURS * 24;
+
+>>>>>>> fffb7a69 (Separate the block processing time from the latency)
 #[cfg(feature = "std")]
 pub fn native_version() -> NativeVersion {
   NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
@@ -257,8 +267,13 @@ impl system::Config for Runtime {
 
 impl timestamp::Config for Runtime {
   type Moment = u64;
+<<<<<<< HEAD
   type OnTimestampSet = Babe;
   type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME * 1000) / 2 }>;
+=======
+  type OnTimestampSet = ();
+  type MinimumPeriod = ConstU64<{ TARGET_BLOCK_TIME / 2 }>;
+>>>>>>> fffb7a69 (Separate the block processing time from the latency)
   type WeightInfo = ();
 }
 

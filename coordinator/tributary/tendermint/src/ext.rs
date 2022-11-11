@@ -283,6 +283,14 @@ pub trait Network: Send + Sync {
   const BLOCK_PROCESSING_TIME: u32;
   /// Network latency time in seconds.
   const LATENCY_TIME: u32;
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
+=======
+
+  /// The block time is defined as the processing time plus three times the latency.
+  fn block_time() -> u32 {
+    Self::BLOCK_PROCESSING_TIME + (3 * Self::LATENCY_TIME)
+  }
+>>>>>>> fffb7a69 (Separate the block processing time from the latency):substrate/tendermint/machine/src/ext.rs
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// The block time is defined as the processing time plus three times the latency.
