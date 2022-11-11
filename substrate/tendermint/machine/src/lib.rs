@@ -107,7 +107,7 @@ pub struct TendermintMachine<N: Network> {
   validators: N::SignatureScheme,
   weights: Arc<N::Weights>,
 
-  validator_id: N::ValidatorId,
+  validator_id: Option<N::ValidatorId>,
 
   number: BlockNumber,
   canonical_start_time: u64,
@@ -179,20 +179,21 @@ impl<N: Network + 'static> TendermintMachine<N> {
     &mut self,
     data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) {
-    let step = data.step();
-    // 27, 33, 41, 46, 60, 64
-    self.step = step;
-    self.queue.push_back(Message {
-      sender: self.validator_id,
-      number: self.number,
-      round: self.round,
-      data,
-    });
+    if let Some(validator_id) = &self.validator_id {
+      // 27, 33, 41, 46, 60, 64
+      self.step = data.step();
+      self.queue.push_back(Message {
+        sender: *validator_id,
+        number: self.number,
+        round: self.round,
+        data,
+      });
+    }
   }
 
   // 14-21
   fn round_propose(&mut self) -> bool {
-    if self.weights.proposer(self.number, self.round) == self.validator_id {
+    if Some(self.weights.proposer(self.number, self.round)) == self.validator_id {
       let (round, block) = self
         .valid
         .clone()

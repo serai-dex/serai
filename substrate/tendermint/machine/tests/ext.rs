@@ -21,8 +21,8 @@ impl Signer for TestSigner {
   type ValidatorId = TestValidatorId;
   type Signature = [u8; 32];
 
-  async fn validator_id(&self) -> TestValidatorId {
-    self.0
+  async fn validator_id(&self) -> Option<TestValidatorId> {
+    Some(self.0)
   }
 
   async fn sign(&self, msg: &[u8]) -> [u8; 32] {

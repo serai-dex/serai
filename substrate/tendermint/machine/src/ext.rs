@@ -41,8 +41,8 @@ pub trait Signer: Send + Sync {
   /// Signature type.
   type Signature: Signature;
 
-  /// Returns the validator's current ID.
-  async fn validator_id(&self) -> Self::ValidatorId;
+  /// Returns the validator's current ID. Returns None if they aren't a current validator.
+  async fn validator_id(&self) -> Option<Self::ValidatorId>;
   /// Sign a signature with the current validator's private key.
   async fn sign(&self, msg: &[u8]) -> Self::Signature;
 }
@@ -52,7 +52,7 @@ impl<S: Signer> Signer for Arc<S> {
   type ValidatorId = S::ValidatorId;
   type Signature = S::Signature;
 
-  async fn validator_id(&self) -> Self::ValidatorId {
+  async fn validator_id(&self) -> Option<Self::ValidatorId> {
     self.as_ref().validator_id().await
   }
 

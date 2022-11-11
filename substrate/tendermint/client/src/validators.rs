@@ -123,17 +123,14 @@ impl<T: TendermintClient> Signer for TendermintSigner<T> {
   type ValidatorId = u16;
   type Signature = Signature;
 
-  async fn validator_id(&self) -> u16 {
+  async fn validator_id(&self) -> Option<u16> {
     let key = self.get_public_key().await;
     for (i, k) in (*self.1 .0).read().unwrap().lookup.iter().enumerate() {
       if k == &key {
-        return u16::try_from(i).unwrap();
+        return Some(u16::try_from(i).unwrap());
       }
     }
-    // TODO: Enable switching between being a validator and not being one, likely be returning
-    // Option<u16> here. Non-validators should be able to simply not broadcast when they think
-    // they have messages.
-    panic!("not a validator");
+    None
   }
 
   async fn sign(&self, msg: &[u8]) -> Signature {
