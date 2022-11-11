@@ -1,16 +1,13 @@
 use std::collections::HashMap;
 
-use crate::{Serialize, Deserialize, SecureMessage, MessageBox, key_gen};
+use crate::{Serialize, Deserialize, PublicKey, SecureMessage, MessageBox, key_gen};
 
 const A: &'static str = "A";
 const B: &'static str = "B";
 
 #[test]
-pub fn re_export() {
-  use crate::key::*;
-
-  let (private, public) = key_gen();
-  assert_eq!(private, PrivateKey::from_repr(private.to_repr()).unwrap());
+pub fn key_serialization() {
+  let (_, public) = key_gen();
   assert_eq!(public, PublicKey::from_bytes(&public.to_bytes()).unwrap());
 }
 
@@ -36,8 +33,8 @@ pub fn message_box() {
   // SecureMessage API
   {
     let msg = b"Hello, world!".to_vec();
-    let enc = a_box.encrypt_bytes(B, msg.clone());
-    assert_eq!(msg, b_box.decrypt_to_bytes(A, enc.clone()));
+    let enc = a_box.encrypt_bytes(&B, msg.clone());
+    assert_eq!(msg, b_box.decrypt_to_bytes(&A, enc.clone()));
 
     // Additionally test its serialize and serde support
     assert_eq!(enc, SecureMessage::new(enc.serialize()).unwrap());
@@ -46,18 +43,18 @@ pub fn message_box() {
 
   // Generic API
   let msg = TestMessage { msg: "Hello, world!".into() };
-  let enc = a_box.encrypt(B, &msg);
-  assert_eq!(msg, b_box.decrypt(A, enc));
+  let enc = a_box.encrypt(&B, &msg);
+  assert_eq!(msg, b_box.decrypt(&A, enc));
 
   // Serialized API
-  assert_eq!(msg, b_box.decrypt_from_slice(A, &a_box.encrypt_to_bytes(B, &msg)).unwrap());
+  assert_eq!(msg, b_box.decrypt_from_slice(&A, &a_box.encrypt_to_bytes(&B, &msg)).unwrap());
 
   // String API
   {
     #[allow(deprecated)]
-    let enc = a_box.encrypt_to_string(B, &msg);
+    let enc = a_box.encrypt_to_string(&B, &msg);
     #[allow(deprecated)]
-    let dec = b_box.decrypt_from_str(A, &enc).unwrap();
+    let dec = b_box.decrypt_from_str(&A, &enc).unwrap();
     assert_eq!(msg, dec);
   }
 }

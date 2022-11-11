@@ -1,9 +1,10 @@
 #![no_std]
 
 use core::{
-  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   borrow::Borrow,
+  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Iterator, Sum},
+  hash::{Hash, Hasher},
 };
 
 use zeroize::Zeroize;
@@ -364,6 +365,13 @@ macro_rules! dalek_group {
       type Output = $Point;
       fn mul(self, b: Scalar) -> $Point {
         $Point(&b.0 * &self.0)
+      }
+    }
+
+    #[allow(clippy::derive_hash_xor_eq)]
+    impl Hash for $Point {
+      fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_bytes().hash(state);
       }
     }
   };

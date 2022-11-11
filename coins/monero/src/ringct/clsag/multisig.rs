@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::{ops::Deref, fmt::Debug};
 use std::{
   io::{self, Read, Write},
   sync::{Arc, RwLock},
@@ -7,7 +7,7 @@ use std::{
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -157,7 +157,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     view: &ThresholdView<Ed25519>,
   ) -> ClsagAddendum {
     ClsagAddendum {
-      key_image: dfg::EdwardsPoint(self.H * view.secret_share().0),
+      key_image: dfg::EdwardsPoint(self.H) * view.secret_share().deref(),
       dleq: DLEqProof::prove(
         rng,
         // Doesn't take in a larger transcript object due to the usage of this
@@ -167,7 +167,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
         // try to merge later in some form, when it should instead just merge xH (as it does)
         &mut dleq_transcript(),
         &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)],
-        dfg::Scalar(view.secret_share().0),
+        view.secret_share(),
       ),
     }
   }
@@ -223,7 +223,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     &mut self,
     view: &ThresholdView<Ed25519>,
     nonce_sums: &[Vec<dfg::EdwardsPoint>],
-    nonces: &[dfg::Scalar],
+    nonces: Vec<Zeroizing<dfg::Scalar>>,
     msg: &[u8],
   ) -> dfg::Scalar {
     // Use the transcript to get a seeded random number generator
@@ -247,7 +247,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     );
     self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
-    nonces[0] - (dfg::Scalar(p) * view.secret_share())
+    (-(dfg::Scalar(p) * view.secret_share().deref())) + nonces[0].deref()
   }
 
   #[must_use]

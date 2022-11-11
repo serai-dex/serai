@@ -1,9 +1,10 @@
+use core::ops::Deref;
 use std::{sync::Mutex, collections::HashSet};
 #[cfg(feature = "multisig")]
 use std::collections::HashMap;
 
 use lazy_static::lazy_static;
-
+use zeroize::Zeroizing;
 use rand_core::OsRng;
 
 #[cfg(feature = "multisig")]
@@ -55,11 +56,11 @@ async fn send_core(test: usize, multisig: bool) {
   let rpc = rpc().await;
 
   // Generate an address
-  let spend = random_scalar(&mut OsRng);
+  let spend = Zeroizing::new(random_scalar(&mut OsRng));
   #[allow(unused_mut)]
   let mut view = random_scalar(&mut OsRng);
   #[allow(unused_mut)]
-  let mut spend_pub = &spend * &ED25519_BASEPOINT_TABLE;
+  let mut spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
 
   #[cfg(feature = "multisig")]
   let keys = key_gen::<_, Ed25519>(&mut OsRng);

@@ -1,12 +1,13 @@
 use std::{
   marker::PhantomData,
+  ops::Deref,
   io::{self, Read, Write},
   collections::HashMap,
 };
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use digest::Digest;
 use hkdf::{Hkdf, hmac::SimpleHmac};
@@ -48,12 +49,6 @@ pub struct Commitments<C: Ciphersuite> {
   cached_msg: Vec<u8>,
   sig: SchnorrSignature<C>,
 }
-impl<C: Ciphersuite> Drop for Commitments<C> {
-  fn drop(&mut self) {
-    self.zeroize();
-  }
-}
-impl<C: Ciphersuite> ZeroizeOnDrop for Commitments<C> {}
 
 impl<C: Ciphersuite> Commitments<C> {
   pub fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
@@ -117,9 +112,9 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
 
     for i in 0 .. t {
       // Step 1: Generate t random values to form a polynomial with
-      coefficients.push(C::random_nonzero_F(&mut *rng));
+      coefficients.push(Zeroizing::new(C::random_nonzero_F(&mut *rng)));
       // Step 3: Generate public commitments
-      commitments.push(C::generator() * coefficients[i]);
+      commitments.push(C::generator() * coefficients[i].deref());
       cached_msg.extend(commitments[i].to_bytes().as_ref());
     }
 
@@ -127,27 +122,22 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     // It would probably be perfectly fine to use one of our polynomial elements, yet doing so
     // puts the integrity of FROST at risk. While there's almost no way it could, as it's used in
     // an ECDH with validated group elemnents, better to avoid any questions on it
-    let enc_key = C::random_nonzero_F(&mut *rng);
-    let pub_enc_key = C::generator() * enc_key;
+    let enc_key = Zeroizing::new(C::random_nonzero_F(&mut *rng));
+    let pub_enc_key = C::generator() * enc_key.deref();
     cached_msg.extend(pub_enc_key.to_bytes().as_ref());
 
     // Step 2: Provide a proof of knowledge
-    let mut r = C::random_nonzero_F(rng);
+    let r = Zeroizing::new(C::random_nonzero_F(rng));
+    let nonce = C::generator() * r.deref();
     let sig = SchnorrSignature::<C>::sign(
-      coefficients[0],
+      &coefficients[0],
       // This could be deterministic as the PoK is a singleton never opened up to cooperative
       // discussion
       // There's no reason to spend the time and effort to make this deterministic besides a
       // general obsession with canonicity and determinism though
       r,
-      challenge::<C>(
-        &self.context,
-        self.params.i(),
-        (C::generator() * r).to_bytes().as_ref(),
-        &cached_msg,
-      ),
+      challenge::<C>(&self.context, self.params.i(), nonce.to_bytes().as_ref(), &cached_msg),
     );
-    r.zeroize();
 
     // Step 4: Broadcast
     (
@@ -157,19 +147,20 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
         coefficients,
         our_commitments: commitments.clone(),
         enc_key,
+        pub_enc_key,
       },
       Commitments { commitments, enc_key: pub_enc_key, cached_msg, sig },
     )
   }
 }
 
-fn polynomial<F: PrimeField>(coefficients: &[F], l: u16) -> F {
+fn polynomial<F: PrimeField + Zeroize>(coefficients: &[Zeroizing<F>], l: u16) -> Zeroizing<F> {
   let l = F::from(u64::from(l));
-  let mut share = F::zero();
+  let mut share = Zeroizing::new(F::zero());
   for (idx, coefficient) in coefficients.iter().rev().enumerate() {
-    share += coefficient;
+    *share += coefficient.deref();
     if idx != (coefficients.len() - 1) {
-      share *= l;
+      *share *= l;
     }
   }
   share
@@ -250,16 +241,11 @@ fn create_ciphers<C: Ciphersuite>(
 pub struct SecretShareMachine<C: Ciphersuite> {
   params: ThresholdParams,
   context: String,
-  coefficients: Vec<C::F>,
+  coefficients: Vec<Zeroizing<C::F>>,
   our_commitments: Vec<C::G>,
-  enc_key: C::F,
+  enc_key: Zeroizing<C::F>,
+  pub_enc_key: C::G,
 }
-impl<C: Ciphersuite> Drop for SecretShareMachine<C> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
-}
-impl<C: Ciphersuite> ZeroizeOnDrop for SecretShareMachine<C> {}
 
 impl<C: Ciphersuite> SecretShareMachine<C> {
   /// Verify the data from the previous round (canonicity, PoKs, message authenticity)
@@ -276,7 +262,6 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
       .drain()
       .map(|(l, mut msg)| {
         enc_keys.insert(l, msg.enc_key);
-        msg.enc_key.zeroize();
 
         // Step 5: Validate each proof of knowledge
         // This is solely the prep step for the latter batch verification
@@ -309,7 +294,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
     let (commitments, mut enc_keys) = self.verify_r1(&mut *rng, commitments)?;
 
     // Step 1: Generate secret shares for all other parties
-    let mut sender = (C::generator() * self.enc_key).to_bytes();
+    let sender = self.pub_enc_key.to_bytes();
     let mut ciphers = HashMap::new();
     let mut res = HashMap::new();
     for l in 1 ..= self.params.n() {
@@ -321,7 +306,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
 
       let (mut cipher_send, cipher_recv) = {
         let receiver = enc_keys.get_mut(&l).unwrap();
-        let mut ecdh = (*receiver * self.enc_key).to_bytes();
+        let mut ecdh = (*receiver * self.enc_key.deref()).to_bytes();
 
         create_ciphers::<C>(sender, &mut receiver.to_bytes(), &mut ecdh)
       };
@@ -338,11 +323,9 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
       share_bytes.as_mut().zeroize();
     }
     self.enc_key.zeroize();
-    sender.as_mut().zeroize();
 
     // Calculate our own share
     let share = polynomial(&self.coefficients, self.params.i());
-
     self.coefficients.zeroize();
 
     Ok((KeyMachine { params: self.params, secret: share, commitments, ciphers }, res))
@@ -352,7 +335,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
 /// Final step of the key generation protocol.
 pub struct KeyMachine<C: Ciphersuite> {
   params: ThresholdParams,
-  secret: C::F,
+  secret: Zeroizing<C::F>,
   ciphers: HashMap<u16, ChaCha20>,
   commitments: HashMap<u16, Vec<C::G>>,
 }
@@ -390,9 +373,6 @@ impl<C: Ciphersuite> KeyMachine<C> {
     rng: &mut R,
     mut shares: HashMap<u16, SecretShare<C::F>>,
   ) -> Result<ThresholdCore<C>, DkgError> {
-    let mut secret_share = self.secret;
-    self.secret.zeroize();
-
     validate_map(&shares, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
 
     // Calculate the exponent for a given participant and apply it to a series of commitments
@@ -414,17 +394,19 @@ impl<C: Ciphersuite> KeyMachine<C> {
       cipher.apply_keystream(share_bytes.0.as_mut());
       drop(cipher);
 
-      let mut share: C::F =
-        Option::from(C::F::from_repr(share_bytes.0)).ok_or(DkgError::InvalidShare(l))?;
+      let mut share = Zeroizing::new(
+        Option::<C::F>::from(C::F::from_repr(share_bytes.0)).ok_or(DkgError::InvalidShare(l))?,
+      );
       share_bytes.zeroize();
-      secret_share += share;
+      *self.secret += share.deref();
 
       // This can be insecurely linearized from n * t to just n using the below sums for a given
       // stripe. Doing so uses naive addition which is subject to malleability. The only way to
       // ensure that malleability isn't present is to use this n * t algorithm, which runs
       // per sender and not as an aggregate of all senders, which also enables blame
       let mut values = exponential(self.params.i, &self.commitments[&l]);
-      values.push((-share, C::generator()));
+      // multiexp will Zeroize this when it's done with it
+      values.push((-*share.deref(), C::generator()));
       share.zeroize();
 
       batch.queue(rng, l, values);
@@ -443,14 +425,19 @@ impl<C: Ciphersuite> KeyMachine<C> {
     // Calculate each user's verification share
     let mut verification_shares = HashMap::new();
     for i in 1 ..= self.params.n() {
-      verification_shares.insert(i, multiexp_vartime(&exponential(i, &stripes)));
+      verification_shares.insert(
+        i,
+        if i == self.params.i() {
+          C::generator() * self.secret.deref()
+        } else {
+          multiexp_vartime(&exponential(i, &stripes))
+        },
+      );
     }
-    // Removing this check would enable optimizing the above from t + (n * t) to t + ((n - 1) * t)
-    debug_assert_eq!(C::generator() * secret_share, verification_shares[&self.params.i()]);
 
     Ok(ThresholdCore {
       params: self.params,
-      secret_share,
+      secret_share: self.secret.clone(),
       group_key: stripes[0],
       verification_shares,
     })

@@ -1,9 +1,11 @@
+use core::ops::Deref;
+
 use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 use rand::seq::SliceRandom;
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
@@ -108,9 +110,9 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   rpc: &Rpc,
   ring_len: usize,
   inputs: &[SpendableOutput],
-  spend: &Scalar,
+  spend: &Zeroizing<Scalar>,
   tx: &mut Transaction,
-) -> Result<Vec<(Scalar, EdwardsPoint, ClsagInput)>, TransactionError> {
+) -> Result<Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>, TransactionError> {
   let mut signable = Vec::with_capacity(inputs.len());
 
   // Select decoys
@@ -125,9 +127,11 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   .map_err(TransactionError::RpcError)?;
 
   for (i, input) in inputs.iter().enumerate() {
+    let input_spend = Zeroizing::new(input.key_offset() + spend.deref());
+    let image = generate_key_image(&input_spend);
     signable.push((
-      spend + input.key_offset(),
-      generate_key_image(spend + input.key_offset()),
+      input_spend,
+      image,
       ClsagInput::new(input.commitment().clone(), decoys[i].clone())
         .map_err(TransactionError::ClsagError)?,
     ));
@@ -358,16 +362,16 @@ impl SignableTransaction {
     &mut self,
     rng: &mut R,
     rpc: &Rpc,
-    spend: &Scalar,
+    spend: &Zeroizing<Scalar>,
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
-      let mut offset = spend + input.key_offset();
-      if (&offset * &ED25519_BASEPOINT_TABLE) != input.key() {
+      let mut offset = Zeroizing::new(spend.deref() + input.key_offset());
+      if (offset.deref() * &ED25519_BASEPOINT_TABLE) != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
-      images.push(generate_key_image(offset));
+      images.push(generate_key_image(&offset));
       offset.zeroize();
     }
     images.sort_by(key_image_sort);
