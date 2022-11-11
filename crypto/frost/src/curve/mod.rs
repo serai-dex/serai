@@ -1,8 +1,9 @@
+use core::ops::Deref;
 use std::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 use subtle::ConstantTimeEq;
 
 use digest::Digest;
@@ -67,26 +68,29 @@ pub trait Curve: Ciphersuite {
   }
 
   /// Securely generate a random nonce. H3 from the IETF draft.
-  fn random_nonce<R: RngCore + CryptoRng>(mut secret: Self::F, rng: &mut R) -> Self::F {
-    let mut seed = vec![0; 32];
-    rng.fill_bytes(&mut seed);
+  fn random_nonce<R: RngCore + CryptoRng>(
+    secret: &Zeroizing<Self::F>,
+    rng: &mut R,
+  ) -> Zeroizing<Self::F> {
+    let mut seed = Zeroizing::new(vec![0; 32]);
+    rng.fill_bytes(seed.as_mut());
 
     let mut repr = secret.to_repr();
-    secret.zeroize();
 
     let mut res;
     while {
       seed.extend(repr.as_ref());
-      res = <Self as Curve>::hash_to_F(b"nonce", &seed);
+      res = Zeroizing::new(<Self as Curve>::hash_to_F(b"nonce", seed.deref()));
       res.ct_eq(&Self::F::zero()).into()
     } {
+      seed = Zeroizing::new(vec![0; 32]);
       rng.fill_bytes(&mut seed);
     }
 
     for i in repr.as_mut() {
       i.zeroize();
     }
-    seed.zeroize();
+
     res
   }
 

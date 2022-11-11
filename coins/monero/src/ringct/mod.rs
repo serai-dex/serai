@@ -1,4 +1,6 @@
-use zeroize::Zeroize;
+use core::ops::Deref;
+
+use zeroize::Zeroizing;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
@@ -17,10 +19,8 @@ use crate::{
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
-pub fn generate_key_image(mut secret: Scalar) -> EdwardsPoint {
-  let res = secret * hash_to_point(&secret * &ED25519_BASEPOINT_TABLE);
-  secret.zeroize();
-  res
+pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
+  hash_to_point(&ED25519_BASEPOINT_TABLE * secret.deref()) * secret.deref()
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

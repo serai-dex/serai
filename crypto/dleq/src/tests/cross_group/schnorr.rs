@@ -1,3 +1,5 @@
+use core::ops::Deref;
+
 use rand_core::OsRng;
 
 use zeroize::Zeroize;
@@ -20,12 +22,12 @@ where
 
   let mut batch = BatchVerifier::new(10);
   for _ in 0 .. 10 {
-    let private = G::Scalar::random(&mut OsRng);
-    SchnorrPoK::prove(&mut OsRng, &mut transcript.clone(), G::generator(), private).verify(
+    let private = Zeroizing::new(G::Scalar::random(&mut OsRng));
+    SchnorrPoK::prove(&mut OsRng, &mut transcript.clone(), G::generator(), &private).verify(
       &mut OsRng,
       &mut transcript.clone(),
       G::generator(),
-      G::generator() * private,
+      G::generator() * private.deref(),
       &mut batch,
     );
   }

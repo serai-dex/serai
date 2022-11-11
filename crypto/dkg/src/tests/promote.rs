@@ -1,4 +1,5 @@
-use std::{marker::PhantomData, collections::HashMap};
+use core::{marker::PhantomData, ops::Deref};
+use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -54,7 +55,10 @@ pub(crate) fn test_generator_promotion<R: RngCore + CryptoRng, C: Ciphersuite>(r
     assert_eq!(keys[&i].secret_share(), promoted.secret_share());
     assert_eq!(new_group_key, promoted.group_key());
     for (l, verification_share) in promoted.verification_shares() {
-      assert_eq!(AltGenerator::<C>::generator() * keys[&l].secret_share(), verification_share);
+      assert_eq!(
+        AltGenerator::<C>::generator() * keys[&l].secret_share().deref(),
+        verification_share
+      );
     }
   }
 }

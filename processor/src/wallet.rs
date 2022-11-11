@@ -39,7 +39,7 @@ impl<C: Curve> WalletKeys<C> {
     let mut transcript = RecommendedTranscript::new(DST);
     transcript.append_message(b"chain", chain);
     transcript.append_message(b"curve", C::ID);
-    transcript.append_message(b"group_key", self.keys.group_key().to_bytes().as_ref());
+    transcript.append_message(b"group_key", self.keys.group_key().to_bytes());
     self.keys.offset(<C as Ciphersuite>::hash_to_F(DST, &transcript.challenge(b"offset")))
   }
 }
@@ -314,12 +314,12 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         // Create the transcript for this transaction
         let mut transcript = RecommendedTranscript::new(b"Serai Processor Wallet Send");
         transcript
-          .append_message(b"canonical_block", &u64::try_from(canonical).unwrap().to_le_bytes());
+          .append_message(b"canonical_block", u64::try_from(canonical).unwrap().to_le_bytes());
         transcript.append_message(
           b"acknowledged_block",
-          &u64::try_from(acknowledged_block).unwrap().to_le_bytes(),
+          u64::try_from(acknowledged_block).unwrap().to_le_bytes(),
         );
-        transcript.append_message(b"index", &u64::try_from(txs.len()).unwrap().to_le_bytes());
+        transcript.append_message(b"index", u64::try_from(txs.len()).unwrap().to_le_bytes());
 
         let tx = self
           .coin
