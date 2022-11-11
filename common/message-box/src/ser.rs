@@ -1,7 +1,12 @@
 use std::io::Read;
 
+use zeroize::{Zeroize, Zeroizing};
+
 use chacha20::XNonce;
 
+use group::{ff::PrimeField, GroupEncoding};
+
+use dalek_ff_group::{Scalar, RistrettoPoint};
 use ciphersuite::Ristretto;
 use schnorr::SchnorrSignature;
 
@@ -10,7 +15,36 @@ use serde::{
   de::{Error, Deserializer, Deserialize, DeserializeOwned},
 };
 
-use crate::{MessageError, SecureMessage, MessageBox};
+use crate::{PrivateKey, PublicKey, MessageError, SecureMessage, MessageBox};
+
+impl PrivateKey {
+  /// Parse a Private Key from a string.
+  pub fn from_string(mut str: String) -> PrivateKey {
+    let mut bytes = hex::decode::<&str>(str.as_ref()).unwrap().try_into().unwrap();
+    str.zeroize();
+    let res = PrivateKey(Zeroizing::new(Scalar::from_repr(bytes).unwrap()));
+    bytes.zeroize();
+    res
+  }
+}
+
+impl PublicKey {
+  /// Parse a Public Key from a string. Panics if an invalid key is used.
+  #[allow(clippy::should_implement_trait)] // Differing return types
+  pub fn from_str(str: &str) -> Self {
+    Self::from_bytes(&hex::decode(str).unwrap().try_into().unwrap()).unwrap()
+  }
+
+  /// Serialize a Public Key to bytes.
+  pub fn to_bytes(&self) -> [u8; 32] {
+    self.0.to_bytes()
+  }
+
+  /// Parse a Public Key from bytes.
+  pub fn from_bytes(bytes: &[u8; 32]) -> Option<Self> {
+    Option::from(RistrettoPoint::from_bytes(bytes)).map(PublicKey)
+  }
+}
 
 impl SecureMessage {
   /// Read a SecureMessage from a reader.

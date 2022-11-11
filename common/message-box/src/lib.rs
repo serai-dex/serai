@@ -12,10 +12,7 @@ use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rand_core::{RngCore, OsRng};
 
-use group::{
-  ff::{Field, PrimeField},
-  Group, GroupEncoding,
-};
+use group::{ff::Field, Group, GroupEncoding};
 use dalek_ff_group::{Scalar, RistrettoPoint};
 use ciphersuite::Ristretto;
 
@@ -43,37 +40,11 @@ impl PrivateKey {
   pub unsafe fn inner(&self) -> &Zeroizing<Scalar> {
     &self.0
   }
-
-  /// Parse a Private Key from a string.
-  pub fn from_string(mut str: String) -> PrivateKey {
-    let mut bytes = hex::decode::<&str>(str.as_ref()).unwrap().try_into().unwrap();
-    str.zeroize();
-    let res = PrivateKey(Zeroizing::new(Scalar::from_repr(bytes).unwrap()));
-    bytes.zeroize();
-    res
-  }
 }
 
 /// Public Key for a Message Box.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct PublicKey(RistrettoPoint);
-impl PublicKey {
-  /// Parse a Public Key from a string. Panics if an invalid key is used.
-  #[allow(clippy::should_implement_trait)] // Differing return types
-  pub fn from_str(str: &str) -> Self {
-    Self::from_bytes(&hex::decode(str).unwrap().try_into().unwrap()).unwrap()
-  }
-
-  /// Serialize a Public Key to bytes.
-  pub fn to_bytes(&self) -> [u8; 32] {
-    self.0.to_bytes()
-  }
-
-  /// Parse a Public Key from bytes.
-  pub fn from_bytes(bytes: &[u8; 32]) -> Option<Self> {
-    Option::from(RistrettoPoint::from_bytes(bytes)).map(PublicKey)
-  }
-}
 
 /// Error from creating/decrypting a message.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
