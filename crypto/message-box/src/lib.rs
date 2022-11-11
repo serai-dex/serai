@@ -263,7 +263,7 @@ impl MessageBox {
     OsRng.fill_bytes(iv.as_mut());
     XChaCha20::new(&self.enc_keys[to], &iv).apply_keystream(msg.as_mut());
 
-    let mut nonce = {
+    let nonce = {
       let mut transcript = transcript();
       transcript.domain_separate(b"nonce");
 
@@ -294,17 +294,18 @@ impl MessageBox {
       transcript.append_message(b"additional_entropy", self.additional_entropy.as_ref());
 
       let mut nonce = transcript.challenge(b"nonce").into();
-      let res = Scalar::from_bytes_mod_order_wide(&nonce);
+      let res = Zeroizing::new(Scalar::from_bytes_mod_order_wide(&nonce));
       nonce.zeroize();
       res
     };
 
+    #[allow(non_snake_case)]
+    let R = RistrettoPoint::generator() * nonce.deref();
     let sig = SchnorrSignature::<Ristretto>::sign(
-      *self.our_key.0.deref(), // SchnorrSignature will zeroize this copy.
+      &self.our_key.0, // SchnorrSignature will zeroize this copy.
       nonce,
-      signature_challenge(to, RistrettoPoint::generator() * nonce, self.our_public_key, &iv, &msg),
+      signature_challenge(to, R, self.our_public_key, &iv, &msg),
     );
-    nonce.zeroize();
 
     let mut res = iv.to_vec();
     sig.write(&mut res).unwrap();
