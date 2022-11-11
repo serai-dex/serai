@@ -139,7 +139,13 @@ use opaque::SessionKeys;
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
   spec_name: create_runtime_str!("serai"),
+<<<<<<< HEAD
   impl_name: create_runtime_str!("core"),
+=======
+  // TODO: "core"?
+  impl_name: create_runtime_str!("turoctocrab"),
+  authoring_version: 1,
+>>>>>>> 354bcefe (Add notes to the runtime)
   // TODO: 1? Do we prefer some level of compatibility or our own path?
   spec_version: 100,
   impl_version: 1,
