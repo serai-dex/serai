@@ -1,3 +1,4 @@
+use core::{hash::Hash, fmt::Debug};
 use std::io::Read;
 
 use zeroize::{Zeroize, Zeroizing};
@@ -15,7 +16,7 @@ use serde::{
   de::{Error, Deserializer, Deserialize, DeserializeOwned},
 };
 
-use crate::{PrivateKey, PublicKey, MessageError, SecureMessage, MessageBox};
+use crate::{PrivateKey, PublicKey, AsBytes, MessageError, SecureMessage, MessageBox};
 
 impl PrivateKey {
   /// Parse a Private Key from a string.
@@ -104,28 +105,28 @@ pub(crate) fn deserialize_sig<'de, D: Deserializer<'de>>(
     .map_err(|_| D::Error::custom("invalid signature"))
 }
 
-impl MessageBox {
+impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
   /// Encrypt a message to be sent to another party.
-  pub fn encrypt<T: Serialize>(&self, to: &'static str, msg: &T) -> SecureMessage {
+  pub fn encrypt<T: Serialize>(&self, to: &K, msg: &T) -> SecureMessage {
     self.encrypt_bytes(to, bincode::serialize(msg).unwrap())
   }
 
   /// Decrypt a message, returning the contained value.
-  pub fn decrypt<T: DeserializeOwned>(&self, from: &'static str, msg: SecureMessage) -> T {
+  pub fn decrypt<T: DeserializeOwned>(&self, from: &K, msg: SecureMessage) -> T {
     let bytes = self.decrypt_to_bytes(from, msg);
     bincode::deserialize_from::<&mut &[u8], _>(&mut bytes.as_ref())
       .expect("invalid value entered into authenticated system")
   }
 
   /// Encrypt a message and serialize it.
-  pub fn encrypt_to_bytes<T: Serialize>(&self, to: &'static str, msg: &T) -> Vec<u8> {
+  pub fn encrypt_to_bytes<T: Serialize>(&self, to: &K, msg: &T) -> Vec<u8> {
     self.encrypt(to, msg).serialize()
   }
 
   /// Deserialize a message and decrypt it.
   pub fn decrypt_from_slice<T: DeserializeOwned>(
     &self,
-    from: &'static str,
+    from: &K,
     mut msg: &[u8],
   ) -> Result<T, MessageError> {
     SecureMessage::read(&mut msg).map(|msg| self.decrypt(from, msg))
@@ -133,7 +134,7 @@ impl MessageBox {
 
   /// Encrypt a message, serialize it, and base64 encode it.
   #[deprecated(note = "use encrypt_to_bytes")]
-  pub fn encrypt_to_string<T: Serialize>(&self, to: &'static str, msg: &T) -> String {
+  pub fn encrypt_to_string<T: Serialize>(&self, to: &K, msg: &T) -> String {
     base64::encode(self.encrypt_to_bytes(to, msg))
   }
 
@@ -141,7 +142,7 @@ impl MessageBox {
   #[deprecated(note = "use decrypt_from_bytes")]
   pub fn decrypt_from_str<T: DeserializeOwned>(
     &self,
-    from: &'static str,
+    from: &K,
     msg: &str,
   ) -> Result<T, MessageError> {
     self.decrypt_from_slice(from, &base64::decode(msg).map_err(|_| MessageError::InvalidEncoding)?)

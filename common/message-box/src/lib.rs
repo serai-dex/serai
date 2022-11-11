@@ -3,6 +3,7 @@
 use core::{
   ops::Deref,
   cmp::Ordering,
+  hash::Hash,
   fmt::{Debug, Formatter},
 };
 use std::collections::HashMap;
@@ -61,30 +62,15 @@ fn transcript() -> RecommendedTranscript {
   RecommendedTranscript::new(b"MessageBox")
 }
 
-/// Error from creating/decrypting a message.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
-pub enum MessageError {
-  #[error("message was incomplete")]
-  Incomplete,
-  #[error("invalid encoding")]
-  InvalidEncoding,
-}
-
-/// A Secure Message, defined as being not only encrypted yet authenticated.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct SecureMessage {
-  #[serde(serialize_with = "serialize_iv")]
-  #[serde(deserialize_with = "deserialize_iv")]
-  iv: XNonce,
-  ciphertext: Vec<u8>,
-  #[serde(serialize_with = "serialize_sig")]
-  #[serde(deserialize_with = "deserialize_sig")]
-  sig: SchnorrSignature<Ristretto>,
+/// Stub trait for obtaining the bytes of a value.
+pub trait AsBytes {
+  type Output: AsRef<[u8]>;
+  fn as_bytes(&self) -> Self::Output;
 }
 
 #[allow(non_snake_case)]
-fn signature_challenge(
-  recipient: &'static str,
+fn signature_challenge<R: AsBytes>(
+  recipient: &R,
   R: RistrettoPoint,
   A: RistrettoPoint,
   iv: &XNonce,
@@ -106,9 +92,30 @@ fn signature_challenge(
   Scalar::from_bytes_mod_order_wide(&transcript.challenge(b"challenge").into())
 }
 
+/// Error from creating/decrypting a message.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+pub enum MessageError {
+  #[error("message was incomplete")]
+  Incomplete,
+  #[error("invalid encoding")]
+  InvalidEncoding,
+}
+
+/// A Secure Message, defined as being not only encrypted yet authenticated.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct SecureMessage {
+  #[serde(serialize_with = "serialize_iv")]
+  #[serde(deserialize_with = "deserialize_iv")]
+  iv: XNonce,
+  ciphertext: Vec<u8>,
+  #[serde(serialize_with = "serialize_sig")]
+  #[serde(deserialize_with = "deserialize_sig")]
+  sig: SchnorrSignature<Ristretto>,
+}
+
 /// MessageBox. A box enabling encrypting and decrypting messages to/from various other peers.
-pub struct MessageBox {
-  our_name: &'static str,
+pub struct MessageBox<K: Copy + Eq + Hash + Debug + AsBytes> {
+  our_name: K,
   our_key: PrivateKey,
   // Optimization for later transcripting
   our_public_key: RistrettoPoint,
@@ -119,11 +126,11 @@ pub struct MessageBox {
   // copies, store a copy which is already hashed
   additional_entropy: [u8; 64],
 
-  pub_keys: HashMap<&'static str, RistrettoPoint>,
-  enc_keys: HashMap<&'static str, Key>,
+  pub_keys: HashMap<K, RistrettoPoint>,
+  enc_keys: HashMap<K, Key>,
 }
 
-impl Debug for MessageBox {
+impl<K: Copy + Eq + Hash + Debug + AsBytes> Debug for MessageBox<K> {
   fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
     fmt
       .debug_struct("MessageBox")
@@ -134,7 +141,7 @@ impl Debug for MessageBox {
   }
 }
 
-impl Zeroize for MessageBox {
+impl<K: Copy + Eq + Hash + Debug + AsBytes> Zeroize for MessageBox<K> {
   fn zeroize(&mut self) {
     self.our_key.zeroize();
     self.our_public_key.zeroize();
@@ -147,15 +154,15 @@ impl Zeroize for MessageBox {
     }
   }
 }
-impl Drop for MessageBox {
+impl<K: Copy + Eq + Hash + Debug + AsBytes> Drop for MessageBox<K> {
   fn drop(&mut self) {
     self.zeroize();
   }
 }
-impl ZeroizeOnDrop for MessageBox {}
+impl<K: Copy + Eq + Hash + Debug + AsBytes> ZeroizeOnDrop for MessageBox<K> {}
 
-impl MessageBox {
-  pub fn add(&mut self, name: &'static str, key: RistrettoPoint) {
+impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
+  fn add_internal(&mut self, name: K, key: RistrettoPoint) {
     self.pub_keys.insert(name, key);
 
     let mut transcript = transcript();
@@ -163,7 +170,7 @@ impl MessageBox {
 
     // We could make these encryption keys directional, yet the sender is clearly established
     // by the Ristretto signature
-    let (name_a, name_b) = match self.our_name.cmp(name) {
+    let (name_a, name_b) = match self.our_name.as_bytes().as_ref().cmp(name.as_bytes().as_ref()) {
       Ordering::Less => (self.our_name, name),
       Ordering::Equal => panic!("encrypting to ourself"),
       Ordering::Greater => (name, self.our_name),
@@ -180,17 +187,13 @@ impl MessageBox {
     self.enc_keys.insert(name, key);
   }
 
-  pub fn remove(&mut self, name: &'static str) {
+  pub fn remove(&mut self, name: &K) {
     self.pub_keys.remove(name);
     self.enc_keys.remove(name);
   }
 
   /// Create a new message box with our identity and the identities of our peers.
-  pub fn new(
-    our_name: &'static str,
-    our_key: PrivateKey,
-    mut keys: HashMap<&'static str, PublicKey>,
-  ) -> MessageBox {
+  pub fn new(our_name: K, our_key: PrivateKey, mut keys: HashMap<K, PublicKey>) -> Self {
     let mut res = MessageBox {
       additional_entropy: {
         let mut transcript = transcript();
@@ -229,13 +232,13 @@ impl MessageBox {
     };
 
     for (name, key) in keys.drain().map(|(name, key)| (name, key.0)) {
-      res.add(name, key);
+      res.add_internal(name, key);
     }
     res
   }
 
   /// Encrypt bytes to be sent to another party.
-  pub fn encrypt_bytes(&self, to: &'static str, mut msg: Vec<u8>) -> SecureMessage {
+  pub fn encrypt_bytes(&self, to: &K, mut msg: Vec<u8>) -> SecureMessage {
     let mut iv = XNonce::default();
     OsRng.fill_bytes(iv.as_mut());
     XChaCha20::new(&self.enc_keys[to], &iv).apply_keystream(msg.as_mut());
@@ -292,10 +295,10 @@ impl MessageBox {
   }
 
   /// Decrypt a message, returning the contained byte vector.
-  pub fn decrypt_to_bytes(&self, from: &'static str, msg: SecureMessage) -> Vec<u8> {
+  pub fn decrypt_to_bytes(&self, from: &K, msg: SecureMessage) -> Vec<u8> {
     if !msg.sig.verify(
       self.pub_keys[from],
-      signature_challenge(self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),
+      signature_challenge(&self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),
     ) {
       panic!("unauthorized/unintended message entered into an authenticated system");
     }
@@ -303,5 +306,31 @@ impl MessageBox {
     let SecureMessage { iv, mut ciphertext, .. } = msg;
     XChaCha20::new(&self.enc_keys[from], &iv).apply_keystream(ciphertext.as_mut());
     ciphertext
+  }
+}
+
+impl AsBytes for &'static str {
+  type Output = &'static [u8];
+  fn as_bytes(&self) -> Self::Output {
+    str::as_bytes(self)
+  }
+}
+pub type InternalMessageBox = MessageBox<&'static str>;
+impl InternalMessageBox {
+  pub fn add(&mut self, name: &'static str, key: RistrettoPoint) {
+    self.add_internal(name, key);
+  }
+}
+
+impl AsBytes for RistrettoPoint {
+  type Output = [u8; 32];
+  fn as_bytes(&self) -> Self::Output {
+    self.to_bytes()
+  }
+}
+pub type ExternalMessageBox = MessageBox<RistrettoPoint>;
+impl ExternalMessageBox {
+  pub fn add(&mut self, key: RistrettoPoint) {
+    self.add_internal(key, key);
   }
 }
