@@ -1,4 +1,4 @@
-use core::{hash::Hash, fmt::Debug};
+use core::{ops::Deref, hash::Hash, fmt::Debug};
 use std::io::Read;
 
 use zeroize::{Zeroize, Zeroizing};
@@ -26,6 +26,14 @@ impl PrivateKey {
     let res = PrivateKey(Zeroizing::new(Scalar::from_repr(bytes).unwrap()));
     bytes.zeroize();
     res
+  }
+
+  /// Serialize a Private Key to a string.
+  #[deprecated]
+  #[allow(clippy::inherent_to_string)]
+  pub fn to_string(&self) -> String {
+    let bytes = Zeroizing::new(self.0.to_repr());
+    hex::encode(bytes.deref())
   }
 }
 
