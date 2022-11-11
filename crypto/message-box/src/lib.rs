@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use core::{
+  ops::Deref,
   cmp::Ordering,
   fmt::{Debug, Formatter},
 };
@@ -8,10 +9,13 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rand_core::{RngCore, OsRng};
 
-use group::{ff::Field, Group, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  Group, GroupEncoding,
+};
 use dalek_ff_group::{Scalar, RistrettoPoint};
 use ciphersuite::Ristretto;
 
@@ -32,17 +36,29 @@ use ser::*;
 mod tests;
 
 /// Private Key for a Message Box.
-pub type PrivateKey = Scalar;
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct PrivateKey(pub(crate) Zeroizing<Scalar>);
+impl PrivateKey {
+  #[doc(hidden)]
+  pub unsafe fn inner(&self) -> &Zeroizing<Scalar> {
+    &self.0
+  }
+}
+
 /// Public Key for a Message Box.
-pub type PublicKey = RistrettoPoint;
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct PublicKey(RistrettoPoint);
+impl PublicKey {
 
-/// Types and traits for handling the keys, intended to be used as `key::*`.
-pub mod key {
-  pub use group::ff::PrimeField;
-  pub use group::GroupEncoding;
+  /// Serialize a Public Key to bytes.
+  pub fn to_bytes(&self) -> [u8; 32] {
+    self.0.to_bytes()
+  }
 
-  pub use crate::PrivateKey;
-  pub use crate::PublicKey;
+  /// Parse a Public Key from bytes.
+  pub fn from_bytes(bytes: &[u8; 32]) -> Option<Self> {
+    Option::from(RistrettoPoint::from_bytes(bytes)).map(PublicKey)
+  }
 }
 
 /// Error from creating/decrypting a message.
@@ -67,13 +83,14 @@ pub struct SecureMessage {
 }
 
 /// Generate a key pair
-pub fn key_gen() -> (Scalar, RistrettoPoint) {
+pub fn key_gen() -> (PrivateKey, PublicKey) {
   let mut scalar;
   while {
-    scalar = Scalar::random(&mut OsRng);
+    scalar = Zeroizing::new(Scalar::random(&mut OsRng));
     scalar.is_zero().into()
   } {}
-  (scalar, RistrettoPoint::generator() * scalar)
+  let public = RistrettoPoint::generator() * scalar.deref();
+  (PrivateKey(scalar), PublicKey(public))
 }
 
 fn transcript() -> RecommendedTranscript {
@@ -107,7 +124,7 @@ fn signature_challenge(
 /// MessageBox. A box enabling encrypting and decrypting messages to/from various other peers.
 pub struct MessageBox {
   our_name: &'static str,
-  our_key: Scalar,
+  our_key: PrivateKey,
   // Optimization for later transcripting
   our_public_key: RistrettoPoint,
   // When generating nonces, we transcript additional entropy to hedge against weak randomness
@@ -156,9 +173,14 @@ impl MessageBox {
   /// Create a new message box with our identity and the identities of our peers.
   pub fn new(
     our_name: &'static str,
-    our_key: Scalar,
-    keys: HashMap<&'static str, RistrettoPoint>,
+    our_key: PrivateKey,
+    mut keys: HashMap<&'static str, PublicKey>,
   ) -> MessageBox {
+    let keys = keys
+      .drain()
+      .map(|(name, key)| (name, key.0))
+      .collect::<HashMap<&'static str, RistrettoPoint>>();
+
     MessageBox {
       enc_keys: keys
         .iter()
@@ -176,7 +198,7 @@ impl MessageBox {
           transcript.append_message(b"name_a", name_a.as_bytes());
           transcript.append_message(b"name_b", name_b.as_bytes());
 
-          transcript.append_message(b"shared_key", (*other_key * our_key).to_bytes());
+          transcript.append_message(b"shared_key", (*other_key * our_key.0.deref()).to_bytes());
           let shared_key = transcript.challenge(b"encryption_key");
 
           let mut key = Key::default();
@@ -188,16 +210,12 @@ impl MessageBox {
         .collect(),
       pub_keys: keys,
 
-      our_name,
-      our_key,
-      our_public_key: RistrettoPoint::generator() * our_key,
-
       additional_entropy: {
         let mut transcript = transcript();
         transcript.domain_separate(b"additional_entropy");
 
         {
-          let mut key_bytes = our_key.to_bytes();
+          let mut key_bytes = our_key.0.to_bytes();
           transcript.append_message(b"private_key", key_bytes.as_ref());
           key_bytes.zeroize();
         }
@@ -219,6 +237,10 @@ impl MessageBox {
 
         transcript.challenge(b"entropy").into()
       },
+
+      our_name,
+      our_public_key: RistrettoPoint::generator() * our_key.0.deref(),
+      our_key,
     }
   }
 
@@ -265,7 +287,7 @@ impl MessageBox {
     };
 
     let sig = SchnorrSignature::<Ristretto>::sign(
-      self.our_key,
+      *self.our_key.0.deref(), // SchnorrSignature will zeroize this copy.
       nonce,
       signature_challenge(to, RistrettoPoint::generator() * nonce, self.our_public_key, &iv, &msg),
     );
