@@ -41,8 +41,8 @@ impl Signer for TestSigner {
   type ValidatorId = TestValidatorId;
   type Signature = [u8; 32];
 
-  async fn validator_id(&self) -> TestValidatorId {
-    self.0
+  async fn validator_id(&self) -> Option<TestValidatorId> {
+    Some(self.0)
   }
 >>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/tests/ext.rs
 
