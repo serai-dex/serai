@@ -1,6 +1,7 @@
 use std::{
   sync::{Arc, RwLock},
   time::{UNIX_EPOCH, SystemTime, Duration},
+  collections::HashSet,
 };
 
 use async_trait::async_trait;
@@ -318,8 +319,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
         origin: None,
         allow_missing_state: false,
         skip_execution: false,
-        // TODO: Only set to true if block was rejected due to its inherents
-        import_existing: true,
+        import_existing: self.import.recheck.read().unwrap().contains(&hash),
         state: None,
       }],
     );
@@ -353,6 +353,9 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
       .finalize_block(BlockId::Hash(hash), Some(justification), true)
       .map_err(|_| Error::InvalidJustification)
       .unwrap();
+
+    // Clear any blocks for the previous height we were willing to recheck
+    *self.import.recheck.write().unwrap() = HashSet::new();
 
     let number: u64 = match (*block.header().number()).try_into() {
       Ok(number) => number,

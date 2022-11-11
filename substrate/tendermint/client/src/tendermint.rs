@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::{
+  sync::{Arc, RwLock},
+  collections::HashSet,
+};
 
 use log::warn;
 
@@ -31,6 +34,7 @@ pub struct TendermintImport<T: TendermintValidator> {
 
   pub(crate) providers: Arc<AsyncRwLock<Option<T::CIDP>>>,
   pub(crate) importing_block: Arc<RwLock<Option<<T::Block as Block>::Hash>>>,
+  pub(crate) recheck: Arc<RwLock<HashSet<<T::Block as Block>::Hash>>>,
 
   pub(crate) client: Arc<T::Client>,
   pub(crate) queue:
@@ -44,6 +48,7 @@ impl<T: TendermintValidator> Clone for TendermintImport<T> {
 
       providers: self.providers.clone(),
       importing_block: self.importing_block.clone(),
+      recheck: self.recheck.clone(),
 
       client: self.client.clone(),
       queue: self.queue.clone(),
@@ -58,6 +63,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
 
       providers: Arc::new(AsyncRwLock::new(None)),
       importing_block: Arc::new(RwLock::new(None)),
+      recheck: Arc::new(RwLock::new(HashSet::new())),
 
       client,
       queue: Arc::new(AsyncRwLock::new(None)),
@@ -89,7 +95,11 @@ impl<T: TendermintValidator> TendermintImport<T> {
     .unwrap_or_else(InherentData::new)
   }
 
-  async fn check_inherents(&self, block: T::Block) -> Result<(), Error> {
+  async fn check_inherents(
+    &mut self,
+    hash: <T::Block as Block>::Hash,
+    block: T::Block,
+  ) -> Result<(), Error> {
     let inherent_data = self.inherent_data(*block.header().parent_hash()).await;
     let err = self
       .client
@@ -98,10 +108,12 @@ impl<T: TendermintValidator> TendermintImport<T> {
       .map_err(|_| Error::Other(BlockError::Fatal.into()))?;
 
     if err.ok() {
+      self.recheck.write().unwrap().remove(&hash);
       Ok(())
     } else if err.fatal_error() {
       Err(Error::Other(BlockError::Fatal.into()))
     } else {
+      self.recheck.write().unwrap().insert(hash);
       Err(Error::Other(BlockError::Temporal.into()))
     }
   }
@@ -173,7 +185,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
   }
 
   pub(crate) async fn check<BT>(
-    &self,
+    &mut self,
     block: &mut BlockImportParams<T::Block, BT>,
   ) -> Result<(), Error> {
     if block.finalized {
@@ -194,9 +206,10 @@ impl<T: TendermintValidator> TendermintImport<T> {
 
     // If the block wasn't finalized, verify the origin and validity of its inherents
     if !block.finalized {
-      self.verify_origin(block.header.hash())?;
+      let hash = block.header.hash();
+      self.verify_origin(hash)?;
       if let Some(body) = block.body.clone() {
-        self.check_inherents(T::Block::new(block.header.clone(), body)).await?;
+        self.check_inherents(hash, T::Block::new(block.header.clone(), body)).await?;
       }
     }
 
