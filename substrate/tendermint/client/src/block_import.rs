@@ -22,7 +22,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
     // This can be triggered if the validators add a block, without justifications, yet the p2p
     // process then broadcasts it with its justifications
     if (self.client.status(id).unwrap() == BlockStatus::InChain) &&
-      self.client.justifications(&id).unwrap().is_some()
+      self.client.justifications(hash).unwrap().is_some()
     {
       return true;
     }

@@ -102,7 +102,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
           &mut self
             .import
             .client
-            .justifications(&BlockId::Hash(info.finalized_hash))
+            .justifications(info.finalized_hash)
             .unwrap()
             .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
             .unwrap_or_default()
@@ -350,7 +350,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     self
       .import
       .client
-      .finalize_block(BlockId::Hash(hash), Some(justification), true)
+      .finalize_block(hash, Some(justification), true)
       .map_err(|_| Error::InvalidJustification)
       .unwrap();
 
