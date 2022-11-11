@@ -155,7 +155,13 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 };
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+// 1 MB
+pub const BLOCK_SIZE: u32 = 1024 * 1024;
+// 6 seconds
+>>>>>>> 32ad6de0 (Properly define and pass around the block size)
 pub const TARGET_BLOCK_TIME: u64 = 6000;
 
 /// Measured in blocks.
@@ -196,11 +202,19 @@ parameter_types! {
   pub const SS58Prefix: u8 = 42; // TODO: Remove for Bech32m
 
   // 1 MB block size limit
+<<<<<<< HEAD
   pub BlockLength: system::limits::BlockLength =
     system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: system::limits::BlockWeights =
     system::limits::BlockWeights::with_sensible_defaults(
       Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
+=======
+  pub BlockLength: frame_system::limits::BlockLength =
+    frame_system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
+  pub BlockWeights: frame_system::limits::BlockWeights =
+    frame_system::limits::BlockWeights::with_sensible_defaults(
+      (2u64 * WEIGHT_PER_SECOND).set_proof_size(u64::MAX),
+>>>>>>> 32ad6de0 (Properly define and pass around the block size)
       NORMAL_DISPATCH_RATIO,
     );
 
