@@ -41,6 +41,10 @@ impl PrivateKey {
   pub unsafe fn inner(&self) -> &Zeroizing<Scalar> {
     &self.0
   }
+
+  pub fn to_public(&self) -> PublicKey {
+    PublicKey(RistrettoPoint::generator() * self.0.deref())
+  }
 }
 
 /// Public Key for a Message Box.
