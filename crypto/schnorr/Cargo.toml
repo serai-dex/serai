@@ -1,6 +1,6 @@
 [package]
 name = "schnorr-signatures"
-version = "0.1.0"
+version = "0.2.0"
 description = "Minimal Schnorr signatures crate hosting common code"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/schnorr"

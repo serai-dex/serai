@@ -1,4 +1,8 @@
+use core::ops::Deref;
+
 use hex_literal::hex;
+
+use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
 use ff::{Field, PrimeField};
@@ -19,7 +23,6 @@ use crate::{
 };
 
 mod scalar;
-mod schnorr;
 mod aos;
 
 type G0 = ProjectivePoint;
@@ -51,8 +54,8 @@ pub(crate) fn generators() -> (Generators<G0>, Generators<G1>) {
 macro_rules! verify_and_deserialize {
   ($type: ty, $proof: ident, $generators: ident, $keys: ident) => {
     let public_keys = $proof.verify(&mut OsRng, &mut transcript(), $generators).unwrap();
-    assert_eq!($generators.0.primary * $keys.0, public_keys.0);
-    assert_eq!($generators.1.primary * $keys.1, public_keys.1);
+    assert_eq!($generators.0.primary * $keys.0.deref(), public_keys.0);
+    assert_eq!($generators.1.primary * $keys.1.deref(), public_keys.1);
 
     #[cfg(feature = "serialize")]
     {
@@ -117,8 +120,8 @@ macro_rules! test_dleq {
           let mut key;
           let mut res;
           while {
-            key = Scalar::random(&mut OsRng);
-            res = $type::prove_without_bias(&mut OsRng, &mut transcript(), generators, key);
+            key = Zeroizing::new(Scalar::random(&mut OsRng));
+            res = $type::prove_without_bias(&mut OsRng, &mut transcript(), generators, key.clone());
             res.is_none()
           } {}
           let res = res.unwrap();
@@ -156,8 +159,13 @@ fn test_rejection_sampling() {
 
   assert!(
     // Either would work
-    EfficientLinearDLEq::prove_without_bias(&mut OsRng, &mut transcript(), generators(), pow_2)
-      .is_none()
+    EfficientLinearDLEq::prove_without_bias(
+      &mut OsRng,
+      &mut transcript(),
+      generators(),
+      Zeroizing::new(pow_2)
+    )
+    .is_none()
   );
 }
 
@@ -167,13 +175,18 @@ fn test_remainder() {
   assert_eq!(Scalar::CAPACITY, 255);
   let generators = (generators().0, generators().0);
   // This will ignore any unused bits, ensuring every remaining one is set
-  let keys = mutual_scalar_from_bytes(&[0xFF; 32]);
-  assert_eq!(keys.0 + Scalar::one(), Scalar::from(2u64).pow_vartime(&[255]));
+  let keys = mutual_scalar_from_bytes::<Scalar, Scalar>(&[0xFF; 32]);
+  let keys = (Zeroizing::new(keys.0), Zeroizing::new(keys.1));
+  assert_eq!(Scalar::one() + keys.0.deref(), Scalar::from(2u64).pow_vartime(&[255]));
   assert_eq!(keys.0, keys.1);
 
-  let (proof, res) =
-    ConciseLinearDLEq::prove_without_bias(&mut OsRng, &mut transcript(), generators, keys.0)
-      .unwrap();
+  let (proof, res) = ConciseLinearDLEq::prove_without_bias(
+    &mut OsRng,
+    &mut transcript(),
+    generators,
+    keys.0.clone(),
+  )
+  .unwrap();
   assert_eq!(keys, res);
 
   verify_and_deserialize!(

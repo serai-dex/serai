@@ -6,12 +6,12 @@
 //! Additional utilities around them, such as promotion from one generator to another, are also
 //! provided.
 
-use core::fmt::Debug;
+use core::{fmt::Debug, ops::Deref};
 use std::{io::Read, sync::Arc, collections::HashMap};
 
 use thiserror::Error;
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, Zeroizing};
 
 use group::{
   ff::{Field, PrimeField},
@@ -153,7 +153,7 @@ pub struct ThresholdCore<C: Ciphersuite> {
   params: ThresholdParams,
 
   /// Secret share key.
-  secret_share: C::F,
+  secret_share: Zeroizing<C::F>,
   /// Group key.
   group_key: C::G,
   /// Verification shares.
@@ -170,17 +170,11 @@ impl<C: Ciphersuite> Zeroize for ThresholdCore<C> {
     }
   }
 }
-impl<C: Ciphersuite> Drop for ThresholdCore<C> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
-}
-impl<C: Ciphersuite> ZeroizeOnDrop for ThresholdCore<C> {}
 
 impl<C: Ciphersuite> ThresholdCore<C> {
   pub(crate) fn new(
     params: ThresholdParams,
-    secret_share: C::F,
+    secret_share: Zeroizing<C::F>,
     verification_shares: HashMap<u16, C::G>,
   ) -> ThresholdCore<C> {
     #[cfg(debug_assertions)]
@@ -198,8 +192,8 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     self.params
   }
 
-  pub fn secret_share(&self) -> C::F {
-    self.secret_share
+  pub fn secret_share(&self) -> &Zeroizing<C::F> {
+    &self.secret_share
   }
 
   pub fn group_key(&self) -> C::G {
@@ -253,8 +247,9 @@ impl<C: Ciphersuite> ThresholdCore<C> {
       (read_u16()?, read_u16()?, read_u16()?)
     };
 
-    let secret_share =
-      C::read_F(reader).map_err(|_| DkgError::InternalError("invalid secret share"))?;
+    let secret_share = Zeroizing::new(
+      C::read_F(reader).map_err(|_| DkgError::InternalError("invalid secret share"))?,
+    );
 
     let mut verification_shares = HashMap::new();
     for l in 1 ..= n {
@@ -284,31 +279,16 @@ pub struct ThresholdKeys<C: Ciphersuite> {
   pub(crate) offset: Option<C::F>,
 }
 
-// Manually implement Drop due to https://github.com/RustCrypto/utils/issues/786
-impl<C: Ciphersuite> Drop for ThresholdKeys<C> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
-}
-impl<C: Ciphersuite> ZeroizeOnDrop for ThresholdKeys<C> {}
-
 /// View of keys passed to algorithm implementations.
 #[derive(Clone, Zeroize)]
 pub struct ThresholdView<C: Ciphersuite> {
   group_key: C::G,
   #[zeroize(skip)]
   included: Vec<u16>,
-  secret_share: C::F,
+  secret_share: Zeroizing<C::F>,
   #[zeroize(skip)]
   verification_shares: HashMap<u16, C::G>,
 }
-
-impl<C: Ciphersuite> Drop for ThresholdView<C> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
-}
-impl<C: Ciphersuite> ZeroizeOnDrop for ThresholdView<C> {}
 
 impl<C: Ciphersuite> ThresholdKeys<C> {
   pub fn new(core: ThresholdCore<C>) -> ThresholdKeys<C> {
@@ -336,8 +316,8 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     self.core.params
   }
 
-  pub fn secret_share(&self) -> C::F {
-    self.core.secret_share
+  pub fn secret_share(&self) -> &Zeroizing<C::F> {
+    &self.core.secret_share
   }
 
   /// Returns the group key with any offset applied.
@@ -366,8 +346,9 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
 
     Ok(ThresholdView {
       group_key: self.group_key(),
-      secret_share: (self.secret_share() * lagrange::<C::F>(self.params().i, included)) +
-        offset_share,
+      secret_share: Zeroizing::new(
+        (lagrange::<C::F>(self.params().i, included) * self.secret_share().deref()) + offset_share,
+      ),
       verification_shares: self
         .verification_shares()
         .iter()
@@ -389,8 +370,8 @@ impl<C: Ciphersuite> ThresholdView<C> {
     self.included.clone()
   }
 
-  pub fn secret_share(&self) -> C::F {
-    self.secret_share
+  pub fn secret_share(&self) -> &Zeroizing<C::F> {
+    &self.secret_share
   }
 
   pub fn verification_share(&self, l: u16) -> C::G {
