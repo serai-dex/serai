@@ -121,7 +121,7 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
 /// a valid commit.
 #[derive(Clone, PartialEq, Debug, Encode, Decode)]
 pub struct Commit<S: SignatureScheme> {
-  /// End time of the round, used as the start time of next round.
+  /// End time of the round which created this commit, used as the start time of the next block.
   pub end_time: u64,
   /// Validators participating in the signature.
   pub validators: Vec<S::ValidatorId>,

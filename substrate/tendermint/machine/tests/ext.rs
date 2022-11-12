@@ -152,7 +152,7 @@ impl TestNetwork {
       let mut write = arc.write().await;
       for i in 0 .. validators {
         let i = u16::try_from(i).unwrap();
-        let TendermintHandle { messages, machine } = TendermintMachine::new(
+        let TendermintHandle { messages, machine, .. } = TendermintMachine::new(
           TestNetwork(i, arc.clone()),
           (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
