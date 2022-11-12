@@ -27,9 +27,12 @@ mod block;
 use block::BlockData;
 >>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/lib.rs
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 mod block;
 use block::BlockData;
 
+=======
+>>>>>>> 4ba469e6 (BlockData::new):substrate/tendermint/machine/src/lib.rs
 pub(crate) mod message_log;
 
 /// Traits and types of the external network being integrated with to provide consensus over.
@@ -266,6 +269,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       self.signer.validator_id().await,
       proposal,
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     );
 =======
 
@@ -280,6 +284,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
       valid: None,
     };
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+    );
+>>>>>>> 4ba469e6 (BlockData::new):substrate/tendermint/machine/src/lib.rs
 
     // Start the first round
     self.round(RoundNumber(0), Some(round_end));
@@ -358,6 +365,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           synced_block_recv,
           synced_block_result_send,
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
           block: BlockData::new(
             weights,
             BlockNumber(last_block.0 + 1),
@@ -379,6 +387,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
             valid: None,
           },
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+          block: BlockData::new(weights, BlockNumber(last.0 .0 + 1), validator_id, proposal),
+>>>>>>> 4ba469e6 (BlockData::new):substrate/tendermint/machine/src/lib.rs
         };
 
         // The end time of the last block is the start time for this one
