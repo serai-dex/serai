@@ -1,19 +1,27 @@
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
 use std::{
   sync::Arc,
   collections::{HashSet, HashMap},
 };
+=======
+use std::collections::{HashSet, HashMap};
+>>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs
 
 use crate::{
   time::CanonicalInstant,
   ext::{RoundNumber, BlockNumber, Block, Network},
   round::RoundData,
   message_log::MessageLog,
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
   Step, Data, DataFor, Message, MessageFor,
+=======
+>>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs
 };
 
 pub(crate) struct BlockData<N: Network> {
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
   pub(crate) proposal: Option<N::Block>,
 
   pub(crate) log: MessageLog<N>,
@@ -25,10 +33,20 @@ pub(crate) struct BlockData<N: Network> {
   pub(crate) end_time: HashMap<RoundNumber, CanonicalInstant>,
 
   pub(crate) round: Option<RoundData<N>>,
+=======
+  pub(crate) proposal: N::Block,
+
+  pub(crate) log: MessageLog<N>,
+  pub(crate) slashes: HashSet<N::ValidatorId>,
+  pub(crate) end_time: HashMap<RoundNumber, CanonicalInstant>,
+
+  pub(crate) round: RoundData<N>,
+>>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs
 
   pub(crate) locked: Option<(RoundNumber, <N::Block as Block>::Id)>,
   pub(crate) valid: Option<(RoundNumber, N::Block)>,
 }
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
 
 impl<N: Network> BlockData<N> {
   pub(crate) fn new(
@@ -137,3 +155,5 @@ impl<N: Network> BlockData<N> {
     })
   }
 }
+=======
+>>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs

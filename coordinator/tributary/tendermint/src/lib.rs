@@ -19,6 +19,13 @@ mod time;
 use time::{sys_time, CanonicalInstant};
 
 mod round;
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+=======
+use round::RoundData;
+
+mod block;
+use block::BlockData;
+>>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/lib.rs
 
 mod block;
 use block::BlockData;
@@ -110,6 +117,7 @@ enum TendermintError<V: ValidatorId> {
   AlreadyHandled,
 }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 // Type aliases to abstract over generic hell
 pub(crate) type DataFor<N> =
   Data<<N as Network>::Block, <<N as Network>::SignatureScheme as SignatureScheme>::Signature>;
@@ -125,6 +133,8 @@ pub type SignedMessageFor<N> = SignedMessage<
   <<N as Network>::SignatureScheme as SignatureScheme>::Signature,
 >;
 
+=======
+>>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/lib.rs
 /// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
   network: N,
