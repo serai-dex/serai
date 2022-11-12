@@ -209,6 +209,7 @@ impl TestNetwork {
         let i = u16::try_from(i).unwrap();
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
         let TendermintHandle { messages, synced_block, synced_block_result, machine } =
           TendermintMachine::new(
             TestNetwork(i, arc.clone()),
@@ -228,6 +229,9 @@ impl TestNetwork {
 >>>>>>> 9b8f2f44 (More misc bug fixes):substrate/tendermint/tests/ext.rs
 =======
         let TendermintHandle { messages, machine } = TendermintMachine::new(
+=======
+        let TendermintHandle { messages, machine, .. } = TendermintMachine::new(
+>>>>>>> b53759c6 (Have the machine respond to advances made by an external sync loop):substrate/tendermint/machine/tests/ext.rs
           TestNetwork(i, arc.clone()),
           (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },

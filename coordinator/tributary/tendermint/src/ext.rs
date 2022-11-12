@@ -171,10 +171,14 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
 >>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/src/ext.rs
 pub struct Commit<S: SignatureScheme> {
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// End time of the round which created this commit, used as the start time of the next block.
 =======
   /// End time of the round, used as the start time of next round.
 >>>>>>> a7f48047 (Move Commit from including the round to including the round's end_time):substrate/tendermint/src/ext.rs
+=======
+  /// End time of the round which created this commit, used as the start time of the next block.
+>>>>>>> b53759c6 (Have the machine respond to advances made by an external sync loop):substrate/tendermint/machine/src/ext.rs
   pub end_time: u64,
   /// Validators participating in the signature.
   pub validators: Vec<S::ValidatorId>,
