@@ -16,8 +16,18 @@ pub(crate) struct BlockData<N: Network> {
   pub(crate) slashes: HashSet<N::ValidatorId>,
   pub(crate) end_time: HashMap<RoundNumber, CanonicalInstant>,
 
-  pub(crate) round: RoundData<N>,
+  pub(crate) round: Option<RoundData<N>>,
 
   pub(crate) locked: Option<(RoundNumber, <N::Block as Block>::Id)>,
   pub(crate) valid: Option<(RoundNumber, N::Block)>,
+}
+
+impl<N: Network> BlockData<N> {
+  pub(crate) fn round(&self) -> &RoundData<N> {
+    self.round.as_ref().unwrap()
+  }
+
+  pub(crate) fn round_mut(&mut self) -> &mut RoundData<N> {
+    self.round.as_mut().unwrap()
+  }
 }
