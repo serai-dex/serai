@@ -214,8 +214,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
     let round_end = self.block.end_time[&end_round];
     sleep(round_end.instant().saturating_duration_since(Instant::now())).await;
 
-    // Only keep queued messages for this block
-    self.queue = self.queue.drain(..).filter(|msg| msg.number == self.block.number).collect();
+    // Clear our outbound message queue
+    self.queue = VecDeque::new();
 
     // Create the new block
     self.block = BlockData {
@@ -339,6 +339,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
       if let Some((broadcast, msg)) = futures::select_biased! {
         // Handle a new height occuring externally (an external sync loop)
+        // Has the highest priority as it makes all other futures here irrelevant
         msg = self.step_recv.next() => {
           if let Some((commit, proposal)) = msg {
             self.reset_by_commit(commit, proposal).await;
