@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use std::{
   sync::Arc,
   time::{SystemTime, Instant, Duration},
-  collections::{VecDeque, HashSet, HashMap},
+  collections::VecDeque,
 };
 
 use parity_scale_codec::{Encode, Decode};
@@ -24,8 +24,7 @@ use round::RoundData;
 mod block;
 use block::BlockData;
 
-mod message_log;
-use message_log::MessageLog;
+pub(crate) mod message_log;
 
 /// Traits and types of the external network being integrated with to provide consensus over.
 pub mod ext;
@@ -218,21 +217,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.queue = VecDeque::new();
 
     // Create the new block
-    self.block = BlockData {
-      number: BlockNumber(self.block.number.0 + 1),
-      validator_id: self.signer.validator_id().await,
+    self.block = BlockData::new(
+      self.weights.clone(),
+      BlockNumber(self.block.number.0 + 1),
+      self.signer.validator_id().await,
       proposal,
-
-      log: MessageLog::new(self.weights.clone()),
-      slashes: HashSet::new(),
-      end_time: HashMap::new(),
-
-      // This will be populated in the following round() call
-      round: None,
-
-      locked: None,
-      valid: None,
-    };
+    );
 
     // Start the first round
     self.round(RoundNumber(0), Some(round_end));
@@ -298,21 +288,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           msg_recv,
           step_recv,
 
-          block: BlockData {
-            number: BlockNumber(last.0 .0 + 1),
-            validator_id,
-            proposal,
-
-            log: MessageLog::new(weights),
-            slashes: HashSet::new(),
-            end_time: HashMap::new(),
-
-            // This will be populated in the following round() call
-            round: None,
-
-            locked: None,
-            valid: None,
-          },
+          block: BlockData::new(weights, BlockNumber(last.0 .0 + 1), validator_id, proposal),
         };
 
         // The end time of the last block is the start time for this one
