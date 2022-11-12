@@ -10,22 +10,22 @@ use tokio::time::sleep;
 use crate::{
   time::CanonicalInstant,
   Step,
-  ext::{Round, Network},
+  ext::{RoundNumber, Network},
 };
 
 pub(crate) struct RoundData<N: Network> {
   _network: PhantomData<N>,
-  pub(crate) round: Round,
+  pub(crate) number: RoundNumber,
   pub(crate) start_time: CanonicalInstant,
   pub(crate) step: Step,
   pub(crate) timeouts: HashMap<Step, Instant>,
 }
 
 impl<N: Network> RoundData<N> {
-  pub(crate) fn new(round: Round, start_time: CanonicalInstant) -> Self {
+  pub(crate) fn new(number: RoundNumber, start_time: CanonicalInstant) -> Self {
     RoundData {
       _network: PhantomData,
-      round,
+      number,
       start_time,
       step: Step::Propose,
       timeouts: HashMap::new(),
@@ -33,8 +33,8 @@ impl<N: Network> RoundData<N> {
   }
 
   fn timeout(&self, step: Step) -> CanonicalInstant {
-    let adjusted_block = N::BLOCK_PROCESSING_TIME * (self.round.0 + 1);
-    let adjusted_latency = N::LATENCY_TIME * (self.round.0 + 1);
+    let adjusted_block = N::BLOCK_PROCESSING_TIME * (self.number.0 + 1);
+    let adjusted_latency = N::LATENCY_TIME * (self.number.0 + 1);
     let offset = Duration::from_secs(
       (match step {
         Step::Propose => adjusted_block + adjusted_latency,

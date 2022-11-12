@@ -41,7 +41,7 @@ enum Step {
 
 #[derive(Clone, Debug, Encode, Decode)]
 enum Data<B: Block, S: Signature> {
-  Proposal(Option<Round>, B),
+  Proposal(Option<RoundNumber>, B),
   Prevote(Option<B::Id>),
   Precommit(Option<(B::Id, S)>),
 }
@@ -73,7 +73,7 @@ struct Message<V: ValidatorId, B: Block, S: Signature> {
   sender: V,
 
   number: BlockNumber,
-  round: Round,
+  round: RoundNumber,
 
   data: Data<B, S>,
 }
@@ -113,12 +113,12 @@ struct BlockData<N: Network> {
 
   log: MessageLog<N>,
   slashes: HashSet<N::ValidatorId>,
-  end_time: HashMap<Round, CanonicalInstant>,
+  end_time: HashMap<RoundNumber, CanonicalInstant>,
 
   round: RoundData<N>,
 
-  locked: Option<(Round, <N::Block as Block>::Id)>,
-  valid: Option<(Round, N::Block)>,
+  locked: Option<(RoundNumber, <N::Block as Block>::Id)>,
+  valid: Option<(RoundNumber, N::Block)>,
 }
 
 /// A machine executing the Tendermint protocol.
@@ -171,33 +171,35 @@ impl<N: Network + 'static> TendermintMachine<N> {
       self.queue.push_back(Message {
         sender: *validator_id,
         number: self.block.number,
-        round: self.block.round.round,
+        round: self.block.round.number,
         data,
       });
     }
   }
 
-  fn populate_end_time(&mut self, round: Round) {
-    for r in (self.block.round.round.0 + 1) .. round.0 {
+  fn populate_end_time(&mut self, round: RoundNumber) {
+    for r in (self.block.round.number.0 + 1) .. round.0 {
       self.block.end_time.insert(
-        Round(r),
-        RoundData::<N>::new(Round(r), self.block.end_time[&Round(r - 1)]).end_time(),
+        RoundNumber(r),
+        RoundData::<N>::new(RoundNumber(r), self.block.end_time[&RoundNumber(r - 1)]).end_time(),
       );
     }
   }
 
   // Start a new round. Returns true if we were the proposer
-  fn round(&mut self, round: Round, time: Option<CanonicalInstant>) -> bool {
+  fn round(&mut self, round: RoundNumber, time: Option<CanonicalInstant>) -> bool {
     // If skipping rounds, populate end_time
     self.populate_end_time(round);
 
     // 11-13
-    self.block.round =
-      RoundData::<N>::new(round, time.unwrap_or_else(|| self.block.end_time[&Round(round.0 - 1)]));
+    self.block.round = RoundData::<N>::new(
+      round,
+      time.unwrap_or_else(|| self.block.end_time[&RoundNumber(round.0 - 1)]),
+    );
     self.block.end_time.insert(round, self.block.round.end_time());
 
     // 14-21
-    if Some(self.weights.proposer(self.block.number, self.block.round.round)) ==
+    if Some(self.weights.proposer(self.block.number, self.block.round.number)) ==
       self.block.validator_id
     {
       let (round, block) = if let Some((round, block)) = &self.block.valid {
@@ -214,7 +216,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   // 53-54
-  async fn reset(&mut self, end_round: Round, proposal: N::Block) {
+  async fn reset(&mut self, end_round: RoundNumber, proposal: N::Block) {
     // Ensure we have the end time data for the last round
     self.populate_end_time(end_round);
 
@@ -236,18 +238,18 @@ impl<N: Network + 'static> TendermintMachine<N> {
       end_time: HashMap::new(),
 
       // This will be populated in the following round() call
-      round: RoundData::<N>::new(Round(0), CanonicalInstant::new(0)),
+      round: RoundData::<N>::new(RoundNumber(0), CanonicalInstant::new(0)),
 
       locked: None,
       valid: None,
     };
 
     // Start the first round
-    self.round(Round(0), Some(round_end));
+    self.round(RoundNumber(0), Some(round_end));
   }
 
   async fn reset_by_commit(&mut self, commit: Commit<N::SignatureScheme>, proposal: N::Block) {
-    let mut round = self.block.round.round;
+    let mut round = self.block.round.number;
     // If this commit is for a round we don't have, jump up to it
     while self.block.end_time[&round].canonical() < commit.end_time {
       round.0 += 1;
@@ -316,7 +318,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             end_time: HashMap::new(),
 
             // This will be populated in the following round() call
-            round: RoundData::<N>::new(Round(0), CanonicalInstant::new(0)),
+            round: RoundData::<N>::new(RoundNumber(0), CanonicalInstant::new(0)),
 
             locked: None,
             valid: None,
@@ -330,7 +332,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // after it, without the standard amount of separation (so their times will be
         // equivalent or minimally offset)
         // For callers wishing to avoid this, they should pass (0, GENESIS + N::block_time())
-        machine.round(Round(0), Some(CanonicalInstant::new(last.1)));
+        machine.round(RoundNumber(0), Some(CanonicalInstant::new(last.1)));
         machine
       },
     }
@@ -372,12 +374,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
             match step {
               Step::Propose => {
                 // Slash the validator for not proposing when they should've
-                self.slash(self.weights.proposer(self.block.number, self.block.round.round)).await;
+                self.slash(self.weights.proposer(self.block.number, self.block.round.number)).await;
                 self.broadcast(Data::Prevote(None));
               },
               Step::Prevote => self.broadcast(Data::Precommit(None)),
               Step::Precommit => {
-                self.round(Round(self.block.round.round.0 + 1), None);
+                self.round(RoundNumber(self.block.round.number.0 + 1), None);
                 continue;
               }
             }
@@ -445,7 +447,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   fn verify_precommit_signature(
     &self,
     sender: N::ValidatorId,
-    round: Round,
+    round: RoundNumber,
     data: &Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> Result<(), TendermintError<N::ValidatorId>> {
     if let Data::Precommit(Some((id, sig))) = data {
@@ -507,10 +509,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     // Else, check if we need to jump ahead
     #[allow(clippy::comparison_chain)]
-    if msg.round.0 < self.block.round.round.0 {
+    if msg.round.0 < self.block.round.number.0 {
       // Prior round, disregard if not finalizing
       return Ok(None);
-    } else if msg.round.0 > self.block.round.round.0 {
+    } else if msg.round.0 > self.block.round.number.0 {
       // 55-56
       // Jump, enabling processing by the below code
       if self.block.log.round_participation(msg.round) > self.weights.fault_thresold() {
@@ -539,7 +541,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // of the round map
     if (self.block.round.step == Step::Prevote) && matches!(msg.data, Data::Prevote(_)) {
       let (participation, weight) =
-        self.block.log.message_instances(self.block.round.round, Data::Prevote(None));
+        self.block.log.message_instances(self.block.round.number, Data::Prevote(None));
       // 34-35
       if participation >= self.weights.threshold() {
         self.block.round.set_timeout(Step::Prevote);
@@ -554,14 +556,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     // 47-48
     if matches!(msg.data, Data::Precommit(_)) &&
-      self.block.log.has_participation(self.block.round.round, Step::Precommit)
+      self.block.log.has_participation(self.block.round.number, Step::Precommit)
     {
       self.block.round.set_timeout(Step::Precommit);
     }
 
-    let proposer = self.weights.proposer(self.block.number, self.block.round.round);
+    let proposer = self.weights.proposer(self.block.number, self.block.round.number);
     if let Some(Data::Proposal(vr, block)) =
-      self.block.log.get(self.block.round.round, proposer, Step::Propose)
+      self.block.log.get(self.block.round.number, proposer, Step::Propose)
     {
       // 22-33
       if self.block.round.step == Step::Propose {
@@ -583,7 +585,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
         if let Some(vr) = vr {
           // Malformed message
-          if vr.0 >= self.block.round.round.0 {
+          if vr.0 >= self.block.round.number.0 {
             Err(TendermintError::Malicious(msg.sender))?;
           }
 
@@ -605,7 +607,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         .block
         .valid
         .as_ref()
-        .map(|(round, _)| round != &self.block.round.round)
+        .map(|(round, _)| round != &self.block.round.number)
         .unwrap_or(true)
       {
         // 36-43
@@ -613,22 +615,22 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // The run once condition is implemented above. Sinve valid will always be set, it not
         // being set, or only being set historically, means this has yet to be run
 
-        if self.block.log.has_consensus(self.block.round.round, Data::Prevote(Some(block.id()))) {
+        if self.block.log.has_consensus(self.block.round.number, Data::Prevote(Some(block.id()))) {
           match self.network.validate(block).await {
             Ok(_) => (),
             Err(BlockError::Temporal) => (),
             Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,
           };
 
-          self.block.valid = Some((self.block.round.round, block.clone()));
+          self.block.valid = Some((self.block.round.number, block.clone()));
           if self.block.round.step == Step::Prevote {
-            self.block.locked = Some((self.block.round.round, block.id()));
+            self.block.locked = Some((self.block.round.number, block.id()));
             self.broadcast(Data::Precommit(Some((
               block.id(),
               self
                 .signer
                 .sign(&commit_msg(
-                  self.block.end_time[&self.block.round.round].canonical(),
+                  self.block.end_time[&self.block.round.number].canonical(),
                   block.id().as_ref(),
                 ))
                 .await,

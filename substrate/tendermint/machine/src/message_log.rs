@@ -1,6 +1,6 @@
 use std::{sync::Arc, collections::HashMap};
 
-use crate::{ext::*, Round, Step, Data, Message, TendermintError};
+use crate::{ext::*, RoundNumber, Step, Data, Message, TendermintError};
 
 pub(crate) struct MessageLog<N: Network> {
   weights: Arc<N::Weights>,
@@ -9,7 +9,7 @@ pub(crate) struct MessageLog<N: Network> {
     (<N::Block as Block>::Id, <N::SignatureScheme as SignatureScheme>::Signature),
   >,
   pub(crate) log: HashMap<
-    Round,
+    RoundNumber,
     HashMap<
       N::ValidatorId,
       HashMap<Step, Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>>,
@@ -57,7 +57,7 @@ impl<N: Network> MessageLog<N> {
   // the data.
   pub(crate) fn message_instances(
     &self,
-    round: Round,
+    round: RoundNumber,
     data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> (u64, u64) {
     let mut participating = 0;
@@ -75,7 +75,7 @@ impl<N: Network> MessageLog<N> {
   }
 
   // Get the participation in a given round
-  pub(crate) fn round_participation(&self, round: Round) -> u64 {
+  pub(crate) fn round_participation(&self, round: RoundNumber) -> u64 {
     let mut weight = 0;
     if let Some(round) = self.log.get(&round) {
       for participant in round.keys() {
@@ -86,7 +86,7 @@ impl<N: Network> MessageLog<N> {
   }
 
   // Check if a supermajority of nodes have participated on a specific step
-  pub(crate) fn has_participation(&self, round: Round, step: Step) -> bool {
+  pub(crate) fn has_participation(&self, round: RoundNumber, step: Step) -> bool {
     let mut participating = 0;
     for (participant, msgs) in &self.log[&round] {
       if msgs.get(&step).is_some() {
@@ -99,7 +99,7 @@ impl<N: Network> MessageLog<N> {
   // Check if consensus has been reached on a specific piece of data
   pub(crate) fn has_consensus(
     &self,
-    round: Round,
+    round: RoundNumber,
     data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> bool {
     let (_, weight) = self.message_instances(round, data);
@@ -108,7 +108,7 @@ impl<N: Network> MessageLog<N> {
 
   pub(crate) fn get(
     &self,
-    round: Round,
+    round: RoundNumber,
     sender: N::ValidatorId,
     step: Step,
   ) -> Option<&Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>> {

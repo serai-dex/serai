@@ -77,7 +77,7 @@ impl Weights for TestWeights {
     [1; 4][usize::try_from(id).unwrap()]
   }
 
-  fn proposer(&self, number: BlockNumber, round: Round) -> TestValidatorId {
+  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> TestValidatorId {
     TestValidatorId::try_from((number.0 + u64::from(round.0)) % 4).unwrap()
   }
 }

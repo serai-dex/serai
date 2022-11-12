@@ -31,7 +31,7 @@ impl<S: Send + Sync + Clone + PartialEq + Debug + Encode + Decode> Signature for
 pub struct BlockNumber(pub u64);
 /// A struct containing a round number, wrapped to have a distinct type.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
-pub struct Round(pub u32);
+pub struct RoundNumber(pub u32);
 
 /// A signer for a validator.
 #[async_trait]
@@ -147,7 +147,7 @@ pub trait Weights: Send + Sync {
   }
 
   /// Weighted round robin function.
-  fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId;
+  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
 }
 
 impl<W: Weights> Weights for Arc<W> {
@@ -161,7 +161,7 @@ impl<W: Weights> Weights for Arc<W> {
     self.as_ref().weight(validator)
   }
 
-  fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId {
+  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
     self.as_ref().proposer(number, round)
   }
 }
