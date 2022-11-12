@@ -130,8 +130,11 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       .propose(
         self.import.inherent_data(parent).await,
         Digest::default(),
-        // Assumes a block cannot take longer to download than it'll take to process
-        Duration::from_secs((T::BLOCK_PROCESSING_TIME_IN_SECONDS / 2).into()),
+        // The first processing time is to build the block.
+        // The second is for it to be downloaded (assumes a block won't take longer to download
+        // than it'll take to process)
+        // The third is for it to actually be processed
+        Duration::from_secs((T::BLOCK_PROCESSING_TIME_IN_SECONDS / 3).into()),
         Some(T::PROPOSED_BLOCK_SIZE_LIMIT),
       )
       .await
