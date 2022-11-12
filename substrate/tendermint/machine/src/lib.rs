@@ -16,10 +16,13 @@ use futures::{
 use tokio::time::sleep;
 
 mod time;
-use time::*;
+use time::{sys_time, CanonicalInstant};
 
 mod round;
-use round::*;
+use round::RoundData;
+
+mod block;
+use block::BlockData;
 
 mod message_log;
 use message_log::MessageLog;
@@ -104,21 +107,6 @@ impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
 enum TendermintError<V: ValidatorId> {
   Malicious(V),
   Temporal,
-}
-
-struct BlockData<N: Network> {
-  number: BlockNumber,
-  validator_id: Option<N::ValidatorId>,
-  proposal: N::Block,
-
-  log: MessageLog<N>,
-  slashes: HashSet<N::ValidatorId>,
-  end_time: HashMap<RoundNumber, CanonicalInstant>,
-
-  round: RoundData<N>,
-
-  locked: Option<(RoundNumber, <N::Block as Block>::Id)>,
-  valid: Option<(RoundNumber, N::Block)>,
 }
 
 /// A machine executing the Tendermint protocol.
