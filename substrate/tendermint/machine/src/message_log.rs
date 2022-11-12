@@ -8,7 +8,7 @@ pub(crate) struct MessageLog<N: Network> {
     N::ValidatorId,
     (<N::Block as Block>::Id, <N::SignatureScheme as SignatureScheme>::Signature),
   >,
-  log: HashMap<
+  pub(crate) log: HashMap<
     Round,
     HashMap<
       N::ValidatorId,
