@@ -21,8 +21,12 @@ impl CanonicalInstant {
 
     // If the time is in the future, this will be off by that much time
     let elapsed = sys_now.duration_since(sys_time(time)).unwrap_or(Duration::ZERO);
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/time.rs
     // Except for the fact this panics here
     let synced_instant = instant_now.checked_sub(elapsed).unwrap();
+=======
+    let synced_instant = instant_now - elapsed;
+>>>>>>> e2e7a70f (Clean up time code in tendermint-machine):substrate/tendermint/machine/src/time.rs
 
     CanonicalInstant { time, instant: synced_instant }
   }

@@ -11,6 +11,7 @@ use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 use tendermint_machine::{
   ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
   TendermintMachine, TendermintHandle,
@@ -18,6 +19,11 @@ use tendermint_machine::{
 =======
 use tendermint_machine::{ext::*, SignedMessage, MessageSender, TendermintMachine, TendermintHandle};
 >>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
+=======
+use tendermint_machine::{
+  ext::*, SignedMessage, StepSender, MessageSender, TendermintMachine, TendermintHandle,
+};
+>>>>>>> e2e7a70f (Clean up time code in tendermint-machine):substrate/tendermint/machine/tests/ext.rs
 
 type TestValidatorId = u16;
 type TestBlockId = [u8; 4];
@@ -123,6 +129,7 @@ impl Block for TestBlock {
 }
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 #[allow(clippy::type_complexity)]
 struct TestNetwork(
   u16,
@@ -131,6 +138,9 @@ struct TestNetwork(
 =======
 struct TestNetwork(u16, Arc<RwLock<Vec<MessageSender<Self>>>>);
 >>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
+=======
+struct TestNetwork(u16, Arc<RwLock<Vec<(MessageSender<Self>, StepSender<Self>)>>>);
+>>>>>>> e2e7a70f (Clean up time code in tendermint-machine):substrate/tendermint/machine/tests/ext.rs
 
 #[async_trait]
 impl Network for TestNetwork {
@@ -166,8 +176,12 @@ impl Network for TestNetwork {
     for (messages, _, _) in self.1.write().await.iter_mut() {
 =======
   async fn broadcast(&mut self, msg: SignedMessage<TestValidatorId, Self::Block, [u8; 32]>) {
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
     for messages in self.1.write().await.iter_mut() {
 >>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
+=======
+    for (messages, _) in self.1.write().await.iter_mut() {
+>>>>>>> e2e7a70f (Clean up time code in tendermint-machine):substrate/tendermint/machine/tests/ext.rs
       messages.send(msg.clone()).await.unwrap();
     }
   }
@@ -195,6 +209,7 @@ impl Network for TestNetwork {
 
 impl TestNetwork {
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
   async fn new(
     validators: usize,
   ) -> Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>
@@ -202,11 +217,15 @@ impl TestNetwork {
 =======
   async fn new(validators: usize) -> Arc<RwLock<Vec<MessageSender<Self>>>> {
 >>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
+=======
+  async fn new(validators: usize) -> Arc<RwLock<Vec<(MessageSender<Self>, StepSender<Self>)>>> {
+>>>>>>> e2e7a70f (Clean up time code in tendermint-machine):substrate/tendermint/machine/tests/ext.rs
     let arc = Arc::new(RwLock::new(vec![]));
     {
       let mut write = arc.write().await;
       for i in 0 .. validators {
         let i = u16::try_from(i).unwrap();
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
@@ -232,14 +251,21 @@ impl TestNetwork {
 =======
         let TendermintHandle { messages, machine, .. } = TendermintMachine::new(
 >>>>>>> b53759c6 (Have the machine respond to advances made by an external sync loop):substrate/tendermint/machine/tests/ext.rs
+=======
+        let TendermintHandle { messages, machine, step } = TendermintMachine::new(
+>>>>>>> e2e7a70f (Clean up time code in tendermint-machine):substrate/tendermint/machine/tests/ext.rs
           TestNetwork(i, arc.clone()),
           (BlockNumber(1), (SystemTime::now().duration_since(UNIX_EPOCH)).unwrap().as_secs()),
           TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
         )
         .await;
         tokio::task::spawn(machine.run());
+<<<<<<< HEAD:coordinator/tributary/tendermint/tests/ext.rs
         write.push(messages);
 >>>>>>> 56a21ca6 (Use futures mpsc instead of tokio):substrate/tendermint/machine/tests/ext.rs
+=======
+        write.push((messages, step));
+>>>>>>> e2e7a70f (Clean up time code in tendermint-machine):substrate/tendermint/machine/tests/ext.rs
       }
     }
     arc
