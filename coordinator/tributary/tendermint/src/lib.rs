@@ -403,6 +403,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       let mut queue_future =
         if self.queue.is_empty() { Fuse::terminated() } else { future::ready(()).fuse() };
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
       if let Some((our_message, msg, mut sig)) = futures::select_biased! {
         // Handle a new block occuring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
@@ -421,6 +422,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
             }
 
             let proposal = self.network.add_block(block, commit.clone()).await;
+=======
+      if let Some((broadcast, msg)) = futures::select_biased! {
+        // Handle a new height occuring externally (an external sync loop)
+        // Has the highest priority as it makes all other futures here irrelevant
+        msg = self.step_recv.next() => {
+          if let Some((commit, proposal)) = msg {
+>>>>>>> 2de4ab8c (Clear the Queue instead of draining and filtering):substrate/tendermint/machine/src/lib.rs
             self.reset_by_commit(commit, proposal).await;
             self.synced_block_result_send.send(true).await.unwrap();
             None
