@@ -1,6 +1,10 @@
 use std::{sync::Arc, collections::HashMap};
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/message_log.rs
 use log::debug;
+=======
+use crate::{ext::*, RoundNumber, Step, Data, Message, TendermintError};
+>>>>>>> 2f3bb887 (Rename Round to RoundNumber):substrate/tendermint/machine/src/message_log.rs
 
 use crate::{ext::*, RoundNumber, Step, Data, DataFor, MessageFor, TendermintError};
 
@@ -16,7 +20,7 @@ pub(crate) struct MessageLog<N: Network> {
     (<N::Block as Block>::Id, <N::SignatureScheme as SignatureScheme>::Signature),
   >,
   pub(crate) log: HashMap<
-    Round,
+    RoundNumber,
     HashMap<
       N::ValidatorId,
       HashMap<Step, Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>>,
@@ -87,7 +91,7 @@ impl<N: Network> MessageLog<N> {
 =======
   pub(crate) fn message_instances(
     &self,
-    round: Round,
+    round: RoundNumber,
     data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> (u64, u64) {
 >>>>>>> b993ff1c (Provide a dedicated signature in Precommit of just the block hash):substrate/tendermint/src/message_log.rs
@@ -122,8 +126,12 @@ impl<N: Network> MessageLog<N> {
   pub(crate) fn has_participation(&self, round: RoundNumber, step: Step) -> bool {
 =======
   // Check if a supermajority of nodes have participated on a specific step
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/message_log.rs
   pub(crate) fn has_participation(&self, round: Round, step: Step) -> bool {
 >>>>>>> 8b6eb117 (Litany of bug fixes):substrate/tendermint/src/message_log.rs
+=======
+  pub(crate) fn has_participation(&self, round: RoundNumber, step: Step) -> bool {
+>>>>>>> 2f3bb887 (Rename Round to RoundNumber):substrate/tendermint/machine/src/message_log.rs
     let mut participating = 0;
     for (participant, msgs) in &self.log[&round] {
       if msgs.get(&step).is_some() {
@@ -144,7 +152,7 @@ impl<N: Network> MessageLog<N> {
 =======
   pub(crate) fn has_consensus(
     &self,
-    round: Round,
+    round: RoundNumber,
     data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
   ) -> bool {
 >>>>>>> b993ff1c (Provide a dedicated signature in Precommit of just the block hash):substrate/tendermint/src/message_log.rs

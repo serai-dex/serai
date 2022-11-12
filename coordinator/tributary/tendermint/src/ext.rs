@@ -35,6 +35,7 @@ pub struct BlockNumber(pub u64);
 /// A struct containing a round number, wrapped to have a distinct type.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct RoundNumber(pub u32);
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
 
 /// A signer for a validator.
 #[async_trait]
@@ -63,6 +64,8 @@ impl<S: Signer> Signer for Arc<S> {
     self.as_ref().sign(msg).await
   }
 }
+=======
+>>>>>>> 2f3bb887 (Rename Round to RoundNumber):substrate/tendermint/machine/src/ext.rs
 
 /// A signer for a validator.
 #[async_trait]
@@ -214,6 +217,7 @@ pub trait Weights: Send + Sync {
   }
 
   /// Weighted round robin function.
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
 }
 
@@ -231,6 +235,9 @@ impl<W: Weights> Weights for Arc<W> {
   fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
     self.as_ref().proposer(block, round)
   }
+=======
+  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
+>>>>>>> 2f3bb887 (Rename Round to RoundNumber):substrate/tendermint/machine/src/ext.rs
 }
 
 impl<W: Weights> Weights for Arc<W> {
@@ -244,7 +251,7 @@ impl<W: Weights> Weights for Arc<W> {
     self.as_ref().weight(validator)
   }
 
-  fn proposer(&self, number: BlockNumber, round: Round) -> Self::ValidatorId {
+  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
     self.as_ref().proposer(number, round)
   }
 }
