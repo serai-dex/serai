@@ -213,13 +213,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
       let end = self.timeout(Step::Precommit);
       self.end_time.insert(Round(r), end);
       self.start_time = end;
+      self.round.0 += 1;
     }
+    debug_assert_eq!(self.round, round);
 
     // 11-13
     // Clear timeouts
     self.timeouts = HashMap::new();
 
-    self.round = round;
     self.end_time.insert(round, self.timeout(Step::Precommit));
     self.step = Step::Propose;
     self.round_propose()
