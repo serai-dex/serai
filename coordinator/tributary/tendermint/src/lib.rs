@@ -175,6 +175,7 @@ pub struct TendermintHandle<N: Network> {
 }
 
 impl<N: Network + 'static> TendermintMachine<N> {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   // Broadcast the given piece of data
   // Tendermint messages always specify their block/round, yet Tendermint only ever broadcasts for
   // the current block/round. Accordingly, instead of manually fetching those at every call-site,
@@ -185,17 +186,63 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // can handle our own message before broadcasting it. That way, we fail before before
       // becoming malicious
       self.queue.push_back(msg);
+=======
+  fn broadcast(
+    &mut self,
+    data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
+  ) {
+    if let Some(validator_id) = self.block.validator_id {
+      // 27, 33, 41, 46, 60, 64
+      self.block.round_mut().step = data.step();
+      self.queue.push_back(Message {
+        sender: validator_id,
+        number: self.block.number,
+        round: self.block.round().number,
+        data,
+      });
+    }
+  }
+
+  fn populate_end_time(&mut self, round: RoundNumber) {
+    for r in (self.block.round().number.0 + 1) .. round.0 {
+      self.block.end_time.insert(
+        RoundNumber(r),
+        RoundData::<N>::new(RoundNumber(r), self.block.end_time[&RoundNumber(r - 1)]).end_time(),
+      );
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
     }
   }
 
   // Start a new round. Returns true if we were the proposer
   fn round(&mut self, round: RoundNumber, time: Option<CanonicalInstant>) -> bool {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     if let Some(data) =
       self.block.new_round(round, self.weights.proposer(self.block.number, round), time)
+=======
+    // If skipping rounds, populate end_time
+    if round.0 != 0 {
+      self.populate_end_time(round);
+    }
+
+    // 11-13
+    self.block.round = Some(RoundData::<N>::new(
+      round,
+      time.unwrap_or_else(|| self.block.end_time[&RoundNumber(round.0 - 1)]),
+    ));
+    self.block.end_time.insert(round, self.block.round().end_time());
+
+    // 14-21
+    if Some(self.weights.proposer(self.block.number, self.block.round().number)) ==
+      self.block.validator_id
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
     {
       self.broadcast(data);
       true
     } else {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+=======
+      self.block.round_mut().set_timeout(Step::Propose);
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
       false
     }
   }
@@ -218,17 +265,35 @@ impl<N: Network + 'static> TendermintMachine<N> {
       BlockNumber(self.block.number.0 + 1),
       self.signer.validator_id().await,
       proposal,
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     );
+=======
+
+      log: MessageLog::new(self.weights.clone()),
+      slashes: HashSet::new(),
+      end_time: HashMap::new(),
+
+      // This will be populated in the following round() call
+      round: None,
+
+      locked: None,
+      valid: None,
+    };
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
 
     // Start the first round
     self.round(RoundNumber(0), Some(round_end));
   }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   async fn reset_by_commit(
     &mut self,
     commit: Commit<N::SignatureScheme>,
     proposal: Option<N::Block>,
   ) {
+=======
+  async fn reset_by_commit(&mut self, commit: Commit<N::SignatureScheme>, proposal: N::Block) {
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
     let mut round = self.block.round().number;
     // If this commit is for a round we don't have, jump up to it
     while self.block.end_time[&round].canonical() < commit.end_time {
@@ -297,8 +362,23 @@ impl<N: Network + 'static> TendermintMachine<N> {
             weights,
             BlockNumber(last_block.0 + 1),
             validator_id,
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
             Some(proposal),
           ),
+=======
+            proposal,
+
+            log: MessageLog::new(weights),
+            slashes: HashSet::new(),
+            end_time: HashMap::new(),
+
+            // This will be populated in the following round() call
+            round: None,
+
+            locked: None,
+            valid: None,
+          },
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
         };
 
         // The end time of the last block is the start time for this one
@@ -365,7 +445,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
             match step {
               Step::Propose => {
                 // Slash the validator for not proposing when they should've
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
                 log::debug!(target: "tendermint", "Validator didn't propose when they should have");
+=======
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
                 self.slash(
                   self.weights.proposer(self.block.number, self.block.round().number)
                 ).await;
@@ -587,6 +670,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       self.block.round_mut().set_timeout(Step::Precommit);
     }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     // All further operations require actually having the proposal in question
     let proposer = self.weights.proposer(self.block.number, self.block.round().number);
     let (vr, block) = if let Some(Data::Proposal(vr, block)) =
@@ -596,6 +680,22 @@ impl<N: Network + 'static> TendermintMachine<N> {
     } else {
       return Ok(None);
     };
+=======
+    let proposer = self.weights.proposer(self.block.number, self.block.round().number);
+    if let Some(Data::Proposal(vr, block)) =
+      self.block.log.get(self.block.round().number, proposer, Step::Propose)
+    {
+      // 22-33
+      if self.block.round().step == Step::Propose {
+        // Delay error handling (triggering a slash) until after we vote.
+        let (valid, err) = match self.network.validate(block).await {
+          Ok(_) => (true, Ok(None)),
+          Err(BlockError::Temporal) => (false, Ok(None)),
+          Err(BlockError::Fatal) => (false, Err(TendermintError::Malicious(proposer))),
+        };
+        // Create a raw vote which only requires block validity as a basis for the actual vote.
+        let raw_vote = Some(block.id()).filter(|_| valid);
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
 
     // 22-33
     if self.block.round().step == Step::Propose {
@@ -611,6 +711,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // Create a raw vote which only requires block validity as a basis for the actual vote.
       let raw_vote = Some(block.id()).filter(|_| valid);
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
       // If locked is none, it has a round of -1 according to the protocol. That satisfies
       // 23 and 29. If it's some, both are satisfied if they're for the same ID. If it's some
       // with different IDs, the function on 22 rejects yet the function on 28 has one other
@@ -630,19 +731,37 @@ impl<N: Network + 'static> TendermintMachine<N> {
           // This is the other condition described above
           if let Some((locked_round, _)) = self.block.locked.as_ref() {
             vote = vote.or_else(|| raw_vote.filter(|_| locked_round.0 <= vr.0));
+=======
+        if let Some(vr) = vr {
+          // Malformed message
+          if vr.0 >= self.block.round().number.0 {
+            Err(TendermintError::Malicious(msg.sender))?;
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
           }
 
           self.broadcast(Data::Prevote(vote));
           return err;
         }
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
       } else {
         self.broadcast(Data::Prevote(vote));
         return err;
       }
+=======
+      } else if self
+        .block
+        .valid
+        .as_ref()
+        .map(|(round, _)| round != &self.block.round().number)
+        .unwrap_or(true)
+      {
+        // 36-43
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
 
       return Ok(None);
     }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     if self
       .block
       .valid
@@ -662,6 +781,30 @@ impl<N: Network + 'static> TendermintMachine<N> {
           Err(BlockError::Fatal) => {
             log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
             Err(TendermintError::Malicious(proposer))?
+=======
+        if self.block.log.has_consensus(self.block.round().number, Data::Prevote(Some(block.id())))
+        {
+          match self.network.validate(block).await {
+            Ok(_) => (),
+            Err(BlockError::Temporal) => (),
+            Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,
+          };
+
+          self.block.valid = Some((self.block.round().number, block.clone()));
+          if self.block.round().step == Step::Prevote {
+            self.block.locked = Some((self.block.round().number, block.id()));
+            self.broadcast(Data::Precommit(Some((
+              block.id(),
+              self
+                .signer
+                .sign(&commit_msg(
+                  self.block.end_time[&self.block.round().number].canonical(),
+                  block.id().as_ref(),
+                ))
+                .await,
+            ))));
+            return Ok(None);
+>>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
           }
         };
 
