@@ -345,15 +345,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
           Ok(Some(block)) => {
             let mut validators = vec![];
             let mut sigs = vec![];
-            for (v, sig) in self
-              .block
-              .log
-              .precommitted
-              .iter()
-              .filter_map(|(k, (id, sig))| Some((*k, sig.clone())).filter(|_| id == &block.id()))
-            {
-              validators.push(v);
-              sigs.push(sig);
+            // Get all precommits for this round
+            for (validator, msgs) in &self.block.log.log[&msg.round] {
+              if let Some(Data::Precommit(Some((id, sig)))) = msgs.get(&Step::Precommit) {
+                // If this precommit was for this block, include it
+                if id == &block.id() {
+                  validators.push(*validator);
+                  sigs.push(sig.clone());
+                }
+              }
             }
 
             let commit = Commit {

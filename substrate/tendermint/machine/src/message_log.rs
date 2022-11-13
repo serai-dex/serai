@@ -4,10 +4,7 @@ use crate::{ext::*, RoundNumber, Step, Data, DataFor, MessageFor, TendermintErro
 
 pub(crate) struct MessageLog<N: Network> {
   weights: Arc<N::Weights>,
-  pub(crate) precommitted: HashMap<
-    N::ValidatorId,
-    (<N::Block as Block>::Id, <N::SignatureScheme as SignatureScheme>::Signature),
-  >,
+  precommitted: HashMap<N::ValidatorId, <N::Block as Block>::Id>,
   pub(crate) log: HashMap<RoundNumber, HashMap<N::ValidatorId, HashMap<Step, DataFor<N>>>>,
 }
 
@@ -34,13 +31,13 @@ impl<N: Network> MessageLog<N> {
     }
 
     // If they already precommitted to a distinct hash, error
-    if let Data::Precommit(Some((hash, sig))) = &msg.data {
-      if let Some((prev, _)) = self.precommitted.get(&msg.sender) {
+    if let Data::Precommit(Some((hash, _))) = &msg.data {
+      if let Some(prev) = self.precommitted.get(&msg.sender) {
         if hash != prev {
           Err(TendermintError::Malicious(msg.sender))?;
         }
       }
-      self.precommitted.insert(msg.sender, (*hash, sig.clone()));
+      self.precommitted.insert(msg.sender, *hash);
     }
 
     msgs.insert(step, msg.data);
