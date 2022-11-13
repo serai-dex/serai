@@ -342,12 +342,19 @@ pub trait Network: Send + Sync {
     commit.validators.iter().map(|v| weights.weight(*v)).sum::<u64>() >= weights.threshold()
   }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// Broadcast a message to the other validators.
   ///
   /// If authenticated channels have already been established, this will double-authenticate.
   /// Switching to unauthenticated channels in a system already providing authenticated channels is
   /// not recommended as this is a minor, temporal inefficiency, while downgrading channels may
   /// have wider implications.
+=======
+  /// Broadcast a message to the other validators. If authenticated channels have already been
+  /// established, this will double-authenticate. Switching to unauthenticated channels in a system
+  /// already providing authenticated channels is not recommended as this is a minor, temporal
+  /// inefficiency while downgrading channels may have wider implications.
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/ext.rs
   async fn broadcast(&mut self, msg: SignedMessageFor<Self>);
 
   /// Trigger a slash for the validator in question who was definitively malicious.

@@ -20,8 +20,11 @@ use time::{sys_time, CanonicalInstant};
 
 mod round;
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 =======
 use round::RoundData;
+=======
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
 
 mod block;
 use block::BlockData;
@@ -121,6 +124,9 @@ enum TendermintError<V: ValidatorId> {
 }
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+=======
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
 // Type aliases to abstract over generic hell
 pub(crate) type DataFor<N> =
   Data<<N as Network>::Block, <<N as Network>::SignatureScheme as SignatureScheme>::Signature>;
@@ -136,8 +142,11 @@ pub type SignedMessageFor<N> = SignedMessage<
   <<N as Network>::SignatureScheme as SignatureScheme>::Signature,
 >;
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 =======
 >>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/lib.rs
+=======
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
 /// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
   network: N,
@@ -147,8 +156,12 @@ pub struct TendermintMachine<N: Network> {
 
   queue: VecDeque<MessageFor<N>>,
   msg_recv: mpsc::UnboundedReceiver<SignedMessageFor<N>>,
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   synced_block_recv: mpsc::UnboundedReceiver<SyncedBlock<N>>,
   synced_block_result_send: mpsc::UnboundedSender<bool>,
+=======
+  step_recv: mpsc::UnboundedReceiver<(Commit<N::SignatureScheme>, N::Block)>,
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
 
   block: BlockData<N>,
 }
@@ -159,9 +172,12 @@ pub struct SyncedBlock<N: Network> {
   pub commit: Commit<<N as Network>::SignatureScheme>,
 }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 pub type SyncedBlockSender<N> = mpsc::UnboundedSender<SyncedBlock<N>>;
 pub type SyncedBlockResultReceiver = mpsc::UnboundedReceiver<bool>;
 
+=======
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
 pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
 
 /// A Tendermint machine and its channel to receive messages from the gossip layer over.
@@ -178,6 +194,7 @@ pub struct TendermintHandle<N: Network> {
 }
 
 impl<N: Network + 'static> TendermintMachine<N> {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   // Broadcast the given piece of data
   // Tendermint messages always specify their block/round, yet Tendermint only ever broadcasts for
@@ -213,11 +230,17 @@ impl<N: Network + 'static> TendermintMachine<N> {
         RoundData::<N>::new(RoundNumber(r), self.block.end_time[&RoundNumber(r - 1)]).end_time(),
       );
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+  fn broadcast(&mut self, data: DataFor<N>) {
+    if let Some(msg) = self.block.message(data) {
+      self.queue.push_back(msg);
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
     }
   }
 
   // Start a new round. Returns true if we were the proposer
   fn round(&mut self, round: RoundNumber, time: Option<CanonicalInstant>) -> bool {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     if let Some(data) =
       self.block.new_round(round, self.weights.proposer(self.block.number, round), time)
@@ -238,14 +261,21 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if Some(self.weights.proposer(self.block.number, self.block.round().number)) ==
       self.block.validator_id
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+    if let Some(data) =
+      self.block.new_round(round, self.weights.proposer(self.block.number, round), time)
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
     {
       self.broadcast(data);
       true
     } else {
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 =======
       self.block.round_mut().set_timeout(Step::Propose);
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
       false
     }
   }
@@ -556,7 +586,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
     sender: N::ValidatorId,
     round: RoundNumber,
     data: &DataFor<N>,
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   ) -> Result<bool, TendermintError<N::ValidatorId>> {
+=======
+  ) -> Result<(), TendermintError<N::ValidatorId>> {
+>>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
     if let Data::Precommit(Some((id, sig))) = data {
       // Also verify the end_time of the commit
       // Only perform this verification if we already have the end_time
