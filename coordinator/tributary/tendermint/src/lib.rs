@@ -580,10 +580,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   // Returns Ok(true) if this was a Precommit which had its signature validated
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   // Returns Ok(false) if it wasn't a Precommit or the signature wasn't validated yet
 =======
   // Returns Ok(false) if the signature wasn't validated yet
 >>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
+=======
+  // Returns Ok(false) if it wasn't a Precommit or the signature wasn't validated yet
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
   // Returns Err if the signature was invalid
   fn verify_precommit_signature(
     &self,
@@ -692,10 +696,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
               // Remove the message so it isn't counted towards forming a commit/included in one
               // This won't remove the fact the precommitted for this block hash in the MessageLog
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
               // TODO: Don't even log these in the first place until we jump, preventing needing
               // to do this in the first place
 =======
 >>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
+=======
+              // TODO: Don't even log these in the first place until we jump, preventing needing
+              // to do this in the first place
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
               self
                 .block
                 .log
@@ -746,6 +755,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     }
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     // All further operations require actually having the proposal in question
     let proposer = self.weights.proposer(self.block.number, self.block.round().number);
     let (vr, block) = if let Some(Data::Proposal(vr, block)) =
@@ -756,10 +766,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
       return Ok(None);
     };
 =======
+=======
+    // All further operations require actually having the proposal in question
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
     let proposer = self.weights.proposer(self.block.number, self.block.round().number);
-    if let Some(Data::Proposal(vr, block)) =
+    let (vr, block) = if let Some(Data::Proposal(vr, block)) =
       self.block.log.get(self.block.round().number, proposer, Step::Propose)
     {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
       // 22-33
       if self.block.round().step == Step::Propose {
         // Delay error handling (triggering a slash) until after we vote.
@@ -771,6 +785,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Create a raw vote which only requires block validity as a basis for the actual vote.
         let raw_vote = Some(block.id()).filter(|_| valid);
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+      (vr, block)
+    } else {
+      return Ok(None);
+    };
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
 
     // 22-33
     if self.block.round().step == Step::Propose {
@@ -778,15 +798,22 @@ impl<N: Network + 'static> TendermintMachine<N> {
       let (valid, err) = match self.network.validate(block).await {
         Ok(_) => (true, Ok(None)),
         Err(BlockError::Temporal) => (false, Ok(None)),
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
         Err(BlockError::Fatal) => (false, {
           log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
           Err(TendermintError::Malicious(proposer))
         }),
+=======
+        Err(BlockError::Fatal) => (false, Err(TendermintError::Malicious(proposer))),
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
       };
       // Create a raw vote which only requires block validity as a basis for the actual vote.
       let raw_vote = Some(block.id()).filter(|_| valid);
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+=======
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
       // If locked is none, it has a round of -1 according to the protocol. That satisfies
       // 23 and 29. If it's some, both are satisfied if they're for the same ID. If it's some
       // with different IDs, the function on 22 rejects yet the function on 28 has one other
@@ -797,7 +824,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
       if let Some(vr) = vr {
         // Malformed message
         if vr.0 >= self.block.round().number.0 {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
           log::warn!(target: "tendermint", "Validator claimed a round from the future was valid");
+=======
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
           Err(TendermintError::Malicious(msg.sender))?;
         }
 
@@ -806,22 +836,29 @@ impl<N: Network + 'static> TendermintMachine<N> {
           // This is the other condition described above
           if let Some((locked_round, _)) = self.block.locked.as_ref() {
             vote = vote.or_else(|| raw_vote.filter(|_| locked_round.0 <= vr.0));
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 =======
         if let Some(vr) = vr {
           // Malformed message
           if vr.0 >= self.block.round().number.0 {
             Err(TendermintError::Malicious(msg.sender))?;
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
           }
 
           self.broadcast(Data::Prevote(vote));
           return err;
         }
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+=======
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
       } else {
         self.broadcast(Data::Prevote(vote));
         return err;
       }
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 =======
       } else if self
         .block
@@ -832,11 +869,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
       {
         // 36-43
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
 
       return Ok(None);
     }
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+=======
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
     if self
       .block
       .valid
@@ -845,6 +887,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       .unwrap_or(true)
     {
       // 36-43
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 
       // The run once condition is implemented above. Since valid will always be set by this, it
       // not being set, or only being set historically, means this has yet to be run
@@ -881,6 +924,17 @@ impl<N: Network + 'static> TendermintMachine<N> {
             return Ok(None);
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
           }
+=======
+
+      // The run once condition is implemented above. Since valid will always be set by this, it
+      // not being set, or only being set historically, means this has yet to be run
+
+      if self.block.log.has_consensus(self.block.round().number, Data::Prevote(Some(block.id()))) {
+        match self.network.validate(block).await {
+          Ok(_) => (),
+          Err(BlockError::Temporal) => (),
+          Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,
+>>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
         };
 
         self.block.valid = Some((self.block.round().number, block.clone()));
