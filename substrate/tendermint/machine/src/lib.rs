@@ -381,7 +381,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   // Returns Ok(true) if this was a Precommit which had its signature validated
-  // Returns Ok(false) if the signature wasn't validated yet
+  // Returns Ok(false) if it wasn't a Precommit or the signature wasn't validated yet
   // Returns Err if the signature was invalid
   fn verify_precommit_signature(
     &self,
@@ -469,6 +469,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
             } else {
               // Remove the message so it isn't counted towards forming a commit/included in one
               // This won't remove the fact the precommitted for this block hash in the MessageLog
+              // TODO: Don't even log these in the first place until we jump, preventing needing
+              // to do this in the first place
               self
                 .block
                 .log
@@ -518,83 +520,90 @@ impl<N: Network + 'static> TendermintMachine<N> {
       self.block.round_mut().set_timeout(Step::Precommit);
     }
 
+    // All further operations require actually having the proposal in question
     let proposer = self.weights.proposer(self.block.number, self.block.round().number);
-    if let Some(Data::Proposal(vr, block)) =
+    let (vr, block) = if let Some(Data::Proposal(vr, block)) =
       self.block.log.get(self.block.round().number, proposer, Step::Propose)
     {
-      // 22-33
-      if self.block.round().step == Step::Propose {
-        // Delay error handling (triggering a slash) until after we vote.
-        let (valid, err) = match self.network.validate(block).await {
-          Ok(_) => (true, Ok(None)),
-          Err(BlockError::Temporal) => (false, Ok(None)),
-          Err(BlockError::Fatal) => (false, Err(TendermintError::Malicious(proposer))),
-        };
-        // Create a raw vote which only requires block validity as a basis for the actual vote.
-        let raw_vote = Some(block.id()).filter(|_| valid);
+      (vr, block)
+    } else {
+      return Ok(None);
+    };
 
-        // If locked is none, it has a round of -1 according to the protocol. That satisfies
-        // 23 and 29. If it's some, both are satisfied if they're for the same ID. If it's some
-        // with different IDs, the function on 22 rejects yet the function on 28 has one other
-        // condition
-        let locked = self.block.locked.as_ref().map(|(_, id)| id == &block.id()).unwrap_or(true);
-        let mut vote = raw_vote.filter(|_| locked);
+    // 22-33
+    if self.block.round().step == Step::Propose {
+      // Delay error handling (triggering a slash) until after we vote.
+      let (valid, err) = match self.network.validate(block).await {
+        Ok(_) => (true, Ok(None)),
+        Err(BlockError::Temporal) => (false, Ok(None)),
+        Err(BlockError::Fatal) => (false, Err(TendermintError::Malicious(proposer))),
+      };
+      // Create a raw vote which only requires block validity as a basis for the actual vote.
+      let raw_vote = Some(block.id()).filter(|_| valid);
 
-        if let Some(vr) = vr {
-          // Malformed message
-          if vr.0 >= self.block.round().number.0 {
-            Err(TendermintError::Malicious(msg.sender))?;
+      // If locked is none, it has a round of -1 according to the protocol. That satisfies
+      // 23 and 29. If it's some, both are satisfied if they're for the same ID. If it's some
+      // with different IDs, the function on 22 rejects yet the function on 28 has one other
+      // condition
+      let locked = self.block.locked.as_ref().map(|(_, id)| id == &block.id()).unwrap_or(true);
+      let mut vote = raw_vote.filter(|_| locked);
+
+      if let Some(vr) = vr {
+        // Malformed message
+        if vr.0 >= self.block.round().number.0 {
+          Err(TendermintError::Malicious(msg.sender))?;
+        }
+
+        if self.block.log.has_consensus(*vr, Data::Prevote(Some(block.id()))) {
+          // Allow differing locked values if the proposal has a newer valid round
+          // This is the other condition described above
+          if let Some((locked_round, _)) = self.block.locked.as_ref() {
+            vote = vote.or_else(|| raw_vote.filter(|_| locked_round.0 <= vr.0));
           }
 
-          if self.block.log.has_consensus(*vr, Data::Prevote(Some(block.id()))) {
-            // Allow differing locked values if the proposal has a newer valid round
-            // This is the other condition described above
-            if let Some((locked_round, _)) = self.block.locked.as_ref() {
-              vote = vote.or_else(|| raw_vote.filter(|_| locked_round.0 <= vr.0));
-            }
-
-            self.broadcast(Data::Prevote(vote));
-            return err;
-          }
-        } else {
           self.broadcast(Data::Prevote(vote));
           return err;
         }
-      } else if self
-        .block
-        .valid
-        .as_ref()
-        .map(|(round, _)| round != &self.block.round().number)
-        .unwrap_or(true)
-      {
-        // 36-43
+      } else {
+        self.broadcast(Data::Prevote(vote));
+        return err;
+      }
 
-        // The run once condition is implemented above. Sinve valid will always be set, it not
-        // being set, or only being set historically, means this has yet to be run
+      return Ok(None);
+    }
 
-        if self.block.log.has_consensus(self.block.round().number, Data::Prevote(Some(block.id())))
-        {
-          match self.network.validate(block).await {
-            Ok(_) => (),
-            Err(BlockError::Temporal) => (),
-            Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,
-          };
+    if self
+      .block
+      .valid
+      .as_ref()
+      .map(|(round, _)| round != &self.block.round().number)
+      .unwrap_or(true)
+    {
+      // 36-43
 
-          self.block.valid = Some((self.block.round().number, block.clone()));
-          if self.block.round().step == Step::Prevote {
-            self.block.locked = Some((self.block.round().number, block.id()));
-            self.broadcast(Data::Precommit(Some((
-              block.id(),
-              self
-                .signer
-                .sign(&commit_msg(
-                  self.block.end_time[&self.block.round().number].canonical(),
-                  block.id().as_ref(),
-                ))
-                .await,
-            ))));
-            return Ok(None);
-          }
+      // The run once condition is implemented above. Since valid will always be set by this, it
+      // not being set, or only being set historically, means this has yet to be run
+
+      if self.block.log.has_consensus(self.block.round().number, Data::Prevote(Some(block.id()))) {
+        match self.network.validate(block).await {
+          Ok(_) => (),
+          Err(BlockError::Temporal) => (),
+          Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,
+        };
+
+        self.block.valid = Some((self.block.round().number, block.clone()));
+        if self.block.round().step == Step::Prevote {
+          self.block.locked = Some((self.block.round().number, block.id()));
+          self.broadcast(Data::Precommit(Some((
+            block.id(),
+            self
+              .signer
+              .sign(&commit_msg(
+                self.block.end_time[&self.block.round().number].canonical(),
+                block.id().as_ref(),
+              ))
+              .await,
+          ))));
         }
       }
     }
