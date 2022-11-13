@@ -380,13 +380,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
     }
   }
 
+  // Returns Ok(true) if this was a Precommit which had its signature validated
+  // Returns Ok(false) if the signature wasn't validated yet
+  // Returns Err if the signature was invalid
   fn verify_precommit_signature(
     &self,
     sender: N::ValidatorId,
     round: RoundNumber,
     data: &DataFor<N>,
-  ) -> Result<(), TendermintError<N::ValidatorId>> {
-    if let Data::Precommit(Some((id, sig))) = data {
+  ) -> Result<bool, TendermintError<N::ValidatorId>> {
+    Ok(if let Data::Precommit(Some((id, sig))) = data {
       // Also verify the end_time of the commit
       // Only perform this verification if we already have the end_time
       // Else, there's a DoS where we receive a precommit for some round infinitely in the future
@@ -395,9 +398,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
         if !self.validators.verify(sender, &commit_msg(end_time.canonical(), id.as_ref()), sig) {
           Err(TendermintError::Malicious(sender))?;
         }
+        true
+      } else {
+        false
       }
-    }
-    Ok(())
+    } else {
+      false
+    })
   }
 
   async fn message(
@@ -456,7 +463,21 @@ impl<N: Network + 'static> TendermintMachine<N> {
         let round_msgs = self.block.log.log[&msg.round].clone();
         for (validator, msgs) in &round_msgs {
           if let Some(data) = msgs.get(&Step::Precommit) {
-            if self.verify_precommit_signature(*validator, msg.round, data).is_err() {
+            if let Ok(res) = self.verify_precommit_signature(*validator, msg.round, data) {
+              // Ensure this actually verified the signature instead of believing it shouldn't yet
+              debug_assert!(res);
+            } else {
+              // Remove the message so it isn't counted towards forming a commit/included in one
+              // This won't remove the fact the precommitted for this block hash in the MessageLog
+              self
+                .block
+                .log
+                .log
+                .get_mut(&msg.round)
+                .unwrap()
+                .get_mut(validator)
+                .unwrap()
+                .remove(&Step::Precommit);
               self.slash(*validator).await;
             }
           }
