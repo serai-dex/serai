@@ -19,7 +19,6 @@ mod time;
 use time::{sys_time, CanonicalInstant};
 
 mod round;
-use round::RoundData;
 
 mod block;
 use block::BlockData;
@@ -108,6 +107,21 @@ enum TendermintError<V: ValidatorId> {
   Temporal,
 }
 
+// Type aliases to abstract over generic hell
+pub(crate) type DataFor<N> =
+  Data<<N as Network>::Block, <<N as Network>::SignatureScheme as SignatureScheme>::Signature>;
+pub(crate) type MessageFor<N> = Message<
+  <N as Network>::ValidatorId,
+  <N as Network>::Block,
+  <<N as Network>::SignatureScheme as SignatureScheme>::Signature,
+>;
+/// Type alias to the SignedMessage type for a given Network
+pub type SignedMessageFor<N> = SignedMessage<
+  <N as Network>::ValidatorId,
+  <N as Network>::Block,
+  <<N as Network>::SignatureScheme as SignatureScheme>::Signature,
+>;
+
 /// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
   network: N,
@@ -115,11 +129,8 @@ pub struct TendermintMachine<N: Network> {
   validators: N::SignatureScheme,
   weights: Arc<N::Weights>,
 
-  queue:
-    VecDeque<Message<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>>,
-  msg_recv: mpsc::UnboundedReceiver<
-    SignedMessage<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
-  >,
+  queue: VecDeque<MessageFor<N>>,
+  msg_recv: mpsc::UnboundedReceiver<SignedMessageFor<N>>,
   step_recv: mpsc::UnboundedReceiver<(Commit<N::SignatureScheme>, N::Block)>,
 
   block: BlockData<N>,
@@ -128,13 +139,7 @@ pub struct TendermintMachine<N: Network> {
 pub type StepSender<N> =
   mpsc::UnboundedSender<(Commit<<N as Network>::SignatureScheme>, <N as Network>::Block)>;
 
-pub type MessageSender<N> = mpsc::UnboundedSender<
-  SignedMessage<
-    <N as Network>::ValidatorId,
-    <N as Network>::Block,
-    <<N as Network>::SignatureScheme as SignatureScheme>::Signature,
-  >,
->;
+pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
 
 /// A Tendermint machine and its channel to receive messages from the gossip layer over.
 pub struct TendermintHandle<N: Network> {
@@ -148,58 +153,20 @@ pub struct TendermintHandle<N: Network> {
 }
 
 impl<N: Network + 'static> TendermintMachine<N> {
-  fn broadcast(
-    &mut self,
-    data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
-  ) {
-    if let Some(validator_id) = self.block.validator_id {
-      // 27, 33, 41, 46, 60, 64
-      self.block.round_mut().step = data.step();
-      self.queue.push_back(Message {
-        sender: validator_id,
-        number: self.block.number,
-        round: self.block.round().number,
-        data,
-      });
-    }
-  }
-
-  fn populate_end_time(&mut self, round: RoundNumber) {
-    for r in (self.block.round().number.0 + 1) .. round.0 {
-      self.block.end_time.insert(
-        RoundNumber(r),
-        RoundData::<N>::new(RoundNumber(r), self.block.end_time[&RoundNumber(r - 1)]).end_time(),
-      );
+  fn broadcast(&mut self, data: DataFor<N>) {
+    if let Some(msg) = self.block.message(data) {
+      self.queue.push_back(msg);
     }
   }
 
   // Start a new round. Returns true if we were the proposer
   fn round(&mut self, round: RoundNumber, time: Option<CanonicalInstant>) -> bool {
-    // If skipping rounds, populate end_time
-    if round.0 != 0 {
-      self.populate_end_time(round);
-    }
-
-    // 11-13
-    self.block.round = Some(RoundData::<N>::new(
-      round,
-      time.unwrap_or_else(|| self.block.end_time[&RoundNumber(round.0 - 1)]),
-    ));
-    self.block.end_time.insert(round, self.block.round().end_time());
-
-    // 14-21
-    if Some(self.weights.proposer(self.block.number, self.block.round().number)) ==
-      self.block.validator_id
+    if let Some(data) =
+      self.block.new_round(round, self.weights.proposer(self.block.number, round), time)
     {
-      let (round, block) = if let Some((round, block)) = &self.block.valid {
-        (Some(*round), block.clone())
-      } else {
-        (None, self.block.proposal.clone())
-      };
-      self.broadcast(Data::Proposal(round, block));
+      self.broadcast(data);
       true
     } else {
-      self.block.round_mut().set_timeout(Step::Propose);
       false
     }
   }
@@ -207,7 +174,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   // 53-54
   async fn reset(&mut self, end_round: RoundNumber, proposal: N::Block) {
     // Ensure we have the end time data for the last round
-    self.populate_end_time(end_round);
+    self.block.populate_end_time(end_round);
 
     // Sleep until this round ends
     let round_end = self.block.end_time[&end_round];
@@ -233,7 +200,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // If this commit is for a round we don't have, jump up to it
     while self.block.end_time[&round].canonical() < commit.end_time {
       round.0 += 1;
-      self.populate_end_time(round);
+      self.block.populate_end_time(round);
     }
     // If this commit is for a prior round, find it
     while self.block.end_time[&round].canonical() > commit.end_time {
@@ -417,7 +384,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     &self,
     sender: N::ValidatorId,
     round: RoundNumber,
-    data: &Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
+    data: &DataFor<N>,
   ) -> Result<(), TendermintError<N::ValidatorId>> {
     if let Data::Precommit(Some((id, sig))) = data {
       // Also verify the end_time of the commit
@@ -435,7 +402,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   async fn message(
     &mut self,
-    msg: Message<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
+    msg: MessageFor<N>,
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
     if msg.number != self.block.number {
       Err(TendermintError::Temporal)?;

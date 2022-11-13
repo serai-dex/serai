@@ -11,7 +11,7 @@ use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{
-  ext::*, SignedMessage, StepSender, MessageSender, TendermintMachine, TendermintHandle,
+  ext::*, SignedMessageFor, StepSender, MessageSender, TendermintMachine, TendermintHandle,
 };
 
 type TestValidatorId = u16;
@@ -120,7 +120,7 @@ impl Network for TestNetwork {
     TestWeights
   }
 
-  async fn broadcast(&mut self, msg: SignedMessage<TestValidatorId, Self::Block, [u8; 32]>) {
+  async fn broadcast(&mut self, msg: SignedMessageFor<Self>) {
     for (messages, _) in self.1.write().await.iter_mut() {
       messages.send(msg.clone()).await.unwrap();
     }

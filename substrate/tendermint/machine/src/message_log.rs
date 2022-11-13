@@ -1,6 +1,6 @@
 use std::{sync::Arc, collections::HashMap};
 
-use crate::{ext::*, RoundNumber, Step, Data, Message, TendermintError};
+use crate::{ext::*, RoundNumber, Step, Data, DataFor, MessageFor, TendermintError};
 
 pub(crate) struct MessageLog<N: Network> {
   weights: Arc<N::Weights>,
@@ -8,13 +8,7 @@ pub(crate) struct MessageLog<N: Network> {
     N::ValidatorId,
     (<N::Block as Block>::Id, <N::SignatureScheme as SignatureScheme>::Signature),
   >,
-  pub(crate) log: HashMap<
-    RoundNumber,
-    HashMap<
-      N::ValidatorId,
-      HashMap<Step, Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>>,
-    >,
-  >,
+  pub(crate) log: HashMap<RoundNumber, HashMap<N::ValidatorId, HashMap<Step, DataFor<N>>>>,
 }
 
 impl<N: Network> MessageLog<N> {
@@ -25,7 +19,7 @@ impl<N: Network> MessageLog<N> {
   // Returns true if it's a new message
   pub(crate) fn log(
     &mut self,
-    msg: Message<N::ValidatorId, N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
+    msg: MessageFor<N>,
   ) -> Result<bool, TendermintError<N::ValidatorId>> {
     let round = self.log.entry(msg.round).or_insert_with(HashMap::new);
     let msgs = round.entry(msg.sender).or_insert_with(HashMap::new);
@@ -55,11 +49,7 @@ impl<N: Network> MessageLog<N> {
 
   // For a given round, return the participating weight for this step, and the weight agreeing with
   // the data.
-  pub(crate) fn message_instances(
-    &self,
-    round: RoundNumber,
-    data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
-  ) -> (u64, u64) {
+  pub(crate) fn message_instances(&self, round: RoundNumber, data: DataFor<N>) -> (u64, u64) {
     let mut participating = 0;
     let mut weight = 0;
     for (participant, msgs) in &self.log[&round] {
@@ -97,11 +87,7 @@ impl<N: Network> MessageLog<N> {
   }
 
   // Check if consensus has been reached on a specific piece of data
-  pub(crate) fn has_consensus(
-    &self,
-    round: RoundNumber,
-    data: Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>,
-  ) -> bool {
+  pub(crate) fn has_consensus(&self, round: RoundNumber, data: DataFor<N>) -> bool {
     let (_, weight) = self.message_instances(round, data);
     weight >= self.weights.threshold()
   }
@@ -111,7 +97,7 @@ impl<N: Network> MessageLog<N> {
     round: RoundNumber,
     sender: N::ValidatorId,
     step: Step,
-  ) -> Option<&Data<N::Block, <N::SignatureScheme as SignatureScheme>::Signature>> {
+  ) -> Option<&DataFor<N>> {
     self.log.get(&round).and_then(|round| round.get(&sender).and_then(|msgs| msgs.get(&step)))
   }
 }

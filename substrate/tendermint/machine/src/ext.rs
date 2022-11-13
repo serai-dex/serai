@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use parity_scale_codec::{Encode, Decode};
 
-use crate::{SignedMessage, commit_msg};
+use crate::{SignedMessageFor, commit_msg};
 
 /// An alias for a series of traits required for a type to be usable as a validator ID,
 /// automatically implemented for all types satisfying those traits.
@@ -249,14 +249,7 @@ pub trait Network: Send + Sync {
   /// established, this will double-authenticate. Switching to unauthenticated channels in a system
   /// already providing authenticated channels is not recommended as this is a minor, temporal
   /// inefficiency while downgrading channels may have wider implications.
-  async fn broadcast(
-    &mut self,
-    msg: SignedMessage<
-      Self::ValidatorId,
-      Self::Block,
-      <Self::SignatureScheme as SignatureScheme>::Signature,
-    >,
-  );
+  async fn broadcast(&mut self, msg: SignedMessageFor<Self>);
 
   /// Trigger a slash for the validator in question who was definitively malicious.
   /// The exact process of triggering a slash is undefined and left to the network as a whole.
