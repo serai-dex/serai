@@ -579,7 +579,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   // Returns Ok(true) if this was a Precommit which had its signature validated
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   // Returns Ok(false) if it wasn't a Precommit or the signature wasn't validated yet
+=======
+  // Returns Ok(false) if the signature wasn't validated yet
+>>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
   // Returns Err if the signature was invalid
   fn verify_precommit_signature(
     &self,
@@ -587,11 +591,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
     round: RoundNumber,
     data: &DataFor<N>,
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   ) -> Result<bool, TendermintError<N::ValidatorId>> {
 =======
   ) -> Result<(), TendermintError<N::ValidatorId>> {
 >>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
     if let Data::Precommit(Some((id, sig))) = data {
+=======
+  ) -> Result<bool, TendermintError<N::ValidatorId>> {
+    Ok(if let Data::Precommit(Some((id, sig))) = data {
+>>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
       // Also verify the end_time of the commit
       // Only perform this verification if we already have the end_time
       // Else, there's a DoS where we receive a precommit for some round infinitely in the future
@@ -601,10 +610,20 @@ impl<N: Network + 'static> TendermintMachine<N> {
           log::warn!(target: "tendermint", "Validator produced an invalid commit signature");
           Err(TendermintError::Malicious(sender))?;
         }
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
         return Ok(true);
       }
     }
     Ok(false)
+=======
+        true
+      } else {
+        false
+      }
+    } else {
+      false
+    })
+>>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
   }
 
   async fn message(
@@ -672,8 +691,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
             } else {
               // Remove the message so it isn't counted towards forming a commit/included in one
               // This won't remove the fact the precommitted for this block hash in the MessageLog
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
               // TODO: Don't even log these in the first place until we jump, preventing needing
               // to do this in the first place
+=======
+>>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
               self
                 .block
                 .log
