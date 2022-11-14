@@ -1,6 +1,6 @@
 #!/bin/bash
 if [[ -z $VALIDATOR ]]; then
-    serai-node --chain $CHAIN --name $NAME
+    serai-node --tmp --chain $CHAIN --name $NAME
 else
-    serai-node --chain $CHAIN --$NAME
+    serai-node --tmp --chain $CHAIN --$NAME
 fi
