@@ -59,10 +59,10 @@ pub type PendingCoins = GenericCoins<PendingBatch>;
 #[derive(Encode, sp_runtime::RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Decode, thiserror::Error))]
 pub enum InherentError {
-  #[cfg_attr(feature = "std", error("unrecognized call"))]
-  UnrecognizedCall,
+  #[cfg_attr(feature = "std", error("invalid call"))]
+  InvalidCall,
   #[cfg_attr(feature = "std", error("inherent has {0} coins despite us having {1}"))]
-  UnrecognizedCoins(u32, u32),
+  InvalidCoins(u32, u32),
   #[cfg_attr(feature = "std", error("inherent has height {0} despite us having {1}"))]
   UnrecognizedHeight(u32, u32),
   #[cfg_attr(feature = "std", error("inherent has height {0} which doesn't succeed {1}"))]
@@ -77,7 +77,16 @@ pub enum InherentError {
 
 impl IsFatalError for InherentError {
   fn is_fatal_error(&self) -> bool {
-    true
+    match self {
+      InherentError::InvalidCall | InherentError::InvalidCoins(..) => true,
+      InherentError::UnrecognizedHeight(..) => false,
+      InherentError::InvalidHeight(..) => true,
+      InherentError::UnrecognizedBatch(..) => false,
+      InherentError::InvalidBatch(..) => true,
+      // One of our nodes is definitively wrong. If it's ours (signified by it passing consensus),
+      // we should panic
+      InherentError::DifferentBatch(..) => false,
+    }
   }
 }
 
@@ -190,11 +199,11 @@ pub mod pallet {
         // Match to be exhaustive
         let coins = match call {
           Call::execute { ref coins } => coins,
-          _ => Err(InherentError::UnrecognizedCall)?,
+          _ => Err(InherentError::InvalidCall)?,
         };
 
         if coins.len() != pending.len() {
-          Err(InherentError::UnrecognizedCoins(
+          Err(InherentError::InvalidCoins(
             coins.len().try_into().unwrap(),
             pending.len().try_into().unwrap(),
           ))?;
