@@ -326,6 +326,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
   }
 
   async fn slash(&mut self, _validator: u16) {
+    // TODO
     todo!()
   }
 
