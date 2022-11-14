@@ -2,7 +2,6 @@ mod core;
 mod health;
 mod observer;
 mod kafka;
-mod message_box_example;
 
 use std::thread;
 use std::io::Write;
@@ -65,6 +64,9 @@ async fn main() {
     // Start Network Broker
 
     // Hang on cli
+
+    // Core Key Gen
+    core::instantiate_keys();
 
     // Kafka Test
     kafka::start();

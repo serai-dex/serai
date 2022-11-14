@@ -8,6 +8,17 @@ use env_logger::Builder;
 use log::info;
 use log::{LevelFilter, Record};
 
+// Key Generation
+use message_box;
+use std::alloc::System;
+use zeroize::Zeroize;
+use zalloc::ZeroizingAlloc;
+use group::ff::PrimeField;
+#[global_allocator]
+static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
+
+
+
 // All asynchronous processes follow a pattern to modularly
 // create, start, and stop their various underlying components.
 // for example, the core module will use this pattern to start the
@@ -366,5 +377,47 @@ impl CoordinatorConfig {
   // get the observer config
   pub fn get_observer(&self) -> ObserverConfig {
     self.observer.clone()
+  }
+}
+
+// Generates Private / Public key pair
+pub fn instantiate_keys(){
+  // A_PRIV and B_PRIV are dynamic testing keys for kafka
+  let a_priv_check = env::var("A_PRIV");
+  if (a_priv_check.is_err()) {
+    const A_PRIV: &'static str = "543600cc54df140d0186f604b3a606cb3d2103327106703e80c183a481cf2a09";
+    env::set_var("A_PRIV", A_PRIV);
+  }
+
+  let a_pub_check = env::var("A_PUB");
+  if (a_pub_check.is_err()) {
+    const A_PUB: &'static str = "ecb27e79e414f51ed0b1b14502611247a99fc81a58ff78604cb7789aaceebf02";
+    env::set_var("A_PUB", A_PUB);
+  }
+
+  let b_priv_check = env::var("B_PRIV");
+  if (b_priv_check.is_err()) {
+    const B_PRIV: &'static str = "db97aa4549842b113bf502ec47905a31c0a97837dcaa8e59ed0f12ee6b33a60c";
+    env::set_var("B_PRIV", B_PRIV);
+  }
+
+  let b_pub_check = env::var("B_PUB");
+  if (b_pub_check.is_err()) {
+    const B_PUB: &'static str = "bc5e598f9337bb98b0e58b4b62fd99f2ccefbc5d4befbfe1e16dcbebab44115c";
+    env::set_var("B_PUB", B_PUB);
+  }
+
+  // Checks if coordinator keys are set
+  let coord_priv_check = env::var("COORD_PRIV");
+  if (coord_priv_check.is_err()) {
+    //println!("Generating new coordinator keys");
+    let (private, public) = message_box::key_gen();
+    let mut private_bytes = unsafe { private.inner().to_repr() };
+    //println!("Private: {}", hex::encode(private_bytes.as_ref()));
+    private_bytes.zeroize();
+    //println!("Public: {}", hex::encode(public.to_bytes()));
+
+    env::set_var("COORD_PRIV", hex::encode(private_bytes.as_ref()));
+    env::set_var("COORD_PUB",  hex::encode(public.to_bytes()));
   }
 }
