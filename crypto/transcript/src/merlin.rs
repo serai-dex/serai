@@ -6,8 +6,8 @@ use crate::Transcript;
 pub struct MerlinTranscript(pub merlin::Transcript);
 // Merlin doesn't implement Debug so provide a stub which won't panic
 impl Debug for MerlinTranscript {
-  fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-    Ok(())
+  fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt.debug_struct("MerlinTranscript").finish()
   }
 }
 
@@ -27,8 +27,8 @@ impl Transcript for MerlinTranscript {
     self.append_message(b"dom-sep", label);
   }
 
-  fn append_message(&mut self, label: &'static [u8], message: &[u8]) {
-    self.0.append_message(label, message);
+  fn append_message<M: AsRef<[u8]>>(&mut self, label: &'static [u8], message: M) {
+    self.0.append_message(label, message.as_ref());
   }
 
   fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge {

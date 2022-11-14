@@ -1,8 +1,9 @@
+use core::ops::Deref;
 use std::io::{self, Read, Write};
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use group::{
   ff::{Field, PrimeField},
@@ -12,6 +13,8 @@ use group::{
 use multiexp::BatchVerifier;
 
 use ciphersuite::Ciphersuite;
+
+pub mod aggregate;
 
 #[cfg(test)]
 mod tests;
@@ -44,11 +47,16 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
   }
 
   /// Sign a Schnorr signature with the given nonce for the specified challenge.
-  pub fn sign(mut private_key: C::F, mut nonce: C::F, challenge: C::F) -> SchnorrSignature<C> {
-    let res = SchnorrSignature { R: C::generator() * nonce, s: nonce + (private_key * challenge) };
-    private_key.zeroize();
-    nonce.zeroize();
-    res
+  pub fn sign(
+    private_key: &Zeroizing<C::F>,
+    nonce: Zeroizing<C::F>,
+    challenge: C::F,
+  ) -> SchnorrSignature<C> {
+    SchnorrSignature {
+      // Uses deref instead of * as * returns C::F yet deref returns &C::F, preventing a copy
+      R: C::generator() * nonce.deref(),
+      s: (challenge * private_key.deref()) + nonce.deref(),
+    }
   }
 
   /// Verify a Schnorr signature for the given key with the specified challenge.

@@ -1,5 +1,5 @@
+use core::{marker::PhantomData, ops::Deref};
 use std::{
-  marker::PhantomData,
   io::{self, Read, Write},
   sync::Arc,
   collections::HashMap,
@@ -29,8 +29,8 @@ pub trait CiphersuitePromote<C2: Ciphersuite> {
 
 fn transcript<G: GroupEncoding>(key: G, i: u16) -> RecommendedTranscript {
   let mut transcript = RecommendedTranscript::new(b"FROST Generator Update");
-  transcript.append_message(b"group_key", key.to_bytes().as_ref());
-  transcript.append_message(b"participant", &i.to_be_bytes());
+  transcript.append_message(b"group_key", key.to_bytes());
+  transcript.append_message(b"participant", i.to_be_bytes());
   transcript
 }
 
@@ -82,7 +82,7 @@ where
   ) -> (GeneratorPromotion<C1, C2>, GeneratorProof<C1>) {
     // Do a DLEqProof for the new generator
     let proof = GeneratorProof {
-      share: C2::generator() * base.secret_share(),
+      share: C2::generator() * base.secret_share().deref(),
       proof: DLEqProof::prove(
         rng,
         &mut transcript(base.core.group_key(), base.params().i),
@@ -120,7 +120,11 @@ where
     }
 
     Ok(ThresholdKeys {
-      core: Arc::new(ThresholdCore::new(params, self.base.secret_share(), verification_shares)),
+      core: Arc::new(ThresholdCore::new(
+        params,
+        self.base.secret_share().clone(),
+        verification_shares,
+      )),
       offset: None,
     })
   }
