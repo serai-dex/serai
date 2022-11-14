@@ -79,7 +79,7 @@ async fn get_proposal<T: TendermintValidator>(
   env: &Arc<Mutex<T::Environment>>,
   import: &TendermintImport<T>,
   header: &<T::Block as Block>::Header,
-  stub: bool
+  stub: bool,
 ) -> T::Block {
   let proposer =
     env.lock().await.init(header).await.expect("Failed to create a proposer for the new block");
