@@ -242,7 +242,7 @@ pub mod pallet {
               }
             }
 
-            // TODO: Accept this if voted on by the validator set which does validate this coin
+            // TODO: Accept this if voted on by the validator set which validates this coin
             (Some(coin), None) => {
               Err(InherentError::UnrecognizedBatch(c, coin.batches.len().try_into().unwrap()))?
             }
@@ -255,8 +255,8 @@ pub mod pallet {
       Ok(())
     }
 
-    fn is_inherent(call: &Self::Call) -> bool {
-      matches!(call, Call::execute { .. })
+    fn is_inherent(_: &Self::Call) -> bool {
+      true
     }
   }
 }
