@@ -176,7 +176,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     let (gossip_tx, mut gossip_rx) = mpsc::unbounded();
 
     // Create the Tendermint machine
-    let TendermintHandle { mut messages, machine } = {
+    let TendermintHandle { mut step, mut messages, machine } = {
       // Set this struct as active
       *self.import.providers.write().await = Some(providers);
       self.active = Some(ActiveAuthority {

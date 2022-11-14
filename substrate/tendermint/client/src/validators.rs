@@ -15,7 +15,7 @@ use sp_api::{BlockId, ProvideRuntimeApi};
 
 use sc_client_api::HeaderBackend;
 
-use tendermint_machine::ext::{BlockNumber, Round, Weights, Signer, SignatureScheme};
+use tendermint_machine::ext::{BlockNumber, RoundNumber, Weights, Signer, SignatureScheme};
 
 use sp_tendermint::TendermintApi;
 
@@ -186,7 +186,7 @@ impl<T: TendermintClient> Weights for TendermintValidators<T> {
   }
 
   // TODO
-  fn proposer(&self, number: BlockNumber, round: Round) -> u16 {
+  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> u16 {
     u16::try_from(
       (number.0 + u64::from(round.0)) % u64::try_from(self.0.read().unwrap().lookup.len()).unwrap(),
     )
