@@ -229,17 +229,17 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Received a message
         msg = recv.next() => {
           if let Some(msg) = msg {
-            messages.send(match SignedMessage::decode(&mut msg.message.as_ref()) {
-          Ok(msg) => msg,
-          Err(e) => {
-            // This is guaranteed to be valid thanks to to the gossip validator, assuming
-              // that pipeline is correct. That's why this doesn't panic
-              error!(target: "tendermint", "Couldn't decode valid message: {}", e);
-              continue;
-            }
-          })
-          .await
-        .unwrap()
+            messages.send(
+              match SignedMessage::decode(&mut msg.message.as_ref()) {
+                Ok(msg) => msg,
+                Err(e) => {
+                  // This is guaranteed to be valid thanks to to the gossip validator, assuming
+                  // that pipeline is correct. This doesn't panic as a hedge
+                  error!(target: "tendermint", "Couldn't decode valid message: {}", e);
+                  continue;
+                }
+              }
+            ).await.unwrap()
           } else {
             break;
           }
