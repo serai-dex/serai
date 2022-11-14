@@ -224,6 +224,14 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Synced a block from the network
         notif = finality.next() => {
           if let Some(notif) = notif {
+            let new_number = match (*notif.header.number()).try_into() {
+              Ok(number) => number,
+              Err(_) => panic!("BlockNumber exceeded u64"),
+            };
+            if new_number <= *number.read().unwrap() {
+              continue;
+            }
+
             let justifications = import.client.justifications(notif.hash).unwrap().unwrap();
             step.send((
               Commit::decode(&mut justifications.get(CONSENSUS_ID).unwrap().as_ref()).unwrap(),
@@ -232,10 +240,6 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
               get_proposal(&env, &import, &notif.header, false).await
             )).await.unwrap();
 
-            let new_number = match (*notif.header.number()).try_into() {
-              Ok(number) => number,
-              Err(_) => panic!("BlockNumber exceeded u64"),
-            };
             *number.write().unwrap() = new_number;
             recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number))
           } else {
