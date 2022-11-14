@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use sp_api::BlockId;
 use sp_runtime::traits::{Header, Block};
 use sp_blockchain::{BlockStatus, HeaderBackend, Backend as BlockchainBackend};
-use sp_consensus::{Error, CacheKeyId, SelectChain};
+use sp_consensus::{Error, CacheKeyId, BlockOrigin, SelectChain};
 
 use sc_consensus::{BlockCheckParams, BlockImportParams, ImportResult, BlockImport, Verifier};
 
@@ -86,6 +86,44 @@ where
     &mut self,
     mut block: BlockImportParams<T::Block, ()>,
   ) -> Result<(BlockImportParams<T::Block, ()>, Option<Vec<(CacheKeyId, Vec<u8>)>>), String> {
+    block.origin = match block.origin {
+      BlockOrigin::Genesis => BlockOrigin::Genesis,
+      BlockOrigin::NetworkBroadcast => BlockOrigin::NetworkBroadcast,
+
+      // Re-map NetworkInitialSync to NetworkBroadcast so it still triggers notifications
+      // Tendermint will listen to the finality stream. If we sync a block we're running a machine
+      // for, it'll force the machine to move ahead. We can only do that if there actually are
+      // notifications
+      //
+      // Then Serai also runs data indexing code based on block addition, so ensuring it always
+      // emits events ensures we always perform our necessary indexing (albeit with a race
+      // condition since Substrate will eventually prune the block's state, potentially before
+      // indexing finishes when syncing)
+      //
+      // The alternative to this would be editing Substrate directly, which would be a lot less
+      // fragile, manually triggering the notifications (which may be possible with code intended
+      // for testing), writing our own notification system, or implementing lock_import_and_run
+      // on our end, letting us directly set the notifications, so we're not beholden to when
+      // Substrate decides to call notify_finalized
+      //
+      // TODO: Call lock_import_and_run on our end, which already may be needed for safety reasons
+      BlockOrigin::NetworkInitialSync => BlockOrigin::NetworkBroadcast,
+      // Also re-map File so bootstraps also trigger notifications, enabling safely using
+      // bootstraps
+      BlockOrigin::File => BlockOrigin::NetworkBroadcast,
+
+      // We do not want this block, which hasn't been confirmed, to be broadcast over the net
+      // Substrate will generate notifications unless it's Genesis, which this isn't, InitialSync,
+      // which changes telemetry behavior, or File, which is... close enough
+      //
+      // Even if we do manually implement lock_import_and_run, Substrate will still override
+      // our notifications if it believes it should provide notifications. That means we *still*
+      // have to keep this patch, with all its fragility, unless we edit Substrate or move the
+      // the entire block import flow under Serai
+      BlockOrigin::ConsensusBroadcast => BlockOrigin::File,
+      BlockOrigin::Own => BlockOrigin::File,
+    };
+
     if self.check_already_in_chain(block.header.hash()) {
       return Ok((block, None));
     }

@@ -310,10 +310,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     *self.import.importing_block.write().unwrap() = Some(hash);
 
     queue_write.as_mut().unwrap().import_blocks(
-      // We do not want this block, which hasn't been confirmed, to be broadcast over the net
-      // Substrate will generate notifications unless it's Genesis, which this isn't, InitialSync,
-      // which changes telemtry behavior, or File, which is... close enough
-      BlockOrigin::File,
+      BlockOrigin::ConsensusBroadcast, // TODO: Use BlockOrigin::Own when it's our block
       vec![IncomingBlock {
         hash,
         header: Some(header),
