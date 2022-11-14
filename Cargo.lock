@@ -10366,6 +10366,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "yap"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fc77f52dc9e9b10d55d3f4462c3b7fc393c4f17975d641542833ab2d3bc26ef"
+
+[[package]]
 name = "zalloc"
 version = "0.1.0"
 dependencies = [
