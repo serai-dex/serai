@@ -7,7 +7,7 @@ use sp_blockchain::HeaderBackend;
 use sp_api::{StateBackend, StateBackendFor, TransactionFor, ApiExt, ProvideRuntimeApi};
 use sp_consensus::{Error, Environment};
 
-use sc_client_api::{BlockBackend, Backend, Finalizer};
+use sc_client_api::{BlockBackend, Backend, Finalizer, BlockchainEvents};
 use sc_block_builder::BlockBuilderApi;
 use sc_consensus::{BlockImport, BasicQueue};
 
@@ -81,6 +81,7 @@ pub trait TendermintClient: Send + Sync + 'static {
     + BlockBackend<Self::Block>
     + BlockImport<Self::Block, Transaction = Self::BackendTransaction>
     + Finalizer<Self::Block, Self::Backend>
+    + BlockchainEvents<Self::Block>
     + ProvideRuntimeApi<Self::Block, Api = Self::Api>
     + 'static;
 }
@@ -100,6 +101,7 @@ pub trait TendermintClientMinimal: Send + Sync + 'static {
     + BlockBackend<Self::Block>
     + BlockImport<Self::Block, Transaction = TransactionFor<Self::Client, Self::Block>>
     + Finalizer<Self::Block, Self::Backend>
+    + BlockchainEvents<Self::Block>
     + ProvideRuntimeApi<Self::Block, Api = Self::Api>
     + 'static;
 }
