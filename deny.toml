@@ -13,10 +13,6 @@ yanked = "deny"
 notice = "warn"
 unmaintained = "warn"
 
-ignore = [
-  "RUSTSEC-2020-0071", # https://github.com/chronotope/chrono/issues/602
-]
-
 [licenses]
 unlicensed = "deny"
 
@@ -77,4 +73,6 @@ skip-tree = []
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = ["https://github.com/serai-dex/substrate", "https://github.com/zip-rs/zip"]
+allow-git = [
+  "https://github.com/serai-dex/substrate",
+]
