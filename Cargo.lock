@@ -1595,6 +1595,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "digest_auth"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa30657988b2ced88f68fe490889e739bf98d342916c33ed3100af1d6f1cbc9c"
+dependencies = [
+ "digest 0.9.0",
+ "hex",
+ "md-5 0.9.1",
+ "rand 0.8.5",
+ "sha2 0.9.9",
+]
+
+[[package]]
 name = "directories"
 version = "4.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2206,7 +2219,7 @@ dependencies = [
  "glob",
  "hex",
  "home",
- "md-5",
+ "md-5 0.10.5",
  "num_cpus",
  "once_cell",
  "path-slash",
@@ -4425,6 +4438,17 @@ dependencies = [
 
 [[package]]
 name = "md-5"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5a279bb9607f9f53c22d496eade00d138d1bdcccd07d74650387cf94942a15"
+dependencies = [
+ "block-buffer 0.9.0",
+ "digest 0.9.0",
+ "opaque-debug 0.3.0",
+]
+
+[[package]]
+name = "md-5"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6365506850d44bff6e2fbcb5176cf63650e48bd45ef2fe2665ae1570e0f4b9ca"
@@ -4638,6 +4662,7 @@ dependencies = [
  "blake2",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
+ "digest_auth",
  "dleq",
  "flexible-transcript",
  "group",

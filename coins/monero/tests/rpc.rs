@@ -11,7 +11,7 @@ use monero_serai::{
 };
 
 pub async fn rpc() -> Rpc {
-  let rpc = Rpc::new("http://127.0.0.1:18081".to_string());
+  let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
 
   // Only run once
   if rpc.get_height().await.unwrap() != 1 {

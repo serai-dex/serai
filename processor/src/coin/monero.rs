@@ -70,7 +70,7 @@ pub struct Monero {
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    Monero { rpc: Rpc::new(url), view: additional_key::<Monero>(0).0 }
+    Monero { rpc: Rpc::new(url).unwrap(), view: additional_key::<Monero>(0).0 }
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {

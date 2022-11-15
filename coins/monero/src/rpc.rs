@@ -7,7 +7,8 @@ use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
-use reqwest;
+use digest_auth::AuthContext;
+use reqwest::{Client, RequestBuilder};
 
 use crate::{
   Protocol,
@@ -72,11 +73,47 @@ fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Rpc(String);
+pub struct Rpc {
+  client: Client,
+  userpass: Option<(String, String)>,
+  url: String,
+}
 
 impl Rpc {
-  pub fn new(daemon: String) -> Rpc {
-    Rpc(daemon)
+  /// Create a new RPC connection.
+  /// A daemon requiring authentication can be used via including the username and password in the
+  /// URL.
+  pub fn new(mut url: String) -> Result<Rpc, RpcError> {
+    // Parse out the username and password
+    let userpass = if url.contains('@') {
+      let url_clone = url.clone();
+      let split_url = url_clone.split('@').collect::<Vec<_>>();
+      if split_url.len() != 2 {
+        Err(RpcError::InvalidNode)?;
+      }
+      let mut userpass = split_url[0];
+      url = split_url[1].to_string();
+
+      // If there was additionally a protocol string, restore that to the daemon URL
+      if userpass.contains("://") {
+        let split_userpass = userpass.split("://").collect::<Vec<_>>();
+        if split_userpass.len() != 2 {
+          Err(RpcError::InvalidNode)?;
+        }
+        url = split_userpass[0].to_string() + "://" + &url;
+        userpass = split_userpass[1];
+      }
+
+      let split_userpass = userpass.split(':').collect::<Vec<_>>();
+      if split_userpass.len() != 2 {
+        Err(RpcError::InvalidNode)?;
+      }
+      Some((split_userpass[0].to_string(), split_userpass[1].to_string()))
+    } else {
+      None
+    };
+
+    Ok(Rpc { client: Client::new(), userpass, url })
   }
 
   /// Perform a RPC call to the specified method with the provided parameters.
@@ -87,8 +124,7 @@ impl Rpc {
     method: &str,
     params: Option<Params>,
   ) -> Result<Response, RpcError> {
-    let client = reqwest::Client::new();
-    let mut builder = client.post(self.0.clone() + "/" + method);
+    let mut builder = self.client.post(self.url.clone() + "/" + method);
     if let Some(params) = params.as_ref() {
       builder = builder.json(params);
     }
@@ -115,16 +151,35 @@ impl Rpc {
     method: &str,
     params: Vec<u8>,
   ) -> Result<Response, RpcError> {
-    let client = reqwest::Client::new();
-    let builder = client.post(self.0.clone() + "/" + method).body(params);
+    let builder = self.client.post(self.url.clone() + "/" + method).body(params.clone());
     self.call_tail(method, builder.header("Content-Type", "application/octet-stream")).await
   }
 
   async fn call_tail<Response: DeserializeOwned + Debug>(
     &self,
     method: &str,
-    builder: reqwest::RequestBuilder,
+    mut builder: RequestBuilder,
   ) -> Result<Response, RpcError> {
+    if let Some((user, pass)) = &self.userpass {
+      let req = self.client.post(&self.url).send().await.map_err(|_| RpcError::InvalidNode)?;
+      // Only provide authentication if this daemon actually expects it
+      if let Some(header) = req.headers().get("www-authenticate") {
+        builder = builder.header(
+          "Authorization",
+          digest_auth::parse(header.to_str().map_err(|_| RpcError::InvalidNode)?)
+            .map_err(|_| RpcError::InvalidNode)?
+            .respond(&AuthContext::new_post::<_, _, _, &[u8]>(
+              user,
+              pass,
+              "/".to_string() + method,
+              None,
+            ))
+            .map_err(|_| RpcError::InvalidNode)?
+            .to_header_string(),
+        );
+      }
+    }
+
     let res = builder.send().await.map_err(|_| RpcError::ConnectionError)?;
 
     Ok(if !method.ends_with(".bin") {
