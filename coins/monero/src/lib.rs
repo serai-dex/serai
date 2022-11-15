@@ -56,7 +56,7 @@ mod tests;
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 #[allow(non_camel_case_types)]
 pub enum Protocol {
-  Unsupported,
+  Unsupported(usize),
   v14,
   v16,
   Custom { ring_len: usize, bp_plus: bool },
@@ -66,7 +66,7 @@ impl Protocol {
   /// Amount of ring members under this protocol version.
   pub fn ring_len(&self) -> usize {
     match self {
-      Protocol::Unsupported => panic!("Unsupported protocol version"),
+      Protocol::Unsupported(_) => panic!("Unsupported protocol version"),
       Protocol::v14 => 11,
       Protocol::v16 => 16,
       Protocol::Custom { ring_len, .. } => *ring_len,
@@ -77,7 +77,7 @@ impl Protocol {
   /// This method will likely be reworked when versions not using Bulletproofs at all are added.
   pub fn bp_plus(&self) -> bool {
     match self {
-      Protocol::Unsupported => panic!("Unsupported protocol version"),
+      Protocol::Unsupported(_) => panic!("Unsupported protocol version"),
       Protocol::v14 => false,
       Protocol::v16 => true,
       Protocol::Custom { bp_plus, .. } => *bp_plus,

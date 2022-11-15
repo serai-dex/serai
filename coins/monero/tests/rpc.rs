@@ -28,7 +28,7 @@ pub async fn rpc() -> Rpc {
   // Mine 20 blocks to ensure decoy availability
   mine_block(&rpc, &addr).await.unwrap();
   mine_block(&rpc, &addr).await.unwrap();
-  assert!(!matches!(rpc.get_protocol().await.unwrap(), Protocol::Unsupported));
+  assert!(!matches!(rpc.get_protocol().await.unwrap(), Protocol::Unsupported(_)));
 
   rpc
 }

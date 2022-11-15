@@ -212,7 +212,7 @@ impl Rpc {
       {
         13 | 14 => Protocol::v14,
         15 | 16 => Protocol::v16,
-        _ => Protocol::Unsupported,
+        version => Protocol::Unsupported(version),
       },
     )
   }
