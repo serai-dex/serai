@@ -5,7 +5,7 @@ use thiserror::Error;
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use reqwest;
 
@@ -79,10 +79,9 @@ impl Rpc {
     Rpc(daemon)
   }
 
-  /// Perform a RPC call to the specific method with the provided parameters (JSON-encoded).
-  /// This is NOT a JSON-RPC call, which requires setting a method of "json_rpc" and properly
-  /// formatting the request.
-  // TODO: Offer jsonrpc_call
+  /// Perform a RPC call to the specified method with the provided parameters.
+  /// This is NOT a JSON-RPC call, which use a method of "json_rpc" and are available via
+  /// `json_rpc_call`.
   pub async fn rpc_call<Params: Serialize + Debug, Response: DeserializeOwned + Debug>(
     &self,
     method: &str,
@@ -95,6 +94,19 @@ impl Rpc {
     }
 
     self.call_tail(method, builder).await
+  }
+
+  /// Perform a JSON-RPC call to the specified method with the provided parameters
+  pub async fn json_rpc_call<Response: DeserializeOwned + Debug>(
+    &self,
+    method: &str,
+    params: Option<Value>,
+  ) -> Result<Response, RpcError> {
+    let mut req = json!({ "method": method });
+    if let Some(params) = params {
+      req.as_object_mut().unwrap().insert("params".into(), params);
+    }
+    Ok(self.rpc_call::<_, JsonRpcResponse<Response>>("json_rpc", Some(req)).await?.result)
   }
 
   /// Perform a binary call to the specified method with the provided parameters.
@@ -138,14 +150,8 @@ impl Rpc {
 
     Ok(
       match self
-        .rpc_call::<_, JsonRpcResponse<LastHeaderResponse>>(
-          "json_rpc",
-          Some(json!({
-            "method": "get_last_block_header"
-          })),
-        )
+        .json_rpc_call::<LastHeaderResponse>("get_last_block_header", None)
         .await?
-        .result
         .block_header
         .major_version
       {
@@ -232,20 +238,10 @@ impl Rpc {
       blob: String,
     }
 
-    let block: JsonRpcResponse<BlockResponse> = self
-      .rpc_call(
-        "json_rpc",
-        Some(json!({
-          "method": "get_block",
-          "params": {
-            "height": height
-          }
-        })),
-      )
-      .await?;
-
+    let block: BlockResponse =
+      self.json_rpc_call("get_block", Some(json!({ "height": height }))).await?;
     Ok(
-      Block::deserialize(&mut std::io::Cursor::new(rpc_hex(&block.result.blob)?))
+      Block::deserialize(&mut std::io::Cursor::new(rpc_hex(&block.blob)?))
         .expect("Monero returned a block we couldn't deserialize"),
     )
   }
@@ -303,23 +299,20 @@ impl Rpc {
       distributions: Vec<Distribution>,
     }
 
-    let mut distributions: JsonRpcResponse<Distributions> = self
-      .rpc_call(
-        "json_rpc",
+    let mut distributions: Distributions = self
+      .json_rpc_call(
+        "get_output_distribution",
         Some(json!({
-          "method": "get_output_distribution",
-          "params": {
-            "binary": false,
-            "amounts": [0],
-            "cumulative": true,
-            "from_height": from,
-            "to_height": to
-          }
+          "binary": false,
+          "amounts": [0],
+          "cumulative": true,
+          "from_height": from,
+          "to_height": to,
         })),
       )
       .await?;
 
-    Ok(distributions.result.distributions.swap_remove(0).distribution)
+    Ok(distributions.distributions.swap_remove(0).distribution)
   }
 
   /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if they're
@@ -396,16 +389,8 @@ impl Rpc {
       quantization_mask: u64,
     }
 
-    let res: JsonRpcResponse<FeeResponse> = self
-      .rpc_call(
-        "json_rpc",
-        Some(json!({
-          "method": "get_fee_estimate"
-        })),
-      )
-      .await?;
-
-    Ok(Fee { per_weight: res.result.fee, mask: res.result.quantization_mask })
+    let res: FeeResponse = self.json_rpc_call("get_fee_estimate", None).await?;
+    Ok(Fee { per_weight: res.fee, mask: res.quantization_mask })
   }
 
   pub async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
