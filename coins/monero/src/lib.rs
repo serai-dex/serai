@@ -59,6 +59,7 @@ pub enum Protocol {
   Unsupported,
   v14,
   v16,
+  Custom { ring_len: usize, bp_plus: bool },
 }
 
 impl Protocol {
@@ -68,6 +69,7 @@ impl Protocol {
       Protocol::Unsupported => panic!("Unsupported protocol version"),
       Protocol::v14 => 11,
       Protocol::v16 => 16,
+      Protocol::Custom { ring_len, .. } => *ring_len,
     }
   }
 
@@ -78,6 +80,7 @@ impl Protocol {
       Protocol::Unsupported => panic!("Unsupported protocol version"),
       Protocol::v14 => false,
       Protocol::v16 => true,
+      Protocol::Custom { bp_plus, .. } => *bp_plus,
     }
   }
 }
