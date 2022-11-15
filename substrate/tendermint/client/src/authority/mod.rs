@@ -325,8 +325,9 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     }
   }
 
-  async fn slash(&mut self, _validator: u16) {
+  async fn slash(&mut self, validator: u16) {
     // TODO
+    error!("slashing {}, if this is a local network, this shouldn't happen", validator);
   }
 
   // The Tendermint machine will call add_block for any block which is committed to, regardless of
