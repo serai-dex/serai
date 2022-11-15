@@ -13,6 +13,10 @@ yanked = "deny"
 notice = "warn"
 unmaintained = "warn"
 
+ignore = [
+  "RUSTSEC-2020-0071", # https://github.com/chronotope/chrono/issues/602
+]
+
 [licenses]
 unlicensed = "deny"
 
