@@ -36,15 +36,11 @@ allow = [
   "GPL-3.0-or-later WITH Classpath-exception-2.0",
 ]
 
-deny = []
-
 copyleft = "warn"
 allow-osi-fsf-free = "neither"
 default = "deny"
 
-confidence-threshold = 0.8
 exceptions = [
-  #{ allow = ["Zlib"], name = "adler32", version = "*" },
 ]
 
 [[licenses.clarify]]
@@ -62,12 +58,6 @@ ignore = true
 multiple-versions = "warn"
 wildcards = "warn"
 highlight = "all"
-
-allow = []
-deny = []
-
-skip = []
-skip-tree = []
 
 [sources]
 unknown-registry = "deny"
