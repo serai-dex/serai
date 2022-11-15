@@ -327,7 +327,6 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
 
   async fn slash(&mut self, _validator: u16) {
     // TODO
-    todo!()
   }
 
   // The Tendermint machine will call add_block for any block which is committed to, regardless of
