@@ -34,10 +34,10 @@ allow = [
   "OpenSSL",
 
   # Non-invasive copyleft
+  "MPL-2.0",
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
-  "GPL-3.0-only WITH Classpath-exception-2.0",
-  "GPL-3.0-or-later WITH Classpath-exception-2.0",
+  "GPL-3.0 WITH Classpath-exception-2.0",
 ]
 
 copyleft = "warn"
