@@ -15,7 +15,7 @@ pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
 /// Address encoding and decoding functionality.
 pub mod address;
-use address::{Network, AddressType, AddressMeta, Address};
+use address::{Network, AddressType, AddressMeta, MoneroAddress};
 
 mod scan;
 pub use scan::SpendableOutput;
@@ -180,23 +180,23 @@ impl Scanner {
   }
 
   /// Return the main address for this view pair.
-  pub fn address(&self) -> Address {
-    Address::new(
-      AddressMeta {
-        network: self.network,
-        kind: if self.burning_bug.is_none() {
+  pub fn address(&self) -> MoneroAddress {
+    MoneroAddress::new(
+      AddressMeta::new(
+        self.network,
+        if self.burning_bug.is_none() {
           AddressType::Featured(false, None, true)
         } else {
           AddressType::Standard
         },
-      },
+      ),
       self.pair.spend,
       &self.pair.view * &ED25519_BASEPOINT_TABLE,
     )
   }
 
   /// Return the specified subaddress for this view pair.
-  pub fn subaddress(&mut self, index: (u32, u32)) -> Address {
+  pub fn subaddress(&mut self, index: (u32, u32)) -> MoneroAddress {
     if index == (0, 0) {
       return self.address();
     }
@@ -204,15 +204,15 @@ impl Scanner {
     let spend = self.pair.spend + (&self.pair.subaddress(index) * &ED25519_BASEPOINT_TABLE);
     self.subaddresses.insert(spend.compress(), index);
 
-    Address::new(
-      AddressMeta {
-        network: self.network,
-        kind: if self.burning_bug.is_none() {
+    MoneroAddress::new(
+      AddressMeta::new(
+        self.network,
+        if self.burning_bug.is_none() {
           AddressType::Featured(true, None, true)
         } else {
           AddressType::Subaddress
         },
-      },
+      ),
       spend,
       self.pair.view * spend,
     )

@@ -6,7 +6,7 @@ use serde_json::json;
 
 use monero_serai::{
   Protocol, random_scalar,
-  wallet::address::{Network, AddressType, AddressMeta, Address},
+  wallet::address::{Network, AddressType, AddressMeta, MoneroAddress},
   rpc::{EmptyResponse, RpcError, Rpc},
 };
 
@@ -18,8 +18,8 @@ pub async fn rpc() -> Rpc {
     return rpc;
   }
 
-  let addr = Address {
-    meta: AddressMeta { network: Network::Mainnet, kind: AddressType::Standard },
+  let addr = MoneroAddress {
+    meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
     spend: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
     view: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
   }
