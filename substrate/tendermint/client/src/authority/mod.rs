@@ -58,7 +58,8 @@ struct ActiveAuthority<T: TendermintValidator> {
   signer: TendermintSigner<T>,
 
   // Notification channel for when we start a new number
-  new_number: UnboundedSender<u64>,
+  new_number: Arc<RwLock<u64>>,
+  new_number_event: UnboundedSender<()>,
   // Outgoing message queue, placed here as the GossipEngine itself can't be
   gossip: UnboundedSender<
     SignedMessage<u16, T::Block, <TendermintValidators<T> as SignatureScheme>::Signature>,
@@ -196,7 +197,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       self.active = Some(ActiveAuthority {
         signer: TendermintSigner(keys, self.import.validators.clone()),
 
-        new_number: new_number_tx,
+        new_number: number.clone(),
+        new_number_event: new_number_tx,
         gossip: gossip_tx,
 
         env: env.clone(),
@@ -226,25 +228,32 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Synced a block from the network
         notif = finality.next() => {
           if let Some(notif) = notif {
-            let mut new_number = match (*notif.header.number()).try_into() {
+            let this_number = match (*notif.header.number()).try_into() {
               Ok(number) => number,
               Err(_) => panic!("BlockNumber exceeded u64"),
             };
-            if new_number <= *number.read().unwrap() {
-              continue;
+
+            // There's a race condition between the machine add_block and this
+            // Both wait for a write lock on this number and don't release it until after updating
+            // it accordingly
+            {
+              let mut number = number.write().unwrap();
+              if this_number < *number {
+                continue;
+              }
+              let new_number = this_number + 1;
+              *number = new_number;
+              recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number));
             }
 
             let justifications = import.client.justifications(notif.hash).unwrap().unwrap();
             step.send((
+              BlockNumber(this_number),
               Commit::decode(&mut justifications.get(CONSENSUS_ID).unwrap().as_ref()).unwrap(),
               // This will fail if syncing occurs radically faster than machine stepping takes
               // TODO: Set true when initial syncing
               get_proposal(&env, &import, &notif.header, false).await
             )).await.unwrap();
-
-            new_number += 1;
-            *number.write().unwrap() = new_number;
-            recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number))
           } else {
             break;
           }
@@ -252,9 +261,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
 
         // Machine reached a new height
         new_number = new_number_rx.next() => {
-          if let Some(new_number) = new_number {
-            *number.write().unwrap() = new_number;
-            recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number))
+          if new_number.is_some() {
+            recv = gossip.messages_for(TendermintGossip::<T>::topic(*number.read().unwrap()));
           } else {
             break;
           }
@@ -351,6 +359,11 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     let parent = *header.parent_hash();
     let number = *header.number();
 
+    // Can happen when we sync a block while also acting as a validator
+    if number <= self.import.client.info().best_number {
+      Err(BlockError::Temporal)?;
+    }
+
     let mut queue_write = self.import.queue.write().await;
     *self.import.importing_block.write().unwrap() = Some(hash);
 
@@ -393,32 +406,47 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     let justification = (CONSENSUS_ID, commit.encode());
     debug_assert!(self.import.verify_justification(hash, &justification).is_ok());
 
-    self
-      .import
-      .client
-      .finalize_block(hash, Some(justification), true)
-      .map_err(|_| Error::InvalidJustification)
-      .unwrap();
-
-    // Clear any blocks for the previous height we were willing to recheck
-    *self.import.recheck.write().unwrap() = HashSet::new();
-
     let raw_number = *block.header().number();
-    let number: u64 = match raw_number.try_into() {
+    let this_number: u64 = match raw_number.try_into() {
       Ok(number) => number,
       Err(_) => panic!("BlockNumber exceeded u64"),
     };
+    let new_number = this_number + 1;
 
-    let active = self.active.as_mut().unwrap();
-    if active.new_number.unbounded_send(number + 1).is_err() {
-      warn!(
-        target: "tendermint",
-        "Attempted to send a new number to the gossip handler except it's closed. {}",
-        "Is the node shutting down?"
-      );
+    {
+      let active = self.active.as_mut().unwrap();
+      // Acquire the write lock
+      let mut number = active.new_number.write().unwrap();
+
+      // This block's number may not be the block we're working on if Substrate synced it before
+      // the machine synced the necessary precommits
+      if this_number == *number {
+        // If we are the party responsible for handling this block, finalize it
+        self
+          .import
+          .client
+          .finalize_block(hash, Some(justification), true)
+          .map_err(|_| Error::InvalidJustification)
+          .unwrap();
+
+        // Tell the loop there's a new number
+        *number = new_number;
+        if active.new_number_event.unbounded_send(()).is_err() {
+          warn!(
+            target: "tendermint",
+            "Attempted to send a new number to the gossip handler except it's closed. {}",
+            "Is the node shutting down?"
+          );
+        }
+      }
+
+      // Clear any blocks for the previous height we were willing to recheck
+      *self.import.recheck.write().unwrap() = HashSet::new();
+
+      // Announce the block to the network so new clients can sync properly
+      active.announce.announce_block(hash, None);
+      active.announce.new_best_block_imported(hash, raw_number);
     }
-    active.announce.announce_block(hash, None);
-    active.announce.new_best_block_imported(hash, raw_number);
 
     self.get_proposal(block.header()).await
   }

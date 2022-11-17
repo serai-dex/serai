@@ -131,13 +131,16 @@ pub struct TendermintMachine<N: Network> {
 
   queue: VecDeque<MessageFor<N>>,
   msg_recv: mpsc::UnboundedReceiver<SignedMessageFor<N>>,
-  step_recv: mpsc::UnboundedReceiver<(Commit<N::SignatureScheme>, N::Block)>,
+  step_recv: mpsc::UnboundedReceiver<(BlockNumber, Commit<N::SignatureScheme>, N::Block)>,
 
   block: BlockData<N>,
 }
 
-pub type StepSender<N> =
-  mpsc::UnboundedSender<(Commit<<N as Network>::SignatureScheme>, <N as Network>::Block)>;
+pub type StepSender<N> = mpsc::UnboundedSender<(
+  BlockNumber,
+  Commit<<N as Network>::SignatureScheme>,
+  <N as Network>::Block,
+)>;
 
 pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
 
@@ -284,7 +287,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Handle a new height occuring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
         msg = self.step_recv.next() => {
-          if let Some((commit, proposal)) = msg {
+          if let Some((block_number, commit, proposal)) = msg {
+            // Commit is for a block we've already moved past
+            if block_number != self.block.number {
+              continue;
+            }
             self.reset_by_commit(commit, proposal).await;
             None
           } else {
