@@ -118,8 +118,7 @@ dependencies = [
 [[package]]
 name = "array-bytes"
 version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a913633b0c922e6b745072795f50d90ebea78ba31a57e2ac8c2fc7b50950949"
+source = "git+https://github.com/hack-ink/array-bytes?rev=994cd29b66bd2ab5c8c15f0b15a1618d4bb2d94c#994cd29b66bd2ab5c8c15f0b15a1618d4bb2d94c"
 
 [[package]]
 name = "array-init"
