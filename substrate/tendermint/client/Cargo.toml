@@ -1,5 +1,5 @@
 [package]
-name = "sc_tendermint"
+name = "sc-tendermint"
 version = "0.1.0"
 description = "Tendermint client for Substrate"
 license = "AGPL-3.0-only"

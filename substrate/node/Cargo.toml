@@ -59,7 +59,7 @@ pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate
 sp-tendermint = { path = "../tendermint/primitives" }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 serai-runtime = { path = "../runtime" }
-sc_tendermint = { path = "../tendermint/client" }
+sc-tendermint = { path = "../tendermint/client" }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate.git" }

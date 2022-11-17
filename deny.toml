@@ -45,8 +45,11 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-extension" },
   { allow = ["AGPL-3.0"], name = "serai-multisig" },
 
+  { allow = ["AGPL-3.0"], name = "sp-tendermint" },
+  { allow = ["AGPL-3.0"], name = "pallet-tendermint" },
+  { allow = ["AGPL-3.0"], name = "sc-tendermint" },
+
   { allow = ["AGPL-3.0"], name = "serai-runtime" },
-  { allow = ["AGPL-3.0"], name = "serai-consensus" },
   { allow = ["AGPL-3.0"], name = "serai-node" },
 ]
 
