@@ -1,7 +1,8 @@
 mod core;
 mod health;
 mod observer;
-mod kafka;
+#[path = "kafka/test/kafka.rs"] mod kafka;
+#[path = "kafka/kafka_flow.rs"] mod kafka_flow;
 
 use std::thread;
 use std::io::Write;
@@ -68,6 +69,10 @@ async fn main() {
     // Core Key Gen
     core::instantiate_keys();
 
+    // Initialize Kafka
+    //kafka::start();
+
     // Kafka Test
-    kafka::start();
+    kafka_flow::start();
+
 }

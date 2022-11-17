@@ -407,7 +407,87 @@ pub fn instantiate_keys(){
     env::set_var("B_PUB", B_PUB);
   }
 
-  // Checks if coordinator keys are set
+  // Kafka Flow
+  
+  // Initializes BTC Message Box credentials
+  let btc_box_priv_check = env::var("BTC_BOX_PRIV");
+  if (btc_box_priv_check.is_err()) {
+    const BTC_BOX_PRIV: &'static str = "20e16728973325729556218324ae6aa4d45c165048e5ea088e625ca5ffdb280c";
+    env::set_var("BTC_BOX_PRIV", BTC_BOX_PRIV);
+  }
+
+  let btc_pub_check = env::var("BTC_BOX_PUB");
+  if (btc_pub_check.is_err()) {
+    const BTC_BOX_PUB: &'static str = "2a9881c66487861603a3049f1a2fa3b1587dba4ac67edbbbd860a003c28f561c";
+    env::set_var("BTC_BOX_PUB", BTC_BOX_PUB);
+  }
+
+  // Initializes ETH Message Box credentials
+  let eth_priv_check = env::var("ETH_BOX_PRIV");
+  if (eth_priv_check.is_err()) {
+    const ETH_BOX_PRIV: &'static str = "317bca0126576608a21e6deb0a93fae0b0dd594531eba7f39bc9a5df678cc209";
+    env::set_var("ETH_BOX_PRIV", ETH_BOX_PRIV);
+  }
+
+  let eth_pub_check = env::var("ETH_BOX_PUB");
+  if (eth_pub_check.is_err()) {
+    const ETH_BOX_PUB: &'static str = "b81a54e422a9c3291024f58c435c7a8237126a796630f92f0b0c260667443231";
+    env::set_var("ETH_BOX_PUB", ETH_BOX_PUB);
+  }
+
+  // Initializes XMR Message Box credentials
+  let xmr_priv_check = env::var("XMR_BOX_PRIV");
+  if (xmr_priv_check.is_err()) {
+    const XMR_BOX_PRIV: &'static str = "3c0a24ee04b8803d73eb686e7cadf6f266468023e656fdf097d4706e6276f30b";
+    env::set_var("XMR_BOX_PRIV", XMR_BOX_PRIV);
+  }
+
+  let xmr_pub_check = env::var("XMR_BOX_PUB");
+  if (xmr_pub_check.is_err()) {
+    const XMR_BOX_PUB: &'static str = "4e4fd2169ff07db08c65fedf83097481cdc5c4f5de27c2a37f1a8d82da6ad447";
+    env::set_var("XMR_BOX_PUB", XMR_BOX_PUB);
+  }
+
+  // Initializes Node Message Box credentials
+  let node_priv_check = env::var("NODE_BOX_PRIV");
+  if (node_priv_check.is_err()) {
+    const NODE_BOX_PRIV: &'static str = "8fa83f048c85fd920465f89ab4f71bd5b1c4484ab6a9e605ec996afc97f30201";
+    env::set_var("NODE_BOX_PRIV", NODE_BOX_PRIV);
+  }
+
+  let node_pub_check = env::var("NODE_BOX_PUB");
+  if (node_pub_check.is_err()) {
+    const NODE_BOX_PUB: &'static str = "1a94987e207fa960ce698c880b0ad23359562646db6c4b703650616fa03b1f0a";
+    env::set_var("NODE_BOX_PUB", NODE_BOX_PUB);
+  }
+
+  // Initializes Coordinator Message Box credentials
+  let coord_priv_check = env::var("COORD_BOX_PRIV");
+  if (coord_priv_check.is_err()) {
+    const COORD_BOX_PRIV: &'static str = "7d9cff45c6678111c998fde637bf19f958ff760e37fe1c238b333feb4ff9640f";
+    env::set_var("COORD_BOX_PRIV", COORD_BOX_PRIV);
+  }
+
+  let coord_pub_check = env::var("COORD_BOX_PUB");
+  if (coord_pub_check.is_err()) {
+    const COORD_BOX_PUB: &'static str = "3e2950d74aca927a675d16db9f625544335498aec2ce3b9b64bc30033558ee05";
+    env::set_var("COORD_BOX_PUB", COORD_BOX_PUB);
+  }
+
+  // Initializes Substrate Message Box credentials
+  let substate_priv_check = env::var("SUBSTRATE_BOX_PRIV");
+  if (substate_priv_check.is_err()) {
+    const SUBSTRATE_BOX_PRIV: &'static str = "62f25c3cfbd2f908df77a21ac3041d02601f58bf3805070bb2da4929616f0b04";
+    env::set_var("SUBSTRATE_BOX_PRIV", SUBSTRATE_BOX_PRIV);
+  }
+
+  let substrate_pub_check = env::var("SUBSTRATE_BOX_PUB");
+  if (substrate_pub_check.is_err()) {
+    const SUBSTRATE_BOX_PUB: &'static str = "8ead618c644f835b403523696423820d59f57f5df290954c8a02ca0e86d0730f";
+    env::set_var("SUBSTRATE_BOX_PUB", SUBSTRATE_BOX_PUB);
+  }
+
+  // Checks if coordinator test keys are set
   let coord_priv_check = env::var("COORD_PRIV");
   if (coord_priv_check.is_err()) {
     //println!("Generating new coordinator keys");

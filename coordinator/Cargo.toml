@@ -51,4 +51,6 @@ group = "0.12"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 zalloc = { path = "../common/zalloc" }
 
+tokio-test = "*"
+
 [workspace]
