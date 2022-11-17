@@ -226,7 +226,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Synced a block from the network
         notif = finality.next() => {
           if let Some(notif) = notif {
-            let new_number = match (*notif.header.number()).try_into() {
+            let mut new_number = match (*notif.header.number()).try_into() {
               Ok(number) => number,
               Err(_) => panic!("BlockNumber exceeded u64"),
             };
@@ -242,6 +242,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
               get_proposal(&env, &import, &notif.header, false).await
             )).await.unwrap();
 
+            new_number += 1;
             *number.write().unwrap() = new_number;
             recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number))
           } else {
