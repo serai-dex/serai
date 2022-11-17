@@ -47,12 +47,8 @@ jobs:
       - name: Install cargo deny
         run: cargo install --locked cargo-deny
 
-      # Doesn't run on advisores due to their frequency and general irrelevancy
-      # The official recommendation is to continue when they fail, yet you can't
-      # even open an issue when they do, making it pointless to have here
-      # GitHub will still alert us if an advisory appears
       - name: Run cargo deny
-        run: cargo deny -L error --all-features check licenses bans sources
+        run: cargo deny -L error --all-features check
 
   test:
     runs-on: ubuntu-latest
