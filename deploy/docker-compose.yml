@@ -10,6 +10,7 @@ volumes:
   serai-eve:
   serai-ferdie:
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 services:
 <<<<<<< HEAD
@@ -84,16 +85,19 @@ services:
 >>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
 =======
   genesis-service-volume:
+=======
+  genesis-volume:
+>>>>>>> 88aabde6 (rename genesis-service to genesis)
 
 services:
-  genesis-service:
-    image: serai-genesis-service:dev
+  genesis:
+    image: genesis:dev
     build:
-      context: ./genesis-service/
+      context: ./genesis/
       dockerfile: Dockerfile
     entrypoint: /entry-dev.sh
     volumes:
-      - genesis-service-volume:/temp
+      - genesis-volume:/temp
 
 >>>>>>> d2e0b58c (created shared volume between containers)
   _serai:
@@ -110,9 +114,9 @@ services:
     entrypoint: /scripts/entry-dev.sh
     volumes:
       - "./serai/scripts:/scripts"
-      - genesis-service-volume:/temp
+      - genesis-volume:/temp
     depends_on:
-      - genesis-service
+      - genesis
 
   serai-node:
     <<: *serai_defaults
