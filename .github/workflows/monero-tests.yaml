@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
@@ -37,8 +35,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
