@@ -4,6 +4,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 use std::{boxed::Box, sync::Arc};
 =======
 use std::{sync::Arc, future::Future};
@@ -64,6 +65,15 @@ use std::sync::Arc;
 >>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
 =======
 use std::{boxed::Box, sync::Arc, error::Error};
+=======
+use std::{
+  error::Error,
+  boxed::Box,
+  sync::Arc,
+  time::{UNIX_EPOCH, Duration},
+  str::FromStr,
+};
+>>>>>>> 426bacac (Pass in the genesis time to Substrate)
 
 use sp_runtime::traits::{Block as BlockTrait};
 use sp_inherents::CreateInherentDataProviders;
@@ -649,12 +659,23 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     task_manager.spawn_essential_handle().spawn(
       "tendermint",
       None,
+<<<<<<< HEAD
       TendermintAuthority::new(authority).authority(
 <<<<<<< HEAD
 <<<<<<< HEAD
         (0, keystore_container.keystore()),
 =======
 =======
+=======
+      TendermintAuthority::new(
+        Some(
+          UNIX_EPOCH +
+            Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
+        ),
+        authority,
+      )
+      .authority(
+>>>>>>> 426bacac (Pass in the genesis time to Substrate)
         tendermint_protocol,
 >>>>>>> 16a2c9a2 (Correct protocol name handling)
         keystore_container.keystore(),
