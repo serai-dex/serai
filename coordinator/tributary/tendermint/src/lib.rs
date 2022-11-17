@@ -157,20 +157,32 @@ pub struct TendermintMachine<N: Network> {
   queue: VecDeque<MessageFor<N>>,
   msg_recv: mpsc::UnboundedReceiver<SignedMessageFor<N>>,
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   synced_block_recv: mpsc::UnboundedReceiver<SyncedBlock<N>>,
   synced_block_result_send: mpsc::UnboundedSender<bool>,
 =======
   step_recv: mpsc::UnboundedReceiver<(Commit<N::SignatureScheme>, N::Block)>,
 >>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
+=======
+  step_recv: mpsc::UnboundedReceiver<(BlockNumber, Commit<N::SignatureScheme>, N::Block)>,
+>>>>>>> 26ad7c1d (Correct race conditions between add_block and step):substrate/tendermint/machine/src/lib.rs
 
   block: BlockData<N>,
 }
 
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 pub struct SyncedBlock<N: Network> {
   pub number: BlockNumber,
   pub block: <N as Network>::Block,
   pub commit: Commit<<N as Network>::SignatureScheme>,
 }
+=======
+pub type StepSender<N> = mpsc::UnboundedSender<(
+  BlockNumber,
+  Commit<<N as Network>::SignatureScheme>,
+  <N as Network>::Block,
+)>;
+>>>>>>> 26ad7c1d (Correct race conditions between add_block and step):substrate/tendermint/machine/src/lib.rs
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 pub type SyncedBlockSender<N> = mpsc::UnboundedSender<SyncedBlock<N>>;
@@ -468,8 +480,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Handle a new height occuring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
         msg = self.step_recv.next() => {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
           if let Some((commit, proposal)) = msg {
 >>>>>>> 2de4ab8c (Clear the Queue instead of draining and filtering):substrate/tendermint/machine/src/lib.rs
+=======
+          if let Some((block_number, commit, proposal)) = msg {
+            // Commit is for a block we've already moved past
+            if block_number != self.block.number {
+              continue;
+            }
+>>>>>>> 26ad7c1d (Correct race conditions between add_block and step):substrate/tendermint/machine/src/lib.rs
             self.reset_by_commit(commit, proposal).await;
             self.synced_block_result_send.send(true).await.unwrap();
             None
