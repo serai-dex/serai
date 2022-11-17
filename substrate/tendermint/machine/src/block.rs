@@ -59,7 +59,7 @@ impl<N: Network> BlockData<N> {
   }
 
   pub(crate) fn populate_end_time(&mut self, round: RoundNumber) {
-    for r in (self.round().number.0 + 1) .. round.0 {
+    for r in (self.round().number.0 + 1) ..= round.0 {
       self.end_time.insert(
         RoundNumber(r),
         RoundData::<N>::new(RoundNumber(r), self.end_time[&RoundNumber(r - 1)]).end_time(),
