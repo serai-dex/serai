@@ -1,5 +1,9 @@
 #!/bin/bash
 
+<<<<<<< HEAD
+=======
+export GENESIS=$(cat /temp/genesis)
+>>>>>>> 8c65e1bd (Complete the sh scripts)
 if [[ -z $VALIDATOR ]]; then
 <<<<<<< HEAD
 <<<<<<< HEAD
