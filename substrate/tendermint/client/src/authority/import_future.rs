@@ -28,7 +28,7 @@ impl<B: Block> Link<B> for ValidateLink<B> {
       B::Hash,
     )>,
   ) {
-    assert_eq!(imported, 1);
+    assert!(imported <= 1);
     assert_eq!(count, 1);
     self.0 = Some((
       results[0].1,
