@@ -1,4 +1,10 @@
-use std::{boxed::Box, sync::Arc, error::Error};
+use std::{
+  error::Error,
+  boxed::Box,
+  sync::Arc,
+  time::{UNIX_EPOCH, Duration},
+  str::FromStr,
+};
 
 use sp_runtime::traits::{Block as BlockTrait};
 use sp_inherents::CreateInherentDataProviders;
@@ -241,7 +247,14 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     task_manager.spawn_essential_handle().spawn(
       "tendermint",
       None,
-      TendermintAuthority::new(authority).authority(
+      TendermintAuthority::new(
+        Some(
+          UNIX_EPOCH +
+            Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
+        ),
+        authority,
+      )
+      .authority(
         tendermint_protocol,
         keystore_container.keystore(),
         Cidp,

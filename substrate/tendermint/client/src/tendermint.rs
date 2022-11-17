@@ -157,7 +157,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
 
     let commit: Commit<TendermintValidators<T>> =
       Commit::decode(&mut justification.1.as_ref()).map_err(|_| Error::InvalidJustification)?;
-    if !TendermintAuthority::new(self.clone()).verify_commit(hash, &commit) {
+    if !TendermintAuthority::new(None, self.clone()).verify_commit(hash, &commit) {
       Err(Error::InvalidJustification)?;
     }
     Ok(())

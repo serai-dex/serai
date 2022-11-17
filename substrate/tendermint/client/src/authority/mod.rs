@@ -71,6 +71,7 @@ struct ActiveAuthority<T: TendermintValidator> {
 
 /// Tendermint Authority. Participates in the block proposal and voting process.
 pub struct TendermintAuthority<T: TendermintValidator> {
+  genesis: Option<u64>,
   import: TendermintImport<T>,
   active: Option<ActiveAuthority<T>>,
 }
@@ -106,17 +107,18 @@ async fn get_proposal<T: TendermintValidator>(
 
 impl<T: TendermintValidator> TendermintAuthority<T> {
   /// Create a new TendermintAuthority.
-  pub fn new(import: TendermintImport<T>) -> Self {
-    Self { import, active: None }
+  pub fn new(genesis: Option<SystemTime>, import: TendermintImport<T>) -> Self {
+    Self {
+      genesis: genesis.map(|genesis| {
+        genesis.duration_since(UNIX_EPOCH).unwrap().as_secs() + u64::from(Self::block_time())
+      }),
+      import,
+      active: None,
+    }
   }
 
   fn get_last(&self) -> (<T::Block as Block>::Hash, (BlockNumber, u64)) {
     let info = self.import.client.info();
-
-    // TODO: Genesis start time + BLOCK_TIME
-    let mut fake_genesis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-    // Round up to the nearest 5s increment
-    fake_genesis += 5 - (fake_genesis % 5);
 
     (
       info.finalized_hash,
@@ -139,7 +141,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
             .as_ref(),
         )
         .map(|commit| commit.end_time)
-        .unwrap_or(fake_genesis),
+        .unwrap_or_else(|_| self.genesis.unwrap()),
       ),
     )
   }
