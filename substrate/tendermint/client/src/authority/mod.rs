@@ -402,18 +402,22 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     // Clear any blocks for the previous height we were willing to recheck
     *self.import.recheck.write().unwrap() = HashSet::new();
 
-    let number: u64 = match (*block.header().number()).try_into() {
+    let raw_number = *block.header().number();
+    let number: u64 = match raw_number.try_into() {
       Ok(number) => number,
       Err(_) => panic!("BlockNumber exceeded u64"),
     };
-    if self.active.as_mut().unwrap().new_number.unbounded_send(number + 1).is_err() {
+
+    let active = self.active.as_mut().unwrap();
+    if active.new_number.unbounded_send(number + 1).is_err() {
       warn!(
         target: "tendermint",
         "Attempted to send a new number to the gossip handler except it's closed. {}",
         "Is the node shutting down?"
       );
     }
-    self.active.as_ref().unwrap().announce.announce_block(hash, None);
+    active.announce.announce_block(hash, None);
+    active.announce.new_best_block_imported(hash, raw_number);
 
     self.get_proposal(block.header()).await
   }
