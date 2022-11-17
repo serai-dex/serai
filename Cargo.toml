@@ -21,6 +21,9 @@ members = [
 
   "processor",
 
+  "substrate/validator-sets/primitives",
+  "substrate/validator-sets/pallet",
+
   "substrate/tendermint/machine",
   "substrate/tendermint/primitives",
   "substrate/tendermint/client",
