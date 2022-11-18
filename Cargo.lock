@@ -8540,6 +8540,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-tendermint"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "hex",
+ "log",
+ "sc-block-builder",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-executor",
+ "sc-network",
+ "sc-network-common",
+ "sc-network-gossip",
+ "sc-service",
+ "sc-transaction-pool",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-inherents",
+ "sp-keystore",
+ "sp-runtime",
+ "sp-staking",
+ "sp-tendermint",
+ "substrate-prometheus-endpoint",
+ "tendermint-machine",
+ "tokio",
+]
+
+[[package]]
 name = "sc-tracing"
 version = "4.0.0-dev"
 <<<<<<< HEAD
@@ -8721,38 +8753,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "sc_tendermint"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "futures",
- "hex",
- "log",
- "sc-block-builder",
- "sc-client-api",
- "sc-consensus",
- "sc-executor",
- "sc-network",
- "sc-network-common",
- "sc-network-gossip",
- "sc-service",
- "sc-transaction-pool",
- "sp-api",
- "sp-application-crypto",
- "sp-blockchain",
- "sp-consensus",
- "sp-core",
- "sp-inherents",
- "sp-keystore",
- "sp-runtime",
- "sp-staking",
- "sp-tendermint",
- "substrate-prometheus-endpoint",
- "tendermint-machine",
- "tokio",
 ]
 
 [[package]]
@@ -9273,12 +9273,16 @@ dependencies = [
  "sc-rpc-api",
  "sc-service",
  "sc-telemetry",
+ "sc-tendermint",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
  "sc_tendermint",
 >>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
+=======
+>>>>>>> c7e97d95 (Update Cargo.lock)
  "serai-runtime",
  "sp-api",
  "sp-application-crypto",
