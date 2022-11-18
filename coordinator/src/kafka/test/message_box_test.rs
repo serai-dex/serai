@@ -10,12 +10,6 @@ use std::collections::HashMap;
 #[test]
 pub fn message_box_test() {
   println!("Starting External Message Box Test");
-  // let (private, public) = message_box::key_gen();
-  // let mut private_bytes = unsafe { private.inner().to_repr() };
-  // println!("Private: {}", hex::encode(private_bytes.as_ref()));
-  // private_bytes.zeroize();
-  // println!("Public: {}", hex::encode(public.to_bytes()));
-
   // ID used for Message Box A:
   // Priv: 7fa1d7740f43a3e897f2cb07b6124fcf05ac54b3bf8af7b78f2ce2806bae630b
   let A_ID_STR = "7028863a50b36889ac0861d782bfbde469ab989936aff4b8282a2af9cc1cfc23";
