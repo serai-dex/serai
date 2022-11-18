@@ -99,6 +99,8 @@ pub enum MessageError {
   Incomplete,
   #[error("invalid encoding")]
   InvalidEncoding,
+  #[error("invalid encoding")]
+  InvalidSignature,
 }
 
 /// A Secure Message, defined as being not only encrypted yet authenticated.
@@ -295,17 +297,17 @@ impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
   }
 
   /// Decrypt a message, returning the contained byte vector.
-  pub fn decrypt_to_bytes(&self, from: &K, msg: SecureMessage) -> Vec<u8> {
+  pub fn decrypt_to_bytes(&self, from: &K, msg: SecureMessage) -> Option<Vec<u8>> {
     if !msg.sig.verify(
       self.pub_keys[from],
       signature_challenge(&self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),
     ) {
-      panic!("unauthorized/unintended message entered into an authenticated system");
+      return None;
     }
 
     let SecureMessage { iv, mut ciphertext, .. } = msg;
     XChaCha20::new(&self.enc_keys[from], &iv).apply_keystream(ciphertext.as_mut());
-    ciphertext
+    Some(ciphertext)
   }
 }
 
