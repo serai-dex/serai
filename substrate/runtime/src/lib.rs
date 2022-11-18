@@ -341,6 +341,7 @@ impl assets::BenchmarkHelper<Coin> for SeraiAssetBenchmarkHelper {
   }
 }
 
+<<<<<<< HEAD
 impl assets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type Balance = SubstrateAmount;
@@ -439,6 +440,8 @@ impl authority_discovery::Config for Runtime {
 =======
 impl pallet_tendermint::Config for Runtime {}
 
+=======
+>>>>>>> 24a8c9f2 (Add staking to the runtime)
 const SESSION_LENGTH: BlockNumber = 5 * DAYS;
 type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
 
@@ -460,6 +463,12 @@ impl pallet_session::Config for Runtime {
   type Keys = SessionKeys;
   type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
+
+impl staking_pallet::Config for Runtime {
+  type Currency = Balances;
+}
+
+impl pallet_tendermint::Config for Runtime {}
 
 pub type Address = AccountId;
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
@@ -519,7 +528,9 @@ construct_runtime!(
     Balances: pallet_balances,
     TransactionPayment: pallet_transaction_payment,
     Contracts: pallet_contracts,
+
     Session: pallet_session,
+    Staking: staking_pallet,
     Tendermint: pallet_tendermint,
 >>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
   }

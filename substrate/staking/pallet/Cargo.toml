@@ -20,7 +20,7 @@ sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-staking-primitives = { path = "../primitives" }
+staking-primitives = { path = "../primitives", default-features = false }
 
 [features]
 std = [

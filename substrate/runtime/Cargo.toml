@@ -75,6 +75,7 @@ pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-featu
 pallet-authority-discovery = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+staking-pallet = { path = "../staking/pallet", default-features = false }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }

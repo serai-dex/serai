@@ -9445,6 +9445,7 @@ dependencies = [
  "sp-tendermint",
  "sp-transaction-pool",
  "sp-version",
+ "staking-pallet",
  "substrate-wasm-builder",
 ]
 
