@@ -48,7 +48,7 @@ impl PrivateKey {
 }
 
 /// Public Key for a Message Box.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
 pub struct PublicKey(RistrettoPoint);
 
 /// Generate a key pair
@@ -321,20 +321,20 @@ impl AsBytes for &'static str {
 }
 pub type InternalMessageBox = MessageBox<&'static str>;
 impl InternalMessageBox {
-  pub fn add(&mut self, name: &'static str, key: RistrettoPoint) {
-    self.add_internal(name, key);
+  pub fn add(&mut self, name: &'static str, key: PublicKey) {
+    self.add_internal(name, key.0);
   }
 }
 
-impl AsBytes for RistrettoPoint {
+impl AsBytes for PublicKey {
   type Output = [u8; 32];
   fn as_bytes(&self) -> Self::Output {
-    self.to_bytes()
+    self.0.to_bytes()
   }
 }
-pub type ExternalMessageBox = MessageBox<RistrettoPoint>;
+pub type ExternalMessageBox = MessageBox<PublicKey>;
 impl ExternalMessageBox {
-  pub fn add(&mut self, key: RistrettoPoint) {
-    self.add_internal(key, key);
+  pub fn add(&mut self, key: PublicKey) {
+    self.add_internal(key, key.0);
   }
 }
