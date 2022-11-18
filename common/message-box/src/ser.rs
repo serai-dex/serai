@@ -40,7 +40,7 @@ impl PrivateKey {
 impl PublicKey {
   /// Parse a Public Key from a string. Panics if an invalid key is used.
   #[allow(clippy::should_implement_trait)] // Differing return types
-  pub fn from_str(str: &str) -> Self {
+  pub fn from_trusted_str(str: &str) -> Self {
     Self::from_bytes(&hex::decode(str).unwrap().try_into().unwrap()).unwrap()
   }
 
@@ -120,10 +120,10 @@ impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
   }
 
   /// Decrypt a message, returning the contained value.
-  pub fn decrypt<T: DeserializeOwned>(&self, from: &K, msg: SecureMessage) -> T {
-    let bytes = self.decrypt_to_bytes(from, msg);
-    bincode::deserialize_from::<&mut &[u8], _>(&mut bytes.as_ref())
-      .expect("invalid value entered into authenticated system")
+  pub fn decrypt<T: DeserializeOwned>(&self, from: &K, msg: SecureMessage) -> Option<T> {
+    self
+      .decrypt_to_bytes(from, msg)
+      .and_then(|bytes| bincode::deserialize_from::<&mut &[u8], _>(&mut bytes.as_ref()).ok())
   }
 
   /// Encrypt a message and serialize it.
@@ -137,7 +137,7 @@ impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
     from: &K,
     mut msg: &[u8],
   ) -> Result<T, MessageError> {
-    SecureMessage::read(&mut msg).map(|msg| self.decrypt(from, msg))
+    self.decrypt(from, SecureMessage::read(&mut msg)?).ok_or(MessageError::InvalidSignature)
   }
 
   /// Encrypt a message, serialize it, and base64 encode it.

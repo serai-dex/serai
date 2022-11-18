@@ -36,7 +36,7 @@ macro_rules! message_box_test {
     {
       let msg = b"Hello, world!".to_vec();
       let enc = a_box.encrypt_bytes(&$B, msg.clone());
-      assert_eq!(msg, b_box.decrypt_to_bytes(&$A, enc.clone()));
+      assert_eq!(msg, b_box.decrypt_to_bytes(&$A, enc.clone()).unwrap());
 
       // Additionally test its serialize and serde support
       assert_eq!(enc, SecureMessage::new(enc.serialize()).unwrap());
@@ -46,7 +46,7 @@ macro_rules! message_box_test {
     // Generic API
     let msg = TestMessage { msg: "Hello, world!".into() };
     let enc = a_box.encrypt(&$B, &msg);
-    assert_eq!(msg, b_box.decrypt(&$A, enc));
+    assert_eq!(msg, b_box.decrypt(&$A, enc).unwrap());
 
     // Serialized API
     assert_eq!(msg, b_box.decrypt_from_slice(&$A, &a_box.encrypt_to_bytes(&$B, &msg)).unwrap());
