@@ -7253,6 +7253,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-tendermint"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "hex",
+ "log",
+ "sc-block-builder",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-executor",
+ "sc-network",
+ "sc-network-common",
+ "sc-network-gossip",
+ "sc-service",
+ "sc-transaction-pool",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-inherents",
+ "sp-keystore",
+ "sp-runtime",
+ "sp-staking",
+ "sp-tendermint",
+ "substrate-prometheus-endpoint",
+ "tendermint-machine",
+ "tokio",
+]
+
+[[package]]
 name = "sc-tracing"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
@@ -7346,38 +7378,6 @@ dependencies = [
  "log",
  "parking_lot 0.12.1",
  "prometheus",
-]
-
-[[package]]
-name = "sc_tendermint"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "futures",
- "hex",
- "log",
- "sc-block-builder",
- "sc-client-api",
- "sc-consensus",
- "sc-executor",
- "sc-network",
- "sc-network-common",
- "sc-network-gossip",
- "sc-service",
- "sc-transaction-pool",
- "sp-api",
- "sp-application-crypto",
- "sp-blockchain",
- "sp-consensus",
- "sp-core",
- "sp-inherents",
- "sp-keystore",
- "sp-runtime",
- "sp-staking",
- "sp-tendermint",
- "substrate-prometheus-endpoint",
- "tendermint-machine",
- "tokio",
 ]
 
 [[package]]
@@ -7636,9 +7636,9 @@ dependencies = [
  "sc-rpc-api",
  "sc-service",
  "sc-telemetry",
+ "sc-tendermint",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
- "sc_tendermint",
  "serai-runtime",
  "sp-api",
  "sp-application-crypto",
