@@ -15,10 +15,10 @@ const B: &'static str = "B";
 pub fn start() {
   // Parses ENV variables to proper priv/pub keys
   let A_PRIV = message_box::PrivateKey::from_string(env::var("A_PRIV").unwrap().to_string());
-  let A_PUB = message_box::PublicKey::from_str(&env::var("A_PUB").unwrap().to_string());
+  let A_PUB = message_box::PublicKey::from_trusted_str(&env::var("A_PUB").unwrap().to_string());
 
   let B_PRIV = message_box::PrivateKey::from_string(env::var("B_PRIV").unwrap().to_string());
-  let B_PUB = message_box::PublicKey::from_str(&env::var("B_PUB").unwrap().to_string());
+  let B_PUB = message_box::PublicKey::from_trusted_str(&env::var("B_PUB").unwrap().to_string());
 
   // Create a HashMap of each pair using service name and public key
   let mut a_others = HashMap::new();
@@ -52,7 +52,7 @@ pub fn start() {
 
       // Creates Message box used for decryption
       // I use REF to illustrate pulling env variables, there's existing A_PUB in scope
-      let A_PUB_REF = message_box::PublicKey::from_str(&env::var("A_PUB").unwrap().to_string());
+      let A_PUB_REF = message_box::PublicKey::from_trusted_str(&env::var("A_PUB").unwrap().to_string());
 
       let B_PRIV_REF =
         message_box::PrivateKey::from_string(env::var("B_PRIV").unwrap().to_string());

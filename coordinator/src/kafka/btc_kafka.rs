@@ -30,7 +30,7 @@ pub fn start() {
       dbg!(&encrypted_msg);
 
       // Creates Message box used for decryption
-      let A_PUB = message_box::PublicKey::from_str(&env::var("BTC_BOX_PUB").unwrap().to_string());
+      let A_PUB = message_box::PublicKey::from_trusted_str(&env::var("BTC_BOX_PUB").unwrap().to_string());
 
       let B_PRIV =
         message_box::PrivateKey::from_string(env::var("COORD_BOX_PRIV").unwrap().to_string());
@@ -53,11 +53,11 @@ pub fn start() {
 pub fn kafka_send_msg() {
   // Parses ENV variables to proper priv/pub keys
   let A_PRIV = message_box::PrivateKey::from_string(env::var("BTC_BOX_PRIV").unwrap().to_string());
-  let A_PUB = message_box::PublicKey::from_str(&env::var("BTC_BOX_PUB").unwrap().to_string());
+  let A_PUB = message_box::PublicKey::from_trusted_str(&env::var("BTC_BOX_PUB").unwrap().to_string());
 
   let B_PRIV =
     message_box::PrivateKey::from_string(env::var("COORD_BOX_PRIV").unwrap().to_string());
-  let B_PUB = message_box::PublicKey::from_str(&env::var("COORD_BOX_PUB").unwrap().to_string());
+  let B_PUB = message_box::PublicKey::from_trusted_str(&env::var("COORD_BOX_PUB").unwrap().to_string());
 
   // Create a HashMap of each pair using service name and public key
   let mut a_others = HashMap::new();
