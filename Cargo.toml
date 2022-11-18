@@ -32,6 +32,7 @@ members = [
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   "coordinator/tributary/tendermint",
   "coordinator/tributary",
   "coordinator",
@@ -51,6 +52,11 @@ members = [
 =======
   "substrate/tendermint",
 =======
+=======
+  "substrate/staking/primitives",
+  "substrate/staking/pallet",
+
+>>>>>>> 820618dd (Implement a basic staking pallet)
   "substrate/tendermint/machine",
   "substrate/tendermint/primitives",
   "substrate/tendermint/client",
