@@ -4,6 +4,8 @@ mod observer;
 #[path = "kafka/test/kafka.rs"] mod kafka;
 #[path = "kafka/kafka_flow.rs"] mod kafka_flow;
 #[path = "kafka/test/message_box_test.rs"] mod message_box_test;
+#[path = "kafka/test/consumer_test.rs"] mod consumer_test;
+
 
 use std::thread;
 use std::io::Write;
@@ -68,15 +70,14 @@ async fn main() {
     // Hang on cli
 
     // Core Key Gen
-    //core::instantiate_keys();
+    core::instantiate_keys();
 
     // Initialize Kafka
     //kafka::start();
 
-    // Kafka Test
-    // kafka_flow::start();
-
     // Message Box Test
-    message_box_test::start();
+    //message_box_test::start();
 
+    // Kafka Consumer Test
+    consumer_test::start();
 }
