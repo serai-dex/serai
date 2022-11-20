@@ -147,11 +147,16 @@ std = [
   "pallet-balances/std",
   "pallet-transaction-payment/std",
 
+<<<<<<< HEAD
 	"pallet-contracts/std",
 	"pallet-contracts-primitives/std",
 >>>>>>> 976948e9 (Update Cargo.tomls for substrate packages)
+=======
+  "pallet-contracts/std",
+  "pallet-contracts-primitives/std",
+>>>>>>> cbe79eb0 (Correct runtime Cargo.toml whitespace)
 
-	"pallet-session/std",
+  "pallet-session/std",
   "pallet-tendermint/std",
 
   "frame-system-rpc-runtime-api/std",
