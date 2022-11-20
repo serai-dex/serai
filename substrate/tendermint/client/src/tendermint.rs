@@ -164,7 +164,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
   }
 
   // Verifies the justifications aren't malformed, not that the block is justified
-  // Errors if justifications is neither empty nor a sinlge Tendermint justification
+  // Errors if justifications is neither empty nor a single Tendermint justification
   // If the block does have a justification, finalized will be set to true
   fn verify_justifications<BT>(
     &self,
