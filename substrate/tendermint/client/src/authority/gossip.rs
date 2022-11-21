@@ -45,7 +45,7 @@ impl<T: TendermintValidator> Validator<T::Block> for TendermintGossip<T> {
       Err(_) => return ValidationResult::Discard,
     };
 
-    if msg.number().0 < *self.number.read().unwrap() {
+    if msg.block().0 < *self.number.read().unwrap() {
       return ValidationResult::Discard;
     }
 
@@ -55,7 +55,7 @@ impl<T: TendermintValidator> Validator<T::Block> for TendermintGossip<T> {
       return ValidationResult::Discard;
     }
 
-    ValidationResult::ProcessAndKeep(Self::topic(msg.number().0))
+    ValidationResult::ProcessAndKeep(Self::topic(msg.block().0))
   }
 
   fn message_expired<'a>(

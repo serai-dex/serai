@@ -271,7 +271,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Message to broadcast
         msg = gossip_recv.next() => {
           if let Some(msg) = msg {
-            let topic = TendermintGossip::<T>::topic(msg.number().0);
+            let topic = TendermintGossip::<T>::topic(msg.block().0);
             gossip.gossip_message(topic, msg.encode(), false);
           } else {
             break;
