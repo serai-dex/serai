@@ -34,6 +34,12 @@ pub struct TendermintImport<T: TendermintValidator> {
 
   pub(crate) providers: Arc<AsyncRwLock<Option<T::CIDP>>>,
   pub(crate) importing_block: Arc<RwLock<Option<<T::Block as Block>::Hash>>>,
+
+  // A set of blocks which we're willing to recheck
+  // We reject blocks with invalid inherents, yet inherents can be fatally flawed or solely
+  // perceived as flawed
+  // If we solely perceive them as flawed, we mark them as eligible for being checked again. Then,
+  // if they're proposed again, we see if our perception has changed
   pub(crate) recheck: Arc<RwLock<HashSet<<T::Block as Block>::Hash>>>,
 
   pub(crate) client: Arc<T::Client>,
