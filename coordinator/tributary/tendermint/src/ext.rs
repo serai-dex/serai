@@ -218,6 +218,7 @@ pub trait Weights: Send + Sync {
 
   /// Weighted round robin function.
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
 }
 
@@ -238,6 +239,9 @@ impl<W: Weights> Weights for Arc<W> {
 =======
   fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
 >>>>>>> 2f3bb887 (Rename Round to RoundNumber):substrate/tendermint/machine/src/ext.rs
+=======
+  fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
+>>>>>>> 9dfa22de (Misc lints):substrate/tendermint/machine/src/ext.rs
 }
 
 impl<W: Weights> Weights for Arc<W> {
@@ -251,8 +255,8 @@ impl<W: Weights> Weights for Arc<W> {
     self.as_ref().weight(validator)
   }
 
-  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
-    self.as_ref().proposer(number, round)
+  fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
+    self.as_ref().proposer(block, round)
   }
 }
 

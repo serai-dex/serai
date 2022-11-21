@@ -477,7 +477,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             let proposal = self.network.add_block(block, commit.clone()).await;
 =======
       if let Some((broadcast, msg)) = futures::select_biased! {
-        // Handle a new height occuring externally (an external sync loop)
+        // Handle a new block occuring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
         msg = self.step_recv.next() => {
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
