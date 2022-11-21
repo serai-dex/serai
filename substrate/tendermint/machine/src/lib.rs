@@ -50,10 +50,12 @@ enum Data<B: Block, S: Signature> {
 impl<B: Block, S: Signature> PartialEq for Data<B, S> {
   fn eq(&self, other: &Data<B, S>) -> bool {
     match (self, other) {
-      (Data::Proposal(r, b), Data::Proposal(r2, b2)) => (r == r2) && (b == b2),
-      (Data::Prevote(i), Data::Prevote(i2)) => i == i2,
+      (Data::Proposal(valid_round, block), Data::Proposal(valid_round2, block2)) => {
+        (valid_round == valid_round2) && (block == block2)
+      }
+      (Data::Prevote(id), Data::Prevote(id2)) => id == id2,
       (Data::Precommit(None), Data::Precommit(None)) => true,
-      (Data::Precommit(Some((i, _))), Data::Precommit(Some((i2, _)))) => i == i2,
+      (Data::Precommit(Some((id, _))), Data::Precommit(Some((id2, _)))) => id == id2,
       _ => false,
     }
   }
@@ -73,7 +75,7 @@ impl<B: Block, S: Signature> Data<B, S> {
 struct Message<V: ValidatorId, B: Block, S: Signature> {
   sender: V,
 
-  number: BlockNumber,
+  block: BlockNumber,
   round: RoundNumber,
 
   data: Data<B, S>,
@@ -88,8 +90,8 @@ pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
 
 impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
   /// Number of the block this message is attempting to add to the chain.
-  pub fn number(&self) -> BlockNumber {
-    self.msg.number
+  pub fn block(&self) -> BlockNumber {
+    self.msg.block
   }
 
   #[must_use]
@@ -146,7 +148,7 @@ pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
 
 /// A Tendermint machine and its channel to receive messages from the gossip layer over.
 pub struct TendermintHandle<N: Network> {
-  /// Channel to trigger the machine to move to the next height.
+  /// Channel to trigger the machine to move to the next block.
   /// Takes in the the previous block's commit, along with the new proposal.
   pub step: StepSender<N>,
   /// Channel to send messages received from the P2P layer.
@@ -284,7 +286,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         if self.queue.is_empty() { Fuse::terminated() } else { future::ready(()).fuse() };
 
       if let Some((broadcast, msg)) = futures::select_biased! {
-        // Handle a new height occuring externally (an external sync loop)
+        // Handle a new block occuring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
         msg = self.step_recv.next() => {
           if let Some((block_number, commit, proposal)) = msg {
@@ -418,7 +420,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     &mut self,
     msg: MessageFor<N>,
   ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
-    if msg.number != self.block.number {
+    if msg.block != self.block.number {
       Err(TendermintError::Temporal)?;
     }
 
@@ -427,7 +429,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     // Only let the proposer propose
     if matches!(msg.data, Data::Proposal(..)) &&
-      (msg.sender != self.weights.proposer(msg.number, msg.round))
+      (msg.sender != self.weights.proposer(msg.block, msg.round))
     {
       Err(TendermintError::Malicious(msg.sender))?;
     };

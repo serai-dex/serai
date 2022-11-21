@@ -181,8 +181,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
 
     // This should only have a single value, yet a bounded channel with a capacity of 1 would cause
     // a firm bound. It's not worth having a backlog crash the node since we aren't constrained
-    let (new_number_tx, mut new_number_rx) = mpsc::unbounded();
-    let (gossip_tx, mut gossip_rx) = mpsc::unbounded();
+    let (new_number_send, mut new_number_recv) = mpsc::unbounded();
+    let (gossip_send, mut gossip_recv) = mpsc::unbounded();
 
     // Clone the import object
     let import = self.import.clone();
@@ -198,8 +198,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         signer: TendermintSigner(keys, self.import.validators.clone()),
 
         new_number: number.clone(),
-        new_number_event: new_number_tx,
-        gossip: gossip_tx,
+        new_number_event: new_number_send,
+        gossip: gossip_send,
 
         env: env.clone(),
         announce: network,
@@ -259,8 +259,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
           }
         },
 
-        // Machine reached a new height
-        new_number = new_number_rx.next() => {
+        // Machine reached a new block
+        new_number = new_number_recv.next() => {
           if new_number.is_some() {
             recv = gossip.messages_for(TendermintGossip::<T>::topic(*number.read().unwrap()));
           } else {
@@ -269,7 +269,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         },
 
         // Message to broadcast
-        msg = gossip_rx.next() => {
+        msg = gossip_recv.next() => {
           if let Some(msg) = msg {
             let topic = TendermintGossip::<T>::topic(msg.number().0);
             gossip.gossip_message(topic, msg.encode(), false);
@@ -375,7 +375,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
         body: Some(body),
         indexed_body: None,
         justifications: None,
-        origin: None,
+        origin: None, // TODO
         allow_missing_state: false,
         skip_execution: false,
         import_existing: self.import.recheck.read().unwrap().contains(&hash),
@@ -440,7 +440,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
         }
       }
 
-      // Clear any blocks for the previous height we were willing to recheck
+      // Clear any blocks for the previous slot which we were willing to recheck
       *self.import.recheck.write().unwrap() = HashSet::new();
 
       // Announce the block to the network so new clients can sync properly

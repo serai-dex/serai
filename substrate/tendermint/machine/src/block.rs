@@ -119,7 +119,7 @@ impl<N: Network> BlockData<N> {
     // Only return a message to if we're actually a current validator
     self.validator_id.map(|validator_id| Message {
       sender: validator_id,
-      number: self.number,
+      block: self.number,
       round: self.round().number,
       data,
     })

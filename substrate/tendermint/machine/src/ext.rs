@@ -147,7 +147,7 @@ pub trait Weights: Send + Sync {
   }
 
   /// Weighted round robin function.
-  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
+  fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
 }
 
 impl<W: Weights> Weights for Arc<W> {
@@ -161,8 +161,8 @@ impl<W: Weights> Weights for Arc<W> {
     self.as_ref().weight(validator)
   }
 
-  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
-    self.as_ref().proposer(number, round)
+  fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
+    self.as_ref().proposer(block, round)
   }
 }
 
