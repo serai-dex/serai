@@ -43,6 +43,7 @@ pub mod pallet {
   impl<T: Config, V> OneSessionHandler<V> for Pallet<T> {
     type Key = crypto::Public;
 
+    // TODO
     fn on_genesis_session<'a, I: 'a>(_validators: I)
     where
       I: Iterator<Item = (&'a V, Self::Key)>,
@@ -66,6 +67,7 @@ pub mod pallet {
       );
     }
 
+    // TODO
     fn on_disabled(_validator_index: u32) {}
   }
 }

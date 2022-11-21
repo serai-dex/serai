@@ -118,35 +118,6 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     }
   }
 
-  fn get_last(&self) -> (<T::Block as Block>::Hash, (BlockNumber, u64)) {
-    let info = self.import.client.info();
-
-    (
-      info.finalized_hash,
-      (
-        // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
-        match info.finalized_number.try_into() {
-          Ok(best) => BlockNumber(best),
-          Err(_) => panic!("BlockNumber exceeded u64"),
-        },
-        // Get the last time by grabbing the last block's justification and reading the time from
-        // that
-        Commit::<TendermintValidators<T>>::decode(
-          &mut self
-            .import
-            .client
-            .justifications(info.finalized_hash)
-            .unwrap()
-            .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
-            .unwrap_or_default()
-            .as_ref(),
-        )
-        .map(|commit| commit.end_time)
-        .unwrap_or_else(|_| self.genesis.unwrap()),
-      ),
-    )
-  }
-
   async fn get_proposal(&mut self, header: &<T::Block as Block>::Header) -> T::Block {
     get_proposal(&self.active.as_mut().unwrap().env, &self.import, header, false).await
   }
@@ -164,8 +135,30 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     network: T::Network,
     registry: Option<&Registry>,
   ) {
-    let (best_hash, last) = self.get_last();
-    let new_number = last.0 .0 + 1;
+    let info = self.import.client.info();
+
+    // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
+    let last_block: u64 = match info.finalized_number.try_into() {
+      Ok(best) => best,
+      Err(_) => panic!("BlockNumber exceeded u64"),
+    };
+    let last_hash = info.finalized_hash;
+
+    // Get the last block's time by grabbing its commit and reading the time from that
+    let last_time = Commit::<TendermintValidators<T>>::decode(
+      &mut self
+        .import
+        .client
+        .justifications(last_hash)
+        .unwrap()
+        .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
+        .unwrap_or_default()
+        .as_ref(),
+    )
+    .map(|commit| commit.end_time)
+    .unwrap_or_else(|_| self.genesis.unwrap());
+
+    let new_number = last_block + 1;
 
     // Shared references between us and the Tendermint machine (and its actions via its Network
     // trait)
@@ -206,11 +199,11 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       });
 
       let proposal = self
-        .get_proposal(&self.import.client.header(BlockId::Hash(best_hash)).unwrap().unwrap())
+        .get_proposal(&self.import.client.header(BlockId::Hash(last_hash)).unwrap().unwrap())
         .await;
 
       // We no longer need self, so let TendermintMachine become its owner
-      TendermintMachine::new(self, last, proposal).await
+      TendermintMachine::new(self, BlockNumber(last_block), last_time, proposal).await
     };
     spawner.spawn_essential("machine", Some("tendermint"), Box::pin(machine.run()));
 

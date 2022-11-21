@@ -232,7 +232,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
   #[allow(clippy::new_ret_no_self)]
   pub async fn new(
     network: N,
-    last: (BlockNumber, u64),
+    last_block: BlockNumber,
+    last_time: u64,
     proposal: N::Block,
   ) -> TendermintHandle<N> {
     let (msg_send, msg_recv) = mpsc::unbounded();
@@ -241,9 +242,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
       step: step_send,
       messages: msg_send,
       machine: {
-        let last_time = sys_time(last.1);
+        let sys_time = sys_time(last_time);
         // If the last block hasn't ended yet, sleep until it has
-        sleep(last_time.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO)).await;
+        sleep(sys_time.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO)).await;
 
         let signer = network.signer();
         let validators = network.signature_scheme();
@@ -260,7 +261,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           msg_recv,
           step_recv,
 
-          block: BlockData::new(weights, BlockNumber(last.0 .0 + 1), validator_id, proposal),
+          block: BlockData::new(weights, BlockNumber(last_block.0 + 1), validator_id, proposal),
         };
 
         // The end time of the last block is the start time for this one
@@ -270,7 +271,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // after it, without the standard amount of separation (so their times will be
         // equivalent or minimally offset)
         // For callers wishing to avoid this, they should pass (0, GENESIS + N::block_time())
-        machine.round(RoundNumber(0), Some(CanonicalInstant::new(last.1)));
+        machine.round(RoundNumber(0), Some(CanonicalInstant::new(last_time)));
         machine
       },
     }
@@ -398,22 +399,19 @@ impl<N: Network + 'static> TendermintMachine<N> {
     round: RoundNumber,
     data: &DataFor<N>,
   ) -> Result<bool, TendermintError<N::ValidatorId>> {
-    Ok(if let Data::Precommit(Some((id, sig))) = data {
+    if let Data::Precommit(Some((id, sig))) = data {
       // Also verify the end_time of the commit
       // Only perform this verification if we already have the end_time
       // Else, there's a DoS where we receive a precommit for some round infinitely in the future
-      // which forces to calculate every end time
+      // which forces us to calculate every end time
       if let Some(end_time) = self.block.end_time.get(&round) {
         if !self.validators.verify(sender, &commit_msg(end_time.canonical(), id.as_ref()), sig) {
           Err(TendermintError::Malicious(sender))?;
         }
-        true
-      } else {
-        false
+        return Ok(true);
       }
-    } else {
-      false
-    })
+    }
+    Ok(false)
   }
 
   async fn message(
