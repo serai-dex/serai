@@ -449,10 +449,8 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     ));
 =======
   let is_authority = config.role.is_authority();
-  let tendermint_protocol = sc_tendermint::protocol_name(
-    client.block_hash(0).unwrap().unwrap(),
-    config.chain_spec.fork_id(),
-  );
+  let genesis = client.block_hash(0).unwrap().unwrap();
+  let tendermint_protocol = sc_tendermint::protocol_name(genesis, config.chain_spec.fork_id());
   if is_authority {
 <<<<<<< HEAD
     config.network.extra_sets.push(sc_tendermint::set_config(tendermint_protocol.clone()));

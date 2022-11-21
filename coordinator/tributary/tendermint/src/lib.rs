@@ -408,6 +408,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           synced_block_result_send,
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
           block: BlockData::new(
             weights,
             BlockNumber(last_block.0 + 1),
@@ -432,6 +433,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
 =======
           block: BlockData::new(weights, BlockNumber(last.0 .0 + 1), validator_id, proposal),
 >>>>>>> 4ba469e6 (BlockData::new):substrate/tendermint/machine/src/lib.rs
+=======
+          block: BlockData::new(weights, BlockNumber(last_block.0 + 1), validator_id, proposal),
+>>>>>>> cd9b9c89 (Resolve low-hanging review comments):substrate/tendermint/machine/src/lib.rs
         };
 
         // The end time of the last block is the start time for this one
@@ -623,8 +627,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if let Data::Precommit(Some((id, sig))) = data {
 =======
   ) -> Result<bool, TendermintError<N::ValidatorId>> {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
     Ok(if let Data::Precommit(Some((id, sig))) = data {
 >>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
+=======
+    if let Data::Precommit(Some((id, sig))) = data {
+>>>>>>> cd9b9c89 (Resolve low-hanging review comments):substrate/tendermint/machine/src/lib.rs
       // Also verify the end_time of the commit
       // Only perform this verification if we already have the end_time
       // Else, there's a DoS where we receive a precommit for some round infinitely in the future
@@ -634,6 +642,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           log::warn!(target: "tendermint", "Validator produced an invalid commit signature");
           Err(TendermintError::Malicious(sender))?;
         }
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
         return Ok(true);
       }
@@ -648,6 +657,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
       false
     })
 >>>>>>> b7502a7f (Have verify_precommit_signature return if it verified the signature):substrate/tendermint/machine/src/lib.rs
+=======
+        return Ok(true);
+      }
+    }
+    Ok(false)
+>>>>>>> cd9b9c89 (Resolve low-hanging review comments):substrate/tendermint/machine/src/lib.rs
   }
 
   async fn message(
