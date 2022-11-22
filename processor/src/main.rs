@@ -4,4 +4,7 @@ mod core;
 pub fn main(){
     println!("Starting processor");
     core::start_coin("btc");
+
+    // Checks if coin keys exists, generates / sets env variables if not
+    core::instantiate_keys();
 }
