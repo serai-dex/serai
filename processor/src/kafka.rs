@@ -33,15 +33,31 @@ pub fn start() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending public key");
+  println!("Sending public keys");
 
-  // Creates a public key message
-  let BTC_PUB = env::var("BTC_PUB");
-  let msg = BTC_PUB.unwrap();
+  // Creates a public key message for each coin
+  let btc_pub = env::var("BTC_PUB");
+  let btc_msg = btc_pub.unwrap();
 
-  // Sends message to Kafka
+  // Sends btc pubkey to Kafka
   producer
-    .send(BaseRecord::to("public_keys").key(&format!("processor")).payload(&msg))
+    .send(BaseRecord::to("public_keys").key(&format!("btc_processor")).payload(&btc_msg))
+    .expect("failed to send message");
+
+  let eth_pub = env::var("ETH_PUB");
+  let eth_msg = eth_pub.unwrap();
+
+  // Sends eth pubkey to Kafka
+  producer
+    .send(BaseRecord::to("public_keys").key(&format!("eth_processor")).payload(&eth_msg))
+    .expect("failed to send message");
+
+  let xmr_pub = env::var("XMR_PUB");
+  let xmr_msg = xmr_pub.unwrap();
+
+  // Sends xmr pubkey to Kafka
+  producer
+    .send(BaseRecord::to("public_keys").key(&format!("xmr_processor")).payload(&xmr_msg))
     .expect("failed to send message");
 
   thread::sleep(Duration::from_secs(10));

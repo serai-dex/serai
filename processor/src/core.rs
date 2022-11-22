@@ -3,7 +3,7 @@ use message_box;
 use group::ff::PrimeField;
 
 // Accepts startup argument specifying which coin package to start
-pub fn start_coin(coin: &str) {
+pub fn initialize_coin(coin: &str) {
   println!("Received Coin Request: {}", coin);
 
   match coin {
@@ -15,7 +15,7 @@ pub fn start_coin(coin: &str) {
 }
 
 // Generates Private / Public key pair
-pub fn instantiate_keys() {
+pub fn initialize_keys() {
   // Checks if coin keys are set
   let btc_priv_check = env::var("BTC_PRIV");
   if (btc_priv_check.is_err()) {

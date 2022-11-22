@@ -380,7 +380,7 @@ impl CoordinatorConfig {
 }
 
 // Generates Private / Public key pair
-pub fn instantiate_keys() {
+pub fn initialize_keys() {
   // Checks if coordinator keys are set
   let coord_priv_check = env::var("COORD_PRIV");
   if (coord_priv_check.is_err()) {
