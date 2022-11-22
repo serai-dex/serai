@@ -1,6 +1,5 @@
 mod core;
 mod health;
-mod observer;
 
 use std::thread;
 use std::io::Write;

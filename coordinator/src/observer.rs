@@ -5,7 +5,6 @@
 // Compare this snippet from coordinator/src/core.rs:
 
 
-[#derive(Clone, Debug, Deserialize)]
 pub struct ObserverProcess {
     observer_config: ObserverConfig
 }
@@ -20,9 +19,7 @@ impl ObserverProcess {
         let port = self.observer_config.get_port();
         let poll_interval = self.observer_config.get_poll_interval();
 
-        // Polls substrate RPC to get block height at a specified interval
-
-        
+        // Polls substrate RPC to get block height at a specified interva;
         
         let client = reqwest::Client::new();
         let mut last_block = 0;
