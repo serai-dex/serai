@@ -1,9 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::ops::Deref;
+
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
@@ -61,7 +63,7 @@ pub enum DLEqError {
   InvalidProof,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct DLEqProof<G: PrimeGroup> {
   c: G::Scalar,
   s: G::Scalar,
@@ -70,32 +72,29 @@ pub struct DLEqProof<G: PrimeGroup> {
 #[allow(non_snake_case)]
 impl<G: PrimeGroup> DLEqProof<G> {
   fn transcript<T: Transcript>(transcript: &mut T, generator: G, nonce: G, point: G) {
-    transcript.append_message(b"generator", generator.to_bytes().as_ref());
-    transcript.append_message(b"nonce", nonce.to_bytes().as_ref());
-    transcript.append_message(b"point", point.to_bytes().as_ref());
+    transcript.append_message(b"generator", generator.to_bytes());
+    transcript.append_message(b"nonce", nonce.to_bytes());
+    transcript.append_message(b"point", point.to_bytes());
   }
 
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
     transcript: &mut T,
     generators: &[G],
-    mut scalar: G::Scalar,
+    scalar: &Zeroizing<G::Scalar>,
   ) -> DLEqProof<G>
   where
     G::Scalar: Zeroize,
   {
-    let mut r = G::Scalar::random(rng);
+    let r = Zeroizing::new(G::Scalar::random(rng));
 
     transcript.domain_separate(b"dleq");
     for generator in generators {
-      Self::transcript(transcript, *generator, *generator * r, *generator * scalar);
+      Self::transcript(transcript, *generator, *generator * r.deref(), *generator * scalar.deref());
     }
 
     let c = challenge(transcript);
-    let s = r + (c * scalar);
-
-    scalar.zeroize();
-    r.zeroize();
+    let s = (c * scalar.deref()) + r.deref();
 
     DLEqProof { c, s }
   }

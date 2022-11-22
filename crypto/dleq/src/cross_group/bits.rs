@@ -91,9 +91,9 @@ where
 {
   fn transcript<T: Transcript>(transcript: &mut T, i: usize, commitments: (G0, G1)) {
     transcript.domain_separate(b"bits");
-    transcript.append_message(b"group", &u16::try_from(i).unwrap().to_le_bytes());
-    transcript.append_message(b"commitment_0", commitments.0.to_bytes().as_ref());
-    transcript.append_message(b"commitment_1", commitments.1.to_bytes().as_ref());
+    transcript.append_message(b"group", u16::try_from(i).unwrap().to_le_bytes());
+    transcript.append_message(b"commitment_0", commitments.0.to_bytes());
+    transcript.append_message(b"commitment_1", commitments.1.to_bytes());
   }
 
   fn ring(pow_2: (G0, G1), commitments: (G0, G1)) -> Vec<(G0, G1)> {

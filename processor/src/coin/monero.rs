@@ -4,7 +4,7 @@ use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;
 use transcript::RecommendedTranscript;
-use frost::{curve::Ed25519, FrostKeys};
+use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_serai::{
   transaction::Transaction,
@@ -55,7 +55,7 @@ impl OutputTrait for Output {
 
 #[derive(Debug)]
 pub struct SignableTransaction {
-  keys: FrostKeys<Ed25519>,
+  keys: ThresholdKeys<Ed25519>,
   transcript: RecommendedTranscript,
   // Monero height, defined as the length of the chain
   height: usize,
@@ -157,7 +157,7 @@ impl Coin for Monero {
 
   async fn prepare_send(
     &self,
-    keys: FrostKeys<Ed25519>,
+    keys: ThresholdKeys<Ed25519>,
     transcript: RecommendedTranscript,
     block_number: usize,
     mut inputs: Vec<Output>,
@@ -236,6 +236,7 @@ impl Coin for Monero {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
+    use zeroize::Zeroizing;
     use rand_core::OsRng;
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
@@ -263,7 +264,7 @@ impl Coin for Monero {
       self.rpc.get_fee().await.unwrap(),
     )
     .unwrap()
-    .sign(&mut OsRng, &self.rpc, &Scalar::one())
+    .sign(&mut OsRng, &self.rpc, &Zeroizing::new(Scalar::one()))
     .await
     .unwrap();
     self.rpc.publish_transaction(&tx).await.unwrap();

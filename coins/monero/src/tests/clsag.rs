@@ -1,6 +1,8 @@
+use core::ops::Deref;
 #[cfg(feature = "multisig")]
 use std::sync::{Arc, RwLock};
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
@@ -19,10 +21,7 @@ use crate::{
   },
 };
 #[cfg(feature = "multisig")]
-use crate::{
-  frost::MultisigError,
-  ringct::clsag::{ClsagDetails, ClsagMultisig},
-};
+use crate::ringct::clsag::{ClsagDetails, ClsagMultisig};
 
 #[cfg(feature = "multisig")]
 use frost::tests::{key_gen, algorithm_machines, sign};
@@ -38,29 +37,30 @@ fn clsag() {
   for real in 0 .. RING_LEN {
     let msg = [1; 32];
 
-    let mut secrets = [Scalar::zero(), Scalar::zero()];
+    let mut secrets = (Zeroizing::new(Scalar::zero()), Scalar::zero());
     let mut ring = vec![];
     for i in 0 .. RING_LEN {
-      let dest = random_scalar(&mut OsRng);
+      let dest = Zeroizing::new(random_scalar(&mut OsRng));
       let mask = random_scalar(&mut OsRng);
       let amount;
       if i == u64::from(real) {
-        secrets = [dest, mask];
+        secrets = (dest.clone(), mask);
         amount = AMOUNT;
       } else {
         amount = OsRng.next_u64();
       }
-      ring.push([&dest * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
+      ring
+        .push([dest.deref() * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
 
-    let image = generate_key_image(secrets[0]);
+    let image = generate_key_image(&secrets.0);
     let (clsag, pseudo_out) = Clsag::sign(
       &mut OsRng,
       vec![(
-        secrets[0],
+        secrets.0,
         image,
         ClsagInput::new(
-          Commitment::new(secrets[1], AMOUNT),
+          Commitment::new(secrets.1, AMOUNT),
           Decoys {
             i: u8::try_from(real).unwrap(),
             offsets: (1 ..= RING_LEN).into_iter().collect(),
@@ -79,7 +79,7 @@ fn clsag() {
 
 #[cfg(feature = "multisig")]
 #[test]
-fn clsag_multisig() -> Result<(), MultisigError> {
+fn clsag_multisig() {
   let keys = key_gen::<_, Ed25519>(&mut OsRng);
 
   let randomness = random_scalar(&mut OsRng);
@@ -125,6 +125,4 @@ fn clsag_multisig() -> Result<(), MultisigError> {
     ),
     &[1; 32],
   );
-
-  Ok(())
 }

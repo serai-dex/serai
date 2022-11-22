@@ -27,8 +27,8 @@ impl Transcript for MerlinTranscript {
     self.append_message(b"dom-sep", label);
   }
 
-  fn append_message(&mut self, label: &'static [u8], message: &[u8]) {
-    self.0.append_message(label, message);
+  fn append_message<M: AsRef<[u8]>>(&mut self, label: &'static [u8], message: M) {
+    self.0.append_message(label, message.as_ref());
   }
 
   fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge {

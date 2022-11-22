@@ -89,7 +89,7 @@ impl Rpc {
     params: Option<Params>,
   ) -> Result<Response, RpcError> {
     let client = reqwest::Client::new();
-    let mut builder = client.post(&(self.0.clone() + "/" + method));
+    let mut builder = client.post(self.0.clone() + "/" + method);
     if let Some(params) = params.as_ref() {
       builder = builder.json(params);
     }
@@ -104,7 +104,7 @@ impl Rpc {
     params: Vec<u8>,
   ) -> Result<Response, RpcError> {
     let client = reqwest::Client::new();
-    let builder = client.post(&(self.0.clone() + "/" + method)).body(params);
+    let builder = client.post(self.0.clone() + "/" + method).body(params);
     self.call_tail(method, builder.header("Content-Type", "application/octet-stream")).await
   }
 

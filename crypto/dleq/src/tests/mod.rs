@@ -1,8 +1,10 @@
-#[cfg(feature = "experimental")]
-mod cross_group;
+use core::ops::Deref;
 
 use hex_literal::hex;
+
 use rand_core::OsRng;
+
+use zeroize::Zeroizing;
 
 use ff::Field;
 use group::GroupEncoding;
@@ -12,6 +14,9 @@ use k256::{Scalar, ProjectivePoint};
 use transcript::{Transcript, RecommendedTranscript};
 
 use crate::DLEqProof;
+
+#[cfg(feature = "experimental")]
+mod cross_group;
 
 #[test]
 fn test_dleq() {
@@ -39,12 +44,12 @@ fn test_dleq() {
   ];
 
   for i in 0 .. 5 {
-    let key = Scalar::random(&mut OsRng);
-    let proof = DLEqProof::prove(&mut OsRng, &mut transcript(), &generators[.. i], key);
+    let key = Zeroizing::new(Scalar::random(&mut OsRng));
+    let proof = DLEqProof::prove(&mut OsRng, &mut transcript(), &generators[.. i], &key);
 
     let mut keys = [ProjectivePoint::GENERATOR; 5];
     for k in 0 .. 5 {
-      keys[k] = generators[k] * key;
+      keys[k] = generators[k] * key.deref();
     }
     proof.verify(&mut transcript(), &generators[.. i], &keys[.. i]).unwrap();
 

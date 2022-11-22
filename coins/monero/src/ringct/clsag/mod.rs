@@ -1,10 +1,12 @@
 #![allow(non_snake_case)]
 
+use core::ops::Deref;
+
 use lazy_static::lazy_static;
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use subtle::{ConstantTimeEq, Choice, CtOption};
 
 use curve25519_dalek::{
@@ -22,7 +24,7 @@ use crate::{
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::{ClsagDetails, ClsagMultisig};
+pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 
 lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();
@@ -233,7 +235,7 @@ impl Clsag {
   /// sum_outputs is for the sum of the outputs' commitment masks.
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
-    mut inputs: Vec<(Scalar, EdwardsPoint, ClsagInput)>,
+    mut inputs: Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>,
     sum_outputs: Scalar,
     msg: [u8; 32],
   ) -> Vec<(Clsag, EdwardsPoint)> {
@@ -247,17 +249,19 @@ impl Clsag {
         sum_pseudo_outs += mask;
       }
 
-      let mut nonce = random_scalar(rng);
+      let mut nonce = Zeroizing::new(random_scalar(rng));
       let (mut clsag, pseudo_out, p, c) = Clsag::sign_core(
         rng,
         &inputs[i].1,
         &inputs[i].2,
         mask,
         &msg,
-        &nonce * &ED25519_BASEPOINT_TABLE,
-        nonce * hash_to_point(inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
+        nonce.deref() * &ED25519_BASEPOINT_TABLE,
+        nonce.deref() *
+          hash_to_point(inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
       );
-      clsag.s[usize::from(inputs[i].2.decoys.i)] = nonce - ((p * inputs[i].0) + c);
+      clsag.s[usize::from(inputs[i].2.decoys.i)] =
+        (-((p * inputs[i].0.deref()) + c)) + nonce.deref();
       inputs[i].0.zeroize();
       nonce.zeroize();
 
