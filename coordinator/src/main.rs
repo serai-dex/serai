@@ -1,7 +1,6 @@
 mod core;
 mod health;
 mod observer;
-#[path = "test/kafka.rs"]
 mod kafka;
 use std::thread;
 use std::io::Write;
