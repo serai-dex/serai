@@ -48,7 +48,7 @@ async fn main() {
     // Start Core Process
     tokio::spawn(async move {
         let core_process = CoreProcess::new(config);
-        core_process.start();
+        core_process.run();
     });
 
 

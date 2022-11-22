@@ -12,3 +12,7 @@ xmr_rpc = ""
 
 [health]
 logger = "debug"
+
+[observer]
+target_host = "127.0.0.1"
+target_port = "1337"
