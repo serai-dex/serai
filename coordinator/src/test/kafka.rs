@@ -12,7 +12,40 @@ use message_box::{MessageBox, SecureMessage};
 const A: &'static str = "A";
 const B: &'static str = "B";
 
+fn instantiate_keys() {
+  let COORD_PRIV = env::var("COORD_PRIV");
+  let COORD_PUB = env::var("COORD_PUB");
+  dbg!(&COORD_PRIV);
+  dbg!(&COORD_PUB);
+
+  // A_PRIV and B_PRIV are dynamic testing keys for kafka
+  let a_priv_check = env::var("A_PRIV");
+  if (a_priv_check.is_err()) {
+    const A_PRIV: &'static str = "543600cc54df140d0186f604b3a606cb3d2103327106703e80c183a481cf2a09";
+    env::set_var("A_PRIV", A_PRIV);
+  }
+
+  let a_pub_check = env::var("A_PUB");
+  if (a_pub_check.is_err()) {
+    const A_PUB: &'static str = "ecb27e79e414f51ed0b1b14502611247a99fc81a58ff78604cb7789aaceebf02";
+    env::set_var("A_PUB", A_PUB);
+  }
+
+  let b_priv_check = env::var("B_PRIV");
+  if (b_priv_check.is_err()) {
+    const B_PRIV: &'static str = "db97aa4549842b113bf502ec47905a31c0a97837dcaa8e59ed0f12ee6b33a60c";
+    env::set_var("B_PRIV", B_PRIV);
+  }
+
+  let b_pub_check = env::var("B_PUB");
+  if (b_pub_check.is_err()) {
+    const B_PUB: &'static str = "bc5e598f9337bb98b0e58b4b62fd99f2ccefbc5d4befbfe1e16dcbebab44115c";
+    env::set_var("B_PUB", B_PUB);
+  }
+}
+
 pub fn start() {
+  instantiate_keys();
   // Parses ENV variables to proper priv/pub keys
   let A_PRIV = message_box::PrivateKey::from_string(env::var("A_PRIV").unwrap().to_string());
   let A_PUB = message_box::PublicKey::from_trusted_str(&env::var("A_PUB").unwrap().to_string());
@@ -52,7 +85,8 @@ pub fn start() {
 
       // Creates Message box used for decryption
       // I use REF to illustrate pulling env variables, there's existing A_PUB in scope
-      let A_PUB_REF = message_box::PublicKey::from_trusted_str(&env::var("A_PUB").unwrap().to_string());
+      let A_PUB_REF =
+        message_box::PublicKey::from_trusted_str(&env::var("A_PUB").unwrap().to_string());
 
       let B_PRIV_REF =
         message_box::PrivateKey::from_string(env::var("B_PRIV").unwrap().to_string());
@@ -83,7 +117,7 @@ pub fn start() {
 
   // Sends message to Kafka
   producer
-    .send(BaseRecord::to("test_topic").key(&format!("user-{}", 54)).payload(&enc))
+    .send(BaseRecord::to("test_topic").key(&format!("msg_key-{}", 1)).payload(&enc))
     .expect("failed to send message");
 
   thread::sleep(Duration::from_secs(3));
@@ -171,4 +205,3 @@ impl ProducerContext for ProduceCallbackLogger {
     }
   }
 }
-

@@ -32,7 +32,7 @@ pub fn message_box_test() {
   let B_PRIV = message_box::PrivateKey::from_string(B_PRIV_STR.to_string());
   let B_PUB_STR = "08692c403818d49edf516d981a8395268075aa8bbb86e59f572b7d39618ed805";
   let B_PUB = message_box::PublicKey::from_trusted_str(B_PUB_STR);
-  
+
   let mut a_others = HashMap::new();
   a_others.insert(B_ID, B_PUB);
 
