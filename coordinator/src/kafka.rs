@@ -7,6 +7,7 @@ use rdkafka::{
   ClientConfig, ClientContext, Message, Offset,
 };
 use message_box::{MessageBox, SecureMessage};
+use std::io;
 
 pub fn start() {
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
@@ -24,6 +25,9 @@ pub fn start() {
       let key: &str = msg.key_view().unwrap().unwrap();
       let value = msg.payload().unwrap();
       let public_key = str::from_utf8(value).unwrap();
+      println!("Received public key");
+      dbg!(&public_key);
+      dbg!(&key);
     }
   });
 
@@ -44,7 +48,8 @@ pub fn start() {
     .send(BaseRecord::to("public_keys").key(&format!("coordinator")).payload(&msg))
     .expect("failed to send message");
 
-  thread::sleep(Duration::from_secs(10));
+  //thread::sleep(Duration::from_secs(10));
+  io::stdin().read_line(&mut String::new()).unwrap();
 }
 
 struct ConsumerCallbackLogger;
