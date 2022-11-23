@@ -1,5 +1,5 @@
 use core::{hash::Hash, fmt::Debug};
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashSet};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -233,6 +233,10 @@ pub trait Network: Send + Sync {
     id: <Self::Block as Block>::Id,
     commit: &Commit<Self::SignatureScheme>,
   ) -> bool {
+    if commit.validators.iter().collect::<HashSet<_>>().len() != commit.validators.len() {
+      return false;
+    }
+
     if !self.signature_scheme().verify_aggregate(
       &commit.validators,
       &commit_msg(commit.end_time, id.as_ref()),
