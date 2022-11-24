@@ -70,11 +70,11 @@ jobs:
           RUNNER_OS=linux
           RUNNER_ARCH=x64
 
-          FILE=monero-$RUNNER_OS-$RUNNER_ARCH-${{ inputs.version }}.tar.bz2
+          FILE=monero-$RUNNER_OS-$RUNNER_ARCH-v0.18.0.0.tar.bz2
           wget https://downloads.getmonero.org/cli/$FILE
           tar -xvf $FILE
 
-          mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod monerod
+          mv monero-x86_64-linux-gnu-v0.18.0.0/monerod monerod
 
       - name: Run Tests
         run: |
