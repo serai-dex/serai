@@ -390,6 +390,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
 
     // Can happen when we sync a block while also acting as a validator
     if number <= self.import.client.info().best_number {
+      debug!(target: "tendermint", "Machine proposed a block for a slot we've already synced");
       Err(BlockError::Temporal)?;
     }
 

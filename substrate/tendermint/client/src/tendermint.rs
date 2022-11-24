@@ -3,7 +3,7 @@ use std::{
   collections::HashSet,
 };
 
-use log::warn;
+use log::{debug, warn};
 
 use tokio::sync::RwLock as AsyncRwLock;
 
@@ -119,6 +119,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
     } else if err.fatal_error() {
       Err(Error::Other(BlockError::Fatal.into()))
     } else {
+      debug!(target: "tendermint", "Proposed block has temporally wrong inherents");
       self.recheck.write().unwrap().insert(hash);
       Err(Error::Other(BlockError::Temporal.into()))
     }
