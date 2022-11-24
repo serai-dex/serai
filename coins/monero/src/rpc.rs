@@ -472,8 +472,6 @@ impl Rpc {
       .await?;
 
     if res.status != "OK" {
-      // https://github.com/serai-dex/serai/issues/166
-      dbg!(res);
       Err(RpcError::InvalidTransaction(tx.hash()))?;
     }
 
