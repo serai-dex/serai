@@ -6,6 +6,8 @@ use std::{
   collections::VecDeque,
 };
 
+use log::debug;
+
 use parity_scale_codec::{Encode, Decode};
 
 use futures::{
@@ -372,7 +374,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   async fn slash(&mut self, validator: N::ValidatorId) {
     if !self.block.slashes.contains(&validator) {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
       log::info!(target: "tendermint", "Slashing validator {:?}", validator);
+=======
+      debug!(target: "tendermint", "Slashing validator {:?}", validator);
+>>>>>>> 32129420 (Add log statements):substrate/tendermint/machine/src/lib.rs
       self.block.slashes.insert(validator);
       self.network.slash(validator).await;
     }
@@ -528,9 +534,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
               Step::Propose => {
                 // Slash the validator for not proposing when they should've
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
                 log::debug!(target: "tendermint", "Validator didn't propose when they should have");
 =======
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
+=======
+                debug!(target: "tendermint", "Validator didn't propose when they should have");
+>>>>>>> 32129420 (Add log statements):substrate/tendermint/machine/src/lib.rs
                 self.slash(
                   self.weights.proposer(self.block.number, self.block.round().number)
                 ).await;
@@ -648,7 +658,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // which forces us to calculate every end time
       if let Some(end_time) = self.block.end_time.get(&round) {
         if !self.validators.verify(sender, &commit_msg(end_time.canonical(), id.as_ref()), sig) {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
           log::warn!(target: "tendermint", "Validator produced an invalid commit signature");
+=======
+          debug!(target: "tendermint", "Validator produced an invalid commit signature");
+>>>>>>> 32129420 (Add log statements):substrate/tendermint/machine/src/lib.rs
           Err(TendermintError::Malicious(sender))?;
         }
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
@@ -689,7 +703,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if matches!(msg.data, Data::Proposal(..)) &&
       (msg.sender != self.weights.proposer(msg.block, msg.round))
     {
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
       log::warn!(target: "tendermint", "Validator who wasn't the proposer proposed");
+=======
+      debug!(target: "tendermint", "Validator who wasn't the proposer proposed");
+>>>>>>> 32129420 (Add log statements):substrate/tendermint/machine/src/lib.rs
       Err(TendermintError::Malicious(msg.sender))?;
     };
 
@@ -843,6 +861,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         Ok(_) => (true, Ok(None)),
         Err(BlockError::Temporal) => (false, Ok(None)),
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
         Err(BlockError::Fatal) => (false, {
           log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
           Err(TendermintError::Malicious(proposer))
@@ -850,6 +869,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
 =======
         Err(BlockError::Fatal) => (false, Err(TendermintError::Malicious(proposer))),
 >>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
+=======
+        Err(BlockError::Fatal) => (false, {
+          debug!(target: "tendermint", "Validator proposed a fatally invalid block");
+          Err(TendermintError::Malicious(proposer))
+        }),
+>>>>>>> 32129420 (Add log statements):substrate/tendermint/machine/src/lib.rs
       };
       // Create a raw vote which only requires block validity as a basis for the actual vote.
       let raw_vote = Some(block.id()).filter(|_| valid);
@@ -869,9 +894,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Malformed message
         if vr.0 >= self.block.round().number.0 {
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
           log::warn!(target: "tendermint", "Validator claimed a round from the future was valid");
 =======
 >>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
+=======
+          debug!(target: "tendermint", "Validator claimed a round from the future was valid");
+>>>>>>> 32129420 (Add log statements):substrate/tendermint/machine/src/lib.rs
           Err(TendermintError::Malicious(msg.sender))?;
         }
 
@@ -977,8 +1006,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
         match self.network.validate(block).await {
           Ok(_) => (),
           Err(BlockError::Temporal) => (),
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
           Err(BlockError::Fatal) => Err(TendermintError::Malicious(proposer))?,
 >>>>>>> 48b4b685 (Slight doc changes):substrate/tendermint/machine/src/lib.rs
+=======
+          Err(BlockError::Fatal) => {
+            debug!(target: "tendermint", "Validator proposed a fatally invalid block");
+            Err(TendermintError::Malicious(proposer))?
+          }
+>>>>>>> 32129420 (Add log statements):substrate/tendermint/machine/src/lib.rs
         };
 
         self.block.valid = Some((self.block.round().number, block.clone()));
