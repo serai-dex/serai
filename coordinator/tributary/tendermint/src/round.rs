@@ -96,9 +96,13 @@ impl<N: Network> RoundData<N> {
   }
 
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/round.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/round.rs
   // Poll all set timeouts, returning the Step whose timeout has just expired
 =======
 >>>>>>> 9e72f873 (BlockData and RoundData structs):substrate/tendermint/machine/src/round.rs
+=======
+  // Poll all set timeouts, returning the Step whose timeout has just expired
+>>>>>>> 3d20afd2 (Improve documentation):substrate/tendermint/machine/src/round.rs
   pub(crate) async fn timeout_future(&self) -> Step {
     let timeout_future = |step| {
       let timeout = self.timeouts.get(&step).copied();

@@ -208,10 +208,14 @@ pub struct TendermintHandle<N: Network> {
 impl<N: Network + 'static> TendermintMachine<N> {
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
+=======
+>>>>>>> 3d20afd2 (Improve documentation):substrate/tendermint/machine/src/lib.rs
   // Broadcast the given piece of data
   // Tendermint messages always specify their block/round, yet Tendermint only ever broadcasts for
   // the current block/round. Accordingly, instead of manually fetching those at every call-site,
   // this function can simply pass the data to the block which can contextualize it
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/lib.rs
   fn broadcast(&mut self, data: DataFor<N>) {
     if let Some(msg) = self.block.message(data) {
       // Push it on to the queue. This is done so we only handle one message at a time, and so we
@@ -243,8 +247,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
       );
 >>>>>>> 85087833 (Move Round to an Option due to the pseudo-uninitialized state we create):substrate/tendermint/machine/src/lib.rs
 =======
+=======
+>>>>>>> 3d20afd2 (Improve documentation):substrate/tendermint/machine/src/lib.rs
   fn broadcast(&mut self, data: DataFor<N>) {
     if let Some(msg) = self.block.message(data) {
+      // Push it on to the queue. This is done so we only handle one message at a time, and so we
+      // can handle our own message before broadcasting it. That way, we fail before before
+      // becoming malicious
       self.queue.push_back(msg);
 >>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/lib.rs
     }

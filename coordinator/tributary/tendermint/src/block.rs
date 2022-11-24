@@ -38,6 +38,10 @@ pub(crate) struct BlockData<N: Network> {
 
   pub(crate) log: MessageLog<N>,
   pub(crate) slashes: HashSet<N::ValidatorId>,
+  // We track the end times of each round for two reasons:
+  // 1) Knowing the start time of the next round
+  // 2) Validating precommits, which include the end time of the round which produced it
+  // This HashMap contains the end time of the round we're currently in and every round prior
   pub(crate) end_time: HashMap<RoundNumber, CanonicalInstant>,
 
   pub(crate) round: RoundData<N>,
@@ -85,10 +89,15 @@ impl<N: Network> BlockData<N> {
   // yet is also used when jumping rounds (when 33% of the validators are on a round ahead of us)
   pub(crate) fn populate_end_time(&mut self, round: RoundNumber) {
 <<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
+<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
     // Starts from the current round since we only start the current round once we have have all
     // the prior time data
 =======
 >>>>>>> 14fc181d (Correct pupulate_end_time):substrate/tendermint/machine/src/block.rs
+=======
+    // Starts from the current round since we only start the current round once we have have all
+    // the prior time data
+>>>>>>> 3d20afd2 (Improve documentation):substrate/tendermint/machine/src/block.rs
     for r in (self.round().number.0 + 1) ..= round.0 {
       self.end_time.insert(
         RoundNumber(r),
