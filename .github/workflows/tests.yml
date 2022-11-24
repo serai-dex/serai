@@ -78,7 +78,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          ./monerod --regtest --offline --fixed-difficulty=1 --log-level 2 &
+          ./monerod --regtest --offline --fixed-difficulty=1 --log-level 2 < /dev/zero &
           cd coins/monero
           cargo test --all-features
 
