@@ -35,17 +35,9 @@ implementation of the [academic protocol](https://arxiv.org/pdf/1807.04938.pdf).
 ### Paper
 
 The [paper](https://arxiv.org/abs/1807.04938) describes the algorithm with
-pseudocode on page 6. This pseudocode is written as a series of conditions for
-advancement. This is extremely archaic, as its a fraction of the actually
-required code. This is due to its hand-waving away of data tracking, lack of
-comments (beyond the entire rest of the paper, of course), and lack of
-specification regarding faulty nodes.
-
-While the "hand-waving" is both legitimate and expected, as it's not the paper's
-job to describe a full message processing loop nor efficient variable handling,
-it does leave behind ambiguities and annoyances, not to mention an overall
-structure which cannot be directly translated. This section is meant to be a
-description of it as used for translation.
+pseudocode on page 6. This pseudocode isn't directly implementable, nor does it
+specify faulty behavior. Instead, it's solely a series of conditions which
+trigger events in order to successfully achieve consensus.
 
 The included pseudocode segments can be minimally described as follows:
 

@@ -158,8 +158,15 @@ pub struct TendermintHandle<N: Network> {
 }
 
 impl<N: Network + 'static> TendermintMachine<N> {
+  // Broadcast the given piece of data
+  // Tendermint messages always specify their block/round, yet Tendermint only ever broadcasts for
+  // the current block/round. Accordingly, instead of manually fetching those at every call-site,
+  // this function can simply pass the data to the block which can contextualize it
   fn broadcast(&mut self, data: DataFor<N>) {
     if let Some(msg) = self.block.message(data) {
+      // Push it on to the queue. This is done so we only handle one message at a time, and so we
+      // can handle our own message before broadcasting it. That way, we fail before before
+      // becoming malicious
       self.queue.push_back(msg);
     }
   }

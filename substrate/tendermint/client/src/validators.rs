@@ -180,7 +180,7 @@ impl<T: TendermintClient> Weights for TendermintValidators<T> {
     self.0.read().unwrap().weights[usize::try_from(id).unwrap()]
   }
 
-  // TODO
+  // TODO: https://github.com/serai-dex/serai/issues/159
   fn proposer(&self, number: BlockNumber, round: RoundNumber) -> u16 {
     u16::try_from(
       (number.0 + u64::from(round.0)) % u64::try_from(self.0.read().unwrap().lookup.len()).unwrap(),

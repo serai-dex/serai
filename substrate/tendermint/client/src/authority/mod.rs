@@ -77,6 +77,12 @@ pub struct TendermintAuthority<T: TendermintValidator> {
   active: Option<ActiveAuthority<T>>,
 }
 
+// Get a block to propose after the specified header
+// If stub is true, no time will be spent adding transactions to it (beyond what's required),
+// making it as minimal as possible (a stub)
+// This is so we can create proposals when syncing, respecting tendermint-machine's API boundaries,
+// without spending the entire block processing time trying to include transactions (since we know
+// our proposal is meaningless and we'll just be syncing a new block anyways)
 async fn get_proposal<T: TendermintValidator>(
   env: &Arc<Mutex<T::Environment>>,
   import: &TendermintImport<T>,
@@ -93,7 +99,7 @@ async fn get_proposal<T: TendermintValidator>(
       if stub {
         Duration::ZERO
       } else {
-        // The first processing time is to build the block.
+        // The first processing time is to build the block
         // The second is for it to be downloaded (assumes a block won't take longer to download
         // than it'll take to process)
         // The third is for it to actually be processed

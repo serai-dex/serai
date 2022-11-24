@@ -55,6 +55,7 @@ impl<N: Network> RoundData<N> {
     self.timeouts.entry(step).or_insert(timeout);
   }
 
+  // Poll all set timeouts, returning the Step whose timeout has just expired
   pub(crate) async fn timeout_future(&self) -> Step {
     let timeout_future = |step| {
       let timeout = self.timeouts.get(&step).copied();
