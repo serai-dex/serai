@@ -17,8 +17,3 @@ runs:
       uses: foundry-rs/foundry-toolchain@v1
       with:
         version: nightly
-
-    - name: Run a Monero Regtest Node
-      uses: ./.github/actions/monero
-      with:
-        version: ${{ inputs.monero-version }}

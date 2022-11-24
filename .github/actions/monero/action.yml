@@ -41,4 +41,4 @@ runs:
 
     - name: Monero Regtest Daemon
       shell: bash
-      run: ./monerod --regtest --offline --fixed-difficulty=1 --log-level 2 &
+      run: ./monerod --regtest --offline --fixed-difficulty=1 --log-level 2 --detach

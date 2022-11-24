@@ -24,9 +24,6 @@ jobs:
           rust-toolchain: ${{ steps.nightly.outputs.version }}
           rust-components: clippy
 
-      - name: Run Clippy
-        run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
-
   deny:
     runs-on: ubuntu-latest
     steps:
@@ -58,8 +55,32 @@ jobs:
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
 
+      - name: Download the Monero Daemon
+        # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
+        # to the contained folder not following the same naming scheme and
+        # requiring further expansion not worth doing right now
+        shell: bash
+        run: |
+          RUNNER_OS=${{ runner.os }}
+          RUNNER_ARCH=${{ runner.arch }}
+
+          RUNNER_OS=${RUNNER_OS,,}
+          RUNNER_ARCH=${RUNNER_ARCH,,}
+
+          RUNNER_OS=linux
+          RUNNER_ARCH=x64
+
+          FILE=monero-$RUNNER_OS-$RUNNER_ARCH-${{ inputs.version }}.tar.bz2
+          wget https://downloads.getmonero.org/cli/$FILE
+          tar -xvf $FILE
+
+          mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod monerod
+
       - name: Run Tests
-        run: cargo test --all-features
+        run: |
+          ./monerod --regtest --offline --fixed-difficulty=1 --log-level 2 &
+          cd coins/monero
+          cargo test --all-features
 
   fmt:
     runs-on: ubuntu-latest
