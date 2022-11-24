@@ -6,7 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 
-use log::{warn, error};
+use log::{debug, warn, error};
 
 use futures::{
   SinkExt, StreamExt,
@@ -182,7 +182,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     // This should only have a single value, yet a bounded channel with a capacity of 1 would cause
     // a firm bound. It's not worth having a backlog crash the node since we aren't constrained
     let (new_block_event_send, mut new_block_event_recv) = mpsc::unbounded();
-    let (gossip_send, mut gossip_recv) = mpsc::unbounded();
+    let (msg_send, mut msg_recv) = mpsc::unbounded();
 
     // Clone the import object
     let import = self.import.clone();
@@ -199,7 +199,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
 
         block_in_progress: block_in_progress.clone(),
         new_block_event: new_block_event_send,
-        gossip: gossip_send,
+        gossip: msg_send,
 
         env: env.clone(),
         announce: network,
@@ -215,7 +215,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     spawner.spawn_essential("machine", Some("tendermint"), Box::pin(machine.run()));
 
     // Start receiving messages about the Tendermint process for this block
-    let mut recv = gossip.messages_for(TendermintGossip::<T>::topic(next_block));
+    let mut gossip_recv = gossip.messages_for(TendermintGossip::<T>::topic(next_block));
 
     // Get finality events from Substrate
     let mut finality = import.client.finality_notification_stream();
@@ -223,7 +223,14 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     loop {
       futures::select_biased! {
         // GossipEngine closed down
-        _ = gossip => break,
+        _ = gossip => {
+          debug!(
+            target: "tendermint",
+            "GossipEngine shut down. {}",
+            "Is the node shutting down?"
+          );
+          break
+        },
 
         // Synced a block from the network
         notif = finality.next() => {
@@ -243,7 +250,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
               }
               let next_block = number + 1;
               *block_in_progress = next_block;
-              recv = gossip.messages_for(TendermintGossip::<T>::topic(next_block));
+              gossip_recv = gossip.messages_for(TendermintGossip::<T>::topic(next_block));
             }
 
             let justifications = import.client.justifications(notif.hash).unwrap().unwrap();
@@ -255,6 +262,11 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
               get_proposal(&env, &import, &notif.header, false).await
             )).await.unwrap();
           } else {
+            debug!(
+              target: "tendermint",
+              "Finality notification stream closed down. {}",
+              "Is the node shutting down?"
+            );
             break;
           }
         },
@@ -262,26 +274,36 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Machine accomplished a new block
         new_block = new_block_event_recv.next() => {
           if new_block.is_some() {
-            recv = gossip.messages_for(
+            gossip_recv = gossip.messages_for(
               TendermintGossip::<T>::topic(*block_in_progress.read().unwrap())
             );
           } else {
+            debug!(
+              target: "tendermint",
+              "Block notification stream shut down. {}",
+              "Is the node shutting down?"
+            );
             break;
           }
         },
 
         // Message to broadcast
-        msg = gossip_recv.next() => {
+        msg = msg_recv.next() => {
           if let Some(msg) = msg {
             let topic = TendermintGossip::<T>::topic(msg.block().0);
             gossip.gossip_message(topic, msg.encode(), false);
           } else {
+            debug!(
+              target: "tendermint",
+              "Machine's message channel shut down. {}",
+              "Is the node shutting down?"
+            );
             break;
           }
         },
 
         // Received a message
-        msg = recv.next() => {
+        msg = gossip_recv.next() => {
           if let Some(msg) = msg {
             messages.send(
               match SignedMessage::decode(&mut msg.message.as_ref()) {
@@ -295,6 +317,11 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
               }
             ).await.unwrap();
           } else {
+            debug!(
+              target: "tendermint",
+              "Gossip channel shut down. {}",
+              "Is the node shutting down?"
+            );
             break;
           }
         }
@@ -439,6 +466,8 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
             "Is the node shutting down?"
           );
         }
+      } else {
+        debug!(target: "tendermint", "Machine produced a commit after we synced it");
       }
 
       // Clear any blocks for the previous slot which we were willing to recheck

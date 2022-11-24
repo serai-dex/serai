@@ -8923,6 +8923,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "log",
  "parity-scale-codec",
  "sp-runtime",
  "thiserror",

@@ -1,11 +1,14 @@
 use std::{sync::Arc, collections::HashMap};
 
+use log::debug;
+
 use crate::{ext::*, RoundNumber, Step, Data, DataFor, MessageFor, TendermintError};
 
+type RoundLog<N> = HashMap<<N as Network>::ValidatorId, HashMap<Step, DataFor<N>>>;
 pub(crate) struct MessageLog<N: Network> {
   weights: Arc<N::Weights>,
   precommitted: HashMap<N::ValidatorId, <N::Block as Block>::Id>,
-  pub(crate) log: HashMap<RoundNumber, HashMap<N::ValidatorId, HashMap<Step, DataFor<N>>>>,
+  pub(crate) log: HashMap<RoundNumber, RoundLog<N>>,
 }
 
 impl<N: Network> MessageLog<N> {
@@ -25,6 +28,10 @@ impl<N: Network> MessageLog<N> {
     let step = msg.data.step();
     if let Some(existing) = msgs.get(&step) {
       if existing != &msg.data {
+        debug!(
+          target: "tendermint",
+          "Validator sent multiple messages for the same block + round + step"
+        );
         Err(TendermintError::Malicious(msg.sender))?;
       }
       return Ok(false);
@@ -34,6 +41,7 @@ impl<N: Network> MessageLog<N> {
     if let Data::Precommit(Some((hash, _))) = &msg.data {
       if let Some(prev) = self.precommitted.get(&msg.sender) {
         if hash != prev {
+          debug!(target: "tendermint", "Validator precommitted to multiple blocks");
           Err(TendermintError::Malicious(msg.sender))?;
         }
       }
