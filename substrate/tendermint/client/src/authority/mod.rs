@@ -57,9 +57,10 @@ use import_future::ImportFuture;
 struct ActiveAuthority<T: TendermintValidator> {
   signer: TendermintSigner<T>,
 
-  // Notification channel for when we start a new number
-  new_number: Arc<RwLock<u64>>,
-  new_number_event: UnboundedSender<()>,
+  // The number of the Block we're working on producing
+  block_in_progress: Arc<RwLock<u64>>,
+  // Notification channel for when we start on a new block
+  new_block_event: UnboundedSender<()>,
   // Outgoing message queue, placed here as the GossipEngine itself can't be
   gossip: UnboundedSender<
     SignedMessage<u16, T::Block, <TendermintValidators<T> as SignatureScheme>::Signature>,
@@ -164,23 +165,23 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     .map(|commit| commit.end_time)
     .unwrap_or_else(|_| self.genesis.unwrap());
 
-    let new_number = last_block + 1;
+    let next_block = last_block + 1;
 
     // Shared references between us and the Tendermint machine (and its actions via its Network
     // trait)
-    let number = Arc::new(RwLock::new(new_number));
+    let block_in_progress = Arc::new(RwLock::new(next_block));
 
     // Create the gossip network
     let mut gossip = GossipEngine::new(
       network.clone(),
       protocol,
-      Arc::new(TendermintGossip::new(number.clone(), self.import.validators.clone())),
+      Arc::new(TendermintGossip::new(block_in_progress.clone(), self.import.validators.clone())),
       registry,
     );
 
     // This should only have a single value, yet a bounded channel with a capacity of 1 would cause
     // a firm bound. It's not worth having a backlog crash the node since we aren't constrained
-    let (new_number_send, mut new_number_recv) = mpsc::unbounded();
+    let (new_block_event_send, mut new_block_event_recv) = mpsc::unbounded();
     let (gossip_send, mut gossip_recv) = mpsc::unbounded();
 
     // Clone the import object
@@ -196,8 +197,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       self.active = Some(ActiveAuthority {
         signer: TendermintSigner(keys, self.import.validators.clone()),
 
-        new_number: number.clone(),
-        new_number_event: new_number_send,
+        block_in_progress: block_in_progress.clone(),
+        new_block_event: new_block_event_send,
         gossip: gossip_send,
 
         env: env.clone(),
@@ -214,7 +215,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     spawner.spawn_essential("machine", Some("tendermint"), Box::pin(machine.run()));
 
     // Start receiving messages about the Tendermint process for this block
-    let mut recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number));
+    let mut recv = gossip.messages_for(TendermintGossip::<T>::topic(next_block));
 
     // Get finality events from Substrate
     let mut finality = import.client.finality_notification_stream();
@@ -227,27 +228,27 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         // Synced a block from the network
         notif = finality.next() => {
           if let Some(notif) = notif {
-            let this_number = match (*notif.header.number()).try_into() {
+            let number = match (*notif.header.number()).try_into() {
               Ok(number) => number,
               Err(_) => panic!("BlockNumber exceeded u64"),
             };
 
             // There's a race condition between the machine add_block and this
-            // Both wait for a write lock on this number and don't release it until after updating
-            // it accordingly
+            // Both wait for a write lock on this ref and don't release it until after updating it
+            // accordingly
             {
-              let mut number = number.write().unwrap();
-              if this_number < *number {
+              let mut block_in_progress = block_in_progress.write().unwrap();
+              if number < *block_in_progress {
                 continue;
               }
-              let new_number = this_number + 1;
-              *number = new_number;
-              recv = gossip.messages_for(TendermintGossip::<T>::topic(new_number));
+              let next_block = number + 1;
+              *block_in_progress = next_block;
+              recv = gossip.messages_for(TendermintGossip::<T>::topic(next_block));
             }
 
             let justifications = import.client.justifications(notif.hash).unwrap().unwrap();
             step.send((
-              BlockNumber(this_number),
+              BlockNumber(number),
               Commit::decode(&mut justifications.get(CONSENSUS_ID).unwrap().as_ref()).unwrap(),
               // This will fail if syncing occurs radically faster than machine stepping takes
               // TODO: Set true when initial syncing
@@ -258,10 +259,12 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
           }
         },
 
-        // Machine reached a new block
-        new_number = new_number_recv.next() => {
-          if new_number.is_some() {
-            recv = gossip.messages_for(TendermintGossip::<T>::topic(*number.read().unwrap()));
+        // Machine accomplished a new block
+        new_block = new_block_event_recv.next() => {
+          if new_block.is_some() {
+            recv = gossip.messages_for(
+              TendermintGossip::<T>::topic(*block_in_progress.read().unwrap())
+            );
           } else {
             break;
           }
@@ -406,20 +409,19 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     debug_assert!(self.import.verify_justification(hash, &justification).is_ok());
 
     let raw_number = *block.header().number();
-    let this_number: u64 = match raw_number.try_into() {
+    let number: u64 = match raw_number.try_into() {
       Ok(number) => number,
       Err(_) => panic!("BlockNumber exceeded u64"),
     };
-    let new_number = this_number + 1;
 
     {
       let active = self.active.as_mut().unwrap();
       // Acquire the write lock
-      let mut number = active.new_number.write().unwrap();
+      let mut block_in_progress = active.block_in_progress.write().unwrap();
 
-      // This block's number may not be the block we're working on if Substrate synced it before
+      // This block's number may not be the block we were working on if Substrate synced it before
       // the machine synced the necessary precommits
-      if this_number == *number {
+      if number == *block_in_progress {
         // If we are the party responsible for handling this block, finalize it
         self
           .import
@@ -428,9 +430,9 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
           .map_err(|_| Error::InvalidJustification)
           .unwrap();
 
-        // Tell the loop there's a new number
-        *number = new_number;
-        if active.new_number_event.unbounded_send(()).is_err() {
+        // Tell the loop we received a block and to move to the next
+        *block_in_progress = number + 1;
+        if active.new_block_event.unbounded_send(()).is_err() {
           warn!(
             target: "tendermint",
             "Attempted to send a new number to the gossip handler except it's closed. {}",
