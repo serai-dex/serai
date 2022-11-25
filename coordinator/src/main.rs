@@ -56,6 +56,7 @@ async fn main() {
   //  * binary checksum ??
 
   // Start Serai Observer
+  observer::start();
 
   // Start Health Monitor
 
