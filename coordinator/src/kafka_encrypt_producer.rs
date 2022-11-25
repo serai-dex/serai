@@ -37,26 +37,26 @@ pub fn send_message() {
   let coordinator_message_box = MessageBox::new("Coordinator", COORD_PRIV, message_box_pubkeys);
   
   // Create Encrypted Message for each processor
-  let btc_msg = "Cooordinator message to BTC Processor";
+  let btc_msg = "Cooordinator message to BTC Processor".to_vec();
   let btc_enc = coordinator_message_box.encrypt_to_string(&"BTC_Processor", &btc_msg.clone());
 
-  let eth_msg = "Cooordinator message to ETH Processor";
+  let eth_msg = "Cooordinator message to ETH Processor".to_vec();
   let eth_enc = coordinator_message_box.encrypt_to_string(&"ETH_Processor", &eth_msg.clone());
   
-  let xmr_msg = "Cooordinator message to XMR Processor";
+  let xmr_msg = "Cooordinator message to XMR Processor".to_vec();
   let xmr_enc = coordinator_message_box.encrypt_to_string(&"XMR_Processor", &xmr_msg.clone());
 
   // Send Encrypted Messages to secure partitian
   producer
-    .send(BaseRecord::to("private").key(&format!("coordinator")).payload(&btc_enc))
+    .send(BaseRecord::to("btc_topic").key(&format!("coordinator")).payload(&btc_enc))
     .expect("failed to send message");
 
   producer
-    .send(BaseRecord::to("private").key(&format!("coordinator")).payload(&eth_enc))
+    .send(BaseRecord::to("eth_topic").key(&format!("coordinator")).payload(&eth_enc))
     .expect("failed to send message");
   
   producer
-    .send(BaseRecord::to("private").key(&format!("coordinator")).payload(&xmr_enc))
+    .send(BaseRecord::to("xmr_topic").key(&format!("coordinator")).payload(&xmr_enc))
     .expect("failed to send message");
 
   io::stdin().read_line(&mut String::new()).unwrap();
