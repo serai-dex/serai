@@ -1,5 +1,5 @@
 mod core;
-mod kafka_pubkey;
+mod kafka_pubkey_producer;
 mod observer;
 // Generates / secruely saves a coin specifik key pari on first launch or reloads
 pub fn main(){
@@ -13,5 +13,5 @@ pub fn main(){
     observer::start();
 
     // Communicates public keys to partition
-    kafka_pubkey::start();
+    kafka_pubkey_producer::start();
 }

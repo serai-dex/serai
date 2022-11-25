@@ -9,16 +9,17 @@ use message_box::{MessageBox, SecureMessage};
 use std::io;
 
 pub fn start() {
-  let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
+  println!("Starting Processor Observer");
+  let consumer_pubkey: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .set("group.id", "serai")
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-  consumer.subscribe(&["public_keys"]).expect("topic subscribe failed");
+    consumer_pubkey.subscribe(&["public_keys"]).expect("topic subscribe failed");
 
   thread::spawn(move || {
-    for msg_result in &consumer {
+    for msg_result in &consumer_pubkey {
       // Pulls recent messages from Kafka
       let msg = msg_result.unwrap();
       let key: &str = msg.key_view().unwrap().unwrap();
