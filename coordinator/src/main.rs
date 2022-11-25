@@ -1,7 +1,7 @@
 mod core;
 mod health;
 mod observer;
-mod kafka;
+mod kafka_pubkey;
 use std::thread;
 use std::io::Write;
 use std::time::Duration;
@@ -67,5 +67,5 @@ async fn main() {
   core::initialize_keys();
 
   // Initialize Kafka
-  kafka::start();
+  kafka_pubkey::start();
 }

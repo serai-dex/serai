@@ -1,5 +1,5 @@
 mod core;
-mod kafka;
+mod kafka_pubkey;
 // Generates / secruely saves a coin specifik key pari on first launch or reloads
 pub fn main(){
     println!("Starting processor");
@@ -9,5 +9,5 @@ pub fn main(){
     core::initialize_keys();
 
     // Communicates public keys to partition
-    kafka::start();
+    kafka_pubkey::start();
 }
