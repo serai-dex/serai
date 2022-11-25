@@ -2,9 +2,11 @@ mod core;
 mod health;
 mod observer;
 mod kafka_pubkey_producer;
+mod kafka_encrypt_producer;
 use std::thread;
 use std::io::Write;
 use std::time::Duration;
+use std::io;
 
 use clap::{value_t, App, Arg};
 
@@ -69,4 +71,9 @@ async fn main() {
 
   // Initialize Kafka
   kafka_pubkey_producer::start();
+
+  // Send message from Coordinator to each Processor
+  kafka_encrypt_producer::send_message();
+
+  io::stdin().read_line(&mut String::new()).unwrap();
 }

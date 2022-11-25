@@ -6,28 +6,106 @@ use rdkafka::{
   ClientConfig, ClientContext, Message, Offset,
 };
 use message_box::{MessageBox, SecureMessage};
-use std::io;
 
 pub fn start() {
   println!("Starting Processor Observer");
-  let consumer_pubkey: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
+  let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .set("group.id", "serai")
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    consumer_pubkey.subscribe(&["public_keys"]).expect("topic subscribe failed");
+    consumer.subscribe(&["Public_Keys"]).expect("public_key_topic subscribe failed");
+    consumer.subscribe(&["BTC_Topic"]).expect("btc topic subscribe failed");
+    consumer.subscribe(&["ETH_Topic"]).expect("eth topic subscribe failed");
+    consumer.subscribe(&["XMR_Topic"]).expect("xmr topic subscribe failed");
 
   thread::spawn(move || {
-    for msg_result in &consumer_pubkey {
-      // Pulls recent messages from Kafka
+    for msg_result in &consumer {
       let msg = msg_result.unwrap();
-      let key: &str = msg.key_view().unwrap().unwrap();
-      let value = msg.payload().unwrap();
-      let public_key = str::from_utf8(value).unwrap();
-      println!("Received public key");
-      dbg!(&public_key);
-      dbg!(&key);
+      match msg.topic() {
+        "Public_Keys" => {
+          let key: &str = msg.key_view().unwrap().unwrap();
+          let value = msg.payload().unwrap();
+          let public_key = str::from_utf8(value).unwrap();
+          println!("Received public key");
+          dbg!(&public_key);
+          dbg!(&key);
+        },
+        "BTC_Topic" => {
+          let key: &str = msg.key_view().unwrap().unwrap();
+          let value = msg.payload().unwrap();
+
+          if let "Coordinator" = &*key {
+            // Creates Message box used for decryption
+            let COORD_PUB =
+            message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
+
+            let BTC_PRIV =
+            message_box::PrivateKey::from_string(env::var("BTC_PRIV").unwrap().to_string());
+
+            let mut message_box_pubkeys = HashMap::new();
+            message_box_pubkeys.insert("Coordinator", COORD_PUB);
+
+            let message_box = MessageBox::new("BTC_Processor", BTC_PRIV, message_box_pubkeys);
+            let encrypted_msg = str::from_utf8(value).unwrap();
+
+            // Decrypt message using Message Box
+            let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
+            let decoded_string = String::from_utf8(encoded_string).unwrap();
+            dbg!(&decoded_string);
+          }
+        },
+        "ETH_Topic" => {
+          let key: &str = msg.key_view().unwrap().unwrap();
+          let value = msg.payload().unwrap();
+
+          if let "Coordinator" = &*key {
+            // Creates Message box used for decryption
+            let COORD_PUB =
+            message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
+
+            let ETH_PRIV =
+            message_box::PrivateKey::from_string(env::var("ETH_PRIV").unwrap().to_string());
+
+            let mut message_box_pubkeys = HashMap::new();
+            message_box_pubkeys.insert("Coordinator", COORD_PUB);
+
+            let message_box = MessageBox::new("ETH_Processor", ETH_PRIV, message_box_pubkeys);
+            let encrypted_msg = str::from_utf8(value).unwrap();
+
+            // Decrypt message using Message Box
+            let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
+            let decoded_string = String::from_utf8(encoded_string).unwrap();
+            dbg!(&decoded_string);
+          }
+        },
+        "XMR_Topic" => {
+          let key: &str = msg.key_view().unwrap().unwrap();
+          let value = msg.payload().unwrap();
+
+          if let "Coordinator" = &*key {
+            // Creates Message box used for decryption
+            let COORD_PUB =
+            message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
+
+            let XMR_PRIV =
+            message_box::PrivateKey::from_string(env::var("XMR_PRIV").unwrap().to_string());
+
+            let mut message_box_pubkeys = HashMap::new();
+            message_box_pubkeys.insert("Coordinator", COORD_PUB);
+
+            let message_box = MessageBox::new("XMR_Processor", XMR_PRIV, message_box_pubkeys);
+            let encrypted_msg = str::from_utf8(value).unwrap();
+
+            // Decrypt message using Message Box
+            let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
+            let decoded_string = String::from_utf8(encoded_string).unwrap();
+            dbg!(&decoded_string);
+          }
+        },
+        _ => println!("Topic Not Found"),
+      }
     }
   });
 }

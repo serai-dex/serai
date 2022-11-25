@@ -23,11 +23,8 @@ pub fn start() {
 
   // Sends message to Kafka
   producer
-    .send(BaseRecord::to("public_keys").key(&format!("coordinator")).payload(&msg))
+    .send(BaseRecord::to("Public_Keys").key(&format!("Coordinator")).payload(&msg))
     .expect("failed to send message");
-
-  //thread::sleep(Duration::from_secs(10));
-  io::stdin().read_line(&mut String::new()).unwrap();
 }
 
 struct ProduceCallbackLogger;

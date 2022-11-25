@@ -23,7 +23,7 @@ pub fn start() {
 
   // Sends btc pubkey to Kafka
   producer
-    .send(BaseRecord::to("public_keys").key(&format!("btc_processor")).payload(&btc_msg))
+    .send(BaseRecord::to("Public_Keys").key(&format!("BTC_Processor")).payload(&btc_msg))
     .expect("failed to send message");
 
   let eth_pub = env::var("ETH_PUB");
@@ -31,7 +31,7 @@ pub fn start() {
 
   // Sends eth pubkey to Kafka
   producer
-    .send(BaseRecord::to("public_keys").key(&format!("eth_processor")).payload(&eth_msg))
+    .send(BaseRecord::to("Public_Keys").key(&format!("ETH_Processor")).payload(&eth_msg))
     .expect("failed to send message");
 
   let xmr_pub = env::var("XMR_PUB");
@@ -39,11 +39,8 @@ pub fn start() {
 
   // Sends xmr pubkey to Kafka
   producer
-    .send(BaseRecord::to("public_keys").key(&format!("xmr_processor")).payload(&xmr_msg))
+    .send(BaseRecord::to("Public_Keys").key(&format!("XMR_Processor")).payload(&xmr_msg))
     .expect("failed to send message");
-
-  //thread::sleep(Duration::from_secs(10));
-  io::stdin().read_line(&mut String::new()).unwrap();
 }
 
 struct ProduceCallbackLogger;

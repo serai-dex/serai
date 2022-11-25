@@ -29,34 +29,34 @@ pub fn send_message() {
 
   // Should use an additional pub key for IDs to use external message box instead of internal
   let mut message_box_pubkeys = HashMap::new();
-  message_box_pubkeys.insert("btc", BTC_PUB);
-  message_box_pubkeys.insert("eth", ETH_PUB);
-  message_box_pubkeys.insert("xmr", XMR_PUB);
+  message_box_pubkeys.insert("BTC_Processor", BTC_PUB);
+  message_box_pubkeys.insert("ETH_Processor", ETH_PUB);
+  message_box_pubkeys.insert("XMR_Processor", XMR_PUB);
 
   // Create Coordinator Message Box
-  let coordinator_message_box = MessageBox::new("Coordinator", COORD_PRIV, message_box_pubkeys);
+  let message_box = MessageBox::new("Coordinator", COORD_PRIV, message_box_pubkeys);
   
   // Create Encrypted Message for each processor
-  let btc_msg = "Cooordinator message to BTC Processor".to_vec();
-  let btc_enc = coordinator_message_box.encrypt_to_string(&"BTC_Processor", &btc_msg.clone());
+  let btc_msg = b"Coordinator message to BTC Processor".to_vec();
+  let btc_enc = message_box.encrypt_to_string(&"BTC_Processor", &btc_msg.clone());
 
-  let eth_msg = "Cooordinator message to ETH Processor".to_vec();
-  let eth_enc = coordinator_message_box.encrypt_to_string(&"ETH_Processor", &eth_msg.clone());
+  let eth_msg = b"Coordinator message to ETH Processor".to_vec();
+  let eth_enc = message_box.encrypt_to_string(&"ETH_Processor", &eth_msg.clone());
   
-  let xmr_msg = "Cooordinator message to XMR Processor".to_vec();
-  let xmr_enc = coordinator_message_box.encrypt_to_string(&"XMR_Processor", &xmr_msg.clone());
+  let xmr_msg = b"Coordinator message to XMR Processor".to_vec();
+  let xmr_enc = message_box.encrypt_to_string(&"XMR_Processor", &xmr_msg.clone());
 
   // Send Encrypted Messages to secure partitian
   producer
-    .send(BaseRecord::to("btc_topic").key(&format!("coordinator")).payload(&btc_enc))
+    .send(BaseRecord::to("BTC_Topic").key(&format!("Coordinator")).payload(&btc_enc))
     .expect("failed to send message");
 
   producer
-    .send(BaseRecord::to("eth_topic").key(&format!("coordinator")).payload(&eth_enc))
+    .send(BaseRecord::to("ETH_Topic").key(&format!("Coordinator")).payload(&eth_enc))
     .expect("failed to send message");
   
   producer
-    .send(BaseRecord::to("xmr_topic").key(&format!("coordinator")).payload(&xmr_enc))
+    .send(BaseRecord::to("XMR_Topic").key(&format!("Coordinator")).payload(&xmr_enc))
     .expect("failed to send message");
 
   io::stdin().read_line(&mut String::new()).unwrap();
