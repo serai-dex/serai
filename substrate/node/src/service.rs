@@ -666,6 +666,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 =======
 =======
       TendermintAuthority::new(
+<<<<<<< HEAD
         Some(
           UNIX_EPOCH +
             Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
@@ -676,6 +677,12 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 >>>>>>> 426bacac (Pass in the genesis time to Substrate)
         tendermint_protocol,
 >>>>>>> 16a2c9a2 (Correct protocol name handling)
+=======
+        UNIX_EPOCH +
+          Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
+        tendermint_protocol,
+        authority,
+>>>>>>> d7579246 (Clean TendermintAuthority::authority as possible)
         keystore_container.keystore(),
 >>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
         Cidp,
