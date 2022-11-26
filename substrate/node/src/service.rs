@@ -246,14 +246,10 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       "tendermint",
       None,
       TendermintAuthority::new(
-        Some(
-          UNIX_EPOCH +
-            Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
-        ),
-        authority,
-      )
-      .authority(
+        UNIX_EPOCH +
+          Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
         tendermint_protocol,
+        authority,
         keystore_container.keystore(),
         Cidp,
         task_manager.spawn_essential_handle(),

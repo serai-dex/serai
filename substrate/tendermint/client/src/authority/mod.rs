@@ -73,7 +73,6 @@ struct ActiveAuthority<T: TendermintValidator> {
 
 /// Tendermint Authority. Participates in the block proposal and voting process.
 pub struct TendermintAuthority<T: TendermintValidator> {
-  genesis: Option<u64>,
   import: TendermintImport<T>,
   active: Option<ActiveAuthority<T>>,
 }
@@ -114,27 +113,22 @@ async fn get_proposal<T: TendermintValidator>(
 }
 
 impl<T: TendermintValidator> TendermintAuthority<T> {
-  /// Create a new TendermintAuthority.
-  pub fn new(genesis: Option<SystemTime>, import: TendermintImport<T>) -> Self {
-    Self {
-      genesis: genesis.map(|genesis| {
-        genesis.duration_since(UNIX_EPOCH).unwrap().as_secs() + u64::from(Self::block_time())
-      }),
-      import,
-      active: None,
-    }
+  // Authority which is capable of verifying commits
+  pub(crate) fn stub(import: TendermintImport<T>) -> Self {
+    Self { import, active: None }
   }
 
   async fn get_proposal(&mut self, header: &<T::Block as Block>::Header) -> T::Block {
     get_proposal(&self.active.as_mut().unwrap().env, &self.import, header, false).await
   }
 
-  /// Act as a network authority, proposing and voting on blocks. This should be spawned on a task
-  /// as it will not return until the P2P stack shuts down.
-  #[allow(clippy::too_many_arguments)]
-  pub async fn authority(
-    mut self,
+  /// Create and run a new Tendermint Authority, proposing and voting on blocks.
+  /// This should be spawned on a task as it will not return until the P2P stack shuts down.
+  #[allow(clippy::too_many_arguments, clippy::new_ret_no_self)]
+  pub async fn new(
+    genesis: SystemTime,
     protocol: ProtocolName,
+    import: TendermintImport<T>,
     keys: Arc<dyn CryptoStore>,
     providers: T::CIDP,
     spawner: impl SpawnEssentialNamed,
@@ -142,80 +136,92 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     network: T::Network,
     registry: Option<&Registry>,
   ) {
-    let info = self.import.client.info();
-
-    // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
-    let last_block: u64 = match info.finalized_number.try_into() {
-      Ok(best) => best,
-      Err(_) => panic!("BlockNumber exceeded u64"),
-    };
-    let last_hash = info.finalized_hash;
-
-    // Get the last block's time by grabbing its commit and reading the time from that
-    let last_time = Commit::<TendermintValidators<T>>::decode(
-      &mut self
-        .import
-        .client
-        .justifications(last_hash)
-        .unwrap()
-        .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
-        .unwrap_or_default()
-        .as_ref(),
-    )
-    .map(|commit| commit.end_time)
-    .unwrap_or_else(|_| self.genesis.unwrap());
-
-    let next_block = last_block + 1;
-
-    // Shared references between us and the Tendermint machine (and its actions via its Network
-    // trait)
-    let block_in_progress = Arc::new(RwLock::new(next_block));
-
-    // Create the gossip network
-    let mut gossip = GossipEngine::new(
-      network.clone(),
-      protocol,
-      Arc::new(TendermintGossip::new(block_in_progress.clone(), self.import.validators.clone())),
-      registry,
-    );
-
     // This should only have a single value, yet a bounded channel with a capacity of 1 would cause
     // a firm bound. It's not worth having a backlog crash the node since we aren't constrained
     let (new_block_event_send, mut new_block_event_recv) = mpsc::unbounded();
     let (msg_send, mut msg_recv) = mpsc::unbounded();
 
-    // Clone the import object
-    let import = self.import.clone();
-
     // Move the env into an Arc
     let env = Arc::new(Mutex::new(env));
 
-    // Create the Tendermint machine
-    let TendermintHandle { mut step, mut messages, machine } = {
-      // Set this struct as active
-      *self.import.providers.write().await = Some(providers);
-      self.active = Some(ActiveAuthority {
-        signer: TendermintSigner(keys, self.import.validators.clone()),
+    // Scoped so the temporary variables used here don't leak
+    let (block_in_progress, TendermintHandle { mut step, mut messages, machine }) = {
+      // Get the info necessary to spawn the machine
+      let info = import.client.info();
 
-        block_in_progress: block_in_progress.clone(),
-        new_block_event: new_block_event_send,
-        gossip: msg_send,
+      // Header::Number: TryInto<u64> doesn't implement Debug and can't be unwrapped
+      let last_block: u64 = match info.finalized_number.try_into() {
+        Ok(best) => best,
+        Err(_) => panic!("BlockNumber exceeded u64"),
+      };
+      let last_hash = info.finalized_hash;
 
-        env: env.clone(),
-        announce: network,
-      });
+      let last_time = {
+        // Convert into a Unix timestamp
+        let genesis = genesis.duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-      let proposal = self
-        .get_proposal(&self.import.client.header(BlockId::Hash(last_hash)).unwrap().unwrap())
+        // Get the last block's time by grabbing its commit and reading the time from that
+        Commit::<TendermintValidators<T>>::decode(
+          &mut import
+            .client
+            .justifications(last_hash)
+            .unwrap()
+            .map(|justifications| justifications.get(CONSENSUS_ID).cloned().unwrap())
+            .unwrap_or_default()
+            .as_ref(),
+        )
+        .map(|commit| commit.end_time)
+        // The commit provides the time its block ended at
+        // The genesis time is when the network starts
+        // Accordingly, the end of the genesis block is a block time after the genesis time
+        .unwrap_or_else(|_| genesis + u64::from(Self::block_time()))
+      };
+
+      let next_block = last_block + 1;
+      // Shared references between us and the Tendermint machine (and its actions via its Network
+      // trait)
+      let block_in_progress = Arc::new(RwLock::new(next_block));
+
+      // Write the providers into the import so it can verify inherents
+      *import.providers.write().await = Some(providers);
+
+      let mut authority = Self {
+        import: import.clone(),
+        active: Some(ActiveAuthority {
+          signer: TendermintSigner(keys, import.validators.clone()),
+
+          block_in_progress: block_in_progress.clone(),
+          new_block_event: new_block_event_send,
+          gossip: msg_send,
+
+          env: env.clone(),
+          announce: network.clone(),
+        }),
+      };
+
+      // Get our first proposal
+      let proposal = authority
+        .get_proposal(&import.client.header(BlockId::Hash(last_hash)).unwrap().unwrap())
         .await;
 
-      // We no longer need self, so let TendermintMachine become its owner
-      TendermintMachine::new(self, BlockNumber(last_block), last_time, proposal).await
+      (
+        block_in_progress,
+        TendermintMachine::new(authority, BlockNumber(last_block), last_time, proposal).await,
+      )
     };
     spawner.spawn_essential("machine", Some("tendermint"), Box::pin(machine.run()));
 
+    // Create the gossip network
+    let mut gossip = GossipEngine::new(
+      network,
+      protocol,
+      Arc::new(TendermintGossip::new(block_in_progress.clone(), import.validators.clone())),
+      registry,
+    );
+
     // Start receiving messages about the Tendermint process for this block
-    let mut gossip_recv = gossip.messages_for(TendermintGossip::<T>::topic(next_block));
+    let mut gossip_recv =
+      gossip.messages_for(TendermintGossip::<T>::topic(*block_in_progress.read().unwrap()));
 
     // Get finality events from Substrate
     let mut finality = import.client.finality_notification_stream();
