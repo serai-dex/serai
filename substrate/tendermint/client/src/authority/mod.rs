@@ -118,8 +118,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     Self { import, active: None }
   }
 
-  async fn get_proposal(&mut self, header: &<T::Block as Block>::Header) -> T::Block {
-    get_proposal(&self.active.as_mut().unwrap().env, &self.import, header, false).await
+  async fn get_proposal(&self, header: &<T::Block as Block>::Header) -> T::Block {
+    get_proposal(&self.active.as_ref().unwrap().env, &self.import, header, false).await
   }
 
   /// Create and run a new Tendermint Authority, proposing and voting on blocks.
@@ -185,7 +185,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       // Write the providers into the import so it can verify inherents
       *import.providers.write().await = Some(providers);
 
-      let mut authority = Self {
+      let authority = Self {
         import: import.clone(),
         active: Some(ActiveAuthority {
           signer: TendermintSigner(keys, import.validators.clone()),
@@ -438,52 +438,54 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     block: T::Block,
     commit: Commit<TendermintValidators<T>>,
   ) -> T::Block {
-    let hash = block.hash();
-    let justification = (CONSENSUS_ID, commit.encode());
-    debug_assert!(self.import.verify_justification(hash, &justification).is_ok());
+    // Prevent import_block from being called while we run
+    let _guard = self.import.sync_lock.lock().await;
 
-    let raw_number = *block.header().number();
-    let number: u64 = match raw_number.try_into() {
-      Ok(number) => number,
-      Err(_) => panic!("BlockNumber exceeded u64"),
-    };
+    // Check if we already imported this externally
+    if self.import.client.justifications(block.hash()).unwrap().is_some() {
+      debug!(target: "tendermint", "Machine produced a commit after we already synced it");
+    } else {
+      let hash = block.hash();
+      let justification = (CONSENSUS_ID, commit.encode());
+      debug_assert!(self.import.verify_justification(hash, &justification).is_ok());
 
-    {
+      let raw_number = *block.header().number();
+      let number: u64 = match raw_number.try_into() {
+        Ok(number) => number,
+        Err(_) => panic!("BlockNumber exceeded u64"),
+      };
+
       let active = self.active.as_mut().unwrap();
-      // Acquire the write lock
       let mut block_in_progress = active.block_in_progress.write().unwrap();
+      // This will hold true unless we received, and handled, a notification for the block before
+      // its justification was made available
+      debug_assert_eq!(number, *block_in_progress);
 
-      // This block's number may not be the block we were working on if Substrate synced it before
-      // the machine synced the necessary precommits
-      if number == *block_in_progress {
-        // If we are the party responsible for handling this block, finalize it
-        self
-          .import
-          .client
-          .finalize_block(hash, Some(justification), true)
-          .map_err(|_| Error::InvalidJustification)
-          .unwrap();
+      // Finalize the block
+      self
+        .import
+        .client
+        .finalize_block(hash, Some(justification), true)
+        .map_err(|_| Error::InvalidJustification)
+        .unwrap();
 
-        // Tell the loop we received a block and to move to the next
-        *block_in_progress = number + 1;
-        if active.new_block_event.unbounded_send(()).is_err() {
-          warn!(
-            target: "tendermint",
-            "Attempted to send a new number to the gossip handler except it's closed. {}",
-            "Is the node shutting down?"
-          );
-        }
-      } else {
-        debug!(target: "tendermint", "Machine produced a commit after we synced it");
+      // Tell the loop we received a block and to move to the next
+      *block_in_progress = number + 1;
+      if active.new_block_event.unbounded_send(()).is_err() {
+        warn!(
+          target: "tendermint",
+          "Attempted to send a new number to the gossip handler except it's closed. {}",
+          "Is the node shutting down?"
+        );
       }
-
-      // Clear any blocks for the previous slot which we were willing to recheck
-      *self.import.recheck.write().unwrap() = HashSet::new();
 
       // Announce the block to the network so new clients can sync properly
       active.announce.announce_block(hash, None);
       active.announce.new_best_block_imported(hash, raw_number);
     }
+
+    // Clear any blocks for the previous slot which we were willing to recheck
+    *self.import.recheck.write().unwrap() = HashSet::new();
 
     self.get_proposal(block.header()).await
   }

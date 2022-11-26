@@ -60,6 +60,9 @@ where
     mut block: BlockImportParams<T::Block, Self::Transaction>,
     new_cache: HashMap<CacheKeyId, Vec<u8>>,
   ) -> Result<ImportResult, Self::Error> {
+    // Don't allow multiple blocks to be imported at once
+    let _guard = self.sync_lock.lock().await;
+
     if self.check_already_in_chain(block.header.hash()) {
       return Ok(ImportResult::AlreadyInChain);
     }
@@ -99,20 +102,17 @@ where
       // on our end, letting us directly set the notifications, so we're not beholden to when
       // Substrate decides to call notify_finalized
       //
-      // TODO: Call lock_import_and_run on our end, which already may be needed for safety reasons
+      // lock_import_and_run unfortunately doesn't allow async code and generally isn't feasible to
+      // work with though. We also couldn't use it to prevent Substrate from creating
+      // notifications, so it only solves half the problem. We'd *still* have to keep this patch,
+      // with all its fragility, unless we edit Substrate or move the entire block import flow here
       BlockOrigin::NetworkInitialSync => BlockOrigin::NetworkBroadcast,
-      // Also re-map File so bootstraps also trigger notifications, enabling safely using
-      // bootstraps
+      // Also re-map File so bootstraps also trigger notifications, enabling using bootstraps
       BlockOrigin::File => BlockOrigin::NetworkBroadcast,
 
       // We do not want this block, which hasn't been confirmed, to be broadcast over the net
       // Substrate will generate notifications unless it's Genesis, which this isn't, InitialSync,
       // which changes telemetry behavior, or File, which is... close enough
-      //
-      // Even if we do manually implement lock_import_and_run, Substrate will still override
-      // our notifications if it believes it should provide notifications. That means we *still*
-      // have to keep this patch, with all its fragility, unless we edit Substrate or move the
-      // the entire block import flow under Serai
       BlockOrigin::ConsensusBroadcast => BlockOrigin::File,
       BlockOrigin::Own => BlockOrigin::File,
     };

@@ -5,7 +5,7 @@ use std::{
 
 use log::{debug, warn};
 
-use tokio::sync::RwLock as AsyncRwLock;
+use tokio::sync::{Mutex, RwLock as AsyncRwLock};
 
 use sp_core::Decode;
 use sp_runtime::{
@@ -30,6 +30,9 @@ use crate::{
 
 /// Tendermint import handler.
 pub struct TendermintImport<T: TendermintValidator> {
+  // Lock ensuring only one block is imported at a time
+  pub(crate) sync_lock: Arc<Mutex<()>>,
+
   pub(crate) validators: TendermintValidators<T>,
 
   pub(crate) providers: Arc<AsyncRwLock<Option<T::CIDP>>>,
@@ -50,6 +53,8 @@ pub struct TendermintImport<T: TendermintValidator> {
 impl<T: TendermintValidator> Clone for TendermintImport<T> {
   fn clone(&self) -> Self {
     TendermintImport {
+      sync_lock: self.sync_lock.clone(),
+
       validators: self.validators.clone(),
 
       providers: self.providers.clone(),
@@ -65,6 +70,8 @@ impl<T: TendermintValidator> Clone for TendermintImport<T> {
 impl<T: TendermintValidator> TendermintImport<T> {
   pub(crate) fn new(client: Arc<T::Client>) -> TendermintImport<T> {
     TendermintImport {
+      sync_lock: Arc::new(Mutex::new(())),
+
       validators: TendermintValidators::new(client.clone()),
 
       providers: Arc::new(AsyncRwLock::new(None)),
@@ -102,7 +109,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
   }
 
   async fn check_inherents(
-    &mut self,
+    &self,
     hash: <T::Block as Block>::Hash,
     block: T::Block,
   ) -> Result<(), Error> {
@@ -193,7 +200,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
   }
 
   pub(crate) async fn check<BT>(
-    &mut self,
+    &self,
     block: &mut BlockImportParams<T::Block, BT>,
   ) -> Result<(), Error> {
     if block.finalized {
