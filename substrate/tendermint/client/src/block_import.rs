@@ -61,7 +61,7 @@ where
     new_cache: HashMap<CacheKeyId, Vec<u8>>,
   ) -> Result<ImportResult, Self::Error> {
     // Don't allow multiple blocks to be imported at once
-    let _guard = self.sync_lock.lock().await;
+    let _lock = self.sync_lock.lock().await;
 
     if self.check_already_in_chain(block.header.hash()) {
       return Ok(ImportResult::AlreadyInChain);

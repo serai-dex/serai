@@ -439,7 +439,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     commit: Commit<TendermintValidators<T>>,
   ) -> T::Block {
     // Prevent import_block from being called while we run
-    let _guard = self.import.sync_lock.lock().await;
+    let _lock = self.import.sync_lock.lock().await;
 
     // Check if we already imported this externally
     if self.import.client.justifications(block.hash()).unwrap().is_some() {
