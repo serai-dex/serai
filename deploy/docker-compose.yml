@@ -166,3 +166,5 @@ services:
     volumes:
       - "./coins/monero/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
+    ports:
+      - "18081:18081"

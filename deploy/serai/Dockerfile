@@ -2,12 +2,14 @@ FROM docker.io/paritytech/ci-linux:production as builder
 LABEL description="STAGE 1: Build"
 
 # Add files for build
-ADD substrate /serai/substrate
-ADD processor /serai/processor
-ADD coins /serai/coins
+ADD common /serai/common
 ADD crypto /serai/crypto
+ADD coins /serai/coins
+ADD processor /serai/processor
 ADD contracts /serai/contracts
+ADD substrate /serai/substrate
 ADD Cargo.toml /serai
+ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
 
 WORKDIR /serai
@@ -26,7 +28,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/serai/target/release/build \
     --mount=type=cache,target=/serai/target/release/deps \
     --mount=type=cache,target=/serai/target/release/.fingerprint \
-    --mount=type=cache,target=/serai/target/release/incremental \ 
+    --mount=type=cache,target=/serai/target/release/incremental \
     --mount=type=cache,target=/serai/target/release/wbuild \
     --mount=type=cache,target=/serai/target/release/lib* \
     cargo build --release

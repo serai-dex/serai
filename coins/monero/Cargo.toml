@@ -1,6 +1,6 @@
 [package]
 name = "monero-serai"
-version = "0.1.1-alpha"
+version = "0.1.2-alpha"
 description = "A modern Monero transaction library"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero"
@@ -33,9 +33,9 @@ group = { version = "0.12" }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
 multiexp = { path = "../../crypto/multiexp", version = "0.2", features = ["batch"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.1", features = ["recommended"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.4", features = ["ed25519"], optional = true }
-dleq = { path = "../../crypto/dleq", version = "0.1", features = ["serialize"], optional = true }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.2", features = ["recommended"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.5", features = ["ed25519"], optional = true }
+dleq = { path = "../../crypto/dleq", version = "0.2", features = ["serialize"], optional = true }
 
 monero-generators = { path = "generators", version = "0.1" }
 
@@ -46,6 +46,7 @@ serde_json = "1.0"
 base58-monero = "1"
 monero-epee-bin-serde = "1.0"
 
+digest_auth = "0.3"
 reqwest = { version = "0.11", features = ["json"] }
 
 [build-dependencies]
@@ -55,7 +56,7 @@ monero-generators = { path = "generators", version = "0.1" }
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.4", features = ["ed25519", "tests"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.5", features = ["ed25519", "tests"] }
 
 [features]
 multisig = ["rand_chacha", "blake2", "transcript", "frost", "dleq"]

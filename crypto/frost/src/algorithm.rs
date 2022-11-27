@@ -1,6 +1,7 @@
 use core::{marker::PhantomData, fmt::Debug};
 use std::io::{self, Read, Write};
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
@@ -66,7 +67,7 @@ pub trait Algorithm<C: Curve>: Clone {
     &mut self,
     params: &ThresholdView<C>,
     nonce_sums: &[Vec<C::G>],
-    nonces: &[C::F],
+    nonces: Vec<Zeroizing<C::F>>,
     msg: &[u8],
   ) -> C::F;
 
@@ -93,8 +94,8 @@ impl Transcript for IetfTranscript {
 
   fn domain_separate(&mut self, _: &[u8]) {}
 
-  fn append_message(&mut self, _: &'static [u8], message: &[u8]) {
-    self.0.extend(message);
+  fn append_message<M: AsRef<[u8]>>(&mut self, _: &'static [u8], message: M) {
+    self.0.extend(message.as_ref());
   }
 
   fn challenge(&mut self, _: &'static [u8]) -> Vec<u8> {
@@ -161,12 +162,12 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     &mut self,
     params: &ThresholdView<C>,
     nonce_sums: &[Vec<C::G>],
-    nonces: &[C::F],
+    mut nonces: Vec<Zeroizing<C::F>>,
     msg: &[u8],
   ) -> C::F {
     let c = H::hram(&nonce_sums[0][0], &params.group_key(), msg);
     self.c = Some(c);
-    SchnorrSignature::<C>::sign(params.secret_share(), nonces[0], c).s
+    SchnorrSignature::<C>::sign(params.secret_share(), nonces.swap_remove(0), c).s
   }
 
   #[must_use]

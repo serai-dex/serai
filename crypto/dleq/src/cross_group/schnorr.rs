@@ -1,6 +1,8 @@
+use core::ops::Deref;
+
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
@@ -30,13 +32,13 @@ impl<G: PrimeGroup + Zeroize> SchnorrPoK<G>
 where
   G::Scalar: PrimeFieldBits + Zeroize,
 {
-  // Not hram due to the lack of m
+  // Not HRAm due to the lack of m
   #[allow(non_snake_case)]
   fn hra<T: Transcript>(transcript: &mut T, generator: G, R: G, A: G) -> G::Scalar {
     transcript.domain_separate(b"schnorr_proof_of_knowledge");
-    transcript.append_message(b"generator", generator.to_bytes().as_ref());
-    transcript.append_message(b"nonce", R.to_bytes().as_ref());
-    transcript.append_message(b"public_key", A.to_bytes().as_ref());
+    transcript.append_message(b"generator", generator.to_bytes());
+    transcript.append_message(b"nonce", R.to_bytes());
+    transcript.append_message(b"public_key", A.to_bytes());
     challenge(transcript)
   }
 
@@ -44,18 +46,17 @@ where
     rng: &mut R,
     transcript: &mut T,
     generator: G,
-    mut private_key: G::Scalar,
+    private_key: &Zeroizing<G::Scalar>,
   ) -> SchnorrPoK<G> {
-    let mut nonce = G::Scalar::random(rng);
+    let nonce = Zeroizing::new(G::Scalar::random(rng));
     #[allow(non_snake_case)]
-    let R = generator * nonce;
-    let res = SchnorrPoK {
+    let R = generator * nonce.deref();
+    SchnorrPoK {
       R,
-      s: nonce + (private_key * SchnorrPoK::hra(transcript, generator, R, generator * private_key)),
-    };
-    private_key.zeroize();
-    nonce.zeroize();
-    res
+      s: (SchnorrPoK::hra(transcript, generator, R, generator * private_key.deref()) *
+        private_key.deref()) +
+        nonce.deref(),
+    }
   }
 
   pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(

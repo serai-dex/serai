@@ -1,9 +1,11 @@
+use core::ops::Deref;
+
 use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 use rand::seq::SliceRandom;
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
@@ -21,7 +23,7 @@ use crate::{
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{
-    address::Address, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
+    address::MoneroAddress, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
     uniqueness, shared_key, commitment_mask, amount_encryption,
   },
 };
@@ -45,7 +47,7 @@ impl SendOutput {
   fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     unique: [u8; 32],
-    output: (usize, (Address, u64)),
+    output: (usize, (MoneroAddress, u64)),
   ) -> (SendOutput, Option<[u8; 8]>) {
     let o = output.0;
     let output = output.1;
@@ -108,9 +110,9 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   rpc: &Rpc,
   ring_len: usize,
   inputs: &[SpendableOutput],
-  spend: &Scalar,
+  spend: &Zeroizing<Scalar>,
   tx: &mut Transaction,
-) -> Result<Vec<(Scalar, EdwardsPoint, ClsagInput)>, TransactionError> {
+) -> Result<Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>, TransactionError> {
   let mut signable = Vec::with_capacity(inputs.len());
 
   // Select decoys
@@ -125,9 +127,11 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
   .map_err(TransactionError::RpcError)?;
 
   for (i, input) in inputs.iter().enumerate() {
+    let input_spend = Zeroizing::new(input.key_offset() + spend.deref());
+    let image = generate_key_image(&input_spend);
     signable.push((
-      spend + input.key_offset(),
-      generate_key_image(spend + input.key_offset()),
+      input_spend,
+      image,
       ClsagInput::new(input.commitment().clone(), decoys[i].clone())
         .map_err(TransactionError::ClsagError)?,
     ));
@@ -169,7 +173,7 @@ impl Fee {
 pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,
-  payments: Vec<(Address, u64)>,
+  payments: Vec<(MoneroAddress, u64)>,
   data: Option<Vec<u8>>,
   fee: u64,
 }
@@ -182,15 +186,15 @@ impl SignableTransaction {
   pub fn new(
     protocol: Protocol,
     inputs: Vec<SpendableOutput>,
-    mut payments: Vec<(Address, u64)>,
-    change_address: Option<Address>,
+    mut payments: Vec<(MoneroAddress, u64)>,
+    change_address: Option<MoneroAddress>,
     data: Option<Vec<u8>>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure there's only one payment ID
     {
       let mut payment_ids = 0;
-      let mut count = |addr: Address| {
+      let mut count = |addr: MoneroAddress| {
         if addr.payment_id().is_some() {
           payment_ids += 1
         }
@@ -358,16 +362,16 @@ impl SignableTransaction {
     &mut self,
     rng: &mut R,
     rpc: &Rpc,
-    spend: &Scalar,
+    spend: &Zeroizing<Scalar>,
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
     for input in &self.inputs {
-      let mut offset = spend + input.key_offset();
-      if (&offset * &ED25519_BASEPOINT_TABLE) != input.key() {
+      let mut offset = Zeroizing::new(spend.deref() + input.key_offset());
+      if (offset.deref() * &ED25519_BASEPOINT_TABLE) != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
-      images.push(generate_key_image(offset));
+      images.push(generate_key_image(&offset));
       offset.zeroize();
     }
     images.sort_by(key_image_sort);

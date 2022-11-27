@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{ops::Deref, fmt::Debug};
 use std::{
   io::{self, Read, Write},
   collections::HashMap,
@@ -6,7 +6,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 use transcript::Transcript;
 
@@ -49,12 +49,6 @@ pub struct Params<C: Curve, A: Algorithm<C>> {
   keys: ThresholdKeys<C>,
   view: ThresholdView<C>,
 }
-impl<C: Curve, A: Algorithm<C>> Drop for Params<C, A> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
-}
-impl<C: Curve, A: Algorithm<C>> ZeroizeOnDrop for Params<C, A> {}
 
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
   pub fn new(
@@ -122,7 +116,7 @@ pub trait PreprocessMachine {
   /// Preprocess message for this machine.
   type Preprocess: Clone + PartialEq + Writable;
   /// Signature produced by this machine.
-  type Signature: Clone + PartialEq + fmt::Debug;
+  type Signature: Clone + PartialEq + Debug;
   /// SignMachine this PreprocessMachine turns into.
   type SignMachine: SignMachine<Self::Signature, Preprocess = Self::Preprocess>;
 
@@ -213,22 +207,13 @@ pub trait SignMachine<S> {
 }
 
 /// Next step of the state machine for the signing process.
+#[derive(Zeroize)]
 pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
   pub(crate) nonces: Vec<Nonce<C>>,
+  #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A::Addendum>,
 }
-impl<C: Curve, A: Algorithm<C>> Zeroize for AlgorithmSignMachine<C, A> {
-  fn zeroize(&mut self) {
-    self.nonces.zeroize()
-  }
-}
-impl<C: Curve, A: Algorithm<C>> Drop for AlgorithmSignMachine<C, A> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
-}
-impl<C: Curve, A: Algorithm<C>> ZeroizeOnDrop for AlgorithmSignMachine<C, A> {}
 
 impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachine<C, A> {
   type Preprocess = Preprocess<C, A::Addendum>;
@@ -266,7 +251,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
             .params
             .algorithm
             .transcript()
-            .append_message(b"participant", C::F::from(u64::from(*l)).to_repr().as_ref());
+            .append_message(b"participant", C::F::from(u64::from(*l)).to_repr());
         }
 
         if *l == self.params.keys.params().i() {
@@ -277,7 +262,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
           {
             let mut buf = vec![];
             addendum.write(&mut buf).unwrap();
-            self.params.algorithm.transcript().append_message(b"addendum", &buf);
+            self.params.algorithm.transcript().append_message(b"addendum", buf);
           }
 
           B.insert(*l, commitments);
@@ -288,7 +273,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
           {
             let mut buf = vec![];
             preprocess.addendum.write(&mut buf).unwrap();
-            self.params.algorithm.transcript().append_message(b"addendum", &buf);
+            self.params.algorithm.transcript().append_message(b"addendum", buf);
           }
 
           B.insert(*l, preprocess.commitments);
@@ -298,7 +283,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
       // Re-format into the FROST-expected rho transcript
       let mut rho_transcript = A::Transcript::new(b"FROST_rho");
-      rho_transcript.append_message(b"message", &C::hash_msg(msg));
+      rho_transcript.append_message(b"message", C::hash_msg(msg));
       rho_transcript.append_message(
         b"preprocesses",
         &C::hash_commitments(
@@ -317,7 +302,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
         // While further code edits would still be required for such a model (having the offset
         // communicated as a point along with only a single party applying the offset), this means
         // it wouldn't require a transcript change as well
-        rho_transcript.append_message(b"offset", (C::generator() * offset).to_bytes().as_ref());
+        rho_transcript.append_message(b"offset", (C::generator() * offset).to_bytes());
       }
 
       // Generate the per-signer binding factors
@@ -329,23 +314,26 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
         .params
         .algorithm
         .transcript()
-        .append_message(b"rho_transcript", rho_transcript.challenge(b"merge").as_ref());
+        .append_message(b"rho_transcript", rho_transcript.challenge(b"merge"));
     }
 
     #[allow(non_snake_case)]
     let Rs = B.nonces(&nonces);
 
     let our_binding_factors = B.binding_factors(multisig_params.i());
-    let mut nonces = self
+    let nonces = self
       .nonces
-      .iter()
+      .drain(..)
       .enumerate()
-      .map(|(n, nonces)| nonces.0[0] + (nonces.0[1] * our_binding_factors[n]))
+      .map(|(n, nonces)| {
+        let [base, mut actual] = nonces.0;
+        *actual *= our_binding_factors[n];
+        *actual += base.deref();
+        actual
+      })
       .collect::<Vec<_>>();
-    self.nonces.zeroize();
 
-    let share = self.params.algorithm.sign_share(&self.params.view, &Rs, &nonces, msg);
-    nonces.zeroize();
+    let share = self.params.algorithm.sign_share(&self.params.view, &Rs, nonces, msg);
 
     Ok((
       AlgorithmSignatureMachine { params: self.params.clone(), B, Rs, share },

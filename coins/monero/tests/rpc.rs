@@ -6,20 +6,20 @@ use serde_json::json;
 
 use monero_serai::{
   Protocol, random_scalar,
-  wallet::address::{Network, AddressType, AddressMeta, Address},
+  wallet::address::{Network, AddressType, AddressMeta, MoneroAddress},
   rpc::{EmptyResponse, RpcError, Rpc},
 };
 
 pub async fn rpc() -> Rpc {
-  let rpc = Rpc::new("http://127.0.0.1:18081".to_string());
+  let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
 
   // Only run once
   if rpc.get_height().await.unwrap() != 1 {
     return rpc;
   }
 
-  let addr = Address {
-    meta: AddressMeta { network: Network::Mainnet, kind: AddressType::Standard },
+  let addr = MoneroAddress {
+    meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
     spend: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
     view: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
   }
@@ -28,7 +28,7 @@ pub async fn rpc() -> Rpc {
   // Mine 20 blocks to ensure decoy availability
   mine_block(&rpc, &addr).await.unwrap();
   mine_block(&rpc, &addr).await.unwrap();
-  assert!(!matches!(rpc.get_protocol().await.unwrap(), Protocol::Unsupported));
+  assert!(!matches!(rpc.get_protocol().await.unwrap(), Protocol::Unsupported(_)));
 
   rpc
 }
