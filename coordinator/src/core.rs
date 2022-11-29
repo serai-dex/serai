@@ -8,6 +8,15 @@ use env_logger::Builder;
 use log::info;
 use log::{LevelFilter, Record};
 
+// Key Generation
+use message_box;
+use std::alloc::System;
+use zeroize::Zeroize;
+use zalloc::ZeroizingAlloc;
+use group::ff::PrimeField;
+#[global_allocator]
+static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
+
 // All asynchronous processes follow a pattern to modularly
 // create, start, and stop their various underlying components.
 // for example, the core module will use this pattern to start the
@@ -25,7 +34,7 @@ use log::{LevelFilter, Record};
 /// `core_config` is the configuration for the core process,
 /// which contains configurations for kafka, logging, and
 /// core host information.
-#[derive( Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct CoreProcess {
   core_config: CoreConfig,
 }
@@ -199,8 +208,9 @@ pub fn load_config(
     // Default to 'development' env
     // Note that this file is _optional_
     .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
-    .build().unwrap();
-  
+    .build()
+    .unwrap();
+
   Ok(config)
 }
 
@@ -366,5 +376,19 @@ impl CoordinatorConfig {
   // get the observer config
   pub fn get_observer(&self) -> ObserverConfig {
     self.observer.clone()
+  }
+}
+
+// Generates Private / Public key pair
+pub fn initialize_keys() {
+  // Checks if coordinator keys are set
+  let coord_priv_check = env::var("COORD_PRIV");
+  if (coord_priv_check.is_err()) {
+    // Generates new private / public key
+    let (private, public) = message_box::key_gen();
+    let mut private_bytes = unsafe { private.inner().to_repr() };
+    // Sets private / public key to environment variables
+    env::set_var("COORD_PRIV", hex::encode(private_bytes.as_ref()));
+    env::set_var("COORD_PUB",  hex::encode(public.to_bytes()));
   }
 }

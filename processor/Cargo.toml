@@ -29,6 +29,9 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25
 
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
+hex = "0.4"
+message-box = { path = "../common/message-box" }
+rdkafka = "0.28.0"
 [dev-dependencies]
 rand_core = "0.6"
 

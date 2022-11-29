@@ -41,14 +41,10 @@ impl PrivateKey {
   pub unsafe fn inner(&self) -> &Zeroizing<Scalar> {
     &self.0
   }
-
-  pub fn to_public(&self) -> PublicKey {
-    PublicKey(RistrettoPoint::generator() * self.0.deref())
-  }
 }
 
 /// Public Key for a Message Box.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
 pub struct PublicKey(RistrettoPoint);
 
 /// Generate a key pair
@@ -103,6 +99,8 @@ pub enum MessageError {
   Incomplete,
   #[error("invalid encoding")]
   InvalidEncoding,
+  #[error("invalid encoding")]
+  InvalidSignature,
 }
 
 /// A Secure Message, defined as being not only encrypted yet authenticated.
@@ -299,17 +297,17 @@ impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
   }
 
   /// Decrypt a message, returning the contained byte vector.
-  pub fn decrypt_to_bytes(&self, from: &K, msg: SecureMessage) -> Vec<u8> {
+  pub fn decrypt_to_bytes(&self, from: &K, msg: SecureMessage) -> Option<Vec<u8>> {
     if !msg.sig.verify(
       self.pub_keys[from],
       signature_challenge(&self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),
     ) {
-      panic!("unauthorized/unintended message entered into an authenticated system");
+      return None;
     }
 
     let SecureMessage { iv, mut ciphertext, .. } = msg;
     XChaCha20::new(&self.enc_keys[from], &iv).apply_keystream(ciphertext.as_mut());
-    ciphertext
+    Some(ciphertext)
   }
 }
 
@@ -321,20 +319,20 @@ impl AsBytes for &'static str {
 }
 pub type InternalMessageBox = MessageBox<&'static str>;
 impl InternalMessageBox {
-  pub fn add(&mut self, name: &'static str, key: RistrettoPoint) {
-    self.add_internal(name, key);
+  pub fn add(&mut self, name: &'static str, key: PublicKey) {
+    self.add_internal(name, key.0);
   }
 }
 
-impl AsBytes for RistrettoPoint {
+impl AsBytes for PublicKey {
   type Output = [u8; 32];
   fn as_bytes(&self) -> Self::Output {
-    self.to_bytes()
+    self.0.to_bytes()
   }
 }
-pub type ExternalMessageBox = MessageBox<RistrettoPoint>;
+pub type ExternalMessageBox = MessageBox<PublicKey>;
 impl ExternalMessageBox {
-  pub fn add(&mut self, key: RistrettoPoint) {
-    self.add_internal(key, key);
+  pub fn add(&mut self, key: PublicKey) {
+    self.add_internal(key, key.0);
   }
 }

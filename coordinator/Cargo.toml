@@ -45,4 +45,12 @@ regex = "1.1.6"
 smol = "1.2.4"
 
 message-box = { path = "../common/message-box" }
+dalek-ff-group = { path = "../crypto/dalek-ff-group" }
+
+group = "0.12"
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zalloc = { path = "../common/zalloc" }
+
+tokio-test = "*"
+
 [workspace]
