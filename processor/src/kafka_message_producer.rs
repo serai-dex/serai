@@ -20,7 +20,7 @@ pub fn btc_send_message() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending BTC encrytped / public message");
+  println!("Sending BTC Encrytped & Public Message");
 
   // Load Coord Priv / Pub Env variable
   let BTC_PRIV =
@@ -65,7 +65,7 @@ pub fn eth_send_message() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending ETH encrytped / public message");
+  println!("Sending ETH Encrytped & Public Message");
 
   // Load Coord Priv / Pub Env variable
   let ETH_PRIV =
@@ -110,7 +110,7 @@ pub fn xmr_send_message() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending XMR encrytped / public message");
+  println!("Sending XMR Encrytped & Public Message");
 
   // Load Coord Priv / Pub Env variable
   let XMR_PRIV =

@@ -26,7 +26,7 @@ pub fn main(){
     while !coord_key_found{
         let coord_pub_check = env::var("COORD_PUB");
         if (!coord_pub_check.is_err()) {
-            println!("Coord pubkey found");
+            println!("Coord Pubkey Ready");
             coord_key_found = true;
         }else {
             thread::sleep(Duration::from_secs(1));
@@ -44,5 +44,6 @@ pub fn main(){
     kafka_message_producer:: eth_send_message();
     kafka_message_producer:: xmr_send_message();
 
+    println!("Success");
     io::stdin().read_line(&mut String::new()).unwrap();
 }

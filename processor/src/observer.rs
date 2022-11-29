@@ -20,12 +20,10 @@ pub fn start() {
     thread::spawn(move || {
       for msg_result in &consumer_coord_pubkey {
         let msg = msg_result.unwrap();
-        println!("Received public key");
         let key: &str = msg.key_view().unwrap().unwrap();
         let value = msg.payload().unwrap();
         let public_key = str::from_utf8(value).unwrap();
-        dbg!(&public_key);
-        dbg!(&key);
+        println!("Received {} Public Key: {}", &key, &public_key);
         env::set_var("COORD_PUB", public_key);
       }
     });
@@ -68,12 +66,11 @@ pub fn start_public_observer() {
         let msg = msg_result.unwrap();
         let key: &str = msg.key_view().unwrap().unwrap();
         if let "Coordinator" = &*key {
-        //dbg!(&key);
         let value = msg.payload().unwrap();
-        println!("Received Public Message");
         str::from_utf8(value).unwrap();
         let pub_msg = str::from_utf8(value).unwrap();
-        dbg!(&pub_msg);
+        println!("Received Public Message from {}", &key);
+        println!("Public Message: {}", &pub_msg);
         }
       }
     });
@@ -83,11 +80,10 @@ pub fn start_public_observer() {
         let msg = msg_result.unwrap();
         let key: &str = msg.key_view().unwrap().unwrap();
         if let "Coordinator" = &*key {
-        //dbg!(&key);
         let value = msg.payload().unwrap();
-        println!("Received Public Message");
         let pub_msg = str::from_utf8(value).unwrap();
-        dbg!(&pub_msg);
+        println!("Received Public Message from {}", &key);
+        println!("Public Message: {}", &pub_msg);
         }
       }
     });
@@ -97,11 +93,10 @@ pub fn start_public_observer() {
         let msg = msg_result.unwrap();
         let key: &str = msg.key_view().unwrap().unwrap();
         if let "Coordinator" = &*key {
-        //dbg!(&key);
         let value = msg.payload().unwrap();
-        println!("Received Public Message");
         let pub_msg = str::from_utf8(value).unwrap();
-        dbg!(&pub_msg);
+        println!("Received Public Message from {}", &key);
+        println!("Public Message: {}", &pub_msg);
         }
       }
     });
@@ -144,7 +139,6 @@ pub fn start_encrypt_observer() {
         let msg = msg_result.unwrap();
         let key: &str = msg.key_view().unwrap().unwrap();
         if let "Coordinator" = &*key {
-        //dbg!(&key);
         let value = msg.payload().unwrap();
         // Creates Message box used for decryption
         let COORD_PUB =
@@ -162,7 +156,8 @@ pub fn start_encrypt_observer() {
         // Decrypt message using Message Box
         let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
         let decoded_string = String::from_utf8(encoded_string).unwrap();
-        dbg!(&decoded_string);
+        println!("Received Encrypted Message from {}", &key);
+        println!("Decrypted Message: {}", &decoded_string);
         }
       }
     });
@@ -172,7 +167,6 @@ pub fn start_encrypt_observer() {
         let msg = msg_result.unwrap();
         let key: &str = msg.key_view().unwrap().unwrap();
         if let "Coordinator" = &*key {
-        //dbg!(&key);
         let value = msg.payload().unwrap();
         // Creates Message box used for decryption
         let COORD_PUB =
@@ -190,7 +184,8 @@ pub fn start_encrypt_observer() {
         // Decrypt message using Message Box
         let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
         let decoded_string = String::from_utf8(encoded_string).unwrap();
-        dbg!(&decoded_string);
+        println!("Received Encrypted Message from {}", &key);
+        println!("Decrypted Message: {}", &decoded_string);
         }
       }
     });
@@ -200,7 +195,6 @@ pub fn start_encrypt_observer() {
         let msg = msg_result.unwrap();
         let key: &str = msg.key_view().unwrap().unwrap();
         if let "Coordinator" = &*key {
-        //dbg!(&key);
         let value = msg.payload().unwrap();
         // Creates Message box used for decryption
         let COORD_PUB =
@@ -218,7 +212,8 @@ pub fn start_encrypt_observer() {
         // Decrypt message using Message Box
         let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
         let decoded_string = String::from_utf8(encoded_string).unwrap();
-        dbg!(&decoded_string);
+        println!("Received Encrypted Message from {}", &key);
+        println!("Decrypted Message: {}", &decoded_string);
         }
       }
     });
@@ -232,16 +227,16 @@ impl ConsumerContext for ConsumerCallbackLogger {
   fn pre_rebalance<'a>(&self, _rebalance: &rdkafka::consumer::Rebalance<'a>) {}
 
   fn post_rebalance<'a>(&self, rebalance: &rdkafka::consumer::Rebalance<'a>) {
-    println!("post_rebalance callback");
+    //println!("post_rebalance callback");
 
     match rebalance {
       Rebalance::Assign(tpl) => {
         for e in tpl.elements() {
-          println!("rebalanced partition {}", e.partition())
+          //println!("rebalanced partition {}", e.partition())
         }
       }
       Rebalance::Revoke(tpl) => {
-        println!("ALL partitions have been REVOKED")
+        //println!("ALL partitions have been REVOKED")
       }
       Rebalance::Error(err_info) => {
         println!("Post Rebalance error {}", err_info)
@@ -261,7 +256,7 @@ impl ConsumerContext for ConsumerCallbackLogger {
             //skip Invalid offset
             Offset::Invalid => {}
             _ => {
-              println!("committed offset {:?} in partition {}", e.offset(), e.partition())
+              //println!("committed offset {:?} in partition {}", e.offset(), e.partition())
             }
           }
         }

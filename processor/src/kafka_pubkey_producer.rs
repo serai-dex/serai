@@ -15,7 +15,7 @@ pub fn start() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending public keys");
+    println!("Sending Public Keys");
 
   // Creates a public key message for each coin
   let btc_pub = env::var("BTC_PUB");

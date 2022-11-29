@@ -96,7 +96,7 @@ async fn main() {
     }
 
     if btc_key_found && eth_key_found && xmr_key_found {
-      println!("All Keys found");
+      println!("All Processor Pubkeys Ready");
       all_keys_found = true;
     } else {
       thread::sleep(Duration::from_secs(1));

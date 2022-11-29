@@ -15,7 +15,7 @@ pub fn start() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending public key");
+  println!("Sending Public Key");
 
   // Creates a public key message
   let COORD_PUB = env::var("COORD_PUB");

@@ -40,7 +40,7 @@ pub fn send_message() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending encrytped / public message");
+  println!("Sending Encrytped & Public Message");
 
   // Load Coord Priv / Pub Env variable
   let COORD_PRIV =
