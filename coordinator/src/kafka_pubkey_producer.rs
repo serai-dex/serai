@@ -1,12 +1,8 @@
-use std::{thread, time::Duration, collections::HashMap};
 use std::{env, str};
 use rdkafka::{
-  message::ToBytes,
-  producer::{BaseProducer, BaseRecord, Producer, ProducerContext, ThreadedProducer},
-  ClientConfig, ClientContext, Message, Offset,
+  producer::{BaseRecord, ProducerContext, ThreadedProducer},
+  ClientConfig, ClientContext, Message,
 };
-use message_box::{MessageBox, SecureMessage};
-use std::io;
 
 pub fn start() {
   // Creates a producer to send message
@@ -18,8 +14,8 @@ pub fn start() {
   println!("Sending Public Key");
 
   // Creates a public key message
-  let COORD_PUB = env::var("COORD_PUB");
-  let msg = COORD_PUB.unwrap();
+  let coord_pub = env::var("COORD_PUB");
+  let msg = coord_pub.unwrap();
 
   // Sends message to Kafka
   producer
@@ -45,12 +41,12 @@ impl ProducerContext for ProduceCallbackLogger {
     match dr {
       Ok(msg) => {
         let key: &str = msg.key_view().unwrap().unwrap();
-        println!(
-          "Produced message with key {} in offset {} of partition {}",
-          key,
-          msg.offset(),
-          msg.partition()
-        );
+        // println!(
+        //   "Produced message with key {} in offset {} of partition {}",
+        //   key,
+        //   msg.offset(),
+        //   msg.partition()
+        // );
       }
       Err(producer_err) => {
         let key: &str = producer_err.1.key_view().unwrap().unwrap();

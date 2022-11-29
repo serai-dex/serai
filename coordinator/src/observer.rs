@@ -1,12 +1,10 @@
-use std::{thread, time::Duration, collections::HashMap};
+use std::{thread, collections::HashMap};
 use std::{env, str};
 use rdkafka::{
   consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance},
-  message::ToBytes,
   ClientConfig, ClientContext, Message, Offset,
 };
-use message_box::{MessageBox, SecureMessage};
-use std::io;
+use message_box::MessageBox;
 
 pub fn start() {
   println!("Starting Coordinator Observer");
@@ -28,39 +26,42 @@ pub fn start() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    btc_consumer.subscribe(&["BTC_Public_Key"]).expect("btc pubkey topic subscribe failed");
-    eth_consumer.subscribe(&["ETH_Public_Key"]).expect("eth pubkey topic subscribe failed");
-    xmr_consumer.subscribe(&["XMR_Public_Key"]).expect("xmr pubkey topic subscribe failed");
+  btc_consumer.subscribe(&["BTC_Public_Key"]).expect("btc pubkey topic subscribe failed");
+  eth_consumer.subscribe(&["ETH_Public_Key"]).expect("eth pubkey topic subscribe failed");
+  xmr_consumer.subscribe(&["XMR_Public_Key"]).expect("xmr pubkey topic subscribe failed");
 
-    thread::spawn(move || {
-      for msg_result in &btc_consumer {
-        let msg = msg_result.unwrap();
-            let key: &str = msg.key_view().unwrap().unwrap();
-            let value = msg.payload().unwrap();
-            let public_key = str::from_utf8(value).unwrap();
-            println!("Received {} Public Key: {}", &key, &public_key);
-            env::set_var("BTC_PUB", public_key);
-      }});
+  thread::spawn(move || {
+    for msg_result in &btc_consumer {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      let value = msg.payload().unwrap();
+      let public_key = str::from_utf8(value).unwrap();
+      println!("Received {} Public Key: {}", &key, &public_key);
+      env::set_var("BTC_PUB", public_key);
+    }
+  });
 
-      thread::spawn(move || {
-        for msg_result in &eth_consumer {
-          let msg = msg_result.unwrap();
-          let key: &str = msg.key_view().unwrap().unwrap();
-          let value = msg.payload().unwrap();
-          let public_key = str::from_utf8(value).unwrap();
-          println!("Received {} Public Key: {}", &key, &public_key);
-          env::set_var("ETH_PUB", public_key);
-        }});
+  thread::spawn(move || {
+    for msg_result in &eth_consumer {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      let value = msg.payload().unwrap();
+      let public_key = str::from_utf8(value).unwrap();
+      println!("Received {} Public Key: {}", &key, &public_key);
+      env::set_var("ETH_PUB", public_key);
+    }
+  });
 
-        thread::spawn(move || {
-          for msg_result in &xmr_consumer {
-            let msg = msg_result.unwrap();
-            let key: &str = msg.key_view().unwrap().unwrap();
-            let value = msg.payload().unwrap();
-            let public_key = str::from_utf8(value).unwrap();
-            println!("Received {} Public Key: {}", &key, &public_key);
-            env::set_var("XMR_PUB", public_key);
-          }});
+  thread::spawn(move || {
+    for msg_result in &xmr_consumer {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      let value = msg.payload().unwrap();
+      let public_key = str::from_utf8(value).unwrap();
+      println!("Received {} Public Key: {}", &key, &public_key);
+      env::set_var("XMR_PUB", public_key);
+    }
+  });
 }
 
 pub fn start_public_observer() {
@@ -72,9 +73,9 @@ pub fn start_public_observer() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut btc_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-    btc_tpl.add_partition("BTC_Topic", 0);
-    consumer_btc_public.assign(&btc_tpl).unwrap();
+  let mut btc_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  btc_tpl.add_partition("BTC_Topic", 0);
+  consumer_btc_public.assign(&btc_tpl).unwrap();
 
   let consumer_eth_public: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -82,9 +83,9 @@ pub fn start_public_observer() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut eth_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-    eth_tpl.add_partition("ETH_Topic", 0);
-    consumer_eth_public.assign(&eth_tpl).unwrap();
+  let mut eth_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  eth_tpl.add_partition("ETH_Topic", 0);
+  consumer_eth_public.assign(&eth_tpl).unwrap();
 
   let consumer_xmr_public: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -92,45 +93,48 @@ pub fn start_public_observer() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut xmr_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-    xmr_tpl.add_partition("XMR_Topic", 0);
-    consumer_xmr_public.assign(&xmr_tpl).unwrap();
+  let mut xmr_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  xmr_tpl.add_partition("XMR_Topic", 0);
+  consumer_xmr_public.assign(&xmr_tpl).unwrap();
 
-    thread::spawn(move || {
-      for msg_result in &consumer_btc_public {
-        let msg = msg_result.unwrap();
-        let key: &str = msg.key_view().unwrap().unwrap();
-        if let "BTC_Processor" = &*key {
+  thread::spawn(move || {
+    for msg_result in &consumer_btc_public {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      if let "BTC_Processor" = &*key {
         let value = msg.payload().unwrap();
         let pub_msg = str::from_utf8(value).unwrap();
         println!("Received Public Message from {}", &key);
         println!("Public Message: {}", &pub_msg);
-        }
-      }});
+      }
+    }
+  });
 
-    thread::spawn(move || {
-      for msg_result in &consumer_eth_public {
-          let msg = msg_result.unwrap();
-          let key: &str = msg.key_view().unwrap().unwrap();
-          if let "ETH_Processor" = &*key {
-          let value = msg.payload().unwrap();
-          let pub_msg = str::from_utf8(value).unwrap();
-          println!("Received Public Message from {}", &key);
-          println!("Public Message: {}", &pub_msg);
-          }
-        }});
-
-    thread::spawn(move || {
-      for msg_result in &consumer_xmr_public {
-        let msg = msg_result.unwrap();
-        let key: &str = msg.key_view().unwrap().unwrap();
-        if let "XMR_Processor" = &*key {
+  thread::spawn(move || {
+    for msg_result in &consumer_eth_public {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      if let "ETH_Processor" = &*key {
         let value = msg.payload().unwrap();
         let pub_msg = str::from_utf8(value).unwrap();
         println!("Received Public Message from {}", &key);
         println!("Public Message: {}", &pub_msg);
-        }
-      }});
+      }
+    }
+  });
+
+  thread::spawn(move || {
+    for msg_result in &consumer_xmr_public {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      if let "XMR_Processor" = &*key {
+        let value = msg.payload().unwrap();
+        let pub_msg = str::from_utf8(value).unwrap();
+        println!("Received Public Message from {}", &key);
+        println!("Public Message: {}", &pub_msg);
+      }
+    }
+  });
 }
 
 pub fn start_encrypt_observer() {
@@ -142,9 +146,9 @@ pub fn start_encrypt_observer() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut btc_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-    btc_tpl.add_partition("BTC_Topic", 1);
-    consumer_btc_encrypt.assign(&btc_tpl).unwrap();
+  let mut btc_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  btc_tpl.add_partition("BTC_Topic", 1);
+  consumer_btc_encrypt.assign(&btc_tpl).unwrap();
 
   let consumer_eth_encrypt: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -152,9 +156,9 @@ pub fn start_encrypt_observer() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut eth_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-    eth_tpl.add_partition("ETH_Topic", 1);
-    consumer_eth_encrypt.assign(&eth_tpl).unwrap();
+  let mut eth_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  eth_tpl.add_partition("ETH_Topic", 1);
+  consumer_eth_encrypt.assign(&eth_tpl).unwrap();
 
   let consumer_xmr_encrypt: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -162,93 +166,99 @@ pub fn start_encrypt_observer() {
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut xmr_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-    xmr_tpl.add_partition("XMR_Topic", 1);
-    consumer_xmr_encrypt.assign(&xmr_tpl).unwrap();
+  let mut xmr_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  xmr_tpl.add_partition("XMR_Topic", 1);
+  consumer_xmr_encrypt.assign(&xmr_tpl).unwrap();
 
-    thread::spawn(move || {
-      for msg_result in &consumer_btc_encrypt {
-        let msg = msg_result.unwrap();
-        let key: &str = msg.key_view().unwrap().unwrap();
-        if let "BTC_Processor" = &*key {
+  thread::spawn(move || {
+    for msg_result in &consumer_btc_encrypt {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      if let "BTC_Processor" = &*key {
         let value = msg.payload().unwrap();
 
         // Creates Message box used for decryption
-        let BTC_PUB =
-        message_box::PublicKey::from_trusted_str(&env::var("BTC_PUB").unwrap().to_string());
+        let btc_pub =
+          message_box::PublicKey::from_trusted_str(&env::var("BTC_PUB").unwrap().to_string());
 
-        let COORD_PRIV =
-        message_box::PrivateKey::from_string(env::var("COORD_PRIV").unwrap().to_string());
+        let coord_priv =
+          message_box::PrivateKey::from_string(env::var("COORD_PRIV").unwrap().to_string());
 
         let mut message_box_pubkeys = HashMap::new();
-        message_box_pubkeys.insert("BTC_Processor", BTC_PUB);
+        message_box_pubkeys.insert("BTC_Processor", btc_pub);
 
-        let message_box = MessageBox::new("Coordinator", COORD_PRIV, message_box_pubkeys);
+        let message_box = MessageBox::new("Coordinator", coord_priv, message_box_pubkeys);
         let encrypted_msg = str::from_utf8(value).unwrap();
 
         // Decrypt message using Message Box
-        let encoded_string = message_box.decrypt_from_str(&"BTC_Processor", &encrypted_msg).unwrap();
+        let encoded_string =
+          message_box.decrypt_from_str(&"BTC_Processor", &encrypted_msg).unwrap();
         let decoded_string = String::from_utf8(encoded_string).unwrap();
         println!("Received Encrypted Message from {}", &key);
         println!("Decrypted Message: {}", &decoded_string);
-        }
-      }});
+      }
+    }
+  });
 
-      thread::spawn(move || {
-        for msg_result in &consumer_eth_encrypt {
-          let msg = msg_result.unwrap();
-          let key: &str = msg.key_view().unwrap().unwrap();
-          if let "ETH_Processor" = &*key {
-          let value = msg.payload().unwrap();
+  thread::spawn(move || {
+    for msg_result in &consumer_eth_encrypt {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      if let "ETH_Processor" = &*key {
+        let value = msg.payload().unwrap();
 
-          // Creates Message box used for decryption
-          let BTC_PUB =
+        // Creates Message box used for decryption
+        let eth_pub =
           message_box::PublicKey::from_trusted_str(&env::var("ETH_PUB").unwrap().to_string());
 
-          let COORD_PRIV =
+        let coord_priv =
           message_box::PrivateKey::from_string(env::var("COORD_PRIV").unwrap().to_string());
 
-          let mut message_box_pubkeys = HashMap::new();
-          message_box_pubkeys.insert("ETH_Processor", BTC_PUB);
+        let mut message_box_pubkeys = HashMap::new();
+        message_box_pubkeys.insert("ETH_Processor", eth_pub);
 
-          let message_box = MessageBox::new("Coordinator", COORD_PRIV, message_box_pubkeys);
-          let encrypted_msg = str::from_utf8(value).unwrap();
+        let message_box = MessageBox::new("Coordinator", coord_priv, message_box_pubkeys);
+        let encrypted_msg = str::from_utf8(value).unwrap();
 
-          // Decrypt message using Message Box
-          let encoded_string = message_box.decrypt_from_str(&"ETH_Processor", &encrypted_msg).unwrap();
-          let decoded_string = String::from_utf8(encoded_string).unwrap();
-          println!("Received Encrypted Message from {}", &key);
-          println!("Decrypted Message: {}", &decoded_string);
-          }
-        }});
+        // Decrypt message using Message Box
+        let encoded_string =
+          message_box.decrypt_from_str(&"ETH_Processor", &encrypted_msg).unwrap();
+        let decoded_string = String::from_utf8(encoded_string).unwrap();
+        println!("Received Encrypted Message from {}", &key);
+        println!("Decrypted Message: {}", &decoded_string);
+      }
+    }
+  });
 
-      thread::spawn(move || {
-        for msg_result in &consumer_xmr_encrypt {
-          let msg = msg_result.unwrap();
-          let key: &str = msg.key_view().unwrap().unwrap();
-          if let "XMR_Processor" = &*key {
-          let value = msg.payload().unwrap();
+  thread::spawn(move || {
+    for msg_result in &consumer_xmr_encrypt {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      if let "XMR_Processor" = &*key {
+        let value = msg.payload().unwrap();
 
-          // Creates Message box used for decryption
-          let BTC_PUB =
+        // Creates Message box used for decryption
+        let xmr_pub =
           message_box::PublicKey::from_trusted_str(&env::var("XMR_PUB").unwrap().to_string());
 
-          let COORD_PRIV =
+        let coord_priv =
           message_box::PrivateKey::from_string(env::var("COORD_PRIV").unwrap().to_string());
 
-          let mut message_box_pubkeys = HashMap::new();
-          message_box_pubkeys.insert("XMR_Processor", BTC_PUB);
+        let mut message_box_pubkeys = HashMap::new();
+        message_box_pubkeys.insert("XMR_Processor", xmr_pub);
 
-          let message_box = MessageBox::new("Coordinator", COORD_PRIV, message_box_pubkeys);
-          let encrypted_msg = str::from_utf8(value).unwrap();
+        let message_box = MessageBox::new("Coordinator", coord_priv, message_box_pubkeys);
+        let encrypted_msg = str::from_utf8(value).unwrap();
 
-          // Decrypt message using Message Box
-          let encoded_string = message_box.decrypt_from_str(&"XMR_Processor", &encrypted_msg).unwrap();
-          let decoded_string = String::from_utf8(encoded_string).unwrap();
-          println!("Received Encrypted Message from {}", &key);
-          println!("Decrypted Message: {}", &decoded_string);
-          }
-        }});
+        // Decrypt message using Message Box
+        let encoded_string =
+          message_box.decrypt_from_str(&"XMR_Processor", &encrypted_msg).unwrap();
+        let decoded_string = String::from_utf8(encoded_string).unwrap();
+        println!("Received Encrypted Message from {}", &key);
+        println!("Decrypted Message: {}", &decoded_string);
+      }
+    }
+  });
 }
 
 struct ConsumerCallbackLogger;

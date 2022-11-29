@@ -1,12 +1,8 @@
-use std::{thread, time::Duration, collections::HashMap};
 use std::{env, str};
 use rdkafka::{
-  message::ToBytes,
-  producer::{BaseProducer, BaseRecord, Producer, ProducerContext, ThreadedProducer},
-  ClientConfig, ClientContext, Message, Offset,
+  producer::{BaseRecord, ProducerContext, ThreadedProducer},
+  ClientConfig, ClientContext, Message
 };
-use message_box::{MessageBox, SecureMessage};
-use std::io;
 
 pub fn start() {
   // Creates a producer to send message
@@ -15,7 +11,7 @@ pub fn start() {
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-    println!("Sending Public Keys");
+  println!("Sending Public Keys");
 
   // Creates a public key message for each coin
   let btc_pub = env::var("BTC_PUB");
