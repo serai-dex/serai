@@ -118,7 +118,7 @@ async fn monero() {
 
 #[tokio::test]
 async fn bitcoin() {
-  let bitcoin = Bitcoin::new("http://127.0.0.1:18443".to_string()).await;
+  let bitcoin = Bitcoin::new("127.0.0.1:18443".to_string(),Some(String::from("serai")),Some(String::from("seraidex"))).await;
   let latest_block = bitcoin.get_latest_block_number().await.unwrap();
   println!("Latest Block : {:?}",latest_block);
   let fetched_block = bitcoin.get_block(latest_block).await.unwrap();
