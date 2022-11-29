@@ -338,6 +338,9 @@ impl CoordinatorConfig {
       },
     };
 
+    // Check coordinator pubkey env variable
+    initialize_keys();
+
     match mode {
       RunMode::Development => {
         // Set development specific config

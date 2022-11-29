@@ -69,9 +69,6 @@ async fn main() {
 
   // Hang on cli
 
-  // Core Key Gen
-  core::initialize_keys();
-
   // Initialize Kafka
   kafka_pubkey_producer::start();
 
