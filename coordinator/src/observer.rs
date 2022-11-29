@@ -5,6 +5,7 @@ use rdkafka::{
   ClientConfig, ClientContext, Message, Offset,
 };
 use message_box::MessageBox;
+use std::time::Duration;
 
 // The coordinator observer module contains functionality to poll, decode, and publish
 // data of interest from the Serai blockchain to other local services.
@@ -27,9 +28,9 @@ impl ObserverProcess {
       let port = self.observer_config.get_port();
       let poll_interval = self.observer_config.get_poll_interval();
 
-      // Polls substrate RPC to get block height at a specified interva;
+      // Polls substrate RPC to get block height at a specified interval;
       
-      let client = reqwest::Client::new();
+      let client = request::Client::new();
       let mut last_block = 0;
       loop {
           let block = client.get(&url).send().unwrap().text().unwrap();
@@ -345,3 +346,4 @@ impl ConsumerContext for ConsumerCallbackLogger {
       }
     }
   }
+}
