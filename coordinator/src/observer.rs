@@ -46,58 +46,28 @@ use std::time::Duration;
 
 pub fn start() {
   println!("Starting Coordinator Observer");
-  let btc_consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "serai")
-    .create_with_context(ConsumerCallbackLogger {})
-    .expect("invalid consumer config");
+  create_pubkey_consumer("serai", "BTC_Public_Key", "BTC_PUB".to_string());
+  create_pubkey_consumer("serai", "ETH_Public_Key", "ETH_PUB".to_string());
+  create_pubkey_consumer("serai", "XMR_Public_Key", "XMR_PUB".to_string());
+}
 
-  let eth_consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "serai")
-    .create_with_context(ConsumerCallbackLogger {})
-    .expect("invalid consumer config");
+fn create_pubkey_consumer(group_id:&str, topic:&str, env_key:String){
+  let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
+  .set("bootstrap.servers", "localhost:9094")
+  .set("group.id", group_id)
+  .create_with_context(ConsumerCallbackLogger {})
+  .expect("invalid consumer config");
 
-  let xmr_consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "serai")
-    .create_with_context(ConsumerCallbackLogger {})
-    .expect("invalid consumer config");
-
-  btc_consumer.subscribe(&["BTC_Public_Key"]).expect("btc pubkey topic subscribe failed");
-  eth_consumer.subscribe(&["ETH_Public_Key"]).expect("eth pubkey topic subscribe failed");
-  xmr_consumer.subscribe(&["XMR_Public_Key"]).expect("xmr pubkey topic subscribe failed");
+  consumer.subscribe(&[&topic]).expect("failed to subscribe to topic");
 
   thread::spawn(move || {
-    for msg_result in &btc_consumer {
+    for msg_result in &consumer {
       let msg = msg_result.unwrap();
       let key: &str = msg.key_view().unwrap().unwrap();
       let value = msg.payload().unwrap();
       let public_key = str::from_utf8(value).unwrap();
       println!("Received {} Public Key: {}", &key, &public_key);
-      env::set_var("BTC_PUB", public_key);
-    }
-  });
-
-  thread::spawn(move || {
-    for msg_result in &eth_consumer {
-      let msg = msg_result.unwrap();
-      let key: &str = msg.key_view().unwrap().unwrap();
-      let value = msg.payload().unwrap();
-      let public_key = str::from_utf8(value).unwrap();
-      println!("Received {} Public Key: {}", &key, &public_key);
-      env::set_var("ETH_PUB", public_key);
-    }
-  });
-
-  thread::spawn(move || {
-    for msg_result in &xmr_consumer {
-      let msg = msg_result.unwrap();
-      let key: &str = msg.key_view().unwrap().unwrap();
-      let value = msg.payload().unwrap();
-      let public_key = str::from_utf8(value).unwrap();
-      println!("Received {} Public Key: {}", &key, &public_key);
-      env::set_var("XMR_PUB", public_key);
+      env::set_var(env_key.clone(), public_key);
     }
   });
 }
