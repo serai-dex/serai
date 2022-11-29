@@ -23,7 +23,7 @@ pub fn start() {
 
   // Sends btc pubkey to Kafka
   producer
-    .send(BaseRecord::to("Public_Keys").key(&format!("BTC_Processor")).payload(&btc_msg))
+    .send(BaseRecord::to("BTC_Public_Key").key(&format!("BTC_Processor")).payload(&btc_msg))
     .expect("failed to send message");
 
   let eth_pub = env::var("ETH_PUB");
@@ -31,7 +31,7 @@ pub fn start() {
 
   // Sends eth pubkey to Kafka
   producer
-    .send(BaseRecord::to("Public_Keys").key(&format!("ETH_Processor")).payload(&eth_msg))
+    .send(BaseRecord::to("ETH_Public_Key").key(&format!("ETH_Processor")).payload(&eth_msg))
     .expect("failed to send message");
 
   let xmr_pub = env::var("XMR_PUB");
@@ -39,7 +39,7 @@ pub fn start() {
 
   // Sends xmr pubkey to Kafka
   producer
-    .send(BaseRecord::to("Public_Keys").key(&format!("XMR_Processor")).payload(&xmr_msg))
+    .send(BaseRecord::to("XMR_Public_Key").key(&format!("XMR_Processor")).payload(&xmr_msg))
     .expect("failed to send message");
 }
 
@@ -61,12 +61,12 @@ impl ProducerContext for ProduceCallbackLogger {
     match dr {
       Ok(msg) => {
         let key: &str = msg.key_view().unwrap().unwrap();
-        println!(
-          "Produced message with key {} in offset {} of partition {}",
-          key,
-          msg.offset(),
-          msg.partition()
-        );
+        // println!(
+        //   "Produced message with key {} in offset {} of partition {}",
+        //   key,
+        //   msg.offset(),
+        //   msg.partition()
+        // );
       }
       Err(producer_err) => {
         let key: &str = producer_err.1.key_view().unwrap().unwrap();

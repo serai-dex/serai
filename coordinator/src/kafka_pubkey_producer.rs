@@ -23,7 +23,7 @@ pub fn start() {
 
   // Sends message to Kafka
   producer
-    .send(BaseRecord::to("Public_Keys").key(&format!("Coordinator")).payload(&msg))
+    .send(BaseRecord::to("Coord_Public_Key").key(&format!("Coordinator")).payload(&msg))
     .expect("failed to send message");
 }
 

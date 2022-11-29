@@ -10,12 +10,37 @@ use std::io;
 
 pub fn send_message() {
   // Creates a producer to send message
-  let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+  let producer_btc_private: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  println!("Sending encrytped message");
+  let producer_eth_private: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+    .set("bootstrap.servers", "localhost:9094")
+    .create_with_context(ProduceCallbackLogger {})
+    .expect("invalid producer config");
+
+  let producer_xmr_private: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+    .set("bootstrap.servers", "localhost:9094")
+    .create_with_context(ProduceCallbackLogger {})
+    .expect("invalid producer config");
+
+  let producer_btc_public: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+    .set("bootstrap.servers", "localhost:9094")
+    .create_with_context(ProduceCallbackLogger {})
+    .expect("invalid producer config");
+
+  let producer_eth_public: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+    .set("bootstrap.servers", "localhost:9094")
+    .create_with_context(ProduceCallbackLogger {})
+    .expect("invalid producer config");
+
+  let producer_xmr_public: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+    .set("bootstrap.servers", "localhost:9094")
+    .create_with_context(ProduceCallbackLogger {})
+    .expect("invalid producer config");
+
+  println!("Sending encrytped / public message");
 
   // Load Coord Priv / Pub Env variable
   let COORD_PRIV =
@@ -46,20 +71,37 @@ pub fn send_message() {
   let xmr_msg = b"Coordinator message to XMR Processor".to_vec();
   let xmr_enc = message_box.encrypt_to_string(&"XMR_Processor", &xmr_msg.clone());
 
-  // Send Encrypted Messages to secure partitian
-  producer
-    .send(BaseRecord::to("BTC_Topic").key(&format!("Coordinator")).payload(&btc_enc))
+  // Send messages to secure partition
+  producer_btc_private
+    .send(BaseRecord::to("BTC_Topic").key(&format!("Coordinator")).payload(&btc_enc).partition(1))
     .expect("failed to send message");
+    thread::sleep(Duration::from_secs(1));
 
-  producer
-    .send(BaseRecord::to("ETH_Topic").key(&format!("Coordinator")).payload(&eth_enc))
+  producer_eth_private
+    .send(BaseRecord::to("ETH_Topic").key(&format!("Coordinator")).payload(&eth_enc).partition(1))
     .expect("failed to send message");
+    thread::sleep(Duration::from_secs(1));
   
-  producer
-    .send(BaseRecord::to("XMR_Topic").key(&format!("Coordinator")).payload(&xmr_enc))
+  producer_xmr_private
+    .send(BaseRecord::to("XMR_Topic").key(&format!("Coordinator")).payload(&xmr_enc).partition(1))
     .expect("failed to send message");
+    thread::sleep(Duration::from_secs(1));
 
-  io::stdin().read_line(&mut String::new()).unwrap();
+  // Send messages to public partition
+  producer_btc_public
+  .send(BaseRecord::to("BTC_Topic").key(&format!("Coordinator")).payload(&btc_msg).partition(0))
+  .expect("failed to send message");
+  thread::sleep(Duration::from_secs(1));
+
+  producer_eth_public
+  .send(BaseRecord::to("ETH_Topic").key(&format!("Coordinator")).payload(&eth_msg).partition(0))
+  .expect("failed to send message");
+  thread::sleep(Duration::from_secs(1));
+
+  producer_xmr_public
+  .send(BaseRecord::to("XMR_Topic").key(&format!("Coordinator")).payload(&xmr_msg).partition(0))
+  .expect("failed to send message");
+  thread::sleep(Duration::from_secs(1));
 }
 
 struct ProduceCallbackLogger;
@@ -80,12 +122,12 @@ impl ProducerContext for ProduceCallbackLogger {
     match dr {
       Ok(msg) => {
         let key: &str = msg.key_view().unwrap().unwrap();
-        println!(
-          "Produced message with key {} in offset {} of partition {}",
-          key,
-          msg.offset(),
-          msg.partition()
-        );
+        // println!(
+        //   "Produced message with key {} in offset {} of partition {}",
+        //   key,
+        //   msg.offset(),
+        //   msg.partition()
+        // );
       }
       Err(producer_err) => {
         let key: &str = producer_err.1.key_view().unwrap().unwrap();

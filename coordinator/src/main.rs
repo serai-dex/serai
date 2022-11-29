@@ -2,11 +2,12 @@ mod core;
 mod health;
 mod observer;
 mod kafka_pubkey_producer;
-mod kafka_encrypt_producer;
+mod kafka_message_producer;
 use std::thread;
 use std::io::Write;
 use std::time::Duration;
 use std::io;
+use std::env;
 
 use clap::{value_t, App, Arg};
 
@@ -72,8 +73,44 @@ async fn main() {
   // Initialize Kafka
   kafka_pubkey_producer::start();
 
+  // Runs a loop to check if all processor keys are found
+  let mut all_keys_found = false;
+  while !all_keys_found{
+    let mut btc_key_found = false;
+    let mut eth_key_found = false;
+    let mut xmr_key_found = false;
+
+    let btc_pub_check = env::var("BTC_PUB");
+    if (!btc_pub_check.is_err()) {
+      btc_key_found = true;
+    }
+
+    let eth_pub_check = env::var("ETH_PUB");
+    if (!eth_pub_check.is_err()) {
+      eth_key_found = true;
+    }
+
+    let xmr_pub_check = env::var("XMR_PUB");
+    if (!xmr_pub_check.is_err()) {
+      xmr_key_found = true;
+    }
+
+    if btc_key_found && eth_key_found && xmr_key_found {
+      println!("All Keys found");
+      all_keys_found = true;
+    } else {
+      thread::sleep(Duration::from_secs(1));
+    }
+  }
+
+  // Start Public Observer
+  observer::start_public_observer();
+
+  // Start Encrypt Observer
+  observer::start_encrypt_observer();
+
   // Send message from Coordinator to each Processor
-  kafka_encrypt_producer::send_message();
+  kafka_message_producer::send_message();
 
   io::stdin().read_line(&mut String::new()).unwrap();
 }
