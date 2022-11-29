@@ -2,7 +2,7 @@ use std::{
   error::Error,
   boxed::Box,
   sync::Arc,
-  time::{UNIX_EPOCH, Duration},
+  time::{UNIX_EPOCH, SystemTime, Duration},
   str::FromStr,
 };
 
@@ -226,6 +226,12 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     })
   };
 
+  let genesis_time = if config.chain_spec.id() != "devnet" {
+    UNIX_EPOCH + Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap())
+  } else {
+    SystemTime::now()
+  };
+
   let registry = config.prometheus_registry().cloned();
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
@@ -246,8 +252,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       "tendermint",
       None,
       TendermintAuthority::new(
-        UNIX_EPOCH +
-          Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
+        genesis_time,
         tendermint_protocol,
         authority,
         keystore_container.keystore(),
