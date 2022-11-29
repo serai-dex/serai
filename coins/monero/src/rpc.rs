@@ -477,4 +477,19 @@ impl Rpc {
 
     Ok(())
   }
+
+  pub async fn mine_regtest_blocks(&self, address: &str, block_count: u32) -> Result<EmptyResponse, RpcError> {
+    self
+      .rpc_call(
+        "json_rpc",
+        Some(json!({
+          "method": "generateblocks",
+          "params": {
+            "wallet_address": address,
+            "amount_of_blocks": block_count
+          },
+        })),
+      )
+      .await
+  }
 }

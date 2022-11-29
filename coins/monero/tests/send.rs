@@ -20,15 +20,14 @@ use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Ed25519,
   tests::{THRESHOLD, key_gen, sign},
+  ThresholdKeys,
 };
 
 use monero_serai::{
   random_scalar,
   wallet::{address::Network, ViewPair, Scanner, SpendableOutput, SignableTransaction},
+  rpc::{Rpc}
 };
-
-mod rpc;
-use crate::rpc::{rpc, mine_block};
 
 lazy_static! {
   static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
@@ -52,143 +51,262 @@ macro_rules! async_sequential {
   };
 }
 
-async fn send_core(test: usize, multisig: bool) {
-  let rpc = rpc().await;
-
-  // Generate an address
+fn generate_keys() -> (Zeroizing<curve25519_dalek::scalar::Scalar>, curve25519_dalek::scalar::Scalar) {
   let spend = Zeroizing::new(random_scalar(&mut OsRng));
-  #[allow(unused_mut)]
-  let mut view = random_scalar(&mut OsRng);
-  #[allow(unused_mut)]
-  let mut spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
+  let view = random_scalar(&mut OsRng);
+  return (spend, view);
+}
 
-  #[cfg(feature = "multisig")]
+fn generate_multisig_keys() -> (HashMap<u16, ThresholdKeys<Ed25519>>, curve25519_dalek::scalar::Scalar) {
   let keys = key_gen::<_, Ed25519>(&mut OsRng);
+  let view = Scalar::from_hash(Blake2b512::new().chain("Monero Serai Transaction Test")).0;
+  return (keys, view);
+}
 
-  if multisig {
-    #[cfg(not(feature = "multisig"))]
-    panic!("Running a multisig test without the multisig feature");
-    #[cfg(feature = "multisig")]
-    {
-      view = Scalar::from_hash(Blake2b512::new().chain("Monero Serai Transaction Test")).0;
-      spend_pub = keys[&1].group_key().0;
+async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
+  // mine until tx is in a block
+  let mut height = rpc.get_height().await.unwrap();
+  let mut found = false;
+  while !found {
+    let block = rpc.get_block(height - 1).await.unwrap();
+    found = match block.txs.iter().find(|&&x| x == tx_hash) {
+        Some(_) => { true },
+        None => { 
+          rpc.mine_regtest_blocks(addr, 1).await.unwrap();
+          height += 1;
+          false 
+        },
     }
   }
 
-  let view_pair = ViewPair::new(spend_pub, view);
-  let mut scanner = Scanner::from_view(view_pair, Network::Mainnet, Some(HashSet::new()));
-  let addr = scanner.address();
+  // mine 9 more blocks to unlock the tx
+  rpc.mine_regtest_blocks(addr, 9).await.unwrap();
+}
 
-  let fee = rpc.get_fee().await.unwrap();
+async_sequential! {
+  async fn send_single_input() {
 
-  let start = rpc.get_height().await.unwrap();
-  for _ in 0 .. 7 {
-    mine_block(&rpc, &addr.to_string()).await.unwrap();
-  }
+    let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+    let (spend, view) = generate_keys();
+    let spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
 
-  let mut tx = None;
-  // Allow tests to test variable transactions
-  for i in 0 .. [2, 1][test] {
-    let mut outputs = vec![];
-    let mut amount = 0;
-    // Test spending both a miner output and a normal output
-    if test == 0 {
-      if i == 0 {
-        tx = Some(rpc.get_block_transactions(start).await.unwrap().swap_remove(0));
-      }
+    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let addr = scanner.address();
+    let addr_str = addr.to_string();
+    let fee = rpc.get_fee().await.unwrap();
 
-      // Grab the largest output available
+    // mine 90(30 for decoys + 60 to unlock) blocks to have unlocked outputs
+    // TODO: check network is regtest
+    rpc.mine_regtest_blocks(&addr_str, 90).await.unwrap();
+
+    // grab an unlocked miner tx
+    let unlocked_block = rpc.get_height().await.unwrap() - 60;
+    let mut tx = rpc.get_block_transactions(unlocked_block).await.unwrap().swap_remove(0);
+
+    for _ in 0..2 {
+      // Grab the biggest output of tx
       let output = {
-        let mut outputs = scanner.scan_transaction(tx.as_ref().unwrap()).ignore_timelock();
+        let mut outputs = scanner.scan_transaction(&tx).ignore_timelock();
         outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount).reverse());
         outputs.swap_remove(0)
       };
-      // Test creating a zero change output and a non-zero change output
-      amount = output.commitment().amount - u64::try_from(i).unwrap();
-      outputs.push(SpendableOutput::from(&rpc, output).await.unwrap());
+      let amount = output.commitment().amount;
 
-    // Test spending multiple inputs
-    } else if test == 1 {
-      if i != 0 {
-        continue;
-      }
+      // make a tx and sign
+      let mut signable = SignableTransaction::new(
+        rpc.get_protocol().await.unwrap(),
+        vec![SpendableOutput::from(&rpc, output).await.unwrap()],
+        vec![(addr, amount - 10_000_000_000)], // 0.01 xmr buffer for the tx fee
+        Some(addr),
+        None,
+        fee,
+      )
+      .unwrap();
+      tx = signable.sign(&mut OsRng, &rpc, &spend).await.unwrap();
 
-      // We actually need 120 decoys for this transaction, so mine until then
-      // 120 + 60 (miner TX maturity) + 10 (lock blocks)
-      // It is possible for this to be lower, by noting maturity is sufficient regardless of lock
-      // blocks, yet that's not currently implemented
-      // TODO, if we care
-      while rpc.get_height().await.unwrap() < 200 {
-        mine_block(&rpc, &addr.to_string()).await.unwrap();
-      }
+      // publish the tx
+      rpc.publish_transaction(&tx).await.unwrap();
 
-      for i in (start + 1) .. (start + 9) {
-        let mut txs = scanner.scan(&rpc, &rpc.get_block(i).await.unwrap()).await.unwrap();
-        let output = txs.swap_remove(0).ignore_timelock().swap_remove(0);
-        amount += output.commitment().amount;
-        outputs.push(output);
-      }
+      // TODO: Ideally we would only need to directly mine 10 block to unlock the tx.
+      // But we have seen that method doesn't always works since there isn't a guarantee that
+      // the tx will be immediately mined in the next block and it doesn't in some slow machines.
+      // this function guarantees to mine until the tx is unlocked(assuming tx is default locked 10 blocks)
+      // but it inevitably mines more than 10 blocks in some cases, hence diverging from the perfect test case scenario.
+      // So we might wanna find another solution in the future.
+      mine_until_unlocked(&rpc, &addr_str, tx.hash()).await;
+    }
+  }
+
+  async fn send_multiple_inputs() {
+    let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+    let (spend, view) = generate_keys();
+    let spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
+
+    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let addr = scanner.address();
+    let fee = rpc.get_fee().await.unwrap();
+
+    // We actually need 120 decoys for this transaction, so mine until then
+    // 120 + 60 (miner TX maturity) + 10 (lock blocks)
+    // It is possible for this to be lower, by noting maturity is sufficient regardless of lock
+    // blocks, yet that's not currently implemented
+    // TODO, if we care
+    rpc.mine_regtest_blocks(&addr.to_string(), 200).await.unwrap();
+    let start = rpc.get_height().await.unwrap() - 68;
+
+    // spent 8 output
+    let mut outputs = vec![];
+    let mut amount = 0;
+    for i in (start + 1) .. (start + 9) {
+      let mut txs = scanner.scan(&rpc, &rpc.get_block(i).await.unwrap()).await.unwrap();
+      let output = txs.swap_remove(0).ignore_timelock().swap_remove(0);
+      amount += output.commitment().amount;
+      outputs.push(output);
     }
 
+    // make a tx and sign
     let mut signable = SignableTransaction::new(
       rpc.get_protocol().await.unwrap(),
       outputs,
-      vec![(addr, amount - 10000000000)],
+      vec![(addr, amount - 10_000_000_000)], // 0.01 xmr buffer for the tx fee
       Some(addr),
       None,
       fee,
     )
     .unwrap();
+    let tx = signable.sign(&mut OsRng, &rpc, &spend).await.unwrap();
 
-    if !multisig {
-      tx = Some(signable.sign(&mut OsRng, &rpc, &spend).await.unwrap());
-    } else {
-      #[cfg(feature = "multisig")]
-      {
-        let mut machines = HashMap::new();
-        for i in 1 ..= THRESHOLD {
-          machines.insert(
-            i,
-            signable
-              .clone()
-              .multisig(
-                &rpc,
-                keys[&i].clone(),
-                RecommendedTranscript::new(b"Monero Serai Test Transaction"),
-                rpc.get_height().await.unwrap() - 10,
-                (1 ..= THRESHOLD).collect::<Vec<_>>(),
-              )
-              .await
-              .unwrap(),
-          );
-        }
-
-        tx = Some(sign(&mut OsRng, machines, &vec![]));
-      }
-    }
-
-    rpc.publish_transaction(tx.as_ref().unwrap()).await.unwrap();
-    mine_block(&rpc, &addr.to_string()).await.unwrap();
-  }
-}
-
-async_sequential! {
-  async fn send_single_input() {
-    send_core(0, false).await;
-  }
-
-  async fn send_multiple_inputs() {
-    send_core(1, false).await;
+    // publish the tx
+    rpc.publish_transaction(&tx).await.unwrap();
   }
 }
 
 #[cfg(feature = "multisig")]
 async_sequential! {
   async fn multisig_send_single_input() {
-    send_core(0, true).await;
+    let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+
+    // generate keys
+    let (keys, view) = generate_multisig_keys();
+    let spend_pub = keys[&1].group_key().0;
+
+    // get a view
+    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let addr = scanner.address();
+    let addr_str = addr.to_string();
+    let fee = rpc.get_fee().await.unwrap();
+
+    // mine 90(30 for decoys + 60 to unlock) blocks to have unlocked outputs
+    // TODO: check network is regtest
+    rpc.mine_regtest_blocks(&addr_str, 90).await.unwrap();
+
+    // grab an unlocked miner tx
+    let unlocked_block = rpc.get_height().await.unwrap() - 60;
+    let mut tx = rpc.get_block_transactions(unlocked_block).await.unwrap().swap_remove(0);
+
+    for _ in 0..2 {
+      // Grab the biggest output of tx
+      let output = {
+        let mut outputs = scanner.scan_transaction(&tx).ignore_timelock();
+        outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount).reverse());
+        outputs.swap_remove(0)
+      };
+      let amount = output.commitment().amount;
+
+      // make a tx and sign
+      let signable = SignableTransaction::new(
+        rpc.get_protocol().await.unwrap(),
+        vec![SpendableOutput::from(&rpc, output).await.unwrap()],
+        vec![(addr, amount - 10_000_000_000)], // 0.01 xmr buffer for the tx fee
+        Some(addr),
+        None,
+        fee,
+      )
+      .unwrap();
+
+      let mut machines = HashMap::new();
+      for i in 1 ..= THRESHOLD {
+        machines.insert(
+          i,
+          signable
+            .clone()
+            .multisig(
+              &rpc,
+              keys[&i].clone(),
+              RecommendedTranscript::new(b"Monero Serai Test Transaction"),
+              rpc.get_height().await.unwrap() - 10,
+              (1 ..= THRESHOLD).collect::<Vec<_>>(),
+            )
+            .await
+            .unwrap(),
+        );
+      }
+      tx = sign(&mut OsRng, machines, &vec![]);
+
+      // publish the tx
+      rpc.publish_transaction(&tx).await.unwrap();
+
+      // unlock the tx
+      mine_until_unlocked(&rpc, &addr_str, tx.hash()).await;
+    }
   }
 
   async fn multisig_send_multiple_inputs() {
-    send_core(1, true).await;
+    let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+
+    // generate keys
+    let (keys, view) = generate_multisig_keys();
+    let spend_pub = keys[&1].group_key().0;
+
+    // get a view
+    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let addr = scanner.address();
+    let fee = rpc.get_fee().await.unwrap();
+
+    rpc.mine_regtest_blocks(&addr.to_string(), 200).await.unwrap();
+    let start = rpc.get_height().await.unwrap() - 68;
+
+    // spent 8 output
+    let mut outputs = vec![];
+    let mut amount = 0;
+    for i in (start + 1) .. (start + 9) {
+      let mut txs = scanner.scan(&rpc, &rpc.get_block(i).await.unwrap()).await.unwrap();
+      let output = txs.swap_remove(0).ignore_timelock().swap_remove(0);
+      amount += output.commitment().amount;
+      outputs.push(output);
+    }
+
+    // make a tx and sign
+    let signable = SignableTransaction::new(
+      rpc.get_protocol().await.unwrap(),
+      outputs,
+      vec![(addr, amount - 10_000_000_000)], // 0.01 xmr buffer for the tx fee
+      Some(addr),
+      None,
+      fee,
+    )
+    .unwrap();
+
+    let mut machines = HashMap::new();
+    for i in 1 ..= THRESHOLD {
+      machines.insert(
+        i,
+        signable
+          .clone()
+          .multisig(
+            &rpc,
+            keys[&i].clone(),
+            RecommendedTranscript::new(b"Monero Serai Test Transaction"),
+            rpc.get_height().await.unwrap() - 10,
+            (1 ..= THRESHOLD).collect::<Vec<_>>(),
+          )
+          .await
+          .unwrap(),
+      );
+    }
+    let tx = sign(&mut OsRng, machines, &vec![]);
+
+    // publish the tx
+    rpc.publish_transaction(&tx).await.unwrap();
   }
 }
