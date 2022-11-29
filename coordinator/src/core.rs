@@ -1,4 +1,4 @@
-/// The coordinator module contains functionality that is shared across modules.
+/// The coordinator core module contains functionality that is shared across modules.
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize};
 use std::{env, fmt, thread, str::FromStr, io::Write};
@@ -46,7 +46,7 @@ impl CoreProcess {
     Self { core_config: core_config }
   }
 
-  pub fn start(self) {
+  pub fn run(self) {
     println!("Starting Core Process");
     start_logger(true, String::from("core"));
   }

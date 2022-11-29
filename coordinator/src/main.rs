@@ -3,6 +3,7 @@ mod health;
 mod observer;
 mod kafka_pubkey_producer;
 mod kafka_message_producer;
+
 use std::thread;
 use std::io::Write;
 use std::time::Duration;
@@ -48,10 +49,11 @@ async fn main() {
 
   // Processes then use configs to create themselves
 
+
   // Start Core Process
   tokio::spawn(async move {
-    let core_process = CoreProcess::new(config);
-    core_process.start();
+      let core_process = CoreProcess::new(config);
+      core_process.run();
   });
 
   // Initial Heartbeat to Processors
