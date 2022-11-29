@@ -39,7 +39,7 @@ pub fn main() {
   // Start Encrypt Observer
   observer::start_encrypt_observer();
 
-  // Send Encrypted Message to Coordinator from each Processor
+  // // Send Encrypted Message to Coordinator from each Processor
   kafka_message_producer::btc_send_message();
   kafka_message_producer::eth_send_message();
   kafka_message_producer::xmr_send_message();

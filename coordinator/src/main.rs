@@ -108,7 +108,7 @@ async fn main() {
   // Start Encrypt Observer
   observer::start_encrypt_observer();
 
-  // Send message from Coordinator to each Processor
+  // // // Send message from Coordinator to each Processor
   kafka_message_producer::send_message();
 
   io::stdin().read_line(&mut String::new()).unwrap();
