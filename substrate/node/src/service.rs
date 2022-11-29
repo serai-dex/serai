@@ -70,7 +70,7 @@ use std::{
   error::Error,
   boxed::Box,
   sync::Arc,
-  time::{UNIX_EPOCH, Duration},
+  time::{UNIX_EPOCH, SystemTime, Duration},
   str::FromStr,
 };
 >>>>>>> 426bacac (Pass in the genesis time to Substrate)
@@ -514,6 +514,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   let enable_grandpa = !config.disable_grandpa;
   let role = config.role.clone();
   let force_authoring = config.force_authoring;
@@ -527,6 +528,14 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 
 =======
 >>>>>>> 16a2c9a2 (Correct protocol name handling)
+=======
+  let genesis_time = if config.chain_spec.id() != "devnet" {
+    UNIX_EPOCH + Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap())
+  } else {
+    SystemTime::now()
+  };
+
+>>>>>>> 3ea8becc (Have the devnet use the current time as the genesis)
   let registry = config.prometheus_registry().cloned();
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     config,
@@ -667,6 +676,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 =======
       TendermintAuthority::new(
 <<<<<<< HEAD
+<<<<<<< HEAD
         Some(
           UNIX_EPOCH +
             Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
@@ -680,6 +690,9 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 =======
         UNIX_EPOCH +
           Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
+=======
+        genesis_time,
+>>>>>>> 3ea8becc (Have the devnet use the current time as the genesis)
         tendermint_protocol,
         authority,
 >>>>>>> d7579246 (Clean TendermintAuthority::authority as possible)
