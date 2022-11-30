@@ -327,15 +327,15 @@ fn send_message_from_pub_priv_producer(topic: &str, env_key: String, processor: 
   let message_box = MessageBox::new(message_box::ids::COORDINATOR, coord_priv, message_box_pubkey);
   let enc = message_box.encrypt_to_string(&processor, &msg.clone());
 
-  // Partition 1 is Private
+  // Partition 0 is public
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", message_box::ids::COORDINATOR)).payload(&enc).partition(1))
+    .send(BaseRecord::to(&topic).key(&format!("{}", message_box::ids::COORDINATOR)).payload(&msg).partition(0))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 
-  // Partition 2 is public
+  // Partition 1 is Private
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", message_box::ids::COORDINATOR)).payload(&msg).partition(0))
+    .send(BaseRecord::to(&topic).key(&format!("{}", message_box::ids::COORDINATOR)).payload(&enc).partition(1))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 }

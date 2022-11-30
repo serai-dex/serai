@@ -114,9 +114,9 @@ fn start_private_consumer(coin_hashmap: &HashMap<String, bool> ) {
 }
 
 // Will Create a Consumer based on Pubkey, Public, or Private
-// Pubkey will listen for Processor Pubkey's
-// Public will listen for Processor Public Messages
-// Private will listen for Processor Private Messages
+// Pubkey will listen for Coordinator Pubkey's
+// Public will listen for Coordinator Public Messages
+// Private will listen for Coordinator Private Messages
 fn initialize_consumer(group_id: &str, topic: &str, env_key: Option<String>, coin: Option<&String>, consumer_type: &str) {
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -325,15 +325,15 @@ fn send_message_from_pub_priv_producer(topic: &str, env_key: String, processor: 
   let message_box = MessageBox::new(processor, coin_priv, message_box_pubkey);
   let enc = message_box.encrypt_to_string(&message_box::ids::COORDINATOR, &msg.clone());
 
-  // Partition 1 is Private
-  producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&enc).partition(1))
+  // Partition 0 is public
+    producer
+    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&msg).partition(0))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 
-  // Partition 2 is public
+  // Partition 1 is Private
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&msg).partition(0))
+    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&enc).partition(1))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 }
