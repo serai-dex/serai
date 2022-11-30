@@ -73,7 +73,7 @@ fn create_pubkey_consumer(group_id: &str, topic: &str, env_key: String) {
 }
 
 pub fn start_public_observer() {
-  println!("Starting public Coordinator Observer");
+  println!("Starting Public Coordinator Observer");
   create_public_consumer("btc_public", "BTC_Topic", "BTC_Processor");
   create_public_consumer("eth_public", "ETH_Topic", "ETH_Processor");
   create_public_consumer("xmr_public", "XMR_Topic", "XMR_Processor");
