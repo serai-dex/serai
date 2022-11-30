@@ -5,7 +5,7 @@ use k256::{
   ProjectivePoint, U256, Scalar,
 };
 
-fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
+pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   let mut c = 0;
   while key.to_encoded_point(true).tag() == Tag::CompressedOddY {
     key += ProjectivePoint::GENERATOR;

@@ -533,6 +533,7 @@ dependencies = [
  "modular-frost",
  "rand_core 0.6.4",
  "reqwest",
+ "secp256k1",
  "serde",
  "serde_derive",
  "serde_json",
