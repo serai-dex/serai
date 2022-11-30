@@ -3,16 +3,19 @@ use serde::de::DeserializeOwned;
 use std::{collections::HashMap, fmt::Debug, vec::Vec};
 
 use bitcoin::{
-    hashes::hex::FromHex, secp256k1::ecdsa::Signature, Address, Amount, OutPoint, PrivateKey,
-    Transaction,
+    hashes::hex::FromHex, secp256k1::ecdsa::Signature, Address, Amount, EcdsaSighashType, OutPoint,
+    PrivateKey, Transaction,
 };
 
-use crate::json_rpc::{
-    empty_arr, empty_obj, handle_defaults, into_json, null, opt_into_json,
-    CreateRawTransactionInput, EcdsaSighashType, EstimateSmartFeeResult, FullParams,
-    FundRawTransactionOptions, FundRawTransactionResult, GetBlockResult, GetRawTransactionResult,
-    GetTransactionResult, JsonOutPoint, ListUnspentResultEntry, NewResponse, RawTx, RpcError,
-    SignRawTransactionInput, SignRawTransactionResult, UnspentInputResponse,
+use crate::rpc_helper::{
+    empty_arr, empty_obj, handle_defaults, into_json, null, opt_into_json, JsonOutPoint, RawTx,
+    RpcConnectionError, RpcParams, RpcResponse,
+};
+
+use bitcoincore_rpc_json::{
+    CreateRawTransactionInput, EstimateSmartFeeResult, FundRawTransactionOptions,
+    FundRawTransactionResult, GetBlockResult, GetRawTransactionResult, GetTransactionResult,
+    ListUnspentResultEntry, SignRawTransactionInput, SignRawTransactionResult,
 };
 
 #[derive(Debug, Clone)]
@@ -36,7 +39,7 @@ impl Rpc {
         let client = reqwest::Client::new();
         let res = client
             .post(&self.url)
-            .json(&FullParams {
+            .json(&RpcParams {
                 jsonrpc: "2.0",
                 id: (),
                 method,
@@ -47,11 +50,11 @@ impl Rpc {
             .text()
             .await?;
 
-        let parsed_res: NewResponse<Response> = serde_json::from_str(&res)
-            .map_err(|_| anyhow::Error::new(RpcError::ParsingError))?;
+        let parsed_res: RpcResponse<Response> = serde_json::from_str(&res)
+            .map_err(|_| anyhow::Error::new(RpcConnectionError::ParsingError))?;
         match parsed_res.error {
             None => Ok(parsed_res.result.unwrap()),
-            Some(..) => Err(anyhow::Error::new(RpcError::ResultError)),
+            Some(..) => Err(anyhow::Error::new(RpcConnectionError::ResultError)),
         }
     }
 
@@ -68,14 +71,27 @@ impl Rpc {
     }
 
     pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash> {
-        let info : bitcoin::BlockHash = self.rpc_call::<bitcoin::BlockHash>("getbestblockhash", &[]).await?;
+        let info: bitcoin::BlockHash = self
+            .rpc_call::<bitcoin::BlockHash>("getbestblockhash", &[])
+            .await?;
         Ok(info)
     }
 
-    pub async fn get_spendable(&self, address: &str) -> anyhow::Result<Vec<UnspentInputResponse>> {
-        let mut ext_args = [into_json(address)?];
+    pub async fn get_spendable(
+        &self,
+        addresses: &Vec<&str>,
+    ) -> anyhow::Result<Vec<ListUnspentResultEntry>> {
+        let mut ext_args = [into_json(addresses)?];
         let args = handle_defaults(&mut ext_args, &[null()]);
         let info = self.rpc_call("listunspent", &args).await?;
+        Ok(info)
+    }
+
+    pub async fn get_o_indexes(
+        &self,
+        addresses: Vec<&str>,
+    ) -> anyhow::Result<Vec<ListUnspentResultEntry>> {
+        let info: Vec<ListUnspentResultEntry> = self.get_spendable(&addresses).await?;
         Ok(info)
     }
 
@@ -97,22 +113,6 @@ impl Rpc {
             .collect();
         let info: bool = self
             .rpc_call::<bool>("lockunspent", &[true.into(), outputs.into()])
-            .await?;
-        Ok(info)
-    }
-
-    pub async fn get_o_indexes(
-        &self,
-        addresses: Vec<&str>,
-    ) -> anyhow::Result<Vec<ListUnspentResultEntry>> {
-        let mut ext_args = [into_json(6)?, into_json(99999999)?, into_json(addresses)?];
-
-        let args = handle_defaults(
-            &mut ext_args,
-            &[into_json(6)?, into_json(99999999)?, empty_arr()],
-        );
-        let info: Vec<ListUnspentResultEntry> = self
-            .rpc_call::<Vec<ListUnspentResultEntry>>("listunspent", &args)
             .await?;
         Ok(info)
     }
@@ -167,7 +167,9 @@ impl Rpc {
     }
 
     pub async fn get_block_hash(&self, height: u64) -> Result<bitcoin::BlockHash> {
-        let info : bitcoin::BlockHash = self.rpc_call::<bitcoin::BlockHash>("getblockhash", &[height.into()]).await?;
+        let info: bitcoin::BlockHash = self
+            .rpc_call::<bitcoin::BlockHash>("getblockhash", &[height.into()])
+            .await?;
         Ok(info)
     }
 
@@ -249,7 +251,7 @@ impl Rpc {
     ) -> Result<String> {
         let outs_converted = serde_json::Map::from_iter(
             outs.iter()
-                .map(|(k, v)| (k.clone(), serde_json::Value::from(v.as_btc()))),
+                .map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
         );
         let mut args = [
             into_json(utxos)?,
@@ -375,7 +377,9 @@ impl Rpc {
     {
         //let test = &tx.raw_hex();
         //dbg!(&test);
-        let info : bitcoin::Txid = self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &[tx.raw_hex().into()]).await?;
+        let info: bitcoin::Txid = self
+            .rpc_call::<bitcoin::Txid>("sendrawtransaction", &[tx.raw_hex().into()])
+            .await?;
         Ok(info)
     }
 

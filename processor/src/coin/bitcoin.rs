@@ -8,7 +8,8 @@ use transcript::RecommendedTranscript;
 use frost::{ curve::Ed25519, ThresholdKeys };
 
 use bitcoin::util::address::Address;
-use bitcoin_serai::{rpc::Rpc,json_rpc::{GetBlockResult, EstimateSmartFeeResult, UnspentInputResponse}};
+use bitcoin_serai::{rpc::Rpc};
+use bitcoincore_rpc_json::{GetBlockResult}; //, EstimateSmartFeeResult, ListUnspentResultEntry
 
 use crate::{
   additional_key,

@@ -526,6 +526,7 @@ dependencies = [
  "async-trait",
  "bitcoin",
  "bitcoin_hashes",
+ "bitcoincore-rpc-json",
  "hex",
  "k256",
  "log",
@@ -547,6 +548,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90064b8dee6815a6470d60bad07bbbaee885c0e12d04177138fa3291a01b7bc4"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "bitcoincore-rpc-json"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c231bea28e314879c5aef240f6052e8a72a369e3c9f9b20d9bfbb33ad18029b2"
+dependencies = [
+ "bitcoin",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7703,6 +7715,7 @@ dependencies = [
  "bitcoin",
  "bitcoin-serai",
  "bitcoin_hashes",
+ "bitcoincore-rpc-json",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "flexible-transcript",
