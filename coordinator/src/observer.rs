@@ -74,12 +74,12 @@ fn create_pubkey_consumer(group_id: &str, topic: &str, env_key: String) {
 
 pub fn start_public_observer() {
   println!("Starting Public Coordinator Observer");
-  create_public_consumer("btc_public", "BTC_Topic", "BTC_Processor");
-  create_public_consumer("eth_public", "ETH_Topic", "ETH_Processor");
-  create_public_consumer("xmr_public", "XMR_Topic", "XMR_Processor");
+  create_public_consumer("btc_public", "BTC_Topic");
+  create_public_consumer("eth_public", "ETH_Topic");
+  create_public_consumer("xmr_public", "XMR_Topic");
 }
 
-fn create_public_consumer(group_id: &str, topic: &str, expected_key: &str) {
+fn create_public_consumer(group_id: &str, topic: &str) {
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .set("group.id", group_id)
@@ -104,12 +104,11 @@ fn create_public_consumer(group_id: &str, topic: &str, expected_key: &str) {
   });
 }
 
-pub fn start_encrypt_observer() {
-  println!("Starting Encrypt Coordinator Observer");
-
+pub fn start_private_observer() {
+  println!("Starting Private Coordinator Observer");
   create_private_consumer("btc_private", "BTC_Topic", "BTC_PUB".to_string(), "BTC_Processor");
-  create_private_consumer("btc_private", "ETH_Topic", "ETH_PUB".to_string(), "ETH_Processor");
-  create_private_consumer("btc_private", "XMR_Topic", "XMR_PUB".to_string(), "XMR_Processor");
+  create_private_consumer("eth_private", "ETH_Topic", "ETH_PUB".to_string(), "ETH_Processor");
+  create_private_consumer("xmr_private", "XMR_Topic", "XMR_PUB".to_string(), "XMR_Processor");
 }
 
 fn create_private_consumer(group_id: &str, topic: &str, env_key: String, processor: &'static str) {

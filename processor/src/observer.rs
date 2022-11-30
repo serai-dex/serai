@@ -31,69 +31,28 @@ pub fn start() {
 }
 
 pub fn start_public_observer() {
-  println!("Starting public Processor Observer");
-  let consumer_btc_public: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
+  println!("Starting Public Processor Observer");
+  create_public_consumer("btc_public", "BTC_Topic");
+  create_public_consumer("eth_public", "ETH_Topic");
+  create_public_consumer("xmr_public", "XMR_Topic");
+}
+
+fn create_public_consumer(group_id: &str, topic: &str) {
+  let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "btc_public")
+    .set("group.id", group_id)
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-  let mut btc_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  btc_tpl.add_partition("BTC_Topic", 0);
-  consumer_btc_public.assign(&btc_tpl).unwrap();
-
-  let consumer_eth_public: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "eth_public")
-    .create_with_context(ConsumerCallbackLogger {})
-    .expect("invalid consumer config");
-
-  let mut eth_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  eth_tpl.add_partition("ETH_Topic", 0);
-  consumer_eth_public.assign(&eth_tpl).unwrap();
-
-  let consumer_xmr_public: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "xmr_public")
-    .create_with_context(ConsumerCallbackLogger {})
-    .expect("invalid consumer config");
-
-  let mut xmr_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  xmr_tpl.add_partition("XMR_Topic", 0);
-  consumer_xmr_public.assign(&xmr_tpl).unwrap();
+  let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  tpl.add_partition(&topic, 0);
+  consumer.assign(&tpl).unwrap();
 
   thread::spawn(move || {
-    for msg_result in &consumer_btc_public {
+    for msg_result in &consumer {
       let msg = msg_result.unwrap();
       let key: &str = msg.key_view().unwrap().unwrap();
-      if let "Coordinator" = &*key {
-        let value = msg.payload().unwrap();
-        str::from_utf8(value).unwrap();
-        let pub_msg = str::from_utf8(value).unwrap();
-        println!("Received Public Message from {}", &key);
-        println!("Public Message: {}", &pub_msg);
-      }
-    }
-  });
-
-  thread::spawn(move || {
-    for msg_result in &consumer_eth_public {
-      let msg = msg_result.unwrap();
-      let key: &str = msg.key_view().unwrap().unwrap();
-      if let "Coordinator" = &*key {
-        let value = msg.payload().unwrap();
-        let pub_msg = str::from_utf8(value).unwrap();
-        println!("Received Public Message from {}", &key);
-        println!("Public Message: {}", &pub_msg);
-      }
-    }
-  });
-
-  thread::spawn(move || {
-    for msg_result in &consumer_xmr_public {
-      let msg = msg_result.unwrap();
-      let key: &str = msg.key_view().unwrap().unwrap();
-      if let "Coordinator" = &*key {
+      if key == "Coordinator" {
         let value = msg.payload().unwrap();
         let pub_msg = str::from_utf8(value).unwrap();
         println!("Received Public Message from {}", &key);
@@ -103,111 +62,41 @@ pub fn start_public_observer() {
   });
 }
 
-pub fn start_encrypt_observer() {
-  println!("Starting Encrypt Processor Observer");
-  let consumer_btc_encrypt: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
+pub fn start_private_observer() {
+  println!("Starting Private Processor Observer");
+  create_private_consumer("btc_private", "BTC_Topic", "BTC_PRIV".to_string(), "BTC_Processor");
+  create_private_consumer("eth_private", "ETH_Topic", "ETH_PRIV".to_string(), "ETH_Processor");
+  create_private_consumer("xmr_private", "XMR_Topic", "XMR_PRIV".to_string(), "XMR_Processor");
+}
+
+fn create_private_consumer(group_id: &str, topic: &str, env_key: String, processor: &'static str) {
+  let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "btc_private")
+    .set("group.id", group_id)
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-  let mut btc_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  btc_tpl.add_partition("BTC_Topic", 1);
-  consumer_btc_encrypt.assign(&btc_tpl).unwrap();
-
-  let consumer_eth_encrypt: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "eth_private")
-    .create_with_context(ConsumerCallbackLogger {})
-    .expect("invalid consumer config");
-
-  let mut eth_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  eth_tpl.add_partition("ETH_Topic", 1);
-  consumer_eth_encrypt.assign(&eth_tpl).unwrap();
-
-  let consumer_xmr_encrypt: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "xmr_private")
-    .create_with_context(ConsumerCallbackLogger {})
-    .expect("invalid consumer config");
-
-  let mut xmr_tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  xmr_tpl.add_partition("XMR_Topic", 1);
-  consumer_xmr_encrypt.assign(&xmr_tpl).unwrap();
+  let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  tpl.add_partition(&topic, 1);
+  consumer.assign(&tpl).unwrap();
 
   thread::spawn(move || {
-    for msg_result in &consumer_btc_encrypt {
+    for msg_result in &consumer {
       let msg = msg_result.unwrap();
       let key: &str = msg.key_view().unwrap().unwrap();
-      if let "Coordinator" = &*key {
+      if key == "Coordinator" {
         let value = msg.payload().unwrap();
         // Creates Message box used for decryption
         let coord_pub =
           message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
 
-        let btc_priv =
-          message_box::PrivateKey::from_string(env::var("BTC_PRIV").unwrap().to_string());
+        let coin_priv =
+          message_box::PrivateKey::from_string(env::var(env_key.to_string()).unwrap().to_string());
 
         let mut message_box_pubkeys = HashMap::new();
         message_box_pubkeys.insert("Coordinator", coord_pub);
 
-        let message_box = MessageBox::new("BTC_Processor", btc_priv, message_box_pubkeys);
-        let encrypted_msg = str::from_utf8(value).unwrap();
-
-        // Decrypt message using Message Box
-        let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
-        let decoded_string = String::from_utf8(encoded_string).unwrap();
-        println!("Received Encrypted Message from {}", &key);
-        println!("Decrypted Message: {}", &decoded_string);
-      }
-    }
-  });
-
-  thread::spawn(move || {
-    for msg_result in &consumer_eth_encrypt {
-      let msg = msg_result.unwrap();
-      let key: &str = msg.key_view().unwrap().unwrap();
-      if let "Coordinator" = &*key {
-        let value = msg.payload().unwrap();
-        // Creates Message box used for decryption
-        let coord_pub =
-          message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
-
-        let btc_priv =
-          message_box::PrivateKey::from_string(env::var("ETH_PRIV").unwrap().to_string());
-
-        let mut message_box_pubkeys = HashMap::new();
-        message_box_pubkeys.insert("Coordinator", coord_pub);
-
-        let message_box = MessageBox::new("ETH_Processor", btc_priv, message_box_pubkeys);
-        let encrypted_msg = str::from_utf8(value).unwrap();
-
-        // Decrypt message using Message Box
-        let encoded_string = message_box.decrypt_from_str(&"Coordinator", &encrypted_msg).unwrap();
-        let decoded_string = String::from_utf8(encoded_string).unwrap();
-        println!("Received Encrypted Message from {}", &key);
-        println!("Decrypted Message: {}", &decoded_string);
-      }
-    }
-  });
-
-  thread::spawn(move || {
-    for msg_result in &consumer_xmr_encrypt {
-      let msg = msg_result.unwrap();
-      let key: &str = msg.key_view().unwrap().unwrap();
-      if let "Coordinator" = &*key {
-        let value = msg.payload().unwrap();
-        // Creates Message box used for decryption
-        let coord_pub =
-          message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
-
-        let xmr_priv =
-          message_box::PrivateKey::from_string(env::var("XMR_PRIV").unwrap().to_string());
-
-        let mut message_box_pubkeys = HashMap::new();
-        message_box_pubkeys.insert("Coordinator", coord_pub);
-
-        let message_box = MessageBox::new("XMR_Processor", xmr_priv, message_box_pubkeys);
+        let message_box = MessageBox::new(processor, coin_priv, message_box_pubkeys);
         let encrypted_msg = str::from_utf8(value).unwrap();
 
         // Decrypt message using Message Box

@@ -105,8 +105,8 @@ async fn main() {
   // Start Public Observer
   observer::start_public_observer();
 
-  // Start Encrypt Observer
-  observer::start_encrypt_observer();
+  // Start Private Observer
+  observer::start_private_observer();
 
   // Send message from Coordinator to each Processor
   kafka_message_producer::send_message();
