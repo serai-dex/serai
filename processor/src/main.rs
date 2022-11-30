@@ -1,46 +1,62 @@
 mod core;
-mod kafka_pubkey_producer;
-mod kafka_message_producer;
-mod observer;
+mod signature;
 use std::io;
 use std::env;
 use std::time::Duration;
 use std::thread;
+use std::io::Write;
 
-// Generates / secruely saves a coin specifik key pari on first launch or reloads
-pub fn main() {
-  println!("Starting processor");
-  core::initialize_coin("btc");
+use clap::{value_t, App, Arg};
 
-  // Checks if coin keys exists, generates / sets env variables if not
-  core::initialize_keys();
+use crate::core::ProcessorConfig;
+use crate::core::CoreProcess;
+use crate::signature::SignatureProcess;
 
-  // Starts Observer
-  observer::start();
 
-  // Communicates public keys to partition
-  kafka_pubkey_producer::start();
+#[tokio::main]
+async fn main() {
+  let args = App::new("Serai Processor")
+  .version("0.1.0")
+  .author("Serai Team")
+  .about("Serai Processor")
+  .arg(
+    Arg::with_name("mode")
+      .short("m")
+      .long("mode")
+      .value_name("MODE")
+      .help("Sets the mode to run in (Development, Test, Prodcution)")
+      .takes_value(true)
+      .default_value("Development"),
+  )
+  .arg(
+    Arg::with_name("config_dir")
+      .short("cd")
+      .long("config_dir")
+      .help(
+        "The path that the coordinator can find relevant config files.
+                   Default: ./config/",
+      )
+      .takes_value(true)
+      .default_value("./config/"),
+  )
+  .get_matches();
 
-  // Runs a loop to check if Coordinator pubkey is found
-  let mut coord_key_found = false;
-  while !coord_key_found {
-    let coord_pub_check = env::var("COORD_PUB");
-    if (!coord_pub_check.is_err()) {
-      println!("Coord Pubkey Ready");
-      coord_key_found = true;
-    } else {
-      thread::sleep(Duration::from_secs(1));
-    }
-  }
+  // Load Config / Chains
+  let path_arg = args.value_of("config_dir").unwrap();
+  let config = ProcessorConfig::new(String::from(path_arg)).unwrap();
 
-  // Start Public Observer
-  observer::start_public_observer();
+  // Start Core Process
+  tokio::spawn(async move {
+    let core_process = CoreProcess::new(config);
+    core_process.run();
+});
 
-  // Start Private Observer
-  observer::start_private_observer();
-
-  // // Send Encrypted Message to Coordinator from each Processor
-  kafka_message_producer::send_messages();
+  // Start Signature Process
+  let sig_config = ProcessorConfig::new(String::from(path_arg)).unwrap();
+  tokio::spawn(async move {
+    let signature_process = SignatureProcess::new(sig_config);
+    signature_process.run();
+  });
 
   io::stdin().read_line(&mut String::new()).unwrap();
 }

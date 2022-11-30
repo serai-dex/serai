@@ -1,6 +1,6 @@
 /// The coordinator core module contains functionality that is shared across modules.
 use config::{Config, ConfigError, Environment, File};
-use serde::{Deserialize};
+use serde::{Deserialize, Serialize};
 use std::{env, fmt, thread, str::FromStr, io::Write};
 use chrono::prelude::*;
 use env_logger::fmt::Formatter;
@@ -235,10 +235,9 @@ impl CoreConfig {
   }
 }
 
-// TODO: change to a struct with a builder pattern
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[allow(unused)]
-struct ChainConfig {
+pub struct ChainConfig {
   btc: bool,
   eth: bool,
   xmr: bool,
@@ -302,6 +301,7 @@ pub struct CoordinatorConfig {
   core: CoreConfig,
   health: HealthConfig,
   observer: ObserverConfig,
+  chain: ChainConfig,
 }
 
 impl CoordinatorConfig {
@@ -335,6 +335,11 @@ impl CoordinatorConfig {
         host: String::from("localhost"),
         port: String::from("5050"),
         poll_interval: 1,
+      },
+      chain: ChainConfig{
+        btc: s.get_bool("chains.btc").unwrap(),
+        eth: s.get_bool("chains.eth").unwrap(),
+        xmr: s.get_bool("chains.xmr").unwrap(),
       },
     };
 
@@ -379,6 +384,10 @@ impl CoordinatorConfig {
   // get the observer config
   pub fn get_observer(&self) -> ObserverConfig {
     self.observer.clone()
+  }
+  // get the chain config
+  pub fn get_chain(&self) -> ChainConfig {
+    self.chain.clone()
   }
 }
 

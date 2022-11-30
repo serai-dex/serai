@@ -30,6 +30,8 @@ pub use serde::{Serialize, Deserialize};
 mod ser;
 use ser::*;
 
+pub mod ids;
+
 #[cfg(test)]
 mod tests;
 

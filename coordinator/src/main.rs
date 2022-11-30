@@ -1,8 +1,6 @@
 mod core;
 mod health;
-mod observer;
-mod kafka_pubkey_producer;
-mod kafka_message_producer;
+mod signature;
 
 use std::thread;
 use std::io::Write;
@@ -14,6 +12,7 @@ use clap::{value_t, App, Arg};
 
 use crate::core::CoordinatorConfig;
 use crate::core::CoreProcess;
+use crate::signature::SignatureProcess;
 
 #[tokio::main]
 async fn main() {
@@ -49,11 +48,17 @@ async fn main() {
 
   // Processes then use configs to create themselves
 
-
   // Start Core Process
   tokio::spawn(async move {
       let core_process = CoreProcess::new(config);
       core_process.run();
+  });
+
+  // Start Signature Process
+  let sig_config = CoordinatorConfig::new(String::from(path_arg)).unwrap();
+  tokio::spawn(async move {
+    let signature_process = SignatureProcess::new(sig_config);
+    signature_process.run();
   });
 
   // Initial Heartbeat to Processors
@@ -61,55 +66,11 @@ async fn main() {
   //  * binary checksum ??
 
   // Start Serai Observer
-  observer::start();
 
   // Start Health Monitor
 
   // Start Network Broker
 
   // Hang on cli
-
-  // Initialize Kafka
-  kafka_pubkey_producer::start();
-
-  // Runs a loop to check if all processor keys are found
-  let mut all_keys_found = false;
-  while !all_keys_found{
-    let mut btc_key_found = false;
-    let mut eth_key_found = false;
-    let mut xmr_key_found = false;
-
-    let btc_pub_check = env::var("BTC_PUB");
-    if (!btc_pub_check.is_err()) {
-      btc_key_found = true;
-    }
-
-    let eth_pub_check = env::var("ETH_PUB");
-    if (!eth_pub_check.is_err()) {
-      eth_key_found = true;
-    }
-
-    let xmr_pub_check = env::var("XMR_PUB");
-    if (!xmr_pub_check.is_err()) {
-      xmr_key_found = true;
-    }
-
-    if btc_key_found && eth_key_found && xmr_key_found {
-      println!("All Processor Pubkeys Ready");
-      all_keys_found = true;
-    } else {
-      thread::sleep(Duration::from_secs(1));
-    }
-  }
-
-  // Start Public Observer
-  observer::start_public_observer();
-
-  // Start Private Observer
-  observer::start_private_observer();
-
-  // Send message from Coordinator to each Processor
-  kafka_message_producer::send_message();
-
   io::stdin().read_line(&mut String::new()).unwrap();
 }
