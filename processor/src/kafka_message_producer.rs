@@ -6,137 +6,56 @@ use rdkafka::{
 };
 use message_box::{MessageBox};
 
-pub fn btc_send_message() {
-  // Creates a producer to send message
-  let producer_private: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .create_with_context(ProduceCallbackLogger {})
-    .expect("invalid producer config");
-
-  let producer_public: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .create_with_context(ProduceCallbackLogger {})
-    .expect("invalid producer config");
-
-  println!("Sending BTC Encrytped & Public Message");
-
-  // Load Coord Priv / Pub Env variable
-  let btc_priv = message_box::PrivateKey::from_string(env::var("BTC_PRIV").unwrap().to_string());
-
-  // Load pubkey for Coordinator
-  let coord_priv =
-    message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
-
-  // Should use an additional pub key for IDs to use external message box instead of internal
-  let mut message_box_pubkeys = HashMap::new();
-  message_box_pubkeys.insert("Coordinator", coord_priv);
-
-  // Create Coordinator Message Box
-  let message_box = MessageBox::new("BTC_Processor", btc_priv, message_box_pubkeys);
-
-  // Create Encrypted Message for each processor
-  let msg = b"BTC Processor message to Coordinator".to_vec();
-  let enc = message_box.encrypt_to_string(&"Coordinator", &msg.clone());
-
-  // Send messages to secure partition
-  producer_private
-    .send(BaseRecord::to("BTC_Topic").key(&format!("BTC_Processor")).payload(&enc).partition(1))
-    .expect("failed to send message");
-  thread::sleep(Duration::from_secs(1));
-
-  // Send message to public partition
-  producer_public
-    .send(BaseRecord::to("BTC_Topic").key(&format!("BTC_Processor")).payload(&msg).partition(0))
-    .expect("failed to send message");
-  thread::sleep(Duration::from_secs(1));
+pub fn send_messages() {
+  send_message_from_producer(
+    "BTC_Topic",
+    "BTC_PRIV".to_string(),
+    "BTC_Processor",
+    b"BTC Processor message to Coordinator".to_vec(),
+  );
+  send_message_from_producer(
+    "ETH_Topic",
+    "ETH_PRIV".to_string(),
+    "ETH_Processor",
+    b"ETH_Processor message to Coordinator".to_vec(),
+  );
+  send_message_from_producer(
+    "XMR_Topic",
+    "XMR_PRIV".to_string(),
+    "XMR_Processor",
+    b"ETH_Processor message to Coordinator".to_vec(),
+  );
 }
 
-pub fn eth_send_message() {
-  // Creates a producer to send message
-  let producer_private: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+fn send_message_from_producer(topic: &str, env_key: String, processor: &'static str, msg: Vec<u8>) {
+  let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .create_with_context(ProduceCallbackLogger {})
     .expect("invalid producer config");
 
-  let producer_public: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .create_with_context(ProduceCallbackLogger {})
-    .expect("invalid producer config");
+  // Load Coordinator private environment variable
+  let coin_priv =
+    message_box::PrivateKey::from_string(env::var(env_key.to_string()).unwrap().to_string());
 
-  println!("Sending ETH Encrytped & Public Message");
-
-  // Load Coord Priv / Pub Env variable
-  let eth_priv = message_box::PrivateKey::from_string(env::var("ETH_PRIV").unwrap().to_string());
-
-  // Load pubkey for Coordinator
-  let coord_pub =
+  // Load Pubkey for Coordinator
+  let pubkey =
     message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
+  let mut message_box_pubkey = HashMap::new();
+  message_box_pubkey.insert("Coordinator", pubkey);
 
-  // Should use an additional pub key for IDs to use external message box instead of internal
-  let mut message_box_pubkeys = HashMap::new();
-  message_box_pubkeys.insert("Coordinator", coord_pub);
-
-  // Create Coordinator Message Box
-  let message_box = MessageBox::new("ETH_Processor", eth_priv, message_box_pubkeys);
-
-  // Create Encrypted Message for each processor
-  let msg = b"ETH Processor message to Coordinator".to_vec();
+  // Create Coin Message Box
+  let message_box = MessageBox::new(processor, coin_priv, message_box_pubkey);
   let enc = message_box.encrypt_to_string(&"Coordinator", &msg.clone());
 
-  // Send message to secure partition
-  producer_private
-    .send(BaseRecord::to("ETH_Topic").key(&format!("ETH_Processor")).payload(&enc).partition(1))
+  // Partition 1 is Private
+  producer
+    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&enc).partition(1))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 
-  // Send message to public partition
-  producer_public
-    .send(BaseRecord::to("ETH_Topic").key(&format!("ETH_Processor")).payload(&msg).partition(0))
-    .expect("failed to send message");
-  thread::sleep(Duration::from_secs(1));
-}
-
-pub fn xmr_send_message() {
-  // Creates a producer to send message
-  let producer_private: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .create_with_context(ProduceCallbackLogger {})
-    .expect("invalid producer config");
-
-  let producer_public: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
-    .set("bootstrap.servers", "localhost:9094")
-    .create_with_context(ProduceCallbackLogger {})
-    .expect("invalid producer config");
-
-  println!("Sending XMR Encrytped & Public Message");
-
-  // Load Coord Priv / Pub Env variable
-  let xmr_priv = message_box::PrivateKey::from_string(env::var("XMR_PRIV").unwrap().to_string());
-
-  // Load pubkey for Coordinator
-  let coord_pub =
-    message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
-
-  // Should use an additional pub key for IDs to use external message box instead of internal
-  let mut message_box_pubkeys = HashMap::new();
-  message_box_pubkeys.insert("Coordinator", coord_pub);
-
-  // Create Coordinator Message Box
-  let message_box = MessageBox::new("XMR_Processor", xmr_priv, message_box_pubkeys);
-
-  // Create Encrypted Message for each processor
-  let msg = b"XMR Processor message to Coordinator".to_vec();
-  let enc = message_box.encrypt_to_string(&"Coordinator", &msg.clone());
-
-  // Send message to secure partition
-  producer_private
-    .send(BaseRecord::to("XMR_Topic").key(&format!("XMR_Processor")).payload(&enc).partition(1))
-    .expect("failed to send message");
-  thread::sleep(Duration::from_secs(1));
-
-  // Send message to public partition
-  producer_public
-    .send(BaseRecord::to("XMR_Topic").key(&format!("XMR_Processor")).payload(&msg).partition(0))
+  // Partition 2 is public
+  producer
+    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&msg).partition(0))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 }
