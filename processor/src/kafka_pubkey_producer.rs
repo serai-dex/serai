@@ -1,7 +1,8 @@
+use std::{thread, time::Duration};
 use std::{env, str};
 use rdkafka::{
   producer::{BaseRecord, ProducerContext, ThreadedProducer},
-  ClientConfig, ClientContext, Message
+  ClientConfig, ClientContext, Message,
 };
 
 pub fn start() {
@@ -12,31 +13,26 @@ pub fn start() {
     .expect("invalid producer config");
 
   println!("Sending Public Keys");
+  send_message_from_producer("BTC_Public_Key", "BTC_PUB".to_string(), "BTC_Processor");
+  send_message_from_producer("ETH_Public_Key", "ETH_PUB".to_string(), "ETH_Processor");
+  send_message_from_producer("XMR_Public_Key", "XMR_PUB".to_string(), "XMR_Processor");
+}
 
-  // Creates a public key message for each coin
-  let btc_pub = env::var("BTC_PUB");
-  let btc_msg = btc_pub.unwrap();
+fn send_message_from_producer(topic: &str, env_key: String, processor: &'static str) {
+  let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+    .set("bootstrap.servers", "localhost:9094")
+    .create_with_context(ProduceCallbackLogger {})
+    .expect("invalid producer config");
 
-  // Sends btc pubkey to Kafka
+  // Load Pubkeys for processor
+  let coin_pub = env::var(env_key.to_string());
+  let coin_msg = coin_pub.unwrap();
+
+  // Send pubkey to kafka topic
   producer
-    .send(BaseRecord::to("BTC_Public_Key").key(&format!("BTC_Processor")).payload(&btc_msg))
+    .send(BaseRecord::to(&topic).key(&format!("{}", processor)).payload(&coin_msg))
     .expect("failed to send message");
-
-  let eth_pub = env::var("ETH_PUB");
-  let eth_msg = eth_pub.unwrap();
-
-  // Sends eth pubkey to Kafka
-  producer
-    .send(BaseRecord::to("ETH_Public_Key").key(&format!("ETH_Processor")).payload(&eth_msg))
-    .expect("failed to send message");
-
-  let xmr_pub = env::var("XMR_PUB");
-  let xmr_msg = xmr_pub.unwrap();
-
-  // Sends xmr pubkey to Kafka
-  producer
-    .send(BaseRecord::to("XMR_Public_Key").key(&format!("XMR_Processor")).payload(&xmr_msg))
-    .expect("failed to send message");
+  thread::sleep(Duration::from_secs(1));
 }
 
 struct ProduceCallbackLogger;
