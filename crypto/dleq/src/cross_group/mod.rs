@@ -183,6 +183,7 @@ where
     res
   }
 
+  #[allow(clippy::type_complexity)]
   fn prove_internal<R: RngCore + CryptoRng, T: Clone + Transcript>(
     rng: &mut R,
     transcript: &mut T,
@@ -283,6 +284,7 @@ where
   /// It also ensures a lack of determinable relation between keys, guaranteeing security in the
   /// currently expected use case for this, atomic swaps, where each swap leaks the key. Knowing
   /// the relationship between keys would allow breaking all swaps after just one.
+  #[allow(clippy::type_complexity)]
   pub fn prove<R: RngCore + CryptoRng, T: Clone + Transcript, D: Digest + HashMarker>(
     rng: &mut R,
     transcript: &mut T,
@@ -304,6 +306,7 @@ where
   /// Prove the cross-Group Discrete Log Equality for the points derived from the scalar passed in,
   /// failing if it's not mutually valid. This allows for rejection sampling externally derived
   /// scalars until they're safely usable, as needed.
+  #[allow(clippy::type_complexity)]
   pub fn prove_without_bias<R: RngCore + CryptoRng, T: Clone + Transcript>(
     rng: &mut R,
     transcript: &mut T,

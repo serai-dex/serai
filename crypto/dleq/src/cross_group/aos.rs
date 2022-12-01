@@ -78,7 +78,7 @@ where
     (((generators.0.alt * s.0) - (A.0 * e.0)), ((generators.1.alt * s.1) - (A.1 * e.1)))
   }
 
-  #[allow(non_snake_case)]
+  #[allow(non_snake_case, clippy::type_complexity)]
   fn R_batch(
     generators: (Generators<G0>, Generators<G1>),
     s: (G0::Scalar, G1::Scalar),
