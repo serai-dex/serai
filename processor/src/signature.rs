@@ -181,7 +181,7 @@ fn initialize_consumer(group_id: &str, topic: &str, env_key: Option<String>, coi
           for msg_result in &consumer {
             let msg = msg_result.unwrap();
             let key: &str = msg.key_view().unwrap().unwrap();
-            if message_box::ids::COORDINATOR != &*key {
+            if message_box::ids::COORDINATOR == &*key {
                 let value = msg.payload().unwrap();
                 // Creates Message box used for decryption
                 let pubkey =

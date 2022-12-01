@@ -320,6 +320,7 @@ fn send_message_from_pub_priv_producer(topic: &str, env_key: String, processor: 
   // Load Pubkeys for processors
   let pubkey =
     message_box::PublicKey::from_trusted_str(&env::var(env_key.to_string()).unwrap().to_string());
+
   let mut message_box_pubkey = HashMap::new();
   message_box_pubkey.insert(processor, pubkey);
 
