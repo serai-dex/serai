@@ -7,13 +7,12 @@ use lazy_static::lazy_static;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
+
 #[cfg(feature = "multisig")]
 use blake2::{digest::Update, Digest, Blake2b512};
-
-use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
-
 #[cfg(feature = "multisig")]
-use dalek_ff_group::Scalar;
+use dalek_ff_group;
 #[cfg(feature = "multisig")]
 use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
@@ -26,7 +25,7 @@ use frost::{
 use monero_serai::{
   random_scalar,
   wallet::{address::Network, ViewPair, Scanner, SpendableOutput, SignableTransaction},
-  rpc::{Rpc}
+  rpc::{Rpc},
 };
 
 lazy_static! {
@@ -51,15 +50,16 @@ macro_rules! async_sequential {
   };
 }
 
-fn generate_keys() -> (Zeroizing<curve25519_dalek::scalar::Scalar>, curve25519_dalek::scalar::Scalar) {
+fn generate_keys() -> (Zeroizing<Scalar>, Scalar) {
   let spend = Zeroizing::new(random_scalar(&mut OsRng));
   let view = random_scalar(&mut OsRng);
   return (spend, view);
 }
 
-fn generate_multisig_keys() -> (HashMap<u16, ThresholdKeys<Ed25519>>, curve25519_dalek::scalar::Scalar) {
+fn generate_multisig_keys() -> (HashMap<u16, ThresholdKeys<Ed25519>>, Scalar) {
   let keys = key_gen::<_, Ed25519>(&mut OsRng);
-  let view = Scalar::from_hash(Blake2b512::new().chain("Monero Serai Transaction Test")).0;
+  let view =
+    dalek_ff_group::Scalar::from_hash(Blake2b512::new().chain("Monero Serai Transaction Test")).0;
   return (keys, view);
 }
 
@@ -70,12 +70,12 @@ async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
   while !found {
     let block = rpc.get_block(height - 1).await.unwrap();
     found = match block.txs.iter().find(|&&x| x == tx_hash) {
-        Some(_) => { true },
-        None => { 
-          rpc.mine_regtest_blocks(addr, 1).await.unwrap();
-          height += 1;
-          false 
-        },
+      Some(_) => true,
+      None => {
+        rpc.mine_regtest_blocks(addr, 1).await.unwrap();
+        height += 1;
+        false
+      }
     }
   }
 
@@ -90,7 +90,11 @@ async_sequential! {
     let (spend, view) = generate_keys();
     let spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
 
-    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let mut scanner = Scanner::from_view(
+      ViewPair::new(spend_pub, view),
+      Network::Mainnet,
+      Some(HashSet::new())
+    );
     let addr = scanner.address();
     let addr_str = addr.to_string();
     let fee = rpc.get_fee().await.unwrap();
@@ -130,8 +134,9 @@ async_sequential! {
       // TODO: Ideally we would only need to directly mine 10 block to unlock the tx.
       // But we have seen that method doesn't always works since there isn't a guarantee that
       // the tx will be immediately mined in the next block and it doesn't in some slow machines.
-      // this function guarantees to mine until the tx is unlocked(assuming tx is default locked 10 blocks)
-      // but it inevitably mines more than 10 blocks in some cases, hence diverging from the perfect test case scenario.
+      // this function mines until the tx is unlocked(assuming tx is default locked 10 blocks)
+      // but it inevitably mines more than 10 blocks in some cases,
+      // hence diverging from the perfect test case scenario.
       // So we might wanna find another solution in the future.
       mine_until_unlocked(&rpc, &addr_str, tx.hash()).await;
     }
@@ -142,7 +147,11 @@ async_sequential! {
     let (spend, view) = generate_keys();
     let spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
 
-    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let mut scanner = Scanner::from_view(
+      ViewPair::new(spend_pub, view),
+      Network::Mainnet,
+      Some(HashSet::new())
+    );
     let addr = scanner.address();
     let fee = rpc.get_fee().await.unwrap();
 
@@ -191,7 +200,11 @@ async_sequential! {
     let spend_pub = keys[&1].group_key().0;
 
     // get a view
-    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let mut scanner = Scanner::from_view(
+      ViewPair::new(spend_pub, view),
+      Network::Mainnet,
+      Some(HashSet::new())
+    );
     let addr = scanner.address();
     let addr_str = addr.to_string();
     let fee = rpc.get_fee().await.unwrap();
@@ -259,7 +272,11 @@ async_sequential! {
     let spend_pub = keys[&1].group_key().0;
 
     // get a view
-    let mut scanner = Scanner::from_view(ViewPair::new(spend_pub, view), Network::Mainnet, Some(HashSet::new()));
+    let mut scanner = Scanner::from_view(
+      ViewPair::new(spend_pub, view),
+      Network::Mainnet,
+      Some(HashSet::new())
+    );
     let addr = scanner.address();
     let fee = rpc.get_fee().await.unwrap();
 
