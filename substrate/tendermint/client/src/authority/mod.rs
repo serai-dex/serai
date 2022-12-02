@@ -145,7 +145,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
     let env = Arc::new(Mutex::new(env));
 
     // Scoped so the temporary variables used here don't leak
-    let (block_in_progress, TendermintHandle { mut step, mut messages, machine }) = {
+    let (block_in_progress, mut gossip, TendermintHandle { mut step, mut messages, machine }) = {
       // Get the info necessary to spawn the machine
       let info = import.client.info();
 
@@ -204,20 +204,22 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
         .get_proposal(&import.client.header(BlockId::Hash(last_hash)).unwrap().unwrap())
         .await;
 
+      // Create the gossip network
+      // This has to be spawning the machine, else gossip fails for some reason
+      let gossip = GossipEngine::new(
+        network,
+        protocol,
+        Arc::new(TendermintGossip::new(block_in_progress.clone(), import.validators.clone())),
+        registry,
+      );
+
       (
         block_in_progress,
+        gossip,
         TendermintMachine::new(authority, BlockNumber(last_block), last_time, proposal).await,
       )
     };
     spawner.spawn_essential("machine", Some("tendermint"), Box::pin(machine.run()));
-
-    // Create the gossip network
-    let mut gossip = GossipEngine::new(
-      network,
-      protocol,
-      Arc::new(TendermintGossip::new(block_in_progress.clone(), import.validators.clone())),
-      registry,
-    );
 
     // Start receiving messages about the Tendermint process for this block
     let mut gossip_recv =
