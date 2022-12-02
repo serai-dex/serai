@@ -180,6 +180,7 @@ fn refine_inputs<C: Coin>(
   }
 }
 
+#[allow(clippy::type_complexity)]
 fn select_inputs_outputs<C: Coin>(
   inputs: &mut Vec<C::Output>,
   outputs: &mut Vec<(C::Address, u64)>,
@@ -200,6 +201,7 @@ fn select_inputs_outputs<C: Coin>(
   (selected, outputs)
 }
 
+#[allow(clippy::type_complexity)]
 pub struct Wallet<D: CoinDb, C: Coin> {
   db: D,
   coin: C,

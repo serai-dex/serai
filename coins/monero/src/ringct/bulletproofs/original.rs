@@ -42,7 +42,8 @@ impl OriginalStruct {
     let (logMN, M, MN) = MN(commitments.len());
 
     let (aL, aR) = bit_decompose(commitments);
-    let (mut cache, _) = hash_commitments(commitments.iter().map(Commitment::calculate));
+    let commitments_points = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
+    let (mut cache, _) = hash_commitments(commitments_points.clone());
 
     let (sL, sR) =
       ScalarVector((0 .. (MN * 2)).map(|_| Scalar::random(&mut *rng)).collect::<Vec<_>>()).split();
@@ -74,7 +75,7 @@ impl OriginalStruct {
       let t2 = inner_product(&l1, &r1);
 
       let mut tau1 = Scalar::random(&mut *rng);
-      let mut tau2 = Scalar::random(rng);
+      let mut tau2 = Scalar::random(&mut *rng);
 
       let T1 = prove_multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]);
       let T2 = prove_multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]);
@@ -146,7 +147,7 @@ impl OriginalStruct {
       }
     }
 
-    OriginalStruct {
+    let res = OriginalStruct {
       A: *A,
       S: *S,
       T1: *T1,
@@ -158,7 +159,9 @@ impl OriginalStruct {
       a: *a[0],
       b: *b[0],
       t: *t,
-    }
+    };
+    debug_assert!(res.verify(rng, &commitments_points));
+    res
   }
 
   #[must_use]

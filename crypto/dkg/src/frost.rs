@@ -249,6 +249,7 @@ pub struct SecretShareMachine<C: Ciphersuite> {
 
 impl<C: Ciphersuite> SecretShareMachine<C> {
   /// Verify the data from the previous round (canonicity, PoKs, message authenticity)
+  #[allow(clippy::type_complexity)]
   fn verify_r1<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
@@ -286,6 +287,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   /// Continue generating a key.
   /// Takes in everyone else's commitments. Returns a HashMap of secret shares to be sent over
   /// authenticated channels to their relevant counterparties.
+  #[allow(clippy::type_complexity)]
   pub fn generate_secret_shares<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
