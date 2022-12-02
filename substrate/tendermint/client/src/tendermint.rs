@@ -24,9 +24,14 @@ use sc_block_builder::BlockBuilderApi;
 use tendermint_machine::ext::{BlockError, Commit, Network};
 
 use crate::{
-  CONSENSUS_ID, TendermintValidator, validators::TendermintValidators, TendermintImportQueue,
-  authority::TendermintAuthority,
+  CONSENSUS_ID, TendermintClient, TendermintValidator, validators::TendermintValidators,
+  TendermintImportQueue, authority::TendermintAuthority,
 };
+
+type InstantiatedTendermintImportQueue<T> = TendermintImportQueue<
+  <T as TendermintClient>::Block,
+  <T as TendermintClient>::BackendTransaction,
+>;
 
 /// Tendermint import handler.
 pub struct TendermintImport<T: TendermintValidator> {
@@ -46,8 +51,7 @@ pub struct TendermintImport<T: TendermintValidator> {
   pub(crate) recheck: Arc<RwLock<HashSet<<T::Block as Block>::Hash>>>,
 
   pub(crate) client: Arc<T::Client>,
-  pub(crate) queue:
-    Arc<AsyncRwLock<Option<TendermintImportQueue<T::Block, T::BackendTransaction>>>>,
+  pub(crate) queue: Arc<AsyncRwLock<Option<InstantiatedTendermintImportQueue<T>>>>,
 }
 
 impl<T: TendermintValidator> Clone for TendermintImport<T> {
@@ -223,9 +227,9 @@ impl<T: TendermintValidator> TendermintImport<T> {
     if !block.finalized {
       let hash = block.header.hash();
       self.verify_origin(hash)?;
-      if let Some(body) = block.body.clone() {
-        self.check_inherents(hash, T::Block::new(block.header.clone(), body)).await?;
-      }
+      self
+        .check_inherents(hash, T::Block::new(block.header.clone(), block.body.clone().unwrap()))
+        .await?;
     }
 
     // Additionally check these fields are empty

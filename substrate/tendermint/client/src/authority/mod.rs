@@ -237,7 +237,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
             "GossipEngine shut down. {}",
             "Is the node shutting down?"
           );
-          break
+          break;
         },
 
         // Synced a block from the network
