@@ -265,6 +265,10 @@ impl Clsag {
       inputs[i].0.zeroize();
       nonce.zeroize();
 
+      debug_assert!(clsag
+        .verify(&inputs[i].2.decoys.ring, &inputs[i].1, &pseudo_out, &msg)
+        .is_ok());
+
       res.push((clsag, pseudo_out));
     }
 

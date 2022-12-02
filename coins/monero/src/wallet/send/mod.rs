@@ -28,6 +28,9 @@ use crate::{
   },
 };
 
+mod builder;
+pub use builder::SignableTransactionBuilder;
+
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
@@ -156,7 +159,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 }
 
 /// Fee struct, defined as a per-unit cost and a mask for rounding purposes.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Fee {
   pub per_weight: u64,
   pub mask: u64,

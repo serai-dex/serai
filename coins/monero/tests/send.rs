@@ -24,7 +24,10 @@ use frost::{
 
 use monero_serai::{
   random_scalar,
-  wallet::{address::Network, ViewPair, Scanner, SpendableOutput, SignableTransaction},
+  wallet::{
+    address::Network, ViewPair, Scanner, SpendableOutput, SignableTransaction,
+    SignableTransactionBuilder,
+  },
   rpc::{Rpc},
 };
 
@@ -325,5 +328,39 @@ async_sequential! {
 
     // publish the tx
     rpc.publish_transaction(&tx).await.unwrap();
+  }
+}
+
+async_sequential! {
+  async fn builder() {
+    let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+
+    // Generate an address
+    let (spend, view) = generate_keys();
+    let spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
+
+    let view_pair = ViewPair::new(spend_pub, view);
+    let mut scanner = Scanner::from_view(view_pair, Network::Mainnet, Some(HashSet::new()));
+    let addr = scanner.address();
+    let fee = rpc.get_fee().await.unwrap();
+
+    // mine 90(30 for decoys + 60 to unlock) blocks to have unlocked outputs
+    rpc.mine_regtest_blocks(&addr.to_string(), 90).await.unwrap();
+
+    // grab an unlocked miner tx
+    let unlocked_block = rpc.get_height().await.unwrap() - 60;
+
+    let coinbase = rpc.get_block_transactions(unlocked_block).await.unwrap().swap_remove(0);
+    let output = scanner.scan_transaction(&coinbase).ignore_timelock().swap_remove(0);
+    rpc.publish_transaction(
+      &SignableTransactionBuilder::new(rpc.get_protocol().await.unwrap(), fee, Some(addr))
+        .add_input(SpendableOutput::from(&rpc, output).await.unwrap())
+        .add_payment(addr, 0)
+        .build()
+        .unwrap()
+        .sign(&mut OsRng, &rpc, &spend)
+        .await
+        .unwrap()
+    ).await.unwrap();
   }
 }
