@@ -8,6 +8,7 @@ use group::Group;
 use crate::{multiexp, multiexp_vartime};
 
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
+#[allow(clippy::type_complexity)]
 #[derive(Clone, Zeroize)]
 pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(Vec<(Id, Vec<(G::Scalar, G)>)>);
 

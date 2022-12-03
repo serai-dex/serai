@@ -25,14 +25,14 @@ jobs:
           rust-components: clippy
 
       - name: Run Clippy
-        run: cargo clippy --all-features -- -D warnings -A clippy::type_complexity -A dead_code
+        run: cargo clippy --all-features -- -D warnings -A dead_code
 
   deny:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Rust Cache
+      - name: Advisory Cache
         uses: actions/cache@v3
         with:
           path: ~/.cargo/advisory-db
