@@ -18,6 +18,7 @@ codec = { package = "parity-scale-codec", version = "3", default-features = fals
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
 sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-version = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-inherents = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -28,25 +29,26 @@ sp-block-builder = { git = "https://github.com/serai-dex/substrate", default-fea
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-executive = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-tendermint = { path = "../tendermint/primitives", default-features = false }
 
-pallet-randomness-collective-flip = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-executive = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
+
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-randomness-collective-flip = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-contracts-primitives = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-contracts = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-# Used for the node template's RPCs
+pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
+
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
-
-# Used for runtime benchmarking
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
-frame-system-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
 [build-dependencies]
 substrate-wasm-builder = { git = "https://github.com/serai-dex/substrate" }
@@ -57,6 +59,7 @@ std = [
   "scale-info/std",
 
   "sp-core/std",
+  "sp-application-crypto/std",
   "sp-std/std",
   "sp-version/std",
   "sp-inherents/std",
@@ -67,30 +70,40 @@ std = [
   "sp-runtime/std",
   "sp-api/std",
 
-  "frame-support/std",
-  "frame-system-rpc-runtime-api/std",
+  "sp-tendermint/std",
+
   "frame-system/std",
+  "frame-support/std",
   "frame-executive/std",
 
-  "pallet-randomness-collective-flip/std",
   "pallet-timestamp/std",
+  "pallet-randomness-collective-flip/std",
   "pallet-balances/std",
   "pallet-transaction-payment/std",
-  "pallet-transaction-payment-rpc-runtime-api/std",
 
-	"pallet-contracts/std",
-	"pallet-contracts-primitives/std",
+  "pallet-contracts/std",
+  "pallet-contracts-primitives/std",
+
+  "pallet-session/std",
+  "pallet-tendermint/std",
+
+  "frame-system-rpc-runtime-api/std",
+  "pallet-transaction-payment-rpc-runtime-api/std",
 ]
 
 runtime-benchmarks = [
   "hex-literal",
+
   "sp-runtime/runtime-benchmarks",
-  "frame-benchmarking/runtime-benchmarks",
-  "frame-support/runtime-benchmarks",
-  "frame-system-benchmarking",
+
   "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+  "frame-benchmarking/runtime-benchmarks",
+
   "pallet-timestamp/runtime-benchmarks",
   "pallet-balances/runtime-benchmarks",
+
+  "pallet-tendermint/runtime-benchmarks",
 ]
 
 default = ["std"]
