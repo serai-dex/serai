@@ -1,6 +1,6 @@
 [package]
 name = "tendermint-machine"
-version = "0.1.0"
+version = "0.2.0"
 description = "An implementation of the Tendermint state machine in Rust"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tendermint/machine"
