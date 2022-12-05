@@ -150,8 +150,12 @@ impl Coin for Monero {
   }
 
   async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
-    let tx_block_number =
-      self.rpc.get_transaction_block_number(tx).await.map_err(|_| CoinError::ConnectionError)?;
+    let tx_block_number = self
+      .rpc
+      .get_transaction_block_number(tx)
+      .await
+      .map_err(|_| CoinError::ConnectionError)?
+      .unwrap_or(usize::MAX);
     Ok((self.get_latest_block_number().await?.saturating_sub(tx_block_number) + 1) >= 10)
   }
 
