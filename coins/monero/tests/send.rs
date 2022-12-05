@@ -59,6 +59,7 @@ fn generate_keys() -> (Zeroizing<Scalar>, Scalar) {
   return (spend, view);
 }
 
+#[cfg(feature = "multisig")]
 fn generate_multisig_keys() -> (HashMap<u16, ThresholdKeys<Ed25519>>, Scalar) {
   let keys = key_gen::<_, Ed25519>(&mut OsRng);
   let view =
