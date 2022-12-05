@@ -1,16 +1,37 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use sp_std::vec::Vec;
+use scale::{Encode, Decode, MaxEncodedLen};
+#[cfg(feature = "std")]
+use scale_info::TypeInfo;
+#[cfg(feature = "std")]
+use serde::{Serialize, Deserialize};
 
-pub type Amount = u64;
-pub type Curve = u16;
-pub type Coin = u32;
-pub type GlobalValidatorSetIndex = u32;
-pub type ValidatorSetIndex = u16;
+/// The type used for amounts.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
+pub struct Amount(pub u64);
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode)]
-#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-pub struct ValidatorSet {
-  bond: Amount,
-  coins: Vec<Coin>,
-}
+/// The type used to identify curves.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
+pub struct Curve(pub u16);
+
+/// The type used to identify coins.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
+pub struct Coin(pub u32);
+
+/// The type used to identify a specific session of validators.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
+pub struct Session(pub u32);
+
+/// The type used to identify a validator set.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
+pub struct ValidatorSetIndex(pub u16);
+
+/// The type used to identify a specific validator set during a specific session.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
+pub struct ValidatorSetInstance(pub Session, pub ValidatorSetIndex);

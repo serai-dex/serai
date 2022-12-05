@@ -9503,8 +9503,6 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "scale-info",
- "sp-core",
- "sp-std",
  "validator-sets-primitives",
 ]
 
@@ -9514,6 +9512,7 @@ version = "0.1.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
+ "serde",
  "sp-core",
  "sp-std",
 ]
