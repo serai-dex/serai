@@ -22,15 +22,12 @@ volumes:
   serai-dave:
   serai-eve:
   serai-ferdie:
-<<<<<<< HEAD
   genesis-volume:
-=======
   zookeeper_data:
     driver: local
   kafka_data:
     driver: local
 
->>>>>>> coordinator
 
 services:
   genesis:
@@ -141,12 +138,8 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-<<<<<<< HEAD
       CHAIN: local
       NAME: ferdie
-=======
-      CHAIN: dev
-      NAME: Ferdie
       
   # Coordinator Services
   zookeeper:
@@ -191,7 +184,6 @@ services:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
       - KAFKA_CLUSTERS_0_ZOOKEEPER=localhost:2181
->>>>>>> coordinator
 
   # Processor Services
 
