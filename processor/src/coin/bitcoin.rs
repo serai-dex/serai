@@ -184,12 +184,121 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
-    let new_block = self.get_latest_block_number().await.unwrap() + 1;
-    self.mine_block().await;
-    for _ in 0 .. 7 {
-      self.mine_block().await;
+    let address_str = String::from("bcrt1q7kc7tm3a4qljpw4gg5w73cgya6g9nfydtessgs");//new_addr.to_string();
+    //let result  = btc_rpc.generate_to_address(1, address_str.as_str()).await.unwrap();
+    let from_addr = Address::from_str(address_str.as_str()).unwrap();
+    let mut utxos = self.rpc.get_spendable(None, None, Some(vec![address_str.as_str()]), None).await.unwrap();
+
+    let mut txin_list_complete = Vec::new();
+    let fee = 0.001;
+    let send_amount = 153.41521;
+    let total_amount = send_amount + fee;
+
+    let mut sum = 0.0;
+    let mut diff = 9999999999999.0;
+    let mut temp_diff = 0.0;
+    let mut utxo_id = 0;
+    let mut changed_amount = 0.0;
+
+    let it = utxos.iter();
+    for (i, one_utx) in it.enumerate() {
+        //dbg!(&one_utx.amount);
+        temp_diff = one_utx.amount.to_btc() - total_amount;
+        if temp_diff > 0.0 && temp_diff < diff {
+            diff = temp_diff;
+            utxo_id = i + 1;
+        } 
+        sum += one_utx.amount.to_btc();
     }
 
+    if total_amount > sum {
+        panic!("No way to reach that much of bitcoin to send !");
+    }
 
+    if utxo_id == 0 {
+        println!("No utxo found - Total : {}",sum);
+        utxos.sort_by(|k1:&ListUnspentResultEntry, k2:&ListUnspentResultEntry| {
+            k2.amount.cmp(&k1.amount)
+        });
+        sum = 0.0;
+        let it = utxos.iter();
+        for (i, one_utx) in it.enumerate() {
+            sum += one_utx.amount.to_btc();
+            txin_list_complete.push(&utxos[i]);
+            if sum > total_amount {
+                changed_amount = sum - total_amount;
+                break;
+            }
+        }
+        println!("Sum : {}  Target: {}   Changed: {}",sum, total_amount, changed_amount);
+    }
+    else {
+        txin_list_complete.push(&utxos[utxo_id-1]);
+    }
+
+    println!("Diff: {}   -  Best ID : {}", diff, utxo_id);
+    //dbg!(&txin_list_complete);
+    let to_addr_str = "n2eMqTT929pb1RDNuqEnxdaLau1rxy3efi";
+    let to_addr = bitcoin::Address::from_str(to_addr_str).unwrap();
+
+    let it = utxos.iter();
+    for (i, one_utx) in it.enumerate() {
+        //dbg!(&one_utx.amount);
+        temp_diff = one_utx.amount.to_btc() - total_amount;
+        if temp_diff > 0.0 && temp_diff < diff {
+            diff = temp_diff;
+            utxo_id = i + 1;
+        } 
+        sum += one_utx.amount.to_btc();
+    }
+
+    if total_amount > sum {
+        panic!("No way to reach that much of bitcoin to send !");
+    }
+
+    if utxo_id == 0 {
+        println!("No utxo found - Total : {}",sum);
+        utxos.sort_by(|k1:&ListUnspentResultEntry, k2:&ListUnspentResultEntry| {
+            k2.amount.cmp(&k1.amount)
+        });
+        sum = 0.0;
+        let it = utxos.iter();
+        for (i, one_utx) in it.enumerate() {
+            sum += one_utx.amount.to_btc();
+            txin_list_complete.push(&utxos[i]);
+            if sum > total_amount {
+                changed_amount = sum - total_amount;
+                break;
+            }
+        }
+        println!("Sum : {}  Target: {}   Changed: {}",sum, total_amount, changed_amount);
+    }
+    else {
+        txin_list_complete.push(&utxos[utxo_id-1]);
+    }
+
+    println!("Diff: {}   -  Best ID : {}", diff, utxo_id);
+    //dbg!(&txin_list_complete);
+    let to_addr_str = "n2eMqTT929pb1RDNuqEnxdaLau1rxy3efi";
+    let to_addr = bitcoin::Address::from_str(to_addr_str).unwrap();
+
+    let mut vin_list = Vec::new();
+
+    for one_txin in txin_list_complete.iter() {
+        vin_list.push(
+        CreateRawTransactionInput {
+            txid: one_txin.txid,
+            vout: one_txin.vout,
+            sequence: None
+        });
+    }
+
+    let mut out_scr = HashMap::new();
+    out_scr.insert(to_addr.to_string(),bitcoin::Amount::from_btc(send_amount).unwrap());
+    if changed_amount > 0.0 {
+        //TODO: PRECISE ERROR = 46.58378999999999 example
+        out_scr.insert(from_addr.to_string(),bitcoin::Amount::from_btc(changed_amount).unwrap());
+    }
+    let raw_transaction = btc_rpc.create_raw_transaction(&vin_list, &out_scr, None, None).await.unwrap();
   }
 }
