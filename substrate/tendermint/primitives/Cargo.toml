@@ -1,0 +1,21 @@
+[package]
+name = "sp-tendermint"
+version = "0.1.0"
+description = "Tendermint primitives for Substrate"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tendermint/primitives"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+[features]
+std = ["sp-core/std", "sp-std/std", "sp-api/std"]
+default = ["std"]

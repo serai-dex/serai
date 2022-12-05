@@ -2664,21 +2664,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "frame-system-benchmarking"
-version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-core",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "frame-system-rpc-runtime-api"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
@@ -5207,6 +5192,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-session"
+version = "4.0.0-dev"
+source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "impl-trait-for-tuples",
+ "log",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-session",
+ "sp-staking",
+ "sp-std",
+ "sp-trie",
+]
+
+[[package]]
+name = "pallet-tendermint"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-application-crypto",
+ "sp-core",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-timestamp"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
@@ -6702,31 +6721,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-consensus-pow"
-version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
-dependencies = [
- "async-trait",
- "futures",
- "futures-timer",
- "log",
- "parity-scale-codec",
- "parking_lot 0.12.1",
- "sc-client-api",
- "sc-consensus",
- "sp-api",
- "sp-block-builder",
- "sp-blockchain",
- "sp-consensus",
- "sp-consensus-pow",
- "sp-core",
- "sp-inherents",
- "sp-runtime",
- "substrate-prometheus-endpoint",
- "thiserror",
-]
-
-[[package]]
 name = "sc-executor"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
@@ -6926,6 +6920,24 @@ dependencies = [
  "sp-runtime",
  "substrate-prometheus-endpoint",
  "thiserror",
+]
+
+[[package]]
+name = "sc-network-gossip"
+version = "0.10.0-dev"
+source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
+dependencies = [
+ "ahash",
+ "futures",
+ "futures-timer",
+ "libp2p",
+ "log",
+ "lru",
+ "sc-network-common",
+ "sc-peerset",
+ "sp-runtime",
+ "substrate-prometheus-endpoint",
+ "tracing",
 ]
 
 [[package]]
@@ -7258,6 +7270,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-tendermint"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "hex",
+ "log",
+ "sc-block-builder",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-executor",
+ "sc-network",
+ "sc-network-common",
+ "sc-network-gossip",
+ "sc-service",
+ "sc-transaction-pool",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-inherents",
+ "sp-keystore",
+ "sp-runtime",
+ "sp-staking",
+ "sp-tendermint",
+ "substrate-prometheus-endpoint",
+ "tendermint-machine",
+ "tokio",
+]
+
+[[package]]
 name = "sc-tracing"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
@@ -7560,30 +7604,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 
 [[package]]
-name = "serai-consensus"
-version = "0.1.0"
-dependencies = [
- "sc-basic-authorship",
- "sc-client-api",
- "sc-consensus",
- "sc-consensus-pow",
- "sc-executor",
- "sc-network",
- "sc-service",
- "sc-transaction-pool",
- "serai-runtime",
- "sp-api",
- "sp-consensus",
- "sp-consensus-pow",
- "sp-core",
- "sp-runtime",
- "sp-timestamp",
- "sp-trie",
- "substrate-prometheus-endpoint",
- "tokio",
-]
-
-[[package]]
 name = "serai-extension"
 version = "0.1.0"
 dependencies = [
@@ -7611,33 +7631,43 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "clap 4.0.26",
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "frame-system",
  "jsonrpsee",
+ "log",
+ "pallet-tendermint",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
+ "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
+ "sc-client-db",
  "sc-consensus",
  "sc-executor",
  "sc-keystore",
+ "sc-network",
  "sc-rpc",
  "sc-rpc-api",
  "sc-service",
  "sc-telemetry",
+ "sc-tendermint",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
- "serai-consensus",
  "serai-runtime",
  "sp-api",
+ "sp-application-crypto",
  "sp-block-builder",
  "sp-blockchain",
+ "sp-consensus",
  "sp-core",
  "sp-inherents",
  "sp-keyring",
+ "sp-keystore",
  "sp-runtime",
+ "sp-tendermint",
  "sp-timestamp",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
@@ -7672,19 +7702,21 @@ dependencies = [
  "frame-executive",
  "frame-support",
  "frame-system",
- "frame-system-benchmarking",
  "frame-system-rpc-runtime-api",
  "hex-literal",
  "pallet-balances",
  "pallet-contracts",
  "pallet-contracts-primitives",
  "pallet-randomness-collective-flip",
+ "pallet-session",
+ "pallet-tendermint",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "scale-info",
  "sp-api",
+ "sp-application-crypto",
  "sp-block-builder",
  "sp-core",
  "sp-inherents",
@@ -7692,6 +7724,7 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-std",
+ "sp-tendermint",
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
@@ -8082,18 +8115,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sp-consensus-pow"
-version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
-dependencies = [
- "parity-scale-codec",
- "sp-api",
- "sp-core",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "sp-core"
 version = "6.0.0"
 source = "git+https://github.com/serai-dex/substrate#881cfbc59c8b65bcccc9fa6187e5096ac3594e3a"
@@ -8447,6 +8468,15 @@ dependencies = [
  "ref-cast",
  "serde",
  "sp-debug-derive",
+ "sp-std",
+]
+
+[[package]]
+name = "sp-tendermint"
+version = "0.1.0"
+dependencies = [
+ "sp-api",
+ "sp-core",
  "sp-std",
 ]
 
@@ -8885,6 +8915,19 @@ dependencies = [
  "redox_syscall",
  "remove_dir_all",
  "winapi",
+]
+
+[[package]]
+name = "tendermint-machine"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "log",
+ "parity-scale-codec",
+ "sp-runtime",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
