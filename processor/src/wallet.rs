@@ -60,7 +60,7 @@ pub trait CoinDb {
 }
 
 pub struct MemCoinDb {
-  // Height this coin has been scanned to
+  // Block number of the block this coin has been scanned to
   scanned_block: usize,
   // Acknowledged block for a given canonical block
   acknowledged_blocks: HashMap<usize, usize>,
