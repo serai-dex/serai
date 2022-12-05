@@ -194,7 +194,7 @@ pub enum RpcConnectionError {
     #[error("parsing error")]
     ParsingError,
     #[error("result error")]
-    ResultError,
+    ResultError(String),
 }
 
 pub fn handle_defaults<'a, 'b>(

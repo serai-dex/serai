@@ -9,7 +9,7 @@ use frost::{ curve::Ed25519, ThresholdKeys };
 
 use bitcoin::util::address::Address;
 use bitcoin_serai::{rpc::Rpc};
-use bitcoincore_rpc_json::{GetBlockResult}; //, EstimateSmartFeeResult, ListUnspentResultEntry
+use bitcoincore_rpc_json::{GetBlockResult, AddressType}; //, EstimateSmartFeeResult, ListUnspentResultEntry
 
 use crate::{
   additional_key,
@@ -99,9 +99,7 @@ impl Coin for Bitcoin {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    let address: Self::Address =
-      Self::Address::from_str("32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf").unwrap();
-    return address;
+    Self::Address::from_str("32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf").unwrap()
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -178,8 +176,20 @@ impl Coin for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn mine_block(&self) {}
+  async fn mine_block(&self) {
+    let address : bitcoin::util::address::Address = self.rpc.get_new_address(None, Some(AddressType::Legacy)).await.unwrap();
+    let new_block = self.rpc.generate_to_address(1, address.to_string().as_str()).await.unwrap();
+    dbg!(&new_block);
+  }
 
   #[cfg(test)]
-  async fn test_send(&self, address: Self::Address) {}
+  async fn test_send(&self, address: Self::Address) {
+    let new_block = self.get_latest_block_number().await.unwrap() + 1;
+    self.mine_block().await;
+    for _ in 0 .. 7 {
+      self.mine_block().await;
+    }
+
+
+  }
 }
