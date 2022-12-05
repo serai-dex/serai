@@ -45,6 +45,9 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-extension" },
   { allow = ["AGPL-3.0"], name = "serai-multisig" },
 
+  { allow = ["AGPL-3.0"], name = "validator-sets-primitives" },
+  { allow = ["AGPL-3.0"], name = "validator-sets-pallet" },
+
   { allow = ["AGPL-3.0"], name = "sp-tendermint" },
   { allow = ["AGPL-3.0"], name = "pallet-tendermint" },
   { allow = ["AGPL-3.0"], name = "sc-tendermint" },
