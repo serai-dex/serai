@@ -226,7 +226,6 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     })
   };
 
-<<<<<<< HEAD
   let genesis_time = if config.chain_spec.id() != "devnet" {
     UNIX_EPOCH + Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap())
   } else {
@@ -234,13 +233,11 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   };
 
   let registry = config.prometheus_registry().cloned();
-=======
   let kafkaModule = crate::kafka::create_full(crate::kafka::KafkaDeps {
     client: client.clone(),
     pool: pool.clone(),
   });
 
->>>>>>> coordinator
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
     client: client.clone(),
