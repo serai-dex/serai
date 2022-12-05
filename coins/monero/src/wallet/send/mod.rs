@@ -362,7 +362,7 @@ impl SignableTransaction {
 
   /// Sign this transaction.
   pub async fn sign<R: RngCore + CryptoRng>(
-    &mut self,
+    mut self,
     rng: &mut R,
     rpc: &Rpc,
     spend: &Zeroizing<Scalar>,

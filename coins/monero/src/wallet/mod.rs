@@ -18,7 +18,7 @@ pub mod address;
 use address::{Network, AddressType, AddressMeta, MoneroAddress};
 
 mod scan;
-pub use scan::SpendableOutput;
+pub use scan::{ReceivedOutput, SpendableOutput};
 
 pub(crate) mod decoys;
 pub(crate) use decoys::Decoys;
