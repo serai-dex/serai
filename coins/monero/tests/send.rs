@@ -24,7 +24,10 @@ use frost::{
 
 use monero_serai::{
   random_scalar,
-  wallet::{address::Network, ViewPair, Scanner, SpendableOutput, SignableTransaction},
+  wallet::{
+    address::Network, ViewPair, Scanner, SpendableOutput, SignableTransaction,
+    SignableTransactionBuilder,
+  },
 };
 
 mod rpc;
@@ -190,5 +193,40 @@ async_sequential! {
 
   async fn multisig_send_multiple_inputs() {
     send_core(1, true).await;
+  }
+}
+
+async_sequential! {
+  async fn builder() {
+    let rpc = rpc().await;
+
+    // Generate an address
+    let spend = Zeroizing::new(random_scalar(&mut OsRng));
+    let view = random_scalar(&mut OsRng);
+    let spend_pub = spend.deref() * &ED25519_BASEPOINT_TABLE;
+
+    let view_pair = ViewPair::new(spend_pub, view);
+    let mut scanner = Scanner::from_view(view_pair, Network::Mainnet, Some(HashSet::new()));
+    let addr = scanner.address();
+
+    let fee = rpc.get_fee().await.unwrap();
+
+    let start = rpc.get_height().await.unwrap();
+    for _ in 0 .. 7 {
+      mine_block(&rpc, &addr.to_string()).await.unwrap();
+    }
+
+    let coinbase = rpc.get_block_transactions(start).await.unwrap().swap_remove(0);
+    let output = scanner.scan_transaction(&coinbase).ignore_timelock().swap_remove(0);
+    rpc.publish_transaction(
+      &SignableTransactionBuilder::new(rpc.get_protocol().await.unwrap(), fee, Some(addr))
+        .add_input(SpendableOutput::from(&rpc, output).await.unwrap())
+        .add_payment(addr, 0)
+        .build()
+        .unwrap()
+        .sign(&mut OsRng, &rpc, &spend)
+        .await
+        .unwrap()
+    ).await.unwrap();
   }
 }

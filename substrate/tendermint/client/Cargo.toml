@@ -1,0 +1,48 @@
+[package]
+name = "sc-tendermint"
+version = "0.1.0"
+description = "Tendermint client for Substrate"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tendermint/client"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+async-trait = "0.1"
+
+hex = "0.4"
+log = "0.4"
+
+futures = "0.3"
+tokio = { version = "1", features = ["sync", "rt"] }
+
+sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
+sp-keystore = { git = "https://github.com/serai-dex/substrate" }
+sp-inherents = { git = "https://github.com/serai-dex/substrate" }
+sp-staking = { git = "https://github.com/serai-dex/substrate" }
+sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }
+sp-api = { git = "https://github.com/serai-dex/substrate" }
+sp-consensus = { git = "https://github.com/serai-dex/substrate" }
+
+sp-tendermint = { path = "../primitives" }
+
+sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
+sc-executor = { git = "https://github.com/serai-dex/substrate" }
+sc-network-common = { git = "https://github.com/serai-dex/substrate" }
+sc-network = { git = "https://github.com/serai-dex/substrate" }
+sc-network-gossip = { git = "https://github.com/serai-dex/substrate" }
+sc-service = { git = "https://github.com/serai-dex/substrate" }
+sc-client-api = { git = "https://github.com/serai-dex/substrate" }
+sc-block-builder = { git = "https://github.com/serai-dex/substrate" }
+sc-consensus = { git = "https://github.com/serai-dex/substrate" }
+
+substrate-prometheus-endpoint = { git = "https://github.com/serai-dex/substrate" }
+
+tendermint-machine = { path = "../machine", features = ["substrate"] }

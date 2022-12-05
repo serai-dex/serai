@@ -60,7 +60,8 @@ impl PlusStruct {
     let (logMN, M, MN) = MN(commitments.len());
 
     let (aL, aR) = bit_decompose(commitments);
-    let (mut cache, _) = hash_plus(commitments.iter().map(Commitment::calculate));
+    let commitments_points = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
+    let (mut cache, _) = hash_plus(commitments_points.clone());
     let (mut alpha1, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
 
     let y = hash_cache(&mut cache, &[A.compress().to_bytes()]);
@@ -132,7 +133,7 @@ impl PlusStruct {
     let mut r = Scalar::random(&mut *rng);
     let mut s = Scalar::random(&mut *rng);
     let mut d = Scalar::random(&mut *rng);
-    let mut eta = Scalar::random(rng);
+    let mut eta = Scalar::random(&mut *rng);
 
     let A1 = prove_multiexp(&[
       (r, G_proof[0]),
@@ -152,7 +153,7 @@ impl PlusStruct {
     eta.zeroize();
     alpha1.zeroize();
 
-    PlusStruct {
+    let res = PlusStruct {
       A: *A,
       A1: *A1,
       B: *B,
@@ -161,7 +162,9 @@ impl PlusStruct {
       d1: *d1,
       L: L.drain(..).map(|L| *L).collect(),
       R: R.drain(..).map(|R| *R).collect(),
-    }
+    };
+    debug_assert!(res.verify(rng, &commitments_points));
+    res
   }
 
   #[must_use]

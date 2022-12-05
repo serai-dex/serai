@@ -1,25 +1,106 @@
-use std::sync::Arc;
+use std::{
+  error::Error,
+  boxed::Box,
+  sync::Arc,
+  time::{UNIX_EPOCH, SystemTime, Duration},
+  str::FromStr,
+};
 
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
-use sc_executor::NativeElseWasmExecutor;
+use sp_runtime::traits::{Block as BlockTrait};
+use sp_inherents::CreateInherentDataProviders;
+use sp_consensus::DisableProofRecording;
+use sp_api::ProvideRuntimeApi;
+
+use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
+use sc_transaction_pool::FullPool;
+use sc_network::NetworkService;
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
+
+use sc_client_api::BlockBackend;
+
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
-use serai_runtime::{self, opaque::Block, RuntimeApi};
-pub(crate) use serai_consensus::{ExecutorDispatch, FullClient};
+pub(crate) use sc_tendermint::{
+  TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
+  TendermintSelectChain, import_queue,
+};
+use serai_runtime::{self, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
-type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
+pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
 
 type PartialComponents = sc_service::PartialComponents<
   FullClient,
   FullBackend,
-  FullSelectChain,
+  TendermintSelectChain<Block, FullBackend>,
   sc_consensus::DefaultImportQueue<Block, FullClient>,
   sc_transaction_pool::FullPool<Block, FullClient>,
   Option<Telemetry>,
 >;
 
-pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceError> {
+pub struct ExecutorDispatch;
+impl NativeExecutionDispatch for ExecutorDispatch {
+  #[cfg(feature = "runtime-benchmarks")]
+  type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
+  #[cfg(not(feature = "runtime-benchmarks"))]
+  type ExtendHostFunctions = ();
+
+  fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
+    serai_runtime::api::dispatch(method, data)
+  }
+
+  fn native_version() -> NativeVersion {
+    serai_runtime::native_version()
+  }
+}
+
+pub struct Cidp;
+#[async_trait::async_trait]
+impl CreateInherentDataProviders<Block, ()> for Cidp {
+  type InherentDataProviders = (sp_timestamp::InherentDataProvider,);
+  async fn create_inherent_data_providers(
+    &self,
+    _: <Block as BlockTrait>::Hash,
+    _: (),
+  ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
+    Ok((sp_timestamp::InherentDataProvider::from_system_time(),))
+  }
+}
+
+pub struct TendermintValidatorFirm;
+impl TendermintClientMinimal for TendermintValidatorFirm {
+  // TODO: This is passed directly to propose, which warns not to use the hard limit as finalize
+  // may grow the block. We don't use storage proofs and use the Executive finalize_block. Is that
+  // guaranteed not to grow the block?
+  const PROPOSED_BLOCK_SIZE_LIMIT: usize = { BLOCK_SIZE as usize };
+  // 3 seconds
+  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 1000) as u32 };
+  // 1 second
+  const LATENCY_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 3 / 1000) as u32 };
+
+  type Block = Block;
+  type Backend = sc_client_db::Backend<Block>;
+  type Api = <FullClient as ProvideRuntimeApi<Block>>::Api;
+  type Client = FullClient;
+}
+
+impl TendermintValidator for TendermintValidatorFirm {
+  type CIDP = Cidp;
+  type Environment = sc_basic_authorship::ProposerFactory<
+    FullPool<Block, FullClient>,
+    Self::Backend,
+    Self::Client,
+    DisableProofRecording,
+  >;
+
+  type Network = Arc<NetworkService<Block, <Block as BlockTrait>::Hash>>;
+}
+
+pub fn new_partial(
+  config: &Configuration,
+) -> Result<(TendermintImport<TendermintValidatorFirm>, PartialComponents), ServiceError> {
+  debug_assert_eq!(TARGET_BLOCK_TIME, 6000);
+
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
   }
@@ -55,8 +136,6 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     telemetry
   });
 
-  let select_chain = sc_consensus::LongestChain::new(backend.clone());
-
   let transaction_pool = sc_transaction_pool::BasicPool::new_full(
     config.transaction_pool.clone(),
     config.role.is_authority().into(),
@@ -65,36 +144,53 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     client.clone(),
   );
 
-  let import_queue = serai_consensus::import_queue(
-    &task_manager,
+  let (authority, import_queue) = import_queue(
+    &task_manager.spawn_essential_handle(),
     client.clone(),
-    select_chain.clone(),
     config.prometheus_registry(),
-  )?;
+  );
 
-  Ok(sc_service::PartialComponents {
-    client,
-    backend,
-    task_manager,
-    import_queue,
-    keystore_container,
-    select_chain,
-    transaction_pool,
-    other: telemetry,
-  })
+  let select_chain = TendermintSelectChain::new(backend.clone());
+
+  Ok((
+    authority,
+    sc_service::PartialComponents {
+      client,
+      backend,
+      task_manager,
+      import_queue,
+      keystore_container,
+      select_chain,
+      transaction_pool,
+      other: telemetry,
+    },
+  ))
 }
 
-pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
-  let sc_service::PartialComponents {
-    client,
-    backend,
-    mut task_manager,
-    import_queue,
-    keystore_container,
-    select_chain,
-    other: mut telemetry,
-    transaction_pool,
-  } = new_partial(&config)?;
+pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
+  let (
+    authority,
+    sc_service::PartialComponents {
+      client,
+      backend,
+      mut task_manager,
+      import_queue,
+      keystore_container,
+      select_chain: _,
+      other: mut telemetry,
+      transaction_pool,
+    },
+  ) = new_partial(&config)?;
+
+  let is_authority = config.role.is_authority();
+  let genesis = client.block_hash(0).unwrap().unwrap();
+  let tendermint_protocol = sc_tendermint::protocol_name(genesis, config.chain_spec.fork_id());
+  if is_authority {
+    config
+      .network
+      .extra_sets
+      .push(sc_tendermint::set_config(tendermint_protocol.clone(), BLOCK_SIZE.into()));
+  }
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter) =
     sc_service::build_network(sc_service::BuildNetworkParams {
@@ -116,9 +212,6 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     );
   }
 
-  let role = config.role.clone();
-  let prometheus_registry = config.prometheus_registry().cloned();
-
   let rpc_extensions_builder = {
     let client = client.clone();
     let pool = transaction_pool.clone();
@@ -133,11 +226,21 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     })
   };
 
+<<<<<<< HEAD
+  let genesis_time = if config.chain_spec.id() != "devnet" {
+    UNIX_EPOCH + Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap())
+  } else {
+    SystemTime::now()
+  };
+
+  let registry = config.prometheus_registry().cloned();
+=======
   let kafkaModule = crate::kafka::create_full(crate::kafka::KafkaDeps {
     client: client.clone(),
     pool: pool.clone(),
   });
 
+>>>>>>> coordinator
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
     client: client.clone(),
@@ -152,14 +255,27 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     telemetry: telemetry.as_mut(),
   })?;
 
-  if role.is_authority() {
-    serai_consensus::authority(
-      &task_manager,
-      client,
-      network,
-      transaction_pool,
-      select_chain,
-      prometheus_registry.as_ref(),
+  if is_authority {
+    task_manager.spawn_essential_handle().spawn(
+      "tendermint",
+      None,
+      TendermintAuthority::new(
+        genesis_time,
+        tendermint_protocol,
+        authority,
+        keystore_container.keystore(),
+        Cidp,
+        task_manager.spawn_essential_handle(),
+        sc_basic_authorship::ProposerFactory::new(
+          task_manager.spawn_handle(),
+          client,
+          transaction_pool,
+          registry.as_ref(),
+          telemetry.map(|telemtry| telemtry.handle()),
+        ),
+        network,
+        None,
+      ),
     );
   }
 

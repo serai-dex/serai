@@ -12,7 +12,7 @@ use monero_serai::{
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
-    address::{Network, Address},
+    address::{Network, MoneroAddress},
     Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
@@ -70,7 +70,7 @@ pub struct Monero {
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    Monero { rpc: Rpc::new(url), view: additional_key::<Monero>(0).0 }
+    Monero { rpc: Rpc::new(url).unwrap(), view: additional_key::<Monero>(0).0 }
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
@@ -88,7 +88,7 @@ impl Monero {
   }
 
   #[cfg(test)]
-  fn empty_address() -> Address {
+  fn empty_address() -> MoneroAddress {
     Self::empty_scanner().address()
   }
 }
@@ -105,7 +105,7 @@ impl Coin for Monero {
   type SignableTransaction = SignableTransaction;
   type TransactionMachine = TransactionMachine;
 
-  type Address = Address;
+  type Address = MoneroAddress;
 
   const ID: &'static [u8] = b"Monero";
   const CONFIRMATIONS: usize = 10;
@@ -161,7 +161,7 @@ impl Coin for Monero {
     transcript: RecommendedTranscript,
     block_number: usize,
     mut inputs: Vec<Output>,
-    payments: &[(Address, u64)],
+    payments: &[(MoneroAddress, u64)],
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
     let spend = keys.group_key();

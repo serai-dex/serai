@@ -4,10 +4,11 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_core::OpaqueMetadata;
+pub use sp_core::sr25519::{Public, Signature};
 use sp_runtime::{
-  create_runtime_str, generic, impl_opaque_keys,
-  traits::{IdentityLookup, BlakeTwo256, Block as BlockT},
+  create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
+  traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
@@ -31,14 +32,13 @@ pub use pallet_timestamp::Call as TimestampCall;
 pub use pallet_balances::Call as BalancesCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
+use pallet_session::PeriodicSessions;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
-/// Signature type
-pub type Signature = sp_core::sr25519::Signature;
-
 /// Account ID type, equivalent to a public key
-pub type AccountId = sp_core::sr25519::Public;
+pub type AccountId = Public;
 
 /// Balance of an account.
 pub type Balance = u64;
@@ -59,15 +59,21 @@ pub mod opaque {
   pub type BlockId = generic::BlockId<Block>;
 
   impl_opaque_keys! {
-    pub struct SessionKeys {}
+    pub struct SessionKeys {
+      pub tendermint: Tendermint,
+    }
   }
 }
+
+use opaque::SessionKeys;
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
   spec_name: create_runtime_str!("serai"),
+  // TODO: "core"?
   impl_name: create_runtime_str!("turoctocrab"),
   authoring_version: 1,
+  // TODO: 1? Do we prefer some level of compatibility or our own path?
   spec_version: 100,
   impl_version: 1,
   apis: RUNTIME_API_VERSIONS,
@@ -75,11 +81,13 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   state_version: 1,
 };
 
-pub const MILLISECS_PER_BLOCK: u64 = 6000;
-pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+// 1 MB
+pub const BLOCK_SIZE: u32 = 1024 * 1024;
+// 6 seconds
+pub const TARGET_BLOCK_TIME: u64 = 6000;
 
 /// Measured in blocks.
-pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
+pub const MINUTES: BlockNumber = 60_000 / (TARGET_BLOCK_TIME as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
@@ -106,7 +114,7 @@ parameter_types! {
 
   // 1 MB block size limit
   pub BlockLength: frame_system::limits::BlockLength =
-    frame_system::limits::BlockLength::max_with_normal_ratio(1024 * 1024, NORMAL_DISPATCH_RATIO);
+    frame_system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: frame_system::limits::BlockWeights =
     frame_system::limits::BlockWeights::with_sensible_defaults(
       (2u64 * WEIGHT_PER_SECOND).set_proof_size(u64::MAX),
@@ -160,7 +168,7 @@ impl pallet_randomness_collective_flip::Config for Runtime {}
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
   type OnTimestampSet = ();
-  type MinimumPeriod = ConstU64<{ SLOT_DURATION / 2 }>;
+  type MinimumPeriod = ConstU64<{ TARGET_BLOCK_TIME / 2 }>;
   type WeightInfo = ();
 }
 
@@ -208,6 +216,30 @@ impl pallet_contracts::Config for Runtime {
   type MaxStorageKeyLen = ConstU32<128>;
 }
 
+impl pallet_tendermint::Config for Runtime {}
+
+const SESSION_LENGTH: BlockNumber = 5 * DAYS;
+type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
+
+pub struct IdentityValidatorIdOf;
+impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
+  fn convert(key: Public) -> Option<Public> {
+    Some(key)
+  }
+}
+
+impl pallet_session::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type ValidatorId = AccountId;
+  type ValidatorIdOf = IdentityValidatorIdOf;
+  type ShouldEndSession = Sessions;
+  type NextSessionRotation = Sessions;
+  type SessionManager = ();
+  type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+  type Keys = SessionKeys;
+  type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+}
+
 pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
@@ -244,6 +276,8 @@ construct_runtime!(
     Balances: pallet_balances,
     TransactionPayment: pallet_transaction_payment,
     Contracts: pallet_contracts,
+    Session: pallet_session,
+    Tendermint: pallet_tendermint,
   }
 );
 
@@ -328,6 +362,16 @@ sp_api::impl_runtime_apis! {
       encoded: Vec<u8>,
     ) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
       opaque::SessionKeys::decode_into_raw_public_keys(&encoded)
+    }
+  }
+
+  impl sp_tendermint::TendermintApi<Block> for Runtime {
+    fn current_session() -> u32 {
+      Tendermint::session()
+    }
+
+    fn validators() -> Vec<Public> {
+      Session::validators()
     }
   }
 

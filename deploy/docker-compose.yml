@@ -22,13 +22,25 @@ volumes:
   serai-dave:
   serai-eve:
   serai-ferdie:
+<<<<<<< HEAD
+  genesis-volume:
+=======
   zookeeper_data:
     driver: local
   kafka_data:
     driver: local
 
+>>>>>>> coordinator
 
 services:
+  genesis:
+    image: genesis:dev
+    build:
+      context: ./genesis/
+      dockerfile: Dockerfile
+    entrypoint: /entry-dev.sh
+    volumes:
+      - genesis-volume:/temp
 
   _serai:
     &serai_defaults
@@ -44,6 +56,9 @@ services:
     entrypoint: /scripts/entry-dev.sh
     volumes:
       - "./serai/scripts:/scripts"
+      - genesis-volume:/temp
+    depends_on:
+      - genesis
 
   serai-base:
     <<: *serai_defaults
@@ -51,7 +66,7 @@ services:
     profiles:
       - base
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: base
 
   serai-alice:
@@ -64,8 +79,8 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Alice
+      CHAIN: local
+      NAME: alice
       VALIDATOR: true
 
   serai-bob:
@@ -78,8 +93,9 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Bob
+      CHAIN: local
+      NAME: bob
+      VALIDATOR: true
 
   serai-charlie:
     <<: *serai_defaults
@@ -91,8 +107,9 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Charlie
+      CHAIN: local
+      NAME: charlie
+      VALIDATOR: true
 
   serai-dave:
     <<: *serai_defaults
@@ -102,8 +119,8 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Dave
+      CHAIN: local
+      NAME: dave
 
   serai-eve:
     <<: *serai_defaults
@@ -113,8 +130,8 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Eve
+      CHAIN: local
+      NAME: eve
 
   serai-ferdie:
     <<: *serai_defaults
@@ -124,6 +141,10 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
+<<<<<<< HEAD
+      CHAIN: local
+      NAME: ferdie
+=======
       CHAIN: dev
       NAME: Ferdie
       
@@ -170,6 +191,7 @@ services:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
       - KAFKA_CLUSTERS_0_ZOOKEEPER=localhost:2181
+>>>>>>> coordinator
 
   # Processor Services
 
