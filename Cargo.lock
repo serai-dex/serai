@@ -664,13 +664,8 @@ dependencies = [
  "arrayref",
  "arrayvec 0.7.2",
  "cc",
-<<<<<<< HEAD
  "cfg-if",
  "constant_time_eq 0.2.4",
-=======
- "cfg-if 1.0.0",
- "constant_time_eq",
->>>>>>> coordinator
 ]
 
 [[package]]
@@ -786,9 +781,6 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "bytes"
-<<<<<<< HEAD
-version = "1.3.0"
-=======
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
@@ -796,7 +788,6 @@ checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
 [[package]]
 name = "bytes"
 version = "1.2.1"
->>>>>>> coordinator
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfb24e866b15a1af2a1b663f10c6b6b8f397a84aadb828f12e5b289ec23a3a3c"
 dependencies = [
@@ -2308,13 +2299,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a72d8436f342d28a05498216f0aebf06a822d8d895e1f961d10b35f43a58aedd"
 dependencies = [
  "arrayvec 0.7.2",
-<<<<<<< HEAD
- "bytes",
- "cargo_metadata 0.15.2",
-=======
  "bytes 1.2.1",
  "cargo_metadata 0.15.1",
->>>>>>> coordinator
  "chrono",
  "convert_case",
  "elliptic-curve",
@@ -3967,13 +3953,8 @@ checksum = "bd302af1b90f2463a98fa5ad469fc212c8e3175a41c3068601bfa2727591c5be"
 dependencies = [
  "socket2 0.4.7",
  "widestring",
-<<<<<<< HEAD
- "winapi",
- "winreg",
-=======
  "winapi 0.3.9",
  "winreg 0.7.0",
->>>>>>> coordinator
 ]
 
 [[package]]
@@ -5096,9 +5077,6 @@ dependencies = [
 
 [[package]]
 name = "libp2p-yamux"
-<<<<<<< HEAD
-version = "0.41.1"
-=======
 version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b74ec8dc042b583f0b2b93d52917f3b374c1e4b1cfa79ee74c7672c41257694c"
@@ -5113,7 +5091,6 @@ dependencies = [
 [[package]]
 name = "libp2p-yamux"
 version = "0.41.0"
->>>>>>> coordinator
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d6874d66543c4f7e26e3b8ca9a6bead351563a13ab4fafd43c7927f7c0d6c12"
 dependencies = [
@@ -7341,10 +7318,7 @@ version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e060280438193c554f654141c9ea9417886713b7acd75974c85b18a69a88e0b"
 dependencies = [
-<<<<<<< HEAD
-=======
  "autocfg 1.1.0",
->>>>>>> coordinator
  "crossbeam-deque",
  "either",
  "rayon-core",
@@ -8915,8 +8889,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "serai-consensus"
 version = "0.1.0"
 dependencies = [
@@ -8941,7 +8913,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> coordinator
 name = "serai-extension"
 version = "0.1.0"
 dependencies = [
@@ -10542,9 +10513,6 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-<<<<<<< HEAD
-version = "1.22.0"
-=======
 version = "0.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6703a273949a90131b290be1fe7b039d0fc884aa1935860dfcbe056f28cd8092"
@@ -10563,7 +10531,6 @@ dependencies = [
 [[package]]
 name = "tokio"
 version = "1.21.2"
->>>>>>> coordinator
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d76ce4a75fb488c605c54bf610f221cea8b0dafb53333c1a67e8ee199dcd2ae3"
 dependencies = [
@@ -10936,13 +10903,8 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
-<<<<<<< HEAD
- "cfg-if",
- "digest 0.10.6",
-=======
  "cfg-if 1.0.0",
  "digest 0.10.5",
->>>>>>> coordinator
  "rand 0.8.5",
  "static_assertions",
 ]
@@ -11773,8 +11735,6 @@ checksum = "f40009d85759725a34da6d89a94e63d7bdc50a862acf0dbc7c8e488f1edcb6f5"
 
 [[package]]
 name = "winreg"
-<<<<<<< HEAD
-=======
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0120db82e8a1e0b9fb3345a539c478767c0048d842860994d96113d5b667bd69"
@@ -11784,7 +11744,6 @@ dependencies = [
 
 [[package]]
 name = "winreg"
->>>>>>> coordinator
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80d0f4e272c85def139476380b12f9ac60926689dd2e01d4923222f40580869d"
