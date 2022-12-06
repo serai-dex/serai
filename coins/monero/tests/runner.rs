@@ -253,6 +253,7 @@ macro_rules! test {
 
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
+            mine_blocks(&rpc, &random_address().2.to_string()).await;
             #[allow(unused_assignments)]
             {
               carried_state =
