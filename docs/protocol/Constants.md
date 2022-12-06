@@ -5,13 +5,14 @@
 These are the list of types used to represent various properties within the
 protocol.
 
-| Alias                      | Shorthand          | Type     |
-|----------------------------|--------------------|----------|
-| Amount                     | Amount             | u64      |
-| Coin                       | Coin               | u32      |
-| Global Validator Set Index | GlobalValidatorSet | u32      |
-| Validator Set Index        | ValidatorSet       | u16      |
-| Key                        | Key                | Vec\<u8> |
+| Alias                  | Type                           |
+|------------------------|--------------------------------|
+| Amount                 | u64                            |
+| Coin                   | u32                            |
+| Session                | u32                            |
+| Validator Set Index    | u16                            |
+| Validator Set Instance | (Session, Validator Set Index) |
+| Key                    | Vec\<u8>                       |
 
 ### Networks
 
@@ -36,6 +37,6 @@ Coins exist over a network and have a distinct integer ID.
 | Coin     | Network  | ID |
 |----------|----------|----|
 | Bitcoin  | Bitcoin  | 0  |
-| Ethereum | Ethereum | 1  |
+| Ether    | Ethereum | 1  |
 | DAI      | Ethereum | 2  |
 | Monero   | Monero   | 3  |
