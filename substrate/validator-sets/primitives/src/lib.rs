@@ -11,11 +11,6 @@ use serde::{Serialize, Deserialize};
 #[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
 pub struct Amount(pub u64);
 
-/// The type used to identify curves.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
-pub struct Curve(pub u16);
-
 /// The type used to identify coins.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(TypeInfo, Serialize, Deserialize))]
