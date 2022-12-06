@@ -17,7 +17,6 @@ use group::ff::PrimeField;
 #[global_allocator]
 static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
 
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct CoreProcess {
   core_config: CoreConfig,
@@ -282,7 +281,7 @@ impl ProcessorConfig {
         port: String::from("5050"),
         poll_interval: 1,
       },
-      chain: ChainConfig{
+      chain: ChainConfig {
         btc: s.get_bool("chains.btc").unwrap(),
         eth: s.get_bool("chains.eth").unwrap(),
         xmr: s.get_bool("chains.xmr").unwrap(),

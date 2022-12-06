@@ -56,16 +56,17 @@ impl SignatureProcess {
 }
 
 // Create/Start Pubkey Consumers
-fn start_pubkey_consumer(){
+fn start_pubkey_consumer() {
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "serai")
+    .set("group.id", "coord_pubkey")
+    .set("auto.offset.reset", "smallest")
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-  consumer
-    .subscribe(&["Coord_Public_Key"])
-    .expect("public_key_topic subscribe failed");
+  let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  tpl.add_partition(&"Coord_Public_Key", 0);
+  consumer.assign(&tpl).unwrap();
 
   thread::spawn(move || {
     for msg_result in &consumer {
@@ -80,7 +81,7 @@ fn start_pubkey_consumer(){
 }
 
 // Create/Start Public Consumer
-fn start_public_consumer(coin_hashmap: &HashMap<String, bool> ) {
+fn start_public_consumer(coin_hashmap: &HashMap<String, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -96,7 +97,7 @@ fn start_public_consumer(coin_hashmap: &HashMap<String, bool> ) {
 }
 
 // Create/Start Private Consumer
-fn start_private_consumer(coin_hashmap: &HashMap<String, bool> ) {
+fn start_private_consumer(coin_hashmap: &HashMap<String, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -117,32 +118,38 @@ fn start_private_consumer(coin_hashmap: &HashMap<String, bool> ) {
 // Pubkey will listen for Coordinator Pubkey's
 // Public will listen for Coordinator Public Messages
 // Private will listen for Coordinator Private Messages
-fn initialize_consumer(group_id: &str, topic: &str, env_key: Option<String>, coin: Option<&String>, consumer_type: &str) {
+fn initialize_consumer(
+  group_id: &str,
+  topic: &str,
+  env_key: Option<String>,
+  coin: Option<&String>,
+  consumer_type: &str,
+) {
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .set("group.id", group_id)
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut env_key_ref: String = "".to_string();
-    match env_key {
-      Some(p) => {
-        env_key_ref = String::from(p);
-      },
-      None => {},
+  let mut env_key_ref: String = "".to_string();
+  match env_key {
+    Some(p) => {
+      env_key_ref = String::from(p);
     }
+    None => {}
+  }
 
-    let mut coin_ref: String = "".to_string();
-    match coin {
-      Some(p) => {
-        coin_ref = String::from(p);
-      },
-      None => {},
+  let mut coin_ref: String = "".to_string();
+  match coin {
+    Some(p) => {
+      coin_ref = String::from(p);
     }
+    None => {}
+  }
 
-  match consumer_type{
+  match consumer_type {
     "pubkey" => {
-    consumer.subscribe(&[&topic]).expect("failed to subscribe to topic");
+      consumer.subscribe(&[&topic]).expect("failed to subscribe to topic");
       thread::spawn(move || {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
@@ -153,67 +160,68 @@ fn initialize_consumer(group_id: &str, topic: &str, env_key: Option<String>, coi
           env::set_var(env_key_ref.clone(), public_key);
         }
       });
-    },
+    }
     "public" => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
       tpl.add_partition(&topic, 0);
       consumer.assign(&tpl).unwrap();
-    
+
       thread::spawn(move || {
         for msg_result in &consumer {
-            let msg = msg_result.unwrap();
-            let key: &str = msg.key_view().unwrap().unwrap();
-            if message_box::ids::COORDINATOR == &*key {
-              let value = msg.payload().unwrap();
-              let pub_msg = str::from_utf8(value).unwrap();
-              println!("Received Public Message from {}", &key);
-              println!("Public Message: {}", &pub_msg);
-            }
+          let msg = msg_result.unwrap();
+          let key: &str = msg.key_view().unwrap().unwrap();
+          if message_box::ids::COORDINATOR == &*key {
+            let value = msg.payload().unwrap();
+            let pub_msg = str::from_utf8(value).unwrap();
+            println!("Received Public Message from {}", &key);
+            println!("Public Message: {}", &pub_msg);
           }
-        });
-      },
-      "private" => {
-        let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-        tpl.add_partition(&topic, 1);
-        consumer.assign(&tpl).unwrap();
-      
-        thread::spawn(move || {
-          for msg_result in &consumer {
-            let msg = msg_result.unwrap();
-            let key: &str = msg.key_view().unwrap().unwrap();
-            if message_box::ids::COORDINATOR == &*key {
-                let value = msg.payload().unwrap();
-                // Creates Message box used for decryption
-                let pubkey =
-                  message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
-      
-                let coin_priv =
-                  message_box::PrivateKey::from_string(env::var(env_key_ref.to_string()).unwrap().to_string());
+        }
+      });
+    }
+    "private" => {
+      let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+      tpl.add_partition(&topic, 1);
+      consumer.assign(&tpl).unwrap();
 
-                let processor_id = retrieve_message_box_id(&coin_ref);
+      thread::spawn(move || {
+        for msg_result in &consumer {
+          let msg = msg_result.unwrap();
+          let key: &str = msg.key_view().unwrap().unwrap();
+          if message_box::ids::COORDINATOR == &*key {
+            let value = msg.payload().unwrap();
+            // Creates Message box used for decryption
+            let pubkey =
+              message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
 
-                let mut message_box_pubkeys = HashMap::new();
-                message_box_pubkeys.insert(message_box::ids::COORDINATOR, pubkey);
-      
-                let message_box = MessageBox::new(processor_id, coin_priv, message_box_pubkeys);
-                let encrypted_msg = str::from_utf8(value).unwrap();
-      
-                // Decrypt message using Message Box
-                let encoded_string =
-                  message_box.decrypt_from_str(&message_box::ids::COORDINATOR, &encrypted_msg).unwrap();
-                let decoded_string = String::from_utf8(encoded_string).unwrap();
-                println!("Received Encrypted Message from {}", &key);
-                println!("Decrypted Message: {}", &decoded_string);
-              }
-            }
-          });
-        },
-    _ => {},
+            let coin_priv = message_box::PrivateKey::from_string(
+              env::var(env_key_ref.to_string()).unwrap().to_string(),
+            );
+
+            let processor_id = retrieve_message_box_id(&coin_ref);
+
+            let mut message_box_pubkeys = HashMap::new();
+            message_box_pubkeys.insert(message_box::ids::COORDINATOR, pubkey);
+
+            let message_box = MessageBox::new(processor_id, coin_priv, message_box_pubkeys);
+            let encrypted_msg = str::from_utf8(value).unwrap();
+
+            // Decrypt message using Message Box
+            let encoded_string =
+              message_box.decrypt_from_str(&message_box::ids::COORDINATOR, &encrypted_msg).unwrap();
+            let decoded_string = String::from_utf8(encoded_string).unwrap();
+            println!("Received Encrypted Message from {}", &key);
+            println!("Decrypted Message: {}", &decoded_string);
+          }
+        }
+      });
+    }
+    _ => {}
   }
 }
 
 // Create Pubkey Producer & Send PubKey
-fn start_pubkey_producer(coin_hashmap: &HashMap<String, bool>){
+fn start_pubkey_producer(coin_hashmap: &HashMap<String, bool>) {
   let hashmap_clone = coin_hashmap.clone();
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
@@ -246,7 +254,7 @@ fn send_pubkey_from_producer(topic: &str, env_key: String, processor: &'static s
 }
 
 // Wait to receive all Processer Pubkeys
-fn process_received_pubkey(){
+fn process_received_pubkey() {
   // Runs a loop to check if Coordinator pubkey is found
   let mut coord_key_found = false;
   while !coord_key_found {
@@ -269,7 +277,7 @@ fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<String, bool> {
 }
 
 // Requests Coin ID from Message Box
-fn retrieve_message_box_id(coin:&String) -> &'static str{
+fn retrieve_message_box_id(coin: &String) -> &'static str {
   let id = match coin.as_str() {
     "btc" => message_box::ids::BTC_PROCESSOR,
     "eth" => message_box::ids::ETH_PROCESSOR,
@@ -299,13 +307,18 @@ fn start_pub_priv_producer(coin_hashmap: &HashMap<String, bool>) {
         &topic,
         env_key.to_string(),
         &processor_id,
-        msg.as_bytes().to_vec()
+        msg.as_bytes().to_vec(),
       );
     }
   }
 }
 
-fn send_message_from_pub_priv_producer(topic: &str, env_key: String, processor: &'static str, msg: Vec<u8>) {
+fn send_message_from_pub_priv_producer(
+  topic: &str,
+  env_key: String,
+  processor: &'static str,
+  msg: Vec<u8>,
+) {
   let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .create_with_context(ProduceCallbackLogger {})
@@ -326,7 +339,7 @@ fn send_message_from_pub_priv_producer(topic: &str, env_key: String, processor: 
   let enc = message_box.encrypt_to_string(&message_box::ids::COORDINATOR, &msg.clone());
 
   // Partition 0 is public
-    producer
+  producer
     .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&msg).partition(0))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));

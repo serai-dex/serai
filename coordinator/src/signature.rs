@@ -56,7 +56,7 @@ impl SignatureProcess {
 }
 
 // Create/Start Pubkey Consumers
-fn start_pubkey_consumers(coin_hashmap: &HashMap<String, bool> ){
+fn start_pubkey_consumers(coin_hashmap: &HashMap<String, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -74,7 +74,7 @@ fn start_pubkey_consumers(coin_hashmap: &HashMap<String, bool> ){
 }
 
 // Create/Start Public Consumer
-fn start_public_consumer(coin_hashmap: &HashMap<String, bool> ) {
+fn start_public_consumer(coin_hashmap: &HashMap<String, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -90,7 +90,7 @@ fn start_public_consumer(coin_hashmap: &HashMap<String, bool> ) {
 }
 
 // Create/Start Private Consumer
-fn start_private_consumer(coin_hashmap: &HashMap<String, bool> ) {
+fn start_private_consumer(coin_hashmap: &HashMap<String, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -111,32 +111,41 @@ fn start_private_consumer(coin_hashmap: &HashMap<String, bool> ) {
 // Pubkey will listen for Processor Pubkey's
 // Public will listen for Processor Public Messages
 // Private will listen for Processor Private Messages
-fn initialize_consumer(group_id: &str, topic: &str, env_key: Option<String>, coin: Option<&String>, consumer_type: &str) {
+fn initialize_consumer(
+  group_id: &str,
+  topic: &str,
+  env_key: Option<String>,
+  coin: Option<&String>,
+  consumer_type: &str,
+) {
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .set("group.id", group_id)
+    .set("auto.offset.reset", "smallest")
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
 
-    let mut env_key_ref: String = "".to_string();
-    match env_key {
-      Some(p) => {
-        env_key_ref = String::from(p);
-      },
-      None => {},
+  let mut env_key_ref: String = "".to_string();
+  match env_key {
+    Some(p) => {
+      env_key_ref = String::from(p);
     }
+    None => {}
+  }
 
-    let mut coin_ref: String = "".to_string();
-    match coin {
-      Some(p) => {
-        coin_ref = String::from(p);
-      },
-      None => {},
+  let mut coin_ref: String = "".to_string();
+  match coin {
+    Some(p) => {
+      coin_ref = String::from(p);
     }
+    None => {}
+  }
 
-  match consumer_type{
+  match consumer_type {
     "pubkey" => {
-    consumer.subscribe(&[&topic]).expect("failed to subscribe to topic");
+      let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+      tpl.add_partition(&topic, 0);
+      consumer.assign(&tpl).unwrap();
       thread::spawn(move || {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
@@ -147,72 +156,74 @@ fn initialize_consumer(group_id: &str, topic: &str, env_key: Option<String>, coi
           env::set_var(env_key_ref.clone(), public_key);
         }
       });
-    },
+    }
     "public" => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
       tpl.add_partition(&topic, 0);
       consumer.assign(&tpl).unwrap();
-    
+
       thread::spawn(move || {
         for msg_result in &consumer {
-            let msg = msg_result.unwrap();
-            let key: &str = msg.key_view().unwrap().unwrap();
-            if message_box::ids::COORDINATOR != &*key {
-              let value = msg.payload().unwrap();
-              let pub_msg = str::from_utf8(value).unwrap();
-              println!("Received Public Message from {}", &key);
-              println!("Public Message: {}", &pub_msg);
-            }
+          let msg = msg_result.unwrap();
+          let key: &str = msg.key_view().unwrap().unwrap();
+          if message_box::ids::COORDINATOR != &*key {
+            let value = msg.payload().unwrap();
+            let pub_msg = str::from_utf8(value).unwrap();
+            println!("Received Public Message from {}", &key);
+            println!("Public Message: {}", &pub_msg);
           }
-        });
-      },
-      "private" => {
-        let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-        tpl.add_partition(&topic, 1);
-        consumer.assign(&tpl).unwrap();
-      
-        thread::spawn(move || {
-          for msg_result in &consumer {
-            let msg = msg_result.unwrap();
-            let key: &str = msg.key_view().unwrap().unwrap();
-            if message_box::ids::COORDINATOR != &*key {
-                let value = msg.payload().unwrap();
-                // Creates Message box used for decryption
-                let pubkey =
-                  message_box::PublicKey::from_trusted_str(&env::var(env_key_ref.to_string()).unwrap().to_string());
-      
-                let coord_priv =
-                  message_box::PrivateKey::from_string(env::var("COORD_PRIV").unwrap().to_string());
+        }
+      });
+    }
+    "private" => {
+      let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+      tpl.add_partition(&topic, 1);
+      consumer.assign(&tpl).unwrap();
 
-                let processor_id = retrieve_message_box_id(&coin_ref);
+      thread::spawn(move || {
+        for msg_result in &consumer {
+          let msg = msg_result.unwrap();
+          let key: &str = msg.key_view().unwrap().unwrap();
+          if message_box::ids::COORDINATOR != &*key {
+            let value = msg.payload().unwrap();
+            // Creates Message box used for decryption
+            let pubkey = message_box::PublicKey::from_trusted_str(
+              &env::var(env_key_ref.to_string()).unwrap().to_string(),
+            );
 
-                let mut message_box_pubkeys = HashMap::new();
-                message_box_pubkeys.insert(processor_id, pubkey);
-      
-                let message_box = MessageBox::new(message_box::ids::COORDINATOR, coord_priv, message_box_pubkeys);
-                let encrypted_msg = str::from_utf8(value).unwrap();
-      
-                // Decrypt message using Message Box
-                let encoded_string =
-                  message_box.decrypt_from_str(&processor_id, &encrypted_msg).unwrap();
-                let decoded_string = String::from_utf8(encoded_string).unwrap();
-                println!("Received Encrypted Message from {}", &processor_id);
-                println!("Decrypted Message: {}", &decoded_string);
-              }
-            }
-          });
-        },
-    _ => {},
+            let coord_priv =
+              message_box::PrivateKey::from_string(env::var("COORD_PRIV").unwrap().to_string());
+
+            let processor_id = retrieve_message_box_id(&coin_ref);
+
+            let mut message_box_pubkeys = HashMap::new();
+            message_box_pubkeys.insert(processor_id, pubkey);
+
+            let message_box =
+              MessageBox::new(message_box::ids::COORDINATOR, coord_priv, message_box_pubkeys);
+            let encrypted_msg = str::from_utf8(value).unwrap();
+
+            // Decrypt message using Message Box
+            let encoded_string =
+              message_box.decrypt_from_str(&processor_id, &encrypted_msg).unwrap();
+            let decoded_string = String::from_utf8(encoded_string).unwrap();
+            println!("Received Encrypted Message from {}", &processor_id);
+            println!("Decrypted Message: {}", &decoded_string);
+          }
+        }
+      });
+    }
+    _ => {}
   }
 }
 
 // Create Pubkey Producer & Send PubKey
-fn start_pubkey_producer(){
+fn start_pubkey_producer() {
   // Creates a producer to send coordinator pubkey message
   let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
-  .set("bootstrap.servers", "localhost:9094")
-  .create_with_context(ProduceCallbackLogger {})
-  .expect("invalid producer config");
+    .set("bootstrap.servers", "localhost:9094")
+    .create_with_context(ProduceCallbackLogger {})
+    .expect("invalid producer config");
 
   println!("Sending Public Key");
 
@@ -222,15 +233,19 @@ fn start_pubkey_producer(){
 
   // Sends message to Kafka
   producer
-    .send(BaseRecord::to("Coord_Public_Key").key(&format!("{}", message_box::ids::COORDINATOR)).payload(&msg))
+    .send(
+      BaseRecord::to("Coord_Public_Key")
+        .key(&format!("{}", message_box::ids::COORDINATOR))
+        .payload(&msg),
+    )
     .expect("failed to send message");
 }
 
 // Wait to receive all Processer Pubkeys
-fn process_received_pubkeys(coin_hashmap: &HashMap<String, bool>){
+fn process_received_pubkeys(coin_hashmap: &HashMap<String, bool>) {
   // Runs a loop to check if all processor keys are found
   let mut all_keys_found = false;
-  while !all_keys_found{
+  while !all_keys_found {
     let hashmap_key_check = coin_hashmap.clone();
     let hashmap_clone = coin_hashmap.clone();
 
@@ -254,7 +269,7 @@ fn process_received_pubkeys(coin_hashmap: &HashMap<String, bool>){
       }
     }
 
-    if active_keys == keys_found{
+    if active_keys == keys_found {
       println!("All Processor Pubkeys Ready");
       all_keys_found = true;
     } else {
@@ -272,7 +287,7 @@ fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<String, bool> {
 }
 
 // Requests Coin ID from Message Box
-fn retrieve_message_box_id(coin:&String) -> &'static str{
+fn retrieve_message_box_id(coin: &String) -> &'static str {
   let id = match coin.as_str() {
     "btc" => message_box::ids::BTC_PROCESSOR,
     "eth" => message_box::ids::ETH_PROCESSOR,
@@ -301,13 +316,18 @@ fn start_pub_priv_producer(coin_hashmap: &HashMap<String, bool>) {
         &topic,
         env_key.to_string(),
         &processor_id,
-        msg.as_bytes().to_vec()
+        msg.as_bytes().to_vec(),
       );
     }
   }
 }
 
-fn send_message_from_pub_priv_producer(topic: &str, env_key: String, processor: &'static str, msg: Vec<u8>) {
+fn send_message_from_pub_priv_producer(
+  topic: &str,
+  env_key: String,
+  processor: &'static str,
+  msg: Vec<u8>,
+) {
   let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .create_with_context(ProduceCallbackLogger {})
@@ -330,13 +350,23 @@ fn send_message_from_pub_priv_producer(topic: &str, env_key: String, processor: 
 
   // Partition 0 is public
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", message_box::ids::COORDINATOR)).payload(&msg).partition(0))
+    .send(
+      BaseRecord::to(&topic)
+        .key(&format!("{}", message_box::ids::COORDINATOR))
+        .payload(&msg)
+        .partition(0),
+    )
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 
   // Partition 1 is Private
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", message_box::ids::COORDINATOR)).payload(&enc).partition(1))
+    .send(
+      BaseRecord::to(&topic)
+        .key(&format!("{}", message_box::ids::COORDINATOR))
+        .payload(&enc)
+        .partition(1),
+    )
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 }
