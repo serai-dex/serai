@@ -1,6 +1,7 @@
 use monero_serai::{
-  rpc::Rpc,
+  rpc::{Rpc, self},
   wallet::{ReceivedOutput, SpendableOutput},
+  transaction::Transaction,
 };
 
 mod runner;
@@ -12,9 +13,8 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), ())
     },
-    |rpc: Rpc, hash, view, _| async move {
-      let mut scanner = Scanner::from_view(view, Network::Mainnet, Some(HashSet::new()));
-      let tx = rpc.get_transaction(hash).await.unwrap();
+    |rpc: Rpc, signed: Transaction, mut scanner: Scanner, _| async move {
+      let tx = rpc.get_transaction(signed.hash()).await.unwrap();
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
     },
@@ -29,9 +29,8 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc: Rpc, hash, view, _| async move {
-      let mut scanner = Scanner::from_view(view, Network::Mainnet, Some(HashSet::new()));
-      let tx = rpc.get_transaction(hash).await.unwrap();
+    |rpc: Rpc, signed: Transaction, mut scanner: Scanner, _| async move {
+      let tx = rpc.get_transaction(signed.hash()).await.unwrap();
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -47,9 +46,8 @@ test!(
       builder.add_payment(addr, 6);
       (builder.build().unwrap(), ())
     },
-    |rpc: Rpc, hash, view, _| async move {
-      let mut scanner = Scanner::from_view(view, Network::Mainnet, Some(HashSet::new()));
-      let tx = rpc.get_transaction(hash).await.unwrap();
+    |rpc: Rpc, signed: Transaction, mut scanner: Scanner, _| async move {
+      let tx = rpc.get_transaction(signed.hash()).await.unwrap();
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 6);
     },
