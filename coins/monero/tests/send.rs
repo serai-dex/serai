@@ -1,5 +1,5 @@
 use monero_serai::{
-  rpc::{Rpc, self},
+  rpc::Rpc,
   wallet::{ReceivedOutput, SpendableOutput},
   transaction::Transaction,
 };
