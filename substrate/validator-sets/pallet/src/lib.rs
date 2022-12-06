@@ -78,12 +78,17 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn validator_set)]
   pub type ValidatorSets<T: Config> =
-    StorageMap<_, Identity, ValidatorSetInstance, ValidatorSet<T>, ValueQuery>;
+    StorageMap<_, Twox64Concat, ValidatorSetInstance, ValidatorSet<T>, ValueQuery>;
 
   #[pallet::storage]
   #[pallet::getter(fn key)]
-  pub type Keys<T: Config> =
-    StorageMap<_, Identity, (ValidatorSetInstance, Coin), BoundedVec<u8, MaxKeyLen>, ValueQuery>;
+  pub type Keys<T: Config> = StorageMap<
+    _,
+    Twox64Concat,
+    (ValidatorSetInstance, Coin),
+    BoundedVec<u8, MaxKeyLen>,
+    ValueQuery,
+  >;
 
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
