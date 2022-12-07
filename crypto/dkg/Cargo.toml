@@ -22,18 +22,12 @@ subtle = "2"
 
 hex = "0.4"
 
-digest = "0.10"
-
-hkdf = "0.12"
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
 chacha20 = { version = "0.9", features = ["zeroize"] }
 
 group = "0.12"
-
-ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
-
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
-
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
+ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
 
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.2" }
 dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
