@@ -6,7 +6,7 @@ use rand_core::OsRng;
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use monero_serai::{
-  random_scalar,
+  Protocol, random_scalar,
   wallet::{
     ViewPair,
     address::{Network, AddressType, AddressMeta, MoneroAddress},
@@ -50,6 +50,28 @@ pub async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
 
   // mine 9 more blocks to unlock the tx
   rpc.generate_blocks(addr, 9).await.unwrap();
+}
+
+pub async fn rpc() -> Rpc {
+  let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+
+  // Only run once
+  if rpc.get_height().await.unwrap() != 1 {
+    return rpc;
+  }
+
+  let addr = MoneroAddress {
+    meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
+    spend: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
+    view: &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
+  }
+  .to_string();
+
+  // Mine 40 blocks to ensure decoy availability
+  rpc.generate_blocks(&addr, 40).await.unwrap();
+  assert!(!matches!(rpc.get_protocol().await.unwrap(), Protocol::Unsupported(_)));
+
+  rpc
 }
 
 lazy_static! {
@@ -116,7 +138,7 @@ macro_rules! test {
           },
         };
 
-        use runner::{random_address, mine_until_unlocked};
+        use runner::{random_address, rpc, mine_until_unlocked};
 
         type Builder = SignableTransactionBuilder;
 
@@ -143,16 +165,16 @@ macro_rules! test {
 
           let view = ViewPair::new(spend_pub, random_scalar(&mut OsRng));
 
-          let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+          let rpc = rpc().await;
 
           let (addr, miner_tx) = {
             let mut scanner =
               Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
             let addr = scanner.address();
 
-            // mine 40(decoy availability) + 60(miner tx unlock) blocks
-            rpc.generate_blocks(&addr.to_string(), 100).await.unwrap();
-            let start = rpc.get_height().await.unwrap() - 60;
+            // mine 60 blocks to unlock a miner tx
+            let start = rpc.get_height().await.unwrap();
+            rpc.generate_blocks(&addr.to_string(), 60).await.unwrap();
 
             let block = rpc.get_block(start).await.unwrap();
             (
@@ -218,12 +240,10 @@ macro_rules! test {
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
             mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
-            ($first_checks)(
-              rpc.clone(),
-              signed,
-              Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new())),
-              state
-            ).await
+            let tx = rpc.get_transaction(signed.hash()).await.unwrap();
+            let scanner =
+              Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
+            ($first_checks)(rpc.clone(), tx, scanner, state).await
           });
           #[allow(unused_variables, unused_mut, unused_assignments)]
           let mut carried_state: Box<dyn Any> = temp;
@@ -239,15 +259,13 @@ macro_rules! test {
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
             mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
+            let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             #[allow(unused_assignments)]
             {
+              let scanner =
+                Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
               carried_state =
-                Box::new(($checks)(
-                  rpc.clone(),
-                  signed,
-                  Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new())),
-                  state
-                ).await);
+                Box::new(($checks)(rpc.clone(), tx, scanner, state).await);
             }
           )*
         }

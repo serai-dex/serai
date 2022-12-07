@@ -490,8 +490,8 @@ impl Rpc {
           },
         })),
       )
-      .await
-      .unwrap();
+      .await?;
+
     Ok(())
   }
 }
