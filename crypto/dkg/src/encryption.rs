@@ -122,7 +122,7 @@ impl<Id: Eq + Hash, C: Ciphersuite> Encryption<Id, C> {
 
   fn cipher(&self, participant: Id, encrypt: bool) -> ChaCha20 {
     // Ideally, we'd box this transcript with ZAlloc, yet that's only possible on nightly
-    // TODO
+    // TODO: https://github.com/serai-dex/serai/issues/151
     let mut transcript = RecommendedTranscript::new(b"DKG Encryption v0");
     transcript.domain_separate(self.dst);
 
@@ -154,7 +154,7 @@ impl<Id: Eq + Hash, C: Ciphersuite> Encryption<Id, C> {
     zeroize(challenge.as_mut());
 
     // Same commentary as the transcript regarding ZAlloc
-    // TODO
+    // TODO: https://github.com/serai-dex/serai/issues/151
     let res = ChaCha20::new(&key, &iv);
     zeroize(key.as_mut());
     zeroize(iv.as_mut());
