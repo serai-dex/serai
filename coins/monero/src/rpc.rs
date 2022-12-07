@@ -477,4 +477,21 @@ impl Rpc {
 
     Ok(())
   }
+
+  pub async fn generate_blocks(&self, address: &str, block_count: usize) -> Result<(), RpcError> {
+    self
+      .rpc_call::<_, EmptyResponse>(
+        "json_rpc",
+        Some(json!({
+          "method": "generateblocks",
+          "params": {
+            "wallet_address": address,
+            "amount_of_blocks": block_count
+          },
+        })),
+      )
+      .await?;
+
+    Ok(())
+  }
 }
