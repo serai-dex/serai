@@ -92,7 +92,7 @@ impl<Id: Eq + Hash, C: Ciphersuite> Zeroize for Encryption<Id, C> {
   fn zeroize(&mut self) {
     self.enc_key.zeroize();
     self.enc_pub_key.zeroize();
-    for (_, value) in self.enc_keys.drain() {
+    for (_, mut value) in self.enc_keys.drain() {
       value.zeroize();
     }
   }
