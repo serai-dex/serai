@@ -336,7 +336,7 @@ impl CoordinatorConfig {
         port: String::from("5050"),
         poll_interval: 1,
       },
-      chain: ChainConfig{
+      chain: ChainConfig {
         btc: s.get_bool("chains.btc").unwrap(),
         eth: s.get_bool("chains.eth").unwrap(),
         xmr: s.get_bool("chains.xmr").unwrap(),
@@ -401,6 +401,6 @@ pub fn initialize_keys() {
     let mut private_bytes = unsafe { private.inner().to_repr() };
     // Sets private / public key to environment variables
     env::set_var("COORD_PRIV", hex::encode(private_bytes.as_ref()));
-    env::set_var("COORD_PUB",  hex::encode(public.to_bytes()));
+    env::set_var("COORD_PUB", hex::encode(public.to_bytes()));
   }
 }
