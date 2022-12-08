@@ -65,7 +65,7 @@ fn start_pubkey_consumers(coin_hashmap: &HashMap<String, bool>) {
       let mut group_id = String::from(&key);
       group_id.push_str("_pubkey");
       let mut topic = String::from(&key).to_uppercase();
-      topic.push_str("_Public_Key");
+      topic.push_str("_Topic");
       let mut env_key = String::from(&key).to_uppercase();
       env_key.push_str("_PUB");
       initialize_consumer(&group_id, &topic, Some(env_key.to_string()), None, "pubkey");
@@ -144,7 +144,7 @@ fn initialize_consumer(
   match consumer_type {
     "pubkey" => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-      tpl.add_partition(&topic, 0);
+      tpl.add_partition(&topic, 2);
       consumer.assign(&tpl).unwrap();
       thread::spawn(move || {
         for msg_result in &consumer {
@@ -234,9 +234,9 @@ fn start_pubkey_producer() {
   // Sends message to Kafka
   producer
     .send(
-      BaseRecord::to("Coord_Public_Key")
+      BaseRecord::to("Coordinator_Topic")
         .key(&format!("{}", message_box::ids::COORDINATOR))
-        .payload(&msg),
+        .payload(&msg).partition(2),
     )
     .expect("failed to send message");
 }

@@ -65,7 +65,7 @@ fn start_pubkey_consumer() {
     .expect("invalid consumer config");
 
   let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  tpl.add_partition(&"Coord_Public_Key", 0);
+  tpl.add_partition(&"Coordinator_Topic", 2);
   consumer.assign(&tpl).unwrap();
 
   thread::spawn(move || {
@@ -149,7 +149,9 @@ fn initialize_consumer(
 
   match consumer_type {
     "pubkey" => {
-      consumer.subscribe(&[&topic]).expect("failed to subscribe to topic");
+      let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+      tpl.add_partition(&topic, 2);
+      consumer.assign(&tpl).unwrap();
       thread::spawn(move || {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
@@ -227,7 +229,7 @@ fn start_pubkey_producer(coin_hashmap: &HashMap<String, bool>) {
   for (key, value) in hashmap_clone.into_iter() {
     if value == true {
       let mut topic = String::from(&key).to_uppercase();
-      topic.push_str("_Public_Key");
+      topic.push_str("_Topic");
       let mut env_key = String::from(&key).to_uppercase();
       env_key.push_str("_PUB");
       let processor_id = retrieve_message_box_id(&key);
@@ -248,7 +250,7 @@ fn send_pubkey_from_producer(topic: &str, env_key: String, processor: &'static s
 
   // Send pubkey to kafka topic
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", processor)).payload(&coin_msg))
+    .send(BaseRecord::to(&topic).key(&format!("{}", processor)).payload(&coin_msg).partition(2))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 }
