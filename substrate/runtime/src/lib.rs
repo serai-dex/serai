@@ -200,7 +200,9 @@ impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
   }
 }
 
-impl validator_sets_pallet::Config for Runtime {}
+impl validator_sets_pallet::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
 
 impl pallet_session::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
