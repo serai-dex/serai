@@ -37,13 +37,10 @@ frame-executive = { git = "https://github.com/serai-dex/substrate", default-feat
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
-pallet-randomness-collective-flip = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-pallet-contracts-primitives = { git = "https://github.com/serai-dex/substrate", default-features = false }
-pallet-contracts = { git = "https://github.com/serai-dex/substrate", default-features = false }
-
+validator-sets-pallet = { path = "../validator-sets/pallet", default-features = false }
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 
@@ -77,13 +74,11 @@ std = [
   "frame-executive/std",
 
   "pallet-timestamp/std",
-  "pallet-randomness-collective-flip/std",
   "pallet-balances/std",
   "pallet-transaction-payment/std",
 
-  "pallet-contracts/std",
-  "pallet-contracts-primitives/std",
-
+  "staking-pallet/std",
+  "validator-sets-pallet/std",
   "pallet-session/std",
   "pallet-tendermint/std",
 

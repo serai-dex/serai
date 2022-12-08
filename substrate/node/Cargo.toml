@@ -56,6 +56,9 @@ sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
+validator-sets-primitives = { path = "../validator-sets/primitives" }
+validator-sets-pallet = { path = "../validator-sets/pallet" }
+
 sp-tendermint = { path = "../tendermint/primitives" }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 serai-runtime = { path = "../runtime" }
@@ -70,5 +73,5 @@ runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
   "frame-benchmarking-cli/runtime-benchmarks",
 
-  "serai-runtime/runtime-benchmarks"
+  "serai-runtime/runtime-benchmarks",
 ]

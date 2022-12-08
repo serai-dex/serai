@@ -13,7 +13,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
 
 serde = { version = "1.0", features = ["derive"], optional = true }
 
@@ -21,5 +21,5 @@ sp-core = { git = "https://github.com/serai-dex/substrate", default-features = f
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
-std = ["scale/std", "scale-info/std", "serde", "sp-core/std"]
+std = ["scale/std", "scale-info/std", "serde", "sp-core/std", "sp-std/std"]
 default = ["std"]

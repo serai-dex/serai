@@ -6,13 +6,8 @@ pub mod pallet {
 
   use validator_sets_primitives::*;
 
-  #[cfg(not(feature = "std"))]
-  pub trait Info {}
-  #[cfg(feature = "std")]
-  pub trait Info: scale_info::TypeInfo {}
-
   #[pallet::config]
-  pub trait Config: frame_system::Config + Info {}
+  pub trait Config: frame_system::Config + scale_info::TypeInfo {}
 
   #[pallet::genesis_config]
   #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, MaxEncodedLen)]
@@ -27,6 +22,7 @@ pub mod pallet {
     pub participants: Vec<T::AccountId>,
   }
 
+  #[cfg(feature = "std")]
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
       GenesisConfig { bond: Amount(0), coins: Coin(0), participants: vec![] }
@@ -50,8 +46,7 @@ pub mod pallet {
   const MAX_KEY_LEN: u32 = 96;
   type MaxKeyLen = ConstU32<MAX_KEY_LEN>;
 
-  #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, MaxEncodedLen)]
-  #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+  #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo, MaxEncodedLen)]
   pub struct ValidatorSet<T: Config> {
     bond: Amount,
     coins: BoundedVec<Coin, MaxCoinsPerSet>,
