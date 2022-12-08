@@ -15,14 +15,14 @@ struct SignableTransactionBuilderInternal {
   inputs: Vec<SpendableOutput>,
   payments: Vec<(MoneroAddress, u64)>,
   change_address: Option<MoneroAddress>,
-  data: Option<Vec<u8>>,
+  data: Vec<Vec<u8>>,
 }
 
 impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
   fn new(protocol: Protocol, fee: Fee, change_address: Option<MoneroAddress>) -> Self {
-    Self { protocol, fee, inputs: vec![], payments: vec![], change_address, data: None }
+    Self { protocol, fee, inputs: vec![], payments: vec![], change_address, data: Vec::new() }
   }
 
   fn add_input(&mut self, input: SpendableOutput) {
@@ -39,8 +39,8 @@ impl SignableTransactionBuilderInternal {
     self.payments.extend(payments);
   }
 
-  fn set_data(&mut self, data: Vec<u8>) {
-    self.data = Some(data);
+  fn add_data(&mut self, data: &Vec<u8>) {
+    self.data.push(data.clone());
   }
 }
 
@@ -100,9 +100,12 @@ impl SignableTransactionBuilder {
     self.shallow_copy()
   }
 
-  pub fn set_data(&mut self, data: Vec<u8>) -> Self {
-    self.0.write().unwrap().set_data(data);
-    self.shallow_copy()
+  pub fn add_data(&mut self, data: &Vec<u8>) -> Result<Self, TransactionError> {
+    if data.len() > 255 {
+      Err(TransactionError::TooMuchData)?;
+    }
+    self.0.write().unwrap().add_data(data);
+    Ok(self.shallow_copy())
   }
 
   pub fn build(self) -> Result<SignableTransaction, TransactionError> {

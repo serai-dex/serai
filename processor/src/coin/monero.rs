@@ -178,7 +178,7 @@ impl Coin for Monero {
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
         Some(self.address(spend)),
-        None,
+        vec![],
         fee,
       )
       .map_err(|_| CoinError::ConnectionError)?,
@@ -264,7 +264,7 @@ impl Coin for Monero {
       outputs,
       vec![(address, amount - fee)],
       Some(Self::empty_address()),
-      None,
+      vec![],
       self.rpc.get_fee().await.unwrap(),
     )
     .unwrap()
