@@ -8,7 +8,9 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
+use group::ff::Field;
 use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::EdwardsPoint};
+use dalek_ff_group as dfg;
 
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
@@ -114,13 +116,16 @@ impl SignableTransaction {
     let mut key_images = vec![];
     for (i, input) in self.inputs.iter().enumerate() {
       // Check this the right set of keys
-      let offset = keys.offset(dalek_ff_group::Scalar(input.key_offset()));
+      let offset = keys.offset(dfg::Scalar(input.key_offset()));
       if offset.group_key().0 != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
       let clsag = ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone());
-      key_images.push((clsag.H, self.inputs[i].key_offset()));
+      key_images.push((
+        clsag.H,
+        keys.current_offset().unwrap_or(dfg::Scalar::zero()).0 + self.inputs[i].key_offset(),
+      ));
       clsags.push(AlgorithmMachine::new(clsag, offset).map_err(TransactionError::FrostError)?);
     }
 

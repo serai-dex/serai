@@ -188,7 +188,6 @@ impl Coin for Monero {
   async fn attempt_send(
     &self,
     transaction: SignableTransaction,
-    included: &[u16],
   ) -> Result<Self::TransactionMachine, CoinError> {
     transaction
       .actual
@@ -198,7 +197,6 @@ impl Coin for Monero {
         transaction.keys.clone(),
         transaction.transcript.clone(),
         transaction.height,
-        included.to_vec(),
       )
       .await
       .map_err(|_| CoinError::ConnectionError)
@@ -209,7 +207,6 @@ impl Coin for Monero {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
     self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-
     Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
 
