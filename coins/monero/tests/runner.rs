@@ -222,7 +222,7 @@ macro_rules! test {
                     );
                   }
 
-                  frost::tests::sign(&mut OsRng, machines, &vec![])
+                  frost::tests::sign_without_caching(&mut OsRng, machines, &vec![])
                 }
               }
             }

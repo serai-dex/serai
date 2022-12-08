@@ -4,6 +4,7 @@ use std::{
   collections::HashMap,
 };
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -14,8 +15,8 @@ use frost::{
   curve::Ed25519,
   FrostError, ThresholdKeys,
   sign::{
-    Writable, Preprocess, SignatureShare, PreprocessMachine, SignMachine, SignatureMachine,
-    AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
+    Writable, Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine,
+    SignatureMachine, AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
   },
 };
 
@@ -205,9 +206,29 @@ impl PreprocessMachine for TransactionMachine {
 }
 
 impl SignMachine<Transaction> for TransactionSignMachine {
+  type Params = ();
+  type Keys = ThresholdKeys<Ed25519>;
   type Preprocess = Vec<Preprocess<Ed25519, ClsagAddendum>>;
   type SignatureShare = Vec<SignatureShare<Ed25519>>;
   type SignatureMachine = TransactionSignatureMachine;
+
+  fn cache(self) -> Zeroizing<CachedPreprocess> {
+    unimplemented!(
+      "Monero transactions don't support caching their preprocesses due to {}",
+      "being already bound to a specific transaction"
+    );
+  }
+
+  fn from_cache(
+    _: (),
+    _: ThresholdKeys<Ed25519>,
+    _: Zeroizing<CachedPreprocess>,
+  ) -> Result<Self, FrostError> {
+    unimplemented!(
+      "Monero transactions don't support caching their preprocesses due to {}",
+      "being already bound to a specific transaction"
+    );
+  }
 
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess> {
     self.clsags.iter().map(|clsag| clsag.read_preprocess(reader)).collect()

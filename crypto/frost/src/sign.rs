@@ -4,9 +4,10 @@ use std::{
   collections::HashMap,
 };
 
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use transcript::Transcript;
 
@@ -73,6 +74,12 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
   }
 }
 
+/// A cached preprocess. A preprocess MUST only be used once. Reuse will enable third-party
+/// recovery of your private key share. Additionally, this MUST be handled with the same security
+/// as your private key share, as knowledge of it also enables recovery.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct CachedPreprocess(pub [u8; 32]);
+
 /// Trait for the initial state machine of a two-round signing protocol.
 pub trait PreprocessMachine {
   /// Preprocess message for this machine.
@@ -100,13 +107,36 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     Ok(AlgorithmMachine { params: Params::new(algorithm, keys)? })
   }
 
+  fn seeded_preprocess(
+    self,
+    seed: Zeroizing<CachedPreprocess>,
+  ) -> (AlgorithmSignMachine<C, A>, Preprocess<C, A::Addendum>) {
+    let mut params = self.params;
+
+    let mut rng = ChaCha20Rng::from_seed(seed.0);
+    let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
+      &mut rng,
+      params.keys.secret_share(),
+      &params.algorithm.nonces(),
+    );
+    let addendum = params.algorithm.preprocess_addendum(&mut rng, &params.keys);
+
+    let preprocess = Preprocess { commitments, addendum };
+    (AlgorithmSignMachine { params, seed, nonces, preprocess: preprocess.clone() }, preprocess)
+  }
+
   #[cfg(any(test, feature = "tests"))]
   pub(crate) fn unsafe_override_preprocess(
     self,
     nonces: Vec<Nonce<C>>,
     preprocess: Preprocess<C, A::Addendum>,
   ) -> AlgorithmSignMachine<C, A> {
-    AlgorithmSignMachine { params: self.params, nonces, preprocess }
+    AlgorithmSignMachine {
+      params: self.params,
+      seed: Zeroizing::new(CachedPreprocess([0; 32])),
+      nonces,
+      preprocess,
+    }
   }
 }
 
@@ -119,17 +149,9 @@ impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
     self,
     rng: &mut R,
   ) -> (Self::SignMachine, Preprocess<C, A::Addendum>) {
-    let mut params = self.params;
-
-    let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
-      &mut *rng,
-      params.keys.secret_share(),
-      &params.algorithm.nonces(),
-    );
-    let addendum = params.algorithm.preprocess_addendum(rng, &params.keys);
-
-    let preprocess = Preprocess { commitments, addendum };
-    (AlgorithmSignMachine { params, nonces, preprocess: preprocess.clone() }, preprocess)
+    let mut seed = Zeroizing::new(CachedPreprocess([0; 32]));
+    rng.fill_bytes(seed.0.as_mut());
+    self.seeded_preprocess(seed)
   }
 }
 
@@ -143,7 +165,11 @@ impl<C: Curve> Writable for SignatureShare<C> {
 }
 
 /// Trait for the second machine of a two-round signing protocol.
-pub trait SignMachine<S> {
+pub trait SignMachine<S>: Sized {
+  /// Params used to instantiate this machine which can be used to rebuild from a cache.
+  type Params: Clone;
+  /// Keys used for signing operations.
+  type Keys;
   /// Preprocess message for this machine.
   type Preprocess: Clone + PartialEq + Writable;
   /// SignatureShare message for this machine.
@@ -151,7 +177,22 @@ pub trait SignMachine<S> {
   /// SignatureMachine this SignMachine turns into.
   type SignatureMachine: SignatureMachine<S, SignatureShare = Self::SignatureShare>;
 
-  /// Read a Preprocess message.
+  /// Cache this preprocess for usage later. This cached preprocess MUST only be used once. Reuse
+  /// of it enables recovery of your private key share. Third-party recovery of a cached preprocess
+  /// also enables recovery of your private key share, so this MUST be treated with the same
+  /// security as your private key share.
+  fn cache(self) -> Zeroizing<CachedPreprocess>;
+
+  /// Create a sign machine from a cached preprocess. After this, the preprocess should be fully
+  /// deleted, as it must never be reused. It is
+  fn from_cache(
+    params: Self::Params,
+    keys: Self::Keys,
+    cache: Zeroizing<CachedPreprocess>,
+  ) -> Result<Self, FrostError>;
+
+  /// Read a Preprocess message. Despite taking self, this does not save the preprocess.
+  /// It must be externally cached and passed into sign.
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess>;
 
   /// Sign a message.
@@ -169,15 +210,32 @@ pub trait SignMachine<S> {
 #[derive(Zeroize)]
 pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
+  seed: Zeroizing<CachedPreprocess>,
+
   pub(crate) nonces: Vec<Nonce<C>>,
   #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A::Addendum>,
 }
 
 impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachine<C, A> {
+  type Params = A;
+  type Keys = ThresholdKeys<C>;
   type Preprocess = Preprocess<C, A::Addendum>;
   type SignatureShare = SignatureShare<C>;
   type SignatureMachine = AlgorithmSignatureMachine<C, A>;
+
+  fn cache(self) -> Zeroizing<CachedPreprocess> {
+    self.seed
+  }
+
+  fn from_cache(
+    algorithm: A,
+    keys: ThresholdKeys<C>,
+    cache: Zeroizing<CachedPreprocess>,
+  ) -> Result<Self, FrostError> {
+    let (machine, _) = AlgorithmMachine::new(algorithm, keys)?.seeded_preprocess(cache);
+    Ok(machine)
+  }
 
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess> {
     Ok(Preprocess {
