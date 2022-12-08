@@ -83,7 +83,7 @@ fn start_pubkey_consumer() {
     .expect("invalid consumer config");
 
   let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  tpl.add_partition(&"Coordinator_Topic", 2);
+  tpl.add_partition(&"Coordinator_Topic", 0);
   consumer.assign(&tpl).unwrap();
 
   thread::spawn(move || {
@@ -170,14 +170,17 @@ fn initialize_consumer(
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
       tpl.add_partition(&topic, 2);
       consumer.assign(&tpl).unwrap();
+
       thread::spawn(move || {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          let value = msg.payload().unwrap();
-          let public_key = str::from_utf8(value).unwrap();
-          println!("Received {} Public Key: {}", &key, &public_key);
-          env::set_var(env_key_ref.clone(), public_key);
+          if key.contains("COORDINATOR") && key.contains("Pubkey"){
+            let value = msg.payload().unwrap();
+            let public_key = str::from_utf8(value).unwrap();
+            println!("Received {} Public Key: {}", &key, &public_key);
+            env::set_var(env_key_ref.clone(), public_key);
+          }
         }
       });
     }
@@ -190,7 +193,7 @@ fn initialize_consumer(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          if message_box::ids::COORDINATOR == &*key {
+          if key.contains("COORDINATOR") && key.contains("Public") {
             let value = msg.payload().unwrap();
             let pub_msg = str::from_utf8(value).unwrap();
             println!("Received Public Message from {}", &key);
@@ -208,7 +211,7 @@ fn initialize_consumer(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          if message_box::ids::COORDINATOR == &*key {
+          if key.contains("COORDINATOR") {
             let value = msg.payload().unwrap();
             // Creates Message box used for decryption
             let pubkey =
@@ -268,7 +271,7 @@ fn send_pubkey_from_producer(topic: &str, env_key: String, processor: &'static s
 
   // Send pubkey to kafka topic
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", processor)).payload(&coin_msg).partition(2))
+    .send(BaseRecord::to(&topic).key(&format!("{}_Pubkey", processor)).payload(&coin_msg).partition(0))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 }
@@ -381,13 +384,13 @@ fn send_message_from_pub_priv_producer(
 
   // Partition 0 is public
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&msg).partition(0))
+    .send(BaseRecord::to(&topic).key(&format!("{}_Public", &processor)).payload(&msg).partition(0))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 
   // Partition 1 is Private
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}", &processor)).payload(&enc).partition(1))
+    .send(BaseRecord::to(&topic).key(&format!("{}_Private", &processor)).payload(&enc).partition(1))
     .expect("failed to send message");
   thread::sleep(Duration::from_secs(1));
 }

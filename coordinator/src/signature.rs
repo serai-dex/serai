@@ -162,16 +162,19 @@ fn initialize_consumer(
   match consumer_type {
     "pubkey" => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-      tpl.add_partition(&topic, 2);
+      tpl.add_partition(&topic, 0);
       consumer.assign(&tpl).unwrap();
+
       thread::spawn(move || {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          let value = msg.payload().unwrap();
-          let public_key = str::from_utf8(value).unwrap();
-          println!("Received {} Public Key: {}", &key, &public_key);
-          env::set_var(env_key_ref.clone(), public_key);
+          if !key.contains("COORDINATOR") && key.contains("Pubkey") {
+            let value = msg.payload().unwrap();
+            let public_key = str::from_utf8(value).unwrap();
+            println!("Received {} Public Key: {}", &key, &public_key);
+            env::set_var(env_key_ref.clone(), public_key);
+          }
         }
       });
     }
@@ -184,7 +187,7 @@ fn initialize_consumer(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          if message_box::ids::COORDINATOR != &*key {
+          if !key.contains("COORDINATOR") && key.contains("Public") {
             let value = msg.payload().unwrap();
             let pub_msg = str::from_utf8(value).unwrap();
             println!("Received Public Message from {}", &key);
@@ -202,7 +205,7 @@ fn initialize_consumer(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          if message_box::ids::COORDINATOR != &*key {
+          if !key.contains("COORDINATOR") {
             let value = msg.payload().unwrap();
             // Creates Message box used for decryption
             let pubkey = message_box::PublicKey::from_trusted_str(
@@ -253,8 +256,8 @@ fn start_pubkey_producer() {
   producer
     .send(
       BaseRecord::to("Coordinator_Topic")
-        .key(&format!("{}", message_box::ids::COORDINATOR))
-        .payload(&msg).partition(2),
+        .key(&format!("{}_Pubkey", message_box::ids::COORDINATOR))
+        .payload(&msg).partition(0),
     )
     .expect("failed to send message");
 }
@@ -391,7 +394,7 @@ fn send_message_from_pub_priv_producer(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}", message_box::ids::COORDINATOR))
+        .key(&format!("{}_Public", message_box::ids::COORDINATOR))
         .payload(&msg)
         .partition(0),
     )
@@ -402,7 +405,7 @@ fn send_message_from_pub_priv_producer(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}", message_box::ids::COORDINATOR))
+        .key(&format!("{}_Private", message_box::ids::COORDINATOR))
         .payload(&enc)
         .partition(1),
     )
