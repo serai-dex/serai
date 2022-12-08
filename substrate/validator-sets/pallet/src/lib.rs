@@ -11,7 +11,9 @@ pub mod pallet {
   use validator_sets_primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + TypeInfo {}
+  pub trait Config: frame_system::Config + TypeInfo {
+    type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
+  }
 
   #[pallet::genesis_config]
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
@@ -60,16 +62,6 @@ pub mod pallet {
     participants: BoundedVec<(T::AccountId, Amount), ConstU32<100>>,
   }
 
-  impl<T: Config> Default for ValidatorSet<T> {
-    fn default() -> Self {
-      ValidatorSet {
-        bond: Amount(0),
-        coins: BoundedVec::default(),
-        participants: BoundedVec::default(),
-      }
-    }
-  }
-
   #[pallet::pallet]
   #[pallet::generate_store(pub(super) trait Store)]
   pub struct Pallet<T>(PhantomData<T>);
@@ -80,33 +72,24 @@ pub mod pallet {
   pub type ValidatorSets<T: Config> =
     StorageMap<_, Twox64Concat, ValidatorSetInstance, ValidatorSet<T>, OptionQuery>;
 
+  type Key = BoundedVec<u8, MaxKeyLen>;
+
   /// The key for a given validator set instance coin.
   #[pallet::storage]
   #[pallet::getter(fn key)]
-  pub type Keys<T: Config> = StorageMap<
-    _,
-    Twox64Concat,
-    (ValidatorSetInstance, Coin),
-    BoundedVec<u8, MaxKeyLen>,
-    OptionQuery,
-  >;
+  pub type Keys<T: Config> =
+    StorageMap<_, Twox64Concat, (ValidatorSetInstance, Coin), Key, OptionQuery>;
 
   /// If an account has voted for a specific key or not. Prevents them from voting multiple times.
   #[pallet::storage]
   #[pallet::getter(fn voted)]
-  pub type Voted<T: Config> =
-    StorageMap<_, Blake2_128Concat, (T::AccountId, BoundedVec<u8, MaxKeyLen>), (), OptionQuery>;
+  pub type Voted<T: Config> = StorageMap<_, Blake2_128Concat, (T::AccountId, Key), (), OptionQuery>;
 
   /// How many times a key has been voted for. Once consensus is reached, the keys will be adopted.
   #[pallet::storage]
   #[pallet::getter(fn vote_count)]
-  pub type VoteCount<T: Config> = StorageMap<
-    _,
-    Blake2_128Concat,
-    (ValidatorSetInstance, Coin, BoundedVec<u8, MaxKeyLen>),
-    u16,
-    ValueQuery,
-  >;
+  pub type VoteCount<T: Config> =
+    StorageMap<_, Blake2_128Concat, (ValidatorSetInstance, Coin, Key), u16, ValueQuery>;
 
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
@@ -134,6 +117,24 @@ pub mod pallet {
     }
   }
 
+  #[pallet::event]
+  #[pallet::generate_deposit(pub(super) fn deposit_event)]
+  pub enum Event<T: Config> {
+    Vote {
+      voter: T::AccountId,
+      instance: ValidatorSetInstance,
+      coin: Coin,
+      key: Key,
+      // Amount of votes the key now has
+      votes: u16,
+    },
+    KeyGen {
+      instance: ValidatorSetInstance,
+      coin: Coin,
+      key: Key,
+    },
+  }
+
   #[pallet::error]
   pub enum Error<T> {
     /// Validator Set doesn't exist.
@@ -153,7 +154,7 @@ pub mod pallet {
       origin: OriginFor<T>,
       index: ValidatorSetIndex,
       coin: Coin,
-      key: BoundedVec<u8, MaxKeyLen>,
+      key: Key,
     ) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       // TODO: Do we need to check key is within bounds?
@@ -186,12 +187,12 @@ pub mod pallet {
         *value
       });
 
-      // TODO: Emit Vote event
+      Self::deposit_event(Event::Vote { voter: signer, instance, coin, key: key.clone(), votes });
 
       // If we've reached consensus, set the key
       if usize::try_from(votes).unwrap() == set.participants.len() {
-        Keys::<T>::set((instance, coin), Some(key));
-        // TODO: Emit KeyGen event
+        Keys::<T>::set((instance, coin), Some(key.clone()));
+        Self::deposit_event(Event::KeyGen { instance, coin, key });
       }
 
       Ok(())
