@@ -82,8 +82,10 @@ impl Metadata {
     res.extend(self.subaddress.0.to_le_bytes());
     res.extend(self.subaddress.1.to_le_bytes());
     res.extend(self.payment_id);
+
+    res.extend([u8::try_from(self.arbitrary_data.len()).unwrap()]);
     for part in &self.arbitrary_data {
-      res.extend([1, u8::try_from(part.len()).unwrap()]);
+      res.extend([u8::try_from(part.len()).unwrap()]);
       res.extend(part);
     }
     res
@@ -95,8 +97,7 @@ impl Metadata {
       payment_id: read_bytes(r)?,
       arbitrary_data: {
         let mut data = vec![];
-        let exist = read_byte(r)?;
-        while exist == 1 {
+        for _ in 0 .. read_byte(r)? {
           let len = read_byte(r)?;
           data.push(read_raw_vec(read_byte, usize::from(len), r)?);
         }

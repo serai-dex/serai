@@ -39,8 +39,8 @@ impl SignableTransactionBuilderInternal {
     self.payments.extend(payments);
   }
 
-  fn add_data(&mut self, data: &Vec<u8>) {
-    self.data.push(data.clone());
+  fn add_data(&mut self, data: &[u8]) {
+    self.data.push(data.to_owned());
   }
 }
 
