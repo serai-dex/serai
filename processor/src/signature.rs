@@ -1,5 +1,5 @@
 use std::{thread, collections::HashMap};
-use std::{env, str};
+use std::{env, str, fmt};
 use rdkafka::{
   producer::{BaseRecord, ProducerContext, ThreadedProducer},
   consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance},
@@ -7,11 +7,29 @@ use rdkafka::{
 };
 use message_box::MessageBox;
 use std::time::Duration;
-use rdkafka::message::BorrowedMessage;
 
 use serde::{Deserialize};
 use crate::ProcessorConfig;
 use crate::core::ChainConfig;
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+enum Coin{
+  SRI,
+  BTC,
+  ETH,
+  XMR
+}
+
+impl fmt::Display for Coin {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+      match self {
+        Coin::SRI => write!(f, "SRI"),
+        Coin::BTC => write!(f, "BTC"),
+        Coin::ETH => write!(f, "ETH"),
+        Coin::XMR => write!(f, "XMR"),
+      }
+  }
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct SignatureProcess {
@@ -59,7 +77,7 @@ impl SignatureProcess {
 fn start_pubkey_consumer() {
   let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "coord_pubkey")
+    .set("group.id", "Coord_Pubkey")
     .set("auto.offset.reset", "smallest")
     .create_with_context(ConsumerCallbackLogger {})
     .expect("invalid consumer config");
@@ -81,15 +99,15 @@ fn start_pubkey_consumer() {
 }
 
 // Create/Start Public Consumer
-fn start_public_consumer(coin_hashmap: &HashMap<String, bool>) {
+fn start_public_consumer(coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
-    if value == true {
-      let mut group_id = String::from(&key);
-      group_id.push_str("_public");
-      let mut topic = String::from(&key).to_uppercase();
+    if *value == true {
+      let group_id = &mut key.to_string();
+      group_id.push_str("_Public");
+      let topic = &mut key.to_string();
       topic.push_str("_Topic");
       initialize_consumer(&group_id, &topic, None, None, "public");
     }
@@ -97,19 +115,19 @@ fn start_public_consumer(coin_hashmap: &HashMap<String, bool>) {
 }
 
 // Create/Start Private Consumer
-fn start_private_consumer(coin_hashmap: &HashMap<String, bool>) {
+fn start_private_consumer(coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
-    if value == true {
-      let mut group_id = String::from(&key);
-      group_id.push_str("_private");
-      let mut topic = String::from(&key).to_uppercase();
+    if *value == true {
+      let group_id = &mut key.to_string();
+      group_id.push_str("_Private");
+      let topic = &mut key.to_string();
       topic.push_str("_Topic");
-      let mut env_key = String::from(&key).to_uppercase();
+      let env_key = &mut key.to_string();
       env_key.push_str("_PRIV");
-      initialize_consumer(&group_id, &topic, Some(env_key.to_string()), Some(&key), "private");
+      initialize_consumer(&group_id, &topic, Some(env_key.to_string()), Some(&key.to_string()), "private");
     }
   }
 }
@@ -223,16 +241,16 @@ fn initialize_consumer(
 }
 
 // Create Pubkey Producer & Send PubKey
-fn start_pubkey_producer(coin_hashmap: &HashMap<String, bool>) {
+fn start_pubkey_producer(coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
-    if value == true {
-      let mut topic = String::from(&key).to_uppercase();
+    if *value == true {
+      let topic = &mut key.to_string();
       topic.push_str("_Topic");
-      let mut env_key = String::from(&key).to_uppercase();
+      let env_key = &mut key.to_string();
       env_key.push_str("_PUB");
-      let processor_id = retrieve_message_box_id(&key);
+      let processor_id = retrieve_message_box_id(&key.to_string());
       send_pubkey_from_producer(&topic, env_key.to_string(), processor_id);
     }
   }
@@ -261,7 +279,7 @@ fn process_received_pubkey() {
   let mut coord_key_found = false;
   while !coord_key_found {
     let coord_pub_check = env::var("COORD_PUB");
-    if (!coord_pub_check.is_err()) {
+    if !coord_pub_check.is_err() {
       println!("Coord Pubkey Ready");
       coord_key_found = true;
     } else {
@@ -271,36 +289,57 @@ fn process_received_pubkey() {
 }
 
 // Create Hashmap based on coins
-fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<String, bool> {
+fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<Coin, bool> {
   // Create Hashmap based on coins
   let j = serde_json::to_string(&chain_config).unwrap();
-  let coins: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
+  let mut coins: HashMap<Coin, bool> = HashMap::new();
+  let coins_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
+  for (key, value) in coins_ref.into_iter() {
+    if value == true {
+      match key.as_str() {
+        "sri" => {
+          coins.insert(Coin::SRI, true);
+        },
+        "btc" => {
+          coins.insert(Coin::BTC, true);
+        },
+        "eth" => {
+          coins.insert(Coin::ETH, true);
+        },
+        "xmr" => {
+          coins.insert(Coin::XMR, true);
+        },
+        &_ => {},
+      };
+    }
+  }
   coins
 }
 
 // Requests Coin ID from Message Box
 fn retrieve_message_box_id(coin: &String) -> &'static str {
   let id = match coin.as_str() {
-    "btc" => message_box::ids::BTC_PROCESSOR,
-    "eth" => message_box::ids::ETH_PROCESSOR,
-    "xmr" => message_box::ids::XMR_PROCESSOR,
+    "SRI" => message_box::ids::SRI_PROCESSOR,
+    "BTC" => message_box::ids::BTC_PROCESSOR,
+    "ETH" => message_box::ids::ETH_PROCESSOR,
+    "XMR" => message_box::ids::XMR_PROCESSOR,
     &_ => "",
   };
   id
 }
 
-fn start_pub_priv_producer(coin_hashmap: &HashMap<String, bool>) {
+fn start_pub_priv_producer(coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
-    if value == true {
-      let mut topic = String::from(&key).to_uppercase();
+    if *value == true {
+      let topic = &mut key.to_string();
       topic.push_str("_Topic");
-      let mut env_key = String::from(&key).to_uppercase();
+      let env_key = &mut key.to_string();
       env_key.push_str("_PRIV");
 
-      let processor_id = retrieve_message_box_id(&key);
+      let processor_id = retrieve_message_box_id(&key.to_string());
       let mut msg: String = "".to_string();
       msg.push_str(&processor_id);
       msg.push_str(" message to Coordinator");
