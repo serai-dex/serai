@@ -2,15 +2,19 @@
 
 #[frame_support::pallet]
 pub mod pallet {
+  use scale::{Encode, Decode};
+  use scale_info::TypeInfo;
+
+  use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
   use validator_sets_primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + scale_info::TypeInfo {}
+  pub trait Config: frame_system::Config + TypeInfo {}
 
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, MaxEncodedLen)]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
   pub struct GenesisConfig<T: Config> {
     /// Bond requirement to join the initial validator set.
     /// Every participant at genesis will automatically be assumed to have this much bond.
@@ -46,7 +50,7 @@ pub mod pallet {
   const MAX_KEY_LEN: u32 = 96;
   type MaxKeyLen = ConstU32<MAX_KEY_LEN>;
 
-  #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo, MaxEncodedLen)]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
   pub struct ValidatorSet<T: Config> {
     bond: Amount,
     coins: BoundedVec<Coin, MaxCoinsPerSet>,
@@ -70,11 +74,13 @@ pub mod pallet {
   #[pallet::generate_store(pub(super) trait Store)]
   pub struct Pallet<T>(PhantomData<T>);
 
+  /// The details of a validator set instance.
   #[pallet::storage]
   #[pallet::getter(fn validator_set)]
   pub type ValidatorSets<T: Config> =
-    StorageMap<_, Twox64Concat, ValidatorSetInstance, ValidatorSet<T>, ValueQuery>;
+    StorageMap<_, Twox64Concat, ValidatorSetInstance, ValidatorSet<T>, OptionQuery>;
 
+  /// The key for a given validator set instance coin.
   #[pallet::storage]
   #[pallet::getter(fn key)]
   pub type Keys<T: Config> = StorageMap<
@@ -82,6 +88,23 @@ pub mod pallet {
     Twox64Concat,
     (ValidatorSetInstance, Coin),
     BoundedVec<u8, MaxKeyLen>,
+    OptionQuery,
+  >;
+
+  /// If an account has voted for a specific key or not. Prevents them from voting multiple times.
+  #[pallet::storage]
+  #[pallet::getter(fn voted)]
+  pub type Voted<T: Config> =
+    StorageMap<_, Blake2_128Concat, (T::AccountId, BoundedVec<u8, MaxKeyLen>), (), OptionQuery>;
+
+  /// How many times a key has been voted for. Once consensus is reached, the keys will be adopted.
+  #[pallet::storage]
+  #[pallet::getter(fn vote_count)]
+  pub type VoteCount<T: Config> = StorageMap<
+    _,
+    Blake2_128Concat,
+    (ValidatorSetInstance, Coin, BoundedVec<u8, MaxKeyLen>),
+    u16,
     ValueQuery,
   >;
 
@@ -102,22 +125,78 @@ pub mod pallet {
 
       ValidatorSets::<T>::set(
         ValidatorSetInstance(Session(0), ValidatorSetIndex(1)),
-        ValidatorSet {
+        Some(ValidatorSet {
           bond: self.bond,
           coins: BoundedVec::try_from(coins).unwrap(),
           participants: BoundedVec::try_from(participants).unwrap(),
-        },
+        }),
       );
     }
   }
 
-  /*
-  TODO: Support voting on keys
+  #[pallet::error]
+  pub enum Error<T> {
+    /// Validator Set doesn't exist.
+    NonExistentValidatorSet,
+    /// Non-validator is voting.
+    NotValidator,
+    /// Validator Set already generated keys.
+    AlreadyGeneratedKeys,
+    /// Vvalidator has already voted for these keys.
+    AlreadyVoted,
+  }
+
   #[pallet::call]
   impl<T: Config> Pallet<T> {
-    pub fn vote()
+    #[pallet::weight(0)] // TODO
+    pub fn vote(
+      origin: OriginFor<T>,
+      index: ValidatorSetIndex,
+      coin: Coin,
+      key: BoundedVec<u8, MaxKeyLen>,
+    ) -> DispatchResult {
+      let signer = ensure_signed(origin)?;
+      // TODO: Do we need to check key is within bounds?
+
+      // TODO: Get session
+      let session: Session = Session(0);
+
+      // Confirm a key hasn't been set for this set instance
+      let instance = ValidatorSetInstance(session, index);
+      if Keys::<T>::get((instance, coin)).is_some() {
+        Err(Error::<T>::AlreadyGeneratedKeys)?;
+      }
+
+      // Confirm the signer is a validator in the set
+      let set = ValidatorSets::<T>::get(instance).ok_or(Error::<T>::NonExistentValidatorSet)?;
+
+      if set.participants.iter().any(|participant| participant.0 == signer) {
+        Err(Error::<T>::NotValidator)?;
+      }
+
+      // Confirm this signer hasn't already voted for these keys
+      if Voted::<T>::get((&signer, &key)).is_some() {
+        Err(Error::<T>::AlreadyVoted)?;
+      }
+      Voted::<T>::set((&signer, &key), Some(()));
+
+      // Add their vote
+      let votes = VoteCount::<T>::mutate((instance, coin, &key), |value| {
+        *value += 1;
+        *value
+      });
+
+      // TODO: Emit Vote event
+
+      // If we've reached consensus, set the key
+      if usize::try_from(votes).unwrap() == set.participants.len() {
+        Keys::<T>::set((instance, coin), Some(key));
+        // TODO: Emit KeyGen event
+      }
+
+      Ok(())
+    }
   }
-  */
 
   // TODO: Support choosing validator set participants to form a Tendermint session
   // TODO: Support session rotation
