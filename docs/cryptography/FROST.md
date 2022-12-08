@@ -15,12 +15,12 @@ also modular so formats which aren't naive like the IETF's can be used.
 
 In order to support algorithms which require their nonces be represented across
 multiple generators, FROST supports providing a nonce's commitments across
-multiple generators. In order to ensure their correctness,
+multiple generators. In order to ensure their correctness, an extended
 [CP93's Discrete Log Equality Proof](https://chaum.com/wp-content/uploads/2021/12/Wallet_Databases.pdf)
-is used. `2 * (n - 1)` proofs are included, since FROST nonces are binomial.
-Each pair of proofs prove discrete log equality between the first pair of
-commitments and each sequential pair. In the future, a single pair of DLEq
-proofs, proving for all generators, may be provided.
+is used. The extension is simply to transcript `n` generators, instead of just
+two, enabling proving for all of them at once. Since FROST nonces are binomial,
+two DLEq proofs are provided, one for each nonce component. In the future, a
+modified proof proving for both components simultaneously may be used.
 
 As some algorithms require multiple nonces, effectively including multiple
 Schnorr signatures within one signature, the library also supports providing
