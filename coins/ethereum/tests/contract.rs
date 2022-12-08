@@ -51,9 +51,12 @@ async fn test_ecrecover_hack() {
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
+  let algo = Algo::<Secp256k1, crypto::EthereumHram>::new();
   let sig = sign(
     &mut OsRng,
-    algorithm_machines(&mut OsRng, Algo::<Secp256k1, crypto::EthereumHram>::new(), &keys),
+    algo.clone(),
+    keys.clone(),
+    algorithm_machines(&mut OsRng, algo, &keys),
     full_message,
   );
   let mut processed_sig =
