@@ -200,10 +200,6 @@ impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
   }
 }
 
-impl staking_pallet::Config for Runtime {
-  type Currency = Balances;
-}
-
 impl validator_sets_pallet::Config for Runtime {}
 
 impl pallet_session::Config for Runtime {
