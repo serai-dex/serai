@@ -23,8 +23,6 @@ wallet.
 - `processor`: A generic chain processor to process data for Serai and process
   events from Serai, executing transactions as expected and needed.
 
-- `contracts`: Smart Contracts implementing Serai's functionality.
-
 - `substrate`: Substrate crates used to instantiate the Serai network.
 
 ### Links
