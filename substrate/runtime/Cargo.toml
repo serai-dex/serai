@@ -77,7 +77,6 @@ std = [
   "pallet-balances/std",
   "pallet-transaction-payment/std",
 
-  "staking-pallet/std",
   "validator-sets-pallet/std",
   "pallet-session/std",
   "pallet-tendermint/std",
