@@ -53,10 +53,7 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     .iter()
     .filter_map(|(i, keys)| {
       if included.contains(i) {
-        Some((
-          *i,
-          AlgorithmMachine::new(algorithm.clone(), keys.clone(), &included.clone()).unwrap(),
-        ))
+        Some((*i, AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap()))
       } else {
         None
       }

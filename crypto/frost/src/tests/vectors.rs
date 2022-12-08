@@ -135,15 +135,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
   let mut machines = vec![];
   for i in &vectors.included {
-    machines.push((
-      i,
-      AlgorithmMachine::new(
-        Schnorr::<C, H>::new(),
-        keys[i].clone(),
-        &vectors.included.to_vec().clone(),
-      )
-      .unwrap(),
-    ));
+    machines.push((i, AlgorithmMachine::new(Schnorr::<C, H>::new(), keys[i].clone()).unwrap()));
   }
 
   let mut commitments = HashMap::new();

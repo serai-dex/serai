@@ -22,8 +22,9 @@ use transcript::{Transcript, RecommendedTranscript};
 use dalek_ff_group as dfg;
 use dleq::DLEqProof;
 use frost::{
+  dkg::lagrange,
   curve::Ed25519,
-  FrostError, ThresholdView,
+  FrostError, ThresholdKeys, ThresholdView,
   algorithm::{WriteAddendum, Algorithm},
 };
 
@@ -103,7 +104,7 @@ struct Interim {
 pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
-  H: EdwardsPoint,
+  pub(crate) H: EdwardsPoint,
   // Merged here as CLSAG needs it, passing it would be a mess, yet having it beforehand requires
   // an extra round
   image: EdwardsPoint,
@@ -142,6 +143,20 @@ impl ClsagMultisig {
   }
 }
 
+pub(crate) fn add_key_image_share(
+  image: &mut EdwardsPoint,
+  generator: EdwardsPoint,
+  offset: Scalar,
+  included: &[u16],
+  participant: u16,
+  share: EdwardsPoint,
+) {
+  if image.is_identity() {
+    *image = generator * offset;
+  }
+  *image += share * lagrange::<dfg::Scalar>(participant, included).0;
+}
+
 impl Algorithm<Ed25519> for ClsagMultisig {
   type Transcript = RecommendedTranscript;
   type Addendum = ClsagAddendum;
@@ -154,10 +169,10 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    view: &ThresholdView<Ed25519>,
+    keys: &ThresholdKeys<Ed25519>,
   ) -> ClsagAddendum {
     ClsagAddendum {
-      key_image: dfg::EdwardsPoint(self.H) * view.secret_share().deref(),
+      key_image: dfg::EdwardsPoint(self.H) * keys.secret_share().deref(),
       dleq: DLEqProof::prove(
         rng,
         // Doesn't take in a larger transcript object due to the usage of this
@@ -167,7 +182,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
         // try to merge later in some form, when it should instead just merge xH (as it does)
         &mut dleq_transcript(),
         &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)],
-        view.secret_share(),
+        keys.secret_share(),
       ),
     }
   }
@@ -205,12 +220,19 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       .verify(
         &mut dleq_transcript(),
         &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)],
-        &[view.verification_share(l), addendum.key_image],
+        &[view.original_verification_share(l), addendum.key_image],
       )
       .map_err(|_| FrostError::InvalidPreprocess(l))?;
 
     self.transcript.append_message(b"key_image_share", addendum.key_image.compress().to_bytes());
-    self.image += addendum.key_image.0;
+    add_key_image_share(
+      &mut self.image,
+      self.H,
+      view.offset().0,
+      &view.included(),
+      l,
+      addendum.key_image.0,
+    );
 
     Ok(())
   }
