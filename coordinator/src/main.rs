@@ -40,6 +40,14 @@ async fn main() {
         .takes_value(true)
         .default_value("./config/"),
     )
+    .arg(
+      Arg::with_name("topic_id")
+        .short("ti")
+        .long("topic_id")
+        .help("The id used as a unique prefix for kafka topics.")
+        .takes_value(true)
+        .default_value("default"),
+    )
     .get_matches();
 
   // Load Config / Chains
@@ -50,9 +58,12 @@ async fn main() {
 
   // Start Core Process
   tokio::spawn(async move {
-      let core_process = CoreProcess::new(config);
-      core_process.run();
+    let core_process = CoreProcess::new(config);
+    core_process.run();
   });
+
+  // Load kafka topic id
+  let topic_id_arg = args.value_of("topic_id").unwrap();
 
   // Start Signature Process
   let sig_config = CoordinatorConfig::new(String::from(path_arg)).unwrap();
