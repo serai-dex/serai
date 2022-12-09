@@ -10,7 +10,7 @@ test!(
       let arbitrary_data = Vec::from("this is an arbitrary data less than 255 bytes");
 
       // make sure we can add to tx
-      let result = builder.add_data(&arbitrary_data);
+      let result = builder.add_data(arbitrary_data.clone());
       assert!(result.is_ok());
 
       builder.add_payment(addr, 5);
@@ -34,7 +34,7 @@ test!(
 
       // add tx multiple times
       for _ in 0 .. 5 {
-        let result = builder.add_data(&arbitrary_data);
+        let result = builder.add_data(arbitrary_data.clone());
         assert!(result.is_ok());
       }
 
@@ -64,16 +64,15 @@ test!(
       }
 
       // make sure we get an error if we try to add it to tx
-      let mut result = builder.add_payment(addr, 5).add_data(&arbitrary_data);
-      assert!(result.is_err());
-      matches!(result.err(), Some(TransactionError::TooMuchData));
+      let mut result = builder.add_payment(addr, 5).add_data(arbitrary_data.clone());
+      assert_eq!(result, Err(TransactionError::TooMuchData));
 
       // reduce data size and re-try
       arbitrary_data.swap_remove(0);
-      result = builder.add_data(&arbitrary_data);
+      result = builder.add_data(arbitrary_data);
 
       assert!(result.is_ok());
-      (builder.build().unwrap(), (arbitrary_data,))
+      (builder.build().unwrap(), ())
     },
     |_, _, _, _| async move {},
   ),

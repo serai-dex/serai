@@ -24,7 +24,7 @@ use crate::{
   rpc::{Rpc, RpcError},
   wallet::{
     address::MoneroAddress, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
-    uniqueness, shared_key, commitment_mask, amount_encryption,
+    uniqueness, shared_key, commitment_mask, amount_encryption, extra::MAX_TX_EXTRA_NONCE_SIZE,
   },
 };
 
@@ -221,7 +221,7 @@ impl SignableTransaction {
     }
 
     for part in &data {
-      if part.len() > 255 {
+      if part.len() > MAX_TX_EXTRA_NONCE_SIZE {
         Err(TransactionError::TooMuchData)?;
       }
     }

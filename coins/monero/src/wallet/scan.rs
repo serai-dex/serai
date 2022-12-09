@@ -83,7 +83,7 @@ impl Metadata {
     res.extend(self.subaddress.1.to_le_bytes());
     res.extend(self.payment_id);
 
-    res.extend([u8::try_from(self.arbitrary_data.len()).unwrap()]);
+    res.extend(u32::try_from(self.arbitrary_data.len()).unwrap().to_le_bytes());
     for part in &self.arbitrary_data {
       res.extend([u8::try_from(part.len()).unwrap()]);
       res.extend(part);
@@ -97,7 +97,7 @@ impl Metadata {
       payment_id: read_bytes(r)?,
       arbitrary_data: {
         let mut data = vec![];
-        for _ in 0 .. read_byte(r)? {
+        for _ in 0 .. read_u32(r)? {
           let len = read_byte(r)?;
           data.push(read_raw_vec(read_byte, usize::from(len), r)?);
         }
@@ -128,8 +128,8 @@ impl ReceivedOutput {
     self.data.commitment.clone()
   }
 
-  pub fn arbitrary_data(&self) -> Vec<Vec<u8>> {
-    self.metadata.arbitrary_data.clone()
+  pub fn arbitrary_data(&self) -> &[Vec<u8>] {
+    &self.metadata.arbitrary_data
   }
 
   pub fn serialize(&self) -> Vec<u8> {

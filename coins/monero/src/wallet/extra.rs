@@ -10,6 +10,8 @@ use crate::serialize::{
   write_point, write_vec,
 };
 
+pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) enum PaymentId {
   Unencrypted([u8; 32]),
@@ -91,7 +93,7 @@ impl ExtraField {
       1 => ExtraField::PublicKey(read_point(r)?),
       2 => ExtraField::Nonce({
         let nonce = read_vec(read_byte, r)?;
-        if nonce.len() > 255 {
+        if nonce.len() > MAX_TX_EXTRA_NONCE_SIZE {
           Err(io::Error::new(io::ErrorKind::Other, "too long nonce"))?;
         }
         nonce
