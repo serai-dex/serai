@@ -23,10 +23,13 @@ use crate::{
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{
-    address::Address, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
+    address::MoneroAddress, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
     uniqueness, shared_key, commitment_mask, amount_encryption,
   },
 };
+
+mod builder;
+pub use builder::SignableTransactionBuilder;
 
 #[cfg(feature = "multisig")]
 mod multisig;
@@ -47,7 +50,7 @@ impl SendOutput {
   fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     unique: [u8; 32],
-    output: (usize, (Address, u64)),
+    output: (usize, (MoneroAddress, u64)),
   ) -> (SendOutput, Option<[u8; 8]>) {
     let o = output.0;
     let output = output.1;
@@ -156,7 +159,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
 }
 
 /// Fee struct, defined as a per-unit cost and a mask for rounding purposes.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Fee {
   pub per_weight: u64,
   pub mask: u64,
@@ -173,7 +176,7 @@ impl Fee {
 pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,
-  payments: Vec<(Address, u64)>,
+  payments: Vec<(MoneroAddress, u64)>,
   data: Option<Vec<u8>>,
   fee: u64,
 }
@@ -186,15 +189,15 @@ impl SignableTransaction {
   pub fn new(
     protocol: Protocol,
     inputs: Vec<SpendableOutput>,
-    mut payments: Vec<(Address, u64)>,
-    change_address: Option<Address>,
+    mut payments: Vec<(MoneroAddress, u64)>,
+    change_address: Option<MoneroAddress>,
     data: Option<Vec<u8>>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure there's only one payment ID
     {
       let mut payment_ids = 0;
-      let mut count = |addr: Address| {
+      let mut count = |addr: MoneroAddress| {
         if addr.payment_id().is_some() {
           payment_ids += 1
         }
@@ -359,7 +362,7 @@ impl SignableTransaction {
 
   /// Sign this transaction.
   pub async fn sign<R: RngCore + CryptoRng>(
-    &mut self,
+    mut self,
     rng: &mut R,
     rpc: &Rpc,
     spend: &Zeroizing<Scalar>,

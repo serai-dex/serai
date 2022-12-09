@@ -1,0 +1,30 @@
+name: Daily Deny Check
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  deny:
+    name: Run cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Advisory Cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/advisory-db
+          key: rust-advisory-db
+
+      - name: Install cargo
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install cargo deny
+        run: cargo install --locked cargo-deny
+
+      - name: Run cargo deny
+        run: cargo deny -L error --all-features check

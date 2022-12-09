@@ -75,7 +75,6 @@ pub trait Coin {
   async fn attempt_send(
     &self,
     transaction: Self::SignableTransaction,
-    included: &[u16],
   ) -> Result<Self::TransactionMachine, CoinError>;
 
   async fn publish_transaction(

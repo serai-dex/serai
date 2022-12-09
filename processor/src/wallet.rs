@@ -60,7 +60,7 @@ pub trait CoinDb {
 }
 
 pub struct MemCoinDb {
-  // Height this coin has been scanned to
+  // Block number of the block this coin has been scanned to
   scanned_block: usize,
   // Acknowledged block for a given canonical block
   acknowledged_blocks: HashMap<usize, usize>,
@@ -180,6 +180,7 @@ fn refine_inputs<C: Coin>(
   }
 }
 
+#[allow(clippy::type_complexity)]
 fn select_inputs_outputs<C: Coin>(
   inputs: &mut Vec<C::Output>,
   outputs: &mut Vec<(C::Address, u64)>,
@@ -200,6 +201,7 @@ fn select_inputs_outputs<C: Coin>(
   (selected, outputs)
 }
 
+#[allow(clippy::type_complexity)]
 pub struct Wallet<D: CoinDb, C: Coin> {
   db: D,
   coin: C,
@@ -337,10 +339,8 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     &mut self,
     network: &mut N,
     prepared: C::SignableTransaction,
-    included: Vec<u16>,
   ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
-    let attempt =
-      self.coin.attempt_send(prepared, &included).await.map_err(SignError::CoinError)?;
+    let attempt = self.coin.attempt_send(prepared).await.map_err(SignError::CoinError)?;
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);
     let commitments = network

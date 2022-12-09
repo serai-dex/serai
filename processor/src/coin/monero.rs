@@ -12,7 +12,7 @@ use monero_serai::{
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
-    address::{Network, Address},
+    address::{Network, MoneroAddress},
     Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
@@ -70,7 +70,7 @@ pub struct Monero {
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    Monero { rpc: Rpc::new(url), view: additional_key::<Monero>(0).0 }
+    Monero { rpc: Rpc::new(url).unwrap(), view: additional_key::<Monero>(0).0 }
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
@@ -88,7 +88,7 @@ impl Monero {
   }
 
   #[cfg(test)]
-  fn empty_address() -> Address {
+  fn empty_address() -> MoneroAddress {
     Self::empty_scanner().address()
   }
 }
@@ -105,7 +105,7 @@ impl Coin for Monero {
   type SignableTransaction = SignableTransaction;
   type TransactionMachine = TransactionMachine;
 
-  type Address = Address;
+  type Address = MoneroAddress;
 
   const ID: &'static [u8] = b"Monero";
   const CONFIRMATIONS: usize = 10;
@@ -150,8 +150,12 @@ impl Coin for Monero {
   }
 
   async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
-    let tx_block_number =
-      self.rpc.get_transaction_block_number(tx).await.map_err(|_| CoinError::ConnectionError)?;
+    let tx_block_number = self
+      .rpc
+      .get_transaction_block_number(tx)
+      .await
+      .map_err(|_| CoinError::ConnectionError)?
+      .unwrap_or(usize::MAX);
     Ok((self.get_latest_block_number().await?.saturating_sub(tx_block_number) + 1) >= 10)
   }
 
@@ -161,7 +165,7 @@ impl Coin for Monero {
     transcript: RecommendedTranscript,
     block_number: usize,
     mut inputs: Vec<Output>,
-    payments: &[(Address, u64)],
+    payments: &[(MoneroAddress, u64)],
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
     let spend = keys.group_key();
@@ -184,7 +188,6 @@ impl Coin for Monero {
   async fn attempt_send(
     &self,
     transaction: SignableTransaction,
-    included: &[u16],
   ) -> Result<Self::TransactionMachine, CoinError> {
     transaction
       .actual
@@ -194,7 +197,6 @@ impl Coin for Monero {
         transaction.keys.clone(),
         transaction.transcript.clone(),
         transaction.height,
-        included.to_vec(),
       )
       .await
       .map_err(|_| CoinError::ConnectionError)
@@ -205,7 +207,6 @@ impl Coin for Monero {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
     self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-
     Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
 

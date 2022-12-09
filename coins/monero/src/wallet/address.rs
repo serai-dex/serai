@@ -1,3 +1,4 @@
+use core::{marker::PhantomData, fmt::Debug};
 use std::string::ToString;
 
 use thiserror::Error;
@@ -8,6 +9,7 @@ use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use base58_monero::base58::{encode_check, decode_check};
 
+/// The network this address is for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum Network {
   Mainnet,
@@ -26,14 +28,6 @@ pub enum AddressType {
 }
 
 impl AddressType {
-  fn network_bytes(network: Network) -> (u8, u8, u8, u8) {
-    match network {
-      Network::Mainnet => (18, 19, 42, 70),
-      Network::Testnet => (53, 54, 63, 111),
-      Network::Stagenet => (24, 25, 36, 86),
-    }
-  }
-
   pub fn subaddress(&self) -> bool {
     matches!(self, AddressType::Subaddress) || matches!(self, AddressType::Featured(true, ..))
   }
@@ -53,12 +47,40 @@ impl AddressType {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub struct AddressMeta {
+/// A type which returns the byte for a given address.
+pub trait AddressBytes: Clone + Copy + PartialEq + Eq + Debug {
+  fn network_bytes(network: Network) -> (u8, u8, u8, u8);
+}
+
+/// Address bytes for Monero.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MoneroAddressBytes;
+impl AddressBytes for MoneroAddressBytes {
+  fn network_bytes(network: Network) -> (u8, u8, u8, u8) {
+    match network {
+      Network::Mainnet => (18, 19, 42, 70),
+      Network::Testnet => (53, 54, 63, 111),
+      Network::Stagenet => (24, 25, 36, 86),
+    }
+  }
+}
+
+/// Address metadata.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct AddressMeta<B: AddressBytes> {
+  _bytes: PhantomData<B>,
   pub network: Network,
   pub kind: AddressType,
 }
 
+impl<B: AddressBytes> Zeroize for AddressMeta<B> {
+  fn zeroize(&mut self) {
+    self.network.zeroize();
+    self.kind.zeroize();
+  }
+}
+
+/// Error when decoding an address.
 #[derive(Clone, Error, Debug)]
 pub enum AddressError {
   #[error("invalid address byte")]
@@ -75,10 +97,10 @@ pub enum AddressError {
   DifferentNetwork,
 }
 
-impl AddressMeta {
+impl<B: AddressBytes> AddressMeta<B> {
   #[allow(clippy::wrong_self_convention)]
   fn to_byte(&self) -> u8 {
-    let bytes = AddressType::network_bytes(self.network);
+    let bytes = B::network_bytes(self.network);
     match self.kind {
       AddressType::Standard => bytes.0,
       AddressType::Integrated(_) => bytes.1,
@@ -87,11 +109,16 @@ impl AddressMeta {
     }
   }
 
+  /// Create an address's metadata.
+  pub fn new(network: Network, kind: AddressType) -> Self {
+    AddressMeta { _bytes: PhantomData, network, kind }
+  }
+
   // Returns an incomplete type in the case of Integrated/Featured addresses
-  fn from_byte(byte: u8) -> Result<AddressMeta, AddressError> {
+  fn from_byte(byte: u8) -> Result<Self, AddressError> {
     let mut meta = None;
     for network in [Network::Mainnet, Network::Testnet, Network::Stagenet] {
-      let (standard, integrated, subaddress, featured) = AddressType::network_bytes(network);
+      let (standard, integrated, subaddress, featured) = B::network_bytes(network);
       if let Some(kind) = match byte {
         _ if byte == standard => Some(AddressType::Standard),
         _ if byte == integrated => Some(AddressType::Integrated([0; 8])),
@@ -99,7 +126,7 @@ impl AddressMeta {
         _ if byte == featured => Some(AddressType::Featured(false, None, false)),
         _ => None,
       } {
-        meta = Some(AddressMeta { network, kind });
+        meta = Some(AddressMeta::new(network, kind));
         break;
       }
     }
@@ -120,14 +147,23 @@ impl AddressMeta {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub struct Address {
-  pub meta: AddressMeta,
+/// A Monero address, composed of metadata and a spend/view key.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Address<B: AddressBytes> {
+  pub meta: AddressMeta<B>,
   pub spend: EdwardsPoint,
   pub view: EdwardsPoint,
 }
 
-impl ToString for Address {
+impl<B: AddressBytes> Zeroize for Address<B> {
+  fn zeroize(&mut self) {
+    self.meta.zeroize();
+    self.spend.zeroize();
+    self.view.zeroize();
+  }
+}
+
+impl<B: AddressBytes> ToString for Address<B> {
   fn to_string(&self) -> String {
     let mut data = vec![self.meta.to_byte()];
     data.extend(self.spend.compress().to_bytes());
@@ -145,12 +181,12 @@ impl ToString for Address {
   }
 }
 
-impl Address {
-  pub fn new(meta: AddressMeta, spend: EdwardsPoint, view: EdwardsPoint) -> Address {
+impl<B: AddressBytes> Address<B> {
+  pub fn new(meta: AddressMeta<B>, spend: EdwardsPoint, view: EdwardsPoint) -> Self {
     Address { meta, spend, view }
   }
 
-  pub fn from_str_raw(s: &str) -> Result<Address, AddressError> {
+  pub fn from_str_raw(s: &str) -> Result<Self, AddressError> {
     let raw = decode_check(s).map_err(|_| AddressError::InvalidEncoding)?;
     if raw.len() < (1 + 32 + 32) {
       Err(AddressError::InvalidLength)?;
@@ -197,7 +233,7 @@ impl Address {
     Ok(Address { meta, spend, view })
   }
 
-  pub fn from_str(s: &str, network: Network) -> Result<Address, AddressError> {
+  pub fn from_str(network: Network, s: &str) -> Result<Self, AddressError> {
     Self::from_str_raw(s).and_then(|addr| {
       if addr.meta.network == network {
         Ok(addr)
@@ -221,5 +257,19 @@ impl Address {
 
   pub fn guaranteed(&self) -> bool {
     self.meta.guaranteed()
+  }
+}
+
+/// Instantiation of the Address type with Monero's network bytes.
+pub type MoneroAddress = Address<MoneroAddressBytes>;
+// Allow re-interpreting of an arbitrary address as a monero address so it can be used with the
+// rest of this library. Doesn't use From as it was conflicting with From<T> for T.
+impl MoneroAddress {
+  pub fn from<B: AddressBytes>(address: Address<B>) -> MoneroAddress {
+    MoneroAddress::new(
+      AddressMeta::new(address.meta.network, address.meta.kind),
+      address.spend,
+      address.view,
+    )
   }
 }

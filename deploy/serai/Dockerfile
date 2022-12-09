@@ -33,7 +33,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/serai/target/release/lib* \
     cargo build --release
 
-
 # Prepare Image
 FROM ubuntu:latest as image
 LABEL description="STAGE 2: Copy and Run"

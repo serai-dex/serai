@@ -25,6 +25,8 @@ use crate::{
 mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
+#[cfg(feature = "multisig")]
+pub(crate) use multisig::add_key_image_share;
 
 lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();
@@ -264,6 +266,10 @@ impl Clsag {
         (-((p * inputs[i].0.deref()) + c)) + nonce.deref();
       inputs[i].0.zeroize();
       nonce.zeroize();
+
+      debug_assert!(clsag
+        .verify(&inputs[i].2.decoys.ring, &inputs[i].1, &pseudo_out, &msg)
+        .is_ok());
 
       res.push((clsag, pseudo_out));
     }

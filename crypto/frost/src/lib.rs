@@ -36,7 +36,7 @@ pub mod sign;
 pub mod tests;
 
 // Validate a map of values to have the expected included participants
-pub(crate) fn validate_map<T>(
+pub fn validate_map<T>(
   map: &HashMap<u16, T>,
   included: &[u16],
   ours: u16,

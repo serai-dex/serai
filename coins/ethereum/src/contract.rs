@@ -19,7 +19,7 @@ abigen!(
 
 pub async fn deploy_schnorr_verifier_contract(
   client: Arc<SignerMiddleware<Provider<Http>, LocalWallet>>,
-) -> Result<schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>> {
+) -> Result<Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>> {
   let path = "./artifacts/Schnorr.sol/Schnorr.json";
   let artifact: ContractBytecode = serde_json::from_reader(File::open(path).unwrap()).unwrap();
   let abi = artifact.abi.unwrap();
@@ -31,7 +31,7 @@ pub async fn deploy_schnorr_verifier_contract(
 }
 
 pub async fn call_verify(
-  contract: &schnorr_mod::Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
+  contract: &Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>,
   params: &ProcessedSignature,
 ) -> Result<()> {
   if contract

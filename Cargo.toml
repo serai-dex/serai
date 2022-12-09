@@ -24,8 +24,12 @@ members = [
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",
 
+  "substrate/tendermint/machine",
+  "substrate/tendermint/primitives",
+  "substrate/tendermint/client",
+  "substrate/tendermint/pallet",
+
   "substrate/runtime",
-  "substrate/consensus",
   "substrate/node",
 
   "contracts/extension",

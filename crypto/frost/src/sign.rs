@@ -4,9 +4,10 @@ use std::{
   collections::HashMap,
 };
 
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use transcript::Transcript;
 
@@ -47,53 +48,15 @@ pub struct Params<C: Curve, A: Algorithm<C>> {
   #[zeroize(skip)]
   algorithm: A,
   keys: ThresholdKeys<C>,
-  view: ThresholdView<C>,
 }
 
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
-  pub fn new(
-    algorithm: A,
-    keys: ThresholdKeys<C>,
-    included: &[u16],
-  ) -> Result<Params<C, A>, FrostError> {
-    let params = keys.params();
-
-    let mut included = included.to_vec();
-    included.sort_unstable();
-
-    // Included < threshold
-    if included.len() < usize::from(params.t()) {
-      Err(FrostError::InvalidSigningSet("not enough signers"))?;
-    }
-    // Invalid index
-    if included[0] == 0 {
-      Err(FrostError::InvalidParticipantIndex(included[0], params.n()))?;
-    }
-    // OOB index
-    if included[included.len() - 1] > params.n() {
-      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], params.n()))?;
-    }
-    // Same signer included multiple times
-    for i in 0 .. (included.len() - 1) {
-      if included[i] == included[i + 1] {
-        Err(FrostError::DuplicatedIndex(included[i]))?;
-      }
-    }
-    // Not included
-    if !included.contains(&params.i()) {
-      Err(FrostError::InvalidSigningSet("signing despite not being included"))?;
-    }
-
-    // Out of order arguments to prevent additional cloning
-    Ok(Params { algorithm, view: keys.view(&included).unwrap(), keys })
+  pub fn new(algorithm: A, keys: ThresholdKeys<C>) -> Result<Params<C, A>, FrostError> {
+    Ok(Params { algorithm, keys })
   }
 
   pub fn multisig_params(&self) -> ThresholdParams {
     self.keys.params()
-  }
-
-  pub fn view(&self) -> ThresholdView<C> {
-    self.view.clone()
   }
 }
 
@@ -110,6 +73,12 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
     self.addendum.write(writer)
   }
 }
+
+/// A cached preprocess. A preprocess MUST only be used once. Reuse will enable third-party
+/// recovery of your private key share. Additionally, this MUST be handled with the same security
+/// as your private key share, as knowledge of it also enables recovery.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct CachedPreprocess(pub [u8; 32]);
 
 /// Trait for the initial state machine of a two-round signing protocol.
 pub trait PreprocessMachine {
@@ -134,12 +103,26 @@ pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
 
 impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a signature with the specified keys.
-  pub fn new(
-    algorithm: A,
-    keys: ThresholdKeys<C>,
-    included: &[u16],
-  ) -> Result<AlgorithmMachine<C, A>, FrostError> {
-    Ok(AlgorithmMachine { params: Params::new(algorithm, keys, included)? })
+  pub fn new(algorithm: A, keys: ThresholdKeys<C>) -> Result<AlgorithmMachine<C, A>, FrostError> {
+    Ok(AlgorithmMachine { params: Params::new(algorithm, keys)? })
+  }
+
+  fn seeded_preprocess(
+    self,
+    seed: Zeroizing<CachedPreprocess>,
+  ) -> (AlgorithmSignMachine<C, A>, Preprocess<C, A::Addendum>) {
+    let mut params = self.params;
+
+    let mut rng = ChaCha20Rng::from_seed(seed.0);
+    let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
+      &mut rng,
+      params.keys.secret_share(),
+      &params.algorithm.nonces(),
+    );
+    let addendum = params.algorithm.preprocess_addendum(&mut rng, &params.keys);
+
+    let preprocess = Preprocess { commitments, addendum };
+    (AlgorithmSignMachine { params, seed, nonces, preprocess: preprocess.clone() }, preprocess)
   }
 
   #[cfg(any(test, feature = "tests"))]
@@ -148,7 +131,12 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     nonces: Vec<Nonce<C>>,
     preprocess: Preprocess<C, A::Addendum>,
   ) -> AlgorithmSignMachine<C, A> {
-    AlgorithmSignMachine { params: self.params, nonces, preprocess }
+    AlgorithmSignMachine {
+      params: self.params,
+      seed: Zeroizing::new(CachedPreprocess([0; 32])),
+      nonces,
+      preprocess,
+    }
   }
 }
 
@@ -161,17 +149,9 @@ impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
     self,
     rng: &mut R,
   ) -> (Self::SignMachine, Preprocess<C, A::Addendum>) {
-    let mut params = self.params;
-
-    let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
-      &mut *rng,
-      params.view().secret_share(),
-      &params.algorithm.nonces(),
-    );
-    let addendum = params.algorithm.preprocess_addendum(rng, &params.view);
-
-    let preprocess = Preprocess { commitments, addendum };
-    (AlgorithmSignMachine { params, nonces, preprocess: preprocess.clone() }, preprocess)
+    let mut seed = Zeroizing::new(CachedPreprocess([0; 32]));
+    rng.fill_bytes(seed.0.as_mut());
+    self.seeded_preprocess(seed)
   }
 }
 
@@ -185,7 +165,11 @@ impl<C: Curve> Writable for SignatureShare<C> {
 }
 
 /// Trait for the second machine of a two-round signing protocol.
-pub trait SignMachine<S> {
+pub trait SignMachine<S>: Sized {
+  /// Params used to instantiate this machine which can be used to rebuild from a cache.
+  type Params: Clone;
+  /// Keys used for signing operations.
+  type Keys;
   /// Preprocess message for this machine.
   type Preprocess: Clone + PartialEq + Writable;
   /// SignatureShare message for this machine.
@@ -193,12 +177,28 @@ pub trait SignMachine<S> {
   /// SignatureMachine this SignMachine turns into.
   type SignatureMachine: SignatureMachine<S, SignatureShare = Self::SignatureShare>;
 
-  /// Read a Preprocess message.
+  /// Cache this preprocess for usage later. This cached preprocess MUST only be used once. Reuse
+  /// of it enables recovery of your private key share. Third-party recovery of a cached preprocess
+  /// also enables recovery of your private key share, so this MUST be treated with the same
+  /// security as your private key share.
+  fn cache(self) -> Zeroizing<CachedPreprocess>;
+
+  /// Create a sign machine from a cached preprocess. After this, the preprocess should be fully
+  /// deleted, as it must never be reused. It is
+  fn from_cache(
+    params: Self::Params,
+    keys: Self::Keys,
+    cache: Zeroizing<CachedPreprocess>,
+  ) -> Result<Self, FrostError>;
+
+  /// Read a Preprocess message. Despite taking self, this does not save the preprocess.
+  /// It must be externally cached and passed into sign.
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess>;
 
   /// Sign a message.
   /// Takes in the participants' preprocess messages. Returns the signature share to be broadcast
-  /// to all participants, over an authenticated channel.
+  /// to all participants, over an authenticated channel. The parties who participate here will
+  /// become the signing set for this session.
   fn sign(
     self,
     commitments: HashMap<u16, Self::Preprocess>,
@@ -210,15 +210,32 @@ pub trait SignMachine<S> {
 #[derive(Zeroize)]
 pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
+  seed: Zeroizing<CachedPreprocess>,
+
   pub(crate) nonces: Vec<Nonce<C>>,
   #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A::Addendum>,
 }
 
 impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachine<C, A> {
+  type Params = A;
+  type Keys = ThresholdKeys<C>;
   type Preprocess = Preprocess<C, A::Addendum>;
   type SignatureShare = SignatureShare<C>;
   type SignatureMachine = AlgorithmSignatureMachine<C, A>;
+
+  fn cache(self) -> Zeroizing<CachedPreprocess> {
+    self.seed
+  }
+
+  fn from_cache(
+    algorithm: A,
+    keys: ThresholdKeys<C>,
+    cache: Zeroizing<CachedPreprocess>,
+  ) -> Result<Self, FrostError> {
+    let (machine, _) = AlgorithmMachine::new(algorithm, keys)?.seeded_preprocess(cache);
+    Ok(machine)
+  }
 
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess> {
     Ok(Preprocess {
@@ -233,7 +250,35 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, SignatureShare<C>), FrostError> {
     let multisig_params = self.params.multisig_params();
-    validate_map(&preprocesses, &self.params.view.included(), multisig_params.i())?;
+
+    let mut included = Vec::with_capacity(preprocesses.len() + 1);
+    included.push(multisig_params.i());
+    for l in preprocesses.keys() {
+      included.push(*l);
+    }
+    included.sort_unstable();
+
+    // Included < threshold
+    if included.len() < usize::from(multisig_params.t()) {
+      Err(FrostError::InvalidSigningSet("not enough signers"))?;
+    }
+    // Invalid index
+    if included[0] == 0 {
+      Err(FrostError::InvalidParticipantIndex(included[0], multisig_params.n()))?;
+    }
+    // OOB index
+    if included[included.len() - 1] > multisig_params.n() {
+      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], multisig_params.n()))?;
+    }
+    // Same signer included multiple times
+    for i in 0 .. (included.len() - 1) {
+      if included[i] == included[i + 1] {
+        Err(FrostError::DuplicatedIndex(included[i]))?;
+      }
+    }
+
+    let view = self.params.keys.view(&included).unwrap();
+    validate_map(&preprocesses, &included, multisig_params.i())?;
 
     {
       // Domain separate FROST
@@ -242,10 +287,10 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
     let nonces = self.params.algorithm.nonces();
     #[allow(non_snake_case)]
-    let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(self.params.view.included().len()));
+    let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(included.len()));
     {
       // Parse the preprocesses
-      for l in &self.params.view.included() {
+      for l in &included {
         {
           self
             .params
@@ -266,7 +311,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
           }
 
           B.insert(*l, commitments);
-          self.params.algorithm.process_addendum(&self.params.view, *l, addendum)?;
+          self.params.algorithm.process_addendum(&view, *l, addendum)?;
         } else {
           let preprocess = preprocesses.remove(l).unwrap();
           preprocess.commitments.transcript(self.params.algorithm.transcript());
@@ -277,7 +322,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
           }
 
           B.insert(*l, preprocess.commitments);
-          self.params.algorithm.process_addendum(&self.params.view, *l, preprocess.addendum)?;
+          self.params.algorithm.process_addendum(&view, *l, preprocess.addendum)?;
         }
       }
 
@@ -333,10 +378,10 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
       })
       .collect::<Vec<_>>();
 
-    let share = self.params.algorithm.sign_share(&self.params.view, &Rs, nonces, msg);
+    let share = self.params.algorithm.sign_share(&view, &Rs, nonces, msg);
 
     Ok((
-      AlgorithmSignatureMachine { params: self.params.clone(), B, Rs, share },
+      AlgorithmSignatureMachine { params: self.params.clone(), view, B, Rs, share },
       SignatureShare(share),
     ))
   }
@@ -359,6 +404,7 @@ pub trait SignatureMachine<S> {
 #[allow(non_snake_case)]
 pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
+  view: ThresholdView<C>,
   B: BindingFactor<C>,
   Rs: Vec<Vec<C::G>>,
   share: C::F,
@@ -376,7 +422,7 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     mut shares: HashMap<u16, SignatureShare<C>>,
   ) -> Result<A::Signature, FrostError> {
     let params = self.params.multisig_params();
-    validate_map(&shares, &self.params.view.included(), params.i())?;
+    validate_map(&shares, &self.view.included(), params.i())?;
 
     let mut responses = HashMap::new();
     responses.insert(params.i(), self.share);
@@ -389,16 +435,16 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     // Perform signature validation instead of individual share validation
     // For the success route, which should be much more frequent, this should be faster
     // It also acts as an integrity check of this library's signing function
-    if let Some(sig) = self.params.algorithm.verify(self.params.view.group_key(), &self.Rs, sum) {
+    if let Some(sig) = self.params.algorithm.verify(self.view.group_key(), &self.Rs, sum) {
       return Ok(sig);
     }
 
     // Find out who misbehaved. It may be beneficial to randomly sort this to have detection be
     // within n / 2 on average, and not gameable to n, though that should be minor
     // TODO
-    for l in &self.params.view.included() {
+    for l in &self.view.included() {
       if !self.params.algorithm.verify_share(
-        self.params.view.verification_share(*l),
+        self.view.verification_share(*l),
         &self.B.bound(*l),
         responses[l],
       ) {

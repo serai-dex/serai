@@ -98,5 +98,6 @@ impl<D: Clone + SecureDigest> Transcript for DigestTranscript<D> {
   }
 }
 
+/// The recommended transcript, secure against length-extension attacks.
 #[cfg(feature = "recommended")]
 pub type RecommendedTranscript = DigestTranscript<blake2::Blake2b512>;
