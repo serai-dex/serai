@@ -4631,6 +4631,7 @@ dependencies = [
  "hkdf",
  "minimal-ed448",
  "multiexp",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "schnorr-signatures",
  "serde_json",

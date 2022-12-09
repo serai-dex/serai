@@ -25,6 +25,8 @@ use crate::{
 mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
+#[cfg(feature = "multisig")]
+pub(crate) use multisig::add_key_image_share;
 
 lazy_static! {
   static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();

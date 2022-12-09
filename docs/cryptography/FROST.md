@@ -35,3 +35,22 @@ The public key signed for is also offset by this value. During the signing
 process, the offset is explicitly transcripted. Then, the offset is divided by
 `p`, the amount of participating signers, and each signer adds it to their
 post-interpolation key share.
+
+# Caching
+
+modular-frost supports caching a preprocess. This is done by having all
+preprocesses use a seeded RNG. Accordingly, the entire preprocess can be derived
+from the RNG seed, making the cache just the seed.
+
+Reusing preprocesses would enable a third-party to recover your private key
+share. Accordingly, you MUST not reuse preprocesses. Third-party knowledge of
+your preprocess would also enable their recovery of your private key share.
+Accordingly, you MUST treat cached preprocesses with the same security as your
+private key share.
+
+Since a reused seed will lead to a reused preprocess, seeded RNGs are generally
+frowned upon when doing multisignature operations. This isn't an issue as each
+new preprocess obtains a fresh seed from the specified RNG. Assuming the
+provided RNG isn't generating the same seed multiple times, the only way for
+this seeded RNG to fail is if a preprocess is loaded multiple times, which was
+already a failure point.

@@ -284,10 +284,12 @@ pub struct ThresholdKeys<C: Ciphersuite> {
 /// View of keys passed to algorithm implementations.
 #[derive(Clone, Zeroize)]
 pub struct ThresholdView<C: Ciphersuite> {
+  offset: C::F,
   group_key: C::G,
-  #[zeroize(skip)]
   included: Vec<u16>,
   secret_share: Zeroizing<C::F>,
+  #[zeroize(skip)]
+  original_verification_shares: HashMap<u16, C::G>,
   #[zeroize(skip)]
   verification_shares: HashMap<u16, C::G>,
 }
@@ -347,10 +349,12 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     let offset_verification_share = C::generator() * offset_share;
 
     Ok(ThresholdView {
+      offset: self.offset.unwrap_or_else(C::F::zero),
       group_key: self.group_key(),
       secret_share: Zeroizing::new(
         (lagrange::<C::F>(self.params().i, included) * self.secret_share().deref()) + offset_share,
       ),
+      original_verification_shares: self.verification_shares(),
       verification_shares: self
         .verification_shares()
         .iter()
@@ -364,6 +368,10 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
 }
 
 impl<C: Ciphersuite> ThresholdView<C> {
+  pub fn offset(&self) -> C::F {
+    self.offset
+  }
+
   pub fn group_key(&self) -> C::G {
     self.group_key
   }
@@ -374,6 +382,10 @@ impl<C: Ciphersuite> ThresholdView<C> {
 
   pub fn secret_share(&self) -> &Zeroizing<C::F> {
     &self.secret_share
+  }
+
+  pub fn original_verification_share(&self, l: u16) -> C::G {
+    self.original_verification_shares[&l]
   }
 
   pub fn verification_share(&self, l: u16) -> C::G {
