@@ -18,12 +18,23 @@ WORKDIR /serai
 RUN rustup update
 
 # Install Solc @ 0.8.16
-RUN --mount=type=cache,target=/root/.cache/ pip3 install solc-select==0.2.1
-RUN --mount=type=cache,target=/root/.cache/ solc-select install 0.8.16
-RUN --mount=type=cache,target=/root/.cache/ solc-select use 0.8.16
+RUN --mount=type=cache,target=/root/.cache/ \
+    --mount=type=cache,target=/root/.local/ \
+    --mount=type=cache,target=/root/.solc-select \
+    pip3 install solc-select==0.2.1
+RUN --mount=type=cache,target=/root/.cache/ \
+    --mount=type=cache,target=/root/.local/ \
+    --mount=type=cache,target=/root/.solc-select \ 
+    solc-select install 0.8.16
+RUN --mount=type=cache,target=/root/.cache/ \
+--mount=type=cache,target=/root/.local/ \
+--mount=type=cache,target=/root/.solc-select \
+ solc-select use 0.8.16
 
 # Mount cargo and serai cache for Cache & Build
-RUN --mount=type=cache,target=/root/.cache/ \
+RUN --mount=type=cache,target=/root/.local/ \
+    --mount=type=cache,target=/root/.solc-select \
+    --mount=type=cache,target=/root/.cache/ \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/serai/target/release/build \
