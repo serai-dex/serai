@@ -6,11 +6,11 @@ ENV GETH_VERSION=1.10.23-d901d853
 WORKDIR /home/ethereum
 
 RUN apk update \
-	&& apk --no-cache add ca-certificates gnupg bash su-exec
+  && apk --no-cache add ca-certificates gnupg bash su-exec
 
 # Get Binary
 RUN wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}.tar.gz\
-	&& wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}.tar.gz.asc
+  && wget https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}.tar.gz.asc
 
 # Verify Binary
 # refer to https://geth.ethereum.org/downloads/#openpgp_signatures

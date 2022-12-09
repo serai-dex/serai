@@ -59,7 +59,7 @@ fn digest_yield<D: Digest, F: PrimeField>(digest: D, i: usize) -> F {
   ))
 }
 
-/// Aggregate Schnorr signature as defined in https://eprint.iacr.org/2021/350.
+/// Aggregate Schnorr signature as defined in <https://eprint.iacr.org/2021/350>.
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct SchnorrAggregate<C: Ciphersuite> {

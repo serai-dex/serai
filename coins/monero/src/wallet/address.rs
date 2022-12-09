@@ -81,7 +81,7 @@ impl<B: AddressBytes> Zeroize for AddressMeta<B> {
 }
 
 /// Error when decoding an address.
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum AddressError {
   #[error("invalid address byte")]
   InvalidByte,

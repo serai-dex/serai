@@ -9,7 +9,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::{ff::PrimeField, GroupEncoding};
 
-use dkg::tests::{test_ciphersuite as test_dkg};
+use dkg::tests::{key_gen, test_ciphersuite as test_dkg};
 
 use crate::{
   curve::Curve,
@@ -19,7 +19,7 @@ use crate::{
     Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess, SignMachine,
     SignatureMachine, AlgorithmMachine,
   },
-  tests::{clone_without, recover_key, curve::test_curve},
+  tests::{clone_without, recover_key, algorithm_machines, sign, curve::test_curve},
 };
 
 pub struct Vectors {
@@ -124,6 +124,15 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   // Test the DKG
   test_dkg::<_, C>(&mut *rng);
 
+  // Test a basic Schnorr signature
+  {
+    let keys = key_gen(&mut *rng);
+    let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
+    const MSG: &[u8] = b"Hello, World!";
+    let sig = sign(&mut *rng, Schnorr::<C, H>::new(), keys.clone(), machines, MSG);
+    assert!(sig.verify(keys[&1].group_key(), H::hram(&sig.R, &keys[&1].group_key(), MSG)));
+  }
+
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
   let group_key =
@@ -135,15 +144,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
   let mut machines = vec![];
   for i in &vectors.included {
-    machines.push((
-      i,
-      AlgorithmMachine::new(
-        Schnorr::<C, H>::new(),
-        keys[i].clone(),
-        &vectors.included.to_vec().clone(),
-      )
-      .unwrap(),
-    ));
+    machines.push((i, AlgorithmMachine::new(Schnorr::<C, H>::new(), keys[i].clone()).unwrap()));
   }
 
   let mut commitments = HashMap::new();

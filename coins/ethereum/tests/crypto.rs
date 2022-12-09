@@ -40,8 +40,11 @@ fn test_signing() {
 
   const MESSAGE: &'static [u8] = b"Hello, World!";
 
+  let algo = Schnorr::<Secp256k1, EthereumHram>::new();
   let _sig = sign(
     &mut OsRng,
+    algo.clone(),
+    keys.clone(),
     algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, EthereumHram>::new(), &keys),
     MESSAGE,
   );
@@ -67,9 +70,12 @@ fn test_ecrecover_hack() {
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
+  let algo = Schnorr::<Secp256k1, EthereumHram>::new();
   let sig = sign(
     &mut OsRng,
-    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, EthereumHram>::new(), &keys),
+    algo.clone(),
+    keys.clone(),
+    algorithm_machines(&mut OsRng, algo, &keys),
     full_message,
   );
 

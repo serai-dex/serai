@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, ThresholdView};
+use crate::{Curve, FrostError, ThresholdKeys, ThresholdView};
 pub use schnorr::SchnorrSignature;
 
 /// Write an addendum to a writer.
@@ -45,7 +45,7 @@ pub trait Algorithm<C: Curve>: Clone {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    params: &ThresholdView<C>,
+    keys: &ThresholdKeys<C>,
   ) -> Self::Addendum;
 
   /// Read an addendum from a reader.
@@ -148,7 +148,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     vec![vec![C::generator()]]
   }
 
-  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &ThresholdView<C>) {}
+  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &ThresholdKeys<C>) {}
 
   fn read_addendum<R: Read>(&self, _: &mut R) -> io::Result<Self::Addendum> {
     Ok(())
