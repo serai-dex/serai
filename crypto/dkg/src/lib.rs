@@ -33,6 +33,34 @@ pub mod promote;
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
 
+/// Various errors possible during key generation/signing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+pub enum DkgError {
+  #[error("a parameter was 0 (required {0}, participants {1})")]
+  ZeroParameter(u16, u16),
+  #[error("invalid amount of required participants (max {1}, got {0})")]
+  InvalidRequiredQuantity(u16, u16),
+  #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
+  InvalidParticipantIndex(u16, u16),
+
+  #[error("invalid signing set")]
+  InvalidSigningSet,
+  #[error("invalid participant quantity (expected {0}, got {1})")]
+  InvalidParticipantQuantity(usize, usize),
+  #[error("duplicated participant index ({0})")]
+  DuplicatedIndex(u16),
+  #[error("missing participant {0}")]
+  MissingParticipant(u16),
+
+  #[error("invalid proof of knowledge (participant {0})")]
+  InvalidProofOfKnowledge(u16),
+  #[error("invalid share (participant {0})")]
+  InvalidShare(u16),
+
+  #[error("internal error ({0})")]
+  InternalError(&'static str),
+}
+
 // Validate a map of values to have the expected included participants
 pub(crate) fn validate_map<T>(
   map: &HashMap<u16, T>,
@@ -98,34 +126,6 @@ impl ThresholdParams {
   pub fn i(&self) -> u16 {
     self.i
   }
-}
-
-/// Various errors possible during key generation/signing.
-#[derive(Copy, Clone, Error, Debug)]
-pub enum DkgError {
-  #[error("a parameter was 0 (required {0}, participants {1})")]
-  ZeroParameter(u16, u16),
-  #[error("invalid amount of required participants (max {1}, got {0})")]
-  InvalidRequiredQuantity(u16, u16),
-  #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
-  InvalidParticipantIndex(u16, u16),
-
-  #[error("invalid signing set")]
-  InvalidSigningSet,
-  #[error("invalid participant quantity (expected {0}, got {1})")]
-  InvalidParticipantQuantity(usize, usize),
-  #[error("duplicated participant index ({0})")]
-  DuplicatedIndex(u16),
-  #[error("missing participant {0}")]
-  MissingParticipant(u16),
-
-  #[error("invalid proof of knowledge (participant {0})")]
-  InvalidProofOfKnowledge(u16),
-  #[error("invalid share (participant {0})")]
-  InvalidShare(u16),
-
-  #[error("internal error ({0})")]
-  InternalError(&'static str),
 }
 
 /// Calculate the lagrange coefficient for a signing set.

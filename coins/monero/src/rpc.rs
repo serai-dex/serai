@@ -38,10 +38,10 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum RpcError {
   #[error("internal error ({0})")]
-  InternalError(String),
+  InternalError(&'static str),
   #[error("connection error")]
   ConnectionError,
   #[error("invalid node")]
@@ -184,10 +184,10 @@ impl Rpc {
 
     Ok(if !method.ends_with(".bin") {
       serde_json::from_str(&res.text().await.map_err(|_| RpcError::ConnectionError)?)
-        .map_err(|_| RpcError::InternalError("Failed to parse JSON response".to_string()))?
+        .map_err(|_| RpcError::InternalError("Failed to parse JSON response"))?
     } else {
       monero_epee_bin_serde::from_bytes(&res.bytes().await.map_err(|_| RpcError::ConnectionError)?)
-        .map_err(|_| RpcError::InternalError("Failed to parse binary response".to_string()))?
+        .map_err(|_| RpcError::InternalError("Failed to parse binary response"))?
     })
   }
 

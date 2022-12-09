@@ -79,7 +79,7 @@ impl SendOutput {
   }
 }
 
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
   #[error("multiple addresses with payment IDs")]
   MultiplePaymentIds,

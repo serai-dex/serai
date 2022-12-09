@@ -33,10 +33,10 @@ lazy_static! {
 }
 
 /// Errors returned when CLSAG signing fails.
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum ClsagError {
   #[error("internal error ({0})")]
-  InternalError(String),
+  InternalError(&'static str),
   #[error("invalid ring")]
   InvalidRing,
   #[error("invalid ring member (member {0}, ring size {1})")]
@@ -66,7 +66,7 @@ impl ClsagInput {
   pub fn new(commitment: Commitment, decoys: Decoys) -> Result<ClsagInput, ClsagError> {
     let n = decoys.len();
     if n > u8::MAX.into() {
-      Err(ClsagError::InternalError("max ring size in this library is u8 max".to_string()))?;
+      Err(ClsagError::InternalError("max ring size in this library is u8 max"))?;
     }
     let n = u8::try_from(n).unwrap();
     if decoys.i >= n {
