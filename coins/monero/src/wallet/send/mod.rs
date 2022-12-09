@@ -24,7 +24,7 @@ use crate::{
   rpc::{Rpc, RpcError},
   wallet::{
     address::MoneroAddress, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
-    uniqueness, shared_key, commitment_mask, amount_encryption,
+    uniqueness, shared_key, commitment_mask, amount_encryption, extra::MAX_TX_EXTRA_NONCE_SIZE,
   },
 };
 
@@ -177,7 +177,7 @@ pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,
   payments: Vec<(MoneroAddress, u64)>,
-  data: Option<Vec<u8>>,
+  data: Vec<Vec<u8>>,
   fee: u64,
 }
 
@@ -191,7 +191,7 @@ impl SignableTransaction {
     inputs: Vec<SpendableOutput>,
     mut payments: Vec<(MoneroAddress, u64)>,
     change_address: Option<MoneroAddress>,
-    data: Option<Vec<u8>>,
+    data: Vec<Vec<u8>>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure there's only one payment ID
@@ -220,8 +220,10 @@ impl SignableTransaction {
       Err(TransactionError::NoOutputs)?;
     }
 
-    if data.as_ref().map(|v| v.len()).unwrap_or(0) > 255 {
-      Err(TransactionError::TooMuchData)?;
+    for part in &data {
+      if part.len() > MAX_TX_EXTRA_NONCE_SIZE {
+        Err(TransactionError::TooMuchData)?;
+      }
     }
 
     // TODO TX MAX SIZE
@@ -313,8 +315,8 @@ impl SignableTransaction {
       extra.push(ExtraField::Nonce(id_vec));
 
       // Include data if present
-      if let Some(data) = self.data.take() {
-        extra.push(ExtraField::Nonce(data));
+      for part in self.data.drain(..) {
+        extra.push(ExtraField::Nonce(part));
       }
 
       let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len(), self.data.as_ref()));
