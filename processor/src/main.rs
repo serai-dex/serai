@@ -39,10 +39,10 @@ async fn main() {
         .default_value("./config/"),
     )
     .arg(
-      Arg::with_name("topic_id")
+      Arg::with_name("topic_identity")
         .short("ti")
-        .long("topic_id")
-        .help("The id used as a unique prefix for kafka topics.")
+        .long("topic_identity")
+        .help("This identity is used as a unique prefix for kafka topics.")
         .takes_value(true)
         .default_value("default"),
     )
@@ -59,7 +59,7 @@ async fn main() {
   });
 
   // Load kafka topic id
-  let topic_id_arg = args.value_of("topic_id").unwrap();
+  let topic_id_arg = args.value_of("topic_identity").unwrap();
 
   // Start Signature Process
   let sig_config = ProcessorConfig::new(String::from(path_arg)).unwrap();
