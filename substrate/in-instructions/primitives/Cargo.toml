@@ -1,5 +1,5 @@
 [package]
-name = "serai-instructions"
+name = "in-instructions-primitives"
 version = "0.1.0"
 description = "Serai instructions library, enabling encoding and decoding"
 license = "MIT"

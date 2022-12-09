@@ -216,7 +216,7 @@ impl pallet_contracts::Config for Runtime {
   type MaxStorageKeyLen = ConstU32<128>;
 }
 
-impl serai_in_instructions::pallet::Config for Runtime {
+impl in_instructions_pallet::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
@@ -282,7 +282,7 @@ construct_runtime!(
     TransactionPayment: pallet_transaction_payment,
     Contracts: pallet_contracts,
 
-    InInstructions: serai_in_instructions::pallet,
+    InInstructions: in_instructions_pallet,
 
     Session: pallet_session,
     Tendermint: pallet_tendermint,

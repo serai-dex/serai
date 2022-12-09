@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use futures::StreamExt;
 
-use in_instructions::{InInstruction, Batch, PendingBatch, Coin};
+use in_instructions_pallet::{InInstruction, Batch, PendingBatch, Coin};
 
 use jsonrpsee_core::server::rpc_module::RpcModule;
 

@@ -128,8 +128,9 @@ dependencies = [
 
 [[package]]
 name = "array-bytes"
-version = "4.1.0"
-source = "git+https://github.com/hack-ink/array-bytes?rev=994cd29b66bd2ab5c8c15f0b15a1618d4bb2d94c#994cd29b66bd2ab5c8c15f0b15a1618d4bb2d94c"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f52f63c5c1316a16a4b35eaac8b76a98248961a533f061684cb2a7cb0eafb6c6"
 
 [[package]]
 name = "array-init"
@@ -3363,6 +3364,34 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "in-instructions-pallet"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "frame-support",
+ "frame-system",
+ "futures",
+ "jsonrpsee-core",
+ "jsonrpsee-http-client",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-std",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "in-instructions-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "thiserror",
 ]
 
 [[package]]
@@ -7749,34 +7778,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serai-in-instructions"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "frame-support",
- "frame-system",
- "futures",
- "jsonrpsee-core",
- "jsonrpsee-http-client",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-inherents",
- "sp-runtime",
- "sp-std",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "serai-instructions"
-version = "0.1.0"
-dependencies = [
- "parity-scale-codec",
- "thiserror",
-]
-
-[[package]]
 name = "serai-multisig"
 version = "0.1.0"
 dependencies = [
@@ -7849,6 +7850,7 @@ dependencies = [
  "futures",
  "group",
  "hex",
+ "in-instructions-pallet",
  "jsonrpsee-core",
  "jsonrpsee-http-client",
  "jsonrpsee-http-server",
@@ -7856,7 +7858,6 @@ dependencies = [
  "monero-serai",
  "parity-scale-codec",
  "rand_core 0.6.4",
- "serai-in-instructions",
  "serai-runtime",
  "serde",
  "serde_json",
@@ -7876,6 +7877,7 @@ dependencies = [
  "frame-system",
  "frame-system-rpc-runtime-api",
  "hex-literal",
+ "in-instructions-pallet",
  "pallet-balances",
  "pallet-contracts",
  "pallet-contracts-primitives",
@@ -7887,7 +7889,6 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "scale-info",
- "serai-in-instructions",
  "sp-api",
  "sp-application-crypto",
  "sp-block-builder",
@@ -10457,6 +10458,12 @@ name = "yansi"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
+
+[[package]]
+name = "yap"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fc77f52dc9e9b10d55d3f4462c3b7fc393c4f17975d641542833ab2d3bc26ef"
 
 [[package]]
 name = "zalloc"

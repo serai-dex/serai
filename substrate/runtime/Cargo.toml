@@ -44,7 +44,7 @@ pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", d
 pallet-contracts-primitives = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-contracts = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-serai-in-instructions = { path = "../in-instructions/pallet", default-features = false }
+in-instructions-pallet = { path = "../in-instructions/pallet", default-features = false }
 
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
@@ -87,7 +87,7 @@ std = [
   "pallet-contracts/std",
   "pallet-contracts-primitives/std",
 
-	"serai-in-instructions/std",
+  "in-instructions-pallet/std",
 
   "pallet-session/std",
   "pallet-tendermint/std",

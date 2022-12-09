@@ -1,5 +1,5 @@
 [package]
-name = "serai-in-instructions"
+name = "in-instructions-pallet"
 version = "0.1.0"
 description = "Execute contracts via In Instructions from inherent transactions"
 license = "AGPL-3.0-only"
