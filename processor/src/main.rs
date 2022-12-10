@@ -39,9 +39,9 @@ async fn main() {
         .default_value("./config/"),
     )
     .arg(
-      Arg::with_name("topic_identity")
-        .short("ti")
-        .long("topic_identity")
+      Arg::with_name("identity")
+        .short("id")
+        .long("identity")
         .help("This identity is used as a unique prefix for kafka topics.")
         .takes_value(true)
         .default_value("default"),
