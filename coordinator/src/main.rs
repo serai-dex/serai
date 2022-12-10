@@ -2,13 +2,8 @@ mod core;
 mod health;
 mod signature;
 
-use std::thread;
-use std::io::Write;
-use std::time::Duration;
 use std::io;
-use std::env;
-
-use clap::{value_t, App, Arg};
+use clap::{App, Arg};
 
 use crate::core::CoordinatorConfig;
 use crate::core::CoreProcess;
@@ -46,7 +41,7 @@ async fn main() {
         .long("identity")
         .help("This identity is used as a unique prefix for kafka topics.")
         .takes_value(true)
-        .default_value("default"),
+        .default_value("Serai"),
     )
     .get_matches();
 
@@ -63,13 +58,13 @@ async fn main() {
   });
 
   // Load identity arg
-  let identity_arg = args.value_of("identity").unwrap();
+  let identity_arg = args.value_of("identity").unwrap().to_owned();
 
   // Start Signature Process
   let sig_config = CoordinatorConfig::new(String::from(path_arg)).unwrap();
   tokio::spawn(async move {
-    let signature_process = SignatureProcess::new(sig_config);
-    signature_process.run();
+    let signature_process = SignatureProcess::new(sig_config, identity_arg);
+    signature_process.run().await;
   });
 
   // Initial Heartbeat to Processors

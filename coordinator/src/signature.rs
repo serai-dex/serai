@@ -4,6 +4,8 @@ use rdkafka::{
   producer::{BaseRecord, ProducerContext, ThreadedProducer},
   consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance},
   ClientConfig, ClientContext, Message, Offset,
+  admin::{AdminClient, TopicReplication, NewTopic, AdminOptions},
+  client::DefaultClientContext,
 };
 use message_box::MessageBox;
 use std::time::Duration;
@@ -15,6 +17,7 @@ use crate::core::ChainConfig;
 #[derive(Clone, Debug, Deserialize)]
 pub struct SignatureProcess {
   chain_config: ChainConfig,
+  identity: String,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -36,36 +39,80 @@ impl fmt::Display for Coin {
   }
 }
 
+fn create_config() -> ClientConfig {
+  let mut config = ClientConfig::new();
+  config.set("bootstrap.servers", "localhost:9094");
+  config
+}
+
+fn create_admin_client() -> AdminClient<DefaultClientContext> {
+  create_config()
+      .create()
+      .expect("admin client creation failed")
+}
+
+
 impl SignatureProcess {
-  pub fn new(config: CoordinatorConfig) -> Self {
+  pub fn new(config: CoordinatorConfig, identity: String) -> Self {
     println!("New Signature Process");
     let chain_config = config.get_chain();
-    Self { chain_config: chain_config }
+    Self { chain_config: chain_config, identity: identity}
   }
 
-  pub fn run(self) {
+  pub async fn run(self) {
     println!("Starting Signature Process");
+
+    // Check/initialize kakf topics
+    let j = serde_json::to_string(&self.chain_config).unwrap();
+    let mut topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
+    topic_ref.insert("Coordinator".to_string(), true);
+
+    let admin_client = create_admin_client();
+    let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
+  
+    // Loop through each coin & initialize each kakfa topic
+    for (key, value) in topic_ref.into_iter() {
+      let mut topic: String = "".to_string();
+      topic.push_str(&self.identity);
+      let topic_ref = &mut String::from(&key);
+      if(topic_ref != "Coordinator"){
+        *topic_ref = topic_ref.to_uppercase();
+      }
+      topic.push_str("_");
+      topic.push_str(topic_ref);
+      topic.push_str("_Topic");
+  
+      let initialized_topic = NewTopic {
+        name: &topic,
+        num_partitions: 2,
+        replication: TopicReplication::Fixed(1),
+        config: Vec::new(),
+      };
+    
+      admin_client.create_topics(&[initialized_topic], &opts).await.expect("topic creation failed");
+      thread::sleep(Duration::from_secs(1));
+    }
 
     // Create Hashmap based on coins
     let coin_hashmap = create_coin_hashmap(&self.chain_config);
 
     // Create/Start Pubkey Consumers
-    start_pubkey_consumers(&coin_hashmap);
+    start_pubkey_consumers(&self.identity, &coin_hashmap);
 
     // Create Pubkey Producer & Send PubKey
-    start_pubkey_producer();
+    start_pubkey_producer(&self.identity);
 
     // Wait to receive all Processer Pubkeys
     process_received_pubkeys(&coin_hashmap);
 
     // Create/Start Public Consumer
-    start_public_consumer(&coin_hashmap);
+    start_public_consumer(&self.identity, &coin_hashmap);
 
     // Create/Start Private Consumer
-    start_private_consumer(&coin_hashmap);
+    start_private_consumer(&self.identity, &coin_hashmap);
 
     // Create/Start Public/Private Producer
-    start_pub_priv_producer(&coin_hashmap);
+    start_pub_priv_producer(&self.identity, &coin_hashmap);
   }
 
   fn stop(self) {
@@ -74,7 +121,7 @@ impl SignatureProcess {
 }
 
 // Create/Start Pubkey Consumers
-fn start_pubkey_consumers(coin_hashmap: &HashMap<Coin, bool>) {
+fn start_pubkey_consumers(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -82,7 +129,9 @@ fn start_pubkey_consumers(coin_hashmap: &HashMap<Coin, bool>) {
     if *value == true {
       let group_id = &mut key.to_string();
       group_id.push_str("_Pubkey");
-      let topic = &mut key.to_string();
+      let mut topic: String = String::from(identity);
+      topic.push_str("_");
+      topic.push_str(&key.to_string());
       topic.push_str("_Topic");
       let env_key = &mut key.to_string();
       env_key.push_str("_PUB");
@@ -92,7 +141,7 @@ fn start_pubkey_consumers(coin_hashmap: &HashMap<Coin, bool>) {
 }
 
 // Create/Start Public Consumer
-fn start_public_consumer(coin_hashmap: &HashMap<Coin, bool>) {
+fn start_public_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -100,7 +149,9 @@ fn start_public_consumer(coin_hashmap: &HashMap<Coin, bool>) {
     if *value == true {
       let group_id = &mut key.to_string();
       group_id.push_str("_Public");
-      let topic = &mut key.to_string();
+      let mut topic: String = String::from(identity);
+      topic.push_str("_");
+      topic.push_str(&key.to_string());
       topic.push_str("_Topic");
       initialize_consumer(&group_id, &topic, None, None, "public");
     }
@@ -108,7 +159,7 @@ fn start_public_consumer(coin_hashmap: &HashMap<Coin, bool>) {
 }
 
 // Create/Start Private Consumer
-fn start_private_consumer(coin_hashmap: &HashMap<Coin, bool>) {
+fn start_private_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -116,7 +167,9 @@ fn start_private_consumer(coin_hashmap: &HashMap<Coin, bool>) {
     if *value == true {
       let group_id = &mut key.to_string();
       group_id.push_str("_Private");
-      let topic = &mut key.to_string();
+      let mut topic: String = String::from(identity);
+      topic.push_str("_");
+      topic.push_str(&key.to_string());
       topic.push_str("_Topic");
       let env_key = &mut key.to_string();
       env_key.push_str("_PUB");
@@ -172,7 +225,7 @@ fn initialize_consumer(
           if !key.contains("COORDINATOR") && key.contains("Pubkey") {
             let value = msg.payload().unwrap();
             let public_key = str::from_utf8(value).unwrap();
-            println!("Received {} Public Key: {}", &key, &public_key);
+            println!("Received Message from {}: {}", &key, &public_key);
             env::set_var(env_key_ref.clone(), public_key);
           }
         }
@@ -239,7 +292,7 @@ fn initialize_consumer(
 }
 
 // Create Pubkey Producer & Send PubKey
-fn start_pubkey_producer() {
+fn start_pubkey_producer(identity: &str) {
   // Creates a producer to send coordinator pubkey message
   let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
@@ -255,7 +308,7 @@ fn start_pubkey_producer() {
   // Sends message to Kafka
   producer
     .send(
-      BaseRecord::to("Coordinator_Topic")
+      BaseRecord::to(&format!("{}_Coordinator_Topic", &identity))
         .key(&format!("{}_Pubkey", message_box::ids::COORDINATOR))
         .payload(&msg).partition(0),
     )
@@ -339,19 +392,21 @@ fn retrieve_message_box_id(coin: &String) -> &'static str {
   id
 }
 
-fn start_pub_priv_producer(coin_hashmap: &HashMap<Coin, bool>) {
+fn start_pub_priv_producer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
-      let topic = &mut key.to_string();
+      let mut topic: String = String::from(identity);
+      topic.push_str("_");
+      topic.push_str(&key.to_string());
       topic.push_str("_Topic");
       let env_key = &mut key.to_string();
       env_key.push_str("_PUB");
 
       let processor_id = retrieve_message_box_id(&mut key.to_string());
-      let mut msg: String = String::from("Coordinator message to ");
+      let mut msg: String = String::from("COORDINATOR message to ");
       msg.push_str(processor_id);
 
       send_message_from_pub_priv_producer(
@@ -394,7 +449,7 @@ fn send_message_from_pub_priv_producer(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}_Public", message_box::ids::COORDINATOR))
+        .key(&format!("{}_PUBLIC", message_box::ids::COORDINATOR))
         .payload(&msg)
         .partition(0),
     )
@@ -405,7 +460,7 @@ fn send_message_from_pub_priv_producer(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}_Private", message_box::ids::COORDINATOR))
+        .key(&format!("{}_PRIVATE", message_box::ids::COORDINATOR))
         .payload(&enc)
         .partition(1),
     )
