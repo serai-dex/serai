@@ -58,8 +58,8 @@ async fn main() {
     core_process.run();
   });
 
-  // Load kafka topic id
-  let topic_id_arg = args.value_of("topic_identity").unwrap();
+  // Load identity arg
+  let identity_arg = args.value_of("identity").unwrap();
 
   // Start Signature Process
   let sig_config = ProcessorConfig::new(String::from(path_arg)).unwrap();
