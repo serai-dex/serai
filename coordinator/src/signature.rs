@@ -90,7 +90,6 @@ impl SignatureProcess {
       };
     
       admin_client.create_topics(&[initialized_topic], &opts).await.expect("topic creation failed");
-      thread::sleep(Duration::from_secs(1));
     }
 
     // Create Hashmap based on coins
