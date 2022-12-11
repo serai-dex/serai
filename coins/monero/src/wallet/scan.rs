@@ -377,7 +377,12 @@ impl Scanner {
       if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }
-      index += u64::try_from(tx.prefix.outputs.len()).unwrap();
+      index += tx
+        .prefix
+        .outputs
+        .iter()
+        .filter_map(|output| Some(1).filter(|_| output.amount == 0))
+        .sum::<u64>();
     }
     Ok(res)
   }
