@@ -373,7 +373,7 @@ impl Scanner {
     };
 
     let mut res = vec![];
-    for tx in txs {
+    for (i, tx) in txs.drain(..).enumerate() {
       if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }
@@ -381,7 +381,9 @@ impl Scanner {
         .prefix
         .outputs
         .iter()
-        .filter_map(|output| Some(1).filter(|_| output.amount == 0))
+        // Filter to miner TX outputs/0-amount outputs since we're tacking the 0-amount index
+        .filter_map(|output| Some(1).filter(|_| (i == 0) || (output.amount == 0)))
+        // Since we can't get the length of an iterator, map each value to 1 and sum
         .sum::<u64>();
     }
     Ok(res)
