@@ -60,9 +60,15 @@ impl Network for LocalNetwork {
 async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
+  
   let latest = coin.get_latest_block_number().await.unwrap();
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
+
+  let xkey = keys[&1].group_key();
+  coin.address(xkey);
+
+
   let threshold = keys[&1].params().t();
   let mut networks = LocalNetwork::new(threshold);
 
@@ -108,25 +114,29 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
 }
 
-#[tokio::test]
+/*#[tokio::test]
 async fn monero() {
   let monero = Monero::new("http://127.0.0.1:18081".to_string()).await;
   let fee = monero.get_fee().await;
-  test_send(monero, fee).await;
-}
-
+  //test_send(monero, fee).await;
+}*/
 
 #[tokio::test]
 async fn bitcoin() {
   let bitcoin = Bitcoin::new("127.0.0.1:18443".to_string(),Some(String::from("serai")),Some(String::from("seraidex"))).await;
+  dbg!("Latest Block 1");
   let latest_block = bitcoin.get_latest_block_number().await.unwrap();
-  println!("Latest Block : {:?}",latest_block);
-  let fetched_block = bitcoin.get_block(latest_block).await.unwrap();
-  println!("Fetched Block : {:?}",fetched_block);
-
+  dbg!(latest_block);
+  dbg!("Latest Block 2");
+  //println!("Latest Block : {:?}",latest_block);
+  //let fetched_block = bitcoin.get_block(latest_block).await.unwrap();
+  //println!("Fetched Block : {:?}",fetched_block);
   
-  let s = "d668166415eac706ffa6bd197d2a0de7295d40726c26f2379a2cb64fa3ceda99";
-  let tx_arr: &[u8] = s.as_bytes();
-  let aa = bitcoin.is_confirmed(tx_arr);
+  //let s = "d668166415eac706ffa6bd197d2a0de7295d40726c26f2379a2cb64fa3ceda99";
+  //let tx_arr: &[u8] = s.as_bytes();
+  //let aa = bitcoin.is_confirmed(tx_arr);
+
+  let fee = bitcoin.get_fee().await;
+  test_send(bitcoin,fee).await;
   // No send test yet
 }

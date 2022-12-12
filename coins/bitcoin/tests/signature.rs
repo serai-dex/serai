@@ -1,3 +1,5 @@
+use bitcoin_hashes::hex::ToHex;
+
 #[test]
 fn test_signing() {
   use secp256k1::Message;
@@ -20,6 +22,10 @@ fn test_signing() {
     *one_key = one_key.offset(Scalar::from(offset));
   }
 
+  let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true).to_hex().to_string();
+  dbg!(pubkey_compressed);
+  
+
   let mut _sig = sign(
     &mut OsRng,
     algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys), //&keys),
@@ -35,5 +41,6 @@ fn test_signing() {
   let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true);
   let pubkey =
     secp256k1::XOnlyPublicKey::from_slice(&pubkey_compressed.x().to_owned().unwrap()).unwrap();
+  dbg!(pubkey.to_hex().to_string());
   let _res = sig.verify(&msg, &pubkey).unwrap();
 }
