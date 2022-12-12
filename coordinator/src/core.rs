@@ -16,6 +16,8 @@ use zalloc::ZeroizingAlloc;
 use group::ff::PrimeField;
 #[global_allocator]
 static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
+use std::process::Command;
+use std::str;
 
 // All asynchronous processes follow a pattern to modularly
 // create, start, and stop their various underlying components.
@@ -396,11 +398,18 @@ pub fn initialize_keys() {
   // Checks if coordinator keys are set
   let coord_priv_check = env::var("COORD_PRIV");
   if (coord_priv_check.is_err()) {
+    println!("Generating New Keys");
     // Generates new private / public key
     let (private, public) = message_box::key_gen();
     let mut private_bytes = unsafe { private.inner().to_repr() };
     // Sets private / public key to environment variables
-    env::set_var("COORD_PRIV", hex::encode(private_bytes.as_ref()));
-    env::set_var("COORD_PUB", hex::encode(public.to_bytes()));
+    env_perm::set("COORD_PRIV", &format!(r#"{}"#, hex::encode(&private_bytes.as_ref())))
+      .expect("Failed to set COORD_PRIV");
+    env_perm::set("COORD_PUB", &format!(r#"{}"#, hex::encode(&public.to_bytes())))
+      .expect("Failed to set COORD_PUB");
+    env::set_var("COORD_PRIV", hex::encode(&private_bytes.as_ref()));
+    env::set_var("COORD_PUB", hex::encode(&public.to_bytes()));
+  } else {
+    println!("Keys Found");
   }
 }

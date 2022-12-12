@@ -39,12 +39,14 @@ impl fmt::Display for Coin {
   }
 }
 
+// Configuration for admin client to check / initialize topics
 fn create_config() -> ClientConfig {
   let mut config = ClientConfig::new();
   config.set("bootstrap.servers", "localhost:9094");
   config
 }
 
+// Creates admin client used to check / initialize topics
 fn create_admin_client() -> AdminClient<DefaultClientContext> {
   create_config()
       .create()
@@ -95,22 +97,22 @@ impl SignatureProcess {
     // Create Hashmap based on coins
     let coin_hashmap = create_coin_hashmap(&self.chain_config);
 
-    // Create/Start Pubkey Consumers
+    // Create/Start Consumer used to read pubkey messages on public partition 0
     start_pubkey_consumers(&self.identity, &coin_hashmap);
 
-    // Create Pubkey Producer & Send PubKey
+    // Create Pubkey Producer & sends pubkey message on public partiion 0
     start_pubkey_producer(&self.identity);
 
     // Wait to receive all Processer Pubkeys
     process_received_pubkeys(&coin_hashmap);
 
-    // Create/Start Public Consumer
+    // Create/Start Consumer used to read public messages on public partition 0
     start_public_consumer(&self.identity, &coin_hashmap);
 
-    // Create/Start Private Consumer
+    // Create/Start Consumer used to read encrypted message on private partition 1
     start_private_consumer(&self.identity, &coin_hashmap);
 
-    // Create/Start Public/Private Producer
+    // Create/Start Producer that sends a public message on partition 0 and encrytped message on partition 1
     start_pub_priv_producer(&self.identity, &coin_hashmap);
   }
 
@@ -119,7 +121,7 @@ impl SignatureProcess {
   }
 }
 
-// Create/Start Pubkey Consumers
+// Create/Start Consumer used to read pubkey messages on public partition 0
 fn start_pubkey_consumers(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
@@ -139,7 +141,7 @@ fn start_pubkey_consumers(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   }
 }
 
-// Create/Start Public Consumer
+// Create/Start Consumer used to read public messages on public partition 0
 fn start_public_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
@@ -157,7 +159,7 @@ fn start_public_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   }
 }
 
-// Create/Start Private Consumer
+// Create/Start Consumer used to read encrypted message on private partition 1
 fn start_private_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
@@ -178,9 +180,9 @@ fn start_private_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
 }
 
 // Will Create a Consumer based on Pubkey, Public, or Private
-// Pubkey will listen for Processor Pubkey's
-// Public will listen for Processor Public Messages
-// Private will listen for Processor Private Messages
+// Pubkey Consumer is used to read pubkey messages on public partition 0
+// Public Consumer is used to read public messages on public partition 0
+// Private Consumer is used to read encrypted message on private partition 1
 fn initialize_consumer(
   group_id: &str,
   topic: &str,
@@ -290,7 +292,7 @@ fn initialize_consumer(
   }
 }
 
-// Create Pubkey Producer & Send PubKey
+// Create Pubkey Producer & sends pubkey message on public partiion 0
 fn start_pubkey_producer(identity: &str) {
   // Creates a producer to send coordinator pubkey message
   let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
@@ -391,6 +393,7 @@ fn retrieve_message_box_id(coin: &String) -> &'static str {
   id
 }
 
+// Create/Start Producer for each coin
 fn start_pub_priv_producer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
@@ -418,6 +421,7 @@ fn start_pub_priv_producer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   }
 }
 
+// Send a public message on partition 0 and encrytped message on partition 1
 fn send_message_from_pub_priv_producer(
   topic: &str,
   env_key: String,

@@ -52,5 +52,6 @@ zeroize = { version = "1.5", features = ["zeroize_derive"] }
 zalloc = { path = "../common/zalloc" }
 
 tokio-test = "*"
+env_perm = "0.1.3"
 
 [workspace]

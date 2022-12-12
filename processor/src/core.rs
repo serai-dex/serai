@@ -358,11 +358,15 @@ pub fn initialize_keys(config: &ProcessorConfig) {
         let (privkey, pubkey) = message_box::key_gen();
         let mut privkey_bytes = unsafe { privkey.inner().to_repr() };
         // Sets private / public key to environment variables
-        env::set_var(env_privkey, hex::encode(privkey_bytes.as_ref()));
+        env_perm::set(&env_privkey, &format!(r#"{}"#, hex::encode(&privkey_bytes.as_ref())))
+          .expect(&format!("Failed to find or set {}", &env_privkey));
+        env::set_var(&env_privkey, hex::encode(&privkey_bytes.as_ref()));
 
         let mut env_pubkey = String::from(&key).to_uppercase();
         env_pubkey.push_str("_PUB");
-        env::set_var(env_pubkey, hex::encode(pubkey.to_bytes()));
+        env_perm::set(&env_pubkey, &format!(r#"{}"#, hex::encode(&pubkey.to_bytes())))
+          .expect(&format!("Failed to find or set {}", &env_pubkey));
+        env::set_var(&env_pubkey, hex::encode(&pubkey.to_bytes()));
       }
     }
   }
