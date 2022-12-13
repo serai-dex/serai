@@ -92,23 +92,23 @@ impl SignatureProcess {
     // Create Hashmap based on coins
     let coin_hashmap = create_coin_hashmap(&self.chain_config);
 
-    // Create/Start Consumer used to read pubkey messages on public partition 0
-    start_pubkey_consumer(&self.identity);
+    // Initialize consumers to read the coordinator pubkey on general partition
+    consume_pubkey_coordinator(&self.identity);
 
-    // Create Pubkey Producer & sends pubkey message on public partiion 0
-    start_pubkey_producer(&self.identity, &coin_hashmap);
+    // Initialize producer to send processor pubkeys to coordinator on general partition
+    produce_processor_pubkey(&self.identity, &coin_hashmap);
 
     // Wait to receive Coordinator Pubkey
-    process_received_pubkey();
+    process_received_pubkey().await;
 
-    // Create/Start Consumer used to read public messages on public partition 0
-    start_public_consumer(&self.identity, &coin_hashmap);
+    // Initialize consumer used to read test messages from coordinator on general partition
+    consume_coordinator_general_test_message(&self.identity, &coin_hashmap);
 
-    // Create/Start Consumer used to read encrypted message on private partition 1
-    start_private_consumer(&self.identity, &coin_hashmap);
+    // Initialize consumer used to read secure test messages from coordinator on secure partition
+    consume_coordinator_secure_test_message(&self.identity, &coin_hashmap);
 
-    // Create/Start Producer that sends a public message on partition 0 and encrytped message on partition 1
-    start_pub_priv_producer(&self.identity, &coin_hashmap);
+    // Initialize a producer that sends a general & secure test message
+    produce_general_and_secure_test_message(&self.identity, &coin_hashmap).await;
   }
 
   fn stop(self) {
@@ -116,13 +116,16 @@ impl SignatureProcess {
   }
 }
 
-// Create/Start Consumer used to read pubkey messages on public partition 0
-fn start_pubkey_consumer(identity: &str) {
-  let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
+// Initialize consumers to read the coordinator pubkey on general partition
+fn consume_pubkey_coordinator(identity: &str) {
+  let mut group_id = String::from(identity);
+      group_id.push_str("_Coord_PUBKEY");
+
+  let consumer: BaseConsumer = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
-    .set("group.id", "Coord_Pubkey")
+    .set("group.id", &group_id)
     .set("auto.offset.reset", "smallest")
-    .create_with_context(ConsumerCallbackLogger {})
+    .create()
     .expect("invalid consumer config");
 
   let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
@@ -141,33 +144,37 @@ fn start_pubkey_consumer(identity: &str) {
   });
 }
 
-// Create/Start Consumer used to read public messages on public partition 0
-fn start_public_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+// Initialize consumer used to read test messages from coordinator on general partition
+fn consume_coordinator_general_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
-      let group_id = &mut key.to_string();
-      group_id.push_str("_Public");
+      let mut group_id = String::from(identity);
+      group_id.push_str("_");
+      group_id.push_str(&mut key.to_string());
+      group_id.push_str("_GENERAL");
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&key.to_string());
       topic.push_str("_Topic");
-      initialize_consumer(&group_id, &topic, None, None, "public");
+      initialize_consumer(&group_id, &topic, None, None, "general");
     }
   }
 }
 
-// Create/Start Consumer used to read encrypted message on private partition 1
-fn start_private_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+// Initialize consumer used to read secure test messages from coordinator on secure partition
+fn consume_coordinator_secure_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
-      let group_id = &mut key.to_string();
-      group_id.push_str("_Private");
+      let mut group_id = String::from(identity);
+      group_id.push_str("_");
+      group_id.push_str(&mut key.to_string());
+      group_id.push_str("_SECURE");
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&key.to_string());
@@ -179,16 +186,13 @@ fn start_private_consumer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
         &topic,
         Some(env_key.to_string()),
         Some(&key.to_string()),
-        "private",
+        "secure",
       );
     }
   }
 }
 
-// Will Create a Consumer based on Pubkey, Public, or Private
-// Pubkey Consumer is used to read pubkey messages on public partition 0
-// Public Consumer is used to read public messages on public partition 0
-// Private Consumer is used to read encrypted message on private partition 1
+// Initializes consumer based on general or secure partition
 fn initialize_consumer(
   group_id: &str,
   topic: &str,
@@ -196,10 +200,10 @@ fn initialize_consumer(
   coin: Option<&String>,
   consumer_type: &str,
 ) {
-  let consumer: BaseConsumer<ConsumerCallbackLogger> = ClientConfig::new()
+  let consumer: BaseConsumer = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
     .set("group.id", group_id)
-    .create_with_context(ConsumerCallbackLogger {})
+    .create()
     .expect("invalid consumer config");
 
   let mut env_key_ref: String = "".to_string();
@@ -219,25 +223,7 @@ fn initialize_consumer(
   }
 
   match consumer_type {
-    "pubkey" => {
-      let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-      tpl.add_partition(&topic, 2);
-      consumer.assign(&tpl).unwrap();
-
-      thread::spawn(move || {
-        for msg_result in &consumer {
-          let msg = msg_result.unwrap();
-          let key: &str = msg.key_view().unwrap().unwrap();
-          if key.contains("COORDINATOR") && key.contains("Pubkey") {
-            let value = msg.payload().unwrap();
-            let public_key = str::from_utf8(value).unwrap();
-            println!("Received Message from {}: {}", &key, &public_key);
-            env::set_var(env_key_ref.clone(), public_key);
-          }
-        }
-      });
-    }
-    "public" => {
+    "general" => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
       tpl.add_partition(&topic, 0);
       consumer.assign(&tpl).unwrap();
@@ -246,7 +232,7 @@ fn initialize_consumer(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          if key.contains("COORDINATOR") && key.contains("Public") {
+          if key.contains("COORDINATOR") && key.contains("GENERAL") {
             let value = msg.payload().unwrap();
             let pub_msg = str::from_utf8(value).unwrap();
             println!("Received Public Message from {}", &key);
@@ -255,7 +241,7 @@ fn initialize_consumer(
         }
       });
     }
-    "private" => {
+    "secure" => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
       tpl.add_partition(&topic, 1);
       consumer.assign(&tpl).unwrap();
@@ -296,8 +282,8 @@ fn initialize_consumer(
   }
 }
 
-// Create Pubkey Producer & sends pubkey message on public partiion 0
-fn start_pubkey_producer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+// Initialize producer to send processor pubkeys to coordinator on general partition
+fn produce_processor_pubkey(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
   // Loop through each coin & if active, create pubkey consumer
   for (key, value) in hashmap_clone.into_iter() {
@@ -309,15 +295,16 @@ fn start_pubkey_producer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
       let env_key = &mut key.to_string();
       env_key.push_str("_PUB");
       let processor_id = retrieve_message_box_id(&key.to_string());
-      send_pubkey_from_producer(&topic, env_key.to_string(), processor_id);
+      send_processor_pubkey(&identity, &topic, env_key.to_string(), processor_id);
     }
   }
 }
 
-fn send_pubkey_from_producer(topic: &str, env_key: String, processor: &'static str) {
-  let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+// Sends processor pubkeys to coordinator on general partition
+fn send_processor_pubkey(identity: &str, topic: &str, env_key: String, processor: &'static str) {
+  let producer: ThreadedProducer<_> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
-    .create_with_context(ProduceCallbackLogger {})
+    .create()
     .expect("invalid producer config");
 
   // Load Pubkeys for processor
@@ -327,14 +314,13 @@ fn send_pubkey_from_producer(topic: &str, env_key: String, processor: &'static s
   // Send pubkey to kafka topic
   producer
     .send(
-      BaseRecord::to(&topic).key(&format!("{}_Pubkey", processor)).payload(&coin_msg).partition(0),
+      BaseRecord::to(&topic).key(&format!("{}_{}_PUBKEY", identity, processor)).payload(&coin_msg).partition(0),
     )
     .expect("failed to send message");
-  thread::sleep(Duration::from_secs(1));
 }
 
 // Wait to receive all Processer Pubkeys
-fn process_received_pubkey() {
+async fn process_received_pubkey() {
   // Runs a loop to check if Coordinator pubkey is found
   let mut coord_key_found = false;
   while !coord_key_found {
@@ -343,7 +329,7 @@ fn process_received_pubkey() {
       println!("Coord Pubkey Ready");
       coord_key_found = true;
     } else {
-      thread::sleep(Duration::from_secs(1));
+      tokio::time::sleep(Duration::from_millis(500)).await;
     }
   }
 }
@@ -388,8 +374,8 @@ fn retrieve_message_box_id(coin: &String) -> &'static str {
   id
 }
 
-// Create/Start Producer for each coin
-fn start_pub_priv_producer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+// Initialize a producer that sends a general & secure test message
+async fn produce_general_and_secure_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -407,26 +393,28 @@ fn start_pub_priv_producer(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
       msg.push_str(&processor_id);
       msg.push_str(" message to COORDINATOR");
 
-      send_message_from_pub_priv_producer(
+      send_general_and_secure_test_message(
+        &identity,
         &topic,
         env_key.to_string(),
         &processor_id,
         msg.as_bytes().to_vec(),
-      );
+      ).await;
     }
   }
 }
 
-// Send a public message on partition 0 and encrytped message on partition 1
-fn send_message_from_pub_priv_producer(
+// Initializes a producer then sends both a general and secure test message
+async fn send_general_and_secure_test_message(
+  identity: &str,
   topic: &str,
   env_key: String,
   processor: &'static str,
   msg: Vec<u8>,
 ) {
-  let producer: ThreadedProducer<ProduceCallbackLogger> = ClientConfig::new()
+  let producer: ThreadedProducer<_> = ClientConfig::new()
     .set("bootstrap.servers", "localhost:9094")
-    .create_with_context(ProduceCallbackLogger {})
+    .create()
     .expect("invalid producer config");
 
   // Load Coordinator private environment variable
@@ -443,98 +431,15 @@ fn send_message_from_pub_priv_producer(
   let message_box = MessageBox::new(processor, coin_priv, message_box_pubkey);
   let enc = message_box.encrypt_to_string(&message_box::ids::COORDINATOR, &msg.clone());
 
-  // Partition 0 is public
+  // Parition 0 is General
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}_PUBLIC", &processor)).payload(&msg).partition(0))
+    .send(BaseRecord::to(&topic).key(&format!("{}_{}_GENERAL", &identity, &processor)).payload(&msg).partition(0))
     .expect("failed to send message");
-  thread::sleep(Duration::from_secs(1));
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
-  // Partition 1 is Private
+  // Partition 1 is Secure
   producer
-    .send(BaseRecord::to(&topic).key(&format!("{}_PRIVATE", &processor)).payload(&enc).partition(1))
+    .send(BaseRecord::to(&topic).key(&format!("{}_{}_SECURE", &identity, &processor)).payload(&enc).partition(1))
     .expect("failed to send message");
-  thread::sleep(Duration::from_secs(1));
-}
-
-struct ConsumerCallbackLogger;
-
-impl ClientContext for ConsumerCallbackLogger {}
-
-impl ConsumerContext for ConsumerCallbackLogger {
-  fn pre_rebalance<'a>(&self, _rebalance: &rdkafka::consumer::Rebalance<'a>) {}
-
-  fn post_rebalance<'a>(&self, rebalance: &rdkafka::consumer::Rebalance<'a>) {
-    //println!("post_rebalance callback");
-
-    match rebalance {
-      Rebalance::Assign(tpl) => {
-        for e in tpl.elements() {
-          //println!("rebalanced partition {}", e.partition())
-        }
-      }
-      Rebalance::Revoke(tpl) => {
-        //println!("ALL partitions have been REVOKED")
-      }
-      Rebalance::Error(err_info) => {
-        //println!("Post Rebalance error {}", err_info)
-      }
-    }
-  }
-
-  fn commit_callback(
-    &self,
-    result: rdkafka::error::KafkaResult<()>,
-    offsets: &rdkafka::TopicPartitionList,
-  ) {
-    match result {
-      Ok(_) => {
-        for e in offsets.elements() {
-          match e.offset() {
-            //skip Invalid offset
-            Offset::Invalid => {}
-            _ => {
-              //println!("committed offset {:?} in partition {}", e.offset(), e.partition())
-            }
-          }
-        }
-      }
-      Err(err) => {
-        println!("error committing offset - {}", err)
-      }
-    }
-  }
-}
-
-struct ProduceCallbackLogger;
-
-impl ClientContext for ProduceCallbackLogger {}
-
-impl ProducerContext for ProduceCallbackLogger {
-  type DeliveryOpaque = ();
-
-  fn delivery(
-    &self,
-    delivery_result: &rdkafka::producer::DeliveryResult<'_>,
-    _delivery_opaque: Self::DeliveryOpaque,
-  ) {
-    let dr = delivery_result.as_ref();
-    let msg = dr.unwrap();
-
-    match dr {
-      Ok(msg) => {
-        let key: &str = msg.key_view().unwrap().unwrap();
-        // println!(
-        //   "Produced message with key {} in offset {} of partition {}",
-        //   key,
-        //   msg.offset(),
-        //   msg.partition()
-        // );
-      }
-      Err(producer_err) => {
-        let key: &str = producer_err.1.key_view().unwrap().unwrap();
-
-        println!("failed to produce message with key {} - {}", key, producer_err.0,)
-      }
-    }
-  }
+    tokio::time::sleep(Duration::from_millis(500)).await;
 }

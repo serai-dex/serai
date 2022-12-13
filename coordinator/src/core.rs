@@ -403,10 +403,10 @@ pub fn initialize_keys() {
     let (private, public) = message_box::key_gen();
     let mut private_bytes = unsafe { private.inner().to_repr() };
     // Sets private / public key to environment variables
-    env_perm::set("COORD_PRIV", &format!(r#"{}"#, hex::encode(&private_bytes.as_ref())))
-      .expect("Failed to set COORD_PRIV");
-    env_perm::set("COORD_PUB", &format!(r#"{}"#, hex::encode(&public.to_bytes())))
-      .expect("Failed to set COORD_PUB");
+    // env_perm::set("COORD_PRIV", &format!(r#"{}"#, hex::encode(&private_bytes.as_ref())))
+    //   .expect("Failed to set COORD_PRIV");
+    // env_perm::set("COORD_PUB", &format!(r#"{}"#, hex::encode(&public.to_bytes())))
+    //   .expect("Failed to set COORD_PUB");
     env::set_var("COORD_PRIV", hex::encode(&private_bytes.as_ref()));
     env::set_var("COORD_PUB", hex::encode(&public.to_bytes()));
   } else {
