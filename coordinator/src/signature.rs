@@ -53,7 +53,10 @@ fn create_admin_client() -> AdminClient<DefaultClientContext> {
       .expect("admin client creation failed")
 }
 
-
+// SignatureProcess communicates General & Secure Messages using Kafka
+// General Messages will contain communicated pubkeys & general messages
+// General Messages are contained in partition 0
+// Secure Messages are contained in parition 1
 impl SignatureProcess {
   pub fn new(config: CoordinatorConfig, identity: String) -> Self {
     println!("New Signature Process");
@@ -147,7 +150,7 @@ fn consume_pubkey_processor(identity: &str, coin_hashmap: &HashMap<Coin, bool>) 
 fn consume_processor_general_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
-  // Loop through each coin & if active, create pubkey consumer
+  // Loop through each coin & if active, create general message consumer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut group_id = String::from(identity);
@@ -167,7 +170,7 @@ fn consume_processor_general_test_message(identity: &str, coin_hashmap: &HashMap
 fn consume_processor_secure_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
-  // Loop through each coin & if active, create pubkey consumer
+  // Loop through each coin & if active, create secure message consumer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut group_id = String::from(identity);
@@ -293,7 +296,7 @@ fn produce_coordinator_pubkey(identity: &str) {
 
   println!("Sending Public Key");
 
-  // Creates a public key message
+  // Load Coordinator Pubkey
   let coord_pub = env::var("COORD_PUB");
   let msg = coord_pub.unwrap();
 
@@ -347,7 +350,6 @@ async fn process_received_pubkeys(coin_hashmap: &HashMap<Coin, bool>) {
 
 // Create Hashmap based on coins
 fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<Coin, bool> {
-  // Create Hashmap based on coins
   let j = serde_json::to_string(&chain_config).unwrap();
   let mut coins: HashMap<Coin, bool> = HashMap::new();
   let coins_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
@@ -389,7 +391,7 @@ fn retrieve_message_box_id(coin: &String) -> &'static str {
 async fn produce_general_and_secure_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
-  // Loop through each coin & if active, create pubkey consumer
+  // Loop through each coin & if active, create general and secure producer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut topic: String = String::from(identity);
@@ -427,7 +429,7 @@ async fn send_general_and_secure_test_message(
     .create()
     .expect("invalid producer config");
 
-  // Load Coordinator private environment variable
+  // Load Coordinator private key environment variable
   let coord_priv =
     message_box::PrivateKey::from_string(env::var("COORD_PRIV").unwrap().to_string());
 
@@ -438,7 +440,7 @@ async fn send_general_and_secure_test_message(
   let mut message_box_pubkey = HashMap::new();
   message_box_pubkey.insert(processor, pubkey);
 
-  // Create Coordinator Message Box
+  // Create Procesor Message Box
   let message_box = MessageBox::new(message_box::ids::COORDINATOR, coord_priv, message_box_pubkey);
   let enc = message_box.encrypt_to_string(&processor, &msg.clone());
 

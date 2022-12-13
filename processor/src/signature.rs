@@ -49,6 +49,10 @@ fn create_admin_client() -> AdminClient<DefaultClientContext> {
   create_config().create().expect("admin client creation failed")
 }
 
+// SignatureProcess communicates General & Secure Messages using Kafak
+// General Messages will contain communicated pubkeys & general messages
+// General Messages are contained in partition 0
+// Secure Messages are contained in parition 1
 impl SignatureProcess {
   pub fn new(config: ProcessorConfig, identity: String) -> Self {
     println!("New Signature Process");
@@ -148,7 +152,7 @@ fn consume_pubkey_coordinator(identity: &str) {
 fn consume_coordinator_general_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
-  // Loop through each coin & if active, create pubkey consumer
+  // Loop through each coin & if active, create general message consumer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut group_id = String::from(identity);
@@ -168,7 +172,7 @@ fn consume_coordinator_general_test_message(identity: &str, coin_hashmap: &HashM
 fn consume_coordinator_secure_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
-  // Loop through each coin & if active, create pubkey consumer
+  // Loop through each coin & if active, create secure message consumer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut group_id = String::from(identity);
@@ -285,7 +289,7 @@ fn initialize_consumer(
 // Initialize producer to send processor pubkeys to coordinator on general partition
 fn produce_processor_pubkey(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
-  // Loop through each coin & if active, create pubkey consumer
+  // Loop through each coin & if active, create producer and send processor pubkeys to coordinator
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut topic: String = String::from(identity);
@@ -307,7 +311,7 @@ fn send_processor_pubkey(identity: &str, topic: &str, env_key: String, processor
     .create()
     .expect("invalid producer config");
 
-  // Load Pubkeys for processor
+  // Load Processor Pubkeys
   let coin_pub = env::var(env_key.to_string());
   let coin_msg = coin_pub.unwrap();
 
@@ -319,7 +323,7 @@ fn send_processor_pubkey(identity: &str, topic: &str, env_key: String, processor
     .expect("failed to send message");
 }
 
-// Wait to receive all Processer Pubkeys
+// Wait to receive Coordinator Pubkey
 async fn process_received_pubkey() {
   // Runs a loop to check if Coordinator pubkey is found
   let mut coord_key_found = false;
@@ -329,6 +333,7 @@ async fn process_received_pubkey() {
       println!("Coord Pubkey Ready");
       coord_key_found = true;
     } else {
+      // Add small delay for checking pubkeys
       tokio::time::sleep(Duration::from_millis(500)).await;
     }
   }
@@ -336,7 +341,6 @@ async fn process_received_pubkey() {
 
 // Create Hashmap based on coins
 fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<Coin, bool> {
-  // Create Hashmap based on coins
   let j = serde_json::to_string(&chain_config).unwrap();
   let mut coins: HashMap<Coin, bool> = HashMap::new();
   let coins_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
@@ -378,7 +382,7 @@ fn retrieve_message_box_id(coin: &String) -> &'static str {
 async fn produce_general_and_secure_test_message(identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
-  // Loop through each coin & if active, create pubkey consumer
+  // Loop through each coin & if active, create general and secure producer
   for (key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut topic: String = String::from(identity);
@@ -391,7 +395,7 @@ async fn produce_general_and_secure_test_message(identity: &str, coin_hashmap: &
       let processor_id = retrieve_message_box_id(&key.to_string());
       let mut msg: String = "".to_string();
       msg.push_str(&processor_id);
-      msg.push_str(" message to COORDINATOR");
+      msg.push_str(&format!(" message to {}", message_box::ids::COORDINATOR));
 
       send_general_and_secure_test_message(
         &identity,
@@ -417,7 +421,7 @@ async fn send_general_and_secure_test_message(
     .create()
     .expect("invalid producer config");
 
-  // Load Coordinator private environment variable
+  // Load Processor private key environment variable
   let coin_priv =
     message_box::PrivateKey::from_string(env::var(env_key.to_string()).unwrap().to_string());
 
@@ -435,11 +439,13 @@ async fn send_general_and_secure_test_message(
   producer
     .send(BaseRecord::to(&topic).key(&format!("{}_{}_GENERAL", &identity, &processor)).payload(&msg).partition(0))
     .expect("failed to send message");
+    // Add small delay for sending messages
     tokio::time::sleep(Duration::from_millis(500)).await;
 
   // Partition 1 is Secure
   producer
     .send(BaseRecord::to(&topic).key(&format!("{}_{}_SECURE", &identity, &processor)).payload(&enc).partition(1))
     .expect("failed to send message");
+    // Add small delay for sending messages
     tokio::time::sleep(Duration::from_millis(500)).await;
 }
