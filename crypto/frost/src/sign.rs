@@ -4,8 +4,9 @@ use std::{
   collections::HashMap,
 };
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
-use rand_chacha::ChaCha20Rng;
+use rand::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::{ChaCha8Rng, ChaCha20Rng};
+use rand::seq::SliceRandom;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -122,7 +123,14 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     let addendum = params.algorithm.preprocess_addendum(&mut rng, &params.keys);
 
     let preprocess = Preprocess { commitments, addendum };
-    (AlgorithmSignMachine { params, seed, nonces, preprocess: preprocess.clone() }, preprocess)
+
+    // Also obtain entropy to randomly sort the included participants if we need to identify blame
+    let mut blame_entropy = [0; 32];
+    rng.fill_bytes(&mut blame_entropy);
+    (
+      AlgorithmSignMachine { params, seed, nonces, preprocess: preprocess.clone(), blame_entropy },
+      preprocess,
+    )
   }
 
   #[cfg(any(test, feature = "tests"))]
@@ -136,6 +144,7 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
       seed: Zeroizing::new(CachedPreprocess([0; 32])),
       nonces,
       preprocess,
+      blame_entropy: [0; 32],
     }
   }
 }
@@ -215,6 +224,7 @@ pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   pub(crate) nonces: Vec<Nonce<C>>,
   #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A::Addendum>,
+  pub(crate) blame_entropy: [u8; 32],
 }
 
 impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachine<C, A> {
@@ -381,7 +391,14 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
     let share = self.params.algorithm.sign_share(&view, &Rs, nonces, msg);
 
     Ok((
-      AlgorithmSignatureMachine { params: self.params.clone(), view, B, Rs, share },
+      AlgorithmSignatureMachine {
+        params: self.params.clone(),
+        view,
+        B,
+        Rs,
+        share,
+        blame_entropy: self.blame_entropy,
+      },
       SignatureShare(share),
     ))
   }
@@ -408,6 +425,7 @@ pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
   B: BindingFactor<C>,
   Rs: Vec<Vec<C::G>>,
   share: C::F,
+  blame_entropy: [u8; 32],
 }
 
 impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSignatureMachine<C, A> {
@@ -439,16 +457,20 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
       return Ok(sig);
     }
 
-    // Find out who misbehaved. It may be beneficial to randomly sort this to have detection be
-    // within n / 2 on average, and not gameable to n, though that should be minor
-    // TODO
-    for l in &self.view.included() {
+    // Find out who misbehaved
+    // Randomly sorts the included participants to discover the answer on average within n/2 tries
+    // If we didn't randomly sort them, it would be gameable to n by a malicious participant
+    let mut rand_included = self.view.included();
+    // It is unfortunate we have to construct a ChaCha RNG here, yet it's due to the lack of a
+    // provided RNG. Its hashing is cheaper than abused ECC ops
+    rand_included.shuffle(&mut ChaCha8Rng::from_seed(self.blame_entropy));
+    for l in rand_included {
       if !self.params.algorithm.verify_share(
-        self.view.verification_share(*l),
-        &self.B.bound(*l),
-        responses[l],
+        self.view.verification_share(l),
+        &self.B.bound(l),
+        responses[&l],
       ) {
-        Err(FrostError::InvalidShare(*l))?;
+        Err(FrostError::InvalidShare(l))?;
       }
     }
 

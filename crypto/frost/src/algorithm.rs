@@ -2,7 +2,7 @@ use core::{marker::PhantomData, fmt::Debug};
 use std::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, CryptoRng};
+use rand::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 

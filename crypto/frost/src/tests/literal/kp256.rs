@@ -1,4 +1,4 @@
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 
 use crate::tests::vectors::{Vectors, test_with_vectors};
 

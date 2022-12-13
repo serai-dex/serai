@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, CryptoRng};
+use rand::{RngCore, CryptoRng};
 
 use group::{ff::PrimeField, GroupEncoding};
 
