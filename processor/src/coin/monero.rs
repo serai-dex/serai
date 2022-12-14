@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 
+use zeroize::Zeroizing;
+
 use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;
@@ -65,23 +67,23 @@ pub struct SignableTransaction {
 #[derive(Clone, Debug)]
 pub struct Monero {
   pub(crate) rpc: Rpc,
-  view: Scalar,
+  view: Zeroizing<Scalar>,
 }
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    Monero { rpc: Rpc::new(url).unwrap(), view: additional_key::<Monero>(0).0 }
+    Monero { rpc: Rpc::new(url).unwrap(), view: Zeroizing::new(additional_key::<Monero>(0).0) }
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
-    Scanner::from_view(ViewPair::new(spend.0, self.view), Network::Mainnet, None)
+    Scanner::from_view(ViewPair::new(spend.0, self.view.clone()), Network::Mainnet, None)
   }
 
   #[cfg(test)]
   fn empty_scanner() -> Scanner {
     use group::Group;
     Scanner::from_view(
-      ViewPair::new(*dfg::EdwardsPoint::generator(), Scalar::one()),
+      ViewPair::new(*dfg::EdwardsPoint::generator(), Zeroizing::new(Scalar::one())),
       Network::Mainnet,
       Some(std::collections::HashSet::new()),
     )
