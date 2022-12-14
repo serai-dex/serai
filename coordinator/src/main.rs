@@ -1,6 +1,7 @@
 mod core;
 mod health;
 mod signature;
+mod test;
 
 use std::io;
 use clap::{App, Arg};
