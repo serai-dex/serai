@@ -14,4 +14,6 @@ xmr_rpc = ""
 logger = "debug"
 
 [kafka]
-server = "localhost:9094"
+host = "localhost"
+port = "9094"
+offset_reset = "smallest"

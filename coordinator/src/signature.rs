@@ -42,15 +42,15 @@ impl fmt::Display for Coin {
 }
 
 // Configuration for admin client to check / initialize topics
-fn create_config(server: &String) -> ClientConfig {
+fn create_config(kafka_config: &KafkaConfig) -> ClientConfig {
   let mut config = ClientConfig::new();
-  config.set("bootstrap.servers", server);
+  config.set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port));
   config
 }
 
 // Creates admin client used to check / initialize topics
-fn create_admin_client(server: &String) -> AdminClient<DefaultClientContext> {
-  create_config(server)
+fn create_admin_client(kafka_config: &KafkaConfig) -> AdminClient<DefaultClientContext> {
+  create_config(kafka_config)
       .create()
       .expect("admin client creation failed")
 }
@@ -70,14 +70,12 @@ impl SignatureProcess {
   pub async fn run(self) {
     println!("Starting Signature Process");
 
-    let kafka_server = &self.kafka_config.server;
-
     // Check/initialize kakf topics
     let j = serde_json::to_string(&self.chain_config).unwrap();
     let mut topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
     topic_ref.insert("Coordinator".to_string(), true);
 
-    let admin_client = create_admin_client(&kafka_server);
+    let admin_client = create_admin_client(&self.kafka_config);
     let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
   
     // Loop through each coin & initialize each kakfa topic
@@ -106,22 +104,22 @@ impl SignatureProcess {
     let coin_hashmap = create_coin_hashmap(&self.chain_config);
 
     // Initialize consumers to read processor pubkeys on general partition
-    consume_pubkey_processor(&kafka_server, &self.identity, &coin_hashmap);
+    consume_pubkey_processor(&self.kafka_config, &self.identity, &coin_hashmap);
 
     // Initialize producer to send coordinator pubkey to processors on general partition
-    produce_coordinator_pubkey(&kafka_server, &self.identity);
+    produce_coordinator_pubkey(&self.kafka_config, &self.identity);
 
     // Wait to receive all Processer Pubkeys
     process_received_pubkeys(&coin_hashmap).await;
 
     // Initialize consumer used to read test messages from processors on general partition
-    consume_processor_general_test_message(&kafka_server, &self.identity, &coin_hashmap);
+    consume_processor_general_test_message(&self.kafka_config, &self.identity, &coin_hashmap);
 
     // Initialize consumer used to read secure test messages from processors on secure partition
-    consume_processor_secure_test_message(&kafka_server, &self.identity, &coin_hashmap);
+    consume_processor_secure_test_message(&self.kafka_config, &self.identity, &coin_hashmap);
 
     // Initialize a producer that sends a general & secure test message
-    produce_general_and_secure_test_message(&kafka_server, &self.identity, &coin_hashmap).await;
+    produce_general_and_secure_test_message(&self.kafka_config, &self.identity, &coin_hashmap).await;
   }
 
   fn stop(self) {
@@ -130,7 +128,7 @@ impl SignatureProcess {
 }
 
 // Initialize consumers to read processor pubkeys on general partition
-fn consume_pubkey_processor(server: &str, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+fn consume_pubkey_processor(kafka_config: &KafkaConfig, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer
@@ -146,13 +144,13 @@ fn consume_pubkey_processor(server: &str, identity: &str, coin_hashmap: &HashMap
       topic.push_str("_Topic");
       let env_key = &mut _key.to_string().to_owned();
       env_key.push_str("_PUB");
-      initialize_consumer(&server, &group_id, &topic, Some(env_key.to_string()), None, "general");
+      initialize_consumer(kafka_config, &group_id, &topic, Some(env_key.to_string()), None, "general");
     }
   }
 }
 
 // Initialize consumer used to read test messages from processors on general partition
-fn consume_processor_general_test_message(server: &str, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+fn consume_processor_general_test_message(kafka_config: &KafkaConfig, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create general message consumer
@@ -166,13 +164,13 @@ fn consume_processor_general_test_message(server: &str, identity: &str, coin_has
       topic.push_str("_");
       topic.push_str(&_key.to_string());
       topic.push_str("_Topic");
-      initialize_consumer(&server, &group_id, &topic, None, None, "general");
+      initialize_consumer(kafka_config, &group_id, &topic, None, None, "general");
     }
   }
 }
 
 // Initialize consumer used to read secure test messages from processors on secure partition
-fn consume_processor_secure_test_message(server: &str, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+fn consume_processor_secure_test_message(kafka_config: &KafkaConfig, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create secure message consumer
@@ -189,14 +187,14 @@ fn consume_processor_secure_test_message(server: &str, identity: &str, coin_hash
       let env_key = &mut key.to_string();
       // ENV_KEY references the processor pubkey we want to use with message box
       env_key.push_str("_PUB");
-      initialize_consumer(&server, &group_id, &topic, Some(env_key.to_string()), Some(&mut key.to_string()), "secure");
+      initialize_consumer(kafka_config, &group_id, &topic, Some(env_key.to_string()), Some(&mut key.to_string()), "secure");
     }
   }
 }
 
 // Initializes consumer based on general or secure partition
 fn initialize_consumer(
-  server: &str,
+  kafka_config: &KafkaConfig,
   group_id: &str,
   topic: &str,
   env_key: Option<String>,
@@ -204,9 +202,9 @@ fn initialize_consumer(
   consumer_type: &str,
 ) {
   let consumer: BaseConsumer = ClientConfig::new()
-    .set("bootstrap.servers", server)
+    .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
     .set("group.id", group_id)
-    .set("auto.offset.reset", "smallest")
+    .set("auto.offset.reset", kafka_config.offset_reset.to_owned())
     .create()
     .expect("invalid consumer config");
 
@@ -293,10 +291,10 @@ fn initialize_consumer(
 }
 
 // Initialize producer to send coordinator pubkey to processors on general partition
-fn produce_coordinator_pubkey(server: &str, identity: &str) {
+fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, identity: &str) {
   // Creates a producer to send coordinator pubkey message
   let producer: ThreadedProducer<_> = ClientConfig::new()
-    .set("bootstrap.servers", server)
+    .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
     .create()
     .expect("invalid producer config");
 
@@ -338,7 +336,7 @@ async fn process_received_pubkeys(coin_hashmap: &HashMap<Coin, bool>) {
         env_key.push_str("_PUB");
 
         let pub_check = env::var(env_key);
-        if (!pub_check.is_err()) {
+        if !pub_check.is_err() {
           keys_found += 1;
         }
       }
@@ -394,7 +392,7 @@ fn retrieve_message_box_id(coin: &String) -> &'static str {
 }
 
 // Initialize a producer that sends a general & secure test message
-async fn produce_general_and_secure_test_message(server: &str, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+async fn produce_general_and_secure_test_message(kafka_config: &KafkaConfig, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create general and secure producer
@@ -412,7 +410,7 @@ async fn produce_general_and_secure_test_message(server: &str, identity: &str, c
       msg.push_str(processor_id);
 
       send_general_and_secure_test_message(
-        &server,
+        &kafka_config,
         &identity,
         &topic,
         env_key.to_string(),
@@ -425,7 +423,7 @@ async fn produce_general_and_secure_test_message(server: &str, identity: &str, c
 
 // Initializes a producer then sends both a general and secure test message
 async fn send_general_and_secure_test_message(
-  server: &str,
+  kafka_config: &KafkaConfig,
   identity: &str,
   topic: &str,
   env_key: String,
@@ -433,7 +431,7 @@ async fn send_general_and_secure_test_message(
   msg: Vec<u8>,
 ) {
   let producer: ThreadedProducer<_> = ClientConfig::new()
-    .set("bootstrap.servers", server)
+    .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
     .create()
     .expect("invalid producer config");
 

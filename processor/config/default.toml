@@ -18,4 +18,6 @@ target_host = "127.0.0.1"
 target_port = "1337"
 
 [kafka]
-server = "localhost:9094"
+host = "localhost"
+port = "9094"
+offset_reset = "smallest"

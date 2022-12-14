@@ -300,16 +300,26 @@ impl ObserverConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[allow(unused)]
 pub struct KafkaConfig {
-  pub server: String,
+  pub host: String,
+  pub port: String,
+  pub offset_reset: String,
 }
 
 impl KafkaConfig {
   fn new(config: Config) -> Self {
-    let server = config.get_string("server").unwrap();
-    Self { server }
+    let host = config.get_string("host").unwrap();
+    let port = config.get_string("port").unwrap();
+    let offset_reset = config.get_string("offset_reset").unwrap();
+    Self { host, port, offset_reset }
   }
-  pub fn get_server(&self) -> String {
-    self.server.clone()
+  pub fn get_host(&self) -> String {
+    self.host.clone()
+  }
+  pub fn get_port(&self) -> String {
+    self.port.clone()
+  }
+  pub fn get_offset_reset(&self) -> String {
+    self.offset_reset.clone()
   }
 }
 
@@ -363,7 +373,9 @@ impl CoordinatorConfig {
         xmr: s.get_bool("chains.xmr").unwrap(),
       },
       kafka: KafkaConfig {
-        server: s.get_string("kafka.server").unwrap(),
+        host: s.get_string("kafka.host").unwrap(),
+        port: s.get_string("kafka.port").unwrap(),
+        offset_reset: s.get_string("kafka.offset_reset").unwrap(),
       },
     };
 
