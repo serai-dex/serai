@@ -376,8 +376,8 @@ impl<C: Ciphersuite> ThresholdView<C> {
     self.group_key
   }
 
-  pub fn included(&self) -> Vec<u16> {
-    self.included.clone()
+  pub fn included(&self) -> &[u16] {
+    &self.included
   }
 
   pub fn secret_share(&self) -> &Zeroizing<C::F> {

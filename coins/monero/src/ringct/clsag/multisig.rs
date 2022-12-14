@@ -229,7 +229,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       &mut self.image,
       self.H,
       view.offset().0,
-      &view.included(),
+      view.included(),
       l,
       addendum.key_image.0,
     );

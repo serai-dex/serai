@@ -461,7 +461,7 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     mut shares: HashMap<u16, SignatureShare<C>>,
   ) -> Result<A::Signature, FrostError> {
     let params = self.params.multisig_params();
-    validate_map(&shares, &self.view.included(), params.i())?;
+    validate_map(&shares, self.view.included(), params.i())?;
 
     let mut responses = HashMap::new();
     responses.insert(params.i(), self.share);
@@ -481,7 +481,7 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     // Find out who misbehaved
     // Randomly sorts the included participants to discover the answer on average within n/2 tries
     // If we didn't randomly sort them, it would be gameable to n by a malicious participant
-    let mut rand_included = self.view.included();
+    let mut rand_included = self.view.included().to_vec();
     // It is unfortunate we have to construct a ChaCha RNG here, yet it's due to the lack of a
     // provided RNG. Its hashing is cheaper than abused ECC ops
     rand_included.shuffle(&mut ChaCha8Rng::from_seed(self.blame_entropy));
