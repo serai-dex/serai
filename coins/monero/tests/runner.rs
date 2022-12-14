@@ -1,6 +1,9 @@
+use core::ops::Deref;
 use std::sync::Mutex;
 
 use lazy_static::lazy_static;
+
+use zeroize::Zeroizing;
 use rand_core::OsRng;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
@@ -17,14 +20,14 @@ use monero_serai::{
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
   let spend = random_scalar(&mut OsRng);
   let spend_pub = &spend * &ED25519_BASEPOINT_TABLE;
-  let view = random_scalar(&mut OsRng);
+  let view = Zeroizing::new(random_scalar(&mut OsRng));
   (
     spend,
-    ViewPair::new(spend_pub, view),
+    ViewPair::new(spend_pub, view.clone()),
     MoneroAddress {
       meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
       spend: spend_pub,
-      view: &view * &ED25519_BASEPOINT_TABLE,
+      view: view.deref() * &ED25519_BASEPOINT_TABLE,
     },
   )
 }
@@ -163,7 +166,7 @@ macro_rules! test {
             keys[&1].group_key().0
           };
 
-          let view = ViewPair::new(spend_pub, random_scalar(&mut OsRng));
+          let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
 
           let rpc = rpc().await;
 

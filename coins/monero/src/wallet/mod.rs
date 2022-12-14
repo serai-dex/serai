@@ -1,6 +1,7 @@
+use core::ops::Deref;
 use std::collections::{HashSet, HashMap};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -97,11 +98,11 @@ pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct ViewPair {
   spend: EdwardsPoint,
-  view: Scalar,
+  view: Zeroizing<Scalar>,
 }
 
 impl ViewPair {
-  pub fn new(spend: EdwardsPoint, view: Scalar) -> ViewPair {
+  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> ViewPair {
     ViewPair { spend, view }
   }
 
@@ -110,15 +111,15 @@ impl ViewPair {
       return Scalar::zero();
     }
 
-    hash_to_scalar(
-      &[
+    hash_to_scalar(&Zeroizing::new(
+      [
         b"SubAddr\0".as_ref(),
-        &self.view.to_bytes(),
+        Zeroizing::new(self.view.to_bytes()).as_ref(),
         &index.0.to_le_bytes(),
         &index.1.to_le_bytes(),
       ]
       .concat(),
-    )
+    ))
   }
 }
 
@@ -191,7 +192,7 @@ impl Scanner {
         },
       ),
       self.pair.spend,
-      &self.pair.view * &ED25519_BASEPOINT_TABLE,
+      self.pair.view.deref() * &ED25519_BASEPOINT_TABLE,
     )
   }
 
@@ -214,7 +215,7 @@ impl Scanner {
         },
       ),
       spend,
-      self.pair.view * spend,
+      self.pair.view.deref() * spend,
     )
   }
 }
