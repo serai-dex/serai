@@ -4,15 +4,15 @@ use std::{
   collections::HashMap,
 };
 
-use rand::{RngCore, CryptoRng, SeedableRng};
-use rand_chacha::{ChaCha8Rng, ChaCha20Rng};
-use rand::seq::SliceRandom;
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use transcript::Transcript;
 
 use group::{ff::PrimeField, GroupEncoding};
+use multiexp::BatchVerifier;
 
 use crate::{
   curve::Curve,
@@ -478,24 +478,29 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
       return Ok(sig);
     }
 
-    // Find out who misbehaved
-    // Randomly sorts the included participants to discover the answer on average within n/2 tries
-    // If we didn't randomly sort them, it would be gameable to n by a malicious participant
-    let mut rand_included = self.view.included().to_vec();
-    // It is unfortunate we have to construct a ChaCha RNG here, yet it's due to the lack of a
-    // provided RNG. Its hashing is cheaper than abused ECC ops
-    rand_included.shuffle(&mut ChaCha8Rng::from_seed(self.blame_entropy));
-    for l in rand_included {
-      if !self.params.algorithm.verify_share(
-        self.view.verification_share(l),
-        &self.B.bound(l),
-        responses[&l],
+    // We could remove blame_entropy by taking in an RNG here
+    // Considering we don't need any RNG for a valid signature, and we only use the RNG here for
+    // performance reasons, it doesn't feel worthwhile to include as an argument to every
+    // implementor of the trait
+    let mut rng = ChaCha20Rng::from_seed(self.blame_entropy);
+    let mut batch = BatchVerifier::new(self.view.included().len());
+    for l in self.view.included() {
+      if let Ok(statements) = self.params.algorithm.verify_share(
+        self.view.verification_share(*l),
+        &self.B.bound(*l),
+        responses[l],
       ) {
-        Err(FrostError::InvalidShare(l))?;
+        batch.queue(&mut rng, *l, statements);
+      } else {
+        Err(FrostError::InvalidShare(*l))?;
       }
     }
 
-    // If everyone has a valid share and there were enough participants, this should've worked
+    if let Err(l) = batch.verify_vartime_with_vartime_blame() {
+      Err(FrostError::InvalidShare(l))?;
+    }
+
+    // If everyone has a valid share, and there were enough participants, this should've worked
     Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
   }
 }

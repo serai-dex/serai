@@ -1,4 +1,4 @@
-use rand::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng};
 
 use group::Group;
 

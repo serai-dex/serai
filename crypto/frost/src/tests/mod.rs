@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rand::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng};
 
 pub use dkg::tests::{key_gen, recover_key};
 

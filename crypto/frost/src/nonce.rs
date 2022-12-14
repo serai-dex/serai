@@ -14,7 +14,7 @@ use std::{
   collections::HashMap,
 };
 
-use rand::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, Zeroizing};
 

@@ -10,13 +10,12 @@ use rand_chacha::ChaCha20Rng;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
   traits::{Identity, IsIdentity},
   scalar::Scalar,
   edwards::EdwardsPoint,
 };
 
-use group::{Group, GroupEncoding};
+use group::{ff::Field, Group, GroupEncoding};
 
 use transcript::{Transcript, RecommendedTranscript};
 use dalek_ff_group as dfg;
@@ -296,14 +295,17 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     None
   }
 
-  #[must_use]
   fn verify_share(
     &self,
     verification_share: dfg::EdwardsPoint,
     nonces: &[Vec<dfg::EdwardsPoint>],
     share: dfg::Scalar,
-  ) -> bool {
+  ) -> Result<Vec<(dfg::Scalar, dfg::EdwardsPoint)>, ()> {
     let interim = self.interim.as_ref().unwrap();
-    (&share.0 * &ED25519_BASEPOINT_TABLE) == (nonces[0][0].0 - (interim.p * verification_share.0))
+    Ok(vec![
+      (share, dfg::EdwardsPoint::generator()),
+      (dfg::Scalar(interim.p), verification_share),
+      (-dfg::Scalar::one(), nonces[0][0]),
+    ])
   }
 }
