@@ -305,7 +305,7 @@ pub struct KafkaConfig {
 
 impl KafkaConfig {
   fn new(config: Config) -> Self {
-    let server = config.get_string("servers").unwrap();
+    let server = config.get_string("server").unwrap();
     Self { server }
   }
   pub fn get_server(&self) -> String {
