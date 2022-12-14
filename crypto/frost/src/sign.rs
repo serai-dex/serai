@@ -115,10 +115,13 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     let mut params = self.params;
 
     let mut rng = ChaCha20Rng::from_seed(seed.0);
+    // Get a challenge to the existing transcript for use when proving for the commitments
+    let commitments_challenge = params.algorithm.transcript().challenge(b"commitments");
     let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
       &mut rng,
       params.keys.secret_share(),
       &params.algorithm.nonces(),
+      commitments_challenge.as_ref(),
     );
     let addendum = params.algorithm.preprocess_addendum(&mut rng, &params.keys);
 
@@ -128,22 +131,35 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     let mut blame_entropy = [0; 32];
     rng.fill_bytes(&mut blame_entropy);
     (
-      AlgorithmSignMachine { params, seed, nonces, preprocess: preprocess.clone(), blame_entropy },
+      AlgorithmSignMachine {
+        params,
+        seed,
+        commitments_challenge,
+        nonces,
+        preprocess: preprocess.clone(),
+        blame_entropy,
+      },
       preprocess,
     )
   }
 
   #[cfg(any(test, feature = "tests"))]
   pub(crate) fn unsafe_override_preprocess(
-    self,
+    mut self,
     nonces: Vec<Nonce<C>>,
     preprocess: Preprocess<C, A::Addendum>,
   ) -> AlgorithmSignMachine<C, A> {
     AlgorithmSignMachine {
+      commitments_challenge: self.params.algorithm.transcript().challenge(b"commitments"),
+
       params: self.params,
       seed: Zeroizing::new(CachedPreprocess([0; 32])),
+
       nonces,
       preprocess,
+      // Uses 0s since this is just used to protect against a malicious participant from
+      // deliberately increasing the amount of time needed to identify them (and is accordingly
+      // not necessary to function)
       blame_entropy: [0; 32],
     }
   }
@@ -221,6 +237,7 @@ pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
   seed: Zeroizing<CachedPreprocess>,
 
+  commitments_challenge: <A::Transcript as Transcript>::Challenge,
   pub(crate) nonces: Vec<Nonce<C>>,
   #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A::Addendum>,
@@ -249,7 +266,11 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess> {
     Ok(Preprocess {
-      commitments: Commitments::read::<_, A::Transcript>(reader, &self.params.algorithm.nonces())?,
+      commitments: Commitments::read::<_, A::Transcript>(
+        reader,
+        &self.params.algorithm.nonces(),
+        self.commitments_challenge.as_ref(),
+      )?,
       addendum: self.params.algorithm.read_addendum(reader)?,
     })
   }

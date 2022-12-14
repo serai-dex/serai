@@ -27,8 +27,19 @@ use dleq::DLEqProof;
 
 use crate::curve::Curve;
 
-fn dleq_transcript<T: Transcript>() -> T {
-  T::new(b"FROST_nonce_dleq")
+// Every participant proves for their commitments at the start of the protocol
+// These proofs are verified sequentially, requiring independent transcripts
+// In order to make these transcripts more robust, the FROST transcript (at time of preprocess) is
+// challenged in order to create a commitment to it, carried in each independent transcript
+// (effectively forking the original transcript)
+//
+// For FROST, as defined by the IETF, this will do nothing (and this transcript will never even be
+// constructed). For higher level protocols, the transcript may have contextual info these proofs
+// will then be bound to
+fn dleq_transcript<T: Transcript>(context: &[u8]) -> T {
+  let mut transcript = T::new(b"FROST_commitments");
+  transcript.append_message(b"context", context);
+  transcript
 }
 
 // Each nonce is actually a pair of random scalars, notated as d, e under the FROST paper
@@ -67,6 +78,7 @@ impl<C: Curve> NonceCommitments<C> {
     rng: &mut R,
     secret_share: &Zeroizing<C::F>,
     generators: &[C::G],
+    context: &[u8],
   ) -> (Nonce<C>, NonceCommitments<C>) {
     let nonce = Nonce::<C>([
       C::random_nonce(secret_share, &mut *rng),
@@ -87,8 +99,7 @@ impl<C: Curve> NonceCommitments<C> {
         // Uses an independent transcript as each signer must prove this with their commitments,
         // yet they're validated while processing everyone's data sequentially, by the global order
         // This avoids needing to clone and fork the transcript around
-        // TODO: At least include a challenge from the existing transcript
-        DLEqProof::prove(&mut *rng, &mut dleq_transcript::<T>(), generators, nonce)
+        DLEqProof::prove(&mut *rng, &mut dleq_transcript::<T>(context), generators, nonce)
       };
       dleqs = Some([dleq(&nonce.0[0]), dleq(&nonce.0[1])]);
     }
@@ -99,6 +110,7 @@ impl<C: Curve> NonceCommitments<C> {
   fn read<R: Read, T: Transcript>(
     reader: &mut R,
     generators: &[C::G],
+    context: &[u8],
   ) -> io::Result<NonceCommitments<C>> {
     let commitments: Vec<GeneratorCommitments<C>> = (0 .. generators.len())
       .map(|_| GeneratorCommitments::read(reader))
@@ -110,7 +122,7 @@ impl<C: Curve> NonceCommitments<C> {
         let dleq = DLEqProof::deserialize(reader)?;
         dleq
           .verify(
-            &mut dleq_transcript::<T>(),
+            &mut dleq_transcript::<T>(context),
             generators,
             &commitments.iter().map(|commitments| commitments.0[i]).collect::<Vec<_>>(),
           )
@@ -146,12 +158,13 @@ impl<C: Curve> Commitments<C> {
     rng: &mut R,
     secret_share: &Zeroizing<C::F>,
     planned_nonces: &[Vec<C::G>],
+    context: &[u8],
   ) -> (Vec<Nonce<C>>, Commitments<C>) {
     let mut nonces = vec![];
     let mut commitments = vec![];
     for generators in planned_nonces {
       let (nonce, these_commitments) =
-        NonceCommitments::new::<_, T>(&mut *rng, secret_share, generators);
+        NonceCommitments::new::<_, T>(&mut *rng, secret_share, generators, context);
       nonces.push(nonce);
       commitments.push(these_commitments);
     }
@@ -183,10 +196,11 @@ impl<C: Curve> Commitments<C> {
   pub(crate) fn read<R: Read, T: Transcript>(
     reader: &mut R,
     nonces: &[Vec<C::G>],
+    context: &[u8],
   ) -> io::Result<Self> {
     Ok(Commitments {
       nonces: (0 .. nonces.len())
-        .map(|i| NonceCommitments::read::<_, T>(reader, &nonces[i]))
+        .map(|i| NonceCommitments::read::<_, T>(reader, &nonces[i], context))
         .collect::<Result<_, _>>()?,
     })
   }
