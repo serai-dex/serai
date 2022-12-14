@@ -1,5 +1,5 @@
 /// The processor core module contains functionality that is shared across modules.
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
 use std::{env, fmt, thread, str::FromStr, io::Write};
 use chrono::prelude::*;
@@ -11,7 +11,6 @@ use std::collections::HashMap;
 // Key Generation
 use message_box;
 use std::alloc::System;
-use zeroize::Zeroize;
 use zalloc::ZeroizingAlloc;
 use group::ff::PrimeField;
 #[global_allocator]
@@ -125,6 +124,7 @@ pub enum ConfigType {
   Chain,
   Health,
   Observer,
+  Kafka,
 }
 
 impl fmt::Display for ConfigType {
@@ -134,6 +134,7 @@ impl fmt::Display for ConfigType {
       ConfigType::Chain => write!(f, "chains"),
       ConfigType::Health => write!(f, "health"),
       ConfigType::Observer => write!(f, "observer"),
+      ConfigType::Kafka => write!(f, "kafka"),
     }
   }
 }
@@ -145,6 +146,7 @@ impl fmt::Debug for ConfigType {
       ConfigType::Chain => write!(f, "chains"),
       ConfigType::Health => write!(f, "health"),
       ConfigType::Observer => write!(f, "observer"),
+      ConfigType::Kafka => write!(f, "kafka"),
     }
   }
 }
@@ -156,6 +158,7 @@ impl Clone for ConfigType {
       ConfigType::Chain => ConfigType::Chain,
       ConfigType::Health => ConfigType::Health,
       ConfigType::Observer => ConfigType::Observer,
+      ConfigType::Kafka => ConfigType::Kafka,
     }
   }
 }
@@ -239,6 +242,22 @@ impl ObserverConfig {
   }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[allow(unused)]
+pub struct KafkaConfig {
+  pub server: String,
+}
+
+impl KafkaConfig {
+  fn new(config: Config) -> Self {
+    let server = config.get_string("servers").unwrap();
+    Self { server }
+  }
+  pub fn get_server(&self) -> String {
+    self.server.clone()
+  }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct ProcessorConfig {
@@ -248,6 +267,7 @@ pub struct ProcessorConfig {
   health: HealthConfig,
   observer: ObserverConfig,
   chain: ChainConfig,
+  kafka: KafkaConfig,
 }
 
 impl ProcessorConfig {
@@ -285,6 +305,9 @@ impl ProcessorConfig {
         btc: s.get_bool("chains.btc").unwrap(),
         eth: s.get_bool("chains.eth").unwrap(),
         xmr: s.get_bool("chains.xmr").unwrap(),
+      },
+      kafka: KafkaConfig {
+        server: s.get_string("kafka.server").unwrap(),
       },
     };
 
@@ -326,6 +349,10 @@ impl ProcessorConfig {
   pub fn get_chain(&self) -> ChainConfig {
     self.chain.clone()
   }
+  // get the kafka config
+  pub fn get_kafka(&self) -> KafkaConfig {
+    self.kafka.clone()
+  }
 }
 
 // Accepts startup argument specifying which coin package to start
@@ -353,19 +380,15 @@ pub fn initialize_keys(config: &ProcessorConfig) {
 
       // Checks if coin keys are set
       let priv_check = env::var(&env_privkey.to_string());
-      if (priv_check.is_err()) {
+      if priv_check.is_err() {
         // Generates new private / public key
         let (privkey, pubkey) = message_box::key_gen();
         let mut privkey_bytes = unsafe { privkey.inner().to_repr() };
         // Sets private / public key to environment variables
-        // env_perm::set(&env_privkey, &format!(r#"{}"#, hex::encode(&privkey_bytes.as_ref())))
-        //   .expect(&format!("Failed to find or set {}", &env_privkey));
         env::set_var(&env_privkey, hex::encode(&privkey_bytes.as_ref()));
 
         let mut env_pubkey = String::from(&key).to_uppercase();
         env_pubkey.push_str("_PUB");
-        // env_perm::set(&env_pubkey, &format!(r#"{}"#, hex::encode(&pubkey.to_bytes())))
-        //   .expect(&format!("Failed to find or set {}", &env_pubkey));
         env::set_var(&env_pubkey, hex::encode(&pubkey.to_bytes()));
       }
     }
@@ -374,7 +397,6 @@ pub fn initialize_keys(config: &ProcessorConfig) {
 
 // Create Hashmap based on coins
 fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<String, bool> {
-  // Create Hashmap based on coins
   let j = serde_json::to_string(&chain_config).unwrap();
   let coins: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
   coins

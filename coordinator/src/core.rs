@@ -1,5 +1,5 @@
 /// The coordinator core module contains functionality that is shared across modules.
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
 use std::{env, fmt, thread, str::FromStr, io::Write};
 use chrono::prelude::*;
@@ -11,12 +11,10 @@ use log::{LevelFilter, Record};
 // Key Generation
 use message_box;
 use std::alloc::System;
-use zeroize::Zeroize;
 use zalloc::ZeroizingAlloc;
 use group::ff::PrimeField;
 #[global_allocator]
 static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
-use std::process::Command;
 use std::str;
 
 // All asynchronous processes follow a pattern to modularly
@@ -144,6 +142,7 @@ pub enum ConfigType {
   Chain,
   Health,
   Observer,
+  Kafka,
 }
 
 impl fmt::Display for ConfigType {
@@ -153,6 +152,7 @@ impl fmt::Display for ConfigType {
       ConfigType::Chain => write!(f, "chains"),
       ConfigType::Health => write!(f, "health"),
       ConfigType::Observer => write!(f, "observer"),
+      ConfigType::Kafka => write!(f, "kafka"),
     }
   }
 }
@@ -164,6 +164,7 @@ impl fmt::Debug for ConfigType {
       ConfigType::Chain => write!(f, "chains"),
       ConfigType::Health => write!(f, "health"),
       ConfigType::Observer => write!(f, "observer"),
+      ConfigType::Kafka => write!(f, "kafka"),
     }
   }
 }
@@ -175,6 +176,7 @@ impl Clone for ConfigType {
       ConfigType::Chain => ConfigType::Chain,
       ConfigType::Health => ConfigType::Health,
       ConfigType::Observer => ConfigType::Observer,
+      ConfigType::Kafka => ConfigType::Kafka,
     }
   }
 }
@@ -295,6 +297,22 @@ impl ObserverConfig {
   }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[allow(unused)]
+pub struct KafkaConfig {
+  pub server: String,
+}
+
+impl KafkaConfig {
+  fn new(config: Config) -> Self {
+    let server = config.get_string("servers").unwrap();
+    Self { server }
+  }
+  pub fn get_server(&self) -> String {
+    self.server.clone()
+  }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct CoordinatorConfig {
@@ -304,6 +322,7 @@ pub struct CoordinatorConfig {
   health: HealthConfig,
   observer: ObserverConfig,
   chain: ChainConfig,
+  kafka: KafkaConfig,
 }
 
 impl CoordinatorConfig {
@@ -342,6 +361,9 @@ impl CoordinatorConfig {
         btc: s.get_bool("chains.btc").unwrap(),
         eth: s.get_bool("chains.eth").unwrap(),
         xmr: s.get_bool("chains.xmr").unwrap(),
+      },
+      kafka: KafkaConfig {
+        server: s.get_string("kafka.server").unwrap(),
       },
     };
 
@@ -391,22 +413,22 @@ impl CoordinatorConfig {
   pub fn get_chain(&self) -> ChainConfig {
     self.chain.clone()
   }
+  // get the kafka config
+  pub fn get_kafka(&self) -> KafkaConfig {
+    self.kafka.clone()
+  }
 }
 
 // Generates Private / Public key pair
 pub fn initialize_keys() {
   // Checks if coordinator keys are set
   let coord_priv_check = env::var("COORD_PRIV");
-  if (coord_priv_check.is_err()) {
+  if coord_priv_check.is_err() {
     println!("Generating New Keys");
     // Generates new private / public key
     let (private, public) = message_box::key_gen();
-    let mut private_bytes = unsafe { private.inner().to_repr() };
+    let private_bytes = unsafe { private.inner().to_repr() };
     // Sets private / public key to environment variables
-    // env_perm::set("COORD_PRIV", &format!(r#"{}"#, hex::encode(&private_bytes.as_ref())))
-    //   .expect("Failed to set COORD_PRIV");
-    // env_perm::set("COORD_PUB", &format!(r#"{}"#, hex::encode(&public.to_bytes())))
-    //   .expect("Failed to set COORD_PUB");
     env::set_var("COORD_PRIV", hex::encode(&private_bytes.as_ref()));
     env::set_var("COORD_PUB", hex::encode(&public.to_bytes()));
   } else {

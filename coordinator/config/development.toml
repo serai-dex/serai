@@ -12,3 +12,6 @@ xmr_rpc = ""
 
 [health]
 logger = "debug"
+
+[kafka]
+server = "localhost:9094"
