@@ -49,8 +49,9 @@ async fn main() {
   let config = ProcessorConfig::new(String::from(path_arg)).unwrap();
 
   // Start Core Process
+  let core_config = config.clone();
   tokio::spawn(async move {
-    let core_process = CoreProcess::new(config);
+    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_chain());
     core_process.run();
   });
 
@@ -58,9 +59,9 @@ async fn main() {
   let identity_arg = args.value_of("identity").unwrap().to_owned();
 
   // Start Signature Process
-  let sig_config = ProcessorConfig::new(String::from(path_arg)).unwrap();
+  let sig_config = config.clone();
   tokio::spawn(async move {
-    let signature_process = SignatureProcess::new(sig_config, identity_arg);
+    let signature_process = SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), identity_arg);
     signature_process.run().await;
   });
 

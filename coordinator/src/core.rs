@@ -40,14 +40,17 @@ pub struct CoreProcess {
 }
 
 impl CoreProcess {
-  pub fn new(config: CoordinatorConfig) -> Self {
+  pub fn new(config: CoreConfig) -> Self {
     println!("New Core Process");
-    let core_config = config.get_core();
-    Self { core_config: core_config }
+    Self { core_config: config }
   }
 
   pub fn run(self) {
     println!("Starting Core Process");
+
+    // Check coordinator pubkey env variable
+    initialize_keys();
+
     start_logger(true, String::from("core"));
   }
 
@@ -378,9 +381,6 @@ impl CoordinatorConfig {
         offset_reset: s.get_string("kafka.offset_reset").unwrap(),
       },
     };
-
-    // Check coordinator pubkey env variable
-    initialize_keys();
 
     match mode {
       RunMode::Development => {

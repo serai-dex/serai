@@ -19,17 +19,21 @@ static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
 #[derive(Clone, Debug, Deserialize)]
 pub struct CoreProcess {
   core_config: CoreConfig,
+  chain_config: ChainConfig,
 }
 
 impl CoreProcess {
-  pub fn new(config: ProcessorConfig) -> Self {
+  pub fn new(core_config: CoreConfig, chain_config: ChainConfig) -> Self {
     println!("New Core Process");
-    let core_config = config.get_core();
-    Self { core_config: core_config }
+    Self { core_config: core_config, chain_config: chain_config}
   }
 
   pub fn run(self) {
     println!("Starting Core Process");
+
+    // Check coordinator pubkey env variable
+    initialize_keys(&self.chain_config);
+
     start_logger(true, String::from("core"));
   }
 
@@ -323,9 +327,6 @@ impl ProcessorConfig {
       },
     };
 
-    // Check coordinator pubkey env variable
-    initialize_keys(&config);
-
     match mode {
       RunMode::Development => {
         // Set development specific config
@@ -380,8 +381,8 @@ pub fn initialize_coin(coin: &str) {
 }
 
 // Generates Private / Public key pair
-pub fn initialize_keys(config: &ProcessorConfig) {
-  let coin_hashmap = create_coin_hashmap(&config.chain);
+pub fn initialize_keys(config: &ChainConfig) {
+  let coin_hashmap = create_coin_hashmap(&config);
   let hashmap_clone = coin_hashmap.clone();
 
   // Loop through each coin & if active, create pubkey consumer

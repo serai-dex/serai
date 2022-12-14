@@ -56,10 +56,8 @@ fn create_admin_client(kafka_config: &KafkaConfig) -> AdminClient<DefaultClientC
 // General Messages are contained in partition 0
 // Secure Messages are contained in parition 1
 impl SignatureProcess {
-  pub fn new(config: ProcessorConfig, identity: String) -> Self {
+  pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, identity: String) -> Self {
     println!("New Signature Process");
-    let chain_config = config.get_chain();
-    let kafka_config = config.get_kafka();
     Self { chain_config: chain_config, identity: identity, kafka_config: kafka_config }
   }
 
