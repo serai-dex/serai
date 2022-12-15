@@ -230,7 +230,7 @@ fn initialize_consumer(
       tpl.add_partition(&topic, 0);
       consumer.assign(&tpl).unwrap();
 
-      thread::spawn(move || {
+      tokio::spawn(async move {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
@@ -253,7 +253,7 @@ fn initialize_consumer(
       tpl.add_partition(&topic, 1);
       consumer.assign(&tpl).unwrap();
 
-      thread::spawn(move || {
+      tokio::spawn(async move {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
