@@ -1,4 +1,4 @@
-use std::{thread, collections::HashMap};
+use std::collections::HashMap;
 use std::{env, str, fmt};
 use rdkafka::{
   producer::{BaseRecord, ThreadedProducer},
@@ -9,6 +9,7 @@ use rdkafka::{
 };
 use message_box::MessageBox;
 use std::time::Duration;
+use log::info;
 
 use serde::{Deserialize};
 use crate::core::ChainConfig;
@@ -56,12 +57,12 @@ fn create_admin_client(kafka_config: &KafkaConfig) -> AdminClient<DefaultClientC
 // Secure Messages are contained in parition 1
 impl SignatureProcess {
   pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, identity: String) -> Self {
-    println!("New Signature Process");
+    info!("New Signature Process");
     Self { chain_config: chain_config, identity: identity, kafka_config: kafka_config }
   }
 
   pub async fn run(self) {
-    println!("Starting Signature Process");
+    info!("Starting Signature Process");
 
     // Check/initialize kakf topics
     let j = serde_json::to_string(&self.chain_config).unwrap();
@@ -116,7 +117,7 @@ impl SignatureProcess {
   }
 
   fn stop(self) {
-    println!("Stopping Signature Process");
+    info!("Stopping Signature Process");
   }
 }
 
@@ -142,7 +143,7 @@ fn consume_pubkey_coordinator(kafka_config: &KafkaConfig, identity: &str) {
       let key: &str = msg.key_view().unwrap().unwrap();
       let value = msg.payload().unwrap();
       let public_key = str::from_utf8(value).unwrap();
-      println!("Received {} Public Key: {}", &key, &public_key);
+      info!("Received {} Public Key: {}", &key, &public_key);
       env::set_var("COORD_PUB", public_key);
     }
   });
@@ -242,8 +243,8 @@ fn initialize_consumer(
           if key.contains("COORDINATOR") && key.contains("GENERAL") {
             let value = msg.payload().unwrap();
             let pub_msg = str::from_utf8(value).unwrap();
-            println!("Received Public Message from {}", &key);
-            println!("Public Message: {}", &pub_msg);
+            info!("Received Public Message from {}", &key);
+            info!("Public Message: {}", &pub_msg);
           }
         }
       });
@@ -279,8 +280,8 @@ fn initialize_consumer(
             let encoded_string =
               message_box.decrypt_from_str(&message_box::ids::COORDINATOR, &encrypted_msg).unwrap();
             let decoded_string = String::from_utf8(encoded_string).unwrap();
-            println!("Received Encrypted Message from {}", &key);
-            println!("Decrypted Message: {}", &decoded_string);
+            info!("Received Encrypted Message from {}", &key);
+            info!("Decrypted Message: {}", &decoded_string);
           }
         }
       });
@@ -333,7 +334,7 @@ async fn process_received_pubkey() {
   while !coord_key_found {
     let coord_pub_check = env::var("COORD_PUB");
     if !coord_pub_check.is_err() {
-      println!("Coord Pubkey Ready");
+      info!("Coord Pubkey Ready");
       coord_key_found = true;
     } else {
       // Add small delay for checking pubkeys

@@ -24,25 +24,23 @@ pub struct CoreProcess {
 
 impl CoreProcess {
   pub fn new(core_config: CoreConfig, chain_config: ChainConfig) -> Self {
-    println!("New Core Process");
     Self { core_config: core_config, chain_config: chain_config}
   }
 
   pub fn run(self) {
-    println!("Starting Core Process");
+    start_logger(true, String::from("core"), &self.core_config.log_filter);
+    info!("Starting Core Process");
 
     // Check coordinator pubkey env variable
     initialize_keys(&self.chain_config);
-
-    start_logger(true, String::from("core"));
   }
 
   fn stop(self) {
-    println!("Stopping Core Process");
+    info!("Stopping Core Process");
   }
 }
 
-fn start_logger(log_thread: bool, rust_log: String) {
+fn start_logger(log_thread: bool, rust_log: String, log_filter: &String) {
   let output_format = move |formatter: &mut Formatter, record: &Record| {
     let thread_name = if log_thread {
       format!("(t: {}) ", thread::current().name().unwrap_or("unknown"))
@@ -63,7 +61,11 @@ fn start_logger(log_thread: bool, rust_log: String) {
     )
   };
   let mut builder = Builder::new();
-  builder.format(output_format).filter(None, LevelFilter::Info);
+  if log_filter == "info" {
+    builder.format(output_format).filter(None, LevelFilter::Info);
+  } else {
+    builder.format(output_format).filter(None, LevelFilter::Warn);
+  }
 
   builder.parse_filters(&rust_log);
 
@@ -172,19 +174,24 @@ impl Clone for ConfigType {
 pub struct CoreConfig {
   host: String,
   port: String,
+  log_filter: String,
 }
 
 impl CoreConfig {
   fn new(config: Config) -> Self {
     let host = config.get_string("host").unwrap();
     let port = config.get_string("port").unwrap();
-    Self { host, port }
+    let log_filter = config.get_string("log_filter").unwrap();
+    Self { host, port, log_filter }
   }
   pub fn get_host(&self) -> String {
     self.host.clone()
   }
   pub fn get_port(&self) -> String {
     self.port.clone()
+  }
+  pub fn get_log_filter(&self) -> String {
+    self.log_filter.clone()
   }
 }
 
@@ -308,6 +315,7 @@ impl ProcessorConfig {
       core: CoreConfig {
         port: s.get_string("core.port").unwrap(),
         host: s.get_string("core.host").unwrap(),
+        log_filter: s.get_string("core.log_filter").unwrap(),
       },
       health: HealthConfig {},
       observer: ObserverConfig {
@@ -330,17 +338,17 @@ impl ProcessorConfig {
     match mode {
       RunMode::Development => {
         // Set development specific config
-        println!("Development config loaded");
+        info!("Development config loaded");
         Ok(config)
       }
       RunMode::Test => {
         // Set test specific config
-        println!("Test config loaded");
+        info!("Test config loaded");
         Ok(config)
       }
       RunMode::Production => {
         // Set production specific config
-        println!("Production config loaded");
+        info!("Production config loaded");
         Ok(config)
       }
     }
@@ -370,13 +378,13 @@ impl ProcessorConfig {
 
 // Accepts startup argument specifying which coin package to start
 pub fn initialize_coin(coin: &str) {
-  println!("Received Coin Request: {}", coin);
+  info!("Received Coin Request: {}", coin);
 
   match coin {
     "btc" => {}
     "eth" => {}
     "xmr" => {}
-    _ => println!("coin unavailable {}", coin),
+    _ => info!("coin unavailable {}", coin),
   }
 }
 

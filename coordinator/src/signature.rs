@@ -1,4 +1,4 @@
-use std::{thread, collections::HashMap};
+use std::collections::HashMap;
 use std::{env, str, fmt};
 use rdkafka::{
   producer::{BaseRecord, ThreadedProducer},
@@ -9,6 +9,7 @@ use rdkafka::{
 };
 use message_box::MessageBox;
 use std::time::Duration;
+use log::info;
 
 use serde::{Deserialize};
 use crate::CoordinatorConfig;
@@ -61,14 +62,14 @@ fn create_admin_client(kafka_config: &KafkaConfig) -> AdminClient<DefaultClientC
 // Secure Messages are contained in parition 1
 impl SignatureProcess {
   pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, identity: String) -> Self {
-    println!("New Signature Process");
+    info!("New Signature Process");
     let chain_config = chain_config;
     let kafka_config = kafka_config;
     Self { chain_config: chain_config, identity: identity, kafka_config: kafka_config}
   }
 
   pub async fn run(self) {
-    println!("Starting Signature Process");
+    info!("Starting Signature Process");
 
     // Check/initialize kakf topics
     let j = serde_json::to_string(&self.chain_config).unwrap();
@@ -123,7 +124,7 @@ impl SignatureProcess {
   }
 
   fn stop(self) {
-    println!("Stopping Signature Process");
+    info!("Stopping Signature Process");
   }
 }
 
@@ -237,13 +238,13 @@ fn initialize_consumer(
           if !key.contains("COORDINATOR") && key.contains("PUBKEY") && env_key_ref != "" {
             let value = msg.payload().unwrap();
             let public_key = str::from_utf8(value).unwrap();
-            println!("Received Pubkey from {}: {}", &key, &public_key);
+            info!("Received Pubkey from {}: {}", &key, &public_key);
             env::set_var(env_key_ref.clone(), public_key);
           } else if !key.contains("COORDINATOR") && key.contains("GENERAL") && env_key_ref == "" {
             let value = msg.payload().unwrap();
             let pub_msg = str::from_utf8(value).unwrap();
-            println!("Received Public Message from {}", &key);
-            println!("Public Message: {}", &pub_msg);
+            info!("Received Public Message from {}", &key);
+            info!("Public Message: {}", &pub_msg);
           }
         }
       });
@@ -280,8 +281,8 @@ fn initialize_consumer(
             let encoded_string =
               message_box.decrypt_from_str(&processor_id, &encrypted_msg).unwrap();
             let decoded_string = String::from_utf8(encoded_string).unwrap();
-            println!("Received Encrypted Message from {}", &processor_id);
-            println!("Decrypted Message: {}", &decoded_string);
+            info!("Received Encrypted Message from {}", &processor_id);
+            info!("Decrypted Message: {}", &decoded_string);
           }
         }
       });
@@ -298,7 +299,7 @@ fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, identity: &str) {
     .create()
     .expect("invalid producer config");
 
-  println!("Sending Public Key");
+  info!("Sending Public Key");
 
   // Load Coordinator Pubkey
   let coord_pub = env::var("COORD_PUB");
@@ -343,7 +344,7 @@ async fn process_received_pubkeys(coin_hashmap: &HashMap<Coin, bool>) {
     }
 
     if active_keys == keys_found {
-      println!("All Processor Pubkeys Ready");
+      info!("All Processor Pubkeys Ready");
       all_keys_found = true;
     } else {
       // Add small delay for checking pubkeys

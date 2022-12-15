@@ -41,25 +41,23 @@ pub struct CoreProcess {
 
 impl CoreProcess {
   pub fn new(config: CoreConfig) -> Self {
-    println!("New Core Process");
     Self { core_config: config }
   }
 
   pub fn run(self) {
-    println!("Starting Core Process");
+    start_logger(true, String::from("core"), &self.core_config.log_filter);
+    info!("Starting Core Process");
 
     // Check coordinator pubkey env variable
     initialize_keys();
-
-    start_logger(true, String::from("core"));
   }
 
   fn stop(self) {
-    println!("Stopping Core Process");
+    info!("Stopping Core Process");
   }
 }
 
-fn start_logger(log_thread: bool, rust_log: String) {
+fn start_logger(log_thread: bool, rust_log: String, log_filter: &String) {
   let output_format = move |formatter: &mut Formatter, record: &Record| {
     let thread_name = if log_thread {
       format!("(t: {}) ", thread::current().name().unwrap_or("unknown"))
@@ -80,7 +78,11 @@ fn start_logger(log_thread: bool, rust_log: String) {
     )
   };
   let mut builder = Builder::new();
-  builder.format(output_format).filter(None, LevelFilter::Info);
+  if log_filter == "info" {
+    builder.format(output_format).filter(None, LevelFilter::Info);
+  } else {
+    builder.format(output_format).filter(None, LevelFilter::Warn);
+  }
 
   builder.parse_filters(&rust_log);
 
@@ -226,19 +228,24 @@ pub fn load_config(
 pub struct CoreConfig {
   host: String,
   port: String,
+  log_filter: String,
 }
 
 impl CoreConfig {
   fn new(config: Config) -> Self {
     let host = config.get_string("host").unwrap();
     let port = config.get_string("port").unwrap();
-    Self { host, port }
+    let log_filter = config.get_string("log_filter").unwrap();
+    Self { host, port, log_filter }
   }
   pub fn get_host(&self) -> String {
     self.host.clone()
   }
   pub fn get_port(&self) -> String {
     self.port.clone()
+  }
+  pub fn get_log_filter(&self) -> String {
+    self.log_filter.clone()
   }
 }
 
@@ -363,6 +370,7 @@ impl CoordinatorConfig {
       core: CoreConfig {
         port: s.get_string("core.port").unwrap(),
         host: s.get_string("core.host").unwrap(),
+        log_filter: s.get_string("core.log_filter").unwrap(),
       },
       health: HealthConfig {},
       observer: ObserverConfig {
@@ -385,17 +393,17 @@ impl CoordinatorConfig {
     match mode {
       RunMode::Development => {
         // Set development specific config
-        println!("Development config loaded");
+        info!("Development config loaded");
         Ok(config)
       }
       RunMode::Test => {
         // Set test specific config
-        println!("Test config loaded");
+        info!("Test config loaded");
         Ok(config)
       }
       RunMode::Production => {
         // Set production specific config
-        println!("Production config loaded");
+        info!("Production config loaded");
         Ok(config)
       }
     }
@@ -436,7 +444,7 @@ pub fn initialize_keys() {
   // Checks if coordinator keys are set
   let coord_priv_check = env::var("COORD_PRIV");
   if coord_priv_check.is_err() {
-    println!("Generating New Keys");
+    info!("Generating New Keys");
     // Generates new private / public key
     let (private, public) = message_box::key_gen();
     let private_bytes = unsafe { private.inner().to_repr() };
@@ -444,6 +452,6 @@ pub fn initialize_keys() {
     env::set_var("COORD_PRIV", hex::encode(&private_bytes.as_ref()));
     env::set_var("COORD_PUB", hex::encode(&public.to_bytes()));
   } else {
-    println!("Keys Found");
+    info!("Keys Found");
   }
 }
