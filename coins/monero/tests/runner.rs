@@ -1,5 +1,6 @@
 use core::ops::Deref;
 use std::sync::Mutex;
+use std::collections::HashSet;
 
 use lazy_static::lazy_static;
 
@@ -11,8 +12,9 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 use monero_serai::{
   Protocol, random_scalar,
   wallet::{
-    ViewPair,
+    ViewPair, Scanner,
     address::{Network, AddressType, AddressMeta, MoneroAddress},
+    SpendableOutput,
   },
   rpc::Rpc,
 };
@@ -53,6 +55,18 @@ pub async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
 
   // mine 9 more blocks to unlock the tx
   rpc.generate_blocks(addr, 9).await.unwrap();
+}
+
+/// Mines 60 blocks and returns an unlocked spendable miner tx output.
+pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput {
+  let mut scanner = Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
+
+  // mine 60 blocks to unlock a miner tx
+  let start = rpc.get_height().await.unwrap();
+  rpc.generate_blocks(&scanner.address().to_string(), 60).await.unwrap();
+
+  let block = rpc.get_block(start).await.unwrap();
+  scanner.scan(&rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
 }
 
 pub async fn rpc() -> Rpc {
@@ -136,12 +150,12 @@ macro_rules! test {
         use monero_serai::{
           random_scalar,
           wallet::{
-            address::Network, ViewPair, Scanner, SignableTransaction,
+            address::{Network, AddressMeta, AddressType}, ViewPair, Scanner, SignableTransaction,
             SignableTransactionBuilder,
           },
         };
 
-        use runner::{random_address, rpc, mine_until_unlocked};
+        use runner::{random_address, rpc, mine_until_unlocked, get_miner_tx_output};
 
         type Builder = SignableTransactionBuilder;
 
@@ -166,28 +180,12 @@ macro_rules! test {
             keys[&1].group_key().0
           };
 
-          let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
-
           let rpc = rpc().await;
 
-          let (addr, miner_tx) = {
-            let mut scanner =
-              Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
-            let addr = scanner.address();
+          let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
+          let addr = view.address(AddressMeta::new(Network::Mainnet, AddressType::Standard));
 
-            // mine 60 blocks to unlock a miner tx
-            let start = rpc.get_height().await.unwrap();
-            rpc.generate_blocks(&addr.to_string(), 60).await.unwrap();
-
-            let block = rpc.get_block(start).await.unwrap();
-            (
-              addr,
-              scanner.scan(
-                &rpc,
-                &block
-              ).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
-            )
-          };
+          let miner_tx = get_miner_tx_output(&rpc, &view).await;
 
           let builder = SignableTransactionBuilder::new(
             rpc.get_protocol().await.unwrap(),
