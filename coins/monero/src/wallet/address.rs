@@ -182,6 +182,14 @@ impl<B: AddressBytes> ToString for Address<B> {
 }
 
 impl<B: AddressBytes> Address<B> {
+  /// Generates an Address type according to the specification provided in the meta.
+  ///
+  /// WARNING: Specification on the meta are not "commands" and are
+  /// just "specifications" for the address. This function relies on the
+  /// caller to make sure all the passed parameters makes sense and assumes
+  /// specifications provided in the meta are correct and applicable for the passed in keys.
+  /// For example, passing `AddressType::Subaddress` type in the meta wont generate
+  /// a correct subaddress if the keys aren't already for a valid subaddress.
   pub fn new(meta: AddressMeta<B>, spend: EdwardsPoint, view: EdwardsPoint) -> Self {
     Address { meta, spend, view }
   }
