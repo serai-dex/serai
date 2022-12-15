@@ -53,5 +53,6 @@ zalloc = { path = "../common/zalloc" }
 
 tokio-test = "*"
 env_perm = "0.1.3"
+actix-rt = "*"
 
 [workspace]
