@@ -13,7 +13,7 @@ use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
 use crate::{constant_time, math, from_uint};
 
-const FIELD_MODULUS: U256 =
+const MODULUS: U256 =
   U256::from_be_hex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed");
 
 const WIDE_MODULUS: U512 = U512::from_be_hex(concat!(
@@ -25,7 +25,7 @@ const WIDE_MODULUS: U512 = U512::from_be_hex(concat!(
 pub struct FieldElement(U256);
 
 pub const MOD_3_8: FieldElement =
-  FieldElement(FIELD_MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8)));
+  FieldElement(MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8)));
 
 pub const MOD_5_8: FieldElement = FieldElement(MOD_3_8.0.saturating_sub(&U256::ONE));
 
@@ -45,8 +45,8 @@ constant_time!(FieldElement, U256);
 math!(
   FieldElement,
   FieldElement,
-  |x, y| U256::add_mod(&x, &y, &FIELD_MODULUS),
-  |x, y| U256::sub_mod(&x, &y, &FIELD_MODULUS),
+  |x, y| U256::add_mod(&x, &y, &MODULUS),
+  |x, y| U256::sub_mod(&x, &y, &MODULUS),
   |x, y| {
     let wide = U256::mul_wide(&x, &y);
     reduce(U512::from((wide.1, wide.0)))
@@ -57,7 +57,7 @@ from_uint!(FieldElement, U256);
 impl Neg for FieldElement {
   type Output = Self;
   fn neg(self) -> Self::Output {
-    Self(self.0.neg_mod(&FIELD_MODULUS))
+    Self(self.0.neg_mod(&MODULUS))
   }
 }
 
@@ -85,11 +85,11 @@ impl Field for FieldElement {
     FieldElement(reduce(self.0.square()))
   }
   fn double(&self) -> Self {
-    FieldElement((self.0 << 1).reduce(&FIELD_MODULUS).unwrap())
+    FieldElement((self.0 << 1).reduce(&MODULUS).unwrap())
   }
 
   fn invert(&self) -> CtOption<Self> {
-    const NEG_2: FieldElement = FieldElement(FIELD_MODULUS.saturating_sub(&U256::from_u8(2)));
+    const NEG_2: FieldElement = FieldElement(MODULUS.saturating_sub(&U256::from_u8(2)));
     CtOption::new(self.pow(NEG_2), !self.is_zero())
   }
 
@@ -131,7 +131,7 @@ impl PrimeField for FieldElement {
   const CAPACITY: u32 = 254;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let res = Self(U256::from_le_bytes(bytes));
-    CtOption::new(res, res.0.ct_lt(&FIELD_MODULUS))
+    CtOption::new(res, res.0.ct_lt(&MODULUS))
   }
   fn to_repr(&self) -> [u8; 32] {
     self.0.to_le_bytes()
@@ -159,7 +159,7 @@ impl PrimeFieldBits for FieldElement {
   }
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
-    FIELD_MODULUS.to_le_bytes().into()
+    MODULUS.to_le_bytes().into()
   }
 }
 
@@ -218,6 +218,45 @@ impl FieldElement {
 }
 
 #[test]
+fn test_s() {
+  // "This is the number of leading zero bits in the little-endian bit representation of
+  // `modulus - 1`."
+  let mut s = 0;
+  for b in (FieldElement::zero() - FieldElement::one()).to_le_bits() {
+    if b {
+      break;
+    }
+    s += 1;
+  }
+  assert_eq!(s, FieldElement::S);
+}
+
+#[test]
+fn test_root_of_unity() {
+  // "It can be calculated by exponentiating `Self::multiplicative_generator` by `t`, where
+  // `t = (modulus - 1) >> Self::S`."
+  let t = FieldElement::zero() - FieldElement::one();
+  let mut bytes = t.to_repr();
+  for _ in 0 .. FieldElement::S {
+    bytes[0] >>= 1;
+    for b in 1 .. 32 {
+      // Shift the dropped but down a byte
+      bytes[b - 1] |= (bytes[b] & 1) << 7;
+      // Shift the byte
+      bytes[b] >>= 1;
+    }
+  }
+  let t = FieldElement::from_repr(bytes).unwrap();
+
+  assert_eq!(FieldElement::multiplicative_generator().pow(t), FieldElement::root_of_unity());
+  assert_eq!(
+    FieldElement::root_of_unity()
+      .pow(FieldElement::from(2u64).pow(FieldElement::from(FieldElement::S))),
+    FieldElement::one()
+  );
+}
+
+#[test]
 fn test_conditional_negate() {
   let one = FieldElement::one();
   let true_choice = 1.into();
@@ -245,6 +284,16 @@ fn test_edwards_d() {
 }
 
 #[test]
+fn test_sqrt_m1() {
+  // TODO: Ideally, tlike EDWARDS_D, this would be calculated undder const. A const pow is just
+  // even more unlikely than a const mul...
+  let sqrt_m1 = MODULUS.saturating_sub(&U256::from_u8(1)).wrapping_div(&U256::from_u8(4));
+  let sqrt_m1 =
+    FieldElement::one().double().pow(FieldElement::from_repr(sqrt_m1.to_le_bytes()).unwrap());
+  assert_eq!(SQRT_M1, sqrt_m1);
+}
+
+#[test]
 fn test_is_odd() {
   assert_eq!(0, FieldElement::zero().is_odd().unwrap_u8());
   assert_eq!(1, FieldElement::one().is_odd().unwrap_u8());
@@ -258,8 +307,8 @@ fn test_is_odd() {
 
 #[test]
 fn test_mul() {
-  assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one(), FieldElement::zero());
-  assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one().double(), FieldElement::zero());
+  assert_eq!(FieldElement(MODULUS) * FieldElement::one(), FieldElement::zero());
+  assert_eq!(FieldElement(MODULUS) * FieldElement::one().double(), FieldElement::zero());
   assert_eq!(SQRT_M1.square(), -FieldElement::one());
 }
 

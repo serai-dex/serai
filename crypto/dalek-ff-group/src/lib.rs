@@ -285,7 +285,7 @@ impl PrimeField for Scalar {
   const CAPACITY: u32 = 252;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
-    // TODO: This unwrap_or isn't constant time, yet do we have an alternative?
+    // TODO: This unwrap_or isn't constant time, yet we don't exactly have an alternative...
     CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(scalar.is_some()))
   }
   fn to_repr(&self) -> [u8; 32] {
@@ -300,7 +300,11 @@ impl PrimeField for Scalar {
     2u64.into()
   }
   fn root_of_unity() -> Self {
-    unimplemented!()
+    const ROOT: [u8; 32] = [
+      212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
+      96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
+    ];
+    Scalar::from_repr(ROOT).unwrap()
   }
 }
 
@@ -448,6 +452,44 @@ dalek_group!(
   RISTRETTO_BASEPOINT_POINT,
   RISTRETTO_BASEPOINT_TABLE
 );
+
+#[test]
+fn test_s() {
+  // "This is the number of leading zero bits in the little-endian bit representation of
+  // `modulus - 1`."
+  let mut s = 0;
+  for b in (Scalar::zero() - Scalar::one()).to_le_bits() {
+    if b {
+      break;
+    }
+    s += 1;
+  }
+  assert_eq!(s, Scalar::S);
+}
+
+#[test]
+fn test_root_of_unity() {
+  // "It can be calculated by exponentiating `Self::multiplicative_generator` by `t`, where
+  // `t = (modulus - 1) >> Self::S`."
+  let t = Scalar::zero() - Scalar::one();
+  let mut bytes = t.to_repr();
+  for _ in 0 .. Scalar::S {
+    bytes[0] >>= 1;
+    for b in 1 .. 32 {
+      // Shift the dropped but down a byte
+      bytes[b - 1] |= (bytes[b] & 1) << 7;
+      // Shift the byte
+      bytes[b] >>= 1;
+    }
+  }
+  let t = Scalar::from_repr(bytes).unwrap();
+
+  assert_eq!(Scalar::multiplicative_generator().pow(t), Scalar::root_of_unity());
+  assert_eq!(
+    Scalar::root_of_unity().pow(Scalar::from(2u64).pow(Scalar::from(Scalar::S))),
+    Scalar::one()
+  );
+}
 
 #[test]
 fn test_sqrt() {
