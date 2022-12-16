@@ -96,17 +96,32 @@ impl Field for FieldElement {
   fn sqrt(&self) -> CtOption<Self> {
     let tv1 = self.pow(MOD_3_8);
     let tv2 = tv1 * SQRT_M1;
-    CtOption::new(Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self)), 1.into())
+    let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
+    CtOption::new(candidate, candidate.square().ct_eq(self))
   }
 
   fn is_zero(&self) -> Choice {
     self.0.ct_eq(&U256::ZERO)
   }
+
   fn cube(&self) -> Self {
     self.square() * self
   }
-  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
-    unimplemented!()
+
+  fn pow_vartime<S: AsRef<[u64]>>(&self, exp: S) -> Self {
+    let mut sum = Self::one();
+    let mut accum = *self;
+    for (_, num) in exp.as_ref().iter().enumerate() {
+      let mut num = *num;
+      for _ in 0 .. 64 {
+        if (num & 1) == 1 {
+          sum *= accum;
+        }
+        num >>= 1;
+        accum *= accum;
+      }
+    }
+    sum
   }
 }
 
@@ -155,13 +170,13 @@ impl FieldElement {
   }
 
   pub fn pow(&self, other: FieldElement) -> FieldElement {
-    let mut table = [FieldElement(U256::ONE); 16];
+    let mut table = [FieldElement::one(); 16];
     table[1] = *self;
     for i in 2 .. 16 {
       table[i] = table[i - 1] * self;
     }
 
-    let mut res = FieldElement(U256::ONE);
+    let mut res = FieldElement::one();
     let mut bits = 0;
     for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
       bits <<= 1;
@@ -246,6 +261,37 @@ fn test_mul() {
   assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one(), FieldElement::zero());
   assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one().double(), FieldElement::zero());
   assert_eq!(SQRT_M1.square(), -FieldElement::one());
+}
+
+#[test]
+fn test_sqrt() {
+  assert_eq!(FieldElement::zero().sqrt().unwrap(), FieldElement::zero());
+  assert_eq!(FieldElement::one().sqrt().unwrap(), FieldElement::one());
+  for _ in 0 .. 10 {
+    let mut elem;
+    while {
+      elem = FieldElement::random(&mut rand_core::OsRng);
+      elem.sqrt().is_none().into()
+    } {}
+    assert_eq!(elem.sqrt().unwrap().square(), elem);
+  }
+}
+
+#[test]
+fn test_pow() {
+  let base = FieldElement::from(0b11100101u64);
+  assert_eq!(base.pow(FieldElement::zero()), FieldElement::one());
+  assert_eq!(base.pow_vartime(&[]), FieldElement::one());
+  assert_eq!(base.pow_vartime(&[0]), FieldElement::one());
+  assert_eq!(base.pow_vartime(&[0, 0]), FieldElement::one());
+
+  assert_eq!(base.pow(FieldElement::one()), base);
+  assert_eq!(base.pow_vartime(&[1]), base);
+  assert_eq!(base.pow_vartime(&[1, 0]), base);
+
+  let one_65 = FieldElement::from(u64::MAX) + FieldElement::one();
+  assert_eq!(base.pow_vartime(&[0, 1]), base.pow(one_65));
+  assert_eq!(base.pow_vartime(&[1, 1]), base.pow(one_65 + FieldElement::one()));
 }
 
 #[test]

@@ -108,6 +108,7 @@ impl Transcript for IetfTranscript {
     self.0.clone()
   }
 
+  // FROST won't use this and this shouldn't be used outside of FROST
   fn rng_seed(&mut self, _: &'static [u8]) -> [u8; 32] {
     unimplemented!()
   }
