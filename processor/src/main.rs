@@ -35,10 +35,10 @@ async fn main() {
         .default_value("./config/"),
     )
     .arg(
-      Arg::with_name("identity")
-        .short("id")
-        .long("identity")
-        .help("This identity is used as a unique prefix for kafka topics.")
+      Arg::with_name("name")
+        .short("n")
+        .long("name")
+        .help("This name is used as a unique prefix for kafka topics.")
         .takes_value(true)
         .default_value("BASE"),
     )
@@ -55,7 +55,7 @@ async fn main() {
     core_process.run();
   });
 
-  // Load identity arg
+  // Load name arg
   let name_arg = args.value_of("identity").unwrap().to_owned();
 
   // Start Signature Process
