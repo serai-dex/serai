@@ -33,17 +33,26 @@ services:
     image: docker.io/bitnami/zookeeper:3.8
     profiles:
       - kafka
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
     ports:
       - "2181:2181"
     volumes:
       - "zookeeper_data:/bitnami"
     environment:
       - ALLOW_ANONYMOUS_LOGIN=yes
+    tmpfs: "/datalog"
 
   kafka:
     image: docker.io/bitnami/kafka:3.2
     profiles:
       - kafka
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
     ports:
       - "9094:9094"
     volumes:
@@ -64,6 +73,10 @@ services:
     container_name: kafka-ui
     profiles:
       - kafka
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
     ports:
       - "8080:8080"
     restart: always
@@ -71,10 +84,10 @@ services:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
       - KAFKA_CLUSTERS_0_ZOOKEEPER=localhost:2181
+    depends_on:
+      - kafka
 
   genesis:
-    profiles:
-      - _
     image: genesis:dev
     build:
       context: ./genesis/
@@ -88,7 +101,7 @@ services:
     restart: unless-stopped
     image: serai-node:dev
     profiles:
-      - _
+      - default_node
     build:
       context: ../
       dockerfile: ./deploy/serai/Dockerfile
@@ -192,7 +205,7 @@ services:
     image: serai-coordinator:dev
     tty: true
     profiles:
-      - _
+      - default_coordinator
     build:
       context: ../
       dockerfile: ./deploy/coordinator/Dockerfile
@@ -202,6 +215,10 @@ services:
     volumes:
       - "./coordinator/scripts:/home/coordinator/scripts"
       - "./coordinator/config:/home/coordinator/config"
+    depends_on:
+      - zookeeper
+      - kafka
+      - kafka-ui
 
   # base
   coordinator-base:
