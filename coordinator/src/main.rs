@@ -20,10 +20,10 @@ async fn main() {
       Arg::with_name("mode")
         .short("m")
         .long("mode")
-        .value_name("MODE")
-        .help("Sets the mode to run in (Development, Test, Prodcution)")
+        .value_name("mode")
+        .help("Sets the mode to run in (Development, Test, Production)")
         .takes_value(true)
-        .default_value("Development"),
+        .default_value("development"),
     )
     .arg(
       Arg::with_name("config_dir")
@@ -31,18 +31,18 @@ async fn main() {
         .long("config_dir")
         .help(
           "The path that the coordinator can find relevant config files.
-                     Default: ./config/",
+                     Default: ./config",
         )
         .takes_value(true)
-        .default_value("./config/"),
+        .default_value("./config"),
     )
     .arg(
-      Arg::with_name("identity")
+      Arg::with_name("name")
         .short("id")
-        .long("identity")
-        .help("This identity is used as a unique prefix for kafka topics.")
+        .long("name")
+        .help("This is the identity of the node running the coordinator and should match.")
         .takes_value(true)
-        .default_value("Base"),
+        .default_value("base"),
     )
     .get_matches();
 
@@ -60,12 +60,15 @@ async fn main() {
   });
 
   // Load identity arg
-  let identity_arg = args.value_of("identity").unwrap().to_owned();
+  let name_arg = args.value_of("name").unwrap().to_owned();
+
+  // print identity arg
+  println!("Coordinator Identity: {}", name_arg);
 
   // Start Signature Process
   let sig_config = config.clone();
   tokio::spawn(async move {
-    let signature_process = SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), identity_arg);
+    let signature_process = SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), name_arg);
     signature_process.run().await;
   });
 

@@ -15,133 +15,20 @@ name: serai-dev
   # ethereum - full node ethereum only
   # Example: docker compose --profile bitcoin up
 volumes:
-  serai-base:
-  serai-alice:
-  serai-bob:
-  serai-charlie:
-  serai-dave:
-  serai-eve:
-  serai-ferdie:
+  node-base:
+  node-alice:
+  node-bob:
+  node-charlie:
+  node-dave:
+  node-eve:
+  node-ferdie:
   genesis-volume:
   zookeeper_data:
     driver: local
   kafka_data:
     driver: local
 
-
 services:
-  genesis:
-    image: genesis:dev
-    build:
-      context: ./genesis/
-      dockerfile: Dockerfile
-    entrypoint: /entry-dev.sh
-    volumes:
-      - genesis-volume:/temp
-
-  _serai:
-    &serai_defaults
-    restart: unless-stopped
-    image: serai:dev
-    profiles:
-      - _
-    build:
-      context: ../
-      dockerfile: ./deploy/serai/Dockerfile
-      args:
-        TAG: serai
-    entrypoint: /scripts/entry-dev.sh
-    volumes:
-      - "./serai/scripts:/scripts"
-      - genesis-volume:/temp
-    depends_on:
-      - genesis
-
-  serai-base:
-    <<: *serai_defaults
-    hostname: serai-base
-    profiles:
-      - base
-    environment:
-      CHAIN: local
-      NAME: base
-
-  serai-alice:
-    <<: *serai_defaults
-    hostname: serai-alice
-    profiles:
-      - alice
-      - cluster-sm
-      - cluster-coins-sm
-      - cluster-lg
-      - cluster-coins-lg
-    environment:
-      CHAIN: local
-      NAME: alice
-      VALIDATOR: true
-
-  serai-bob:
-    <<: *serai_defaults
-    hostname: serai-bob
-    profiles:
-      - bob
-      - cluster-sm
-      - cluster-coins-sm
-      - cluster-lg
-      - cluster-coins-lg
-    environment:
-      CHAIN: local
-      NAME: bob
-      VALIDATOR: true
-
-  serai-charlie:
-    <<: *serai_defaults
-    hostname: serai-charlie
-    profiles:
-      - charlie
-      - cluster-sm
-      - cluster-coins-sm
-      - cluster-lg
-      - cluster-coins-lg
-    environment:
-      CHAIN: local
-      NAME: charlie
-      VALIDATOR: true
-
-  serai-dave:
-    <<: *serai_defaults
-    hostname: serai-dave
-    profiles:
-      - dave
-      - cluster-lg
-      - cluster-coins-lg
-    environment:
-      CHAIN: local
-      NAME: dave
-
-  serai-eve:
-    <<: *serai_defaults
-    hostname: serai-eve
-    profiles:
-      - eve
-      - cluster-lg
-      - cluster-coins-lg
-    environment:
-      CHAIN: local
-      NAME: eve
-
-  serai-ferdie:
-    <<: *serai_defaults
-    hostname: serai-ferdie
-    profiles:
-      - ferdie
-      - cluster-lg
-      - cluster-coins-lg
-    environment:
-      CHAIN: local
-      NAME: ferdie
-      
-  # Coordinator Services
   zookeeper:
     image: docker.io/bitnami/zookeeper:3.8
     profiles:
@@ -184,6 +71,219 @@ services:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
       - KAFKA_CLUSTERS_0_ZOOKEEPER=localhost:2181
+
+  genesis:
+    profiles:
+      - _
+    image: genesis:dev
+    build:
+      context: ./genesis/
+      dockerfile: Dockerfile
+    entrypoint: /entry-dev.sh
+    volumes:
+      - genesis-volume:/temp
+
+  _node:
+    &node_defaults
+    restart: unless-stopped
+    image: serai-node:dev
+    profiles:
+      - _
+    build:
+      context: ../
+      dockerfile: ./deploy/serai/Dockerfile
+      args:
+        TAG: serai-node
+    entrypoint: /scripts/entry-dev.sh
+    volumes:
+      - "./serai/scripts:/scripts"
+      - genesis-volume:/temp
+    depends_on:
+      - genesis
+
+  node-base:
+    <<: *node_defaults
+    hostname: node-base
+    profiles:
+      - node
+      - base
+    environment:
+      CHAIN: local
+      NAME: base
+
+  node-alice:
+    <<: *node_defaults
+    hostname: node-alice
+    profiles:
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: local
+      NAME: alice
+      VALIDATOR: true
+
+  node-bob:
+    <<: *node_defaults
+    hostname: node-bob
+    profiles:
+      - bob
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: local
+      NAME: bob
+      VALIDATOR: true
+
+  node-charlie:
+    <<: *node_defaults
+    hostname: node-charlie
+    profiles:
+      - charlie
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: local
+      NAME: charlie
+      VALIDATOR: true
+
+  node-dave:
+    <<: *node_defaults
+    hostname: node-dave
+    profiles:
+      - dave
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: local
+      NAME: dave
+
+  node-eve:
+    <<: *node_defaults
+    hostname: node-eve
+    profiles:
+      - eve
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: local
+      NAME: eve
+
+  node-ferdie:
+    <<: *node_defaults
+    hostname: node-ferdie
+    profiles:
+      - ferdie
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      CHAIN: local
+      NAME: ferdie
+      
+  # Coordinator Services
+  _coordinator:
+    &coordinator_defaults
+    restart: unless-stopped
+    image: serai-coordinator:dev
+    tty: true
+    profiles:
+      - _
+    build:
+      context: ../
+      dockerfile: ./deploy/coordinator/Dockerfile
+      args:
+        TAG: serai-coordinator
+    entrypoint: /home/coordinator/scripts/entry-dev.sh
+    volumes:
+      - "./coordinator/scripts:/home/coordinator/scripts"
+      - "./coordinator/config:/home/coordinator/config"
+
+  # base
+  coordinator-base:
+    <<: *coordinator_defaults
+    hostname: coordinator-base
+    profiles:
+      - base
+      - coordinator
+    environment:
+      NAME: base
+
+  # alice
+  coordinator-alice:
+    <<: *coordinator_defaults
+    hostname: coordinator-alice
+    profiles:
+      - alice
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: alice
+
+  # bob
+  coordinator-bob:
+    <<: *coordinator_defaults
+    hostname: coordinator-bob
+    profiles:
+      - bob
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: bob
+
+  # charlie
+  coordinator-charlie:
+    <<: *coordinator_defaults
+    hostname: coordinator-charlie
+    profiles:
+      - charlie
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: charlie
+
+  # dave
+  coordinator-dave:
+    <<: *coordinator_defaults
+    hostname: coordinator-dave
+    profiles:
+      - dave
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: dave
+
+  # eve
+  coordinator-eve:
+    <<: *coordinator_defaults
+    hostname: coordinator-eve
+    profiles:
+      - eve
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: eve
+
+  # ferdie
+  coordinator-ferdie:
+    <<: *coordinator_defaults
+    hostname: coordinator-ferdie
+    profiles:
+      - ferdie
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: ferdie
 
   # Processor Services
 

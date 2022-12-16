@@ -75,7 +75,7 @@ Configuration is handled through a configuration file that is loaded on startup.
 * connection
   * rpc_endpoint
   * polling_interval
-  * validators
+  * validators[label](README.md)
     * public_key
     * endpoint
 * health 

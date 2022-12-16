@@ -56,12 +56,12 @@ async fn main() {
   });
 
   // Load identity arg
-  let identity_arg = args.value_of("identity").unwrap().to_owned();
+  let name_arg = args.value_of("name").unwrap().to_owned();
 
   // Start Signature Process
   let sig_config = config.clone();
   tokio::spawn(async move {
-    let signature_process = SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), identity_arg);
+    let signature_process = SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), name_arg);
     signature_process.run().await;
   });
 

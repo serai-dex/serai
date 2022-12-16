@@ -161,6 +161,7 @@ impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
     self,
     rng: &mut R,
   ) -> (Self::SignMachine, Preprocess<C, A::Addendum>) {
+    // 1. Generate the commitments to the nonces.
     let mut params = self.params;
 
     let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
@@ -168,10 +169,22 @@ impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
       params.view().secret_share(),
       &params.algorithm.nonces(),
     );
+
+    // 2. Generate the preprocessing addendum.
     let addendum = params.algorithm.preprocess_addendum(rng, &params.view);
 
+    // 3. Generate the preprocessing object.
     let preprocess = Preprocess { commitments, addendum };
-    (AlgorithmSignMachine { params, nonces, preprocess: preprocess.clone() }, preprocess)
+
+    // 4. Generate the sign machine and return it.
+    (
+      AlgorithmSignMachine {
+        params,
+        nonces,
+        preprocess: preprocess.clone(),
+      },
+      preprocess,
+    )
   }
 }
 

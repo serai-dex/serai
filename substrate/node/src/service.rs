@@ -234,10 +234,10 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
 
   let registry = config.prometheus_registry().cloned();
   let pool = transaction_pool.clone();
-  let kafkaModule = crate::kafka::create_full(crate::kafka::KafkaDeps {
-    client: client.clone(),
-    pool: pool.clone(),
-  });
+  //let kafkaModule = crate::kafka::create_full(crate::kafka::KafkaDeps {
+  //  client: client.clone(),
+  //  pool: pool.clone(),
+  //});
 
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),

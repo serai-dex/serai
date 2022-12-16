@@ -74,7 +74,9 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
   let mut machines = machines
     .drain()
     .map(|(i, machine)| {
+      // First, each machine preprocesses the message.
       let (machine, preprocess) = machine.preprocess(rng);
+      // Each machine then commits to the preprocessing.
       commitments.insert(i, {
         let mut buf = vec![];
         preprocess.write(&mut buf).unwrap();
@@ -88,7 +90,10 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
   let mut machines = machines
     .drain()
     .map(|(i, machine)| {
+      // Next, each machine signs the message, given the commitments of
+      // other machines.
       let (machine, share) = machine.sign(clone_without(&commitments, &i), msg).unwrap();
+      // Each machine then commits to their share.
       shares.insert(i, {
         let mut buf = vec![];
         share.write(&mut buf).unwrap();
@@ -100,7 +105,10 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
 
   let mut signature = None;
   for (i, machine) in machines.drain() {
+    // Finally, each machine completes the signature, given the commitments
+    // of other machines.
     let sig = machine.complete(clone_without(&shares, &i)).unwrap();
+    // Each machine should produce identical signatures.
     if signature.is_none() {
       signature = Some(sig.clone());
     }

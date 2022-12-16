@@ -199,23 +199,20 @@ impl Clone for ConfigType {
 /// * `Result<Config, ConfigError>` - The configuration
 ///  or an error if the configuration could not be loaded
 /// or parsed.
-// TODO: We could draw from a single cached instace of the config
-// and return a copy of the config for each config type. Does it matter?
 
 pub fn load_config(
-  config_type: ConfigType,
   run_mode: RunMode,
   path: &str,
 ) -> Result<Config, ConfigError> {
   // Load the configuration file
   let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
 
+  // if runmode is not set, use the default, else load the config file based on the mode specified
+  
+  println!("Loading config for mode: {}", run_mode);
+  
+
   let config = Config::builder()
-    // Start off by merging in the "default" configuration file
-    .add_source(File::with_name(&format!("{}/default", path)))
-    // Add in the current environment file
-    // Default to 'development' env
-    // Note that this file is _optional_
     .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
     .build()
     .unwrap();
@@ -350,15 +347,7 @@ impl CoordinatorConfig {
   pub fn new(path: String) -> Result<Self, ConfigError> {
     let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
 
-    let s = Config::builder()
-      // Start off by merging in the "default" configuration file
-      .add_source(File::with_name(&format!("{}/default", path)))
-      // Add in the current environment file
-      // Default to 'development' env
-      // Note that this file is _optional_
-      .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
-      .build()?;
-
+    let s = load_config(RunMode::from_str(&run_mode).unwrap(), &path)?;
     // Convert the config into enum for use.
     let mode = RunMode::from_str(&run_mode).unwrap_or(RunMode::Development);
 
