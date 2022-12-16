@@ -74,7 +74,7 @@ impl SignatureProcess {
     // Check/initialize kakf topics
     let j = serde_json::to_string(&self.chain_config).unwrap();
     let mut topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
-    topic_ref.insert("Coordinator".to_string(), true);
+    topic_ref.insert("COORDINATOR".to_string(), true);
 
     let admin_client = create_admin_client(&self.kafka_config);
     let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
@@ -84,12 +84,11 @@ impl SignatureProcess {
       let mut topic: String = "".to_string();
       topic.push_str(&self.identity);
       let topic_ref = &mut String::from(&_key);
-      if topic_ref != "Coordinator"{
+      if topic_ref != "COORDINATOR"{
         *topic_ref = topic_ref.to_uppercase();
       }
       topic.push_str("_");
       topic.push_str(topic_ref);
-      topic.push_str("_Topic");
   
       let initialized_topic = NewTopic {
         name: &topic,
@@ -142,7 +141,6 @@ fn consume_pubkey_processor(kafka_config: &KafkaConfig, identity: &str, coin_has
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&_key.to_string());
-      topic.push_str("_Topic");
       let env_key = &mut _key.to_string().to_owned();
       env_key.push_str("_PUB");
       initialize_consumer(kafka_config, &group_id, &topic, Some(env_key.to_string()), None, "general");
@@ -164,7 +162,6 @@ fn consume_processor_general_test_message(kafka_config: &KafkaConfig, identity: 
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&_key.to_string());
-      topic.push_str("_Topic");
       initialize_consumer(kafka_config, &group_id, &topic, None, None, "general");
     }
   }
@@ -184,7 +181,6 @@ fn consume_processor_secure_test_message(kafka_config: &KafkaConfig, identity: &
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&key.to_string());
-      topic.push_str("_Topic");
       let env_key = &mut key.to_string();
       // ENV_KEY references the processor pubkey we want to use with message box
       env_key.push_str("_PUB");
@@ -308,7 +304,7 @@ fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, identity: &str) {
   // Sends message to Kafka
   producer
     .send(
-      BaseRecord::to(&format!("{}_Coordinator_Topic", &identity))
+      BaseRecord::to(&format!("{}_COORDINATOR", &identity))
         .key(&format!("{}_PUBKEY", message_box::ids::COORDINATOR))
         .payload(&msg).partition(0),
     )
@@ -402,7 +398,6 @@ async fn produce_general_and_secure_test_message(kafka_config: &KafkaConfig, ide
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&key.to_string());
-      topic.push_str("_Topic");
       let env_key = &mut key.to_string();
       env_key.push_str("_PUB");
 

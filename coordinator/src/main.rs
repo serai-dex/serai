@@ -42,7 +42,7 @@ async fn main() {
         .long("name")
         .help("This is the identity of the node running the coordinator and should match.")
         .takes_value(true)
-        .default_value("base"),
+        .default_value("BASE"),
     )
     .get_matches();
 

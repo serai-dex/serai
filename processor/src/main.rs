@@ -40,7 +40,7 @@ async fn main() {
         .long("identity")
         .help("This identity is used as a unique prefix for kafka topics.")
         .takes_value(true)
-        .default_value("Base"),
+        .default_value("BASE"),
     )
     .get_matches();
 
@@ -56,7 +56,7 @@ async fn main() {
   });
 
   // Load identity arg
-  let name_arg = args.value_of("name").unwrap().to_owned();
+  let name_arg = args.value_of("identity").unwrap().to_owned();
 
   // Start Signature Process
   let sig_config = config.clone();

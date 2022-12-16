@@ -67,7 +67,7 @@ impl SignatureProcess {
     // Check/initialize kakf topics
     let j = serde_json::to_string(&self.chain_config).unwrap();
     let mut topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
-    topic_ref.insert("Coordinator".to_string(), true);
+    topic_ref.insert("COORDINATOR".to_string(), true);
 
     let admin_client = create_admin_client(&self.kafka_config);
     let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
@@ -77,12 +77,11 @@ impl SignatureProcess {
       let mut topic: String = "".to_string();
       topic.push_str(&self.identity);
       let topic_ref = &mut String::from(&_key);
-      if topic_ref != "Coordinator" {
+      if topic_ref != "COORDINATOR" {
         *topic_ref = topic_ref.to_uppercase();
       }
       topic.push_str("_");
       topic.push_str(topic_ref);
-      topic.push_str("_Topic");
 
       let initialized_topic = NewTopic {
         name: &topic,
@@ -134,7 +133,7 @@ fn consume_pubkey_coordinator(kafka_config: &KafkaConfig, identity: &str) {
     .expect("invalid consumer config");
 
   let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  tpl.add_partition(&format!("{}_Coordinator_Topic", &identity), 0);
+  tpl.add_partition(&format!("{}_COORDINATOR", &identity), 0);
   consumer.assign(&tpl).unwrap();
 
   tokio::spawn(async move {
@@ -163,7 +162,6 @@ fn consume_coordinator_general_test_message(kafka_config: &KafkaConfig, identity
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&_key.to_string());
-      topic.push_str("_Topic");
       initialize_consumer(kafka_config, &group_id, &topic, None, None, "general");
     }
   }
@@ -183,7 +181,6 @@ fn consume_coordinator_secure_test_message(kafka_config: &KafkaConfig, identity:
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&_key.to_string());
-      topic.push_str("_Topic");
       let env_key = &mut _key.to_string();
       env_key.push_str("_PRIV");
       initialize_consumer(
@@ -299,7 +296,6 @@ fn produce_processor_pubkey(kafka_config: &KafkaConfig, identity: &str, coin_has
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&_key.to_string());
-      topic.push_str("_Topic");
       let env_key = &mut _key.to_string();
       env_key.push_str("_PUB");
       let processor_id = retrieve_message_box_id(&_key.to_string());
@@ -392,7 +388,6 @@ async fn produce_general_and_secure_test_message(kafka_config: &KafkaConfig, ide
       let mut topic: String = String::from(identity);
       topic.push_str("_");
       topic.push_str(&_key.to_string());
-      topic.push_str("_Topic");
       let env_key = &mut _key.to_string();
       env_key.push_str("_PRIV");
 
