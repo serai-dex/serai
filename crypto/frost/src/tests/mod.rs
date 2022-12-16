@@ -53,10 +53,7 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     .iter()
     .filter_map(|(i, keys)| {
       if included.contains(i) {
-        Some((
-          *i,
-          AlgorithmMachine::new(algorithm.clone(), keys.clone(), &included.clone()).unwrap(),
-        ))
+        Some((*i, AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap()))
       } else {
         None
       }
@@ -64,10 +61,14 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     .collect()
 }
 
-/// Execute the signing protocol.
-pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
+fn sign_internal<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine,
+  F: FnMut(&mut R, &mut HashMap<u16, M::SignMachine>),
+>(
   rng: &mut R,
   mut machines: HashMap<u16, M>,
+  mut cache: F,
   msg: &[u8],
 ) -> M::Signature {
   let mut commitments = HashMap::new();
@@ -85,6 +86,8 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
       (i, machine)
     })
     .collect::<HashMap<_, _>>();
+
+  cache(rng, &mut machines);
 
   let mut shares = HashMap::new();
   let mut machines = machines
@@ -115,4 +118,44 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     assert_eq!(&sig, signature.as_ref().unwrap());
   }
   signature.unwrap()
+}
+
+/// Execute the signing protocol, without caching any machines. This isn't as comprehensive at
+/// testing as sign, and accordingly isn't preferred, yet is usable for machines not supporting
+/// caching.
+pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
+  rng: &mut R,
+  machines: HashMap<u16, M>,
+  msg: &[u8],
+) -> M::Signature {
+  sign_internal(rng, machines, |_, _| {}, msg)
+}
+
+/// Execute the signing protocol, randomly caching various machines to ensure they can cache
+/// successfully.
+pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
+  rng: &mut R,
+  params: <M::SignMachine as SignMachine<M::Signature>>::Params,
+  mut keys: HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
+  machines: HashMap<u16, M>,
+  msg: &[u8],
+) -> M::Signature {
+  sign_internal(
+    rng,
+    machines,
+    |rng, machines| {
+      // Cache and rebuild half of the machines
+      let mut included = machines.keys().into_iter().cloned().collect::<Vec<_>>();
+      for i in included.drain(..) {
+        if (rng.next_u64() % 2) == 0 {
+          let cache = machines.remove(&i).unwrap().cache();
+          machines.insert(
+            i,
+            M::SignMachine::from_cache(params.clone(), keys.remove(&i).unwrap(), cache).unwrap(),
+          );
+        }
+      }
+    },
+    msg,
+  )
 }

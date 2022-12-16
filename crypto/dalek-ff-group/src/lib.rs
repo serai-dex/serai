@@ -15,6 +15,7 @@ use digest::{consts::U64, Digest, HashMarker};
 
 use subtle::{Choice, CtOption};
 
+use crypto_bigint::{Encoding, U256};
 pub use curve25519_dalek as dalek;
 
 use dalek::{
@@ -176,7 +177,37 @@ constant_time!(Scalar, DScalar);
 math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
 from_uint!(Scalar, DScalar);
 
+const MODULUS: U256 =
+  U256::from_be_hex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed");
+
 impl Scalar {
+  pub fn pow(&self, other: Scalar) -> Scalar {
+    let mut table = [Scalar::one(); 16];
+    table[1] = *self;
+    for i in 2 .. 16 {
+      table[i] = table[i - 1] * self;
+    }
+
+    let mut res = Scalar::one();
+    let mut bits = 0;
+    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+      bits <<= 1;
+      let bit = u8::from(*bit);
+      bits |= bit;
+
+      if ((i + 1) % 4) == 0 {
+        if i != 3 {
+          for _ in 0 .. 4 {
+            res *= res;
+          }
+        }
+        res *= table[usize::from(bits)];
+        bits = 0;
+      }
+    }
+    res
+  }
+
   /// Perform wide reduction on a 64-byte array to create a Scalar without bias.
   pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Scalar {
     Self(DScalar::from_bytes_mod_order_wide(bytes))
@@ -215,7 +246,16 @@ impl Field for Scalar {
     CtOption::new(Self(self.0.invert()), !self.is_zero())
   }
   fn sqrt(&self) -> CtOption<Self> {
-    unimplemented!()
+    let mod_3_8 = MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8));
+    let mod_3_8 = Scalar::from_repr(mod_3_8.to_le_bytes()).unwrap();
+
+    let sqrt_m1 = MODULUS.saturating_sub(&U256::from_u8(1)).wrapping_div(&U256::from_u8(4));
+    let sqrt_m1 = Scalar::one().double().pow(Scalar::from_repr(sqrt_m1.to_le_bytes()).unwrap());
+
+    let tv1 = self.pow(mod_3_8);
+    let tv2 = tv1 * sqrt_m1;
+    let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
+    CtOption::new(candidate, candidate.square().ct_eq(self))
   }
   fn is_zero(&self) -> Choice {
     self.0.ct_eq(&DScalar::zero())
@@ -223,8 +263,20 @@ impl Field for Scalar {
   fn cube(&self) -> Self {
     *self * self * self
   }
-  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
-    unimplemented!()
+  fn pow_vartime<S: AsRef<[u64]>>(&self, exp: S) -> Self {
+    let mut sum = Self::one();
+    let mut accum = *self;
+    for (_, num) in exp.as_ref().iter().enumerate() {
+      let mut num = *num;
+      for _ in 0 .. 64 {
+        if (num & 1) == 1 {
+          sum *= accum;
+        }
+        num >>= 1;
+        accum *= accum;
+      }
+    }
+    sum
   }
 }
 
@@ -234,7 +286,7 @@ impl PrimeField for Scalar {
   const CAPACITY: u32 = 252;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
-    // TODO: This unwrap_or isn't constant time, yet do we have an alternative?
+    // TODO: This unwrap_or isn't constant time, yet we don't exactly have an alternative...
     CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(scalar.is_some()))
   }
   fn to_repr(&self) -> [u8; 32] {
@@ -249,7 +301,11 @@ impl PrimeField for Scalar {
     2u64.into()
   }
   fn root_of_unity() -> Self {
-    unimplemented!()
+    const ROOT: [u8; 32] = [
+      212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
+      96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
+    ];
+    Scalar::from_repr(ROOT).unwrap()
   }
 }
 
@@ -404,3 +460,72 @@ dalek_group!(
   RISTRETTO_BASEPOINT_POINT,
   RISTRETTO_BASEPOINT_TABLE
 );
+
+#[test]
+fn test_s() {
+  // "This is the number of leading zero bits in the little-endian bit representation of
+  // `modulus - 1`."
+  let mut s = 0;
+  for b in (Scalar::zero() - Scalar::one()).to_le_bits() {
+    if b {
+      break;
+    }
+    s += 1;
+  }
+  assert_eq!(s, Scalar::S);
+}
+
+#[test]
+fn test_root_of_unity() {
+  // "It can be calculated by exponentiating `Self::multiplicative_generator` by `t`, where
+  // `t = (modulus - 1) >> Self::S`."
+  let t = Scalar::zero() - Scalar::one();
+  let mut bytes = t.to_repr();
+  for _ in 0 .. Scalar::S {
+    bytes[0] >>= 1;
+    for b in 1 .. 32 {
+      // Shift the dropped but down a byte
+      bytes[b - 1] |= (bytes[b] & 1) << 7;
+      // Shift the byte
+      bytes[b] >>= 1;
+    }
+  }
+  let t = Scalar::from_repr(bytes).unwrap();
+
+  assert_eq!(Scalar::multiplicative_generator().pow(t), Scalar::root_of_unity());
+  assert_eq!(
+    Scalar::root_of_unity().pow(Scalar::from(2u64).pow(Scalar::from(Scalar::S))),
+    Scalar::one()
+  );
+}
+
+#[test]
+fn test_sqrt() {
+  assert_eq!(Scalar::zero().sqrt().unwrap(), Scalar::zero());
+  assert_eq!(Scalar::one().sqrt().unwrap(), Scalar::one());
+  for _ in 0 .. 10 {
+    let mut elem;
+    while {
+      elem = Scalar::random(&mut rand_core::OsRng);
+      elem.sqrt().is_none().into()
+    } {}
+    assert_eq!(elem.sqrt().unwrap().square(), elem);
+  }
+}
+
+#[test]
+fn test_pow() {
+  let base = Scalar::from(0b11100101u64);
+  assert_eq!(base.pow(Scalar::zero()), Scalar::one());
+  assert_eq!(base.pow_vartime(&[]), Scalar::one());
+  assert_eq!(base.pow_vartime(&[0]), Scalar::one());
+  assert_eq!(base.pow_vartime(&[0, 0]), Scalar::one());
+
+  assert_eq!(base.pow(Scalar::one()), base);
+  assert_eq!(base.pow_vartime(&[1]), base);
+  assert_eq!(base.pow_vartime(&[1, 0]), base);
+
+  let one_65 = Scalar::from(u64::MAX) + Scalar::one();
+  assert_eq!(base.pow_vartime(&[0, 1]), base.pow(one_65));
+  assert_eq!(base.pow_vartime(&[1, 1]), base.pow(one_65 + Scalar::one()));
+}

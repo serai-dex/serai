@@ -7,18 +7,17 @@ ENV BITCOIN_DATA=/home/bitcoin/.bitcoin
 
 WORKDIR /home/bitcoin
 
-
 RUN apk update \
-	&& apk --no-cache add ca-certificates gnupg bash su-exec 
+  && apk --no-cache add ca-certificates gnupg bash su-exec 
 
 # Get Binary
 # TODO: When bitcoin.org publishes 23.0, retrieve checksums from there.
 RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz \
-	&& wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS \
-	&& wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS.asc
+  && wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS \
+  && wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS.asc
 
 # Verify Binary
-# For the PGP keys of builders and developers, refer to 
+# For the PGP keys of builders and developers, refer to
 # https://github.com/bitcoin/bitcoin/tree/master/contrib/builder-keys
 # Serai recognizes the builder keys for 16/17 signatures
 # from the 23.0 release
@@ -27,10 +26,10 @@ ENV KEYS2 4DAF18FE948E7A965B30F9457E296D555E7F63A7 28E72909F1717FE9607754F8A7BEB
 
 # Use hardcoded prints to get keys from servers. 2 Different servers used.
 RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ${KEYS} \
-	&& gpg --keyserver hkp://keys.openpgp.org:80 --recv-keys ${KEYS2}
+  && gpg --keyserver hkp://keys.openpgp.org:80 --recv-keys ${KEYS2}
 
 # verify all sigs and check for valid signature from laanwj -- 71A3
-RUN gpg --verify --status-fd 1 --verify SHA256SUMS.asc SHA256SUMS | grep "^\[GNUPG:\] VALIDSIG.*71A3B16735405025D447E8F274810B012346C9A6" 
+RUN gpg --verify --status-fd 1 --verify SHA256SUMS.asc SHA256SUMS | grep "^\[GNUPG:\] VALIDSIG.*71A3B16735405025D447E8F274810B012346C9A6"
 
 RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256sum -c
 

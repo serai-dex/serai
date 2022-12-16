@@ -9,49 +9,43 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use digest::Digest;
-use hkdf::{Hkdf, hmac::SimpleHmac};
-use chacha20::{
-  cipher::{crypto_common::KeyIvInit, StreamCipher},
-  Key as Cc20Key, Nonce as Cc20Iv, ChaCha20,
-};
+use transcript::{Transcript, RecommendedTranscript};
 
 use group::{
   ff::{Field, PrimeField},
   GroupEncoding,
 };
-
 use ciphersuite::Ciphersuite;
-
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 use schnorr::SchnorrSignature;
 
-use crate::{DkgError, ThresholdParams, ThresholdCore, validate_map};
+use crate::{
+  DkgError, ThresholdParams, ThresholdCore, validate_map,
+  encryption::{ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption},
+};
 
 #[allow(non_snake_case)]
 fn challenge<C: Ciphersuite>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
-  const DST: &[u8] = b"FROST Schnorr Proof of Knowledge";
-
-  // Hashes the context to get a fixed size value out of it
-  let mut transcript = C::H::digest(context.as_bytes()).as_ref().to_vec();
-  transcript.extend(l.to_be_bytes());
-  transcript.extend(R);
-  transcript.extend(Am);
-  C::hash_to_F(DST, &transcript)
+  let mut transcript = RecommendedTranscript::new(b"DKG FROST v0");
+  transcript.domain_separate(b"Schnorr Proof of Knowledge");
+  transcript.append_message(b"context", context.as_bytes());
+  transcript.append_message(b"participant", l.to_le_bytes());
+  transcript.append_message(b"nonce", R);
+  transcript.append_message(b"commitments", Am);
+  C::hash_to_F(b"PoK 0", &transcript.challenge(b"challenge"))
 }
 
 /// Commitments message to be broadcast to all other parties.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Commitments<C: Ciphersuite> {
   commitments: Vec<C::G>,
-  enc_key: C::G,
   cached_msg: Vec<u8>,
   sig: SchnorrSignature<C>,
 }
 
-impl<C: Ciphersuite> Commitments<C> {
-  pub fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
+impl<C: Ciphersuite> ReadWrite for Commitments<C> {
+  fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
     let mut commitments = Vec::with_capacity(params.t().into());
     let mut cached_msg = vec![];
 
@@ -67,20 +61,13 @@ impl<C: Ciphersuite> Commitments<C> {
     for _ in 0 .. params.t() {
       commitments.push(read_G()?);
     }
-    let enc_key = read_G()?;
 
-    Ok(Commitments { commitments, enc_key, cached_msg, sig: SchnorrSignature::read(reader)? })
+    Ok(Commitments { commitments, cached_msg, sig: SchnorrSignature::read(reader)? })
   }
 
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&self.cached_msg)?;
     self.sig.write(writer)
-  }
-
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut buf = vec![];
-    self.write(&mut buf).unwrap();
-    buf
   }
 }
 
@@ -104,7 +91,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
   pub fn generate_coefficients<R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-  ) -> (SecretShareMachine<C>, Commitments<C>) {
+  ) -> (SecretShareMachine<C>, EncryptionKeyMessage<C, Commitments<C>>) {
     let t = usize::from(self.params.t);
     let mut coefficients = Vec::with_capacity(t);
     let mut commitments = Vec::with_capacity(t);
@@ -117,14 +104,6 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
       commitments.push(C::generator() * coefficients[i].deref());
       cached_msg.extend(commitments[i].to_bytes().as_ref());
     }
-
-    // Generate an encryption key for transmitting the secret shares
-    // It would probably be perfectly fine to use one of our polynomial elements, yet doing so
-    // puts the integrity of FROST at risk. While there's almost no way it could, as it's used in
-    // an ECDH with validated group elemnents, better to avoid any questions on it
-    let enc_key = Zeroizing::new(C::random_nonzero_F(&mut *rng));
-    let pub_enc_key = C::generator() * enc_key.deref();
-    cached_msg.extend(pub_enc_key.to_bytes().as_ref());
 
     // Step 2: Provide a proof of knowledge
     let r = Zeroizing::new(C::random_nonzero_F(rng));
@@ -139,17 +118,21 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
       challenge::<C>(&self.context, self.params.i(), nonce.to_bytes().as_ref(), &cached_msg),
     );
 
+    // Additionally create an encryption mechanism to protect the secret shares
+    let encryption = Encryption::new(b"FROST", rng);
+
     // Step 4: Broadcast
+    let msg =
+      encryption.registration(Commitments { commitments: commitments.clone(), cached_msg, sig });
     (
       SecretShareMachine {
         params: self.params,
         context: self.context,
         coefficients,
-        our_commitments: commitments.clone(),
-        enc_key,
-        pub_enc_key,
+        our_commitments: commitments,
+        encryption,
       },
-      Commitments { commitments, enc_key: pub_enc_key, cached_msg, sig },
+      msg,
     )
   }
 }
@@ -169,6 +152,11 @@ fn polynomial<F: PrimeField + Zeroize>(coefficients: &[Zeroizing<F>], l: u16) ->
 /// Secret share to be sent to the party it's intended for over an authenticated channel.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SecretShare<F: PrimeField>(F::Repr);
+impl<F: PrimeField> AsMut<[u8]> for SecretShare<F> {
+  fn as_mut(&mut self) -> &mut [u8] {
+    self.0.as_mut()
+  }
+}
 impl<F: PrimeField> Zeroize for SecretShare<F> {
   fn zeroize(&mut self) {
     self.0.as_mut().zeroize()
@@ -181,59 +169,16 @@ impl<F: PrimeField> Drop for SecretShare<F> {
 }
 impl<F: PrimeField> ZeroizeOnDrop for SecretShare<F> {}
 
-impl<F: PrimeField> SecretShare<F> {
-  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+impl<F: PrimeField> ReadWrite for SecretShare<F> {
+  fn read<R: Read>(reader: &mut R, _: ThresholdParams) -> io::Result<Self> {
     let mut repr = F::Repr::default();
     reader.read_exact(repr.as_mut())?;
     Ok(SecretShare(repr))
   }
 
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.0.as_ref())
   }
-
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut buf = vec![];
-    self.write(&mut buf).unwrap();
-    buf
-  }
-}
-
-fn create_ciphers<C: Ciphersuite>(
-  mut sender: <C::G as GroupEncoding>::Repr,
-  receiver: &mut <C::G as GroupEncoding>::Repr,
-  ecdh: &mut <C::G as GroupEncoding>::Repr,
-) -> (ChaCha20, ChaCha20) {
-  let directional = |sender: &mut <C::G as GroupEncoding>::Repr| {
-    let mut key = Cc20Key::default();
-    key.copy_from_slice(
-      &Hkdf::<C::H, SimpleHmac<C::H>>::extract(
-        Some(b"key"),
-        &[sender.as_ref(), ecdh.as_ref()].concat(),
-      )
-      .0
-      .as_ref()[.. 32],
-    );
-    let mut iv = Cc20Iv::default();
-    iv.copy_from_slice(
-      &Hkdf::<C::H, SimpleHmac<C::H>>::extract(
-        Some(b"iv"),
-        &[sender.as_ref(), ecdh.as_ref()].concat(),
-      )
-      .0
-      .as_ref()[.. 12],
-    );
-    sender.as_mut().zeroize();
-
-    let res = ChaCha20::new(&key, &iv);
-    <Cc20Key as AsMut<[u8]>>::as_mut(&mut key).zeroize();
-    <Cc20Iv as AsMut<[u8]>>::as_mut(&mut iv).zeroize();
-    res
-  };
-
-  let res = (directional(&mut sender), directional(receiver));
-  ecdh.as_mut().zeroize();
-  res
 }
 
 /// Advancement of the key generation state machine.
@@ -243,8 +188,7 @@ pub struct SecretShareMachine<C: Ciphersuite> {
   context: String,
   coefficients: Vec<Zeroizing<C::F>>,
   our_commitments: Vec<C::G>,
-  enc_key: Zeroizing<C::F>,
-  pub_enc_key: C::G,
+  encryption: Encryption<u16, C>,
 }
 
 impl<C: Ciphersuite> SecretShareMachine<C> {
@@ -253,16 +197,15 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   fn verify_r1<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    mut commitments: HashMap<u16, Commitments<C>>,
-  ) -> Result<(HashMap<u16, Vec<C::G>>, HashMap<u16, C::G>), DkgError> {
+    mut commitments: HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>>,
+  ) -> Result<HashMap<u16, Vec<C::G>>, DkgError> {
     validate_map(&commitments, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
 
-    let mut enc_keys = HashMap::new();
     let mut batch = BatchVerifier::<u16, C::G>::new(commitments.len());
     let mut commitments = commitments
       .drain()
-      .map(|(l, mut msg)| {
-        enc_keys.insert(l, msg.enc_key);
+      .map(|(l, msg)| {
+        let mut msg = self.encryption.register(l, msg);
 
         // Step 5: Validate each proof of knowledge
         // This is solely the prep step for the latter batch verification
@@ -281,7 +224,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
     batch.verify_with_vartime_blame().map_err(DkgError::InvalidProofOfKnowledge)?;
 
     commitments.insert(self.params.i, self.our_commitments.drain(..).collect());
-    Ok((commitments, enc_keys))
+    Ok(commitments)
   }
 
   /// Continue generating a key.
@@ -291,13 +234,11 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   pub fn generate_secret_shares<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    commitments: HashMap<u16, Commitments<C>>,
-  ) -> Result<(KeyMachine<C>, HashMap<u16, SecretShare<C::F>>), DkgError> {
-    let (commitments, mut enc_keys) = self.verify_r1(&mut *rng, commitments)?;
+    commitments: HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>>,
+  ) -> Result<(KeyMachine<C>, HashMap<u16, EncryptedMessage<SecretShare<C::F>>>), DkgError> {
+    let commitments = self.verify_r1(&mut *rng, commitments)?;
 
     // Step 1: Generate secret shares for all other parties
-    let sender = self.pub_enc_key.to_bytes();
-    let mut ciphers = HashMap::new();
     let mut res = HashMap::new();
     for l in 1 ..= self.params.n() {
       // Don't insert our own shares to the byte buffer which is meant to be sent around
@@ -306,31 +247,20 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
         continue;
       }
 
-      let (mut cipher_send, cipher_recv) = {
-        let receiver = enc_keys.get_mut(&l).unwrap();
-        let mut ecdh = (*receiver * self.enc_key.deref()).to_bytes();
-
-        create_ciphers::<C>(sender, &mut receiver.to_bytes(), &mut ecdh)
-      };
-
       let mut share = polynomial(&self.coefficients, l);
-      let mut share_bytes = share.to_repr();
+      let share_bytes = Zeroizing::new(SecretShare::<C::F>(share.to_repr()));
       share.zeroize();
-
-      cipher_send.apply_keystream(share_bytes.as_mut());
-      drop(cipher_send);
-
-      ciphers.insert(l, cipher_recv);
-      res.insert(l, SecretShare::<C::F>(share_bytes));
-      share_bytes.as_mut().zeroize();
+      res.insert(l, self.encryption.encrypt(l, share_bytes));
     }
-    self.enc_key.zeroize();
 
     // Calculate our own share
     let share = polynomial(&self.coefficients, self.params.i());
     self.coefficients.zeroize();
 
-    Ok((KeyMachine { params: self.params, secret: share, commitments, ciphers }, res))
+    Ok((
+      KeyMachine { params: self.params, secret: share, commitments, encryption: self.encryption },
+      res,
+    ))
   }
 }
 
@@ -338,24 +268,17 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
 pub struct KeyMachine<C: Ciphersuite> {
   params: ThresholdParams,
   secret: Zeroizing<C::F>,
-  ciphers: HashMap<u16, ChaCha20>,
   commitments: HashMap<u16, Vec<C::G>>,
+  encryption: Encryption<u16, C>,
 }
 impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
   fn zeroize(&mut self) {
     self.params.zeroize();
     self.secret.zeroize();
-
-    // cipher implements ZeroizeOnDrop and zeroizes on drop, yet doesn't implement Zeroize
-    // The following is redundant, as Rust should automatically handle dropping it, yet it shows
-    // awareness of this quirk and at least attempts to be comprehensive
-    for (_, cipher) in self.ciphers.drain() {
-      drop(cipher);
-    }
-
     for (_, commitments) in self.commitments.iter_mut() {
       commitments.zeroize();
     }
+    self.encryption.zeroize();
   }
 }
 impl<C: Ciphersuite> Drop for KeyMachine<C> {
@@ -373,7 +296,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
   pub fn complete<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    mut shares: HashMap<u16, SecretShare<C::F>>,
+    mut shares: HashMap<u16, EncryptedMessage<SecretShare<C::F>>>,
   ) -> Result<ThresholdCore<C>, DkgError> {
     validate_map(&shares, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
 
@@ -391,11 +314,8 @@ impl<C: Ciphersuite> KeyMachine<C> {
     };
 
     let mut batch = BatchVerifier::new(shares.len());
-    for (l, mut share_bytes) in shares.drain() {
-      let mut cipher = self.ciphers.remove(&l).unwrap();
-      cipher.apply_keystream(share_bytes.0.as_mut());
-      drop(cipher);
-
+    for (l, share_bytes) in shares.drain() {
+      let mut share_bytes = self.encryption.decrypt(l, share_bytes);
       let mut share = Zeroizing::new(
         Option::<C::F>::from(C::F::from_repr(share_bytes.0)).ok_or(DkgError::InvalidShare(l))?,
       );
