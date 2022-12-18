@@ -20,6 +20,8 @@ use group::{
 
 use ciphersuite::Ciphersuite;
 
+mod encryption;
+
 /// The distributed key generation protocol described in the
 /// [FROST paper](https://eprint.iacr.org/2020/852).
 pub mod frost;
@@ -30,6 +32,34 @@ pub mod promote;
 /// Tests for application-provided curves and algorithms.
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
+
+/// Various errors possible during key generation/signing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+pub enum DkgError {
+  #[error("a parameter was 0 (required {0}, participants {1})")]
+  ZeroParameter(u16, u16),
+  #[error("invalid amount of required participants (max {1}, got {0})")]
+  InvalidRequiredQuantity(u16, u16),
+  #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
+  InvalidParticipantIndex(u16, u16),
+
+  #[error("invalid signing set")]
+  InvalidSigningSet,
+  #[error("invalid participant quantity (expected {0}, got {1})")]
+  InvalidParticipantQuantity(usize, usize),
+  #[error("duplicated participant index ({0})")]
+  DuplicatedIndex(u16),
+  #[error("missing participant {0}")]
+  MissingParticipant(u16),
+
+  #[error("invalid proof of knowledge (participant {0})")]
+  InvalidProofOfKnowledge(u16),
+  #[error("invalid share (participant {0})")]
+  InvalidShare(u16),
+
+  #[error("internal error ({0})")]
+  InternalError(&'static str),
+}
 
 // Validate a map of values to have the expected included participants
 pub(crate) fn validate_map<T>(
@@ -96,34 +126,6 @@ impl ThresholdParams {
   pub fn i(&self) -> u16 {
     self.i
   }
-}
-
-/// Various errors possible during key generation/signing.
-#[derive(Copy, Clone, Error, Debug)]
-pub enum DkgError {
-  #[error("a parameter was 0 (required {0}, participants {1})")]
-  ZeroParameter(u16, u16),
-  #[error("invalid amount of required participants (max {1}, got {0})")]
-  InvalidRequiredQuantity(u16, u16),
-  #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
-  InvalidParticipantIndex(u16, u16),
-
-  #[error("invalid signing set")]
-  InvalidSigningSet,
-  #[error("invalid participant quantity (expected {0}, got {1})")]
-  InvalidParticipantQuantity(usize, usize),
-  #[error("duplicated participant index ({0})")]
-  DuplicatedIndex(u16),
-  #[error("missing participant {0}")]
-  MissingParticipant(u16),
-
-  #[error("invalid proof of knowledge (participant {0})")]
-  InvalidProofOfKnowledge(u16),
-  #[error("invalid share (participant {0})")]
-  InvalidShare(u16),
-
-  #[error("internal error ({0})")]
-  InternalError(&'static str),
 }
 
 /// Calculate the lagrange coefficient for a signing set.
@@ -282,10 +284,12 @@ pub struct ThresholdKeys<C: Ciphersuite> {
 /// View of keys passed to algorithm implementations.
 #[derive(Clone, Zeroize)]
 pub struct ThresholdView<C: Ciphersuite> {
+  offset: C::F,
   group_key: C::G,
-  #[zeroize(skip)]
   included: Vec<u16>,
   secret_share: Zeroizing<C::F>,
+  #[zeroize(skip)]
+  original_verification_shares: HashMap<u16, C::G>,
   #[zeroize(skip)]
   verification_shares: HashMap<u16, C::G>,
 }
@@ -345,10 +349,12 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     let offset_verification_share = C::generator() * offset_share;
 
     Ok(ThresholdView {
+      offset: self.offset.unwrap_or_else(C::F::zero),
       group_key: self.group_key(),
       secret_share: Zeroizing::new(
         (lagrange::<C::F>(self.params().i, included) * self.secret_share().deref()) + offset_share,
       ),
+      original_verification_shares: self.verification_shares(),
       verification_shares: self
         .verification_shares()
         .iter()
@@ -362,16 +368,24 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
 }
 
 impl<C: Ciphersuite> ThresholdView<C> {
+  pub fn offset(&self) -> C::F {
+    self.offset
+  }
+
   pub fn group_key(&self) -> C::G {
     self.group_key
   }
 
-  pub fn included(&self) -> Vec<u16> {
-    self.included.clone()
+  pub fn included(&self) -> &[u16] {
+    &self.included
   }
 
   pub fn secret_share(&self) -> &Zeroizing<C::F> {
     &self.secret_share
+  }
+
+  pub fn original_verification_share(&self, l: u16) -> C::G {
+    self.original_verification_shares[&l]
   }
 
   pub fn verification_share(&self, l: u16) -> C::G {

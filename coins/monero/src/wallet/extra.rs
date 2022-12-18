@@ -10,6 +10,8 @@ use crate::serialize::{
   write_point, write_vec,
 };
 
+pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) enum PaymentId {
   Unencrypted([u8; 32]),
@@ -91,7 +93,7 @@ impl ExtraField {
       1 => ExtraField::PublicKey(read_point(r)?),
       2 => ExtraField::Nonce({
         let nonce = read_vec(read_byte, r)?;
-        if nonce.len() > 255 {
+        if nonce.len() > MAX_TX_EXTRA_NONCE_SIZE {
           Err(io::Error::new(io::ErrorKind::Other, "too long nonce"))?;
         }
         nonce
@@ -131,8 +133,9 @@ impl Extra {
     None
   }
 
-  pub(crate) fn data(&self) -> Option<Vec<u8>> {
+  pub(crate) fn data(&self) -> Vec<Vec<u8>> {
     let mut first = true;
+    let mut res = vec![];
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
         // Skip the first Nonce, which should be the payment ID
@@ -140,10 +143,10 @@ impl Extra {
           first = false;
           continue;
         }
-        return Some(data.clone());
+        res.push(data.clone());
       }
     }
-    None
+    res
   }
 
   pub(crate) fn new(mut keys: Vec<EdwardsPoint>) -> Extra {
@@ -162,15 +165,15 @@ impl Extra {
   }
 
   #[rustfmt::skip]
-  pub(crate) fn fee_weight(outputs: usize, data: Option<&Vec<u8>>) -> usize {
+  pub(crate) fn fee_weight(outputs: usize, data: &[Vec<u8>]) -> usize {
     // PublicKey, key
     (1 + 32) +
     // PublicKeys, length, additional keys
     (1 + 1 + (outputs.saturating_sub(1) * 32)) +
     // PaymentId (Nonce), length, encrypted, ID
     (1 + 1 + 1 + 8) +
-    // Nonce, length, data (if existant)
-    data.map(|v| 1 + varint_len(v.len()) + v.len()).unwrap_or(0)
+    // Nonce, length, data (if existent)
+    data.iter().map(|v| 1 + varint_len(v.len()) + v.len()).sum::<usize>()
   }
 
   pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {

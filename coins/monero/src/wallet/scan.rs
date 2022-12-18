@@ -73,7 +73,7 @@ pub struct Metadata {
   // have this making it simplest for it to be as-is.
   pub payment_id: [u8; 8],
   /// Arbitrary data encoded in TX extra.
-  pub arbitrary_data: Option<Vec<u8>>,
+  pub arbitrary_data: Vec<Vec<u8>>,
 }
 
 impl Metadata {
@@ -82,11 +82,11 @@ impl Metadata {
     res.extend(self.subaddress.0.to_le_bytes());
     res.extend(self.subaddress.1.to_le_bytes());
     res.extend(self.payment_id);
-    if let Some(data) = self.arbitrary_data.as_ref() {
-      res.extend([1, u8::try_from(data.len()).unwrap()]);
-      res.extend(data);
-    } else {
-      res.extend([0]);
+
+    res.extend(u32::try_from(self.arbitrary_data.len()).unwrap().to_le_bytes());
+    for part in &self.arbitrary_data {
+      res.extend([u8::try_from(part.len()).unwrap()]);
+      res.extend(part);
     }
     res
   }
@@ -96,12 +96,12 @@ impl Metadata {
       subaddress: (read_u32(r)?, read_u32(r)?),
       payment_id: read_bytes(r)?,
       arbitrary_data: {
-        if read_byte(r)? == 1 {
+        let mut data = vec![];
+        for _ in 0 .. read_u32(r)? {
           let len = read_byte(r)?;
-          Some(read_raw_vec(read_byte, usize::from(len), r)?)
-        } else {
-          None
+          data.push(read_raw_vec(read_byte, usize::from(len), r)?);
         }
+        data
       },
     })
   }
@@ -126,6 +126,10 @@ impl ReceivedOutput {
 
   pub fn commitment(&self) -> Commitment {
     self.data.commitment.clone()
+  }
+
+  pub fn arbitrary_data(&self) -> &[Vec<u8>] {
+    &self.metadata.arbitrary_data
   }
 
   pub fn serialize(&self) -> Vec<u8> {
@@ -369,11 +373,18 @@ impl Scanner {
     };
 
     let mut res = vec![];
-    for tx in txs {
+    for (i, tx) in txs.drain(..).enumerate() {
       if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }
-      index += u64::try_from(tx.prefix.outputs.len()).unwrap();
+      index += tx
+        .prefix
+        .outputs
+        .iter()
+        // Filter to miner TX outputs/0-amount outputs since we're tacking the 0-amount index
+        .filter_map(|output| Some(1).filter(|_| (i == 0) || (output.amount == 0)))
+        // Since we can't get the length of an iterator, map each value to 1 and sum
+        .sum::<u64>();
     }
     Ok(res)
   }

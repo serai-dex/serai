@@ -4,7 +4,8 @@ use rand_core::{RngCore, CryptoRng};
 
 use crate::{
   Ciphersuite, ThresholdParams, ThresholdCore,
-  frost::{SecretShare, Commitments, KeyGenMachine},
+  frost::KeyGenMachine,
+  encryption::{EncryptionKeyMessage, EncryptedMessage},
   tests::{THRESHOLD, PARTICIPANTS, clone_without},
 };
 
@@ -24,7 +25,7 @@ pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
 
     commitments.insert(
       i,
-      Commitments::read::<&[u8]>(
+      EncryptionKeyMessage::read::<&[u8]>(
         &mut these_commitments.serialize().as_ref(),
         ThresholdParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 },
       )
@@ -41,7 +42,14 @@ pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
       let shares = shares
         .drain()
         .map(|(l, share)| {
-          (l, SecretShare::<C::F>::read::<&[u8]>(&mut share.serialize().as_ref()).unwrap())
+          (
+            l,
+            EncryptedMessage::read::<&[u8]>(
+              &mut share.serialize().as_ref(),
+              ThresholdParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 },
+            )
+            .unwrap(),
+          )
         })
         .collect::<HashMap<_, _>>();
       secret_shares.insert(l, shares);

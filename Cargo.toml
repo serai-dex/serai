@@ -21,8 +21,12 @@ members = [
 
   "processor",
 
+  "substrate/tendermint/machine",
+  "substrate/tendermint/primitives",
+  "substrate/tendermint/client",
+  "substrate/tendermint/pallet",
+
   "substrate/runtime",
-  "substrate/consensus",
   "substrate/node",
 
   "contracts/extension",

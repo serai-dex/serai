@@ -113,8 +113,20 @@ macro_rules! field {
       fn cube(&self) -> Self {
         self.square() * self
       }
-      fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
-        unimplemented!()
+      fn pow_vartime<S: AsRef<[u64]>>(&self, exp: S) -> Self {
+        let mut sum = Self::one();
+        let mut accum = *self;
+        for (_, num) in exp.as_ref().iter().enumerate() {
+          let mut num = *num;
+          for _ in 0 .. 64 {
+            if (num & 1) == 1 {
+              sum *= accum;
+            }
+            num >>= 1;
+            accum *= accum;
+          }
+        }
+        sum
       }
     }
 

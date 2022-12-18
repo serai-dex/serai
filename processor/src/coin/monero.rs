@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 
+use zeroize::Zeroizing;
+
 use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;
@@ -65,23 +67,23 @@ pub struct SignableTransaction {
 #[derive(Clone, Debug)]
 pub struct Monero {
   pub(crate) rpc: Rpc,
-  view: Scalar,
+  view: Zeroizing<Scalar>,
 }
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    Monero { rpc: Rpc::new(url).unwrap(), view: additional_key::<Monero>(0).0 }
+    Monero { rpc: Rpc::new(url).unwrap(), view: Zeroizing::new(additional_key::<Monero>(0).0) }
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
-    Scanner::from_view(ViewPair::new(spend.0, self.view), Network::Mainnet, None)
+    Scanner::from_view(ViewPair::new(spend.0, self.view.clone()), Network::Mainnet, None)
   }
 
   #[cfg(test)]
   fn empty_scanner() -> Scanner {
     use group::Group;
     Scanner::from_view(
-      ViewPair::new(*dfg::EdwardsPoint::generator(), Scalar::one()),
+      ViewPair::new(*dfg::EdwardsPoint::generator(), Zeroizing::new(Scalar::one())),
       Network::Mainnet,
       Some(std::collections::HashSet::new()),
     )
@@ -150,8 +152,12 @@ impl Coin for Monero {
   }
 
   async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
-    let tx_block_number =
-      self.rpc.get_transaction_block_number(tx).await.map_err(|_| CoinError::ConnectionError)?;
+    let tx_block_number = self
+      .rpc
+      .get_transaction_block_number(tx)
+      .await
+      .map_err(|_| CoinError::ConnectionError)?
+      .unwrap_or(usize::MAX);
     Ok((self.get_latest_block_number().await?.saturating_sub(tx_block_number) + 1) >= 10)
   }
 
@@ -174,7 +180,7 @@ impl Coin for Monero {
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
         Some(self.address(spend)),
-        None,
+        vec![],
         fee,
       )
       .map_err(|_| CoinError::ConnectionError)?,
@@ -184,7 +190,6 @@ impl Coin for Monero {
   async fn attempt_send(
     &self,
     transaction: SignableTransaction,
-    included: &[u16],
   ) -> Result<Self::TransactionMachine, CoinError> {
     transaction
       .actual
@@ -194,7 +199,6 @@ impl Coin for Monero {
         transaction.keys.clone(),
         transaction.transcript.clone(),
         transaction.height,
-        included.to_vec(),
       )
       .await
       .map_err(|_| CoinError::ConnectionError)
@@ -205,7 +209,6 @@ impl Coin for Monero {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
     self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-
     Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
 
@@ -260,7 +263,7 @@ impl Coin for Monero {
       outputs,
       vec![(address, amount - fee)],
       Some(Self::empty_address()),
-      None,
+      vec![],
       self.rpc.get_fee().await.unwrap(),
     )
     .unwrap()

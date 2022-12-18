@@ -22,9 +22,17 @@ volumes:
   serai-dave:
   serai-eve:
   serai-ferdie:
-
+  genesis-volume:
 
 services:
+  genesis:
+    image: genesis:dev
+    build:
+      context: ./genesis/
+      dockerfile: Dockerfile
+    entrypoint: /entry-dev.sh
+    volumes:
+      - genesis-volume:/temp
 
   _serai:
     &serai_defaults
@@ -40,6 +48,9 @@ services:
     entrypoint: /scripts/entry-dev.sh
     volumes:
       - "./serai/scripts:/scripts"
+      - genesis-volume:/temp
+    depends_on:
+      - genesis
 
   serai-base:
     <<: *serai_defaults
@@ -47,7 +58,7 @@ services:
     profiles:
       - base
     environment:
-      CHAIN: dev
+      CHAIN: local
       NAME: base
 
   serai-alice:
@@ -60,8 +71,8 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Alice
+      CHAIN: local
+      NAME: alice
       VALIDATOR: true
 
   serai-bob:
@@ -74,8 +85,9 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Bob
+      CHAIN: local
+      NAME: bob
+      VALIDATOR: true
 
   serai-charlie:
     <<: *serai_defaults
@@ -87,8 +99,9 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Charlie
+      CHAIN: local
+      NAME: charlie
+      VALIDATOR: true
 
   serai-dave:
     <<: *serai_defaults
@@ -98,8 +111,8 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Dave
+      CHAIN: local
+      NAME: dave
 
   serai-eve:
     <<: *serai_defaults
@@ -109,8 +122,8 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Eve
+      CHAIN: local
+      NAME: eve
 
   serai-ferdie:
     <<: *serai_defaults
@@ -120,8 +133,9 @@ services:
       - cluster-lg
       - cluster-coins-lg
     environment:
-      CHAIN: dev
-      NAME: Ferdie
+      CHAIN: local
+      NAME: ferdie
+
   # Processor Services
 
   # Coin Services

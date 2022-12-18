@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, ThresholdView};
+use crate::{Curve, FrostError, ThresholdKeys, ThresholdView};
 pub use schnorr::SchnorrSignature;
 
 /// Write an addendum to a writer.
@@ -45,7 +45,7 @@ pub trait Algorithm<C: Curve>: Clone {
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    params: &ThresholdView<C>,
+    keys: &ThresholdKeys<C>,
   ) -> Self::Addendum;
 
   /// Read an addendum from a reader.
@@ -75,10 +75,16 @@ pub trait Algorithm<C: Curve>: Clone {
   #[must_use]
   fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature>;
 
-  /// Verify a specific share given as a response. Used to determine blame if signature
-  /// verification fails.
-  #[must_use]
-  fn verify_share(&self, verification_share: C::G, nonces: &[Vec<C::G>], share: C::F) -> bool;
+  /// Verify a specific share given as a response.
+  /// This function should return a series of pairs whose products should sum to zero for a valid
+  /// share. Any error raised is treated as the share being invalid.
+  #[allow(clippy::type_complexity, clippy::result_unit_err)]
+  fn verify_share(
+    &self,
+    verification_share: C::G,
+    nonces: &[Vec<C::G>],
+    share: C::F,
+  ) -> Result<Vec<(C::F, C::G)>, ()>;
 }
 
 /// IETF-compliant transcript. This is incredibly naive and should not be used within larger
@@ -102,6 +108,7 @@ impl Transcript for IetfTranscript {
     self.0.clone()
   }
 
+  // FROST won't use this and this shouldn't be used outside of FROST
   fn rng_seed(&mut self, _: &'static [u8]) -> [u8; 32] {
     unimplemented!()
   }
@@ -148,7 +155,7 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     vec![vec![C::generator()]]
   }
 
-  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &ThresholdView<C>) {}
+  fn preprocess_addendum<R: RngCore + CryptoRng>(&mut self, _: &mut R, _: &ThresholdKeys<C>) {}
 
   fn read_addendum<R: Read>(&self, _: &mut R) -> io::Result<Self::Addendum> {
     Ok(())
@@ -176,8 +183,16 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     Some(sig).filter(|sig| sig.verify(group_key, self.c.unwrap()))
   }
 
-  #[must_use]
-  fn verify_share(&self, verification_share: C::G, nonces: &[Vec<C::G>], share: C::F) -> bool {
-    SchnorrSignature::<C> { R: nonces[0][0], s: share }.verify(verification_share, self.c.unwrap())
+  fn verify_share(
+    &self,
+    verification_share: C::G,
+    nonces: &[Vec<C::G>],
+    share: C::F,
+  ) -> Result<Vec<(C::F, C::G)>, ()> {
+    Ok(
+      SchnorrSignature::<C> { R: nonces[0][0], s: share }
+        .batch_statements(verification_share, self.c.unwrap())
+        .to_vec(),
+    )
   }
 }
