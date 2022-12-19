@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 
 use zeroize::Zeroizing;
@@ -210,6 +212,10 @@ impl Coin for Monero {
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
     self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
     Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
+  }
+
+  async fn tweak_keys(keys : &mut HashMap<u16, ThresholdKeys<Self::Curve>>) -> &mut HashMap<u16, ThresholdKeys<Self::Curve>> {
+    keys
   }
 
   #[cfg(test)]

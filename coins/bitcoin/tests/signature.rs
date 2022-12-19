@@ -1,9 +1,8 @@
-use bitcoin_hashes::hex::ToHex;
 
 #[test]
 fn test_signing() {
   use secp256k1::Message;
-  use bitcoin_hashes::{sha256, Hash};
+  use bitcoin_hashes::{sha256, Hash, hex::ToHex};
   use frost::{
     curve::Secp256k1,
     algorithm::Schnorr,
@@ -25,16 +24,18 @@ fn test_signing() {
   let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true).to_hex().to_string();
   dbg!(pubkey_compressed);
   
-
+  let algo = Schnorr::<Secp256k1, BitcoinHram>::new();
   let mut _sig = sign(
     &mut OsRng,
-    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys), //&keys),
+    algo.clone(),
+    keys.clone(),
+    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys),
     &Sha256::digest(MESSAGE),
   );
-  
-  let mut offset = 0;
-  (_sig.R, offset) = make_even(_sig.R);
-  _sig.s += Scalar::from(offset);
+
+  let mut _offset = 0;
+  (_sig.R, _offset) = make_even(_sig.R);
+  _sig.s += Scalar::from(_offset);
 
   let sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1..65]).unwrap();
   let msg = Message::from(sha256::Hash::hash(&MESSAGE));

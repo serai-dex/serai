@@ -37,6 +37,8 @@ hex = "0.4"
 bitcoin_hashes = "0.11.0"
 bitcoincore-rpc-json = "0.16.0"
 secp256k1 = {version = "0.24.1", features = ["global-context", "rand-std"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [dev-dependencies]
 rand_core = "0.6"

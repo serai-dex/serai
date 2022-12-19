@@ -1,21 +1,21 @@
-use std::{str::FromStr};
+use std::{str::FromStr, io::Read, fs::read_to_string,collections::HashMap};
 
 use async_trait::async_trait;
 
+use rand_core::le::read_u32_into;
 use transcript::RecommendedTranscript;
-use frost::{ curve::Secp256k1, ThresholdKeys };
+use frost::{ curve::{Secp256k1, Ciphersuite}, ThresholdKeys };
 
-use bitcoin_hashes::hex::ToHex;
-use bitcoin::{util::address::Address, Txid};
-use bitcoin_serai::{rpc::Rpc,rpc_helper::RawTx};
-use bitcoincore_rpc_json::{AddressType, GetBlockResult, 
-  EstimateSmartFeeResult, CreateRawTransactionInput, 
-  SignRawTransactionInput, ListUnspentResultEntry};
+use serde::Deserialize;
 
-use k256::{ProjectivePoint, elliptic_curve::sec1::ToEncodedPoint,};
+use bitcoin_hashes::hex::FromHex;
 
+use bitcoin::{util::address::Address, Txid, schnorr::{TweakedPublicKey,SchnorrSig}, XOnlyPublicKey, psbt::PartiallySignedTransaction, hashes::sha256d::Hash};
+use bitcoin_serai::{rpc::Rpc,rpc_helper::RawTx, crypto::{make_even, taproot_sighash}, wallet::SpendableOutput};
+use bitcoincore_rpc_json::{AddressType, ListUnspentResultEntry};
+
+use k256::{ProjectivePoint, elliptic_curve::{sec1::{ToEncodedPoint,Tag}}, Scalar};
 use crate::{
-  additional_key,
   coin::{CoinError, Output as OutputTrait, Coin},
 };
 
@@ -46,8 +46,11 @@ impl Bitcoin {
 }
 
 //TODO: Implement proper Structs
-pub struct SignableTransaction {}
-use monero_serai::{transaction::Transaction,wallet::{SpendableOutput, TransactionMachine}};
+//use zeroize::{Zeroize, ZeroizeOnDrop};
+//use bitcoin_serai::rpc_helper::RpcError;
+use monero_serai::{transaction::Transaction,wallet::{TransactionMachine}};
+
+
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
 impl From<SpendableOutput> for Output {
@@ -59,14 +62,16 @@ impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
   // While the Monero library offers a variant which allows senders to ensure their TXs have unique
   // output keys, Serai can still be targeted using the classic burning bug
-  type Id = [u8; 32];
+  type Id = [u8; 36];
 
   fn id(&self) -> Self::Id {
-    self.0.output.data.key.compress().to_bytes()
+    let serialized_data = self.0.serialize();
+    let ret : [u8; 36] = serialized_data[0..36].try_into().unwrap();
+    ret
   }
 
   fn amount(&self) -> u64 {
-    self.0.commitment().amount
+    self.0.amount
   }
 
   fn serialize(&self) -> Vec<u8> {
@@ -87,7 +92,7 @@ impl Coin for Bitcoin {
   type Block = bitcoin::Block;
 
   type Output = Output;
-  type SignableTransaction = SignableTransaction;
+  type SignableTransaction = PartiallySignedTransaction;
   type TransactionMachine = TransactionMachine;
 
   type Address = bitcoin::util::address::Address;
@@ -99,8 +104,12 @@ impl Coin for Bitcoin {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: ProjectivePoint) -> Self::Address {
-    let pubkey = bitcoin::util::key::PublicKey::from_slice(key.to_encoded_point(true).as_bytes()).unwrap();
-    Address::p2wpkh(&pubkey, bitcoin::network::constants::Network::Regtest).unwrap()
+    assert!(key.to_encoded_point(true).tag() == Tag::CompressedOddY, "YKey is odd");
+    //let pubkey = bitcoin::util::key::PublicKey::from_slice(key.to_encoded_point(true).as_bytes()).unwrap();
+    let xonly_pubkey = XOnlyPublicKey::from_slice(&key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
+    let tweaked_pubkey = bitcoin::schnorr::TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
+    
+    Address::p2tr_tweaked(tweaked_pubkey, bitcoin::network::constants::Network::Regtest)
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -133,26 +142,26 @@ impl Coin for Bitcoin {
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let main_addr = self.address(key);
-    dbg!(&main_addr);
+    //dbg!(&main_addr);
     let block_details = self.rpc.get_block_with_transactions(&block.block_hash()).await.unwrap();
-    dbg!(&main_addr.script_pubkey());
+    //dbg!(&main_addr.script_pubkey());
+    let mut outputs = Vec::new();
     for one_transaction in block_details.tx {
-      let mut vout = 0;
       for output_tx in one_transaction.vout {
-        dbg!(&output_tx);
-
-        let pub_script = main_addr.script_pubkey().asm();
-        let pubkey = pub_script.split_whitespace().last().unwrap();
-
-        if output_tx.script_pub_key.asm.contains(pubkey)  {
-          
-          println!("Here : n: {} , value: {}", output_tx.n, output_tx.value);
-        }
-        vout += 1;
+        dbg!(&output_tx.script_pub_key);
+        //if output_tx.script_pub_key.script().unwrap().cmp(&main_addr.script_pubkey()).is_eq() {
+          println!("It is spendable");
+          outputs.push(Output(SpendableOutput{
+            txid:one_transaction.txid,
+            vout:output_tx.n,
+            amount:output_tx.value.to_sat()
+          }));
+        //}
       }
-
     }
-    return Err(CoinError::ConnectionError);
+    dbg!(&outputs);
+    return Ok(outputs);
+    //return Err(CoinError::ConnectionError);
   }
 
   //TODO: Add sending logic
@@ -164,7 +173,7 @@ impl Coin for Bitcoin {
     mut inputs: Vec<Output>,
     payments: &[(Address, u64)],
     fee: Fee,
-  ) -> Result<SignableTransaction, CoinError> {
+  ) -> Result<Self::SignableTransaction, CoinError> {
     let spend = keys.group_key();
     return Err(CoinError::ConnectionError);
   }
@@ -172,8 +181,7 @@ impl Coin for Bitcoin {
   //TODO: Add sending logic
   async fn attempt_send(
     &self,
-    transaction: SignableTransaction,
-    included: &[u16],
+    transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError> {
     return Err(CoinError::ConnectionError);
   }
@@ -188,10 +196,18 @@ impl Coin for Bitcoin {
 
     //Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
+  
+  async fn tweak_keys(keys : &mut HashMap<u16, ThresholdKeys<Self::Curve>>) -> &mut HashMap<u16, ThresholdKeys<Self::Curve>> {
+    for (_, one_key) in keys.iter_mut() {
+      let (_, offset) = make_even(one_key.group_key());
+      *one_key = one_key.offset(Scalar::from(offset));
+    }
+    keys
+  }
 
-  #[cfg(test)]
+  #[cfg(test)] //42 satoshi / byte
   async fn get_fee(&self) -> Self::Fee {
-    Self::Fee { per_weight: 36, mask: 66 }
+    Self::Fee { per_weight: 42, mask: 66 }
   }
 
   #[cfg(test)]
@@ -203,9 +219,9 @@ impl Coin for Bitcoin {
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
     dbg!(&address);
-    let from_addr = &address;//Address::from_str(String::from("tb1p84x2ryuyfevgnlpnxt9f39gm7r68gwtvllxqe5w2n5ru00s9aquslzggwq").as_str()).unwrap();
+    let from_addr = &address;
     let mut utxos = self.rpc.get_spendable(None, None, Some(vec![from_addr.to_string().as_str()]), None).await.unwrap();
-    dbg!(&utxos);
+    //dbg!(&utxos);
     let mut txin_list_complete = Vec::new();
     
     let fee_amount_sat = bitcoin::Amount::from_sat(100000);
@@ -215,7 +231,7 @@ impl Coin for Bitcoin {
     let mut sum_sat = bitcoin::Amount::from_sat(0);
     let mut diff_sat = bitcoin::Amount::from_sat(9999999999999);
     let mut temp_diff_sat = bitcoin::Amount::from_sat(0);
-    let mut utxo_id:usize = 0;
+    let mut utxo_id = 0;
     let mut changed_amount_sat = bitcoin::Amount::from_sat(0);
 
     let it = utxos.iter();
@@ -252,50 +268,76 @@ impl Coin for Bitcoin {
                 break;
             }
         }
-        println!("Sum : {}  Target: {}   Changed: {}",sum_sat.to_sat(), total_amount_sat.to_sat(), changed_amount_sat.to_sat());
+        println!(
+            "Sum : {}  Target: {}   Change: {}",
+            sum_sat.to_sat(),
+            total_amount_sat.to_sat(),
+            changed_amount_sat.to_sat()
+        );
     }
     else {
         txin_list_complete.push(&utxos[utxo_id-1]);
     }
 
-    println!("Diff: {}   -  Best ID : {}", diff_sat.to_sat(), utxo_id);
-    //dbg!(&txin_list_complete);
-    /*let to_addr_str = "2N5ZRwT42rHFjAtizZPa3Rp7Tn88PcoSzEB";//"n2eMqTT929pb1RDNuqEnxdaLau1rxy3efi";
+    println!(
+      "Total Amount: {} Diff sat: {}  -  Diff Btc: {}, Best ID : {} Change:{}",
+      total_amount_sat.to_btc(),
+      diff_sat.to_sat(),
+      diff_sat.to_btc(),
+      utxo_id,
+      changed_amount_sat.to_sat()
+    );
+    let to_addr_str = "bcrt1qy7wwnkflgl94asjv93cvusxy4chqpxlvrq7sa0"; //"2N5ZRwT42rHFjAtizZPa3Rp7Tn88PcoSzEB";//"n2eMqTT929pb1RDNuqEnxdaLau1rxy3efi";
     let to_addr = bitcoin::Address::from_str(to_addr_str).unwrap();
-    dbg!("Adress Type: {:?}",to_addr.address_type());
-
-    let mut vin_list = Vec::new();
-
+    let mut vin_alt_list = Vec::new();
+    let mut txsource_list = Vec::new();
     for one_txin in txin_list_complete.iter() {
-        dbg!(&one_txin.amount.to_btc());
-        vin_list.push(
-        CreateRawTransactionInput {
-            txid: one_txin.txid,
-            vout: one_txin.vout,
-            sequence: None
+        let one_transaction = self.rpc
+            .get_raw_transaction(&one_txin.txid, None, None)
+            .await
+            .unwrap();
+        txsource_list.push(one_transaction.output[one_txin.vout as usize].clone());
+
+        vin_alt_list.push(bitcoin::blockdata::transaction::TxIn {
+            previous_output: 
+            bitcoin::OutPoint {
+                txid: one_txin.txid,
+                vout: one_txin.vout,
+            },
+            script_sig: bitcoin::Script::new(),
+            sequence: bitcoin::Sequence(u32::MAX),
+            witness: bitcoin::Witness::default(),
         });
     }
 
-    let mut out_scr = HashMap::new();
-    out_scr.insert(to_addr.to_string(),send_amount_sat);
+    let mut vout_alt_list = Vec::new();
     if changed_amount_sat.to_sat() > 0 {
-        out_scr.insert(from_addr.to_string(),changed_amount_sat);
+        vout_alt_list.push(bitcoin::TxOut {
+            value: changed_amount_sat.to_sat(),
+            script_pubkey: from_addr.script_pubkey(),
+        });
+    }
+    vout_alt_list.push(bitcoin::TxOut {
+        value: send_amount_sat.to_sat(),
+        script_pubkey: to_addr.script_pubkey(),
+    });
+
+    let new_transaction = bitcoin::blockdata::transaction::Transaction {
+        version: 2,
+        lock_time: bitcoin::PackedLockTime(0),
+        input: vin_alt_list,
+        output: vout_alt_list,
+    };
+    let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction).unwrap();
+    //dbg!(psbt);
+    for (i, one_txinout) in txsource_list.iter().enumerate() {
+        psbt.inputs[i].witness_utxo = Some(one_txinout.clone());
+        //psbt.inputs[0].redeem_script = Some(from_addr.script_pubkey());
+        //psbt.inputs[i].tap_key_sig = 
     }
 
-    let raw_transaction = self.rpc.create_raw_transaction(&vin_list, &out_scr, None, None).await.unwrap();
-    dbg!(raw_transaction.raw_hex());
-
-    let priv_keys = vec![privkey_obj];
-    let sign_transaction: SignRawTransactionResult = self.rpc.sign_raw_transaction_with_key(raw_transaction.raw_hex(), &priv_keys, None, None).await.unwrap();
-    dbg!(hex::encode(&sign_transaction.hex).to_string());
-    
-    
-    let tr_sign_transaction = sign_transaction.transaction().unwrap();
-    //dbg!(&tr_sign_transaction.raw_hex());
-    let s_raw_transaction = self.rpc.send_raw_transaction(&tr_sign_transaction).await.unwrap_or_else(|err| {
-        eprintln!("Problem parsing arguments: {err}");
-        bitcoin::Txid::from_str("849b2bb48eed534bd073c32cc9efa98c5ffa48738c75641f3cef340fd859e112").unwrap()
-    });*/
+    let (tap_sighash, _schnorr_sighash_type) = taproot_sighash(&psbt, 0).unwrap();
+    dbg!(&tap_sighash);
 
   }
 }

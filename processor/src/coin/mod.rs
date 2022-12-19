@@ -1,4 +1,4 @@
-use std::marker::Send;
+use std::{marker::Send,collections::HashMap};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -84,6 +84,8 @@ pub trait Coin {
     &self,
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+
+  async fn tweak_keys(keys : &mut HashMap<u16, ThresholdKeys<Self::Curve>>) -> &mut HashMap<u16, ThresholdKeys<Self::Curve>>;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;
