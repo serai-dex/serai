@@ -214,8 +214,8 @@ impl Coin for Monero {
     Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
 
-  async fn tweak_keys(keys : &mut HashMap<u16, ThresholdKeys<Self::Curve>>) -> &mut HashMap<u16, ThresholdKeys<Self::Curve>> {
-    keys
+  fn tweak_keys<'a>(&'a self, keys : &'a mut HashMap<u16, ThresholdKeys<Self::Curve>>) {
+
   }
 
   #[cfg(test)]

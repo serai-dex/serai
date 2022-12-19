@@ -197,12 +197,11 @@ impl Coin for Bitcoin {
     //Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
   
-  async fn tweak_keys(keys : &mut HashMap<u16, ThresholdKeys<Self::Curve>>) -> &mut HashMap<u16, ThresholdKeys<Self::Curve>> {
+  fn tweak_keys<'a>(&'a self, keys : &'a mut HashMap<u16, ThresholdKeys<Self::Curve>>) {
     for (_, one_key) in keys.iter_mut() {
       let (_, offset) = make_even(one_key.group_key());
       *one_key = one_key.offset(Scalar::from(offset));
     }
-    keys
   }
 
   #[cfg(test)] //42 satoshi / byte

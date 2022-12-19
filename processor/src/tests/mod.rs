@@ -58,12 +58,15 @@ impl Network for LocalNetwork {
 }
 
 async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
+  dbg!("Started");
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
   
   let latest = coin.get_latest_block_number().await.unwrap();
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
+
+  coin.tweak_keys(&mut keys);
 
   let xkey = keys[&1].group_key();
   coin.address(xkey);
