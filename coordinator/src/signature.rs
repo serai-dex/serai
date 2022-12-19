@@ -74,7 +74,7 @@ impl SignatureProcess {
     // Check/initialize kakf topics
     let j = serde_json::to_string(&self.chain_config).unwrap();
     let mut topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
-    topic_ref.insert("COORDINATOR".to_string(), true);
+    topic_ref.insert(String::from(message_box::ids::COORDINATOR).to_lowercase(), true);
 
     let admin_client = create_admin_client(&self.kafka_config);
     let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
@@ -84,8 +84,8 @@ impl SignatureProcess {
       let mut topic: String = "".to_string();
       topic.push_str(&self.identity);
       let topic_ref = &mut String::from(&_key);
-      if topic_ref != "COORDINATOR"{
-        *topic_ref = topic_ref.to_uppercase();
+      if topic_ref != &String::from(message_box::ids::COORDINATOR).to_lowercase(){
+        *topic_ref = topic_ref.to_lowercase();
       }
       topic.push_str("_");
       topic.push_str(topic_ref);
@@ -136,11 +136,11 @@ fn consume_pubkey_processor(kafka_config: &KafkaConfig, identity: &str, coin_has
     if *value == true {
       let mut group_id = String::from(identity);
       group_id.push_str("_");
-      group_id.push_str(&mut _key.to_string());
-      group_id.push_str("_PUBKEY");
+      group_id.push_str(&mut _key.to_string().to_lowercase());
+      group_id.push_str("_pubkey");
       let mut topic: String = String::from(identity);
       topic.push_str("_");
-      topic.push_str(&_key.to_string());
+      topic.push_str(&_key.to_string().to_lowercase());
       let env_key = &mut _key.to_string().to_owned();
       env_key.push_str("_PUB");
       initialize_consumer(kafka_config, &group_id, &topic, Some(env_key.to_string()), None, "general");
@@ -157,11 +157,11 @@ fn consume_processor_general_test_message(kafka_config: &KafkaConfig, identity: 
     if *value == true {
       let mut group_id = String::from(identity);
       group_id.push_str("_");
-      group_id.push_str(&mut _key.to_string());
-      group_id.push_str("_GENERAL");
+      group_id.push_str(&mut _key.to_string().to_lowercase());
+      group_id.push_str("_general");
       let mut topic: String = String::from(identity);
       topic.push_str("_");
-      topic.push_str(&_key.to_string());
+      topic.push_str(&_key.to_string().to_lowercase());
       initialize_consumer(kafka_config, &group_id, &topic, None, None, "general");
     }
   }
@@ -176,11 +176,11 @@ fn consume_processor_secure_test_message(kafka_config: &KafkaConfig, identity: &
     if *value == true {
       let mut group_id = String::from(identity);
       group_id.push_str("_");
-      group_id.push_str(&mut key.to_string());
-      group_id.push_str("_SECURE");
+      group_id.push_str(&mut key.to_string().to_lowercase());
+      group_id.push_str("_secure");
       let mut topic: String = String::from(identity);
       topic.push_str("_");
-      topic.push_str(&key.to_string());
+      topic.push_str(&key.to_string().to_lowercase());
       let env_key = &mut key.to_string();
       // ENV_KEY references the processor pubkey we want to use with message box
       env_key.push_str("_PUB");
@@ -231,12 +231,12 @@ fn initialize_consumer(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          if !key.contains("COORDINATOR") && key.contains("PUBKEY") && env_key_ref != "" {
+          if !key.contains(&String::from(message_box::ids::COORDINATOR).to_lowercase()) && key.contains("pubkey") && env_key_ref != "" {
             let value = msg.payload().unwrap();
             let public_key = str::from_utf8(value).unwrap();
             info!("Received Pubkey from {}: {}", &key, &public_key);
             env::set_var(env_key_ref.clone(), public_key);
-          } else if !key.contains("COORDINATOR") && key.contains("GENERAL") && env_key_ref == "" {
+          } else if !key.contains(&String::from(message_box::ids::COORDINATOR).to_lowercase()) && key.contains("general") && env_key_ref == "" {
             let value = msg.payload().unwrap();
             let pub_msg = str::from_utf8(value).unwrap();
             info!("Received Public Message from {}", &key);
@@ -254,7 +254,7 @@ fn initialize_consumer(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          if !key.contains("COORDINATOR") {
+          if !key.contains(&String::from(message_box::ids::COORDINATOR).to_lowercase()) {
             let value = msg.payload().unwrap();
             // Creates Message box used for decryption
             let pubkey = message_box::PublicKey::from_trusted_str(
@@ -277,7 +277,7 @@ fn initialize_consumer(
             let encoded_string =
               message_box.decrypt_from_str(&processor_id, &encrypted_msg).unwrap();
             let decoded_string = String::from_utf8(encoded_string).unwrap();
-            info!("Received Encrypted Message from {}", &processor_id);
+            info!("Received Encrypted Message from {}", &String::from(processor_id).to_lowercase());
             info!("Decrypted Message: {}", &decoded_string);
           }
         }
@@ -304,8 +304,8 @@ fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, identity: &str) {
   // Sends message to Kafka
   producer
     .send(
-      BaseRecord::to(&format!("{}_COORDINATOR", &identity))
-        .key(&format!("{}_PUBKEY", message_box::ids::COORDINATOR))
+      BaseRecord::to(&format!("{}_{}", &identity, &String::from(message_box::ids::COORDINATOR).to_lowercase()))
+        .key(&format!("{}_pubkey", message_box::ids::COORDINATOR))
         .payload(&msg).partition(0),
     )
     .expect("failed to send message");
@@ -397,13 +397,13 @@ async fn produce_general_and_secure_test_message(kafka_config: &KafkaConfig, ide
     if *value == true {
       let mut topic: String = String::from(identity);
       topic.push_str("_");
-      topic.push_str(&key.to_string());
+      topic.push_str(&key.to_string().to_lowercase());
       let env_key = &mut key.to_string();
       env_key.push_str("_PUB");
 
       let processor_id = retrieve_message_box_id(&mut key.to_string());
-      let mut msg: String = String::from("COORDINATOR message to ");
-      msg.push_str(processor_id);
+      let mut msg: String = String::from("coordinator message to ");
+      msg.push_str(&processor_id.to_lowercase());
 
       send_general_and_secure_test_message(
         &kafka_config,
@@ -450,7 +450,7 @@ async fn send_general_and_secure_test_message(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}_{}_GENERAL", identity, message_box::ids::COORDINATOR))
+        .key(&format!("{}_{}_general", identity, String::from(message_box::ids::COORDINATOR).to_lowercase()))
         .payload(&msg)
         .partition(0),
     )
@@ -462,7 +462,7 @@ async fn send_general_and_secure_test_message(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}_{}_SECURE", identity, message_box::ids::COORDINATOR))
+        .key(&format!("{}_{}_secure", identity, String::from(message_box::ids::COORDINATOR).to_lowercase()))
         .payload(&enc)
         .partition(1),
     )

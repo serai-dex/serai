@@ -41,7 +41,7 @@ async fn main() {
         .long("name")
         .help("This is the identity of the node running the coordinator and should match.")
         .takes_value(true)
-        .default_value("BASE"),
+        .default_value("base"),
     )
     .get_matches();
 
@@ -59,7 +59,7 @@ async fn main() {
   });
 
   // Load identity arg
-  let name_arg = args.value_of("name").unwrap().to_owned();
+  let name_arg = args.value_of("name").unwrap().to_owned().to_lowercase();
 
   // print identity arg
   println!("Coordinator Identity: {}", name_arg);

@@ -40,7 +40,7 @@ async fn main() {
         .long("name")
         .help("This name is used as a unique prefix for kafka topics.")
         .takes_value(true)
-        .default_value("BASE"),
+        .default_value("base"),
     )
     .get_matches();
 
@@ -56,7 +56,7 @@ async fn main() {
   });
 
   // Load name arg
-  let name_arg = args.value_of("identity").unwrap().to_owned();
+  let name_arg = args.value_of("name").unwrap().to_owned().to_lowercase();
 
   // Start Signature Process
   let sig_config = config.clone();
