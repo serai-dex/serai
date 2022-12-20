@@ -296,19 +296,46 @@ pub struct ProcessorConfig {
   kafka: KafkaConfig,
 }
 
+/// Public static function to load the configuration
+/// based on the provided ConfigType, RunMode, and path.
+/// The returned config will be sanitized for the specified ConfigType.
+
+/// # Arguments
+/// * `config_type` - The type of configuration to load
+/// * `run_mode` - The run mode to load the configuration for
+/// * `path` - The path to the configuration file
+
+/// # Returns
+/// * `Result<Config, ConfigError>` - The configuration
+///  or an error if the configuration could not be loaded
+/// or parsed.
+
+pub fn load_config(
+  run_mode: RunMode,
+  path: &str,
+) -> Result<Config, ConfigError> {
+  // Load the configuration file
+  let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
+
+  // if runmode is not set, use the default, else load the config file based on the mode specified
+  
+  println!("Loading config for mode: {}", run_mode);
+  
+
+  let config = Config::builder()
+    .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
+    .build()
+    .unwrap();
+
+  Ok(config)
+}
+
 impl ProcessorConfig {
   // Creates a new config based on the set environment
   pub fn new(path: String) -> Result<Self, ConfigError> {
-    let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
+    let run_mode = env::var("PROCESSOR_MODE").unwrap_or_else(|_| "development".into());
 
-    let s = Config::builder()
-      // Start off by merging in the "default" configuration file
-      .add_source(File::with_name(&format!("{}/default", path)))
-      // Add in the current environment file
-      // Default to 'development' env
-      // Note that this file is _optional_
-      .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
-      .build()?;
+    let s = load_config(RunMode::from_str(&run_mode).unwrap(), &path)?;
 
     // Convert the config into enum for use.
     let mode = RunMode::from_str(&run_mode).unwrap_or(RunMode::Development);
@@ -327,12 +354,6 @@ impl ProcessorConfig {
         host: String::from("localhost"),
         port: String::from("5050"),
         poll_interval: 1,
-      },
-      chain: ChainConfig {
-        sri: s.get_bool("chains.sri").unwrap(),
-        btc: s.get_bool("chains.btc").unwrap(),
-        eth: s.get_bool("chains.eth").unwrap(),
-        xmr: s.get_bool("chains.xmr").unwrap(),
       },
       kafka: KafkaConfig {
         host: s.get_string("kafka.host").unwrap(),

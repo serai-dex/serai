@@ -1,4 +1,4 @@
-# Serai Coordinator
+# Coordinator
 
 Serai Coordinator is a service that serves as a coordination layer for Serai. It is responsible for coordinating the execution of Serai DEX with the various services that Serai DEX depends on, communicating non-consensus matters with validators through a secure channel, and observation of the Serai blockchain to ensure solvency and integrity.
 
@@ -8,17 +8,21 @@ TBA
 
 ## Requirements
 
-* Observation
-  * Send events from serai observations to the appropriate processor.
-  * Receive instructions from supported validators to publish to substrate.
-* Health
-  * Scan Status
-  * Processor Heartbeats
-  * Logging
-  * Backups
-* Coordination
-  * Establish signature parties.
-  * Route messages from coordinated signature parties to relevant processor.
+* A service that coordinates processors with:
+  * A core process with:
+    * Configuration for multiple environments (local,test,prod) containing:
+    * Information as to what chains are enabled for a local environment.
+    * Network interface information for local services:
+      * Serai (for outbound rpc events)
+      * Kafka (for internal events)
+  * A observation process with:
+    * Consumer that processes all events deposited by Serai producer.
+    * Consumer for observed txin instructions.
+    * Consumer for observed txout instructions.
+  * A signature process with:
+    *  Deterministic selection of signature party members from a given validator set.
+    *  Secure network communication capabilities with foreign network party members.
+    *  Encrypted extraservice communication capabilities with local network processors.
 
 ## Dependencies
 
@@ -35,24 +39,19 @@ Rust Crates:
 
 ## General Architecture
 
-Serai Coordinator uses Apache Kafka as a message bus to communicate between the processors and coordinator of the local Serai deployment. Through the use of Kafka topics, the coordinator can route messages to the appropriate processor.
+Serai Coordinator uses Apache Kafka as a message bus to communicate between the processors and coordinator of the local Serai deployment. Through the use of Kafka topics, the coordinator can route/receive messages to/from the appropriate area of our service cluster.
 
 Topics:
 
-* `serai-observation` - Observations from the Serai blockchain.
-* `chain-observation` - Observations from chains registered by the Serai Coordinator.
-* `chain-health` - Heartbeats from the processors about health and chain health.
-* `signing` - Messages from the coordinator to processors for signing procedures.
+* `name-chain` - Observations from the Serai blockchain.
+* `name-serai` - Observations from chains registered by the Serai Coordinator.
 
-Within the coordinator we have managers, each manager will be responsible for one or more producers, and may be responsible for one or more consumers, all running on separate threads. If a manager is responsible for a consumer, it likely produces or creates its own data. Through initialization, the manager will create the appropriate Kafka producers and consumers, and then start them on their own threads. The manager will then start a supervisor thread that will monitor the health of the manager, restarting  or gracefully stopping other systems   that may have failed.
+Within the coordinator we have processes, each process will be responsible for one or more producers, and may be responsible for one or more consumers, all running on separate threads. Through initialization, the process will create the appropriate kafka producers and consumers, and then start them on their own threads.
 
 
 ## Core Module
 
 ### Requirements
-
-* Traits for common functionality.
-* Common types for common functionality.
 * Configuration loading and management.
 * Logger setup, management, and consumption.
 
@@ -66,20 +65,11 @@ Configuration is handled through a configuration file that is loaded on startup.
   * backup_dir - The directory to store backups in.
   * backup_interval - The interval to backup the coordinator state.
 * kafka
-  * bootstrap.servers
-  * client.id
-  * group.id
+  * kafka_host
+  * kafka_port
 * observation
-  * rpc_endpoint
-  * polling_interval
-* connection
-  * rpc_endpoint
-  * polling_interval
-  * validators[label](README.md)
-    * public_key
-    * endpoint
-* health 
-
+  * rpc_host
+  * rpc_port
 
 ## Observation Module
 
@@ -92,7 +82,7 @@ Configuration is handled through a configuration file that is loaded on startup.
 
 The observation module is responsible for observing the target blockchain for events of interest. It is responsible for publishing these events to the appropriate Kafka topic. To do this, we will continuously poll the local RPC endpoint for changes or information of interest. Once the information has been captured from the target blockchain, it will be published to the appropriate Kafka topic.
 
-The module will provide a manager with an initialization method that requires the rpc endpoint at instatiation. Once initialized, the manager will then spawn a thread that will continuously poll the RPC endpoint for information of interest. The manager will also provide a method to stop the polling thread. Within the polling operation there will be a check to determine if our in-memory understanding of the chainstate has changed, for example the blockheight. If the chainstate has changed, the manager will publish an update to the chainstate on the appropriate Kafka topic. In the polling operation there will also be a check to determine if there are any events of interest that have occurred on the target blockchain. If there are events of interest such as "Serai Instructions", the manager will publish the event to the appropriate Kafka topic so that downstream consumers can process. The observation module uses a custom polling consumer model, not a kafka message consumer.
+The module will provide a process with an initialization method that requires the rpc endpoint at instatiation. Once initialized, the manager will then spawn a thread that will use subxt to subscribe for all events. The manager will also provide a method to stop the event subscription thread. If the chainstate has changed, the manager will produce an update to the chainstate on the appropriate Kafka topic. In the polling operation there will also be a check to determine if there are any events of interest that have occurred on the target blockchain. If there are events of interest such as "Instructions", the process will publish the event to the appropriate Kafka topic so that downstream consumers can process. The observation module uses a custom polling consumer model, not a kafka message consumer.
 
 ## Crypto Module
 
@@ -120,8 +110,6 @@ let rng = Chacha20Rng::from_seed(block_hash); loop { rng.next_u64() % VALIDATOR_
 * Consume inbound messages and publish them securely to the appropriate Kafka topic.
 
 The connection module is responsible for establishing secure connections with a list of validators. It will accept requests to establish connections with a list of validators, and then will attempt to establish secure connections with each validator. Once a secure connection has been established, the connection module will publish a messages provided from the CryptoManager to target validators. The connection module will also consume messages from the appropriate Kafka topic, and then will publish the message to the appropriate validator. 
-
-The connection module will also consume inbound messages from libp2p and then will publish the message to the appropriate Kafka topic. 
 
 ## Data Module
 

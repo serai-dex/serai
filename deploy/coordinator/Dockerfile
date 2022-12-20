@@ -16,12 +16,12 @@ RUN rustup update
 # Mount cargo and serai cache for Cache & Build
 RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/coordinator/target/release/build \
-    --mount=type=cache,target=/coordinator/target/release/deps \
-    --mount=type=cache,target=/coordinator/target/release/.fingerprint \
-    --mount=type=cache,target=/coordinator/target/release/incremental \
-    --mount=type=cache,target=/coordinator/target/release/wbuild \
-    --mount=type=cache,target=/coordinator/target/release/lib* \
+    --mount=type=cache,target=/target/release/build \
+    --mount=type=cache,target=/target/release/deps \
+    --mount=type=cache,target=/target/release/.fingerprint \
+    --mount=type=cache,target=/target/release/incremental \
+    --mount=type=cache,target=/target/release/wbuild \
+    --mount=type=cache,target=/target/release/lib* \
     cargo build --release
 
 # Prepare Image

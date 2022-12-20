@@ -9,6 +9,9 @@ keywords = []
 edition = "2021"
 publish = false
 
+[[bin]]
+name = "serai-processor"
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

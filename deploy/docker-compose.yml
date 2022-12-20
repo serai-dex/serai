@@ -305,6 +305,339 @@ services:
   # Processor Services
 
   # Coin Services
+  processor-bitcoin:
+    &processor_bitcoin_defaults
+    restart: unless-stopped
+    image: serai-processor-bitcoin:dev
+    profiles:
+      - default_bitcoin_processor
+    build:
+      context: ../
+      dockerfile: ./deploy/processor/Dockerfile
+      args:
+        TAG: serai-processor
+    entrypoint: /home/processor/scripts/entry-dev.sh
+    volumes:
+      - "./processor/scripts:/home/processor/scripts"
+      - "./processor/config:/home/processor/config"
+    depends_on:
+      - zookeeper
+      - kafka
+      - kafka-ui
+  
+  # base
+  processor-bitcoin-base:
+    <<: *processor_bitcoin_defaults
+    hostname: processor-bitcoin-base
+    profiles:
+      - base
+      - processor
+      - bitcoin
+    environment:
+      NAME: base
+      CHAIN: BTC
+  
+  # alice
+  processor-bitcoin-alice:
+    <<: *processor_bitcoin_defaults
+    hostname: processor-bitcoin-alice
+    profiles:
+      - alice
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: alice
+      CHAIN: BTC
+  
+  # bob
+  processor-bitcoin-bob:
+    <<: *processor_bitcoin_defaults
+    hostname: processor-bitcoin-bob
+    profiles:
+      - bob
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: bob
+      CHAIN: BTC
+  
+  # charlie
+  processor-bitcoin-charlie:
+    <<: *processor_bitcoin_defaults
+    hostname: processor-bitcoin-charlie
+    profiles:
+      - charlie
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: charlie
+      CHAIN: BTC
+  
+  # dave
+  processor-bitcoin-dave:
+    <<: *processor_bitcoin_defaults
+    hostname: processor-bitcoin-dave
+    profiles:
+      - dave
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: dave
+      CHAIN: BTC
+  
+  # eve
+  processor-bitcoin-eve:
+    <<: *processor_bitcoin_defaults
+    hostname: processor-bitcoin-eve
+    profiles:
+      - eve
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: eve
+      CHAIN: BTC
+  
+  # ferdie
+  processor-bitcoin-ferdie:
+    <<: *processor_bitcoin_defaults
+    hostname: processor-bitcoin-ferdie
+    profiles:
+      - ferdie
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: ferdie
+      CHAIN: BTC
+
+  # Ethereum
+  processor-ethereum:
+    &processor_ethereum_defaults
+    restart: unless-stopped
+    image: serai-processor-ethereum:dev
+    profiles:
+      - default__ethereum_processor
+    build:
+      context: ../
+      dockerfile: ./deploy/processor/Dockerfile
+      args:
+        TAG: serai-processor
+    entrypoint: /home/processor/scripts/entry-dev.sh
+    volumes:
+      - "./processor/scripts:/home/processor/scripts"
+      - "./processor/config:/home/processor/config"
+    depends_on:
+      - zookeeper
+      - kafka
+      - kafka-ui
+    
+  # base
+  processor-ethereum-base:
+    <<: *processor_ethereum_defaults
+    hostname: processor-ethereum-base
+    profiles:
+      - base
+      - processor
+      - ethereum
+    environment:
+      NAME: base
+      CHAIN: ETH
+
+  # alice
+  processor-ethereum-alice:
+    <<: *processor_ethereum_defaults
+    hostname: processor-ethereum-alice
+    profiles:
+      - alice
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: alice
+      CHAIN: ETH
+
+  # bob
+  processor-ethereum-bob:
+    <<: *processor_ethereum_defaults
+    hostname: processor-ethereum-bob
+    profiles:
+      - bob
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: bob
+      CHAIN: ETH
+
+  # charlie
+  processor-ethereum-charlie:
+    <<: *processor_ethereum_defaults
+    hostname: processor-ethereum-charlie
+    profiles:
+      - charlie
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: charlie
+      CHAIN: ETH
+
+  # dave
+  processor-ethereum-dave:
+    <<: *processor_ethereum_defaults
+    hostname: processor-ethereum-dave
+    profiles:
+      - dave
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: dave
+      CHAIN: ETH
+
+  # eve
+  processor-ethereum-eve:
+    <<: *processor_ethereum_defaults
+    hostname: processor-ethereum-eve
+    profiles:
+      - eve
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: eve
+      CHAIN: ETH
+
+  # ferdie
+  processor-ethereum-ferdie:
+    <<: *processor_ethereum_defaults
+    hostname: processor-ethereum-ferdie
+    profiles:
+      - ferdie
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: ferdie
+      CHAIN: ETH
+
+  # Monero Processor
+  processor-monero:
+    &processor_monero_defaults
+    restart: unless-stopped
+    image: serai-processor-monero:dev
+    profiles:
+      - default_monero_processor
+    build:
+      context: ../
+      dockerfile: ./deploy/processor/Dockerfile
+      args:
+        TAG: serai-processor
+    entrypoint: /home/processor/scripts/entry-dev.sh
+    volumes:
+      - "./processor/scripts:/home/processor/scripts"
+      - "./processor/config:/home/processor/config"
+    depends_on:
+      - zookeeper
+      - kafka
+      - kafka-ui
+    
+  # base
+  processor-monero-base:
+    <<: *processor_monero_defaults
+    hostname: processor-monero-base
+    profiles:
+      - base
+      - processor
+      - monero
+    environment:
+      NAME: base
+      CHAIN: XMR
+
+  # alice
+  processor-monero-alice:
+    <<: *processor_monero_defaults
+    hostname: processor-monero-alice
+    profiles:
+      - alice
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: alice
+      CHAIN: XMR
+
+  # bob
+  processor-monero-bob:
+    <<: *processor_monero_defaults
+    hostname: processor-monero-bob
+    profiles:
+      - bob
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: bob
+      CHAIN: XMR
+
+  # charlie
+  processor-monero-charlie:
+    <<: *processor_monero_defaults
+    hostname: processor-monero-charlie
+    profiles:
+      - charlie
+      - cluster-sm
+      - cluster-coins-sm
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: charlie
+      CHAIN: XMR
+
+  # dave
+  processor-monero-dave:
+    <<: *processor_monero_defaults
+    hostname: processor-monero-dave
+    profiles:
+      - dave
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: dave
+      CHAIN: XMR
+  
+  # eve
+  processor-monero-eve:
+    <<: *processor_monero_defaults
+    hostname: processor-monero-eve
+    profiles:
+      - eve
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: eve
+      CHAIN: XMR
+
+  # ferdie
+  processor-monero-ferdie:
+    <<: *processor_monero_defaults
+    hostname: processor-monero-ferdie
+    profiles:
+      - ferdie
+      - cluster-lg
+      - cluster-coins-lg
+    environment:
+      NAME: ferdie
+      CHAIN: XMR
+      
+  # Coin Services
   bitcoin:
     profiles:
       - single-coins
