@@ -1,0 +1,14 @@
+# Processor Development Config
+[core]
+host = "0.0.0.0"
+port = "1338"
+log_filter = "info"
+
+[observer]
+target_host = "127.0.0.1"
+target_port = "1337"
+
+[kafka]
+host = "kafka"
+port = "9092" # localhost connects from 9094, internal docker connects from 9092
+offset_reset = "smallest"
