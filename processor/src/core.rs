@@ -198,6 +198,7 @@ impl CoreConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[allow(unused)]
 pub struct ChainConfig {
+  sri: bool,
   btc: bool,
   eth: bool,
   xmr: bool,
@@ -205,10 +206,14 @@ pub struct ChainConfig {
 
 impl ChainConfig {
   fn new(config: Config) -> Self {
+    let sri = config.get_bool("chain_sri").unwrap();
     let btc = config.get_bool("chain_btc").unwrap();
     let eth = config.get_bool("chain_eth").unwrap();
     let xmr = config.get_bool("chain_xmr").unwrap();
-    Self { btc, eth, xmr }
+    Self { btc, eth, xmr, sri }
+  }
+  pub fn get_sri(&self) -> bool {
+    self.sri
   }
   pub fn get_btc(&self) -> bool {
     self.btc
@@ -324,6 +329,7 @@ impl ProcessorConfig {
         poll_interval: 1,
       },
       chain: ChainConfig {
+        sri: s.get_bool("chains.sri").unwrap(),
         btc: s.get_bool("chains.btc").unwrap(),
         eth: s.get_bool("chains.eth").unwrap(),
         xmr: s.get_bool("chains.xmr").unwrap(),
@@ -384,6 +390,7 @@ pub fn initialize_coin(coin: &str) {
     "btc" => {}
     "eth" => {}
     "xmr" => {}
+    "sri" => {}
     _ => info!("coin unavailable {}", coin),
   }
 }
