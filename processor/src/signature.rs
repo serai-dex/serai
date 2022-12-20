@@ -49,19 +49,11 @@ impl fmt::Display for MessageType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
       MessageType::CoordinatorPubkeyToProcessor => write!(f, "coordinator_pubkey_to_processor"),
-      MessageType::CoordinatorGeneralMessageToProcessor => {
-        write!(f, "coordinator_general_message_to_processor")
-      }
-      MessageType::CoordinatorSecureMessageToProcessor => {
-        write!(f, "coordinator_secure_message_to_processor")
-      }
+      MessageType::CoordinatorGeneralMessageToProcessor => write!(f, "coordinator_general_message_to_processor"),
+      MessageType::CoordinatorSecureMessageToProcessor => write!(f, "coordinator_secure_message_to_processor"),
       MessageType::ProcessorPubkeyToCoordinator => write!(f, "processor_pubkey_to_coordinator"),
-      MessageType::ProcessorGeneralMessageToCoordinator => {
-        write!(f, "processor_general_message_to_coordinator")
-      }
-      MessageType::ProcessorSecureMessageToCoordinator => {
-        write!(f, "processor_secure_message_to_coordinator")
-      }
+      MessageType::ProcessorGeneralMessageToCoordinator => write!(f, "processor_general_message_to_coordinator"),
+      MessageType::ProcessorSecureMessageToCoordinator => write!(f, "processor_secure_message_to_coordinator"),
       MessageType::Default => write!(f, "Default"),
     }
   }
