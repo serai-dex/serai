@@ -71,10 +71,9 @@ impl SignatureProcess {
   pub async fn run(self) {
     info!("Starting Signature Process");
 
-    // Check/initialize kakf topics
+    // Check/initialize kakfa topics
     let j = serde_json::to_string(&self.chain_config).unwrap();
     let mut topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
-    topic_ref.insert(String::from(message_box::ids::COORDINATOR).to_lowercase(), true);
 
     let admin_client = create_admin_client(&self.kafka_config);
     let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
@@ -83,10 +82,7 @@ impl SignatureProcess {
     for (_key, value) in topic_ref.into_iter() {
       let mut topic: String = "".to_string();
       topic.push_str(&self.identity);
-      let topic_ref = &mut String::from(&_key);
-      if topic_ref != &String::from(message_box::ids::COORDINATOR).to_lowercase(){
-        *topic_ref = topic_ref.to_lowercase();
-      }
+      let topic_ref = &mut String::from(&_key).to_lowercase();
       topic.push_str("_");
       topic.push_str(topic_ref);
   
@@ -107,7 +103,7 @@ impl SignatureProcess {
     consume_pubkey_processor(&self.kafka_config, &self.identity, &coin_hashmap);
 
     // Initialize producer to send coordinator pubkey to processors on general partition
-    produce_coordinator_pubkey(&self.kafka_config, &self.identity);
+    produce_coordinator_pubkey(&self.kafka_config, &self.identity, &coin_hashmap);
 
     // Wait to receive all Processer Pubkeys
     process_received_pubkeys(&coin_hashmap).await;
@@ -135,15 +131,15 @@ fn consume_pubkey_processor(kafka_config: &KafkaConfig, identity: &str, coin_has
   for (_key, value) in hashmap_clone.into_iter() {
     if *value == true {
       let mut group_id = String::from(identity);
-      group_id.push_str("_");
-      group_id.push_str(&mut _key.to_string().to_lowercase());
-      group_id.push_str("_pubkey");
-      let mut topic: String = String::from(identity);
-      topic.push_str("_");
-      topic.push_str(&_key.to_string().to_lowercase());
-      let env_key = &mut _key.to_string().to_owned();
-      env_key.push_str("_PUB");
-      initialize_consumer(kafka_config, &group_id, &topic, Some(env_key.to_string()), None, "general");
+        group_id.push_str("_");
+        group_id.push_str(&mut _key.to_string().to_lowercase());
+        group_id.push_str("_pubkey");
+        let mut topic: String = String::from(identity);
+        topic.push_str("_");
+        topic.push_str(&_key.to_string().to_lowercase());
+        let env_key = &mut _key.to_string().to_owned();
+        env_key.push_str("_PUB");
+        initialize_consumer(kafka_config, &group_id, &topic, Some(env_key.to_string()), None, "general");
     }
   }
 }
@@ -288,7 +284,8 @@ fn initialize_consumer(
 }
 
 // Initialize producer to send coordinator pubkey to processors on general partition
-fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, identity: &str) {
+fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, identity: &str, coin_hashmap: &HashMap<Coin, bool>) {
+  let hashmap_clone = coin_hashmap.clone();
   // Creates a producer to send coordinator pubkey message
   let producer: ThreadedProducer<_> = ClientConfig::new()
     .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
@@ -301,14 +298,18 @@ fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, identity: &str) {
   let coord_pub = env::var("COORD_PUB");
   let msg = coord_pub.unwrap();
 
-  // Sends message to Kafka
-  producer
-    .send(
-      BaseRecord::to(&format!("{}_{}", &identity, &String::from(message_box::ids::COORDINATOR).to_lowercase()))
-        .key(&format!("{}_pubkey", message_box::ids::COORDINATOR))
-        .payload(&msg).partition(0),
-    )
-    .expect("failed to send message");
+  for (_key, value) in hashmap_clone.into_iter() {
+    if *value == true {
+      // Sends message to Kafka
+      producer
+      .send(
+      BaseRecord::to(&format!("{}_{}", &identity, &_key.to_string().to_lowercase()))
+      .key(&format!("{}_pubkey", String::from(message_box::ids::COORDINATOR).to_lowercase()))
+      .payload(&msg).partition(0),
+      )
+      .expect("failed to send message");
+    }
+  }
 }
 
 // Wait to receive all Processer Pubkeys
