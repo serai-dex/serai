@@ -249,7 +249,6 @@ impl CoreConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[allow(unused)]
 pub struct ChainConfig {
-  sri: bool,
   btc: bool,
   eth: bool,
   xmr: bool,
@@ -261,10 +260,7 @@ impl ChainConfig {
     let btc = config.get_bool("chain_btc").unwrap();
     let eth = config.get_bool("chain_eth").unwrap();
     let xmr = config.get_bool("chain_xmr").unwrap();
-    Self { btc, eth, xmr, sri }
-  }
-  pub fn get_sri(&self) -> bool {
-    self.sri
+    Self { btc, eth, xmr}
   }
   pub fn get_btc(&self) -> bool {
     self.btc
@@ -373,7 +369,6 @@ impl CoordinatorConfig {
         poll_interval: 1,
       },
       chain: ChainConfig {
-        sri: s.get_bool("chains.sri").unwrap(),
         btc: s.get_bool("chains.btc").unwrap(),
         eth: s.get_bool("chains.eth").unwrap(),
         xmr: s.get_bool("chains.xmr").unwrap(),

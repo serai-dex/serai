@@ -376,7 +376,6 @@ pub fn initialize_coin(coin: &str) {
     "btc" => {}
     "eth" => {}
     "xmr" => {}
-    "sri" => {}
     _ => info!("coin unavailable {}", coin),
   }
 }

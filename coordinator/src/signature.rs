@@ -30,7 +30,6 @@ pub struct SignatureProcess {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum Coin {
-  SRI,
   BTC,
   ETH,
   XMR,
@@ -39,7 +38,6 @@ enum Coin {
 impl fmt::Display for Coin {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      Coin::SRI => write!(f, "SRI"),
       Coin::BTC => write!(f, "BTC"),
       Coin::ETH => write!(f, "ETH"),
       Coin::XMR => write!(f, "XMR"),
@@ -140,12 +138,23 @@ impl SignatureProcess {
     let admin_client = create_admin_client(&self.kafka_config);
     let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
 
+    let serai_topic_name = format!("{}_node_serai", self.name);
+
+    let initialized_topic = NewTopic {
+      name: &serai_topic_name,
+      num_partitions: 2,
+      replication: TopicReplication::Fixed(1),
+      config: Vec::new(),
+    };
+
+    admin_client.create_topics(&[initialized_topic], &opts).await.expect("topic creation failed");
+
     // Loop through each coin & initialize each kakfa topic
     for (_key, _value) in topic_ref.into_iter() {
       let mut topic: String = "".to_string();
       topic.push_str(&self.name);
       let topic_ref = &mut String::from(&_key).to_lowercase();
-      topic.push_str("_");
+      topic.push_str("_processor_");
       topic.push_str(topic_ref);
 
       let initialized_topic = NewTopic {
@@ -169,7 +178,8 @@ impl SignatureProcess {
           _key.to_string().to_owned(),
           self.kafka_config.clone().to_owned(),
           self.name.to_string(),
-        );
+        )
+        .await;
       }
     }
   }
@@ -180,7 +190,7 @@ impl SignatureProcess {
 }
 
 // Spawn a thread for each coin that is active
-fn spawn_processor_thread(coin: String, kafka_config: KafkaConfig, name: String) {
+async fn spawn_processor_thread(coin: String, kafka_config: KafkaConfig, name: String) {
   tokio::spawn(async move {
     // Initialize consumers to read the processor pubkey & general test messages on partition 0
     consume_general_messages_from_processor(&kafka_config, &name, &coin.to_string());
@@ -203,7 +213,7 @@ fn spawn_processor_thread(coin: String, kafka_config: KafkaConfig, name: String)
 fn consume_general_messages_from_processor(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   let mut group_id = &coin.to_string().to_lowercase();
   let mut topic: String = String::from(name);
-  topic.push_str("_");
+  topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_owned().to_uppercase();
   env_key.push_str("_PUB");
@@ -221,7 +231,7 @@ fn consume_general_messages_from_processor(kafka_config: &KafkaConfig, name: &st
 fn consume_processor_secure_test_message(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   let mut group_id = &coin.to_string().to_lowercase();
   let mut topic: String = String::from(name);
-  topic.push_str("_");
+  topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
   // ENV_KEY references the processor pubkey we want to use with message box
@@ -348,7 +358,7 @@ fn initialize_consumer(
 
 // Initialize producer to send coordinator pubkey to processors on general partition
 fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str) {
-  info!("Sending Public Key");
+  info!("Sending Public Key to {}", coin);
 
   // Creates a producer to send coordinator pubkey message
   let producer: ThreadedProducer<_> = ClientConfig::new()
@@ -363,7 +373,7 @@ fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str
   // Sends message to Kafka
   producer
     .send(
-      BaseRecord::to(&format!("{}_{}", &name, &coin.to_string().to_lowercase()))
+      BaseRecord::to(&format!("{}_processor_{}", &name, &coin.to_string().to_lowercase()))
         .key(&format!("{}", MessageType::CoordinatorPubkeyToProcessor.to_string()))
         .payload(&msg)
         .partition(0),
@@ -397,9 +407,6 @@ fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<Coin, bool> {
   for (key, value) in coins_ref.into_iter() {
     if value == true {
       match key.as_str() {
-        "sri" => {
-          coins.insert(Coin::SRI, true);
-        }
         "btc" => {
           coins.insert(Coin::BTC, true);
         }
@@ -435,7 +442,7 @@ async fn produce_general_and_secure_test_message(
   coin: &str,
 ) {
   let mut topic: String = String::from(name);
-  topic.push_str("_");
+  topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string();
   env_key.push_str("_PUB");
@@ -502,5 +509,6 @@ async fn send_general_and_secure_test_message(
     )
     .expect("failed to send message");
 
+  // Add small delay for checking pubkeys
   tokio::time::sleep(Duration::from_millis(500)).await;
 }

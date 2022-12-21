@@ -119,25 +119,28 @@ impl SignatureProcess {
 }
 
 // Initialize consumers to read the coordinator pubkey & general test messages on partition 0
-fn consume_general_messages_from_coordinator(
-  kafka_config: &KafkaConfig,
-  name: &str,
-  coin: &str,
-) {
+fn consume_general_messages_from_coordinator(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   let mut group_id = &coin.to_string().to_lowercase();
   let mut topic: String = String::from(name);
-  topic.push_str("_");
+  topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_owned().to_uppercase();
   env_key.push_str("_PUB");
-  initialize_consumer(kafka_config, &group_id, &topic, Some(env_key.to_string()), None, &PartitionType::General);
+  initialize_consumer(
+    kafka_config,
+    &group_id,
+    &topic,
+    Some(env_key.to_string()),
+    None,
+    &PartitionType::General,
+  );
 }
 
 // Initialize consumer used to read secure test messages from coordinator on secure partition
 fn consume_coordinator_secure_test_message(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   let mut group_id = &coin.to_string().to_lowercase();
   let mut topic: String = String::from(name);
-  topic.push_str("_");
+  topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
   env_key.push_str("_PRIV");
@@ -265,15 +268,15 @@ fn initialize_consumer(
 // Initialize producer to send processor pubkeys to coordinator on general partition
 fn produce_processor_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   let mut topic: String = String::from(name);
-  topic.push_str("_");
+  topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
   env_key.push_str("_PUB");
-  send_processor_pubkey(&kafka_config, &topic, env_key.to_string());
+  send_processor_pubkey(&kafka_config, &topic, env_key.to_string(), coin);
 }
 
 // Sends processor pubkeys to coordinator on general partition
-fn send_processor_pubkey(kafka_config: &KafkaConfig, topic: &str, env_key: String) {
+fn send_processor_pubkey(kafka_config: &KafkaConfig, topic: &str, env_key: String, coin: &str) {
   let producer: ThreadedProducer<_> = ClientConfig::new()
     .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
     .create()
@@ -283,7 +286,7 @@ fn send_processor_pubkey(kafka_config: &KafkaConfig, topic: &str, env_key: Strin
   let coin_pub = env::var(env_key.to_string());
   let coin_msg = coin_pub.unwrap();
 
-  info!("Sending Public Key");
+  info!("Sending {} Public Key to Corodinator", coin.to_uppercase());
 
   // Send pubkey to kafka topic
   producer
@@ -331,7 +334,7 @@ async fn produce_general_and_secure_test_message(
   coin: &str,
 ) {
   let mut topic: String = String::from(name);
-  topic.push_str("_");
+  topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
   env_key.push_str("_PRIV");
@@ -399,6 +402,6 @@ async fn send_general_and_secure_test_message(
         .partition(1),
     )
     .expect("failed to send message");
-  // Add small delay for sending messages
+  // Add small delay for checking pubkeys
   tokio::time::sleep(Duration::from_millis(500)).await;
 }
