@@ -25,7 +25,7 @@ async fn main() {
     )
     .arg(
       Arg::with_name("config_dir")
-        .short("cd")
+        .short("d")
         .long("config_dir")
         .help(
           "The path that the coordinator can find relevant config files.
@@ -42,16 +42,28 @@ async fn main() {
         .takes_value(true)
         .default_value("base"),
     )
+    .arg(
+      Arg::with_name("coin")
+        .short("c")
+        .long("coin")
+        .help("The coin to run the processor for.")
+        .takes_value(true)
+        .default_value("btc"),
+    )
     .get_matches();
 
   // Load Config / Chains
   let path_arg = args.value_of("config_dir").unwrap();
-  let config = ProcessorConfig::new(String::from(path_arg)).unwrap();
+
+  // Load Coin argo
+  let coin_arg = args.value_of("coin").unwrap();
+
+  let config = ProcessorConfig::new(String::from(path_arg), String::from(coin_arg)).unwrap();
 
   // Start Core Process
   let core_config = config.clone();
   tokio::spawn(async move {
-    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_chain());
+    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_coin());
     core_process.run();
   });
 
@@ -61,7 +73,7 @@ async fn main() {
   // Start Signature Process
   let sig_config = config.clone();
   tokio::spawn(async move {
-    let signature_process = SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), name_arg);
+    let signature_process = SignatureProcess::new(sig_config.get_coin(), sig_config.get_kafka(), name_arg);
     signature_process.run().await;
   });
 

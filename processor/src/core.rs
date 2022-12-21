@@ -7,7 +7,6 @@ use env_logger::fmt::Formatter;
 use env_logger::Builder;
 use log::info;
 use log::{LevelFilter, Record};
-use std::collections::HashMap;
 // Key Generation
 use message_box;
 use std::alloc::System;
@@ -19,12 +18,12 @@ static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
 #[derive(Clone, Debug, Deserialize)]
 pub struct CoreProcess {
   core_config: CoreConfig,
-  chain_config: ChainConfig,
+  coin: String,
 }
 
 impl CoreProcess {
-  pub fn new(core_config: CoreConfig, chain_config: ChainConfig) -> Self {
-    Self { core_config: core_config, chain_config: chain_config}
+  pub fn new(core_config: CoreConfig, coin: String) -> Self {
+    Self { core_config: core_config, coin: coin }
   }
 
   pub fn run(self) {
@@ -32,7 +31,7 @@ impl CoreProcess {
     info!("Starting Core Process");
 
     // Check coordinator pubkey env variable
-    initialize_keys(&self.chain_config);
+    initialize_keys(&self.coin);
   }
 
   fn stop(self) {
@@ -195,37 +194,6 @@ impl CoreConfig {
   }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[allow(unused)]
-pub struct ChainConfig {
-  sri: bool,
-  btc: bool,
-  eth: bool,
-  xmr: bool,
-}
-
-impl ChainConfig {
-  fn new(config: Config) -> Self {
-    let sri = config.get_bool("chain_sri").unwrap();
-    let btc = config.get_bool("chain_btc").unwrap();
-    let eth = config.get_bool("chain_eth").unwrap();
-    let xmr = config.get_bool("chain_xmr").unwrap();
-    Self { btc, eth, xmr, sri }
-  }
-  pub fn get_sri(&self) -> bool {
-    self.sri
-  }
-  pub fn get_btc(&self) -> bool {
-    self.btc
-  }
-  pub fn get_eth(&self) -> bool {
-    self.eth
-  }
-  pub fn get_xmr(&self) -> bool {
-    self.xmr
-  }
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 struct HealthConfig {}
@@ -287,12 +255,12 @@ impl KafkaConfig {
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct ProcessorConfig {
+  coin: String,
   path: String,
   options: RunMode,
   core: CoreConfig,
   health: HealthConfig,
   observer: ObserverConfig,
-  chain: ChainConfig,
   kafka: KafkaConfig,
 }
 
@@ -310,17 +278,13 @@ pub struct ProcessorConfig {
 ///  or an error if the configuration could not be loaded
 /// or parsed.
 
-pub fn load_config(
-  run_mode: RunMode,
-  path: &str,
-) -> Result<Config, ConfigError> {
+pub fn load_config(run_mode: RunMode, path: &str) -> Result<Config, ConfigError> {
   // Load the configuration file
   let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
 
   // if runmode is not set, use the default, else load the config file based on the mode specified
-  
+
   println!("Loading config for mode: {}", run_mode);
-  
 
   let config = Config::builder()
     .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
@@ -332,7 +296,7 @@ pub fn load_config(
 
 impl ProcessorConfig {
   // Creates a new config based on the set environment
-  pub fn new(path: String) -> Result<Self, ConfigError> {
+  pub fn new(path: String, coin: String) -> Result<Self, ConfigError> {
     let run_mode = env::var("PROCESSOR_MODE").unwrap_or_else(|_| "development".into());
 
     let s = load_config(RunMode::from_str(&run_mode).unwrap(), &path)?;
@@ -342,6 +306,7 @@ impl ProcessorConfig {
 
     // switch based on mode to build config
     let config = ProcessorConfig {
+      coin: coin,
       path: String::from("./config/"),
       options: mode.clone(),
       core: CoreConfig {
@@ -382,6 +347,10 @@ impl ProcessorConfig {
   }
 
   // get the config path
+  pub fn get_coin(&self) -> String {
+    self.coin.clone()
+  }
+  // get the config path
   pub fn get_path(&self) -> String {
     self.path.clone()
   }
@@ -392,10 +361,6 @@ impl ProcessorConfig {
   // get the core config
   pub fn get_core(&self) -> CoreConfig {
     self.core.clone()
-  }
-  // get the chain config
-  pub fn get_chain(&self) -> ChainConfig {
-    self.chain.clone()
   }
   // get the kafka config
   pub fn get_kafka(&self) -> KafkaConfig {
@@ -417,36 +382,21 @@ pub fn initialize_coin(coin: &str) {
 }
 
 // Generates Private / Public key pair
-pub fn initialize_keys(config: &ChainConfig) {
-  let coin_hashmap = create_coin_hashmap(&config);
-  let hashmap_clone = coin_hashmap.clone();
+pub fn initialize_keys(coin: &String) {
+  let mut env_privkey = String::from(coin).to_uppercase();
+  env_privkey.push_str("_PRIV");
 
-  // Loop through each coin & if active, create pubkey consumer
-  for (key, value) in hashmap_clone.into_iter() {
-    if value == true {
-      let mut env_privkey = String::from(&key).to_uppercase();
-      env_privkey.push_str("_PRIV");
+  // Checks if coin keys are set
+  let priv_check = env::var(&env_privkey.to_string());
+  if priv_check.is_err() {
+    // Generates new private / public key
+    let (privkey, pubkey) = message_box::key_gen();
+    let mut privkey_bytes = unsafe { privkey.inner().to_repr() };
+    // Sets private / public key to environment variables
+    env::set_var(&env_privkey, hex::encode(&privkey_bytes.as_ref()));
 
-      // Checks if coin keys are set
-      let priv_check = env::var(&env_privkey.to_string());
-      if priv_check.is_err() {
-        // Generates new private / public key
-        let (privkey, pubkey) = message_box::key_gen();
-        let mut privkey_bytes = unsafe { privkey.inner().to_repr() };
-        // Sets private / public key to environment variables
-        env::set_var(&env_privkey, hex::encode(&privkey_bytes.as_ref()));
-
-        let mut env_pubkey = String::from(&key).to_uppercase();
-        env_pubkey.push_str("_PUB");
-        env::set_var(&env_pubkey, hex::encode(&pubkey.to_bytes()));
-      }
-    }
+    let mut env_pubkey = String::from(coin).to_uppercase();
+    env_pubkey.push_str("_PUB");
+    env::set_var(&env_pubkey, hex::encode(&pubkey.to_bytes()));
   }
-}
-
-// Create Hashmap based on coins
-fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<String, bool> {
-  let j = serde_json::to_string(&chain_config).unwrap();
-  let coins: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
-  coins
 }

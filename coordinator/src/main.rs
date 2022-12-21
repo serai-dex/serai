@@ -26,7 +26,7 @@ async fn main() {
     )
     .arg(
       Arg::with_name("config_dir")
-        .short("cd")
+        .short("d")
         .long("config_dir")
         .help(
           "The path that the coordinator can find relevant config files.
@@ -37,9 +37,9 @@ async fn main() {
     )
     .arg(
       Arg::with_name("name")
-        .short("id")
+        .short("n")
         .long("name")
-        .help("This is the identity of the node running the coordinator and should match.")
+        .help("This is the name of the node running the coordinator and should match.")
         .takes_value(true)
         .default_value("base"),
     )

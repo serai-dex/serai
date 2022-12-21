@@ -15,14 +15,20 @@ use serde::{Deserialize};
 use crate::core::ChainConfig;
 use crate::core::KafkaConfig;
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+enum PartitionType {
+  General,
+  Secure,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct SignatureProcess {
   chain_config: ChainConfig,
   kafka_config: KafkaConfig,
-  identity: String,
+  name: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum Coin {
   SRI,
   BTC,
@@ -45,10 +51,10 @@ impl fmt::Display for Coin {
 enum MessageType {
   CoordinatorPubkeyToProcessor,
   CoordinatorGeneralMessageToProcessor,
-  CoordinatorSecureMessageToProcessor,
+  CoordinatorSecureTestMessageToProcessor,
   ProcessorPubkeyToCoordinator,
   ProcessorGeneralMessageToCoordinator,
-  ProcessorSecureMessageToCoordinator,
+  ProcessorSecureTestMessageToCoordinator,
   Default,
 }
 
@@ -56,11 +62,19 @@ impl fmt::Display for MessageType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
       MessageType::CoordinatorPubkeyToProcessor => write!(f, "coordinator_pubkey_to_processor"),
-      MessageType::CoordinatorGeneralMessageToProcessor => write!(f, "coordinator_general_message_to_processor"),
-      MessageType::CoordinatorSecureMessageToProcessor => write!(f, "coordinator_secure_message_to_processor"),
+      MessageType::CoordinatorGeneralMessageToProcessor => {
+        write!(f, "coordinator_general_message_to_processor")
+      }
+      MessageType::CoordinatorSecureTestMessageToProcessor => {
+        write!(f, "coordinator_secure_test_message_to_processor")
+      }
       MessageType::ProcessorPubkeyToCoordinator => write!(f, "processor_pubkey_to_coordinator"),
-      MessageType::ProcessorGeneralMessageToCoordinator => write!(f, "processor_general_message_to_coordinator"),
-      MessageType::ProcessorSecureMessageToCoordinator => write!(f, "processor_secure_message_to_coordinator"),
+      MessageType::ProcessorGeneralMessageToCoordinator => {
+        write!(f, "processor_general_message_to_coordinator")
+      }
+      MessageType::ProcessorSecureTestMessageToCoordinator => {
+        write!(f, "processor_secure_test_message_to_coordinator")
+      }
       MessageType::Default => write!(f, "Default"),
     }
   }
@@ -75,8 +89,8 @@ fn parse_message_type(message_type: &str) -> MessageType {
     "coordinator_general_message_to_processor" => {
       msg_type = MessageType::CoordinatorGeneralMessageToProcessor;
     }
-    "coordinator_secure_message_to_processor" => {
-      msg_type = MessageType::CoordinatorSecureMessageToProcessor;
+    "coordinator_secure_test_message_to_processor" => {
+      msg_type = MessageType::CoordinatorSecureTestMessageToProcessor;
     }
     "processor_pubkey_to_coordinator" => {
       msg_type = MessageType::ProcessorPubkeyToCoordinator;
@@ -84,8 +98,8 @@ fn parse_message_type(message_type: &str) -> MessageType {
     "processor_general_message_to_coordinator" => {
       msg_type = MessageType::ProcessorGeneralMessageToCoordinator;
     }
-    "processor_secure_message_to_coordinator" => {
-      msg_type = MessageType::ProcessorSecureMessageToCoordinator;
+    "processor_secure_test_message_to_coordinator" => {
+      msg_type = MessageType::ProcessorSecureTestMessageToCoordinator;
     }
     _ => {}
   }
@@ -109,11 +123,11 @@ fn create_admin_client(kafka_config: &KafkaConfig) -> AdminClient<DefaultClientC
 // General Messages are contained in partition 0
 // Secure Messages are contained in parition 1
 impl SignatureProcess {
-  pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, identity: String) -> Self {
+  pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String) -> Self {
     info!("New Signature Process");
     let chain_config = chain_config;
     let kafka_config = kafka_config;
-    Self { chain_config: chain_config, identity: identity, kafka_config: kafka_config }
+    Self { chain_config: chain_config, name: name, kafka_config: kafka_config }
   }
 
   pub async fn run(self) {
@@ -129,7 +143,7 @@ impl SignatureProcess {
     // Loop through each coin & initialize each kakfa topic
     for (_key, _value) in topic_ref.into_iter() {
       let mut topic: String = "".to_string();
-      topic.push_str(&self.identity);
+      topic.push_str(&self.name);
       let topic_ref = &mut String::from(&_key).to_lowercase();
       topic.push_str("_");
       topic.push_str(topic_ref);
@@ -147,21 +161,17 @@ impl SignatureProcess {
     // Create Hashmap based on coins
     let coin_hashmap = create_coin_hashmap(&self.chain_config);
 
-    // Initialize consumers to read the processor pubkey & general test messages on partition 0
-    consume_general_messages_from_processor(&self.kafka_config, &self.identity, &coin_hashmap);
-
-    // Initialize producer to send coordinator pubkey to processors on general partition
-    produce_coordinator_pubkey(&self.kafka_config, &self.identity, &coin_hashmap);
-
-    // Wait to receive all Processer Pubkeys
-    process_received_pubkeys(&coin_hashmap).await;
-
-    // Initialize consumer used to read secure test messages from processors on secure partition
-    consume_processor_secure_test_message(&self.kafka_config, &self.identity, &coin_hashmap);
-
-    // Initialize a producer that sends a general & secure test message
-    produce_general_and_secure_test_message(&self.kafka_config, &self.identity, &coin_hashmap)
-      .await;
+    info!("Spawning Processor Threads");
+    // Loop through each coin & if active, create processor thread
+    for (_key, value) in coin_hashmap.into_iter() {
+      if value == true {
+        spawn_processor_thread(
+          _key.to_string().to_owned(),
+          self.kafka_config.clone().to_owned(),
+          self.name.to_string(),
+        );
+      }
+    }
   }
 
   fn stop(self) {
@@ -169,63 +179,61 @@ impl SignatureProcess {
   }
 }
 
-// Initialize consumers to read the processor pubkey & general test messages on partition 0
-fn consume_general_messages_from_processor(
-  kafka_config: &KafkaConfig,
-  identity: &str,
-  coin_hashmap: &HashMap<Coin, bool>,
-) {
-  let hashmap_clone = coin_hashmap.clone();
+// Spawn a thread for each coin that is active
+fn spawn_processor_thread(coin: String, kafka_config: KafkaConfig, name: String) {
+  tokio::spawn(async move {
+    // Initialize consumers to read the processor pubkey & general test messages on partition 0
+    consume_general_messages_from_processor(&kafka_config, &name, &coin.to_string());
 
-  // Loop through each coin & if active, create pubkey consumer
-  for (_key, value) in hashmap_clone.into_iter() {
-    if *value == true {
-      let mut group_id = &_key.to_string().to_lowercase();
-      let mut topic: String = String::from(identity);
-      topic.push_str("_");
-      topic.push_str(&_key.to_string().to_lowercase());
-      let env_key = &mut _key.to_string().to_owned();
-      env_key.push_str("_PUB");
-      initialize_consumer(
-        kafka_config,
-        &group_id,
-        &topic,
-        Some(env_key.to_string()),
-        None,
-        "general",
-      );
-    }
-  }
+    // Initialize producer to send coordinator pubkey to processors on general partition
+    produce_coordinator_pubkey(&kafka_config, &name, &coin.to_string());
+
+    // Wait to receive Processer Pubkey
+    process_received_pubkey(&coin.to_string()).await;
+
+    // Initialize consumer used to read secure test messages from processors on secure partition
+    consume_processor_secure_test_message(&kafka_config, &name, &coin.to_string());
+
+    // Initialize a producer that sends a general & secure test message
+    produce_general_and_secure_test_message(&kafka_config, &name, &coin.to_string()).await;
+  });
+}
+
+// Initialize consumers to read the processor pubkey & general test messages on partition 0
+fn consume_general_messages_from_processor(kafka_config: &KafkaConfig, name: &str, coin: &str) {
+  let mut group_id = &coin.to_string().to_lowercase();
+  let mut topic: String = String::from(name);
+  topic.push_str("_");
+  topic.push_str(&coin.to_string().to_lowercase());
+  let env_key = &mut coin.to_string().to_owned().to_uppercase();
+  env_key.push_str("_PUB");
+  initialize_consumer(
+    kafka_config,
+    &group_id,
+    &topic,
+    Some(env_key.to_string()),
+    None,
+    &PartitionType::General,
+  );
 }
 
 // Initialize consumer used to read secure test messages from processors on secure partition
-fn consume_processor_secure_test_message(
-  kafka_config: &KafkaConfig,
-  identity: &str,
-  coin_hashmap: &HashMap<Coin, bool>,
-) {
-  let hashmap_clone = coin_hashmap.clone();
-
-  // Loop through each coin & if active, create secure message consumer
-  for (_key, value) in hashmap_clone.into_iter() {
-    if *value == true {
-      let mut group_id = &_key.to_string().to_lowercase();
-      let mut topic: String = String::from(identity);
-      topic.push_str("_");
-      topic.push_str(&_key.to_string().to_lowercase());
-      let env_key = &mut _key.to_string();
-      // ENV_KEY references the processor pubkey we want to use with message box
-      env_key.push_str("_PUB");
-      initialize_consumer(
-        kafka_config,
-        &group_id,
-        &topic,
-        Some(env_key.to_string()),
-        Some(&mut _key.to_string()),
-        "secure",
-      );
-    }
-  }
+fn consume_processor_secure_test_message(kafka_config: &KafkaConfig, name: &str, coin: &str) {
+  let mut group_id = &coin.to_string().to_lowercase();
+  let mut topic: String = String::from(name);
+  topic.push_str("_");
+  topic.push_str(&coin.to_string().to_lowercase());
+  let env_key = &mut coin.to_string().to_uppercase();
+  // ENV_KEY references the processor pubkey we want to use with message box
+  env_key.push_str("_PUB");
+  initialize_consumer(
+    kafka_config,
+    &group_id,
+    &topic,
+    Some(env_key.to_string()),
+    Some(&mut coin.to_string()),
+    &PartitionType::Secure,
+  );
 }
 
 // Initializes consumer based on general or secure partition
@@ -235,7 +243,7 @@ fn initialize_consumer(
   topic: &str,
   env_key: Option<String>,
   coin: Option<&String>,
-  partition_type: &str,
+  partition_type: &PartitionType,
 ) {
   let consumer: BaseConsumer = ClientConfig::new()
     .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
@@ -261,7 +269,7 @@ fn initialize_consumer(
   }
 
   match partition_type {
-    "general" => {
+    PartitionType::General => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
       tpl.add_partition(&topic, 0);
       consumer.assign(&tpl).unwrap();
@@ -289,7 +297,7 @@ fn initialize_consumer(
         }
       });
     }
-    "secure" => {
+    PartitionType::Secure => {
       let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
       tpl.add_partition(&topic, 1);
       consumer.assign(&tpl).unwrap();
@@ -300,7 +308,7 @@ fn initialize_consumer(
           let key: &str = msg.key_view().unwrap().unwrap();
           let msg_type = parse_message_type(&key);
           match msg_type {
-            MessageType::ProcessorSecureMessageToCoordinator => {
+            MessageType::ProcessorSecureTestMessageToCoordinator => {
               let value = msg.payload().unwrap();
               // Creates Message box used for decryption
               let pubkey = message_box::PublicKey::from_trusted_str(
@@ -339,13 +347,7 @@ fn initialize_consumer(
 }
 
 // Initialize producer to send coordinator pubkey to processors on general partition
-fn produce_coordinator_pubkey(
-  kafka_config: &KafkaConfig,
-  identity: &str,
-  coin_hashmap: &HashMap<Coin, bool>,
-) {
-  let hashmap_clone = coin_hashmap.clone();
-
+fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   info!("Sending Public Key");
 
   // Creates a producer to send coordinator pubkey message
@@ -358,52 +360,28 @@ fn produce_coordinator_pubkey(
   let coord_pub = env::var("COORD_PUB");
   let msg = coord_pub.unwrap();
 
-  for (_key, value) in hashmap_clone.into_iter() {
-    if *value == true {
-      // Sends message to Kafka
-      producer
-        .send(
-          BaseRecord::to(&format!("{}_{}", &identity, &_key.to_string().to_lowercase()))
-            .key(&format!("{}", MessageType::CoordinatorPubkeyToProcessor.to_string()))
-            .payload(&msg)
-            .partition(0),
-        )
-        .expect("failed to send message");
-    }
-  }
+  // Sends message to Kafka
+  producer
+    .send(
+      BaseRecord::to(&format!("{}_{}", &name, &coin.to_string().to_lowercase()))
+        .key(&format!("{}", MessageType::CoordinatorPubkeyToProcessor.to_string()))
+        .payload(&msg)
+        .partition(0),
+    )
+    .expect("failed to send message");
 }
 
 // Wait to receive all Processer Pubkeys
-async fn process_received_pubkeys(coin_hashmap: &HashMap<Coin, bool>) {
-  // Runs a loop to check if all processor keys are found
-  let mut all_keys_found = false;
-  while !all_keys_found {
-    let hashmap_key_check = coin_hashmap.clone();
-    let hashmap_clone = coin_hashmap.clone();
+async fn process_received_pubkey(coin: &str) {
+  let mut pubkey_found = false;
+  while !pubkey_found {
+    let env_key = &mut coin.to_string().to_uppercase();
+    env_key.push_str("_PUB");
 
-    let mut active_keys = 0;
-    let mut keys_found = 0;
-    for (_key, value) in hashmap_key_check.into_iter() {
-      if *value == true {
-        active_keys += 1;
-      }
-    }
-
-    for (_key, value) in hashmap_clone.into_iter() {
-      if *value == true {
-        let env_key = &mut _key.to_string();
-        env_key.push_str("_PUB");
-
-        let pub_check = env::var(env_key);
-        if !pub_check.is_err() {
-          keys_found += 1;
-        }
-      }
-    }
-
-    if active_keys == keys_found {
-      info!("All Processor Pubkeys Ready");
-      all_keys_found = true;
+    let pub_check = env::var(env_key);
+    if !pub_check.is_err() {
+      pubkey_found = true;
+      info!("{} Processor Pubkey Ready", &coin.to_string().to_uppercase());
     } else {
       // Add small delay for checking pubkeys
       tokio::time::sleep(Duration::from_millis(500)).await;
@@ -453,34 +431,27 @@ fn retrieve_message_box_id(coin: &String) -> &'static str {
 // Initialize a producer that sends a general & secure test message
 async fn produce_general_and_secure_test_message(
   kafka_config: &KafkaConfig,
-  identity: &str,
-  coin_hashmap: &HashMap<Coin, bool>,
+  name: &str,
+  coin: &str,
 ) {
-  let hashmap_clone = coin_hashmap.clone();
+  let mut topic: String = String::from(name);
+  topic.push_str("_");
+  topic.push_str(&coin.to_string().to_lowercase());
+  let env_key = &mut coin.to_string();
+  env_key.push_str("_PUB");
 
-  // Loop through each coin & if active, create general and secure producer
-  for (key, value) in hashmap_clone.into_iter() {
-    if *value == true {
-      let mut topic: String = String::from(identity);
-      topic.push_str("_");
-      topic.push_str(&key.to_string().to_lowercase());
-      let env_key = &mut key.to_string();
-      env_key.push_str("_PUB");
+  let processor_id = retrieve_message_box_id(&mut coin.to_string().to_uppercase());
+  let mut msg: String = String::from("coordinator message to ");
+  msg.push_str(&processor_id.to_lowercase());
 
-      let processor_id = retrieve_message_box_id(&mut key.to_string());
-      let mut msg: String = String::from("coordinator message to ");
-      msg.push_str(&processor_id.to_lowercase());
-
-      send_general_and_secure_test_message(
-        &kafka_config,
-        &topic,
-        env_key.to_string(),
-        &processor_id,
-        msg.as_bytes().to_vec(),
-      )
-      .await;
-    }
-  }
+  send_general_and_secure_test_message(
+    &kafka_config,
+    &topic,
+    env_key.to_string(),
+    &processor_id,
+    msg.as_bytes().to_vec(),
+  )
+  .await;
 }
 
 // Initializes a producer then sends both a general and secure test message
@@ -520,18 +491,16 @@ async fn send_general_and_secure_test_message(
         .partition(0),
     )
     .expect("failed to send message");
-  // Add small delay for sending messages
-  tokio::time::sleep(Duration::from_millis(500)).await;
 
   // Partition 1 is Secure
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}", MessageType::CoordinatorSecureMessageToProcessor.to_string()))
+        .key(&format!("{}", MessageType::CoordinatorSecureTestMessageToProcessor.to_string()))
         .payload(&enc)
         .partition(1),
     )
     .expect("failed to send message");
-  // Add small delay for sending messages
+
   tokio::time::sleep(Duration::from_millis(500)).await;
 }
