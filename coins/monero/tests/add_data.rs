@@ -1,4 +1,4 @@
-use monero_serai::{rpc::Rpc, wallet::TransactionError, transaction::Transaction};
+use monero_serai::{wallet::TransactionError, transaction::Transaction};
 
 mod runner;
 
@@ -16,8 +16,7 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), (arbitrary_data,))
     },
-    |rpc: Rpc, signed: Transaction, mut scanner: Scanner, state: (Vec<u8>,)| async move {
-      let tx = rpc.get_transaction(signed.hash()).await.unwrap();
+    |_, tx: Transaction, mut scanner: Scanner, state: (Vec<u8>,)| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.arbitrary_data()[0], state.0);
@@ -41,8 +40,7 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), (arbitrary_data,))
     },
-    |rpc: Rpc, signed: Transaction, mut scanner: Scanner, state: (Vec<u8>,)| async move {
-      let tx = rpc.get_transaction(signed.hash()).await.unwrap();
+    |_, tx: Transaction, mut scanner: Scanner, state: (Vec<u8>,)| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
       let data = output.arbitrary_data();
