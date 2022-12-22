@@ -1,6 +1,5 @@
 use core::ops::Deref;
-use std::sync::Mutex;
-use std::collections::HashSet;
+use std::{sync::Mutex, collections::HashSet};
 
 use lazy_static::lazy_static;
 
