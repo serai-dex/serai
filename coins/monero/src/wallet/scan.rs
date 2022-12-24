@@ -7,7 +7,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 use crate::{
   Commitment,
   serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point, read_raw_vec},
-  transaction::{Timelock, Transaction},
+  transaction::{Input, Timelock, Transaction},
   block::Block,
   rpc::{Rpc, RpcError},
   wallet::{PaymentId, Extra, Scanner, uniqueness, shared_key, amount_decryption, commitment_mask},
@@ -373,18 +373,22 @@ impl Scanner {
     };
 
     let mut res = vec![];
-    for (i, tx) in txs.drain(..).enumerate() {
+    for tx in txs.drain(..) {
       if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }
-      index += tx
-        .prefix
-        .outputs
-        .iter()
-        // Filter to miner TX outputs/0-amount outputs since we're tacking the 0-amount index
-        .filter_map(|output| Some(1).filter(|_| (i == 0) || (output.amount == 0)))
-        // Since we can't get the length of an iterator, map each value to 1 and sum
-        .sum::<u64>();
+      index += u64::try_from(
+        tx.prefix
+          .outputs
+          .iter()
+          // Filter to miner TX outputs/0-amount outputs since we're tacking the 0-amount index
+          // This will fail to scan blocks containing pre-RingCT miner TXs
+          .filter(|output| {
+            matches!(tx.prefix.inputs.get(0), Some(Input::Gen(..))) || (output.amount == 0)
+          })
+          .count(),
+      )
+      .unwrap()
     }
     Ok(res)
   }
