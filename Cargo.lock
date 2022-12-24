@@ -1512,6 +1512,7 @@ dependencies = [
  "curve25519-dalek 3.2.0",
  "digest 0.10.6",
  "ff",
+ "ff-group-tests",
  "group",
  "rand_core 0.6.4",
  "subtle",
@@ -2329,6 +2330,15 @@ dependencies = [
  "bitvec 1.0.1",
  "rand_core 0.6.4",
  "subtle",
+]
+
+[[package]]
+name = "ff-group-tests"
+version = "0.12.0"
+dependencies = [
+ "group",
+ "k256",
+ "p256",
 ]
 
 [[package]]
@@ -4570,6 +4580,7 @@ dependencies = [
  "dalek-ff-group",
  "digest 0.10.6",
  "ff",
+ "ff-group-tests",
  "generic-array 0.14.6",
  "group",
  "hex",
