@@ -10,8 +10,6 @@ use crate::{
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
 
-/// Curve tests.
-pub mod curve;
 /// Vectorized test suite to ensure consistency.
 pub mod vectors;
 

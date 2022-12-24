@@ -52,6 +52,38 @@ fn test_dleq() {
       keys[k] = generators[k] * key.deref();
     }
     proof.verify(&mut transcript(), &generators[.. i], &keys[.. i]).unwrap();
+    // Different challenge
+    assert!(proof
+      .verify(
+        &mut RecommendedTranscript::new(b"different challenge"),
+        &generators[.. i],
+        &keys[.. i]
+      )
+      .is_err());
+
+    // We could edit these tests to always test with at least two generators
+    // Then we don't test proofs with zero/one generator(s)
+    // While those are stupid, and pointless, and potentially point to a failure in the caller,
+    // it could also be part of a dynamic system which deals with variable amounts of generators
+    // Not panicking in such use cases, even if they're inefficient, provides seamless behavior
+    if i >= 2 {
+      // Different generators
+      assert!(proof
+        .verify(
+          &mut transcript(),
+          generators[.. i].iter().cloned().rev().collect::<Vec<_>>().as_ref(),
+          &keys[.. i]
+        )
+        .is_err());
+      // Different keys
+      assert!(proof
+        .verify(
+          &mut transcript(),
+          &generators[.. i],
+          keys[.. i].iter().cloned().rev().collect::<Vec<_>>().as_ref()
+        )
+        .is_err());
+    }
 
     #[cfg(feature = "serialize")]
     {

@@ -39,6 +39,16 @@ macro_rules! dalek_curve {
 
 #[cfg(any(test, feature = "ristretto"))]
 dalek_curve!("ristretto", Ristretto, RistrettoPoint, b"ristretto");
+#[cfg(any(test, feature = "ristretto"))]
+#[test]
+fn test_ristretto() {
+  ff_group_tests::group::test_prime_group_bits::<RistrettoPoint>();
+}
 
 #[cfg(feature = "ed25519")]
 dalek_curve!("ed25519", Ed25519, EdwardsPoint, b"edwards25519");
+#[cfg(feature = "ed25519")]
+#[test]
+fn test_ed25519() {
+  ff_group_tests::group::test_prime_group_bits::<EdwardsPoint>();
+}

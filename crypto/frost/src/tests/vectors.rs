@@ -9,7 +9,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use group::{ff::PrimeField, GroupEncoding};
 
-use dkg::tests::{key_gen, test_ciphersuite as test_dkg};
+use dkg::tests::key_gen;
 
 use crate::{
   curve::Curve,
@@ -19,7 +19,7 @@ use crate::{
     Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess, SignMachine,
     SignatureMachine, AlgorithmMachine,
   },
-  tests::{clone_without, recover_key, algorithm_machines, sign, curve::test_curve},
+  tests::{clone_without, recover_key, algorithm_machines, sign},
 };
 
 pub struct Vectors {
@@ -118,12 +118,6 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   rng: &mut R,
   vectors: Vectors,
 ) {
-  // Do basic tests before trying the vectors
-  test_curve::<_, C>(&mut *rng);
-
-  // Test the DKG
-  test_dkg::<_, C>(&mut *rng);
-
   // Test a basic Schnorr signature
   {
     let keys = key_gen(&mut *rng);

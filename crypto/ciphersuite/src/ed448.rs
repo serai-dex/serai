@@ -65,3 +65,9 @@ impl Ciphersuite for Ed448 {
     Scalar::wide_reduce(Self::H::digest([dst, data].concat()).as_ref().try_into().unwrap())
   }
 }
+
+#[test]
+fn test_ed448() {
+  // TODO: Enable once ed448 passes these tests
+  //ff_group_tests::group::test_prime_group_bits::<Point>();
+}
