@@ -34,6 +34,8 @@ k256 = { version = "0.11", features = ["arithmetic", "bits", "hash2curve"], opti
 minimal-ed448 = { path = "../ed448", version = "^0.1.2", optional = true }
 
 [dev-dependencies]
+hex = "0.4"
+
 ff-group-tests = { version = "0.12", path = "../ff-group-tests" }
 
 [features]
