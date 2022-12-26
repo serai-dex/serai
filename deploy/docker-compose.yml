@@ -96,7 +96,7 @@ services:
     volumes:
       - genesis-volume:/temp
 
-  _node:
+  node:
     &node_defaults
     restart: unless-stopped
     image: serai-node:dev
@@ -199,7 +199,7 @@ services:
       NAME: ferdie
       
   # Coordinator Services
-  _coordinator:
+  coordinator:
     &coordinator_defaults
     restart: unless-stopped
     image: serai-coordinator:dev

@@ -11,7 +11,10 @@ All commands are assumed to be ran from the deploy folder, not the serai root fo
 ### Profiles:
 * base - single node, named base
 * coins - node clients for coins only (BTC, ETH, XMR)
-* cluster-sm - Alice (Validator), Bob, Charlie
+* kafka - zookeeper, kafka, kafka-ui
+* coordinator - single coordinator with base name
+* processor - single processor (defaults btc) with base name
+* cluster-sm - Alice (Validator), Bob, Charlie | Node, Processor (BTC, ETH, XMR ), Coordinator
 * cluster-coins-sm - cluster-sm with coins
 * cluter-lg - Alice (Validator), Bob, Charlie, Dave, Eve, Ferdie
 * cluster-coins-lg - cluster-lg with coins
