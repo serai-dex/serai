@@ -6,14 +6,20 @@ name: serai-dev
   # Profiles:
   # base - single node, unidentified
   # coins - node clients for coins only (BTC, ETH, XMR)
-  # cluster-sm - Alice, Bob, Charlie
+  # cluster-sm - Alice, Bob, Charlie (Full Infrastructure)
+  # cluster-node-sm - Alice, Bob, Charlie (Node + Kafka)
+  # cluster-coordinator-sm - Alice, Bob, Charlie (Coordinator + Kafka)
   # cluster-coins-sm - cluster-sm with coins
   # cluster-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
+  # cluster-node-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie (Node + Kafka)
+  # cluster-coordinator-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie (Coordinator + Kafka)
   # cluster-coins-lg - cluster-lg with coins
   # monero - full node monero only
   # bitcoin - full node bitcoin only
   # ethereum - full node ethereum only
   # Example: docker compose --profile bitcoin up
+  # ------------------------------------------------------------
+
 volumes:
   node-base:
   node-alice:
@@ -34,8 +40,12 @@ services:
     profiles:
       - kafka
       - cluster-sm
+      - cluster-node-sm
+      - cluster-coordinator-sm
       - cluster-coins-sm
       - cluster-lg
+      - cluster-node-lg
+      - cluster-coordinator-lg
       - cluster-coins-lg
     ports:
       - "2181:2181"
@@ -50,8 +60,12 @@ services:
     profiles:
       - kafka
       - cluster-sm
+      - cluster-node-sm
+      - cluster-coordinator-sm
       - cluster-coins-sm
       - cluster-lg
+      - cluster-node-lg
+      - cluster-coordinator-lg
       - cluster-coins-lg
     ports:
       - "9094:9094"
@@ -74,8 +88,12 @@ services:
     profiles:
       - kafka
       - cluster-sm
+      - cluster-node-sm
+      - cluster-coordinator-sm
       - cluster-coins-sm
       - cluster-lg
+      - cluster-node-lg
+      - cluster-coordinator-lg
       - cluster-coins-lg
     ports:
       - "8080:8080"
@@ -129,9 +147,9 @@ services:
     hostname: node-alice
     profiles:
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-node-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-node-lg
     environment:
       CHAIN: local
       NAME: alice
@@ -143,9 +161,9 @@ services:
     profiles:
       - bob
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-node-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-node-lg
     environment:
       CHAIN: local
       NAME: bob
@@ -157,9 +175,10 @@ services:
     profiles:
       - charlie
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-node-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-node-lg
+
     environment:
       CHAIN: local
       NAME: charlie
@@ -171,7 +190,8 @@ services:
     profiles:
       - dave
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-node-lg
+
     environment:
       CHAIN: local
       NAME: dave
@@ -182,7 +202,7 @@ services:
     profiles:
       - eve
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-node-lg
     environment:
       CHAIN: local
       NAME: eve
@@ -193,7 +213,7 @@ services:
     profiles:
       - ferdie
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-node-lg
     environment:
       CHAIN: local
       NAME: ferdie
@@ -237,9 +257,10 @@ services:
     profiles:
       - alice
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-coordinator-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-coordinator-lg
+
     environment:
       NAME: alice
 
@@ -250,9 +271,9 @@ services:
     profiles:
       - bob
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-coordinator-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-coordinator-lg
     environment:
       NAME: bob
 
@@ -263,9 +284,9 @@ services:
     profiles:
       - charlie
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-coordinator-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-coordinator-lg
     environment:
       NAME: charlie
 
@@ -276,7 +297,7 @@ services:
     profiles:
       - dave
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-coordinator-lg
     environment:
       NAME: dave
 
@@ -287,7 +308,7 @@ services:
     profiles:
       - eve
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-coordinator-lg
     environment:
       NAME: eve
 
@@ -298,7 +319,7 @@ services:
     profiles:
       - ferdie
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-coordinator-lg
     environment:
       NAME: ferdie
 

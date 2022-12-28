@@ -15,9 +15,13 @@ All commands are assumed to be ran from the deploy folder, not the serai root fo
 * coordinator - single coordinator with base name
 * processor - single processor (defaults btc) with base name
 * cluster-sm - Alice (Validator), Bob, Charlie | Node, Processor (BTC, ETH, XMR ), Coordinator
-* cluster-coins-sm - cluster-sm with coins
+* cluster-node-sm - cluster-sm with node clients and kafka only
+* cluster-coordinator-sm - cluster-sm with coordinator and kafka only
+* cluster-coins-sm - cluster-sm with processors and kafka only
 * cluter-lg - Alice (Validator), Bob, Charlie, Dave, Eve, Ferdie
-* cluster-coins-lg - cluster-lg with coins
+* cluster-node-lg - cluster-lg with node clients and kafka only
+* cluster-coordinator-lg - cluster-lg with coordinator and kafka only
+* cluster-coins-lg - cluster-lg with processors and kafka only
 * monero - full node monero only
 * bitcoin - full node bitcoin only
 * ethereum - full node ethereum only
