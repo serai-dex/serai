@@ -119,7 +119,7 @@ impl<C: Curve> NonceCommitments<C> {
     let mut dleqs = None;
     if generators.len() >= 2 {
       let mut verify = |i| -> io::Result<_> {
-        let dleq = DLEqProof::deserialize(reader)?;
+        let dleq = DLEqProof::read(reader)?;
         dleq
           .verify(
             &mut dleq_transcript::<T>(context),
@@ -140,8 +140,8 @@ impl<C: Curve> NonceCommitments<C> {
       generator.write(writer)?;
     }
     if let Some(dleqs) = &self.dleqs {
-      dleqs[0].serialize(writer)?;
-      dleqs[1].serialize(writer)?;
+      dleqs[0].write(writer)?;
+      dleqs[1].write(writer)?;
     }
     Ok(())
   }
@@ -184,7 +184,7 @@ impl<C: Curve> Commitments<C> {
       if let Some(dleqs) = &nonce.dleqs {
         let mut transcript_dleq = |label, dleq: &DLEqProof<C::G>| {
           let mut buf = vec![];
-          dleq.serialize(&mut buf).unwrap();
+          dleq.write(&mut buf).unwrap();
           t.append_message(label, &buf);
         };
         transcript_dleq(b"dleq_D", &dleqs[0]);

@@ -90,10 +90,12 @@ impl<G: PrimeGroup> DLEqProof<G> {
 
     transcript.domain_separate(b"dleq");
     for generator in generators {
+      // R, A
       Self::transcript(transcript, *generator, *generator * r.deref(), *generator * scalar.deref());
     }
 
     let c = challenge(transcript);
+    // r + ca
     let s = (c * scalar.deref()) + r.deref();
 
     DLEqProof { c, s }
@@ -111,6 +113,9 @@ impl<G: PrimeGroup> DLEqProof<G> {
 
     transcript.domain_separate(b"dleq");
     for (generator, point) in generators.iter().zip(points) {
+      // s = r + ca
+      // sG - cA = R
+      // R, A
       Self::transcript(transcript, *generator, (*generator * self.s) - (*point * self.c), *point);
     }
 
@@ -122,13 +127,20 @@ impl<G: PrimeGroup> DLEqProof<G> {
   }
 
   #[cfg(feature = "serialize")]
-  pub fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(self.c.to_repr().as_ref())?;
     w.write_all(self.s.to_repr().as_ref())
   }
 
   #[cfg(feature = "serialize")]
-  pub fn deserialize<R: Read>(r: &mut R) -> io::Result<DLEqProof<G>> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<DLEqProof<G>> {
     Ok(DLEqProof { c: read_scalar(r)?, s: read_scalar(r)? })
+  }
+
+  #[cfg(feature = "serialize")]
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
+    res
   }
 }
