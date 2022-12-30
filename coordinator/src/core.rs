@@ -148,6 +148,7 @@ pub enum ConfigType {
   Health,
   Observer,
   Kafka,
+  Network,
 }
 
 impl fmt::Display for ConfigType {
@@ -158,6 +159,7 @@ impl fmt::Display for ConfigType {
       ConfigType::Health => write!(f, "health"),
       ConfigType::Observer => write!(f, "observer"),
       ConfigType::Kafka => write!(f, "kafka"),
+      ConfigType::Network => write!(f, "network"),
     }
   }
 }
@@ -170,6 +172,7 @@ impl fmt::Debug for ConfigType {
       ConfigType::Health => write!(f, "health"),
       ConfigType::Observer => write!(f, "observer"),
       ConfigType::Kafka => write!(f, "kafka"),
+      ConfigType::Network => write!(f, "network"),
     }
   }
 }
@@ -182,6 +185,7 @@ impl Clone for ConfigType {
       ConfigType::Health => ConfigType::Health,
       ConfigType::Observer => ConfigType::Observer,
       ConfigType::Kafka => ConfigType::Kafka,
+      ConfigType::Network => ConfigType::Network,
     }
   }
 }
@@ -275,7 +279,7 @@ impl ChainConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
-struct HealthConfig {}
+pub struct HealthConfig {}
 
 impl HealthConfig {
   pub fn new() -> Self {
@@ -285,7 +289,7 @@ impl HealthConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
-struct ObserverConfig {
+pub struct ObserverConfig {
   host: String,
   port: String,
   poll_interval: u16,
@@ -333,6 +337,19 @@ impl KafkaConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
+pub struct NetworkConfig {
+  pub party: Vec<config::Value>,
+}
+
+impl NetworkConfig {
+  fn new(config: Config) -> Self {
+    let party = config.get_array("party").unwrap();
+    Self { party }
+  }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[allow(unused)]
 pub struct CoordinatorConfig {
   path: String,
   options: RunMode,
@@ -341,6 +358,7 @@ pub struct CoordinatorConfig {
   observer: ObserverConfig,
   chain: ChainConfig,
   kafka: KafkaConfig,
+  network: NetworkConfig,
 }
 
 impl CoordinatorConfig {
@@ -377,6 +395,9 @@ impl CoordinatorConfig {
         host: s.get_string("kafka.host").unwrap(),
         port: s.get_string("kafka.port").unwrap(),
         offset_reset: s.get_string("kafka.offset_reset").unwrap(),
+      },
+      network: NetworkConfig {
+        party: s.get_array("network.party").unwrap(),
       },
     };
 
@@ -426,6 +447,10 @@ impl CoordinatorConfig {
   // get the kafka config
   pub fn get_kafka(&self) -> KafkaConfig {
     self.kafka.clone()
+  }
+   // get the network config
+   pub fn get_network(&self) -> NetworkConfig {
+    self.network.clone()
   }
 }
 

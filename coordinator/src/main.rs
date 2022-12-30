@@ -8,6 +8,9 @@ use clap::{App, Arg};
 use crate::core::CoordinatorConfig;
 use crate::core::CoreProcess;
 use crate::signature::SignatureProcess;
+use log::{error, info};
+mod network;
+use crate::network::NetworkProcess;
 
 #[tokio::main]
 async fn main() {
@@ -62,7 +65,14 @@ async fn main() {
   let name_arg = args.value_of("name").unwrap().to_owned().to_lowercase();
 
   // print identity arg
-  println!("Coordinator Identity: {}", name_arg);
+  info!("Coordinator Identity: {}", name_arg);
+
+  let network_config = config.clone().get_network();
+  let network_name_arg = name_arg.to_string().to_owned();
+  tokio::spawn(async move {
+    let network_process = NetworkProcess::new(network_name_arg.to_string(), network_config.party);
+    network_process.run().await;
+  });
 
   // Start Signature Process
   let sig_config = config.clone();
