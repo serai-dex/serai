@@ -1,9 +1,11 @@
-use core::{hash::Hash, fmt::Debug};
+use core::fmt::Debug;
 use std::{
   ops::Deref,
   io::{self, Read, Write},
   collections::HashMap,
 };
+
+use thiserror::Error;
 
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
@@ -18,6 +20,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use ciphersuite::Ciphersuite;
 
+use schnorr::SchnorrSignature;
 use dleq::DLEqProof;
 
 use crate::ThresholdParams;
@@ -61,24 +64,38 @@ impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
   }
 }
 
-pub trait Encryptable: Clone + AsMut<[u8]> + Zeroize + ReadWrite {}
-impl<E: Clone + AsMut<[u8]> + Zeroize + ReadWrite> Encryptable for E {}
+pub trait Encryptable: Clone + AsRef<[u8]> + AsMut<[u8]> + Zeroize + ReadWrite {}
+impl<E: Clone + AsRef<[u8]> + AsMut<[u8]> + Zeroize + ReadWrite> Encryptable for E {}
 
 /// An encrypted message, with a per-message encryption key enabling revealing specific messages
 /// without side effects.
 #[derive(Clone, Zeroize)]
 pub struct EncryptedMessage<C: Ciphersuite, E: Encryptable> {
   key: C::G,
+  // Also include a proof-of-possession for the key.
+  // If this proof-of-possession wasn't here, Eve could observe Alice encrypt to Bob with key X,
+  // then send Bob a message also claiming to use X.
+  // While Eve's message would fail to meaningfully decrypt, Bob would then use this to create a
+  // blame argument against Eve. When they do, they'd reveal bX, revealing Alice's message to Bob.
+  // This is a massive side effect which could break some protocols, in the worst case.
+  // While Eve can still reuse their own keys, causing Bob to leak all messages by revealing for
+  // any single one, that's effectively Eve revealing themselves, and not considered relevant.
+  pop: SchnorrSignature<C>,
   msg: Zeroizing<E>,
 }
 
 impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
   pub fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
-    Ok(Self { key: C::read_G(reader)?, msg: Zeroizing::new(E::read(reader, params)?) })
+    Ok(Self {
+      key: C::read_G(reader)?,
+      pop: SchnorrSignature::<C>::read(reader)?,
+      msg: Zeroizing::new(E::read(reader, params)?),
+    })
   }
 
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.key.to_bytes().as_ref())?;
+    self.pop.write(writer)?;
     self.msg.write(writer)
   }
 
@@ -117,20 +134,46 @@ fn ecdh<C: Ciphersuite>(private: &Zeroizing<C::F>, public: C::G) -> Zeroizing<C:
   Zeroizing::new(public * private.deref())
 }
 
+// This doesn't need to take the msg. It just doesn't hurt as an extra layer.
+// This still doesn't mean the DKG offers an authenticated channel. The per-message keys have no
+// root of trust other than their existence in the assumed-to-exist external authenticated channel.
+fn pop_challenge<C: Ciphersuite>(nonce: C::G, key: C::G, sender: u16, msg: &[u8]) -> C::F {
+  let mut transcript = RecommendedTranscript::new(b"DKG Encryption Key Proof of Possession v0.2");
+  transcript.append_message(b"nonce", nonce.to_bytes());
+  transcript.append_message(b"key", key.to_bytes());
+  // This is sufficient to prevent the attack this is meant to stop
+  transcript.append_message(b"sender", sender.to_le_bytes());
+  // This, as written above, doesn't hurt
+  transcript.append_message(b"message", msg);
+  // While this is a PoK and a PoP, it's called a PoP here since the important part is its owner
+  // Elsewhere, where we use the term PoK, the important part is that it isn't some inverse, with
+  // an unknown to anyone discrete log, breaking the system
+  C::hash_to_F(b"DKG-encryption-proof_of_possession", &transcript.challenge(b"schnorr"))
+}
+
 fn encryption_key_transcript() -> RecommendedTranscript {
-  RecommendedTranscript::new(b"DKG Encryption Key Proof v0.2")
+  RecommendedTranscript::new(b"DKG Encryption Key Correctness Proof v0.2")
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+pub(crate) enum DecryptionError {
+  #[error("accused provided an invalid signature")]
+  InvalidSignature,
+  #[error("accuser provided an invalid decryption key")]
+  InvalidProof,
 }
 
 // A simple box for managing encryption.
 #[derive(Clone)]
-pub(crate) struct Encryption<Id: Eq + Hash, C: Ciphersuite> {
+pub(crate) struct Encryption<C: Ciphersuite> {
   dst: &'static [u8],
+  i: u16,
   enc_key: Zeroizing<C::F>,
   enc_pub_key: C::G,
-  enc_keys: HashMap<Id, C::G>,
+  enc_keys: HashMap<u16, C::G>,
 }
 
-impl<Id: Eq + Hash, C: Ciphersuite> Zeroize for Encryption<Id, C> {
+impl<C: Ciphersuite> Zeroize for Encryption<C> {
   fn zeroize(&mut self) {
     self.enc_key.zeroize();
     self.enc_pub_key.zeroize();
@@ -140,10 +183,16 @@ impl<Id: Eq + Hash, C: Ciphersuite> Zeroize for Encryption<Id, C> {
   }
 }
 
-impl<Id: Eq + Hash, C: Ciphersuite> Encryption<Id, C> {
-  pub(crate) fn new<R: RngCore + CryptoRng>(dst: &'static [u8], rng: &mut R) -> Self {
+impl<C: Ciphersuite> Encryption<C> {
+  pub(crate) fn new<R: RngCore + CryptoRng>(dst: &'static [u8], i: u16, rng: &mut R) -> Self {
     let enc_key = Zeroizing::new(C::random_nonzero_F(rng));
-    Self { dst, enc_pub_key: C::generator() * enc_key.deref(), enc_key, enc_keys: HashMap::new() }
+    Self {
+      dst,
+      i,
+      enc_pub_key: C::generator() * enc_key.deref(),
+      enc_key,
+      enc_keys: HashMap::new(),
+    }
   }
 
   pub(crate) fn registration<M: Message>(&self, msg: M) -> EncryptionKeyMessage<C, M> {
@@ -152,7 +201,7 @@ impl<Id: Eq + Hash, C: Ciphersuite> Encryption<Id, C> {
 
   pub(crate) fn register<M: Message>(
     &mut self,
-    participant: Id,
+    participant: u16,
     msg: EncryptionKeyMessage<C, M>,
   ) -> M {
     if self.enc_keys.contains_key(&participant) {
@@ -197,7 +246,7 @@ impl<Id: Eq + Hash, C: Ciphersuite> Encryption<Id, C> {
   pub(crate) fn encrypt<R: RngCore + CryptoRng, E: Encryptable>(
     &self,
     rng: &mut R,
-    participant: Id,
+    participant: u16,
     mut msg: Zeroizing<E>,
   ) -> EncryptedMessage<C, E> {
     /*
@@ -213,17 +262,37 @@ impl<Id: Eq + Hash, C: Ciphersuite> Encryption<Id, C> {
     self
       .cipher(&ecdh::<C>(&key, self.enc_keys[&participant]))
       .apply_keystream(msg.as_mut().as_mut());
-    EncryptedMessage { key: C::generator() * key.deref(), msg }
+
+    let pub_key = C::generator() * key.deref();
+    let nonce = Zeroizing::new(C::random_nonzero_F(rng));
+    let pub_nonce = C::generator() * nonce.deref();
+    EncryptedMessage {
+      key: pub_key,
+      pop: SchnorrSignature::sign(
+        &key,
+        nonce,
+        pop_challenge::<C>(pub_nonce, pub_key, self.i, msg.deref().as_ref()),
+      ),
+      msg,
+    }
   }
 
   pub(crate) fn decrypt<R: RngCore + CryptoRng, E: Encryptable>(
     &self,
     rng: &mut R,
+    from: u16,
     mut msg: EncryptedMessage<C, E>,
-  ) -> (Zeroizing<E>, EncryptionKeyProof<C>) {
+  ) -> Option<(Zeroizing<E>, EncryptionKeyProof<C>)> {
+    if !msg
+      .pop
+      .verify(msg.key, pop_challenge::<C>(msg.pop.R, msg.key, from, msg.msg.deref().as_ref()))
+    {
+      return None;
+    }
+
     let key = ecdh::<C>(&self.enc_key, msg.key);
     self.cipher(&key).apply_keystream(msg.msg.as_mut().as_mut());
-    (
+    Some((
       msg.msg,
       EncryptionKeyProof {
         key,
@@ -234,30 +303,41 @@ impl<Id: Eq + Hash, C: Ciphersuite> Encryption<Id, C> {
           &self.enc_key,
         ),
       },
-    )
+    ))
   }
 
   // Given a message, and the intended decryptor, and a proof for its key, decrypt the message.
   // Returns None if the key was wrong.
   pub(crate) fn decrypt_with_proof<E: Encryptable>(
     &self,
-    decryptor: Id,
+    from: u16,
+    decryptor: u16,
     mut msg: EncryptedMessage<C, E>,
-    proof: EncryptionKeyProof<C>,
-  ) -> Option<Zeroizing<E>> {
-    // Verify this is the decryption key for this message
-    if proof
-      .dleq
-      .verify(
-        &mut encryption_key_transcript(),
-        &[C::generator(), msg.key],
-        &[self.enc_keys[&decryptor], *proof.key],
-      )
-      .is_err()
+    // There's no encryption key proof if the accusation is of an invalid signature
+    proof: Option<EncryptionKeyProof<C>>,
+  ) -> Result<Zeroizing<E>, DecryptionError> {
+    if !msg
+      .pop
+      .verify(msg.key, pop_challenge::<C>(msg.pop.R, msg.key, from, msg.msg.deref().as_ref()))
     {
-      return None;
+      Err(DecryptionError::InvalidSignature)?;
     }
-    self.cipher(&proof.key).apply_keystream(msg.msg.as_mut().as_mut());
-    Some(msg.msg)
+
+    if let Some(proof) = proof {
+      // Verify this is the decryption key for this message
+      proof
+        .dleq
+        .verify(
+          &mut encryption_key_transcript(),
+          &[C::generator(), msg.key],
+          &[self.enc_keys[&decryptor], *proof.key],
+        )
+        .map_err(|_| DecryptionError::InvalidProof)?;
+
+      self.cipher(&proof.key).apply_keystream(msg.msg.as_mut().as_mut());
+      Ok(msg.msg)
+    } else {
+      Err(DecryptionError::InvalidProof)
+    }
   }
 }

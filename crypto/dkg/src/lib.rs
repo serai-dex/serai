@@ -58,7 +58,7 @@ pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
   #[error("invalid proof of knowledge (participant {0})")]
   InvalidProofOfKnowledge(u16),
   #[error("invalid share (participant {participant}, blame {blame})")]
-  InvalidShare { participant: u16, blame: B },
+  InvalidShare { participant: u16, blame: Option<B> },
 
   #[error("internal error ({0})")]
   InternalError(&'static str),

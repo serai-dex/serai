@@ -25,7 +25,10 @@ use schnorr::SchnorrSignature;
 
 use crate::{
   DkgError, ThresholdParams, ThresholdCore, validate_map,
-  encryption::{ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, EncryptionKeyProof},
+  encryption::{
+    ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, EncryptionKeyProof,
+    DecryptionError,
+  },
 };
 
 type FrostError<C> = DkgError<EncryptionKeyProof<C>>;
@@ -38,7 +41,7 @@ fn challenge<C: Ciphersuite>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F
   transcript.append_message(b"participant", l.to_le_bytes());
   transcript.append_message(b"nonce", R);
   transcript.append_message(b"commitments", Am);
-  C::hash_to_F(b"PoK 0", &transcript.challenge(b"challenge"))
+  C::hash_to_F(b"DKG-FROST-proof_of_knowledge-0", &transcript.challenge(b"schnorr"))
 }
 
 /// The commitments message, intended to be broadcast to all other parties.
@@ -129,7 +132,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     );
 
     // Additionally create an encryption mechanism to protect the secret shares
-    let encryption = Encryption::new(b"FROST", rng);
+    let encryption = Encryption::new(b"FROST", self.params.i, rng);
 
     // Step 4: Broadcast
     let msg =
@@ -168,6 +171,11 @@ fn polynomial<F: PrimeField + Zeroize>(coefficients: &[Zeroizing<F>], l: u16) ->
 // encrypted is within Zeroizing. Accordingly, internally having Zeroizing would be redundant.
 #[derive(Clone, PartialEq, Eq)]
 pub struct SecretShare<F: PrimeField>(F::Repr);
+impl<F: PrimeField> AsRef<[u8]> for SecretShare<F> {
+  fn as_ref(&self) -> &[u8] {
+    self.0.as_ref()
+  }
+}
 impl<F: PrimeField> AsMut<[u8]> for SecretShare<F> {
   fn as_mut(&mut self) -> &mut [u8] {
     self.0.as_mut()
@@ -213,7 +221,7 @@ pub struct SecretShareMachine<C: Ciphersuite> {
   context: String,
   coefficients: Vec<Zeroizing<C::F>>,
   our_commitments: Vec<C::G>,
-  encryption: Encryption<u16, C>,
+  encryption: Encryption<C>,
 }
 
 impl<C: Ciphersuite> SecretShareMachine<C> {
@@ -300,7 +308,7 @@ pub struct KeyMachine<C: Ciphersuite> {
   params: ThresholdParams,
   secret: Zeroizing<C::F>,
   commitments: HashMap<u16, Vec<C::G>>,
-  encryption: Encryption<u16, C>,
+  encryption: Encryption<C>,
 }
 impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
   fn zeroize(&mut self) {
@@ -360,8 +368,11 @@ impl<C: Ciphersuite> KeyMachine<C> {
     let mut batch = BatchVerifier::new(shares.len());
     let mut blames = HashMap::new();
     for (l, share_bytes) in shares.drain() {
-      let (mut share_bytes, blame) = self.encryption.decrypt(rng, share_bytes);
-      blames.insert(l, blame);
+      let (mut share_bytes, blame) = match self.encryption.decrypt(rng, l, share_bytes) {
+        Some(res) => res,
+        None => Err(FrostError::InvalidShare { participant: l, blame: None })?,
+      };
+      blames.insert(l, Some(blame));
       let share =
         Zeroizing::new(Option::<C::F>::from(C::F::from_repr(share_bytes.0)).ok_or_else(|| {
           FrostError::InvalidShare { participant: l, blame: blames.remove(&l).unwrap() }
@@ -418,7 +429,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
 
 pub struct BlameMachine<C: Ciphersuite> {
   commitments: HashMap<u16, Vec<C::G>>,
-  encryption: Encryption<u16, C>,
+  encryption: Encryption<C>,
   result: ThresholdCore<C>,
 }
 
@@ -451,26 +462,28 @@ impl<C: Ciphersuite> BlameMachine<C> {
     sender: u16,
     recipient: u16,
     msg: EncryptedMessage<C, SecretShare<C::F>>,
-    proof: EncryptionKeyProof<C>,
+    proof: Option<EncryptionKeyProof<C>>,
   ) -> u16 {
-    let share_bytes = self.encryption.decrypt_with_proof(recipient, msg, proof);
-    // Decryption will fail if the provided ECDH key wasn't correct for the given message
-    if share_bytes.is_none() {
-      return recipient;
-    }
+    let share_bytes = match self.encryption.decrypt_with_proof(sender, recipient, msg, proof) {
+      Ok(share_bytes) => share_bytes,
+      // If there's an invalid signature, the sender did not send a properly formed message
+      Err(DecryptionError::InvalidSignature) => return sender,
+      // Decryption will fail if the provided ECDH key wasn't correct for the given message
+      Err(DecryptionError::InvalidProof) => return recipient,
+    };
 
-    let share = Option::<C::F>::from(C::F::from_repr(share_bytes.unwrap().0));
-    // If this isn't a valid scalar, the sender is faulty
-    if share.is_none() {
-      return sender;
-    }
+    let share = match Option::<C::F>::from(C::F::from_repr(share_bytes.0)) {
+      Some(share) => share,
+      // If this isn't a valid scalar, the sender is faulty
+      None => return sender,
+    };
 
     // If this isn't a valid share, the sender is faulty
     if !bool::from(
       multiexp_vartime(&share_verification_statements::<C>(
         recipient,
         &self.commitments[&sender],
-        Zeroizing::new(share.unwrap()),
+        Zeroizing::new(share),
       ))
       .is_identity(),
     ) {
@@ -498,7 +511,7 @@ impl<C: Ciphersuite> BlameMachine<C> {
     sender: u16,
     recipient: u16,
     msg: EncryptedMessage<C, SecretShare<C::F>>,
-    proof: EncryptionKeyProof<C>,
+    proof: Option<EncryptionKeyProof<C>>,
   ) -> (AdditionalBlameMachine<C>, u16) {
     let faulty = self.blame_internal(sender, recipient, msg, proof);
     (AdditionalBlameMachine(self), faulty)
@@ -523,7 +536,7 @@ impl<C: Ciphersuite> AdditionalBlameMachine<C> {
     sender: u16,
     recipient: u16,
     msg: EncryptedMessage<C, SecretShare<C::F>>,
-    proof: EncryptionKeyProof<C>,
+    proof: Option<EncryptionKeyProof<C>>,
   ) -> u16 {
     self.0.blame_internal(sender, recipient, msg, proof)
   }

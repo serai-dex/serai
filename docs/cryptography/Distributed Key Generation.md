@@ -24,3 +24,12 @@ without revealing any other message's decryption keys. This is utilized when a
 participant misbehaves. A participant who receives an invalid encrypted message
 publishes its key, able to without concern for side effects, With the key
 published, all participants can decrypt the message in order to decide blame.
+
+While key reuse by a participant is considered as them revealing the messages
+themselves, and therefore out of scope, there is an attack where a malicious
+adversary claims another participant's encryption key. They'll fail to encrypt
+their message, and the recipient will issue a blame statement. This blame
+statement, intended to reveal the malicious adversary, also reveals the message
+by the participant whose keys were co-opted. To resolve this, a
+proof-of-possession is also included with encrypted messages, ensuring only
+those actually with per-message keys can claim to use them.
