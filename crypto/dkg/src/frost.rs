@@ -1,6 +1,9 @@
-use std::{
+use core::{
   marker::PhantomData,
   ops::Deref,
+  fmt::{Debug, Formatter},
+};
+use std::{
   io::{self, Read, Write},
   collections::HashMap,
 };
@@ -159,11 +162,20 @@ fn polynomial<F: PrimeField + Zeroize>(coefficients: &[Zeroizing<F>], l: u16) ->
 /// The secret share message, to be sent to the party it's intended for over an authenticated
 /// channel.
 /// If any participant sends multiple secret shares to another participant, they are faulty.
-#[derive(Clone, PartialEq, Eq, Debug)]
+// This should presumably be written as SecretShare(Zeroizing<F::Repr>).
+// It's unfortunately not possible as F::Repr doesn't have Zeroize as a bound.
+// The encryption system also explicitly uses Zeroizing<M> so it can ensure anything being
+// encrypted is within Zeroizing. Accordingly, internally having Zeroizing would be redundant.
+#[derive(Clone, PartialEq, Eq)]
 pub struct SecretShare<F: PrimeField>(F::Repr);
 impl<F: PrimeField> AsMut<[u8]> for SecretShare<F> {
   fn as_mut(&mut self) -> &mut [u8] {
     self.0.as_mut()
+  }
+}
+impl<F: PrimeField> Debug for SecretShare<F> {
+  fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt.debug_struct("SecretShare").finish_non_exhaustive()
   }
 }
 impl<F: PrimeField> Zeroize for SecretShare<F> {
@@ -171,6 +183,10 @@ impl<F: PrimeField> Zeroize for SecretShare<F> {
     self.0.as_mut().zeroize()
   }
 }
+// Still manually implement ZeroizeOnDrop to ensure these don't stick around.
+// We could replace Zeroizing<M> with a bound M: ZeroizeOnDrop.
+// Doing so would potentially fail to highlight thr expected behavior with these and remove a layer
+// of depth.
 impl<F: PrimeField> Drop for SecretShare<F> {
   fn drop(&mut self) {
     self.zeroize();
@@ -400,12 +416,20 @@ impl<C: Ciphersuite> KeyMachine<C> {
   }
 }
 
-#[derive(Zeroize)]
 pub struct BlameMachine<C: Ciphersuite> {
-  #[zeroize(skip)]
   commitments: HashMap<u16, Vec<C::G>>,
   encryption: Encryption<u16, C>,
   result: ThresholdCore<C>,
+}
+
+impl<C: Ciphersuite> Zeroize for BlameMachine<C> {
+  fn zeroize(&mut self) {
+    for (_, commitments) in self.commitments.iter_mut() {
+      commitments.zeroize();
+    }
+    self.encryption.zeroize();
+    self.result.zeroize();
+  }
 }
 
 impl<C: Ciphersuite> BlameMachine<C> {
