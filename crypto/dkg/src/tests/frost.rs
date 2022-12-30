@@ -69,7 +69,7 @@ pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
         }
         our_secret_shares.insert(*l, shares[&i].clone());
       }
-      let these_keys = machine.complete(rng, our_secret_shares).unwrap();
+      let these_keys = machine.calculate_share(rng, our_secret_shares).unwrap().complete();
 
       // Verify the verification_shares are agreed upon
       if verification_shares.is_none() {

@@ -13,7 +13,7 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use group::{
   ff::{Field, PrimeField},
-  GroupEncoding,
+  Group, GroupEncoding,
 };
 use ciphersuite::Ciphersuite;
 use multiexp::{multiexp_vartime, BatchVerifier};
@@ -22,8 +22,10 @@ use schnorr::SchnorrSignature;
 
 use crate::{
   DkgError, ThresholdParams, ThresholdCore, validate_map,
-  encryption::{ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption},
+  encryption::{ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, EncryptionKeyProof},
 };
+
+type FrostError<C> = DkgError<EncryptionKeyProof<C>>;
 
 #[allow(non_snake_case)]
 fn challenge<C: Ciphersuite>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
@@ -36,7 +38,12 @@ fn challenge<C: Ciphersuite>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F
   C::hash_to_F(b"PoK 0", &transcript.challenge(b"challenge"))
 }
 
-/// Commitments message to be broadcast to all other parties.
+/// The commitments message, intended to be broadcast to all other parties.
+/// Every participant should only provide one set of commitments to all parties.
+/// If any participant sends multiple sets of commitments, they are faulty and should be presumed
+/// malicious.
+/// As this library does not handle networking, it is also unable to detect if any participant is
+/// so faulty. That responsibility lies with the caller.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Commitments<C: Ciphersuite> {
   commitments: Vec<C::G>,
@@ -149,7 +156,9 @@ fn polynomial<F: PrimeField + Zeroize>(coefficients: &[Zeroizing<F>], l: u16) ->
   share
 }
 
-/// Secret share to be sent to the party it's intended for over an authenticated channel.
+/// The secret share message, to be sent to the party it's intended for over an authenticated
+/// channel.
+/// If any participant sends multiple secret shares to another participant, they are faulty.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SecretShare<F: PrimeField>(F::Repr);
 impl<F: PrimeField> AsMut<[u8]> for SecretShare<F> {
@@ -198,7 +207,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
     &mut self,
     rng: &mut R,
     mut commitments: HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>>,
-  ) -> Result<HashMap<u16, Vec<C::G>>, DkgError> {
+  ) -> Result<HashMap<u16, Vec<C::G>>, FrostError<C>> {
     validate_map(&commitments, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
 
     let mut batch = BatchVerifier::<u16, C::G>::new(commitments.len());
@@ -221,21 +230,23 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
       })
       .collect::<HashMap<_, _>>();
 
-    batch.verify_with_vartime_blame().map_err(DkgError::InvalidProofOfKnowledge)?;
+    batch.verify_with_vartime_blame().map_err(FrostError::InvalidProofOfKnowledge)?;
 
     commitments.insert(self.params.i, self.our_commitments.drain(..).collect());
     Ok(commitments)
   }
 
   /// Continue generating a key.
-  /// Takes in everyone else's commitments. Returns a HashMap of secret shares to be sent over
-  /// authenticated channels to their relevant counterparties.
+  /// Takes in everyone else's commitments. Returns a HashMap of encrypted secret shares to be sent
+  /// over authenticated channels to their relevant counterparties.
+  /// If any participant sends multiple secret shares to another participant, they are faulty.
   #[allow(clippy::type_complexity)]
   pub fn generate_secret_shares<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
     commitments: HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>>,
-  ) -> Result<(KeyMachine<C>, HashMap<u16, EncryptedMessage<SecretShare<C::F>>>), DkgError> {
+  ) -> Result<(KeyMachine<C>, HashMap<u16, EncryptedMessage<C, SecretShare<C::F>>>), FrostError<C>>
+  {
     let commitments = self.verify_r1(&mut *rng, commitments)?;
 
     // Step 1: Generate secret shares for all other parties
@@ -250,7 +261,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
       let mut share = polynomial(&self.coefficients, l);
       let share_bytes = Zeroizing::new(SecretShare::<C::F>(share.to_repr()));
       share.zeroize();
-      res.insert(l, self.encryption.encrypt(l, share_bytes));
+      res.insert(l, self.encryption.encrypt(rng, l, share_bytes));
     }
 
     // Calculate our own share
@@ -264,7 +275,11 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   }
 }
 
-/// Final step of the key generation protocol.
+/// Advancement of the the secret share state machine protocol.
+/// This machine will 'complete' the protocol, by a local perspective, and can be the last
+/// interactive component. In order to be secure, the parties must confirm having successfully
+/// completed the protocol (an effort out of scope to this library), yet this is modelled by one
+/// more state transition.
 pub struct KeyMachine<C: Ciphersuite> {
   params: ThresholdParams,
   secret: Zeroizing<C::F>,
@@ -281,59 +296,73 @@ impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
     self.encryption.zeroize();
   }
 }
-impl<C: Ciphersuite> Drop for KeyMachine<C> {
-  fn drop(&mut self) {
-    self.zeroize()
-  }
+
+// Calculate the exponent for a given participant and apply it to a series of commitments
+// Initially used with the actual commitments to verify the secret share, later used with
+// stripes to generate the verification shares
+fn exponential<C: Ciphersuite>(i: u16, values: &[C::G]) -> Vec<(C::F, C::G)> {
+  let i = C::F::from(i.into());
+  let mut res = Vec::with_capacity(values.len());
+  (0 .. values.len()).into_iter().fold(C::F::one(), |exp, l| {
+    res.push((exp, values[l]));
+    exp * i
+  });
+  res
 }
-impl<C: Ciphersuite> ZeroizeOnDrop for KeyMachine<C> {}
+
+fn share_verification_statements<C: Ciphersuite>(
+  target: u16,
+  commitments: &[C::G],
+  mut share: Zeroizing<C::F>,
+) -> Vec<(C::F, C::G)> {
+  // This can be insecurely linearized from n * t to just n using the below sums for a given
+  // stripe. Doing so uses naive addition which is subject to malleability. The only way to
+  // ensure that malleability isn't present is to use this n * t algorithm, which runs
+  // per sender and not as an aggregate of all senders, which also enables blame
+  let mut values = exponential::<C>(target, commitments);
+
+  // Perform the share multiplication outside of the multiexp to minimize stack copying
+  // While the multiexp BatchVerifier does zeroize its flattened multiexp, and itself, it still
+  // converts whatever we give to an iterator and then builds a Vec internally, welcoming copies
+  let neg_share_pub = C::generator() * -*share;
+  share.zeroize();
+  values.push((C::F::one(), neg_share_pub));
+
+  values
+}
 
 impl<C: Ciphersuite> KeyMachine<C> {
-  /// Complete key generation.
-  /// Takes in everyone elses' shares submitted to us. Returns a ThresholdCore object representing
-  /// the generated keys. Successful protocol completion MUST be confirmed by all parties before
-  /// these keys may be safely used.
-  pub fn complete<R: RngCore + CryptoRng>(
+  /// Calculate our share given the shares sent to us.
+  /// Returns a BlameMachine usable to determine if faults in the protocol occurred.
+  pub fn calculate_share<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    mut shares: HashMap<u16, EncryptedMessage<SecretShare<C::F>>>,
-  ) -> Result<ThresholdCore<C>, DkgError> {
+    mut shares: HashMap<u16, EncryptedMessage<C, SecretShare<C::F>>>,
+  ) -> Result<BlameMachine<C>, FrostError<C>> {
     validate_map(&shares, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
 
-    // Calculate the exponent for a given participant and apply it to a series of commitments
-    // Initially used with the actual commitments to verify the secret share, later used with
-    // stripes to generate the verification shares
-    let exponential = |i: u16, values: &[_]| {
-      let i = C::F::from(i.into());
-      let mut res = Vec::with_capacity(self.params.t().into());
-      (0 .. usize::from(self.params.t())).into_iter().fold(C::F::one(), |exp, l| {
-        res.push((exp, values[l]));
-        exp * i
-      });
-      res
-    };
-
     let mut batch = BatchVerifier::new(shares.len());
+    let mut blames = HashMap::new();
     for (l, share_bytes) in shares.drain() {
-      let mut share_bytes = self.encryption.decrypt(l, share_bytes);
-      let mut share = Zeroizing::new(
-        Option::<C::F>::from(C::F::from_repr(share_bytes.0)).ok_or(DkgError::InvalidShare(l))?,
-      );
+      let (mut share_bytes, blame) = self.encryption.decrypt(rng, share_bytes);
+      blames.insert(l, blame);
+      let share =
+        Zeroizing::new(Option::<C::F>::from(C::F::from_repr(share_bytes.0)).ok_or_else(|| {
+          FrostError::InvalidShare { participant: l, blame: blames.remove(&l).unwrap() }
+        })?);
       share_bytes.zeroize();
       *self.secret += share.deref();
 
-      // This can be insecurely linearized from n * t to just n using the below sums for a given
-      // stripe. Doing so uses naive addition which is subject to malleability. The only way to
-      // ensure that malleability isn't present is to use this n * t algorithm, which runs
-      // per sender and not as an aggregate of all senders, which also enables blame
-      let mut values = exponential(self.params.i, &self.commitments[&l]);
-      // multiexp will Zeroize this when it's done with it
-      values.push((-*share.deref(), C::generator()));
-      share.zeroize();
-
-      batch.queue(rng, l, values);
+      batch.queue(
+        rng,
+        l,
+        share_verification_statements::<C>(self.params.i(), &self.commitments[&l], share),
+      );
     }
-    batch.verify_with_vartime_blame().map_err(DkgError::InvalidShare)?;
+    batch.verify_with_vartime_blame().map_err(|l| FrostError::InvalidShare {
+      participant: l,
+      blame: blames.remove(&l).unwrap(),
+    })?;
 
     // Stripe commitments per t and sum them in advance. Calculating verification shares relies on
     // these sums so preprocessing them is a massive speedup
@@ -352,16 +381,126 @@ impl<C: Ciphersuite> KeyMachine<C> {
         if i == self.params.i() {
           C::generator() * self.secret.deref()
         } else {
-          multiexp_vartime(&exponential(i, &stripes))
+          multiexp_vartime(&exponential::<C>(i, &stripes))
         },
       );
     }
 
-    Ok(ThresholdCore {
-      params: self.params,
-      secret_share: self.secret.clone(),
-      group_key: stripes[0],
-      verification_shares,
+    let KeyMachine { commitments, encryption, params, secret } = self;
+    Ok(BlameMachine {
+      commitments,
+      encryption,
+      result: ThresholdCore {
+        params,
+        secret_share: secret,
+        group_key: stripes[0],
+        verification_shares,
+      },
     })
+  }
+}
+
+#[derive(Zeroize)]
+pub struct BlameMachine<C: Ciphersuite> {
+  #[zeroize(skip)]
+  commitments: HashMap<u16, Vec<C::G>>,
+  encryption: Encryption<u16, C>,
+  result: ThresholdCore<C>,
+}
+
+impl<C: Ciphersuite> BlameMachine<C> {
+  /// Mark the protocol as having been successfully completed, returning the generated keys.
+  /// This should only be called after having confirmed, with all participants, successful
+  /// completion.
+  ///
+  /// Confirming successful completion is not necessarily as simple as everyone reporting their
+  /// completion. Everyone must also receive everyone's report of completion, entering into the
+  /// territory of consensus protocols. This library does not handle that nor does it provide any
+  /// tooling to do so. This function is solely intended to force users to acknowledge they're
+  /// completing the protocol, not processing any blame.
+  pub fn complete(self) -> ThresholdCore<C> {
+    self.result
+  }
+
+  fn blame_internal(
+    &self,
+    sender: u16,
+    recipient: u16,
+    msg: EncryptedMessage<C, SecretShare<C::F>>,
+    proof: EncryptionKeyProof<C>,
+  ) -> u16 {
+    let share_bytes = self.encryption.decrypt_with_proof(recipient, msg, proof);
+    // Decryption will fail if the provided ECDH key wasn't correct for the given message
+    if share_bytes.is_none() {
+      return recipient;
+    }
+
+    let share = Option::<C::F>::from(C::F::from_repr(share_bytes.unwrap().0));
+    // If this isn't a valid scalar, the sender is faulty
+    if share.is_none() {
+      return sender;
+    }
+
+    // If this isn't a valid share, the sender is faulty
+    if !bool::from(
+      multiexp_vartime(&share_verification_statements::<C>(
+        recipient,
+        &self.commitments[&sender],
+        Zeroizing::new(share.unwrap()),
+      ))
+      .is_identity(),
+    ) {
+      return sender;
+    }
+
+    // The share was canonical and valid
+    recipient
+  }
+
+  /// Given an accusation of fault, determine the faulty party (either the sender, who sent an
+  /// invalid secret share, or the receiver, who claimed a valid secret share was invalid). No
+  /// matter which, prevent completion of the machine, forcing an abort of the protocol.
+  ///
+  /// The message should be a copy of the encrypted secret share from the accused sender to the
+  /// accusing recipient. This message must have been authenticated as actually having come from
+  /// the sender in question.
+  ///
+  /// In order to enable detecting multiple faults, an `AdditionalBlameMachine` is returned, which
+  /// can be used to determine further blame. These machines will process the same blame statements
+  /// multiple times, always identifying blame. It is the caller's job to ensure they're unique in
+  /// order to prevent multiple instances of blame over a single incident.
+  pub fn blame(
+    self,
+    sender: u16,
+    recipient: u16,
+    msg: EncryptedMessage<C, SecretShare<C::F>>,
+    proof: EncryptionKeyProof<C>,
+  ) -> (AdditionalBlameMachine<C>, u16) {
+    let faulty = self.blame_internal(sender, recipient, msg, proof);
+    (AdditionalBlameMachine(self), faulty)
+  }
+}
+
+#[derive(Zeroize)]
+pub struct AdditionalBlameMachine<C: Ciphersuite>(BlameMachine<C>);
+impl<C: Ciphersuite> AdditionalBlameMachine<C> {
+  /// Given an accusation of fault, determine the faulty party (either the sender, who sent an
+  /// invalid secret share, or the receiver, who claimed a valid secret share was invalid).
+  ///
+  /// The message should be a copy of the encrypted secret share from the accused sender to the
+  /// accusing recipient. This message must have been authenticated as actually having come from
+  /// the sender in question.
+  ///
+  /// This will process the same blame statement multiple times, always identifying blame. It is
+  /// the caller's job to ensure they're unique in order to prevent multiple instances of blame
+  /// over a single incident.
+  pub fn blame(
+    self,
+    sender: u16,
+    recipient: u16,
+    msg: EncryptedMessage<C, SecretShare<C::F>>,
+    proof: EncryptionKeyProof<C>,
+  ) -> u16 {
+    self.0.blame_internal(sender, recipient, msg, proof)
   }
 }

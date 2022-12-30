@@ -34,8 +34,8 @@ pub mod promote;
 pub mod tests;
 
 /// Various errors possible during key generation/signing.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
-pub enum DkgError {
+#[derive(Clone, PartialEq, Eq, Debug, Error)]
+pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
   #[error("a parameter was 0 (required {0}, participants {1})")]
   ZeroParameter(u16, u16),
   #[error("invalid amount of required participants (max {1}, got {0})")]
@@ -54,19 +54,19 @@ pub enum DkgError {
 
   #[error("invalid proof of knowledge (participant {0})")]
   InvalidProofOfKnowledge(u16),
-  #[error("invalid share (participant {0})")]
-  InvalidShare(u16),
+  #[error("invalid share (participant {participant}, blame {blame})")]
+  InvalidShare { participant: u16, blame: B },
 
   #[error("internal error ({0})")]
   InternalError(&'static str),
 }
 
 // Validate a map of values to have the expected included participants
-pub(crate) fn validate_map<T>(
+pub(crate) fn validate_map<T, B: Clone + PartialEq + Eq + Debug>(
   map: &HashMap<u16, T>,
   included: &[u16],
   ours: u16,
-) -> Result<(), DkgError> {
+) -> Result<(), DkgError<B>> {
   if (map.len() + 1) != included.len() {
     Err(DkgError::InvalidParticipantQuantity(included.len(), map.len() + 1))?;
   }
@@ -100,7 +100,7 @@ pub struct ThresholdParams {
 }
 
 impl ThresholdParams {
-  pub fn new(t: u16, n: u16, i: u16) -> Result<ThresholdParams, DkgError> {
+  pub fn new(t: u16, n: u16, i: u16) -> Result<ThresholdParams, DkgError<()>> {
     if (t == 0) || (n == 0) {
       Err(DkgError::ZeroParameter(t, n))?;
     }
@@ -179,8 +179,12 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     secret_share: Zeroizing<C::F>,
     verification_shares: HashMap<u16, C::G>,
   ) -> ThresholdCore<C> {
-    #[cfg(debug_assertions)]
-    validate_map(&verification_shares, &(0 ..= params.n).collect::<Vec<_>>(), 0).unwrap();
+    debug_assert!(validate_map::<_, ()>(
+      &verification_shares,
+      &(0 ..= params.n).collect::<Vec<_>>(),
+      0
+    )
+    .is_ok());
 
     let t = (1 ..= params.t).collect::<Vec<_>>();
     ThresholdCore {
@@ -220,15 +224,15 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     serialized
   }
 
-  pub fn deserialize<R: Read>(reader: &mut R) -> Result<ThresholdCore<C>, DkgError> {
+  pub fn deserialize<R: Read>(reader: &mut R) -> Result<ThresholdCore<C>, DkgError<()>> {
     {
       let missing = DkgError::InternalError("ThresholdCore serialization is missing its curve");
       let different = DkgError::InternalError("deserializing ThresholdCore for another curve");
 
       let mut id_len = [0; 4];
-      reader.read_exact(&mut id_len).map_err(|_| missing)?;
+      reader.read_exact(&mut id_len).map_err(|_| missing.clone())?;
       if u32::try_from(C::ID.len()).unwrap().to_be_bytes() != id_len {
-        Err(different)?;
+        Err(different.clone())?;
       }
 
       let mut id = vec![0; C::ID.len()];
@@ -338,7 +342,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     self.core.serialize()
   }
 
-  pub fn view(&self, included: &[u16]) -> Result<ThresholdView<C>, DkgError> {
+  pub fn view(&self, included: &[u16]) -> Result<ThresholdView<C>, DkgError<()>> {
     if (included.len() < self.params().t.into()) || (usize::from(self.params().n) < included.len())
     {
       Err(DkgError::InvalidSigningSet)?;
