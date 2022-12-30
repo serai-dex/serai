@@ -123,15 +123,7 @@ pub fn taproot_sighash(
   let mut all_witness_utxos = vec![];
 
   let mut cache = sighash::SighashCache::new(&psbt.unsigned_tx);
-  let is_anyone_can_pay = false;//psbt::PsbtSighashType::from(sighash_type).to_u32() & 0x80 != 0;
-  let prevouts = if is_anyone_can_pay {
-      sighash::Prevouts::One(
-          input_index,
-          witness_utxos[input_index]
-              .as_ref()
-              .ok_or(SignerError::MissingWitnessUtxo)?,
-      )
-  } else if witness_utxos.iter().all(Option::is_some) {
+  let prevouts = if witness_utxos.iter().all(Option::is_some) {
       all_witness_utxos.extend(witness_utxos.iter().filter_map(|x| x.as_ref()));
       sighash::Prevouts::All(&all_witness_utxos)
   } else {
