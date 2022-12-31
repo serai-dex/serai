@@ -13,8 +13,8 @@ use crate::{
 #[cfg(feature = "serialize")]
 fn test_aos_serialization<const RING_LEN: usize>(proof: Aos<G0, G1, RING_LEN>, Re_0: Re<G0, G1>) {
   let mut buf = vec![];
-  proof.serialize(&mut buf).unwrap();
-  let deserialized = Aos::deserialize(&mut std::io::Cursor::new(buf), Re_0).unwrap();
+  proof.write(&mut buf).unwrap();
+  let deserialized = Aos::read::<&[u8]>(&mut buf.as_ref(), Re_0).unwrap();
   assert_eq!(proof, deserialized);
 }
 

@@ -60,8 +60,8 @@ macro_rules! verify_and_deserialize {
     #[cfg(feature = "serialize")]
     {
       let mut buf = vec![];
-      $proof.serialize(&mut buf).unwrap();
-      let deserialized = <$type>::deserialize(&mut std::io::Cursor::new(&buf)).unwrap();
+      $proof.write(&mut buf).unwrap();
+      let deserialized = <$type>::read::<&[u8]>(&mut buf.as_ref()).unwrap();
       assert_eq!($proof, deserialized);
     }
   };
@@ -96,7 +96,7 @@ macro_rules! test_dleq {
       #[cfg(feature = "serialize")]
       {
         let mut buf = vec![];
-        proofs[0].serialize(&mut buf).unwrap();
+        proofs[0].write(&mut buf).unwrap();
         println!("{} had a proof size of {} bytes", $str, buf.len());
       }
     }

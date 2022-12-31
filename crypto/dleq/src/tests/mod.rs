@@ -88,9 +88,8 @@ fn test_dleq() {
     #[cfg(feature = "serialize")]
     {
       let mut buf = vec![];
-      proof.serialize(&mut buf).unwrap();
-      let deserialized =
-        DLEqProof::<ProjectivePoint>::deserialize(&mut std::io::Cursor::new(&buf)).unwrap();
+      proof.write(&mut buf).unwrap();
+      let deserialized = DLEqProof::<ProjectivePoint>::read::<&[u8]>(&mut buf.as_ref()).unwrap();
       assert_eq!(proof, deserialized);
     }
   }
