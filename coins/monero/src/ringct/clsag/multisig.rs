@@ -83,7 +83,7 @@ pub struct ClsagAddendum {
 impl WriteAddendum for ClsagAddendum {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.key_image.compress().to_bytes().as_ref())?;
-    self.dleq.serialize(writer)
+    self.dleq.write(writer)
   }
 }
 
@@ -197,7 +197,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       Err(io::Error::new(io::ErrorKind::Other, "non-canonical key image"))?;
     }
 
-    Ok(ClsagAddendum { key_image: xH, dleq: DLEqProof::<dfg::EdwardsPoint>::deserialize(reader)? })
+    Ok(ClsagAddendum { key_image: xH, dleq: DLEqProof::<dfg::EdwardsPoint>::read(reader)? })
   }
 
   fn process_addendum(

@@ -210,7 +210,7 @@ where
   }
 
   #[cfg(feature = "serialize")]
-  pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub(crate) fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     #[allow(non_snake_case)]
     match self.Re_0 {
       Re::R(R0, R1) => {
@@ -230,7 +230,7 @@ where
 
   #[allow(non_snake_case)]
   #[cfg(feature = "serialize")]
-  pub(crate) fn deserialize<R: Read>(r: &mut R, mut Re_0: Re<G0, G1>) -> std::io::Result<Self> {
+  pub(crate) fn read<R: Read>(r: &mut R, mut Re_0: Re<G0, G1>) -> std::io::Result<Self> {
     match Re_0 {
       Re::R(ref mut R0, ref mut R1) => {
         *R0 = read_point(r)?;

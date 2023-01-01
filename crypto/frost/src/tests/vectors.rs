@@ -13,13 +13,13 @@ use dkg::tests::key_gen;
 
 use crate::{
   curve::Curve,
-  ThresholdCore, ThresholdKeys,
+  ThresholdCore, ThresholdKeys, FrostError,
   algorithm::{Schnorr, Hram},
   sign::{
     Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess, SignMachine,
     SignatureMachine, AlgorithmMachine,
   },
-  tests::{clone_without, recover_key, algorithm_machines, sign},
+  tests::{clone_without, recover_key, algorithm_machines, commit_and_shares, sign},
 };
 
 pub struct Vectors {
@@ -125,6 +125,27 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     const MSG: &[u8] = b"Hello, World!";
     let sig = sign(&mut *rng, Schnorr::<C, H>::new(), keys.clone(), machines, MSG);
     assert!(sig.verify(keys[&1].group_key(), H::hram(&sig.R, &keys[&1].group_key(), MSG)));
+  }
+
+  // Test blame on an invalid Schnorr signature share
+  {
+    let keys = key_gen(&mut *rng);
+    let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
+    const MSG: &[u8] = b"Hello, World!";
+
+    let (mut machines, mut shares) = commit_and_shares(&mut *rng, machines, |_, _| {}, MSG);
+    let faulty = *shares.keys().into_iter().next().unwrap();
+    shares.get_mut(&faulty).unwrap().invalidate();
+
+    for (i, machine) in machines.drain() {
+      if i == faulty {
+        continue;
+      }
+      assert_eq!(
+        machine.complete(clone_without(&shares, &i)).err(),
+        Some(FrostError::InvalidShare(faulty))
+      );
+    }
   }
 
   // Test against the vectors

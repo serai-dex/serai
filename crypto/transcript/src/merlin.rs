@@ -7,7 +7,7 @@ pub struct MerlinTranscript(pub merlin::Transcript);
 // Merlin doesn't implement Debug so provide a stub which won't panic
 impl Debug for MerlinTranscript {
   fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-    fmt.debug_struct("MerlinTranscript").finish()
+    fmt.debug_struct("MerlinTranscript").finish_non_exhaustive()
   }
 }
 

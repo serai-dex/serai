@@ -44,13 +44,13 @@ pub struct GeneratorProof<C: Ciphersuite> {
 impl<C: Ciphersuite> GeneratorProof<C> {
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.share.to_bytes().as_ref())?;
-    self.proof.serialize(writer)
+    self.proof.write(writer)
   }
 
   pub fn read<R: Read>(reader: &mut R) -> io::Result<GeneratorProof<C>> {
     Ok(GeneratorProof {
       share: <C as Ciphersuite>::read_G(reader)?,
-      proof: DLEqProof::deserialize(reader)?,
+      proof: DLEqProof::read(reader)?,
     })
   }
 
@@ -98,7 +98,7 @@ where
   pub fn complete(
     self,
     proofs: &HashMap<u16, GeneratorProof<C1>>,
-  ) -> Result<ThresholdKeys<C2>, DkgError> {
+  ) -> Result<ThresholdKeys<C2>, DkgError<()>> {
     let params = self.base.params();
     validate_map(proofs, &(1 ..= params.n).collect::<Vec<_>>(), params.i)?;
 
