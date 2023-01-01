@@ -177,7 +177,7 @@ fn test_remainder() {
   // This will ignore any unused bits, ensuring every remaining one is set
   let keys = mutual_scalar_from_bytes::<Scalar, Scalar>(&[0xFF; 32]);
   let keys = (Zeroizing::new(keys.0), Zeroizing::new(keys.1));
-  assert_eq!(Scalar::one() + keys.0.deref(), Scalar::from(2u64).pow_vartime(&[255]));
+  assert_eq!(Scalar::one() + keys.0.deref(), Scalar::from(2u64).pow_vartime([255]));
   assert_eq!(keys.0, keys.1);
 
   let (proof, res) = ConciseLinearDLEq::prove_without_bias(

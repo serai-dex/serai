@@ -44,7 +44,7 @@ impl SignatureScheme for TestSignatureScheme {
 
   #[must_use]
   fn verify(&self, validator: u16, msg: &[u8], sig: &[u8; 32]) -> bool {
-    (sig[.. 2] == validator.to_le_bytes()) && (&sig[2 ..] == &[msg, &[0; 30]].concat()[.. 30])
+    (sig[.. 2] == validator.to_le_bytes()) && (sig[2 ..] == [msg, &[0; 30]].concat()[.. 30])
   }
 
   fn aggregate(sigs: &[[u8; 32]]) -> Vec<[u8; 32]> {
@@ -96,6 +96,7 @@ impl Block for TestBlock {
   }
 }
 
+#[allow(clippy::type_complexity)]
 struct TestNetwork(u16, Arc<RwLock<Vec<(MessageSender<Self>, StepSender<Self>)>>>);
 
 #[async_trait]

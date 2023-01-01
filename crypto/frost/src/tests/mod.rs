@@ -155,7 +155,7 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     machines,
     |rng, machines| {
       // Cache and rebuild half of the machines
-      let mut included = machines.keys().into_iter().cloned().collect::<Vec<_>>();
+      let mut included = machines.keys().cloned().collect::<Vec<_>>();
       for i in included.drain(..) {
         if (rng.next_u64() % 2) == 0 {
           let cache = machines.remove(&i).unwrap().cache();

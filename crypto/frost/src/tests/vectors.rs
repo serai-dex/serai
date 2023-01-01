@@ -56,7 +56,7 @@ impl From<serde_json::Value> for Vectors {
 
       msg: to_str(&value["inputs"]["message"]),
       included: to_str(&value["round_one_outputs"]["participant_list"])
-        .split(",")
+        .split(',')
         .map(u16::from_str)
         .collect::<Result<_, _>>()
         .unwrap(),
@@ -134,7 +134,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     const MSG: &[u8] = b"Hello, World!";
 
     let (mut machines, mut shares) = commit_and_shares(&mut *rng, machines, |_, _| {}, MSG);
-    let faulty = *shares.keys().into_iter().next().unwrap();
+    let faulty = *shares.keys().next().unwrap();
     shares.get_mut(&faulty).unwrap().invalidate();
 
     for (i, machine) in machines.drain() {

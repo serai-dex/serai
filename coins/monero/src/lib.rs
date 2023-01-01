@@ -131,6 +131,6 @@ pub fn hash_to_scalar(data: &[u8]) -> Scalar {
   // This library acknowledges its practical impossibility of it occurring, and doesn't bother to
   // code in logic to handle it. That said, if it ever occurs, something must happen in order to
   // not generate/verify a proof we believe to be valid when it isn't
-  assert!(scalar != Scalar::zero(), "ZERO HASH: {:?}", data);
+  assert!(scalar != Scalar::zero(), "ZERO HASH: {data:?}");
   scalar
 }

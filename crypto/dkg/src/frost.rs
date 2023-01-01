@@ -328,7 +328,7 @@ impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
 fn exponential<C: Ciphersuite>(i: u16, values: &[C::G]) -> Vec<(C::F, C::G)> {
   let i = C::F::from(i.into());
   let mut res = Vec::with_capacity(values.len());
-  (0 .. values.len()).into_iter().fold(C::F::one(), |exp, l| {
+  (0 .. values.len()).fold(C::F::one(), |exp, l| {
     res.push((exp, values[l]));
     exp * i
   });

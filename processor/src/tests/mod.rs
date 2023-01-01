@@ -18,6 +18,7 @@ struct LocalNetwork {
   i: u16,
   size: u16,
   round: usize,
+  #[allow(clippy::type_complexity)]
   rounds: Arc<RwLock<Vec<HashMap<u16, Vec<u8>>>>>,
 }
 

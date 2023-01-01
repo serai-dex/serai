@@ -1,5 +1,4 @@
 use core::ops::Deref;
-use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 
@@ -7,6 +6,8 @@ use zeroize::Zeroizing;
 use rand_core::OsRng;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
+
+use tokio::sync::Mutex;
 
 use monero_serai::{
   Protocol, random_scalar,
@@ -87,7 +88,7 @@ macro_rules! async_sequential {
     $(
       #[tokio::test]
       async fn $name() {
-        let guard = runner::SEQUENTIAL.lock().unwrap();
+        let guard = runner::SEQUENTIAL.lock().await;
         let local = tokio::task::LocalSet::new();
         local.run_until(async move {
           if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
@@ -146,6 +147,7 @@ macro_rules! test {
         type Builder = SignableTransactionBuilder;
 
         // Run each function as both a single signer and as a multisig
+        #[allow(clippy::redundant_closure_call)]
         for multisig in [false, true] {
           // Only run the multisig variant if multisig is enabled
           if multisig {
@@ -225,7 +227,7 @@ macro_rules! test {
                     );
                   }
 
-                  frost::tests::sign_without_caching(&mut OsRng, machines, &vec![])
+                  frost::tests::sign_without_caching(&mut OsRng, machines, &[])
                 }
               }
             }

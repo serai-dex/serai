@@ -31,14 +31,14 @@ fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
     ring[i] = (generators.0.alt * ring_keys[i].0, generators.1.alt * ring_keys[i].1);
   }
 
-  for actual in 0 .. RING_LEN {
+  for (actual, key) in ring_keys.iter_mut().enumerate() {
     let proof = Aos::<_, _, RING_LEN>::prove(
       &mut OsRng,
       transcript(),
       generators,
       &ring,
       actual,
-      &mut ring_keys[actual],
+      key,
       default.clone(),
     );
 

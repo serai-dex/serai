@@ -43,12 +43,11 @@ pub fn test_encoding<F: PrimeField>() {
     let bytes = scalar.to_repr();
     let mut repr = F::Repr::default();
     repr.as_mut().copy_from_slice(bytes.as_ref());
-    assert_eq!(scalar, F::from_repr(repr).unwrap(), "{} couldn't be encoded and decoded", msg);
+    assert_eq!(scalar, F::from_repr(repr).unwrap(), "{msg} couldn't be encoded and decoded");
     assert_eq!(
       scalar,
       F::from_repr_vartime(repr).unwrap(),
-      "{} couldn't be encoded and decoded",
-      msg
+      "{msg} couldn't be encoded and decoded",
     );
   };
   test(F::zero(), "0");

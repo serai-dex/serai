@@ -129,12 +129,11 @@ pub fn test_encoding<G: PrimeGroup>() {
     let bytes = point.to_bytes();
     let mut repr = G::Repr::default();
     repr.as_mut().copy_from_slice(bytes.as_ref());
-    assert_eq!(point, G::from_bytes(&repr).unwrap(), "{} couldn't be encoded and decoded", msg);
+    assert_eq!(point, G::from_bytes(&repr).unwrap(), "{msg} couldn't be encoded and decoded");
     assert_eq!(
       point,
       G::from_bytes_unchecked(&repr).unwrap(),
-      "{} couldn't be encoded and decoded",
-      msg
+      "{msg} couldn't be encoded and decoded",
     );
   };
   test(G::identity(), "identity");
