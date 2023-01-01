@@ -182,8 +182,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
           commitments: Commitments {
             nonces: vec![NonceCommitments {
               generators: vec![GeneratorCommitments(these_commitments)],
-              dleqs: None,
             }],
+            dleq: None,
           },
           addendum: (),
         },
