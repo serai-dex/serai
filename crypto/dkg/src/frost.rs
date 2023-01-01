@@ -356,6 +356,12 @@ fn share_verification_statements<C: Ciphersuite>(
   values
 }
 
+#[derive(Clone, Copy, Hash, Debug, Zeroize)]
+enum BatchId {
+  Decryption(u16),
+  Share(u16),
+}
+
 impl<C: Ciphersuite> KeyMachine<C> {
   /// Calculate our share given the shares sent to us.
   /// Returns a BlameMachine usable to determine if faults in the protocol occurred.
@@ -370,27 +376,28 @@ impl<C: Ciphersuite> KeyMachine<C> {
     let mut batch = BatchVerifier::new(shares.len());
     let mut blames = HashMap::new();
     for (l, share_bytes) in shares.drain() {
-      let (mut share_bytes, blame) = match self.encryption.decrypt(rng, l, share_bytes) {
-        Some(res) => res,
-        None => Err(FrostError::InvalidShare { participant: l, blame: None })?,
-      };
-      blames.insert(l, Some(blame));
+      let (mut share_bytes, blame) =
+        self.encryption.decrypt(rng, &mut batch, BatchId::Decryption(l), l, share_bytes);
       let share =
         Zeroizing::new(Option::<C::F>::from(C::F::from_repr(share_bytes.0)).ok_or_else(|| {
-          FrostError::InvalidShare { participant: l, blame: blames.remove(&l).unwrap() }
+          FrostError::InvalidShare { participant: l, blame: Some(blame.clone()) }
         })?);
       share_bytes.zeroize();
       *self.secret += share.deref();
 
+      blames.insert(l, blame);
       batch.queue(
         rng,
-        l,
+        BatchId::Share(l),
         share_verification_statements::<C>(self.params.i(), &self.commitments[&l], share),
       );
     }
-    batch.verify_with_vartime_blame().map_err(|l| FrostError::InvalidShare {
-      participant: l,
-      blame: blames.remove(&l).unwrap(),
+    batch.verify_with_vartime_blame().map_err(|id| {
+      let (l, blame) = match id {
+        BatchId::Decryption(l) => (l, None),
+        BatchId::Share(l) => (l, Some(blames.remove(&l).unwrap())),
+      };
+      FrostError::InvalidShare { participant: l, blame }
     })?;
 
     // Stripe commitments per t and sum them in advance. Calculating verification shares relies on

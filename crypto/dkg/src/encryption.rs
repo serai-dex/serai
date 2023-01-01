@@ -21,6 +21,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use group::ff::Field;
 use group::GroupEncoding;
 use ciphersuite::Ciphersuite;
+use multiexp::BatchVerifier;
 
 use schnorr::SchnorrSignature;
 use dleq::DLEqProof;
@@ -370,22 +371,27 @@ impl<C: Ciphersuite> Encryption<C> {
     encrypt(rng, self.dst, self.i, self.enc_keys[&participant], msg)
   }
 
-  pub(crate) fn decrypt<R: RngCore + CryptoRng, E: Encryptable>(
+  pub(crate) fn decrypt<R: RngCore + CryptoRng, I: Copy + Zeroize, E: Encryptable>(
     &self,
     rng: &mut R,
+    batch: &mut BatchVerifier<I, C::G>,
+    // Uses a distinct batch ID so if this batch verifier is reused, we know its the PoP aspect
+    // which failed, and therefore to use None for the blame
+    batch_id: I,
     from: u16,
     mut msg: EncryptedMessage<C, E>,
-  ) -> Option<(Zeroizing<E>, EncryptionKeyProof<C>)> {
-    if !msg
-      .pop
-      .verify(msg.key, pop_challenge::<C>(msg.pop.R, msg.key, from, msg.msg.deref().as_ref()))
-    {
-      return None;
-    }
+  ) -> (Zeroizing<E>, EncryptionKeyProof<C>) {
+    msg.pop.batch_verify(
+      rng,
+      batch,
+      batch_id,
+      msg.key,
+      pop_challenge::<C>(msg.pop.R, msg.key, from, msg.msg.deref().as_ref()),
+    );
 
     let key = ecdh::<C>(&self.enc_key, msg.key);
     cipher::<C>(self.dst, &key).apply_keystream(msg.msg.as_mut().as_mut());
-    Some((
+    (
       msg.msg,
       EncryptionKeyProof {
         key,
@@ -396,7 +402,7 @@ impl<C: Ciphersuite> Encryption<C> {
           &self.enc_key,
         ),
       },
-    ))
+    )
   }
 
   // Given a message, and the intended decryptor, and a proof for its key, decrypt the message.
