@@ -310,6 +310,7 @@ pub struct KeyMachine<C: Ciphersuite> {
   commitments: HashMap<u16, Vec<C::G>>,
   encryption: Encryption<C>,
 }
+
 impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
   fn zeroize(&mut self) {
     self.params.zeroize();
@@ -358,6 +359,7 @@ fn share_verification_statements<C: Ciphersuite>(
 impl<C: Ciphersuite> KeyMachine<C> {
   /// Calculate our share given the shares sent to us.
   /// Returns a BlameMachine usable to determine if faults in the protocol occurred.
+  /// Will error on, and return a blame proof for, the first-observed case of faulty behavior.
   pub fn calculate_share<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,

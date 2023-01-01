@@ -17,6 +17,8 @@ use chacha20::{
 
 use transcript::{Transcript, RecommendedTranscript};
 
+#[cfg(test)]
+use group::ff::Field;
 use group::GroupEncoding;
 use ciphersuite::Ciphersuite;
 
@@ -62,6 +64,11 @@ impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
     self.write(&mut buf).unwrap();
     buf
   }
+
+  // Used by tests
+  pub(crate) fn enc_key(&self) -> C::G {
+    self.enc_key
+  }
 }
 
 pub trait Encryptable: Clone + AsRef<[u8]> + AsMut<[u8]> + Zeroize + ReadWrite {}
@@ -84,6 +91,75 @@ pub struct EncryptedMessage<C: Ciphersuite, E: Encryptable> {
   msg: Zeroizing<E>,
 }
 
+fn ecdh<C: Ciphersuite>(private: &Zeroizing<C::F>, public: C::G) -> Zeroizing<C::G> {
+  Zeroizing::new(public * private.deref())
+}
+
+fn cipher<C: Ciphersuite>(dst: &'static [u8], ecdh: &Zeroizing<C::G>) -> ChaCha20 {
+  // Ideally, we'd box this transcript with ZAlloc, yet that's only possible on nightly
+  // TODO: https://github.com/serai-dex/serai/issues/151
+  let mut transcript = RecommendedTranscript::new(b"DKG Encryption v0.2");
+  transcript.domain_separate(dst);
+
+  let mut ecdh = ecdh.to_bytes();
+  transcript.append_message(b"shared_key", ecdh.as_ref());
+  ecdh.as_mut().zeroize();
+
+  let zeroize = |buf: &mut [u8]| buf.zeroize();
+
+  let mut key = Cc20Key::default();
+  let mut challenge = transcript.challenge(b"key");
+  key.copy_from_slice(&challenge[.. 32]);
+  zeroize(challenge.as_mut());
+
+  // The RecommendedTranscript isn't vulnerable to length extension attacks, yet if it was,
+  // it'd make sense to clone it (and fork it) just to hedge against that
+  let mut iv = Cc20Iv::default();
+  let mut challenge = transcript.challenge(b"iv");
+  iv.copy_from_slice(&challenge[.. 12]);
+  zeroize(challenge.as_mut());
+
+  // Same commentary as the transcript regarding ZAlloc
+  // TODO: https://github.com/serai-dex/serai/issues/151
+  let res = ChaCha20::new(&key, &iv);
+  zeroize(key.as_mut());
+  zeroize(iv.as_mut());
+  res
+}
+
+fn encrypt<R: RngCore + CryptoRng, C: Ciphersuite, E: Encryptable>(
+  rng: &mut R,
+  dst: &'static [u8],
+  from: u16,
+  to: C::G,
+  mut msg: Zeroizing<E>,
+) -> EncryptedMessage<C, E> {
+  /*
+  The following code could be used to replace the requirement on an RNG here.
+  It's just currently not an issue to require taking in an RNG here.
+  let last = self.last_enc_key.to_bytes();
+  self.last_enc_key = C::hash_to_F(b"encryption_base", last.as_ref());
+  let key = C::hash_to_F(b"encryption_key", last.as_ref());
+  last.as_mut().zeroize();
+  */
+
+  let key = Zeroizing::new(C::random_nonzero_F(rng));
+  cipher::<C>(dst, &ecdh::<C>(&key, to)).apply_keystream(msg.as_mut().as_mut());
+
+  let pub_key = C::generator() * key.deref();
+  let nonce = Zeroizing::new(C::random_nonzero_F(rng));
+  let pub_nonce = C::generator() * nonce.deref();
+  EncryptedMessage {
+    key: pub_key,
+    pop: SchnorrSignature::sign(
+      &key,
+      nonce,
+      pop_challenge::<C>(pub_nonce, pub_key, from, msg.deref().as_ref()),
+    ),
+    msg,
+  }
+}
+
 impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
   pub fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
     Ok(Self {
@@ -103,6 +179,68 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     let mut buf = vec![];
     self.write(&mut buf).unwrap();
     buf
+  }
+
+  #[cfg(test)]
+  pub(crate) fn invalidate_pop(&mut self) {
+    self.pop.s += C::F::one();
+  }
+
+  #[cfg(test)]
+  pub(crate) fn invalidate_msg<R: RngCore + CryptoRng>(&mut self, rng: &mut R, from: u16) {
+    // Invalidate the message by specifying a new key/Schnorr PoP
+    // This will cause all initial checks to pass, yet a decrypt to gibberish
+    let key = Zeroizing::new(C::random_nonzero_F(rng));
+    let pub_key = C::generator() * key.deref();
+    let nonce = Zeroizing::new(C::random_nonzero_F(rng));
+    let pub_nonce = C::generator() * nonce.deref();
+    self.key = pub_key;
+    self.pop = SchnorrSignature::sign(
+      &key,
+      nonce,
+      pop_challenge::<C>(pub_nonce, pub_key, from, self.msg.deref().as_ref()),
+    );
+  }
+
+  // Assumes the encrypted message is a secret share.
+  #[cfg(test)]
+  pub(crate) fn invalidate_share_serialization<R: RngCore + CryptoRng>(
+    &mut self,
+    rng: &mut R,
+    dst: &'static [u8],
+    from: u16,
+    to: C::G,
+  ) {
+    use group::ff::PrimeField;
+
+    let mut repr = <C::F as PrimeField>::Repr::default();
+    for b in repr.as_mut().iter_mut() {
+      *b = 255;
+    }
+    // Tries to guarantee the above assumption.
+    assert_eq!(repr.as_ref().len(), self.msg.as_ref().len());
+    // Checks that this isn't over a field where this is somehow valid
+    assert!(!bool::from(C::F::from_repr(repr).is_some()));
+
+    self.msg.as_mut().as_mut().copy_from_slice(repr.as_ref());
+    *self = encrypt(rng, dst, from, to, self.msg.clone());
+  }
+
+  // Assumes the encrypted message is a secret share.
+  #[cfg(test)]
+  pub(crate) fn invalidate_share_value<R: RngCore + CryptoRng>(
+    &mut self,
+    rng: &mut R,
+    dst: &'static [u8],
+    from: u16,
+    to: C::G,
+  ) {
+    use group::ff::PrimeField;
+
+    // Assumes the share isn't randomly 1
+    let repr = C::F::one().to_repr();
+    self.msg.as_mut().as_mut().copy_from_slice(repr.as_ref());
+    *self = encrypt(rng, dst, from, to, self.msg.clone());
   }
 }
 
@@ -128,10 +266,22 @@ impl<C: Ciphersuite> EncryptionKeyProof<C> {
     self.write(&mut buf).unwrap();
     buf
   }
-}
 
-fn ecdh<C: Ciphersuite>(private: &Zeroizing<C::F>, public: C::G) -> Zeroizing<C::G> {
-  Zeroizing::new(public * private.deref())
+  #[cfg(test)]
+  pub(crate) fn invalidate_key(&mut self) {
+    *self.key += C::generator();
+  }
+
+  #[cfg(test)]
+  pub(crate) fn invalidate_dleq(&mut self) {
+    let mut buf = vec![];
+    self.dleq.write(&mut buf).unwrap();
+    // Adds one to c since this is serialized c, s
+    // Adding one to c will leave a validly serialized c
+    // Adding one to s may leave an invalidly serialized s
+    buf[0] = buf[0].wrapping_add(1);
+    self.dleq = DLEqProof::read::<&[u8]>(&mut buf.as_ref()).unwrap();
+  }
 }
 
 // This doesn't need to take the msg. It just doesn't hurt as an extra layer.
@@ -211,70 +361,13 @@ impl<C: Ciphersuite> Encryption<C> {
     msg.msg
   }
 
-  fn cipher(&self, ecdh: &Zeroizing<C::G>) -> ChaCha20 {
-    // Ideally, we'd box this transcript with ZAlloc, yet that's only possible on nightly
-    // TODO: https://github.com/serai-dex/serai/issues/151
-    let mut transcript = RecommendedTranscript::new(b"DKG Encryption v0.2");
-    transcript.domain_separate(self.dst);
-
-    let mut ecdh = ecdh.to_bytes();
-    transcript.append_message(b"shared_key", ecdh.as_ref());
-    ecdh.as_mut().zeroize();
-
-    let zeroize = |buf: &mut [u8]| buf.zeroize();
-
-    let mut key = Cc20Key::default();
-    let mut challenge = transcript.challenge(b"key");
-    key.copy_from_slice(&challenge[.. 32]);
-    zeroize(challenge.as_mut());
-
-    // The RecommendedTranscript isn't vulnerable to length extension attacks, yet if it was,
-    // it'd make sense to clone it (and fork it) just to hedge against that
-    let mut iv = Cc20Iv::default();
-    let mut challenge = transcript.challenge(b"iv");
-    iv.copy_from_slice(&challenge[.. 12]);
-    zeroize(challenge.as_mut());
-
-    // Same commentary as the transcript regarding ZAlloc
-    // TODO: https://github.com/serai-dex/serai/issues/151
-    let res = ChaCha20::new(&key, &iv);
-    zeroize(key.as_mut());
-    zeroize(iv.as_mut());
-    res
-  }
-
   pub(crate) fn encrypt<R: RngCore + CryptoRng, E: Encryptable>(
     &self,
     rng: &mut R,
     participant: u16,
-    mut msg: Zeroizing<E>,
+    msg: Zeroizing<E>,
   ) -> EncryptedMessage<C, E> {
-    /*
-    The following code could be used to replace the requirement on an RNG here.
-    It's just currently not an issue to require taking in an RNG here.
-    let last = self.last_enc_key.to_bytes();
-    self.last_enc_key = C::hash_to_F(b"encryption_base", last.as_ref());
-    let key = C::hash_to_F(b"encryption_key", last.as_ref());
-    last.as_mut().zeroize();
-    */
-
-    let key = Zeroizing::new(C::random_nonzero_F(rng));
-    self
-      .cipher(&ecdh::<C>(&key, self.enc_keys[&participant]))
-      .apply_keystream(msg.as_mut().as_mut());
-
-    let pub_key = C::generator() * key.deref();
-    let nonce = Zeroizing::new(C::random_nonzero_F(rng));
-    let pub_nonce = C::generator() * nonce.deref();
-    EncryptedMessage {
-      key: pub_key,
-      pop: SchnorrSignature::sign(
-        &key,
-        nonce,
-        pop_challenge::<C>(pub_nonce, pub_key, self.i, msg.deref().as_ref()),
-      ),
-      msg,
-    }
+    encrypt(rng, self.dst, self.i, self.enc_keys[&participant], msg)
   }
 
   pub(crate) fn decrypt<R: RngCore + CryptoRng, E: Encryptable>(
@@ -291,7 +384,7 @@ impl<C: Ciphersuite> Encryption<C> {
     }
 
     let key = ecdh::<C>(&self.enc_key, msg.key);
-    self.cipher(&key).apply_keystream(msg.msg.as_mut().as_mut());
+    cipher::<C>(self.dst, &key).apply_keystream(msg.msg.as_mut().as_mut());
     Some((
       msg.msg,
       EncryptionKeyProof {
@@ -334,7 +427,7 @@ impl<C: Ciphersuite> Encryption<C> {
         )
         .map_err(|_| DecryptionError::InvalidProof)?;
 
-      self.cipher(&proof.key).apply_keystream(msg.msg.as_mut().as_mut());
+      cipher::<C>(self.dst, &proof.key).apply_keystream(msg.msg.as_mut().as_mut());
       Ok(msg.msg)
     } else {
       Err(DecryptionError::InvalidProof)
