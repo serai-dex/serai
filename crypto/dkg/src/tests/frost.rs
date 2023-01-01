@@ -14,6 +14,7 @@ type FrostEncryptedMessage<C> = EncryptedMessage<C, SecretShare<<C as Ciphersuit
 type FrostSecretShares<C> = HashMap<u16, FrostEncryptedMessage<C>>;
 
 // Commit, then return enc key and shares
+#[allow(clippy::type_complexity)]
 fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
 ) -> (HashMap<u16, KeyMachine<C>>, HashMap<u16, C::G>, HashMap<u16, FrostSecretShares<C>>) {

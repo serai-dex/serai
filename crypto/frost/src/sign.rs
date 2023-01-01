@@ -11,7 +11,10 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use group::{ff::PrimeField, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
 use multiexp::BatchVerifier;
 
 use crate::{
@@ -190,6 +193,12 @@ pub struct SignatureShare<C: Curve>(C::F);
 impl<C: Curve> Writable for SignatureShare<C> {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.0.to_repr().as_ref())
+  }
+}
+#[cfg(any(test, feature = "tests"))]
+impl<C: Curve> SignatureShare<C> {
+  pub(crate) fn invalidate(&mut self) {
+    self.0 += C::F::one();
   }
 }
 
