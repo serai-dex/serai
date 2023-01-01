@@ -13,7 +13,7 @@ use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
 use crate::{constant_time, math, from_uint};
 
-const FIELD_MODULUS: U256 =
+const MODULUS: U256 =
   U256::from_be_hex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed");
 
 const WIDE_MODULUS: U512 = U512::from_be_hex(concat!(
@@ -25,7 +25,7 @@ const WIDE_MODULUS: U512 = U512::from_be_hex(concat!(
 pub struct FieldElement(U256);
 
 pub const MOD_3_8: FieldElement =
-  FieldElement(FIELD_MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8)));
+  FieldElement(MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8)));
 
 pub const MOD_5_8: FieldElement = FieldElement(MOD_3_8.0.saturating_sub(&U256::ONE));
 
@@ -45,8 +45,8 @@ constant_time!(FieldElement, U256);
 math!(
   FieldElement,
   FieldElement,
-  |x, y| U256::add_mod(&x, &y, &FIELD_MODULUS),
-  |x, y| U256::sub_mod(&x, &y, &FIELD_MODULUS),
+  |x, y| U256::add_mod(&x, &y, &MODULUS),
+  |x, y| U256::sub_mod(&x, &y, &MODULUS),
   |x, y| {
     let wide = U256::mul_wide(&x, &y);
     reduce(U512::from((wide.1, wide.0)))
@@ -57,7 +57,7 @@ from_uint!(FieldElement, U256);
 impl Neg for FieldElement {
   type Output = Self;
   fn neg(self) -> Self::Output {
-    Self(self.0.neg_mod(&FIELD_MODULUS))
+    Self(self.0.neg_mod(&MODULUS))
   }
 }
 
@@ -85,28 +85,19 @@ impl Field for FieldElement {
     FieldElement(reduce(self.0.square()))
   }
   fn double(&self) -> Self {
-    FieldElement((self.0 << 1).reduce(&FIELD_MODULUS).unwrap())
+    FieldElement((self.0 << 1).reduce(&MODULUS).unwrap())
   }
 
   fn invert(&self) -> CtOption<Self> {
-    const NEG_2: FieldElement = FieldElement(FIELD_MODULUS.saturating_sub(&U256::from_u8(2)));
+    const NEG_2: FieldElement = FieldElement(MODULUS.saturating_sub(&U256::from_u8(2)));
     CtOption::new(self.pow(NEG_2), !self.is_zero())
   }
 
   fn sqrt(&self) -> CtOption<Self> {
     let tv1 = self.pow(MOD_3_8);
     let tv2 = tv1 * SQRT_M1;
-    CtOption::new(Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self)), 1.into())
-  }
-
-  fn is_zero(&self) -> Choice {
-    self.0.ct_eq(&U256::ZERO)
-  }
-  fn cube(&self) -> Self {
-    self.square() * self
-  }
-  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
-    unimplemented!()
+    let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
+    CtOption::new(candidate, candidate.square().ct_eq(self))
   }
 }
 
@@ -116,7 +107,7 @@ impl PrimeField for FieldElement {
   const CAPACITY: u32 = 254;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let res = Self(U256::from_le_bytes(bytes));
-    CtOption::new(res, res.0.ct_lt(&FIELD_MODULUS))
+    CtOption::new(res, res.0.ct_lt(&MODULUS))
   }
   fn to_repr(&self) -> [u8; 32] {
     self.0.to_le_bytes()
@@ -144,7 +135,7 @@ impl PrimeFieldBits for FieldElement {
   }
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
-    FIELD_MODULUS.to_le_bytes().into()
+    MODULUS.to_le_bytes().into()
   }
 }
 
@@ -155,13 +146,13 @@ impl FieldElement {
   }
 
   pub fn pow(&self, other: FieldElement) -> FieldElement {
-    let mut table = [FieldElement(U256::ONE); 16];
+    let mut table = [FieldElement::one(); 16];
     table[1] = *self;
     for i in 2 .. 16 {
       table[i] = table[i - 1] * self;
     }
 
-    let mut res = FieldElement(U256::ONE);
+    let mut res = FieldElement::one();
     let mut bits = 0;
     for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
       bits <<= 1;
@@ -203,80 +194,6 @@ impl FieldElement {
 }
 
 #[test]
-fn test_conditional_negate() {
-  let one = FieldElement::one();
-  let true_choice = 1.into();
-  let false_choice = 0.into();
-
-  let mut var = one;
-
-  var.conditional_negate(false_choice);
-  assert_eq!(var, FieldElement::one());
-
-  var.conditional_negate(true_choice);
-  assert_eq!(var, -FieldElement::one());
-
-  var.conditional_negate(false_choice);
-  assert_eq!(var, -FieldElement::one());
-}
-
-#[test]
-fn test_edwards_d() {
-  // TODO: Generate the constant with this when const fn mul_mod is available, removing the need
-  // for this test
-  let a = -FieldElement::from(121665u32);
-  let b = FieldElement::from(121666u32);
-  assert_eq!(EDWARDS_D, a * b.invert().unwrap());
-}
-
-#[test]
-fn test_is_odd() {
-  assert_eq!(0, FieldElement::zero().is_odd().unwrap_u8());
-  assert_eq!(1, FieldElement::one().is_odd().unwrap_u8());
-  assert_eq!(0, FieldElement::one().double().is_odd().unwrap_u8());
-
-  // 0 is even, yet the modulus is odd
-  // -1 moves to the even value before the modulus
-  assert_eq!(0, (-FieldElement::one()).is_odd().unwrap_u8());
-  assert_eq!(1, (-FieldElement::one().double()).is_odd().unwrap_u8());
-}
-
-#[test]
-fn test_mul() {
-  assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one(), FieldElement::zero());
-  assert_eq!(FieldElement(FIELD_MODULUS) * FieldElement::one().double(), FieldElement::zero());
-  assert_eq!(SQRT_M1.square(), -FieldElement::one());
-}
-
-#[test]
-fn test_sqrt_ratio_i() {
-  let zero = FieldElement::zero();
-  let one = FieldElement::one();
-  let two = one + one;
-  let three = two + one;
-
-  let (choice, sqrt) = FieldElement::sqrt_ratio_i(zero, zero);
-  assert_eq!(sqrt, zero);
-  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
-  assert_eq!(choice.unwrap_u8(), 1);
-
-  let (choice, sqrt) = FieldElement::sqrt_ratio_i(one, zero);
-  assert_eq!(sqrt, zero);
-  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
-  assert_eq!(choice.unwrap_u8(), 0);
-
-  let (choice, sqrt) = FieldElement::sqrt_ratio_i(two, one);
-  assert_eq!(sqrt.square(), two * SQRT_M1);
-  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
-  assert_eq!(choice.unwrap_u8(), 0);
-
-  let (choice, sqrt) = FieldElement::sqrt_ratio_i(three, one);
-  assert_eq!(sqrt.square(), three);
-  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
-  assert_eq!(choice.unwrap_u8(), 1);
-
-  let (choice, sqrt) = FieldElement::sqrt_ratio_i(one, three);
-  assert_eq!(sqrt.square() * three, one);
-  assert_eq!(sqrt.is_odd().unwrap_u8(), 0);
-  assert_eq!(choice.unwrap_u8(), 1);
+fn test_field() {
+  ff_group_tests::prime_field::test_prime_field_bits::<FieldElement>();
 }

@@ -33,6 +33,7 @@ impl Scalar {
 }
 
 #[test]
-fn invert() {
-  assert_eq!(Scalar::one().invert().unwrap(), Scalar::one());
+fn test_scalar_field() {
+  // TODO: Move to test_prime_field_bits once the impl is finished
+  ff_group_tests::prime_field::test_prime_field::<Scalar>();
 }

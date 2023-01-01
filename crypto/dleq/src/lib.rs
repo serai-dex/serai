@@ -28,22 +28,55 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   //    and loading it in
   // 3: Iterating over each byte and manually doubling/adding. This is simplest
 
-  // Get a wide amount of bytes to safely reduce without bias
-  let target = ((usize::try_from(F::NUM_BITS).unwrap() + 7) / 8) * 2;
-  let mut challenge_bytes = transcript.challenge(b"challenge").as_ref().to_vec();
-  while challenge_bytes.len() < target {
-    // Secure given transcripts updating on challenge
-    challenge_bytes.extend(transcript.challenge(b"challenge_extension").as_ref());
-  }
-  challenge_bytes.truncate(target);
-
   let mut challenge = F::zero();
-  for b in challenge_bytes {
-    for _ in 0 .. 8 {
-      challenge = challenge.double();
+
+  // Get a wide amount of bytes to safely reduce without bias
+  // In most cases, <=1.5x bytes is enough. 2x is still standard and there's some theoretical
+  // groups which may technically require more than 1.5x bytes for this to work as intended
+  let target_bytes = ((usize::try_from(F::NUM_BITS).unwrap() + 7) / 8) * 2;
+  let mut challenge_bytes = transcript.challenge(b"challenge");
+  let challenge_bytes_len = challenge_bytes.as_ref().len();
+  // If the challenge is 32 bytes, and we need 64, we need two challenges
+  let needed_challenges = (target_bytes + (challenge_bytes_len - 1)) / challenge_bytes_len;
+
+  // The following algorithm should be equivalent to a wide reduction of the challenges,
+  // interpreted as concatenated, big-endian byte string
+  let mut handled_bytes = 0;
+  'outer: for _ in 0 ..= needed_challenges {
+    // Cursor of which byte of the challenge to use next
+    let mut b = 0;
+    while b < challenge_bytes_len {
+      // Get the next amount of bytes to attempt
+      // Only grabs the needed amount of bytes, up to 8 at a time (u64), so long as they're
+      // available in the challenge
+      let chunk_bytes = (target_bytes - handled_bytes).min(8).min(challenge_bytes_len - b);
+
+      let mut chunk = 0;
+      for _ in 0 .. chunk_bytes {
+        chunk <<= 8;
+        chunk |= u64::from(challenge_bytes.as_ref()[b]);
+        b += 1;
+      }
+      // Add this chunk
+      challenge += F::from(chunk);
+
+      handled_bytes += chunk_bytes;
+      // If we've reached the target amount of bytes, break
+      if handled_bytes == target_bytes {
+        break 'outer;
+      }
+
+      // Shift over by however many bits will be in the next chunk
+      let next_chunk_bytes = (target_bytes - handled_bytes).min(8).min(challenge_bytes_len);
+      for _ in 0 .. (next_chunk_bytes * 8) {
+        challenge = challenge.double();
+      }
     }
-    challenge += F::from(u64::from(b));
+
+    // Secure thanks to the Transcript trait having a bound of updating on challenge
+    challenge_bytes = transcript.challenge(b"challenge_extension");
   }
+
   challenge
 }
 
@@ -90,10 +123,12 @@ impl<G: PrimeGroup> DLEqProof<G> {
 
     transcript.domain_separate(b"dleq");
     for generator in generators {
+      // R, A
       Self::transcript(transcript, *generator, *generator * r.deref(), *generator * scalar.deref());
     }
 
     let c = challenge(transcript);
+    // r + ca
     let s = (c * scalar.deref()) + r.deref();
 
     DLEqProof { c, s }
@@ -111,6 +146,9 @@ impl<G: PrimeGroup> DLEqProof<G> {
 
     transcript.domain_separate(b"dleq");
     for (generator, point) in generators.iter().zip(points) {
+      // s = r + ca
+      // sG - cA = R
+      // R, A
       Self::transcript(transcript, *generator, (*generator * self.s) - (*point * self.c), *point);
     }
 
@@ -122,13 +160,20 @@ impl<G: PrimeGroup> DLEqProof<G> {
   }
 
   #[cfg(feature = "serialize")]
-  pub fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(self.c.to_repr().as_ref())?;
     w.write_all(self.s.to_repr().as_ref())
   }
 
   #[cfg(feature = "serialize")]
-  pub fn deserialize<R: Read>(r: &mut R) -> io::Result<DLEqProof<G>> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<DLEqProof<G>> {
     Ok(DLEqProof { c: read_scalar(r)?, s: read_scalar(r)? })
+  }
+
+  #[cfg(feature = "serialize")]
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
+    res
   }
 }

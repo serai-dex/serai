@@ -4,6 +4,7 @@ members = [
 
   "crypto/transcript",
 
+  "crypto/ff-group-tests",
   "crypto/dalek-ff-group",
   "crypto/ed448",
   "crypto/ciphersuite",

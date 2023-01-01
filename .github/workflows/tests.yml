@@ -20,12 +20,13 @@ jobs:
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           # Clippy requires nightly due to serai-runtime requiring it
           rust-toolchain: ${{ steps.nightly.outputs.version }}
           rust-components: clippy
 
       - name: Run Clippy
-        run: cargo clippy --all-features -- -D warnings -A dead_code
+        run: cargo clippy --all-features --tests -- -D warnings -A dead_code
 
   deny:
     runs-on: ubuntu-latest
@@ -57,6 +58,8 @@ jobs:
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         run: cargo test --all-features
