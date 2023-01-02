@@ -15,7 +15,7 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), (arbitrary_data,))
     },
-    |_, tx: Transaction, mut scanner: Scanner, state: (Vec<u8>,)| async move {
+    |_, tx: Transaction, mut scanner: Scanner, data: (Vec<u8>,)| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.arbitrary_data()[0], data.0);
@@ -38,7 +38,7 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), data)
     },
-    |_, tx: Transaction, mut scanner: Scanner, state: (Vec<u8>,)| async move {
+    |_, tx: Transaction, mut scanner: Scanner, data: Vec<u8>| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.arbitrary_data(), vec![data; 5]);
@@ -63,8 +63,7 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), data)
     },
-    |rpc: Rpc, signed: Transaction, mut scanner: Scanner, data: Vec<u8>| async move {
-      let tx = rpc.get_transaction(signed.hash()).await.unwrap();
+    |_, tx: Transaction, mut scanner: Scanner, data: Vec<u8>| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.arbitrary_data(), vec![data]);
