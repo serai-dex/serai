@@ -177,3 +177,115 @@ impl<G: PrimeGroup> DLEqProof<G> {
     res
   }
 }
+
+#[cfg(feature = "std")]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub struct MultiDLEqProof<G: PrimeGroup> {
+  c: G::Scalar,
+  s: Vec<G::Scalar>,
+}
+
+#[cfg(feature = "std")]
+#[allow(non_snake_case)]
+impl<G: PrimeGroup> MultiDLEqProof<G> {
+  pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
+    rng: &mut R,
+    transcript: &mut T,
+    generators: &[Vec<G>],
+    scalars: &[Zeroizing<G::Scalar>],
+  ) -> MultiDLEqProof<G>
+  where
+    G::Scalar: Zeroize,
+  {
+    transcript.domain_separate(b"multi-dleq");
+
+    let mut nonces = vec![];
+    for (i, (scalar, generators)) in scalars.iter().zip(generators).enumerate() {
+      // Delineate between discrete logarithms
+      transcript.append_message(b"discrete_logarithm", i.to_le_bytes());
+
+      let nonce = Zeroizing::new(G::Scalar::random(&mut *rng));
+      for generator in generators {
+        DLEqProof::transcript(
+          transcript,
+          *generator,
+          *generator * nonce.deref(),
+          *generator * scalar.deref(),
+        );
+      }
+      nonces.push(nonce);
+    }
+
+    let c = challenge(transcript);
+
+    let mut s = vec![];
+    for (scalar, nonce) in scalars.iter().zip(nonces) {
+      s.push((c * scalar.deref()) + nonce.deref());
+    }
+
+    MultiDLEqProof { c, s }
+  }
+
+  pub fn verify<T: Transcript>(
+    &self,
+    transcript: &mut T,
+    generators: &[Vec<G>],
+    points: &[Vec<G>],
+  ) -> Result<(), DLEqError> {
+    if points.len() != generators.len() {
+      Err(DLEqError::InvalidProof)?;
+    }
+    if self.s.len() != generators.len() {
+      Err(DLEqError::InvalidProof)?;
+    }
+
+    transcript.domain_separate(b"multi-dleq");
+    for (i, (generators, points)) in generators.iter().zip(points).enumerate() {
+      if points.len() != generators.len() {
+        Err(DLEqError::InvalidProof)?;
+      }
+
+      transcript.append_message(b"discrete_logarithm", i.to_le_bytes());
+      for (generator, point) in generators.iter().zip(points) {
+        DLEqProof::transcript(
+          transcript,
+          *generator,
+          (*generator * self.s[i]) - (*point * self.c),
+          *point,
+        );
+      }
+    }
+
+    if self.c != challenge(transcript) {
+      Err(DLEqError::InvalidProof)?;
+    }
+
+    Ok(())
+  }
+
+  #[cfg(feature = "serialize")]
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    w.write_all(self.c.to_repr().as_ref())?;
+    for s in &self.s {
+      w.write_all(s.to_repr().as_ref())?;
+    }
+    Ok(())
+  }
+
+  #[cfg(feature = "serialize")]
+  pub fn read<R: Read>(r: &mut R, discrete_logs: usize) -> io::Result<MultiDLEqProof<G>> {
+    let c = read_scalar(r)?;
+    let mut s = vec![];
+    for _ in 0 .. discrete_logs {
+      s.push(read_scalar(r)?);
+    }
+    Ok(MultiDLEqProof { c, s })
+  }
+
+  #[cfg(feature = "serialize")]
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
+    res
+  }
+}

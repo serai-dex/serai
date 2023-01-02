@@ -36,7 +36,7 @@ type FrostError<C> = DkgError<EncryptionKeyProof<C>>;
 #[allow(non_snake_case)]
 fn challenge<C: Ciphersuite>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
   let mut transcript = RecommendedTranscript::new(b"DKG FROST v0.2");
-  transcript.domain_separate(b"Schnorr Proof of Knowledge");
+  transcript.domain_separate(b"schnorr_proof_of_knowledge");
   transcript.append_message(b"context", context.as_bytes());
   transcript.append_message(b"participant", l.to_le_bytes());
   transcript.append_message(b"nonce", R);
