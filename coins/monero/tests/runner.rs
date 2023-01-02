@@ -67,7 +67,7 @@ pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput 
   rpc.generate_blocks(&scanner.address().to_string(), 60).await.unwrap();
 
   let block = rpc.get_block(start).await.unwrap();
-  scanner.scan(&rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
+  scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
 }
 
 pub async fn rpc() -> Rpc {
