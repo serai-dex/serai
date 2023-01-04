@@ -16,7 +16,7 @@ pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
 /// Address encoding and decoding functionality.
 pub mod address;
-use address::{Network, AddressType, AddressMeta, MoneroAddress};
+use address::{Network, AddressType, AddressMeta, MoneroAddress, AddressSpec};
 
 mod scan;
 pub use scan::{ReceivedOutput, SpendableOutput};
@@ -28,8 +28,6 @@ mod send;
 pub use send::{Fee, TransactionError, SignableTransaction, SignableTransactionBuilder};
 #[cfg(feature = "multisig")]
 pub use send::TransactionMachine;
-
-use self::address::MoneroAddressBytes;
 
 fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> std::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
@@ -108,7 +106,7 @@ impl ViewPair {
     ViewPair { spend, view }
   }
 
-  pub(crate) fn subaddress(&self, index: (u32, u32)) -> Scalar {
+  fn subaddress_keys(&self, index: (u32, u32)) -> Scalar {
     if index == (0, 0) {
       return Scalar::zero();
     }
@@ -124,9 +122,45 @@ impl ViewPair {
     ))
   }
 
-  /// Returns an address with the provided metadata.
-  pub fn address(&self, meta: AddressMeta<MoneroAddressBytes>) -> MoneroAddress {
-    MoneroAddress::new(meta, self.spend, self.view.deref() * &ED25519_BASEPOINT_TABLE)
+  fn subaddress_derivation(&self, index: (u32, u32)) -> (EdwardsPoint, EdwardsPoint) {
+    let scalar = self.subaddress_keys(index);
+    let spend = self.spend + (&scalar * &ED25519_BASEPOINT_TABLE);
+    let view = self.view.deref() * spend;
+    (spend, view)
+  }
+
+  /// Returns an address with the provided specification.
+  pub fn address(&self, network: Network, spec: AddressSpec) -> MoneroAddress {
+    let mut spend = self.spend;
+    let mut view: EdwardsPoint = self.view.deref() * &ED25519_BASEPOINT_TABLE;
+
+    // construct the address meta
+    let meta = match spec {
+      AddressSpec::Standard => AddressMeta::new(network, AddressType::Standard),
+      AddressSpec::Integrated(payment_id) => {
+        AddressMeta::new(network, AddressType::Integrated(payment_id))
+      }
+      AddressSpec::Subaddress(i1, i2) => {
+        if i1 == 0 && i2 == 0 {
+          AddressMeta::new(network, AddressType::Standard)
+        } else {
+          (spend, view) = self.subaddress_derivation((i1, i2));
+          AddressMeta::new(network, AddressType::Subaddress)
+        }
+      }
+      AddressSpec::Featured(subaddress, payment_id, guaranteed) => {
+        let mut is_subaddress = false;
+        if let Some(index) = subaddress {
+          if index != (0, 0) {
+            (spend, view) = self.subaddress_derivation(index);
+            is_subaddress = true;
+          }
+        }
+        AddressMeta::new(network, AddressType::Featured(is_subaddress, payment_id, guaranteed))
+      }
+    };
+
+    MoneroAddress::new(meta, spend, view)
   }
 }
 
@@ -187,80 +221,22 @@ impl Scanner {
     Scanner { pair, network, subaddresses, burning_bug }
   }
 
-  /// Returns the main address for this view pair.
-  pub fn address(&self) -> MoneroAddress {
-    let meta = AddressMeta::new(
-      self.network,
-      if self.burning_bug.is_none() {
-        AddressType::Featured(false, None, true)
-      } else {
-        AddressType::Standard
-      },
-    );
-    self.pair.address(meta)
-  }
-
-  /// Returns the integrated address for a given payment ID.
-  pub fn integrated_address(&self, payment_id: [u8; 8]) -> MoneroAddress {
-    let meta = AddressMeta::new(
-      self.network,
-      if self.burning_bug.is_none() {
-        AddressType::Featured(false, Some(payment_id), true)
-      } else {
-        AddressType::Integrated(payment_id)
-      },
-    );
-    self.pair.address(meta)
-  }
-
-  /// Returns the specified subaddress for this view pair.
-  pub fn subaddress(&mut self, index: (u32, u32)) -> MoneroAddress {
-    if index == (0, 0) {
-      return self.address();
-    }
-
-    let spend = self.pair.spend + (&self.pair.subaddress(index) * &ED25519_BASEPOINT_TABLE);
-    self.subaddresses.insert(spend.compress(), index);
-
-    MoneroAddress::new(
-      AddressMeta::new(
-        self.network,
-        if self.burning_bug.is_none() {
-          AddressType::Featured(true, None, true)
-        } else {
-          AddressType::Subaddress
-        },
-      ),
-      spend,
-      self.pair.view.deref() * spend,
-    )
-  }
-
-  /// Returns a featured address.
+  /// Returns the specified address.
   ///
   /// A `Scanner` will fail to scan this address unless it is appropriate to the `Scanner`.
   /// If the `Scanner` was defined as not handling the burning bug, by passing `None` for
   /// `burning_bug` upon construction, this must be a guaranteed address
   /// in order to be scanned by it.
-  pub fn featured_address(
-    &mut self,
-    subaddress: Option<(u32, u32)>,
-    payment_id: Option<[u8; 8]>,
-    guaranteed: bool,
-  ) -> MoneroAddress {
-    let is_subaddress = subaddress.is_some() && (subaddress.unwrap() != (0, 0));
+  pub fn address(&mut self, spec: AddressSpec) -> MoneroAddress {
+    let addr = self.pair.address(self.network, spec);
 
-    let mut spend = self.pair.spend;
-    let mut view: EdwardsPoint = self.pair.view.deref() * &ED25519_BASEPOINT_TABLE;
-    if is_subaddress {
-      spend =
-        self.pair.spend + (&self.pair.subaddress(subaddress.unwrap()) * &ED25519_BASEPOINT_TABLE);
-      self.subaddresses.insert(spend.compress(), subaddress.unwrap());
-      view = self.pair.view.deref() * spend;
+    let mut index = (0, 0);
+    if let AddressSpec::Subaddress(i1, i2) = spec {
+      index = (i1, i2);
+    } else if let AddressSpec::Featured(Some(index_inner), _, _) = spec {
+      index = index_inner;
     }
-
-    let meta =
-      AddressMeta::new(self.network, AddressType::Featured(is_subaddress, payment_id, guaranteed));
-    MoneroAddress::new(meta, spend, view)
+    self.subaddresses.insert(addr.spend.compress(), index);
+    addr
   }
 }

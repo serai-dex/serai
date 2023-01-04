@@ -14,7 +14,7 @@ use monero_serai::{
   Protocol, random_scalar,
   wallet::{
     ViewPair, Scanner,
-    address::{Network, AddressType, AddressMeta, MoneroAddress},
+    address::{Network, AddressType, AddressMeta, MoneroAddress, AddressSpec},
     SpendableOutput,
   },
   rpc::Rpc,
@@ -64,7 +64,7 @@ pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput 
 
   // mine 60 blocks to unlock a miner tx
   let start = rpc.get_height().await.unwrap();
-  rpc.generate_blocks(&scanner.address().to_string(), 60).await.unwrap();
+  rpc.generate_blocks(&scanner.address(AddressSpec::Standard).to_string(), 60).await.unwrap();
 
   let block = rpc.get_block(start).await.unwrap();
   scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
@@ -151,7 +151,7 @@ macro_rules! test {
         use monero_serai::{
           random_scalar,
           wallet::{
-            address::{Network, AddressMeta, AddressType}, ViewPair, Scanner, SignableTransaction,
+            address::{Network, AddressSpec}, ViewPair, Scanner, SignableTransaction,
             SignableTransactionBuilder,
           },
         };
@@ -185,7 +185,7 @@ macro_rules! test {
           let rpc = rpc().await;
 
           let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
-          let addr = view.address(AddressMeta::new(Network::Mainnet, AddressType::Standard));
+          let addr = view.address(Network::Mainnet, AddressSpec::Standard);
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
 

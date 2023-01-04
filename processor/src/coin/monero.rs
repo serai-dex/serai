@@ -14,7 +14,7 @@ use monero_serai::{
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
-    address::{Network, MoneroAddress},
+    address::{Network, MoneroAddress, AddressSpec},
     Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
@@ -91,7 +91,7 @@ impl Monero {
 
   #[cfg(test)]
   fn empty_address() -> MoneroAddress {
-    Self::empty_scanner().address()
+    Self::empty_scanner().address(AddressSpec::Standard)
   }
 }
 
@@ -121,7 +121,7 @@ impl Coin for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    self.scanner(key).address()
+    self.scanner(key).address(AddressSpec::Featured(None, None, true))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
