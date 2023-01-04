@@ -18,9 +18,9 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 use frame_support::{
-  traits::{ConstU8, ConstU32, ConstU64},
+  traits::{ConstBool, ConstU8, ConstU32, ConstU64},
   weights::{
-    constants::{RocksDbWeight, WEIGHT_PER_SECOND},
+    constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
   dispatch::DispatchClass,
@@ -117,7 +117,7 @@ parameter_types! {
     frame_system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: frame_system::limits::BlockWeights =
     frame_system::limits::BlockWeights::with_sensible_defaults(
-      (2u64 * WEIGHT_PER_SECOND).set_proof_size(u64::MAX),
+      Weight::from_ref_time(2u64 * WEIGHT_REF_TIME_PER_SECOND).set_proof_size(u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
 
@@ -214,6 +214,9 @@ impl pallet_contracts::Config for Runtime {
 
   type MaxCodeLen = ConstU32<{ 128 * 1024 }>;
   type MaxStorageKeyLen = ConstU32<128>;
+
+  type UnsafeUnstableInterface = ConstBool<false>;
+  type MaxDebugBufferLen = ConstU32<255>;
 }
 
 impl pallet_tendermint::Config for Runtime {}

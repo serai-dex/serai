@@ -405,7 +405,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     let mut queue_write = self.import.queue.write().await;
     *self.import.importing_block.write().unwrap() = Some(hash);
 
-    queue_write.as_mut().unwrap().import_blocks(
+    queue_write.as_mut().unwrap().service_ref().import_blocks(
       BlockOrigin::ConsensusBroadcast, // TODO: Use BlockOrigin::Own when it's our block
       vec![IncomingBlock {
         hash,
