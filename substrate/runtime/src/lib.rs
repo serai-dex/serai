@@ -18,7 +18,7 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 use frame_support::{
-  traits::{ConstBool, ConstU8, ConstU32, ConstU64},
+  traits::{ConstU8, ConstU32, ConstU64},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
