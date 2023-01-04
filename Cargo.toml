@@ -22,6 +22,8 @@ members = [
 
   "processor",
 
+  "substrate/serai/primitives",
+
   "substrate/validator-sets/primitives",
   "substrate/validator-sets/pallet",
 

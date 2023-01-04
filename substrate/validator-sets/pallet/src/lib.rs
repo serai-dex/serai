@@ -8,6 +8,7 @@ pub mod pallet {
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
+  use serai_primitives::*;
   use validator_sets_primitives::*;
 
   #[pallet::config]
