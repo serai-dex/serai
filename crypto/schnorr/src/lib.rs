@@ -7,10 +7,10 @@ use zeroize::{Zeroize, Zeroizing};
 
 use group::{
   ff::{Field, PrimeField},
-  GroupEncoding,
+  Group, GroupEncoding,
 };
 
-use multiexp::BatchVerifier;
+use multiexp::{multiexp_vartime, BatchVerifier};
 
 use ciphersuite::Ciphersuite;
 
@@ -59,10 +59,26 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
     }
   }
 
+  /// Return the series of pairs whose products sum to zero for a valid signature.
+  /// This is inteded to be used with a multiexp.
+  pub fn batch_statements(&self, public_key: C::G, challenge: C::F) -> [(C::F, C::G); 3] {
+    // s = r + ca
+    // sG == R + cA
+    // R + cA - sG == 0
+    [
+      // R
+      (C::F::one(), self.R),
+      // cA
+      (challenge, public_key),
+      // -sG
+      (-self.s, C::generator()),
+    ]
+  }
+
   /// Verify a Schnorr signature for the given key with the specified challenge.
   #[must_use]
   pub fn verify(&self, public_key: C::G, challenge: C::F) -> bool {
-    (C::generator() * self.s) == (self.R + (public_key * challenge))
+    multiexp_vartime(&self.batch_statements(public_key, challenge)).is_identity().into()
   }
 
   /// Queue a signature for batch verification.
@@ -74,21 +90,6 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
     public_key: C::G,
     challenge: C::F,
   ) {
-    // s = r + ca
-    // sG == R + cA
-    // R + cA - sG == 0
-
-    batch.queue(
-      rng,
-      id,
-      [
-        // R
-        (C::F::one(), self.R),
-        // cA
-        (challenge, public_key),
-        // -sG
-        (-self.s, C::generator()),
-      ],
-    );
+    batch.queue(rng, id, self.batch_statements(public_key, challenge));
   }
 }

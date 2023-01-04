@@ -47,7 +47,7 @@ async fn select_n<R: RngCore + CryptoRng>(
       iters += 1;
       // This is cheap and on fresh chains, thousands of rounds may be needed
       if iters == 10000 {
-        Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
+        Err(RpcError::InternalError("not enough decoy candidates"))?;
       }
 
       // Use a gamma distribution
@@ -178,7 +178,7 @@ impl Decoys {
 
     // TODO: Simply create a TX with less than the target amount
     if (high - MATURITY) < u64::try_from(inputs.len() * ring_len).unwrap() {
-      Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
+      Err(RpcError::InternalError("not enough decoy candidates"))?;
     }
 
     // Select all decoys for this transaction, assuming we generate a sane transaction

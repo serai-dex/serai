@@ -43,7 +43,7 @@ fn clsag() {
       let dest = Zeroizing::new(random_scalar(&mut OsRng));
       let mask = random_scalar(&mut OsRng);
       let amount;
-      if i == u64::from(real) {
+      if i == real {
         secrets = (dest.clone(), mask);
         amount = AMOUNT;
       } else {
@@ -101,28 +101,28 @@ fn clsag_multisig() {
   }
 
   let mask_sum = random_scalar(&mut OsRng);
+  let algorithm = ClsagMultisig::new(
+    RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
+    keys[&1].group_key().0,
+    Arc::new(RwLock::new(Some(ClsagDetails::new(
+      ClsagInput::new(
+        Commitment::new(randomness, AMOUNT),
+        Decoys {
+          i: RING_INDEX,
+          offsets: (1 ..= RING_LEN).into_iter().collect(),
+          ring: ring.clone(),
+        },
+      )
+      .unwrap(),
+      mask_sum,
+    )))),
+  );
+
   sign(
     &mut OsRng,
-    algorithm_machines(
-      &mut OsRng,
-      ClsagMultisig::new(
-        RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
-        keys[&1].group_key().0,
-        Arc::new(RwLock::new(Some(ClsagDetails::new(
-          ClsagInput::new(
-            Commitment::new(randomness, AMOUNT),
-            Decoys {
-              i: RING_INDEX,
-              offsets: (1 ..= RING_LEN).into_iter().collect(),
-              ring: ring.clone(),
-            },
-          )
-          .unwrap(),
-          mask_sum,
-        )))),
-      ),
-      &keys,
-    ),
+    algorithm.clone(),
+    keys.clone(),
+    algorithm_machines(&mut OsRng, algorithm, &keys),
     &[1; 32],
   );
 }

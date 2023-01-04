@@ -38,7 +38,7 @@ macro_rules! field {
     impl Neg for $FieldName {
       type Output = $FieldName;
       fn neg(self) -> $FieldName {
-        $MODULUS - self
+        Self(self.0.neg_mod(&$MODULUS.0))
       }
     }
 
@@ -104,17 +104,10 @@ macro_rules! field {
       }
 
       fn sqrt(&self) -> CtOption<Self> {
-        unimplemented!()
-      }
-
-      fn is_zero(&self) -> Choice {
-        self.0.ct_eq(&U512::ZERO)
-      }
-      fn cube(&self) -> Self {
-        self.square() * self
-      }
-      fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
-        unimplemented!()
+        const MOD_1_4: $FieldName =
+          Self($MODULUS.0.saturating_add(&U512::from_u8(1)).wrapping_div(&U512::from_u8(4)));
+        let res = self.pow(MOD_1_4);
+        CtOption::new(res, res.square().ct_eq(self))
       }
     }
 

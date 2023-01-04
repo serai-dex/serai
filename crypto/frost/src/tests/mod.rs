@@ -10,8 +10,6 @@ use crate::{
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
 
-/// Curve tests.
-pub mod curve;
 /// Vectorized test suite to ensure consistency.
 pub mod vectors;
 
@@ -53,10 +51,7 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     .iter()
     .filter_map(|(i, keys)| {
       if included.contains(i) {
-        Some((
-          *i,
-          AlgorithmMachine::new(algorithm.clone(), keys.clone(), &included.clone()).unwrap(),
-        ))
+        Some((*i, AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap()))
       } else {
         None
       }
@@ -64,12 +59,21 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     .collect()
 }
 
-/// Execute the signing protocol.
-pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
+// Run the commit step and generate signature shares
+#[allow(clippy::type_complexity)]
+pub(crate) fn commit_and_shares<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine,
+  F: FnMut(&mut R, &mut HashMap<u16, M::SignMachine>),
+>(
   rng: &mut R,
   mut machines: HashMap<u16, M>,
+  mut cache: F,
   msg: &[u8],
-) -> M::Signature {
+) -> (
+  HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::SignatureMachine>,
+  HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::SignatureShare>,
+) {
   let mut commitments = HashMap::new();
   let mut machines = machines
     .drain()
@@ -84,8 +88,10 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     })
     .collect::<HashMap<_, _>>();
 
+  cache(rng, &mut machines);
+
   let mut shares = HashMap::new();
-  let mut machines = machines
+  let machines = machines
     .drain()
     .map(|(i, machine)| {
       let (machine, share) = machine.sign(clone_without(&commitments, &i), msg).unwrap();
@@ -98,6 +104,21 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     })
     .collect::<HashMap<_, _>>();
 
+  (machines, shares)
+}
+
+fn sign_internal<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine,
+  F: FnMut(&mut R, &mut HashMap<u16, M::SignMachine>),
+>(
+  rng: &mut R,
+  machines: HashMap<u16, M>,
+  cache: F,
+  msg: &[u8],
+) -> M::Signature {
+  let (mut machines, shares) = commit_and_shares(rng, machines, cache, msg);
+
   let mut signature = None;
   for (i, machine) in machines.drain() {
     let sig = machine.complete(clone_without(&shares, &i)).unwrap();
@@ -107,4 +128,44 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     assert_eq!(&sig, signature.as_ref().unwrap());
   }
   signature.unwrap()
+}
+
+/// Execute the signing protocol, without caching any machines. This isn't as comprehensive at
+/// testing as sign, and accordingly isn't preferred, yet is usable for machines not supporting
+/// caching.
+pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
+  rng: &mut R,
+  machines: HashMap<u16, M>,
+  msg: &[u8],
+) -> M::Signature {
+  sign_internal(rng, machines, |_, _| {}, msg)
+}
+
+/// Execute the signing protocol, randomly caching various machines to ensure they can cache
+/// successfully.
+pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
+  rng: &mut R,
+  params: <M::SignMachine as SignMachine<M::Signature>>::Params,
+  mut keys: HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
+  machines: HashMap<u16, M>,
+  msg: &[u8],
+) -> M::Signature {
+  sign_internal(
+    rng,
+    machines,
+    |rng, machines| {
+      // Cache and rebuild half of the machines
+      let mut included = machines.keys().cloned().collect::<Vec<_>>();
+      for i in included.drain(..) {
+        if (rng.next_u64() % 2) == 0 {
+          let cache = machines.remove(&i).unwrap().cache();
+          machines.insert(
+            i,
+            M::SignMachine::from_cache(params.clone(), keys.remove(&i).unwrap(), cache).unwrap(),
+          );
+        }
+      }
+    },
+    msg,
+  )
 }

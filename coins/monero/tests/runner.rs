@@ -1,9 +1,13 @@
-use std::sync::Mutex;
+use core::ops::Deref;
 
 use lazy_static::lazy_static;
+
+use zeroize::Zeroizing;
 use rand_core::OsRng;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
+
+use tokio::sync::Mutex;
 
 use monero_serai::{
   Protocol, random_scalar,
@@ -17,14 +21,14 @@ use monero_serai::{
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
   let spend = random_scalar(&mut OsRng);
   let spend_pub = &spend * &ED25519_BASEPOINT_TABLE;
-  let view = random_scalar(&mut OsRng);
+  let view = Zeroizing::new(random_scalar(&mut OsRng));
   (
     spend,
-    ViewPair::new(spend_pub, view),
+    ViewPair::new(spend_pub, view.clone()),
     MoneroAddress {
       meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
       spend: spend_pub,
-      view: &view * &ED25519_BASEPOINT_TABLE,
+      view: view.deref() * &ED25519_BASEPOINT_TABLE,
     },
   )
 }
@@ -84,7 +88,7 @@ macro_rules! async_sequential {
     $(
       #[tokio::test]
       async fn $name() {
-        let guard = runner::SEQUENTIAL.lock().unwrap();
+        let guard = runner::SEQUENTIAL.lock().await;
         let local = tokio::task::LocalSet::new();
         local.run_until(async move {
           if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
@@ -143,6 +147,7 @@ macro_rules! test {
         type Builder = SignableTransactionBuilder;
 
         // Run each function as both a single signer and as a multisig
+        #[allow(clippy::redundant_closure_call)]
         for multisig in [false, true] {
           // Only run the multisig variant if multisig is enabled
           if multisig {
@@ -163,7 +168,7 @@ macro_rules! test {
             keys[&1].group_key().0
           };
 
-          let view = ViewPair::new(spend_pub, random_scalar(&mut OsRng));
+          let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
 
           let rpc = rpc().await;
 
@@ -216,14 +221,13 @@ macro_rules! test {
                           keys[&i].clone(),
                           RecommendedTranscript::new(b"Monero Serai Test Transaction"),
                           rpc.get_height().await.unwrap() - 10,
-                          (1 ..= THRESHOLD).collect::<Vec<_>>(),
                         )
                         .await
                         .unwrap(),
                     );
                   }
 
-                  frost::tests::sign(&mut OsRng, machines, &vec![])
+                  frost::tests::sign_without_caching(&mut OsRng, machines, &[])
                 }
               }
             }

@@ -16,8 +16,11 @@ async-trait = "0.1"
 
 log = "0.4"
 
+futures = { version = "0.3" }
+
 clap = { version = "4", features = ["derive"] }
-jsonrpsee = { version = "0.15", features = ["server"] }
+
+jsonrpsee = { version = "0.16", features = ["server"] }
 
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }

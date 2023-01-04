@@ -24,3 +24,6 @@ group = "0.12"
 
 crypto-bigint = "0.4"
 curve25519-dalek =  "3.2"
+
+[dev-dependencies]
+ff-group-tests = { path = "../ff-group-tests" }

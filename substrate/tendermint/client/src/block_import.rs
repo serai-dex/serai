@@ -121,7 +121,7 @@ where
       return Ok((block, None));
     }
 
-    self.check(&mut block).await.map_err(|e| format!("{}", e))?;
+    self.check(&mut block).await.map_err(|e| format!("{e}"))?;
     Ok((block, None))
   }
 }

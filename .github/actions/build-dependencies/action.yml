@@ -2,6 +2,11 @@ name: build-dependencies
 description: Installs build dependencies for Serai
 
 inputs:
+  github-token:
+    description: "GitHub token to install Protobuf with"
+    require: true
+    default:
+
   rust-toolchain:
     description: "Rust toolchain to install"
     required: false
@@ -17,6 +22,8 @@ runs:
   steps:
     - name: Install Protobuf
       uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ inputs.github-token }}
 
     - name: Install solc
       shell: bash

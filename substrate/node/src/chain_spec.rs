@@ -12,7 +12,7 @@ use serai_runtime::{
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
 fn insecure_pair_from_name(name: &'static str) -> Pair {
-  Pair::from_string(&format!("//{}", name), None).unwrap()
+  Pair::from_string(&format!("//{name}"), None).unwrap()
 }
 
 fn account_id_from_name(name: &'static str) -> AccountId {
