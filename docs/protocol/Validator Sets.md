@@ -9,7 +9,7 @@ Validator Sets are defined at the protocol level, with the following parameters:
 Validator Sets are referred to by `ValidatorSetIndex` yet have their data
 accessible via `ValidatorSetInstance`.
 
-At launch, there will solely be Validator Set 1, managing Bitcoin, Ether, DAI,
+At launch, there will solely be Validator Set 0, managing Bitcoin, Ether, DAI,
 and Monero.
 
 ### Participation in the BFT process

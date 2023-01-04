@@ -32,7 +32,7 @@ pub mod pallet {
   #[cfg(feature = "std")]
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig { bond: Amount(0), coins: Coin(0), participants: vec![] }
+      GenesisConfig { bond: Amount(1), coins: Coin(0), participants: vec![] }
     }
   }
 
@@ -95,8 +95,6 @@ pub mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
     fn build(&self) {
-      // Start at 1 to leave 0 available for a future design where Serai itself has a distinct
-      // validator set for its Tendermint consensus
       let mut coins = Vec::new();
       for coin in 0 .. self.coins.0 {
         coins.push(Coin(coin));
@@ -108,7 +106,7 @@ pub mod pallet {
       }
 
       ValidatorSets::<T>::set(
-        ValidatorSetInstance(Session(0), ValidatorSetIndex(1)),
+        ValidatorSetInstance(Session(0), ValidatorSetIndex(0)),
         Some(ValidatorSet {
           bond: self.bond,
           coins: BoundedVec::try_from(coins).unwrap(),
@@ -158,7 +156,9 @@ pub mod pallet {
       key: Key,
     ) -> DispatchResult {
       let signer = ensure_signed(origin)?;
-      // TODO: Do we need to check key is within bounds?
+      // TODO: Do we need to check the key is within the length bounds?
+      // The docs suggest the BoundedVec will create/write, yet not read, which could be an issue
+      // if it can be passed in
 
       // TODO: Get session
       let session: Session = Session(0);
@@ -200,7 +200,6 @@ pub mod pallet {
     }
   }
 
-  // TODO: Support choosing validator set participants to form a Tendermint session
   // TODO: Support session rotation
 }
 
