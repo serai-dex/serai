@@ -44,12 +44,12 @@ impl CoreProcess {
     Self { core_config: config }
   }
 
-  pub fn run(self) {
+  pub fn run(self, name: String) {
     start_logger(true, String::from("core"), &self.core_config.log_filter);
     info!("Starting Core Process");
 
     // Check coordinator pubkey env variable
-    initialize_keys();
+    initialize_keys(name);
   }
 
   fn stop(self) {
@@ -455,7 +455,7 @@ impl CoordinatorConfig {
 }
 
 // Generates Private / Public key pair
-pub fn initialize_keys() {
+pub fn initialize_keys(name: String) {
   // Checks if coordinator keys are set
   let coord_priv_check = env::var("COORD_PRIV");
   if coord_priv_check.is_err() {
@@ -463,9 +463,13 @@ pub fn initialize_keys() {
     // Generates new private / public key
     let (private, public) = message_box::key_gen();
     let private_bytes = unsafe { private.inner().to_repr() };
+
+    let env_priv_key = format!("COORD_{}_PRIV", name.to_uppercase());
+    let env_pub_key = format!("COORD_{}_PUB", name.to_uppercase());
+
     // Sets private / public key to environment variables
-    env::set_var("COORD_PRIV", hex::encode(&private_bytes.as_ref()));
-    env::set_var("COORD_PUB", hex::encode(&public.to_bytes()));
+    env::set_var(env_priv_key, hex::encode(&private_bytes.as_ref()));
+    env::set_var(env_pub_key, hex::encode(&public.to_bytes()));
   } else {
     info!("Keys Found");
   }

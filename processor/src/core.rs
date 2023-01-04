@@ -26,12 +26,12 @@ impl CoreProcess {
     Self { core_config: core_config, coin: coin }
   }
 
-  pub fn run(self) {
+  pub fn run(self, name: String) {
     start_logger(true, String::from("core"), &self.core_config.log_filter);
     info!("Starting Core Process");
 
     // Check coordinator pubkey env variable
-    initialize_keys(&self.coin);
+    initialize_keys(&self.coin, &name);
   }
 
   fn stop(self) {
@@ -381,9 +381,9 @@ pub fn initialize_coin(coin: &str) {
 }
 
 // Generates Private / Public key pair
-pub fn initialize_keys(coin: &String) {
+pub fn initialize_keys(coin: &String, name: &String) {
   let mut env_privkey = String::from(coin).to_uppercase();
-  env_privkey.push_str("_PRIV");
+  env_privkey.push_str(format!("_{}_PRIV", &name.to_uppercase()).as_str());
 
   // Checks if coin keys are set
   let priv_check = env::var(&env_privkey.to_string());
@@ -395,7 +395,7 @@ pub fn initialize_keys(coin: &String) {
     env::set_var(&env_privkey, hex::encode(&privkey_bytes.as_ref()));
 
     let mut env_pubkey = String::from(coin).to_uppercase();
-    env_pubkey.push_str("_PUB");
+    env_pubkey.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
     env::set_var(&env_pubkey, hex::encode(&pubkey.to_bytes()));
   }
 }

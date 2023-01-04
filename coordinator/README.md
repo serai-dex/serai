@@ -48,7 +48,7 @@ Within the coordinator we have processes, each process will be responsible for o
 
 ### Main
 ```mermaid
-    graph LR
+    graph TB
     A[Coordinator Startup] --> B[Load Configuration]
     B --> C[Start Core Process]
     C --> D[Start Observation Process]
@@ -180,3 +180,70 @@ The connection module is responsible for establishing secure connections with a 
     BBP --> BBK ==> BC-.-AC ==> ABK ==> ABP
     end
 ```
+
+# Processing Coordiantor Instructions & Requests
+
+Coordinators would receive instructions from the substrate topic to create requests, for testing we'll use bash scripts to test coordinator instructions. 
+* The coordinator we be required to initialize, accept/process instructions, communicate requests to coordinators & process requests.
+
+
+#### Coordinator States 
+
+```mermaid
+    graph TB
+    A[Idle] --> B[Instructions Received]
+    B --> C[Request Sent to Coordinators]
+    C --> D[Awaiting Coordiantor Responses]
+    D --> E[All Responses Received]
+    E --> F[Send to Processor]
+    F --> G[Awaiting Processor Response]
+    G --> H[Instructions Complete]
+    H --> A[Idle]
+
+    A[Idle] --> I[Request Received]
+    I --> J[Send to Processor]
+    J --> K[Processor Creates Secure Message]
+    K --> L[Processor Sends to Coordinator]
+    L --> M[Coordinator Sends Response to Coordinator]
+    M --> N[Request Complete]
+    N --> A
+```
+## Processing Instructions
+
+**Idle** - Awaits instructions. Uses a kafka consumer to receive instructions for building a request.
+
+**Instructions Recieved** - Processes instructions & builds request with processor pubkey for coordinators.
+
+**Request Sent to Coordinators** - Coordinator sends request to other coordinators via libp2p.
+
+**Awaiting Coordiantor Responses** - Based on instructions, awaits all coordinators responses via libp2p.
+
+**All Responses Received** - Has received all coordinator responses & ready to communicate messages to its processor.
+
+**Send to Processor** - Communicates responses to processor via kafka topic. 
+
+**Awaiting Processor Response** - Awaits processor response via kafka consumer.
+
+**Instructions Complete** - After consuming processor response, marks instructions complete. 
+
+## Processing Requests
+
+**Idle** - Awaits instructions. Uses a kafka consumer to receive instructions for building a request.
+
+**Request Recieved** - Processes request & builds message to processor.
+
+**Send to Processor** - Communicates message via kafka topic.
+
+**Processor Creates Secure Message** - Consumes kafka message & creates secure message using commnicated pubkey.
+
+**Processor Sends to Coordinator** - Processor sends secure message to coordinator via kafka topic
+
+**Coordinator Sends Response to Coordinator** - Coordinator receives response & sends secure message to coordinator via libp2p. 
+
+**Requests Complete** - After sending response, marks request complete 
+
+
+## Kafka Messages
+Public and secure messages should be structured so coordinator / processor would know what current instruction / request the message belong to.
+
+This will allow coordinator to consume messages & continue through each state for completing an instruction / request.

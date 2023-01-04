@@ -2,6 +2,12 @@ mod core;
 mod health;
 mod signature;
 
+#[path = "test/kafka_test.rs"]
+mod kafka_test;
+
+#[path = "test/message_box_test.rs"]
+mod message_box_test;
+
 use std::io;
 use clap::{App, Arg};
 
@@ -52,20 +58,21 @@ async fn main() {
   let path_arg = args.value_of("config_dir").unwrap();
   let config = CoordinatorConfig::new(String::from(path_arg)).unwrap();
 
-  // Processes then use configs to create themselves
-
-  // Start Core Process
-  let core_config = config.clone();
-  tokio::spawn(async move {
-    let core_process = CoreProcess::new(core_config.get_core());
-    core_process.run();
-  });
-
   // Load identity arg
   let name_arg = args.value_of("name").unwrap().to_owned().to_lowercase();
 
   // print identity arg
   info!("Coordinator Identity: {}", name_arg);
+
+  // Processes then use configs to create themselves
+
+  // Start Core Process
+  let core_config = config.clone();
+  let core_name_arg = name_arg.to_string().to_owned();
+  tokio::spawn(async move {
+    let core_process = CoreProcess::new(core_config.get_core());
+    core_process.run(core_name_arg);
+  });
 
   let network_config = config.clone().get_network();
   let network_name_arg = name_arg.to_string().to_owned();
@@ -77,7 +84,8 @@ async fn main() {
   // Start Signature Process
   let sig_config = config.clone();
   tokio::spawn(async move {
-    let signature_process = SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), name_arg);
+    let signature_process =
+      SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), name_arg);
     signature_process.run().await;
   });
 

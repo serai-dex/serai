@@ -60,20 +60,22 @@ async fn main() {
 
   let config = ProcessorConfig::new(String::from(path_arg), String::from(coin_arg)).unwrap();
 
-  // Start Core Process
-  let core_config = config.clone();
-  tokio::spawn(async move {
-    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_coin());
-    core_process.run();
-  });
-
   // Load name arg
   let name_arg = args.value_of("name").unwrap().to_owned().to_lowercase();
+
+  // Start Core Process
+  let core_config = config.clone();
+  let core_name_arg = name_arg.clone();
+  tokio::spawn(async move {
+    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_coin());
+    core_process.run(core_name_arg);
+  });
 
   // Start Signature Process
   let sig_config = config.clone();
   tokio::spawn(async move {
-    let signature_process = SignatureProcess::new(sig_config.get_coin(), sig_config.get_kafka(), name_arg);
+    let signature_process =
+      SignatureProcess::new(sig_config.get_coin(), sig_config.get_kafka(), name_arg);
     signature_process.run().await;
   });
 
