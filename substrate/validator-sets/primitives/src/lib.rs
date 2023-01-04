@@ -1,7 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::ops::{Add, Mul};
-
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 #[cfg(feature = "std")]

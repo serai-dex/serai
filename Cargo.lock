@@ -7249,6 +7249,7 @@ dependencies = [
  "sc-tendermint",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
+ "serai-primitives",
  "serai-runtime",
  "sp-api",
  "sp-application-crypto",
@@ -7265,7 +7266,17 @@ dependencies = [
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
  "validator-sets-pallet",
- "validator-sets-primitives",
+]
+
+[[package]]
+name = "serai-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-std",
 ]
 
 [[package]]
@@ -9106,6 +9117,7 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "scale-info",
+ "serai-primitives",
  "validator-sets-primitives",
 ]
 

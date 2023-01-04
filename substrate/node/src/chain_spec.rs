@@ -1,7 +1,7 @@
 use sp_core::{Pair as PairTrait, sr25519::Pair};
 use sc_service::ChainType;
 
-use validator_sets_primitives::{Amount, COIN, Coin};
+use serai_primitives::{Amount, COIN, Coin};
 use pallet_tendermint::crypto::Public;
 
 use serai_runtime::{
