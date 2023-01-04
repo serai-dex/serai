@@ -141,6 +141,8 @@ services:
     environment:
       CHAIN: local
       NAME: base
+    ports:
+      - "9933:9933"
 
   node-alice:
     <<: *node_defaults

@@ -1,9 +1,16 @@
-// The coordinator observer module contains functionality to poll, decode, and publish
-// data of interest from the Serai blockchain to other local services.
+use codec::Decode;
+use kitchensink_runtime::Runtime;
+use log::debug;
+use sp_core::{sr25519, H256 as Hash};
+use substrate_api_client::{
+	rpc::{HandleSubscription, JsonrpseeClient},
+	Api, AssetTipExtrinsicParams, SubscribeFrameSystem,
+};
 
-// Path: coordinator/src/observer.rs
-// Compare this snippet from coordinator/src/core.rs:
-
+// This module depends on node_runtime.
+// To avoid dependency collisions, node_runtime has been removed from the substrate-api-client library.
+// Replace this crate by your own if you run a custom substrate node to get your custom events.
+use kitchensink_runtime::RuntimeEvent;
 pub struct ObserverProcess {
   observer_config: ObserverConfig
 }

@@ -36,6 +36,7 @@ libc = "0.2.134"
 config = "0.13.1"
 warp = "0.2"
 lazy_static = "1.4"
+substrate-api-client = "0.6.6"
 
 async-std = { version = "1.9.0", features = ["attributes"] }
 backoff = "0.1.5"

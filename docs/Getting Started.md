@@ -5,6 +5,7 @@
 ##### Ubuntu
 
 ```
+sudo apt-get update
 sudo apt-get install -y build-essential cmake clang-11 git curl python3-pip protobuf-compiler libssl-dev pkg-config
 ```
 
