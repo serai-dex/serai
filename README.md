@@ -1,7 +1,7 @@
 # Serai
 
 Serai is a new DEX, built from the ground up, initially planning on listing
-Bitcoin, Ethereum, Monero, and DAI, offering a liquidity-pool-based trading
+Bitcoin, Ethereum, DAI, and Monero, offering a liquidity-pool-based trading
 experience. Funds are stored in an economically secured threshold-multisig
 wallet.
 
