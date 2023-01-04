@@ -71,7 +71,7 @@ Set to track both sets of keys. The old keys are also prioritized for handling
 outbound transfers, until the end of the grace period, at which point they're
 no longer eligible to receive coins and they forward all of their coins to the
 new set of keys. It is only then that validators in the previous instance of the
-set, yet not the current instance, may deallocate their bond.
+set, yet not the current instance, may unbond their stake.
 
 ### Vote (message)
 
