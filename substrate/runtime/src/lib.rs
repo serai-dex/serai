@@ -28,7 +28,6 @@ use frame_support::{
 };
 pub use frame_system::Call as SystemCall;
 
-pub use pallet_timestamp::Call as TimestampCall;
 pub use pallet_balances::Call as BalancesCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
@@ -162,13 +161,6 @@ impl frame_system::Config for Runtime {
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-impl pallet_timestamp::Config for Runtime {
-  type Moment = u64;
-  type OnTimestampSet = ();
-  type MinimumPeriod = ConstU64<{ TARGET_BLOCK_TIME / 2 }>;
-  type WeightInfo = ();
-}
-
 impl pallet_balances::Config for Runtime {
   type MaxLocks = ConstU32<50>;
   type MaxReserves = ();
@@ -249,7 +241,6 @@ construct_runtime!(
     UncheckedExtrinsic = UncheckedExtrinsic
   {
     System: frame_system,
-    Timestamp: pallet_timestamp,
     Balances: pallet_balances,
     TransactionPayment: pallet_transaction_payment,
 
@@ -269,7 +260,6 @@ mod benches {
     [frame_benchmarking, BaselineBench::<Runtime>]
     [frame_system, SystemBench::<Runtime>]
     [pallet_balances, Balances]
-    [pallet_timestamp, Timestamp]
   );
 }
 

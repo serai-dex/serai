@@ -36,7 +36,6 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 frame-executive = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
-pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -73,7 +72,6 @@ std = [
   "frame-support/std",
   "frame-executive/std",
 
-  "pallet-timestamp/std",
   "pallet-balances/std",
   "pallet-transaction-payment/std",
 
@@ -94,7 +92,6 @@ runtime-benchmarks = [
   "frame-support/runtime-benchmarks",
   "frame-benchmarking/runtime-benchmarks",
 
-  "pallet-timestamp/runtime-benchmarks",
   "pallet-balances/runtime-benchmarks",
 
   "pallet-tendermint/runtime-benchmarks",

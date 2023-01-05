@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use sp_core::{Encode, Pair};
 use sp_keyring::Sr25519Keyring;
-use sp_inherents::{InherentData, InherentDataProvider};
+use sp_inherents::InherentData;
 
 use sp_runtime::OpaqueExtrinsic;
 
@@ -87,11 +87,5 @@ pub fn create_benchmark_extrinsic(
 }
 
 pub fn inherent_benchmark_data() -> Result<InherentData> {
-  let mut inherent_data = InherentData::new();
-  futures::executor::block_on(
-    sp_timestamp::InherentDataProvider::new(Duration::from_millis(0).into())
-      .provide_inherent_data(&mut inherent_data),
-  )
-  .map_err(|e| format!("creating inherent data: {e:?}"))?;
-  Ok(inherent_data)
+  Ok(InherentData::new())
 }
