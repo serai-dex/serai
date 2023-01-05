@@ -18,7 +18,7 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 use frame_support::{
-  traits::{ConstBool, ConstU8, ConstU32, ConstU64},
+  traits::{ConstU8, ConstU32, ConstU64},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
@@ -130,7 +130,6 @@ parameter_types! {
     .get(DispatchClass::Normal)
     .max_total
     .unwrap_or(BlockWeights::get().max_block);
-  pub Schedule: pallet_contracts::Schedule<Runtime> = Default::default();
 }
 
 impl frame_system::Config for Runtime {
@@ -163,8 +162,6 @@ impl frame_system::Config for Runtime {
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-impl pallet_randomness_collective_flip::Config for Runtime {}
-
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
   type OnTimestampSet = ();
@@ -193,34 +190,6 @@ impl pallet_transaction_payment::Config for Runtime {
   type FeeMultiplierUpdate = ();
 }
 
-impl pallet_contracts::Config for Runtime {
-  type Time = Timestamp;
-  type Randomness = RandomnessCollectiveFlip;
-  type Currency = Balances;
-  type RuntimeEvent = RuntimeEvent;
-  type RuntimeCall = RuntimeCall;
-
-  type CallFilter = frame_support::traits::Nothing;
-  type DepositPerItem = DepositPerItem;
-  type DepositPerByte = DepositPerByte;
-  type CallStack = [pallet_contracts::Frame<Self>; 31];
-  type WeightPrice = pallet_transaction_payment::Pallet<Self>;
-  type WeightInfo = pallet_contracts::weights::SubstrateWeight<Self>;
-  type ChainExtension = ();
-  type DeletionQueueDepth = DeletionQueueDepth;
-  type DeletionWeightLimit = DeletionWeightLimit;
-  type Schedule = Schedule;
-  type AddressGenerator = pallet_contracts::DefaultAddressGenerator;
-
-  type MaxCodeLen = ConstU32<{ 128 * 1024 }>;
-  type MaxStorageKeyLen = ConstU32<128>;
-
-  type UnsafeUnstableInterface = ConstBool<false>;
-  type MaxDebugBufferLen = ConstU32<255>;
-}
-
-impl pallet_tendermint::Config for Runtime {}
-
 const SESSION_LENGTH: BlockNumber = 5 * DAYS;
 type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
 
@@ -229,6 +198,10 @@ impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
   fn convert(key: Public) -> Option<Public> {
     Some(key)
   }
+}
+
+impl validator_sets_pallet::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
 }
 
 impl pallet_session::Config for Runtime {
@@ -242,6 +215,8 @@ impl pallet_session::Config for Runtime {
   type Keys = SessionKeys;
   type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
+
+impl pallet_tendermint::Config for Runtime {}
 
 pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
@@ -274,11 +249,11 @@ construct_runtime!(
     UncheckedExtrinsic = UncheckedExtrinsic
   {
     System: frame_system,
-    RandomnessCollectiveFlip: pallet_randomness_collective_flip,
     Timestamp: pallet_timestamp,
     Balances: pallet_balances,
     TransactionPayment: pallet_transaction_payment,
-    Contracts: pallet_contracts,
+
+    ValidatorSets: validator_sets_pallet,
     Session: pallet_session,
     Tendermint: pallet_tendermint,
   }

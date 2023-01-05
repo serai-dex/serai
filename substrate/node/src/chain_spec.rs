@@ -1,11 +1,12 @@
+use sp_core::{Pair as PairTrait, sr25519::Pair};
 use sc_service::ChainType;
 
-use sp_core::{Pair as PairTrait, sr25519::Pair};
+use serai_primitives::{Amount, COIN, Coin};
 use pallet_tendermint::crypto::Public;
 
 use serai_runtime::{
   WASM_BINARY, AccountId, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig,
-  SessionConfig,
+  ValidatorSetsConfig, SessionConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
@@ -34,6 +35,12 @@ fn testnet_genesis(
       balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
     },
     transaction_payment: Default::default(),
+
+    validator_sets: ValidatorSetsConfig {
+      bond: Amount(1_000_000) * COIN,
+      coins: Coin(4),
+      participants: validators.iter().map(|name| account_id_from_name(name)).collect(),
+    },
     session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
   }
 }

@@ -137,14 +137,9 @@ dependencies = [
 
 [[package]]
 name = "array-bytes"
-version = "4.1.0"
-source = "git+https://github.com/hack-ink/array-bytes?rev=994cd29b66bd2ab5c8c15f0b15a1618d4bb2d94c#994cd29b66bd2ab5c8c15f0b15a1618d4bb2d94c"
-
-[[package]]
-name = "array-init"
-version = "2.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d62b7694a562cdf5a74227903507c56ab2cc8bdd1f781ed5cb4cf9c9f810bfc"
+checksum = "f52f63c5c1316a16a4b35eaac8b76a98248961a533f061684cb2a7cb0eafb6c6"
 
 [[package]]
 name = "arrayref"
@@ -274,7 +269,7 @@ checksum = "b6d7b9decdf35d8908a7e3ef02f64c5e9b1695e230154c0e8de3969142d9b94c"
 dependencies = [
  "futures",
  "pharos",
- "rustc_version 0.4.0",
+ "rustc_version",
 ]
 
 [[package]]
@@ -1911,7 +1906,7 @@ dependencies = [
  "fixed-hash",
  "impl-codec",
  "impl-rlp",
- "impl-serde 0.4.0",
+ "impl-serde",
  "scale-info",
  "tiny-keccak",
 ]
@@ -1945,7 +1940,7 @@ dependencies = [
  "fixed-hash",
  "impl-codec",
  "impl-rlp",
- "impl-serde 0.4.0",
+ "impl-serde",
  "primitive-types",
  "scale-info",
  "uint",
@@ -3242,15 +3237,6 @@ dependencies = [
 
 [[package]]
 name = "impl-serde"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4551f042f3438e64dbd6226b20527fc84a6e1fe65688b58746a2f53623f25f5c"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "impl-serde"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc88fc67028ae3db0c853baa36269d398d5f45b6982f95549ff5def78c935cd"
@@ -3287,12 +3273,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "indexmap-nostd"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e04e2fd2b8188ea827b32ef11de88377086d690286ab35747ef7f9bf3ccb590"
-
-[[package]]
 name = "indicatif"
 version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3302,184 +3282,6 @@ dependencies = [
  "lazy_static",
  "number_prefix",
  "regex",
-]
-
-[[package]]
-name = "ink_allocator"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c9588a59a0e8997c0b2153cd11b5aaa77c06a0537a6b18f3811d1f1aa098b12"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
-name = "ink_engine"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "487c3b390b7feb0620496b0cd38683433c7d7e6946b1caabda51e1f23eb24b30"
-dependencies = [
- "blake2",
- "derive_more",
- "parity-scale-codec",
- "rand 0.8.5",
- "secp256k1",
- "sha2 0.10.6",
- "sha3",
-]
-
-[[package]]
-name = "ink_env"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a891d34301a3dbb1c7b7424c49ae184282b163491c54f9acd17fcbe14a80447b"
-dependencies = [
- "arrayref",
- "blake2",
- "cfg-if",
- "derive_more",
- "ink_allocator",
- "ink_engine",
- "ink_metadata",
- "ink_prelude",
- "ink_primitives",
- "num-traits",
- "parity-scale-codec",
- "paste",
- "rand 0.8.5",
- "rlibc",
- "scale-info",
- "secp256k1",
- "sha2 0.10.6",
- "sha3",
- "static_assertions",
-]
-
-[[package]]
-name = "ink_lang"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cca26e374e0f89c82cf5dabb4309ef3c76a01659ad95186f4e84455c5f4621a0"
-dependencies = [
- "derive_more",
- "ink_env",
- "ink_lang_macro",
- "ink_prelude",
- "ink_primitives",
- "ink_storage",
- "parity-scale-codec",
-]
-
-[[package]]
-name = "ink_lang_codegen"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fe57826726d89c84fe0b1fafe0dee328f58c8e927be40f0290f04602aacc45c"
-dependencies = [
- "blake2",
- "derive_more",
- "either",
- "heck",
- "impl-serde 0.3.2",
- "ink_lang_ir",
- "itertools",
- "parity-scale-codec",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "ink_lang_ir"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f47d16b2a5340df90f11b2ec2242b37907f5c8396dbbc72c52ec9f2b1a8c90c8"
-dependencies = [
- "blake2",
- "either",
- "itertools",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "ink_lang_macro"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81b858be42ac6cde2c15ce6d7fa75cef59b64a3baf37f7105f39208f2b84dadb"
-dependencies = [
- "ink_lang_codegen",
- "ink_lang_ir",
- "ink_primitives",
- "parity-scale-codec",
- "proc-macro2",
- "syn",
-]
-
-[[package]]
-name = "ink_metadata"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74913aaed5751f5615af4631b7559328b8ed56c9cb821b89e14af0706176e849"
-dependencies = [
- "derive_more",
- "impl-serde 0.3.2",
- "ink_prelude",
- "ink_primitives",
- "scale-info",
- "serde",
-]
-
-[[package]]
-name = "ink_prelude"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f031e6b8495594a7288b089bf4122e76c26b994959d1b2b693bdfe846b14c0e"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
-name = "ink_primitives"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e12cf42dce81d060401c7cec95a392ad6d3c2f18661fa3083f619ce135133c33"
-dependencies = [
- "cfg-if",
- "ink_prelude",
- "parity-scale-codec",
- "scale-info",
-]
-
-[[package]]
-name = "ink_storage"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c0a98b6acbd79eedf44720412437d713e7195d1407822604de5885b0ee6c7e1"
-dependencies = [
- "array-init",
- "cfg-if",
- "derive_more",
- "ink_env",
- "ink_metadata",
- "ink_prelude",
- "ink_primitives",
- "ink_storage_derive",
- "parity-scale-codec",
- "scale-info",
-]
-
-[[package]]
-name = "ink_storage_derive"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "babf1d8903dc9219ad8e8aa181eddb919d9794aad1da23ccdce770925b7de2ba"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "synstructure",
 ]
 
 [[package]]
@@ -5103,70 +4905,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-contracts"
-version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
-dependencies = [
- "bitflags",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "impl-trait-for-tuples",
- "log",
- "pallet-contracts-primitives",
- "pallet-contracts-proc-macro",
- "parity-scale-codec",
- "rand 0.8.5",
- "scale-info",
- "serde",
- "smallvec",
- "sp-api",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-std",
- "wasm-instrument 0.4.0",
- "wasmi 0.20.0",
- "wasmparser-nostd",
-]
-
-[[package]]
-name = "pallet-contracts-primitives"
-version = "7.0.0"
-source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
-dependencies = [
- "bitflags",
- "parity-scale-codec",
- "sp-runtime",
- "sp-std",
- "sp-weights",
-]
-
-[[package]]
-name = "pallet-contracts-proc-macro"
-version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "pallet-randomness-collective-flip"
-version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
-dependencies = [
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "safe-mix",
- "scale-info",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "pallet-session"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
@@ -5500,7 +5238,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9567389417feee6ce15dd6527a8a1ecac205ef62c2932bcf3d9f6fc5b78b414"
 dependencies = [
  "futures",
- "rustc_version 0.4.0",
+ "rustc_version",
 ]
 
 [[package]]
@@ -5717,7 +5455,7 @@ dependencies = [
  "fixed-hash",
  "impl-codec",
  "impl-rlp",
- "impl-serde 0.4.0",
+ "impl-serde",
  "scale-info",
  "uint",
 ]
@@ -6211,7 +5949,7 @@ dependencies = [
  "cc",
  "libc",
  "once_cell",
- "spin 0.5.2",
+ "spin",
  "untrusted",
  "web-sys",
  "winapi",
@@ -6225,12 +5963,6 @@ checksum = "bd124222d17ad93a644ed9d011a40f4fb64aa54275c08cc216524a9ea82fb09f"
 dependencies = [
  "digest 0.10.6",
 ]
-
-[[package]]
-name = "rlibc"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc874b127765f014d792f16763a81245ab80500e2ad921ed4ee9e82481ee08fe"
 
 [[package]]
 name = "rlp"
@@ -6316,15 +6048,6 @@ name = "rustc-hex"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e75f6a532d0fd9f7f13144f392b6ad56a32696bfcd9c78f797f16bbb6f072d6"
-
-[[package]]
-name = "rustc_version"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
-dependencies = [
- "semver 0.9.0",
-]
 
 [[package]]
 name = "rustc_version"
@@ -6418,15 +6141,6 @@ name = "ryu"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b4b9743ed687d4b4bcedf9ff5eaa7398495ae14e61cba0a295704edbc7decde"
-
-[[package]]
-name = "safe-mix"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d3d055a2582e6b00ed7a31c1524040aa391092bf636328350813f3a0605215c"
-dependencies = [
- "rustc_version 0.2.3",
-]
 
 [[package]]
 name = "salsa20"
@@ -6663,7 +6377,7 @@ dependencies = [
  "sp-version",
  "sp-wasm-interface",
  "tracing",
- "wasmi 0.13.2",
+ "wasmi",
 ]
 
 [[package]]
@@ -6675,8 +6389,8 @@ dependencies = [
  "sp-maybe-compressed-blob",
  "sp-wasm-interface",
  "thiserror",
- "wasm-instrument 0.3.0",
- "wasmi 0.13.2",
+ "wasm-instrument",
+ "wasmi",
 ]
 
 [[package]]
@@ -6689,7 +6403,7 @@ dependencies = [
  "sc-executor-common",
  "sp-runtime-interface",
  "sp-wasm-interface",
- "wasmi 0.13.2",
+ "wasmi",
 ]
 
 [[package]]
@@ -7486,15 +7200,6 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
-dependencies = [
- "semver-parser",
-]
-
-[[package]]
-name = "semver"
 version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58bc9567378fc7690d6b2addae4e60ac2eeea07becb2c64b9f218b53865cba2a"
@@ -7513,30 +7218,6 @@ name = "send_wrapper"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
-
-[[package]]
-name = "serai-extension"
-version = "0.1.0"
-dependencies = [
- "ink_env",
- "ink_lang",
- "parity-scale-codec",
-]
-
-[[package]]
-name = "serai-multisig"
-version = "0.1.0"
-dependencies = [
- "ink_env",
- "ink_lang",
- "ink_metadata",
- "ink_primitives",
- "ink_storage",
- "lazy_static",
- "parity-scale-codec",
- "scale-info",
- "serai-extension",
-]
 
 [[package]]
 name = "serai-node"
@@ -7568,6 +7249,7 @@ dependencies = [
  "sc-tendermint",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
+ "serai-primitives",
  "serai-runtime",
  "sp-api",
  "sp-application-crypto",
@@ -7583,6 +7265,18 @@ dependencies = [
  "sp-timestamp",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
+ "validator-sets-pallet",
+]
+
+[[package]]
+name = "serai-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-std",
 ]
 
 [[package]]
@@ -7617,9 +7311,6 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "hex-literal",
  "pallet-balances",
- "pallet-contracts",
- "pallet-contracts-primitives",
- "pallet-randomness-collective-flip",
  "pallet-session",
  "pallet-tendermint",
  "pallet-timestamp",
@@ -7640,6 +7331,7 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+ "validator-sets-pallet",
 ]
 
 [[package]]
@@ -7865,7 +7557,7 @@ dependencies = [
  "curve25519-dalek 4.0.0-pre.5",
  "rand_core 0.6.4",
  "ring",
- "rustc_version 0.4.0",
+ "rustc_version",
  "sha2 0.10.6",
  "subtle",
 ]
@@ -8032,7 +7724,7 @@ dependencies = [
  "futures",
  "hash-db",
  "hash256-std-hasher",
- "impl-serde 0.4.0",
+ "impl-serde",
  "lazy_static",
  "libsecp256k1",
  "log",
@@ -8058,7 +7750,7 @@ dependencies = [
  "substrate-bip39",
  "thiserror",
  "tiny-bip39",
- "wasmi 0.13.2",
+ "wasmi",
  "zeroize",
 ]
 
@@ -8353,7 +8045,7 @@ name = "sp-storage"
 version = "7.0.0"
 source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
 dependencies = [
- "impl-serde 0.4.0",
+ "impl-serde",
  "parity-scale-codec",
  "ref-cast",
  "serde",
@@ -8451,7 +8143,7 @@ name = "sp-version"
 version = "5.0.0"
 source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
 dependencies = [
- "impl-serde 0.4.0",
+ "impl-serde",
  "parity-scale-codec",
  "parity-wasm",
  "scale-info",
@@ -8483,7 +8175,7 @@ dependencies = [
  "log",
  "parity-scale-codec",
  "sp-std",
- "wasmi 0.13.2",
+ "wasmi",
  "wasmtime",
 ]
 
@@ -8508,12 +8200,6 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
-
-[[package]]
-name = "spin"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6002a767bff9e83f8eeecf883ecb8011875a21ae8da43bffb817a57e78cc09"
 
 [[package]]
 name = "spki"
@@ -9424,6 +9110,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "validator-sets-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "validator-sets-primitives",
+]
+
+[[package]]
+name = "validator-sets-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-std",
+]
+
+[[package]]
 name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9568,15 +9277,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm-instrument"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a47ecb37b9734d1085eaa5ae1a81e60801fd8c28d4cabdd8aedb982021918bc"
-dependencies = [
- "parity-wasm",
-]
-
-[[package]]
 name = "wasm-opt"
 version = "0.110.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9640,19 +9340,7 @@ checksum = "06c326c93fbf86419608361a2c925a31754cf109da1b8b55737070b4d6669422"
 dependencies = [
  "parity-wasm",
  "wasmi-validation",
- "wasmi_core 0.2.1",
-]
-
-[[package]]
-name = "wasmi"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01bf50edb2ea9d922aa75a7bf3c15e26a6c9e2d18c56e862b49737a582901729"
-dependencies = [
- "spin 0.9.4",
- "wasmi_arena",
- "wasmi_core 0.5.0",
- "wasmparser-nostd",
+ "wasmi_core",
 ]
 
 [[package]]
@@ -9663,12 +9351,6 @@ checksum = "91ff416ad1ff0c42e5a926ed5d5fab74c0f098749aa0ad8b2a34b982ce0e867b"
 dependencies = [
  "parity-wasm",
 ]
-
-[[package]]
-name = "wasmi_arena"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1ea379cbb0b41f3a9f0bf7b47036d036aae7f43383d8cc487d4deccf40dee0a"
 
 [[package]]
 name = "wasmi_core"
@@ -9684,32 +9366,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasmi_core"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5bf998ab792be85e20e771fe14182b4295571ad1d4f89d3da521c1bef5f597a"
-dependencies = [
- "downcast-rs",
- "libm 0.2.6",
- "num-traits",
-]
-
-[[package]]
 name = "wasmparser"
 version = "0.89.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5d3e08b13876f96dd55608d03cd4883a0545884932d5adf11925876c96daef"
 dependencies = [
  "indexmap",
-]
-
-[[package]]
-name = "wasmparser-nostd"
-version = "0.91.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c37f310b5a62bfd5ae7c0f1d8e6f98af16a5d6d84ba764e9c36439ec14e318b"
-dependencies = [
- "indexmap-nostd",
 ]
 
 [[package]]
@@ -10130,7 +9792,7 @@ dependencies = [
  "futures",
  "js-sys",
  "pharos",
- "rustc_version 0.4.0",
+ "rustc_version",
  "send_wrapper",
  "thiserror",
  "wasm-bindgen",
