@@ -13,12 +13,6 @@ is still met.
   - `delegate` (Address): Address to delegate the newly added stake to.
   - `amount`   (Amount):  Amount to stake and delegate.
 
-### Transfer (message)
-
-  - `from`   (Address): Address to transfer delegated stake from.
-  - `to`     (Address): Address to transfer delegated stake to.
-  - `amount` (Amount):  Amount to transfer.
-
 ### Unstake (message)
 
   - `delegate` (Address): Address the stake is currently delegated to.
