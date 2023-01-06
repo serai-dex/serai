@@ -27,6 +27,15 @@ pub enum AddressType {
   Featured(bool, Option<[u8; 8]>, bool),
 }
 
+/// Address specification. Used internally to create addresses.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub enum AddressSpec {
+  Standard,
+  Integrated([u8; 8]),
+  Subaddress(u32, u32),
+  Featured(Option<(u32, u32)>, Option<[u8; 8]>, bool),
+}
+
 impl AddressType {
   pub fn subaddress(&self) -> bool {
     matches!(self, AddressType::Subaddress) || matches!(self, AddressType::Featured(true, ..))

@@ -1,4 +1,5 @@
 use core::ops::Deref;
+use std::collections::HashSet;
 
 use lazy_static::lazy_static;
 
@@ -12,8 +13,9 @@ use tokio::sync::Mutex;
 use monero_serai::{
   Protocol, random_scalar,
   wallet::{
-    ViewPair,
-    address::{Network, AddressType, AddressMeta, MoneroAddress},
+    ViewPair, Scanner,
+    address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
+    SpendableOutput,
   },
   rpc::Rpc,
 };
@@ -54,6 +56,21 @@ pub async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
 
   // mine 9 more blocks to unlock the tx
   rpc.generate_blocks(addr, 9).await.unwrap();
+}
+
+// Mines 60 blocks and returns an unlocked miner TX output.
+pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput {
+  let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
+
+  // Mine 60 blocks to unlock a miner TX
+  let start = rpc.get_height().await.unwrap();
+  rpc
+    .generate_blocks(&view.address(Network::Mainnet, AddressSpec::Standard).to_string(), 60)
+    .await
+    .unwrap();
+
+  let block = rpc.get_block(start).await.unwrap();
+  scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
 }
 
 pub async fn rpc() -> Rpc {
@@ -137,12 +154,12 @@ macro_rules! test {
         use monero_serai::{
           random_scalar,
           wallet::{
-            address::Network, ViewPair, Scanner, SignableTransaction,
+            address::{Network, AddressSpec}, ViewPair, Scanner, SignableTransaction,
             SignableTransactionBuilder,
           },
         };
 
-        use runner::{random_address, rpc, mine_until_unlocked};
+        use runner::{random_address, rpc, mine_until_unlocked, get_miner_tx_output};
 
         type Builder = SignableTransactionBuilder;
 
@@ -168,28 +185,12 @@ macro_rules! test {
             keys[&1].group_key().0
           };
 
-          let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
-
           let rpc = rpc().await;
 
-          let (addr, miner_tx) = {
-            let mut scanner =
-              Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
-            let addr = scanner.address();
+          let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
+          let addr = view.address(Network::Mainnet, AddressSpec::Standard);
 
-            // mine 60 blocks to unlock a miner tx
-            let start = rpc.get_height().await.unwrap();
-            rpc.generate_blocks(&addr.to_string(), 60).await.unwrap();
-
-            let block = rpc.get_block(start).await.unwrap();
-            (
-              addr,
-              scanner.scan(
-                &rpc,
-                &block
-              ).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
-            )
-          };
+          let miner_tx = get_miner_tx_output(&rpc, &view).await;
 
           let builder = SignableTransactionBuilder::new(
             rpc.get_protocol().await.unwrap(),
@@ -246,7 +247,7 @@ macro_rules! test {
             mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             let scanner =
-              Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
+              Scanner::from_view(view.clone(), Some(HashSet::new()));
             ($first_checks)(rpc.clone(), tx, scanner, state).await
           });
           #[allow(unused_variables, unused_mut, unused_assignments)]
@@ -267,7 +268,7 @@ macro_rules! test {
             #[allow(unused_assignments)]
             {
               let scanner =
-                Scanner::from_view(view.clone(), Network::Mainnet, Some(HashSet::new()));
+                Scanner::from_view(view.clone(), Some(HashSet::new()));
               carried_state =
                 Box::new(($checks)(rpc.clone(), tx, scanner, state).await);
             }

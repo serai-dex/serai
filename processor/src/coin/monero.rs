@@ -14,7 +14,7 @@ use monero_serai::{
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
-    address::{Network, MoneroAddress},
+    address::{Network, AddressSpec, MoneroAddress},
     Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
@@ -75,23 +75,28 @@ impl Monero {
     Monero { rpc: Rpc::new(url).unwrap(), view: Zeroizing::new(additional_key::<Monero>(0).0) }
   }
 
+  fn view_pair(&self, spend: dfg::EdwardsPoint) -> ViewPair {
+    ViewPair::new(spend.0, self.view.clone())
+  }
+
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
-    Scanner::from_view(ViewPair::new(spend.0, self.view.clone()), Network::Mainnet, None)
+    Scanner::from_view(self.view_pair(spend), None)
   }
 
   #[cfg(test)]
-  fn empty_scanner() -> Scanner {
+  fn test_view_pair() -> ViewPair {
     use group::Group;
-    Scanner::from_view(
-      ViewPair::new(*dfg::EdwardsPoint::generator(), Zeroizing::new(Scalar::one())),
-      Network::Mainnet,
-      Some(std::collections::HashSet::new()),
-    )
+    ViewPair::new(*dfg::EdwardsPoint::generator(), Zeroizing::new(Scalar::one()))
   }
 
   #[cfg(test)]
-  fn empty_address() -> MoneroAddress {
-    Self::empty_scanner().address()
+  fn test_scanner() -> Scanner {
+    Scanner::from_view(Self::test_view_pair(), Some(std::collections::HashSet::new()))
+  }
+
+  #[cfg(test)]
+  fn test_address() -> MoneroAddress {
+    Self::test_view_pair().address(Network::Mainnet, AddressSpec::Standard)
   }
 }
 
@@ -121,7 +126,7 @@ impl Coin for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    self.scanner(key).address()
+    self.view_pair(key).address(Network::Mainnet, AddressSpec::Featured(None, None, true))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -228,7 +233,7 @@ impl Coin for Monero {
         Some(serde_json::json!({
           "method": "generateblocks",
           "params": {
-            "wallet_address": Self::empty_address().to_string(),
+            "wallet_address": Self::test_address().to_string(),
             "amount_of_blocks": 10
           },
         })),
@@ -249,7 +254,7 @@ impl Coin for Monero {
       self.mine_block().await;
     }
 
-    let outputs = Self::empty_scanner()
+    let outputs = Self::test_scanner()
       .scan(&self.rpc, &self.rpc.get_block(new_block).await.unwrap())
       .await
       .unwrap()
@@ -262,7 +267,7 @@ impl Coin for Monero {
       self.rpc.get_protocol().await.unwrap(),
       outputs,
       vec![(address, amount - fee)],
-      Some(Self::empty_address()),
+      Some(Self::test_address()),
       vec![],
       self.rpc.get_fee().await.unwrap(),
     )

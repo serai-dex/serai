@@ -293,7 +293,7 @@ impl Scanner {
         // If we did though, it'd enable bypassing the included burning bug protection
         debug_assert!(output_key.is_torsion_free());
 
-        let key_offset = shared_key + self.pair.subaddress(subaddress);
+        let key_offset = shared_key + self.pair.subaddress_derivation(subaddress);
         // Since we've found an output to us, get its amount
         let mut commitment = Commitment::zero();
 
