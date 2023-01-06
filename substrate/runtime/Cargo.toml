@@ -25,7 +25,7 @@ sp-inherents = { git = "https://github.com/serai-dex/substrate", default-feature
 sp-offchain = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-transaction-pool = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-block-builder = { git = "https://github.com/serai-dex/substrate", default-features = false}
+sp-block-builder = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -36,7 +36,10 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 frame-executive = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
+serai-primitives = { path = "../serai/primitives", default-features = false }
+
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-assets = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 validator-sets-pallet = { path = "../validator-sets/pallet", default-features = false }
@@ -72,7 +75,10 @@ std = [
   "frame-support/std",
   "frame-executive/std",
 
+  "serai-primitives/std",
+
   "pallet-balances/std",
+  "pallet-assets/std",
   "pallet-transaction-payment/std",
 
   "validator-sets-pallet/std",
@@ -93,6 +99,7 @@ runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
 
   "pallet-balances/runtime-benchmarks",
+  "pallet-assets/runtime-benchmarks",
 
   "pallet-tendermint/runtime-benchmarks",
 ]

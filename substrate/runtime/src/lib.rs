@@ -28,7 +28,10 @@ use frame_support::{
 };
 pub use frame_system::Call as SystemCall;
 
+use serai_primitives::Coin;
+
 pub use pallet_balances::Call as BalancesCall;
+pub use pallet_assets::Call as AssetsCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
 use pallet_session::PeriodicSessions;
@@ -40,6 +43,11 @@ pub type BlockNumber = u32;
 pub type AccountId = Public;
 
 /// Balance of an account.
+// Distinct from serai-primitives Amount due to Substrate's requirements on this type.
+// If Amount could be dropped in here, it would be.
+// While Amount could have all the necessary traits implemented, not only are they many, yet it'd
+// make Amount a larger type, providing more operations than desired.
+// The current type's minimalism sets clear bounds on usage.
 pub type Balance = u64;
 
 /// Index of a transaction in the chain, for a given account.
@@ -69,8 +77,7 @@ use opaque::SessionKeys;
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
   spec_name: create_runtime_str!("serai"),
-  // TODO: "core"?
-  impl_name: create_runtime_str!("turoctocrab"),
+  impl_name: create_runtime_str!("core"),
   authoring_version: 1,
   // TODO: 1? Do we prefer some level of compatibility or our own path?
   spec_version: 100,
@@ -97,14 +104,6 @@ pub fn native_version() -> NativeVersion {
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
-// Unit = the base number of indivisible units for balances
-const UNIT: Balance = 1_000_000_000_000;
-const MILLIUNIT: Balance = 1_000_000_000;
-
-const fn deposit(items: u32, bytes: u32) -> Balance {
-  (items as Balance * UNIT + (bytes as Balance) * (5 * MILLIUNIT / 100)) / 10
-}
-
 parameter_types! {
   pub const BlockHashCount: BlockNumber = 2400;
   pub const Version: RuntimeVersion = VERSION;
@@ -119,16 +118,6 @@ parameter_types! {
       Weight::from_ref_time(2u64 * WEIGHT_REF_TIME_PER_SECOND).set_proof_size(u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
-
-  pub const DepositPerItem: Balance = deposit(1, 0);
-  pub const DepositPerByte: Balance = deposit(0, 1);
-  pub const DeletionQueueDepth: u32 = 128;
-  // The lazy deletion runs inside on_initialize.
-  pub DeletionWeightLimit: Weight = BlockWeights::get()
-    .per_class
-    .get(DispatchClass::Normal)
-    .max_total
-    .unwrap_or(BlockWeights::get().max_block);
 }
 
 impl frame_system::Config for Runtime {
@@ -171,6 +160,37 @@ impl pallet_balances::Config for Runtime {
   type ExistentialDeposit = ConstU64<500>;
   type AccountStore = System;
   type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_assets::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type Balance = Balance;
+  type Currency = Balances;
+
+  type AssetId = Coin;
+  type AssetIdParameter = Coin;
+  type StringLimit = ConstU32<32>;
+
+  // Don't allow anyone to create assets
+  type CreateOrigin =
+    frame_support::traits::AsEnsureOriginWithArg<frame_system::EnsureNever<AccountId>>;
+  type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+
+  // Don't charge fees nor kill accounts
+  type RemoveItemsLimit = ConstU32<0>;
+  type AssetDeposit = ConstU64<0>;
+  type AssetAccountDeposit = ConstU64<0>;
+  type MetadataDepositBase = ConstU64<0>;
+  type MetadataDepositPerByte = ConstU64<0>;
+  type ApprovalDeposit = ConstU64<0>;
+
+  // Unused hooks
+  type Freezer = ();
+  type Extra = ();
+
+  type WeightInfo = pallet_assets::weights::SubstrateWeight<Runtime>;
+  #[cfg(feature = "runtime-benchmarks")]
+  type BenchmarkHelper = ();
 }
 
 impl pallet_transaction_payment::Config for Runtime {
@@ -242,6 +262,7 @@ construct_runtime!(
   {
     System: frame_system,
     Balances: pallet_balances,
+    Assets: pallet_assets,
     TransactionPayment: pallet_transaction_payment,
 
     ValidatorSets: validator_sets_pallet,

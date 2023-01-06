@@ -4890,6 +4890,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-assets"
+version = "4.0.0-dev"
+source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-balances"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#6dc38b0ba11dff62c1042ab0fa21d0b55a64bf6e"
@@ -7309,6 +7324,7 @@ dependencies = [
  "frame-system",
  "frame-system-rpc-runtime-api",
  "hex-literal",
+ "pallet-assets",
  "pallet-balances",
  "pallet-session",
  "pallet-tendermint",
@@ -7316,6 +7332,7 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "scale-info",
+ "serai-primitives",
  "sp-api",
  "sp-application-crypto",
  "sp-block-builder",

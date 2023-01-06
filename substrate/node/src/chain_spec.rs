@@ -1,12 +1,14 @@
-use sp_core::{Pair as PairTrait, sr25519::Pair};
+use sp_core::{Decode, Pair as PairTrait, sr25519::Pair};
+use sp_runtime::traits::TrailingZeroInput;
+
 use sc_service::ChainType;
 
-use serai_primitives::{Amount, COIN, Coin};
+use serai_primitives::*;
 use pallet_tendermint::crypto::Public;
 
 use serai_runtime::{
   WASM_BINARY, AccountId, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig,
-  ValidatorSetsConfig, SessionConfig,
+  AssetsConfig, ValidatorSetsConfig, SessionConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
@@ -29,10 +31,24 @@ fn testnet_genesis(
     (key, key, SessionKeys { tendermint: Public::from(key) })
   };
 
+  // TODO: Replace with a call to the pallet to ask for its account
+  let owner = AccountId::decode(&mut TrailingZeroInput::new(b"tokens")).unwrap();
+
   GenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec() },
     balances: BalancesConfig {
       balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
+    },
+    assets: AssetsConfig {
+      assets: [BITCOIN, ETHER, DAI, MONERO].iter().map(|coin| (*coin, owner, true, 1)).collect(),
+      metadata: vec![
+        (BITCOIN, b"Bitcoin".to_vec(), b"BTC".to_vec(), 8),
+        // Reduce to 8 decimals to feasibly fit within u64 (instead of its native u256)
+        (ETHER, b"Ether".to_vec(), b"ETH".to_vec(), 8),
+        (DAI, b"Dai Stablecoin".to_vec(), b"DAI".to_vec(), 8),
+        (MONERO, b"Monero".to_vec(), b"XMR".to_vec(), 12),
+      ],
+      accounts: vec![],
     },
     transaction_payment: Default::default(),
 
