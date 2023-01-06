@@ -1,4 +1,6 @@
-use core::{ops::{Add, Mul}};
+use core::{
+  ops::{Add, Mul},
+};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;

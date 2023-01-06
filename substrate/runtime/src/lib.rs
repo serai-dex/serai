@@ -23,7 +23,6 @@ use frame_support::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
-  dispatch::DispatchClass,
   parameter_types, construct_runtime,
 };
 pub use frame_system::Call as SystemCall;
