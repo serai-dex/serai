@@ -16,7 +16,7 @@ pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
 /// Address encoding and decoding functionality.
 pub mod address;
-use address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress};
+use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, MoneroAddress};
 
 mod scan;
 pub use scan::{ReceivedOutput, SpendableOutput};
@@ -106,31 +106,23 @@ impl ViewPair {
     ViewPair { spend, view }
   }
 
-  fn subaddress_derivation(&self, index: (u32, u32)) -> Scalar {
-    if index == (0, 0) {
-      return Scalar::zero();
-    }
-
+  fn subaddress_derivation(&self, index: SubaddressIndex) -> Scalar {
     hash_to_scalar(&Zeroizing::new(
       [
         b"SubAddr\0".as_ref(),
         Zeroizing::new(self.view.to_bytes()).as_ref(),
-        &index.0.to_le_bytes(),
-        &index.1.to_le_bytes(),
+        &index.account().to_le_bytes(),
+        &index.address().to_le_bytes(),
       ]
       .concat(),
     ))
   }
 
-  fn subaddress_keys(&self, index: (u32, u32)) -> Option<(EdwardsPoint, EdwardsPoint)> {
-    if index == (0, 0) {
-      return None;
-    }
-
+  fn subaddress_keys(&self, index: SubaddressIndex) -> (EdwardsPoint, EdwardsPoint) {
     let scalar = self.subaddress_derivation(index);
     let spend = self.spend + (&scalar * &ED25519_BASEPOINT_TABLE);
     let view = self.view.deref() * spend;
-    Some((spend, view))
+    (spend, view)
   }
 
   /// Returns an address with the provided specification.
@@ -144,21 +136,18 @@ impl ViewPair {
       AddressSpec::Integrated(payment_id) => {
         AddressMeta::new(network, AddressType::Integrated(payment_id))
       }
-      AddressSpec::Subaddress(i1, i2) => {
-        if let Some(keys) = self.subaddress_keys((i1, i2)) {
-          (spend, view) = keys;
-          AddressMeta::new(network, AddressType::Subaddress)
-        } else {
-          AddressMeta::new(network, AddressType::Standard)
-        }
+      AddressSpec::Subaddress(index) => {
+        (spend, view) = self.subaddress_keys(index);
+        AddressMeta::new(network, AddressType::Subaddress)
       }
       AddressSpec::Featured(subaddress, payment_id, guaranteed) => {
-        let mut is_subaddress = false;
-        if let Some(Some(keys)) = subaddress.map(|subaddress| self.subaddress_keys(subaddress)) {
-          (spend, view) = keys;
-          is_subaddress = true;
+        if let Some(index) = subaddress {
+          (spend, view) = self.subaddress_keys(index);
         }
-        AddressMeta::new(network, AddressType::Featured(is_subaddress, payment_id, guaranteed))
+        AddressMeta::new(
+          network,
+          AddressType::Featured(subaddress.is_some(), payment_id, guaranteed),
+        )
       }
     };
 
@@ -173,7 +162,8 @@ impl ViewPair {
 #[derive(Clone)]
 pub struct Scanner {
   pair: ViewPair,
-  pub(crate) subaddresses: HashMap<CompressedEdwardsY, (u32, u32)>,
+  // Also contains the spend key as None
+  pub(crate) subaddresses: HashMap<CompressedEdwardsY, Option<SubaddressIndex>>,
   pub(crate) burning_bug: Option<HashSet<CompressedEdwardsY>>,
 }
 
@@ -212,7 +202,7 @@ impl Scanner {
   // TODO: Should this take in a DB access handle to ensure output keys are saved?
   pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Scanner {
     let mut subaddresses = HashMap::new();
-    subaddresses.insert(pair.spend.compress(), (0, 0));
+    subaddresses.insert(pair.spend.compress(), None);
     Scanner { pair, subaddresses, burning_bug }
   }
 
@@ -221,9 +211,8 @@ impl Scanner {
   // incompatible with the Scanner. While we could return None for that, then we have the issue
   // of runtime failures to generate an address.
   // Removing that API was the simplest option.
-  pub fn register_subaddress(&mut self, subaddress: (u32, u32)) {
-    if let Some((spend, _)) = self.pair.subaddress_keys(subaddress) {
-      self.subaddresses.insert(spend.compress(), subaddress);
-    }
+  pub fn register_subaddress(&mut self, subaddress: SubaddressIndex) {
+    let (spend, _) = self.pair.subaddress_keys(subaddress);
+    self.subaddresses.insert(spend.compress(), Some(subaddress));
   }
 }

@@ -27,13 +27,36 @@ pub enum AddressType {
   Featured(bool, Option<[u8; 8]>, bool),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct SubaddressIndex {
+  pub(crate) account: u32,
+  pub(crate) address: u32,
+}
+
+impl SubaddressIndex {
+  pub const fn new(account: u32, address: u32) -> Option<SubaddressIndex> {
+    if (account == 0) && (address == 0) {
+      return None;
+    }
+    Some(SubaddressIndex { account, address })
+  }
+
+  pub fn account(&self) -> u32 {
+    self.account
+  }
+
+  pub fn address(&self) -> u32 {
+    self.address
+  }
+}
+
 /// Address specification. Used internally to create addresses.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum AddressSpec {
   Standard,
   Integrated([u8; 8]),
-  Subaddress(u32, u32),
-  Featured(Option<(u32, u32)>, Option<[u8; 8]>, bool),
+  Subaddress(SubaddressIndex),
+  Featured(Option<SubaddressIndex>, Option<[u8; 8]>, bool),
 }
 
 impl AddressType {

@@ -1,3 +1,5 @@
+use std::io;
+
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
@@ -8,7 +10,10 @@ use crate::{
   transaction::{Input, Timelock, Transaction},
   block::Block,
   rpc::{Rpc, RpcError},
-  wallet::{PaymentId, Extra, Scanner, uniqueness, shared_key, amount_decryption, commitment_mask},
+  wallet::{
+    PaymentId, Extra, address::SubaddressIndex, Scanner, uniqueness, shared_key, amount_decryption,
+    commitment_mask,
+  },
 };
 
 /// An absolute output ID, defined as its transaction hash and output index.
@@ -26,7 +31,7 @@ impl AbsoluteId {
     res
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<AbsoluteId> {
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<AbsoluteId> {
     Ok(AbsoluteId { tx: read_bytes(r)?, o: read_byte(r)? })
   }
 }
@@ -50,7 +55,7 @@ impl OutputData {
     res
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<OutputData> {
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<OutputData> {
     Ok(OutputData {
       key: read_point(r)?,
       key_offset: read_scalar(r)?,
@@ -62,9 +67,8 @@ impl OutputData {
 /// The metadata for an output.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Metadata {
-  // Does not have to be an Option since the 0 subaddress is the main address
   /// The subaddress this output was sent to.
-  pub subaddress: (u32, u32),
+  pub subaddress: Option<SubaddressIndex>,
   /// The payment ID included with this output.
   /// This will be gibberish if the payment ID wasn't intended for the recipient or wasn't included.
   // Could be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
@@ -77,8 +81,13 @@ pub struct Metadata {
 impl Metadata {
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(4 + 4 + 8 + 1);
-    res.extend(self.subaddress.0.to_le_bytes());
-    res.extend(self.subaddress.1.to_le_bytes());
+    if let Some(subaddress) = self.subaddress {
+      res.push(1);
+      res.extend(subaddress.account().to_le_bytes());
+      res.extend(subaddress.address().to_le_bytes());
+    } else {
+      res.push(0);
+    }
     res.extend(self.payment_id);
 
     res.extend(u32::try_from(self.arbitrary_data.len()).unwrap().to_le_bytes());
@@ -89,9 +98,18 @@ impl Metadata {
     res
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Metadata> {
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Metadata> {
+    let subaddress = if read_byte(r)? == 1 {
+      Some(
+        SubaddressIndex::new(read_u32(r)?, read_u32(r)?)
+          .ok_or(io::Error::new(io::ErrorKind::Other, "invalid subaddress in metadata"))?,
+      )
+    } else {
+      None
+    };
+
     Ok(Metadata {
-      subaddress: (read_u32(r)?, read_u32(r)?),
+      subaddress,
       payment_id: read_bytes(r)?,
       arbitrary_data: {
         let mut data = vec![];
@@ -137,11 +155,11 @@ impl ReceivedOutput {
     serialized
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<ReceivedOutput> {
+  pub fn deserialize<R: io::Read>(r: &mut R) -> io::Result<ReceivedOutput> {
     Ok(ReceivedOutput {
-      absolute: AbsoluteId::deserialize(r)?,
-      data: OutputData::deserialize(r)?,
-      metadata: Metadata::deserialize(r)?,
+      absolute: AbsoluteId::read(r)?,
+      data: OutputData::read(r)?,
+      metadata: Metadata::read(r)?,
     })
   }
 }
@@ -188,7 +206,7 @@ impl SpendableOutput {
     serialized
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<SpendableOutput> {
     Ok(SpendableOutput { output: ReceivedOutput::deserialize(r)?, global_index: read_u64(r)? })
   }
 }
@@ -291,7 +309,10 @@ impl Scanner {
         // If we did though, it'd enable bypassing the included burning bug protection
         debug_assert!(output_key.is_torsion_free());
 
-        let key_offset = shared_key + self.pair.subaddress_derivation(subaddress);
+        let mut key_offset = shared_key;
+        if let Some(subaddress) = subaddress {
+          key_offset += self.pair.subaddress_derivation(subaddress);
+        }
         // Since we've found an output to us, get its amount
         let mut commitment = Commitment::zero();
 

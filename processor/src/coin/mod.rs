@@ -40,7 +40,7 @@ pub trait Output: Sized + Clone {
   fn amount(&self) -> u64;
 
   fn serialize(&self) -> Vec<u8>;
-  fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
+  fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
 }
 
 #[async_trait]

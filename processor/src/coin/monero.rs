@@ -14,7 +14,7 @@ use monero_serai::{
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
-    address::{Network, AddressSpec, MoneroAddress},
+    address::{Network, SubaddressIndex, AddressSpec, MoneroAddress},
     Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
@@ -41,9 +41,9 @@ impl From<SpendableOutput> for Output {
   }
 }
 
-const EXTERNAL_SUBADDRESS: (u32, u32) = (0, 0);
-const BRANCH_SUBADDRESS: (u32, u32) = (1, 0);
-const CHANGE_SUBADDRESS: (u32, u32) = (2, 0);
+const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
+const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
+const CHANGE_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(2, 0);
 
 impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
@@ -72,8 +72,8 @@ impl OutputTrait for Output {
     self.0.serialize()
   }
 
-  fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-    SpendableOutput::deserialize(reader).map(Output)
+  fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    SpendableOutput::read(reader).map(Output)
   }
 }
 
@@ -101,17 +101,19 @@ impl Monero {
     ViewPair::new(spend.0, self.view.clone())
   }
 
-  fn address_internal(&self, spend: dfg::EdwardsPoint, subaddress: (u32, u32)) -> MoneroAddress {
-    self
-      .view_pair(spend)
-      .address(Network::Mainnet, AddressSpec::Featured(Some(subaddress), None, true))
+  fn address_internal(
+    &self,
+    spend: dfg::EdwardsPoint,
+    subaddress: Option<SubaddressIndex>,
+  ) -> MoneroAddress {
+    self.view_pair(spend).address(Network::Mainnet, AddressSpec::Featured(subaddress, None, true))
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
     let mut scanner = Scanner::from_view(self.view_pair(spend), None);
-    scanner.register_subaddress(EXTERNAL_SUBADDRESS); // Pointless as (0, 0) is already registered
-    scanner.register_subaddress(BRANCH_SUBADDRESS);
-    scanner.register_subaddress(CHANGE_SUBADDRESS);
+    debug_assert!(EXTERNAL_SUBADDRESS.is_none());
+    scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
+    scanner.register_subaddress(CHANGE_SUBADDRESS.unwrap());
     scanner
   }
 

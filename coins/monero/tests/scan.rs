@@ -1,6 +1,6 @@
 use rand::RngCore;
 
-use monero_serai::transaction::Transaction;
+use monero_serai::{transaction::Transaction, wallet::address::SubaddressIndex};
 
 mod runner;
 
@@ -24,22 +24,19 @@ test!(
   scan_subaddress,
   (
     |_, mut builder: Builder, _| async move {
-      let subaddress = (0, 1);
+      let subaddress = SubaddressIndex::new(0, 1).unwrap();
 
       let view = runner::random_address().1;
       let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
       scanner.register_subaddress(subaddress);
 
-      builder.add_payment(
-        view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress.0, subaddress.1)),
-        5,
-      );
+      builder.add_payment(view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress)), 5);
       (builder.build().unwrap(), (scanner, subaddress))
     },
-    |_, tx: Transaction, _, mut state: (Scanner, (u32, u32))| async move {
+    |_, tx: Transaction, _, mut state: (Scanner, SubaddressIndex)| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.subaddress, state.1);
+      assert_eq!(output.metadata.subaddress, Some(state.1));
     },
   ),
 );
@@ -86,7 +83,7 @@ test!(
   scan_featured_subaddress,
   (
     |_, mut builder: Builder, _| async move {
-      let subaddress = (0, 2);
+      let subaddress = SubaddressIndex::new(0, 2).unwrap();
 
       let view = runner::random_address().1;
       let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
@@ -98,10 +95,10 @@ test!(
       );
       (builder.build().unwrap(), (scanner, subaddress))
     },
-    |_, tx: Transaction, _, mut state: (Scanner, (u32, u32))| async move {
+    |_, tx: Transaction, _, mut state: (Scanner, SubaddressIndex)| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.subaddress, state.1);
+      assert_eq!(output.metadata.subaddress, Some(state.1));
     },
   ),
 );
@@ -133,7 +130,7 @@ test!(
   scan_featured_integrated_subaddress,
   (
     |_, mut builder: Builder, _| async move {
-      let subaddress = (0, 3);
+      let subaddress = SubaddressIndex::new(0, 3).unwrap();
 
       let view = runner::random_address().1;
       let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
@@ -151,11 +148,11 @@ test!(
       );
       (builder.build().unwrap(), (scanner, payment_id, subaddress))
     },
-    |_, tx: Transaction, _, mut state: (Scanner, [u8; 8], (u32, u32))| async move {
+    |_, tx: Transaction, _, mut state: (Scanner, [u8; 8], SubaddressIndex)| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.metadata.payment_id, state.1);
-      assert_eq!(output.metadata.subaddress, state.2);
+      assert_eq!(output.metadata.subaddress, Some(state.2));
     },
   ),
 );
@@ -182,7 +179,7 @@ test!(
   scan_guaranteed_subaddress,
   (
     |_, mut builder: Builder, _| async move {
-      let subaddress = (1, 0);
+      let subaddress = SubaddressIndex::new(1, 0).unwrap();
 
       let view = runner::random_address().1;
       let mut scanner = Scanner::from_view(view.clone(), None);
@@ -194,10 +191,10 @@ test!(
       );
       (builder.build().unwrap(), (scanner, subaddress))
     },
-    |_, tx: Transaction, _, mut state: (Scanner, (u32, u32))| async move {
+    |_, tx: Transaction, _, mut state: (Scanner, SubaddressIndex)| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.subaddress, state.1);
+      assert_eq!(output.metadata.subaddress, Some(state.1));
     },
   ),
 );
@@ -229,7 +226,7 @@ test!(
   scan_guaranteed_integrated_subaddress,
   (
     |_, mut builder: Builder, _| async move {
-      let subaddress = (1, 1);
+      let subaddress = SubaddressIndex::new(1, 1).unwrap();
 
       let view = runner::random_address().1;
       let mut scanner = Scanner::from_view(view.clone(), None);
@@ -247,11 +244,11 @@ test!(
       );
       (builder.build().unwrap(), (scanner, payment_id, subaddress))
     },
-    |_, tx: Transaction, _, mut state: (Scanner, [u8; 8], (u32, u32))| async move {
+    |_, tx: Transaction, _, mut state: (Scanner, [u8; 8], SubaddressIndex)| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.metadata.payment_id, state.1);
-      assert_eq!(output.metadata.subaddress, state.2);
+      assert_eq!(output.metadata.subaddress, Some(state.2));
     },
   ),
 );
