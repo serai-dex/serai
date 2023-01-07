@@ -21,7 +21,7 @@ use monero_serai::{
 
 use crate::{
   additional_key,
-  coin::{CoinError, Output as OutputTrait, Coin},
+  coin::{CoinError, OutputType, Output as OutputTrait, Coin},
 };
 
 #[derive(Clone, Debug)]
@@ -32,11 +32,24 @@ impl From<SpendableOutput> for Output {
   }
 }
 
+const EXTERNAL_SUBADDRESS: (u32, u32) = (0, 0);
+const BRANCH_SUBADDRESS: (u32, u32) = (1, 0);
+const CHANGE_SUBADDRESS: (u32, u32) = (2, 0);
+
 impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
-  // While the Monero library offers a variant which allows senders to ensure their TXs have unique
-  // output keys, Serai can still be targeted using the classic burning bug
+  // While we already are immune, thanks to using featured address, this doesn't hurt and is
+  // technically more efficient.
   type Id = [u8; 32];
+
+  fn kind(&self) -> OutputType {
+    match self.0.output.metadata.subaddress {
+      EXTERNAL_SUBADDRESS => OutputType::External,
+      BRANCH_SUBADDRESS => OutputType::Branch,
+      CHANGE_SUBADDRESS => OutputType::Change,
+      _ => panic!("unrecognized address was scanned for"),
+    }
+  }
 
   fn id(&self) -> Self::Id {
     self.0.output.data.key.compress().to_bytes()
@@ -79,8 +92,18 @@ impl Monero {
     ViewPair::new(spend.0, self.view.clone())
   }
 
+  fn address_internal(&self, spend: dfg::EdwardsPoint, subaddress: (u32, u32)) -> MoneroAddress {
+    self
+      .view_pair(spend)
+      .address(Network::Mainnet, AddressSpec::Featured(Some(subaddress), None, true))
+  }
+
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
-    Scanner::from_view(self.view_pair(spend), None)
+    let mut scanner = Scanner::from_view(self.view_pair(spend), None);
+    scanner.register_subaddress(EXTERNAL_SUBADDRESS); // Pointless as (0, 0) is already registered
+    scanner.register_subaddress(BRANCH_SUBADDRESS);
+    scanner.register_subaddress(CHANGE_SUBADDRESS);
+    scanner
   }
 
   #[cfg(test)]
@@ -126,7 +149,11 @@ impl Coin for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    self.view_pair(key).address(Network::Mainnet, AddressSpec::Featured(None, None, true))
+    self.address_internal(key, EXTERNAL_SUBADDRESS)
+  }
+
+  fn branch_address(&self, key: dfg::EdwardsPoint) -> Self::Address {
+    self.address_internal(key, BRANCH_SUBADDRESS)
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -151,19 +178,18 @@ impl Coin for Monero {
         .map_err(|_| CoinError::ConnectionError)?
         .iter()
         .flat_map(|outputs| outputs.not_locked())
-        .map(Output::from)
+        // This should be pointless as we shouldn't be able to scan for any other subaddress
+        // This just ensures nothing invalid makes it in
+        .filter_map(|output| {
+          if ![EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS]
+            .contains(&output.output.metadata.subaddress)
+          {
+            return None;
+          }
+          Some(Output::from(output))
+        })
         .collect(),
     )
-  }
-
-  async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
-    let tx_block_number = self
-      .rpc
-      .get_transaction_block_number(tx)
-      .await
-      .map_err(|_| CoinError::ConnectionError)?
-      .unwrap_or(usize::MAX);
-    Ok((self.get_latest_block_number().await?.saturating_sub(tx_block_number) + 1) >= 10)
   }
 
   async fn prepare_send(
@@ -173,9 +199,9 @@ impl Coin for Monero {
     block_number: usize,
     mut inputs: Vec<Output>,
     payments: &[(MoneroAddress, u64)],
+    change: Option<dfg::EdwardsPoint>,
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
-    let spend = keys.group_key();
     Ok(SignableTransaction {
       keys,
       transcript,
@@ -184,7 +210,7 @@ impl Coin for Monero {
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
-        Some(self.address(spend)),
+        change.map(|change| self.address_internal(change, CHANGE_SUBADDRESS)),
         vec![],
         fee,
       )
