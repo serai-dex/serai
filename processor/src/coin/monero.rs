@@ -106,7 +106,10 @@ impl Monero {
     spend: dfg::EdwardsPoint,
     subaddress: Option<SubaddressIndex>,
   ) -> MoneroAddress {
-    self.view_pair(spend).address(Network::Mainnet, AddressSpec::Featured(subaddress, None, true))
+    self.view_pair(spend).address(
+      Network::Mainnet,
+      AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
+    )
   }
 
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {

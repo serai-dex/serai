@@ -140,13 +140,13 @@ impl ViewPair {
         (spend, view) = self.subaddress_keys(index);
         AddressMeta::new(network, AddressType::Subaddress)
       }
-      AddressSpec::Featured(subaddress, payment_id, guaranteed) => {
+      AddressSpec::Featured { subaddress, payment_id, guaranteed } => {
         if let Some(index) = subaddress {
           (spend, view) = self.subaddress_keys(index);
         }
         AddressMeta::new(
           network,
-          AddressType::Featured(subaddress.is_some(), payment_id, guaranteed),
+          AddressType::Featured { subaddress: subaddress.is_some(), payment_id, guaranteed },
         )
       }
     };

@@ -68,8 +68,13 @@ test!(
     |_, mut builder: Builder, _| async move {
       let view = runner::random_address().1;
       let scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
-      builder
-        .add_payment(view.address(Network::Mainnet, AddressSpec::Featured(None, None, false)), 5);
+      builder.add_payment(
+        view.address(
+          Network::Mainnet,
+          AddressSpec::Featured { subaddress: None, payment_id: None, guaranteed: false },
+        ),
+        5,
+      );
       (builder.build().unwrap(), scanner)
     },
     |_, tx: Transaction, _, mut state: Scanner| async move {
@@ -90,7 +95,14 @@ test!(
       scanner.register_subaddress(subaddress);
 
       builder.add_payment(
-        view.address(Network::Mainnet, AddressSpec::Featured(Some(subaddress), None, false)),
+        view.address(
+          Network::Mainnet,
+          AddressSpec::Featured {
+            subaddress: Some(subaddress),
+            payment_id: None,
+            guaranteed: false,
+          },
+        ),
         5,
       );
       (builder.build().unwrap(), (scanner, subaddress))
@@ -113,7 +125,14 @@ test!(
       OsRng.fill_bytes(&mut payment_id);
 
       builder.add_payment(
-        view.address(Network::Mainnet, AddressSpec::Featured(None, Some(payment_id), false)),
+        view.address(
+          Network::Mainnet,
+          AddressSpec::Featured {
+            subaddress: None,
+            payment_id: Some(payment_id),
+            guaranteed: false,
+          },
+        ),
         5,
       );
       (builder.build().unwrap(), (scanner, payment_id))
@@ -142,7 +161,11 @@ test!(
       builder.add_payment(
         view.address(
           Network::Mainnet,
-          AddressSpec::Featured(Some(subaddress), Some(payment_id), false),
+          AddressSpec::Featured {
+            subaddress: Some(subaddress),
+            payment_id: Some(payment_id),
+            guaranteed: false,
+          },
         ),
         5,
       );
@@ -164,8 +187,13 @@ test!(
       let view = runner::random_address().1;
       let scanner = Scanner::from_view(view.clone(), None);
 
-      builder
-        .add_payment(view.address(Network::Mainnet, AddressSpec::Featured(None, None, true)), 5);
+      builder.add_payment(
+        view.address(
+          Network::Mainnet,
+          AddressSpec::Featured { subaddress: None, payment_id: None, guaranteed: true },
+        ),
+        5,
+      );
       (builder.build().unwrap(), scanner)
     },
     |_, tx: Transaction, _, mut state: Scanner| async move {
@@ -186,7 +214,14 @@ test!(
       scanner.register_subaddress(subaddress);
 
       builder.add_payment(
-        view.address(Network::Mainnet, AddressSpec::Featured(Some(subaddress), None, true)),
+        view.address(
+          Network::Mainnet,
+          AddressSpec::Featured {
+            subaddress: Some(subaddress),
+            payment_id: None,
+            guaranteed: true,
+          },
+        ),
         5,
       );
       (builder.build().unwrap(), (scanner, subaddress))
@@ -209,7 +244,14 @@ test!(
       OsRng.fill_bytes(&mut payment_id);
 
       builder.add_payment(
-        view.address(Network::Mainnet, AddressSpec::Featured(None, Some(payment_id), true)),
+        view.address(
+          Network::Mainnet,
+          AddressSpec::Featured {
+            subaddress: None,
+            payment_id: Some(payment_id),
+            guaranteed: true,
+          },
+        ),
         5,
       );
       (builder.build().unwrap(), (scanner, payment_id))
@@ -238,7 +280,11 @@ test!(
       builder.add_payment(
         view.address(
           Network::Mainnet,
-          AddressSpec::Featured(Some(subaddress), Some(payment_id), true),
+          AddressSpec::Featured {
+            subaddress: Some(subaddress),
+            payment_id: Some(payment_id),
+            guaranteed: true,
+          },
         ),
         5,
       );
