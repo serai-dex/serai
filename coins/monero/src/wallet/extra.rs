@@ -32,7 +32,7 @@ impl BitXor<[u8; 8]> for PaymentId {
 }
 
 impl PaymentId {
-  pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       PaymentId::Unencrypted(id) => {
         w.write_all(&[0])?;
@@ -46,7 +46,7 @@ impl PaymentId {
     Ok(())
   }
 
-  fn deserialize<R: Read>(r: &mut R) -> io::Result<PaymentId> {
+  fn read<R: Read>(r: &mut R) -> io::Result<PaymentId> {
     Ok(match read_byte(r)? {
       0 => PaymentId::Unencrypted(read_bytes(r)?),
       1 => PaymentId::Encrypted(read_bytes(r)?),
@@ -65,7 +65,7 @@ pub(crate) enum ExtraField {
 }
 
 impl ExtraField {
-  fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       ExtraField::PublicKey(key) => {
         w.write_all(&[1])?;
@@ -88,7 +88,7 @@ impl ExtraField {
     Ok(())
   }
 
-  fn deserialize<R: Read>(r: &mut R) -> io::Result<ExtraField> {
+  fn read<R: Read>(r: &mut R) -> io::Result<ExtraField> {
     Ok(match read_byte(r)? {
       1 => ExtraField::PublicKey(read_point(r)?),
       2 => ExtraField::Nonce({
@@ -127,7 +127,7 @@ impl Extra {
   pub(crate) fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
-        return PaymentId::deserialize::<&[u8]>(&mut data.as_ref()).ok();
+        return PaymentId::read::<&[u8]>(&mut data.as_ref()).ok();
       }
     }
     None
@@ -176,18 +176,18 @@ impl Extra {
     data.iter().map(|v| 1 + varint_len(v.len()) + v.len()).sum::<usize>()
   }
 
-  pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for field in &self.0 {
-      field.serialize(w)?;
+      field.write(w)?;
     }
     Ok(())
   }
 
-  pub(crate) fn deserialize<R: Read>(r: &mut R) -> io::Result<Extra> {
+  pub(crate) fn read<R: Read>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
     let mut field;
     while {
-      field = ExtraField::deserialize(r);
+      field = ExtraField::read(r);
       field.is_ok()
     } {
       res.0.push(field.unwrap());

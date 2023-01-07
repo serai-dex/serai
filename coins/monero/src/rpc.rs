@@ -249,7 +249,7 @@ impl Rpc {
       .txs
       .iter()
       .map(|res| {
-        let tx = Transaction::deserialize::<&[u8]>(
+        let tx = Transaction::read::<&[u8]>(
           &mut rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex })?
             .as_ref(),
         )
@@ -312,8 +312,7 @@ impl Rpc {
     let res: BlockResponse =
       self.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await?;
 
-    Block::deserialize::<&[u8]>(&mut rpc_hex(&res.blob)?.as_ref())
-      .map_err(|_| RpcError::InvalidNode)
+    Block::read::<&[u8]>(&mut rpc_hex(&res.blob)?.as_ref()).map_err(|_| RpcError::InvalidNode)
   }
 
   pub async fn get_block_by_number(&self, number: usize) -> Result<Block, RpcError> {
@@ -487,7 +486,7 @@ impl Rpc {
     }
 
     let mut buf = Vec::with_capacity(2048);
-    tx.serialize(&mut buf).unwrap();
+    tx.write(&mut buf).unwrap();
     let res: SendRawResponse = self
       .rpc_call("send_raw_transaction", Some(json!({ "tx_as_hex": hex::encode(&buf) })))
       .await?;
