@@ -69,7 +69,7 @@ pub trait Coin {
     &self,
     block: &Self::Block,
     key: <Self::Curve as Ciphersuite>::G,
-  ) -> Result<Vec<Self::Output>, CoinError>;
+  ) -> Result<Vec<Vec<Self::Output>>, CoinError>;
 
   #[allow(clippy::too_many_arguments)]
   async fn prepare_send(

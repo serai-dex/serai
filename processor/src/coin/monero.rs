@@ -169,25 +169,33 @@ impl Coin for Monero {
     &self,
     block: &Self::Block,
     key: dfg::EdwardsPoint,
-  ) -> Result<Vec<Self::Output>, CoinError> {
-    Ok(
-      self
-        .scanner(key)
-        .scan(&self.rpc, block)
-        .await
-        .map_err(|_| CoinError::ConnectionError)?
-        .iter()
-        .flat_map(|outputs| outputs.not_locked())
-        // This should be pointless as we shouldn't be able to scan for any other subaddress
-        // This just ensures nothing invalid makes it in
-        .filter_map(|output| {
-          if ![EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS]
+  ) -> Result<Vec<Vec<Self::Output>>, CoinError> {
+    let mut transactions = self
+      .scanner(key)
+      .scan(&self.rpc, block)
+      .await
+      .map_err(|_| CoinError::ConnectionError)?
+      .iter()
+      .map(|outputs| outputs.not_locked())
+      .collect::<Vec<_>>();
+
+    // This should be pointless as we shouldn't be able to scan for any other subaddress
+    // This just ensures nothing invalid makes it through
+    for transaction in transactions.iter_mut() {
+      *transaction = transaction
+        .drain(..)
+        .filter(|output| {
+          [EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS]
             .contains(&output.output.metadata.subaddress)
-          {
-            return None;
-          }
-          Some(Output::from(output))
         })
+        .collect();
+    }
+    transactions = transactions.drain(..).filter(|outputs| !outputs.is_empty()).collect();
+
+    Ok(
+      transactions
+        .drain(..)
+        .map(|mut transaction| transaction.drain(..).map(Output::from).collect())
         .collect(),
     )
   }
