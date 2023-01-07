@@ -169,7 +169,7 @@ impl Coin for Monero {
     &self,
     block: &Self::Block,
     key: dfg::EdwardsPoint,
-  ) -> Result<Vec<Vec<Self::Output>>, CoinError> {
+  ) -> Result<Vec<Self::Output>, CoinError> {
     let mut transactions = self
       .scanner(key)
       .scan(&self.rpc, block)
@@ -190,12 +190,11 @@ impl Coin for Monero {
         })
         .collect();
     }
-    transactions = transactions.drain(..).filter(|outputs| !outputs.is_empty()).collect();
 
     Ok(
       transactions
         .drain(..)
-        .map(|mut transaction| transaction.drain(..).map(Output::from).collect())
+        .flat_map(|mut outputs| outputs.drain(..).map(Output::from).collect::<Vec<_>>())
         .collect(),
     )
   }
