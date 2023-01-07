@@ -10,7 +10,11 @@ use core::{
   fmt::{Debug, Formatter},
   ops::Deref,
 };
-use std::{io::Read, sync::Arc, collections::HashMap};
+use std::{
+  io::{self, Read, Write},
+  sync::Arc,
+  collections::HashMap,
+};
 
 use thiserror::Error;
 
@@ -224,21 +228,26 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     self.verification_shares.clone()
   }
 
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = vec![];
-    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
-    serialized.extend(C::ID);
-    serialized.extend(self.params.t.to_be_bytes());
-    serialized.extend(self.params.n.to_be_bytes());
-    serialized.extend(self.params.i.to_be_bytes());
-    serialized.extend(self.secret_share.to_repr().as_ref());
+  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&u32::try_from(C::ID.len()).unwrap().to_be_bytes())?;
+    writer.write_all(C::ID)?;
+    writer.write_all(&self.params.t.to_be_bytes())?;
+    writer.write_all(&self.params.n.to_be_bytes())?;
+    writer.write_all(&self.params.i.to_be_bytes())?;
+    writer.write_all(self.secret_share.to_repr().as_ref())?;
     for l in 1 ..= self.params.n {
-      serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
+      writer.write_all(self.verification_shares[&l].to_bytes().as_ref())?;
     }
+    Ok(())
+  }
+
+  pub fn serialize(&self) -> Zeroizing<Vec<u8>> {
+    let mut serialized = Zeroizing::new(vec![]);
+    self.write::<Vec<u8>>(serialized.as_mut()).unwrap();
     serialized
   }
 
-  pub fn deserialize<R: Read>(reader: &mut R) -> Result<ThresholdCore<C>, DkgError<()>> {
+  pub fn read<R: Read>(reader: &mut R) -> Result<ThresholdCore<C>, DkgError<()>> {
     {
       let missing = DkgError::InternalError("ThresholdCore serialization is missing its curve");
       let different = DkgError::InternalError("deserializing ThresholdCore for another curve");
@@ -367,7 +376,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     self.core.verification_shares()
   }
 
-  pub fn serialize(&self) -> Vec<u8> {
+  pub fn serialize(&self) -> Zeroizing<Vec<u8>> {
     self.core.serialize()
   }
 
