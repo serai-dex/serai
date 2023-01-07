@@ -1,5 +1,5 @@
 use core::ops::BitXor;
-use std::io::{self, Read, Write, Cursor};
+use std::io::{self, Read, Write};
 
 use zeroize::Zeroize;
 
@@ -127,7 +127,7 @@ impl Extra {
   pub(crate) fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
-        return PaymentId::deserialize(&mut Cursor::new(data)).ok();
+        return PaymentId::deserialize::<&[u8]>(&mut data.as_ref()).ok();
       }
     }
     None

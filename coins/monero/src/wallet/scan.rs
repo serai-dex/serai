@@ -1,5 +1,3 @@
-use std::io::Cursor;
-
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
@@ -232,7 +230,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
 impl Scanner {
   /// Scan a transaction to discover the received outputs.
   pub fn scan_transaction(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
-    let extra = Extra::deserialize(&mut Cursor::new(&tx.prefix.extra));
+    let extra = Extra::deserialize::<&[u8]>(&mut tx.prefix.extra.as_ref());
     let keys;
     let extra = if let Ok(extra) = extra {
       keys = extra.keys();
