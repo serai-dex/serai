@@ -19,6 +19,11 @@ pub enum CoinError {
   ConnectionError,
 }
 
+pub trait Block: Sized + Clone {
+  type Id: Clone + Copy + AsRef<[u8]>;
+  fn id(&self) -> Self::Id;
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputType {
   External,
@@ -27,7 +32,7 @@ pub enum OutputType {
 }
 
 pub trait Output: Sized + Clone {
-  type Id: AsRef<[u8]>;
+  type Id: Clone + Copy + AsRef<[u8]>;
 
   fn kind(&self) -> OutputType;
 
@@ -44,7 +49,7 @@ pub trait Coin {
 
   type Fee: Copy;
   type Transaction;
-  type Block;
+  type Block: Block;
 
   type Output: Output;
   type SignableTransaction;

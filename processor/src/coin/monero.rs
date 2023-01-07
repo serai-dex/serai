@@ -10,7 +10,7 @@ use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_serai::{
   transaction::Transaction,
-  block::Block,
+  block::Block as MBlock,
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
@@ -21,8 +21,17 @@ use monero_serai::{
 
 use crate::{
   additional_key,
-  coin::{CoinError, OutputType, Output as OutputTrait, Coin},
+  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin},
 };
+
+#[derive(Clone, Debug)]
+pub struct Block([u8; 32], MBlock);
+impl BlockTrait for Block {
+  type Id = [u8; 32];
+  fn id(&self) -> Self::Id {
+    self.0
+  }
+}
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -162,7 +171,9 @@ impl Coin for Monero {
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
-    self.rpc.get_block(number).await.map_err(|_| CoinError::ConnectionError)
+    let hash = self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?;
+    let block = self.rpc.get_block(hash).await.map_err(|_| CoinError::ConnectionError)?;
+    Ok(Block(hash, block))
   }
 
   async fn get_outputs(
@@ -172,7 +183,7 @@ impl Coin for Monero {
   ) -> Result<Vec<Self::Output>, CoinError> {
     let mut transactions = self
       .scanner(key)
-      .scan(&self.rpc, block)
+      .scan(&self.rpc, &block.1)
       .await
       .map_err(|_| CoinError::ConnectionError)?
       .iter()
@@ -288,7 +299,7 @@ impl Coin for Monero {
     }
 
     let outputs = Self::test_scanner()
-      .scan(&self.rpc, &self.rpc.get_block(new_block).await.unwrap())
+      .scan(&self.rpc, &self.rpc.get_block_by_number(new_block).await.unwrap())
       .await
       .unwrap()
       .swap_remove(0)
