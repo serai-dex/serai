@@ -76,7 +76,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   let mut wallets = vec![];
   for i in 1 ..= threshold {
-    coin.temp_generate_to_address(keys[&i].group_key()).await;
+    //coin.temp_generate_to_address(keys[&i].group_key()).await;
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_block(0, latest);
     wallet.add_keys(&WalletKeys::new(keys.remove(&i).unwrap(), 0));

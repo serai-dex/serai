@@ -98,5 +98,4 @@ pub trait Coin {
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address);
 
-  async fn temp_generate_to_address(&self, key: <Self::Curve as Ciphersuite>::G);
 }

@@ -283,9 +283,4 @@ impl Coin for Monero {
     self.rpc.publish_transaction(&tx).await.unwrap();
     self.mine_block().await;
   }
-
-  
-  async fn temp_generate_to_address(&self, key: dfg::EdwardsPoint) {
-    
-  }
 }

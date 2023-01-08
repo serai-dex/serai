@@ -62,7 +62,6 @@ impl SignableTransaction {
       sigs.push(AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap());
     }
 
-
     return Ok(TransactionMachine {
       signable: self,
       transcript,
@@ -163,7 +162,6 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
     let mut tx = self.signable.tx;
     /*for (i, one_txinput) in tx.inputs.iter().enumerate() {
       let (tx_sighash ,sighash_type)= taproot_sighash(&tx, i).unwrap();
-      tx.inputs[i].tap_key_sig = Some(tx_sighash);
     }*/
 
     let mut included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
