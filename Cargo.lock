@@ -550,6 +550,9 @@ dependencies = [
  "bitcoin",
  "bitcoin_hashes",
  "bitcoincore-rpc-json",
+ "dalek-ff-group",
+ "dleq",
+ "flexible-transcript",
  "hex",
  "k256",
  "log",
@@ -563,6 +566,7 @@ dependencies = [
  "sha2 0.10.6",
  "thiserror",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

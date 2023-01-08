@@ -232,11 +232,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     self.coin.address(self.keys[self.keys.len() - 1].0.group_key())
   }
 
-  // TODO: Remove
-  pub async fn is_confirmed(&mut self, tx: &[u8]) -> Result<bool, CoinError> {
-    self.coin.is_confirmed(tx).await
-  }
-
   pub async fn poll(&mut self) -> Result<(), CoinError> {
     if self.coin.get_latest_block_number().await? < (C::CONFIRMATIONS - 1) {
       return Ok(());
@@ -245,6 +240,8 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     // Will never scan the genesis block, which shouldn't be an issue
     for b in (self.scanned_block() + 1) ..= confirmed_block {
+      println!("{} {} {}",b,self.scanned_block(), confirmed_block);
+
       // If any keys activated at this block, shift them over
       {
         let mut k = 0;
@@ -260,8 +257,10 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         }
       }
 
+      dbg!("before keys");
       let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
+        self.coin.tweak_key(keys);
         outputs.extend(
           self
             .coin
@@ -273,6 +272,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         );
       }
 
+      dbg!("after keys");
       self.db.scanned_to_block(b);
     }
 
@@ -290,6 +290,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     payments: Vec<(C::Address, u64)>,
     fee: C::Fee,
   ) -> Result<(Vec<(C::Address, u64)>, Vec<C::SignableTransaction>), CoinError> {
+    dbg!("prepare_sends called from wallet");
     if payments.is_empty() {
       return Ok((vec![], vec![]));
     }
@@ -325,7 +326,14 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
         let tx = self
           .coin
-          .prepare_send(keys.clone(), transcript, acknowledged_block, inputs, &outputs, fee)
+          .prepare_send(
+            keys.clone(),
+            transcript,
+            acknowledged_block,
+            inputs,
+            &outputs,
+            fee,
+          )
           .await?;
         // self.db.save_tx(tx) // TODO
         txs.push(tx);
@@ -340,6 +348,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     network: &mut N,
     prepared: C::SignableTransaction,
   ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
+    dbg!("Attempt_send called from wallet");
     let attempt = self.coin.attempt_send(prepared).await.map_err(SignError::CoinError)?;
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);

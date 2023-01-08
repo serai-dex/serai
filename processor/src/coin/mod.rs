@@ -87,6 +87,8 @@ pub trait Coin {
 
   fn tweak_keys<'a>(&self, keys : &'a mut HashMap<u16, ThresholdKeys<Self::Curve>>);
 
+  fn tweak_key<'a>(&self, one_key: &'a mut ThresholdKeys<Self::Curve>);
+
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;
 
@@ -95,4 +97,6 @@ pub trait Coin {
 
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address);
+
+  async fn temp_generate_to_address(&self, key: <Self::Curve as Ciphersuite>::G);
 }

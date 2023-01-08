@@ -76,6 +76,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   let mut wallets = vec![];
   for i in 1 ..= threshold {
+    coin.temp_generate_to_address(keys[&i].group_key()).await;
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_block(0, latest);
     wallet.add_keys(&WalletKeys::new(keys.remove(&i).unwrap(), 0));
@@ -87,6 +88,8 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
     coin.mine_block().await;
   }
 
+  dbg!("Total Wallet: {}",wallets.len());
+  
   for wallet in wallets.iter_mut() {
     // Poll to activate the keys
     wallet.poll().await.unwrap();
@@ -108,7 +111,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
       .swap_remove(0);
     futures.push(wallet.attempt_send(network, signable));
   }
-
+  
   println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
 }
 
@@ -121,20 +124,10 @@ async fn monero() {
 
 #[tokio::test]
 async fn bitcoin() {
+  dbg!("Bitcoin Test");
   let bitcoin = Bitcoin::new("127.0.0.1:18443".to_string(),Some(String::from("serai")),Some(String::from("seraidex"))).await;
-  dbg!("Latest Block 1");
-  let latest_block = bitcoin.get_latest_block_number().await.unwrap();
-  dbg!(latest_block);
-  dbg!("Latest Block 2");
-  //println!("Latest Block : {:?}",latest_block);
-  //let fetched_block = bitcoin.get_block(latest_block).await.unwrap();
-  //println!("Fetched Block : {:?}",fetched_block);
-  
-  //let s = "d668166415eac706ffa6bd197d2a0de7295d40726c26f2379a2cb64fa3ceda99";
-  //let tx_arr: &[u8] = s.as_bytes();
-  //let aa = bitcoin.is_confirmed(tx_arr);
 
   let fee = bitcoin.get_fee().await;
-  test_send(bitcoin,fee).await;
+  test_send(bitcoin, fee).await;
   // No send test yet
 }

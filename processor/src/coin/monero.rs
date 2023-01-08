@@ -218,6 +218,10 @@ impl Coin for Monero {
 
   }
 
+  fn tweak_key<'a>(&self, one_key: &'a mut ThresholdKeys<Self::Curve>) {
+
+  }
+
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
     self.rpc.get_fee().await.unwrap()
@@ -278,5 +282,10 @@ impl Coin for Monero {
     .unwrap();
     self.rpc.publish_transaction(&tx).await.unwrap();
     self.mine_block().await;
+  }
+
+  
+  async fn temp_generate_to_address(&self, key: dfg::EdwardsPoint) {
+    
   }
 }

@@ -191,7 +191,6 @@ impl Rpc {
         }
         Ok(transactions)
     }
-    
 
     pub async fn get_raw_transactions(
         &self,
@@ -427,6 +426,16 @@ impl Rpc {
         R: Sync + Send,
     {
         let mut ext_args = [tx.raw_hex().into()];
+        let args = handle_defaults(&mut ext_args, &[null()]);
+        let info: bitcoin::Txid = self
+            .rpc_call::<bitcoin::Txid>("sendrawtransaction", &args)
+            .await?;
+        Ok(info)
+    }
+
+    pub async fn send_raw_str_transaction(&self, raw_tx: String) -> Result<bitcoin::Txid>
+    {
+        let mut ext_args = [raw_tx.into()];
         let args = handle_defaults(&mut ext_args, &[null()]);
         let info: bitcoin::Txid = self
             .rpc_call::<bitcoin::Txid>("sendrawtransaction", &args)
