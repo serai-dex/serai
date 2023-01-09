@@ -33,7 +33,7 @@ runs:
         solc-select use 0.8.16
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@${{ inputs.rust-toolchain }}
+      uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
@@ -44,6 +44,7 @@ runs:
       run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
     - name: Install WASM toolchain
-      uses: dtolnay/rust-toolchain@${{ steps.nightly.outputs.version }}
+      uses: dtolnay/rust-toolchain@master
       with:
+        toolchain: ${{ steps.nightly.outputs.version }}
         targets: wasm32-unknown-unknown

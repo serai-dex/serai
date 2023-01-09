@@ -71,8 +71,9 @@ jobs:
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Install rustfmt
-        uses: dtolnay/rust-toolchain@${{ steps.nightly.outputs.version }}
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ steps.nightly.outputs.version }}
           components: rustfmt
 
       - name: Run rustfmt
