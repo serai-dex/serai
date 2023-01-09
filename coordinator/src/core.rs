@@ -17,6 +17,15 @@ use group::ff::PrimeField;
 static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
 use std::str;
 
+// rdkafka
+use rdkafka::{
+  producer::{BaseRecord, ThreadedProducer},
+  consumer::{BaseConsumer, Consumer},
+  ClientConfig, Message,
+  admin::{AdminClient, TopicReplication, NewTopic, AdminOptions},
+  client::DefaultClientContext,
+};
+
 // All asynchronous processes follow a pattern to modularly
 // create, start, and stop their various underlying components.
 // for example, the core module will use this pattern to start the
@@ -50,6 +59,9 @@ impl CoreProcess {
 
     // Check coordinator pubkey env variable
     initialize_keys(name);
+
+    // Initialize Kafka topics
+    initialize_kafka_topics(self.core_config.chain_config.clone(), self.core_config.kafka_config.clone(), name);
   }
 
   fn stop(self) {
@@ -472,5 +484,42 @@ pub fn initialize_keys(name: String) {
     env::set_var(env_pub_key, hex::encode(&public.to_bytes()));
   } else {
     info!("Keys Found");
+  }
+}
+
+fn initialize_kafka_topics(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String) {
+  let j = serde_json::to_string(&chain_config).unwrap();
+  let topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
+
+  let admin_client = create_admin_client(&kafka_config);
+  let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
+
+  let serai_topic_name = format!("{}_node_serai", &name);
+
+  let initialized_topic = NewTopic {
+    name: &serai_topic_name,
+    num_partitions: 2,
+    replication: TopicReplication::Fixed(1),
+    config: Vec::new(),
+  };
+
+  admin_client.create_topics(&[initialized_topic], &opts).await.expect("topic creation failed");
+
+  // Loop through each coin & initialize each kakfa topic
+  for (_key, _value) in topic_ref.into_iter() {
+    let mut topic: String = "".to_string();
+    topic.push_str(&name);
+    let topic_ref = &mut String::from(&_key).to_lowercase();
+    topic.push_str("_processor_");
+    topic.push_str(topic_ref);
+
+    let initialized_topic = NewTopic {
+      name: &topic,
+      num_partitions: 2,
+      replication: TopicReplication::Fixed(1),
+      config: Vec::new(),
+    };
+
+    admin_client.create_topics(&[initialized_topic], &opts).await.expect("topic creation failed");
   }
 }

@@ -131,42 +131,6 @@ impl SignatureProcess {
   pub async fn run(self) {
     info!("Starting Signature Process");
 
-    // Check/initialize kakfa topics
-    let j = serde_json::to_string(&self.chain_config).unwrap();
-    let topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
-
-    let admin_client = create_admin_client(&self.kafka_config);
-    let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
-
-    let serai_topic_name = format!("{}_node_serai", self.name);
-
-    let initialized_topic = NewTopic {
-      name: &serai_topic_name,
-      num_partitions: 2,
-      replication: TopicReplication::Fixed(1),
-      config: Vec::new(),
-    };
-
-    admin_client.create_topics(&[initialized_topic], &opts).await.expect("topic creation failed");
-
-    // Loop through each coin & initialize each kakfa topic
-    for (_key, _value) in topic_ref.into_iter() {
-      let mut topic: String = "".to_string();
-      topic.push_str(&self.name);
-      let topic_ref = &mut String::from(&_key).to_lowercase();
-      topic.push_str("_processor_");
-      topic.push_str(topic_ref);
-
-      let initialized_topic = NewTopic {
-        name: &topic,
-        num_partitions: 2,
-        replication: TopicReplication::Fixed(1),
-        config: Vec::new(),
-      };
-
-      admin_client.create_topics(&[initialized_topic], &opts).await.expect("topic creation failed");
-    }
-
     // Create Hashmap based on coins
     let coin_hashmap = create_coin_hashmap(&self.chain_config);
 
