@@ -9,6 +9,6 @@ target_host = "127.0.0.1"
 target_port = "1337"
 
 [kafka]
-host = "localhost"
-port = "9094" # localhost connects from 9094, internal docker connects from 9092
+host = "kafka"
+port = "9092" # localhost connects from 9094, internal docker connects from 9092
 offset_reset = "smallest"
