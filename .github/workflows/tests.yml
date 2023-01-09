@@ -40,7 +40,7 @@ jobs:
           key: rust-advisory-db
 
       - name: Install cargo
-        uses: dtolnay/toolchain@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo deny
         run: cargo install --locked cargo-deny
@@ -71,7 +71,7 @@ jobs:
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Install rustfmt
-        uses: dtolnay/toolchain@${{ steps.nightly.outputs.version }}
+        uses: dtolnay/rust-toolchain@${{ steps.nightly.outputs.version }}
         with:
           components: rustfmt
 
