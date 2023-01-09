@@ -1,6 +1,8 @@
 /// The coordinator core module contains functionality that is shared across modules.
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::Duration;
 use std::{env, fmt, thread, str::FromStr, io::Write};
 use chrono::prelude::*;
 use env_logger::fmt::Formatter;
@@ -43,25 +45,40 @@ use rdkafka::{
 /// `core_config` is the configuration for the core process,
 /// which contains configurations for kafka, logging, and
 /// core host information.
+
+// Configuration for admin client to check / initialize topics
+fn create_config(kafka_config: &KafkaConfig) -> ClientConfig {
+  let mut config = ClientConfig::new();
+  config.set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port));
+  config
+}
+
+// Creates admin client used to check / initialize topics
+fn create_admin_client(kafka_config: &KafkaConfig) -> AdminClient<DefaultClientContext> {
+  create_config(kafka_config).create().expect("admin client creation failed")
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct CoreProcess {
   core_config: CoreConfig,
+  chain_config: ChainConfig,
+  kafka_config: KafkaConfig,
 }
 
 impl CoreProcess {
-  pub fn new(config: CoreConfig) -> Self {
-    Self { core_config: config }
+  pub fn new(config: CoreConfig, chain_config: ChainConfig, kafka_config: KafkaConfig) -> Self {
+    Self { core_config: config, chain_config, kafka_config }
   }
 
-  pub fn run(self, name: String) {
+  pub async fn run(self, name: String) {
     start_logger(true, String::from("core"), &self.core_config.log_filter);
     info!("Starting Core Process");
 
     // Check coordinator pubkey env variable
-    initialize_keys(name);
+    initialize_keys(name.clone());
 
     // Initialize Kafka topics
-    initialize_kafka_topics(self.core_config.chain_config.clone(), self.core_config.kafka_config.clone(), name);
+    initialize_kafka_topics(self.chain_config, self.kafka_config.clone(), name.clone()).await;
   }
 
   fn stop(self) {
@@ -487,7 +504,7 @@ pub fn initialize_keys(name: String) {
   }
 }
 
-fn initialize_kafka_topics(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String) {
+async fn initialize_kafka_topics(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String) {
   let j = serde_json::to_string(&chain_config).unwrap();
   let topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
 

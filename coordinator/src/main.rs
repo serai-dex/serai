@@ -71,10 +71,11 @@ async fn main() {
   let core_config = config.clone();
   let core_name_arg = name_arg.to_string().to_owned();
   tokio::spawn(async move {
-    let core_process = CoreProcess::new(core_config.get_core());
-    core_process.run(core_name_arg);
-  });
+    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_chain(), core_config.get_kafka());
+    core_process.run(core_name_arg).await;
+  }).await.unwrap();
 
+  // Start Network Process
   let network_config = config.clone().get_network();
   let network_name_arg = name_arg.to_string().to_owned();
   tokio::spawn(async move {
@@ -89,6 +90,7 @@ async fn main() {
       SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), name_arg);
     signature_process.run().await;
   });
+  
 
   // Initial Heartbeat to Processors
   //  * version check
