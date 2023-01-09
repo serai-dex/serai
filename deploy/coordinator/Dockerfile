@@ -1,4 +1,4 @@
-FROM docker.io/paritytech/ci-linux:production as builder
+FROM docker.io/paritytech/base-ci-linux:latest as builder
 LABEL description="STAGE 1: Build"
 
 # Add files for build
@@ -12,6 +12,9 @@ WORKDIR /serai/coordinator
 
 # Update Rust
 RUN rustup update
+RUN rustup toolchain install nightly
+RUN rustup install nightly
+RUN rustup target add wasm32-unknown-unknown --toolchain nightly
 
 # Mount cargo and serai cache for Cache & Build
 RUN --mount=type=cache,target=/usr/local/cargo/git \
@@ -22,7 +25,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/target/release/incremental \
     --mount=type=cache,target=/target/release/wbuild \
     --mount=type=cache,target=/target/release/lib* \
-    cargo build --release
+    cargo +nightly build --release
 
 # Prepare Image
 FROM ubuntu:latest as image

@@ -1,43 +1,86 @@
-use codec::Decode;
-use kitchensink_runtime::Runtime;
-use log::debug;
-use sp_core::{sr25519, H256 as Hash};
-use substrate_api_client::{
-	rpc::{HandleSubscription, JsonrpseeClient},
-	Api, AssetTipExtrinsicParams, SubscribeFrameSystem,
+use log::info;
+
+use subxt::{
+    ext::sp_runtime::{ generic::Header, traits::BlakeTwo256 },
+    rpc::Subscription,
+    OnlineClient,
+    PolkadotConfig,
 };
 
-// This module depends on node_runtime.
-// To avoid dependency collisions, node_runtime has been removed from the substrate-api-client library.
-// Replace this crate by your own if you run a custom substrate node to get your custom events.
-use kitchensink_runtime::RuntimeEvent;
+use crate::{ core::ObserverConfig, core::KafkaConfig };
+
 pub struct ObserverProcess {
-  observer_config: ObserverConfig
+    observer_config: ObserverConfig,
 }
 
 impl ObserverProcess {
-  pub fn new(config: ObserverConfig) -> Self {
-      Self { observer_config: config }
-  }
+    pub fn new(config: ObserverConfig) -> Self {
+        Self { observer_config: config }
+    }
 
-  pub fn run(&self) {
-      let host = self.observer_config.get_host();
-      let port = self.observer_config.get_port();
-      let poll_interval = self.observer_config.get_poll_interval();
+    pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Observer process started");
 
-      // Polls substrate RPC to get block height at a specified interval;
+        let api = OnlineClient::<PolkadotConfig>::from_url("ws://node-base:9944").await?;
 
-      let client = request::Client::new();
-      let mut last_block = 0;
-      loop {
-          let block = client.get(&url).send().unwrap().text().unwrap();
-          let block: u64 = block.parse().unwrap();
-          if block > last_block {
-              println!("New block: {}", block);
-              last_block = block;
-          }
-          thread::sleep(Duration::from_secs(poll_interval as u64));
-      }
-  }
+        // For non-finalised blocks use `.subscribe_blocks()`
+        let mut blocks: Subscription<Header<u32, BlakeTwo256>> = api
+            .rpc()
+            .subscribe_finalized_block_headers().await?;
+
+        while let Some(Ok(block)) = blocks.next().await {
+            println!(
+                "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
+                block.number,
+                block.hash(),
+                block.parent_hash,
+                block.state_root,
+                block.extrinsics_root
+            );
+        }
+
+        Ok(())
+    }
+
+        // // write a second version of the run function that deposits blockdata to kafka
+        // pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
+        //     // info!("Observer process started");
+    
+        //     // let api = OnlineClient::<PolkadotConfig>::from_url("ws://node-base:9944").await?;
+    
+        //     // // For non-finalised blocks use `.subscribe_blocks()`
+        //     // let mut blocks: Subscription<Header<u32, BlakeTwo256>> = api
+        //     //     .rpc()
+        //     //     .subscribe_finalized_block_headers().await?;
+    
+        //     // let kafka_config = self.observer_config.kafka_config.clone();
+        //     // let producer = create_producer(&kafka_config);
+    
+        //     // while let Some(Ok(block)) = blocks.next().await {
+        //     //     println!(
+        //     //         "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
+        //     //         block.number,
+        //     //         block.hash(),
+        //     //         block.parent_hash,
+        //     //         block.state_root,
+        //     //         block.extrinsics_root
+        //     //     );
+    
+        //     //     let block_data = format!(
+        //     //         "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
+        //     //         block.number,
+        //     //         block.hash(),
+        //     //         block.parent_hash,
+        //     //         block.state_root,
+        //     //         block.extrinsics_root
+        //     //     );
+    
+        //     //     let record = BaseRecord::to(&kafka_config.topic)
+        //     //         .payload(&block_data);
+    
+        //     //     producer.send(record, 0).unwrap();
+        //     // }
+    
+        //     Ok(())
+        // }
 }
-
