@@ -217,11 +217,9 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     let pool = transaction_pool.clone();
 
     Box::new(move |deny_unsafe, _| {
-      crate::rpc::create_full(crate::rpc::FullDeps {
-        client: client.clone(),
-        pool: pool.clone(),
-        deny_unsafe,
-      })
+      let deps =
+      crate::rpc::FullDeps { client: client.clone(), pool: pool.clone(), deny_unsafe };
+      crate::rpc::create_full(deps)
       .map_err(Into::into)
     })
   };
@@ -239,7 +237,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   //  pool: pool.clone(),
   //});
 
-  sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+  let _rpc_handlers =  sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
     client: client.clone(),
     keystore: keystore_container.sync_keystore(),

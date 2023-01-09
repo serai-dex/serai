@@ -66,7 +66,7 @@ pub fn create_benchmark_extrinsic(
 
   runtime::UncheckedExtrinsic::new_signed(
     call.clone(),
-    sender.public(),
+    sp_runtime::MultiAddress::Id(sender.public()),
     runtime::SignedPayload::from_raw(
       call,
       extra.clone(),

@@ -143,6 +143,7 @@ services:
       NAME: base
     ports:
       - "9933:9933"
+      - "9944:9944"
 
   node-alice:
     <<: *node_defaults

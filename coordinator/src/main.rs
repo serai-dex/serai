@@ -1,6 +1,7 @@
 mod core;
 mod health;
 mod signature;
+mod observer;
 
 use std::io;
 use clap::{App, Arg};
@@ -86,6 +87,12 @@ async fn main() {
   //  * binary checksum ??
 
   // Start Serai Observer
+
+  tokio::spawn(async move {
+    let observer_config = config.clone().get_observer();
+    let observer_process = observer::ObserverProcess::new(observer_config);
+    observer_process.run().await;
+  });
 
   // Start Health Monitor
 

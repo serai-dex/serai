@@ -8,7 +8,7 @@ use sp_core::OpaqueMetadata;
 pub use sp_core::sr25519::{Public, Signature};
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
-  traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
+  traits::{Convert, OpaqueKeys, AccountIdLookup, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
@@ -139,12 +139,12 @@ impl frame_system::Config for Runtime {
   type BlockLength = BlockLength;
   type AccountId = AccountId;
   type RuntimeCall = RuntimeCall;
-  type Lookup = IdentityLookup<AccountId>;
+  type Lookup = AccountIdLookup<AccountId, ()>;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
   type Hashing = BlakeTwo256;
-  type Header = Header;
+  type Header = generic::Header<BlockNumber, BlakeTwo256>;
   type RuntimeOrigin = RuntimeOrigin;
   type RuntimeEvent = RuntimeEvent;
   type BlockHashCount = BlockHashCount;
@@ -240,7 +240,7 @@ impl pallet_session::Config for Runtime {
   type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
 
-pub type Address = AccountId;
+pub type Address = sp_runtime::MultiAddress<AccountId, ()>;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedExtra = (
