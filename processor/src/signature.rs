@@ -104,7 +104,7 @@ impl SignatureProcess {
     produce_processor_pubkey(&self.kafka_config, &self.name, &self.coin);
 
     // Wait to receive Coordinator Pubkey
-    process_received_pubkey().await;
+    process_received_pubkey(&self.name).await;
 
     // Initialize consumer used to read secure test messages from coordinator on secure partition
     consume_coordinator_secure_test_message(&self.kafka_config, &self.name, &self.coin);
@@ -125,7 +125,7 @@ fn consume_general_messages_from_coordinator(kafka_config: &KafkaConfig, name: &
   topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_owned().to_uppercase();
-  env_key.push_str("_PUB");
+  env_key.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
   initialize_consumer(
     kafka_config,
     &group_id,
@@ -133,6 +133,7 @@ fn consume_general_messages_from_coordinator(kafka_config: &KafkaConfig, name: &
     Some(env_key.to_string()),
     None,
     &PartitionType::General,
+    &name,
   );
 }
 
@@ -143,7 +144,7 @@ fn consume_coordinator_secure_test_message(kafka_config: &KafkaConfig, name: &st
   topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
-  env_key.push_str("_PRIV");
+  env_key.push_str(format!("_{}_PRIV", &name.to_uppercase()).as_str());
   initialize_consumer(
     kafka_config,
     &group_id,
@@ -151,6 +152,7 @@ fn consume_coordinator_secure_test_message(kafka_config: &KafkaConfig, name: &st
     Some(env_key.to_string()),
     Some(&coin.to_string()),
     &PartitionType::Secure,
+    &name,
   );
 }
 
@@ -162,6 +164,7 @@ fn initialize_consumer(
   env_key: Option<String>,
   coin: Option<&String>,
   partition_type: &PartitionType,
+  name: &str,
 ) {
   let consumer: BaseConsumer = ClientConfig::new()
     .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
@@ -192,6 +195,7 @@ fn initialize_consumer(
       tpl.add_partition(&topic, 0);
       consumer.assign(&tpl).unwrap();
 
+      let name_arg = name.to_owned();
       tokio::spawn(async move {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
@@ -199,12 +203,12 @@ fn initialize_consumer(
           let msg_type = parse_message_type(&key);
           match msg_type {
             MessageType::CoordinatorPubkeyToProcessor => {
-              let coord_pubkey_check = env::var("COORD_PUB");
+              let coord_pubkey_check = env::var(format!("COORD_{}_PUB", &name_arg.to_uppercase()).as_str());
               if coord_pubkey_check.is_err() {
                 let value = msg.payload().unwrap();
                 let public_key = str::from_utf8(value).unwrap();
                 info!("Received {} Public Key: {}", &key, &public_key);
-                env::set_var("COORD_PUB", public_key);
+                env::set_var(format!("COORD_{}_PUB", name_arg.to_uppercase()), public_key);
               }
             }
             MessageType::CoordinatorGeneralMessageToProcessor => {
@@ -223,6 +227,7 @@ fn initialize_consumer(
       tpl.add_partition(&topic, 1);
       consumer.assign(&tpl).unwrap();
 
+      let name_arg = name.to_owned();
       tokio::spawn(async move {
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
@@ -233,7 +238,7 @@ fn initialize_consumer(
               let value = msg.payload().unwrap();
               // Creates Message box used for decryption
               let pubkey = message_box::PublicKey::from_trusted_str(
-                &env::var("COORD_PUB").unwrap().to_string(),
+                &env::var(format!("COORD_{}_PUB", &name_arg.to_uppercase()).as_str()).unwrap().to_string(),
               );
 
               let coin_priv = message_box::PrivateKey::from_string(
@@ -271,7 +276,7 @@ fn produce_processor_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str) 
   topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
-  env_key.push_str("_PUB");
+  env_key.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
   send_processor_pubkey(&kafka_config, &topic, env_key.to_string(), coin);
 }
 
@@ -300,11 +305,11 @@ fn send_processor_pubkey(kafka_config: &KafkaConfig, topic: &str, env_key: Strin
 }
 
 // Wait to receive Coordinator Pubkey
-async fn process_received_pubkey() {
+async fn process_received_pubkey(name: &str) {
   // Runs a loop to check if Coordinator pubkey is found
   let mut coord_key_found = false;
   while !coord_key_found {
-    let coord_pub_check = env::var("COORD_PUB");
+    let coord_pub_check = env::var(format!("COORD_{}_PUB", &name.to_uppercase()).as_str());
     if !coord_pub_check.is_err() {
       info!("Coord Pubkey Ready");
       coord_key_found = true;
@@ -337,7 +342,7 @@ async fn produce_general_and_secure_test_message(
   topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
-  env_key.push_str("_PRIV");
+  env_key.push_str(format!("_{}_PRIV", &name.to_uppercase()).as_str());
 
   let processor_id = retrieve_message_box_id(&coin.to_string().to_uppercase());
   let mut msg: String = "".to_string();
@@ -352,6 +357,7 @@ async fn produce_general_and_secure_test_message(
     env_key.to_string(),
     &processor_id,
     msg.as_bytes().to_vec(),
+    &name,
   )
   .await;
 }
@@ -363,7 +369,9 @@ async fn send_general_and_secure_test_message(
   env_key: String,
   processor: &'static str,
   msg: Vec<u8>,
+  name: &str
 ) {
+
   let producer: ThreadedProducer<_> = ClientConfig::new()
     .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
     .create()
@@ -375,7 +383,7 @@ async fn send_general_and_secure_test_message(
 
   // Load Pubkeys for processors
   let pubkey =
-    message_box::PublicKey::from_trusted_str(&env::var("COORD_PUB").unwrap().to_string());
+    message_box::PublicKey::from_trusted_str(&env::var(format!("COORD_{}_PUB", &name.to_uppercase())).unwrap().to_string());
   let mut message_box_pubkey = HashMap::new();
   message_box_pubkey.insert(message_box::ids::COORDINATOR, pubkey);
 

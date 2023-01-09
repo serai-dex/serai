@@ -48,7 +48,7 @@ Within the coordinator we have processes, each process will be responsible for o
 
 ### Main
 ```mermaid
-    graph LR
+    graph TB
     A[Coordinator Startup] --> B[Load Configuration]
     B --> C[Start Core Process]
     C --> D[Start Observation Process]
