@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![no_std]
 
 use core::{
@@ -14,6 +15,7 @@ use digest::{consts::U64, Digest, HashMarker};
 
 use subtle::{Choice, CtOption};
 
+use crypto_bigint::{Encoding, U256};
 pub use curve25519_dalek as dalek;
 
 use dalek::{
@@ -175,7 +177,37 @@ constant_time!(Scalar, DScalar);
 math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
 from_uint!(Scalar, DScalar);
 
+const MODULUS: U256 =
+  U256::from_be_hex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed");
+
 impl Scalar {
+  pub fn pow(&self, other: Scalar) -> Scalar {
+    let mut table = [Scalar::one(); 16];
+    table[1] = *self;
+    for i in 2 .. 16 {
+      table[i] = table[i - 1] * self;
+    }
+
+    let mut res = Scalar::one();
+    let mut bits = 0;
+    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+      bits <<= 1;
+      let bit = u8::from(*bit);
+      bits |= bit;
+
+      if ((i + 1) % 4) == 0 {
+        if i != 3 {
+          for _ in 0 .. 4 {
+            res *= res;
+          }
+        }
+        res *= table[usize::from(bits)];
+        bits = 0;
+      }
+    }
+    res
+  }
+
   /// Perform wide reduction on a 64-byte array to create a Scalar without bias.
   pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Scalar {
     Self(DScalar::from_bytes_mod_order_wide(bytes))
@@ -214,16 +246,16 @@ impl Field for Scalar {
     CtOption::new(Self(self.0.invert()), !self.is_zero())
   }
   fn sqrt(&self) -> CtOption<Self> {
-    unimplemented!()
-  }
-  fn is_zero(&self) -> Choice {
-    self.0.ct_eq(&DScalar::zero())
-  }
-  fn cube(&self) -> Self {
-    *self * self * self
-  }
-  fn pow_vartime<S: AsRef<[u64]>>(&self, _exp: S) -> Self {
-    unimplemented!()
+    let mod_3_8 = MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8));
+    let mod_3_8 = Scalar::from_repr(mod_3_8.to_le_bytes()).unwrap();
+
+    let sqrt_m1 = MODULUS.saturating_sub(&U256::from_u8(1)).wrapping_div(&U256::from_u8(4));
+    let sqrt_m1 = Scalar::one().double().pow(Scalar::from_repr(sqrt_m1.to_le_bytes()).unwrap());
+
+    let tv1 = self.pow(mod_3_8);
+    let tv2 = tv1 * sqrt_m1;
+    let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
+    CtOption::new(candidate, candidate.square().ct_eq(self))
   }
 }
 
@@ -233,7 +265,7 @@ impl PrimeField for Scalar {
   const CAPACITY: u32 = 252;
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
-    // TODO: This unwrap_or isn't constant time, yet do we have an alternative?
+    // TODO: This unwrap_or isn't constant time, yet we don't exactly have an alternative...
     CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(scalar.is_some()))
   }
   fn to_repr(&self) -> [u8; 32] {
@@ -248,7 +280,11 @@ impl PrimeField for Scalar {
     2u64.into()
   }
   fn root_of_unity() -> Self {
-    unimplemented!()
+    const ROOT: [u8; 32] = [
+      212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
+      96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
+    ];
+    Scalar::from_repr(ROOT).unwrap()
   }
 }
 
@@ -396,3 +432,13 @@ dalek_group!(
   RISTRETTO_BASEPOINT_POINT,
   RISTRETTO_BASEPOINT_TABLE
 );
+
+#[test]
+fn test_ed25519_group() {
+  ff_group_tests::group::test_prime_group_bits::<EdwardsPoint>();
+}
+
+#[test]
+fn test_ristretto_group() {
+  ff_group_tests::group::test_prime_group_bits::<RistrettoPoint>();
+}

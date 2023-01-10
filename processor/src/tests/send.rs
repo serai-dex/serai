@@ -18,6 +18,7 @@ struct LocalNetwork {
   i: u16,
   size: u16,
   round: usize,
+  #[allow(clippy::type_complexity)]
   rounds: Arc<RwLock<Vec<HashMap<u16, Vec<u8>>>>>,
 }
 
@@ -57,7 +58,7 @@ impl Network for LocalNetwork {
   }
 }
 
-pub(crate) async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
+async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
   let latest = coin.get_latest_block_number().await.unwrap();
@@ -98,11 +99,7 @@ pub(crate) async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
       .unwrap()
       .1
       .swap_remove(0);
-    futures.push(wallet.attempt_send(
-      network,
-      signable,
-      (1 ..= threshold).into_iter().collect::<Vec<_>>(),
-    ));
+    futures.push(wallet.attempt_send(network, signable));
   }
 
   println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));

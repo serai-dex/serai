@@ -44,15 +44,14 @@ fn generators(prefix: &'static str, path: &str) {
           lazy_static! {{
             pub static ref GENERATORS: Generators = Generators {{
               G: [
-                {}
+                {G_str}
               ],
               H: [
-                {}
+                {H_str}
               ],
             }};
           }}
         ",
-        G_str, H_str,
       )
       .as_bytes(),
     )

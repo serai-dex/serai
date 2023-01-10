@@ -4,6 +4,7 @@ members = [
 
   "crypto/transcript",
 
+  "crypto/ff-group-tests",
   "crypto/dalek-ff-group",
   "crypto/ed448",
   "crypto/ciphersuite",
@@ -21,8 +22,13 @@ members = [
 
   "processor",
 
+  "substrate/serai/primitives",
+
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",
+
+  "substrate/validator-sets/primitives",
+  "substrate/validator-sets/pallet",
 
   "substrate/tendermint/machine",
   "substrate/tendermint/primitives",
@@ -31,9 +37,6 @@ members = [
 
   "substrate/runtime",
   "substrate/node",
-
-  "contracts/extension",
-  "contracts/multisig",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due
@@ -55,8 +58,3 @@ monero-serai = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
-
-[patch.crates-io]
-sp-core = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
-sp-keyring = { git = "https://github.com/serai-dex/substrate" }

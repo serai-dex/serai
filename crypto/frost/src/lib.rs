@@ -35,6 +35,29 @@ pub mod sign;
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
 
+/// Various errors possible during signing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+pub enum FrostError {
+  #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
+  InvalidParticipantIndex(u16, u16),
+  #[error("invalid signing set ({0})")]
+  InvalidSigningSet(&'static str),
+  #[error("invalid participant quantity (expected {0}, got {1})")]
+  InvalidParticipantQuantity(usize, usize),
+  #[error("duplicated participant index ({0})")]
+  DuplicatedIndex(u16),
+  #[error("missing participant {0}")]
+  MissingParticipant(u16),
+
+  #[error("invalid preprocess (participant {0})")]
+  InvalidPreprocess(u16),
+  #[error("invalid share (participant {0})")]
+  InvalidShare(u16),
+
+  #[error("internal error ({0})")]
+  InternalError(&'static str),
+}
+
 // Validate a map of values to have the expected included participants
 pub fn validate_map<T>(
   map: &HashMap<u16, T>,
@@ -59,27 +82,4 @@ pub fn validate_map<T>(
   }
 
   Ok(())
-}
-
-/// Various errors possible during signing.
-#[derive(Copy, Clone, Error, Debug)]
-pub enum FrostError {
-  #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
-  InvalidParticipantIndex(u16, u16),
-  #[error("invalid signing set ({0})")]
-  InvalidSigningSet(&'static str),
-  #[error("invalid participant quantity (expected {0}, got {1})")]
-  InvalidParticipantQuantity(usize, usize),
-  #[error("duplicated participant index ({0})")]
-  DuplicatedIndex(u16),
-  #[error("missing participant {0}")]
-  MissingParticipant(u16),
-
-  #[error("invalid preprocess (participant {0})")]
-  InvalidPreprocess(u16),
-  #[error("invalid share (participant {0})")]
-  InvalidShare(u16),
-
-  #[error("internal error ({0})")]
-  InternalError(&'static str),
 }

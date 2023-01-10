@@ -1,5 +1,5 @@
 use core::ops::BitXor;
-use std::io::{self, Read, Write, Cursor};
+use std::io::{self, Read, Write};
 
 use zeroize::Zeroize;
 
@@ -9,6 +9,8 @@ use crate::serialize::{
   varint_len, read_byte, read_bytes, read_varint, read_point, read_vec, write_byte, write_varint,
   write_point, write_vec,
 };
+
+pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) enum PaymentId {
@@ -30,7 +32,7 @@ impl BitXor<[u8; 8]> for PaymentId {
 }
 
 impl PaymentId {
-  pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       PaymentId::Unencrypted(id) => {
         w.write_all(&[0])?;
@@ -44,7 +46,7 @@ impl PaymentId {
     Ok(())
   }
 
-  fn deserialize<R: Read>(r: &mut R) -> io::Result<PaymentId> {
+  fn read<R: Read>(r: &mut R) -> io::Result<PaymentId> {
     Ok(match read_byte(r)? {
       0 => PaymentId::Unencrypted(read_bytes(r)?),
       1 => PaymentId::Encrypted(read_bytes(r)?),
@@ -63,7 +65,7 @@ pub(crate) enum ExtraField {
 }
 
 impl ExtraField {
-  fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       ExtraField::PublicKey(key) => {
         w.write_all(&[1])?;
@@ -86,12 +88,12 @@ impl ExtraField {
     Ok(())
   }
 
-  fn deserialize<R: Read>(r: &mut R) -> io::Result<ExtraField> {
+  fn read<R: Read>(r: &mut R) -> io::Result<ExtraField> {
     Ok(match read_byte(r)? {
       1 => ExtraField::PublicKey(read_point(r)?),
       2 => ExtraField::Nonce({
         let nonce = read_vec(read_byte, r)?;
-        if nonce.len() > 255 {
+        if nonce.len() > MAX_TX_EXTRA_NONCE_SIZE {
           Err(io::Error::new(io::ErrorKind::Other, "too long nonce"))?;
         }
         nonce
@@ -125,14 +127,15 @@ impl Extra {
   pub(crate) fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
-        return PaymentId::deserialize(&mut Cursor::new(data)).ok();
+        return PaymentId::read::<&[u8]>(&mut data.as_ref()).ok();
       }
     }
     None
   }
 
-  pub(crate) fn data(&self) -> Option<Vec<u8>> {
+  pub(crate) fn data(&self) -> Vec<Vec<u8>> {
     let mut first = true;
+    let mut res = vec![];
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
         // Skip the first Nonce, which should be the payment ID
@@ -140,10 +143,10 @@ impl Extra {
           first = false;
           continue;
         }
-        return Some(data.clone());
+        res.push(data.clone());
       }
     }
-    None
+    res
   }
 
   pub(crate) fn new(mut keys: Vec<EdwardsPoint>) -> Extra {
@@ -162,29 +165,29 @@ impl Extra {
   }
 
   #[rustfmt::skip]
-  pub(crate) fn fee_weight(outputs: usize, data: Option<&Vec<u8>>) -> usize {
+  pub(crate) fn fee_weight(outputs: usize, data: &[Vec<u8>]) -> usize {
     // PublicKey, key
     (1 + 32) +
     // PublicKeys, length, additional keys
     (1 + 1 + (outputs.saturating_sub(1) * 32)) +
     // PaymentId (Nonce), length, encrypted, ID
     (1 + 1 + 1 + 8) +
-    // Nonce, length, data (if existant)
-    data.map(|v| 1 + varint_len(v.len()) + v.len()).unwrap_or(0)
+    // Nonce, length, data (if existent)
+    data.iter().map(|v| 1 + varint_len(v.len()) + v.len()).sum::<usize>()
   }
 
-  pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for field in &self.0 {
-      field.serialize(w)?;
+      field.write(w)?;
     }
     Ok(())
   }
 
-  pub(crate) fn deserialize<R: Read>(r: &mut R) -> io::Result<Extra> {
+  pub(crate) fn read<R: Read>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
     let mut field;
     while {
-      field = ExtraField::deserialize(r);
+      field = ExtraField::read(r);
       field.is_ok()
     } {
       res.0.push(field.unwrap());

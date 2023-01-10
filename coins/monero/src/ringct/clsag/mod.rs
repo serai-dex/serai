@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use core::ops::Deref;
+use std::io::{self, Read, Write};
 
 use lazy_static::lazy_static;
 use thiserror::Error;
@@ -33,10 +34,10 @@ lazy_static! {
 }
 
 /// Errors returned when CLSAG signing fails.
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum ClsagError {
   #[error("internal error ({0})")]
-  InternalError(String),
+  InternalError(&'static str),
   #[error("invalid ring")]
   InvalidRing,
   #[error("invalid ring member (member {0}, ring size {1})")]
@@ -66,7 +67,7 @@ impl ClsagInput {
   pub fn new(commitment: Commitment, decoys: Decoys) -> Result<ClsagInput, ClsagError> {
     let n = decoys.len();
     if n > u8::MAX.into() {
-      Err(ClsagError::InternalError("max ring size in this library is u8 max".to_string()))?;
+      Err(ClsagError::InternalError("max ring size in this library is u8 max"))?;
     }
     let n = u8::try_from(n).unwrap();
     if decoys.i >= n {
@@ -313,13 +314,13 @@ impl Clsag {
     (ring_len * 32) + 32 + 32
   }
 
-  pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_raw_vec(write_scalar, &self.s, w)?;
     w.write_all(&self.c1.to_bytes())?;
     write_point(&self.D, w)
   }
 
-  pub fn deserialize<R: std::io::Read>(decoys: usize, r: &mut R) -> std::io::Result<Clsag> {
+  pub fn read<R: Read>(decoys: usize, r: &mut R) -> io::Result<Clsag> {
     Ok(Clsag { s: read_raw_vec(read_scalar, decoys, r)?, c1: read_scalar(r)?, D: read_point(r)? })
   }
 }

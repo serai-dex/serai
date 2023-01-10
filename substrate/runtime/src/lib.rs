@@ -20,16 +20,17 @@ use sp_version::RuntimeVersion;
 use frame_support::{
   traits::{ConstU8, ConstU32, ConstU64},
   weights::{
-    constants::{RocksDbWeight, WEIGHT_PER_SECOND},
+    constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
-  dispatch::DispatchClass,
   parameter_types, construct_runtime,
 };
 pub use frame_system::Call as SystemCall;
 
-pub use pallet_timestamp::Call as TimestampCall;
+use serai_primitives::Coin;
+
 pub use pallet_balances::Call as BalancesCall;
+pub use pallet_assets::Call as AssetsCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
 use pallet_session::PeriodicSessions;
@@ -41,6 +42,11 @@ pub type BlockNumber = u32;
 pub type AccountId = Public;
 
 /// Balance of an account.
+// Distinct from serai-primitives Amount due to Substrate's requirements on this type.
+// If Amount could be dropped in here, it would be.
+// While Amount could have all the necessary traits implemented, not only are they many, yet it'd
+// make Amount a larger type, providing more operations than desired.
+// The current type's minimalism sets clear bounds on usage.
 pub type Balance = u64;
 
 /// Index of a transaction in the chain, for a given account.
@@ -70,8 +76,7 @@ use opaque::SessionKeys;
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
   spec_name: create_runtime_str!("serai"),
-  // TODO: "core"?
-  impl_name: create_runtime_str!("turoctocrab"),
+  impl_name: create_runtime_str!("core"),
   authoring_version: 1,
   // TODO: 1? Do we prefer some level of compatibility or our own path?
   spec_version: 100,
@@ -98,14 +103,6 @@ pub fn native_version() -> NativeVersion {
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
-// Unit = the base number of indivisible units for balances
-const UNIT: Balance = 1_000_000_000_000;
-const MILLIUNIT: Balance = 1_000_000_000;
-
-const fn deposit(items: u32, bytes: u32) -> Balance {
-  (items as Balance * UNIT + (bytes as Balance) * (5 * MILLIUNIT / 100)) / 10
-}
-
 parameter_types! {
   pub const BlockHashCount: BlockNumber = 2400;
   pub const Version: RuntimeVersion = VERSION;
@@ -117,20 +114,9 @@ parameter_types! {
     frame_system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: frame_system::limits::BlockWeights =
     frame_system::limits::BlockWeights::with_sensible_defaults(
-      (2u64 * WEIGHT_PER_SECOND).set_proof_size(u64::MAX),
+      Weight::from_ref_time(2u64 * WEIGHT_REF_TIME_PER_SECOND).set_proof_size(u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
-
-  pub const DepositPerItem: Balance = deposit(1, 0);
-  pub const DepositPerByte: Balance = deposit(0, 1);
-  pub const DeletionQueueDepth: u32 = 128;
-  // The lazy deletion runs inside on_initialize.
-  pub DeletionWeightLimit: Weight = BlockWeights::get()
-    .per_class
-    .get(DispatchClass::Normal)
-    .max_total
-    .unwrap_or(BlockWeights::get().max_block);
-  pub Schedule: pallet_contracts::Schedule<Runtime> = Default::default();
 }
 
 impl frame_system::Config for Runtime {
@@ -163,15 +149,6 @@ impl frame_system::Config for Runtime {
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-impl pallet_randomness_collective_flip::Config for Runtime {}
-
-impl pallet_timestamp::Config for Runtime {
-  type Moment = u64;
-  type OnTimestampSet = ();
-  type MinimumPeriod = ConstU64<{ TARGET_BLOCK_TIME / 2 }>;
-  type WeightInfo = ();
-}
-
 impl pallet_balances::Config for Runtime {
   type MaxLocks = ConstU32<50>;
   type MaxReserves = ();
@@ -184,6 +161,37 @@ impl pallet_balances::Config for Runtime {
   type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_assets::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type Balance = Balance;
+  type Currency = Balances;
+
+  type AssetId = Coin;
+  type AssetIdParameter = Coin;
+  type StringLimit = ConstU32<32>;
+
+  // Don't allow anyone to create assets
+  type CreateOrigin =
+    frame_support::traits::AsEnsureOriginWithArg<frame_system::EnsureNever<AccountId>>;
+  type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+
+  // Don't charge fees nor kill accounts
+  type RemoveItemsLimit = ConstU32<0>;
+  type AssetDeposit = ConstU64<0>;
+  type AssetAccountDeposit = ConstU64<0>;
+  type MetadataDepositBase = ConstU64<0>;
+  type MetadataDepositPerByte = ConstU64<0>;
+  type ApprovalDeposit = ConstU64<0>;
+
+  // Unused hooks
+  type Freezer = ();
+  type Extra = ();
+
+  type WeightInfo = pallet_assets::weights::SubstrateWeight<Runtime>;
+  #[cfg(feature = "runtime-benchmarks")]
+  type BenchmarkHelper = ();
+}
+
 impl pallet_transaction_payment::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
@@ -193,34 +201,9 @@ impl pallet_transaction_payment::Config for Runtime {
   type FeeMultiplierUpdate = ();
 }
 
-impl pallet_contracts::Config for Runtime {
-  type Time = Timestamp;
-  type Randomness = RandomnessCollectiveFlip;
-  type Currency = Balances;
-  type RuntimeEvent = RuntimeEvent;
-  type RuntimeCall = RuntimeCall;
-
-  type CallFilter = frame_support::traits::Nothing;
-  type DepositPerItem = DepositPerItem;
-  type DepositPerByte = DepositPerByte;
-  type CallStack = [pallet_contracts::Frame<Self>; 31];
-  type WeightPrice = pallet_transaction_payment::Pallet<Self>;
-  type WeightInfo = pallet_contracts::weights::SubstrateWeight<Self>;
-  type ChainExtension = ();
-  type DeletionQueueDepth = DeletionQueueDepth;
-  type DeletionWeightLimit = DeletionWeightLimit;
-  type Schedule = Schedule;
-  type AddressGenerator = pallet_contracts::DefaultAddressGenerator;
-
-  type MaxCodeLen = ConstU32<{ 128 * 1024 }>;
-  type MaxStorageKeyLen = ConstU32<128>;
-}
-
 impl in_instructions_pallet::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
-
-impl pallet_tendermint::Config for Runtime {}
 
 const SESSION_LENGTH: BlockNumber = 5 * DAYS;
 type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
@@ -230,6 +213,10 @@ impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
   fn convert(key: Public) -> Option<Public> {
     Some(key)
   }
+}
+
+impl validator_sets_pallet::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
 }
 
 impl pallet_session::Config for Runtime {
@@ -243,6 +230,8 @@ impl pallet_session::Config for Runtime {
   type Keys = SessionKeys;
   type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
+
+impl pallet_tendermint::Config for Runtime {}
 
 pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
@@ -275,15 +264,13 @@ construct_runtime!(
     UncheckedExtrinsic = UncheckedExtrinsic
   {
     System: frame_system,
-
-    RandomnessCollectiveFlip: pallet_randomness_collective_flip,
-    Timestamp: pallet_timestamp,
     Balances: pallet_balances,
+    Assets: pallet_assets,
     TransactionPayment: pallet_transaction_payment,
-    Contracts: pallet_contracts,
 
     InInstructions: in_instructions_pallet,
 
+    ValidatorSets: validator_sets_pallet,
     Session: pallet_session,
     Tendermint: pallet_tendermint,
   }
@@ -299,7 +286,6 @@ mod benches {
     [frame_benchmarking, BaselineBench::<Runtime>]
     [frame_system, SystemBench::<Runtime>]
     [pallet_balances, Balances]
-    [pallet_timestamp, Timestamp]
   );
 }
 

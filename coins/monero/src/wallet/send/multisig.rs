@@ -4,7 +4,6 @@ use std::{
   collections::HashMap,
 };
 
-use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -217,18 +216,14 @@ impl SignMachine<Transaction> for TransactionSignMachine {
   type SignatureShare = Vec<SignatureShare<Ed25519>>;
   type SignatureMachine = TransactionSignatureMachine;
 
-  fn cache(self) -> Zeroizing<CachedPreprocess> {
+  fn cache(self) -> CachedPreprocess {
     unimplemented!(
       "Monero transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"
     );
   }
 
-  fn from_cache(
-    _: (),
-    _: ThresholdKeys<Ed25519>,
-    _: Zeroizing<CachedPreprocess>,
-  ) -> Result<Self, FrostError> {
+  fn from_cache(_: (), _: ThresholdKeys<Ed25519>, _: CachedPreprocess) -> Result<Self, FrostError> {
     unimplemented!(
       "Monero transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"

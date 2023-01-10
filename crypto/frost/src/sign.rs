@@ -7,11 +7,15 @@ use std::{
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use group::{ff::PrimeField, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
+use multiexp::BatchVerifier;
 
 use crate::{
   curve::Curve,
@@ -45,6 +49,7 @@ impl<T: Writable> Writable for Vec<T> {
 /// Pairing of an Algorithm with a ThresholdKeys instance and this specific signing set.
 #[derive(Clone, Zeroize)]
 pub struct Params<C: Curve, A: Algorithm<C>> {
+  // Skips the algorithm due to being too large a bound to feasibly enforce on users
   #[zeroize(skip)]
   algorithm: A,
   keys: ThresholdKeys<C>,
@@ -77,8 +82,11 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
 /// A cached preprocess. A preprocess MUST only be used once. Reuse will enable third-party
 /// recovery of your private key share. Additionally, this MUST be handled with the same security
 /// as your private key share, as knowledge of it also enables recovery.
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct CachedPreprocess(pub [u8; 32]);
+// Directly exposes the [u8; 32] member to void needing to route through std::io interfaces.
+// Still uses Zeroizing internally so when users grab it, they have a higher likelihood of
+// appreciating how to handle it and don't immediately start copying it just by grabbing it.
+#[derive(Zeroize)]
+pub struct CachedPreprocess(pub Zeroizing<[u8; 32]>);
 
 /// Trait for the initial state machine of a two-round signing protocol.
 pub trait PreprocessMachine {
@@ -109,33 +117,57 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
 
   fn seeded_preprocess(
     self,
-    seed: Zeroizing<CachedPreprocess>,
+    seed: CachedPreprocess,
   ) -> (AlgorithmSignMachine<C, A>, Preprocess<C, A::Addendum>) {
     let mut params = self.params;
 
-    let mut rng = ChaCha20Rng::from_seed(seed.0);
+    let mut rng = ChaCha20Rng::from_seed(*seed.0);
+    // Get a challenge to the existing transcript for use when proving for the commitments
+    let commitments_challenge = params.algorithm.transcript().challenge(b"commitments");
     let (nonces, commitments) = Commitments::new::<_, A::Transcript>(
       &mut rng,
       params.keys.secret_share(),
       &params.algorithm.nonces(),
+      commitments_challenge.as_ref(),
     );
     let addendum = params.algorithm.preprocess_addendum(&mut rng, &params.keys);
 
     let preprocess = Preprocess { commitments, addendum };
-    (AlgorithmSignMachine { params, seed, nonces, preprocess: preprocess.clone() }, preprocess)
+
+    // Also obtain entropy to randomly sort the included participants if we need to identify blame
+    let mut blame_entropy = [0; 32];
+    rng.fill_bytes(&mut blame_entropy);
+    (
+      AlgorithmSignMachine {
+        params,
+        seed,
+        commitments_challenge,
+        nonces,
+        preprocess: preprocess.clone(),
+        blame_entropy,
+      },
+      preprocess,
+    )
   }
 
   #[cfg(any(test, feature = "tests"))]
   pub(crate) fn unsafe_override_preprocess(
-    self,
+    mut self,
     nonces: Vec<Nonce<C>>,
     preprocess: Preprocess<C, A::Addendum>,
   ) -> AlgorithmSignMachine<C, A> {
     AlgorithmSignMachine {
+      commitments_challenge: self.params.algorithm.transcript().challenge(b"commitments"),
+
       params: self.params,
-      seed: Zeroizing::new(CachedPreprocess([0; 32])),
+      seed: CachedPreprocess(Zeroizing::new([0; 32])),
+
       nonces,
       preprocess,
+      // Uses 0s since this is just used to protect against a malicious participant from
+      // deliberately increasing the amount of time needed to identify them (and is accordingly
+      // not necessary to function)
+      blame_entropy: [0; 32],
     }
   }
 }
@@ -149,7 +181,7 @@ impl<C: Curve, A: Algorithm<C>> PreprocessMachine for AlgorithmMachine<C, A> {
     self,
     rng: &mut R,
   ) -> (Self::SignMachine, Preprocess<C, A::Addendum>) {
-    let mut seed = Zeroizing::new(CachedPreprocess([0; 32]));
+    let mut seed = CachedPreprocess(Zeroizing::new([0; 32]));
     rng.fill_bytes(seed.0.as_mut());
     self.seeded_preprocess(seed)
   }
@@ -161,6 +193,12 @@ pub struct SignatureShare<C: Curve>(C::F);
 impl<C: Curve> Writable for SignatureShare<C> {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.0.to_repr().as_ref())
+  }
+}
+#[cfg(any(test, feature = "tests"))]
+impl<C: Curve> SignatureShare<C> {
+  pub(crate) fn invalidate(&mut self) {
+    self.0 += C::F::one();
   }
 }
 
@@ -181,14 +219,14 @@ pub trait SignMachine<S>: Sized {
   /// of it enables recovery of your private key share. Third-party recovery of a cached preprocess
   /// also enables recovery of your private key share, so this MUST be treated with the same
   /// security as your private key share.
-  fn cache(self) -> Zeroizing<CachedPreprocess>;
+  fn cache(self) -> CachedPreprocess;
 
   /// Create a sign machine from a cached preprocess. After this, the preprocess should be fully
   /// deleted, as it must never be reused. It is
   fn from_cache(
     params: Self::Params,
     keys: Self::Keys,
-    cache: Zeroizing<CachedPreprocess>,
+    cache: CachedPreprocess,
   ) -> Result<Self, FrostError>;
 
   /// Read a Preprocess message. Despite taking self, this does not save the preprocess.
@@ -210,11 +248,14 @@ pub trait SignMachine<S>: Sized {
 #[derive(Zeroize)]
 pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
-  seed: Zeroizing<CachedPreprocess>,
+  seed: CachedPreprocess,
 
+  commitments_challenge: <A::Transcript as Transcript>::Challenge,
   pub(crate) nonces: Vec<Nonce<C>>,
+  // Skips the preprocess due to being too large a bound to feasibly enforce on users
   #[zeroize(skip)]
   pub(crate) preprocess: Preprocess<C, A::Addendum>,
+  pub(crate) blame_entropy: [u8; 32],
 }
 
 impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachine<C, A> {
@@ -224,14 +265,14 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
   type SignatureShare = SignatureShare<C>;
   type SignatureMachine = AlgorithmSignatureMachine<C, A>;
 
-  fn cache(self) -> Zeroizing<CachedPreprocess> {
+  fn cache(self) -> CachedPreprocess {
     self.seed
   }
 
   fn from_cache(
     algorithm: A,
     keys: ThresholdKeys<C>,
-    cache: Zeroizing<CachedPreprocess>,
+    cache: CachedPreprocess,
   ) -> Result<Self, FrostError> {
     let (machine, _) = AlgorithmMachine::new(algorithm, keys)?.seeded_preprocess(cache);
     Ok(machine)
@@ -239,7 +280,11 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess> {
     Ok(Preprocess {
-      commitments: Commitments::read::<_, A::Transcript>(reader, &self.params.algorithm.nonces())?,
+      commitments: Commitments::read::<_, A::Transcript>(
+        reader,
+        &self.params.algorithm.nonces(),
+        self.commitments_challenge.as_ref(),
+      )?,
       addendum: self.params.algorithm.read_addendum(reader)?,
     })
   }
@@ -381,7 +426,14 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
     let share = self.params.algorithm.sign_share(&view, &Rs, nonces, msg);
 
     Ok((
-      AlgorithmSignatureMachine { params: self.params.clone(), view, B, Rs, share },
+      AlgorithmSignatureMachine {
+        params: self.params.clone(),
+        view,
+        B,
+        Rs,
+        share,
+        blame_entropy: self.blame_entropy,
+      },
       SignatureShare(share),
     ))
   }
@@ -408,6 +460,7 @@ pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
   B: BindingFactor<C>,
   Rs: Vec<Vec<C::G>>,
   share: C::F,
+  blame_entropy: [u8; 32],
 }
 
 impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSignatureMachine<C, A> {
@@ -422,7 +475,7 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     mut shares: HashMap<u16, SignatureShare<C>>,
   ) -> Result<A::Signature, FrostError> {
     let params = self.params.multisig_params();
-    validate_map(&shares, &self.view.included(), params.i())?;
+    validate_map(&shares, self.view.included(), params.i())?;
 
     let mut responses = HashMap::new();
     responses.insert(params.i(), self.share);
@@ -439,20 +492,29 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
       return Ok(sig);
     }
 
-    // Find out who misbehaved. It may be beneficial to randomly sort this to have detection be
-    // within n / 2 on average, and not gameable to n, though that should be minor
-    // TODO
-    for l in &self.view.included() {
-      if !self.params.algorithm.verify_share(
+    // We could remove blame_entropy by taking in an RNG here
+    // Considering we don't need any RNG for a valid signature, and we only use the RNG here for
+    // performance reasons, it doesn't feel worthwhile to include as an argument to every
+    // implementor of the trait
+    let mut rng = ChaCha20Rng::from_seed(self.blame_entropy);
+    let mut batch = BatchVerifier::new(self.view.included().len());
+    for l in self.view.included() {
+      if let Ok(statements) = self.params.algorithm.verify_share(
         self.view.verification_share(*l),
         &self.B.bound(*l),
         responses[l],
       ) {
+        batch.queue(&mut rng, *l, statements);
+      } else {
         Err(FrostError::InvalidShare(*l))?;
       }
     }
 
-    // If everyone has a valid share and there were enough participants, this should've worked
+    if let Err(l) = batch.verify_vartime_with_vartime_blame() {
+      Err(FrostError::InvalidShare(l))?;
+    }
+
+    // If everyone has a valid share, and there were enough participants, this should've worked
     Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
   }
 }
