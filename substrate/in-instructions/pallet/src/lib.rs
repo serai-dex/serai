@@ -129,7 +129,7 @@ pub mod pallet {
 
   #[pallet::call]
   impl<T: Config> Pallet<T> {
-    #[frame_support::transactional]
+    #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Mandatory))] // TODO
     pub fn execute(origin: OriginFor<T>, coins: Coins) -> DispatchResult {
       ensure_none(origin)?;

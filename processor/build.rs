@@ -27,7 +27,7 @@ fn metadata() -> PathBuf {
 
   let node = format!("../target/{}/serai-node", env::var("PROFILE").unwrap());
   // Re-run whenever a new Serai node version exists
-  println!("cargo:rerun-if-changed={}", node);
+  println!("cargo:rerun-if-changed={node}");
 
   // Remove any existing file
   let _ = remove_file(&metadata);

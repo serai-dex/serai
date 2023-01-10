@@ -58,3 +58,7 @@ monero-serai = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
+
+[patch.crates-io]
+sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }
