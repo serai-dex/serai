@@ -123,7 +123,7 @@ impl SignableTransaction {
       let clsag = ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone());
       key_images.push((
         clsag.H,
-        keys.current_offset().unwrap_or(dfg::Scalar::zero()).0 + self.inputs[i].key_offset(),
+        keys.current_offset().unwrap_or_else(dfg::Scalar::zero).0 + self.inputs[i].key_offset(),
       ));
       clsags.push(AlgorithmMachine::new(clsag, offset).map_err(TransactionError::FrostError)?);
     }
