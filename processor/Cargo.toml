@@ -32,14 +32,14 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 # Substrate
-scale = { package = "parity-scale-codec", version = "3.0.0" }
+scale = { package = "parity-scale-codec", version = "3" }
 frame-system = { git = "https://github.com/serai-dex/substrate" }
-subxt = "0.24"
+subxt = "0.25"
 
 # JSON-RPC
-jsonrpsee-core = "0.15"
-jsonrpsee-http-client = "0.15"
-jsonrpsee-http-server = "0.15"
+jsonrpsee-core = "0.16"
+jsonrpsee-http-client = "0.16"
+jsonrpsee-server = "0.16"
 
 # Serai
 in-instructions-pallet = { path = "../substrate/in-instructions/pallet" }
