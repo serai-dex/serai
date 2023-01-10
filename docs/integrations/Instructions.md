@@ -3,16 +3,15 @@
 Instructions are used to communicate with networks connected to Serai, and they
 come in two forms:
 
-  - In Instructions are [Application Calls](../Serai.md#application-calls),
-paired with incoming funds. Encoded in transactions on connected networks,
-Serai will parse out instructions when it receives funds, executing the included
-calls.
+  - In Instructions are programmable specifications paired with incoming coins,
+encoded into transactions on connected networks. Serai will parse included
+instructions when it receives coins, executing the included specs.
 
-  - Out Instructions detail how to transfer assets, either to a Serai address or
-an address native to the asset in question.
+  - Out Instructions detail how to transfer coins, either to a Serai address or
+an address native to the coin in question.
 
 A transaction containing an In Instruction and an Out Instruction (to a native
-address) will receive funds to Serai and send funds from Serai, without
+address) will receive coins to Serai and send coins from Serai, without
 requiring directly performing any transactions on Serai itself.
 
 All instructions are encoded under [Shorthand](#shorthand). Shorthand provides
@@ -21,47 +20,55 @@ frequent use cases to create minimal data representations on connected networks.
 Instructions are interpreted according to their non-Serai network. Addresses
 have no validation performed, beyond being a valid enum entry (when applicable)
 of the correct length, unless otherwise noted. If the processor is instructed to
-act on invalid data, or send to itself, it will drop the entire instruction.
+act on invalid data, it will drop the entire instruction.
 
 ### Serialization
 
-  - Numbers are exclusively unsigned and encoded as compact integers under
-SCALE.
-  - Enums are prefixed by an ordinal byte of their type, followed by their
-actual values.
-  - Vectors are prefixed by their length.
-  - Structs have their fields sequentially encoded without additional markers.
+Instructions are SCALE encoded.
 
-Certain fields may be omitted depending on the network in question.
+### Application Call
 
-### In Instructions
+  - `application` (u16): The application of Serai to call. Currently, only 0,
+Serai DEX is valid.
+  - `data`        (Vec\<u8>): The data to call the application with.
 
-  - `target` (Address):          The ink! contract to transfer the incoming
-funds to.
-  - `data`   (Vec\<u8>):         The data to call `target` with.
+### Target
+
+Target is an enum of Application Call and Address.
+
+### In Instructions (Native)
+
+  - `target` (Target):  The target to transfer the incoming coins to. If an
+Application Call, the encoded call will be executed.
+  - `origin` (Address): Address from the network of origin which sent
+coins in.
+
+Upon receiving coins, the respective Serai token has the appropriate amount
+minted. If `target` is an Address, it'll be transferred the tokens.
+
+### In Instructions (External)
+
+  - `target` (Target):           The target to transfer the incoming coins to.
+If an application call, the encoded call will be executed.
   - `origin` (Option\<Address>): Address from the network of origin which sent
-funds in.
+coins in.
 
 Networks may automatically provide `origin`. If they do, the instruction may
 still provide `origin`, overriding the automatically provided value. If no
 `origin` is provided, the instruction is dropped.
 
-Upon receiving funds, the respective Serai Asset contract is called, minting the
-appropriate amount of coins, and transferring them to `target`, calling it with
-the attached data.
-
-If the instruction fails, funds are scheduled to be returned to `origin`.
+If the instruction fails, coins are scheduled to be returned to `origin`.
 
 ### Out Instructions
 
-  - `destination` (Enum { Native(Address), Serai(Address) }): Address to receive
-funds to.
-  - `data`        (Option\<Vec\<u8>>):                        The data to call
-the target with.
+  - `destination` (Enum { External(Address), Native(Address) }): Address to
+receive coins to.
+  - `data`        (Option\<Vec\<u8>>):                           The data to
+call the target with.
 
-Transfer the funds included with this instruction to the specified address with
-the specified data. Asset contracts perform no validation on native
-addresses/data.
+Transfer the coins included with this instruction to the specified address with
+the specified data. No validation of external addresses/data is performed
+on-chain.
 
 ### Shorthand
 
@@ -84,8 +91,10 @@ which expands to:
 ```
 In Instruction {
   origin,
-  target: Router,
-  data:   swap(Incoming Asset, out, minimum)
+  target: ApplicationCall {
+    application: DEX,
+    data:        swap(Incoming Asset, coin, out, minimum)
+  }
 }
 ```
 
@@ -99,7 +108,7 @@ where `swap` is a function which:
 ##### Add Liquidity
 
   - `origin`  (Option\<Address>): In Instruction's `origin`.
-  - `minimum` (Amount):           Minimum amount of SRI to receive.
+  - `minimum` (Amount):           Minimum amount of SRI tokens to swap half for.
   - `gas`     (Amount):           Amount of SRI to send to `address` to cover
 gas in the future.
   - `address` (Address):          Account to send the created liquidity tokens.
@@ -109,8 +118,10 @@ which expands to:
 ```
 In Instruction {
   origin,
-  target: Router,
-  data:   swap_and_add_liquidity(Incoming Asset, address, minimum, gas)
+  target: ApplicationCall {
+    application: DEX,
+    data:        swap_and_add_liquidity(Incoming Asset, address, minimum, gas)
+  }
 }
 ```
 
@@ -119,5 +130,5 @@ where `swap_and_add_liquidity` is a function which:
   1) Swaps half of the incoming funds for SRI.
   2) Checks the amount of SRI received is greater than `minimum`.
   3) Calls `swap_and_add_liquidity` with the amount of SRI received - `gas`, and
-a matching amount of the incoming asset.
+a matching amount of the incoming coin.
   4) Transfers any leftover funds to `address`.

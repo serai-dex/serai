@@ -48,7 +48,6 @@ validator-sets-pallet = { path = "../validator-sets/pallet", default-features = 
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 
-# Used for the node template's RPCs
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
