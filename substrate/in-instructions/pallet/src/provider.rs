@@ -9,7 +9,7 @@ use crate::{INHERENT_IDENTIFIER, PendingCoins, InherentError};
 
 pub struct InherentDataProvider;
 impl InherentDataProvider {
-  pub async fn new() -> InherentDataProvider {
+  pub fn new() -> InherentDataProvider {
     InherentDataProvider
   }
 }

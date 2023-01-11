@@ -60,6 +60,8 @@ pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate
 
 serai-primitives = { path = "../serai/primitives" }
 
+in-instructions-pallet = { path = "../in-instructions/pallet" }
+
 validator-sets-pallet = { path = "../validator-sets/pallet" }
 
 sp-tendermint = { path = "../tendermint/primitives" }

@@ -7409,6 +7409,7 @@ dependencies = [
  "frame-benchmarking-cli",
  "frame-system",
  "futures",
+ "in-instructions-pallet",
  "jsonrpsee",
  "log",
  "pallet-tendermint",
