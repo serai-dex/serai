@@ -27,10 +27,10 @@ pub struct InInstruction {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct Coin<T> {
-  // Coin's current height
+  // Coin's latest block number
   // Ideally, this would be the coin's current block hash, or a 32-byte hash of any global clock
   // We would be unable to validate those unless we can pass a HashMap with the inherent data
-  pub height: u32,
+  pub block_number: u32,
   pub batches: Vec<T>,
 }
 
@@ -63,9 +63,9 @@ pub enum InherentError {
   InvalidCall,
   #[cfg_attr(feature = "std", error("inherent has {0} coins despite us having {1}"))]
   InvalidCoins(u32, u32),
-  #[cfg_attr(feature = "std", error("inherent has height {0} despite us having {1}"))]
+  #[cfg_attr(feature = "std", error("inherent has block number {0} despite us having {1}"))]
   UnrecognizedHeight(u32, u32),
-  #[cfg_attr(feature = "std", error("inherent has height {0} which doesn't succeed {1}"))]
+  #[cfg_attr(feature = "std", error("inherent has block number {0} which doesn't succeed {1}"))]
   InvalidHeight(u32, u32),
   #[cfg_attr(feature = "std", error("coin {0} has {1} more batches than we do"))]
   UnrecognizedBatch(u32, u32),
@@ -114,7 +114,7 @@ pub mod pallet {
   #[pallet::storage]
   pub(crate) type Once<T: Config> = StorageValue<_, bool, ValueQuery>;
   #[pallet::storage]
-  #[pallet::getter(fn height)]
+  #[pallet::getter(fn block_number)]
   pub(crate) type Heights<T: Config> = StorageMap<_, Blake2_256, u32, u32, ValueQuery>;
   #[pallet::storage]
   #[pallet::getter(fn executed_batches)]
@@ -139,7 +139,7 @@ pub mod pallet {
       for (c, coin) in coins.iter().enumerate() {
         if let Some(coin) = coin {
           let c = c.try_into().unwrap();
-          Heights::<T>::insert(c, coin.height);
+          Heights::<T>::insert(c, coin.block_number);
 
           for batch in &coin.batches {
             // TODO: EXECUTE
@@ -169,7 +169,7 @@ pub mod pallet {
           .map(|coin| {
             // to an Option<Coin<Batch>>
             coin.clone().map(|coin| Coin {
-              height: coin.height,
+              block_number: coin.block_number,
               // Only propose this batch if it's been queued for the delay period
               batches: coin
                 .batches
@@ -213,13 +213,13 @@ pub mod pallet {
           let c = c.try_into().unwrap();
           match both {
             (Some(coin), Some(pending)) => {
-              if coin.height > pending.height {
-                Err(InherentError::UnrecognizedHeight(coin.height, pending.height))?;
+              if coin.block_number > pending.block_number {
+                Err(InherentError::UnrecognizedHeight(coin.block_number, pending.block_number))?;
               }
 
               let prev = Heights::<T>::get(c);
-              if coin.height <= prev {
-                Err(InherentError::InvalidHeight(coin.height, prev))?;
+              if coin.block_number <= prev {
+                Err(InherentError::InvalidHeight(coin.block_number, prev))?;
               }
 
               if coin.batches.len() > pending.batches.len() {

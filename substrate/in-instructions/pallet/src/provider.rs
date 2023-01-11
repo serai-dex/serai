@@ -7,24 +7,23 @@ use sp_inherents::{Error, InherentData, InherentIdentifier};
 
 use crate::{INHERENT_IDENTIFIER, PendingCoins, InherentError};
 
-pub async fn get_pending_coins() -> Option<PendingCoins> {
-  let client = HttpClientBuilder::default().build("http://127.0.0.1:5134").ok()?;
-  client.request("processor_coins", Vec::<u8>::new()).await.ok()?
-}
-
-pub struct InherentDataProvider(Option<PendingCoins>);
+pub struct InherentDataProvider;
 impl InherentDataProvider {
   pub async fn new() -> InherentDataProvider {
-    InherentDataProvider(get_pending_coins().await)
+    InherentDataProvider
   }
 }
 
 #[async_trait::async_trait]
 impl sp_inherents::InherentDataProvider for InherentDataProvider {
   async fn provide_inherent_data(&self, inherent_data: &mut InherentData) -> Result<(), Error> {
-    if let Some(coins) = &self.0 {
-      inherent_data.put_data(INHERENT_IDENTIFIER, coins)?
-    }
+    let coins: PendingCoins = (|| async {
+      let client = HttpClientBuilder::default().build("http://127.0.0.1:5134").ok()?;
+      client.request("processor_coins", Vec::<u8>::new()).await.ok()
+    })()
+    .await
+    .ok_or(Error::Application(Box::from("couldn't communicate with processor")))?;
+    inherent_data.put_data(INHERENT_IDENTIFIER, &coins)?;
     Ok(())
   }
 
