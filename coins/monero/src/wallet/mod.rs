@@ -106,6 +106,14 @@ impl ViewPair {
     ViewPair { spend, view }
   }
 
+  pub fn spend(&self) -> EdwardsPoint {
+    self.spend
+  }
+
+  pub fn view(&self) -> Zeroizing<Scalar> {
+    self.view.clone()
+  }
+
   fn subaddress_derivation(&self, index: (u32, u32)) -> Scalar {
     if index == (0, 0) {
       return Scalar::zero();
@@ -144,8 +152,8 @@ impl ViewPair {
       AddressSpec::Integrated(payment_id) => {
         AddressMeta::new(network, AddressType::Integrated(payment_id))
       }
-      AddressSpec::Subaddress(i1, i2) => {
-        if let Some(keys) = self.subaddress_keys((i1, i2)) {
+      AddressSpec::Subaddress(index) => {
+        if let Some(keys) = self.subaddress_keys(index) {
           (spend, view) = keys;
           AddressMeta::new(network, AddressType::Subaddress)
         } else {

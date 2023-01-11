@@ -32,7 +32,7 @@ pub enum AddressType {
 pub enum AddressSpec {
   Standard,
   Integrated([u8; 8]),
-  Subaddress(u32, u32),
+  Subaddress((u32, u32)),
   Featured(Option<(u32, u32)>, Option<[u8; 8]>, bool),
 }
 

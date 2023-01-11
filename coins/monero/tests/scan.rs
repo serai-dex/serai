@@ -31,7 +31,7 @@ test!(
       scanner.register_subaddress(subaddress);
 
       builder.add_payment(
-        view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress.0, subaddress.1)),
+        view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress)),
         5,
       );
       (builder.build().unwrap(), (scanner, subaddress))
