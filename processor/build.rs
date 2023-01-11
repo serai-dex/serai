@@ -82,8 +82,13 @@ fn main() {
     .write_all(
       format!(
         "
-          #[subxt::subxt(runtime_metadata_path = \"{}\")]
-          mod runtime {{}}
+          #[allow(clippy::too_many_arguments)]
+          mod runtime {{
+            #[subxt::subxt(runtime_metadata_path = \"{}\")]
+            pub mod runtime_inner {{}}
+
+            pub use runtime_inner::*;
+          }}
         ",
         metadata.display()
       )

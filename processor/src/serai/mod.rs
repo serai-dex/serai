@@ -1,17 +1,12 @@
 use thiserror::Error;
 
 use frame_system::Config as SysConfig;
-use subxt::{
-  tx::BaseExtrinsicParams,
-  events::{EventSubscription, FilterEvents},
-  rpc::Subscription,
-  Config, OnlineClient,
-};
+use subxt::{tx::BaseExtrinsicParams, Config, OnlineClient};
 
 use jsonrpsee_core::client::ClientT;
 use jsonrpsee_http_client::HttpClientBuilder;
 
-use serai_runtime::{Address, Signature, UncheckedExtrinsic, Runtime};
+use serai_runtime::{Address, Signature, Runtime};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct SeraiConfig;
@@ -29,21 +24,12 @@ impl Config for SeraiConfig {
   type Header = <Runtime as SysConfig>::Header;
   type Signature = Signature;
 
-  type Extrinsic = UncheckedExtrinsic;
   type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, ()>;
 }
 
 include!(concat!(env!("OUT_DIR"), "/runtime.rs"));
 
-pub(crate) type Events = EventSubscription<
-  SeraiConfig,
-  OnlineClient<SeraiConfig>,
-  Subscription<<SeraiConfig as Config>::Header>,
->;
-pub(crate) type Filter<T> = (T,);
-pub(crate) type Event<'a, T> = FilterEvents<'a, Events, SeraiConfig, Filter<T>>;
-
-pub(crate) type Batch = runtime::in_instructions::events::Batch;
+use runtime::in_instructions::events::Batch;
 
 #[derive(Clone, Error, Debug)]
 pub(crate) enum SeraiError {
@@ -61,26 +47,21 @@ impl Serai {
 
   // Doesn't use subxt as we can't have multiple connections through it yet a global subxt requires
   // unsafe. Directly implementing this primitve allows us to not require multiple subxts
-  pub(crate) async fn height() -> Result<u32, SeraiError> {
-    let header: <SeraiConfig as Config>::Header = HttpClientBuilder::default()
+  pub(crate) async fn get_latest_block_hash() -> Result<[u8; 32], SeraiError> {
+    let hash: <SeraiConfig as Config>::Hash = HttpClientBuilder::default()
       .build("http://127.0.0.1:9933")
       .map_err(|_| SeraiError::RpcError)?
-      // TODO: Replace with getFinalizedHead
-      .request("chain_getHeader", None)
+      .request("chain_getFinalizedHead", Vec::<u8>::new())
       .await
       .map_err(|_| SeraiError::RpcError)?;
-    Ok(header.number)
+    Ok(hash.into())
   }
 
-  pub(crate) async fn batches(&self) -> Result<Event<Batch>, SeraiError> {
-    Ok(
-      self
-        .0
-        .events()
-        .subscribe() // TODO: subscribe_finalized
-        .await
-        .map_err(|_| SeraiError::RpcError)?
-        .filter_events::<Filter<Batch>>(),
-    )
+  pub(crate) async fn get_batches(&self, block: [u8; 32]) -> Result<Option<Batch>, SeraiError> {
+    let events = self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?;
+    let mut batches =
+      events.find::<Batch>().collect::<Result<Vec<_>, _>>().map_err(|_| SeraiError::RpcError)?;
+    debug_assert!(batches.len() <= 1);
+    Ok(batches.pop())
   }
 }
