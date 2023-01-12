@@ -1,7 +1,7 @@
 use core::time::Duration;
 use std::sync::{Arc, Mutex};
 
-use serai_primitives::NativeAddress;
+use serai_primitives::{BlockNumber, NativeAddress};
 
 use in_instructions_primitives::{ExternalAddress, Target, InInstruction};
 use in_instructions_pallet::{Batch, Update};
@@ -28,7 +28,7 @@ async fn get_events() {
       println!("Offering batch {}", batch.id);
 
       // Re-use the batch ID as the coin's block number
-      let coin_block_number = u32::try_from(batch.id + 100).unwrap();
+      let coin_block_number = BlockNumber(u32::try_from(batch.id + 100).unwrap());
 
       let update = Update { block_number: coin_block_number, batches: vec![batch] };
 

@@ -14,7 +14,8 @@ use sp_inherents::{InherentData, InherentIdentifier, IsFatalError};
 
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::Coin;
+use serai_primitives::{BlockNumber, Coin};
+
 use in_instructions_primitives::InInstruction;
 
 pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
@@ -32,7 +33,7 @@ pub struct Update {
   // Coin's latest block number
   // Ideally, this would be the coin's current block hash, or a 32-byte hash of any global clock
   // We would be unable to validate those unless we can pass a HashMap with the inherent data
-  pub block_number: u32,
+  pub block_number: BlockNumber,
   pub batches: Vec<Batch>,
 }
 
@@ -47,10 +48,10 @@ pub enum InherentError {
   InvalidCall,
   #[cfg_attr(feature = "std", error("inherent has {0} updates despite us having {1} coins"))]
   InvalidUpdateQuantity(u32, u32),
-  #[cfg_attr(feature = "std", error("inherent for coin {0:?} has block number {1} despite us having {2}"))]
-  UnrecognizedBlockNumber(Coin, u32, u32),
-  #[cfg_attr(feature = "std", error("inherent for coin {0:?} has block number {1} which doesn't succeed {2}"))]
-  InvalidBlockNumber(Coin, u32, u32),
+  #[cfg_attr(feature = "std", error("inherent for coin {0:?} has block number {1:?} despite us having {2:?}"))]
+  UnrecognizedBlockNumber(Coin, BlockNumber, BlockNumber),
+  #[cfg_attr(feature = "std", error("inherent for coin {0:?} has block number {1:?} which doesn't succeed {2:?}"))]
+  InvalidBlockNumber(Coin, BlockNumber, BlockNumber),
   #[cfg_attr(feature = "std", error("coin {0:?} has {1} more batches than we do"))]
   UnrecognizedBatches(Coin, u32),
   #[cfg_attr(feature = "std", error("coin {0:?} has an invalid batch"))]
@@ -102,7 +103,7 @@ pub mod pallet {
   pub(crate) type Once<T: Config> = StorageValue<_, bool, ValueQuery>;
   #[pallet::storage]
   #[pallet::getter(fn block_number)]
-  pub(crate) type BlockNumbers<T: Config> = StorageMap<_, Blake2_256, Coin, u32, ValueQuery>;
+  pub(crate) type BlockNumbers<T: Config> = StorageMap<_, Blake2_256, Coin, BlockNumber, ValueQuery>;
   #[pallet::storage]
   #[pallet::getter(fn executed_batches)]
   pub(crate) type NextBatch<T: Config> = StorageMap<_, Blake2_256, Coin, u64, ValueQuery>;
@@ -170,12 +171,12 @@ pub mod pallet {
           let coin = Coin::from(u32::try_from(coin).unwrap());
           match both {
             (Some(update), Some(expected)) => {
-              if update.block_number > expected.block_number {
+              if update.block_number.0 > expected.block_number.0 {
                 Err(InherentError::UnrecognizedBlockNumber(coin, update.block_number, expected.block_number))?;
               }
 
               let prev = BlockNumbers::<T>::get(coin);
-              if update.block_number <= prev {
+              if update.block_number.0 <= prev.0 {
                 Err(InherentError::InvalidBlockNumber(coin, update.block_number, prev))?;
               }
 
