@@ -1,6 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use scale::{Encode, Decode};
@@ -48,9 +47,15 @@ pub enum InherentError {
   InvalidCall,
   #[cfg_attr(feature = "std", error("inherent has {0} updates despite us having {1} coins"))]
   InvalidUpdateQuantity(u32, u32),
-  #[cfg_attr(feature = "std", error("inherent for coin {0:?} has block number {1:?} despite us having {2:?}"))]
+  #[cfg_attr(
+    feature = "std",
+    error("inherent for coin {0:?} has block number {1:?} despite us having {2:?}")
+  )]
   UnrecognizedBlockNumber(Coin, BlockNumber, BlockNumber),
-  #[cfg_attr(feature = "std", error("inherent for coin {0:?} has block number {1:?} which doesn't succeed {2:?}"))]
+  #[cfg_attr(
+    feature = "std",
+    error("inherent for coin {0:?} has block number {1:?} which doesn't succeed {2:?}")
+  )]
   InvalidBlockNumber(Coin, BlockNumber, BlockNumber),
   #[cfg_attr(feature = "std", error("coin {0:?} has {1} more batches than we do"))]
   UnrecognizedBatches(Coin, u32),
@@ -89,10 +94,7 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Batch {
-      coin: Coin,
-      id: u64,
-    },
+    Batch { coin: Coin, id: u64 },
   }
 
   #[pallet::pallet]
@@ -103,7 +105,8 @@ pub mod pallet {
   pub(crate) type Once<T: Config> = StorageValue<_, bool, ValueQuery>;
   #[pallet::storage]
   #[pallet::getter(fn block_number)]
-  pub(crate) type BlockNumbers<T: Config> = StorageMap<_, Blake2_256, Coin, BlockNumber, ValueQuery>;
+  pub(crate) type BlockNumbers<T: Config> =
+    StorageMap<_, Blake2_256, Coin, BlockNumber, ValueQuery>;
   #[pallet::storage]
   #[pallet::getter(fn executed_batches)]
   pub(crate) type NextBatch<T: Config> = StorageMap<_, Blake2_256, Coin, u64, ValueQuery>;
@@ -148,7 +151,10 @@ pub mod pallet {
     const INHERENT_IDENTIFIER: InherentIdentifier = INHERENT_IDENTIFIER;
 
     fn create_inherent(data: &InherentData) -> Option<Self::Call> {
-      data.get_data::<Updates>(&INHERENT_IDENTIFIER).unwrap().map(|updates| Call::execute { updates })
+      data
+        .get_data::<Updates>(&INHERENT_IDENTIFIER)
+        .unwrap()
+        .map(|updates| Call::execute { updates })
     }
 
     fn check_inherent(call: &Self::Call, data: &InherentData) -> Result<(), Self::Error> {
@@ -172,7 +178,11 @@ pub mod pallet {
           match both {
             (Some(update), Some(expected)) => {
               if update.block_number.0 > expected.block_number.0 {
-                Err(InherentError::UnrecognizedBlockNumber(coin, update.block_number, expected.block_number))?;
+                Err(InherentError::UnrecognizedBlockNumber(
+                  coin,
+                  update.block_number,
+                  expected.block_number,
+                ))?;
               }
 
               let prev = BlockNumbers::<T>::get(coin);
@@ -200,9 +210,10 @@ pub mod pallet {
               }
             }
 
-            (Some(update), None) => {
-              Err(InherentError::UnrecognizedBatches(coin, update.batches.len().try_into().unwrap()))?
-            }
+            (Some(update), None) => Err(InherentError::UnrecognizedBatches(
+              coin,
+              update.batches.len().try_into().unwrap(),
+            ))?,
 
             (None, _) => (),
           };

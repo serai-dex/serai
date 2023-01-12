@@ -7,8 +7,8 @@ use serai_primitives::*;
 use pallet_tendermint::crypto::Public;
 
 use serai_runtime::{
-  WASM_BINARY, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig,
-  AssetsConfig, ValidatorSetsConfig, SessionConfig,
+  WASM_BINARY, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
+  ValidatorSetsConfig, SessionConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
