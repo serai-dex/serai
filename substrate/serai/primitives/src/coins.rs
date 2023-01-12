@@ -4,7 +4,7 @@ use scale_info::TypeInfo;
 use serde::{Serialize, Deserialize};
 
 /// The type used to identify coins.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Coin(pub u32);
 impl From<u32> for Coin {

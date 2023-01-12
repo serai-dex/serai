@@ -27,7 +27,7 @@ use frame_support::{
 };
 pub use frame_system::Call as SystemCall;
 
-use serai_primitives::Coin;
+use serai_primitives::{NativeAddress, Coin};
 
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_assets::Call as AssetsCall;
@@ -37,9 +37,6 @@ use pallet_session::PeriodicSessions;
 
 /// An index to a block.
 pub type BlockNumber = u32;
-
-/// Account ID type, equivalent to a public key
-pub type AccountId = Public;
 
 /// Balance of an account.
 // Distinct from serai-primitives Amount due to Substrate's requirements on this type.
@@ -123,9 +120,9 @@ impl frame_system::Config for Runtime {
   type BaseCallFilter = frame_support::traits::Everything;
   type BlockWeights = BlockWeights;
   type BlockLength = BlockLength;
-  type AccountId = AccountId;
+  type AccountId = NativeAddress;
   type RuntimeCall = RuntimeCall;
-  type Lookup = IdentityLookup<AccountId>;
+  type Lookup = IdentityLookup<NativeAddress>;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
@@ -172,8 +169,8 @@ impl pallet_assets::Config for Runtime {
 
   // Don't allow anyone to create assets
   type CreateOrigin =
-    frame_support::traits::AsEnsureOriginWithArg<frame_system::EnsureNever<AccountId>>;
-  type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+    frame_support::traits::AsEnsureOriginWithArg<frame_system::EnsureNever<NativeAddress>>;
+  type ForceOrigin = frame_system::EnsureRoot<NativeAddress>;
 
   // Don't charge fees nor kill accounts
   type RemoveItemsLimit = ConstU32<0>;
@@ -221,7 +218,7 @@ impl validator_sets_pallet::Config for Runtime {
 
 impl pallet_session::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type ValidatorId = AccountId;
+  type ValidatorId = NativeAddress;
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Sessions;
   type NextSessionRotation = Sessions;
@@ -233,7 +230,6 @@ impl pallet_session::Config for Runtime {
 
 impl pallet_tendermint::Config for Runtime {}
 
-pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedExtra = (
@@ -247,7 +243,7 @@ pub type SignedExtra = (
   pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
 );
 pub type UncheckedExtrinsic =
-  generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+  generic::UncheckedExtrinsic<NativeAddress, RuntimeCall, Signature, SignedExtra>;
 pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 pub type Executive = frame_executive::Executive<
   Runtime,
@@ -369,8 +365,8 @@ sp_api::impl_runtime_apis! {
     }
   }
 
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
-    fn account_nonce(account: AccountId) -> Index {
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, NativeAddress, Index> for Runtime {
+    fn account_nonce(account: NativeAddress) -> Index {
       System::account_nonce(account)
     }
   }

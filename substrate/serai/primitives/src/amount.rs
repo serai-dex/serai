@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 
 /// The type used for amounts.
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Debug, Encode, Decode, TypeInfo, MaxEncodedLen,
+  Clone, Copy, PartialEq, Eq, PartialOrd, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Amount(pub u64);
