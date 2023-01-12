@@ -5,14 +5,17 @@
 These are the list of types used to represent various properties within the
 protocol.
 
-| Alias                  | Type                           |
-|------------------------|--------------------------------|
-| Amount                 | u64                            |
-| Coin                   | u32                            |
-| Session                | u32                            |
-| Validator Set Index    | u16                            |
-| Validator Set Instance | (Session, Validator Set Index) |
-| Key                    | Vec\<u8>                       |
+| Alias                  | Type                                         |
+|------------------------|----------------------------------------------|
+| NativeAddress          | sr25519::Public (unchecked [u8; 32] wrapper) |
+| Amount                 | u64                                          |
+| Coin                   | u32                                          |
+| Session                | u32                                          |
+| Validator Set Index    | u16                                          |
+| Validator Set Instance | (Session, Validator Set Index)               |
+| Key                    | BoundedVec\<u8, 96>                          |
+| ExternalAddress        | BoundedVec\<u8, 74>                          |
+| Data                   | BoundedVec\<u8, 512>                         |
 
 ### Networks
 

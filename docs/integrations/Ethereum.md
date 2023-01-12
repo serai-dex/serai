@@ -9,11 +9,11 @@ Ethereum addresses are 20-byte hashes.
 Ethereum In Instructions are present via being appended to the calldata
 transferring funds to Serai. `origin` is automatically set to the party from
 which funds are being transferred. For an ERC20, this is `from`. For ETH, this
-is the caller. `data` is limited to 255 bytes.
+is the caller.
 
 ### Out Instructions
 
-`data` is limited to 255 bytes.
+`data` is limited to 512 bytes.
 
 If `data` is provided, the Ethereum Router will call a contract-calling child
 contract in order to sandbox it. The first byte of `data` designates which child

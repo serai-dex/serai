@@ -9,8 +9,14 @@ edition = "2021"
 [dependencies]
 thiserror = { version = "1", optional = true }
 
-scale = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
+
+serai-primitives = { path = "../../serai/primitives" }
+
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
-std = ["thiserror", "scale/std"]
+std = ["thiserror", "scale/std", "scale-info/std"]
 default = ["std"]

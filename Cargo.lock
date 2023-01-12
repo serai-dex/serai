@@ -3334,6 +3334,10 @@ name = "in-instructions-primitives"
 version = "0.1.0"
 dependencies = [
  "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "sp-core",
+ "sp-std",
  "thiserror",
 ]
 
