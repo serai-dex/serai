@@ -4,12 +4,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use scale::{Encode, Decode};
+use scale_info::TypeInfo;
 
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
 use sp_std::vec::Vec;
 use sp_inherents::{InherentData, InherentIdentifier, IsFatalError};
+
+use sp_runtime::RuntimeDebug;
 
 use in_instructions_primitives::InInstruction;
 
@@ -18,8 +21,8 @@ pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 // the odds of synchrony
 const DELAY: u32 = 2;
 
+#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct Coin<T> {
   // Coin's latest block number
   // Ideally, this would be the coin's current block hash, or a 32-byte hash of any global clock
@@ -32,15 +35,15 @@ pub struct Coin<T> {
 // data
 pub(crate) type GenericCoins<T> = Vec<Option<Coin<T>>>;
 
+#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct Batch {
   pub id: u32,
   pub instructions: Vec<InInstruction>,
 }
 
+#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct PendingBatch {
   // Block number this batch was initially reported at
   pub reported_at: u32,
@@ -50,7 +53,7 @@ pub struct PendingBatch {
 pub type Coins = GenericCoins<Batch>;
 pub type PendingCoins = GenericCoins<PendingBatch>;
 
-#[derive(Encode, sp_runtime::RuntimeDebug)]
+#[derive(Encode, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Decode, thiserror::Error))]
 pub enum InherentError {
   #[cfg_attr(feature = "std", error("invalid call"))]
@@ -98,7 +101,10 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Batch(u32, u32),
+    Batch {
+      coin: u32,
+      id: u32,
+    },
   }
 
   #[pallet::pallet]
@@ -137,7 +143,7 @@ pub mod pallet {
 
           for batch in &coin.batches {
             // TODO: EXECUTE
-            Self::deposit_event(Event::Batch(c, batch.id));
+            Self::deposit_event(Event::Batch { coin: c, id: batch.id });
             Executed::<T>::insert(c, batch.id + 1);
           }
         }

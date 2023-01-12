@@ -33,8 +33,8 @@ pub enum Target {
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct InInstruction {
-  origin: ExternalAddress,
-  target: Target,
+  pub origin: ExternalAddress,
+  pub target: Target,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]

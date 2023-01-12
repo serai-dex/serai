@@ -6,7 +6,8 @@ use subxt::{tx::BaseExtrinsicParams, Config, OnlineClient};
 use jsonrpsee_core::client::ClientT;
 use jsonrpsee_http_client::HttpClientBuilder;
 
-use serai_runtime::{Address, Signature, Runtime};
+use serai_primitives::NativeAddress;
+use serai_runtime::{Signature, Runtime};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct SeraiConfig;
@@ -19,7 +20,7 @@ impl Config for SeraiConfig {
   type Index = <Runtime as SysConfig>::Index;
   type AccountId = <Runtime as SysConfig>::AccountId;
   // TODO: Bech32m
-  type Address = Address;
+  type Address = NativeAddress;
 
   type Header = <Runtime as SysConfig>::Header;
   type Signature = Signature;
@@ -57,11 +58,8 @@ impl Serai {
     Ok(hash.into())
   }
 
-  pub(crate) async fn get_batches(&self, block: [u8; 32]) -> Result<Option<Batch>, SeraiError> {
+  pub(crate) async fn get_batches(&self, block: [u8; 32]) -> Result<Vec<Batch>, SeraiError> {
     let events = self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?;
-    let mut batches =
-      events.find::<Batch>().collect::<Result<Vec<_>, _>>().map_err(|_| SeraiError::RpcError)?;
-    debug_assert!(batches.len() <= 1);
-    Ok(batches.pop())
+    Ok(events.find::<Batch>().collect::<Result<_, _>>().map_err(|_| SeraiError::RpcError)?)
   }
 }

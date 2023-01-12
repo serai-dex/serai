@@ -42,6 +42,8 @@ jsonrpsee-http-client = "0.16"
 jsonrpsee-server = "0.16"
 
 # Serai
+serai-primitives = { path = "../substrate/serai/primitives" }
+in-instructions-primitives = { path = "../substrate/in-instructions/primitives" }
 in-instructions-pallet = { path = "../substrate/in-instructions/pallet" }
 serai-runtime = { path = "../substrate/runtime" }
 
