@@ -9,7 +9,8 @@ use sp_api::ProvideRuntimeApi;
 
 pub use sc_rpc_api::DenyUnsafe;
 
-use serai_runtime::{opaque::Block, AccountId, Balance, Index};
+use serai_primitives::NativeAddress;
+use serai_runtime::{opaque::Block, Balance, Index};
 
 pub struct FullDeps<C, P> {
   pub client: Arc<C>,
@@ -29,7 +30,7 @@ pub fn create_full<
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>
+  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, NativeAddress, Index>
     + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
     + BlockBuilder<Block>,
 {

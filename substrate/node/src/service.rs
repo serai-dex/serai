@@ -11,7 +11,7 @@ use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
 use sp_api::ProvideRuntimeApi;
 
-use in_instructions_pallet::provider::InherentDataProvider as InstructionsProvider;
+use in_instructions_client::InherentDataProvider as InstructionsProvider;
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;

@@ -26,6 +26,7 @@ members = [
 
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",
+  "substrate/in-instructions/client",
 
   "substrate/validator-sets/primitives",
   "substrate/validator-sets/pallet",

@@ -3310,13 +3310,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "in-instructions-pallet"
+name = "in-instructions-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "frame-support",
- "frame-system",
  "futures",
+ "in-instructions-pallet",
  "jsonrpsee-core",
  "jsonrpsee-http-client",
  "parity-scale-codec",
@@ -3327,6 +3326,21 @@ dependencies = [
  "sp-std",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "in-instructions-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-std",
+ "thiserror",
 ]
 
 [[package]]
@@ -7413,7 +7427,7 @@ dependencies = [
  "frame-benchmarking-cli",
  "frame-system",
  "futures",
- "in-instructions-pallet",
+ "in-instructions-client",
  "jsonrpsee",
  "log",
  "pallet-tendermint",
@@ -7449,7 +7463,6 @@ dependencies = [
  "sp-tendermint",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
- "validator-sets-pallet",
 ]
 
 [[package]]
