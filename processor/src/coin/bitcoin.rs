@@ -20,13 +20,13 @@ use bitcoin::{
   schnorr::{TweakedPublicKey, SchnorrSig},
   XOnlyPublicKey,
   psbt::{PartiallySignedTransaction,PsbtSighashType},
-  hashes::sha256d::Hash,
+  SchnorrSighashType,
 };
 
 use bitcoin_serai::{
   rpc::Rpc,
   rpc_helper::RawTx,
-  crypto::{make_even, taproot_sighash},
+  crypto::{make_even},
   wallet::{SpendableOutput},
   transactions::{TransactionMachine,SignableTransaction as MSignableTransaction},
 };
@@ -242,18 +242,10 @@ impl Coin for Bitcoin {
     for (i, one_input) in (&inputs).iter().enumerate() {
       let txid = one_input.0.txid.clone();
       let one_transaction = self.rpc.get_raw_transaction(&txid, None, None).await.unwrap();
-      psbt.inputs[i].witness_utxo = Some(one_transaction.output[one_input.0.vout as usize].clone());
-      /*psbt.inputs[i].witness_utxo = {
-        let script_pubkey = ScriptBuf::from_hex(input_utxo.script_pubkey).expect("failed to parse input utxo scriptPubkey");
-        let amount = Amount::from_sat(from_amount);
-
-        Some(TxOut { value: amount.to_sat(), script_pubkey })
-      };*/
       let xonly_pubkey = XOnlyPublicKey::from_slice(&keys.group_key().to_encoded_point(true).x().to_owned().unwrap()).unwrap();
-      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from_u32(1));
+      psbt.inputs[i].witness_utxo = Some(one_transaction.output[one_input.0.vout as usize].clone());
+      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from_u32(SchnorrSighashType::All as u32));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
-      //let (tap_sighash, _schnorr_sighash_type) = taproot_sighash(&psbt, i).unwrap();
-      //dbg!(&tap_sighash);
     }
     return Ok(SignableTransaction { keys: keys, transcript: transcript, height: block_number+1, actual: MSignableTransaction{tx: psbt} });
   }
@@ -285,7 +277,6 @@ impl Coin for Bitcoin {
     let psbt_hex =  tx.clone().extract_tx().raw_hex();
     let test_transaction = self.rpc.test_mempool_accept(&[psbt_hex]).await.unwrap();
     dbg!(&test_transaction);
-
 
     let s_raw_transaction = self.rpc.send_raw_str_transaction(target_tx.raw_hex()).await.unwrap();
     let vec_output = target_tx
@@ -494,11 +485,6 @@ impl Coin for Bitcoin {
     //dbg!(psbt);
     for (i, one_txinout) in txsource_list.iter().enumerate() {
       psbt.inputs[i].witness_utxo = Some(one_txinout.clone());
-      //psbt.inputs[0].redeem_script = Some(from_addr.script_pubkey());
-      //psbt.inputs[i].tap_key_sig =
-
-      let (tap_sighash, _schnorr_sighash_type) = taproot_sighash(&psbt, i).unwrap();
-      dbg!(&tap_sighash);
 
       //sign_psbt_schnorr(&privkey_obj.inner, pub1.x_only_public_key().0,None,
       //&mut psbt.inputs[i],tap_sighash,SchnorrSighashType::All,&secp);

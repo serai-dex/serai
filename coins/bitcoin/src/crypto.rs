@@ -102,39 +102,6 @@ impl PSBTUtils for PartiallySignedTransaction {
   }
 }
 
-pub fn taproot_sighash(
-  psbt: &psbt::PartiallySignedTransaction,
-  input_index: usize,
-) -> Result<(bitcoin::util::taproot::TapSighashHash, SchnorrSighashType), SignerError> {
-  if input_index >= psbt.inputs.len() || input_index >= psbt.unsigned_tx.input.len() {
-      return Err(SignerError::InputIndexOutOfRange);
-  }
-
-  let psbt_input = &psbt.inputs[input_index];
-
-  let sighash_type = psbt_input
-      .sighash_type
-      .unwrap_or_else(|| SchnorrSighashType::Default.into())
-      .schnorr_hash_ty()
-      .map_err(|_| SignerError::InvalidSighash)?;
-  let witness_utxos = (0..psbt.inputs.len())
-      .map(|i| psbt.get_utxo_for(i))
-      .collect::<Vec<_>>();
-  let mut all_witness_utxos = vec![];
-
-  let mut cache = sighash::SighashCache::new(&psbt.unsigned_tx);
-  let prevouts = if witness_utxos.iter().all(Option::is_some) {
-      all_witness_utxos.extend(witness_utxos.iter().filter_map(|x| x.as_ref()));
-      sighash::Prevouts::All(&all_witness_utxos)
-  } else {
-      return Err(SignerError::MissingWitnessUtxo);
-  };
-  Ok((
-      cache.taproot_signature_hash(input_index, &prevouts, None, None, sighash_type).unwrap(),
-      sighash_type,
-  ))
-}
-
 pub fn taproot_key_spend_signature_hash(
   psbt: &psbt::PartiallySignedTransaction,
   input_index: usize,
@@ -171,7 +138,6 @@ pub fn taproot_key_spend_signature_hash(
   );
 
   Ok((
-      //cache.taproot_signature_hash(input_index, &prevouts, None, None, sighash_type).unwrap(),
       hash.unwrap(),
       sighash_type,
   ))

@@ -1,41 +1,41 @@
 use bitcoin::{
-  Txid, util::schnorr::{self,SchnorrSig}, schnorr::TapTweak, util::taproot,
-  util::sighash::{SchnorrSighashType, self}, psbt::{self,serialize::Serialize,PartiallySignedTransaction, PsbtSighashType}, Script, Witness,
+  util::{
+    schnorr::{SchnorrSig},
+    sighash::{SchnorrSighashType},
+  },
+  psbt::{serialize::Serialize, PartiallySignedTransaction},
+  Witness,
 };
 use frost::{
   algorithm::Schnorr,
-  curve::{Secp256k1, Ciphersuite},
+  curve::{Secp256k1},
   FrostError, ThresholdKeys,
   sign::{
-    Writable, Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine,
-    SignatureMachine, AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
+    Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine, SignatureMachine,
+    AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
   },
-  algorithm::{WriteAddendum, Algorithm},
-  tests::{algorithm_machines, key_gen, sign},
 };
-use crate::crypto::{BitcoinHram, make_even, SignerError, taproot_sighash, taproot_key_spend_signature_hash};
-use rand_core::{OsRng, RngCore};
+use crate::crypto::{BitcoinHram, make_even, taproot_key_spend_signature_hash};
+use rand_core::{RngCore};
 
-use core::{ops::Deref, fmt::Debug};
+use core::{fmt::Debug};
 use std::{
-  str::FromStr,
-  io::{self, Read, Write},
-  sync::{Arc, RwLock},
+  io::{self, Read},
   collections::{HashMap, BTreeMap},
 };
 
-use k256::{elliptic_curve::sec1::ToEncodedPoint,Scalar};
+use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use transcript::{Transcript, RecommendedTranscript};
 use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SignableTransaction {
-  pub tx : PartiallySignedTransaction
+  pub tx: PartiallySignedTransaction,
 }
 
 impl SignableTransaction {
   /// Create a FROST signing machine out of this signable transaction.
-  /// The height is the Monero blockchain height to synchronize around.
+  /// The height is the Bitcoin blockchain height to synchronize around.
   pub async fn multisig(
     self,
     keys: ThresholdKeys<Secp256k1>,
@@ -45,29 +45,33 @@ impl SignableTransaction {
     transcript.domain_separate(b"bitcoin_transaction");
     transcript.append_message(b"height", u64::try_from(height).unwrap().to_le_bytes());
     transcript.append_message(b"spend_key", keys.group_key().to_encoded_point(true).as_bytes());
-    for input in &self.tx.inputs {
-      //transcript.append_message(b"input_hash", input.output.absolute.tx);
-      //transcript.append_message(b"input_output_index", [input.output.absolute.o]);
-      //transcript.append_message(b"input_shared_key", input.key_offset().to_bytes());
+
+    let raw_tx = self.tx.clone().extract_tx();
+    let mut sigs = vec![];
+    let algorithm = Schnorr::<Secp256k1, BitcoinHram>::new();
+    for (i, input) in raw_tx.input.iter().enumerate() {
+      let txid: [u8; 32] = input.previous_output.txid.to_vec()[0..32].try_into().unwrap();
+      transcript.append_message(b"input_hash", txid);
+      transcript.append_message(b"input_output_index", input.previous_output.vout.to_le_bytes());
+      transcript.append_message(
+        b"input_shared_key",
+        self.tx.inputs[i].tap_internal_key.unwrap().serialize(),
+      );
+
+      sigs.push(AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap());
     }
 
-    for payment in &self.tx.clone().extract_tx().output {
-      //transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
+    for payment in raw_tx.output {
+      //TODO: need address generator function to generate address from script_pubkey
+      transcript.append_message(b"payment_address", payment.script_pubkey.as_bytes());
       transcript.append_message(b"payment_amount", payment.value.to_le_bytes());
     }
 
-    let mut sigs = vec![];
-    
-    let algorithm= Schnorr::<Secp256k1, BitcoinHram>::new();
     for _ in self.tx.inputs.iter() {
       sigs.push(AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap());
     }
 
-    return Ok(TransactionMachine {
-      signable: self,
-      transcript,
-      sigs,
-    });
+    return Ok(TransactionMachine { signable: self, transcript, sigs });
   }
 }
 
@@ -106,7 +110,7 @@ impl PreprocessMachine for TransactionMachine {
         preprocesses.push(preprocess);
         sig
       })
-      .collect();    
+      .collect();
     (
       TransactionSignMachine {
         signable: self.signable,
@@ -159,32 +163,36 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
     }
     let mut msg_list = Vec::new();
     for i in 0..self.signable.tx.inputs.len() {
-      let (tx_sighash ,sighash_type)= taproot_key_spend_signature_hash(&self.signable.tx, i).unwrap();
-      //TODO: Change later
-      //self.signable.tx.inputs[i].sighash_type = Some(PsbtSighashType::from_str(sighash_type.to_string().as_str()).unwrap());
+      let (tx_sighash, _) = taproot_key_spend_signature_hash(&self.signable.tx, i).unwrap();
       msg_list.push(tx_sighash);
     }
 
     let included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
-    let mut commitments = (0 .. self.sigs.len()).map(|c| {
-      included
-        .iter()
-        .map(|l| {
-          let preprocess = commitments.get_mut(l).ok_or(FrostError::MissingParticipant(*l))?[c].clone();
-          Ok((*l, preprocess))
-        })
-        .collect::<Result<HashMap<_, _>, _>>()
-    })
-    .collect::<Result<Vec<_>, _>>()?;
+    let mut commitments = (0..self.sigs.len())
+      .map(|c| {
+        included
+          .iter()
+          .map(|l| {
+            let preprocess =
+              commitments.get_mut(l).ok_or(FrostError::MissingParticipant(*l))?[c].clone();
+            Ok((*l, preprocess))
+          })
+          .collect::<Result<HashMap<_, _>, _>>()
+      })
+      .collect::<Result<Vec<_>, _>>()?;
 
     let mut shares = Vec::with_capacity(self.sigs.len());
-    let sigs = self.sigs.drain(..).enumerate().map(|(index, sig)| {
-      let (sig, share) = sig.sign(commitments.remove(0), &msg_list.remove(index))?;
-      shares.push(share);
-      Ok(sig)
-    })
-    .collect::<Result<_, _>>()?;
-    Ok((TransactionSignatureMachine { tx:self.signable.tx, sigs:sigs}, shares))
+    let sigs = self
+      .sigs
+      .drain(..)
+      .enumerate()
+      .map(|(index, sig)| {
+        let (sig, share) = sig.sign(commitments.remove(0), &msg_list.remove(index))?;
+        shares.push(share);
+        Ok(sig)
+      })
+      .collect::<Result<_, _>>()?;
+    Ok((TransactionSignatureMachine { tx: self.signable.tx, sigs: sigs }, shares))
   }
 }
 
@@ -199,18 +207,18 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
     mut self,
     shares: HashMap<u16, Self::SignatureShare>,
   ) -> Result<PartiallySignedTransaction, FrostError> {
-
     for (i, schnorr) in self.sigs.drain(..).enumerate() {
-      let mut _sig = schnorr.complete(shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>())?;
+      let mut _sig = schnorr.complete(
+        shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>(),
+      )?;
       let mut _offset = 0;
       (_sig.R, _offset) = make_even(_sig.R);
       _sig.s += Scalar::from(_offset);
 
       let temp_sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1..65]).unwrap();
-
-      let sig = SchnorrSig { sig:temp_sig, hash_ty: SchnorrSighashType::All };
+      let sig = SchnorrSig { sig: temp_sig, hash_ty: SchnorrSighashType::All };
       self.tx.inputs[i].tap_key_sig = Some(sig);
-      
+
       let mut script_witness: Witness = Witness::new();
       script_witness.push(self.tx.inputs[i].tap_key_sig.unwrap().serialize());
       self.tx.inputs[i].final_script_witness = Some(script_witness);
@@ -219,11 +227,7 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
       self.tx.inputs[i].redeem_script = None;
       self.tx.inputs[i].witness_script = None;
       self.tx.inputs[i].bip32_derivation = BTreeMap::new();
-
-      //self.tx.inputs[i].witness = vec![sig, self.tx.inputs[i].tap_internal_key];
     }
-
-    
     Ok(self.tx)
   }
 }
