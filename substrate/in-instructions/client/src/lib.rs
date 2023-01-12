@@ -8,7 +8,7 @@ use jsonrpsee_http_client::HttpClientBuilder;
 
 use sp_inherents::{Error, InherentData, InherentIdentifier};
 
-use in_instructions_pallet::{INHERENT_IDENTIFIER, PendingCoins, InherentError};
+use in_instructions_pallet::{INHERENT_IDENTIFIER, Updates, InherentError};
 
 pub struct InherentDataProvider;
 impl InherentDataProvider {
@@ -20,13 +20,13 @@ impl InherentDataProvider {
 #[async_trait::async_trait]
 impl sp_inherents::InherentDataProvider for InherentDataProvider {
   async fn provide_inherent_data(&self, inherent_data: &mut InherentData) -> Result<(), Error> {
-    let coins: PendingCoins = (|| async {
+    let updates: Updates = (|| async {
       let client = HttpClientBuilder::default().build("http://127.0.0.1:5134").ok()?;
-      client.request("processor_coins", Vec::<u8>::new()).await.ok()
+      client.request("processor_coinUpdates", Vec::<u8>::new()).await.ok()
     })()
     .await
     .ok_or(Error::Application(Box::from("couldn't communicate with processor")))?;
-    inherent_data.put_data(INHERENT_IDENTIFIER, &coins)?;
+    inherent_data.put_data(INHERENT_IDENTIFIER, &updates)?;
     Ok(())
   }
 

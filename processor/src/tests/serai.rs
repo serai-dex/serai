@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use serai_primitives::NativeAddress;
 
 use in_instructions_primitives::{ExternalAddress, Target, InInstruction};
-use in_instructions_pallet::{Batch, PendingBatch, Coin};
+use in_instructions_pallet::{Batch, Update};
 
 use jsonrpsee_core::server::rpc_module::RpcModule;
 
@@ -16,7 +16,7 @@ async fn get_events() {
 
   let mut rpc = RpcModule::new(next_id.clone());
   rpc
-    .register_async_method("processor_coins", |_, context| async move {
+    .register_async_method("processor_coinUpdates", |_, context| async move {
       tokio::time::sleep(Duration::from_millis(1500)).await;
       let batch = Batch {
         id: *context.lock().unwrap(),
@@ -27,16 +27,12 @@ async fn get_events() {
       };
       println!("Offering batch {}", batch.id);
 
-      // Re-use the batch ID as the Substrate block we reported at
-      let serai_block_number = batch.id;
-      // Just set the coin block number to a distinct, incremental number
-      let coin_block_number = batch.id + 100;
+      // Re-use the batch ID as the coin's block number
+      let coin_block_number = u32::try_from(batch.id + 100).unwrap();
 
-      let pending = PendingBatch { reported_at: serai_block_number, batch };
+      let update = Update { block_number: coin_block_number, batches: vec![batch] };
 
-      let coin = Coin { block_number: coin_block_number, batches: vec![pending] };
-
-      Ok(vec![Some(coin)])
+      Ok(vec![Some(update)])
     })
     .unwrap();
 
