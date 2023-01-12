@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use scale::{Encode, Decode};

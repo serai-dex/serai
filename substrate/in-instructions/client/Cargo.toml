@@ -7,6 +7,10 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 async-trait = { version = "0.1" }
 thiserror = { version = "1" }
