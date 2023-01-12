@@ -1,102 +1,57 @@
-use std::collections::HashSet;
+use std::{
+  collections::{HashSet, HashMap},
+  str::FromStr,
+};
 
 use rand_core::OsRng;
 use rand::RngCore;
 
-use serde_json::json;
-use serde::Deserialize;
-
-use curve25519_dalek::scalar::Scalar;
+use monero_rpc::{
+  monero::{Amount, Address},
+  TransferOptions,
+};
 
 use monero_serai::{
-  rpc::{Rpc, EmptyResponse},
-  wallet::address::{MoneroAddress, Network, AddressSpec},
+  wallet::address::{Network, AddressSpec},
   wallet::Scanner,
 };
-use zeroize::Zeroizing;
 
 mod runner;
 
-#[derive(Deserialize, Debug)]
-struct AddressResponse {
-  address: String,
-}
-
-async fn create_rpc_wallet(
-  wallet_rpc: &Rpc,
-  spend: Scalar,
-  view: Zeroizing<Scalar>,
-  address: &str,
-) {
-  let params = json!({
-      "file_name": "test_wallet",
-      "password": "pass",
-      "address": address,
-      "spendkey": hex::encode(spend.as_bytes()),
-      "viewkey": hex::encode(view.as_bytes())
-  });
-  wallet_rpc.json_rpc_call::<AddressResponse>("generate_from_keys", Some(params)).await.unwrap();
-}
-
-async fn make_tx(wallet_rpc: &Rpc, to: &str, amount: u64) -> [u8; 32] {
-  #[derive(Deserialize, Debug)]
-  struct TransactionResponse {
-    tx_hash_list: [String; 1],
-  }
-
-  // refresh the wallet first
-  wallet_rpc.json_rpc_call::<EmptyResponse>("refresh", Some(json!({}))).await.unwrap();
-
-  let params = json!({
-      "destinations" : [{
-          "amount": amount,
-          "address": to
-      }],
-      "get_tx_hex": false,
-  });
-  let resp =
-    wallet_rpc.json_rpc_call::<TransactionResponse>("transfer_split", Some(params)).await.unwrap();
-
-  if resp.tx_hash_list.is_empty() {
-    panic!("something went wrong creating tx");
-  }
-
-  hex::decode(&resp.tx_hash_list[0]).unwrap().try_into().unwrap()
-}
-
-async fn wallet_rpc_address(wallet_rpc: &Rpc) -> Option<MoneroAddress> {
-  let resp = wallet_rpc
-    .json_rpc_call::<AddressResponse>("get_address", Some(json!({"account_index": 0})))
-    .await;
-
-  if resp.is_err() {
-    return None;
-  }
-
-  Some(MoneroAddress::from_str(Network::Mainnet, &resp.unwrap().address).unwrap())
-}
-
 async fn test_from_wallet_rpc_to(spec: AddressSpec) {
-  let wallet_rpc = Rpc::new("http://127.0.0.1:6061".to_string()).unwrap();
+  let wallet_rpc =
+    monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
   let daemon_rpc = runner::rpc().await;
 
-  // initialize monero wallet rpc
-  let wallet_rpc_addr = if let Some(addr) = wallet_rpc_address(&wallet_rpc).await {
-    addr
+  // initialize wallet rpc
+  let address_resp = wallet_rpc.get_address(0, None).await;
+  let wallet_rpc_addr = if address_resp.is_ok() {
+    address_resp.unwrap().address
   } else {
-    let (spend, view, addr) = runner::random_address();
+    wallet_rpc.create_wallet("test_wallet".to_string(), None, "English".to_string()).await.unwrap();
+    let addr = wallet_rpc.get_address(0, None).await.unwrap().address;
     daemon_rpc.generate_blocks(&addr.to_string(), 70).await.unwrap();
-    create_rpc_wallet(&wallet_rpc, spend, view.view(), &addr.to_string()).await;
     addr
   };
 
-  // make tx to an addr
+  // make an addr
   let (_, view_pair, _) = runner::random_address();
-  let tx_id =
-    make_tx(&wallet_rpc, &view_pair.address(Network::Mainnet, spec).to_string(), 1000000).await;
+  let addr = Address::from_str(&view_pair.address(Network::Mainnet, spec).to_string()[..]).unwrap();
+
+  // refresh & make a tx
+  wallet_rpc.refresh(None).await.unwrap();
+  let tx = wallet_rpc
+    .transfer(
+      HashMap::from([(addr, Amount::ONE_XMR)]),
+      monero_rpc::TransferPriority::Default,
+      TransferOptions::default(),
+    )
+    .await
+    .unwrap();
+  let tx_hash: [u8; 32] = tx.tx_hash.0.try_into().unwrap();
 
   // unlock it
-  runner::mine_until_unlocked(&daemon_rpc, &wallet_rpc_addr.to_string(), tx_id).await;
+  runner::mine_until_unlocked(&daemon_rpc, &wallet_rpc_addr.to_string(), tx_hash).await;
 
   // create the scanner
   let mut scanner = Scanner::from_view(view_pair, Some(HashSet::new()));
@@ -105,7 +60,7 @@ async fn test_from_wallet_rpc_to(spec: AddressSpec) {
   }
 
   // retrieve it and confirm
-  let tx = daemon_rpc.get_transaction(tx_id).await.unwrap();
+  let tx = daemon_rpc.get_transaction(tx_hash).await.unwrap();
   let output = scanner.scan_transaction(&tx).ignore_timelock().swap_remove(0);
 
   match spec {
@@ -113,7 +68,7 @@ async fn test_from_wallet_rpc_to(spec: AddressSpec) {
     AddressSpec::Integrated(payment_id) => assert_eq!(output.metadata.payment_id, payment_id),
     _ => {}
   }
-  assert_eq!(output.commitment().amount, 1000000);
+  assert_eq!(output.commitment().amount, 1000000000000);
 }
 
 async_sequential!(
