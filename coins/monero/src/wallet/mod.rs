@@ -60,13 +60,15 @@ pub(crate) fn shared_key(
 ) -> (u8, Scalar, [u8; 8]) {
   // 8Ra
   let mut output_derivation = (s * P).mul_by_cofactor().compress().to_bytes().to_vec();
+
+  let mut payment_id_xor = [0; 8];
+  payment_id_xor
+    .copy_from_slice(&hash(&[output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
+
   // || o
   write_varint(&o.try_into().unwrap(), &mut output_derivation).unwrap();
 
   let view_tag = hash(&[b"view_tag".as_ref(), &output_derivation].concat())[0];
-  let mut payment_id_xor = [0; 8];
-  payment_id_xor
-    .copy_from_slice(&hash(&[output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
 
   // uniqueness ||
   let shared_key = if let Some(uniqueness) = uniqueness {
