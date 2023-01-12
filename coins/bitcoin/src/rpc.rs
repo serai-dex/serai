@@ -16,7 +16,7 @@ use bitcoincore_rpc_json::{
     AddressType, CreateRawTransactionInput, EstimateSmartFeeResult, FundRawTransactionOptions,
     FundRawTransactionResult, GetBlockResult, GetRawTransactionResult, GetTransactionResult,
     ListUnspentResultEntry, LoadWalletResult, SignRawTransactionInput, SignRawTransactionResult,
-    ListTransactionResult
+    ListTransactionResult, TestMempoolAcceptResult
 };
 
 #[derive(Debug, Clone)]
@@ -558,6 +558,16 @@ impl Rpc {
         let args = handle_defaults(&mut ext_args, &defaults);
 
         let info = self.rpc_call::<Vec<ListTransactionResult>>("listtransactions", &args).await?;
+        Ok(info)
+    }
+
+    pub async fn test_mempool_accept<R: RawTx>(
+        &self,
+        rawtxs: &[R],
+    ) -> Result<Vec<TestMempoolAcceptResult>> {
+        let hexes: Vec<serde_json::Value> =
+            rawtxs.to_vec().into_iter().map(|r| r.raw_hex().into()).collect();
+        let info = self.rpc_call::<Vec<TestMempoolAcceptResult>>("testmempoolaccept", &[hexes.into()]).await?;
         Ok(info)
     }
 }

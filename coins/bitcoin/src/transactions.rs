@@ -1,6 +1,6 @@
 use bitcoin::{
-  Txid, util::schnorr::{self,SchnorrSig}, schnorr::TapTweak, util::taproot, util::psbt,
-  util::sighash::SchnorrSighashType, psbt::PartiallySignedTransaction, Script,
+  Txid, util::schnorr::{self,SchnorrSig}, schnorr::TapTweak, util::taproot,
+  util::sighash::{SchnorrSighashType, self}, psbt::{self,serialize::Serialize,PartiallySignedTransaction, PsbtSighashType}, Script, Witness,
 };
 use frost::{
   algorithm::Schnorr,
@@ -13,17 +13,18 @@ use frost::{
   algorithm::{WriteAddendum, Algorithm},
   tests::{algorithm_machines, key_gen, sign},
 };
-use crate::crypto::{BitcoinHram, make_even, SignerError, taproot_sighash};
+use crate::crypto::{BitcoinHram, make_even, SignerError, taproot_sighash, taproot_key_spend_signature_hash};
 use rand_core::{OsRng, RngCore};
 
 use core::{ops::Deref, fmt::Debug};
 use std::{
+  str::FromStr,
   io::{self, Read, Write},
   sync::{Arc, RwLock},
-  collections::HashMap,
+  collections::{HashMap, BTreeMap},
 };
 
-use k256::{elliptic_curve::sec1::ToEncodedPoint};
+use k256::{elliptic_curve::sec1::ToEncodedPoint,Scalar};
 use transcript::{Transcript, RecommendedTranscript};
 use zeroize::Zeroizing;
 
@@ -57,8 +58,8 @@ impl SignableTransaction {
 
     let mut sigs = vec![];
     
-    for (i, input) in self.tx.inputs.iter().enumerate() {
-      let algorithm= Schnorr::<Secp256k1, BitcoinHram>::new();
+    let algorithm= Schnorr::<Secp256k1, BitcoinHram>::new();
+    for _ in self.tx.inputs.iter() {
       sigs.push(AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap());
     }
 
@@ -67,8 +68,6 @@ impl SignableTransaction {
       transcript,
       sigs,
     });
-
-    //return Err(FrostError::DuplicatedIndex(1));
   }
 }
 
@@ -158,13 +157,15 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
         "message was passed to the TransactionMachine when it generates its own",
       ))?;
     }
+    let mut msg_list = Vec::new();
+    for i in 0..self.signable.tx.inputs.len() {
+      let (tx_sighash ,sighash_type)= taproot_key_spend_signature_hash(&self.signable.tx, i).unwrap();
+      //TODO: Change later
+      //self.signable.tx.inputs[i].sighash_type = Some(PsbtSighashType::from_str(sighash_type.to_string().as_str()).unwrap());
+      msg_list.push(tx_sighash);
+    }
 
-    let mut tx = self.signable.tx;
-    /*for (i, one_txinput) in tx.inputs.iter().enumerate() {
-      let (tx_sighash ,sighash_type)= taproot_sighash(&tx, i).unwrap();
-    }*/
-
-    let mut included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
+    let included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
     let mut commitments = (0 .. self.sigs.len()).map(|c| {
       included
         .iter()
@@ -177,13 +178,13 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
     .collect::<Result<Vec<_>, _>>()?;
 
     let mut shares = Vec::with_capacity(self.sigs.len());
-    let sigs = self.sigs.drain(..).map(|sig| {
-      let (sig, share) = sig.sign(commitments.remove(0), &msg)?;
+    let sigs = self.sigs.drain(..).enumerate().map(|(index, sig)| {
+      let (sig, share) = sig.sign(commitments.remove(0), &msg_list.remove(index))?;
       shares.push(share);
       Ok(sig)
     })
     .collect::<Result<_, _>>()?;
-    Ok((TransactionSignatureMachine { tx, sigs}, shares))
+    Ok((TransactionSignatureMachine { tx:self.signable.tx, sigs:sigs}, shares))
   }
 }
 
@@ -200,11 +201,29 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
   ) -> Result<PartiallySignedTransaction, FrostError> {
 
     for (i, schnorr) in self.sigs.drain(..).enumerate() {
-      let _sig = schnorr.complete(shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>())?;
+      let mut _sig = schnorr.complete(shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>())?;
+      let mut _offset = 0;
+      (_sig.R, _offset) = make_even(_sig.R);
+      _sig.s += Scalar::from(_offset);
+
       let temp_sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1..65]).unwrap();
+
       let sig = SchnorrSig { sig:temp_sig, hash_ty: SchnorrSighashType::All };
       self.tx.inputs[i].tap_key_sig = Some(sig);
+      
+      let mut script_witness: Witness = Witness::new();
+      script_witness.push(self.tx.inputs[i].tap_key_sig.unwrap().serialize());
+      self.tx.inputs[i].final_script_witness = Some(script_witness);
+      self.tx.inputs[i].partial_sigs = BTreeMap::new();
+      self.tx.inputs[i].sighash_type = None;
+      self.tx.inputs[i].redeem_script = None;
+      self.tx.inputs[i].witness_script = None;
+      self.tx.inputs[i].bip32_derivation = BTreeMap::new();
+
+      //self.tx.inputs[i].witness = vec![sig, self.tx.inputs[i].tap_internal_key];
     }
+
+    
     Ok(self.tx)
   }
 }

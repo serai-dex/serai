@@ -138,7 +138,7 @@ fn select_outputs<C: Coin>(
     }
     // Doesn't break in this else case as a smaller payment may still fit
   }
-
+  //dbg!(outputs.len());
   outputs
 }
 
@@ -240,7 +240,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     // Will never scan the genesis block, which shouldn't be an issue
     for b in (self.scanned_block() + 1) ..= confirmed_block {
-      println!("{} {} {}",b,self.scanned_block(), confirmed_block);
+      //println!("{} {} {}",b,self.scanned_block(), confirmed_block);
 
       // If any keys activated at this block, shift them over
       {
@@ -256,24 +256,28 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           }
         }
       }
-
-      dbg!("before keys");
+      let mut total_output = 0;
       let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
         self.coin.tweak_key(keys);
+        let res_output = self.coin.get_outputs(&block, keys.group_key()).await?;
+        total_output = res_output.len();
+        //dbg!(total_output);
         outputs.extend(
-          self
-            .coin
-            .get_outputs(&block, keys.group_key())
-            .await?
+          res_output
             .iter()
             .cloned()
             .filter(|output| self.db.add_output(output)),
         );
+
+        
       }
 
-      dbg!("after keys");
       self.db.scanned_to_block(b);
+      
+      if total_output > 0 {
+        break;
+      }
     }
 
     Ok(())
@@ -303,9 +307,11 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     // the source payment
     // let (mut payments, schedule) = schedule(payments);
     let mut payments = payments;
-
+    dbg!("prepare_sends before for");
+    //dbg!(self.keys.len());
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
+      //dbg!(outputs.len());
       while !outputs.is_empty() {
         let (inputs, outputs) = select_inputs_outputs::<C>(outputs, &mut payments);
         // If we can no longer process any payments, move to the next set of keys
@@ -323,7 +329,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           u64::try_from(acknowledged_block).unwrap().to_le_bytes(),
         );
         transcript.append_message(b"index", u64::try_from(txs.len()).unwrap().to_le_bytes());
-
         let tx = self
           .coin
           .prepare_send(
@@ -339,7 +344,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         txs.push(tx);
       }
     }
-
     Ok((payments, txs))
   }
 

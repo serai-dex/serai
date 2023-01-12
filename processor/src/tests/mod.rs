@@ -103,13 +103,13 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
     let latest = coin.get_latest_block_number().await.unwrap();
     wallet.acknowledge_block(1, latest - (C::CONFIRMATIONS - 1));
-    let signable = wallet
-      .prepare_sends(1, vec![(wallet.address(), 10000000000)], fee)
+    let mut signable = wallet
+      .prepare_sends(1, vec![(wallet.address(), 4999990000)], fee)
       .await
-      .unwrap()
-      .1
-      .swap_remove(0);
-    futures.push(wallet.attempt_send(network, signable));
+      .unwrap();
+
+    let mut new_signable = signable.1.swap_remove(0);
+    futures.push(wallet.attempt_send(network, new_signable));
   }
   
   println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));

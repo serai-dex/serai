@@ -19,7 +19,7 @@ use bitcoin::{
   Txid,
   schnorr::{TweakedPublicKey, SchnorrSig},
   XOnlyPublicKey,
-  psbt::PartiallySignedTransaction,
+  psbt::{PartiallySignedTransaction,PsbtSighashType},
   hashes::sha256d::Hash,
 };
 
@@ -128,8 +128,8 @@ impl Coin for Bitcoin {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: ProjectivePoint) -> Self::Address {
-    let secp = secp256k1::Secp256k1::new();
-    dbg!("-------ADDRESS-------");
+    //let secp = secp256k1::Secp256k1::new();
+    //dbg!("-------ADDRESS-------");
     //dbg!(&key);
     //dbg!(&key.to_encoded_point(true));
     //dbg!(&key.to_encoded_point(true).tag());
@@ -140,12 +140,10 @@ impl Coin for Bitcoin {
       XOnlyPublicKey::from_slice(&key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
 
     let tweaked_pubkey = bitcoin::schnorr::TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
-    let last_addr = Address::p2tr(&secp, xonly_pubkey, None, bitcoin::network::constants::Network::Regtest);
+    //let last_addr = Address::p2tr(&secp, xonly_pubkey, None, bitcoin::network::constants::Network::Regtest);
     let result_addr = Address::p2tr_tweaked(tweaked_pubkey, bitcoin::network::constants::Network::Regtest);
-    dbg!(&last_addr);
-    dbg!(&result_addr);
-    //assert!(last_addr == result_addr, "Addresses are different");
-
+    //dbg!(&last_addr);
+    //dbg!(&result_addr);
     result_addr
   }
 
@@ -172,13 +170,12 @@ impl Coin for Bitcoin {
     Ok((self.get_latest_block_number().await.unwrap().saturating_sub(tx_block_number) + 1) >= 10)
   }
 
-  //TODO:
   async fn get_outputs(
     &self,
     block: &Self::Block,
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
-    dbg!("get outputs");
+    //dbg!("get outputs");
     let main_addr = self.address(key);
     self.rpc.generate_to_address(1, main_addr.to_string().as_str()).await.unwrap();
     //dbg!(&main_addr);
@@ -187,8 +184,8 @@ impl Coin for Bitcoin {
     let mut outputs = Vec::new();
     for one_transaction in block_details.tx {
       for output_tx in one_transaction.vout {
-        dbg!(&output_tx.script_pub_key.asm);
-        dbg!(&main_addr.script_pubkey());
+        //dbg!(&output_tx.script_pub_key.asm);
+        //dbg!(&main_addr.script_pubkey());
         if output_tx.script_pub_key.script().unwrap().cmp(&main_addr.script_pubkey()).is_eq() {
           println!("It is spendable");
           outputs.push(Output(SpendableOutput {
@@ -199,12 +196,11 @@ impl Coin for Bitcoin {
         }
       }
     }
-    dbg!(&outputs);
+    //dbg!(&outputs);
     return Ok(outputs);
     //return Err(CoinError::ConnectionError);
   }
 
-  //TODO: Add sending logic
   async fn prepare_send(
     &self,
     keys: ThresholdKeys<Secp256k1>,
@@ -214,6 +210,7 @@ impl Coin for Bitcoin {
     payments: &[(Address, u64)],
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
+    dbg!("prepare_send from bitcoin called");
     let mut vin_alt_list = Vec::new();
     let mut vout_alt_list = Vec::new();
 
@@ -245,8 +242,16 @@ impl Coin for Bitcoin {
     for (i, one_input) in (&inputs).iter().enumerate() {
       let txid = one_input.0.txid.clone();
       let one_transaction = self.rpc.get_raw_transaction(&txid, None, None).await.unwrap();
-
       psbt.inputs[i].witness_utxo = Some(one_transaction.output[one_input.0.vout as usize].clone());
+      /*psbt.inputs[i].witness_utxo = {
+        let script_pubkey = ScriptBuf::from_hex(input_utxo.script_pubkey).expect("failed to parse input utxo scriptPubkey");
+        let amount = Amount::from_sat(from_amount);
+
+        Some(TxOut { value: amount.to_sat(), script_pubkey })
+      };*/
+      let xonly_pubkey = XOnlyPublicKey::from_slice(&keys.group_key().to_encoded_point(true).x().to_owned().unwrap()).unwrap();
+      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from_u32(1));
+      psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
       //let (tap_sighash, _schnorr_sighash_type) = taproot_sighash(&psbt, i).unwrap();
       //dbg!(&tap_sighash);
     }
@@ -275,6 +280,13 @@ impl Coin for Bitcoin {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
     let target_tx = tx.clone().extract_tx();
+    dbg!(&target_tx.raw_hex());
+
+    let psbt_hex =  tx.clone().extract_tx().raw_hex();
+    let test_transaction = self.rpc.test_mempool_accept(&[psbt_hex]).await.unwrap();
+    dbg!(&test_transaction);
+
+
     let s_raw_transaction = self.rpc.send_raw_str_transaction(target_tx.raw_hex()).await.unwrap();
     let vec_output = target_tx
       .output
@@ -289,24 +301,23 @@ impl Coin for Bitcoin {
         Output(one_output).id()
       })
       .collect();
-
     Ok((s_raw_transaction.to_vec(), vec_output))
   }
 
   fn tweak_keys<'a>(&self, keys: &'a mut HashMap<u16, ThresholdKeys<Self::Curve>>) {
     for (_, one_key) in keys.iter_mut() {
       if one_key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
-        dbg!("-------EVEN-------");
+        dbg!("-------EVEN keys-------");
         //dbg!(&one_key);
-        dbg!(&one_key.group_key().to_encoded_point(true));
-        dbg!("-------EVEN-------");
+        //dbg!(&one_key.group_key().to_encoded_point(true));
+        //dbg!("-------EVEN-------");
         continue;
       }
       else {
-        dbg!("-------ODD-------");
+        dbg!("-------ODD keys-------");
         //dbg!(&one_key);
-        dbg!(&one_key.group_key().to_encoded_point(true));
-        dbg!("-------ODD-------");
+        //dbg!(&one_key.group_key().to_encoded_point(true));
+        //dbg!("-------ODD-------");
       }
       let (_, offset) = make_even(one_key.group_key());
       *one_key = one_key.offset(Scalar::from(offset));
@@ -315,16 +326,16 @@ impl Coin for Bitcoin {
 
   fn tweak_key<'a>(&self, one_key: &'a mut ThresholdKeys<Self::Curve>) {
     if one_key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
-      dbg!("-------EVEN-------");
+      dbg!("-------EVEN 1key-------");
       //dbg!(&one_key);
-      dbg!(&one_key.group_key().to_encoded_point(true));
-      dbg!("-------EVEN-------");
+      //dbg!(&one_key.group_key().to_encoded_point(true));
+      //dbg!("-------EVEN-------");
     }
     else {
-      dbg!("-------ODD-------");
+      //dbg!("-------ODD-------");
       //dbg!(&one_key);
-      dbg!(&one_key.group_key().to_encoded_point(true));
-      dbg!("-------ODD-------");
+      //dbg!(&one_key.group_key().to_encoded_point(true));
+      dbg!("-------ODD 1key-------");
     }
     let (_, offset) = make_even(one_key.group_key());
     *one_key = one_key.offset(Scalar::from(offset));
@@ -364,7 +375,7 @@ impl Coin for Bitcoin {
     //dbg!(&main_addr.script_pubkey());
     for one_transaction in block_details.tx {
       for output_tx in one_transaction.vout {
-        dbg!(&output_tx.script_pub_key.asm);
+        //dbg!(&output_tx.script_pub_key.asm);
         //if output_tx.script_pub_key.script().unwrap().cmp(&main_addr.script_pubkey()).is_eq() {
         println!("It is spendable");
         utxos.push(Output(SpendableOutput {
