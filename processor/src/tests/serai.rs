@@ -17,7 +17,7 @@ async fn get_events() {
   let mut rpc = RpcModule::new(next_id.clone());
   rpc
     .register_async_method("processor_coinUpdates", |_, context| async move {
-      tokio::time::sleep(Duration::from_millis(1500)).await;
+      tokio::time::sleep(Duration::from_millis(1000)).await;
       let batch = Batch {
         id: *context.lock().unwrap(),
         instructions: vec![InInstruction {
@@ -49,6 +49,6 @@ async fn get_events() {
     if let Some(batch) = batches.get(0) {
       *next_id.lock().unwrap() = dbg!(batch).id + 1;
     }
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::time::sleep(Duration::from_millis(1)).await;
   }
 }
