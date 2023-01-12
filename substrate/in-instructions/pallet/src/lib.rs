@@ -42,7 +42,7 @@ pub struct Batch {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
 pub struct PendingBatch {
-  // Height this batch was initially reported at
+  // Block number this batch was initially reported at
   pub reported_at: u32,
   pub batch: Batch,
 }
@@ -58,9 +58,9 @@ pub enum InherentError {
   #[cfg_attr(feature = "std", error("inherent has {0} coins despite us having {1}"))]
   InvalidCoins(u32, u32),
   #[cfg_attr(feature = "std", error("inherent has block number {0} despite us having {1}"))]
-  UnrecognizedHeight(u32, u32),
+  UnrecognizedBlockNumber(u32, u32),
   #[cfg_attr(feature = "std", error("inherent has block number {0} which doesn't succeed {1}"))]
-  InvalidHeight(u32, u32),
+  InvalidBlockNumber(u32, u32),
   #[cfg_attr(feature = "std", error("coin {0} has {1} more batches than we do"))]
   UnrecognizedBatch(u32, u32),
   #[cfg_attr(feature = "std", error("coin {0} has an invalid batch"))]
@@ -73,8 +73,8 @@ impl IsFatalError for InherentError {
   fn is_fatal_error(&self) -> bool {
     match self {
       InherentError::InvalidCall | InherentError::InvalidCoins(..) => true,
-      InherentError::UnrecognizedHeight(..) => false,
-      InherentError::InvalidHeight(..) => true,
+      InherentError::UnrecognizedBlockNumber(..) => false,
+      InherentError::InvalidBlockNumber(..) => true,
       InherentError::UnrecognizedBatch(..) => false,
       InherentError::InvalidBatch(..) => true,
       // One of our nodes is definitively wrong. If it's ours (signified by it passing consensus),
@@ -109,7 +109,7 @@ pub mod pallet {
   pub(crate) type Once<T: Config> = StorageValue<_, bool, ValueQuery>;
   #[pallet::storage]
   #[pallet::getter(fn block_number)]
-  pub(crate) type Heights<T: Config> = StorageMap<_, Blake2_256, u32, u32, ValueQuery>;
+  pub(crate) type BlockNumbers<T: Config> = StorageMap<_, Blake2_256, u32, u32, ValueQuery>;
   #[pallet::storage]
   #[pallet::getter(fn executed_batches)]
   pub(crate) type Executed<T: Config> = StorageMap<_, Blake2_256, u32, u32, ValueQuery>;
@@ -133,7 +133,7 @@ pub mod pallet {
       for (c, coin) in coins.iter().enumerate() {
         if let Some(coin) = coin {
           let c = c.try_into().unwrap();
-          Heights::<T>::insert(c, coin.block_number);
+          BlockNumbers::<T>::insert(c, coin.block_number);
 
           for batch in &coin.batches {
             // TODO: EXECUTE
@@ -208,12 +208,12 @@ pub mod pallet {
           match both {
             (Some(coin), Some(pending)) => {
               if coin.block_number > pending.block_number {
-                Err(InherentError::UnrecognizedHeight(coin.block_number, pending.block_number))?;
+                Err(InherentError::UnrecognizedBlockNumber(coin.block_number, pending.block_number))?;
               }
 
-              let prev = Heights::<T>::get(c);
+              let prev = BlockNumbers::<T>::get(c);
               if coin.block_number <= prev {
-                Err(InherentError::InvalidHeight(coin.block_number, prev))?;
+                Err(InherentError::InvalidBlockNumber(coin.block_number, prev))?;
               }
 
               if coin.batches.len() > pending.batches.len() {
