@@ -1,6 +1,9 @@
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
+#[cfg(feature = "std")]
+use serde::{Serialize, Deserialize};
+
 #[cfg(not(feature = "std"))]
 use sp_std::Debug;
 use sp_core::{ConstU32, bounded::BoundedVec};
@@ -10,6 +13,7 @@ use serai_primitives::{NativeAddress, Coin, Amount};
 use crate::{MAX_DATA_LEN, ExternalAddress, ExternalInInstruction, OutInstruction};
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum Shorthand {
   Raw(BoundedVec<u8, ConstU32<{ MAX_DATA_LEN }>>),
   Swap {

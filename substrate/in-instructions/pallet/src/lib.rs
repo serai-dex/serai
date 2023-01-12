@@ -11,18 +11,12 @@ use serde::{Serialize, Deserialize};
 use sp_std::vec::Vec;
 use sp_inherents::{InherentData, InherentIdentifier, IsFatalError};
 
+use in_instructions_primitives::InInstruction;
+
 pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 // Amount of blocks to delay creating an inherent with a certain batch of transactions to increase
 // the odds of synchrony
 const DELAY: u32 = 2;
-
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]
-pub struct InInstruction {
-  pub destination: [u8; 32],
-  pub amount: u64,
-  pub data: Vec<u8>,
-}
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, Encode, Decode, scale_info::TypeInfo, sp_runtime::RuntimeDebug)]

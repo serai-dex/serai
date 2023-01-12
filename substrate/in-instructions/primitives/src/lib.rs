@@ -6,6 +6,9 @@
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
+#[cfg(feature = "std")]
+use serde::{Serialize, Deserialize};
+
 #[cfg(not(feature = "std"))]
 use sp_std::Debug;
 use sp_core::{ConstU32, bounded::BoundedVec};
@@ -17,6 +20,7 @@ pub const MAX_ADDRESS_LEN: u32 = 74;
 pub const MAX_DATA_LEN: u32 = 512;
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct ExternalAddress(BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>);
 impl ExternalAddress {
   pub fn new(address: Vec<u8>) -> Result<ExternalAddress, &'static str> {
