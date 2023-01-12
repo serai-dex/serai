@@ -30,10 +30,7 @@ test!(
       let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
       scanner.register_subaddress(subaddress);
 
-      builder.add_payment(
-        view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress)),
-        5,
-      );
+      builder.add_payment(view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress)), 5);
       (builder.build().unwrap(), (scanner, subaddress))
     },
     |_, tx: Transaction, _, mut state: (Scanner, (u32, u32))| async move {

@@ -19,10 +19,15 @@ mod runner;
 
 #[derive(Deserialize, Debug)]
 struct AddressResponse {
-  address: String
+  address: String,
 }
 
-async fn create_rpc_wallet(wallet_rpc: &Rpc, spend: Scalar, view: Zeroizing<Scalar>, address: &str) {
+async fn create_rpc_wallet(
+  wallet_rpc: &Rpc,
+  spend: Scalar,
+  view: Zeroizing<Scalar>,
+  address: &str,
+) {
   let params = json!({
       "file_name": "test_wallet",
       "password": "pass",
@@ -50,7 +55,7 @@ async fn make_tx(wallet_rpc: &Rpc, to: &str, amount: u64) -> [u8; 32] {
       "get_tx_hex": false,
   });
   let resp =
-  wallet_rpc.json_rpc_call::<TransactionResponse>("transfer_split", Some(params)).await.unwrap();
+    wallet_rpc.json_rpc_call::<TransactionResponse>("transfer_split", Some(params)).await.unwrap();
 
   if resp.tx_hash_list.is_empty() {
     panic!("something went wrong creating tx");
@@ -60,11 +65,9 @@ async fn make_tx(wallet_rpc: &Rpc, to: &str, amount: u64) -> [u8; 32] {
 }
 
 async fn wallet_rpc_address(wallet_rpc: &Rpc) -> Option<MoneroAddress> {
-
-  let resp = wallet_rpc.json_rpc_call::<AddressResponse>(
-    "get_address",
-    Some(json!({"account_index": 0})))
-  .await;
+  let resp = wallet_rpc
+    .json_rpc_call::<AddressResponse>("get_address", Some(json!({"account_index": 0})))
+    .await;
 
   if resp.is_err() {
     return None;
@@ -89,14 +92,15 @@ async fn test_from_wallet_rpc_to(spec: AddressSpec) {
 
   // make tx to an addr
   let (_, view_pair, _) = runner::random_address();
-  let tx_id = make_tx(&wallet_rpc, &view_pair.address(Network::Mainnet, spec).to_string(), 1000000).await;
+  let tx_id =
+    make_tx(&wallet_rpc, &view_pair.address(Network::Mainnet, spec).to_string(), 1000000).await;
 
   // unlock it
   runner::mine_until_unlocked(&daemon_rpc, &wallet_rpc_addr.to_string(), tx_id).await;
 
   // create the scanner
   let mut scanner = Scanner::from_view(view_pair, Some(HashSet::new()));
-  if let AddressSpec::Subaddress(index) = spec  {
+  if let AddressSpec::Subaddress(index) = spec {
     scanner.register_subaddress(index);
   }
 
@@ -107,7 +111,7 @@ async fn test_from_wallet_rpc_to(spec: AddressSpec) {
   match spec {
     AddressSpec::Subaddress(index) => assert_eq!(output.metadata.subaddress, index),
     AddressSpec::Integrated(payment_id) => assert_eq!(output.metadata.payment_id, payment_id),
-    _ => {},
+    _ => {}
   }
   assert_eq!(output.commitment().amount, 1000000);
 }
@@ -126,5 +130,4 @@ async_sequential!(
     OsRng.fill_bytes(&mut payment_id);
     test_from_wallet_rpc_to(AddressSpec::Integrated(payment_id)).await;
   }
-
 );
