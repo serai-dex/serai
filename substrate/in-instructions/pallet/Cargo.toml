@@ -26,7 +26,7 @@ sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-in-instructions-primitives = { path = "../primitives" }
+in-instructions-primitives = { path = "../primitives", default-features = false }
 
 [features]
 std = [
@@ -43,5 +43,7 @@ std = [
 
   "frame-system/std",
   "frame-support/std",
+
+  "in-instructions-primitives/std",
 ]
 default = ["std"]

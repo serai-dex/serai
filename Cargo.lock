@@ -3334,6 +3334,7 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "in-instructions-primitives",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -3350,8 +3351,8 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
+ "serde",
  "sp-core",
- "sp-std",
  "thiserror",
 ]
 

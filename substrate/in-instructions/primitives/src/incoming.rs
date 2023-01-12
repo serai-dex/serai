@@ -4,8 +4,6 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
-#[cfg(not(feature = "std"))]
-use sp_std::Debug;
 use sp_core::{ConstU32, bounded::BoundedVec};
 
 use serai_primitives::NativeAddress;

@@ -9,8 +9,6 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
-#[cfg(not(feature = "std"))]
-use sp_std::Debug;
 use sp_core::{ConstU32, bounded::BoundedVec};
 
 // Monero, our current longest address candidate, has a longest address of featured with payment ID
@@ -23,6 +21,7 @@ pub const MAX_DATA_LEN: u32 = 512;
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct ExternalAddress(BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>);
 impl ExternalAddress {
+  #[cfg(feature = "std")]
   pub fn new(address: Vec<u8>) -> Result<ExternalAddress, &'static str> {
     Ok(ExternalAddress(address.try_into().map_err(|_| "address length exceeds {MAX_ADDRESS_LEN}")?))
   }
@@ -31,6 +30,7 @@ impl ExternalAddress {
     self.0.as_ref()
   }
 
+  #[cfg(feature = "std")]
   pub fn consume(self) -> Vec<u8> {
     self.0.into_inner()
   }
