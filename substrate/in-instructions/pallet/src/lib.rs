@@ -74,7 +74,10 @@ impl IsFatalError for InherentError {
       InherentError::UnrecognizedBatches(..) => false,
       InherentError::InvalidBatch(..) => true,
       // One of our nodes is definitively wrong. If it's ours (signified by it passing consensus),
-      // we should panic
+      // we should panic. If it's theirs, they should be slashed
+      // Unfortunately, we can't return fatal here to trigger a slash as fatal should only be used
+      // for undeniable, technical invalidity
+      // TODO: Code a way in which this still triggers a slash vote
       InherentError::DifferentBatch(..) => false,
     }
   }
