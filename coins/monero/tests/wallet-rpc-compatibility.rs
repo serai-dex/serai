@@ -12,7 +12,7 @@ use monero_rpc::{
 };
 
 use monero_serai::{
-  wallet::address::{Network, AddressSpec},
+  wallet::address::{Network, AddressSpec, SubaddressIndex},
   wallet::Scanner,
 };
 
@@ -64,7 +64,7 @@ async fn test_from_wallet_rpc_to(spec: AddressSpec) {
   let output = scanner.scan_transaction(&tx).ignore_timelock().swap_remove(0);
 
   match spec {
-    AddressSpec::Subaddress(index) => assert_eq!(output.metadata.subaddress, index),
+    AddressSpec::Subaddress(index) => assert_eq!(output.metadata.subaddress, Some(index)),
     AddressSpec::Integrated(payment_id) => assert_eq!(output.metadata.payment_id, payment_id),
     _ => {}
   }
@@ -77,7 +77,7 @@ async_sequential!(
   }
 
   async fn test_receipt_of_wallet_rpc_tx_subaddress() {
-    test_from_wallet_rpc_to(AddressSpec::Subaddress((0, 1))).await;
+    test_from_wallet_rpc_to(AddressSpec::Subaddress(SubaddressIndex::new(0, 1).unwrap())).await;
   }
 
   async fn test_receipt_of_wallet_rpc_tx_integrated() {
