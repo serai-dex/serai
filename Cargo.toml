@@ -15,7 +15,6 @@ members = [
   "crypto/dleq",
   "crypto/dkg",
   "crypto/frost",
-  "crypto/schnorrkel",
 
   "coins/ethereum",
   "coins/monero/generators",
