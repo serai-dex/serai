@@ -33,11 +33,11 @@ runs:
         RUNNER_OS=linux
         RUNNER_ARCH=x64
 
-        FILE=monero-wallet-rpc-$RUNNER_OS-$RUNNER_ARCH-${{ inputs.version }}.tar.bz2
+        FILE=monero-$RUNNER_OS-$RUNNER_ARCH-${{ inputs.version }}.tar.bz2
         wget https://downloads.getmonero.org/cli/$FILE
         tar -xvf $FILE
 
-        mv monero-wallet-rpc-x86_64-linux-gnu-${{ inputs.version }}/monero-wallet-rpc monero-wallet-rpc
+        mv monero-x86_64-linux-gnu-${{ inputs.version }}/monero-wallet-rpc  monero-wallet-rpc 
 
     - name: Monero Wallet RPC
       shell: bash
