@@ -67,10 +67,6 @@ impl SignableTransaction {
       transcript.append_message(b"payment_amount", payment.value.to_le_bytes());
     }
 
-    for _ in self.tx.inputs.iter() {
-      sigs.push(AlgorithmMachine::new(algorithm.clone(), keys.clone()).unwrap());
-    }
-
     return Ok(TransactionMachine { signable: self, transcript, sigs });
   }
 }
