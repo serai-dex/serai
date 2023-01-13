@@ -10,19 +10,28 @@ use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_serai::{
   transaction::Transaction,
-  block::Block,
+  block::Block as MBlock,
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
-    address::{Network, AddressSpec, MoneroAddress},
+    address::{Network, SubaddressIndex, AddressSpec, MoneroAddress},
     Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
 
 use crate::{
   additional_key,
-  coin::{CoinError, Output as OutputTrait, Coin},
+  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin},
 };
+
+#[derive(Clone, Debug)]
+pub struct Block([u8; 32], MBlock);
+impl BlockTrait for Block {
+  type Id = [u8; 32];
+  fn id(&self) -> Self::Id {
+    self.0
+  }
+}
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -32,11 +41,24 @@ impl From<SpendableOutput> for Output {
   }
 }
 
+const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
+const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
+const CHANGE_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(2, 0);
+
 impl OutputTrait for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
-  // While the Monero library offers a variant which allows senders to ensure their TXs have unique
-  // output keys, Serai can still be targeted using the classic burning bug
+  // While we already are immune, thanks to using featured address, this doesn't hurt and is
+  // technically more efficient.
   type Id = [u8; 32];
+
+  fn kind(&self) -> OutputType {
+    match self.0.output.metadata.subaddress {
+      EXTERNAL_SUBADDRESS => OutputType::External,
+      BRANCH_SUBADDRESS => OutputType::Branch,
+      CHANGE_SUBADDRESS => OutputType::Change,
+      _ => panic!("unrecognized address was scanned for"),
+    }
+  }
 
   fn id(&self) -> Self::Id {
     self.0.output.data.key.compress().to_bytes()
@@ -50,8 +72,8 @@ impl OutputTrait for Output {
     self.0.serialize()
   }
 
-  fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-    SpendableOutput::deserialize(reader).map(Output)
+  fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    SpendableOutput::read(reader).map(Output)
   }
 }
 
@@ -79,8 +101,23 @@ impl Monero {
     ViewPair::new(spend.0, self.view.clone())
   }
 
+  fn address_internal(
+    &self,
+    spend: dfg::EdwardsPoint,
+    subaddress: Option<SubaddressIndex>,
+  ) -> MoneroAddress {
+    self.view_pair(spend).address(
+      Network::Mainnet,
+      AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
+    )
+  }
+
   fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
-    Scanner::from_view(self.view_pair(spend), None)
+    let mut scanner = Scanner::from_view(self.view_pair(spend), None);
+    debug_assert!(EXTERNAL_SUBADDRESS.is_none());
+    scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
+    scanner.register_subaddress(CHANGE_SUBADDRESS.unwrap());
+    scanner
   }
 
   #[cfg(test)]
@@ -126,7 +163,11 @@ impl Coin for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    self.view_pair(key).address(Network::Mainnet, AddressSpec::Featured(None, None, true))
+    self.address_internal(key, EXTERNAL_SUBADDRESS)
+  }
+
+  fn branch_address(&self, key: dfg::EdwardsPoint) -> Self::Address {
+    self.address_internal(key, BRANCH_SUBADDRESS)
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -135,7 +176,9 @@ impl Coin for Monero {
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
-    self.rpc.get_block(number).await.map_err(|_| CoinError::ConnectionError)
+    let hash = self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?;
+    let block = self.rpc.get_block(hash).await.map_err(|_| CoinError::ConnectionError)?;
+    Ok(Block(hash, block))
   }
 
   async fn get_outputs(
@@ -143,27 +186,33 @@ impl Coin for Monero {
     block: &Self::Block,
     key: dfg::EdwardsPoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
-    Ok(
-      self
-        .scanner(key)
-        .scan(&self.rpc, block)
-        .await
-        .map_err(|_| CoinError::ConnectionError)?
-        .iter()
-        .flat_map(|outputs| outputs.not_locked())
-        .map(Output::from)
-        .collect(),
-    )
-  }
-
-  async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
-    let tx_block_number = self
-      .rpc
-      .get_transaction_block_number(tx)
+    let mut transactions = self
+      .scanner(key)
+      .scan(&self.rpc, &block.1)
       .await
       .map_err(|_| CoinError::ConnectionError)?
-      .unwrap_or(usize::MAX);
-    Ok((self.get_latest_block_number().await?.saturating_sub(tx_block_number) + 1) >= 10)
+      .iter()
+      .map(|outputs| outputs.not_locked())
+      .collect::<Vec<_>>();
+
+    // This should be pointless as we shouldn't be able to scan for any other subaddress
+    // This just ensures nothing invalid makes it through
+    for transaction in transactions.iter_mut() {
+      *transaction = transaction
+        .drain(..)
+        .filter(|output| {
+          [EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS]
+            .contains(&output.output.metadata.subaddress)
+        })
+        .collect();
+    }
+
+    Ok(
+      transactions
+        .drain(..)
+        .flat_map(|mut outputs| outputs.drain(..).map(Output::from).collect::<Vec<_>>())
+        .collect(),
+    )
   }
 
   async fn prepare_send(
@@ -173,9 +222,9 @@ impl Coin for Monero {
     block_number: usize,
     mut inputs: Vec<Output>,
     payments: &[(MoneroAddress, u64)],
+    change: Option<dfg::EdwardsPoint>,
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
-    let spend = keys.group_key();
     Ok(SignableTransaction {
       keys,
       transcript,
@@ -184,7 +233,7 @@ impl Coin for Monero {
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
-        Some(self.address(spend)),
+        change.map(|change| self.address_internal(change, CHANGE_SUBADDRESS)),
         vec![],
         fee,
       )
@@ -255,7 +304,7 @@ impl Coin for Monero {
     }
 
     let outputs = Self::test_scanner()
-      .scan(&self.rpc, &self.rpc.get_block(new_block).await.unwrap())
+      .scan(&self.rpc, &self.rpc.get_block_by_number(new_block).await.unwrap())
       .await
       .unwrap()
       .swap_remove(0)

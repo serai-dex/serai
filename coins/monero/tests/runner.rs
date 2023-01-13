@@ -43,7 +43,7 @@ pub async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
   let mut height = rpc.get_height().await.unwrap();
   let mut found = false;
   while !found {
-    let block = rpc.get_block(height - 1).await.unwrap();
+    let block = rpc.get_block_by_number(height - 1).await.unwrap();
     found = match block.txs.iter().find(|&&x| x == tx_hash) {
       Some(_) => true,
       None => {
@@ -69,7 +69,7 @@ pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput 
     .await
     .unwrap();
 
-  let block = rpc.get_block(start).await.unwrap();
+  let block = rpc.get_block_by_number(start).await.unwrap();
   scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
 }
 

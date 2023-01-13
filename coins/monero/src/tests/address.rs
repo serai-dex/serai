@@ -83,13 +83,14 @@ fn featured() {
 
         let subaddress = (features & SUBADDRESS_FEATURE_BIT) == SUBADDRESS_FEATURE_BIT;
 
-        let mut id = [0; 8];
-        OsRng.fill_bytes(&mut id);
-        let id = Some(id).filter(|_| (features & INTEGRATED_FEATURE_BIT) == INTEGRATED_FEATURE_BIT);
+        let mut payment_id = [0; 8];
+        OsRng.fill_bytes(&mut payment_id);
+        let payment_id = Some(payment_id)
+          .filter(|_| (features & INTEGRATED_FEATURE_BIT) == INTEGRATED_FEATURE_BIT);
 
         let guaranteed = (features & GUARANTEED_FEATURE_BIT) == GUARANTEED_FEATURE_BIT;
 
-        let kind = AddressType::Featured(subaddress, id, guaranteed);
+        let kind = AddressType::Featured { subaddress, payment_id, guaranteed };
         let meta = AddressMeta::new(network, kind);
         let addr = MoneroAddress::new(meta, spend, view);
 
@@ -100,7 +101,7 @@ fn featured() {
         assert_eq!(addr.view, view);
 
         assert_eq!(addr.subaddress(), subaddress);
-        assert_eq!(addr.payment_id(), id);
+        assert_eq!(addr.payment_id(), payment_id);
         assert_eq!(addr.guaranteed(), guaranteed);
       }
     }
@@ -159,7 +160,11 @@ fn featured_vectors() {
       MoneroAddress::new(
         AddressMeta::new(
           network,
-          AddressType::Featured(vector.subaddress, vector.payment_id, vector.guaranteed)
+          AddressType::Featured {
+            subaddress: vector.subaddress,
+            payment_id: vector.payment_id,
+            guaranteed: vector.guaranteed
+          }
         ),
         spend,
         view

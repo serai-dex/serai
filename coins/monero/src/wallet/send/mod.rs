@@ -311,7 +311,7 @@ impl SignableTransaction {
       let mut extra = Extra::new(outputs.iter().map(|output| output.R).collect());
 
       let mut id_vec = Vec::with_capacity(1 + 8);
-      PaymentId::Encrypted(id).serialize(&mut id_vec).unwrap();
+      PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
       extra.push(ExtraField::Nonce(id_vec));
 
       // Include data if present
@@ -320,7 +320,7 @@ impl SignableTransaction {
       }
 
       let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len(), self.data.as_ref()));
-      extra.serialize(&mut serialized).unwrap();
+      extra.write(&mut serialized).unwrap();
       serialized
     };
 

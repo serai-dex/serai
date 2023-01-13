@@ -41,18 +41,17 @@ impl ClsagInput {
     // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
     // Ring index
-    transcript.append_message(b"ring_index", [self.decoys.i]);
+    transcript.append_message(b"real_spend", [self.decoys.i]);
 
     // Ring
-    let mut ring = vec![];
-    for pair in &self.decoys.ring {
+    for (i, pair) in self.decoys.ring.iter().enumerate() {
       // Doesn't include global output indexes as CLSAG doesn't care and won't be affected by it
       // They're just a unreliable reference to this data which will be included in the message
       // if in use
-      ring.extend(pair[0].compress().to_bytes());
-      ring.extend(pair[1].compress().to_bytes());
+      transcript.append_message(b"member", [u8::try_from(i).expect("ring size exceeded 255")]);
+      transcript.append_message(b"key", pair[0].compress().to_bytes());
+      transcript.append_message(b"commitment", pair[1].compress().to_bytes())
     }
-    transcript.append_message(b"ring", ring);
 
     // Doesn't include the commitment's parts as the above ring + index includes the commitment
     // The only potential malleability would be if the G/H relationship is known breaking the

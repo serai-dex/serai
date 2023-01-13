@@ -18,10 +18,7 @@ jobs:
           key: rust-advisory-db
 
       - name: Install cargo
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo deny
         run: cargo install --locked cargo-deny
