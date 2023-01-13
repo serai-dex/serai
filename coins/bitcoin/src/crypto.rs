@@ -4,10 +4,11 @@ use k256::{
   elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, sec1::Tag},
   ProjectivePoint, U256, Scalar,
 };
-use bitcoin::util::sighash;
-
-use bitcoin::psbt::{self, PartiallySignedTransaction};
-use bitcoin::{SchnorrSighashType, TxOut};
+use bitcoin::{
+  util::sighash,
+  psbt::{self, PartiallySignedTransaction},
+  SchnorrSighashType, TxOut,
+};
 
 pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   let mut c = 0;
@@ -43,37 +44,37 @@ impl Hram<Secp256k1> for BitcoinHram {
 /// Signing error
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SignerError {
-    /// The private key is missing for the required public key
-    MissingKey,
-    /// The private key in use has the right fingerprint but derives differently than expected
-    InvalidKey,
-    /// The user canceled the operation
-    UserCanceled,
-    /// Input index is out of range
-    InputIndexOutOfRange,
-    /// The `non_witness_utxo` field of the transaction is required to sign this input
-    MissingNonWitnessUtxo,
-    /// The `non_witness_utxo` specified is invalid
-    InvalidNonWitnessUtxo,
-    /// The `witness_utxo` field of the transaction is required to sign this input
-    MissingWitnessUtxo,
-    /// The `witness_script` field of the transaction is required to sign this input
-    MissingWitnessScript,
-    /// The fingerprint and derivation path are missing from the psbt input
-    MissingHdKeypath,
-    /// The psbt contains a non-`SIGHASH_ALL` sighash in one of its input and the user hasn't
-    /// explicitly allowed them
-    ///
-    /// To enable signing transactions with non-standard sighashes set
-    /// [`SignOptions::allow_all_sighashes`] to `true`.
-    NonStandardSighash,
-    /// Invalid SIGHASH for the signing context in use
-    InvalidSighash,
-    /// Error while computing the hash to sign
-    SighashError(sighash::Error),
-    /// Error while signing using hardware wallets
-    #[cfg(feature = "hardware-signer")]
-    HWIError(hwi::error::Error),
+  /// The private key is missing for the required public key
+  MissingKey,
+  /// The private key in use has the right fingerprint but derives differently than expected
+  InvalidKey,
+  /// The user canceled the operation
+  UserCanceled,
+  /// Input index is out of range
+  InputIndexOutOfRange,
+  /// The `non_witness_utxo` field of the transaction is required to sign this input
+  MissingNonWitnessUtxo,
+  /// The `non_witness_utxo` specified is invalid
+  InvalidNonWitnessUtxo,
+  /// The `witness_utxo` field of the transaction is required to sign this input
+  MissingWitnessUtxo,
+  /// The `witness_script` field of the transaction is required to sign this input
+  MissingWitnessScript,
+  /// The fingerprint and derivation path are missing from the psbt input
+  MissingHdKeypath,
+  /// The psbt contains a non-`SIGHASH_ALL` sighash in one of its input and the user hasn't
+  /// explicitly allowed them
+  ///
+  /// To enable signing transactions with non-standard sighashes set
+  /// [`SignOptions::allow_all_sighashes`] to `true`.
+  NonStandardSighash,
+  /// Invalid SIGHASH for the signing context in use
+  InvalidSighash,
+  /// Error while computing the hash to sign
+  SighashError(sighash::Error),
+  /// Error while signing using hardware wallets
+  #[cfg(feature = "hardware-signer")]
+  HWIError(hwi::error::Error),
 }
 
 pub trait PSBTUtils {
@@ -82,23 +83,23 @@ pub trait PSBTUtils {
 
 impl PSBTUtils for PartiallySignedTransaction {
   fn get_utxo_for(&self, input_index: usize) -> Option<TxOut> {
-      let tx = &self.unsigned_tx;
+    let tx = &self.unsigned_tx;
 
-      if input_index >= tx.input.len() {
-          return None;
-      }
+    if input_index >= tx.input.len() {
+      return None;
+    }
 
-      if let Some(input) = self.inputs.get(input_index) {
-          if let Some(wit_utxo) = &input.witness_utxo {
-              Some(wit_utxo.clone())
-          } else if let Some(in_tx) = &input.non_witness_utxo {
-              Some(in_tx.output[tx.input[input_index].previous_output.vout as usize].clone())
-          } else {
-              None
-          }
+    if let Some(input) = self.inputs.get(input_index) {
+      if let Some(wit_utxo) = &input.witness_utxo {
+        Some(wit_utxo.clone())
+      } else if let Some(in_tx) = &input.non_witness_utxo {
+        Some(in_tx.output[tx.input[input_index].previous_output.vout as usize].clone())
       } else {
-          None
+        None
       }
+    } else {
+      None
+    }
   }
 }
 
@@ -107,38 +108,28 @@ pub fn taproot_key_spend_signature_hash(
   input_index: usize,
 ) -> Result<(bitcoin::util::taproot::TapSighashHash, SchnorrSighashType), SignerError> {
   if input_index >= psbt.inputs.len() || input_index >= psbt.unsigned_tx.input.len() {
-      return Err(SignerError::InputIndexOutOfRange);
+    return Err(SignerError::InputIndexOutOfRange);
   }
 
   let psbt_input = &psbt.inputs[input_index];
 
   let sighash_type = psbt_input
-      .sighash_type
-      .unwrap_or_else(|| SchnorrSighashType::Default.into())
-      .schnorr_hash_ty()
-      .map_err(|_| SignerError::InvalidSighash)?;
-  let witness_utxos = (0..psbt.inputs.len())
-      .map(|i| psbt.get_utxo_for(i))
-      .collect::<Vec<_>>();
+    .sighash_type
+    .unwrap_or_else(|| SchnorrSighashType::Default.into())
+    .schnorr_hash_ty()
+    .map_err(|_| SignerError::InvalidSighash)?;
+  let witness_utxos = (0..psbt.inputs.len()).map(|i| psbt.get_utxo_for(i)).collect::<Vec<_>>();
   let mut all_witness_utxos = vec![];
 
   let mut cache = sighash::SighashCache::new(&psbt.unsigned_tx);
   let prevouts = if witness_utxos.iter().all(Option::is_some) {
-      all_witness_utxos.extend(witness_utxos.iter().filter_map(|x| x.as_ref()));
-      sighash::Prevouts::All(&all_witness_utxos)
+    all_witness_utxos.extend(witness_utxos.iter().filter_map(|x| x.as_ref()));
+    sighash::Prevouts::All(&all_witness_utxos)
   } else {
-      return Err(SignerError::MissingWitnessUtxo);
+    return Err(SignerError::MissingWitnessUtxo);
   };
 
-  
-  let hash = cache.taproot_key_spend_signature_hash(
-    input_index,
-    &prevouts,
-    sighash_type,
-  );
+  let hash = cache.taproot_key_spend_signature_hash(input_index, &prevouts, sighash_type);
 
-  Ok((
-      hash.unwrap(),
-      sighash_type,
-  ))
+  Ok((hash.unwrap(), sighash_type))
 }
