@@ -128,22 +128,12 @@ impl Coin for Bitcoin {
   const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: ProjectivePoint) -> Self::Address {
-    //let secp = secp256k1::Secp256k1::new();
-    //dbg!("-------ADDRESS-------");
-    //dbg!(&key);
-    //dbg!(&key.to_encoded_point(true));
-    //dbg!(&key.to_encoded_point(true).tag());
-    //dbg!("-------ADDRESS-------");
     assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
-    //let pubkey = bitcoin::util::key::PublicKey::from_slice(key.to_encoded_point(true).as_bytes()).unwrap();
     let xonly_pubkey =
       XOnlyPublicKey::from_slice(&key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
 
     let tweaked_pubkey = bitcoin::schnorr::TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
-    //let last_addr = Address::p2tr(&secp, xonly_pubkey, None, bitcoin::network::constants::Network::Regtest);
     let result_addr = Address::p2tr_tweaked(tweaked_pubkey, bitcoin::network::constants::Network::Regtest);
-    //dbg!(&last_addr);
-    //dbg!(&result_addr);
     result_addr
   }
 
@@ -175,19 +165,14 @@ impl Coin for Bitcoin {
     block: &Self::Block,
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
-    //dbg!("get outputs");
     let main_addr = self.address(key);
     self.rpc.generate_to_address(1, main_addr.to_string().as_str()).await.unwrap();
-    //dbg!(&main_addr);
     let block_details = self.rpc.get_block_with_transactions(&block.block_hash()).await.unwrap();
-    //dbg!(&main_addr.script_pubkey());
     let mut outputs = Vec::new();
     for one_transaction in block_details.tx {
       for output_tx in one_transaction.vout {
-        //dbg!(&output_tx.script_pub_key.asm);
-        //dbg!(&main_addr.script_pubkey());
         if output_tx.script_pub_key.script().unwrap().cmp(&main_addr.script_pubkey()).is_eq() {
-          println!("It is spendable");
+          println!("It is spendable {}",output_tx.value.to_sat());
           outputs.push(Output(SpendableOutput {
             txid: one_transaction.txid,
             vout: output_tx.n,
@@ -196,9 +181,7 @@ impl Coin for Bitcoin {
         }
       }
     }
-    //dbg!(&outputs);
     return Ok(outputs);
-    //return Err(CoinError::ConnectionError);
   }
 
   async fn prepare_send(
@@ -250,7 +233,6 @@ impl Coin for Bitcoin {
     return Ok(SignableTransaction { keys: keys, transcript: transcript, height: block_number+1, actual: MSignableTransaction{tx: psbt} });
   }
 
-  //TODO: Add sending logic
   async fn attempt_send(
     &self,
     transaction: Self::SignableTransaction,
@@ -298,17 +280,7 @@ impl Coin for Bitcoin {
   fn tweak_keys<'a>(&self, keys: &'a mut HashMap<u16, ThresholdKeys<Self::Curve>>) {
     for (_, one_key) in keys.iter_mut() {
       if one_key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
-        dbg!("-------EVEN keys-------");
-        //dbg!(&one_key);
-        //dbg!(&one_key.group_key().to_encoded_point(true));
-        //dbg!("-------EVEN-------");
         continue;
-      }
-      else {
-        dbg!("-------ODD keys-------");
-        //dbg!(&one_key);
-        //dbg!(&one_key.group_key().to_encoded_point(true));
-        //dbg!("-------ODD-------");
       }
       let (_, offset) = make_even(one_key.group_key());
       *one_key = one_key.offset(Scalar::from(offset));
@@ -317,16 +289,7 @@ impl Coin for Bitcoin {
 
   fn tweak_key<'a>(&self, one_key: &'a mut ThresholdKeys<Self::Curve>) {
     if one_key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
-      dbg!("-------EVEN 1key-------");
-      //dbg!(&one_key);
-      //dbg!(&one_key.group_key().to_encoded_point(true));
-      //dbg!("-------EVEN-------");
-    }
-    else {
-      //dbg!("-------ODD-------");
-      //dbg!(&one_key);
-      //dbg!(&one_key.group_key().to_encoded_point(true));
-      dbg!("-------ODD 1key-------");
+      return;
     }
     let (_, offset) = make_even(one_key.group_key());
     *one_key = one_key.offset(Scalar::from(offset));
@@ -338,16 +301,28 @@ impl Coin for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn mine_block(&self) {
+  async fn mine_block(&self, key: Option<ProjectivePoint>, count: Option<usize>) {
     dbg!("mine_block called");
-    let new_addr = self.rpc.get_new_address(None, Some(AddressType::Bech32)).await.unwrap();
-    self.rpc.generate_to_address(1, new_addr.to_string().as_str()).await.unwrap();
+    let mut new_addr = None;
+    if key.is_some() {
+      new_addr = Some(self.address(key.unwrap()));
+    }
+    else {
+      new_addr = Some(self.rpc.get_new_address(None, Some(AddressType::Bech32)).await.unwrap());
+    }
+
+    let mut number_of_block = 1;
+    if count.is_some() {
+      number_of_block = count.unwrap();
+    }
+    
+    self.rpc.generate_to_address(number_of_block, new_addr.unwrap().to_string().as_str()).await.unwrap();
   }
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
     dbg!("Bitcoin test send");
-    let address_str = String::from("bcrt1q7kc7tm3a4qljpw4gg5w73cgya6g9nfydtessgs"); //new_addr.to_string();
+    /*let address_str = String::from("bcrt1q7kc7tm3a4qljpw4gg5w73cgya6g9nfydtessgs"); //new_addr.to_string();
     let from_addr = Address::from_str(address_str.as_str()).unwrap();
 
     let privkey_obj =
@@ -489,6 +464,6 @@ impl Coin for Bitcoin {
       //sign_psbt_schnorr(&privkey_obj.inner, pub1.x_only_public_key().0,None,
       //&mut psbt.inputs[i],tap_sighash,SchnorrSighashType::All,&secp);
       //dbg!(&psbt.inputs[i].tap_key_sig);
-    }
+    }*/
   }
 }
