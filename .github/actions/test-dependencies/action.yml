@@ -29,3 +29,8 @@ runs:
       uses: ./.github/actions/monero
       with:
         version: ${{ inputs.monero-version }}
+
+    - name: Run a Monero Wallet-RPC Client
+      uses: ./.github/actions/monero-wallet-rpc
+      with:
+        version: ${{ inputs.monero-version }}
