@@ -6,9 +6,6 @@ use frame_support::traits::PalletInfo as PalletInfoTrait;
 use frame_system::Config as SysConfig;
 use subxt::{tx::BaseExtrinsicParams, Config, OnlineClient};
 
-use jsonrpsee_core::client::ClientT;
-use jsonrpsee_http_client::HttpClientBuilder;
-
 use serai_primitives::NativeAddress;
 use serai_runtime::{in_instructions_pallet, Signature, PalletInfo, InInstructions, Runtime};
 
@@ -43,20 +40,18 @@ pub(crate) enum SeraiError {
 pub(crate) struct Serai(OnlineClient<SeraiConfig>);
 
 impl Serai {
-  pub(crate) async fn new() -> Self {
-    Serai(OnlineClient::<SeraiConfig>::from_url("ws://127.0.0.1:9944").await.unwrap())
+  pub(crate) async fn new() -> Result<Self, SeraiError> {
+    Ok(Serai(
+      OnlineClient::<SeraiConfig>::from_url("ws://127.0.0.1:9944")
+        .await
+        .map_err(|_| SeraiError::RpcError)?,
+    ))
   }
 
   // Doesn't use subxt as we can't have multiple connections through it yet a global subxt requires
   // unsafe. Directly implementing this primitve allows us to not require multiple subxts
-  pub(crate) async fn get_latest_block_hash() -> Result<[u8; 32], SeraiError> {
-    let hash: <SeraiConfig as Config>::Hash = HttpClientBuilder::default()
-      .build("http://127.0.0.1:9933")
-      .map_err(|_| SeraiError::RpcError)?
-      .request("chain_getFinalizedHead", Vec::<u8>::new())
-      .await
-      .map_err(|_| SeraiError::RpcError)?;
-    Ok(hash.into())
+  pub(crate) async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
+    Ok(self.0.rpc().finalized_head().await.map_err(|_| SeraiError::RpcError)?.into())
   }
 
   pub(crate) async fn get_batch_events(

@@ -10,7 +10,7 @@ use serai_primitives::{BlockNumber, NativeAddress};
 use in_instructions_primitives::{ExternalAddress, Target, InInstruction};
 use serai_runtime::in_instructions_pallet::{Batch, Update};
 
-use jsonrpsee_core::server::rpc_module::RpcModule;
+use jsonrpsee_server::RpcModule;
 
 use crate::serai::{InInstructionsEvent, Serai};
 
@@ -28,8 +28,10 @@ macro_rules! serai_test {
 
         // Spawn a fresh Serai node
         let mut command = Command::new("../target/debug/serai-node").arg("--dev").spawn().unwrap();
-        while Serai::get_latest_block_hash().await.is_err() {
-          tokio::time::sleep(Duration::from_secs(1)).await;
+        {
+          while Serai::new().await.is_err() {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+          }
         }
 
         let local = tokio::task::LocalSet::new();
@@ -80,10 +82,10 @@ serai_test!(
       .start(rpc)
       .unwrap();
 
-    let serai = Serai::new().await;
+    let serai = Serai::new().await.unwrap();
     loop {
       let batches =
-        serai.get_batch_events(Serai::get_latest_block_hash().await.unwrap()).await.unwrap();
+        serai.get_batch_events(serai.get_latest_block_hash().await.unwrap()).await.unwrap();
       if let Some(batch) = batches.get(0) {
         match batch {
           InInstructionsEvent::Batch { id, .. } => {

@@ -39,8 +39,6 @@ frame-system = { git = "https://github.com/serai-dex/substrate" }
 subxt = "0.25"
 
 # JSON-RPC
-jsonrpsee-core = "0.16"
-jsonrpsee-http-client = "0.16"
 jsonrpsee-server = "0.16"
 
 # Serai

@@ -7492,8 +7492,6 @@ dependencies = [
  "group",
  "hex",
  "in-instructions-primitives",
- "jsonrpsee-core",
- "jsonrpsee-http-client",
  "jsonrpsee-server",
  "lazy_static",
  "modular-frost",
