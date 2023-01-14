@@ -1,5 +1,5 @@
 use core::time::Duration;
-use std::{sync::Arc, process::Command};
+use std::process::Command;
 
 use lazy_static::lazy_static;
 
@@ -51,27 +51,18 @@ macro_rules! serai_test {
 
 serai_test!(
   async fn publish_update() {
-    let next_id = Arc::new(Mutex::new(0));
-
-    let mut rpc = RpcModule::new(next_id.clone());
+    let mut rpc = RpcModule::new(());
     rpc
-      .register_async_method("processor_coinUpdates", |_, context| async move {
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+      .register_async_method("processor_coinUpdates", |_, _| async move {
         let batch = Batch {
-          id: *context.lock().await,
+          id: 0,
           instructions: vec![InInstruction {
             origin: ExternalAddress::new(b"external".to_vec()).unwrap(),
             target: Target::Address(NativeAddress::from_raw([0xff; 32])),
           }],
         };
-        println!("Offering batch {}", batch.id);
 
-        // Re-use the batch ID as the coin's block number
-        let coin_block_number = BlockNumber(u32::try_from(batch.id + 100).unwrap());
-
-        let update = Update { block_number: coin_block_number, batches: vec![batch] };
-
-        Ok(vec![Some(update)])
+        Ok(vec![Some(Update { block_number: BlockNumber(100), batches: vec![batch] })])
       })
       .unwrap();
 
@@ -88,8 +79,7 @@ serai_test!(
         serai.get_batch_events(serai.get_latest_block_hash().await.unwrap()).await.unwrap();
       if let Some(batch) = batches.get(0) {
         match batch {
-          InInstructionsEvent::Batch { id, .. } => {
-            *next_id.lock().await = dbg!(id + 1);
+          InInstructionsEvent::Batch { .. } => {
             return;
           }
           _ => panic!("get_batches returned non-batch"),
