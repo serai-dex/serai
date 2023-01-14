@@ -1,5 +1,8 @@
 use thiserror::Error;
 
+use scale::Decode;
+
+use frame_support::traits::PalletInfo as PalletInfoTrait;
 use frame_system::Config as SysConfig;
 use subxt::{tx::BaseExtrinsicParams, Config, OnlineClient};
 
@@ -7,7 +10,9 @@ use jsonrpsee_core::client::ClientT;
 use jsonrpsee_http_client::HttpClientBuilder;
 
 use serai_primitives::NativeAddress;
-use serai_runtime::{Signature, Runtime};
+use serai_runtime::{in_instructions_pallet, Signature, PalletInfo, InInstructions, Runtime};
+
+pub type InInstructionsEvent = in_instructions_pallet::Event<Runtime>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct SeraiConfig;
@@ -27,10 +32,6 @@ impl Config for SeraiConfig {
 
   type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, ()>;
 }
-
-include!(concat!(env!("OUT_DIR"), "/runtime.rs"));
-
-use runtime::in_instructions::events::Batch;
 
 #[derive(Clone, Error, Debug)]
 pub(crate) enum SeraiError {
@@ -58,8 +59,24 @@ impl Serai {
     Ok(hash.into())
   }
 
-  pub(crate) async fn get_batches(&self, block: [u8; 32]) -> Result<Vec<Batch>, SeraiError> {
-    let events = self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?;
-    Ok(events.find::<Batch>().collect::<Result<_, _>>().map_err(|_| SeraiError::RpcError)?)
+  pub(crate) async fn get_batch_events(
+    &self,
+    block: [u8; 32],
+  ) -> Result<Vec<InInstructionsEvent>, SeraiError> {
+    let mut res = vec![];
+    for event in
+      self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?.iter()
+    {
+      let event = event.unwrap();
+      if PalletInfo::index::<InInstructions>().unwrap() == usize::from(event.pallet_index()) {
+        let mut with_variant: &[u8] =
+          &[[event.variant_index()].as_ref(), event.field_bytes()].concat();
+        let event = InInstructionsEvent::decode(&mut with_variant).unwrap();
+        if matches!(event, InInstructionsEvent::Batch { .. }) {
+          res.push(event);
+        }
+      }
+    }
+    Ok(res)
   }
 }

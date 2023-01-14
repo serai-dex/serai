@@ -33,6 +33,9 @@ use serai_primitives::{NativeAddress, Coin};
 
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_assets::Call as AssetsCall;
+
+pub use in_instructions_pallet;
+
 use pallet_transaction_payment::CurrencyAdapter;
 
 use pallet_session::PeriodicSessions;
