@@ -1,0 +1,16 @@
+[package]
+name = "dynamic-generator"
+version = "0.1.0"
+description = "Provide dynamic generators for curves implementing the Group API"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/custom-generator"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["ff", "group", "generator"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+group = "0.12"
