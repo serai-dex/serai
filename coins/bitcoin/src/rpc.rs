@@ -471,8 +471,8 @@ impl Rpc {
     }
 
     pub async fn generate_to_address(&self, nblocks: usize, address: &str) -> Result<Vec<String>> {
-        let mut ext_args = [into_json(nblocks)?, into_json(address)?];
-        let defaults = [null(), null()];
+        let mut ext_args = [into_json(nblocks)?, into_json(address)?, 100000000.into()];
+        let defaults = [null(), null(), 100000000.into()];
         let args = handle_defaults(&mut ext_args, &defaults);
         let info = self
             .rpc_call::<Vec<String>>("generatetoaddress", &args)
@@ -504,41 +504,6 @@ impl Rpc {
         let args = handle_defaults(&mut ext_args, &[null()]);
         self.rpc_call::<GetBlockResult>("decoderawtransaction", &args)
             .await
-    }
-
-    pub async fn create_wallet(
-        &self,
-        wallet_name: &str,
-        disable_private_keys: Option<bool>,
-        blank: Option<bool>,
-        passphrase: Option<&str>,
-        avoid_reuse: Option<bool>,
-        descriptors: Option<bool>,
-        load_on_startup: Option<bool>,
-    ) -> Result<LoadWalletResult> {
-        let mut ext_args = [
-            into_json(wallet_name)?,
-            opt_into_json(disable_private_keys)?,
-            opt_into_json(blank)?,
-            opt_into_json(passphrase)?,
-            opt_into_json(avoid_reuse)?,
-            opt_into_json(descriptors)?,
-            opt_into_json(load_on_startup)?,
-        ];
-        let defaults = [
-            null(),
-            into_json(false)?,
-            into_json(false)?,
-            into_json("")?,
-            into_json(false)?,
-            into_json(false)?,
-            null(),
-        ];
-        let args = handle_defaults(&mut ext_args, &defaults);
-        let info = self
-            .rpc_call::<LoadWalletResult>("createwallet", &args)
-            .await?;
-        Ok(info)
     }
 
     pub async fn list_transactions(

@@ -138,7 +138,6 @@ fn select_outputs<C: Coin>(
     }
     // Doesn't break in this else case as a smaller payment may still fit
   }
-  //dbg!(outputs.len());
   outputs
 }
 
@@ -240,7 +239,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     // Will never scan the genesis block, which shouldn't be an issue
     for b in (self.scanned_block() + 1) ..= confirmed_block {
-      //println!("{} {} {}",b,self.scanned_block(), confirmed_block);
 
       // If any keys activated at this block, shift them over
       {
@@ -256,28 +254,19 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           }
         }
       }
-      let mut total_output = 0;
       let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
         self.coin.tweak_key(keys);
         let res_output = self.coin.get_outputs(&block, keys.group_key()).await?;
-        total_output = res_output.len();
-        //dbg!(total_output);
         outputs.extend(
           res_output
             .iter()
             .cloned()
             .filter(|output| self.db.add_output(output)),
         );
-
-        
       }
 
       self.db.scanned_to_block(b);
-      
-      if total_output > 0 {
-        break;
-      }
     }
 
     Ok(())
@@ -294,7 +283,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     payments: Vec<(C::Address, u64)>,
     fee: C::Fee,
   ) -> Result<(Vec<(C::Address, u64)>, Vec<C::SignableTransaction>), CoinError> {
-    dbg!("prepare_sends called from wallet");
     if payments.is_empty() {
       return Ok((vec![], vec![]));
     }
@@ -307,11 +295,8 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     // the source payment
     // let (mut payments, schedule) = schedule(payments);
     let mut payments = payments;
-    dbg!("prepare_sends before for");
-    //dbg!(self.keys.len());
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
-      //dbg!(outputs.len());
       while !outputs.is_empty() {
         let (inputs, outputs) = select_inputs_outputs::<C>(outputs, &mut payments);
         // If we can no longer process any payments, move to the next set of keys
@@ -352,7 +337,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     network: &mut N,
     prepared: C::SignableTransaction,
   ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
-    dbg!("Attempt_send called from wallet");
     let attempt = self.coin.attempt_send(prepared).await.map_err(SignError::CoinError)?;
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);

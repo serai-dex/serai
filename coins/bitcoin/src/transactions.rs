@@ -6,6 +6,8 @@ use bitcoin::{
   psbt::{serialize::Serialize, PartiallySignedTransaction},
   Witness,
 };
+use thiserror::Error;
+use bitcoin_hashes::hex::ToHex;
 use frost::{
   algorithm::Schnorr,
   curve::{Secp256k1},
@@ -28,9 +30,32 @@ use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use transcript::{Transcript, RecommendedTranscript};
 use zeroize::Zeroizing;
 
+#[derive(Clone, PartialEq, Eq, Debug, Error)]
+pub enum TransactionError {
+  #[error("multiple addresses with payment IDs")]
+  MultiplePaymentIds,
+  #[error("no inputs")]
+  NoInputs,
+  #[error("no outputs")]
+  NoOutputs,
+  #[error("only one output and no change address")]
+  NoChange,
+  #[error("too many outputs")]
+  TooManyOutputs,
+  #[error("too much data")]
+  TooMuchData,
+  #[error("not enough funds (in {0}, out {1})")]
+  NotEnoughFunds(u64, u64),
+  #[error("wrong spend private key")]
+  WrongPrivateKey,
+  #[error("frost error {0}")]
+  FrostError(FrostError),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SignableTransaction {
   pub tx: PartiallySignedTransaction,
+  pub fee: u64,
 }
 
 impl SignableTransaction {
@@ -69,6 +94,44 @@ impl SignableTransaction {
 
     return Ok(TransactionMachine { signable: self, transcript, sigs });
   }
+
+  pub fn calculate_weight(total_inputs: usize, address: &bitcoin::Address, change: bool) -> usize{
+    // version number + segwit marker + segwit flag 
+    let mut total_weight= 4 * 4;
+    total_weight += 1;
+    total_weight += 1;
+    // number of input
+    total_weight += 1 * 4;
+    // Previous output hash
+    total_weight += total_inputs * 32 * 4;
+    // Previous output index
+    total_weight += total_inputs * 4 * 4;
+    // Script length -  Scriptsig is empty
+    total_weight += total_inputs * 1 * 4;
+    //total_weight += total_inputs * (address.script_pubkey().to_hex().len()/2) * 4;
+    total_weight += total_inputs * 4 * 4;
+    // OUTPUTS
+    let total_outputs = 1 + usize::from(change);
+
+    total_weight += 1 * 4;
+    total_weight += total_outputs * 8 * 4;
+    total_weight += total_outputs * 1 * 4;
+    // Script pubkey
+    total_weight += (address.script_pubkey().to_hex().len()/2) * 1 * 4;
+    if change {
+      // Change address script pubkey byte
+      total_weight += 34 * 4;
+    }
+    // Stack size of p2tr
+    total_weight += total_inputs * 1 * 1;
+    total_weight += total_inputs * 1 * 1;
+    total_weight += total_inputs * 65 * 1;
+    // locktime
+    total_weight += 4 * 4;
+
+    return total_weight;
+  }
+
 }
 
 pub struct TransactionMachine {

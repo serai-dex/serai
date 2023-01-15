@@ -58,9 +58,8 @@ impl Network for LocalNetwork {
 }
 
 async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
-  dbg!("Started");
   // Mine blocks so there's a confirmed block
-  coin.mine_block().await;
+  coin.mine_block(None, None).await;
   
   let latest = coin.get_latest_block_number().await.unwrap();
 
@@ -70,13 +69,13 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   let xkey = keys[&1].group_key();
   coin.address(xkey);
+  coin.mine_block(Some(xkey), Some(1)).await;
 
   let threshold = keys[&1].params().t();
   let mut networks = LocalNetwork::new(threshold);
 
   let mut wallets = vec![];
   for i in 1 ..= threshold {
-    //coin.temp_generate_to_address(keys[&i].group_key()).await;
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_block(0, latest);
     wallet.add_keys(&WalletKeys::new(keys.remove(&i).unwrap(), 0));
@@ -85,11 +84,9 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   // Get the chain to a length where blocks have sufficient confirmations
   while (latest + (C::CONFIRMATIONS - 1)) > coin.get_latest_block_number().await.unwrap() {
-    coin.mine_block().await;
+    coin.mine_block(Some(xkey), Some(1)).await;
   }
 
-  dbg!("Total Wallet: {}",wallets.len());
-  
   for wallet in wallets.iter_mut() {
     // Poll to activate the keys
     wallet.poll().await.unwrap();
@@ -107,27 +104,28 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
       .prepare_sends(1, vec![(wallet.address(), 4999990000)], fee)
       .await
       .unwrap();
-
-    let mut new_signable = signable.1.swap_remove(0);
+    if signable.1.len() <= 0 {
+      break;
+    }
+    let new_signable = signable.1.swap_remove(0);
     futures.push(wallet.attempt_send(network, new_signable));
   }
   
-  println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
+  if futures.len() > 0 {
+    println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
+  }
 }
 
-/*#[tokio::test]
+#[tokio::test]
 async fn monero() {
   let monero = Monero::new("http://127.0.0.1:18081".to_string()).await;
   let fee = monero.get_fee().await;
-  //test_send(monero, fee).await;
-}*/
+  test_send(monero, fee).await;
+}
 
 #[tokio::test]
 async fn bitcoin() {
-  dbg!("Bitcoin Test");
   let bitcoin = Bitcoin::new("127.0.0.1:18443".to_string(),Some(String::from("serai")),Some(String::from("seraidex"))).await;
-
   let fee = bitcoin.get_fee().await;
   test_send(bitcoin, fee).await;
-  // No send test yet
 }
