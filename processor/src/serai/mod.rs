@@ -1,18 +1,18 @@
 use thiserror::Error;
 
+use serde::Serialize;
 use scale::Decode;
 
 use serai_runtime::{
   primitives::{Signature, NativeAddress},
-  support::traits::PalletInfo as PalletInfoTrait,
-  PalletInfo,
   system::Config,
-  in_instructions, InInstructions, Runtime,
+  Runtime,
 };
 
 use subxt::{tx::BaseExtrinsicParams, Config as SubxtConfig, OnlineClient};
 
-pub type InInstructionsEvent = in_instructions::Event<Runtime>;
+mod in_instructions;
+pub use in_instructions::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct SeraiConfig;
@@ -43,7 +43,7 @@ pub(crate) enum SeraiError {
 pub(crate) struct Serai(OnlineClient<SeraiConfig>);
 
 impl Serai {
-  pub(crate) async fn new() -> Result<Self, SeraiError> {
+  pub async fn new() -> Result<Self, SeraiError> {
     Ok(Serai(
       OnlineClient::<SeraiConfig>::from_url("ws://127.0.0.1:9944")
         .await
@@ -51,30 +51,38 @@ impl Serai {
     ))
   }
 
-  // Doesn't use subxt as we can't have multiple connections through it yet a global subxt requires
-  // unsafe. Directly implementing this primitve allows us to not require multiple subxts
-  pub(crate) async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
-    Ok(self.0.rpc().finalized_head().await.map_err(|_| SeraiError::RpcError)?.into())
+  async fn storage<K: Serialize, R: Decode>(
+    &self,
+    pallet: &'static str,
+    name: &'static str,
+    key: Option<K>,
+    block: [u8; 32],
+  ) -> Result<Option<R>, SeraiError> {
+    /*
+    let mut registry = scale_info::Registry::new();
+    registry.register_type(&MetaType::<K>::new());
+    let registry = scale_value::scale::PortableRegistry::from(registry);
+    scale_value::decode_as_type(&mut &key.encode(), core::any::type_id::<K>(), &registry)
+    */
+    let mut keys = vec![];
+    if let Some(key) = key {
+      keys.push(scale_value::serde::to_value(key).unwrap());
+    }
+
+    let storage = self.0.storage();
+    let address = subxt::dynamic::storage(pallet, name, keys);
+    debug_assert!(storage.validate(&address).is_ok());
+
+    Ok(
+      storage
+        .fetch(&address, Some(block.into()))
+        .await
+        .map_err(|_| SeraiError::RpcError)?
+        .map(|res| R::decode(&mut res.encoded()).unwrap()),
+    )
   }
 
-  pub(crate) async fn get_batch_events(
-    &self,
-    block: [u8; 32],
-  ) -> Result<Vec<InInstructionsEvent>, SeraiError> {
-    let mut res = vec![];
-    for event in
-      self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?.iter()
-    {
-      let event = event.unwrap();
-      if PalletInfo::index::<InInstructions>().unwrap() == usize::from(event.pallet_index()) {
-        let mut with_variant: &[u8] =
-          &[[event.variant_index()].as_ref(), event.field_bytes()].concat();
-        let event = InInstructionsEvent::decode(&mut with_variant).unwrap();
-        if matches!(event, InInstructionsEvent::Batch { .. }) {
-          res.push(event);
-        }
-      }
-    }
-    Ok(res)
+  pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
+    Ok(self.0.rpc().finalized_head().await.map_err(|_| SeraiError::RpcError)?.into())
   }
 }

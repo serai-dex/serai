@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
 use serai_runtime::{
-  primitives::{BlockNumber, NativeAddress},
+  primitives::{BlockNumber, NativeAddress, Coin},
   in_instructions::{
     primitives::{ExternalAddress, Target, InInstruction},
     Batch, Update,
@@ -65,7 +65,7 @@ serai_test!(
           }],
         };
 
-        Ok(vec![Some(Update { block_number: BlockNumber(100), batches: vec![batch] })])
+        Ok(vec![Some(Update { block_number: BlockNumber(123), batches: vec![batch] })])
       })
       .unwrap();
 
@@ -77,12 +77,22 @@ serai_test!(
       .unwrap();
 
     let serai = Serai::new().await.unwrap();
+    assert_eq!(
+      serai.get_next_batch_id(Coin(0), serai.get_latest_block_hash().await.unwrap()).await.unwrap(),
+      0
+    );
+
     loop {
-      let batches =
-        serai.get_batch_events(serai.get_latest_block_hash().await.unwrap()).await.unwrap();
+      let latest = serai.get_latest_block_hash().await.unwrap();
+      let batches = serai.get_batch_events(latest).await.unwrap();
       if let Some(batch) = batches.get(0) {
         match batch {
           InInstructionsEvent::Batch { .. } => {
+            assert_eq!(
+              serai.get_coin_block_number(Coin(0), latest).await.unwrap(),
+              BlockNumber(123)
+            );
+            assert_eq!(serai.get_next_batch_id(Coin(0), latest).await.unwrap(), 1);
             return;
           }
           _ => panic!("get_batches returned non-batch"),

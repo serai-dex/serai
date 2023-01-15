@@ -7490,6 +7490,7 @@ dependencies = [
  "monero-serai",
  "parity-scale-codec",
  "rand_core 0.6.4",
+ "scale-value",
  "serai-runtime",
  "serde",
  "serde_json",
