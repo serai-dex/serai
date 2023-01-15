@@ -7,13 +7,17 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
+use sp_core::sr25519::{Public, Signature as RistrettoSignature};
+
 mod amount;
 pub use amount::*;
 
 mod coins;
 pub use coins::*;
 
-pub type NativeAddress = sp_core::sr25519::Public;
+pub type PublicKey = Public;
+pub type NativeAddress = PublicKey;
+pub type Signature = RistrettoSignature;
 
 /// The type used to identify block numbers.
 // Doesn't re-export TendermintMachine due to traits.

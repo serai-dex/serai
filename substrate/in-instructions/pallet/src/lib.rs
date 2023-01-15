@@ -15,7 +15,8 @@ use sp_runtime::RuntimeDebug;
 
 use serai_primitives::{BlockNumber, Coin};
 
-use in_instructions_primitives::InInstruction;
+pub use in_instructions_primitives as primitives;
+use primitives::InInstruction;
 
 pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 

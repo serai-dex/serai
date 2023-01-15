@@ -26,7 +26,7 @@ pub(crate) use sc_tendermint::{
   TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
   TendermintSelectChain, import_queue,
 };
-use serai_runtime::{self, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
+use serai_runtime::{self as runtime, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
 pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
@@ -48,7 +48,7 @@ impl NativeExecutionDispatch for ExecutorDispatch {
   type ExtendHostFunctions = ();
 
   fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-    serai_runtime::api::dispatch(method, data)
+    runtime::api::dispatch(method, data)
   }
 
   fn native_version() -> NativeVersion {

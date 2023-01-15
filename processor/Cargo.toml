@@ -34,16 +34,12 @@ monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 # Substrate
 scale = { package = "parity-scale-codec", version = "3" }
-frame-support = { git = "https://github.com/serai-dex/substrate" }
-frame-system = { git = "https://github.com/serai-dex/substrate" }
 subxt = "0.25"
 
 # JSON-RPC
 jsonrpsee-server = "0.16"
 
 # Serai
-serai-primitives = { path = "../substrate/serai/primitives" }
-in-instructions-primitives = { path = "../substrate/in-instructions/primitives" }
 serai-runtime = { path = "../substrate/runtime" }
 
 [dev-dependencies]

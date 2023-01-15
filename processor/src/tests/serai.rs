@@ -5,10 +5,13 @@ use lazy_static::lazy_static;
 
 use tokio::sync::Mutex;
 
-use serai_primitives::{BlockNumber, NativeAddress};
-
-use in_instructions_primitives::{ExternalAddress, Target, InInstruction};
-use serai_runtime::in_instructions_pallet::{Batch, Update};
+use serai_runtime::{
+  primitives::{BlockNumber, NativeAddress},
+  in_instructions::{
+    primitives::{ExternalAddress, Target, InInstruction},
+    Batch, Update,
+  },
+};
 
 use jsonrpsee_server::RpcModule;
 

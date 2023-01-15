@@ -12,6 +12,7 @@ use in_instructions_pallet::{INHERENT_IDENTIFIER, Updates, InherentError};
 
 pub struct InherentDataProvider;
 impl InherentDataProvider {
+  #[allow(clippy::new_without_default)] // This isn't planned to forever have empty arguments
   pub fn new() -> InherentDataProvider {
     InherentDataProvider
   }

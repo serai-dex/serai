@@ -33,6 +33,11 @@ sp-api = { git = "https://github.com/serai-dex/substrate" }
 sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
 sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 
+frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
+frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate" }
+
+serai-runtime = { path = "../runtime" }
+
 sc-keystore = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
@@ -47,24 +52,14 @@ sc-consensus = { git = "https://github.com/serai-dex/substrate" }
 sc-telemetry = { git = "https://github.com/serai-dex/substrate" }
 sc-cli = { git = "https://github.com/serai-dex/substrate" }
 
-frame-system = { git = "https://github.com/serai-dex/substrate" }
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
-frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate" }
-pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
-
 sc-rpc = { git = "https://github.com/serai-dex/substrate" }
 sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
 
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
-serai-primitives = { path = "../serai/primitives" }
-
 in-instructions-client = { path = "../in-instructions/client" }
 
-sp-tendermint = { path = "../tendermint/primitives" }
-pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
-serai-runtime = { path = "../runtime" }
 sc-tendermint = { path = "../tendermint/client" }
 
 [build-dependencies]

@@ -2,29 +2,32 @@ use thiserror::Error;
 
 use scale::Decode;
 
-use frame_support::traits::PalletInfo as PalletInfoTrait;
-use frame_system::Config as SysConfig;
-use subxt::{tx::BaseExtrinsicParams, Config, OnlineClient};
+use serai_runtime::{
+  primitives::{Signature, NativeAddress},
+  support::traits::PalletInfo as PalletInfoTrait,
+  PalletInfo,
+  system::Config,
+  in_instructions, InInstructions, Runtime,
+};
 
-use serai_primitives::NativeAddress;
-use serai_runtime::{in_instructions_pallet, Signature, PalletInfo, InInstructions, Runtime};
+use subxt::{tx::BaseExtrinsicParams, Config as SubxtConfig, OnlineClient};
 
-pub type InInstructionsEvent = in_instructions_pallet::Event<Runtime>;
+pub type InInstructionsEvent = in_instructions::Event<Runtime>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct SeraiConfig;
-impl Config for SeraiConfig {
-  type BlockNumber = <Runtime as SysConfig>::BlockNumber;
+impl SubxtConfig for SeraiConfig {
+  type BlockNumber = <Runtime as Config>::BlockNumber;
 
-  type Hash = <Runtime as SysConfig>::Hash;
-  type Hashing = <Runtime as SysConfig>::Hashing;
+  type Hash = <Runtime as Config>::Hash;
+  type Hashing = <Runtime as Config>::Hashing;
 
-  type Index = <Runtime as SysConfig>::Index;
-  type AccountId = <Runtime as SysConfig>::AccountId;
+  type Index = <Runtime as Config>::Index;
+  type AccountId = <Runtime as Config>::AccountId;
   // TODO: Bech32m
   type Address = NativeAddress;
 
-  type Header = <Runtime as SysConfig>::Header;
+  type Header = <Runtime as Config>::Header;
   type Signature = Signature;
 
   type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, ()>;
