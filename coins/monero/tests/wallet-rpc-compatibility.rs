@@ -3,8 +3,7 @@ use std::{
   str::FromStr,
 };
 
-use rand_core::OsRng;
-use rand::RngCore;
+use rand_core::{RngCore, OsRng};
 
 use monero_rpc::{
   monero::{Amount, Address},
@@ -18,7 +17,7 @@ use monero_serai::{
 
 mod runner;
 
-async fn test_from_wallet_rpc_to(spec: AddressSpec) {
+async fn test_from_wallet_rpc_to_self(spec: AddressSpec) {
   let wallet_rpc =
     monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
   let daemon_rpc = runner::rpc().await;
@@ -61,28 +60,32 @@ async fn test_from_wallet_rpc_to(spec: AddressSpec) {
 
   // retrieve it and confirm
   let tx = daemon_rpc.get_transaction(tx_hash).await.unwrap();
-  let output = scanner.scan_transaction(&tx).ignore_timelock().swap_remove(0);
+  let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
 
   match spec {
     AddressSpec::Subaddress(index) => assert_eq!(output.metadata.subaddress, Some(index)),
-    AddressSpec::Integrated(payment_id) => assert_eq!(output.metadata.payment_id, payment_id),
-    _ => {}
+    AddressSpec::Integrated(payment_id) => {
+      assert_eq!(output.metadata.payment_id, payment_id);
+      assert_eq!(output.metadata.subaddress, None);
+    }
+    _ => assert_eq!(output.metadata.subaddress, None),
   }
   assert_eq!(output.commitment().amount, 1000000000000);
 }
 
 async_sequential!(
   async fn test_receipt_of_wallet_rpc_tx_standard() {
-    test_from_wallet_rpc_to(AddressSpec::Standard).await;
+    test_from_wallet_rpc_to_self(AddressSpec::Standard).await;
   }
 
   async fn test_receipt_of_wallet_rpc_tx_subaddress() {
-    test_from_wallet_rpc_to(AddressSpec::Subaddress(SubaddressIndex::new(0, 1).unwrap())).await;
+    test_from_wallet_rpc_to_self(AddressSpec::Subaddress(SubaddressIndex::new(0, 1).unwrap()))
+      .await;
   }
 
   async fn test_receipt_of_wallet_rpc_tx_integrated() {
     let mut payment_id = [0u8; 8];
     OsRng.fill_bytes(&mut payment_id);
-    test_from_wallet_rpc_to(AddressSpec::Integrated(payment_id)).await;
+    test_from_wallet_rpc_to_self(AddressSpec::Integrated(payment_id)).await;
   }
 );

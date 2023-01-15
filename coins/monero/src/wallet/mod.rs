@@ -112,8 +112,8 @@ impl ViewPair {
     self.spend
   }
 
-  pub fn view(&self) -> Zeroizing<Scalar> {
-    self.view.clone()
+  pub fn view(&self) -> EdwardsPoint {
+    self.view.deref() * &ED25519_BASEPOINT_TABLE
   }
 
   fn subaddress_derivation(&self, index: SubaddressIndex) -> Scalar {
