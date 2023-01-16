@@ -184,6 +184,7 @@ impl pallet_assets::Config for Runtime {
   type ApprovalDeposit = ConstU64<0>;
 
   // Unused hooks
+  type CallbackHandle = ();
   type Freezer = ();
   type Extra = ();
 
