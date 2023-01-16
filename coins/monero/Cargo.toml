@@ -55,6 +55,7 @@ monero-generators = { path = "generators", version = "0.1" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+monero-rpc = "0.3"
 
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.5", features = ["ed25519", "tests"] }
 
