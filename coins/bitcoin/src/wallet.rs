@@ -9,7 +9,7 @@ pub struct SpendableOutput {
 }
 
 impl SpendableOutput {
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
+  pub fn read<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
     let mut txid_buff = [0; 32];
     r.read(&mut txid_buff)?;
     txid_buff.reverse();

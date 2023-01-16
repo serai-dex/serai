@@ -9,6 +9,7 @@ use frost::{
 };
 
 use bitcoin::{
+  Block as MBlock,
   util::address::Address,
   Txid, schnorr::{TweakedPublicKey},
   XOnlyPublicKey, SchnorrSighashType,
@@ -30,8 +31,17 @@ use k256::{
   },
 };
 use crate::{
-  coin::{CoinError, Output as OutputTrait, Coin}
+  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin}
 };
+
+#[derive(Clone, Debug)]
+pub struct Block([u8; 32], MBlock);
+impl BlockTrait for Block {
+  type Id = [u8; 32];
+  fn id(&self) -> Self::Id {
+    self.0
+  }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Fee {
@@ -66,6 +76,11 @@ impl From<SpendableOutput> for Output {
 impl OutputTrait for Output {
   type Id = [u8; 36];
 
+  //TODO: Implement later
+  fn kind(&self) -> OutputType {
+    OutputType::External
+  }
+
   fn id(&self) -> Self::Id {
     let serialized_data = self.0.serialize();
     let ret: [u8; 36] = serialized_data[0..36].try_into().unwrap();
@@ -80,8 +95,8 @@ impl OutputTrait for Output {
     self.0.serialize()
   }
 
-  fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-    SpendableOutput::deserialize(reader).map(Output)
+  fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    SpendableOutput::read(reader).map(Output)
   }
 }
 
@@ -98,8 +113,8 @@ impl Coin for Bitcoin {
   type Curve = Secp256k1;
 
   type Fee = Fee;
-  type Transaction = PartiallySignedTransaction; //bitcoin::Transaction;
-  type Block = bitcoin::Block;
+  type Transaction = PartiallySignedTransaction;
+  type Block = Block;
 
   type Output = Output;
   type SignableTransaction = SignableTransaction;
@@ -110,8 +125,9 @@ impl Coin for Bitcoin {
   const ID: &'static [u8] = b"Bitcoin";
   const CONFIRMATIONS: usize = 3;
 
-  const MAX_INPUTS: usize = 255;
-  const MAX_OUTPUTS: usize = 255;
+  // TODO: Get hard numbers and tune
+  const MAX_INPUTS: usize = 128;
+  const MAX_OUTPUTS: usize = 16;
 
   fn address(&self, key: ProjectivePoint) -> Self::Address {
     assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
@@ -119,6 +135,11 @@ impl Coin for Bitcoin {
       XOnlyPublicKey::from_slice(&key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
     let tweaked_pubkey = bitcoin::schnorr::TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
     Address::p2tr_tweaked(tweaked_pubkey, bitcoin::network::constants::Network::Regtest)
+  }
+
+  //TODO: Implement later
+  fn branch_address(&self, key: ProjectivePoint) -> Self::Address {
+    self.address(key)
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -134,14 +155,8 @@ impl Coin for Bitcoin {
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
     let block_hash = self.rpc.get_block_hash(number - 1).await.unwrap();
     let info = self.rpc.get_block(&block_hash).await.unwrap();
-    Ok(info)
-  }
-
-  async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError> {
-    let txid_str = String::from_utf8(tx.to_vec()).unwrap();
-    let tx_block_number =
-      self.rpc.get_transaction_block_number(&txid_str.to_string()).await.unwrap();
-    Ok((self.get_latest_block_number().await.unwrap().saturating_sub(tx_block_number) + 1) >= 10)
+    let mblock = Block(info.block_hash().to_vec()[0..32].try_into().unwrap(),info);
+    Ok(mblock)
   }
 
   async fn get_outputs(
@@ -150,7 +165,7 @@ impl Coin for Bitcoin {
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let main_addr = self.address(key);
-    let block_details = self.rpc.get_block_with_transactions(&block.block_hash()).await.unwrap();
+    let block_details = self.rpc.get_block_with_transactions(&block.1.block_hash()).await.unwrap();
     let mut outputs = Vec::new();
     for one_transaction in block_details.tx {
       for output_tx in one_transaction.vout {
@@ -173,11 +188,12 @@ impl Coin for Bitcoin {
     block_number: usize,
     mut inputs: Vec<Output>,
     payments: &[(Address, u64)],
+    change: Option<ProjectivePoint>,
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
     let mut vin_alt_list = Vec::new();
     let mut vout_alt_list = Vec::new();
-    let change_addr = self.address(keys.group_key());
+    let change_addr = self.address(change.unwrap());
 
     let mut input_sat = 0;
     for one_input in &inputs {
@@ -331,7 +347,7 @@ impl Coin for Bitcoin {
     let total_amount = amount - fee.calculate(transaction_weight) - change_amount;
     let transcript = RecommendedTranscript::new(b"bitcoin_test");
     let payments = vec![(address, total_amount)];
-    let mut signable_transactions = self.prepare_send(one_key, transcript, block_number, inputs, &payments, fee).await.unwrap();
+    let mut signable_transactions = self.prepare_send(one_key, transcript, block_number, inputs, &payments, Some(key), fee).await.unwrap();
   
     for i in 0..signable_transactions.actual.tx.inputs.len() {
       let (tx_sighash, _) = taproot_key_spend_signature_hash(&signable_transactions.actual.tx, i).unwrap();

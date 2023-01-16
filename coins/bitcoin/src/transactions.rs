@@ -188,18 +188,14 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
   type SignatureShare = Vec<SignatureShare<Secp256k1>>;
   type SignatureMachine = TransactionSignatureMachine;
 
-  fn cache(self) -> Zeroizing<CachedPreprocess> {
+  fn cache(self) -> CachedPreprocess {
     unimplemented!(
       "Bitcoin transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"
     );
   }
 
-  fn from_cache(
-    _: (),
-    _: ThresholdKeys<Secp256k1>,
-    _: Zeroizing<CachedPreprocess>,
-  ) -> Result<Self, FrostError> {
+  fn from_cache(_: (), _: ThresholdKeys<Secp256k1>, _: CachedPreprocess) -> Result<Self, FrostError> {
     unimplemented!(
       "Bitcoin transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"
