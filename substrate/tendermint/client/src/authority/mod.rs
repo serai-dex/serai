@@ -21,7 +21,6 @@ use sp_runtime::{
   Digest,
 };
 use sp_blockchain::HeaderBackend;
-use sp_api::BlockId;
 
 use sp_consensus::{Error, BlockOrigin, Proposer, Environment};
 use sc_consensus::import_queue::IncomingBlock;
@@ -200,9 +199,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       };
 
       // Get our first proposal
-      let proposal = authority
-        .get_proposal(&import.client.header(BlockId::Hash(last_hash)).unwrap().unwrap())
-        .await;
+      let proposal = authority.get_proposal(&import.client.header(last_hash).unwrap().unwrap()).await;
 
       // Create the gossip network
       // This has to be spawning the machine, else gossip fails for some reason
