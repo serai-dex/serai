@@ -223,7 +223,7 @@ impl Coin for Monero {
   }
 
   #[cfg(test)]
-  async fn mine_block(&self, key: Option<dfg::EdwardsPoint>, count: Option<usize>) {
+  async fn mine_block(&self) {
     #[derive(serde::Deserialize, Debug)]
     struct EmptyResponse {}
     let _: EmptyResponse = self
@@ -249,9 +249,9 @@ impl Coin for Monero {
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
 
-    self.mine_block(None, None).await;
+    self.mine_block().await;
     for _ in 0 .. 7 {
-      self.mine_block(None, None).await;
+      self.mine_block().await;
     }
 
     let outputs = Self::empty_scanner()
@@ -276,6 +276,6 @@ impl Coin for Monero {
     .await
     .unwrap();
     self.rpc.publish_transaction(&tx).await.unwrap();
-    self.mine_block(None, None).await;
+    self.mine_block().await;
   }
 }

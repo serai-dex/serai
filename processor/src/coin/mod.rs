@@ -91,7 +91,7 @@ pub trait Coin {
   async fn get_fee(&self) -> Self::Fee;
 
   #[cfg(test)]
-  async fn mine_block(&self, key: Option<<Self::Curve as Ciphersuite>::G>, count: Option<usize>);
+  async fn mine_block(&self);
 
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address);

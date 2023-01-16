@@ -59,7 +59,7 @@ impl Network for LocalNetwork {
 
 async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   // Mine blocks so there's a confirmed block
-  coin.mine_block(None, None).await;
+  coin.mine_block().await;
   
   let latest = coin.get_latest_block_number().await.unwrap();
 
@@ -71,7 +71,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   let xkey = keys[&1].group_key();
   coin.address(xkey);
-  coin.mine_block(Some(xkey), Some(1)).await;
+  coin.mine_block().await;
 
   let threshold = keys[&1].params().t();
   let mut networks = LocalNetwork::new(threshold);
@@ -86,7 +86,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   // Get the chain to a length where blocks have sufficient confirmations
   while (latest + (C::CONFIRMATIONS - 1)) > coin.get_latest_block_number().await.unwrap() {
-    coin.mine_block(Some(xkey), Some(1)).await;
+    coin.mine_block().await;
   }
 
   for wallet in wallets.iter_mut() {
@@ -103,7 +103,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
     let latest = coin.get_latest_block_number().await.unwrap();
     wallet.acknowledge_block(1, latest - (C::CONFIRMATIONS - 1));
     let mut signable = wallet
-      .prepare_sends(1, vec![(wallet.address(), 4999990000)], fee)
+      .prepare_sends(1, vec![(wallet.address(), 4999900000)], fee)
       .await
       .unwrap();
     if signable.1.len() <= 0 {
@@ -119,15 +119,15 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 }
 
 #[tokio::test]
-async fn monero() {
-  let monero = Monero::new("http://127.0.0.1:18081".to_string()).await;
-  let fee = monero.get_fee().await;
-  test_send(monero, fee).await;
-}
-
-#[tokio::test]
 async fn bitcoin() {
   let bitcoin = Bitcoin::new("127.0.0.1:18443".to_string(),Some(String::from("serai")),Some(String::from("seraidex"))).await;
   let fee = bitcoin.get_fee().await;
   test_send(bitcoin, fee).await;
+}
+
+#[tokio::test]
+async fn monero() {
+  let monero = Monero::new("http://127.0.0.1:18081".to_string()).await;
+  let fee = monero.get_fee().await;
+  test_send(monero, fee).await;
 }
