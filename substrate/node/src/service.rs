@@ -6,6 +6,8 @@ use std::{
   str::FromStr,
 };
 
+use async_std::stream::stream::StreamExt;
+
 use sp_runtime::traits::{Block as BlockTrait};
 use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
@@ -17,6 +19,7 @@ use sc_network::NetworkService;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
 use sc_client_api::BlockBackend;
+use sc_client_api::BlockchainEvents;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
@@ -129,6 +132,31 @@ pub fn new_partial(
       telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
       executor,
     )?;
+
+    let mut finality = client.finality_notification_stream();
+    let mut imports = client.import_notification_stream();
+  
+    loop {
+      select! {
+        f = finality.next() => {
+          match f {
+            Some(block) => {
+              handle.block_finalized(block.into()).await;
+            }
+            None => break,
+          }
+        },
+        i = imports.next() => {
+          match i {
+            Some(block) => {
+              handle.block_imported(block.into()).await;
+            }
+            None => break,
+          }
+        },
+        complete => break,
+      }
+    }
   let client = Arc::new(client);
 
   let telemetry = telemetry.map(|(worker, telemetry)| {
@@ -231,7 +259,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   };
 
   let registry = config.prometheus_registry().cloned();
-  let pool = transaction_pool.clone();
+  let _pool = transaction_pool.clone();
   //let kafkaModule = crate::kafka::create_full(crate::kafka::KafkaDeps {
   //  client: client.clone(),
   //  pool: pool.clone(),

@@ -319,22 +319,17 @@ impl HealthConfig {
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct ObserverConfig {
-  host: String,
-  port: String,
-  poll_interval: u16,
+  pub host_prefix: String,
+  pub port: String,
 }
 
 impl ObserverConfig {
-  pub fn get_host(&self) -> String {
-    self.host.clone()
+  pub fn get_host_prefix(&self) -> String {
+    self.host_prefix.clone()
   }
 
   pub fn get_port(&self) -> String {
     self.port.clone()
-  }
-
-  pub fn get_poll_interval(&self) -> u16 {
-    self.poll_interval
   }
 }
 
@@ -411,9 +406,8 @@ impl CoordinatorConfig {
       },
       health: HealthConfig {},
       observer: ObserverConfig {
-        host: String::from("localhost"),
-        port: String::from("5050"),
-        poll_interval: 1,
+        host_prefix: s.get_string("observer.host_prefix").unwrap(),
+        port: s.get_string("observer.port").unwrap(),
       },
       chain: ChainConfig {
         btc: s.get_bool("chains.btc").unwrap(),
@@ -511,7 +505,7 @@ async fn initialize_kafka_topics(chain_config: ChainConfig, kafka_config: KafkaC
   let admin_client = create_admin_client(&kafka_config);
   let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(1)));
 
-  let serai_topic_name = format!("{}_node_serai", &name);
+  let serai_topic_name = format!("{}_node", &name);
 
   let initialized_topic = NewTopic {
     name: &serai_topic_name,

@@ -43,58 +43,75 @@ impl fmt::Display for Coin {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-enum MessageType {
+enum SignatureMessageType {
+
+  // The coordinator sends its public key to the processor.
   CoordinatorPubkeyToProcessor,
+
+  // The coordinator sends a general message to the processor.
   CoordinatorGeneralMessageToProcessor,
+
+  // The coordinator sends a secure test message to the processor.
   CoordinatorSecureTestMessageToProcessor,
+
+  // The processor sends its public key to the coordinator.
   ProcessorPubkeyToCoordinator,
+
+  // The processor sends a general message to the coordinator.
   ProcessorGeneralMessageToCoordinator,
+
+  // The processor sends a secure test message to the coordinator.
   ProcessorSecureTestMessageToCoordinator,
+
+  // Default message type.
   Default,
 }
 
-impl fmt::Display for MessageType {
+impl fmt::Display for SignatureMessageType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      MessageType::CoordinatorPubkeyToProcessor => write!(f, "coordinator_pubkey_to_processor"),
-      MessageType::CoordinatorGeneralMessageToProcessor => {
+        SignatureMessageType::CoordinatorPubkeyToProcessor => write!(f, "coordinator_pubkey_to_processor"),
+        SignatureMessageType::CoordinatorGeneralMessageToProcessor => {
         write!(f, "coordinator_general_message_to_processor")
       }
-      MessageType::CoordinatorSecureTestMessageToProcessor => {
+      SignatureMessageType::CoordinatorSecureTestMessageToProcessor => {
         write!(f, "coordinator_secure_test_message_to_processor")
       }
-      MessageType::ProcessorPubkeyToCoordinator => write!(f, "processor_pubkey_to_coordinator"),
-      MessageType::ProcessorGeneralMessageToCoordinator => {
+      SignatureMessageType::ProcessorPubkeyToCoordinator => write!(f, "processor_pubkey_to_coordinator"),
+      SignatureMessageType::ProcessorGeneralMessageToCoordinator => {
         write!(f, "processor_general_message_to_coordinator")
       }
-      MessageType::ProcessorSecureTestMessageToCoordinator => {
+      SignatureMessageType::ProcessorSecureTestMessageToCoordinator => {
         write!(f, "processor_secure_test_message_to_coordinator")
       }
-      MessageType::Default => write!(f, "Default"),
+      SignatureMessageType::Default => write!(f, "Default"),
     }
   }
 }
 
-fn parse_message_type(message_type: &str) -> MessageType {
-  let mut msg_type = MessageType::Default;
+// Parses the message type from a string to a SignatureMessageType.
+// The message type is used to determine which type of message is being sent
+// to the coordinator.
+fn parse_message_type(message_type: &str) -> SignatureMessageType {
+  let mut msg_type = SignatureMessageType::Default;
   match message_type {
     "coordinator_pubkey_to_processor" => {
-      msg_type = MessageType::CoordinatorPubkeyToProcessor;
+      msg_type = SignatureMessageType::CoordinatorPubkeyToProcessor;
     }
     "coordinator_general_message_to_processor" => {
-      msg_type = MessageType::CoordinatorGeneralMessageToProcessor;
+      msg_type = SignatureMessageType::CoordinatorGeneralMessageToProcessor;
     }
     "coordinator_secure_test_message_to_processor" => {
-      msg_type = MessageType::CoordinatorSecureTestMessageToProcessor;
+      msg_type = SignatureMessageType::CoordinatorSecureTestMessageToProcessor;
     }
     "processor_pubkey_to_coordinator" => {
-      msg_type = MessageType::ProcessorPubkeyToCoordinator;
+      msg_type = SignatureMessageType::ProcessorPubkeyToCoordinator;
     }
     "processor_general_message_to_coordinator" => {
-      msg_type = MessageType::ProcessorGeneralMessageToCoordinator;
+      msg_type = SignatureMessageType::ProcessorGeneralMessageToCoordinator;
     }
     "processor_secure_test_message_to_coordinator" => {
-      msg_type = MessageType::ProcessorSecureTestMessageToCoordinator;
+      msg_type = SignatureMessageType::ProcessorSecureTestMessageToCoordinator;
     }
     _ => {}
   }
@@ -242,13 +259,13 @@ fn initialize_consumer(
           let key: &str = msg.key_view().unwrap().unwrap();
           let msg_type = parse_message_type(&key);
           match msg_type {
-            MessageType::ProcessorPubkeyToCoordinator => {
+            SignatureMessageType::ProcessorPubkeyToCoordinator => {
               let value = msg.payload().unwrap();
               let public_key = str::from_utf8(value).unwrap();
               info!("Received Pubkey from {}: {}", &key, &public_key);
               env::set_var(env_key_ref.clone(), public_key);
             }
-            MessageType::ProcessorGeneralMessageToCoordinator => {
+            SignatureMessageType::ProcessorGeneralMessageToCoordinator => {
               let value = msg.payload().unwrap();
               let pub_msg = str::from_utf8(value).unwrap();
               info!("Received Public Message from {}", &key);
@@ -272,7 +289,7 @@ fn initialize_consumer(
           let key: &str = msg.key_view().unwrap().unwrap();
           let msg_type = parse_message_type(&key);
           match msg_type {
-            MessageType::ProcessorSecureTestMessageToCoordinator => {
+            SignatureMessageType::ProcessorSecureTestMessageToCoordinator => {
               let value = msg.payload().unwrap();
               // Creates Message box used for decryption
               let pubkey = message_box::PublicKey::from_trusted_str(
@@ -333,7 +350,7 @@ fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str
   producer
     .send(
       BaseRecord::to(&format!("{}_processor_{}", &name, &coin.to_string().to_lowercase()))
-        .key(&format!("{}", MessageType::CoordinatorPubkeyToProcessor.to_string()))
+        .key(&format!("{}", SignatureMessageType::CoordinatorPubkeyToProcessor.to_string()))
         .payload(&msg)
         .partition(0),
     )
@@ -386,7 +403,6 @@ fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<Coin, bool> {
 // Requests Coin ID from Message Box
 fn retrieve_message_box_id(coin: &String) -> &'static str {
   let id = match coin.as_str() {
-    "SRI" => message_box::ids::SRI_PROCESSOR,
     "BTC" => message_box::ids::BTC_PROCESSOR,
     "ETH" => message_box::ids::ETH_PROCESSOR,
     "XMR" => message_box::ids::XMR_PROCESSOR,
@@ -456,7 +472,7 @@ async fn send_general_and_secure_test_message(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}", MessageType::CoordinatorGeneralMessageToProcessor.to_string()))
+        .key(&format!("{}", SignatureMessageType::CoordinatorGeneralMessageToProcessor.to_string()))
         .payload(&msg)
         .partition(0),
     )
@@ -466,7 +482,7 @@ async fn send_general_and_secure_test_message(
   producer
     .send(
       BaseRecord::to(&topic)
-        .key(&format!("{}", MessageType::CoordinatorSecureTestMessageToProcessor.to_string()))
+        .key(&format!("{}", SignatureMessageType::CoordinatorSecureTestMessageToProcessor.to_string()))
         .payload(&enc)
         .partition(1),
     )
@@ -475,5 +491,3 @@ async fn send_general_and_secure_test_message(
   // Add small delay for checking pubkeys
   tokio::time::sleep(Duration::from_millis(500)).await;
 }
-
-

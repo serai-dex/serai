@@ -1,6 +1,9 @@
 FROM docker.io/paritytech/base-ci-linux:latest as builder
 LABEL description="STAGE 1: Build"
 
+# Update Rust
+RUN rustup update
+
 # Add files for build
 ADD common /serai/common
 ADD crypto /serai/crypto
@@ -10,22 +13,16 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai/coordinator
 
-# Update Rust
-RUN rustup update
-RUN rustup toolchain install nightly
-RUN rustup install nightly
-RUN rustup target add wasm32-unknown-unknown --toolchain nightly
-
 # Mount cargo and serai cache for Cache & Build
 RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/target/release/build \
-    --mount=type=cache,target=/target/release/deps \
-    --mount=type=cache,target=/target/release/.fingerprint \
-    --mount=type=cache,target=/target/release/incremental \
-    --mount=type=cache,target=/target/release/wbuild \
-    --mount=type=cache,target=/target/release/lib* \
-    cargo +nightly build --release
+    --mount=type=cache,target=/serai/coordinator/target/release/build \
+    --mount=type=cache,target=/serai/coordinator/target/release/deps \
+    --mount=type=cache,target=/serai/coordinator/target/release/.fingerprint \
+    --mount=type=cache,target=/serai/coordinator/target/release/incremental \
+    --mount=type=cache,target=/serai/coordinator/target/release/wbuild \
+    --mount=type=cache,target=/serai/coordinator/target/release/lib* \
+    cargo build --release
 
 # Prepare Image
 FROM ubuntu:latest as image

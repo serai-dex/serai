@@ -2,10 +2,10 @@
 
 The Coordinator is a service that coordinates the processor infrastructure to prepare and submit instructions into the Serai blockchain and relay consensus-driven instructions from the Serai blockchain to the various processors. Other responsibilites of the coordinator include:
 
-*   Managing the lifecycle of the processor infrastructure.
-*   Proxying communications between internal and external processors for collaborative signing.
-*   Ensuring data integrity with information going to and from the blockchain.
-*   Provide necessary data for frontend consumption.
+* Managing the lifecycle of the processor infrastructure.
+* Proxying communications between internal and external processors for collaborative signing.
+* Ensuring data integrity with information going to and from the blockchain.
+* Provide necessary data for frontend consumption.
 
 ## Build, Run, Test
 
@@ -25,9 +25,9 @@ TBA
     * Consumer for observed txin instructions.
     * Consumer for observed txout instructions.
   * A signature process with:
-    *  Deterministic selection of signature party members from a given validator set.
-    *  Secure network communication capabilities with foreign network party members.
-    *  Encrypted extraservice communication capabilities with local network processors.
+    * Deterministic selection of signature party members from a given validator set.
+    * Secure network communication capabilities with foreign network party members.
+    * Encrypted extraservice communication capabilities with local network processors.
 
 ## General Architecture
 
@@ -42,11 +42,12 @@ Within the coordinator we have processes, each process will be responsible for o
 
 ### Coordinator Runtime Responsibilities
 
-*   Monitor the Serai blockchain for new instructions.
-*   Regularly validate solvency of multisignature vaults.
-*   Provide public data to a topic destined for consumption by a frontend/datawarehouse service.
+* Monitor the Serai blockchain for new instructions.
+* Regularly validate solvency of multisignature vaults.
+* Provide public data to a topic destined for consumption by a frontend/datawarehouse service.
 
 ### Main
+
 ```mermaid
     graph TB
     A[Coordinator Startup] --> B[Load Configuration]
@@ -58,9 +59,9 @@ Within the coordinator we have processes, each process will be responsible for o
 
 ***Runtime Arguments*** - The coordinator will accept the following runtime arguments:
 
-*   --config_dir - The path to the configuration file.
-*   --mode - The mode of the coordinator (production, development, test).
-*   --name - The identity of the keys responsible for the runtime coordinator.
+* --config_dir - The path to the configuration file.
+* --mode - The mode of the coordinator (production, development, test).
+* --name - The identity of the keys responsible for the runtime coordinator.
 
 **Load Configuration** - The coordinator will load the configuration file that contains the necessary information to start the coordinator. Configuration is setup to faciliatate multiple orchestration environments (Development, Test, Production).
 
@@ -75,6 +76,7 @@ Within the coordinator we have processes, each process will be responsible for o
 ## Core Process
 
 ### Requirements
+
 * Configuration loading and management.
 * Logger setup, management, and consumption.
 
@@ -99,12 +101,6 @@ Configuration is handled through a configuration file that is loaded on startup.
 * network
   * temporary array for party member names
 
-
-### Keygen
-
-To form a multisignature vault after validators have been elected to be a part of an upcoming set update, the coordinator will send this list of validators and the corresponding set and coin to the keygen processor. The coordinator will then form secure connections to each set member and send the keygen party to the validators. The validators will then sign the keygen party and send the signed keygen party back to the keygen processor. Once the processor has received the required number of signatures, it will send the succesfully generated public keys to the coordinator. The coordinator will then send the key and necessary metadata to the serai layer for publishing. The serai layer will then publish a vault update in the blockchain that will be considered active after the set succesfully updates. 
-
-
 ## Observation Process
 
 ### Requirements
@@ -119,6 +115,7 @@ The observation module is responsible for observing the target blockchain for ev
 The module will provide a process with an initialization method that requires the rpc endpoint at instatiation. Once initialized, the manager will then spawn a thread that will use subxt to subscribe for all events. The manager will also provide a method to stop the event subscription thread. If the chainstate has changed, the manager will produce an update to the chainstate on the appropriate Kafka topic. In the polling operation there will also be a check to determine if there are any events of interest that have occurred on the target blockchain. If there are events of interest such as "Instructions", the process will publish the event to the appropriate Kafka topic so that downstream consumers can process. The observation module uses a custom polling consumer model, not a kafka message consumer.
 
 ### Signature Process
+
 Serai's custom FROST library has keygen state machine that accepts shares until error or a cryptographic key is generated. These signature shares must accumulate shares in hashmap then when threshold reached, a transaction will be generated that can be relayed to the appropriate chain. Generating a signature share is a two-step process, first each signing party member must exchange commitments with eachother, then they must send shares to eachother based on these commitments.
 
 ### Requirements
@@ -146,7 +143,9 @@ Serai's custom FROST library has keygen state machine that accepts shares until 
 
 **Genesis Vault** - The coordinator will generate the genesis vault from using the multisignature keygen process later detailed.
 
+### Keygen
 
+To form a multisignature vault after validators have been elected to be a part of an upcoming set update, the coordinator will send this list of validators and the corresponding set and coin to the keygen processor. The coordinator will then form secure connections to each set member and send the keygen party to the validators. The validators will then sign the keygen party and send the signed keygen party back to the keygen processor. Once the processor has received the required number of signatures, it will send the succesfully generated public keys to the coordinator. The coordinator will then send the key and necessary metadata to the serai layer for publishing. The serai layer will then publish a vault update in the blockchain that will be considered active after the set succesfully updates.
 
 ### Party Formation
 
@@ -163,7 +162,7 @@ let rng = Chacha20Rng::from_seed(block_hash); loop { rng.next_u64() % VALIDATOR_
 * Accept requests from other processes to secure connections with a specific list of addresses.
 * Consume inbound messages and publish them securely to the appropriate Kafka topic.
 
-The connection module is responsible for establishing secure connections with a list of validators. It will accept requests to establish connections with a list of validators, and then will attempt to establish secure connections with each validator. Once a secure connection has been established, the connection module will publish a messages provided from the CryptoManager to target validators. The connection module will also consume messages from the appropriate Kafka topic, and then will publish the message to the appropriate validator. 
+The connection module is responsible for establishing secure connections with a list of validators. It will accept requests to establish connections with a list of validators, and then will attempt to establish secure connections with each validator. Once a secure connection has been established, the connection module will publish a messages provided from the CryptoManager to target validators. The connection module will also consume messages from the appropriate Kafka topic, and then will publish the message to the appropriate validator.
 
 ```mermaid
     graph LR;

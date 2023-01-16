@@ -69,9 +69,11 @@ async fn main() {
 
   // Start Core Process
   let core_config = config.clone();
+  let core_kafka_config = config.clone().get_kafka();
   let core_name_arg = name_arg.to_string().to_owned();
+
   tokio::spawn(async move {
-    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_chain(), core_config.get_kafka());
+    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_chain(), core_kafka_config.clone());
     core_process.run(core_name_arg).await;
   }).await.unwrap();
 
@@ -85,9 +87,11 @@ async fn main() {
 
   // Start Signature Process
   let sig_config = config.clone();
+  let sig_kafka_config = config.clone().get_kafka();
+  let sig_name_arg = name_arg.to_string().to_owned();
   tokio::spawn(async move {
     let signature_process =
-      SignatureProcess::new(sig_config.get_chain(), sig_config.get_kafka(), name_arg);
+      SignatureProcess::new(sig_config.get_chain(), sig_kafka_config.clone(), sig_name_arg);
     signature_process.run().await;
   });
   
@@ -95,12 +99,12 @@ async fn main() {
   // Initial Heartbeat to Processors
   //  * version check
   //  * binary checksum ??
-
+  let observer_config = config.clone().get_observer();
+  let observer_kafka_config = config.clone().get_kafka();
+  let observer_name_arg = name_arg.to_string().to_owned();
   // Start Serai Observer
-
   tokio::spawn(async move {
-    let observer_config = config.clone().get_observer();
-    let observer_process = observer::ObserverProcess::new(observer_config);
+    let observer_process = observer::ObserverProcess::new(observer_config, observer_kafka_config.clone(), observer_name_arg);
     observer_process.run().await;
   });
 
