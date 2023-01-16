@@ -199,7 +199,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       };
 
       // Get our first proposal
-      let proposal = authority.get_proposal(&import.client.header(last_hash).unwrap().unwrap()).await;
+      let proposal =
+        authority.get_proposal(&import.client.header(last_hash).unwrap().unwrap()).await;
 
       // Create the gossip network
       // This has to be spawning the machine, else gossip fails for some reason
