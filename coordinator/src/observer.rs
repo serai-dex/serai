@@ -17,7 +17,7 @@ use rdkafka::{
 
 use crate::{ core::ObserverConfig, core::KafkaConfig };
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize)]
 enum ObserverMessage {
     BlockUpdate { block_hash: String, 
                   block_number: u32, 
@@ -29,9 +29,8 @@ enum ObserverMessage {
 
 impl fmt::Display for ObserverMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match &*self {
             ObserverMessage::BlockUpdate { block_hash, block_number, parent_hash, state_root, extrinsics_root } => write!(f, "BlockUpdate {{ block_hash: {}, block_number: {}, parent_hash: {}, state_root: {}, extrinsics_root: {} }}", block_hash, block_number, parent_hash, state_root, extrinsics_root),
-            ObserverMessage::Default => write!(f, "Default"),
         }
     }
 }
@@ -64,7 +63,6 @@ impl ObserverProcess {
         // get host and port from config and assemble url
         let api = OnlineClient::<PolkadotConfig>::from_url(&self.observer_url).await?;
 
-        // For non-finalised blocks use `.subscribe_blocks()`
         let mut blocks: Subscription<Header<u32, BlakeTwo256>> = api
             .rpc()
             .subscribe_finalized_block_headers().await?;
@@ -76,22 +74,22 @@ impl ObserverProcess {
             .expect("invalid producer config");
 
         while let Some(Ok(block)) = blocks.next().await {
-            
-            let block = ObserverMessage::BlockUpdate({block_number: block.number, block_hash: block.hash(), parent_hash: block.parent_hash, state_root: block.state_root, extrinsics_root: block.extrinsics_root});
-            info!("Block update: {:?}", block);
+            info!("Block: {:?}", block);
             let mut topic = "".to_string();
             topic.push_str(&self.name);
             topic.push_str("_");
             topic.push_str("node");
-
-            producer
-            .send(
-              BaseRecord::to(&topic)
-                .key(&format!("{}", block.hash()))
-                .payload(&block)
-                .partition(0),
-            )
-            .expect("failed to send message");
+            
+            // extract block data to kafka
+            let block_hash = block.hash().to_string();
+            let block_number = block.number;
+            let parent_hash = block.parent_hash.to_string();
+            let state_root = block.state_root.to_string();
+            let extrinsics_root = block.extrinsics_root.to_string();
+            let message = ObserverMessage::BlockUpdate { block_hash: block_hash.to_string(), block_number, parent_hash, state_root, extrinsics_root };
+            let payload = serde_json::to_string(&message).unwrap();
+            let record = BaseRecord::to(&topic).key(&block_hash).payload(&payload);
+            producer.send(record).unwrap();
         }
 
         Ok(())
