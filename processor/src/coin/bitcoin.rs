@@ -16,7 +16,6 @@ use rand_core::OsRng;
 use bitcoin_hashes::hex::{FromHex, ToHex};
 
 use bitcoin::{
-  PrivateKey,
   util::address::Address,
   Txid,
   schnorr::{TweakedPublicKey, SchnorrSig},
@@ -78,9 +77,6 @@ impl From<SpendableOutput> for Output {
   }
 }
 impl OutputTrait for Output {
-  // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
-  // While the Monero library offers a variant which allows senders to ensure their TXs have unique
-  // output keys, Serai can still be targeted using the classic burning bug
   type Id = [u8; 36];
 
   fn id(&self) -> Self::Id {
@@ -302,22 +298,12 @@ impl Coin for Bitcoin {
     Ok((s_raw_transaction.to_vec(), vec_output))
   }
 
-  fn tweak_keys<'a>(&self, keys: &'a mut HashMap<u16, ThresholdKeys<Self::Curve>>) {
-    for (_, one_key) in keys.iter_mut() {
-      if one_key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
-        continue;
-      }
-      let (_, offset) = make_even(one_key.group_key());
-      *one_key = one_key.offset(Scalar::from(offset));
-    }
-  }
-
-  fn tweak_key<'a>(&self, one_key: &'a mut ThresholdKeys<Self::Curve>) {
-    if one_key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
+  fn tweak_keys<'a>(&self, key: &'a mut ThresholdKeys<Self::Curve>) {
+    if key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
       return;
     }
-    let (_, offset) = make_even(one_key.group_key());
-    *one_key = one_key.offset(Scalar::from(offset));
+    let (_, offset) = make_even(key.group_key());
+    *key = key.offset(Scalar::from(offset));
   }
 
   #[cfg(test)]
@@ -348,7 +334,9 @@ impl Coin for Bitcoin {
     //println!("Bitcoin test send");
 
     let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
-    self.tweak_keys(&mut keys);
+    for (_, key) in keys.iter_mut() {
+      self.tweak_keys(key);
+    }
     let key = keys[&1].group_key();
     let one_key = keys[&1].clone();
 

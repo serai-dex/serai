@@ -256,7 +256,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
       }
       let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
-        self.coin.tweak_key(keys);
+        self.coin.tweak_keys(keys);
         let res_output = self.coin.get_outputs(&block, keys.group_key()).await?;
         outputs.extend(
           res_output

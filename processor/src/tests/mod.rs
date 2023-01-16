@@ -65,7 +65,9 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
 
-  coin.tweak_keys(&mut keys);
+  for (_, key) in keys.iter_mut() {
+    coin.tweak_keys(key);
+  }
 
   let xkey = keys[&1].group_key();
   coin.address(xkey);
