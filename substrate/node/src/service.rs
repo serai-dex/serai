@@ -57,13 +57,13 @@ impl NativeExecutionDispatch for ExecutorDispatch {
 pub struct Cidp;
 #[async_trait::async_trait]
 impl CreateInherentDataProviders<Block, ()> for Cidp {
-  type InherentDataProviders = (sp_timestamp::InherentDataProvider,);
+  type InherentDataProviders = ();
   async fn create_inherent_data_providers(
     &self,
     _: <Block as BlockTrait>::Hash,
     _: (),
   ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
-    Ok((sp_timestamp::InherentDataProvider::from_system_time(),))
+    Ok(())
   }
 }
 

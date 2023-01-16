@@ -16,10 +16,10 @@ pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
 /// Address encoding and decoding functionality.
 pub mod address;
-use address::{Network, AddressType, AddressMeta, MoneroAddress};
+use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, MoneroAddress};
 
 mod scan;
-pub use scan::{ReceivedOutput, SpendableOutput};
+pub use scan::{ReceivedOutput, SpendableOutput, Timelocked};
 
 pub(crate) mod decoys;
 pub(crate) use decoys::Decoys;
@@ -106,20 +106,52 @@ impl ViewPair {
     ViewPair { spend, view }
   }
 
-  pub(crate) fn subaddress(&self, index: (u32, u32)) -> Scalar {
-    if index == (0, 0) {
-      return Scalar::zero();
-    }
-
+  fn subaddress_derivation(&self, index: SubaddressIndex) -> Scalar {
     hash_to_scalar(&Zeroizing::new(
       [
         b"SubAddr\0".as_ref(),
         Zeroizing::new(self.view.to_bytes()).as_ref(),
-        &index.0.to_le_bytes(),
-        &index.1.to_le_bytes(),
+        &index.account().to_le_bytes(),
+        &index.address().to_le_bytes(),
       ]
       .concat(),
     ))
+  }
+
+  fn subaddress_keys(&self, index: SubaddressIndex) -> (EdwardsPoint, EdwardsPoint) {
+    let scalar = self.subaddress_derivation(index);
+    let spend = self.spend + (&scalar * &ED25519_BASEPOINT_TABLE);
+    let view = self.view.deref() * spend;
+    (spend, view)
+  }
+
+  /// Returns an address with the provided specification.
+  pub fn address(&self, network: Network, spec: AddressSpec) -> MoneroAddress {
+    let mut spend = self.spend;
+    let mut view: EdwardsPoint = self.view.deref() * &ED25519_BASEPOINT_TABLE;
+
+    // construct the address meta
+    let meta = match spec {
+      AddressSpec::Standard => AddressMeta::new(network, AddressType::Standard),
+      AddressSpec::Integrated(payment_id) => {
+        AddressMeta::new(network, AddressType::Integrated(payment_id))
+      }
+      AddressSpec::Subaddress(index) => {
+        (spend, view) = self.subaddress_keys(index);
+        AddressMeta::new(network, AddressType::Subaddress)
+      }
+      AddressSpec::Featured { subaddress, payment_id, guaranteed } => {
+        if let Some(index) = subaddress {
+          (spend, view) = self.subaddress_keys(index);
+        }
+        AddressMeta::new(
+          network,
+          AddressType::Featured { subaddress: subaddress.is_some(), payment_id, guaranteed },
+        )
+      }
+    };
+
+    MoneroAddress::new(meta, spend, view)
   }
 }
 
@@ -130,15 +162,14 @@ impl ViewPair {
 #[derive(Clone)]
 pub struct Scanner {
   pair: ViewPair,
-  network: Network,
-  pub(crate) subaddresses: HashMap<CompressedEdwardsY, (u32, u32)>,
+  // Also contains the spend key as None
+  pub(crate) subaddresses: HashMap<CompressedEdwardsY, Option<SubaddressIndex>>,
   pub(crate) burning_bug: Option<HashSet<CompressedEdwardsY>>,
 }
 
 impl Zeroize for Scanner {
   fn zeroize(&mut self) {
     self.pair.zeroize();
-    self.network.zeroize();
 
     // These may not be effective, unfortunately
     for (mut key, mut value) in self.subaddresses.drain() {
@@ -163,59 +194,25 @@ impl ZeroizeOnDrop for Scanner {}
 
 impl Scanner {
   /// Create a Scanner from a ViewPair.
-  /// The network is used for generating subaddresses.
   /// burning_bug is a HashSet of used keys, intended to prevent key reuse which would burn funds.
   /// When an output is successfully scanned, the output key MUST be saved to disk.
   /// When a new scanner is created, ALL saved output keys must be passed in to be secure.
   /// If None is passed, a modified shared key derivation is used which is immune to the burning
   /// bug (specifically the Guaranteed feature from Featured Addresses).
   // TODO: Should this take in a DB access handle to ensure output keys are saved?
-  pub fn from_view(
-    pair: ViewPair,
-    network: Network,
-    burning_bug: Option<HashSet<CompressedEdwardsY>>,
-  ) -> Scanner {
+  pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Scanner {
     let mut subaddresses = HashMap::new();
-    subaddresses.insert(pair.spend.compress(), (0, 0));
-    Scanner { pair, network, subaddresses, burning_bug }
+    subaddresses.insert(pair.spend.compress(), None);
+    Scanner { pair, subaddresses, burning_bug }
   }
 
-  /// Return the main address for this view pair.
-  pub fn address(&self) -> MoneroAddress {
-    MoneroAddress::new(
-      AddressMeta::new(
-        self.network,
-        if self.burning_bug.is_none() {
-          AddressType::Featured(false, None, true)
-        } else {
-          AddressType::Standard
-        },
-      ),
-      self.pair.spend,
-      self.pair.view.deref() * &ED25519_BASEPOINT_TABLE,
-    )
-  }
-
-  /// Return the specified subaddress for this view pair.
-  pub fn subaddress(&mut self, index: (u32, u32)) -> MoneroAddress {
-    if index == (0, 0) {
-      return self.address();
-    }
-
-    let spend = self.pair.spend + (&self.pair.subaddress(index) * &ED25519_BASEPOINT_TABLE);
-    self.subaddresses.insert(spend.compress(), index);
-
-    MoneroAddress::new(
-      AddressMeta::new(
-        self.network,
-        if self.burning_bug.is_none() {
-          AddressType::Featured(true, None, true)
-        } else {
-          AddressType::Subaddress
-        },
-      ),
-      spend,
-      self.pair.view.deref() * spend,
-    )
+  /// Register a subaddress.
+  // There used to be an address function here, yet it wasn't safe. It could generate addresses
+  // incompatible with the Scanner. While we could return None for that, then we have the issue
+  // of runtime failures to generate an address.
+  // Removing that API was the simplest option.
+  pub fn register_subaddress(&mut self, subaddress: SubaddressIndex) {
+    let (spend, _) = self.pair.subaddress_keys(subaddress);
+    self.subaddresses.insert(spend.compress(), Some(subaddress));
   }
 }

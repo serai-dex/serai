@@ -24,26 +24,59 @@ pub enum AddressType {
   Standard,
   Integrated([u8; 8]),
   Subaddress,
-  Featured(bool, Option<[u8; 8]>, bool),
+  Featured { subaddress: bool, payment_id: Option<[u8; 8]>, guaranteed: bool },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct SubaddressIndex {
+  pub(crate) account: u32,
+  pub(crate) address: u32,
+}
+
+impl SubaddressIndex {
+  pub const fn new(account: u32, address: u32) -> Option<SubaddressIndex> {
+    if (account == 0) && (address == 0) {
+      return None;
+    }
+    Some(SubaddressIndex { account, address })
+  }
+
+  pub fn account(&self) -> u32 {
+    self.account
+  }
+
+  pub fn address(&self) -> u32 {
+    self.address
+  }
+}
+
+/// Address specification. Used internally to create addresses.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub enum AddressSpec {
+  Standard,
+  Integrated([u8; 8]),
+  Subaddress(SubaddressIndex),
+  Featured { subaddress: Option<SubaddressIndex>, payment_id: Option<[u8; 8]>, guaranteed: bool },
 }
 
 impl AddressType {
   pub fn subaddress(&self) -> bool {
-    matches!(self, AddressType::Subaddress) || matches!(self, AddressType::Featured(true, ..))
+    matches!(self, AddressType::Subaddress) ||
+      matches!(self, AddressType::Featured { subaddress: true, .. })
   }
 
   pub fn payment_id(&self) -> Option<[u8; 8]> {
     if let AddressType::Integrated(id) = self {
       Some(*id)
-    } else if let AddressType::Featured(_, id, _) = self {
-      *id
+    } else if let AddressType::Featured { payment_id, .. } = self {
+      *payment_id
     } else {
       None
     }
   }
 
   pub fn guaranteed(&self) -> bool {
-    matches!(self, AddressType::Featured(_, _, true))
+    matches!(self, AddressType::Featured { guaranteed: true, .. })
   }
 }
 
@@ -105,7 +138,7 @@ impl<B: AddressBytes> AddressMeta<B> {
       AddressType::Standard => bytes.0,
       AddressType::Integrated(_) => bytes.1,
       AddressType::Subaddress => bytes.2,
-      AddressType::Featured(..) => bytes.3,
+      AddressType::Featured { .. } => bytes.3,
     }
   }
 
@@ -114,7 +147,7 @@ impl<B: AddressBytes> AddressMeta<B> {
     AddressMeta { _bytes: PhantomData, network, kind }
   }
 
-  // Returns an incomplete type in the case of Integrated/Featured addresses
+  // Returns an incomplete instantiation in the case of Integrated/Featured addresses
   fn from_byte(byte: u8) -> Result<Self, AddressError> {
     let mut meta = None;
     for network in [Network::Mainnet, Network::Testnet, Network::Stagenet] {
@@ -123,7 +156,9 @@ impl<B: AddressBytes> AddressMeta<B> {
         _ if byte == standard => Some(AddressType::Standard),
         _ if byte == integrated => Some(AddressType::Integrated([0; 8])),
         _ if byte == subaddress => Some(AddressType::Subaddress),
-        _ if byte == featured => Some(AddressType::Featured(false, None, false)),
+        _ if byte == featured => {
+          Some(AddressType::Featured { subaddress: false, payment_id: None, guaranteed: false })
+        }
         _ => None,
       } {
         meta = Some(AddressMeta::new(network, kind));
@@ -168,7 +203,7 @@ impl<B: AddressBytes> ToString for Address<B> {
     let mut data = vec![self.meta.to_byte()];
     data.extend(self.spend.compress().to_bytes());
     data.extend(self.view.compress().to_bytes());
-    if let AddressType::Featured(subaddress, payment_id, guaranteed) = self.meta.kind {
+    if let AddressType::Featured { subaddress, payment_id, guaranteed } = self.meta.kind {
       // Technically should be a VarInt, yet we don't have enough features it's needed
       data.push(
         u8::from(subaddress) + (u8::from(payment_id.is_some()) << 1) + (u8::from(guaranteed) << 2),
@@ -201,7 +236,7 @@ impl<B: AddressBytes> Address<B> {
       .ok_or(AddressError::InvalidKey)?;
     let mut read = 65;
 
-    if matches!(meta.kind, AddressType::Featured(..)) {
+    if matches!(meta.kind, AddressType::Featured { .. }) {
       if raw[read] >= (2 << 3) {
         Err(AddressError::UnknownFeatures)?;
       }
@@ -210,8 +245,11 @@ impl<B: AddressBytes> Address<B> {
       let integrated = ((raw[read] >> 1) & 1) == 1;
       let guaranteed = ((raw[read] >> 2) & 1) == 1;
 
-      meta.kind =
-        AddressType::Featured(subaddress, Some([0; 8]).filter(|_| integrated), guaranteed);
+      meta.kind = AddressType::Featured {
+        subaddress,
+        payment_id: Some([0; 8]).filter(|_| integrated),
+        guaranteed,
+      };
       read += 1;
     }
 
@@ -226,7 +264,7 @@ impl<B: AddressBytes> Address<B> {
     if let AddressType::Integrated(ref mut id) = meta.kind {
       id.copy_from_slice(&raw[(read - 8) .. read]);
     }
-    if let AddressType::Featured(_, Some(ref mut id), _) = meta.kind {
+    if let AddressType::Featured { payment_id: Some(ref mut id), .. } = meta.kind {
       id.copy_from_slice(&raw[(read - 8) .. read]);
     }
 

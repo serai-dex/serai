@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{self, Read, Write};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -7,10 +7,13 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 use crate::{
   Commitment,
   serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point, read_raw_vec},
-  transaction::{Timelock, Transaction},
+  transaction::{Input, Timelock, Transaction},
   block::Block,
   rpc::{Rpc, RpcError},
-  wallet::{PaymentId, Extra, Scanner, uniqueness, shared_key, amount_decryption, commitment_mask},
+  wallet::{
+    PaymentId, Extra, address::SubaddressIndex, Scanner, uniqueness, shared_key, amount_decryption,
+    commitment_mask,
+  },
 };
 
 /// An absolute output ID, defined as its transaction hash and output index.
@@ -21,14 +24,18 @@ pub struct AbsoluteId {
 }
 
 impl AbsoluteId {
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(32 + 1);
-    res.extend(self.tx);
-    res.push(self.o);
-    res
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    w.write_all(&self.tx)?;
+    w.write_all(&[self.o])
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<AbsoluteId> {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = Vec::with_capacity(32 + 1);
+    self.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  pub fn read<R: Read>(r: &mut R) -> io::Result<AbsoluteId> {
     Ok(AbsoluteId { tx: read_bytes(r)?, o: read_byte(r)? })
   }
 }
@@ -43,16 +50,20 @@ pub struct OutputData {
 }
 
 impl OutputData {
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(32 + 32 + 40);
-    res.extend(self.key.compress().to_bytes());
-    res.extend(self.key_offset.to_bytes());
-    res.extend(self.commitment.mask.to_bytes());
-    res.extend(self.commitment.amount.to_le_bytes());
-    res
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    w.write_all(&self.key.compress().to_bytes())?;
+    w.write_all(&self.key_offset.to_bytes())?;
+    w.write_all(&self.commitment.mask.to_bytes())?;
+    w.write_all(&self.commitment.amount.to_le_bytes())
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<OutputData> {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = Vec::with_capacity(32 + 32 + 32 + 8);
+    self.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  pub fn read<R: Read>(r: &mut R) -> io::Result<OutputData> {
     Ok(OutputData {
       key: read_point(r)?,
       key_offset: read_scalar(r)?,
@@ -64,9 +75,8 @@ impl OutputData {
 /// The metadata for an output.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Metadata {
-  // Does not have to be an Option since the 0 subaddress is the main address
   /// The subaddress this output was sent to.
-  pub subaddress: (u32, u32),
+  pub subaddress: Option<SubaddressIndex>,
   /// The payment ID included with this output.
   /// This will be gibberish if the payment ID wasn't intended for the recipient or wasn't included.
   // Could be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
@@ -77,23 +87,42 @@ pub struct Metadata {
 }
 
 impl Metadata {
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = Vec::with_capacity(4 + 4 + 8 + 1);
-    res.extend(self.subaddress.0.to_le_bytes());
-    res.extend(self.subaddress.1.to_le_bytes());
-    res.extend(self.payment_id);
-
-    res.extend(u32::try_from(self.arbitrary_data.len()).unwrap().to_le_bytes());
-    for part in &self.arbitrary_data {
-      res.extend([u8::try_from(part.len()).unwrap()]);
-      res.extend(part);
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    if let Some(subaddress) = self.subaddress {
+      w.write_all(&[1])?;
+      w.write_all(&subaddress.account().to_le_bytes())?;
+      w.write_all(&subaddress.address().to_le_bytes())?;
+    } else {
+      w.write_all(&[0])?;
     }
-    res
+    w.write_all(&self.payment_id)?;
+
+    w.write_all(&u32::try_from(self.arbitrary_data.len()).unwrap().to_le_bytes())?;
+    for part in &self.arbitrary_data {
+      w.write_all(&[u8::try_from(part.len()).unwrap()])?;
+      w.write_all(part)?;
+    }
+    Ok(())
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Metadata> {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = Vec::with_capacity(1 + 8 + 1);
+    self.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Metadata> {
+    let subaddress = if read_byte(r)? == 1 {
+      Some(
+        SubaddressIndex::new(read_u32(r)?, read_u32(r)?)
+          .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid subaddress in metadata"))?,
+      )
+    } else {
+      None
+    };
+
     Ok(Metadata {
-      subaddress: (read_u32(r)?, read_u32(r)?),
+      subaddress,
       payment_id: read_bytes(r)?,
       arbitrary_data: {
         let mut data = vec![];
@@ -132,18 +161,23 @@ impl ReceivedOutput {
     &self.metadata.arbitrary_data
   }
 
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    self.absolute.write(w)?;
+    self.data.write(w)?;
+    self.metadata.write(w)
+  }
+
   pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = self.absolute.serialize();
-    serialized.extend(&self.data.serialize());
-    serialized.extend(&self.metadata.serialize());
+    let mut serialized = vec![];
+    self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<ReceivedOutput> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<ReceivedOutput> {
     Ok(ReceivedOutput {
-      absolute: AbsoluteId::deserialize(r)?,
-      data: OutputData::deserialize(r)?,
-      metadata: Metadata::deserialize(r)?,
+      absolute: AbsoluteId::read(r)?,
+      data: OutputData::read(r)?,
+      metadata: Metadata::read(r)?,
     })
   }
 }
@@ -184,14 +218,19 @@ impl SpendableOutput {
     self.output.commitment()
   }
 
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    self.output.write(w)?;
+    w.write_all(&self.global_index.to_le_bytes())
+  }
+
   pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = self.output.serialize();
-    serialized.extend(self.global_index.to_le_bytes());
+    let mut serialized = vec![];
+    self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<SpendableOutput> {
-    Ok(SpendableOutput { output: ReceivedOutput::deserialize(r)?, global_index: read_u64(r)? })
+  pub fn read<R: Read>(r: &mut R) -> io::Result<SpendableOutput> {
+    Ok(SpendableOutput { output: ReceivedOutput::read(r)?, global_index: read_u64(r)? })
   }
 }
 
@@ -232,7 +271,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
 impl Scanner {
   /// Scan a transaction to discover the received outputs.
   pub fn scan_transaction(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
-    let extra = Extra::deserialize(&mut Cursor::new(&tx.prefix.extra));
+    let extra = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref());
     let keys;
     let extra = if let Ok(extra) = extra {
       keys = extra.keys();
@@ -293,7 +332,10 @@ impl Scanner {
         // If we did though, it'd enable bypassing the included burning bug protection
         debug_assert!(output_key.is_torsion_free());
 
-        let key_offset = shared_key + self.pair.subaddress(subaddress);
+        let mut key_offset = shared_key;
+        if let Some(subaddress) = subaddress {
+          key_offset += self.pair.subaddress_derivation(subaddress);
+        }
         // Since we've found an output to us, get its amount
         let mut commitment = Commitment::zero();
 
@@ -373,18 +415,22 @@ impl Scanner {
     };
 
     let mut res = vec![];
-    for (i, tx) in txs.drain(..).enumerate() {
+    for tx in txs.drain(..) {
       if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }
-      index += tx
-        .prefix
-        .outputs
-        .iter()
-        // Filter to miner TX outputs/0-amount outputs since we're tacking the 0-amount index
-        .filter_map(|output| Some(1).filter(|_| (i == 0) || (output.amount == 0)))
-        // Since we can't get the length of an iterator, map each value to 1 and sum
-        .sum::<u64>();
+      index += u64::try_from(
+        tx.prefix
+          .outputs
+          .iter()
+          // Filter to miner TX outputs/0-amount outputs since we're tacking the 0-amount index
+          // This will fail to scan blocks containing pre-RingCT miner TXs
+          .filter(|output| {
+            matches!(tx.prefix.inputs.get(0), Some(Input::Gen(..))) || (output.amount == 0)
+          })
+          .count(),
+      )
+      .unwrap()
     }
     Ok(res)
   }

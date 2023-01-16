@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![no_std]
 
 use core::{
@@ -256,27 +257,6 @@ impl Field for Scalar {
     let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
     CtOption::new(candidate, candidate.square().ct_eq(self))
   }
-  fn is_zero(&self) -> Choice {
-    self.0.ct_eq(&DScalar::zero())
-  }
-  fn cube(&self) -> Self {
-    *self * self * self
-  }
-  fn pow_vartime<S: AsRef<[u64]>>(&self, exp: S) -> Self {
-    let mut sum = Self::one();
-    let mut accum = *self;
-    for (_, num) in exp.as_ref().iter().enumerate() {
-      let mut num = *num;
-      for _ in 0 .. 64 {
-        if (num & 1) == 1 {
-          sum *= accum;
-        }
-        num >>= 1;
-        accum *= accum;
-      }
-    }
-    sum
-  }
 }
 
 impl PrimeField for Scalar {
@@ -454,70 +434,11 @@ dalek_group!(
 );
 
 #[test]
-fn test_s() {
-  // "This is the number of leading zero bits in the little-endian bit representation of
-  // `modulus - 1`."
-  let mut s = 0;
-  for b in (Scalar::zero() - Scalar::one()).to_le_bits() {
-    if b {
-      break;
-    }
-    s += 1;
-  }
-  assert_eq!(s, Scalar::S);
+fn test_ed25519_group() {
+  ff_group_tests::group::test_prime_group_bits::<EdwardsPoint>();
 }
 
 #[test]
-fn test_root_of_unity() {
-  // "It can be calculated by exponentiating `Self::multiplicative_generator` by `t`, where
-  // `t = (modulus - 1) >> Self::S`."
-  let t = Scalar::zero() - Scalar::one();
-  let mut bytes = t.to_repr();
-  for _ in 0 .. Scalar::S {
-    bytes[0] >>= 1;
-    for b in 1 .. 32 {
-      // Shift the dropped but down a byte
-      bytes[b - 1] |= (bytes[b] & 1) << 7;
-      // Shift the byte
-      bytes[b] >>= 1;
-    }
-  }
-  let t = Scalar::from_repr(bytes).unwrap();
-
-  assert_eq!(Scalar::multiplicative_generator().pow(t), Scalar::root_of_unity());
-  assert_eq!(
-    Scalar::root_of_unity().pow(Scalar::from(2u64).pow(Scalar::from(Scalar::S))),
-    Scalar::one()
-  );
-}
-
-#[test]
-fn test_sqrt() {
-  assert_eq!(Scalar::zero().sqrt().unwrap(), Scalar::zero());
-  assert_eq!(Scalar::one().sqrt().unwrap(), Scalar::one());
-  for _ in 0 .. 10 {
-    let mut elem;
-    while {
-      elem = Scalar::random(&mut rand_core::OsRng);
-      elem.sqrt().is_none().into()
-    } {}
-    assert_eq!(elem.sqrt().unwrap().square(), elem);
-  }
-}
-
-#[test]
-fn test_pow() {
-  let base = Scalar::from(0b11100101u64);
-  assert_eq!(base.pow(Scalar::zero()), Scalar::one());
-  assert_eq!(base.pow_vartime(&[]), Scalar::one());
-  assert_eq!(base.pow_vartime(&[0]), Scalar::one());
-  assert_eq!(base.pow_vartime(&[0, 0]), Scalar::one());
-
-  assert_eq!(base.pow(Scalar::one()), base);
-  assert_eq!(base.pow_vartime(&[1]), base);
-  assert_eq!(base.pow_vartime(&[1, 0]), base);
-
-  let one_65 = Scalar::from(u64::MAX) + Scalar::one();
-  assert_eq!(base.pow_vartime(&[0, 1]), base.pow(one_65));
-  assert_eq!(base.pow_vartime(&[1, 1]), base.pow(one_65 + Scalar::one()));
+fn test_ristretto_group() {
+  ff_group_tests::group::test_prime_group_bits::<RistrettoPoint>();
 }

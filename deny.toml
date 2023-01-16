@@ -9,6 +9,11 @@ unmaintained = "warn"
 
 ignore = [
   "RUSTSEC-2020-0071", # https://github.com/chronotope/chrono/issues/602
+  "RUSTSEC-2021-0139", # https://github.com/serai-dex/serai/228
+  "RUSTSEC-2021-0145", # https://github.com/serai-dex/serai/225
+  "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
+  "RUSTSEC-2022-0075", # https://github.com/serai-dex/serai/226
+  "RUSTSEC-2022-0076", # https://github.com/serai-dex/serai/226
 ]
 
 [licenses]
@@ -42,8 +47,10 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "ethereum-serai" },
   { allow = ["AGPL-3.0"], name = "serai-processor" },
 
-  { allow = ["AGPL-3.0"], name = "serai-extension" },
-  { allow = ["AGPL-3.0"], name = "serai-multisig" },
+  { allow = ["AGPL-3.0"], name = "serai-primitives" },
+
+  { allow = ["AGPL-3.0"], name = "validator-sets-primitives" },
+  { allow = ["AGPL-3.0"], name = "validator-sets-pallet" },
 
   { allow = ["AGPL-3.0"], name = "sp-tendermint" },
   { allow = ["AGPL-3.0"], name = "pallet-tendermint" },
@@ -72,5 +79,4 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
   "https://github.com/serai-dex/substrate",
-  "https://github.com/hack-ink/array-bytes"
 ]

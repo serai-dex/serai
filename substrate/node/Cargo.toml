@@ -16,15 +16,17 @@ async-trait = "0.1"
 
 log = "0.4"
 
+futures = { version = "0.3" }
+
 clap = { version = "4", features = ["derive"] }
-jsonrpsee = { version = "0.15", features = ["server"] }
+
+jsonrpsee = { version = "0.16", features = ["server"] }
 
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
 sp-keystore = { git = "https://github.com/serai-dex/substrate" }
 sp-keyring = { git = "https://github.com/serai-dex/substrate" }
 sp-inherents = { git = "https://github.com/serai-dex/substrate" }
-sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
 sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
 sp-api = { git = "https://github.com/serai-dex/substrate" }
@@ -56,6 +58,10 @@ sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
+serai-primitives = { path = "../serai/primitives" }
+
+validator-sets-pallet = { path = "../validator-sets/pallet" }
+
 sp-tendermint = { path = "../tendermint/primitives" }
 pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
 serai-runtime = { path = "../runtime" }
@@ -70,5 +76,5 @@ runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
   "frame-benchmarking-cli/runtime-benchmarks",
 
-  "serai-runtime/runtime-benchmarks"
+  "serai-runtime/runtime-benchmarks",
 ]

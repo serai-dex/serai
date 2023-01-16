@@ -166,17 +166,17 @@ where
   }
 
   #[cfg(feature = "serialize")]
-  pub(crate) fn serialize<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub(crate) fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     w.write_all(self.commitments.0.to_bytes().as_ref())?;
     w.write_all(self.commitments.1.to_bytes().as_ref())?;
-    self.signature.serialize(w)
+    self.signature.write(w)
   }
 
   #[cfg(feature = "serialize")]
-  pub(crate) fn deserialize<R: Read>(r: &mut R) -> std::io::Result<Self> {
+  pub(crate) fn read<R: Read>(r: &mut R) -> std::io::Result<Self> {
     Ok(Bits {
       commitments: (read_point(r)?, read_point(r)?),
-      signature: Aos::deserialize(r, BitSignature::from(SIGNATURE).aos_form())?,
+      signature: Aos::read(r, BitSignature::from(SIGNATURE).aos_form())?,
     })
   }
 }

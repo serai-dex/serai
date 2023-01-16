@@ -10,8 +10,6 @@ use crate::{
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
 
-/// Curve tests.
-pub mod curve;
 /// Vectorized test suite to ensure consistency.
 pub mod vectors;
 
@@ -61,7 +59,9 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     .collect()
 }
 
-fn sign_internal<
+// Run the commit step and generate signature shares
+#[allow(clippy::type_complexity)]
+pub(crate) fn commit_and_shares<
   R: RngCore + CryptoRng,
   M: PreprocessMachine,
   F: FnMut(&mut R, &mut HashMap<u16, M::SignMachine>),
@@ -70,7 +70,10 @@ fn sign_internal<
   mut machines: HashMap<u16, M>,
   mut cache: F,
   msg: &[u8],
-) -> M::Signature {
+) -> (
+  HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::SignatureMachine>,
+  HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::SignatureShare>,
+) {
   let mut commitments = HashMap::new();
   let mut machines = machines
     .drain()
@@ -88,7 +91,7 @@ fn sign_internal<
   cache(rng, &mut machines);
 
   let mut shares = HashMap::new();
-  let mut machines = machines
+  let machines = machines
     .drain()
     .map(|(i, machine)| {
       let (machine, share) = machine.sign(clone_without(&commitments, &i), msg).unwrap();
@@ -100,6 +103,21 @@ fn sign_internal<
       (i, machine)
     })
     .collect::<HashMap<_, _>>();
+
+  (machines, shares)
+}
+
+fn sign_internal<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine,
+  F: FnMut(&mut R, &mut HashMap<u16, M::SignMachine>),
+>(
+  rng: &mut R,
+  machines: HashMap<u16, M>,
+  cache: F,
+  msg: &[u8],
+) -> M::Signature {
+  let (mut machines, shares) = commit_and_shares(rng, machines, cache, msg);
 
   let mut signature = None;
   for (i, machine) in machines.drain() {
@@ -137,7 +155,7 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     machines,
     |rng, machines| {
       // Cache and rebuild half of the machines
-      let mut included = machines.keys().into_iter().cloned().collect::<Vec<_>>();
+      let mut included = machines.keys().cloned().collect::<Vec<_>>();
       for i in included.drain(..) {
         if (rng.next_u64() % 2) == 0 {
           let cache = machines.remove(&i).unwrap().cache();

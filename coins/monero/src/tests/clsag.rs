@@ -43,7 +43,7 @@ fn clsag() {
       let dest = Zeroizing::new(random_scalar(&mut OsRng));
       let mask = random_scalar(&mut OsRng);
       let amount;
-      if i == u64::from(real) {
+      if i == real {
         secrets = (dest.clone(), mask);
         amount = AMOUNT;
       } else {

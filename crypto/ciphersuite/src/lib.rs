@@ -58,7 +58,14 @@ pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   fn generator() -> Self::G;
 
-  /// Hash the provided dst and message to a scalar.
+  /// Hash the provided domain-separation tag and message to a scalar. Ciphersuites MAY naively
+  /// prefix the tag to the message, enabling transpotion between the two. Accordingly, this
+  /// function should NOT be used in any scheme where one tag is a valid substring of another
+  /// UNLESS the specific Ciphersuite is verified to handle the DST securely.
+  ///
+  /// Verifying specific ciphersuites have secure tag handling is not recommended, due to it
+  /// breaking the intended modularity of ciphersuites. Instead, component-specific tags with
+  /// further purpose tags are recommended ("Schnorr-nonce", "Schnorr-chal").
   #[allow(non_snake_case)]
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
 

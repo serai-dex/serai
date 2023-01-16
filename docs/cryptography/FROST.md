@@ -18,9 +18,12 @@ multiple generators, FROST supports providing a nonce's commitments across
 multiple generators. In order to ensure their correctness, an extended
 [CP93's Discrete Log Equality Proof](https://chaum.com/wp-content/uploads/2021/12/Wallet_Databases.pdf)
 is used. The extension is simply to transcript `n` generators, instead of just
-two, enabling proving for all of them at once. Since FROST nonces are binomial,
-two DLEq proofs are provided, one for each nonce component. In the future, a
-modified proof proving for both components simultaneously may be used.
+two, enabling proving for all of them at once.
+
+Since FROST nonces are binomial, every nonce would require two DLEq proofs. To
+make this more efficient, we hash their commitments to obtain a binding factor,
+before doing a single DLEq proof for `d + be`, similar to how FROST calculates
+its nonces (as well as MuSig's key aggregation).
 
 As some algorithms require multiple nonces, effectively including multiple
 Schnorr signatures within one signature, the library also supports providing
@@ -29,12 +32,17 @@ multiplied by a per-participant binding factor to ensure the security of FROST.
 When additional nonces are used, this is actually a per-nonce per-participant
 binding factor.
 
+When multiple nonces are used, with multiple generators, we use a single DLEq
+proof for all nonces, merging their challenges. This provides a proof of `1 + n`
+elements instead of `2n`.
+
 Finally, to support additive offset signing schemes (accounts, stealth
 addresses, randomization), it's possible to specify a scalar offset for keys.
 The public key signed for is also offset by this value. During the signing
 process, the offset is explicitly transcripted. Then, the offset is divided by
 `p`, the amount of participating signers, and each signer adds it to their
-post-interpolation key share.
+post-interpolation key share. This maintains a leaderless protocol while still
+being correct.
 
 # Caching
 

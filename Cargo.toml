@@ -4,6 +4,7 @@ members = [
 
   "crypto/transcript",
 
+  "crypto/ff-group-tests",
   "crypto/dalek-ff-group",
   "crypto/ed448",
   "crypto/ciphersuite",
@@ -21,6 +22,11 @@ members = [
 
   "processor",
 
+  "substrate/serai/primitives",
+
+  "substrate/validator-sets/primitives",
+  "substrate/validator-sets/pallet",
+
   "substrate/tendermint/machine",
   "substrate/tendermint/primitives",
   "substrate/tendermint/client",
@@ -28,9 +34,6 @@ members = [
 
   "substrate/runtime",
   "substrate/node",
-
-  "contracts/extension",
-  "contracts/multisig",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due
@@ -52,8 +55,3 @@ monero-serai = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
-
-[patch.crates-io]
-# array-bytes 4.1.0 is GPL-3.0.
-# array-bytes git, which has no code changes, includes a dual-license under Apache-2.0.
-array-bytes = { git = "https://github.com/hack-ink/array-bytes", rev = "994cd29b66bd2ab5c8c15f0b15a1618d4bb2d94c" }

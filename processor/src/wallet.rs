@@ -322,6 +322,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
             acknowledged_block,
             inputs,
             &outputs,
+            Some(keys.group_key()),
             fee,
           )
           .await?;
