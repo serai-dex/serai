@@ -1,6 +1,6 @@
 use anyhow::Result;
-use serde::{de::DeserializeOwned};
-use std::{collections::HashMap, fmt::Debug, vec::Vec, str::FromStr};
+use serde::de::DeserializeOwned;
+use std::{collections::HashMap, str::FromStr};
 
 use bitcoin::{
     hashes::hex::FromHex, secp256k1::ecdsa::Signature, Address, Amount, EcdsaSighashType, OutPoint,
