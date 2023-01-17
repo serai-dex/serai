@@ -252,19 +252,6 @@ impl Rpc {
     Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
   }
 
-  pub async fn verify_message(
-    &self,
-    address: &Address,
-    signature: &Signature,
-    message: &str,
-  ) -> Result<bool> {
-    let mut ext_args =
-      [address.to_string().into(), signature.to_string().into(), into_json(message)?];
-    let defaults = [null(), null(), null()];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call::<bool>("verifymessage", &args).await
-  }
-
   pub async fn get_new_address(
     &self,
     label: Option<&str>,
