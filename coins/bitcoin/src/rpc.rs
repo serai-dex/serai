@@ -270,15 +270,6 @@ impl Rpc {
     Ok(self.rpc_call::<Vec<String>>("generatetoaddress", &args).await.unwrap())
   }
 
-  pub async fn decode_raw_transaction<R: RawTx>(&self, tx: R) -> Result<GetBlockResult>
-  where
-    R: Sync + Send,
-  {
-    let mut ext_args = [tx.raw_hex().into()];
-    let args = handle_defaults(&mut ext_args, &[null()]);
-    self.rpc_call::<GetBlockResult>("decoderawtransaction", &args).await
-  }
-
   pub async fn list_transactions(
     &self,
     label: Option<&str>,
