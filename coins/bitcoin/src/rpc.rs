@@ -236,21 +236,6 @@ impl Rpc {
     self.rpc_call::<GetRawTransactionResult>("getrawtransaction", &args).await
   }
 
-  pub async fn fund_raw_transaction<R: RawTx>(
-    &self,
-    tx: R,
-    options: Option<&FundRawTransactionOptions>,
-    is_witness: Option<bool>,
-  ) -> Result<FundRawTransactionResult>
-  where
-    R: Sync + Send,
-  {
-    let mut ext_args = [tx.raw_hex().into(), opt_into_json(options)?, opt_into_json(is_witness)?];
-    let defaults = [empty_obj(), null()];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call("fundrawtransaction", &args).await
-  }
-
   #[deprecated]
   pub async fn sign_raw_transaction<R: RawTx>(
     &self,
