@@ -12,21 +12,13 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-async-trait = { version = "0.1" }
-thiserror = { version = "1" }
+async-trait = "0.1"
 
 scale = { package = "parity-scale-codec", version = "3", features = ["derive", "max-encoded-len"] }
-scale-info = { version = "2", features = ["derive"] }
 
-futures = "0.3"
-serde = { version = "1" }
-jsonrpsee-core = { version = "0.16" }
-jsonrpsee-http-client = { version = "0.16" }
+jsonrpsee-core = "0.16"
+jsonrpsee-http-client = "0.16"
 
-tokio = "1"
-
-sp-std = { git = "https://github.com/serai-dex/substrate" }
 sp-inherents = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 
 in-instructions-pallet = { path = "../pallet" }

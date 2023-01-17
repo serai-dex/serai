@@ -2179,7 +2179,6 @@ dependencies = [
  "ethers-solc",
  "eyre",
  "group",
- "hex-literal",
  "k256",
  "modular-frost",
  "rand_core 0.6.4",
@@ -3541,18 +3540,11 @@ name = "in-instructions-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "futures",
  "in-instructions-pallet",
  "jsonrpsee-core",
  "jsonrpsee-http-client",
  "parity-scale-codec",
- "scale-info",
- "serde",
  "sp-inherents",
- "sp-runtime",
- "sp-std",
- "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -3581,7 +3573,6 @@ dependencies = [
  "serai-primitives",
  "serde",
  "sp-core",
- "thiserror",
 ]
 
 [[package]]
@@ -4860,7 +4851,6 @@ name = "monero-serai"
 version = "0.1.2-alpha"
 dependencies = [
  "base58-monero",
- "blake2",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "digest_auth",
@@ -7503,12 +7493,10 @@ dependencies = [
  "sc-block-builder",
  "sc-client-api",
  "sc-consensus",
- "sc-executor",
  "sc-network",
  "sc-network-common",
  "sc-network-gossip",
  "sc-service",
- "sc-transaction-pool",
  "sp-api",
  "sp-application-crypto",
  "sp-blockchain",
@@ -7897,10 +7885,8 @@ dependencies = [
  "clap 4.1.1",
  "frame-benchmarking",
  "frame-benchmarking-cli",
- "futures",
  "in-instructions-client",
  "jsonrpsee",
- "log",
  "pallet-transaction-payment-rpc",
  "sc-basic-authorship",
  "sc-cli",
@@ -7908,9 +7894,7 @@ dependencies = [
  "sc-client-db",
  "sc-consensus",
  "sc-executor",
- "sc-keystore",
  "sc-network",
- "sc-rpc",
  "sc-rpc-api",
  "sc-service",
  "sc-telemetry",
@@ -7919,14 +7903,12 @@ dependencies = [
  "sc-transaction-pool-api",
  "serai-runtime",
  "sp-api",
- "sp-application-crypto",
  "sp-block-builder",
  "sp-blockchain",
  "sp-consensus",
  "sp-core",
  "sp-inherents",
  "sp-keyring",
- "sp-keystore",
  "sp-runtime",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
@@ -7940,7 +7922,6 @@ dependencies = [
  "scale-info",
  "serde",
  "sp-core",
- "sp-std",
 ]
 
 [[package]]
@@ -7958,14 +7939,11 @@ dependencies = [
  "lazy_static",
  "modular-frost",
  "monero-serai",
- "parity-scale-codec",
  "rand_core 0.6.4",
- "scale-value",
  "serai-client",
  "serai-runtime",
  "serde",
  "serde_json",
- "subxt",
  "thiserror",
  "tokio",
  "zeroize",
@@ -7992,7 +7970,6 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "sp-api",
- "sp-application-crypto",
  "sp-block-builder",
  "sp-core",
  "sp-inherents",
@@ -9919,8 +9896,6 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
- "sp-core",
- "sp-std",
 ]
 
 [[package]]
