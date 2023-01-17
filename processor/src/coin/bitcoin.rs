@@ -159,7 +159,7 @@ impl Coin for Bitcoin {
     let mut outputs = Vec::new();
     for one_transaction in block_details.tx {
       for output_tx in one_transaction.vout {
-        if output_tx.script_pub_key.script().unwrap().cmp(&main_addr.script_pubkey()).is_eq() {
+        if output_tx.script_pub_key.script().unwrap() == main_addr.script_pubkey() {
           outputs.push(Output(SpendableOutput {
             txid: one_transaction.txid,
             vout: output_tx.n,
