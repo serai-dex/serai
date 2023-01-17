@@ -20,7 +20,7 @@ use frost::{
 use crate::crypto::{BitcoinHram, make_even, taproot_key_spend_signature_hash};
 use rand_core::RngCore;
 
-use core::{fmt::Debug};
+use core::fmt::Debug;
 use std::{
   io::{self, Read},
   collections::{HashMap, BTreeMap},
