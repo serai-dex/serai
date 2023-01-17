@@ -101,7 +101,7 @@ impl OutputTrait for Output {
 pub struct SignableTransaction {
   keys: ThresholdKeys<Secp256k1>,
   transcript: RecommendedTranscript,
-  height: usize,
+  number: usize,
   actual: BSignableTransaction,
 }
 
@@ -239,7 +239,7 @@ impl Coin for Bitcoin {
       psbt.inputs[i].sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
     }
-    return Ok(SignableTransaction { keys: keys, transcript: transcript, height: block_number+1, actual: BSignableTransaction{tx: psbt, fee:actual_fee} });
+    return Ok(SignableTransaction { keys: keys, transcript: transcript, number: block_number+1, actual: BSignableTransaction{tx: psbt, fee:actual_fee} });
   }
 
   async fn attempt_send(
@@ -252,7 +252,7 @@ impl Coin for Bitcoin {
     .multisig(
       transaction.keys.clone(),
       transaction.transcript.clone(),
-      transaction.height,
+      transaction.number,
     )
     .await
     .map_err(|_| CoinError::ConnectionError)
