@@ -270,7 +270,7 @@ impl Coin for Bitcoin {
       .enumerate()
       .map(|(i, output)| {
         let one_output = SpendableOutput {
-          txid: Txid::from_str(target_tx.txid().to_string().as_str()).unwrap(),
+          txid: target_tx.txid(),
           amount: output.value,
           vout: u32::try_from(i).unwrap(),
         };
