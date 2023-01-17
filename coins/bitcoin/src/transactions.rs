@@ -75,7 +75,7 @@ impl SignableTransaction {
     let mut sigs = vec![];
     let algorithm = Schnorr::<Secp256k1, BitcoinHram>::new();
     for (i, input) in raw_tx.input.iter().enumerate() {
-      let txid: [u8; 32] = input.previous_output.txid.to_vec()[0..32].try_into().unwrap();
+      let txid: [u8; 32] = input.previous_output.txid.as_ref().try_into().unwrap();
       transcript.append_message(b"input_hash", txid);
       transcript.append_message(b"input_output_index", input.previous_output.vout.to_le_bytes());
       transcript.append_message(
@@ -255,7 +255,7 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
   type SignatureShare = Vec<SignatureShare<Secp256k1>>;
 
   fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare> {
-    self.sigs.iter().map(|clsag| clsag.read_share(reader)).collect()
+    self.sigs.iter().map(|sig| sig.read_share(reader)).collect()
   }
 
   fn complete(
