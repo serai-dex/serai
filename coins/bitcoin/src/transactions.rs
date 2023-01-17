@@ -263,14 +263,14 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
     shares: HashMap<u16, Self::SignatureShare>,
   ) -> Result<PartiallySignedTransaction, FrostError> {
     for (i, schnorr) in self.sigs.drain(..).enumerate() {
-      let mut _sig = schnorr.complete(
+      let mut schnorr_signature = schnorr.complete(
         shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>(),
       )?;
       let mut _offset = 0;
-      (_sig.R, _offset) = make_even(_sig.R);
-      _sig.s += Scalar::from(_offset);
+      (schnorr_signature.R, _offset) = make_even(schnorr_signature.R);
+      schnorr_signature.s += Scalar::from(_offset);
 
-      let temp_sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1..65]).unwrap();
+      let temp_sig = secp256k1::schnorr::Signature::from_slice(&schnorr_signature.serialize()[1..65]).unwrap();
       let sig = SchnorrSig { sig: temp_sig, hash_ty: SchnorrSighashType::All };
       self.tx.inputs[i].tap_key_sig = Some(sig);
 
