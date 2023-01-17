@@ -3,16 +3,14 @@ use thiserror::Error;
 use serde::Serialize;
 use scale::Decode;
 
-use serai_runtime::{
-  primitives::{Signature, NativeAddress},
-  system::Config,
-  Runtime,
-};
-
 use subxt::{tx::BaseExtrinsicParams, Config as SubxtConfig, OnlineClient};
 
-mod in_instructions;
-pub use in_instructions::*;
+pub use serai_primitives as primitives;
+use primitives::{Signature, NativeAddress};
+
+use serai_runtime::{system::Config, Runtime};
+
+pub mod in_instructions;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct SeraiConfig;

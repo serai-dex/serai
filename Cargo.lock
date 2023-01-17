@@ -7869,12 +7869,17 @@ checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 name = "serai-client"
 version = "0.1.0"
 dependencies = [
+ "in-instructions-primitives",
+ "jsonrpsee-server",
+ "lazy_static",
  "parity-scale-codec",
  "scale-value",
+ "serai-primitives",
  "serai-runtime",
  "serde",
  "subxt",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -7935,13 +7940,10 @@ dependencies = [
  "futures",
  "group",
  "hex",
- "jsonrpsee-server",
  "lazy_static",
  "modular-frost",
  "monero-serai",
  "rand_core 0.6.4",
- "serai-client",
- "serai-runtime",
  "serde",
  "serde_json",
  "thiserror",

@@ -10,8 +10,6 @@ use coin::{CoinError, Coin};
 
 mod wallet;
 
-pub use serai;
-
 #[cfg(test)]
 mod tests;
 

@@ -1,56 +1,21 @@
 use core::time::Duration;
-use std::process::Command;
 
-use lazy_static::lazy_static;
+use tokio::time::sleep;
 
-use tokio::sync::Mutex;
-
-use serai_runtime::{
-  primitives::{BlockNumber, NativeAddress, Coin},
-  in_instructions::{
-    primitives::{ExternalAddress, Target, InInstruction},
-    Batch, Update,
-  },
-};
+use serai_runtime::in_instructions::{Batch, Update};
 
 use jsonrpsee_server::RpcModule;
 
-use crate::serai::{InInstructionsEvent, Serai};
+use serai_client::{
+  primitives::{BlockNumber, NativeAddress, Coin},
+  in_instructions::{
+    primitives::{ExternalAddress, Target, InInstruction},
+    InInstructionsEvent,
+  },
+  Serai,
+};
 
-lazy_static! {
-  pub static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
-}
-
-#[macro_export]
-macro_rules! serai_test {
-  ($(async fn $name: ident() $body: block)*) => {
-    $(
-      #[tokio::test]
-      async fn $name() {
-        let guard = SEQUENTIAL.lock().await;
-
-        // Spawn a fresh Serai node
-        let mut command = Command::new("../target/debug/serai-node").arg("--dev").spawn().unwrap();
-        {
-          while Serai::new().await.is_err() {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-          }
-        }
-
-        let local = tokio::task::LocalSet::new();
-        local.run_until(async move {
-          if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
-            drop(guard);
-            let _ = command.kill();
-            Err(err).unwrap()
-          } else {
-            command.kill().unwrap();
-          }
-        }).await;
-      }
-    )*
-  }
-}
+mod runner;
 
 serai_test!(
   async fn publish_update() {
@@ -98,7 +63,7 @@ serai_test!(
           _ => panic!("get_batches returned non-batch"),
         }
       }
-      tokio::time::sleep(Duration::from_millis(50)).await;
+      sleep(Duration::from_millis(50)).await;
     }
   }
 );

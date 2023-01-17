@@ -1,12 +1,16 @@
 use scale::Decode;
 
 use serai_runtime::{
-  primitives::{Coin, BlockNumber},
-  support::traits::PalletInfo as PalletInfoTrait,
-  PalletInfo, in_instructions, InInstructions, Runtime,
+  support::traits::PalletInfo as PalletInfoTrait, PalletInfo, in_instructions, InInstructions,
+  Runtime,
 };
 
-use crate::{Serai, SeraiError};
+pub use in_instructions_primitives as primitives;
+
+use crate::{
+  primitives::{Coin, BlockNumber},
+  Serai, SeraiError,
+};
 
 const PALLET: &str = "InInstructions";
 
