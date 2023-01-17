@@ -1,4 +1,4 @@
-use sc_service::PartialComponents;
+use sc_service::{PruningMode, PartialComponents};
 use frame_benchmarking_cli::{ExtrinsicFactory, BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 
@@ -135,7 +135,10 @@ pub fn run() -> sc_cli::Result<()> {
       cli.create_runner(cmd)?.sync_run(|config| cmd.run::<Block>(&config))
     }
 
-    None => cli.create_runner(&cli.run)?.run_node_until_exit(|config| async {
+    None => cli.create_runner(&cli.run)?.run_node_until_exit(|mut config| async {
+      if config.role.is_authority() {
+        config.state_pruning = Some(PruningMode::ArchiveAll);
+      }
       service::new_full(config).await.map_err(sc_cli::Error::Service)
     }),
   }
