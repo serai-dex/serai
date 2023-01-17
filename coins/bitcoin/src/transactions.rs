@@ -1,7 +1,7 @@
 use bitcoin::{
   util::{
-    schnorr::{SchnorrSig},
-    sighash::{SchnorrSighashType},
+    schnorr::SchnorrSig,
+    sighash::SchnorrSighashType,
   },
   psbt::{serialize::Serialize, PartiallySignedTransaction},
   Witness,
@@ -10,7 +10,7 @@ use thiserror::Error;
 use bitcoin_hashes::hex::ToHex;
 use frost::{
   algorithm::Schnorr,
-  curve::{Secp256k1},
+  curve::Secp256k1,
   FrostError, ThresholdKeys,
   sign::{
     Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine, SignatureMachine,
@@ -18,7 +18,7 @@ use frost::{
   },
 };
 use crate::crypto::{BitcoinHram, make_even, taproot_key_spend_signature_hash};
-use rand_core::{RngCore};
+use rand_core::RngCore;
 
 use core::{fmt::Debug};
 use std::{
