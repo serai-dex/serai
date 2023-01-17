@@ -145,7 +145,7 @@ impl Coin for Bitcoin {
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
     let block_result = self.rpc.get_height().await.map_err(|_| CoinError::ConnectionError);
     let block_number = match block_result {
-      Ok(val) => Ok(val as usize),
+      Ok(val) => Ok(usize::try_from(val).unwrap()),
       Err(_) => return Err(CoinError::ConnectionError),
     };
 
@@ -245,8 +245,8 @@ impl Coin for Bitcoin {
     for (i, one_input) in (&inputs).iter().enumerate() {
       let one_transaction = self.rpc.get_raw_transaction(&one_input.0.txid, None, None).await.unwrap();
       let xonly_pubkey = XOnlyPublicKey::from_slice(&keys.group_key().to_encoded_point(true).x().to_owned().unwrap()).unwrap();
-      psbt.inputs[i].witness_utxo = Some(one_transaction.output[one_input.0.vout as usize].clone());
-      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from_u32(SchnorrSighashType::All as u32));
+      psbt.inputs[i].witness_utxo = Some(one_transaction.output[usize::try_from(one_input.0.vout).unwrap()].clone());
+      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from_u32(u32::try_from(SchnorrSighashType::All).unwrap()));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
     }
     return Ok(SignableTransaction { keys: keys, transcript: transcript, height: block_number+1, actual: MSignableTransaction{tx: psbt, fee:actual_fee} });
@@ -282,7 +282,7 @@ impl Coin for Bitcoin {
         let one_output = SpendableOutput {
           txid: Txid::from_str(target_tx.txid().to_string().as_str()).unwrap(),
           amount: output.value,
-          vout: i as u32,
+          vout: u32::try_from(i).unwrap(),
         };
         Output(one_output).id()
       })
