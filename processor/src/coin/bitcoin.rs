@@ -21,7 +21,7 @@ use bitcoin_serai::{
   rpc_helper::RawTx,
   crypto::make_even,
   wallet::SpendableOutput,
-  transactions::{TransactionMachine, SignableTransaction as MSignableTransaction},
+  transactions::{TransactionMachine, SignableTransaction as BSignableTransaction},
 };
 
 use k256::{
@@ -105,7 +105,7 @@ pub struct SignableTransaction {
   keys: ThresholdKeys<Secp256k1>,
   transcript: RecommendedTranscript,
   height: usize,
-  actual: MSignableTransaction,
+  actual: BSignableTransaction,
 }
 
 #[async_trait]
@@ -209,7 +209,7 @@ impl Coin for Bitcoin {
       });
     }
 
-    let transaction_weight = MSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, false);
+    let transaction_weight = BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, false);
     let mut actual_fee = fee.calculate(transaction_weight);
     let target_sat = actual_fee + payment_sat;
     if input_sat < target_sat {
@@ -217,7 +217,7 @@ impl Coin for Bitcoin {
       return Err(CoinError::ConnectionError);
     }
     else if input_sat != target_sat {
-      let transaction_weight = MSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, true);
+      let transaction_weight = BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, true);
       actual_fee = fee.calculate(transaction_weight);
       let target_sat = actual_fee + payment_sat;
       if target_sat < input_sat {
@@ -243,7 +243,7 @@ impl Coin for Bitcoin {
       psbt.inputs[i].sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
     }
-    return Ok(SignableTransaction { keys: keys, transcript: transcript, height: block_number+1, actual: MSignableTransaction{tx: psbt, fee:actual_fee} });
+    return Ok(SignableTransaction { keys: keys, transcript: transcript, height: block_number+1, actual: BSignableTransaction{tx: psbt, fee:actual_fee} });
   }
 
   async fn attempt_send(
@@ -337,7 +337,7 @@ impl Coin for Bitcoin {
     let amount = inputs[0].amount();
     let change_amount = 10000;
     let fee = Self::Fee { per_weight: 42, mask: 66 };
-    let transaction_weight = MSignableTransaction::calculate_weight(inputs.len(), &address, false);
+    let transaction_weight = BSignableTransaction::calculate_weight(inputs.len(), &address, false);
     let total_amount = amount - fee.calculate(transaction_weight) - change_amount;
     let transcript = RecommendedTranscript::new(b"bitcoin_test");
     let payments = vec![(address, total_amount)];
