@@ -6,7 +6,7 @@ use serai_runtime::{
   PalletInfo, in_instructions, InInstructions, Runtime,
 };
 
-use crate::serai::{Serai, SeraiError};
+use crate::{Serai, SeraiError};
 
 const PALLET: &str = "InInstructions";
 
@@ -21,11 +21,12 @@ impl Serai {
     for event in
       self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?.iter()
     {
-      let event = event.unwrap();
+      let event = event.map_err(|_| SeraiError::InvalidRuntime)?;
       if PalletInfo::index::<InInstructions>().unwrap() == usize::from(event.pallet_index()) {
         let mut with_variant: &[u8] =
           &[[event.variant_index()].as_ref(), event.field_bytes()].concat();
-        let event = InInstructionsEvent::decode(&mut with_variant).unwrap();
+        let event =
+          InInstructionsEvent::decode(&mut with_variant).map_err(|_| SeraiError::InvalidRuntime)?;
         if matches!(event, InInstructionsEvent::Batch { .. }) {
           res.push(event);
         }

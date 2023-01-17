@@ -32,16 +32,12 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25
 # Monero
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
-# Substrate
-scale = { package = "parity-scale-codec", version = "3" }
-scale-value = "0.6"
-subxt = "0.25"
-
 # JSON-RPC
 jsonrpsee-server = "0.16"
 
 # Serai
 serai-runtime = { path = "../substrate/runtime" }
+serai = { path = "../client", package = "serai-client" }
 
 [dev-dependencies]
 rand_core = "0.6"

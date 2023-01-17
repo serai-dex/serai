@@ -34,13 +34,15 @@ impl SubxtConfig for SeraiConfig {
 }
 
 #[derive(Clone, Error, Debug)]
-pub(crate) enum SeraiError {
+pub enum SeraiError {
   #[error("failed to connect to serai")]
   RpcError,
+  #[error("serai-client library was intended for a different runtime version")]
+  InvalidRuntime,
 }
 
 #[derive(Clone)]
-pub(crate) struct Serai(OnlineClient<SeraiConfig>);
+pub struct Serai(OnlineClient<SeraiConfig>);
 
 impl Serai {
   pub async fn new() -> Result<Self, SeraiError> {
@@ -73,13 +75,12 @@ impl Serai {
     let address = subxt::dynamic::storage(pallet, name, keys);
     debug_assert!(storage.validate(&address).is_ok());
 
-    Ok(
-      storage
-        .fetch(&address, Some(block.into()))
-        .await
-        .map_err(|_| SeraiError::RpcError)?
-        .map(|res| R::decode(&mut res.encoded()).unwrap()),
-    )
+    storage
+      .fetch(&address, Some(block.into()))
+      .await
+      .map_err(|_| SeraiError::RpcError)?
+      .map(|res| R::decode(&mut res.encoded()).map_err(|_| SeraiError::InvalidRuntime))
+      .transpose()
   }
 
   pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
