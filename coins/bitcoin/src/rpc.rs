@@ -122,15 +122,6 @@ impl Rpc {
     Ok(self.rpc_call::<bool>("lockunspent", &args).await?)
   }
 
-  pub async fn get_fee_per_byte(&self, conf_target: Option<usize>) -> anyhow::Result<u64> {
-    let mut ext_args = [opt_into_json(conf_target)?];
-    let defaults = [into_json(100)?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    let fee: EstimateSmartFeeResult =
-      self.rpc_call::<EstimateSmartFeeResult>("estimatesmartfee", &args).await?;
-    Ok(fee.fee_rate.unwrap().to_sat())
-  }
-
   pub async fn get_transaction(&self, tx_hash: &str) -> anyhow::Result<GetTransactionResult> {
     let mut ext_args = [into_json(tx_hash)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
