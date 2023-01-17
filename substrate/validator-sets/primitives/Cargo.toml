@@ -2,7 +2,7 @@
 name = "validator-sets-primitives"
 version = "0.1.0"
 description = "Primitives for validator sets"
-license = "AGPL-3.0-only"
+license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/validator-sets/primitives"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
