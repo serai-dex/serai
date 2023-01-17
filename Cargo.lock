@@ -9189,7 +9189,7 @@ checksum = "7722c31febf55eb300c73d977da5d65cfd6fb443419b1185b9abcdd9925fd7be"
 dependencies = [
  "darling",
  "frame-metadata",
- "heck",
+ "heck 0.4.0",
  "hex",
  "jsonrpsee",
  "parity-scale-codec",
