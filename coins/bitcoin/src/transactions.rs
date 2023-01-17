@@ -65,10 +65,10 @@ impl SignableTransaction {
     self,
     keys: ThresholdKeys<Secp256k1>,
     mut transcript: RecommendedTranscript,
-    height: usize,
+    number: usize,
   ) -> Result<TransactionMachine, FrostError> {
     transcript.domain_separate(b"bitcoin_transaction");
-    transcript.append_message(b"height", u64::try_from(height).unwrap().to_le_bytes());
+    transcript.append_message(b"height", u64::try_from(number).unwrap().to_le_bytes());
     transcript.append_message(b"spend_key", keys.group_key().to_encoded_point(true).as_bytes());
 
     let raw_tx = self.tx.clone().extract_tx();
