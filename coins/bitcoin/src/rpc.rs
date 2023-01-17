@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::de::DeserializeOwned;
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, fmt::Debug, str::FromStr};
 
 use bitcoin::{
   hashes::hex::FromHex, secp256k1::ecdsa::Signature, Address, Amount, EcdsaSighashType, OutPoint,
@@ -15,7 +15,7 @@ use crate::rpc_helper::{
 use bitcoincore_rpc_json::{
   AddressType, CreateRawTransactionInput, EstimateSmartFeeResult, FundRawTransactionOptions,
   FundRawTransactionResult, GetBlockResult, GetRawTransactionResult, GetTransactionResult,
-  ListUnspentResultEntry, LoadWalletResult, SignRawTransactionInput, SignRawTransactionResult,
+  ListUnspentResultEntry, SignRawTransactionInput, SignRawTransactionResult,
   ListTransactionResult, TestMempoolAcceptResult,
 };
 
