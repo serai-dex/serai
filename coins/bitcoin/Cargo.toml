@@ -23,7 +23,7 @@ reqwest = { version = "0.11", features = ["json"] }
 anyhow = "1.0.32"
 tokio = { version = "1", features = ["full"] }
 thiserror = "1"
-sha2 = { version = "0.10" }
+sha2 = "0.10"
 frost = { version = "0.5", package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1"] }
 dleq = {  version = "0.2", package = "dleq", path = "../../crypto/dleq", features = ["serialize"]}
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.2", features = ["recommended"] }
