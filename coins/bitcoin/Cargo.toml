@@ -1,6 +1,10 @@
 [package]
 name = "bitcoin-serai"
 version = "0.1.0"
+description = "A Bitcoin library supporting Schnorr signing and on-chain verification"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/bitcoin"
+authors = ["Vrx <vrx00@proton.me>"]
 edition = "2021"
 publish = false
 
