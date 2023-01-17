@@ -35,6 +35,9 @@ runs:
       with:
         version: ${{ inputs.monero-version }}
 
+    - name: Run a Monero Wallet-RPC
+      uses: ./.github/actions/monero-wallet-rpc
+
     - name: Run a Serai Development Node
       if: ${{ inputs.serai }}
       shell: bash

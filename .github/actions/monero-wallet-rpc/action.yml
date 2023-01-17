@@ -1,5 +1,5 @@
-name: monero-regtest
-description: Spawns a regtest Monero daemon
+name: monero-wallet-rpc
+description: Spawns a Monero Wallet-RPC.
 
 inputs:
   version:
@@ -10,15 +10,15 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Monero Daemon Cache
-      id: cache-monerod
+    - name: Monero Wallet RPC Cache
+      id: cache-monero-wallet-rpc
       uses: actions/cache@v3
       with:
-        path: monerod
-        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+        path: monero-wallet-rpc
+        key: monero-wallet-rpc-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
-    - name: Download the Monero Daemon
-      if: steps.cache-monerod.outputs.cache-hit != 'true'
+    - name: Download the Monero Wallet RPC
+      if: steps.cache-monero-wallet-rpc.outputs.cache-hit != 'true'
       # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
       # to the contained folder not following the same naming scheme and
       # requiring further expansion not worth doing right now
@@ -37,8 +37,8 @@ runs:
         wget https://downloads.getmonero.org/cli/$FILE
         tar -xvf $FILE
 
-        mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod monerod
+        mv monero-x86_64-linux-gnu-${{ inputs.version }}/monero-wallet-rpc monero-wallet-rpc 
 
-    - name: Monero Regtest Daemon
+    - name: Monero Wallet RPC
       shell: bash
-      run: ./monerod --regtest --offline --fixed-difficulty=1 --detach
+      run: ./monero-wallet-rpc --disable-rpc-login --rpc-bind-port 6061 --allow-mismatched-daemon-version --wallet-dir ./ --detach
