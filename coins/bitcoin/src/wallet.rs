@@ -1,9 +1,9 @@
-use bitcoin::{Txid};
+use bitcoin::Txid;
 use bitcoin_hashes::hex::FromHex;
 
 #[derive(Clone, Debug)]
 pub struct SpendableOutput {
-  pub txid: Txid,//[u8;32],
+  pub txid: Txid,
   pub vout: u32,
   pub amount:u64,
 }
