@@ -246,7 +246,7 @@ impl Coin for Bitcoin {
       let one_transaction = self.rpc.get_raw_transaction(&one_input.0.txid, None, None).await.unwrap();
       let xonly_pubkey = XOnlyPublicKey::from_slice(&keys.group_key().to_encoded_point(true).x().to_owned().unwrap()).unwrap();
       psbt.inputs[i].witness_utxo = Some(one_transaction.output[usize::try_from(one_input.0.vout).unwrap()].clone());
-      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from_u32(u32::try_from(SchnorrSighashType::All).unwrap()));
+      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from_u32(SchnorrSighashType::All.into()));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
     }
     return Ok(SignableTransaction { keys: keys, transcript: transcript, height: block_number+1, actual: MSignableTransaction{tx: psbt, fee:actual_fee} });
