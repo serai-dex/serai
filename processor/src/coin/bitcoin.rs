@@ -9,7 +9,7 @@ use frost::{
 };
 
 use bitcoin::{
-  Block as MBlock,
+  Block as BBlock,
   util::address::Address,
   Txid, schnorr::TweakedPublicKey,
   XOnlyPublicKey, SchnorrSighashType,
@@ -35,7 +35,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Block([u8; 32], MBlock);
+pub struct Block([u8; 32], BBlock);
 impl BlockTrait for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
@@ -149,8 +149,8 @@ impl Coin for Bitcoin {
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
     let block_hash = self.rpc.get_block_hash(number - 1).await.unwrap();
     let info = self.rpc.get_block(&block_hash).await.unwrap();
-    let mblock = Block(info.block_hash().to_vec()[0..32].try_into().unwrap(),info);
-    Ok(mblock)
+    let BBlock = Block(info.block_hash().to_vec()[0..32].try_into().unwrap(),info);
+    Ok(BBlock)
   }
 
   async fn get_outputs(
