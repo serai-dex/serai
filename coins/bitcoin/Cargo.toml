@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A Bitcoin library supporting Schnorr signing and on-chain verification"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/coins/bitcoin"
-authors = ["Vrx <vrx00@proton.me>"]
+authors = ["Luke Parker <lukeparker5132@gmail.com>", "Vrx <vrx00@proton.me>"]
 edition = "2021"
 publish = false
 
@@ -28,6 +28,6 @@ frost = { version = "0.5", package = "modular-frost", path = "../../crypto/frost
 dleq = { version = "0.2", package = "dleq", path = "../../crypto/dleq", features = ["serialize"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.2", features = ["recommended"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
-k256 = { version = "0.11", features = ["arithmetic", "keccak256", "ecdsa"] }
+k256 = { version = "0.11", features = ["arithmetic"] }
 secp256k1 = {version = "0.24", features = ["global-context", "rand-std"] }
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
