@@ -296,7 +296,7 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn mine_block(&self) {
-    use bitcoincore_rpc_json::{AddressType};
+    use bitcoincore_rpc_json::AddressType;
 
     let new_addr = self.rpc.get_new_address(None, Some(AddressType::Bech32)).await.unwrap();
     self.rpc.generate_to_address(1, new_addr.to_string().as_str()).await.unwrap();
