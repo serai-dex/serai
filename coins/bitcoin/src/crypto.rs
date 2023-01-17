@@ -28,8 +28,8 @@ impl Hram<Secp256k1> for BitcoinHram {
 
     let r_encoded_point = R.to_encoded_point(true);
     let a_encoded_point = A.to_encoded_point(true);
-    let tag = b"BIP0340/challenge";
-    let tag_hash = Sha256::digest(tag);
+    const TAG : &[u8; 17] = b"BIP0340/challenge";
+    let tag_hash = Sha256::digest(TAG);
     let mut data = Sha256::new();
     data.update(tag_hash);
     data.update(tag_hash);
