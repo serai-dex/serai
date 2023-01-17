@@ -7,17 +7,8 @@ use bitcoin::{
   PrivateKey, Transaction, BlockHash,
 };
 
-use crate::rpc_helper::{
-  empty_arr, empty_obj, handle_defaults, into_json, null, opt_into_json, JsonOutPoint, RawTx,
-  RpcConnectionError, RpcParams, RpcResponse, GetBlockWithDetailResult,
-};
-
-use bitcoincore_rpc_json::{
-  AddressType, CreateRawTransactionInput, EstimateSmartFeeResult, FundRawTransactionOptions,
-  FundRawTransactionResult, GetBlockResult, GetRawTransactionResult, GetTransactionResult,
-  ListUnspentResultEntry, SignRawTransactionInput, SignRawTransactionResult,
-  ListTransactionResult, TestMempoolAcceptResult,
-};
+use crate::rpc_helper::*;
+use bitcoincore_rpc_json::*;
 
 #[derive(Debug, Clone)]
 pub struct Rpc {
