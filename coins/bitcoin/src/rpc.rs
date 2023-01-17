@@ -270,17 +270,6 @@ impl Rpc {
     Ok(self.rpc_call::<Vec<String>>("generatetoaddress", &args).await.unwrap())
   }
 
-  pub async fn get_balance(
-    &self,
-    minconf: Option<usize>,
-    include_watchonly: Option<bool>,
-  ) -> Result<Amount> {
-    let mut ext_args = ["*".into(), opt_into_json(minconf)?, opt_into_json(include_watchonly)?];
-    let defaults = [0.into(), null()];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(Amount::from_btc(self.rpc_call("getbalance", &args).await?)?)
-  }
-
   pub async fn decode_raw_transaction<R: RawTx>(&self, tx: R) -> Result<GetBlockResult>
   where
     R: Sync + Send,
