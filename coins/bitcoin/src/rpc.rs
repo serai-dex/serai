@@ -270,24 +270,6 @@ impl Rpc {
     Ok(self.rpc_call::<Vec<String>>("generatetoaddress", &args).await.unwrap())
   }
 
-  pub async fn list_transactions(
-    &self,
-    label: Option<&str>,
-    count: Option<usize>,
-    skip: Option<usize>,
-    include_watchonly: Option<bool>,
-  ) -> Result<Vec<ListTransactionResult>> {
-    let mut ext_args = [
-      label.unwrap_or("*").into(),
-      opt_into_json(count)?,
-      opt_into_json(skip)?,
-      opt_into_json(include_watchonly)?,
-    ];
-    let defaults = [10.into(), 0.into(), null()];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<Vec<ListTransactionResult>>("listtransactions", &args).await?)
-  }
-
   pub async fn test_mempool_accept<R: RawTx>(
     &self,
     rawtxs: &[R],
