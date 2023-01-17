@@ -111,5 +111,4 @@ pub trait Coin {
 
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address);
-
 }
