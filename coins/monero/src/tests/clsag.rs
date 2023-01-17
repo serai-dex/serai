@@ -107,11 +107,7 @@ fn clsag_multisig() {
     Arc::new(RwLock::new(Some(ClsagDetails::new(
       ClsagInput::new(
         Commitment::new(randomness, AMOUNT),
-        Decoys {
-          i: RING_INDEX,
-          offsets: (1 ..= RING_LEN).collect(),
-          ring: ring.clone(),
-        },
+        Decoys { i: RING_INDEX, offsets: (1 ..= RING_LEN).collect(), ring: ring.clone() },
       )
       .unwrap(),
       mask_sum,
