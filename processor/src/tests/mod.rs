@@ -70,10 +70,6 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
     coin.tweak_keys(key);
   }
 
-  let xkey = keys[&1].group_key();
-  coin.address(xkey);
-  coin.mine_block().await;
-
   let threshold = keys[&1].params().t();
   let mut networks = LocalNetwork::new(threshold);
 
