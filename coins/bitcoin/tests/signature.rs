@@ -43,5 +43,5 @@ fn test_signing() {
   let pubkey =
     secp256k1::XOnlyPublicKey::from_slice(&pubkey_compressed.x().to_owned().unwrap()).unwrap();
   dbg!(pubkey.to_hex().to_string());
-  let _res = sig.verify(&msg, &pubkey).unwrap();
+  sig.verify(&msg, &pubkey).unwrap()
 }
