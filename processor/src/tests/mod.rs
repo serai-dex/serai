@@ -100,7 +100,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
     let latest = coin.get_latest_block_number().await.unwrap();
     wallet.acknowledge_block(1, latest - (C::CONFIRMATIONS - 1));
     let mut signable = wallet
-      .prepare_sends(1, vec![(wallet.address(), 4999900000)], fee)
+      .prepare_sends(1, vec![(wallet.address(), 10000000000)], fee)
       .await
       .unwrap();
     if signable.1.len() <= 0 {
