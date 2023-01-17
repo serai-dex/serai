@@ -43,13 +43,12 @@ impl BlockTrait for Block {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Fee {
-  pub per_weight: u64,
-  pub mask: u64,
+  pub per_weight: u64
 }
 
 impl Fee {
   pub fn calculate(&self, weight: usize) -> u64 {
-    ((((self.per_weight * u64::try_from(weight).unwrap()) - 1) / self.mask) + 1) * self.mask
+    ((self.per_weight * u64::try_from(weight).unwrap()) - 1) 
   }
 }
 
@@ -293,7 +292,7 @@ impl Coin for Bitcoin {
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
     //TODO: Add fee estimation (42 satoshi / byte)
-    Self::Fee { per_weight: 11, mask: 66 }
+    Self::Fee { per_weight: 11 }
   }
 
   #[cfg(test)]
@@ -334,7 +333,7 @@ impl Coin for Bitcoin {
 
     let amount = inputs[0].amount();
     let change_amount = 10000;
-    let fee = Self::Fee { per_weight: 42, mask: 66 };
+    let fee = Self::Fee { per_weight: 42 };
     let transaction_weight = BSignableTransaction::calculate_weight(inputs.len(), &address, false);
     let total_amount = amount - fee.calculate(transaction_weight) - change_amount;
     let transcript = RecommendedTranscript::new(b"bitcoin_test");
