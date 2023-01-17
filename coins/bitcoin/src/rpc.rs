@@ -236,64 +236,6 @@ impl Rpc {
     self.rpc_call::<GetRawTransactionResult>("getrawtransaction", &args).await
   }
 
-  #[deprecated]
-  pub async fn sign_raw_transaction<R: RawTx>(
-    &self,
-    tx: R,
-    utxos: Option<&[SignRawTransactionInput]>,
-    private_keys: Option<&[PrivateKey]>,
-    sighash_type: Option<EcdsaSighashType>,
-  ) -> Result<SignRawTransactionResult>
-  where
-    R: Sync + Send,
-  {
-    let mut ext_args = [
-      tx.raw_hex().into(),
-      opt_into_json(utxos)?,
-      opt_into_json(private_keys)?,
-      opt_into_json(sighash_type)?,
-    ];
-    let defaults = [null(), empty_arr(), empty_arr(), into_json("ALL")?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call::<SignRawTransactionResult>("signrawtransaction", &args).await
-  }
-
-  pub async fn sign_raw_transaction_with_wallet<R: RawTx>(
-    &self,
-    tx: R,
-    utxos: Option<&[SignRawTransactionInput]>,
-    sighash_type: Option<EcdsaSighashType>,
-  ) -> Result<SignRawTransactionResult>
-  where
-    R: Sync + Send,
-  {
-    let mut ext_args = [tx.raw_hex().into(), opt_into_json(utxos)?, opt_into_json(sighash_type)?];
-    let defaults = [null(), empty_arr(), into_json("ALL")?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call::<SignRawTransactionResult>("signrawtransactionwithwallet", &args).await
-  }
-
-  pub async fn sign_raw_transaction_with_key<R: RawTx>(
-    &self,
-    tx: R,
-    privkeys: &[PrivateKey],
-    prevtxs: Option<&[SignRawTransactionInput]>,
-    sighash_type: Option<EcdsaSighashType>,
-  ) -> Result<SignRawTransactionResult>
-  where
-    R: Sync + Send,
-  {
-    let mut ext_args = [
-      tx.raw_hex().into(),
-      into_json(privkeys)?,
-      opt_into_json(prevtxs)?,
-      opt_into_json(sighash_type)?,
-    ];
-    let defaults = [empty_arr(), null(), empty_arr(), into_json("ALL")?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call::<SignRawTransactionResult>("signrawtransactionwithkey", &args).await
-  }
-
   pub async fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<bitcoin::Txid>
   where
     R: Sync + Send,
