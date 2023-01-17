@@ -101,7 +101,7 @@ pub trait Coin {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
 
-  fn tweak_keys<'a>(&self, key: &'a mut ThresholdKeys<Self::Curve>);
+  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>);
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;

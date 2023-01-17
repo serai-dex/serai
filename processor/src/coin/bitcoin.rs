@@ -280,7 +280,7 @@ impl Coin for Bitcoin {
     Ok((s_raw_transaction.to_vec(), vec_output))
   }
 
-  fn tweak_keys<'a>(&self, key: &'a mut ThresholdKeys<Self::Curve>) {
+  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>) {
     if key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
       return;
     }
