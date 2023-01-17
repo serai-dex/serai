@@ -37,7 +37,7 @@ jsonrpsee-server = "0.16"
 
 # Serai
 serai-runtime = { path = "../substrate/runtime" }
-serai = { path = "../client", package = "serai-client" }
+serai = { path = "../substrate/serai/client", package = "serai-client" }
 
 [dev-dependencies]
 rand_core = "0.6"

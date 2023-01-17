@@ -23,6 +23,7 @@ members = [
   "processor",
 
   "substrate/serai/primitives",
+  "substrate/serai/client",
 
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",
