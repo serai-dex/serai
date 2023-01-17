@@ -26,9 +26,7 @@ use bitcoin_serai::{
 
 use k256::{
   ProjectivePoint, Scalar,
-  elliptic_curve::{
-    sec1::{ToEncodedPoint, Tag},
-  },
+  elliptic_curve::sec1::{ToEncodedPoint, Tag},
 };
 use crate::{
   coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin}
