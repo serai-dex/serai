@@ -236,39 +236,6 @@ impl Rpc {
     self.rpc_call::<GetRawTransactionResult>("getrawtransaction", &args).await
   }
 
-  pub async fn create_raw_transaction_hex(
-    &self,
-    utxos: &[CreateRawTransactionInput],
-    outs: &HashMap<String, Amount>,
-    locktime: Option<i64>,
-    replaceable: Option<bool>,
-  ) -> Result<String> {
-    let outs_converted = serde_json::Map::from_iter(
-      outs.iter().map(|(k, v)| (k.clone(), serde_json::Value::from(v.to_btc()))),
-    );
-    let mut ext_args = [
-      into_json(utxos)?,
-      into_json(outs_converted)?,
-      opt_into_json(locktime)?,
-      opt_into_json(replaceable)?,
-    ];
-    let defaults = [null(), null(), into_json(0)?, into_json(false)?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call::<String>("createrawtransaction", &args).await
-  }
-
-  pub async fn create_raw_transaction(
-    &self,
-    utxos: &[CreateRawTransactionInput],
-    outs: &HashMap<String, Amount>,
-    locktime: Option<i64>,
-    replaceable: Option<bool>,
-  ) -> Result<Transaction> {
-    let hex: String = self.create_raw_transaction_hex(utxos, outs, locktime, replaceable).await?;
-    let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
-    Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
-  }
-
   pub async fn fund_raw_transaction<R: RawTx>(
     &self,
     tx: R,
