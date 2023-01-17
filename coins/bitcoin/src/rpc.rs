@@ -26,9 +26,6 @@ impl Rpc {
     params: &[serde_json::Value],
   ) -> anyhow::Result<Response> {
     let client = reqwest::Client::new();
-    //println!("METHOD : ---------->");
-    //dbg!(&method);
-    //dbg!(&params);
     let res = client
       .post(&self.url)
       .json(&RpcParams { jsonrpc: "2.0", id: (), method, params })
@@ -36,10 +33,8 @@ impl Rpc {
       .await?
       .text()
       .await?;
-    //dbg!(&res);
     let parsed_res: RpcResponse<Response> = serde_json::from_str(&res)
       .map_err(|_| anyhow::Error::new(RpcConnectionError::ParsingError))?;
-    //dbg!(&parsed_res.error);
     match parsed_res.error {
       None => Ok(parsed_res.result.unwrap()),
       Some(r) => Err(anyhow::Error::msg(r.message)), //Err(anyhow::Error::new(RpcConnectionError::ResultError(r.message))),
@@ -47,22 +42,19 @@ impl Rpc {
   }
 
   pub async fn get_height(&self) -> anyhow::Result<usize> {
-    let info: usize = self.rpc_call::<usize>("getblockcount", &[]).await?;
-    Ok(info)
+    Ok(self.rpc_call::<usize>("getblockcount", &[]).await?)
   }
 
   pub async fn get_block_info(&self, block_hash: &str) -> anyhow::Result<GetBlockResult> {
     let mut ext_args = [into_json(block_hash)?];
     let defaults = [null()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let info: GetBlockResult = self.rpc_call::<GetBlockResult>("getblock", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call::<GetBlockResult>("getblock", &args).await?)
   }
 
   pub async fn get_block_index(&self, block_hash: &str) -> anyhow::Result<usize> {
     let block = self.get_block_info(block_hash).await.unwrap();
-    let info = block.height;
-    Ok(info)
+    Ok(block.height)
   }
 
   pub async fn get_block(&self, block_hash: &bitcoin::BlockHash) -> anyhow::Result<bitcoin::Block> {
@@ -81,14 +73,11 @@ impl Rpc {
     let mut ext_args = [into_json(block_hash)?, 2.into()];
     let defaults = [null(), 1.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let info: GetBlockWithDetailResult =
-      self.rpc_call::<GetBlockWithDetailResult>("getblock", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call::<GetBlockWithDetailResult>("getblock", &args).await?)
   }
 
   pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash> {
-    let info = self.rpc_call::<bitcoin::BlockHash>("getbestblockhash", &[]).await?;
-    Ok(info)
+    Ok(self.rpc_call::<bitcoin::BlockHash>("getbestblockhash", &[]).await?)
   }
 
   pub async fn get_spendable(
@@ -106,8 +95,7 @@ impl Rpc {
     ];
     let defaults = [into_json(1)?, into_json(9999999)?, null(), into_json(true)?];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let info = self.rpc_call("listunspent", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call("listunspent", &args).await?)
   }
 
   pub async fn get_o_indexes(
@@ -117,16 +105,13 @@ impl Rpc {
     addresses: Option<Vec<&str>>,
     include_unsafe: Option<bool>,
   ) -> anyhow::Result<Vec<ListUnspentResultEntry>> {
-    let info: Vec<ListUnspentResultEntry> =
-      self.get_spendable(minconf, maxconf, addresses, include_unsafe).await?;
-    Ok(info)
+    Ok(self.get_spendable(minconf, maxconf, addresses, include_unsafe).await?)
   }
 
   pub async fn lock_unspent(&self, outputs: &[OutPoint]) -> Result<bool> {
     let outputs: Vec<_> =
       outputs.iter().map(|o| serde_json::to_value(JsonOutPoint::from(*o)).unwrap()).collect();
-    let info: bool = self.rpc_call::<bool>("lockunspent", &[false.into(), outputs.into()]).await?;
-    Ok(info)
+    Ok(self.rpc_call::<bool>("lockunspent", &[false.into(), outputs.into()]).await?)
   }
 
   pub async fn unlock_unspent(&self, outputs: &[OutPoint]) -> Result<bool> {
@@ -134,8 +119,7 @@ impl Rpc {
       outputs.iter().map(|o| serde_json::to_value(JsonOutPoint::from(*o)).unwrap()).collect();
     let mut ext_args = [true.into(), outputs.into()];
     let args = handle_defaults(&mut ext_args, &[true.into(), empty_arr()]);
-    let info: bool = self.rpc_call::<bool>("lockunspent", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call::<bool>("lockunspent", &args).await?)
   }
 
   pub async fn get_fee_per_byte(&self, conf_target: Option<usize>) -> anyhow::Result<u64> {
@@ -150,8 +134,7 @@ impl Rpc {
   pub async fn get_transaction(&self, tx_hash: &str) -> anyhow::Result<GetTransactionResult> {
     let mut ext_args = [into_json(tx_hash)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
-    let tx = self.rpc_call::<GetTransactionResult>("gettransaction", &args).await?;
-    Ok(tx)
+    Ok(self.rpc_call::<GetTransactionResult>("gettransaction", &args).await?)
   }
 
   pub async fn get_transactions(
@@ -193,15 +176,13 @@ impl Rpc {
     let mut ext_args = [into_json(tx_hash)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
     let tx = self.rpc_call::<GetTransactionResult>("gettransaction", &args).await?;
-    Ok(tx.info.blockheight.unwrap() as usize)
+    Ok(usize::try_from(tx.info.blockheight.unwrap()).unwrap())
   }
 
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash> {
     let mut ext_args = [into_json(height)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
-    let info: bitcoin::BlockHash =
-      self.rpc_call::<bitcoin::BlockHash>("getblockhash", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call::<bitcoin::BlockHash>("getblockhash", &args).await?)
   }
 
   pub async fn get_block_transactions(
@@ -214,8 +195,7 @@ impl Rpc {
       block_info.txdata.iter().map(|one_tx| one_tx.txid().to_string()).collect();
 
     let tx_ids_str: Vec<&str> = tx_ids.iter().map(|s| &s[..]).collect();
-    let transactions = self.get_transactions(tx_ids_str).await.unwrap();
-    Ok(transactions)
+    Ok(self.get_transactions(tx_ids_str).await.unwrap())
   }
 
   pub async fn get_block_raw_transactions(
@@ -228,8 +208,7 @@ impl Rpc {
       block_info.txdata.iter().map(|one_tx| one_tx.txid().to_string()).collect();
 
     let tx_ids_str: Vec<&str> = tx_ids.iter().map(|s| &s[..]).collect();
-    let transactions = self.get_raw_transactions(tx_ids_str, Some(&block_hash)).await.unwrap();
-    Ok(transactions)
+    Ok(self.get_raw_transactions(tx_ids_str, Some(&block_hash)).await.unwrap())
   }
 
   pub async fn get_raw_transaction(
@@ -378,15 +357,14 @@ impl Rpc {
   {
     let mut ext_args = [tx.raw_hex().into()];
     let args = handle_defaults(&mut ext_args, &[null()]);
-    let info: bitcoin::Txid = self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
+    
   }
 
   pub async fn send_raw_str_transaction(&self, raw_tx: String) -> Result<bitcoin::Txid> {
     let mut ext_args = [raw_tx.into()];
     let args = handle_defaults(&mut ext_args, &[null()]);
-    let info: bitcoin::Txid = self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
   }
 
   pub async fn verify_message(
@@ -417,8 +395,7 @@ impl Rpc {
     let mut ext_args = [into_json(nblocks)?, into_json(address)?, 100000000.into()];
     let defaults = [null(), null(), 100000000.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let info = self.rpc_call::<Vec<String>>("generatetoaddress", &args).await.unwrap();
-    Ok(info)
+    Ok(self.rpc_call::<Vec<String>>("generatetoaddress", &args).await.unwrap())
   }
 
   pub async fn get_balance(
@@ -456,9 +433,7 @@ impl Rpc {
     ];
     let defaults = [10.into(), 0.into(), null()];
     let args = handle_defaults(&mut ext_args, &defaults);
-
-    let info = self.rpc_call::<Vec<ListTransactionResult>>("listtransactions", &args).await?;
-    Ok(info)
+    Ok(self.rpc_call::<Vec<ListTransactionResult>>("listtransactions", &args).await?)
   }
 
   pub async fn test_mempool_accept<R: RawTx>(
@@ -467,8 +442,6 @@ impl Rpc {
   ) -> Result<Vec<TestMempoolAcceptResult>> {
     let hexes: Vec<serde_json::Value> =
       rawtxs.to_vec().into_iter().map(|r| r.raw_hex().into()).collect();
-    let info =
-      self.rpc_call::<Vec<TestMempoolAcceptResult>>("testmempoolaccept", &[hexes.into()]).await?;
-    Ok(info)
+    Ok(self.rpc_call::<Vec<TestMempoolAcceptResult>>("testmempoolaccept", &[hexes.into()]).await?)
   }
 }
