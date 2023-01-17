@@ -7940,7 +7940,6 @@ dependencies = [
  "futures",
  "group",
  "hex",
- "lazy_static",
  "modular-frost",
  "monero-serai",
  "rand_core 0.6.4",

@@ -2,6 +2,8 @@ use lazy_static::lazy_static;
 
 use tokio::sync::Mutex;
 
+pub const URL: &str = "ws://127.0.0.1:9944";
+
 lazy_static! {
   pub static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
 }
@@ -19,12 +21,14 @@ macro_rules! serai_test {
           use core::time::Duration;
           use std::{path::Path, process::Command};
 
-          let this_crate = Path::new(env!("CARGO_MANIFEST_DIR"));
-          let top_level = this_crate.join("../../../");
-          let node = top_level.join("target/debug/serai-node");
-          dbg!(node.clone());
+          let node = {
+            let this_crate = Path::new(env!("CARGO_MANIFEST_DIR"));
+            let top_level = this_crate.join("../../../");
+            top_level.join("target/debug/serai-node")
+          };
+
           let command = Command::new(node).arg("--dev").spawn().unwrap();
-          while Serai::new().await.is_err() {
+          while Serai::new(URL).await.is_err() {
             tokio::time::sleep(Duration::from_secs(1)).await;
           }
           command

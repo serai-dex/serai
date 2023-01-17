@@ -15,7 +15,7 @@ inputs:
   serai:
     description: "Run a Serai development node in the background"
     required: false
-    default: true
+    default: false
 
 runs:
   using: "composite"
@@ -39,5 +39,8 @@ runs:
       if: ${{ inputs.serai }}
       shell: bash
       run: |
+        cd substrate/node
         cargo build
+        cd ../..
+
         ./target/debug/serai-node --dev &

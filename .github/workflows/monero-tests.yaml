@@ -22,7 +22,6 @@ jobs:
         uses: ./.github/actions/test-dependencies
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          serai: false
 
       - name: Run Unit Tests Without Features
         run: cargo test --package monero-serai --lib

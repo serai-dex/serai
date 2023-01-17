@@ -16,6 +16,7 @@ use serai_client::{
 };
 
 mod runner;
+use runner::URL;
 
 serai_test!(
   async fn publish_update() {
@@ -41,7 +42,7 @@ serai_test!(
       .start(rpc)
       .unwrap();
 
-    let serai = Serai::new().await.unwrap();
+    let serai = Serai::new(URL).await.unwrap();
     assert_eq!(
       serai.get_next_batch_id(Coin(0), serai.get_latest_block_hash().await.unwrap()).await.unwrap(),
       0

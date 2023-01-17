@@ -43,12 +43,8 @@ pub enum SeraiError {
 pub struct Serai(OnlineClient<SeraiConfig>);
 
 impl Serai {
-  pub async fn new() -> Result<Self, SeraiError> {
-    Ok(Serai(
-      OnlineClient::<SeraiConfig>::from_url("ws://127.0.0.1:9944")
-        .await
-        .map_err(|_| SeraiError::RpcError)?,
-    ))
+  pub async fn new(url: &str) -> Result<Self, SeraiError> {
+    Ok(Serai(OnlineClient::<SeraiConfig>::from_url(url).await.map_err(|_| SeraiError::RpcError)?))
   }
 
   async fn storage<K: Serialize, R: Decode>(
@@ -58,12 +54,6 @@ impl Serai {
     key: Option<K>,
     block: [u8; 32],
   ) -> Result<Option<R>, SeraiError> {
-    /*
-    let mut registry = scale_info::Registry::new();
-    registry.register_type(&MetaType::<K>::new());
-    let registry = scale_value::scale::PortableRegistry::from(registry);
-    scale_value::decode_as_type(&mut &key.encode(), core::any::type_id::<K>(), &registry)
-    */
     let mut keys = vec![];
     if let Some(key) = key {
       keys.push(scale_value::serde::to_value(key).unwrap());

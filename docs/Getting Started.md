@@ -30,12 +30,6 @@ rustup toolchain install nightly
 rustup target add wasm32-unknown-unknown --toolchain nightly
 ```
 
-### Install subxt
-
-```
-cargo install subxt-cli
-```
-
 ### Install Solidity
 
 ```
