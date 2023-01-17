@@ -1,17 +1,17 @@
 use async_trait::async_trait;
 use bitcoin_hashes::hex::{FromHex, ToHex};
-use std::{str::FromStr};
-use transcript::{RecommendedTranscript};
+use std::str::FromStr;
+use transcript::RecommendedTranscript;
 
 use frost::{
-  curve::{Secp256k1},
+  curve::Secp256k1,
   ThresholdKeys,
 };
 
 use bitcoin::{
   Block as MBlock,
   util::address::Address,
-  Txid, schnorr::{TweakedPublicKey},
+  Txid, schnorr::TweakedPublicKey,
   XOnlyPublicKey, SchnorrSighashType,
   psbt::{PartiallySignedTransaction,PsbtSighashType},
 };
@@ -19,8 +19,8 @@ use bitcoin::{
 use bitcoin_serai::{
   rpc::Rpc,
   rpc_helper::RawTx,
-  crypto::{make_even},
-  wallet::{SpendableOutput},
+  crypto::make_even,
+  wallet::SpendableOutput,
   transactions::{TransactionMachine, SignableTransaction as MSignableTransaction},
 };
 
