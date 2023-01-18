@@ -176,8 +176,8 @@ impl ThresholdParams {
 pub fn lagrange<F: PrimeField>(i: Participant, included: &[Participant]) -> F {
   let i_f = F::from(u64::from(u16::from(i)));
 
-  let mut num = F::one();
-  let mut denom = F::one();
+  let mut num = F::ONE;
+  let mut denom = F::ONE;
   for l in included {
     if i == *l {
       continue;

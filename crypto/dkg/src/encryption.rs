@@ -190,7 +190,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
 
   #[cfg(test)]
   pub(crate) fn invalidate_pop(&mut self) {
-    self.pop.s += C::F::one();
+    self.pop.s += C::F::ONE;
   }
 
   #[cfg(test)]
@@ -250,7 +250,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     use ciphersuite::group::ff::PrimeField;
 
     // Assumes the share isn't randomly 1
-    let repr = C::F::one().to_repr();
+    let repr = C::F::ONE.to_repr();
     self.msg.as_mut().as_mut().copy_from_slice(repr.as_ref());
     *self = encrypt(rng, context, from, to, self.msg.clone());
   }

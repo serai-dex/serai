@@ -32,14 +32,14 @@ bincode = "1"
 serde_json = "1"
 
 # Cryptography
-group = "0.12"
+group = "0.13"
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript" }
 frost = { package = "modular-frost", path = "../crypto/frost" }
 
 # Bitcoin
 secp256k1 = { version = "0.24", features = ["global-context", "rand-std"], optional = true }
-k256 = { version = "0.12", features = ["arithmetic"], optional = true }
+k256 = { version = "0.13", features = ["arithmetic"], optional = true }
 bitcoin-serai = { path = "../coins/bitcoin", optional = true }
 
 # Monero

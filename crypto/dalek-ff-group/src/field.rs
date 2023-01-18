@@ -1,4 +1,7 @@
-use core::ops::{DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign};
+use core::{
+  ops::{DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
+  iter::{Sum, Product},
+};
 
 use zeroize::Zeroize;
 use rand_core::RngCore;
@@ -107,18 +110,15 @@ impl<'a> Neg for &'a FieldElement {
 }
 
 impl Field for FieldElement {
+  const ZERO: Self = Self(U256::ZERO);
+  const ONE: Self = Self(U256::ONE);
+
   fn random(mut rng: impl RngCore) -> Self {
     let mut bytes = [0; 64];
     rng.fill_bytes(&mut bytes);
     FieldElement(reduce(U512::from_le_bytes(bytes)))
   }
 
-  fn zero() -> Self {
-    Self(U256::ZERO)
-  }
-  fn one() -> Self {
-    Self(U256::ONE)
-  }
   fn square(&self) -> Self {
     FieldElement(reduce(self.0.square()))
   }
@@ -138,12 +138,66 @@ impl Field for FieldElement {
     let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
     CtOption::new(candidate, candidate.square().ct_eq(self))
   }
+
+  fn sqrt_ratio(u: &FieldElement, v: &FieldElement) -> (Choice, FieldElement) {
+    let i = SQRT_M1;
+
+    let u = *u;
+    let v = *v;
+
+    let v3 = v.square() * v;
+    let v7 = v3.square() * v;
+    let mut r = (u * v3) * (u * v7).pow(MOD_5_8);
+
+    let check = v * r.square();
+    let correct_sign = check.ct_eq(&u);
+    let flipped_sign = check.ct_eq(&(-u));
+    let flipped_sign_i = check.ct_eq(&((-u) * i));
+
+    r.conditional_assign(&(r * i), flipped_sign | flipped_sign_i);
+
+    let r_is_negative = r.is_odd();
+    r.conditional_negate(r_is_negative);
+
+    (correct_sign | flipped_sign, r)
+  }
 }
 
 impl PrimeField for FieldElement {
   type Repr = [u8; 32];
+
+  const MODULUS: &'static str = "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed";
+
   const NUM_BITS: u32 = 255;
   const CAPACITY: u32 = 254;
+
+  // TODO
+  const TWO_INV: Self = FieldElement(U256::from_be_hex(
+    "0000000000000000000000000000000000000000000000000000000000000000",
+  ));
+
+  // This was calculated with the method from the ff crate docs
+  // SageMath GF(modulus).primitive_element()
+  const MULTIPLICATIVE_GENERATOR: Self = Self(U256::from_u8(2));
+  // This was set per the specification in the ff crate docs
+  // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
+  const S: u32 = 2;
+
+  // This was calculated via the formula from the ff crate docs
+  // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
+  const ROOT_OF_UNITY: Self = FieldElement(U256::from_be_hex(
+    "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
+  ));
+  // TODO
+  const ROOT_OF_UNITY_INV: Self = FieldElement(U256::from_be_hex(
+    "0000000000000000000000000000000000000000000000000000000000000000",
+  ));
+
+  // TODO
+  const DELTA: Self = FieldElement(U256::from_be_hex(
+    "0000000000000000000000000000000000000000000000000000000000000000",
+  ));
+
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let res = Self(U256::from_le_bytes(bytes));
     CtOption::new(res, res.0.ct_lt(&MODULUS))
@@ -152,23 +206,12 @@ impl PrimeField for FieldElement {
     self.0.to_le_bytes()
   }
 
-  // This was set per the specification in the ff crate docs
-  // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
-  const S: u32 = 2;
   fn is_odd(&self) -> Choice {
     self.0.is_odd()
   }
-  fn multiplicative_generator() -> Self {
-    // This was calculated with the method from the ff crate docs
-    // SageMath GF(modulus).primitive_element()
-    2u64.into()
-  }
-  fn root_of_unity() -> Self {
-    // This was calculated via the formula from the ff crate docs
-    // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
-    FieldElement(U256::from_be_hex(
-      "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
-    ))
+
+  fn from_u128(num: u128) -> Self {
+    Self::from(num)
   }
 }
 
@@ -193,13 +236,13 @@ impl FieldElement {
 
   /// Perform an exponentation.
   pub fn pow(&self, other: FieldElement) -> FieldElement {
-    let mut table = [FieldElement::one(); 16];
+    let mut table = [FieldElement::ONE; 16];
     table[1] = *self;
     for i in 2 .. 16 {
       table[i] = table[i - 1] * self;
     }
 
-    let mut res = FieldElement::one();
+    let mut res = FieldElement::ONE;
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
@@ -254,6 +297,38 @@ impl FieldElement {
     r.conditional_negate(r.is_odd());
 
     (correct_sign | flipped_sign, r)
+  }
+}
+
+impl Sum<FieldElement> for FieldElement {
+  fn sum<I: Iterator<Item = FieldElement>>(iter: I) -> FieldElement {
+    let mut res = FieldElement::ZERO;
+    for item in iter {
+      res += item;
+    }
+    res
+  }
+}
+
+impl<'a> Sum<&'a FieldElement> for FieldElement {
+  fn sum<I: Iterator<Item = &'a FieldElement>>(iter: I) -> FieldElement {
+    iter.cloned().sum()
+  }
+}
+
+impl Product<FieldElement> for FieldElement {
+  fn product<I: Iterator<Item = FieldElement>>(iter: I) -> FieldElement {
+    let mut res = FieldElement::ZERO;
+    for item in iter {
+      res *= item;
+    }
+    res
+  }
+}
+
+impl<'a> Product<&'a FieldElement> for FieldElement {
+  fn product<I: Iterator<Item = &'a FieldElement>>(iter: I) -> FieldElement {
+    iter.cloned().product()
   }
 }
 

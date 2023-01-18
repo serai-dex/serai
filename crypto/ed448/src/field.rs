@@ -8,6 +8,11 @@ use crate::field;
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct FieldElement(pub(crate) U512);
 
+const MODULUS_STR: &str = concat!(
+  "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+);
+
 // 2**448 - 2**224 - 1
 pub(crate) const MODULUS: FieldElement = FieldElement(U512::from_be_hex(concat!(
   "00000000000000",
@@ -22,13 +27,13 @@ const WIDE_MODULUS: U1024 = U1024::from_be_hex(concat!(
   "00000000000000",
   "00",
   "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
-  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 ));
 
 pub(crate) const Q_4: FieldElement =
   FieldElement(MODULUS.0.saturating_add(&U512::ONE).wrapping_div(&U512::from_u8(4)));
 
-field!(FieldElement, MODULUS, WIDE_MODULUS, 448);
+field!(FieldElement, MODULUS_STR, MODULUS, WIDE_MODULUS, 448);
 
 #[test]
 fn test_field() {

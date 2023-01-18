@@ -21,7 +21,7 @@ fn test_aos_serialization<const RING_LEN: usize>(proof: Aos<G0, G1, RING_LEN>, R
 fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
   let generators = generators();
 
-  let mut ring_keys = [(<G0 as Group>::Scalar::zero(), <G1 as Group>::Scalar::zero()); RING_LEN];
+  let mut ring_keys = [(<G0 as Group>::Scalar::ZERO, <G1 as Group>::Scalar::ZERO); RING_LEN];
   // Side-effect of G0 being a type-alias with identity() deprecated
   #[allow(deprecated)]
   let mut ring = [(G0::identity(), G1::identity()); RING_LEN];

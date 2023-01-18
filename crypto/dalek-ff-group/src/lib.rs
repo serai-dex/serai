@@ -5,7 +5,7 @@
 use core::{
   borrow::Borrow,
   ops::{Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
-  iter::{Iterator, Sum},
+  iter::{Iterator, Sum, Product},
   hash::{Hash, Hasher},
 };
 
@@ -30,7 +30,7 @@ use dalek::{
 pub use constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
 
 use group::{
-  ff::{Field, PrimeField, FieldBits, PrimeFieldBits},
+  ff::{Field, PrimeField, FieldBits, PrimeFieldBits, helpers::sqrt_ratio_generic},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };
@@ -190,6 +190,7 @@ macro_rules! from_uint {
     from_wrapper!($wrapper, $inner, u16);
     from_wrapper!($wrapper, $inner, u32);
     from_wrapper!($wrapper, $inner, u64);
+    from_wrapper!($wrapper, $inner, u128);
   };
 }
 
@@ -207,13 +208,13 @@ const MODULUS: U256 =
 
 impl Scalar {
   pub fn pow(&self, other: Scalar) -> Scalar {
-    let mut table = [Scalar::one(); 16];
+    let mut table = [Scalar::ONE; 16];
     table[1] = *self;
     for i in 2 .. 16 {
       table[i] = table[i - 1] * self;
     }
 
-    let mut res = Scalar::one();
+    let mut res = Scalar::ONE;
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
@@ -250,18 +251,19 @@ impl Scalar {
 }
 
 impl Field for Scalar {
+  const ZERO: Scalar = Scalar(DScalar::from_bits([0; 32]));
+  const ONE: Scalar = Scalar(DScalar::from_bits({
+    let mut bytes = [0; 32];
+    bytes[0] = 1;
+    bytes
+  }));
+
   fn random(mut rng: impl RngCore) -> Self {
     let mut r = [0; 64];
     rng.fill_bytes(&mut r);
     Self(DScalar::from_bytes_mod_order_wide(&r))
   }
 
-  fn zero() -> Self {
-    Self(DScalar::zero())
-  }
-  fn one() -> Self {
-    Self(DScalar::one())
-  }
   fn square(&self) -> Self {
     *self * self
   }
@@ -271,24 +273,65 @@ impl Field for Scalar {
   fn invert(&self) -> CtOption<Self> {
     CtOption::new(Self(self.0.invert()), !self.is_zero())
   }
+
   fn sqrt(&self) -> CtOption<Self> {
     let mod_3_8 = MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8));
     let mod_3_8 = Scalar::from_repr(mod_3_8.to_le_bytes()).unwrap();
 
     let sqrt_m1 = MODULUS.saturating_sub(&U256::from_u8(1)).wrapping_div(&U256::from_u8(4));
-    let sqrt_m1 = Scalar::one().double().pow(Scalar::from_repr(sqrt_m1.to_le_bytes()).unwrap());
+    let sqrt_m1 = Scalar::from(2u8).pow(Scalar::from_repr(sqrt_m1.to_le_bytes()).unwrap());
 
     let tv1 = self.pow(mod_3_8);
     let tv2 = tv1 * sqrt_m1;
     let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
     CtOption::new(candidate, candidate.square().ct_eq(self))
   }
+
+  fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
+    sqrt_ratio_generic(num, div)
+  }
 }
 
 impl PrimeField for Scalar {
   type Repr = [u8; 32];
+
+  const MODULUS: &'static str = "1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed";
+
   const NUM_BITS: u32 = 253;
   const CAPACITY: u32 = 252;
+
+  // TODO
+  const TWO_INV: Scalar = Scalar(DScalar::from_bits([
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]));
+
+  // This was calculated with the method from the ff crate docs
+  // SageMath GF(modulus).primitive_element()
+  const MULTIPLICATIVE_GENERATOR: Scalar = Scalar(DScalar::from_bits({
+    let mut bytes = [0; 32];
+    bytes[0] = 2;
+    bytes
+  }));
+  // This was set per the specification in the ff crate docs
+  // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
+  const S: u32 = 2;
+
+  // This was calculated via the formula from the ff crate docs
+  // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
+  const ROOT_OF_UNITY: Scalar = Scalar(DScalar::from_bits([
+    212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
+    96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
+  ]));
+  // TODO
+  const ROOT_OF_UNITY_INV: Scalar = Scalar(DScalar::from_bits([
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]));
+
+  // TODO
+  const DELTA: Scalar = Scalar(DScalar::from_bits([
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]));
+
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
     // TODO: This unwrap_or isn't constant time, yet we don't exactly have an alternative...
@@ -298,9 +341,6 @@ impl PrimeField for Scalar {
     self.0.to_bytes()
   }
 
-  // This was set per the specification in the ff crate docs
-  // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
-  const S: u32 = 2;
   fn is_odd(&self) -> Choice {
     // This is probably overkill? Yet it's better safe than sorry since this is a complete
     // decomposition of the scalar
@@ -315,19 +355,9 @@ impl PrimeField for Scalar {
     }
     res
   }
-  fn multiplicative_generator() -> Self {
-    // This was calculated with the method from the ff crate docs
-    // SageMath GF(modulus).primitive_element()
-    2u64.into()
-  }
-  fn root_of_unity() -> Self {
-    // This was calculated via the formula from the ff crate docs
-    // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
-    Scalar::from_repr([
-      212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
-      96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
-    ])
-    .unwrap()
+
+  fn from_u128(num: u128) -> Self {
+    Self::from(num)
   }
 }
 
@@ -339,9 +369,9 @@ impl PrimeFieldBits for Scalar {
   }
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
-    let mut bytes = (Scalar::zero() - Scalar::one()).to_repr();
+    let mut bytes = (Scalar::ZERO - Scalar::ONE).to_repr();
     bytes[0] += 1;
-    debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::zero());
+    debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::ZERO);
     bytes.into()
   }
 }
@@ -349,6 +379,24 @@ impl PrimeFieldBits for Scalar {
 impl Sum<Scalar> for Scalar {
   fn sum<I: Iterator<Item = Scalar>>(iter: I) -> Scalar {
     Self(DScalar::sum(iter))
+  }
+}
+
+impl<'a> Sum<&'a Scalar> for Scalar {
+  fn sum<I: Iterator<Item = &'a Scalar>>(iter: I) -> Scalar {
+    Self(DScalar::sum(iter))
+  }
+}
+
+impl Product<Scalar> for Scalar {
+  fn product<I: Iterator<Item = Scalar>>(iter: I) -> Scalar {
+    Self(DScalar::product(iter))
+  }
+}
+
+impl<'a> Product<&'a Scalar> for Scalar {
+  fn product<I: Iterator<Item = &'a Scalar>>(iter: I) -> Scalar {
+    Self(DScalar::product(iter))
   }
 }
 

@@ -37,13 +37,13 @@ fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   let ysq = y.square();
   #[allow(non_snake_case)]
   let D_ysq = D * ysq;
-  (D_ysq - FieldElement::one()).invert().and_then(|inverted| {
-    let temp = (ysq - FieldElement::one()) * inverted;
+  (D_ysq - FieldElement::ONE).invert().and_then(|inverted| {
+    let temp = (ysq - FieldElement::ONE) * inverted;
     let mut x = temp.pow(Q_4);
     x.conditional_negate(x.is_odd());
 
     let xsq = x.square();
-    CtOption::new(x, (xsq + ysq).ct_eq(&(FieldElement::one() + (xsq * D_ysq))))
+    CtOption::new(x, (xsq + ysq).ct_eq(&(FieldElement::ONE + (xsq * D_ysq))))
   })
 }
 
@@ -56,7 +56,7 @@ pub struct Point {
 }
 
 lazy_static! {
-  static ref G: Point = Point { x: recover_x(G_Y).unwrap(), y: G_Y, z: FieldElement::one() };
+  static ref G: Point = Point { x: recover_x(G_Y).unwrap(), y: G_Y, z: FieldElement::ONE };
 }
 
 impl ConstantTimeEq for Point {
@@ -180,7 +180,7 @@ impl Group for Point {
     }
   }
   fn identity() -> Self {
-    Point { x: FieldElement::zero(), y: FieldElement::one(), z: FieldElement::one() }
+    Point { x: FieldElement::ZERO, y: FieldElement::ONE, z: FieldElement::ONE }
   }
   fn generator() -> Self {
     *G
@@ -291,7 +291,7 @@ impl GroupEncoding for Point {
       recover_x(y).and_then(|mut x| {
         x.conditional_negate(x.is_odd().ct_eq(&!sign));
         let not_negative_zero = !(x.is_zero() & sign);
-        let point = Point { x, y, z: FieldElement::one() };
+        let point = Point { x, y, z: FieldElement::ONE };
         CtOption::new(point, not_negative_zero & point.is_torsion_free())
       })
     })
@@ -350,7 +350,7 @@ fn torsion() {
     .unwrap(),
   ))
   .unwrap();
-  let old = Point { x: -recover_x(old_y).unwrap(), y: old_y, z: FieldElement::one() };
+  let old = Point { x: -recover_x(old_y).unwrap(), y: old_y, z: FieldElement::ONE };
   assert!(bool::from(!old.is_torsion_free()));
 }
 

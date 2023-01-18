@@ -82,7 +82,7 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
     // R + cA - sG == 0
     [
       // R
-      (C::F::one(), self.R),
+      (C::F::ONE, self.R),
       // cA
       (challenge, public_key),
       // -sG

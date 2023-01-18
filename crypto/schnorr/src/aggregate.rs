@@ -22,7 +22,7 @@ fn weight<D: Send + Clone + SecureDigest, F: PrimeField>(digest: &mut DigestTran
   // This should be guaranteed thanks to SecureDigest
   debug_assert!(bytes.len() >= 32);
 
-  let mut res = F::zero();
+  let mut res = F::ZERO;
   let mut i = 0;
 
   // Derive a scalar from enough bits of entropy that bias is < 2^128
@@ -169,7 +169,7 @@ impl<C: Ciphersuite> SchnorrAggregator<C> {
     }
 
     let mut aggregate =
-      SchnorrAggregate { Rs: Vec::with_capacity(self.sigs.len()), s: C::F::zero() };
+      SchnorrAggregate { Rs: Vec::with_capacity(self.sigs.len()), s: C::F::ZERO };
     for i in 0 .. self.sigs.len() {
       aggregate.Rs.push(self.sigs[i].R);
       aggregate.s += self.sigs[i].s * weight::<_, C::F>(&mut self.digest);

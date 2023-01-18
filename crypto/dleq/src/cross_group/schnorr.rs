@@ -72,7 +72,7 @@ where
       (),
       [
         (-self.s, generator),
-        (G::Scalar::one(), self.R),
+        (G::Scalar::ONE, self.R),
         (Self::hra(transcript, generator, self.R, public_key), public_key),
       ],
     );

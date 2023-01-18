@@ -108,7 +108,7 @@ pub fn test_mul<G: Group>() {
 
 /// Test `((order - 1) * G) + G == identity`.
 pub fn test_order<G: Group>() {
-  let minus_one = G::generator() * (G::Scalar::zero() - G::Scalar::one());
+  let minus_one = G::generator() * (G::Scalar::ZERO - G::Scalar::ONE);
   assert!(minus_one != G::identity(), "(modulus - 1) * G was identity");
   assert_eq!(minus_one + G::generator(), G::identity(), "((modulus - 1) * G) + G wasn't identity");
 }

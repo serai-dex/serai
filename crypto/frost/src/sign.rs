@@ -200,7 +200,7 @@ impl<C: Curve> SignatureShare<C> {
   pub(crate) fn invalidate(&mut self) {
     use ciphersuite::group::ff::Field;
 
-    self.0 += C::F::one();
+    self.0 += C::F::ONE;
   }
 }
 

@@ -32,7 +32,7 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   //    and loading it in
   // 3: Iterating over each byte and manually doubling/adding. This is simplest
 
-  let mut challenge = F::zero();
+  let mut challenge = F::ZERO;
 
   // Get a wide amount of bytes to safely reduce without bias
   // In most cases, <=1.5x bytes is enough. 2x is still standard and there's some theoretical

@@ -19,7 +19,7 @@ sha2 = "0.10"
 secp256k1 = { version = "0.24", features = ["global-context"] }
 bitcoin = { version = "0.29", features = ["serde"] }
 
-k256 = { version = "0.12", features = ["arithmetic"] }
+k256 = { version = "0.13", features = ["arithmetic"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", features = ["recommended"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["secp256k1"] }
 
