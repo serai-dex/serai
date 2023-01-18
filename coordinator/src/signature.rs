@@ -26,7 +26,7 @@ pub struct SignatureProcess {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-enum Coin {
+pub enum Coin {
   BTC,
   ETH,
   XMR,
@@ -43,7 +43,7 @@ impl fmt::Display for Coin {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-enum SignatureMessageType {
+pub enum SignatureMessageType {
 
   // The coordinator sends its public key to the processor.
   CoordinatorPubkeyToProcessor,
@@ -62,6 +62,9 @@ enum SignatureMessageType {
 
   // The processor sends a secure test message to the coordinator.
   ProcessorSecureTestMessageToCoordinator,
+
+  // The coordinator sends recieved processor pubkey to its processor.
+  ProcessorPubkeyToProcessor,
 
   // Default message type.
   Default,
@@ -84,6 +87,9 @@ impl fmt::Display for SignatureMessageType {
       SignatureMessageType::ProcessorSecureTestMessageToCoordinator => {
         write!(f, "processor_secure_test_message_to_coordinator")
       }
+      SignatureMessageType::ProcessorPubkeyToProcessor => {
+        write!(f, "processor_pubkey_to_processor")
+      }
       SignatureMessageType::Default => write!(f, "Default"),
     }
   }
@@ -92,7 +98,7 @@ impl fmt::Display for SignatureMessageType {
 // Parses the message type from a string to a SignatureMessageType.
 // The message type is used to determine which type of message is being sent
 // to the coordinator.
-fn parse_message_type(message_type: &str) -> SignatureMessageType {
+pub fn parse_message_type(message_type: &str) -> SignatureMessageType {
   let mut msg_type = SignatureMessageType::Default;
   match message_type {
     "coordinator_pubkey_to_processor" => {
@@ -377,7 +383,7 @@ async fn process_received_pubkey(coin: &str, name: &str) {
 }
 
 // Create Hashmap based on coins
-fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<Coin, bool> {
+pub fn create_coin_hashmap(chain_config: &ChainConfig) -> HashMap<Coin, bool> {
   let j = serde_json::to_string(&chain_config).unwrap();
   let mut coins: HashMap<Coin, bool> = HashMap::new();
   let coins_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();

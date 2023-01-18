@@ -77,14 +77,6 @@ async fn main() {
     core_process.run(core_name_arg).await;
   }).await.unwrap();
 
-  // Start Network Process
-  let network_config = config.clone().get_network();
-  let network_name_arg = name_arg.to_string().to_owned();
-  tokio::spawn(async move {
-    let network_process = NetworkProcess::new(network_name_arg.to_string(), network_config.party);
-    network_process.run().await;
-  });
-
   // Start Signature Process
   let sig_config = config.clone();
   let sig_kafka_config = config.clone().get_kafka();
@@ -93,6 +85,14 @@ async fn main() {
     let signature_process =
       SignatureProcess::new(sig_config.get_chain(), sig_kafka_config.clone(), sig_name_arg);
     signature_process.run().await;
+  });
+
+  // Start Network Process
+  let network_config = config.clone();
+  let network_name_arg = name_arg.to_string().to_owned();
+  tokio::spawn(async move {
+    let network_process = NetworkProcess::new(network_name_arg.to_string(), network_config.get_network().signers);
+    network_process.run(network_config.get_chain(), network_config.get_kafka()).await;
   });
   
 

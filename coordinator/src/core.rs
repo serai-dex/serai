@@ -362,13 +362,13 @@ impl KafkaConfig {
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct NetworkConfig {
-  pub party: Vec<config::Value>,
+  pub signers: Vec<config::Value>,
 }
 
 impl NetworkConfig {
   fn new(config: Config) -> Self {
-    let party = config.get_array("party").unwrap();
-    Self { party }
+    let signers = config.get_array("signers").unwrap();
+    Self { signers }
   }
 }
 
@@ -420,7 +420,7 @@ impl CoordinatorConfig {
         offset_reset: s.get_string("kafka.offset_reset").unwrap(),
       },
       network: NetworkConfig {
-        party: s.get_array("network.party").unwrap(),
+        signers: s.get_array("network.signers").unwrap(),
       },
     };
 

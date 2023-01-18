@@ -22,4 +22,4 @@ port = "9092" # localhost connects from 9094, internal docker connects from 9092
 offset_reset = "smallest"
 
 [network]
-party = ["alice", "bob", "charlie"]
+signers = ["alice", "bob", "charlie"]
