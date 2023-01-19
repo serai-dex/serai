@@ -6,8 +6,6 @@ use std::{
   str::FromStr,
 };
 
-use async_std::stream::stream::StreamExt;
-
 use sp_runtime::traits::{Block as BlockTrait};
 use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
@@ -133,30 +131,10 @@ pub fn new_partial(
       executor,
     )?;
 
-    let mut finality = client.finality_notification_stream();
-    let mut imports = client.import_notification_stream();
+  let finality_notification_stream = client.finality_notification_stream();
+
+  // listen to finality_notification_stream and output events from all pallets
   
-    loop {
-      select! {
-        f = finality.next() => {
-          match f {
-            Some(block) => {
-              handle.block_finalized(block.into()).await;
-            }
-            None => break,
-          }
-        },
-        i = imports.next() => {
-          match i {
-            Some(block) => {
-              handle.block_imported(block.into()).await;
-            }
-            None => break,
-          }
-        },
-        complete => break,
-      }
-    }
   let client = Arc::new(client);
 
   let telemetry = telemetry.map(|(worker, telemetry)| {
