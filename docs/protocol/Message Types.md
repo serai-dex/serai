@@ -12,16 +12,16 @@
 
  The message types are:
     - `SeraiBlock` - This message is sent from the observer to the
-     coordinator when a new block is observed.D
+     coordinator when a new block is observed.
     - `AckSeraiBlock` - This message is sent from the processor to
      the serai kafka topic when a block height is acknowledged.
     - `ExternalBlock{COIN}` - this message is sent from the processor to
      the relevant coin kafka topic when a block is witnessed from the XMR network.
-    - `ExternalInstruction{COIN}` - the message is sent from the processor to
+    - `ExternalInstructionIn{COIN}` - the message is sent from the processor to
      the relevant coin kafka topic when an instruction is witnessed from a block.
-    - `SeraiInstruction{COIN}` - this message is sent from the coordinator to the
-     relevant coin topic when a new instruction is witnessed from Serai targeting the coin's network.
-    - `SeraiSetUpdate` - this message is produced from the coordinator via the observer process to
-     the relevant coin topics when a new set is witnessed from Serai.
-    - `SeraiNetworkUpdate` - this message is produced from the coordinator via the observer process to
-     the network process when a new network is witnessed from Serai.
+    - `InternalInstructionOut{COIN}` - this message is sent from the coordinator to the
+     relevant coin topic when a new instruction is witnessed from Serai targeting a coin network.
+     - `NativeInstructionRefund{COIN}` - this message is sent from the coordinator to the relevant
+       coin topic when a refund instruction is witnessed from Serai targeting a coin network.
+    - `MultiSigReady{COIN}` - this message is sent from the coordinator to the
+     relevant coin topic when a multisig is generated.
