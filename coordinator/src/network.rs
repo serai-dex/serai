@@ -132,7 +132,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
             NetworkMessageType::CoordinatorPubkey => {
               let sender: String = self.network_state.get_signer_name(&raw_data.source.to_string());
               let pubkey = String::from_utf8_lossy(&message.data);
-              info!("Pubkey recieved! {}: {}", sender, pubkey);
+              info!("Coordinator Pubkey recieved! {}: {}", sender, pubkey);
               self.network_state.signer_coordinator_pubkeys.insert(sender, pubkey.to_string());
             }
             // Coordinator has received a secure message from a signer.
@@ -608,7 +608,6 @@ fn create_processor_consumers(
             SignatureMessageType::ProcessorPubkeyToCoordinator => {
               let value = msg.payload().unwrap();
               let public_key = str::from_utf8(value).unwrap();
-              info!("Network Received Pubkey from {}: {}", &key, &public_key);
               let processor_pubkey_msg = ProcessorChannelMessage {
                 signer: cloned_name.to_string(),
                 coin: cloned_coin.to_string(),

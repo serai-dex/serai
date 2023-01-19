@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::{env, str, fmt};
+use rdkafka::producer::Producer;
 use rdkafka::{
   producer::{BaseRecord, ThreadedProducer},
   consumer::{BaseConsumer, Consumer},
@@ -410,6 +411,10 @@ async fn send_general_and_secure_test_message(
         .partition(1),
     )
     .expect("failed to send message");
+
+  // Flushes producer
+  producer.flush(Duration::from_secs(10));
+
   // Add small delay for checking pubkeys
   tokio::time::sleep(Duration::from_millis(500)).await;
 }

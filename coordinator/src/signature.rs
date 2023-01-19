@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::{env, str, fmt};
 use rdkafka::{
-  producer::{BaseRecord, ThreadedProducer},
+  producer::{BaseRecord, ThreadedProducer, Producer},
   consumer::{BaseConsumer, Consumer},
   ClientConfig, Message,
 };
@@ -361,6 +361,9 @@ fn produce_coordinator_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str
         .partition(0),
     )
     .expect("failed to send message");
+
+  // Flushes producer
+  producer.flush(Duration::from_secs(10));
 }
 
 // Wait to receive all Processer Pubkeys
@@ -493,6 +496,9 @@ async fn send_general_and_secure_test_message(
         .partition(1),
     )
     .expect("failed to send message");
+
+  // Flushes producer
+  producer.flush(Duration::from_secs(10));
 
   // Add small delay for checking pubkeys
   tokio::time::sleep(Duration::from_millis(500)).await;
