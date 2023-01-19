@@ -161,67 +161,74 @@ pub mod pallet {
         .map(|updates| Call::execute { updates })
     }
 
+    // Assumes that only not yet handled batches are provided as inherent data
     fn check_inherent(call: &Self::Call, data: &InherentData) -> Result<(), Self::Error> {
-      // Assumes that only not yet handled batches are provided as inherent data
-      if let Some(expected) = data.get_data::<Updates>(&INHERENT_IDENTIFIER).unwrap() {
-        // Match to be exhaustive
-        let updates = match call {
-          Call::execute { ref updates } => updates,
-          _ => Err(InherentError::InvalidCall)?,
-        };
+      // First unwrap is for the Result of fetching/decoding the Updates
+      // Second unwrap is for the Option of if they exist
+      let expected = data.get_data::<Updates>(&INHERENT_IDENTIFIER).unwrap().unwrap();
+      // Match to be exhaustive
+      let updates = match call {
+        Call::execute { ref updates } => updates,
+        _ => Err(InherentError::InvalidCall)?,
+      };
 
-        if updates.len() != expected.len() {
-          Err(InherentError::InvalidUpdateQuantity(
-            updates.len().try_into().unwrap(),
-            expected.len().try_into().unwrap(),
-          ))?;
-        }
+      // The block producer should've provided one update per coin
+      // We, an honest node, did provide one update per coin
+      // Accordingly, we should have the same amount of updates
+      if updates.len() != expected.len() {
+        Err(InherentError::InvalidUpdateQuantity(
+          updates.len().try_into().unwrap(),
+          expected.len().try_into().unwrap(),
+        ))?;
+      }
 
-        for (coin, both) in updates.iter().zip(&expected).enumerate() {
-          let coin = Coin::from(u32::try_from(coin).unwrap());
-          match both {
-            (Some(update), Some(expected)) => {
-              if update.block_number.0 > expected.block_number.0 {
-                Err(InherentError::UnrecognizedBlockNumber(
-                  coin,
-                  update.block_number,
-                  expected.block_number,
-                ))?;
-              }
-
-              let prev = BlockNumbers::<T>::get(coin);
-              if update.block_number.0 <= prev.0 {
-                Err(InherentError::InvalidBlockNumber(coin, update.block_number, prev))?;
-              }
-
-              if update.batches.len() > expected.batches.len() {
-                Err(InherentError::UnrecognizedBatches(
-                  coin,
-                  (update.batches.len() - expected.batches.len()).try_into().unwrap(),
-                ))?;
-              }
-
-              let mut next_batch = NextBatch::<T>::get(coin);
-              for (batch, expected) in update.batches.iter().zip(&expected.batches) {
-                if batch.id != next_batch {
-                  Err(InherentError::InvalidBatch(coin))?;
-                }
-                next_batch += 1;
-
-                if batch != expected {
-                  Err(InherentError::DifferentBatch(coin, batch.id))?;
-                }
-              }
+      // This zip is safe since we verified they're equally sized
+      for (coin, both) in updates.iter().zip(&expected).enumerate() {
+        let coin = Coin::from(u32::try_from(coin).unwrap());
+        match both {
+          // Block producer claims there's an update for this coin, as do we
+          (Some(update), Some(expected)) => {
+            if update.block_number.0 > expected.block_number.0 {
+              Err(InherentError::UnrecognizedBlockNumber(
+                coin,
+                update.block_number,
+                expected.block_number,
+              ))?;
             }
 
-            (Some(update), None) => Err(InherentError::UnrecognizedBatches(
-              coin,
-              update.batches.len().try_into().unwrap(),
-            ))?,
+            let prev = BlockNumbers::<T>::get(coin);
+            if update.block_number.0 <= prev.0 {
+              Err(InherentError::InvalidBlockNumber(coin, update.block_number, prev))?;
+            }
 
-            (None, _) => (),
-          };
-        }
+            if update.batches.len() > expected.batches.len() {
+              Err(InherentError::UnrecognizedBatches(
+                coin,
+                (update.batches.len() - expected.batches.len()).try_into().unwrap(),
+              ))?;
+            }
+
+            let mut next_batch = NextBatch::<T>::get(coin);
+            for (batch, expected) in update.batches.iter().zip(&expected.batches) {
+              if batch.id != next_batch {
+                Err(InherentError::InvalidBatch(coin))?;
+              }
+              next_batch += 1;
+
+              if batch != expected {
+                Err(InherentError::DifferentBatch(coin, batch.id))?;
+              }
+            }
+          }
+
+          // Block producer claims there's an update for this coin, yet we don't
+          (Some(update), None) => {
+            Err(InherentError::UnrecognizedBatches(coin, update.batches.len().try_into().unwrap()))?
+          }
+
+          // Block producer didn't include update for this coin
+          (None, _) => (),
+        };
       }
 
       Ok(())
