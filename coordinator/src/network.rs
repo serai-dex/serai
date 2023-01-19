@@ -181,6 +181,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
                   .partition(0),
                 )
                 .expect("failed to send message");
+
+                // Flushes producer
+                producer.flush(Duration::from_secs(10));
             }
           }
         } else {
