@@ -16,7 +16,7 @@ mod coins;
 pub use coins::*;
 
 pub type PublicKey = Public;
-pub type NativeAddress = PublicKey;
+pub type SeraiAddress = PublicKey;
 pub type Signature = RistrettoSignature;
 
 /// The type used to identify block numbers.

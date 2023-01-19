@@ -7,7 +7,7 @@ use serai_runtime::in_instructions::{Batch, Update};
 use jsonrpsee_server::RpcModule;
 
 use serai_client::{
-  primitives::{BlockNumber, NativeAddress, Coin},
+  primitives::{BlockNumber, SeraiAddress, Coin},
   in_instructions::{
     primitives::{ExternalAddress, Target, InInstruction},
     InInstructionsEvent,
@@ -27,7 +27,7 @@ serai_test!(
           id: 0,
           instructions: vec![InInstruction {
             origin: ExternalAddress::new(b"external".to_vec()).unwrap(),
-            target: Target::Address(NativeAddress::from_raw([0xff; 32])),
+            target: Target::Address(SeraiAddress::from_raw([0xff; 32])),
           }],
         };
 

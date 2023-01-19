@@ -7,7 +7,7 @@ protocol.
 
 | Alias                  | Type                                         |
 |------------------------|----------------------------------------------|
-| NativeAddress          | sr25519::Public (unchecked [u8; 32] wrapper) |
+| SeraiAddress           | sr25519::Public (unchecked [u8; 32] wrapper) |
 | Amount                 | u64                                          |
 | Coin                   | u32                                          |
 | Session                | u32                                          |

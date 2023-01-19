@@ -33,7 +33,7 @@ Serai DEX is valid.
 
 ### Target
 
-Target is an enum of ApplicationCall and NativeAddress.
+Target is an enum of ApplicationCall and SeraiAddress.
 
 ### In Instructions (Native)
 
@@ -60,7 +60,7 @@ If the instruction fails, coins are scheduled to be returned to `origin`.
 
 ### Destination
 
-Destination is an enum of ExternalAddress and NativeAddress.
+Destination is an enum of ExternalAddress and SeraiAddress.
 
 ### Out Instructions
 

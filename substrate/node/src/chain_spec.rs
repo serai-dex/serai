@@ -14,14 +14,14 @@ fn insecure_pair_from_name(name: &'static str) -> Pair {
   Pair::from_string(&format!("//{name}"), None).unwrap()
 }
 
-fn address_from_name(name: &'static str) -> NativeAddress {
+fn address_from_name(name: &'static str) -> SeraiAddress {
   insecure_pair_from_name(name).public()
 }
 
 fn testnet_genesis(
   wasm_binary: &[u8],
   validators: &[&'static str],
-  endowed_accounts: Vec<NativeAddress>,
+  endowed_accounts: Vec<SeraiAddress>,
 ) -> GenesisConfig {
   let session_key = |name| {
     let key = address_from_name(name);
@@ -29,7 +29,7 @@ fn testnet_genesis(
   };
 
   // TODO: Replace with a call to the pallet to ask for its account
-  let owner = NativeAddress::decode(&mut TrailingZeroInput::new(b"tokens")).unwrap();
+  let owner = SeraiAddress::decode(&mut TrailingZeroInput::new(b"tokens")).unwrap();
 
   GenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec() },

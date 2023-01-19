@@ -38,7 +38,7 @@ use sp_runtime::{
   ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{PublicKey, Signature, NativeAddress, Coin};
+use primitives::{PublicKey, Signature, SeraiAddress, Coin};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64},
@@ -138,9 +138,9 @@ impl system::Config for Runtime {
   type BaseCallFilter = support::traits::Everything;
   type BlockWeights = BlockWeights;
   type BlockLength = BlockLength;
-  type AccountId = NativeAddress;
+  type AccountId = SeraiAddress;
   type RuntimeCall = RuntimeCall;
-  type Lookup = IdentityLookup<NativeAddress>;
+  type Lookup = IdentityLookup<SeraiAddress>;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
@@ -186,8 +186,8 @@ impl assets::Config for Runtime {
   type StringLimit = ConstU32<32>;
 
   // Don't allow anyone to create assets
-  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<NativeAddress>>;
-  type ForceOrigin = system::EnsureRoot<NativeAddress>;
+  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<SeraiAddress>>;
+  type ForceOrigin = system::EnsureRoot<SeraiAddress>;
 
   // Don't charge fees nor kill accounts
   type RemoveItemsLimit = ConstU32<0>;
@@ -236,7 +236,7 @@ impl validator_sets::Config for Runtime {
 
 impl session::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type ValidatorId = NativeAddress;
+  type ValidatorId = SeraiAddress;
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Sessions;
   type NextSessionRotation = Sessions;
@@ -261,7 +261,7 @@ pub type SignedExtra = (
   transaction_payment::ChargeTransactionPayment<Runtime>,
 );
 pub type UncheckedExtrinsic =
-  generic::UncheckedExtrinsic<NativeAddress, RuntimeCall, Signature, SignedExtra>;
+  generic::UncheckedExtrinsic<SeraiAddress, RuntimeCall, Signature, SignedExtra>;
 pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 pub type Executive = frame_executive::Executive<
   Runtime,
@@ -385,8 +385,8 @@ sp_api::impl_runtime_apis! {
     }
   }
 
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, NativeAddress, Index> for Runtime {
-    fn account_nonce(account: NativeAddress) -> Index {
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, SeraiAddress, Index> for Runtime {
+    fn account_nonce(account: SeraiAddress) -> Index {
       System::account_nonce(account)
     }
   }

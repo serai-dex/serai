@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
-use serai_primitives::NativeAddress;
+use serai_primitives::SeraiAddress;
 
 use crate::{MAX_DATA_LEN, ExternalAddress};
 
@@ -27,7 +27,7 @@ pub struct ApplicationCall {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum Target {
   Application(ApplicationCall),
-  Address(NativeAddress),
+  Address(SeraiAddress),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]

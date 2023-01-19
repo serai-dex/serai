@@ -6,7 +6,7 @@ use scale::Decode;
 use subxt::{tx::BaseExtrinsicParams, Config as SubxtConfig, OnlineClient};
 
 pub use serai_primitives as primitives;
-use primitives::{Signature, NativeAddress};
+use primitives::{Signature, SeraiAddress};
 
 use serai_runtime::{system::Config, Runtime};
 
@@ -23,7 +23,7 @@ impl SubxtConfig for SeraiConfig {
   type Index = <Runtime as Config>::Index;
   type AccountId = <Runtime as Config>::AccountId;
   // TODO: Bech32m
-  type Address = NativeAddress;
+  type Address = SeraiAddress;
 
   type Header = <Runtime as Config>::Header;
   type Signature = Signature;

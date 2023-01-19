@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
-use serai_primitives::{NativeAddress, Coin, Amount};
+use serai_primitives::{SeraiAddress, Coin, Amount};
 
 use crate::{MAX_DATA_LEN, ExternalAddress, ExternalInInstruction, OutInstruction};
 
@@ -24,7 +24,7 @@ pub enum Shorthand {
     origin: Option<ExternalAddress>,
     minimum: Amount,
     gas: Amount,
-    address: NativeAddress,
+    address: SeraiAddress,
   },
 }
 
