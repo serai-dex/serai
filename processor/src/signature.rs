@@ -170,6 +170,8 @@ fn initialize_consumer(
 
   let topic_copy = topic.to_owned();
   let name_arg = name.to_owned();
+
+  // This bool is used to delay receiving secure messages until the public key is received
   let mut pubkey_ready = false;
   tokio::spawn(async move {
     for msg_result in &consumer {
@@ -182,6 +184,8 @@ fn initialize_consumer(
             let public_key = str::from_utf8(value).unwrap();
             info!("Received {} Public Key: {}", &key, &public_key);
             env::set_var(format!("COORD_{}_PUB", name_arg.to_uppercase()), public_key);
+            
+            // Once the public key is received, the consumer will start to read secure messages from partition 1
             if !pubkey_ready {
               tpl.add_partition(&topic_copy, 1);
               consumer.assign(&tpl).unwrap(); 
