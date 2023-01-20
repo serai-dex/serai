@@ -46,8 +46,4 @@ impl Serai {
   ) -> Result<BlockNumber, SeraiError> {
     Ok(self.storage(PALLET, "BlockNumbers", Some(coin), block).await?.unwrap_or(BlockNumber(0)))
   }
-
-  pub async fn get_next_batch_id(&self, coin: Coin, block: [u8; 32]) -> Result<u64, SeraiError> {
-    Ok(self.storage(PALLET, "NextBatch", Some(coin), block).await?.unwrap_or(0))
-  }
 }

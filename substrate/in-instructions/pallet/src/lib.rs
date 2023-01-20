@@ -9,11 +9,11 @@ use scale_info::TypeInfo;
 use serde::{Serialize, Deserialize};
 
 use sp_std::vec::Vec;
-use sp_inherents::{InherentData, InherentIdentifier, IsFatalError};
+use sp_inherents::{InherentIdentifier, IsFatalError};
 
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::{BlockNumber, Coin};
+use serai_primitives::{BlockNumber, BlockHash, Coin};
 
 pub use in_instructions_primitives as primitives;
 use primitives::InInstruction;
@@ -23,7 +23,7 @@ pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Batch {
-  pub id: u64,
+  pub id: BlockHash,
   pub instructions: Vec<InInstruction>,
 }
 
@@ -31,8 +31,6 @@ pub struct Batch {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Update {
   // Coin's latest block number
-  // Ideally, this would be the coin's current block hash, or a 32-byte hash of any global clock
-  // We would be unable to validate those unless we can pass a HashMap with the inherent data
   pub block_number: BlockNumber,
   pub batches: Vec<Batch>,
 }
@@ -60,10 +58,8 @@ pub enum InherentError {
   InvalidBlockNumber(Coin, BlockNumber, BlockNumber),
   #[cfg_attr(feature = "std", error("coin {0:?} has {1} more batches than we do"))]
   UnrecognizedBatches(Coin, u32),
-  #[cfg_attr(feature = "std", error("coin {0:?} has an invalid batch"))]
-  InvalidBatch(Coin),
-  #[cfg_attr(feature = "std", error("coin {0:?} has a different batch (ID {1})"))]
-  DifferentBatch(Coin, u64),
+  #[cfg_attr(feature = "std", error("coin {0:?} has a different batch (ID {1:?})"))]
+  DifferentBatch(Coin, BlockHash),
 }
 
 impl IsFatalError for InherentError {
@@ -73,7 +69,6 @@ impl IsFatalError for InherentError {
       InherentError::UnrecognizedBlockNumber(..) => false,
       InherentError::InvalidBlockNumber(..) => true,
       InherentError::UnrecognizedBatches(..) => false,
-      InherentError::InvalidBatch(..) => true,
       // One of our nodes is definitively wrong. If it's ours (signified by it passing consensus),
       // we should panic. If it's theirs, they should be slashed
       // Unfortunately, we can't return fatal here to trigger a slash as fatal should only be used
@@ -84,11 +79,17 @@ impl IsFatalError for InherentError {
   }
 }
 
+fn coin_from_index(index: usize) -> Coin {
+  // Offset by 1 since Serai is the first coin, yet Serai doesn't have updates
+  Coin::from(1 + u32::try_from(index).unwrap())
+}
+
 #[frame_support::pallet]
 pub mod pallet {
-  use super::*;
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
+
+  use super::*;
 
   #[pallet::config]
   pub trait Config: frame_system::Config<BlockNumber = u32> {
@@ -98,7 +99,7 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Batch { coin: Coin, id: u64 },
+    Batch { coin: Coin, id: BlockHash },
   }
 
   #[pallet::pallet]
@@ -111,9 +112,6 @@ pub mod pallet {
   #[pallet::getter(fn block_number)]
   pub(crate) type BlockNumbers<T: Config> =
     StorageMap<_, Blake2_256, Coin, BlockNumber, ValueQuery>;
-  #[pallet::storage]
-  #[pallet::getter(fn executed_batches)]
-  pub(crate) type NextBatch<T: Config> = StorageMap<_, Blake2_256, Coin, u64, ValueQuery>;
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -133,13 +131,12 @@ pub mod pallet {
 
       for (coin, update) in updates.iter().enumerate() {
         if let Some(update) = update {
-          let coin = Coin::from(u32::try_from(coin).unwrap());
+          let coin = coin_from_index(coin);
           BlockNumbers::<T>::insert(coin, update.block_number);
 
           for batch in &update.batches {
             // TODO: EXECUTE
             Self::deposit_event(Event::Batch { coin, id: batch.id });
-            NextBatch::<T>::insert(coin, batch.id + 1);
           }
         }
       }
@@ -183,8 +180,12 @@ pub mod pallet {
       }
 
       // This zip is safe since we verified they're equally sized
+      // This should be written as coins.zip(updates.iter().zip(&expected)), where coins is the
+      // validator set's coins
+      // That'd require having context on the validator set right now which isn't worth pulling in
+      // right now, when we only have one validator set
       for (coin, both) in updates.iter().zip(&expected).enumerate() {
-        let coin = Coin::from(u32::try_from(coin).unwrap());
+        let coin = coin_from_index(coin);
         match both {
           // Block producer claims there's an update for this coin, as do we
           (Some(update), Some(expected)) => {
@@ -208,13 +209,7 @@ pub mod pallet {
               ))?;
             }
 
-            let mut next_batch = NextBatch::<T>::get(coin);
             for (batch, expected) in update.batches.iter().zip(&expected.batches) {
-              if batch.id != next_batch {
-                Err(InherentError::InvalidBatch(coin))?;
-              }
-              next_batch += 1;
-
               if batch != expected {
                 Err(InherentError::DifferentBatch(coin, batch.id))?;
               }

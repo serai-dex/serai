@@ -22,11 +22,13 @@ impl InherentDataProvider {
 impl sp_inherents::InherentDataProvider for InherentDataProvider {
   async fn provide_inherent_data(&self, inherent_data: &mut InherentData) -> Result<(), Error> {
     let updates: Updates = (|| async {
-      let client = HttpClientBuilder::default().build("http://127.0.0.1:5134").ok()?;
-      client.request("processor_coinUpdates", Vec::<u8>::new()).await.ok()
+      let client = HttpClientBuilder::default().build("http://127.0.0.1:5134")?;
+      client.request("processor_coinUpdates", Vec::<u8>::new()).await
     })()
     .await
-    .ok_or(Error::Application(Box::from("couldn't communicate with processor")))?;
+    .map_err(|e| {
+      Error::Application(Box::from(format!("couldn't communicate with processor: {e}")))
+    })?;
     inherent_data.put_data(INHERENT_IDENTIFIER, &updates)?;
     Ok(())
   }

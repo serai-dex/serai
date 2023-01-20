@@ -7,7 +7,7 @@ use serai_runtime::in_instructions::{Batch, Update};
 use jsonrpsee_server::RpcModule;
 
 use serai_client::{
-  primitives::{BlockNumber, SeraiAddress, Coin},
+  primitives::{BlockNumber, BlockHash, SeraiAddress, BITCOIN},
   in_instructions::{
     primitives::{ExternalAddress, Target, InInstruction},
     InInstructionsEvent,
@@ -24,7 +24,7 @@ serai_test!(
     rpc
       .register_async_method("processor_coinUpdates", |_, _| async move {
         let batch = Batch {
-          id: 0,
+          id: BlockHash([0xaa; 32]),
           instructions: vec![InInstruction {
             origin: ExternalAddress::new(b"external".to_vec()).unwrap(),
             target: Target::Address(SeraiAddress::from_raw([0xff; 32])),
@@ -43,22 +43,18 @@ serai_test!(
       .unwrap();
 
     let serai = Serai::new(URL).await.unwrap();
-    assert_eq!(
-      serai.get_next_batch_id(Coin(0), serai.get_latest_block_hash().await.unwrap()).await.unwrap(),
-      0
-    );
-
     loop {
       let latest = serai.get_latest_block_hash().await.unwrap();
       let batches = serai.get_batch_events(latest).await.unwrap();
       if let Some(batch) = batches.get(0) {
         match batch {
-          InInstructionsEvent::Batch { .. } => {
+          InInstructionsEvent::Batch { coin, id } => {
+            assert_eq!(coin, &BITCOIN);
+            assert_eq!(id, &BlockHash([0xaa; 32]));
             assert_eq!(
-              serai.get_coin_block_number(Coin(0), latest).await.unwrap(),
+              serai.get_coin_block_number(BITCOIN, latest).await.unwrap(),
               BlockNumber(123)
             );
-            assert_eq!(serai.get_next_batch_id(Coin(0), latest).await.unwrap(), 1);
             return;
           }
           _ => panic!("get_batches returned non-batch"),
