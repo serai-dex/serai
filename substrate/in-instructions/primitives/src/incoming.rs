@@ -25,28 +25,14 @@ pub struct ApplicationCall {
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub enum Target {
-  Application(ApplicationCall),
-  Address(SeraiAddress),
+pub enum InInstruction {
+  Transfer(SeraiAddress),
+  Call(ApplicationCall),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct InInstruction {
-  pub origin: ExternalAddress,
-  pub target: Target,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct ExternalInInstruction {
-  origin: Option<ExternalAddress>,
-  target: Target,
-}
-
-impl TryFrom<ExternalInInstruction> for InInstruction {
-  type Error = &'static str;
-  fn try_from(external: ExternalInInstruction) -> Result<InInstruction, &'static str> {
-    Ok(InInstruction { origin: external.origin.ok_or("no origin")?, target: external.target })
-  }
+pub struct RefundableInInstruction {
+  pub origin: Option<ExternalAddress>,
+  pub instruction: InInstruction,
 }

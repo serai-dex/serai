@@ -31,38 +31,31 @@ Instructions are SCALE encoded.
 Serai DEX is valid.
   - `data`        (Data): The data to call the application with.
 
-### Target
+### In Instruction
 
-Target is an enum of ApplicationCall and SeraiAddress.
+InInstruction is an enum of SeraiAddress and ApplicationCall.
 
-### In Instructions (Native)
+The specified target will be minted an appropriate amount of the respective
+Serai token. If an Application Call, the encoded call will be executed.
 
-  - `origin` (ExternalAddress): Address from the network of origin which sent
-coins in.
-  - `target` (Target):          The target to transfer the incoming coins to. If
-an Application Call, the encoded call will be executed.
+### Refundable In Instruction
 
-Upon receiving coins, the respective Serai token has the appropriate amount
-minted. If `target` is an Address, it'll be transferred the tokens.
-
-### In Instructions (External)
-
-  - `origin` (Option\<ExternalAddress>): Address from the network of origin
+  - `origin` (Option\<ExternalAddress>): Address, from the network of origin,
 which sent coins in.
-  - `target` (Target):                   The target to transfer the incoming
-coins to. If an application call, the encoded call will be executed.
+  - `instruction` (InInstruction):       The action to perform with the incoming
+coins.
 
 Networks may automatically provide `origin`. If they do, the instruction may
-still provide `origin`, overriding the automatically provided value. If no
-`origin` is provided, the instruction is dropped.
+still provide `origin`, overriding the automatically provided value.
 
-If the instruction fails, coins are scheduled to be returned to `origin`.
+If the instruction fails, coins are scheduled to be returned to `origin`,
+if provided.
 
 ### Destination
 
-Destination is an enum of ExternalAddress and SeraiAddress.
+Destination is an enum of SeraiAddress and ExternalAddress.
 
-### Out Instructions
+### Out Instruction
 
   - `destination` (Destination):   Address to receive coins to.
   - `data`        (Option\<Data>): The data to call the destination with.
@@ -74,17 +67,17 @@ dropped.
 
 ### Shorthand
 
-Shorthand is an enum which expands to an In Instruction (External).
+Shorthand is an enum which expands to an Refundable In Instruction.
 
 ##### Raw
 
-Raw Shorthand encodes a raw In Instruction in a Data, with no further
+Raw Shorthand encodes a raw Refundable In Instruction in a Data, with no further
 processing. This is a verbose fallback option for infrequent use cases not
 covered by Shorthand.
 
 ##### Swap
 
-  - `origin`  (Option\<ExternalAddress>): In Instruction's `origin`.
+  - `origin`  (Option\<ExternalAddress>): Refundable In Instruction's `origin`.
   - `coin`    (Coin):                     Coin to swap funds for.
   - `minimum` (Amount):                   Minimum amount of `coin` to receive.
   - `out`     (Out Instruction):          Final destination for funds.
@@ -92,9 +85,9 @@ covered by Shorthand.
 which expands to:
 
 ```
-In Instruction {
+RefundableInInstruction {
   origin,
-  target: ApplicationCall {
+  instruction: ApplicationCall {
     application: DEX,
     data:        swap(Incoming Asset, coin, minimum, out)
   }
@@ -110,7 +103,7 @@ where `swap` is a function which:
 
 ##### Add Liquidity
 
-  - `origin`  (Option\<ExternalAddress>): In Instruction's `origin`.
+  - `origin`  (Option\<ExternalAddress>): Refundable In Instruction's `origin`.
   - `minimum` (Amount):                   Minimum amount of SRI tokens to swap
 half for.
   - `gas`     (Amount):                   Amount of SRI to send to `address` to
@@ -121,9 +114,9 @@ tokens.
 which expands to:
 
 ```
-In Instruction {
+RefundableInInstruction {
   origin,
-  target: ApplicationCall {
+  instruction: ApplicationCall {
     application: DEX,
     data:        swap_and_add_liquidity(Incoming Asset, minimum, gas, address)
   }
