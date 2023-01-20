@@ -14,26 +14,28 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+# Macros
 async-trait = "0.1"
 zeroize = "1.5"
 thiserror = "1"
 rand_core = "0.6"
 
+# Cryptography
 group = "0.12"
-
 curve25519-dalek = { version = "3", features = ["std"] }
-
-transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
 dalek-ff-group = { path = "../crypto/dalek-ff-group" }
+
+transcript = { package = "flexible-transcript", path = "../crypto/transcript" }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
+# Monero
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
 
 [dev-dependencies]
 rand_core = "0.6"
 
 hex = "0.4"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 
 futures = "0.3"

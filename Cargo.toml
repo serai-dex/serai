@@ -23,6 +23,11 @@ members = [
   "processor",
 
   "substrate/serai/primitives",
+  "substrate/serai/client",
+
+  "substrate/in-instructions/primitives",
+  "substrate/in-instructions/pallet",
+  "substrate/in-instructions/client",
 
   "substrate/validator-sets/primitives",
   "substrate/validator-sets/pallet",
@@ -37,7 +42,7 @@ members = [
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due
-# to the unoptimized performance of Bulletproofs
+# to the extensive operations required for Bulletproofs
 [profile.dev.package]
 subtle = { opt-level = 3 }
 curve25519-dalek = { opt-level = 3 }
@@ -55,3 +60,8 @@ monero-serai = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
+
+# Required for subxt
+[patch.crates-io]
+sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }

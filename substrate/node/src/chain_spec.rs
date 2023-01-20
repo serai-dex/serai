@@ -3,12 +3,9 @@ use sp_runtime::traits::TrailingZeroInput;
 
 use sc_service::ChainType;
 
-use serai_primitives::*;
-use pallet_tendermint::crypto::Public;
-
 use serai_runtime::{
-  WASM_BINARY, AccountId, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig,
-  AssetsConfig, ValidatorSetsConfig, SessionConfig,
+  primitives::*, tendermint::crypto::Public, WASM_BINARY, opaque::SessionKeys, GenesisConfig,
+  SystemConfig, BalancesConfig, AssetsConfig, ValidatorSetsConfig, SessionConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
@@ -17,22 +14,22 @@ fn insecure_pair_from_name(name: &'static str) -> Pair {
   Pair::from_string(&format!("//{name}"), None).unwrap()
 }
 
-fn account_id_from_name(name: &'static str) -> AccountId {
+fn address_from_name(name: &'static str) -> SeraiAddress {
   insecure_pair_from_name(name).public()
 }
 
 fn testnet_genesis(
   wasm_binary: &[u8],
   validators: &[&'static str],
-  endowed_accounts: Vec<AccountId>,
+  endowed_accounts: Vec<SeraiAddress>,
 ) -> GenesisConfig {
   let session_key = |name| {
-    let key = account_id_from_name(name);
+    let key = address_from_name(name);
     (key, key, SessionKeys { tendermint: Public::from(key) })
   };
 
   // TODO: Replace with a call to the pallet to ask for its account
-  let owner = AccountId::decode(&mut TrailingZeroInput::new(b"tokens")).unwrap();
+  let owner = SeraiAddress::decode(&mut TrailingZeroInput::new(b"tokens")).unwrap();
 
   GenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec() },
@@ -54,8 +51,8 @@ fn testnet_genesis(
 
     validator_sets: ValidatorSetsConfig {
       bond: Amount(1_000_000) * COIN,
-      coins: Coin(4),
-      participants: validators.iter().map(|name| account_id_from_name(name)).collect(),
+      coins: vec![BITCOIN, ETHER, DAI, MONERO],
+      participants: validators.iter().map(|name| address_from_name(name)).collect(),
     },
     session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
   }
@@ -75,18 +72,18 @@ pub fn development_config() -> Result<ChainSpec, &'static str> {
         wasm_binary,
         &["Alice"],
         vec![
-          account_id_from_name("Alice"),
-          account_id_from_name("Bob"),
-          account_id_from_name("Charlie"),
-          account_id_from_name("Dave"),
-          account_id_from_name("Eve"),
-          account_id_from_name("Ferdie"),
-          account_id_from_name("Alice//stash"),
-          account_id_from_name("Bob//stash"),
-          account_id_from_name("Charlie//stash"),
-          account_id_from_name("Dave//stash"),
-          account_id_from_name("Eve//stash"),
-          account_id_from_name("Ferdie//stash"),
+          address_from_name("Alice"),
+          address_from_name("Bob"),
+          address_from_name("Charlie"),
+          address_from_name("Dave"),
+          address_from_name("Eve"),
+          address_from_name("Ferdie"),
+          address_from_name("Alice//stash"),
+          address_from_name("Bob//stash"),
+          address_from_name("Charlie//stash"),
+          address_from_name("Dave//stash"),
+          address_from_name("Eve//stash"),
+          address_from_name("Ferdie//stash"),
         ],
       )
     },
@@ -119,18 +116,18 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
         wasm_binary,
         &["Alice", "Bob", "Charlie"],
         vec![
-          account_id_from_name("Alice"),
-          account_id_from_name("Bob"),
-          account_id_from_name("Charlie"),
-          account_id_from_name("Dave"),
-          account_id_from_name("Eve"),
-          account_id_from_name("Ferdie"),
-          account_id_from_name("Alice//stash"),
-          account_id_from_name("Bob//stash"),
-          account_id_from_name("Charlie//stash"),
-          account_id_from_name("Dave//stash"),
-          account_id_from_name("Eve//stash"),
-          account_id_from_name("Ferdie//stash"),
+          address_from_name("Alice"),
+          address_from_name("Bob"),
+          address_from_name("Charlie"),
+          address_from_name("Dave"),
+          address_from_name("Eve"),
+          address_from_name("Ferdie"),
+          address_from_name("Alice//stash"),
+          address_from_name("Bob//stash"),
+          address_from_name("Charlie//stash"),
+          address_from_name("Dave//stash"),
+          address_from_name("Eve//stash"),
+          address_from_name("Ferdie//stash"),
         ],
       )
     },
