@@ -8,7 +8,7 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 
 use serai_primitives::{SeraiAddress, Coin, Amount};
 
-use crate::{MAX_DATA_LEN, ExternalAddress, RefundableInInstruction, OutInstruction};
+use crate::{MAX_DATA_LEN, ExternalAddress, RefundableInInstruction, InInstruction, OutInstruction};
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -26,6 +26,18 @@ pub enum Shorthand {
     gas: Amount,
     address: SeraiAddress,
   },
+}
+
+impl Shorthand {
+  pub fn transfer(origin: Option<ExternalAddress>, address: SeraiAddress) -> Option<Self> {
+    Some(Self::Raw(
+      BoundedVec::try_from(
+        (RefundableInInstruction { origin, instruction: InInstruction::Transfer(address) })
+          .encode(),
+      )
+      .ok()?,
+    ))
+  }
 }
 
 impl TryFrom<Shorthand> for RefundableInInstruction {
