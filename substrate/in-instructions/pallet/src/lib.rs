@@ -106,8 +106,10 @@ pub mod pallet {
   #[pallet::generate_store(pub(crate) trait Store)]
   pub struct Pallet<T>(PhantomData<T>);
 
+  // Used to only allow one set of updates per block, preventing double updating
   #[pallet::storage]
   pub(crate) type Once<T: Config> = StorageValue<_, bool, ValueQuery>;
+  // Latest block number agreed upon for a coin
   #[pallet::storage]
   #[pallet::getter(fn block_number)]
   pub(crate) type BlockNumbers<T: Config> =
