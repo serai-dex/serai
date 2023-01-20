@@ -72,12 +72,6 @@ fn parse_message_type(message_type: &str) -> MessageType {
   msg_type
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-enum PartitionType {
-  General,
-  Secure,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct SignatureProcess {
   coin: String,
@@ -98,17 +92,14 @@ impl SignatureProcess {
   pub async fn run(self) {
     info!("Starting Signature Process");
 
-    // Initialize consumers to read the coordinator pubkey & general test messages on partition 0
-    consume_general_messages_from_coordinator(&self.kafka_config, &self.name, &self.coin);
+    // Initialize consumers to read the coordinator pubkey, general/secure test messages
+    consume_messages_from_coordinator(&self.kafka_config, &self.name, &self.coin);
 
     // Initialize producer to send processor pubkeys to coordinator on general partition
     produce_processor_pubkey(&self.kafka_config, &self.name, &self.coin);
 
     // Wait to receive Coordinator Pubkey
     process_received_pubkey(&self.name).await;
-
-    // Initialize consumer used to read secure test messages from coordinator on secure partition
-    consume_coordinator_secure_test_message(&self.kafka_config, &self.name, &self.coin);
 
     // Initialize a producer that sends a general & secure test message
     produce_general_and_secure_test_message(&self.kafka_config, &self.name, &self.coin).await;
@@ -119,40 +110,24 @@ impl SignatureProcess {
   }
 }
 
-// Initialize consumers to read the coordinator pubkey & general test messages on partition 0
-fn consume_general_messages_from_coordinator(kafka_config: &KafkaConfig, name: &str, coin: &str) {
-  let mut group_id = &coin.to_string().to_lowercase();
+// Initialize consumers to read the coordinator pubkey, general/secure test messages
+fn consume_messages_from_coordinator(kafka_config: &KafkaConfig, name: &str, coin: &str) {
+  let group_id = &mut name.to_string().to_lowercase();
+  group_id.push_str("_processor_");
+  group_id.push_str(&mut coin.to_owned().to_string().to_lowercase());
   let mut topic: String = String::from(name);
   topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
-  let env_key = &mut coin.to_string().to_owned().to_uppercase();
-  env_key.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
+  let pub_env_key = &mut coin.to_string().to_owned().to_uppercase();
+  pub_env_key.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
+  let priv_env_key = &mut coin.to_string().to_owned().to_uppercase();
+  priv_env_key.push_str(format!("_{}_PRIV", &name.to_uppercase()).as_str());
   initialize_consumer(
     kafka_config,
     &group_id,
     &topic,
-    Some(env_key.to_string()),
-    None,
-    &PartitionType::General,
-    &name,
-  );
-}
-
-// Initialize consumer used to read secure test messages from coordinator on secure partition
-fn consume_coordinator_secure_test_message(kafka_config: &KafkaConfig, name: &str, coin: &str) {
-  let mut group_id = &coin.to_string().to_lowercase();
-  let mut topic: String = String::from(name);
-  topic.push_str("_processor_");
-  topic.push_str(&coin.to_string().to_lowercase());
-  let env_key = &mut coin.to_string().to_uppercase();
-  env_key.push_str(format!("_{}_PRIV", &name.to_uppercase()).as_str());
-  initialize_consumer(
-    kafka_config,
-    &group_id,
-    &topic,
-    Some(env_key.to_string()),
+    Some(priv_env_key.to_string()),
     Some(&coin.to_string()),
-    &PartitionType::Secure,
     &name,
   );
 }
@@ -162,9 +137,8 @@ fn initialize_consumer(
   kafka_config: &KafkaConfig,
   group_id: &str,
   topic: &str,
-  env_key: Option<String>,
+  priv_env_key: Option<String>,
   coin: Option<&String>,
-  partition_type: &PartitionType,
   name: &str,
 ) {
   let consumer: BaseConsumer = ClientConfig::new()
@@ -174,10 +148,10 @@ fn initialize_consumer(
     .create()
     .expect("invalid consumer config");
 
-  let mut env_key_ref: String = "".to_string();
-  match env_key {
+  let mut priv_env_key_ref: String = "".to_string();
+  match priv_env_key {
     Some(p) => {
-      env_key_ref = String::from(p);
+      priv_env_key_ref = String::from(p);
     }
     None => {}
   }
@@ -190,85 +164,67 @@ fn initialize_consumer(
     None => {}
   }
 
-  match partition_type {
-    PartitionType::General => {
-      let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-      tpl.add_partition(&topic, 0);
-      consumer.assign(&tpl).unwrap();
+  let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+  tpl.add_partition(&topic, 0);
+  consumer.assign(&tpl).unwrap();
 
-      let name_arg = name.to_owned();
-      tokio::spawn(async move {
-        for msg_result in &consumer {
-          let msg = msg_result.unwrap();
-          let key: &str = msg.key_view().unwrap().unwrap();
-          let msg_type = parse_message_type(&key);
-          match msg_type {
-            MessageType::CoordinatorPubkeyToProcessor => {
-              let coord_pubkey_check = env::var(format!("COORD_{}_PUB", &name_arg.to_uppercase()).as_str());
-              if coord_pubkey_check.is_err() {
-                let value = msg.payload().unwrap();
-                let public_key = str::from_utf8(value).unwrap();
-                info!("Received {} Public Key: {}", &key, &public_key);
-                env::set_var(format!("COORD_{}_PUB", name_arg.to_uppercase()), public_key);
-              }
+  let topic_copy = topic.to_owned();
+  let name_arg = name.to_owned();
+  let mut pubkey_ready = false;
+  tokio::spawn(async move {
+    for msg_result in &consumer {
+      let msg = msg_result.unwrap();
+      let key: &str = msg.key_view().unwrap().unwrap();
+      let msg_type = parse_message_type(&key);
+      match msg_type {
+        MessageType::CoordinatorPubkeyToProcessor => {
+            let value = msg.payload().unwrap();
+            let public_key = str::from_utf8(value).unwrap();
+            info!("Received {} Public Key: {}", &key, &public_key);
+            env::set_var(format!("COORD_{}_PUB", name_arg.to_uppercase()), public_key);
+            if !pubkey_ready {
+              tpl.add_partition(&topic_copy, 1);
+              consumer.assign(&tpl).unwrap(); 
+              pubkey_ready = true;
             }
-            MessageType::CoordinatorGeneralMessageToProcessor => {
-              let value = msg.payload().unwrap();
-              let pub_msg = str::from_utf8(value).unwrap();
-              info!("Received Public Message from {}", &key);
-              info!("Public Message: {}", &pub_msg);
-            }
-            _ => {}
-          }
         }
-      });
-    }
-    PartitionType::Secure => {
-      let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-      tpl.add_partition(&topic, 1);
-      consumer.assign(&tpl).unwrap();
-
-      let name_arg = name.to_owned();
-      tokio::spawn(async move {
-        for msg_result in &consumer {
-          let msg = msg_result.unwrap();
-          let key: &str = msg.key_view().unwrap().unwrap();
-          let msg_type = parse_message_type(&key);
-          match msg_type {
-            MessageType::CoordinatorSecureTestMessageToProcessor => {
-              let value = msg.payload().unwrap();
-              // Creates Message box used for decryption
-              let pubkey = message_box::PublicKey::from_trusted_str(
-                &env::var(format!("COORD_{}_PUB", &name_arg.to_uppercase()).as_str()).unwrap().to_string(),
-              );
-
-              let coin_priv = message_box::PrivateKey::from_string(
-                env::var(env_key_ref.to_string()).unwrap().to_string(),
-              );
-
-              let processor_id = retrieve_message_box_id(&coin_ref.to_uppercase());
-
-              let mut message_box_pubkeys = HashMap::new();
-              message_box_pubkeys.insert(message_box::ids::COORDINATOR, pubkey);
-
-              let message_box = MessageBox::new(processor_id, coin_priv, message_box_pubkeys);
-              let encrypted_msg = str::from_utf8(value).unwrap();
-
-              // Decrypt message using Message Box
-              let encoded_string = message_box
-                .decrypt_from_str(&message_box::ids::COORDINATOR, &encrypted_msg)
-                .unwrap();
-              let decoded_string = String::from_utf8(encoded_string).unwrap();
-              info!("Received Encrypted Message from {}", &key);
-              info!("Decrypted Message: {}", &decoded_string);
-            }
-            _ => {}
-          }
+        MessageType::CoordinatorGeneralMessageToProcessor => {
+          let value = msg.payload().unwrap();
+          let pub_msg = str::from_utf8(value).unwrap();
+          info!("Received Public Message from {}", &key);
+          info!("Public Message: {}", &pub_msg);
         }
-      });
+        MessageType::CoordinatorSecureTestMessageToProcessor => {
+          let value = msg.payload().unwrap();
+          // Creates Message box used for decryption
+          let pubkey_string = env::var(format!("COORD_{}_PUB", &name_arg.to_uppercase()).as_str())
+            .unwrap()
+            .to_string();
+          let pubkey = message_box::PublicKey::from_trusted_str(&pubkey_string);
+
+          let coin_priv = message_box::PrivateKey::from_string(
+            env::var(priv_env_key_ref.to_string()).unwrap().to_string(),
+          );
+
+          let processor_id = retrieve_message_box_id(&coin_ref.to_uppercase());
+
+          let mut message_box_pubkeys = HashMap::new();
+          message_box_pubkeys.insert(message_box::ids::COORDINATOR, pubkey);
+
+          let message_box = MessageBox::new(processor_id, coin_priv, message_box_pubkeys);
+          let encrypted_msg = str::from_utf8(value).unwrap();
+
+          // Decrypt message using Message Box
+          let encoded_string =
+            message_box.decrypt_from_str(&message_box::ids::COORDINATOR, &encrypted_msg).unwrap();
+          let decoded_string = String::from_utf8(encoded_string).unwrap();
+          info!("Received Encrypted Message from {}", &key);
+          info!("Decrypted Message: {}", &decoded_string);
+        }
+        _ => {}
+      }
     }
-    _ => {}
-  }
+  });
 }
 
 // Initialize producer to send processor pubkeys to coordinator on general partition
@@ -312,7 +268,6 @@ async fn process_received_pubkey(name: &str) {
   while !coord_key_found {
     let coord_pub_check = env::var(format!("COORD_{}_PUB", &name.to_uppercase()).as_str());
     if !coord_pub_check.is_err() {
-      info!("Coord Pubkey Ready");
       coord_key_found = true;
     } else {
       // Add small delay for checking pubkeys
@@ -370,9 +325,9 @@ async fn send_general_and_secure_test_message(
   env_key: String,
   processor: &'static str,
   msg: Vec<u8>,
-  name: &str
+  name: &str,
 ) {
-
+  info!("Sending General and Secure Test Message to Coordinator");
   let producer: ThreadedProducer<_> = ClientConfig::new()
     .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
     .create()
@@ -383,8 +338,9 @@ async fn send_general_and_secure_test_message(
     message_box::PrivateKey::from_string(env::var(env_key.to_string()).unwrap().to_string());
 
   // Load Pubkeys for processors
-  let pubkey =
-    message_box::PublicKey::from_trusted_str(&env::var(format!("COORD_{}_PUB", &name.to_uppercase())).unwrap().to_string());
+  let pubkey = message_box::PublicKey::from_trusted_str(
+    &env::var(format!("COORD_{}_PUB", &name.to_uppercase())).unwrap().to_string(),
+  );
   let mut message_box_pubkey = HashMap::new();
   message_box_pubkey.insert(message_box::ids::COORDINATOR, pubkey);
 
