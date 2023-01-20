@@ -51,7 +51,7 @@ fn testnet_genesis(
 
     validator_sets: ValidatorSetsConfig {
       bond: Amount(1_000_000) * COIN,
-      coins: Coin(4),
+      coins: vec![BITCOIN, ETHER, DAI, MONERO],
       participants: validators.iter().map(|name| address_from_name(name)).collect(),
     },
     session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },

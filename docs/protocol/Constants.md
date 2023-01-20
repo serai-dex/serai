@@ -39,7 +39,8 @@ Coins exist over a network and have a distinct integer ID.
 
 | Coin     | Network  | ID |
 |----------|----------|----|
-| Bitcoin  | Bitcoin  | 0  |
-| Ether    | Ethereum | 1  |
-| DAI      | Ethereum | 2  |
-| Monero   | Monero   | 3  |
+| Serai    | Serai    | 0  |
+| Bitcoin  | Bitcoin  | 1  |
+| Ether    | Ethereum | 2  |
+| DAI      | Ethereum | 3  |
+| Monero   | Monero   | 4  |

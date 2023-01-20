@@ -13,7 +13,8 @@ impl From<u32> for Coin {
   }
 }
 
-pub const BITCOIN: Coin = Coin(0);
-pub const ETHER: Coin = Coin(1);
-pub const DAI: Coin = Coin(2);
-pub const MONERO: Coin = Coin(3);
+pub const SERAI: Coin = Coin(0);
+pub const BITCOIN: Coin = Coin(1);
+pub const ETHER: Coin = Coin(2);
+pub const DAI: Coin = Coin(3);
+pub const MONERO: Coin = Coin(4);

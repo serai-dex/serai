@@ -17,14 +17,14 @@ pub mod pallet {
   }
 
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen)]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct GenesisConfig<T: Config> {
     /// Bond requirement to join the initial validator set.
     /// Every participant at genesis will automatically be assumed to have this much bond.
     /// This bond cannot be withdrawn however as there's no stake behind it.
     pub bond: Amount,
-    /// Amount of coins to spawn the network with in the initial validator set.
-    pub coins: Coin,
+    /// Coins to spawn the network with in the initial validator set.
+    pub coins: Vec<Coin>,
     /// List of participants to place in the genesis set.
     pub participants: Vec<T::AccountId>,
   }
@@ -32,7 +32,7 @@ pub mod pallet {
   #[cfg(feature = "std")]
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig { bond: Amount(1), coins: Coin(0), participants: vec![] }
+      GenesisConfig { bond: Amount(1), coins: vec![], participants: vec![] }
     }
   }
 
@@ -95,11 +95,6 @@ pub mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
     fn build(&self) {
-      let mut coins = Vec::new();
-      for coin in 0 .. self.coins.0 {
-        coins.push(Coin(coin));
-      }
-
       let mut participants = Vec::new();
       for participant in self.participants.clone() {
         participants.push((participant, self.bond));
@@ -109,7 +104,7 @@ pub mod pallet {
         ValidatorSetInstance(Session(0), ValidatorSetIndex(0)),
         Some(ValidatorSet {
           bond: self.bond,
-          coins: BoundedVec::try_from(coins).unwrap(),
+          coins: BoundedVec::try_from(self.coins.clone()).unwrap(),
           participants: BoundedVec::try_from(participants).unwrap(),
         }),
       );
