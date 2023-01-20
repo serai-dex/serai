@@ -19,7 +19,7 @@ use libp2p::{
 use rdkafka::{
   consumer::{BaseConsumer, Consumer},
   ClientConfig, Message,
-  producer::{BaseProducer, BaseRecord},
+  producer::{BaseProducer, BaseRecord, Producer},
 };
 
 use dns_lookup::lookup_host;
@@ -132,7 +132,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
             NetworkMessageType::CoordinatorPubkey => {
               let sender: String = self.network_state.get_signer_name(&raw_data.source.to_string());
               let pubkey = String::from_utf8_lossy(&message.data);
-              info!("Pubkey recieved! {}: {}", sender, pubkey);
+              info!("Coordinator Pubkey recieved! {}: {}", sender, pubkey);
               self.network_state.signer_coordinator_pubkeys.insert(sender, pubkey.to_string());
             }
             // Coordinator has received a secure message from a signer.
@@ -141,7 +141,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
               let secure_message = String::from_utf8_lossy(&message.data);
               info!("Secure Message recieved! {}: {}", sender, secure_message);
 
-              let reciever_name: String = self.network_state.get_signer_name(&self.signer_p2p_address);
+              let reciever_name: String =
+                self.network_state.get_signer_name(&self.signer_p2p_address);
               let pubkey_string =
                 &self.network_state.signer_coordinator_pubkeys.get(&sender).unwrap().to_string();
               let signer_pubkey = message_box::PublicKey::from_trusted_str(pubkey_string);
@@ -154,7 +155,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
               let sender: String = self.network_state.get_signer_name(&raw_data.source.to_string());
               let secure_message = String::from_utf8_lossy(&message.data);
 
-              let reciever_name: String = self.network_state.get_signer_name(&self.signer_p2p_address);
+              let reciever_name: String =
+                self.network_state.get_signer_name(&self.signer_p2p_address);
               let pubkey_string =
                 &self.network_state.signer_coordinator_pubkeys.get(&sender).unwrap().to_string();
               let signer_pubkey = message_box::PublicKey::from_trusted_str(pubkey_string);
@@ -164,7 +166,13 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
 
               // Creates a producer to send processor pubkey message
               let producer: BaseProducer<_> = ClientConfig::new()
-                .set("bootstrap.servers", format!("{}:{}", self.network_state.kafka_config.host, self.network_state.kafka_config.port))
+                .set(
+                  "bootstrap.servers",
+                  format!(
+                    "{}:{}",
+                    self.network_state.kafka_config.host, self.network_state.kafka_config.port
+                  ),
+                )
                 .create()
                 .expect("invalid producer config");
 
@@ -182,8 +190,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
                 )
                 .expect("failed to send message");
 
-                // Flushes producer
-                producer.flush(Duration::from_secs(10));
+              // Flushes producer
+              producer.flush(Duration::from_secs(10));
             }
           }
         } else {
@@ -328,21 +336,29 @@ impl NetworkProcess {
     let mut sender_name = self.signer_name.clone().to_uppercase();
     sender_name.push_str("_PUB");
     let pubkey_string = env::var(sender_name).unwrap().to_string();
-    swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.insert(self.signer_name.clone(), pubkey_string);
+    swarm
+      .behaviour_mut()
+      .network_state
+      .signer_coordinator_pubkeys
+      .insert(self.signer_name.clone(), pubkey_string);
 
     loop {
       if &swarm.behaviour_mut().network_state.signers.len()
         == &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len()
         && swarm.behaviour_mut().network_state.signers.len() > 1
       {
+        // Add small delay for kafka to process message.
+        tokio::time::sleep(Duration::from_millis(500)).await;
         for processor_msg in rx.try_iter() {
           // Send Network Message to other Coordinator with updated pubkey
-          let signer_pubkeys = swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.clone();
+          let signer_pubkeys =
+            swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.clone();
           for (sender_name, sender_pubkey_string) in signer_pubkeys {
             if sender_name != self.signer_name {
               let decoded_msg = serde_json::to_string(&processor_msg).unwrap();
               let sender_pubkey = message_box::PublicKey::from_trusted_str(&sender_pubkey_string);
-              let enc_msg = build_secure_msg(&self.signer_name.clone(), sender_pubkey, &decoded_msg);
+              let enc_msg =
+                build_secure_msg(&self.signer_name.clone(), sender_pubkey, &decoded_msg);
 
               let receiver_p2p_address = swarm
                 .behaviour_mut()
@@ -592,7 +608,6 @@ fn create_processor_consumers(
             SignatureMessageType::ProcessorPubkeyToCoordinator => {
               let value = msg.payload().unwrap();
               let public_key = str::from_utf8(value).unwrap();
-              info!("Network Received Pubkey from {}: {}", &key, &public_key);
               let processor_pubkey_msg = ProcessorChannelMessage {
                 signer: cloned_name.to_string(),
                 coin: cloned_coin.to_string(),
