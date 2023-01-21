@@ -306,8 +306,7 @@ impl Coin for Bitcoin {
   async fn test_send(&self, address: Self::Address) {
     use bitcoin::{Address, KeyPair, PrivateKey, PublicKey,
         OutPoint, Sequence, Witness,util::sighash::SighashCache,
-        Script, PackedLockTime, 
-        EcdsaSighashType, network::constants::Network, 
+        Script, PackedLockTime,EcdsaSighashType, network::constants::Network, 
         blockdata::transaction::{TxIn, TxOut, Transaction}};
     use secp256k1::{rand, Secp256k1, Message};
 
