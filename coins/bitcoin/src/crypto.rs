@@ -111,13 +111,7 @@ pub fn taproot_key_spend_signature_hash(
     return Err(SignerError::InputIndexOutOfRange);
   }
 
-  let psbt_input = &psbt.inputs[input_index];
-
-  let sighash_type = psbt_input
-    .sighash_type
-    .unwrap_or_else(|| SchnorrSighashType::Default.into())
-    .schnorr_hash_ty()
-    .map_err(|_| SignerError::InvalidSighash)?;
+  let sighash_type = SchnorrSighashType::All.into();
   let witness_utxos = (0..psbt.inputs.len()).map(|i| psbt.get_utxo_for(i)).collect::<Vec<_>>();
   let mut all_witness_utxos = vec![];
 
