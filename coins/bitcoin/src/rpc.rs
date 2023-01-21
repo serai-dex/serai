@@ -219,18 +219,7 @@ impl Rpc {
     let args = handle_defaults(&mut ext_args, &[null()]);
     Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
   }
-
-  pub async fn get_new_address(
-    &self,
-    label: Option<&str>,
-    address_type: Option<AddressType>,
-  ) -> Result<Address> {
-    let mut ext_args = [opt_into_json(label)?, opt_into_json(address_type)?];
-    let defaults = [into_json("")?, into_json(AddressType::Legacy)?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call::<Address>("getnewaddress", &args).await
-  }
-
+  
   pub async fn generate_to_address(&self, nblocks: usize, address: &str) -> Result<Vec<String>> {
     let mut ext_args = [into_json(nblocks)?, into_json(address)?, 100000000.into()];
     let defaults = [null(), null(), 100000000.into()];
