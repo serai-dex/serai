@@ -41,9 +41,9 @@ pub struct GetBlockWithDetailResult {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct RpcResponseError {
-    pub code: i64,
-    pub message: String,
+pub(crate) struct RpcResponseError {
+    pub(crate) code: i64,
+    pub(crate) message: String,
 }
 
 impl Default for RpcResponseError {
@@ -56,25 +56,25 @@ impl Default for RpcResponseError {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct RpcResponse<T> {
-    pub result: Option<T>,
+pub(crate) struct RpcResponse<T> {
+    pub(crate) result: Option<T>,
     #[serde(default)]
-    pub id: Option<i64>,
+    pub(crate) id: Option<i64>,
     #[serde(default)]
-    pub error: Option<RpcResponseError>,
+    pub(crate) error: Option<RpcResponseError>,
 }
 
 #[derive(Serialize)]
-pub struct RpcParams<T> {
-    pub jsonrpc: String,
-    pub id: (),
-    pub method: String,
-    pub params: T,
+pub(crate) struct RpcParams<T> {
+    pub(crate) jsonrpc: String,
+    pub(crate) id: (),
+    pub(crate) method: String,
+    pub(crate) params: T,
 }
 
 /// The error type for errors produced in this library.
 #[derive(Debug)]
-pub enum RpcError {
+pub(crate) enum RpcError {
     Hex(hex::Error),
     Json(serde_json::error::Error),
     BitcoinSerialization(bitcoin::consensus::encode::Error),
@@ -157,10 +157,10 @@ impl error::Error for RpcError {
     }
 }
 /// specific Error type;
-pub type Result<T> = result::Result<T, RpcError>;
+pub(crate) type Result<T> = result::Result<T, RpcError>;
 
 /// Shorthand for converting a variable into a serde_json::Value.
-pub fn into_json<T>(val: T) -> Result<serde_json::Value>
+pub(crate) fn into_json<T>(val: T) -> Result<serde_json::Value>
 where
     T: serde::ser::Serialize,
 {
@@ -168,7 +168,7 @@ where
 }
 
 /// Shorthand for converting an Option into an Option<serde_json::Value>.
-pub fn opt_into_json<T>(opt: Option<T>) -> Result<serde_json::Value>
+pub(crate) fn opt_into_json<T>(opt: Option<T>) -> Result<serde_json::Value>
 where
     T: serde::ser::Serialize,
 {
@@ -185,7 +185,7 @@ impl ser::Error for RpcError {
 }
 
 /// deserialize_hex_array_opt deserializes a vector of hex-encoded byte arrays.
-pub fn deserialize_hex_array_opt<'de, D>(
+pub(crate) fn deserialize_hex_array_opt<'de, D>(
     deserializer: D,
 ) -> result::Result<Option<Vec<Vec<u8>>>, D::Error>
 where
@@ -202,20 +202,20 @@ where
     Ok(Some(res))
 }
 
-pub fn null() -> serde_json::Value {
+pub(crate) fn null() -> serde_json::Value {
     serde_json::Value::Null
 }
 
-pub fn empty_obj() -> serde_json::Value {
+pub(crate) fn empty_obj() -> serde_json::Value {
     serde_json::Value::Object(Default::default())
 }
 
-pub fn empty_arr() -> serde_json::Value {
+pub(crate) fn empty_arr() -> serde_json::Value {
     serde_json::Value::Array(vec![])
 }
 
 #[derive(Clone, Error, Debug)]
-pub enum RpcConnectionError {
+pub(crate) enum RpcConnectionError {
     #[error("connection error")]
     ConnectionError,
     #[error("parsing error")]
@@ -224,7 +224,7 @@ pub enum RpcConnectionError {
     ResultError(String),
 }
 
-pub fn handle_defaults<'a, 'b>(
+pub(crate) fn handle_defaults<'a, 'b>(
     args: &'a mut [serde_json::Value],
     defaults: &'b [serde_json::Value],
 ) -> &'a [serde_json::Value] {
@@ -268,9 +268,9 @@ impl<'a> RawTx for &'a Transaction {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct JsonOutPoint {
-    pub txid: bitcoin::Txid,
-    pub vout: u32,
+pub(crate) struct JsonOutPoint {
+    pub(crate) txid: bitcoin::Txid,
+    pub(crate) vout: u32,
 }
 
 impl From<OutPoint> for JsonOutPoint {

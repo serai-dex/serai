@@ -216,11 +216,6 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
         "message was passed to the TransactionMachine when it generates its own",
       ))?;
     }
-    let mut msg_list = Vec::new();
-    for i in 0..self.signable.tx.inputs.len() {
-      let (tx_sighash, _) = taproot_key_spend_signature_hash(&self.signable.tx, i).unwrap();
-      msg_list.push(tx_sighash);
-    }
 
     let included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
     let mut commitments = (0..self.sigs.len())
@@ -242,7 +237,8 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
       .drain(..)
       .enumerate()
       .map(|(index, sig)| {
-        let (sig, share) = sig.sign(commitments.remove(index), &msg_list.remove(index))?;
+        let (tx_sighash, _) = taproot_key_spend_signature_hash(&self.signable.tx, index).unwrap();
+        let (sig, share) = sig.sign(commitments.remove(0), &tx_sighash)?;
         shares.push(share);
         Ok(sig)
       })
