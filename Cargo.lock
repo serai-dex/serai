@@ -8072,6 +8072,7 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+ "tokens-pallet",
  "validator-sets-pallet",
 ]
 
@@ -9529,6 +9530,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
+name = "tokens-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "in-instructions-primitives",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serde",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-std",
+ "thiserror",
+ "tokens-primitives",
+]
+
+[[package]]
 name = "tokens-primitives"
 version = "0.1.0"
 dependencies = [
@@ -9536,6 +9555,7 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "serde",
+ "sp-runtime",
 ]
 
 [[package]]

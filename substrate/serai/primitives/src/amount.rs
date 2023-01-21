@@ -12,10 +12,6 @@ use serde::{Serialize, Deserialize};
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Amount(pub u64);
 
-/// One whole coin with eight decimals.
-#[allow(clippy::inconsistent_digit_grouping)]
-pub const COIN: Amount = Amount(1_000_000_00);
-
 impl Add for Amount {
   type Output = Amount;
   fn add(self, other: Amount) -> Amount {

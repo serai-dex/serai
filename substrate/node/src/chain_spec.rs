@@ -1,11 +1,11 @@
-use sp_core::{Decode, Pair as PairTrait, sr25519::Pair};
-use sp_runtime::traits::TrailingZeroInput;
+use sp_core::{Pair as PairTrait, sr25519::Pair};
 
 use sc_service::ChainType;
 
 use serai_runtime::{
-  primitives::*, tendermint::crypto::Public, WASM_BINARY, opaque::SessionKeys, GenesisConfig,
-  SystemConfig, BalancesConfig, AssetsConfig, ValidatorSetsConfig, SessionConfig,
+  primitives::*, tokens::primitives::ADDRESS as TOKENS_ADDRESS, tendermint::crypto::Public,
+  WASM_BINARY, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
+  ValidatorSetsConfig, SessionConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
@@ -28,16 +28,19 @@ fn testnet_genesis(
     (key, key, SessionKeys { tendermint: Public::from(key) })
   };
 
-  // TODO: Replace with a call to the pallet to ask for its account
-  let owner = SeraiAddress::decode(&mut TrailingZeroInput::new(b"tokens")).unwrap();
-
   GenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec() },
+
     balances: BalancesConfig {
       balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
     },
+    transaction_payment: Default::default(),
+
     assets: AssetsConfig {
-      assets: [BITCOIN, ETHER, DAI, MONERO].iter().map(|coin| (*coin, owner, true, 1)).collect(),
+      assets: [BITCOIN, ETHER, DAI, MONERO]
+        .iter()
+        .map(|coin| (*coin, TOKENS_ADDRESS, true, 1))
+        .collect(),
       metadata: vec![
         (BITCOIN, b"Bitcoin".to_vec(), b"BTC".to_vec(), 8),
         // Reduce to 8 decimals to feasibly fit within u64 (instead of its native u256)
@@ -47,14 +50,13 @@ fn testnet_genesis(
       ],
       accounts: vec![],
     },
-    transaction_payment: Default::default(),
 
+    session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
     validator_sets: ValidatorSetsConfig {
-      bond: Amount(1_000_000) * COIN,
+      bond: Amount(1_000_000 * 10_u64.pow(8)),
       coins: vec![BITCOIN, ETHER, DAI, MONERO],
       participants: validators.iter().map(|name| address_from_name(name)).collect(),
     },
-    session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
   }
 }
 

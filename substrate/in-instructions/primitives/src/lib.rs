@@ -10,6 +10,9 @@ use serde::{Serialize, Deserialize};
 
 use serai_primitives::{SeraiAddress, ExternalAddress, Data};
 
+mod shorthand;
+pub use shorthand::*;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum Application {
@@ -36,6 +39,3 @@ pub struct RefundableInInstruction {
   pub origin: Option<ExternalAddress>,
   pub instruction: InInstruction,
 }
-
-mod shorthand;
-pub use shorthand::*;

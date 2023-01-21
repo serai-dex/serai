@@ -41,6 +41,7 @@ pallet-balances = { git = "https://github.com/serai-dex/substrate", default-feat
 pallet-assets = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+tokens-pallet = { path = "../tokens/pallet", default-features = false }
 in-instructions-pallet = { path = "../in-instructions/pallet", default-features = false }
 
 validator-sets-pallet = { path = "../validator-sets/pallet", default-features = false }

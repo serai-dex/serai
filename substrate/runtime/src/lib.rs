@@ -16,6 +16,7 @@ pub use pallet_balances as balances;
 pub use pallet_transaction_payment as transaction_payment;
 
 pub use pallet_assets as assets;
+pub use tokens_pallet as tokens;
 pub use in_instructions_pallet as in_instructions;
 
 pub use validator_sets_pallet as validator_sets;
@@ -176,6 +177,15 @@ impl balances::Config for Runtime {
   type WeightInfo = balances::weights::SubstrateWeight<Runtime>;
 }
 
+impl transaction_payment::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
+  type OperationalFeeMultiplier = ConstU8<5>;
+  type WeightToFee = IdentityFee<Balance>;
+  type LengthToFee = IdentityFee<Balance>;
+  type FeeMultiplierUpdate = ();
+}
+
 impl assets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type Balance = Balance;
@@ -207,13 +217,8 @@ impl assets::Config for Runtime {
   type BenchmarkHelper = ();
 }
 
-impl transaction_payment::Config for Runtime {
+impl tokens::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
-  type OperationalFeeMultiplier = ConstU8<5>;
-  type WeightToFee = IdentityFee<Balance>;
-  type LengthToFee = IdentityFee<Balance>;
-  type FeeMultiplierUpdate = ();
 }
 
 impl in_instructions::Config for Runtime {
@@ -283,6 +288,7 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Assets: assets,
+    Tokens: tokens,
     InInstructions: in_instructions,
 
     ValidatorSets: validator_sets,

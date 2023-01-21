@@ -18,6 +18,9 @@ serde = { version = "1", features = ["derive"], optional = true }
 
 serai-primitives = { path = "../../serai/primitives", default-features = false }
 
+[dev-dependencies]
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 [features]
-std = ["scale/std", "scale-info/std", "serde", "serai-primitives/std"]
+std = ["scale/std", "scale-info/std", "serde", "sp-runtime/std", "serai-primitives/std"]
 default = ["std"]

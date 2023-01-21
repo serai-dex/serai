@@ -48,6 +48,8 @@ exceptions = [
 
   { allow = ["AGPL-3.0"], name = "serai-processor" },
 
+  { allow = ["AGPL-3.0"], name = "tokens-pallet" },
+
   { allow = ["AGPL-3.0"], name = "in-instructions-pallet" },
   { allow = ["AGPL-3.0"], name = "in-instructions-client" },
 

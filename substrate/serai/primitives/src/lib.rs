@@ -22,9 +22,22 @@ pub use block::*;
 mod coins;
 pub use coins::*;
 
+mod balance;
+pub use balance::*;
+
 pub type PublicKey = Public;
 pub type SeraiAddress = PublicKey;
 pub type Signature = RistrettoSignature;
+
+pub const fn pallet_address(pallet: &'static [u8]) -> SeraiAddress {
+  let mut address = [0; 32];
+  let mut i = 0;
+  while i < pallet.len() {
+    address[i] = pallet[i];
+    i += 1;
+  }
+  Public(address)
+}
 
 // Monero, our current longest address candidate, has a longest address of featured with payment ID
 // 1 (enum) + 1 (flags) + 64 (two keys) + 8 (payment ID) = 74
