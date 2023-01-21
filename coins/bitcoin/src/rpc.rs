@@ -4,7 +4,7 @@ use std::{fmt::Debug, str::FromStr};
 
 use bitcoin::{
   hashes::hex::FromHex, OutPoint,
-  Transaction, BlockHash,
+  Transaction,
 };
 
 use crate::rpc_helper::*;
@@ -175,18 +175,9 @@ impl Rpc {
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
 
-  pub async fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<bitcoin::Txid>
-  where
-    R: Sync + Send,
+  pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid>
   {
     let mut ext_args = [tx.raw_hex().into()];
-    let args = handle_defaults(&mut ext_args, &[null()]);
-    Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
-    
-  }
-
-  pub async fn send_raw_str_transaction(&self, raw_tx: String) -> Result<bitcoin::Txid> {
-    let mut ext_args = [raw_tx.into()];
     let args = handle_defaults(&mut ext_args, &[null()]);
     Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
   }

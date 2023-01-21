@@ -263,7 +263,7 @@ impl Coin for Bitcoin {
     tx: &Self::Transaction,
   ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
     let target_tx = tx.clone().extract_tx();
-    let s_raw_transaction = self.rpc.send_raw_str_transaction(target_tx.raw_hex()).await.unwrap();
+    let s_raw_transaction = self.rpc.send_raw_transaction(&target_tx).await.unwrap();
     let vec_output = target_tx
       .output
       .iter()
