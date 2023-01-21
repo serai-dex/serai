@@ -54,12 +54,12 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
 #[allow(non_snake_case)]
 pub(crate) fn shared_key(
   uniqueness: Option<[u8; 32]>,
-  s: &Scalar,
+  s: &Zeroizing<Scalar>,
   P: &EdwardsPoint,
   o: usize,
 ) -> (u8, Scalar, [u8; 8]) {
   // 8Ra
-  let mut output_derivation = (s * P).mul_by_cofactor().compress().to_bytes().to_vec();
+  let mut output_derivation = (s.deref() * P).mul_by_cofactor().compress().to_bytes().to_vec();
 
   let mut payment_id_xor = [0; 8];
   payment_id_xor

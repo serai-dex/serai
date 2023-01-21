@@ -149,13 +149,11 @@ impl Extra {
     res
   }
 
-  pub(crate) fn new(mut keys: Vec<EdwardsPoint>) -> Extra {
+  pub(crate) fn new(key: EdwardsPoint, additional: Vec<EdwardsPoint>) -> Extra {
     let mut res = Extra(Vec::with_capacity(3));
-    if !keys.is_empty() {
-      res.push(ExtraField::PublicKey(keys[0]));
-    }
-    if keys.len() > 1 {
-      res.push(ExtraField::PublicKeys(keys.drain(1 ..).collect()));
+    res.push(ExtraField::PublicKey(key));
+    if !additional.is_empty() {
+      res.push(ExtraField::PublicKeys(additional));
     }
     res
   }
