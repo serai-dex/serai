@@ -25,10 +25,10 @@ fn test_scalar() {
     let (k, ed) = scalar_normalize::<_, DalekScalar>(initial);
 
     // The initial scalar should equal the new scalar with Ed25519's capacity
-    let mut initial_bytes = (&initial.to_repr()).to_vec();
+    let mut initial_bytes = initial.to_repr().to_vec();
     // Drop the first 4 bits to hit 252
-    initial_bytes[0] = initial_bytes[0] & 0b00001111;
-    let k_bytes = (&k.to_repr()).to_vec();
+    initial_bytes[0] &= 0b00001111;
+    let k_bytes = k.to_repr().to_vec();
     assert_eq!(initial_bytes, k_bytes);
 
     let mut ed_bytes = ed.to_repr().as_ref().to_vec();

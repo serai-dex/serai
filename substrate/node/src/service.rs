@@ -11,6 +11,8 @@ use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
 use sp_api::ProvideRuntimeApi;
 
+use in_instructions_client::InherentDataProvider as InstructionsProvider;
+
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
 use sc_network::NetworkService;
@@ -25,7 +27,7 @@ pub(crate) use sc_tendermint::{
   TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
   TendermintSelectChain, import_queue,
 };
-use serai_runtime::{self, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
+use serai_runtime::{self as runtime, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
 pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
@@ -47,7 +49,7 @@ impl NativeExecutionDispatch for ExecutorDispatch {
   type ExtendHostFunctions = ();
 
   fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-    serai_runtime::api::dispatch(method, data)
+    runtime::api::dispatch(method, data)
   }
 
   fn native_version() -> NativeVersion {
@@ -58,13 +60,13 @@ impl NativeExecutionDispatch for ExecutorDispatch {
 pub struct Cidp;
 #[async_trait::async_trait]
 impl CreateInherentDataProviders<Block, ()> for Cidp {
-  type InherentDataProviders = (sp_timestamp::InherentDataProvider,);
+  type InherentDataProviders = (InstructionsProvider,);
   async fn create_inherent_data_providers(
     &self,
     _: <Block as BlockTrait>::Hash,
     _: (),
   ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
-    Ok((sp_timestamp::InherentDataProvider::from_system_time(),))
+    Ok((InstructionsProvider::new(),))
   }
 }
 

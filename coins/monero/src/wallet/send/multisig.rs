@@ -4,7 +4,6 @@ use std::{
   collections::HashMap,
 };
 
-use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -124,7 +123,7 @@ impl SignableTransaction {
       let clsag = ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone());
       key_images.push((
         clsag.H,
-        keys.current_offset().unwrap_or(dfg::Scalar::zero()).0 + self.inputs[i].key_offset(),
+        keys.current_offset().unwrap_or_else(dfg::Scalar::zero).0 + self.inputs[i].key_offset(),
       ));
       clsags.push(AlgorithmMachine::new(clsag, offset).map_err(TransactionError::FrostError)?);
     }
@@ -217,18 +216,14 @@ impl SignMachine<Transaction> for TransactionSignMachine {
   type SignatureShare = Vec<SignatureShare<Ed25519>>;
   type SignatureMachine = TransactionSignatureMachine;
 
-  fn cache(self) -> Zeroizing<CachedPreprocess> {
+  fn cache(self) -> CachedPreprocess {
     unimplemented!(
       "Monero transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"
     );
   }
 
-  fn from_cache(
-    _: (),
-    _: ThresholdKeys<Ed25519>,
-    _: Zeroizing<CachedPreprocess>,
-  ) -> Result<Self, FrostError> {
+  fn from_cache(_: (), _: ThresholdKeys<Ed25519>, _: CachedPreprocess) -> Result<Self, FrostError> {
     unimplemented!(
       "Monero transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"
@@ -253,7 +248,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // Find out who's included
     // This may not be a valid set of signers yet the algorithm machine will error if it's not
     commitments.remove(&self.i); // Remove, if it was included for some reason
-    let mut included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
+    let mut included = commitments.keys().cloned().collect::<Vec<_>>();
     included.push(self.i);
     included.sort_unstable();
 

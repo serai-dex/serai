@@ -30,5 +30,6 @@ crypto-bigint = { version = "0.4", features = ["zeroize"] }
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 
 [dev-dependencies]
-hex-literal = "0.3"
 hex = "0.4"
+
+ff-group-tests = { path = "../ff-group-tests" }

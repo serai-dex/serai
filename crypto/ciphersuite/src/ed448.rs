@@ -65,3 +65,38 @@ impl Ciphersuite for Ed448 {
     Scalar::wide_reduce(Self::H::digest([dst, data].concat()).as_ref().try_into().unwrap())
   }
 }
+
+#[test]
+fn test_ed448() {
+  use ff::PrimeField;
+
+  // TODO: Enable once ed448 passes these tests
+  //ff_group_tests::group::test_prime_group_bits::<Point>();
+
+  // Ideally, a test vector from RFC-8032 (not FROST) would be here
+  // Unfortunately, the IETF draft doesn't provide any vectors for the derived challenges
+  assert_eq!(
+    Ed448::hash_to_F(
+      b"FROST-ED448-SHAKE256-v11nonce",
+      &hex::decode(
+        "\
+89bf16040081ff2990336b200613787937ebe1f024b8cdff90eb6f1c741d91c1\
+4a2b2f5858a932ad3d3b18bd16e76ced3070d72fd79ae4402df201f5\
+25e754716a1bc1b87a502297f2a99d89ea054e0018eb55d39562fd01\
+00"
+      )
+      .unwrap()
+    )
+    .to_repr()
+    .iter()
+    .cloned()
+    .collect::<Vec<_>>(),
+    hex::decode(
+      "\
+67a6f023e77361707c6e894c625e809e80f33fdb310810053ae29e28\
+e7011f3193b9020e73c183a98cc3a519160ed759376dd92c94831622\
+00"
+    )
+    .unwrap()
+  );
+}

@@ -232,11 +232,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     self.coin.address(self.keys[self.keys.len() - 1].0.group_key())
   }
 
-  // TODO: Remove
-  pub async fn is_confirmed(&mut self, tx: &[u8]) -> Result<bool, CoinError> {
-    self.coin.is_confirmed(tx).await
-  }
-
   pub async fn poll(&mut self) -> Result<(), CoinError> {
     if self.coin.get_latest_block_number().await? < (C::CONFIRMATIONS - 1) {
       return Ok(());
@@ -325,7 +320,15 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
         let tx = self
           .coin
-          .prepare_send(keys.clone(), transcript, acknowledged_block, inputs, &outputs, fee)
+          .prepare_send(
+            keys.clone(),
+            transcript,
+            acknowledged_block,
+            inputs,
+            &outputs,
+            Some(keys.group_key()),
+            fee,
+          )
           .await?;
         // self.db.save_tx(tx) // TODO
         txs.push(tx);

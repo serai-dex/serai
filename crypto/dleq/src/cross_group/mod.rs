@@ -367,36 +367,32 @@ where
   }
 
   #[cfg(feature = "serialize")]
-  pub fn serialize<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     for bit in &self.bits {
-      bit.serialize(w)?;
+      bit.write(w)?;
     }
     if let Some(bit) = &self.remainder {
-      bit.serialize(w)?;
+      bit.write(w)?;
     }
-    self.poks.0.serialize(w)?;
-    self.poks.1.serialize(w)
+    self.poks.0.write(w)?;
+    self.poks.1.write(w)
   }
 
   #[cfg(feature = "serialize")]
-  pub fn deserialize<R: Read>(r: &mut R) -> std::io::Result<Self> {
+  pub fn read<R: Read>(r: &mut R) -> std::io::Result<Self> {
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
     let bits_per_group = BitSignature::from(SIGNATURE).bits();
 
     let mut bits = Vec::with_capacity(capacity / bits_per_group);
     for _ in 0 .. (capacity / bits_per_group) {
-      bits.push(Bits::deserialize(r)?);
+      bits.push(Bits::read(r)?);
     }
 
     let mut remainder = None;
     if (capacity % bits_per_group) != 0 {
-      remainder = Some(Bits::deserialize(r)?);
+      remainder = Some(Bits::read(r)?);
     }
 
-    Ok(__DLEqProof {
-      bits,
-      remainder,
-      poks: (SchnorrPoK::deserialize(r)?, SchnorrPoK::deserialize(r)?),
-    })
+    Ok(__DLEqProof { bits, remainder, poks: (SchnorrPoK::read(r)?, SchnorrPoK::read(r)?) })
   }
 }

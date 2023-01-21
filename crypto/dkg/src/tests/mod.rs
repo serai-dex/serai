@@ -68,3 +68,8 @@ pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Ciphersuite>(rng: &mut R) {
   key_gen::<_, C>(rng);
   test_generator_promotion::<_, C>(rng);
 }
+
+#[test]
+fn test_with_ristretto() {
+  test_ciphersuite::<_, ciphersuite::Ristretto>(&mut rand_core::OsRng);
+}

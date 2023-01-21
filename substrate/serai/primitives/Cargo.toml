@@ -1,0 +1,24 @@
+[package]
+name = "serai-primitives"
+version = "0.1.0"
+description = "Primitives for the Serai blockchain"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/serai/primitives"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
+
+serde = { version = "1", features = ["derive"], optional = true }
+
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+[features]
+std = ["scale/std", "scale-info/std", "serde", "sp-core/std"]
+default = ["std"]
