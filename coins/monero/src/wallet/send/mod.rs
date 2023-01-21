@@ -7,7 +7,9 @@ use rand::seq::SliceRandom;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
+use group::Group;
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
+use dalek_ff_group as dfg;
 
 #[cfg(feature = "multisig")]
 use frost::FrostError;
@@ -47,24 +49,23 @@ struct SendOutput {
 }
 
 impl SendOutput {
-  fn new<R: RngCore + CryptoRng>(
-    rng: &mut R,
+  fn new(
+    r: &Zeroizing<Scalar>,
     unique: [u8; 32],
     output: (usize, (MoneroAddress, u64)),
   ) -> (SendOutput, Option<[u8; 8]>) {
     let o = output.0;
     let output = output.1;
 
-    let r = random_scalar(rng);
     let (view_tag, shared_key, payment_id_xor) =
-      shared_key(Some(unique).filter(|_| output.0.meta.kind.guaranteed()), &r, &output.0.view, o);
+      shared_key(Some(unique).filter(|_| output.0.is_guaranteed()), r, &output.0.view, o);
 
     (
       SendOutput {
-        R: if !output.0.meta.kind.subaddress() {
-          &r * &ED25519_BASEPOINT_TABLE
+        R: if !output.0.is_subaddress() {
+          r.deref() * &ED25519_BASEPOINT_TABLE
         } else {
-          r * output.0.spend
+          r.deref() * output.0.spend
         },
         view_tag,
         dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
@@ -281,11 +282,26 @@ impl SignableTransaction {
     // Shuffle the payments
     self.payments.shuffle(rng);
 
+    // Used for all non-subaddress outputs, or if there's only one subaddress output and a change
+    let tx_key = Zeroizing::new(random_scalar(rng));
+    // TODO: Support not needing additional when one subaddress and non-subaddress change
+    let additional = self.payments.iter().filter(|payment| payment.0.is_subaddress()).count() != 0;
+
     // Actually create the outputs
     let mut outputs = Vec::with_capacity(self.payments.len());
     let mut id = None;
     for payment in self.payments.drain(..).enumerate() {
-      let (output, payment_id) = SendOutput::new(rng, uniqueness, payment);
+      // If this is a subaddress, generate a dedicated r. Else, reuse the TX key
+      let dedicated = Zeroizing::new(random_scalar(&mut *rng));
+      let use_dedicated = additional && payment.1 .0.is_subaddress();
+      let r = if use_dedicated { &dedicated } else { &tx_key };
+
+      let (mut output, payment_id) = SendOutput::new(r, uniqueness, payment);
+      // If this used the tx_key, randomize its R
+      if !use_dedicated {
+        output.R = dfg::EdwardsPoint::random(&mut *rng).0;
+      }
+
       outputs.push(output);
       id = id.or(payment_id);
     }
@@ -308,7 +324,10 @@ impl SignableTransaction {
 
     // Create the TX extra
     let extra = {
-      let mut extra = Extra::new(outputs.iter().map(|output| output.R).collect());
+      let mut extra = Extra::new(
+        tx_key.deref() * &ED25519_BASEPOINT_TABLE,
+        if additional { outputs.iter().map(|output| output.R).collect() } else { vec![] },
+      );
 
       let mut id_vec = Vec::with_capacity(1 + 8);
       PaymentId::Encrypted(id).write(&mut id_vec).unwrap();

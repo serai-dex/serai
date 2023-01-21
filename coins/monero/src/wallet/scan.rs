@@ -296,6 +296,7 @@ impl Scanner {
       }
       let output_key = output_key.unwrap();
 
+      // TODO: Only use THE key or the matching additional key. Not any key
       for key in &keys {
         let (view_tag, shared_key, payment_id_xor) = shared_key(
           if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix.inputs)) } else { None },

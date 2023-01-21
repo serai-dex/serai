@@ -33,9 +33,9 @@ fn standard_address() {
   let addr = MoneroAddress::from_str(Network::Mainnet, STANDARD).unwrap();
   assert_eq!(addr.meta.network, Network::Mainnet);
   assert_eq!(addr.meta.kind, AddressType::Standard);
-  assert!(!addr.meta.kind.subaddress());
+  assert!(!addr.meta.kind.is_subaddress());
   assert_eq!(addr.meta.kind.payment_id(), None);
-  assert!(!addr.meta.kind.guaranteed());
+  assert!(!addr.meta.kind.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SPEND);
   assert_eq!(addr.view.compress().to_bytes(), VIEW);
   assert_eq!(addr.to_string(), STANDARD);
@@ -46,9 +46,9 @@ fn integrated_address() {
   let addr = MoneroAddress::from_str(Network::Mainnet, INTEGRATED).unwrap();
   assert_eq!(addr.meta.network, Network::Mainnet);
   assert_eq!(addr.meta.kind, AddressType::Integrated(PAYMENT_ID));
-  assert!(!addr.meta.kind.subaddress());
+  assert!(!addr.meta.kind.is_subaddress());
   assert_eq!(addr.meta.kind.payment_id(), Some(PAYMENT_ID));
-  assert!(!addr.meta.kind.guaranteed());
+  assert!(!addr.meta.kind.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SPEND);
   assert_eq!(addr.view.compress().to_bytes(), VIEW);
   assert_eq!(addr.to_string(), INTEGRATED);
@@ -59,9 +59,9 @@ fn subaddress() {
   let addr = MoneroAddress::from_str(Network::Mainnet, SUBADDRESS).unwrap();
   assert_eq!(addr.meta.network, Network::Mainnet);
   assert_eq!(addr.meta.kind, AddressType::Subaddress);
-  assert!(addr.meta.kind.subaddress());
+  assert!(addr.meta.kind.is_subaddress());
   assert_eq!(addr.meta.kind.payment_id(), None);
-  assert!(!addr.meta.kind.guaranteed());
+  assert!(!addr.meta.kind.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SUB_SPEND);
   assert_eq!(addr.view.compress().to_bytes(), SUB_VIEW);
   assert_eq!(addr.to_string(), SUBADDRESS);
@@ -100,9 +100,9 @@ fn featured() {
         assert_eq!(addr.spend, spend);
         assert_eq!(addr.view, view);
 
-        assert_eq!(addr.subaddress(), subaddress);
+        assert_eq!(addr.is_subaddress(), subaddress);
         assert_eq!(addr.payment_id(), payment_id);
-        assert_eq!(addr.guaranteed(), guaranteed);
+        assert_eq!(addr.is_guaranteed(), guaranteed);
       }
     }
   }
@@ -151,10 +151,10 @@ fn featured_vectors() {
     assert_eq!(addr.spend, spend);
     assert_eq!(addr.view, view);
 
-    assert_eq!(addr.subaddress(), vector.subaddress);
+    assert_eq!(addr.is_subaddress(), vector.subaddress);
     assert_eq!(vector.integrated, vector.payment_id.is_some());
     assert_eq!(addr.payment_id(), vector.payment_id);
-    assert_eq!(addr.guaranteed(), vector.guaranteed);
+    assert_eq!(addr.is_guaranteed(), vector.guaranteed);
 
     assert_eq!(
       MoneroAddress::new(
