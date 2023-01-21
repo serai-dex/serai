@@ -125,8 +125,8 @@ pub mod pallet {
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
-    #[pallet::weight((0, DispatchClass::Mandatory))] // TODO
-    pub fn execute(origin: OriginFor<T>, updates: Updates) -> DispatchResult {
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    pub fn update(origin: OriginFor<T>, updates: Updates) -> DispatchResult {
       ensure_none(origin)?;
       assert!(!Once::<T>::exists());
       Once::<T>::put(true);
@@ -157,7 +157,7 @@ pub mod pallet {
       data
         .get_data::<Updates>(&INHERENT_IDENTIFIER)
         .unwrap()
-        .map(|updates| Call::execute { updates })
+        .map(|updates| Call::update { updates })
     }
 
     // Assumes that only not yet handled batches are provided as inherent data
@@ -167,7 +167,7 @@ pub mod pallet {
       let expected = data.get_data::<Updates>(&INHERENT_IDENTIFIER).unwrap().unwrap();
       // Match to be exhaustive
       let updates = match call {
-        Call::execute { ref updates } => updates,
+        Call::update { ref updates } => updates,
         _ => Err(InherentError::InvalidCall)?,
       };
 
