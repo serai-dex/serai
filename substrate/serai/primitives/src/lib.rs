@@ -8,12 +8,16 @@ use scale_info::TypeInfo;
 use serde::{Serialize, Deserialize};
 
 use sp_core::{
-  H256,
+  ConstU32,
   sr25519::{Public, Signature as RistrettoSignature},
+  bounded::BoundedVec,
 };
 
 mod amount;
 pub use amount::*;
+
+mod block;
+pub use block::*;
 
 mod coins;
 pub use coins::*;
@@ -22,42 +26,29 @@ pub type PublicKey = Public;
 pub type SeraiAddress = PublicKey;
 pub type Signature = RistrettoSignature;
 
-/// The type used to identify block numbers.
-// Doesn't re-export tendermint-machine's due to traits.
-#[derive(
-  Clone, Copy, Default, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+// Monero, our current longest address candidate, has a longest address of featured with payment ID
+// 1 (enum) + 1 (flags) + 64 (two keys) + 8 (payment ID) = 74
+pub const MAX_ADDRESS_LEN: u32 = 74;
+
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct BlockNumber(pub u32);
-impl From<u32> for BlockNumber {
-  fn from(number: u32) -> BlockNumber {
-    BlockNumber(number)
+pub struct ExternalAddress(BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>);
+impl ExternalAddress {
+  #[cfg(feature = "std")]
+  pub fn new(address: Vec<u8>) -> Result<ExternalAddress, &'static str> {
+    Ok(ExternalAddress(address.try_into().map_err(|_| "address length exceeds {MAX_ADDRESS_LEN}")?))
   }
-}
 
-/// The type used to identify block hashes.
-// This may not be universally compatible
-// If a block exists with a hash which isn't 32-bytes, it can be hashed into a value with 32-bytes
-// This would require the processor to maintain a mapping of 32-byte IDs to actual hashes, which
-// would be fine
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct BlockHash(pub [u8; 32]);
-
-impl AsRef<[u8]> for BlockHash {
-  fn as_ref(&self) -> &[u8] {
+  pub fn address(&self) -> &[u8] {
     self.0.as_ref()
   }
-}
 
-impl From<[u8; 32]> for BlockHash {
-  fn from(hash: [u8; 32]) -> BlockHash {
-    BlockHash(hash)
+  #[cfg(feature = "std")]
+  pub fn consume(self) -> Vec<u8> {
+    self.0.into_inner()
   }
 }
 
-impl From<H256> for BlockHash {
-  fn from(hash: H256) -> BlockHash {
-    BlockHash(hash.into())
-  }
-}
+// Should be enough for a Uniswap v3 call
+pub const MAX_DATA_LEN: u32 = 512;
+pub type Data = BoundedVec<u8, ConstU32<{ MAX_DATA_LEN }>>;

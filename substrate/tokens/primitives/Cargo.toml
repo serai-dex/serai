@@ -1,7 +1,7 @@
 [package]
-name = "in-instructions-primitives"
+name = "tokens-primitives"
 version = "0.1.0"
-description = "Serai instructions library, enabling encoding and decoding"
+description = "Serai tokens primitives"
 license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
@@ -17,8 +17,7 @@ scale-info = { version = "2", default-features = false, features = ["derive"] }
 serde = { version = "1", features = ["derive"], optional = true }
 
 serai-primitives = { path = "../../serai/primitives", default-features = false }
-tokens-primitives = { path = "../../tokens/primitives", default-features = false }
 
 [features]
-std = ["scale/std", "scale-info/std", "serde", "serai-primitives/std", "tokens-primitives/std"]
+std = ["scale/std", "scale-info/std", "serde", "serai-primitives/std"]
 default = ["std"]

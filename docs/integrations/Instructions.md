@@ -51,14 +51,9 @@ still provide `origin`, overriding the automatically provided value.
 If the instruction fails, coins are scheduled to be returned to `origin`,
 if provided.
 
-### Destination
-
-Destination is an enum of SeraiAddress and ExternalAddress.
-
 ### Out Instruction
 
-  - `destination` (Destination):   Address to receive coins to.
-  - `data`        (Option\<Data>): The data to call the destination with.
+OutInstruction is an enum of SeraiAddress and (ExternalAddress, Option\<Data>).
 
 Transfer the coins included with this instruction to the specified address with
 the specified data. No validation of external addresses/data is performed

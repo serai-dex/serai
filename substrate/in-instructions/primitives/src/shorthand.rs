@@ -4,16 +4,16 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
-use sp_core::{ConstU32, bounded::BoundedVec};
+use serai_primitives::{Coin, Amount, SeraiAddress, ExternalAddress, Data};
 
-use serai_primitives::{SeraiAddress, Coin, Amount};
+use tokens_primitives::OutInstruction;
 
-use crate::{MAX_DATA_LEN, ExternalAddress, RefundableInInstruction, InInstruction, OutInstruction};
+use crate::{RefundableInInstruction, InInstruction};
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum Shorthand {
-  Raw(BoundedVec<u8, ConstU32<{ MAX_DATA_LEN }>>),
+  Raw(Data),
   Swap {
     origin: Option<ExternalAddress>,
     coin: Coin,
@@ -31,7 +31,7 @@ pub enum Shorthand {
 impl Shorthand {
   pub fn transfer(origin: Option<ExternalAddress>, address: SeraiAddress) -> Option<Self> {
     Some(Self::Raw(
-      BoundedVec::try_from(
+      Data::try_from(
         (RefundableInInstruction { origin, instruction: InInstruction::Transfer(address) })
           .encode(),
       )
