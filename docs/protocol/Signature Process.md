@@ -36,7 +36,7 @@ The `CoordinatorPublicKey` message is used to provide the coordinator's public k
 
 ```json
 "CoordinatorPublicKey" : {
-  "pubkey": "0x..."
+  "pubkey": "..."
 }
 ```
 
@@ -45,7 +45,7 @@ The `CoordinatorPublicKey` message is used to provide the coordinator's public k
 ```json
 
 "ProcessorPublicKey : {
-  "pubkey": "0x..."
+  "pubkey": "..."
 }
 ```
 
@@ -53,6 +53,6 @@ The `CoordinatorPublicKey` message is used to provide the coordinator's public k
 
 ```json
 "SignerReady" : {
-  "pubkey": "0x..."
+  "pubkey": "..."
 }
 ```
