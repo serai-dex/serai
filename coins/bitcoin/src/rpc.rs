@@ -1,10 +1,10 @@
 use anyhow::Result;
 use serde::de::DeserializeOwned;
-use std::{collections::HashMap, fmt::Debug, str::FromStr};
+use std::{fmt::Debug, str::FromStr};
 
 use bitcoin::{
-  hashes::hex::FromHex, secp256k1::ecdsa::Signature, Address, Amount, EcdsaSighashType, OutPoint,
-  PrivateKey, Transaction, BlockHash,
+  hashes::hex::FromHex, OutPoint,
+  Transaction, BlockHash,
 };
 
 use crate::rpc_helper::*;
@@ -219,20 +219,11 @@ impl Rpc {
     let args = handle_defaults(&mut ext_args, &[null()]);
     Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
   }
-  
+
   pub async fn generate_to_address(&self, nblocks: usize, address: &str) -> Result<Vec<String>> {
     let mut ext_args = [into_json(nblocks)?, into_json(address)?, 100000000.into()];
     let defaults = [null(), null(), 100000000.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
     Ok(self.rpc_call::<Vec<String>>("generatetoaddress", &args).await.unwrap())
-  }
-
-  pub async fn test_mempool_accept<R: RawTx>(
-    &self,
-    rawtxs: &[R],
-  ) -> Result<Vec<TestMempoolAcceptResult>> {
-    let hexes: Vec<serde_json::Value> =
-      rawtxs.to_vec().into_iter().map(|r| r.raw_hex().into()).collect();
-    Ok(self.rpc_call::<Vec<TestMempoolAcceptResult>>("testmempoolaccept", &[hexes.into()]).await?)
   }
 }
