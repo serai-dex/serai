@@ -499,6 +499,7 @@ dependencies = [
  "flexible-transcript",
  "hex",
  "k256",
+ "lazy_static",
  "log",
  "modular-frost",
  "rand_core 0.6.4",
@@ -510,7 +511,6 @@ dependencies = [
  "sha2 0.10.6",
  "thiserror",
  "tokio",
- "zeroize",
 ]
 
 [[package]]

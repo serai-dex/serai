@@ -30,4 +30,4 @@ transcript = { package = "flexible-transcript", path = "../../crypto/transcript"
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
 k256 = { version = "0.11", features = ["arithmetic"] }
 secp256k1 = {version = "0.24", features = ["global-context", "rand-std"] }
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+lazy_static = "1"

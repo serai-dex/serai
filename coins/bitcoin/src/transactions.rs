@@ -28,7 +28,6 @@ use std::{
 
 use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use transcript::{Transcript, RecommendedTranscript};
-use zeroize::Zeroizing;
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
