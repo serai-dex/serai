@@ -40,7 +40,7 @@ pub struct GetBlockWithDetailResult {
     pub nextblockhash: Option<bitcoin::BlockHash>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub(crate) struct RpcResponseError {
     pub(crate) code: i64,
     pub(crate) message: String,
@@ -55,7 +55,7 @@ impl Default for RpcResponseError {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub(crate) struct RpcResponse<T> {
     pub(crate) result: Option<T>,
     #[serde(default)]

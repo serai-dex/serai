@@ -77,32 +77,6 @@ pub enum SignerError {
   HWIError(hwi::error::Error),
 }
 
-pub trait PSBTUtils {
-  fn get_utxo_for(&self, input_index: usize) -> Option<TxOut>;
-}
-
-impl PSBTUtils for PartiallySignedTransaction {
-  fn get_utxo_for(&self, input_index: usize) -> Option<TxOut> {
-    let tx = &self.unsigned_tx;
-
-    if input_index >= tx.input.len() {
-      return None;
-    }
-
-    if let Some(input) = self.inputs.get(input_index) {
-      if let Some(wit_utxo) = &input.witness_utxo {
-        Some(wit_utxo.clone())
-      } else if let Some(in_tx) = &input.non_witness_utxo {
-        Some(in_tx.output[tx.input[input_index].previous_output.vout as usize].clone())
-      } else {
-        None
-      }
-    } else {
-      None
-    }
-  }
-}
-
 pub(crate) fn taproot_key_spend_signature_hash(
   psbt: &psbt::PartiallySignedTransaction,
   input_index: usize,
@@ -112,7 +86,7 @@ pub(crate) fn taproot_key_spend_signature_hash(
   }
 
   let sighash_type = SchnorrSighashType::All.into();
-  let witness_utxos = (0..psbt.inputs.len()).map(|i| psbt.get_utxo_for(i)).collect::<Vec<_>>();
+  let witness_utxos = (0..psbt.inputs.len()).map(|i| psbt.inputs[i].witness_utxo.clone()).collect::<Vec<_>>();
   let mut all_witness_utxos = vec![];
 
   let mut cache = sighash::SighashCache::new(&psbt.unsigned_tx);
