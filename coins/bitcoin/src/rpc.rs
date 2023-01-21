@@ -142,22 +142,6 @@ impl Rpc {
     Ok(transactions)
   }
 
-  pub async fn get_raw_transactions(
-    &self,
-    tx_hashes: Vec<&str>,
-    block_hash: Option<&BlockHash>,
-  ) -> anyhow::Result<Vec<Transaction>> {
-    let mut transactions = Vec::<Transaction>::new();
-    for one_tx in tx_hashes.iter() {
-      let one_transaction = self
-        .get_raw_transaction(&bitcoin::Txid::from_str(one_tx).unwrap(), None, block_hash)
-        .await
-        .unwrap();
-      transactions.push(one_transaction);
-    }
-    Ok(transactions)
-  }
-
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash> {
     let mut ext_args = [into_json(height)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
@@ -175,19 +159,6 @@ impl Rpc {
 
     let tx_ids_str: Vec<&str> = tx_ids.iter().map(|s| &s[..]).collect();
     Ok(self.get_transactions(tx_ids_str).await.unwrap())
-  }
-
-  pub async fn get_block_raw_transactions(
-    &self,
-    height: usize,
-  ) -> anyhow::Result<Vec<Transaction>> {
-    let block_hash = self.get_block_hash(height).await.unwrap();
-    let block_info = self.get_block(&block_hash).await.unwrap();
-    let tx_ids: Vec<String> =
-      block_info.txdata.iter().map(|one_tx| one_tx.txid().to_string()).collect();
-
-    let tx_ids_str: Vec<&str> = tx_ids.iter().map(|s| &s[..]).collect();
-    Ok(self.get_raw_transactions(tx_ids_str, Some(&block_hash)).await.unwrap())
   }
 
   pub async fn get_raw_transaction(
