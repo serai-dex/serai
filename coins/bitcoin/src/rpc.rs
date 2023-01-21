@@ -52,7 +52,7 @@ impl Rpc {
     Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), &args).await?)
   }
 
-  pub async fn get_block_index(&self, block_hash: &str) -> anyhow::Result<usize> {
+  pub async fn get_block_number(&self, block_hash: &str) -> anyhow::Result<usize> {
     let block = self.get_block_info(block_hash).await.unwrap();
     Ok(block.height)
   }
