@@ -3,8 +3,7 @@ use serde::de::DeserializeOwned;
 use std::{fmt::Debug, str::FromStr};
 
 use bitcoin::{
-  hashes::hex::FromHex, OutPoint,
-  Transaction,
+  hashes::hex::FromHex, Transaction,
 };
 
 use crate::rpc_helper::*;
@@ -91,20 +90,6 @@ impl Rpc {
     include_unsafe: Option<bool>,
   ) -> anyhow::Result<Vec<ListUnspentResultEntry>> {
     Ok(self.get_spendable(minconf, maxconf, addresses, include_unsafe).await?)
-  }
-
-  pub async fn lock_unspent(&self, outputs: &[OutPoint]) -> Result<bool> {
-    let outputs: Vec<_> =
-      outputs.iter().map(|o| serde_json::to_value(JsonOutPoint::from(*o)).unwrap()).collect();
-    Ok(self.rpc_call::<bool>("lockunspent".to_string(), &[false.into(), outputs.into()]).await?)
-  }
-
-  pub async fn unlock_unspent(&self, outputs: &[OutPoint]) -> Result<bool> {
-    let outputs: Vec<_> =
-      outputs.iter().map(|o| serde_json::to_value(JsonOutPoint::from(*o)).unwrap()).collect();
-    let mut ext_args = [true.into(), outputs.into()];
-    let args = handle_defaults(&mut ext_args, &[true.into(), empty_arr()]);
-    Ok(self.rpc_call::<bool>("lockunspent".to_string(), &args).await?)
   }
 
   pub async fn get_transaction(&self, tx_hash: &str) -> anyhow::Result<GetTransactionResult> {
