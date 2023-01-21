@@ -158,18 +158,6 @@ impl Rpc {
     Ok(transactions)
   }
 
-  pub async fn is_confirmed(&self, tx_hash: &str) -> anyhow::Result<bool> {
-    let tx_block_number = self.get_transaction_block_number(&tx_hash).await?;
-    Ok((self.get_height().await?.saturating_sub(tx_block_number) + 1) >= 10)
-  }
-
-  pub async fn get_transaction_block_number(&self, tx_hash: &str) -> anyhow::Result<usize> {
-    let mut ext_args = [into_json(tx_hash)?];
-    let args = handle_defaults(&mut ext_args, &[null()]);
-    let tx = self.rpc_call::<GetTransactionResult>("gettransaction", &args).await?;
-    Ok(usize::try_from(tx.info.blockheight.unwrap()).unwrap())
-  }
-
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash> {
     let mut ext_args = [into_json(height)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
