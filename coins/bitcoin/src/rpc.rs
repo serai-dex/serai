@@ -22,13 +22,13 @@ impl Rpc {
 
   pub async fn rpc_call<Response: DeserializeOwned + Debug>(
     &self,
-    method: &str,
+    method: String,
     params: &[serde_json::Value],
   ) -> anyhow::Result<Response> {
     let client = reqwest::Client::new();
     let res = client
       .post(&self.url)
-      .json(&RpcParams { jsonrpc: "2.0", id: (), method, params })
+      .json(&RpcParams { jsonrpc: "2.0".to_string(), id: (), method, params })
       .send()
       .await?
       .text()
@@ -42,14 +42,14 @@ impl Rpc {
   }
 
   pub async fn get_height(&self) -> anyhow::Result<usize> {
-    Ok(self.rpc_call::<usize>("getblockcount", &[]).await?)
+    Ok(self.rpc_call::<usize>("getblockcount".to_string(), &[]).await?)
   }
 
   pub async fn get_block_info(&self, block_hash: &str) -> anyhow::Result<GetBlockResult> {
     let mut ext_args = [into_json(block_hash)?];
     let defaults = [null()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<GetBlockResult>("getblock", &args).await?)
+    Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), &args).await?)
   }
 
   pub async fn get_block_index(&self, block_hash: &str) -> anyhow::Result<usize> {
@@ -61,7 +61,7 @@ impl Rpc {
     let mut ext_args = [into_json(block_hash)?, 0.into()];
     let defaults = [null(), 0.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let hex: String = self.rpc_call("getblock", &args).await?;
+    let hex: String = self.rpc_call("getblock".to_string(), &args).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
@@ -73,11 +73,11 @@ impl Rpc {
     let mut ext_args = [into_json(block_hash)?, 2.into()];
     let defaults = [null(), 1.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<GetBlockWithDetailResult>("getblock", &args).await?)
+    Ok(self.rpc_call::<GetBlockWithDetailResult>("getblock".to_string(), &args).await?)
   }
 
   pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash> {
-    Ok(self.rpc_call::<bitcoin::BlockHash>("getbestblockhash", &[]).await?)
+    Ok(self.rpc_call::<bitcoin::BlockHash>("getbestblockhash".to_string(), &[]).await?)
   }
 
   pub async fn get_spendable(
@@ -95,7 +95,7 @@ impl Rpc {
     ];
     let defaults = [into_json(1)?, into_json(9999999)?, null(), into_json(true)?];
     let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call("listunspent", &args).await?)
+    Ok(self.rpc_call("listunspent".to_string(), &args).await?)
   }
 
   pub async fn get_o_indexes(
@@ -111,7 +111,7 @@ impl Rpc {
   pub async fn lock_unspent(&self, outputs: &[OutPoint]) -> Result<bool> {
     let outputs: Vec<_> =
       outputs.iter().map(|o| serde_json::to_value(JsonOutPoint::from(*o)).unwrap()).collect();
-    Ok(self.rpc_call::<bool>("lockunspent", &[false.into(), outputs.into()]).await?)
+    Ok(self.rpc_call::<bool>("lockunspent".to_string(), &[false.into(), outputs.into()]).await?)
   }
 
   pub async fn unlock_unspent(&self, outputs: &[OutPoint]) -> Result<bool> {
@@ -119,13 +119,13 @@ impl Rpc {
       outputs.iter().map(|o| serde_json::to_value(JsonOutPoint::from(*o)).unwrap()).collect();
     let mut ext_args = [true.into(), outputs.into()];
     let args = handle_defaults(&mut ext_args, &[true.into(), empty_arr()]);
-    Ok(self.rpc_call::<bool>("lockunspent", &args).await?)
+    Ok(self.rpc_call::<bool>("lockunspent".to_string(), &args).await?)
   }
 
   pub async fn get_transaction(&self, tx_hash: &str) -> anyhow::Result<GetTransactionResult> {
     let mut ext_args = [into_json(tx_hash)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
-    Ok(self.rpc_call::<GetTransactionResult>("gettransaction", &args).await?)
+    Ok(self.rpc_call::<GetTransactionResult>("gettransaction".to_string(), &args).await?)
   }
 
   pub async fn get_transactions(
@@ -136,7 +136,7 @@ impl Rpc {
     for one_tx in tx_hashes.iter() {
       let mut ext_args = [into_json(one_tx)?];
       let args = handle_defaults(&mut ext_args, &[null()]);
-      let one_transaction = self.rpc_call::<GetTransactionResult>("gettransaction", &args).await?;
+      let one_transaction = self.rpc_call::<GetTransactionResult>("gettransaction".to_string(), &args).await?;
       transactions.push(one_transaction);
     }
     Ok(transactions)
@@ -145,7 +145,7 @@ impl Rpc {
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash> {
     let mut ext_args = [into_json(height)?];
     let args = handle_defaults(&mut ext_args, &[null()]);
-    Ok(self.rpc_call::<bitcoin::BlockHash>("getblockhash", &args).await?)
+    Ok(self.rpc_call::<bitcoin::BlockHash>("getblockhash".to_string(), &args).await?)
   }
 
   pub async fn get_block_transactions(
@@ -170,7 +170,7 @@ impl Rpc {
     let mut ext_args = [into_json(txid)?, opt_into_json(verbose)?, opt_into_json(block_hash)?];
     let defaults = [null(), into_json(false)?, into_json("")?];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let hex: String = self.rpc_call::<String>("getrawtransaction", &args).await?;
+    let hex: String = self.rpc_call::<String>("getrawtransaction".to_string(), &args).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
@@ -179,13 +179,13 @@ impl Rpc {
   {
     let mut ext_args = [tx.raw_hex().into()];
     let args = handle_defaults(&mut ext_args, &[null()]);
-    Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction", &args).await?)
+    Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction".to_string(), &args).await?)
   }
 
   pub async fn generate_to_address(&self, nblocks: usize, address: &str) -> Result<Vec<String>> {
     let mut ext_args = [into_json(nblocks)?, into_json(address)?, 100000000.into()];
     let defaults = [null(), null(), 100000000.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<Vec<String>>("generatetoaddress", &args).await.unwrap())
+    Ok(self.rpc_call::<Vec<String>>("generatetoaddress".to_string(), &args).await.unwrap())
   }
 }

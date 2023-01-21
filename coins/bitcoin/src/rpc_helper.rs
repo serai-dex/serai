@@ -65,10 +65,10 @@ pub struct RpcResponse<T> {
 }
 
 #[derive(Serialize)]
-pub struct RpcParams<'a, T> {
-    pub jsonrpc: &'a str,
+pub struct RpcParams<T> {
+    pub jsonrpc: String,
     pub id: (),
-    pub method: &'a str,
+    pub method: String,
     pub params: T,
 }
 
