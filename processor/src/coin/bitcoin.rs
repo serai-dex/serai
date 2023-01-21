@@ -10,7 +10,7 @@ use frost::{
 
 use bitcoin::{
   Block as BBlock, OutPoint,
-  util::address::Address,
+  util::address::Address, consensus::encode,
   Txid, schnorr::TweakedPublicKey,
   XOnlyPublicKey, SchnorrSighashType,
   psbt::{PartiallySignedTransaction,PsbtSighashType},
@@ -79,9 +79,7 @@ impl OutputTrait for Output {
   }
 
   fn id(&self) -> Self::Id {
-    let serialized_data = self.0.serialize();
-    let ret: [u8; 36] = serialized_data[0..36].try_into().unwrap();
-    ret
+    encode::serialize(&self.0.output).try_into().unwrap()
   }
 
   fn amount(&self) -> u64 {
