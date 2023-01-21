@@ -3,13 +3,13 @@ use std::sync::Arc;
 use jsonrpsee::RpcModule;
 
 use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
-use sc_transaction_pool_api::TransactionPool;
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 
-pub use sc_rpc_api::DenyUnsafe;
+use serai_runtime::{primitives::SeraiAddress, opaque::Block, Balance, Index};
 
-use serai_runtime::{opaque::Block, AccountId, Balance, Index};
+pub use sc_rpc_api::DenyUnsafe;
+use sc_transaction_pool_api::TransactionPool;
 
 pub struct FullDeps<C, P> {
   pub client: Arc<C>,
@@ -29,7 +29,7 @@ pub fn create_full<
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>
+  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, SeraiAddress, Index>
     + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
     + BlockBuilder<Block>,
 {

@@ -12,30 +12,30 @@ use crate::{
 const SPEND: [u8; 32] = hex!("f8631661f6ab4e6fda310c797330d86e23a682f20d5bc8cc27b18051191f16d7");
 const VIEW: [u8; 32] = hex!("4a1535063ad1fee2dabbf909d4fd9a873e29541b401f0944754e17c9a41820ce");
 
-const STANDARD: &'static str =
+const STANDARD: &str =
   "4B33mFPMq6mKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KQH4pNey";
 
 const PAYMENT_ID: [u8; 8] = hex!("b8963a57855cf73f");
-const INTEGRATED: &'static str =
+const INTEGRATED: &str =
   "4Ljin4CrSNHKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KbaTH6Mn\
   pXSn88oBX35";
 
 const SUB_SPEND: [u8; 32] =
   hex!("fe358188b528335ad1cfdc24a22a23988d742c882b6f19a602892eaab3c1b62b");
 const SUB_VIEW: [u8; 32] = hex!("9bc2b464de90d058468522098d5610c5019c45fd1711a9517db1eea7794f5470");
-const SUBADDRESS: &'static str =
+const SUBADDRESS: &str =
   "8C5zHM5ud8nGC4hC2ULiBLSWx9infi8JUUmWEat4fcTf8J4H38iWYVdFmPCA9UmfLTZxD43RsyKnGEdZkoGij6csDeUnbEB";
 
-const FEATURED_JSON: &'static str = include_str!("vectors/featured_addresses.json");
+const FEATURED_JSON: &str = include_str!("vectors/featured_addresses.json");
 
 #[test]
 fn standard_address() {
   let addr = MoneroAddress::from_str(Network::Mainnet, STANDARD).unwrap();
   assert_eq!(addr.meta.network, Network::Mainnet);
   assert_eq!(addr.meta.kind, AddressType::Standard);
-  assert_eq!(addr.meta.kind.subaddress(), false);
+  assert!(!addr.meta.kind.is_subaddress());
   assert_eq!(addr.meta.kind.payment_id(), None);
-  assert_eq!(addr.meta.kind.guaranteed(), false);
+  assert!(!addr.meta.kind.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SPEND);
   assert_eq!(addr.view.compress().to_bytes(), VIEW);
   assert_eq!(addr.to_string(), STANDARD);
@@ -46,9 +46,9 @@ fn integrated_address() {
   let addr = MoneroAddress::from_str(Network::Mainnet, INTEGRATED).unwrap();
   assert_eq!(addr.meta.network, Network::Mainnet);
   assert_eq!(addr.meta.kind, AddressType::Integrated(PAYMENT_ID));
-  assert_eq!(addr.meta.kind.subaddress(), false);
+  assert!(!addr.meta.kind.is_subaddress());
   assert_eq!(addr.meta.kind.payment_id(), Some(PAYMENT_ID));
-  assert_eq!(addr.meta.kind.guaranteed(), false);
+  assert!(!addr.meta.kind.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SPEND);
   assert_eq!(addr.view.compress().to_bytes(), VIEW);
   assert_eq!(addr.to_string(), INTEGRATED);
@@ -59,9 +59,9 @@ fn subaddress() {
   let addr = MoneroAddress::from_str(Network::Mainnet, SUBADDRESS).unwrap();
   assert_eq!(addr.meta.network, Network::Mainnet);
   assert_eq!(addr.meta.kind, AddressType::Subaddress);
-  assert_eq!(addr.meta.kind.subaddress(), true);
+  assert!(addr.meta.kind.is_subaddress());
   assert_eq!(addr.meta.kind.payment_id(), None);
-  assert_eq!(addr.meta.kind.guaranteed(), false);
+  assert!(!addr.meta.kind.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SUB_SPEND);
   assert_eq!(addr.view.compress().to_bytes(), SUB_VIEW);
   assert_eq!(addr.to_string(), SUBADDRESS);
@@ -83,13 +83,14 @@ fn featured() {
 
         let subaddress = (features & SUBADDRESS_FEATURE_BIT) == SUBADDRESS_FEATURE_BIT;
 
-        let mut id = [0; 8];
-        OsRng.fill_bytes(&mut id);
-        let id = Some(id).filter(|_| (features & INTEGRATED_FEATURE_BIT) == INTEGRATED_FEATURE_BIT);
+        let mut payment_id = [0; 8];
+        OsRng.fill_bytes(&mut payment_id);
+        let payment_id = Some(payment_id)
+          .filter(|_| (features & INTEGRATED_FEATURE_BIT) == INTEGRATED_FEATURE_BIT);
 
         let guaranteed = (features & GUARANTEED_FEATURE_BIT) == GUARANTEED_FEATURE_BIT;
 
-        let kind = AddressType::Featured(subaddress, id, guaranteed);
+        let kind = AddressType::Featured { subaddress, payment_id, guaranteed };
         let meta = AddressMeta::new(network, kind);
         let addr = MoneroAddress::new(meta, spend, view);
 
@@ -99,9 +100,9 @@ fn featured() {
         assert_eq!(addr.spend, spend);
         assert_eq!(addr.view, view);
 
-        assert_eq!(addr.subaddress(), subaddress);
-        assert_eq!(addr.payment_id(), id);
-        assert_eq!(addr.guaranteed(), guaranteed);
+        assert_eq!(addr.is_subaddress(), subaddress);
+        assert_eq!(addr.payment_id(), payment_id);
+        assert_eq!(addr.is_guaranteed(), guaranteed);
       }
     }
   }
@@ -150,16 +151,20 @@ fn featured_vectors() {
     assert_eq!(addr.spend, spend);
     assert_eq!(addr.view, view);
 
-    assert_eq!(addr.subaddress(), vector.subaddress);
+    assert_eq!(addr.is_subaddress(), vector.subaddress);
     assert_eq!(vector.integrated, vector.payment_id.is_some());
     assert_eq!(addr.payment_id(), vector.payment_id);
-    assert_eq!(addr.guaranteed(), vector.guaranteed);
+    assert_eq!(addr.is_guaranteed(), vector.guaranteed);
 
     assert_eq!(
       MoneroAddress::new(
         AddressMeta::new(
           network,
-          AddressType::Featured(vector.subaddress, vector.payment_id, vector.guaranteed)
+          AddressType::Featured {
+            subaddress: vector.subaddress,
+            payment_id: vector.payment_id,
+            guaranteed: vector.guaranteed
+          }
         ),
         spend,
         view

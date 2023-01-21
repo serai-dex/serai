@@ -65,8 +65,54 @@ macro_rules! kp_curve {
   };
 }
 
-#[cfg(feature = "p256")]
-kp_curve!("p256", p256, P256, b"P-256");
-
 #[cfg(feature = "secp256k1")]
 kp_curve!("secp256k1", k256, Secp256k1, b"secp256k1");
+#[cfg(feature = "secp256k1")]
+#[test]
+fn test_secp256k1() {
+  ff_group_tests::group::test_prime_group_bits::<k256::ProjectivePoint>();
+
+  // Ideally, a test vector from hash to field (not FROST) would be here
+  // Unfortunately, the IETF draft only provides vectors for field elements, not scalars
+  assert_eq!(
+    Secp256k1::hash_to_F(
+      b"FROST-secp256k1-SHA256-v11nonce",
+      &hex::decode(
+        "\
+80cbea5e405d169999d8c4b30b755fedb26ab07ec8198cda4873ed8ce5e16773\
+08f89ffe80ac94dcb920c26f3f46140bfc7f95b493f8310f5fc1ea2b01f4254c"
+      )
+      .unwrap()
+    )
+    .to_repr()
+    .iter()
+    .cloned()
+    .collect::<Vec<_>>(),
+    hex::decode("acc83278035223c1ba464e2d11bfacfc872b2b23e1041cf5f6130da21e4d8068").unwrap()
+  );
+}
+
+#[cfg(feature = "p256")]
+kp_curve!("p256", p256, P256, b"P-256");
+#[cfg(feature = "p256")]
+#[test]
+fn test_p256() {
+  ff_group_tests::group::test_prime_group_bits::<p256::ProjectivePoint>();
+
+  assert_eq!(
+    P256::hash_to_F(
+      b"FROST-P256-SHA256-v11nonce",
+      &hex::decode(
+        "\
+f4e8cf80aec3f888d997900ac7e3e349944b5a6b47649fc32186d2f1238103c6\
+0c9c1a0fe806c184add50bbdcac913dda73e482daf95dcb9f35dbb0d8a9f7731"
+      )
+      .unwrap()
+    )
+    .to_repr()
+    .iter()
+    .cloned()
+    .collect::<Vec<_>>(),
+    hex::decode("f871dfcf6bcd199342651adc361b92c941cb6a0d8c8c1a3b91d79e2c1bf3722d").unwrap()
+  );
+}

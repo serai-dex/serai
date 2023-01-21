@@ -309,31 +309,38 @@ impl GroupEncoding for Point {
 impl PrimeGroup for Point {}
 
 #[test]
-fn identity() {
-  assert_eq!(Point::from_bytes(&Point::identity().to_bytes()).unwrap(), Point::identity());
-  assert_eq!(Point::identity() + Point::identity(), Point::identity());
+fn test_group() {
+  // TODO: Move to test_prime_group_bits once the impl is finished
+  use ff_group_tests::group::*;
+
+  test_eq::<Point>();
+  test_identity::<Point>();
+  test_generator::<Point>();
+  test_double::<Point>();
+  test_add::<Point>();
+  test_sum::<Point>();
+  test_neg::<Point>();
+  test_sub::<Point>();
+  test_mul::<Point>();
+  test_order::<Point>();
+
+  test_encoding::<Point>();
 }
 
-#[test]
-fn addition_multiplication_serialization() {
-  let mut accum = Point::identity();
-  for x in 1 .. 10 {
-    accum += Point::generator();
-    let mul = Point::generator() * Scalar::from(u8::try_from(x).unwrap());
-    assert_eq!(accum, mul);
-    assert_eq!(Point::from_bytes(&mul.to_bytes()).unwrap(), mul);
-  }
-}
-
-#[rustfmt::skip]
 #[test]
 fn torsion() {
+  use generic_array::GenericArray;
+
   // Uses the originally suggested generator which had torsion
-  let old_y = FieldElement::from_repr(
-    hex_literal::hex!(
-      "12796c1532041525945f322e414d434467cfd5c57c9a9af2473b27758c921c4828b277ca5f2891fc4f3d79afdf29a64c72fb28b59c16fa5100"
-    ).into(),
-  )
+  let old_y = FieldElement::from_repr(*GenericArray::from_slice(
+    &hex::decode(
+      "\
+12796c1532041525945f322e414d434467cfd5c57c9a9af2473b2775\
+8c921c4828b277ca5f2891fc4f3d79afdf29a64c72fb28b59c16fa51\
+00",
+    )
+    .unwrap(),
+  ))
   .unwrap();
   let old = Point { x: -recover_x(old_y).unwrap(), y: old_y, z: FieldElement::one() };
   assert!(bool::from(!old.is_torsion_free()));
@@ -382,6 +389,7 @@ a401cd9df24632adfe6b418dc942d8a091817dd8bd70e1c72ba52f3c\
   );
 }
 
+// Checks random won't infinitely loop
 #[test]
 fn random() {
   Point::random(&mut rand_core::OsRng);

@@ -79,13 +79,13 @@ where
   }
 
   #[cfg(feature = "serialize")]
-  pub fn serialize<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     w.write_all(self.R.to_bytes().as_ref())?;
     w.write_all(self.s.to_repr().as_ref())
   }
 
   #[cfg(feature = "serialize")]
-  pub fn deserialize<R: Read>(r: &mut R) -> std::io::Result<SchnorrPoK<G>> {
+  pub fn read<R: Read>(r: &mut R) -> std::io::Result<SchnorrPoK<G>> {
     Ok(SchnorrPoK { R: read_point(r)?, s: read_scalar(r)? })
   }
 }

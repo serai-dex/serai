@@ -38,7 +38,7 @@ const PROTOCOL_NAME: &str = "/tendermint/1";
 pub fn protocol_name<Hash: AsRef<[u8]>>(genesis: Hash, fork: Option<&str>) -> ProtocolName {
   let mut name = format!("/{}", hex::encode(genesis.as_ref()));
   if let Some(fork) = fork {
-    name += &format!("/{}", fork);
+    name += &format!("/{fork}");
   }
   name += PROTOCOL_NAME;
   name.into()

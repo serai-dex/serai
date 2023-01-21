@@ -2,7 +2,6 @@ use std::{marker::PhantomData, sync::Arc, collections::HashMap};
 
 use async_trait::async_trait;
 
-use sp_api::BlockId;
 use sp_runtime::traits::{Header, Block};
 use sp_blockchain::{BlockStatus, HeaderBackend, Backend as BlockchainBackend};
 use sp_consensus::{Error, CacheKeyId, BlockOrigin, SelectChain};
@@ -15,13 +14,12 @@ use crate::{TendermintValidator, tendermint::TendermintImport};
 
 impl<T: TendermintValidator> TendermintImport<T> {
   fn check_already_in_chain(&self, hash: <T::Block as Block>::Hash) -> bool {
-    let id = BlockId::Hash(hash);
     // If it's in chain, with justifications, return it's already on chain
     // If it's in chain, without justifications, continue the block import process to import its
     // justifications
     // This can be triggered if the validators add a block, without justifications, yet the p2p
     // process then broadcasts it with its justifications
-    (self.client.status(id).unwrap() == BlockStatus::InChain) &&
+    (self.client.status(hash).unwrap() == BlockStatus::InChain) &&
       self.client.justifications(hash).unwrap().is_some()
   }
 }
@@ -121,7 +119,7 @@ where
       return Ok((block, None));
     }
 
-    self.check(&mut block).await.map_err(|e| format!("{}", e))?;
+    self.check(&mut block).await.map_err(|e| format!("{e}"))?;
     Ok((block, None))
   }
 }
@@ -173,7 +171,7 @@ impl<B: Block, Be: Backend<B>> SelectChain<B> for TendermintSelectChain<B, Be> {
         .0
         .blockchain()
         // There should always be a finalized block
-        .header(BlockId::Hash(self.0.blockchain().last_finalized().unwrap()))
+        .header(self.0.blockchain().last_finalized().unwrap())
         // There should not be an error in retrieving it and since it's finalized, it should exist
         .unwrap()
         .unwrap(),

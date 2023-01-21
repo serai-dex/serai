@@ -60,8 +60,8 @@ macro_rules! verify_and_deserialize {
     #[cfg(feature = "serialize")]
     {
       let mut buf = vec![];
-      $proof.serialize(&mut buf).unwrap();
-      let deserialized = <$type>::deserialize(&mut std::io::Cursor::new(&buf)).unwrap();
+      $proof.write(&mut buf).unwrap();
+      let deserialized = <$type>::read::<&[u8]>(&mut buf.as_ref()).unwrap();
       assert_eq!($proof, deserialized);
     }
   };
@@ -96,7 +96,7 @@ macro_rules! test_dleq {
       #[cfg(feature = "serialize")]
       {
         let mut buf = vec![];
-        proofs[0].serialize(&mut buf).unwrap();
+        proofs[0].write(&mut buf).unwrap();
         println!("{} had a proof size of {} bytes", $str, buf.len());
       }
     }
@@ -177,7 +177,7 @@ fn test_remainder() {
   // This will ignore any unused bits, ensuring every remaining one is set
   let keys = mutual_scalar_from_bytes::<Scalar, Scalar>(&[0xFF; 32]);
   let keys = (Zeroizing::new(keys.0), Zeroizing::new(keys.1));
-  assert_eq!(Scalar::one() + keys.0.deref(), Scalar::from(2u64).pow_vartime(&[255]));
+  assert_eq!(Scalar::one() + keys.0.deref(), Scalar::from(2u64).pow_vartime([255]));
   assert_eq!(keys.0, keys.1);
 
   let (proof, res) = ConciseLinearDLEq::prove_without_bias(

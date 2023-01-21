@@ -35,8 +35,7 @@ This document describes the process of signing a multisignature transaction, and
 The `CoordinatorPublicKey` message is used to provide the coordinator's public key to the network. This message is sent to the {IDENTITY}{COIN} topic on the general partition.
 
 ```json
-{
-  "type": "CoordinatorPublicKey",
+"CoordinatorPublicKey" : {
   "pubkey": "0x..."
 }
 ```
@@ -44,8 +43,16 @@ The `CoordinatorPublicKey` message is used to provide the coordinator's public k
 ### ProcessorPublicKey
 
 ```json
-{
-  "type": "ProcessorPublicKey",
+
+"ProcessorPublicKey : {
+  "pubkey": "0x..."
+}
+```
+
+### SignerReady
+
+```json
+"SignerReady" : {
   "pubkey": "0x..."
 }
 ```

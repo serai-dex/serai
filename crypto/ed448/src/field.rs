@@ -30,30 +30,7 @@ pub(crate) const Q_4: FieldElement =
 field!(FieldElement, MODULUS, WIDE_MODULUS, 448);
 
 #[test]
-fn repr() {
-  assert_eq!(FieldElement::from_repr(FieldElement::one().to_repr()).unwrap(), FieldElement::one());
-}
-
-#[test]
-fn one_two() {
-  assert_eq!(FieldElement::one() * FieldElement::one().double(), FieldElement::from(2u8));
-  assert_eq!(
-    FieldElement::from_repr(FieldElement::from(2u8).to_repr()).unwrap(),
-    FieldElement::from(2u8)
-  );
-}
-
-#[test]
-fn pow() {
-  assert_eq!(FieldElement::one().pow(FieldElement::one()), FieldElement::one());
-  let two = FieldElement::one().double();
-  assert_eq!(two.pow(two), two.double());
-
-  let three = two + FieldElement::one();
-  assert_eq!(three.pow(three), three * three * three);
-}
-
-#[test]
-fn invert() {
-  assert_eq!(FieldElement::one().invert().unwrap(), FieldElement::one());
+fn test_field() {
+  // TODO: Move to test_prime_field_bits once the impl is finished
+  ff_group_tests::prime_field::test_prime_field::<FieldElement>();
 }

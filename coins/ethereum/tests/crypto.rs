@@ -17,7 +17,7 @@ fn test_ecrecover() {
   let private = SigningKey::random(&mut OsRng);
   let public = VerifyingKey::from(&private);
 
-  const MESSAGE: &'static [u8] = b"Hello, World!";
+  const MESSAGE: &[u8] = b"Hello, World!";
   let sig: Signature = private.sign(MESSAGE);
   public.verify(MESSAGE, &sig).unwrap();
 
@@ -38,12 +38,12 @@ fn test_signing() {
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
   let _group_key = keys[&1].group_key();
 
-  const MESSAGE: &'static [u8] = b"Hello, World!";
+  const MESSAGE: &[u8] = b"Hello, World!";
 
   let algo = Schnorr::<Secp256k1, EthereumHram>::new();
   let _sig = sign(
     &mut OsRng,
-    algo.clone(),
+    algo,
     keys.clone(),
     algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, EthereumHram>::new(), &keys),
     MESSAGE,
@@ -64,7 +64,7 @@ fn test_ecrecover_hack() {
   let group_key_compressed = group_key_encoded.as_ref();
   let group_key_x = Scalar::from_uint_reduced(U256::from_be_slice(&group_key_compressed[1 .. 33]));
 
-  const MESSAGE: &'static [u8] = b"Hello, World!";
+  const MESSAGE: &[u8] = b"Hello, World!";
   let hashed_message = keccak256(MESSAGE);
   let chain_id = U256::ONE;
 

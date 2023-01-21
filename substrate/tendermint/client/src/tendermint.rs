@@ -97,7 +97,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
       .create_inherent_data_providers(parent, ())
       .await
     {
-      Ok(providers) => match providers.create_inherent_data() {
+      Ok(providers) => match providers.create_inherent_data().await {
         Ok(data) => Some(data),
         Err(err) => {
           warn!(target: "tendermint", "Failed to create inherent data: {}", err);

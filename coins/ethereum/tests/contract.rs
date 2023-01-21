@@ -46,7 +46,7 @@ async fn test_ecrecover_hack() {
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
   let group_key = keys[&1].group_key();
 
-  const MESSAGE: &'static [u8] = b"Hello, World!";
+  const MESSAGE: &[u8] = b"Hello, World!";
   let hashed_message = keccak256(MESSAGE);
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();

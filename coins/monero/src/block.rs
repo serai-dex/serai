@@ -1,3 +1,5 @@
+use std::io::{self, Read, Write};
+
 use crate::{serialize::*, transaction::Transaction};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -10,7 +12,7 @@ pub struct BlockHeader {
 }
 
 impl BlockHeader {
-  pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_varint(&self.major_version, w)?;
     write_varint(&self.minor_version, w)?;
     write_varint(&self.timestamp, w)?;
@@ -18,7 +20,13 @@ impl BlockHeader {
     w.write_all(&self.nonce.to_le_bytes())
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<BlockHeader> {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = vec![];
+    self.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  pub fn read<R: Read>(r: &mut R) -> io::Result<BlockHeader> {
     Ok(BlockHeader {
       major_version: read_varint(r)?,
       minor_version: read_varint(r)?,
@@ -37,9 +45,9 @@ pub struct Block {
 }
 
 impl Block {
-  pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
-    self.header.serialize(w)?;
-    self.miner_tx.serialize(w)?;
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    self.header.write(w)?;
+    self.miner_tx.write(w)?;
     write_varint(&self.txs.len().try_into().unwrap(), w)?;
     for tx in &self.txs {
       w.write_all(tx)?;
@@ -47,10 +55,16 @@ impl Block {
     Ok(())
   }
 
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Block> {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = vec![];
+    self.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Block> {
     Ok(Block {
-      header: BlockHeader::deserialize(r)?,
-      miner_tx: Transaction::deserialize(r)?,
+      header: BlockHeader::read(r)?,
+      miner_tx: Transaction::read(r)?,
       txs: (0 .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
     })
   }

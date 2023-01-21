@@ -2,16 +2,28 @@ name: test-dependencies
 description: Installs test dependencies for Serai
 
 inputs:
+  github-token:
+    description: "GitHub token to install Protobuf with"
+    require: true
+    default:
+
   monero-version:
     description: "Monero version to download and run as a regtest node"
     required: false
     default: v0.18.0.0
+
+  serai:
+    description: "Run a Serai development node in the background"
+    required: false
+    default: false
 
 runs:
   using: "composite"
   steps:
     - name: Install Build Dependencies
       uses: ./.github/actions/build-dependencies
+      with:
+        github-token: ${{ inputs.github-token }}
 
     - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@v1
@@ -22,3 +34,16 @@ runs:
       uses: ./.github/actions/monero
       with:
         version: ${{ inputs.monero-version }}
+
+    - name: Run a Monero Wallet-RPC
+      uses: ./.github/actions/monero-wallet-rpc
+
+    - name: Run a Serai Development Node
+      if: ${{ inputs.serai }}
+      shell: bash
+      run: |
+        cd substrate/node
+        cargo build
+        cd ../..
+
+        ./target/debug/serai-node --dev &

@@ -13,7 +13,6 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-hex-literal = "0.3"
 thiserror = "1"
 rand_core = "0.6"
 
