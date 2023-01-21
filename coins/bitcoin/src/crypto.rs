@@ -33,8 +33,8 @@ impl Hram<Secp256k1> for BitcoinHram {
     let mut data = Sha256::new();
     data.update(tag_hash);
     data.update(tag_hash);
-    data.update(r_encoded_point.x().to_owned().unwrap());
-    data.update(a_encoded_point.x().to_owned().unwrap());
+    data.update(r_encoded_point.x().unwrap());
+    data.update(a_encoded_point.x().unwrap());
     data.update(m);
 
     Scalar::from_uint_reduced(U256::from_be_slice(&data.finalize()))

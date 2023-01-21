@@ -11,7 +11,7 @@ fn test_signing() {
   use sha2::{Digest, Sha256};
   use rand_core::OsRng;
   use bitcoin_serai::crypto::{BitcoinHram, make_even};
-  use k256::{elliptic_curve::sec1::ToEncodedPoint,Scalar};
+  use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 
   let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
   const MESSAGE: &'static [u8] = b"Hello, World!";
@@ -42,6 +42,5 @@ fn test_signing() {
   let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true);
   let pubkey =
     secp256k1::XOnlyPublicKey::from_slice(&pubkey_compressed.x().to_owned().unwrap()).unwrap();
-  dbg!(pubkey.to_hex().to_string());
   sig.verify(&msg, &pubkey).unwrap()
 }
