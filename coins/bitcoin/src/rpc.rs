@@ -204,16 +204,6 @@ impl Rpc {
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
 
-  pub async fn get_raw_transaction_info(
-    &self,
-    txid: &bitcoin::Txid,
-    block_hash: Option<&bitcoin::BlockHash>,
-  ) -> Result<GetRawTransactionResult> {
-    let mut ext_args = [into_json(txid)?, into_json(true)?, opt_into_json(block_hash)?];
-    let args = handle_defaults(&mut ext_args, &[null()]);
-    self.rpc_call::<GetRawTransactionResult>("getrawtransaction", &args).await
-  }
-
   pub async fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<bitcoin::Txid>
   where
     R: Sync + Send,
