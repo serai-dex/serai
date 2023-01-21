@@ -242,7 +242,7 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
       .drain(..)
       .enumerate()
       .map(|(index, sig)| {
-        let (sig, share) = sig.sign(commitments.remove(0), &msg_list.remove(index))?;
+        let (sig, share) = sig.sign(commitments.remove(index), &msg_list.remove(index))?;
         shares.push(share);
         Ok(sig)
       })
