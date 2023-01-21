@@ -131,7 +131,7 @@ impl Coin for Bitcoin {
     let xonly_pubkey =
       XOnlyPublicKey::from_slice(&key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
     let tweaked_pubkey = bitcoin::schnorr::TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
-    Address::p2tr_tweaked(tweaked_pubkey, bitcoin::network::constants::Network::Regtest)
+    Address::p2tr_tweaked(tweaked_pubkey, bitcoin::Network::Regtest)
   }
 
   //TODO: Implement later
@@ -306,7 +306,7 @@ impl Coin for Bitcoin {
   async fn test_send(&self, address: Self::Address) {
     use bitcoin::{Address, KeyPair, PrivateKey, PublicKey,
         OutPoint, Sequence, Witness,util::sighash::SighashCache,
-        Script, PackedLockTime,EcdsaSighashType, network::constants::Network, 
+        Script, PackedLockTime,EcdsaSighashType, Network, 
         blockdata::transaction::{TxIn, TxOut, Transaction}};
     use secp256k1::{rand, Secp256k1, Message};
 
