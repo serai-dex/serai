@@ -48,7 +48,7 @@ pub struct Fee {
 
 impl Fee {
   pub fn calculate(&self, weight: usize) -> u64 {
-    ((self.per_weight * u64::try_from(weight).unwrap()) - 1) 
+    (self.per_weight * u64::try_from(weight).unwrap()) - 1
   }
 }
 
