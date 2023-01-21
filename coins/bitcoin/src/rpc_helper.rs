@@ -12,7 +12,6 @@ use bitcoin::{
     secp256k1, OutPoint, Transaction,
 };
 use serde::{de::Error as SerdeError, ser, Deserialize, Serialize};
-use bitcoincore_rpc_json::{serde_hex, GetRawTransactionResult};
 
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct RpcResponseError {
