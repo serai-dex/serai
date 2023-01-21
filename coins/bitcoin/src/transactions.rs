@@ -108,7 +108,6 @@ impl SignableTransaction {
     total_weight += total_inputs * 4 * 4;
     // Script length -  Scriptsig is empty
     total_weight += total_inputs * 1 * 4;
-    //total_weight += total_inputs * (address.script_pubkey().to_hex().len()/2) * 4;
     total_weight += total_inputs * 4 * 4;
     // OUTPUTS
     let total_outputs = 1 + usize::from(change);
@@ -117,7 +116,7 @@ impl SignableTransaction {
     total_weight += total_outputs * 8 * 4;
     total_weight += total_outputs * 1 * 4;
     // Script pubkey
-    total_weight += (address.script_pubkey().to_hex().len()/2) * 1 * 4;
+    total_weight += (address.script_pubkey().as_bytes().len()) * 1 * 4;
     if change {
       // Change address script pubkey byte
       total_weight += 34 * 4;
