@@ -58,8 +58,8 @@ pub struct Bitcoin {
   
 }
 impl Bitcoin {
-  pub async fn new(url: String, username: Option<String>, userpass: Option<String>) -> Bitcoin {
-    Bitcoin { rpc: Rpc::new(url, username.unwrap(), userpass.unwrap()).unwrap()}
+  pub async fn new(url: String) -> Bitcoin {
+    Bitcoin { rpc: Rpc::new(url).unwrap()}
   }
 }
 

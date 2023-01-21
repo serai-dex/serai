@@ -16,8 +16,8 @@ pub struct Rpc {
 }
 
 impl Rpc {
-  pub fn new(url: String, username: String, userpass: String) -> anyhow::Result<Rpc> {
-    Ok(Rpc { url: format!("http://{}:{}@{}", username, userpass, url) })
+  pub fn new(url: String) -> anyhow::Result<Rpc> {
+    Ok(Rpc { url: url })
   }
 
   pub async fn rpc_call<Response: DeserializeOwned + Debug>(

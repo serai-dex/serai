@@ -113,7 +113,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
 #[tokio::test]
 async fn bitcoin() {
-  let bitcoin = Bitcoin::new("127.0.0.1:18443".to_string(),Some(String::from("serai")),Some(String::from("seraidex"))).await;
+  let bitcoin = Bitcoin::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await;
   let fee = bitcoin.get_fee().await;
   test_send(bitcoin, fee).await;
 }
