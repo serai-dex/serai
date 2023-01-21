@@ -2,13 +2,15 @@ use sha2::{Digest, Sha256};
 use frost::{algorithm::Hram, curve::Secp256k1};
 use k256::{
   elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, sec1::Tag},
-  ProjectivePoint, U256, Scalar,
+  ProjectivePoint, U256, Scalar,sha2::digest::generic_array::GenericArray,
+  sha2::digest::generic_array::typenum::U32,
 };
 use bitcoin::{
   util::sighash,
-  psbt::{self, PartiallySignedTransaction},
-  SchnorrSighashType, TxOut,
+  psbt::PartiallySignedTransaction,
+  SchnorrSighashType,
 };
+use lazy_static::lazy_static;
 
 pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   let mut c = 0;
@@ -22,17 +24,21 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
 #[derive(Clone)]
 pub struct BitcoinHram {}
 
+lazy_static! {
+  static ref TAG_HASH : GenericArray<u8, U32> = Sha256::digest(b"BIP0340/challenge");
+}
+
 impl Hram<Secp256k1> for BitcoinHram {
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
     let (R, _) = make_even(*R);
 
     let r_encoded_point = R.to_encoded_point(true);
     let a_encoded_point = A.to_encoded_point(true);
-    const TAG : &[u8; 17] = b"BIP0340/challenge";
-    let tag_hash = Sha256::digest(TAG);
+    //let tag_hash:GenericArray<u8, U32> = Sha256::digest(b"BIP0340/challenge");
     let mut data = Sha256::new();
-    data.update(tag_hash);
-    data.update(tag_hash);
+    //data.update(TAG_HASH.as_ref());
+    data.update(&*TAG_HASH);
+    data.update(&*TAG_HASH);
     data.update(r_encoded_point.x().unwrap());
     data.update(a_encoded_point.x().unwrap());
     data.update(m);
@@ -78,7 +84,7 @@ pub enum SignerError {
 }
 
 pub(crate) fn taproot_key_spend_signature_hash(
-  psbt: &psbt::PartiallySignedTransaction,
+  psbt: &PartiallySignedTransaction,
   input_index: usize,
 ) -> Result<(bitcoin::util::taproot::TapSighashHash, SchnorrSighashType), SignerError> {
   if input_index >= psbt.inputs.len() || input_index >= psbt.unsigned_tx.input.len() {
