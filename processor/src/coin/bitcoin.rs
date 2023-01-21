@@ -209,8 +209,7 @@ impl Coin for Bitcoin {
     let mut actual_fee = fee.calculate(transaction_weight);
     let target_sat = actual_fee + payment_sat;
     if input_sat < target_sat {
-      //TODO: Change it with TransactionError
-      return Err(CoinError::ConnectionError);
+      return Err(CoinError::NotEnoughFunds);
     }
     else if input_sat != target_sat {
       let transaction_weight = BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, true);

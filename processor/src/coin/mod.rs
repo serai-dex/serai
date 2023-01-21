@@ -20,6 +20,8 @@ pub use self::monero::Monero;
 pub enum CoinError {
   #[error("failed to connect to coin daemon")]
   ConnectionError,
+  #[error("not enough funds")]
+  NotEnoughFunds,
 }
 
 pub trait Block: Sized + Clone {
