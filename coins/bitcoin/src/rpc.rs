@@ -61,16 +61,6 @@ impl Rpc {
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
 
-  pub async fn get_block_with_transactions(
-    &self,
-    block_hash: &bitcoin::BlockHash,
-  ) -> anyhow::Result<GetBlockWithDetailResult> {
-    let mut ext_args = [into_json(block_hash)?, 2.into()];
-    let defaults = [null(), 1.into()];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<GetBlockWithDetailResult>("getblock".to_string(), &args).await?)
-  }
-
   pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash> {
     Ok(self.rpc_call::<bitcoin::BlockHash>("getbestblockhash".to_string(), &[]).await?)
   }

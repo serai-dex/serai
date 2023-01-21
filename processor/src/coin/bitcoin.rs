@@ -153,17 +153,17 @@ impl Coin for Bitcoin {
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let main_addr = self.address(key);
-    let block_details = self.rpc.get_block_with_transactions(&block.1.block_hash()).await.unwrap();
+    let block_details = self.rpc.get_block(&block.1.block_hash()).await.unwrap();
     let mut outputs = Vec::new();
-    for one_transaction in block_details.tx {
-      for output_tx in one_transaction.vout {
-        if output_tx.script_pub_key.script().unwrap() == main_addr.script_pubkey() {
+    for one_transaction in block_details.txdata {
+      for (index, output_tx) in one_transaction.output.iter().enumerate() {
+        if output_tx.script_pubkey == main_addr.script_pubkey() {
           outputs.push(Output(SpendableOutput {
             output: OutPoint{
-              txid: one_transaction.txid,
-              vout: output_tx.n,
+              txid: one_transaction.txid(),
+              vout: u32::try_from(index).unwrap(),
             },
-            amount: output_tx.value.to_sat(),
+            amount: output_tx.value,
           }));
         }
       }
@@ -337,22 +337,22 @@ impl Coin for Bitcoin {
     let block_number = new_block + 1;
     let active_block = self.get_block(block_number).await.unwrap();
     
-    let block_details = self.rpc.get_block_with_transactions(&active_block.1.block_hash()).await.unwrap();
-    let first_tx = &block_details.tx[0];
+    let block_details = self.rpc.get_block(&active_block.1.block_hash()).await.unwrap();
+    let first_tx = &block_details.txdata[0];
     let mut amount = 0;
-    for output_tx in &first_tx.vout {
-      if output_tx.script_pub_key.script().unwrap() == main_addr.script_pubkey() {
+    for (index, output_tx) in first_tx.output.iter().enumerate() {
+      if output_tx.script_pubkey == main_addr.script_pubkey() {
         vin_list.push(TxIn {
           previous_output: 
           OutPoint {
-              txid: first_tx.txid,
-              vout: output_tx.n,
+              txid: first_tx.txid(),
+              vout: u32::try_from(index).unwrap(),
           },
           script_sig: Script::default(), 
           sequence: Sequence(u32::MAX),
           witness: Witness::default(), 
         });
-        amount = output_tx.value.to_sat();
+        amount = output_tx.value;
         vout_list.push(TxOut {
           value: amount - 10000,
           script_pubkey: address.script_pubkey(),

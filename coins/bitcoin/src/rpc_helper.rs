@@ -14,32 +14,6 @@ use bitcoin::{
 use serde::{de::Error as SerdeError, ser, Deserialize, Serialize};
 use bitcoincore_rpc_json::{serde_hex, GetRawTransactionResult};
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetBlockWithDetailResult {
-    pub hash: bitcoin::BlockHash,
-    pub confirmations: i32,
-    pub size: usize,
-    pub strippedsize: Option<usize>,
-    pub weight: usize,
-    pub height: usize,
-    pub version: i32,
-    #[serde(default, with = "serde_hex::opt")]
-    pub version_hex: Option<Vec<u8>>,
-    pub merkleroot: bitcoin::TxMerkleNode,
-    pub tx: Vec<GetRawTransactionResult>,
-    pub time: usize,
-    pub mediantime: Option<usize>,
-    pub nonce: u32,
-    pub bits: String,
-    pub difficulty: f64,
-    #[serde(with = "serde_hex")]
-    pub chainwork: Vec<u8>,
-    pub n_tx: usize,
-    pub previousblockhash: Option<bitcoin::BlockHash>,
-    pub nextblockhash: Option<bitcoin::BlockHash>,
-}
-
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct RpcResponseError {
     pub(crate) code: i64,
