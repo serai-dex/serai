@@ -9,7 +9,7 @@ use frost::{
 };
 
 use bitcoin::{
-  Block as BBlock,
+  Block as BBlock, OutPoint,
   util::address::Address,
   Txid, schnorr::TweakedPublicKey,
   XOnlyPublicKey, SchnorrSighashType,
@@ -161,8 +161,10 @@ impl Coin for Bitcoin {
       for output_tx in one_transaction.vout {
         if output_tx.script_pub_key.script().unwrap() == main_addr.script_pubkey() {
           outputs.push(Output(SpendableOutput {
-            txid: one_transaction.txid,
-            vout: output_tx.n,
+            output: OutPoint{
+              txid: one_transaction.txid,
+              vout: output_tx.n,
+            },
             amount: output_tx.value.to_sat(),
           }));
         }
@@ -189,7 +191,7 @@ impl Coin for Bitcoin {
     for one_input in &inputs {
       input_sat += one_input.amount();
       vin_alt_list.push(bitcoin::blockdata::transaction::TxIn {
-        previous_output: bitcoin::OutPoint { txid: one_input.0.txid, vout: one_input.0.vout },
+        previous_output: one_input.0.output,
         script_sig: bitcoin::Script::new(),
         sequence: bitcoin::Sequence(u32::MAX),
         witness: bitcoin::Witness::default(),
@@ -232,9 +234,9 @@ impl Coin for Bitcoin {
     };
     let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction.clone()).unwrap();
     for (i, one_input) in (&inputs).iter().enumerate() {
-      let one_transaction = self.rpc.get_raw_transaction(&one_input.0.txid, None, None).await.unwrap();
+      let one_transaction = self.rpc.get_raw_transaction(&one_input.0.output.txid, None, None).await.unwrap();
       let xonly_pubkey = XOnlyPublicKey::from_slice(&keys.group_key().to_encoded_point(true).x().to_owned().unwrap()).unwrap();
-      psbt.inputs[i].witness_utxo = Some(one_transaction.output[usize::try_from(one_input.0.vout).unwrap()].clone());
+      psbt.inputs[i].witness_utxo = Some(one_transaction.output[usize::try_from(one_input.0.output.vout).unwrap()].clone());
       psbt.inputs[i].sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
     }
@@ -269,9 +271,11 @@ impl Coin for Bitcoin {
       .enumerate()
       .map(|(i, output)| {
         let one_output = SpendableOutput {
-          txid: target_tx.txid(),
+          output : OutPoint {
+            txid: target_tx.txid(),
+            vout: u32::try_from(i).unwrap(),
+          },
           amount: output.value,
-          vout: u32::try_from(i).unwrap(),
         };
         Output(one_output).id()
       })
