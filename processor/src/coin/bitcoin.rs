@@ -310,15 +310,15 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
-    use bitcoin::{Address, KeyPair, PrivateKey, PublicKey,
+    use bitcoin::{Address, PrivateKey, PublicKey,
         OutPoint, Sequence, Witness,util::sighash::SighashCache,
         Script, PackedLockTime,EcdsaSighashType, Network, 
-        blockdata::transaction::{TxIn, TxOut, Transaction}};
-    use secp256k1::{rand, Secp256k1, Message};
+        blockdata::transaction::{TxIn, TxOut, Transaction},
+        secp256k1::{rand, Secp256k1, Message, SecretKey}};
 
     let secp = Secp256k1::new();
-    let key_pair: KeyPair = KeyPair::new(&secp, &mut rand::thread_rng());
-    let private_key = PrivateKey::from_slice(&key_pair.secret_bytes(), Network::Regtest).unwrap();
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(&secp, &private_key);
     
     let main_addr = Address::p2wpkh(&public_key, Network::Regtest).unwrap();
