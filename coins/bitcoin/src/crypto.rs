@@ -103,7 +103,7 @@ impl PSBTUtils for PartiallySignedTransaction {
   }
 }
 
-pub fn taproot_key_spend_signature_hash(
+pub(crate) fn taproot_key_spend_signature_hash(
   psbt: &psbt::PartiallySignedTransaction,
   input_index: usize,
 ) -> Result<(bitcoin::util::taproot::TapSighashHash, SchnorrSighashType), SignerError> {
