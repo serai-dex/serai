@@ -45,16 +45,11 @@ impl Rpc {
     Ok(self.rpc_call::<usize>("getblockcount".to_string(), &[]).await?)
   }
 
-  pub async fn get_block_info(&self, block_hash: &str) -> anyhow::Result<GetBlockResult> {
+  pub async fn get_block_number(&self, block_hash: &str) -> anyhow::Result<usize> {
     let mut ext_args = [into_json(block_hash)?];
     let defaults = [null()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), &args).await?)
-  }
-
-  pub async fn get_block_number(&self, block_hash: &str) -> anyhow::Result<usize> {
-    let block = self.get_block_info(block_hash).await.unwrap();
-    Ok(block.height)
+    Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), &args).await?.height)
   }
 
   pub async fn get_block(&self, block_hash: &bitcoin::BlockHash) -> anyhow::Result<bitcoin::Block> {
