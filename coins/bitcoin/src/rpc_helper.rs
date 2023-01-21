@@ -257,6 +257,16 @@ pub fn handle_defaults<'a, 'b>(
     }
 }
 
+pub trait RawTx: Sized + Clone {
+    fn raw_hex(self) -> String;
+}
+
+impl<'a> RawTx for &'a Transaction {
+    fn raw_hex(self) -> String {
+        bitcoin::consensus::encode::serialize(self).to_vec().to_hex()
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonOutPoint {
     pub txid: bitcoin::Txid,
