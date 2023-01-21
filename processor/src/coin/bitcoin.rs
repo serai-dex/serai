@@ -304,63 +304,72 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
-    use bitcoin::{schnorr::SchnorrSig, psbt::serialize::Serialize};
-    use bitcoin_serai::crypto::{BitcoinHram, taproot_key_spend_signature_hash};
-    use frost::{algorithm::Schnorr, tests::{algorithm_machines, key_gen, sign}};
-    use rand_core::OsRng;
-    use transcript::Transcript;
+    use bitcoin::{Address, KeyPair, PrivateKey, PublicKey,
+        OutPoint, Sequence, Witness,util::sighash::SighashCache,
+        Script, PackedLockTime, 
+        EcdsaSighashType, network::constants::Network, 
+        blockdata::transaction::{TxIn, TxOut, Transaction}};
+    use secp256k1::{rand, Secp256k1, Message};
 
-    let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
-    for (_, key) in keys.iter_mut() {
-      self.tweak_keys(key);
-    }
-    let key = keys[&1].group_key();
-    let one_key = keys[&1].clone();
+    let secp = Secp256k1::new();
+    let key_pair: KeyPair = KeyPair::new(&secp, &mut rand::thread_rng());
+    let private_key = PrivateKey::from_slice(&key_pair.secret_bytes(), Network::Regtest).unwrap();
+    let public_key = PublicKey::from_private_key(&secp, &private_key);
+    
+    let main_addr = Address::p2wpkh(&public_key, Network::Regtest).unwrap();
 
-    let change_address = self.address(key);
+    let mut vin_list = Vec::new();
+    let mut vout_list = Vec::new();
+
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
+    self.rpc.generate_to_address(1, main_addr.to_string().as_str()).await.unwrap();
 
-    self.rpc.generate_to_address(1, change_address.to_string().as_str()).await.unwrap();
-    self.rpc.generate_to_address(2, address.to_string().as_str()).await.unwrap();
     for _ in 0..100 {
       self.mine_block().await;
     }
 
     let block_number = new_block + 1;
     let active_block = self.get_block(block_number).await.unwrap();
-    let inputs = self.get_outputs(&active_block, key).await.unwrap();
-
-    let amount = inputs[0].amount();
-    let change_amount = 10000;
-    let fee = Self::Fee { per_weight: 42 };
-    let transaction_weight = BSignableTransaction::calculate_weight(inputs.len(), &address, false);
-    let total_amount = amount - fee.calculate(transaction_weight) - change_amount;
-    let transcript = RecommendedTranscript::new(b"bitcoin_test");
-    let payments = vec![(address, total_amount)];
-    let mut signable_transactions = self.prepare_send(one_key, transcript, block_number, inputs, &payments, Some(key), fee).await.unwrap();
-  
-    for i in 0..signable_transactions.actual.tx.inputs.len() {
-      let (tx_sighash, _) = taproot_key_spend_signature_hash(&signable_transactions.actual.tx, i).unwrap();
-      let algo = Schnorr::<Secp256k1, BitcoinHram>::new();
-      let mut _sig = sign(
-        &mut OsRng,
-        algo.clone(),
-        keys.clone(),
-        algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys),
-        &tx_sighash.as_ref(),
-      );
-
-      let mut _offset = 0;
-      (_sig.R, _offset) = make_even(_sig.R);
-      _sig.s += Scalar::from(_offset);
-
-      let temp_sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1..65]).unwrap();
-      let sig = SchnorrSig { sig: temp_sig, hash_ty: SchnorrSighashType::All };
-      signable_transactions.actual.tx.inputs[i].tap_key_sig = Some(sig);
-      let mut script_witness: bitcoin::Witness = bitcoin::Witness::new();
-      script_witness.push(signable_transactions.actual.tx.inputs[i].tap_key_sig.unwrap().serialize());
-      signable_transactions.actual.tx.inputs[i].final_script_witness = Some(script_witness);
+    
+    let block_details = self.rpc.get_block_with_transactions(&active_block.1.block_hash()).await.unwrap();
+    let first_tx = &block_details.tx[0];
+    let mut amount = 0;
+    for output_tx in &first_tx.vout {
+      if output_tx.script_pub_key.script().unwrap() == main_addr.script_pubkey() {
+        vin_list.push(TxIn {
+          previous_output: 
+          OutPoint {
+              txid: first_tx.txid,
+              vout: output_tx.n,
+          },
+          script_sig: Script::default(), 
+          sequence: Sequence(u32::MAX),
+          witness: Witness::default(), 
+        });
+        amount = output_tx.value.to_sat();
+        vout_list.push(TxOut {
+          value: amount - 10000,
+          script_pubkey: address.script_pubkey(),
+        });
+      }
     }
-    let _result = self.publish_transaction(&signable_transactions.actual.tx).await.unwrap();
+
+    let mut new_transaction = Transaction {
+      version: 2,
+      lock_time: PackedLockTime(0),
+      input: vin_list,
+      output: vout_list,
+    };
+    
+    let mut sig_hasher = SighashCache::new(&new_transaction);
+    let script_code = Address::p2pkh(&public_key, Network::Testnet).script_pubkey();
+    let transactions_sighash = sig_hasher.segwit_signature_hash(0, &script_code, amount, EcdsaSighashType::All).unwrap();
+    let signed_der = secp.sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner).serialize_der();
+    let mut signed_witness = Witness::new();
+    signed_witness.push_bitcoin_signature(&signed_der, EcdsaSighashType::All);
+    signed_witness.push(public_key.to_bytes());
+    new_transaction.input[0].witness = signed_witness;
+
+    let _result = self.rpc.send_raw_transaction(&new_transaction).await.unwrap();
   }
 }
