@@ -41,7 +41,7 @@ impl Rpc {
     }
   }
 
-  pub async fn get_height(&self) -> anyhow::Result<usize> {
+  pub async fn get_latest_block_number(&self) -> anyhow::Result<usize> {
     Ok(self.rpc_call::<usize>("getblockcount".to_string(), &[]).await?)
   }
 

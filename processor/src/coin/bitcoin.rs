@@ -138,7 +138,7 @@ impl Coin for Bitcoin {
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
-    Ok(self.rpc.get_height().await.map_err(|_| CoinError::ConnectionError)?)
+    Ok(self.rpc.get_latest_block_number().await.map_err(|_| CoinError::ConnectionError)?)
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
