@@ -296,9 +296,15 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn mine_block(&self) {
-    use bitcoincore_rpc_json::AddressType;
+    use bitcoin::{Address, PrivateKey, PublicKey, Network, 
+                  secp256k1::{SecretKey, rand, Secp256k1}};
 
-    let new_addr = self.rpc.get_new_address(None, Some(AddressType::Bech32)).await.unwrap();
+    let secp = Secp256k1::new();
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    let private_key = PrivateKey::new(secret_key, Network::Regtest);
+    let public_key = PublicKey::from_private_key(&secp, &private_key);
+    
+    let new_addr = Address::p2wpkh(&public_key, Network::Regtest).unwrap();
     self.rpc.generate_to_address(1, new_addr.to_string().as_str()).await.unwrap();
   }
 
