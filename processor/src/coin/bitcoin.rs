@@ -232,7 +232,7 @@ impl Coin for Bitcoin {
     };
     let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction.clone()).unwrap();
     for (i, one_input) in (&inputs).iter().enumerate() {
-      let one_transaction = self.rpc.get_raw_transaction(&one_input.0.output.txid, None, None).await.unwrap();
+      let one_transaction = self.rpc.get_transaction(&one_input.0.output.txid, None, None).await.unwrap();
       let xonly_pubkey = XOnlyPublicKey::from_slice(&keys.group_key().to_encoded_point(true).x().to_owned().unwrap()).unwrap();
       psbt.inputs[i].witness_utxo = Some(one_transaction.output[usize::try_from(one_input.0.output.vout).unwrap()].clone());
       psbt.inputs[i].sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
