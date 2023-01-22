@@ -18,7 +18,6 @@ use bitcoin::{
 
 use bitcoin_serai::{
   rpc::Rpc,
-  rpc_helper::RawTx,
   crypto::make_even,
   wallet::SpendableOutput,
   transactions::{TransactionMachine, SignableTransaction as BSignableTransaction},

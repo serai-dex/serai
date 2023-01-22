@@ -1,17 +1,42 @@
-use std::{
-    error,
-    fmt::{self, Display},
-    io, result,
-};
 use thiserror::Error;
 use bitcoin::{
-    self,
+    self, Transaction,
     hashes::{
-        hex::{self, FromHex, ToHex},
+        hex::{self, ToHex},
     },
-    secp256k1, OutPoint, Transaction,
+    secp256k1,
 };
-use serde::{de::Error as SerdeError, ser, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
+
+#[derive(Error, Debug)]
+pub enum RpcError {
+    #[error("Read error")]
+    ReadError { source: std::io::Error },
+
+    #[error("Serialization error")]
+    BitcoinSerialization(#[from] bitcoin::consensus::encode::Error),
+
+    #[error("reqwest error")]
+    ReqWestError(#[from] reqwest::Error),
+
+    #[error("serde error")]
+    SerdeError(#[from] serde_json::error::Error),
+
+    #[error("parsing error")]
+    ParsingError,
+
+    #[error("Hex error")]
+    HexError(#[from] hex::Error),
+
+    #[error("Bitcoin amount error")]
+    ParseAmountError(#[from] bitcoin::util::amount::ParseAmountError),
+
+    #[error("Secp256k1 error")]
+    Secp256k1Error(#[from] secp256k1::Error),
+
+    #[error("custom : {0}")]
+    CustomError(String),
+}
 
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct RpcResponseError {
@@ -45,155 +70,7 @@ pub(crate) struct RpcParams<T> {
     pub(crate) params: T,
 }
 
-/// The error type for errors produced in this library.
-#[derive(Debug)]
-pub(crate) enum RpcError {
-    Hex(hex::Error),
-    Json(serde_json::error::Error),
-    BitcoinSerialization(bitcoin::consensus::encode::Error),
-    Secp256k1(secp256k1::Error),
-    Io(io::Error),
-    InvalidAmount(bitcoin::util::amount::ParseAmountError),
-    InvalidCookieFile,
-    /// The JSON result had an unexpected structure.
-    UnexpectedStructure,
-    /// The daemon returned an error string.
-    ReturnedError(String),
-}
-
-impl From<hex::Error> for RpcError {
-    fn from(e: hex::Error) -> RpcError {
-        RpcError::Hex(e)
-    }
-}
-
-impl From<serde_json::error::Error> for RpcError {
-    fn from(e: serde_json::error::Error) -> RpcError {
-        RpcError::Json(e)
-    }
-}
-
-impl From<bitcoin::consensus::encode::Error> for RpcError {
-    fn from(e: bitcoin::consensus::encode::Error) -> RpcError {
-        RpcError::BitcoinSerialization(e)
-    }
-}
-
-impl From<secp256k1::Error> for RpcError {
-    fn from(e: secp256k1::Error) -> RpcError {
-        RpcError::Secp256k1(e)
-    }
-}
-
-impl From<io::Error> for RpcError {
-    fn from(e: io::Error) -> RpcError {
-        RpcError::Io(e)
-    }
-}
-
-impl From<bitcoin::util::amount::ParseAmountError> for RpcError {
-    fn from(e: bitcoin::util::amount::ParseAmountError) -> RpcError {
-        RpcError::InvalidAmount(e)
-    }
-}
-
-impl fmt::Display for RpcError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            RpcError::Hex(ref e) => write!(f, "hex decode error: {}", e),
-            RpcError::Json(ref e) => write!(f, "JSON error: {}", e),
-            RpcError::BitcoinSerialization(ref e) => write!(f, "Bitcoin serialization error: {}", e),
-            RpcError::Secp256k1(ref e) => write!(f, "secp256k1 error: {}", e),
-            RpcError::Io(ref e) => write!(f, "I/O error: {}", e),
-            RpcError::InvalidAmount(ref e) => write!(f, "invalid amount: {}", e),
-            RpcError::InvalidCookieFile => write!(f, "invalid cookie file"),
-            RpcError::UnexpectedStructure => write!(f, "the JSON result had an unexpected structure"),
-            RpcError::ReturnedError(ref s) => write!(f, "the daemon returned an error string: {}", s),
-        }
-    }
-}
-
-impl error::Error for RpcError {
-    fn description(&self) -> &str {
-        "bitcoincore-rpc error"
-    }
-
-    fn cause(&self) -> Option<&dyn error::Error> {
-        match *self {
-            RpcError::Hex(ref e) => Some(e),
-            RpcError::Json(ref e) => Some(e),
-            RpcError::BitcoinSerialization(ref e) => Some(e),
-            RpcError::Secp256k1(ref e) => Some(e),
-            RpcError::Io(ref e) => Some(e),
-            _ => None,
-        }
-    }
-}
-/// specific Error type;
-pub(crate) type Result<T> = result::Result<T, RpcError>;
-
-/// Shorthand for converting a variable into a serde_json::Value.
-pub(crate) fn into_json<T>(val: T) -> Result<serde_json::Value>
-where
-    T: serde::ser::Serialize,
-{
-    Ok(serde_json::to_value(val)?)
-}
-
-/// Shorthand for converting an Option into an Option<serde_json::Value>.
-pub(crate) fn opt_into_json<T>(opt: Option<T>) -> Result<serde_json::Value>
-where
-    T: serde::ser::Serialize,
-{
-    Ok(into_json(Some(opt))?)
-}
-
-impl ser::Error for RpcError {
-    fn custom<T: Display>(msg: T) -> Self {
-        RpcError::ReturnedError(msg.to_string())
-    }
-}
-
-/// deserialize_hex_array_opt deserializes a vector of hex-encoded byte arrays.
-pub(crate) fn deserialize_hex_array_opt<'de, D>(
-    deserializer: D,
-) -> result::Result<Option<Vec<Vec<u8>>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    //TODO(stevenroose) Revisit when issue is fixed:
-    // https://github.com/serde-rs/serde/issues/723
-
-    let v: Vec<String> = Vec::deserialize(deserializer)?;
-    let mut res = Vec::new();
-    for h in v.into_iter() {
-        res.push(FromHex::from_hex(&h).map_err(D::Error::custom)?);
-    }
-    Ok(Some(res))
-}
-
-pub(crate) fn null() -> serde_json::Value {
-    serde_json::Value::Null
-}
-
-pub(crate) fn empty_obj() -> serde_json::Value {
-    serde_json::Value::Object(Default::default())
-}
-
-pub(crate) fn empty_arr() -> serde_json::Value {
-    serde_json::Value::Array(vec![])
-}
-
-#[derive(Clone, Error, Debug)]
-pub(crate) enum RpcConnectionError {
-    #[error("connection error")]
-    ConnectionError,
-    #[error("parsing error")]
-    ParsingError,
-    #[error("result error")]
-    ResultError(String),
-}
-
+// Code originally thanks to https://github.com/rust-bitcoin/rust-bitcoincore-rpc (Line 78-135)
 pub(crate) fn handle_defaults<'a, 'b>(
     args: &'a mut [serde_json::Value],
     defaults: &'b [serde_json::Value],
@@ -227,6 +104,21 @@ pub(crate) fn handle_defaults<'a, 'b>(
     }
 }
 
+
+pub(crate) fn into_json<T>(val: T) -> Result<serde_json::Value, RpcError>
+where
+    T: serde::ser::Serialize,
+{
+    Ok(serde_json::to_value(val)?)
+}
+
+pub(crate) fn opt_into_json<T>(opt: Option<T>) -> Result<serde_json::Value, RpcError>
+where
+    T: serde::ser::Serialize,
+{
+    Ok(into_json(Some(opt))?)
+}
+
 pub trait RawTx: Sized + Clone {
     fn raw_hex(self) -> String;
 }
@@ -234,29 +126,5 @@ pub trait RawTx: Sized + Clone {
 impl<'a> RawTx for &'a Transaction {
     fn raw_hex(self) -> String {
         bitcoin::consensus::encode::serialize(self).to_vec().to_hex()
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct JsonOutPoint {
-    pub(crate) txid: bitcoin::Txid,
-    pub(crate) vout: u32,
-}
-
-impl From<OutPoint> for JsonOutPoint {
-    fn from(o: OutPoint) -> JsonOutPoint {
-        JsonOutPoint {
-            txid: o.txid,
-            vout: o.vout,
-        }
-    }
-}
-
-impl From<JsonOutPoint> for OutPoint {
-    fn from(jop: JsonOutPoint) -> OutPoint {
-        OutPoint {
-            txid: jop.txid,
-            vout: jop.vout,
-        }
     }
 }
