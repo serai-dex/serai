@@ -145,10 +145,7 @@ pub(crate) fn opt_into_json<T>(opt: Option<T>) -> Result<serde_json::Value>
 where
     T: serde::ser::Serialize,
 {
-    match opt {
-        Some(val) => Ok(into_json(val)?),
-        None => Ok(serde_json::Value::Null),
-    }
+    Ok(into_json(Some(opt))?)
 }
 
 impl ser::Error for RpcError {
