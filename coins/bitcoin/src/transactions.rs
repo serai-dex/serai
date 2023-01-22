@@ -87,8 +87,8 @@ impl SignableTransaction {
 
     for payment in raw_tx.output {
       //TODO: need address generator function to generate address from script_pubkey
-      transcript.append_message(b"payment_address", payment.script_pubkey.as_bytes());
-      transcript.append_message(b"payment_amount", payment.value.to_le_bytes());
+      transcript.append_message(b"output_script", payment.script_pubkey.as_bytes());
+      transcript.append_message(b"output_amount", payment.value.to_le_bytes());
     }
 
     return Ok(TransactionMachine { signable: self, transcript, sigs });
