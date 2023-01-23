@@ -9,11 +9,11 @@ name: serai-dev
   # cluster-sm - Alice, Bob, Charlie (Full Infrastructure)
   # cluster-node-sm - Alice, Bob, Charlie (Node + Kafka)
   # cluster-coordinator-sm - Alice, Bob, Charlie (Coordinator + Kafka)
-  # cluster-coins-sm - cluster-sm with coins
+  # cluster-processor-sm - cluster-sm with coins
   # cluster-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
   # cluster-node-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie (Node + Kafka)
   # cluster-coordinator-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie (Coordinator + Kafka)
-  # cluster-coins-lg - cluster-lg with coins
+  # cluster-processor-lg - cluster-lg with coins
   # monero - full node monero only
   # bitcoin - full node bitcoin only
   # ethereum - full node ethereum only
@@ -42,11 +42,11 @@ services:
       - cluster-sm
       - cluster-node-sm
       - cluster-coordinator-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
       - cluster-node-lg
       - cluster-coordinator-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     ports:
       - "2181:2181"
     volumes:
@@ -62,11 +62,11 @@ services:
       - cluster-sm
       - cluster-node-sm
       - cluster-coordinator-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
       - cluster-node-lg
       - cluster-coordinator-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     ports:
       - "9094:9094"
     volumes:
@@ -90,11 +90,11 @@ services:
       - cluster-sm
       - cluster-node-sm
       - cluster-coordinator-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
       - cluster-node-lg
       - cluster-coordinator-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     ports:
       - "8080:8080"
     restart: always
@@ -368,9 +368,9 @@ services:
     profiles:
       - alice
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: alice
       CHAIN: BTC
@@ -382,9 +382,9 @@ services:
     profiles:
       - bob
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: bob
       CHAIN: BTC
@@ -396,9 +396,9 @@ services:
     profiles:
       - charlie
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: charlie
       CHAIN: BTC
@@ -410,7 +410,7 @@ services:
     profiles:
       - dave
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: dave
       CHAIN: BTC
@@ -422,7 +422,7 @@ services:
     profiles:
       - eve
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: eve
       CHAIN: BTC
@@ -434,7 +434,7 @@ services:
     profiles:
       - ferdie
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: ferdie
       CHAIN: BTC
@@ -479,9 +479,9 @@ services:
     profiles:
       - alice
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: alice
       CHAIN: ETH
@@ -493,9 +493,9 @@ services:
     profiles:
       - bob
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: bob
       CHAIN: ETH
@@ -507,9 +507,9 @@ services:
     profiles:
       - charlie
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: charlie
       CHAIN: ETH
@@ -521,7 +521,7 @@ services:
     profiles:
       - dave
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: dave
       CHAIN: ETH
@@ -533,7 +533,7 @@ services:
     profiles:
       - eve
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: eve
       CHAIN: ETH
@@ -545,7 +545,7 @@ services:
     profiles:
       - ferdie
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: ferdie
       CHAIN: ETH
@@ -590,9 +590,9 @@ services:
     profiles:
       - alice
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: alice
       CHAIN: XMR
@@ -604,9 +604,9 @@ services:
     profiles:
       - bob
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: bob
       CHAIN: XMR
@@ -618,9 +618,9 @@ services:
     profiles:
       - charlie
       - cluster-sm
-      - cluster-coins-sm
+      - cluster-processor-sm
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: charlie
       CHAIN: XMR
@@ -632,7 +632,7 @@ services:
     profiles:
       - dave
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: dave
       CHAIN: XMR
@@ -644,7 +644,7 @@ services:
     profiles:
       - eve
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: eve
       CHAIN: XMR
@@ -656,7 +656,7 @@ services:
     profiles:
       - ferdie
       - cluster-lg
-      - cluster-coins-lg
+      - cluster-processor-lg
     environment:
       NAME: ferdie
       CHAIN: XMR
@@ -664,9 +664,6 @@ services:
   # Coin Services
   bitcoin:
     profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
       - coins
       - bitcoin
     build:
@@ -678,9 +675,6 @@ services:
 
   ethereum:
     profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
       - coins
       - ethereum
     build:
@@ -692,9 +686,6 @@ services:
 
   monero:
     profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
       - coins
       - monero
     build:
