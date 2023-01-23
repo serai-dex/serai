@@ -8,9 +8,7 @@ use serde::{Serialize, Deserialize};
 use crate::{Coin, Amount};
 
 /// The type used for balances (a Coin and Balance).
-#[derive(
-  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Balance {
   pub coin: Coin,

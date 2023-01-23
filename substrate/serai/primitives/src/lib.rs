@@ -31,11 +31,19 @@ pub type Signature = RistrettoSignature;
 
 pub const fn pallet_address(pallet: &'static [u8]) -> SeraiAddress {
   let mut address = [0; 32];
+  let mut set = false;
+  // Implement a while loop since we can't use a for loop
   let mut i = 0;
   while i < pallet.len() {
     address[i] = pallet[i];
+    if address[i] != 0 {
+      set = true;
+    }
     i += 1;
   }
+  // Make sure this address isn't the identity point
+  // Doesn't do address != [0; 32] since that's not const
+  assert!(set, "address is the identity point");
   Public(address)
 }
 
