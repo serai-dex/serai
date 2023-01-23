@@ -1,8 +1,9 @@
-use sc_service::{PruningMode, PartialComponents};
-use frame_benchmarking_cli::{ExtrinsicFactory, BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
-use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
-
 use serai_runtime::Block;
+
+use sc_service::{PruningMode, PartialComponents};
+
+use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
+use frame_benchmarking_cli::{ExtrinsicFactory, BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 
 use crate::{
   chain_spec,

@@ -25,11 +25,10 @@ zeroize = { version = "1.5", features = ["zeroize_derive"] }
 subtle = "2.4"
 
 sha3 = "0.10"
-blake2 = { version = "0.10", optional = true }
 
 curve25519-dalek = { version = "3", features = ["std"] }
 
-group = { version = "0.12" }
+group = "0.12"
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
 multiexp = { path = "../../crypto/multiexp", version = "0.2", features = ["batch"] }
 
@@ -60,4 +59,4 @@ monero-rpc = "0.3"
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.5", features = ["ed25519", "tests"] }
 
 [features]
-multisig = ["rand_chacha", "blake2", "transcript", "frost", "dleq"]
+multisig = ["rand_chacha", "transcript", "frost", "dleq"]

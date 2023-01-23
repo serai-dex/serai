@@ -59,6 +59,7 @@ pub async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
 }
 
 // Mines 60 blocks and returns an unlocked miner TX output.
+#[allow(dead_code)]
 pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput {
   let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
 

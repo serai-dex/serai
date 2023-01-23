@@ -1699,6 +1699,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "derive_builder"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2170,7 +2181,6 @@ dependencies = [
  "ethers-solc",
  "eyre",
  "group",
- "hex-literal",
  "k256",
  "modular-frost",
  "rand_core 0.6.4",
@@ -3414,6 +3424,7 @@ dependencies = [
  "rustls-native-certs",
  "tokio",
  "tokio-rustls",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3545,6 +3556,46 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "in-instructions-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "in-instructions-pallet",
+ "jsonrpsee-core",
+ "jsonrpsee-http-client",
+ "parity-scale-codec",
+ "sp-inherents",
+]
+
+[[package]]
+name = "in-instructions-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "in-instructions-primitives",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serde",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-std",
+ "thiserror",
+]
+
+[[package]]
+name = "in-instructions-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serde",
+ "sp-core",
 ]
 
 [[package]]
@@ -3731,11 +3782,34 @@ version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d291e3a5818a2384645fd9756362e6d89cf0541b0b916fa7702ea4a9833608e"
 dependencies = [
+ "jsonrpsee-client-transport",
  "jsonrpsee-core",
+ "jsonrpsee-http-client",
  "jsonrpsee-proc-macros",
  "jsonrpsee-server",
  "jsonrpsee-types",
  "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-client-transport"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965de52763f2004bc91ac5bcec504192440f0b568a5d621c59d9dbd6f886c3fb"
+dependencies = [
+ "futures-util",
+ "http",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
+ "pin-project",
+ "rustls-native-certs",
+ "soketto",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tracing",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3746,9 +3820,11 @@ checksum = "a4e70b4439a751a5de7dd5ed55eacff78ebf4ffe0fc009cb1ebb11417f5b536b"
 dependencies = [
  "anyhow",
  "arrayvec 0.7.2",
+ "async-lock",
  "async-trait",
  "beef",
  "futures-channel",
+ "futures-timer",
  "futures-util",
  "globset",
  "hyper",
@@ -3759,6 +3835,25 @@ dependencies = [
  "serde",
  "serde_json",
  "soketto",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-http-client"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc345b0a43c6bc49b947ebeb936e886a419ee3d894421790c969cc56040542ad"
+dependencies = [
+ "async-trait",
+ "hyper",
+ "hyper-rustls",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
+ "rustc-hash",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -4832,7 +4927,6 @@ name = "monero-serai"
 version = "0.1.2-alpha"
 dependencies = [
  "base58-monero",
- "blake2",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "digest_auth",
@@ -7477,12 +7571,10 @@ dependencies = [
  "sc-block-builder",
  "sc-client-api",
  "sc-consensus",
- "sc-executor",
  "sc-network",
  "sc-network-common",
  "sc-network-gossip",
  "sc-service",
- "sc-transaction-pool",
  "sp-api",
  "sp-application-crypto",
  "sp-blockchain",
@@ -7595,6 +7687,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "scale-bits"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dd7aca73785181cc41f0bbe017263e682b585ca660540ba569133901d013ecf"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
+name = "scale-decode"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d823d4be477fc33321f93d08fb6c2698273d044f01362dc27573a750deb7c233"
+dependencies = [
+ "parity-scale-codec",
+ "scale-bits",
+ "scale-info",
+ "thiserror",
+]
+
+[[package]]
 name = "scale-info"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7618,6 +7733,23 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "scale-value"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16a5e7810815bd295da73e4216d1dfbced3c7c7c7054d70fa5f6e4c58123fff4"
+dependencies = [
+ "either",
+ "frame-metadata",
+ "parity-scale-codec",
+ "scale-bits",
+ "scale-decode",
+ "scale-info",
+ "serde",
+ "thiserror",
+ "yap",
 ]
 
 [[package]]
@@ -7824,6 +7956,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 
 [[package]]
+name = "serai-client"
+version = "0.1.0"
+dependencies = [
+ "in-instructions-primitives",
+ "jsonrpsee-server",
+ "lazy_static",
+ "parity-scale-codec",
+ "scale-value",
+ "serai-primitives",
+ "serai-runtime",
+ "serde",
+ "subxt",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
@@ -7831,12 +7980,8 @@ dependencies = [
  "clap 4.1.1",
  "frame-benchmarking",
  "frame-benchmarking-cli",
- "frame-system",
- "futures",
+ "in-instructions-client",
  "jsonrpsee",
- "log",
- "pallet-tendermint",
- "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "sc-basic-authorship",
  "sc-cli",
@@ -7844,31 +7989,24 @@ dependencies = [
  "sc-client-db",
  "sc-consensus",
  "sc-executor",
- "sc-keystore",
  "sc-network",
- "sc-rpc",
  "sc-rpc-api",
  "sc-service",
  "sc-telemetry",
  "sc-tendermint",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
- "serai-primitives",
  "serai-runtime",
  "sp-api",
- "sp-application-crypto",
  "sp-block-builder",
  "sp-blockchain",
  "sp-consensus",
  "sp-core",
  "sp-inherents",
  "sp-keyring",
- "sp-keystore",
  "sp-runtime",
- "sp-tendermint",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
- "validator-sets-pallet",
 ]
 
 [[package]]
@@ -7879,7 +8017,6 @@ dependencies = [
  "scale-info",
  "serde",
  "sp-core",
- "sp-std",
 ]
 
 [[package]]
@@ -7913,6 +8050,7 @@ dependencies = [
  "frame-system",
  "frame-system-rpc-runtime-api",
  "hex-literal",
+ "in-instructions-pallet",
  "pallet-assets",
  "pallet-balances",
  "pallet-session",
@@ -7923,7 +8061,6 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "sp-api",
- "sp-application-crypto",
  "sp-block-builder",
  "sp-core",
  "sp-inherents",
@@ -9017,6 +9154,79 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
+name = "subxt"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3cbc78fd36035a24883eada29e0205b9b1416172530a7d00a60c07d0337db0c"
+dependencies = [
+ "bitvec 1.0.1",
+ "derivative",
+ "frame-metadata",
+ "futures",
+ "getrandom 0.2.8",
+ "hex",
+ "jsonrpsee",
+ "parity-scale-codec",
+ "parking_lot 0.12.1",
+ "scale-decode",
+ "scale-info",
+ "scale-value",
+ "serde",
+ "serde_json",
+ "sp-core",
+ "sp-runtime",
+ "subxt-macro",
+ "subxt-metadata",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "subxt-codegen"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7722c31febf55eb300c73d977da5d65cfd6fb443419b1185b9abcdd9925fd7be"
+dependencies = [
+ "darling",
+ "frame-metadata",
+ "heck 0.4.0",
+ "hex",
+ "jsonrpsee",
+ "parity-scale-codec",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "scale-info",
+ "subxt-metadata",
+ "syn",
+ "tokio",
+]
+
+[[package]]
+name = "subxt-macro"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f64826f2c4ba20e3b2a86ec81a6ae8655ca6b6a4c2a6ccc888b6615efc2df14"
+dependencies = [
+ "darling",
+ "proc-macro-error",
+ "subxt-codegen",
+ "syn",
+]
+
+[[package]]
+name = "subxt-metadata"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "869af75e23513538ad0af046af4a97b8d684e8d202e35ff4127ee061c1110813"
+dependencies = [
+ "frame-metadata",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+]
+
+[[package]]
 name = "svm-rs"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9798,8 +10008,6 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
- "sp-core",
- "sp-std",
 ]
 
 [[package]]
@@ -10788,6 +10996,12 @@ name = "yansi"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
+
+[[package]]
+name = "yap"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fc77f52dc9e9b10d55d3f4462c3b7fc393c4f17975d641542833ab2d3bc26ef"
 
 [[package]]
 name = "yasna"

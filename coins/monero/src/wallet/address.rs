@@ -60,7 +60,7 @@ pub enum AddressSpec {
 }
 
 impl AddressType {
-  pub fn subaddress(&self) -> bool {
+  pub fn is_subaddress(&self) -> bool {
     matches!(self, AddressType::Subaddress) ||
       matches!(self, AddressType::Featured { subaddress: true, .. })
   }
@@ -75,7 +75,7 @@ impl AddressType {
     }
   }
 
-  pub fn guaranteed(&self) -> bool {
+  pub fn is_guaranteed(&self) -> bool {
     matches!(self, AddressType::Featured { guaranteed: true, .. })
   }
 }
@@ -169,16 +169,16 @@ impl<B: AddressBytes> AddressMeta<B> {
     meta.ok_or(AddressError::InvalidByte)
   }
 
-  pub fn subaddress(&self) -> bool {
-    self.kind.subaddress()
+  pub fn is_subaddress(&self) -> bool {
+    self.kind.is_subaddress()
   }
 
   pub fn payment_id(&self) -> Option<[u8; 8]> {
     self.kind.payment_id()
   }
 
-  pub fn guaranteed(&self) -> bool {
-    self.kind.guaranteed()
+  pub fn is_guaranteed(&self) -> bool {
+    self.kind.is_guaranteed()
   }
 }
 
@@ -285,16 +285,16 @@ impl<B: AddressBytes> Address<B> {
     self.meta.network
   }
 
-  pub fn subaddress(&self) -> bool {
-    self.meta.subaddress()
+  pub fn is_subaddress(&self) -> bool {
+    self.meta.is_subaddress()
   }
 
   pub fn payment_id(&self) -> Option<[u8; 8]> {
     self.meta.payment_id()
   }
 
-  pub fn guaranteed(&self) -> bool {
-    self.meta.guaranteed()
+  pub fn is_guaranteed(&self) -> bool {
+    self.meta.is_guaranteed()
   }
 }
 
