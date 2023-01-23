@@ -43,12 +43,12 @@ async fn main() {
         .default_value("base"),
     )
     .arg(
-      Arg::with_name("coin")
+      Arg::with_name("chain")
         .short("c")
-        .long("coin")
-        .help("The coin to run the processor for.")
+        .long("chain")
+        .help("The chain to run the processor for.")
         .takes_value(true)
-        .default_value("btc"),
+        .default_value("BTC"),
     )
     .get_matches();
 
@@ -56,9 +56,9 @@ async fn main() {
   let path_arg = args.value_of("config_dir").unwrap();
 
   // Load Coin argo
-  let coin_arg = args.value_of("coin").unwrap();
+  let chain_arg = args.value_of("chain").unwrap();
 
-  let config = ProcessorConfig::new(String::from(path_arg), String::from(coin_arg)).unwrap();
+  let config = ProcessorConfig::new(String::from(path_arg), String::from(chain_arg)).unwrap();
 
   // Load name arg
   let name_arg = args.value_of("name").unwrap().to_owned().to_lowercase();
