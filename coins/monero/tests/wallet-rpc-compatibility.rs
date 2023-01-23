@@ -3,7 +3,7 @@ use std::{
   str::FromStr,
 };
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{OsRng, RngCore};
 
 use serde::Deserialize;
 use serde_json::json;
@@ -30,7 +30,6 @@ async fn make_integrated_address(payment_id: [u8; 8]) -> String {
   #[derive(Deserialize, Debug)]
   struct IntegratedAddressResponse {
     integrated_address: String,
-    // payment_id: String
   }
 
   let rpc = Rpc::new("http://127.0.0.1:6061".to_string()).unwrap();
@@ -45,10 +44,11 @@ async fn make_integrated_address(payment_id: [u8; 8]) -> String {
   res.integrated_address
 }
 
-async fn initialize_wallet_rpc(
-  wallet_rpc: &WalletClient,
-  daemon_rpc: &Rpc,
-) -> monero_rpc::monero::Address {
+async fn initialize_rpcs() -> (WalletClient, Rpc, monero_rpc::monero::Address) {
+  let wallet_rpc =
+    monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
+  let daemon_rpc = runner::rpc().await;
+
   let address_resp = wallet_rpc.get_address(0, None).await;
   let wallet_rpc_addr = if address_resp.is_ok() {
     address_resp.unwrap().address
@@ -58,16 +58,12 @@ async fn initialize_wallet_rpc(
     daemon_rpc.generate_blocks(&addr.to_string(), 70).await.unwrap();
     addr
   };
-  wallet_rpc_addr
+  (wallet_rpc, daemon_rpc, wallet_rpc_addr)
 }
 
 async fn test_from_wallet_rpc_to_self(spec: AddressSpec) {
-  let wallet_rpc =
-    monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
-  let daemon_rpc = runner::rpc().await;
-
-  // initialize wallet rpc
-  let wallet_rpc_addr = initialize_wallet_rpc(&wallet_rpc, &daemon_rpc).await;
+  // initialize rpc
+  let (wallet_rpc, daemon_rpc, wallet_rpc_addr) = initialize_rpcs().await;
 
   // make an addr
   let (_, view_pair, _) = runner::random_address();
@@ -130,13 +126,10 @@ test!(
   test_send_to_wallet_rpc_standard,
   (
     |_, mut builder: Builder, _| async move {
-      let wallet_rpc =
-        monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
-      let daemon_rpc = runner::rpc().await;
+      // initialize rpc
+      let (wallet_rpc, _, wallet_rpc_addr) = initialize_rpcs().await;
 
-      // initialize wallet rpc
-      let wallet_rpc_addr = initialize_wallet_rpc(&wallet_rpc, &daemon_rpc).await;
-
+      // add destination
       builder.add_payment(
         MoneroAddress::from_str(Network::Mainnet, &wallet_rpc_addr.to_string()).unwrap(),
         1000000,
@@ -157,12 +150,10 @@ test!(
   test_send_to_wallet_rpc_subaddress,
   (
     |_, mut builder: Builder, _| async move {
-      let wallet_rpc =
-        monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
-      let daemon_rpc = runner::rpc().await;
+      // initialize rpc
+      let (wallet_rpc, _, _) = initialize_rpcs().await;
 
-      // initialize wallet rpc & make the addr
-      initialize_wallet_rpc(&wallet_rpc, &daemon_rpc).await;
+      // make the addr
       let (subaddress, index) = wallet_rpc.create_address(0, None).await.unwrap();
 
       builder.add_payment(
@@ -186,12 +177,8 @@ test!(
   test_send_to_wallet_rpc_integrated,
   (
     |_, mut builder: Builder, _| async move {
-      let wallet_rpc =
-        monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
-      let daemon_rpc = runner::rpc().await;
-
-      // initialize wallet rpc
-      initialize_wallet_rpc(&wallet_rpc, &daemon_rpc).await;
+      // initialize rpc
+      let (wallet_rpc, _, _) = initialize_rpcs().await;
 
       // make the addr
       let mut payment_id = [0u8; 8];
