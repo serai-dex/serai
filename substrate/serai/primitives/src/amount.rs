@@ -5,12 +5,18 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
+/// The type used for amounts within Substrate.
+// Distinct from Amount due to Substrate's requirements on this type.
+// While Amount could have all the necessary traits implemented, not only are they many, it'd make
+// Amount a large type with a variety of misc functions.
+// The current type's minimalism sets clear bounds on usage.
+pub type SubstrateAmount = u64;
 /// The type used for amounts.
 #[derive(
   Clone, Copy, PartialEq, Eq, PartialOrd, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct Amount(pub u64);
+pub struct Amount(pub SubstrateAmount);
 
 impl Add for Amount {
   type Output = Amount;

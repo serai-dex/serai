@@ -39,7 +39,7 @@ use sp_runtime::{
   ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{PublicKey, Signature, SeraiAddress, Coin};
+use primitives::{SubstrateAmount, PublicKey, Signature, SeraiAddress, Coin};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64},
@@ -56,14 +56,6 @@ use session::PeriodicSessions;
 
 /// An index to a block.
 pub type BlockNumber = u32;
-
-/// Balance of an account.
-// Distinct from serai-primitives Amount due to Substrate's requirements on this type.
-// If Amount could be dropped in here, it would be.
-// While Amount could have all the necessary traits implemented, not only are they many, yet it'd
-// make Amount a larger type, providing more operations than desired.
-// The current type's minimalism sets clear bounds on usage.
-pub type Balance = u64;
 
 /// Index of a transaction in the chain, for a given account.
 pub type Index = u32;
@@ -105,10 +97,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 // 1 MB
 pub const BLOCK_SIZE: u32 = 1024 * 1024;
 // 6 seconds
-pub const TARGET_BLOCK_TIME: u64 = 6000;
+pub const TARGET_BLOCK_TIME: u64 = 6;
 
 /// Measured in blocks.
-pub const MINUTES: BlockNumber = 60_000 / (TARGET_BLOCK_TIME as BlockNumber);
+pub const MINUTES: BlockNumber = 60 / (TARGET_BLOCK_TIME as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
@@ -158,7 +150,7 @@ impl system::Config for Runtime {
   type OnKilledAccount = ();
   type OnSetCode = ();
 
-  type AccountData = balances::AccountData<Balance>;
+  type AccountData = balances::AccountData<SubstrateAmount>;
   type SystemWeightInfo = ();
   type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
@@ -169,7 +161,7 @@ impl balances::Config for Runtime {
   type MaxLocks = ConstU32<50>;
   type MaxReserves = ();
   type ReserveIdentifier = [u8; 8];
-  type Balance = Balance;
+  type Balance = SubstrateAmount;
   type RuntimeEvent = RuntimeEvent;
   type DustRemoval = ();
   type ExistentialDeposit = ConstU64<500>;
@@ -181,14 +173,14 @@ impl transaction_payment::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
   type OperationalFeeMultiplier = ConstU8<5>;
-  type WeightToFee = IdentityFee<Balance>;
-  type LengthToFee = IdentityFee<Balance>;
+  type WeightToFee = IdentityFee<SubstrateAmount>;
+  type LengthToFee = IdentityFee<SubstrateAmount>;
   type FeeMultiplierUpdate = ();
 }
 
 impl assets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type Balance = Balance;
+  type Balance = SubstrateAmount;
   type Currency = Balances;
 
   type AssetId = Coin;
@@ -399,19 +391,19 @@ sp_api::impl_runtime_apis! {
 
   impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<
     Block,
-    Balance
+    SubstrateAmount
   > for Runtime {
     fn query_info(
       uxt: <Block as BlockT>::Extrinsic,
       len: u32,
-    ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<Balance> {
+    ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<SubstrateAmount> {
       TransactionPayment::query_info(uxt, len)
     }
 
     fn query_fee_details(
       uxt: <Block as BlockT>::Extrinsic,
       len: u32,
-    ) -> transaction_payment::FeeDetails<Balance> {
+    ) -> transaction_payment::FeeDetails<SubstrateAmount> {
       TransactionPayment::query_fee_details(uxt, len)
     }
   }

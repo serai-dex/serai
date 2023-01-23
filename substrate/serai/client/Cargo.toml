@@ -21,8 +21,9 @@ scale = { package = "parity-scale-codec", version = "3" }
 scale-value = "0.6"
 subxt = "0.25"
 
+pallet-assets = { git = "https://github.com/serai-dex/substrate", version = "4.0.0-dev" }
+
 serai-primitives = { path = "../primitives", version = "0.1" }
-in-instructions-primitives = { path = "../../in-instructions/primitives", version = "0.1" }
 serai-runtime = { path = "../../runtime", version = "0.1" }
 
 [dev-dependencies]

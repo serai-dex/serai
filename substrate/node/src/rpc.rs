@@ -6,7 +6,11 @@ use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 
-use serai_runtime::{primitives::SeraiAddress, opaque::Block, Balance, Index};
+use serai_runtime::{
+  primitives::{SubstrateAmount, SeraiAddress},
+  opaque::Block,
+  Index,
+};
 
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
@@ -30,7 +34,7 @@ pub fn create_full<
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
   C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, SeraiAddress, Index>
-    + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
+    + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, SubstrateAmount>
     + BlockBuilder<Block>,
 {
   use substrate_frame_rpc_system::{System, SystemApiServer};
