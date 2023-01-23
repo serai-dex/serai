@@ -7,6 +7,7 @@ use bitcoin::{
 };
 use bitcoincore_rpc_json::*;
 use crate::rpc_helper::*;
+use crate::json_helper::*;
 
 #[derive(Debug, Clone)]
 pub struct Rpc {
