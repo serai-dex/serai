@@ -48,40 +48,10 @@ impl Hram<Secp256k1> for BitcoinHram {
   }
 }
 
-/// Signing error
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SignerError {
-  /// The private key is missing for the required public key
-  MissingKey,
-  /// The private key in use has the right fingerprint but derives differently than expected
-  InvalidKey,
-  /// The user canceled the operation
-  UserCanceled,
-  /// Input index is out of range
-  InputIndexOutOfRange,
-  /// The `non_witness_utxo` field of the transaction is required to sign this input
-  MissingNonWitnessUtxo,
-  /// The `non_witness_utxo` specified is invalid
-  InvalidNonWitnessUtxo,
-  /// The `witness_utxo` field of the transaction is required to sign this input
   MissingWitnessUtxo,
-  /// The `witness_script` field of the transaction is required to sign this input
-  MissingWitnessScript,
-  /// The fingerprint and derivation path are missing from the psbt input
-  MissingHdKeypath,
-  /// The psbt contains a non-`SIGHASH_ALL` sighash in one of its input and the user hasn't
-  /// explicitly allowed them
-  ///
-  /// To enable signing transactions with non-standard sighashes set
-  /// [`SignOptions::allow_all_sighashes`] to `true`.
-  NonStandardSighash,
-  /// Invalid SIGHASH for the signing context in use
-  InvalidSighash,
-  /// Error while computing the hash to sign
-  SighashError(sighash::Error),
-  /// Error while signing using hardware wallets
-  #[cfg(feature = "hardware-signer")]
-  HWIError(hwi::error::Error),
+  InputIndexOutOfRange,
 }
 
 pub(crate) fn taproot_key_spend_signature_hash(
