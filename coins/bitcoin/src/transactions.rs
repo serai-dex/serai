@@ -6,8 +6,6 @@ use bitcoin::{
   psbt::{serialize::Serialize, PartiallySignedTransaction},
   Witness,
 };
-use thiserror::Error;
-use bitcoin_hashes::hex::ToHex;
 use frost::{
   algorithm::Schnorr,
   curve::Secp256k1,
@@ -28,28 +26,6 @@ use std::{
 
 use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use transcript::{Transcript, RecommendedTranscript};
-
-#[derive(Clone, PartialEq, Eq, Debug, Error)]
-pub enum TransactionError {
-  #[error("multiple addresses with payment IDs")]
-  MultiplePaymentIds,
-  #[error("no inputs")]
-  NoInputs,
-  #[error("no outputs")]
-  NoOutputs,
-  #[error("only one output and no change address")]
-  NoChange,
-  #[error("too many outputs")]
-  TooManyOutputs,
-  #[error("too much data")]
-  TooMuchData,
-  #[error("not enough funds (in {0}, out {1})")]
-  NotEnoughFunds(u64, u64),
-  #[error("wrong spend private key")]
-  WrongPrivateKey,
-  #[error("frost error {0}")]
-  FrostError(FrostError),
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SignableTransaction {
