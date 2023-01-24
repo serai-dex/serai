@@ -73,11 +73,7 @@ async fn main() {
 
   // Start Signature Process
   let sig_config = config.clone();
-  tokio::spawn(async move {
-    let signature_process =
+  let signature_process =
       SignatureProcess::new(sig_config.get_coin(), sig_config.get_kafka(), name_arg);
-    signature_process.run().await;
-  });
-
-  io::stdin().read_line(&mut String::new()).unwrap();
+  signature_process.run().await;
 }

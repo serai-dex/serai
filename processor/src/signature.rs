@@ -263,6 +263,9 @@ fn send_processor_pubkey(kafka_config: &KafkaConfig, topic: &str, env_key: Strin
         .partition(0),
     )
     .expect("failed to send message");
+
+  // Flushes producer
+  producer.flush(Duration::from_secs(10));
 }
 
 // Wait to receive Coordinator Pubkey

@@ -226,7 +226,6 @@ services:
     &coordinator_defaults
     restart: unless-stopped
     image: serai-coordinator:dev
-    tty: true
     profiles:
       - default_coordinator
     build:

@@ -86,14 +86,6 @@ async fn main() {
       SignatureProcess::new(sig_config.get_chain(), sig_kafka_config.clone(), sig_name_arg);
     signature_process.run().await;
   });
-
-  // Start Network Process
-  let network_config = config.clone();
-  let network_name_arg = name_arg.to_string().to_owned();
-  tokio::spawn(async move {
-    let network_process = NetworkProcess::new(network_name_arg.to_string(), network_config.get_network().signers);
-    network_process.run(network_config.get_chain(), network_config.get_kafka()).await;
-  });
   
 
   // Initial Heartbeat to Processors
@@ -112,6 +104,10 @@ async fn main() {
 
   // Start Network Broker
 
-  // Hang on cli
-  io::stdin().read_line(&mut String::new()).unwrap();
+  // Start Network Process
+  let network_config = config.clone();
+  let network_name_arg = name_arg.to_string().to_owned();
+
+  let network_process = NetworkProcess::new(network_name_arg.to_string(), network_config.get_network().signers);
+  network_process.run(network_config.get_chain(), network_config.get_kafka()).await;
 }

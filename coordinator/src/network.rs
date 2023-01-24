@@ -13,8 +13,9 @@ use libp2p::{
   noise::{Keypair, NoiseConfig, X25519Spec},
   swarm::NetworkBehaviourEventProcess,
   tcp::TcpConfig,
-  NetworkBehaviour, PeerId, Swarm, Transport, Multiaddr,
+  NetworkBehaviour, PeerId, Swarm, Transport, Multiaddr, ping::{self, PingSuccess}
 };
+use crate::network::ping::PingEvent;
 
 use rdkafka::{
   consumer::{BaseConsumer, Consumer},
@@ -99,12 +100,38 @@ impl NetworkState {
 #[behaviour(event_process = true)]
 struct NetworkConnection {
   floodsub: Floodsub,
+  ping: ping::Ping,
   #[behaviour(ignore)]
   network_state: NetworkState,
   #[behaviour(ignore)]
   signer_p2p_address: String,
   #[behaviour(ignore)]
   responder: mpsc::UnboundedSender<NetworkMessage>,
+}
+
+impl NetworkBehaviourEventProcess<PingEvent> for NetworkConnection{
+  fn inject_event(&mut self, event: PingEvent) {
+    match event {
+      PingEvent {
+        peer,
+        result: Ok(PingSuccess::Ping { rtt }),
+      } => {
+        //info!("Ping from {} in {:?}", peer, rtt);
+      }
+      PingEvent {
+        peer,
+        result: Ok(PingSuccess::Pong),
+      } => {
+        //info!("Pong from {}", peer);
+      }
+      PingEvent {
+        peer,
+        result: Err(e),
+      } => {
+        //info!("Ping failed with {} from {}", e, peer);
+      }
+    }
+  }
 }
 
 // Fires event when a message is received.
@@ -304,6 +331,7 @@ impl NetworkProcess {
       },
       signer_p2p_address: signer_p2p_address.to_string(),
       responder: response_sender,
+      ping: ping::Ping::new(ping::PingConfig::new().with_keep_alive(true)),
     };
 
     // Create a topic for libp2p channel
@@ -312,6 +340,7 @@ impl NetworkProcess {
 
     // Create Swarm
     let mut swarm = Swarm::new(transport, behaviour, signer_p2p_address);
+
     let listening_address: Multiaddr = self.signer_ipv4_address.parse().unwrap();
     swarm.listen_on(listening_address).unwrap();
 
