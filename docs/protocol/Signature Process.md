@@ -4,6 +4,8 @@
 
 This document describes the process of signing a multisignature transaction, and the messages that are used to communicate between the various Serai processes. The process is as follows:
 
+### Key Generation
+
 1. The operator starts their infrastructure for the first time and unique keys are generated:
         - a new keypair for coordinator messaging.
         - a new keypair for processor messaging.
