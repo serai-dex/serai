@@ -142,6 +142,7 @@ test!(
       let transfer =
         data.0.get_transfer(Hash::from_slice(&tx.hash()), None).await.unwrap().unwrap();
       assert_eq!(transfer.amount.as_pico(), 1000000);
+      assert_eq!(transfer.subaddr_index, Index { major: 0, minor: 0 });
     },
   ),
 );
