@@ -2,125 +2,112 @@
 
 use core::{
   ops::Deref,
-  cmp::Ordering,
   hash::Hash,
   fmt::{Debug, Formatter},
 };
 use std::collections::HashMap;
 
-use thiserror::Error;
-
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rand_core::{RngCore, OsRng};
 
-use group::{ff::Field, Group, GroupEncoding};
+use group::{Group, GroupEncoding};
 use dalek_ff_group::{Scalar, RistrettoPoint};
 use ciphersuite::Ristretto;
 
 use transcript::{Transcript, RecommendedTranscript};
-use chacha20::{
-  cipher::{KeyIvInit, StreamCipher},
-  Key, XNonce, XChaCha20,
-};
 
 use schnorr::SchnorrSignature;
 
-pub use serde::{Serialize, Deserialize};
+pub use serde::{
+  Serializer, Serialize, Deserialize,
+  de::{Error, Deserializer, DeserializeOwned},
+};
 
-mod ser;
-use ser::*;
+mod keys;
+pub use keys::*;
 
 #[cfg(test)]
 mod tests;
-
-/// Private Key for a Message Box.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct PrivateKey(pub(crate) Zeroizing<Scalar>);
-impl PrivateKey {
-  #[doc(hidden)]
-  pub unsafe fn inner(&self) -> &Zeroizing<Scalar> {
-    &self.0
-  }
-
-  pub fn to_public(&self) -> PublicKey {
-    PublicKey(RistrettoPoint::generator() * self.0.deref())
-  }
-}
-
-/// Public Key for a Message Box.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
-pub struct PublicKey(RistrettoPoint);
-
-/// Generate a key pair
-pub fn key_gen() -> (PrivateKey, PublicKey) {
-  let mut scalar;
-  while {
-    scalar = Zeroizing::new(Scalar::random(&mut OsRng));
-    scalar.is_zero().into()
-  } {}
-  let public = RistrettoPoint::generator() * scalar.deref();
-  (PrivateKey(scalar), PublicKey(public))
-}
 
 fn transcript() -> RecommendedTranscript {
   RecommendedTranscript::new(b"MessageBox")
 }
 
 /// Stub trait for obtaining the bytes of a value.
-pub trait AsBytes {
+pub trait AsDesignatedVerifier {
   type Output: AsRef<[u8]>;
-  fn as_bytes(&self) -> Self::Output;
+  fn as_designated_verifier(&self) -> Option<Self::Output>;
 }
 
 #[allow(non_snake_case)]
-fn signature_challenge<R: AsBytes>(
-  recipient: &R,
+pub(crate) fn signature_challenge<V: AsDesignatedVerifier>(
+  recipient: &V,
   R: RistrettoPoint,
   A: RistrettoPoint,
-  iv: &XNonce,
-  enc_msg: &[u8],
+  msg: &[u8],
 ) -> Scalar {
   let mut transcript = transcript();
 
-  transcript.domain_separate(b"recipient");
-  transcript.append_message(b"name", recipient.as_bytes());
+  if let Some(recipient) = recipient.as_designated_verifier() {
+    transcript.domain_separate(b"recipient");
+    transcript.append_message(b"name", recipient);
+  }
 
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", R.to_bytes());
   transcript.append_message(b"public_key", A.to_bytes());
 
-  transcript.domain_separate(b"message");
-  transcript.append_message(b"iv", iv);
-  transcript.append_message(b"encrypted_message", enc_msg);
+  transcript.append_message(b"message", msg);
 
   Scalar::from_bytes_mod_order_wide(&transcript.challenge(b"challenge").into())
 }
 
-/// Error from creating/decrypting a message.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
-pub enum MessageError {
-  #[error("message was incomplete")]
-  Incomplete,
-  #[error("invalid encoding")]
-  InvalidEncoding,
-  #[error("invalid encoding")]
-  InvalidSignature,
-}
-
-/// A Secure Message, defined as being not only encrypted yet authenticated.
+/// A Signed Message.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct SecureMessage {
-  #[serde(serialize_with = "serialize_iv")]
-  #[serde(deserialize_with = "deserialize_iv")]
-  iv: XNonce,
-  ciphertext: Vec<u8>,
+pub struct Message<M: Serialize> {
+  msg: M,
   #[serde(serialize_with = "serialize_sig")]
   #[serde(deserialize_with = "deserialize_sig")]
   sig: SchnorrSignature<Ristretto>,
 }
 
-/// MessageBox. A box enabling encrypting and decrypting messages to/from various other peers.
-pub struct MessageBox<K: Copy + Eq + Hash + Debug + AsBytes> {
+fn serialize_sig<S: Serializer>(
+  sig: &SchnorrSignature<Ristretto>,
+  serializer: S,
+) -> Result<S::Ok, S::Error> {
+  let sig = sig.serialize();
+  #[allow(non_snake_case)]
+  let mut R = [0; 32];
+  let mut s = [0; 32];
+  R.copy_from_slice(&sig[.. 32]);
+  s.copy_from_slice(&sig[32 ..]);
+  (R, s).serialize(serializer)
+}
+
+fn deserialize_sig<'de, D: Deserializer<'de>>(
+  deserializer: D,
+) -> Result<SchnorrSignature<Ristretto>, D::Error> {
+  let sig = <([u8; 32], [u8; 32])>::deserialize(deserializer)?;
+  SchnorrSignature::<Ristretto>::read::<&[u8]>(
+    &mut [sig.0.as_ref(), sig.1.as_ref()].concat().as_ref(),
+  )
+  .map_err(|_| D::Error::custom("invalid signature"))
+}
+
+impl<M: Serialize + DeserializeOwned> Message<M> {
+  pub fn to_bytes(&self) -> Vec<u8> {
+    bincode::serialize(self).unwrap()
+  }
+}
+
+impl<M: Serialize + DeserializeOwned> ToString for Message<M> {
+  fn to_string(&self) -> String {
+    serde_json::to_string(self).unwrap()
+  }
+}
+
+/// A box enabling authenticating messages to/from various other peers.
+pub struct MessageBox<K: Copy + Eq + Hash + Debug + AsDesignatedVerifier> {
   our_name: K,
   our_key: PrivateKey,
   // Optimization for later transcripting
@@ -133,73 +120,48 @@ pub struct MessageBox<K: Copy + Eq + Hash + Debug + AsBytes> {
   additional_entropy: [u8; 64],
 
   pub_keys: HashMap<K, RistrettoPoint>,
-  enc_keys: HashMap<K, Key>,
 }
 
-impl<K: Copy + Eq + Hash + Debug + AsBytes> Debug for MessageBox<K> {
+impl<K: Copy + Eq + Hash + Debug + AsDesignatedVerifier> Debug for MessageBox<K> {
   fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
     fmt
       .debug_struct("MessageBox")
       .field("our_name", &self.our_name)
       .field("our_public_key", &self.our_public_key)
       .field("pub_keys", &self.pub_keys)
-      .finish()
+      .finish_non_exhaustive()
   }
 }
 
-impl<K: Copy + Eq + Hash + Debug + AsBytes> Zeroize for MessageBox<K> {
+impl<K: Copy + Eq + Hash + Debug + AsDesignatedVerifier> Zeroize for MessageBox<K> {
   fn zeroize(&mut self) {
+    // Doesn't zeroize our_name as we can't if it's &'static str
     self.our_key.zeroize();
     self.our_public_key.zeroize();
     self.additional_entropy.zeroize();
     for (_, key) in self.pub_keys.iter_mut() {
       key.zeroize();
     }
-    for (_, key) in self.enc_keys.iter_mut() {
-      key.zeroize();
-    }
   }
 }
-impl<K: Copy + Eq + Hash + Debug + AsBytes> Drop for MessageBox<K> {
+impl<K: Copy + Eq + Hash + Debug + AsDesignatedVerifier> Drop for MessageBox<K> {
   fn drop(&mut self) {
     self.zeroize();
   }
 }
-impl<K: Copy + Eq + Hash + Debug + AsBytes> ZeroizeOnDrop for MessageBox<K> {}
+impl<K: Copy + Eq + Hash + Debug + AsDesignatedVerifier> ZeroizeOnDrop for MessageBox<K> {}
 
-impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
-  fn add_internal(&mut self, name: K, key: RistrettoPoint) {
+impl<K: Copy + Eq + Hash + Debug + AsDesignatedVerifier> MessageBox<K> {
+  fn add_generic(&mut self, name: K, key: RistrettoPoint) {
     self.pub_keys.insert(name, key);
-
-    let mut transcript = transcript();
-    transcript.domain_separate(b"encryption_keys");
-
-    // We could make these encryption keys directional, yet the sender is clearly established
-    // by the Ristretto signature
-    let (name_a, name_b) = match self.our_name.as_bytes().as_ref().cmp(name.as_bytes().as_ref()) {
-      Ordering::Less => (self.our_name, name),
-      Ordering::Equal => panic!("encrypting to ourself"),
-      Ordering::Greater => (name, self.our_name),
-    };
-    transcript.append_message(b"name_a", name_a.as_bytes());
-    transcript.append_message(b"name_b", name_b.as_bytes());
-
-    transcript.append_message(b"shared_key", (key * self.our_key.0.deref()).to_bytes());
-    let mut shared_key = transcript.challenge(b"encryption_key");
-
-    let mut key = Key::default();
-    key.copy_from_slice(&shared_key[.. 32]);
-    shared_key.zeroize();
-    self.enc_keys.insert(name, key);
   }
 
   pub fn remove(&mut self, name: &K) {
     self.pub_keys.remove(name);
-    self.enc_keys.remove(name);
   }
 
   /// Create a new message box with our identity and the identities of our peers.
-  pub fn new(our_name: K, our_key: PrivateKey, mut keys: HashMap<K, PublicKey>) -> Self {
+  fn new_generic(our_name: K, our_key: PrivateKey, mut keys: HashMap<K, PublicKey>) -> Self {
     let mut res = MessageBox {
       additional_entropy: {
         let mut transcript = transcript();
@@ -233,22 +195,18 @@ impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
       our_public_key: RistrettoPoint::generator() * our_key.0.deref(),
       our_key,
 
-      enc_keys: HashMap::new(),
       pub_keys: HashMap::new(),
     };
 
     for (name, key) in keys.drain().map(|(name, key)| (name, key.0)) {
-      res.add_internal(name, key);
+      res.add_generic(name, key);
     }
     res
   }
 
-  /// Encrypt bytes to be sent to another party.
-  pub fn encrypt_bytes(&self, to: &K, mut msg: Vec<u8>) -> SecureMessage {
-    let mut iv = XNonce::default();
-    OsRng.fill_bytes(iv.as_mut());
-    XChaCha20::new(&self.enc_keys[to], &iv).apply_keystream(msg.as_mut());
-
+  // Sign a message to be sent to another party.
+  fn sign_generic<M: Serialize + DeserializeOwned>(&self, to: &K, msg: M) -> Message<M> {
+    let msg_ser = bincode::serialize(&msg).unwrap();
     let nonce = {
       let mut transcript = transcript();
       transcript.domain_separate(b"nonce");
@@ -258,17 +216,18 @@ impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
       // hashed in order to ensure that it isn't based off of public data alone
       // THe private key is indirectly included via the below additional entropy, ensuring a lack
       // of potential for nonce reuse
-      transcript.append_message(b"to", to.as_bytes());
+      if let Some(to) = to.as_designated_verifier() {
+        transcript.append_message(b"to", to);
+      }
       transcript.append_message(b"public_key", self.our_public_key.to_bytes());
-      transcript.append_message(b"iv", iv);
-      transcript.append_message(b"message", &msg);
+      transcript.append_message(b"message", &msg_ser);
 
       // Transcript entropy
       // While this could be fully deterministic, anyone who recovers the entropy can recover the
       // nonce and therefore the private key. While recovering additional_entropy should be as
       // difficult as recovering our_key, this entropy binds the nonce's recoverability lifespan
       // to the lifetime of this specific entropy and this specific nonce
-      let mut entropy = [0; 64];
+      let mut entropy = [0; 32];
       OsRng.fill_bytes(&mut entropy);
       transcript.append_message(b"entropy", entropy.as_ref());
       entropy.zeroize();
@@ -290,53 +249,90 @@ impl<K: Copy + Eq + Hash + Debug + AsBytes> MessageBox<K> {
     let sig = SchnorrSignature::<Ristretto>::sign(
       &self.our_key.0, // SchnorrSignature will zeroize this copy.
       nonce,
-      signature_challenge(to, R, self.our_public_key, &iv, &msg),
+      signature_challenge(to, R, self.our_public_key, &msg_ser),
     );
 
-    let mut res = iv.to_vec();
-    sig.write(&mut res).unwrap();
-    res.extend(&msg);
-
-    SecureMessage { iv, ciphertext: msg, sig }
+    Message { msg, sig }
   }
 
-  /// Decrypt a message, returning the contained byte vector.
-  pub fn decrypt_to_bytes(&self, from: &K, msg: SecureMessage) -> Option<Vec<u8>> {
-    if !msg.sig.verify(
+  /// Verify a message.
+  pub fn verify<M: Serialize + DeserializeOwned>(&self, from: &K, msg: Message<M>) -> Option<M> {
+    let Message { msg, sig } = msg;
+
+    if !sig.verify(
       self.pub_keys[from],
-      signature_challenge(&self.our_name, msg.sig.R, self.pub_keys[from], &msg.iv, &msg.ciphertext),
+      signature_challenge(
+        &self.our_name,
+        sig.R,
+        self.pub_keys[from],
+        &bincode::serialize(&msg).unwrap(),
+      ),
     ) {
       return None;
     }
 
-    let SecureMessage { iv, mut ciphertext, .. } = msg;
-    XChaCha20::new(&self.enc_keys[from], &iv).apply_keystream(ciphertext.as_mut());
-    Some(ciphertext)
+    Some(msg)
   }
 }
 
-impl AsBytes for &'static str {
+impl AsDesignatedVerifier for &'static str {
   type Output = &'static [u8];
-  fn as_bytes(&self) -> Self::Output {
-    str::as_bytes(self)
+  fn as_designated_verifier(&self) -> Option<Self::Output> {
+    Some(str::as_bytes(self))
   }
 }
+
 pub type InternalMessageBox = MessageBox<&'static str>;
 impl InternalMessageBox {
+  pub fn new(
+    our_name: &'static str,
+    our_key: PrivateKey,
+    keys: HashMap<&'static str, PublicKey>,
+  ) -> Self {
+    MessageBox::new_generic(our_name, our_key, keys)
+  }
+
+  // TODO: Remove
   pub fn add(&mut self, name: &'static str, key: PublicKey) {
-    self.add_internal(name, key.0);
+    self.add_generic(name, key.0);
+  }
+
+  pub fn sign<M: Serialize + DeserializeOwned>(&self, to: &'static str, msg: M) -> Message<M> {
+    self.sign_generic(&to, msg)
+  }
+
+  pub fn decode<M: Serialize + DeserializeOwned>(
+    &self,
+    from: &'static str,
+    msg: &str,
+  ) -> Option<M> {
+    self.verify(&from, serde_json::from_str(msg).ok()?)
   }
 }
 
-impl AsBytes for PublicKey {
-  type Output = [u8; 32];
-  fn as_bytes(&self) -> Self::Output {
-    self.0.to_bytes()
+// Don't utilize weakly designated-verified challenges for the P2P layer, which broadcasts
+impl AsDesignatedVerifier for PublicKey {
+  type Output = [u8; 0];
+  fn as_designated_verifier(&self) -> Option<Self::Output> {
+    None
   }
 }
+
 pub type ExternalMessageBox = MessageBox<PublicKey>;
 impl ExternalMessageBox {
+  pub fn new(our_key: PrivateKey) -> Self {
+    ExternalMessageBox::new_generic(our_key.to_public(), our_key, HashMap::new())
+  }
+
   pub fn add(&mut self, key: PublicKey) {
-    self.add_internal(key, key.0);
+    self.add_generic(key, key.0);
+  }
+
+  pub fn sign<M: Serialize + DeserializeOwned>(&self, msg: M) -> Message<M> {
+    self.sign_generic(&PublicKey(RistrettoPoint::identity()), msg)
+  }
+
+  pub fn decode<M: Serialize + DeserializeOwned>(&self, from: &PublicKey, msg: &[u8]) -> Option<M> {
+    self.verify(from, bincode::deserialize(msg).ok()?)
   }
 }

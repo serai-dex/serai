@@ -1,16 +1,20 @@
 use std::collections::HashMap;
 
-use crate::{Serialize, Deserialize, PrivateKey, PublicKey, SecureMessage, MessageBox, key_gen};
+use crate::{
+  Serialize, Deserialize, PrivateKey, PublicKey, InternalMessageBox, ExternalMessageBox, key_gen,
+};
 
-const A: &'static str = "A";
-const B: &'static str = "B";
+const A: &str = "A";
+const B: &str = "B";
 
 #[allow(deprecated)]
 #[test]
 pub fn key_serialization() {
   let (private, public) = key_gen();
   assert_eq!(private, PrivateKey::from_string(private.to_string()));
-  assert_eq!(public, PublicKey::from_bytes(&public.to_bytes()).unwrap());
+  assert_eq!(public, PublicKey::from_str(&public.to_string()).unwrap());
+  assert_eq!(public, bincode::deserialize(&bincode::serialize(&public).unwrap()).unwrap());
+  assert_eq!(public, serde_json::from_str(&serde_json::to_string(&public).unwrap()).unwrap());
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -19,44 +23,35 @@ struct TestMessage {
 }
 
 macro_rules! message_box_test {
-  ($A: ident, $B: ident) => {
+  ($new: expr, $sign: expr, $encode: ident, $A_id: expr, $B_id: expr,) => {
     let (a_priv, a_pub) = key_gen();
     let (b_priv, b_pub) = key_gen();
 
     let mut a_others = HashMap::new();
-    a_others.insert($B, b_pub);
+    a_others.insert($B_id(b_pub), b_pub);
 
     let mut b_others = HashMap::new();
-    b_others.insert($A, a_pub);
+    b_others.insert($A_id(a_pub), a_pub);
 
-    let a_box = MessageBox::new($A, a_priv, a_others);
-    let b_box = MessageBox::new($B, b_priv, b_others);
+    let a_box = $new($A_id(a_pub), a_priv, a_others);
+    let b_box = $new($B_id(b_pub), b_priv, b_others);
 
-    // SecureMessage API
+    let msg = TestMessage { msg: "Hello, world!".into() };
+
+    // Message API
     {
-      let msg = b"Hello, world!".to_vec();
-      let enc = a_box.encrypt_bytes(&$B, msg.clone());
-      assert_eq!(msg, b_box.decrypt_to_bytes(&$A, enc.clone()).unwrap());
+      let res = $sign(&a_box, msg.clone());
+      assert_eq!(msg, b_box.verify(&$A_id(a_pub), res.clone()).unwrap());
 
       // Additionally test its serialize and serde support
-      assert_eq!(enc, SecureMessage::new(enc.serialize()).unwrap());
-      assert_eq!(enc, serde_json::from_str(&serde_json::to_string(&enc).unwrap()).unwrap());
+      assert_eq!(res, bincode::deserialize(&bincode::serialize(&res).unwrap()).unwrap());
+      assert_eq!(res, serde_json::from_str(&serde_json::to_string(&res).unwrap()).unwrap());
     }
 
-    // Generic API
-    let msg = TestMessage { msg: "Hello, world!".into() };
-    let enc = a_box.encrypt(&$B, &msg);
-    assert_eq!(msg, b_box.decrypt(&$A, enc).unwrap());
-
-    // Serialized API
-    assert_eq!(msg, b_box.decrypt_from_slice(&$A, &a_box.encrypt_to_bytes(&$B, &msg)).unwrap());
-
-    // String API
+    // Encoded API
     {
-      #[allow(deprecated)]
-      let enc = a_box.encrypt_to_string(&$B, &msg);
-      #[allow(deprecated)]
-      let dec = b_box.decrypt_from_str(&$A, &enc).unwrap();
+      let res = $sign(&a_box, msg.clone()).$encode();
+      let dec = b_box.decode(&$A_id(a_pub), &res).unwrap();
       assert_eq!(msg, dec);
     }
   };
@@ -64,15 +59,25 @@ macro_rules! message_box_test {
 
 #[test]
 pub fn message_box() {
-  message_box_test!(A, B);
+  message_box_test!(
+    InternalMessageBox::new,
+    |a_box: &InternalMessageBox, msg| a_box.sign(B, msg),
+    to_string,
+    |_| A,
+    |_| B,
+  );
 
-  // The ExternalMessageBox should have the public keys used for encryption used as IDs
-  // This uses a different public key, which is allowed at construction, yet not via the runtime
-  // add API
-  // This just required the least changes to the test. Do not do this in prod
-  #[allow(non_snake_case)]
-  let A_pub = key_gen().1;
-  #[allow(non_snake_case)]
-  let B_pub = key_gen().1;
-  message_box_test!(A_pub, B_pub);
+  message_box_test!(
+    |_, key, others: HashMap<PublicKey, PublicKey>| {
+      let mut a_box = ExternalMessageBox::new(key);
+      for other in others.values() {
+        a_box.add(*other);
+      }
+      a_box
+    },
+    |a_box: &ExternalMessageBox, msg| a_box.sign(msg),
+    to_bytes,
+    |key| key,
+    |key| key,
+  );
 }
