@@ -407,6 +407,8 @@ impl NetworkProcess {
               };
 
               send_message(&message, &mut swarm, &topic);
+              // Small delay for message processing
+              tokio::time::sleep(Duration::from_millis(100)).await;
             }
           }
         }
@@ -435,6 +437,8 @@ impl NetworkProcess {
                 };
                 info!("Sending pubkey to new signer: {} from: {}", &name, &self.signer_name);
                 send_message(&message, &mut swarm, &topic);
+                // Small delay for message processing
+                tokio::time::sleep(Duration::from_millis(100)).await;
               }
             }
           }
