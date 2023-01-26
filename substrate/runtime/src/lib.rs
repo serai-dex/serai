@@ -42,7 +42,7 @@ use sp_runtime::{
 use primitives::{SubstrateAmount, PublicKey, Signature, SeraiAddress, Coin};
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64},
+  traits::{ConstU8, ConstU32, ConstU64, Contains},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
@@ -127,8 +127,39 @@ parameter_types! {
     );
 }
 
+pub struct CallFilter;
+impl Contains<RuntimeCall> for CallFilter {
+  fn contains(call: &RuntimeCall) -> bool {
+    if let RuntimeCall::Balances(call) = call {
+      return matches!(call, balances::Call::transfer { .. } | balances::Call::transfer_all { .. });
+    }
+
+    if let RuntimeCall::Assets(call) = call {
+      return matches!(
+        call,
+        assets::Call::approve_transfer { .. } |
+          assets::Call::cancel_approval { .. } |
+          assets::Call::transfer { .. } |
+          assets::Call::transfer_approved { .. }
+      );
+    }
+    if let RuntimeCall::Tokens(call) = call {
+      return matches!(call, tokens::Call::burn { .. });
+    }
+    if let RuntimeCall::InInstructions(call) = call {
+      return matches!(call, in_instructions::Call::update { .. });
+    }
+
+    if let RuntimeCall::ValidatorSets(call) = call {
+      return matches!(call, validator_sets::Call::vote { .. });
+    }
+
+    false
+  }
+}
+
 impl system::Config for Runtime {
-  type BaseCallFilter = support::traits::Everything;
+  type BaseCallFilter = CallFilter;
   type BlockWeights = BlockWeights;
   type BlockLength = BlockLength;
   type AccountId = SeraiAddress;
