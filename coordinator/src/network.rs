@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration, env, io, fmt, str};
+use std::{collections::{HashMap, hash_map::DefaultHasher}, time::Duration, env, io, fmt, str, hash::{Hash, Hasher}};
 use group::ff::PrimeField;
 use message_box::{MessageBox, PublicKey};
 use tokio::{sync::mpsc, signal::ctrl_c};
@@ -7,7 +7,7 @@ use log::{error, info};
 use futures::StreamExt;
 use libp2p::{
   core::{upgrade},
-  floodsub::{Floodsub, FloodsubEvent, Topic},
+  gossipsub::{Gossipsub, GossipsubEvent, IdentTopic, self, ValidationMode, GossipsubMessage, MessageId, MessageAuthenticity},
   identity::{self},
   mplex,
   noise::{Keypair, NoiseConfig, X25519Spec},
@@ -99,8 +99,7 @@ impl NetworkState {
 #[derive(NetworkBehaviour)]
 #[behaviour(event_process = true)]
 struct NetworkConnection {
-  floodsub: Floodsub,
-  ping: ping::Ping,
+  gossipsub: Gossipsub,
   #[behaviour(ignore)]
   network_state: NetworkState,
   #[behaviour(ignore)]
@@ -109,38 +108,13 @@ struct NetworkConnection {
   responder: mpsc::UnboundedSender<NetworkMessage>,
 }
 
-impl NetworkBehaviourEventProcess<PingEvent> for NetworkConnection{
-  fn inject_event(&mut self, event: PingEvent) {
-    match event {
-      PingEvent {
-        peer,
-        result: Ok(PingSuccess::Ping { rtt }),
-      } => {
-        //info!("Ping from {} in {:?}", peer, rtt);
-      }
-      PingEvent {
-        peer,
-        result: Ok(PingSuccess::Pong),
-      } => {
-        //info!("Pong from {}", peer);
-      }
-      PingEvent {
-        peer,
-        result: Err(e),
-      } => {
-        //info!("Ping failed with {} from {}", e, peer);
-      }
-    }
-  }
-}
-
 // Fires event when a message is received.
-impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
-  fn inject_event(&mut self, event: FloodsubEvent) {
+impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
+  fn inject_event(&mut self, event: GossipsubEvent) {
     match event {
-      FloodsubEvent::Message(raw_data) => {
+      GossipsubEvent::Message { propagation_source, message_id, message } => {
         // Parse the message as bytes
-        let deser = bincode::deserialize::<NetworkMessage>(&raw_data.data);
+        let deser = bincode::deserialize::<NetworkMessage>(&message.data);
         if let Ok(message) = deser {
           if let Some(user) = &message.receiver_p2p_address {
             if *user != self.signer_p2p_address.to_string() {
@@ -157,14 +131,14 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
             }
             // Coordinator has received a signers coordinator pubkey used for message box.
             NetworkMessageType::CoordinatorPubkey => {
-              let sender: String = self.network_state.get_signer_name(&raw_data.source.to_string());
+              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
               let pubkey = String::from_utf8_lossy(&message.data);
               info!("Coordinator Pubkey recieved! {}: {}", sender, pubkey);
               self.network_state.signer_coordinator_pubkeys.insert(sender, pubkey.to_string());
             }
             // Coordinator has received a secure message from a signer.
             NetworkMessageType::CoordinatorSecure => {
-              let sender: String = self.network_state.get_signer_name(&raw_data.source.to_string());
+              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
               let secure_message = String::from_utf8_lossy(&message.data);
               info!("Secure Message recieved! {}: {}", sender, secure_message);
 
@@ -179,7 +153,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
             NetworkMessageType::ProcessorPubkey => {
               // Create Producer to communicate processor pubkey with Kafka
               info!("Secure Processor Pubkey recieved!");
-              let sender: String = self.network_state.get_signer_name(&raw_data.source.to_string());
+              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
               let secure_message = String::from_utf8_lossy(&message.data);
 
               let reciever_name: String =
@@ -208,10 +182,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
                 .send(
                   BaseRecord::to(&format!(
                     "{}_processor_{}",
-                    &processor_channel_message.signer,
+                    &reciever_name,
                     &processor_channel_message.coin.to_string().to_lowercase()
                   ))
-                  .key(&format!("{}", SignatureMessageType::ProcessorPubkeyToProcessor.to_string()))
+                  .key(&format!("{}_{}", processor_channel_message.signer.to_string(), SignatureMessageType::ProcessorPubkeyToProcessor.to_string()))
                   .payload(&processor_channel_message.pubkey)
                   .partition(0),
                 )
@@ -225,7 +199,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
           error!("Unable to decode message! Due to {:?}", deser.unwrap_err());
         }
       }
-      FloodsubEvent::Subscribed { peer_id, topic: _ } => {
+      GossipsubEvent::Subscribed { peer_id, topic: _ } => {
         // Send our state to new user
         // info!("Sending stage to {}", peer_id);
         let message: NetworkMessage = NetworkMessage {
@@ -236,7 +210,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
         };
         send_response(message, self.responder.clone());
       }
-      FloodsubEvent::Unsubscribed { peer_id, topic: _ } => {
+      GossipsubEvent::Unsubscribed { peer_id, topic: _ } => {
         // After a signers disconnects, remove them from the network state.
         let name =
           self.network_state.signers.remove(&peer_id.to_string()).unwrap_or(String::from("Anon"));
@@ -248,6 +222,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for NetworkConnection {
           .unwrap_or(String::from("Anon"));
         info!("Disconnect from {}", name);
       }
+      GossipsubEvent::GossipsubNotSupported { peer_id } => {},
     }
   }
 }
@@ -321,9 +296,22 @@ impl NetworkProcess {
     // Generate network channel for p2p communicaton
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
 
+    let message_id_fn = |message: &GossipsubMessage| {
+      let mut s = DefaultHasher::new();
+      message.data.hash(&mut s);
+      MessageId::from(s.finish().to_string())
+    };
+
+    let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
+    .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
+    .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
+    .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
+    .build()
+    .expect("Valid config");
+    
     // Create network behaviour using floodsub to broadcast messages.
     let mut behaviour = NetworkConnection {
-      floodsub: Floodsub::new(signer_p2p_address),
+      gossipsub: Gossipsub::new(MessageAuthenticity::Signed(id_keys), gossipsub_config).unwrap(),
       network_state: NetworkState {
         signers: HashMap::from([(signer_p2p_address.to_string(), self.signer_name.to_string())]),
         signer_coordinator_pubkeys: HashMap::new(),
@@ -331,12 +319,11 @@ impl NetworkProcess {
       },
       signer_p2p_address: signer_p2p_address.to_string(),
       responder: response_sender,
-      ping: ping::Ping::new(ping::PingConfig::new().with_keep_alive(true)),
     };
 
     // Create a topic for libp2p channel
-    let topic = Topic::new("coordinator");
-    behaviour.floodsub.subscribe(topic.clone());
+    let topic = IdentTopic::new("coordinator");
+    behaviour.gossipsub.subscribe(&topic.clone()).unwrap();
 
     // Create Swarm
     let mut swarm = Swarm::new(transport, behaviour, signer_p2p_address);
@@ -452,11 +439,11 @@ impl NetworkProcess {
                   }
                   libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, concurrent_dial_errors } => {
                     info!("Connection Established");
-                    swarm.behaviour_mut().floodsub.add_node_to_partial_view(peer_id);
+                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                   },
                   libp2p::swarm::SwarmEvent::ConnectionClosed { peer_id, endpoint, num_established, cause } => {
                     info!("Connection Closed");
-                    swarm.behaviour_mut().floodsub.remove_node_from_partial_view(&peer_id);
+                    swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
                   }
                   libp2p::swarm::SwarmEvent::IncomingConnection { local_addr, send_back_addr } => {
                     info!("Incoming Connection");
@@ -522,9 +509,9 @@ fn send_response(message: NetworkMessage, sender: mpsc::UnboundedSender<NetworkM
 }
 
 /// Send a message using the swarm
-fn send_message(message: &NetworkMessage, swarm: &mut Swarm<NetworkConnection>, topic: &Topic) {
+fn send_message(message: &NetworkMessage, swarm: &mut Swarm<NetworkConnection>, topic: &IdentTopic) {
   let bytes = bincode::serialize(message).unwrap();
-  swarm.behaviour_mut().floodsub.publish(topic.clone(), bytes);
+  swarm.behaviour_mut().gossipsub.publish(topic.clone(), bytes);
 }
 
 // Generates Private / Public key pair

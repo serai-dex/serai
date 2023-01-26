@@ -91,14 +91,14 @@ async fn main() {
   // Initial Heartbeat to Processors
   //  * version check
   //  * binary checksum ??
-  let observer_config = config.clone().get_observer();
-  let observer_kafka_config = config.clone().get_kafka();
-  let observer_name_arg = name_arg.to_string().to_owned();
-  // Start Serai Observer
-  tokio::spawn(async move {
-    let observer_process = observer::ObserverProcess::new(observer_config, observer_kafka_config.clone(), observer_name_arg);
-    observer_process.run().await;
-  });
+  // let observer_config = config.clone().get_observer();
+  // let observer_kafka_config = config.clone().get_kafka();
+  // let observer_name_arg = name_arg.to_string().to_owned();
+  // // Start Serai Observer
+  // tokio::spawn(async move {
+  //   let observer_process = observer::ObserverProcess::new(observer_config, observer_kafka_config.clone(), observer_name_arg);
+  //   observer_process.run().await;
+  // });
 
   // Start Health Monitor
 
