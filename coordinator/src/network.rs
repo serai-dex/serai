@@ -100,12 +100,38 @@ impl NetworkState {
 #[behaviour(event_process = true)]
 struct NetworkConnection {
   gossipsub: Gossipsub,
+  ping: ping::Ping,
   #[behaviour(ignore)]
   network_state: NetworkState,
   #[behaviour(ignore)]
   signer_p2p_address: String,
   #[behaviour(ignore)]
   responder: mpsc::UnboundedSender<NetworkMessage>,
+}
+
+impl NetworkBehaviourEventProcess<PingEvent> for NetworkConnection{
+  fn inject_event(&mut self, event: PingEvent) {
+    match event {
+      PingEvent {
+        peer,
+        result: Ok(PingSuccess::Ping { rtt }),
+      } => {
+        //info!("Ping from {} in {:?}", peer, rtt);
+      }
+      PingEvent {
+        peer,
+        result: Ok(PingSuccess::Pong),
+      } => {
+        //info!("Pong from {}", peer);
+      }
+      PingEvent {
+        peer,
+        result: Err(e),
+      } => {
+        //info!("Ping failed with {} from {}", e, peer);
+      }
+    }
+  }
 }
 
 // Fires event when a message is received.
@@ -312,6 +338,7 @@ impl NetworkProcess {
     // Create network behaviour using floodsub to broadcast messages.
     let mut behaviour = NetworkConnection {
       gossipsub: Gossipsub::new(MessageAuthenticity::Signed(id_keys), gossipsub_config).unwrap(),
+      ping: ping::Ping::new(ping::PingConfig::new().with_keep_alive(true)),
       network_state: NetworkState {
         signers: HashMap::from([(signer_p2p_address.to_string(), self.signer_name.to_string())]),
         signer_coordinator_pubkeys: HashMap::new(),
