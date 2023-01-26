@@ -14,9 +14,16 @@ pub const ADDRESS: SeraiAddress = pallet_address(b"Tokens");
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub enum OutInstruction {
+pub struct OutInstruction {
+  pub address: ExternalAddress,
+  pub data: Option<Data>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum Destination {
   Native(SeraiAddress),
-  External(ExternalAddress, Data),
+  External(OutInstruction),
 }
 
 #[test]

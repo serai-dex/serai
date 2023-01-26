@@ -40,8 +40,8 @@ Serai token. If an Application Call, the encoded call will be executed.
 
 ### Refundable In Instruction
 
-  - `origin` (Option\<ExternalAddress>): Address, from the network of origin,
-which sent coins in.
+  - `origin`      (Option\<ExternalAddress>): Address, from the network of
+origin, which sent coins in.
   - `instruction` (InInstruction):       The action to perform with the incoming
 coins.
 
@@ -53,12 +53,16 @@ if provided.
 
 ### Out Instruction
 
-OutInstruction is an enum of SeraiAddress and (ExternalAddress, Option\<Data>).
+  - `address` (ExternalAddress): Address to transfer the coins included with
+this instruction to.
+  - `data`    (Option<Data>):    Data to include when transferring coins.
 
-Transfer the coins included with this instruction to the specified address with
-the specified data. No validation of external addresses/data is performed
-on-chain. If data is specified for a chain not supporting data, it is silently
-dropped.
+No validation of external addresses/data is performed on-chain. If data is
+specified for a chain not supporting data, it is silently dropped.
+
+### Destination
+
+Destination is an enum of SeraiAddress and OutInstruction.
 
 ### Shorthand
 
@@ -75,7 +79,7 @@ covered by Shorthand.
   - `origin`  (Option\<ExternalAddress>): Refundable In Instruction's `origin`.
   - `coin`    (Coin):                     Coin to swap funds for.
   - `minimum` (Amount):                   Minimum amount of `coin` to receive.
-  - `out`     (Out Instruction):          Final destination for funds.
+  - `out`     (Destination):              Final destination for funds.
 
 which expands to:
 
