@@ -1,4 +1,7 @@
-use core::ops::{Add, Sub, Mul};
+use core::{
+  ops::{Add, Sub, Mul},
+  fmt::Debug,
+};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
@@ -38,4 +41,13 @@ impl Mul for Amount {
   fn mul(self, other: Amount) -> Amount {
     Amount(self.0.checked_mul(other.0).unwrap())
   }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct WithAmount<
+  T: Clone + PartialEq + Eq + Debug + Encode + Decode + MaxEncodedLen + TypeInfo,
+> {
+  pub data: T,
+  pub amount: Amount,
 }

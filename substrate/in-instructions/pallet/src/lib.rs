@@ -13,7 +13,7 @@ use sp_inherents::{InherentIdentifier, IsFatalError};
 
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::{BlockNumber, BlockHash, Coin, Amount, Balance};
+use serai_primitives::{BlockNumber, BlockHash, Coin, WithAmount, Balance};
 
 pub use in_instructions_primitives as primitives;
 use primitives::InInstruction;
@@ -24,7 +24,7 @@ pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Batch {
   pub id: BlockHash,
-  pub instructions: Vec<InInstruction>,
+  pub instructions: Vec<WithAmount<InInstruction>>,
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
@@ -126,11 +126,11 @@ pub mod pallet {
   }
 
   impl<T: Config> Pallet<T> {
-    fn execute(coin: Coin, instruction: InInstruction) -> Result<(), ()> {
-      match instruction {
+    fn execute(coin: Coin, instruction: WithAmount<InInstruction>) -> Result<(), ()> {
+      match instruction.data {
         InInstruction::Transfer(address) => {
-          Tokens::<T>::mint(address, Balance { coin, amount: Amount(100) })
-        } // TODO: Amount,
+          Tokens::<T>::mint(address, Balance { coin, amount: instruction.amount })
+        }
         _ => panic!("unsupported instruction"),
       }
       Ok(())

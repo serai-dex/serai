@@ -7,7 +7,7 @@ use serai_runtime::in_instructions::{Batch, Update};
 use jsonrpsee_server::RpcModule;
 
 use serai_client::{
-  primitives::{BITCOIN, BlockNumber, BlockHash, SeraiAddress, Amount, Balance},
+  primitives::{BITCOIN, BlockNumber, BlockHash, SeraiAddress, Amount, WithAmount, Balance},
   tokens::TokensEvent,
   in_instructions::{primitives::InInstruction, InInstructionsEvent},
   Serai,
@@ -21,7 +21,7 @@ serai_test!(
     let fake_block_hash = BlockHash([0xaa; 32]);
     let fake_block_number = BlockNumber(123);
     let address = SeraiAddress::from_raw([0xff; 32]);
-    let amount = Amount(100);
+    let amount = Amount(101);
 
     let fake_block_number_clone = fake_block_number;
     let address_clone = address;
@@ -30,7 +30,7 @@ serai_test!(
       .register_async_method("processor_coinUpdates", move |_, _| async move {
         let batch = Batch {
           id: BlockHash([0xaa; 32]),
-          instructions: vec![InInstruction::Transfer(address_clone)],
+          instructions: vec![WithAmount { data: InInstruction::Transfer(address_clone), amount }],
         };
 
         Ok(vec![Some(Update { block_number: fake_block_number_clone, batches: vec![batch] })])
