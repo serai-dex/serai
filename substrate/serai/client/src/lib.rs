@@ -1,10 +1,17 @@
 use thiserror::Error;
 
 use scale::Decode;
-use serde::Serialize;
-use scale_value::Value;
+mod scale_value;
+pub(crate) use crate::scale_value::{scale_value, scale_composite};
+use ::scale_value::Value;
 
-use subxt::{tx::BaseExtrinsicParams, Config as SubxtConfig, OnlineClient};
+use subxt::{
+  utils::Encoded,
+  tx::{
+    Signer, DynamicTxPayload, PolkadotExtrinsicParams, PolkadotExtrinsicParamsBuilder, TxClient,
+  },
+  Config as SubxtConfig, OnlineClient,
+};
 
 pub use serai_primitives as primitives;
 use primitives::{Signature, SeraiAddress};
@@ -16,12 +23,8 @@ use serai_runtime::{
 pub mod tokens;
 pub mod in_instructions;
 
-fn scale_value<K: Serialize>(key: K) -> Value {
-  scale_value::serde::to_value(key).unwrap()
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct SeraiConfig;
+pub struct SeraiConfig;
 impl SubxtConfig for SeraiConfig {
   type BlockNumber = <Runtime as Config>::BlockNumber;
 
@@ -36,7 +39,7 @@ impl SubxtConfig for SeraiConfig {
   type Header = <Runtime as Config>::Header;
   type Signature = Signature;
 
-  type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, ()>;
+  type ExtrinsicParams = PolkadotExtrinsicParams<SeraiConfig>;
 }
 
 #[derive(Clone, Error, Debug)]
@@ -69,10 +72,7 @@ impl Serai {
     storage
       .fetch(&address, Some(block.into()))
       .await
-      .map_err(|e| {
-        dbg!(e);
-        SeraiError::RpcError
-      })?
+      .map_err(|_| SeraiError::RpcError)?
       .map(|res| R::decode(&mut res.encoded()).map_err(|_| SeraiError::InvalidRuntime))
       .transpose()
   }
@@ -101,5 +101,22 @@ impl Serai {
 
   pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
     Ok(self.0.rpc().finalized_head().await.map_err(|_| SeraiError::RpcError)?.into())
+  }
+
+  pub fn sign<S: Send + Sync + Signer<SeraiConfig>>(
+    &self,
+    signer: &S,
+    payload: &DynamicTxPayload<'static>,
+    nonce: u32,
+    params: PolkadotExtrinsicParamsBuilder<SeraiConfig>,
+  ) -> Result<Encoded, SeraiError> {
+    TxClient::new(self.0.offline())
+      .create_signed_with_nonce(payload, signer, nonce, params)
+      .map(|tx| Encoded(tx.into_encoded()))
+      .map_err(|_| SeraiError::InvalidRuntime)
+  }
+
+  pub async fn publish(&self, tx: &Encoded) -> Result<[u8; 32], SeraiError> {
+    self.0.rpc().submit_extrinsic(tx).await.map(Into::into).map_err(|_| SeraiError::RpcError)
   }
 }

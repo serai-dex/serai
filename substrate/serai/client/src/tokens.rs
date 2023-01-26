@@ -1,14 +1,16 @@
-use pallet_assets::{AssetDetails, AssetAccount};
-
 use serai_runtime::{
-  primitives::{SeraiAddress, SubstrateAmount, Amount, Coin},
+  primitives::{SeraiAddress, SubstrateAmount, Amount, Coin, Balance},
+  assets::{AssetDetails, AssetAccount},
   tokens, Tokens, Runtime,
 };
 pub use tokens::primitives;
+use primitives::OutInstruction;
 
-use crate::{Serai, SeraiError, scale_value};
+use subxt::tx::{self, DynamicTxPayload};
 
-// const PALLET: &str = "Tokens";
+use crate::{Serai, SeraiError, scale_value, scale_composite};
+
+const PALLET: &str = "Tokens";
 
 pub type TokensEvent = tokens::Event<Runtime>;
 
@@ -43,14 +45,24 @@ impl Serai {
         .storage::<AssetAccount<SubstrateAmount, SubstrateAmount, ()>>(
           "Assets",
           "Account",
-          // For some reason, scale_value address converts it to a string
-          // This preserves the intended [u8; 32] API
-          Some(vec![scale_value(coin), scale_value(address.0)]),
+          Some(vec![scale_value(coin), scale_value(address)]),
           block,
         )
         .await?
         .map(|account| account.balance)
         .unwrap_or(0),
     ))
+  }
+
+  pub fn burn(balance: Balance, instruction: OutInstruction) -> DynamicTxPayload<'static> {
+    tx::dynamic(
+      PALLET,
+      "burn",
+      scale_composite(tokens::Call::<Runtime>::burn { balance, instruction }),
+    )
+  }
+
+  pub async fn get_burn_events(&self, block: [u8; 32]) -> Result<Vec<TokensEvent>, SeraiError> {
+    self.events::<Tokens, _>(block, |event| matches!(event, TokensEvent::Burn { .. })).await
   }
 }
