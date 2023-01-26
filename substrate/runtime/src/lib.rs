@@ -34,12 +34,12 @@ use sp_version::NativeVersion;
 
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
-  traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
+  traits::{Convert, OpaqueKeys, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{SubstrateAmount, PublicKey, Signature, SeraiAddress, Coin};
+use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount, Coin};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64, Contains},
@@ -162,9 +162,9 @@ impl system::Config for Runtime {
   type BaseCallFilter = CallFilter;
   type BlockWeights = BlockWeights;
   type BlockLength = BlockLength;
-  type AccountId = SeraiAddress;
+  type AccountId = PublicKey;
   type RuntimeCall = RuntimeCall;
-  type Lookup = IdentityLookup<SeraiAddress>;
+  type Lookup = AccountLookup;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
@@ -219,8 +219,8 @@ impl assets::Config for Runtime {
   type StringLimit = ConstU32<32>;
 
   // Don't allow anyone to create assets
-  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<SeraiAddress>>;
-  type ForceOrigin = system::EnsureRoot<SeraiAddress>;
+  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<PublicKey>>;
+  type ForceOrigin = system::EnsureRoot<PublicKey>;
 
   // Don't charge fees nor kill accounts
   type RemoveItemsLimit = ConstU32<0>;
@@ -253,8 +253,8 @@ type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSIO
 
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
-  fn convert(key: PublicKey) -> Option<PublicKey> {
-    Some(key)
+  fn convert(address: PublicKey) -> Option<PublicKey> {
+    Some(address)
   }
 }
 
@@ -264,7 +264,7 @@ impl validator_sets::Config for Runtime {
 
 impl session::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type ValidatorId = SeraiAddress;
+  type ValidatorId = PublicKey;
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Sessions;
   type NextSessionRotation = Sessions;
@@ -410,12 +410,12 @@ sp_api::impl_runtime_apis! {
     }
 
     fn validators() -> Vec<PublicKey> {
-      Session::validators()
+      Session::validators().iter().map(|validator| PublicKey::from_raw(validator.0)).collect()
     }
   }
 
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, SeraiAddress, Index> for Runtime {
-    fn account_nonce(account: SeraiAddress) -> Index {
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Index> for Runtime {
+    fn account_nonce(account: PublicKey) -> Index {
       System::account_nonce(account)
     }
   }

@@ -6,21 +6,19 @@ pub use tokens_primitives as primitives;
 
 #[frame_support::pallet]
 pub mod pallet {
-  use sp_runtime::traits::IdentityLookup;
-
   use frame_support::pallet_prelude::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
 
   use pallet_assets::{Config as AssetsConfig, Pallet as AssetsPallet};
 
-  use serai_primitives::{SubstrateAmount, Coin, Balance, SeraiAddress};
+  use serai_primitives::{SubstrateAmount, Coin, Balance, PublicKey, SeraiAddress, AccountLookup};
   use primitives::{ADDRESS, OutInstruction};
 
   use super::*;
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<AccountId = SeraiAddress, Lookup = IdentityLookup<SeraiAddress>>
+    frame_system::Config<AccountId = PublicKey, Lookup = AccountLookup>
     + AssetsConfig<AssetIdParameter = Coin, Balance = SubstrateAmount>
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -46,7 +44,7 @@ pub mod pallet {
       instruction: OutInstruction,
     ) -> DispatchResult {
       AssetsPallet::<T>::burn(
-        RawOrigin::Signed(ADDRESS).into(),
+        RawOrigin::Signed(ADDRESS.into()).into(),
         balance.coin,
         address,
         balance.amount.0,
@@ -58,7 +56,7 @@ pub mod pallet {
     pub fn mint(address: SeraiAddress, balance: Balance) {
       // TODO: Prevent minting when it'd cause an amount exceeding the bond
       AssetsPallet::<T>::mint(
-        RawOrigin::Signed(ADDRESS).into(),
+        RawOrigin::Signed(ADDRESS.into()).into(),
         balance.coin,
         address,
         balance.amount.0,
@@ -77,7 +75,7 @@ pub mod pallet {
       balance: Balance,
       instruction: OutInstruction,
     ) -> DispatchResult {
-      Self::burn_internal(ensure_signed(origin)?, balance, instruction)
+      Self::burn_internal(ensure_signed(origin)?.into(), balance, instruction)
     }
   }
 }

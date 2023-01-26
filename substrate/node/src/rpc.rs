@@ -7,7 +7,7 @@ use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 
 use serai_runtime::{
-  primitives::{SubstrateAmount, SeraiAddress},
+  primitives::{SubstrateAmount, PublicKey},
   opaque::Block,
   Index,
 };
@@ -33,7 +33,7 @@ pub fn create_full<
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, SeraiAddress, Index>
+  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, PublicKey, Index>
     + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, SubstrateAmount>
     + BlockBuilder<Block>,
 {

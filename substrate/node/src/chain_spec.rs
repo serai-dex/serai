@@ -1,4 +1,4 @@
-use sp_core::{Pair as PairTrait, sr25519::Pair};
+use sp_core::Pair as PairTrait;
 
 use sc_service::ChainType;
 
@@ -10,21 +10,17 @@ use serai_runtime::{
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
-fn insecure_pair_from_name(name: &'static str) -> Pair {
-  Pair::from_string(&format!("//{name}"), None).unwrap()
-}
-
-fn address_from_name(name: &'static str) -> SeraiAddress {
+fn account_from_name(name: &'static str) -> PublicKey {
   insecure_pair_from_name(name).public()
 }
 
 fn testnet_genesis(
   wasm_binary: &[u8],
   validators: &[&'static str],
-  endowed_accounts: Vec<SeraiAddress>,
+  endowed_accounts: Vec<PublicKey>,
 ) -> GenesisConfig {
   let session_key = |name| {
-    let key = address_from_name(name);
+    let key = account_from_name(name);
     (key, key, SessionKeys { tendermint: Public::from(key) })
   };
 
@@ -39,7 +35,7 @@ fn testnet_genesis(
     assets: AssetsConfig {
       assets: [BITCOIN, ETHER, DAI, MONERO]
         .iter()
-        .map(|coin| (*coin, TOKENS_ADDRESS, true, 1))
+        .map(|coin| (*coin, TOKENS_ADDRESS.into(), true, 1))
         .collect(),
       metadata: vec![
         (BITCOIN, b"Bitcoin".to_vec(), b"BTC".to_vec(), 8),
@@ -55,7 +51,7 @@ fn testnet_genesis(
     validator_sets: ValidatorSetsConfig {
       bond: Amount(1_000_000 * 10_u64.pow(8)),
       coins: vec![BITCOIN, ETHER, DAI, MONERO],
-      participants: validators.iter().map(|name| address_from_name(name)).collect(),
+      participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },
   }
 }
@@ -74,18 +70,18 @@ pub fn development_config() -> Result<ChainSpec, &'static str> {
         wasm_binary,
         &["Alice"],
         vec![
-          address_from_name("Alice"),
-          address_from_name("Bob"),
-          address_from_name("Charlie"),
-          address_from_name("Dave"),
-          address_from_name("Eve"),
-          address_from_name("Ferdie"),
-          address_from_name("Alice//stash"),
-          address_from_name("Bob//stash"),
-          address_from_name("Charlie//stash"),
-          address_from_name("Dave//stash"),
-          address_from_name("Eve//stash"),
-          address_from_name("Ferdie//stash"),
+          account_from_name("Alice"),
+          account_from_name("Bob"),
+          account_from_name("Charlie"),
+          account_from_name("Dave"),
+          account_from_name("Eve"),
+          account_from_name("Ferdie"),
+          account_from_name("Alice//stash"),
+          account_from_name("Bob//stash"),
+          account_from_name("Charlie//stash"),
+          account_from_name("Dave//stash"),
+          account_from_name("Eve//stash"),
+          account_from_name("Ferdie//stash"),
         ],
       )
     },
@@ -118,18 +114,18 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
         wasm_binary,
         &["Alice", "Bob", "Charlie"],
         vec![
-          address_from_name("Alice"),
-          address_from_name("Bob"),
-          address_from_name("Charlie"),
-          address_from_name("Dave"),
-          address_from_name("Eve"),
-          address_from_name("Ferdie"),
-          address_from_name("Alice//stash"),
-          address_from_name("Bob//stash"),
-          address_from_name("Charlie//stash"),
-          address_from_name("Dave//stash"),
-          address_from_name("Eve//stash"),
-          address_from_name("Ferdie//stash"),
+          account_from_name("Alice"),
+          account_from_name("Bob"),
+          account_from_name("Charlie"),
+          account_from_name("Dave"),
+          account_from_name("Eve"),
+          account_from_name("Ferdie"),
+          account_from_name("Alice//stash"),
+          account_from_name("Bob//stash"),
+          account_from_name("Charlie//stash"),
+          account_from_name("Dave//stash"),
+          account_from_name("Eve//stash"),
+          account_from_name("Ferdie//stash"),
         ],
       )
     },

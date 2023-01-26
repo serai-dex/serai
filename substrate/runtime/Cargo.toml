@@ -79,9 +79,10 @@ std = [
   "serai-primitives/std",
 
   "pallet-balances/std",
-  "pallet-assets/std",
   "pallet-transaction-payment/std",
 
+  "pallet-assets/std",
+  "tokens-pallet/std",
   "in-instructions-pallet/std",
 
   "validator-sets-pallet/std",
