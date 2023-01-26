@@ -1883,6 +1883,7 @@ dependencies = [
  "schnorr-signatures",
  "subtle",
  "thiserror",
+ "tokio",
  "zeroize",
 ]
 

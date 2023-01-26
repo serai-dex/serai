@@ -32,6 +32,8 @@ ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.2" }
 dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
 
+tokio = { version = "1", features = ["full"] }
+
 [dev-dependencies]
 ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std", "ristretto"] }
 

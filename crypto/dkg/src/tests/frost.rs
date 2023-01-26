@@ -93,7 +93,7 @@ pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
     .drain()
     .map(|(i, machine)| {
       let our_secret_shares = generate_secret_shares(&secret_shares, i);
-      let these_keys = machine.calculate_share(rng, our_secret_shares).unwrap().complete();
+      let these_keys = machine.calculate_share(rng, our_secret_shares).unwrap().0.complete();
 
       // Verify the verification_shares are agreed upon
       if verification_shares.is_none() {
@@ -157,7 +157,7 @@ mod literal {
           blame = Some(None);
           None
         } else {
-          Some(machine.unwrap())
+          Some(machine.unwrap().0)
         }
       })
       .collect::<Vec<_>>();
@@ -191,7 +191,7 @@ mod literal {
           });
           None
         } else {
-          Some(machine.unwrap())
+          Some(machine.unwrap().0)
         }
       })
       .collect::<Vec<_>>();
@@ -221,7 +221,7 @@ mod literal {
           });
           None
         } else {
-          Some(machine.unwrap())
+          Some(machine.unwrap().0)
         }
       })
       .collect::<Vec<_>>();
@@ -255,7 +255,7 @@ mod literal {
           });
           None
         } else {
-          Some(machine.unwrap())
+          Some(machine.unwrap().0)
         }
       })
       .collect::<Vec<_>>();
@@ -288,7 +288,7 @@ mod literal {
           });
           None
         } else {
-          Some(machine.unwrap())
+          Some(machine.unwrap().0)
         }
       })
       .collect::<Vec<_>>();
