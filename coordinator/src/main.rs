@@ -97,7 +97,7 @@ async fn main() {
   // Start Serai Observer
   tokio::spawn(async move {
     let observer_process = observer::ObserverProcess::new(observer_config, observer_kafka_config.clone(), observer_name_arg);
-    observer_process.run().await.unwrap();
+    observer_process.run().await;
   });
 
   // Start Health Monitor
