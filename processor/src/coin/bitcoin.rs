@@ -9,7 +9,7 @@ use frost::{
 };
 
 use bitcoin::{
-  Block as BBlock, OutPoint,
+  Block, OutPoint,
   util::address::Address, consensus::encode,
   Txid, schnorr::TweakedPublicKey,
   XOnlyPublicKey, SchnorrSighashType,
@@ -31,12 +31,10 @@ use crate::{
   coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin}
 };
 
-#[derive(Clone, Debug)]
-pub struct Block([u8; 32], BBlock);
 impl BlockTrait for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    self.0
+    self.block_hash().as_ref().try_into().unwrap()
   }
 }
 
@@ -143,7 +141,7 @@ impl Coin for Bitcoin {
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
     let block_hash = self.rpc.get_block_hash(number - 1).await.unwrap();
     let info = self.rpc.get_block(&block_hash).await.unwrap();
-    Ok(Block(info.block_hash().as_ref().try_into().unwrap(),info))
+    Ok(info)
   }
 
   async fn get_outputs(
@@ -152,7 +150,7 @@ impl Coin for Bitcoin {
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let main_addr = self.address(key);
-    let block_details = self.rpc.get_block(&block.1.block_hash()).await.unwrap();
+    let block_details = self.rpc.get_block(&block.block_hash()).await.unwrap();
     let mut outputs = Vec::new();
     for one_transaction in block_details.txdata {
       for (index, output_tx) in one_transaction.output.iter().enumerate() {
@@ -336,7 +334,7 @@ impl Coin for Bitcoin {
     let block_number = new_block + 1;
     let active_block = self.get_block(block_number).await.unwrap();
     
-    let block_details = self.rpc.get_block(&active_block.1.block_hash()).await.unwrap();
+    let block_details = self.rpc.get_block(&active_block.block_hash()).await.unwrap();
     let first_tx = &block_details.txdata[0];
     let mut amount = 0;
     for (index, output_tx) in first_tx.output.iter().enumerate() {
@@ -376,5 +374,7 @@ impl Coin for Bitcoin {
     new_transaction.input[0].witness = signed_witness;
 
     let _result = self.rpc.send_raw_transaction(&new_transaction).await.unwrap();
+
+    println!("sent finished");
   }
 }
