@@ -365,7 +365,7 @@ impl Coin for Bitcoin {
     };
     
     let mut sig_hasher = SighashCache::new(&new_transaction);
-    let script_code = Address::p2pkh(&public_key, Network::Testnet).script_pubkey();
+    let script_code = Address::p2pkh(&public_key, Network::Regtest).script_pubkey();
     let transactions_sighash = sig_hasher.segwit_signature_hash(0, &script_code, amount, EcdsaSighashType::All).unwrap();
     let signed_der = secp.sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner).serialize_der();
     let mut signed_witness = Witness::new();
