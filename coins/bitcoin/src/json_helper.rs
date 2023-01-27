@@ -50,13 +50,3 @@ where
 {
     Ok(into_json(Some(opt))?)
 }
-
-pub trait RawTx: Sized + Clone {
-    fn raw_hex(self) -> String;
-}
-
-impl<'a> RawTx for &'a Transaction {
-    fn raw_hex(self) -> String {
-        bitcoin::consensus::encode::serialize(self).to_vec().to_hex()
-    }
-}

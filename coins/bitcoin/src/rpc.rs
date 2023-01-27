@@ -113,7 +113,7 @@ impl Rpc {
 
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid, RpcError>
   {
-    let mut ext_args = [tx.raw_hex().into()];
+    let mut ext_args = [bitcoin::consensus::encode::serialize(tx).to_vec().to_hex().into()];
     let args = handle_defaults(&mut ext_args, &[Null]);
     Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction".to_string(), &args).await?)
   }
