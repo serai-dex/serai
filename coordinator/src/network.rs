@@ -1,4 +1,9 @@
-use std::{collections::{HashMap, hash_map::DefaultHasher}, time::Duration, env, io, fmt, str, hash::{Hash, Hasher}};
+use std::{
+  collections::{HashMap, hash_map::DefaultHasher},
+  time::Duration,
+  env, io, fmt, str,
+  hash::{Hash, Hasher},
+};
 use group::ff::PrimeField;
 use message_box::{MessageBox, PublicKey};
 use tokio::{sync::mpsc, signal::ctrl_c};
@@ -7,13 +12,17 @@ use log::{error, info};
 use futures::StreamExt;
 use libp2p::{
   core::{upgrade},
-  gossipsub::{Gossipsub, GossipsubEvent, IdentTopic, self, ValidationMode, GossipsubMessage, MessageId, MessageAuthenticity},
+  gossipsub::{
+    Gossipsub, GossipsubEvent, IdentTopic, self, ValidationMode, GossipsubMessage, MessageId,
+    MessageAuthenticity,
+  },
   identity::{self},
   mplex,
   noise::{Keypair, NoiseConfig, X25519Spec},
   swarm::NetworkBehaviourEventProcess,
   tcp::TcpConfig,
-  NetworkBehaviour, PeerId, Swarm, Transport, Multiaddr, ping::{self, PingSuccess}
+  NetworkBehaviour, PeerId, Swarm, Transport, Multiaddr,
+  ping::{self, PingSuccess},
 };
 use crate::network::ping::PingEvent;
 
@@ -109,25 +118,16 @@ struct NetworkConnection {
   responder: mpsc::UnboundedSender<NetworkMessage>,
 }
 
-impl NetworkBehaviourEventProcess<PingEvent> for NetworkConnection{
+impl NetworkBehaviourEventProcess<PingEvent> for NetworkConnection {
   fn inject_event(&mut self, event: PingEvent) {
     match event {
-      PingEvent {
-        peer,
-        result: Ok(PingSuccess::Ping { rtt }),
-      } => {
+      PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
         //info!("Ping from {} in {:?}", peer, rtt);
       }
-      PingEvent {
-        peer,
-        result: Ok(PingSuccess::Pong),
-      } => {
+      PingEvent { peer, result: Ok(PingSuccess::Pong) } => {
         //info!("Pong from {}", peer);
       }
-      PingEvent {
-        peer,
-        result: Err(e),
-      } => {
+      PingEvent { peer, result: Err(e) } => {
         //info!("Ping failed with {} from {}", e, peer);
       }
     }
@@ -157,14 +157,18 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
             }
             // Coordinator has received a signers coordinator pubkey used for message box.
             NetworkMessageType::CoordinatorPubkey => {
-              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
+              let sender: String =
+                self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
               let pubkey = String::from_utf8_lossy(&message.data);
               info!("Coordinator Pubkey recieved! {}: {}", sender, pubkey);
-              self.network_state.signer_coordinator_pubkeys.insert(sender, pubkey.to_string());
+              if !self.network_state.signer_coordinator_pubkeys.contains_key(&sender) {
+                self.network_state.signer_coordinator_pubkeys.insert(sender, pubkey.to_string());
+              }
             }
             // Coordinator has received a secure message from a signer.
             NetworkMessageType::CoordinatorSecure => {
-              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
+              let sender: String =
+                self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
               let secure_message = String::from_utf8_lossy(&message.data);
               info!("Secure Message recieved! {}: {}", sender, secure_message);
 
@@ -179,7 +183,8 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
             NetworkMessageType::ProcessorPubkey => {
               // Create Producer to communicate processor pubkey with Kafka
               info!("Secure Processor Pubkey recieved!");
-              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
+              let sender: String =
+                self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
               let secure_message = String::from_utf8_lossy(&message.data);
 
               let reciever_name: String =
@@ -211,7 +216,11 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
                     &reciever_name,
                     &processor_channel_message.coin.to_string().to_lowercase()
                   ))
-                  .key(&format!("{}_{}", processor_channel_message.signer.to_string(), SignatureMessageType::ProcessorPubkeyToProcessor.to_string()))
+                  .key(&format!(
+                    "{}_{}",
+                    processor_channel_message.signer.to_string(),
+                    SignatureMessageType::ProcessorPubkeyToProcessor.to_string()
+                  ))
                   .payload(&processor_channel_message.pubkey)
                   .partition(0),
                 )
@@ -248,7 +257,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
           .unwrap_or(String::from("Anon"));
         info!("Disconnect from {}", name);
       }
-      GossipsubEvent::GossipsubNotSupported { peer_id } => {},
+      GossipsubEvent::GossipsubNotSupported { peer_id } => {}
     }
   }
 }
@@ -329,12 +338,12 @@ impl NetworkProcess {
     };
 
     let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
-    .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
-    .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
-    .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
-    .build()
-    .expect("Valid config");
-    
+      .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
+      .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
+      .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
+      .build()
+      .expect("Valid config");
+
     // Create network behaviour using floodsub to broadcast messages.
     let mut behaviour = NetworkConnection {
       gossipsub: Gossipsub::new(MessageAuthenticity::Signed(id_keys), gossipsub_config).unwrap(),
@@ -434,10 +443,6 @@ impl NetworkProcess {
           // Sending messages immdediatly after connection is established without a tick causes the messages to be dropped
           // Check if we need to communicate pubkey to new signers
           if &swarm.behaviour_mut().network_state.signers.len() > &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len() {
-            let signers = swarm.behaviour_mut().network_state.signers.clone();
-            let signer_pubkeys = swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.clone();
-            for (signer_p2p_address, name) in signers {
-              if !signer_pubkeys.contains_key(&name) {
                 let receiver_pub_key = &mut self.signer_name.to_string().to_uppercase();
                 receiver_pub_key.push_str("_PUB");
 
@@ -446,17 +451,15 @@ impl NetworkProcess {
                 let message = NetworkMessage {
                   message_type: NetworkMessageType::CoordinatorPubkey,
                   data: msg.as_bytes().to_vec(),
-                  receiver_p2p_address: Some(signer_p2p_address.to_string()),
+                  receiver_p2p_address: None,
                   sender_p2p_address: swarm.behaviour_mut().signer_p2p_address.to_owned(),
                 };
-                info!("Sending pubkey to new signer: {} from: {}", &name, &self.signer_name);
+
+                info!("Broadcasting Coordinator Pubkey");
                 send_message(&message, &mut swarm, &topic);
                 // Small delay for message processing
                 tokio::time::sleep(Duration::from_millis(100)).await;
-              }
-            }
           }
-
         }
         event = swarm.select_next_some() => {
                 //println!("Swarm event: {:?}", &event);
@@ -536,9 +539,13 @@ fn send_response(message: NetworkMessage, sender: mpsc::UnboundedSender<NetworkM
 }
 
 /// Send a message using the swarm
-fn send_message(message: &NetworkMessage, swarm: &mut Swarm<NetworkConnection>, topic: &IdentTopic) {
+fn send_message(
+  message: &NetworkMessage,
+  swarm: &mut Swarm<NetworkConnection>,
+  topic: &IdentTopic,
+) {
   let bytes = bincode::serialize(message).unwrap();
-  swarm.behaviour_mut().gossipsub.publish(topic.clone(), bytes);
+  swarm.behaviour_mut().gossipsub.publish(topic.clone(), bytes).unwrap();
 }
 
 // Generates Private / Public key pair
