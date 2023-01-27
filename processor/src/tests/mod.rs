@@ -106,9 +106,7 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
     futures.push(wallet.attempt_send(network, signable));
   }
   
-  if futures.len() > 0 {
-    println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
-  }
+  println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
 }
 
 #[tokio::test]

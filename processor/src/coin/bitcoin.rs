@@ -374,7 +374,5 @@ impl Coin for Bitcoin {
     new_transaction.input[0].witness = signed_witness;
 
     let _result = self.rpc.send_raw_transaction(&new_transaction).await.unwrap();
-
-    println!("sent finished");
   }
 }
