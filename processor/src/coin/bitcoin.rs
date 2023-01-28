@@ -48,16 +48,6 @@ impl Fee {
 }
 
 #[derive(Clone, Debug)]
-pub struct Bitcoin {
-  pub(crate) rpc: Rpc,
-}
-impl Bitcoin {
-  pub async fn new(url: String) -> Bitcoin {
-    Bitcoin { rpc: Rpc::new(url).unwrap() }
-  }
-}
-
-#[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
 impl From<SpendableOutput> for Output {
   fn from(output: SpendableOutput) -> Output {
@@ -95,6 +85,29 @@ pub struct SignableTransaction {
   transcript: RecommendedTranscript,
   number: usize,
   actual: BSignableTransaction,
+}
+
+#[derive(Clone, Debug)]
+pub struct Bitcoin {
+  pub(crate) rpc: Rpc,
+}
+impl Bitcoin {
+  pub async fn new(url: String) -> Bitcoin {
+    Bitcoin { rpc: Rpc::new(url).unwrap() }
+  }
+
+  #[cfg(test)]
+  fn test_address_with_key() -> (bitcoin::PrivateKey, bitcoin::PublicKey, Address) {
+    use bitcoin::{PrivateKey, PublicKey, Network};
+    use secp256k1::{rand, Secp256k1, SecretKey};
+
+    let secp = Secp256k1::new();
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    let private_key = PrivateKey::new(secret_key, Network::Regtest);
+    let public_key = PublicKey::from_private_key(&secp, &private_key);
+    let address = Address::p2pkh(&public_key, Network::Regtest);
+    (private_key, public_key, address)
+  }
 }
 
 #[async_trait]
@@ -314,20 +327,15 @@ impl Coin for Bitcoin {
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
     use bitcoin::{
-      Address, PrivateKey, PublicKey, OutPoint, Sequence, Witness, Script, PackedLockTime, Network,
+      OutPoint, Sequence, Witness, Script, PackedLockTime,
       blockdata::{
         script::Builder,
         transaction::{TxIn, TxOut, Transaction},
       },
-      secp256k1::{rand, Secp256k1, Message, SecretKey},
+      secp256k1::{Secp256k1, Message},
     };
 
-    let secp = Secp256k1::new();
-    let secret_key = SecretKey::new(&mut rand::thread_rng());
-    let private_key = PrivateKey::new(secret_key, Network::Regtest);
-    let public_key = PublicKey::from_private_key(&secp, &private_key);
-
-    let main_addr = Address::p2pkh(&public_key, Network::Regtest);
+    let (private_key, public_key, main_addr) = Self::test_address_with_key();
 
     let mut vin_list = Vec::new();
     let mut vout_list = Vec::new();
@@ -368,6 +376,7 @@ impl Coin for Bitcoin {
     let mut new_transaction =
       Transaction { version: 2, lock_time: PackedLockTime(0), input: vin_list, output: vout_list };
 
+    let secp = Secp256k1::new();
     let transactions_sighash = new_transaction.signature_hash(0, &main_addr.script_pubkey(), 1);
     let mut signed_der = secp
       .sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner)
