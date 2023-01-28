@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use scale::Decode;
+use scale::{Encode, Decode};
 mod scale_value;
 pub(crate) use crate::scale_value::{scale_value, scale_composite};
 use ::scale_value::Value;
@@ -8,7 +8,7 @@ use ::scale_value::Value;
 use subxt::{
   utils::Encoded,
   tx::{
-    Signer, DynamicTxPayload, PolkadotExtrinsicParams, PolkadotExtrinsicParamsBuilder, TxClient,
+    Signer, DynamicTxPayload, BaseExtrinsicParams, BaseExtrinsicParamsBuilder, TxClient,
   },
   Config as SubxtConfig, OnlineClient,
 };
@@ -22,6 +22,12 @@ use serai_runtime::{
 
 pub mod tokens;
 pub mod in_instructions;
+
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Encode, Decode)]
+pub struct Tip {
+  #[codec(compact)]
+  pub tip: u64,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SeraiConfig;
@@ -39,7 +45,7 @@ impl SubxtConfig for SeraiConfig {
   type Header = <Runtime as Config>::Header;
   type Signature = Signature;
 
-  type ExtrinsicParams = PolkadotExtrinsicParams<SeraiConfig>;
+  type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, Tip>;
 }
 
 #[derive(Clone, Error, Debug)]
@@ -108,7 +114,7 @@ impl Serai {
     signer: &S,
     payload: &DynamicTxPayload<'static>,
     nonce: u32,
-    params: PolkadotExtrinsicParamsBuilder<SeraiConfig>,
+    params: BaseExtrinsicParamsBuilder<SeraiConfig, Tip>,
   ) -> Result<Encoded, SeraiError> {
     TxClient::new(self.0.offline())
       .create_signed_with_nonce(payload, signer, nonce, params)

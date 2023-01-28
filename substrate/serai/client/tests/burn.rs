@@ -7,7 +7,7 @@ use serai_runtime::in_instructions::{Batch, Update};
 
 use tokio::time::sleep;
 
-use subxt::tx::{PolkadotExtrinsicParamsBuilder, PairSigner};
+use subxt::tx::{BaseExtrinsicParamsBuilder, PairSigner};
 
 use serai_client::{
   primitives::{
@@ -59,7 +59,7 @@ serai_test!(
 
     let signer = PairSigner::new(pair);
     serai
-      .publish(&serai.sign(&signer, &burn, 0, PolkadotExtrinsicParamsBuilder::new()).unwrap())
+      .publish(&serai.sign(&signer, &burn, 0, BaseExtrinsicParamsBuilder::new()).unwrap())
       .await
       .unwrap();
 
