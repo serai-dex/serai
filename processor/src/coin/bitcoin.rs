@@ -149,7 +149,7 @@ impl Coin for Bitcoin {
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
-    let block_hash = self.rpc.get_block_hash(number - 1).await.unwrap();
+    let block_hash = self.rpc.get_block_hash(number).await.unwrap();
     let info = self.rpc.get_block(&block_hash).await.unwrap();
     Ok(info)
   }
@@ -344,17 +344,13 @@ impl Coin for Bitcoin {
       )
       .await
       .unwrap();
-
+    
     for _ in 0..100 {
       self.mine_block().await;
     }
 
-    let block_number = new_block + 1;
-    let active_block = self.get_block(block_number).await.unwrap();
-
-    let block_details = self.rpc.get_block(&active_block.block_hash()).await.unwrap();
-    let first_tx = &block_details.txdata[0];
-    let mut amount = 0;
+    let active_block = self.get_block(new_block).await.unwrap();
+    let first_tx = &active_block.txdata[0];
     for (index, output_tx) in first_tx.output.iter().enumerate() {
       if output_tx.script_pubkey == main_addr.script_pubkey() {
         vin_list.push(TxIn {
@@ -363,8 +359,7 @@ impl Coin for Bitcoin {
           sequence: Sequence(u32::MAX),
           witness: Witness::default(),
         });
-        amount = output_tx.value;
-        vout_list.push(TxOut { value: amount - 10000, script_pubkey: address.script_pubkey() });
+        vout_list.push(TxOut { value: output_tx.value - 10000, script_pubkey: address.script_pubkey() });
       }
     }
 
