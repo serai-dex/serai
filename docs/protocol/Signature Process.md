@@ -10,10 +10,10 @@ This document describes the process of signing a multisignature transaction, and
         - a new keypair for coordinator messaging.
         - a new keypair for processor messaging.
         - a new keypair for processor signature.
-2. The coordinator provides its public key to `{IDENTITY}{COIN}` topic on the general parition via the `CoordinatorPublicKey` message.
-3. The processor provides its public key to the `{IDENTITY}{COIN}` topic on the general partition via the `ProcessorPublicKey` message.
+2. The coordinator provides its public key to `{NAME}{COIN}` topic on the general parition via the `CoordinatorPublicKey` message.
+3. The processor provides its public key to the `{NAME}{COIN}` topic on the general partition via the `ProcessorPublicKey` message.
 4. If a new pubkey is provided by the processor, the coordinator will immediately forget the previous and replace with the new key.
-5. Each Processor will send a `SignerReady` message to the `{IDENTITY}{COIN}` topic on the encrypted partition.
+5. Each Processor will send a `SignerReady` message to the `{NAME}{COIN}` topic partition.
 6. Upon SignerReady, the coordinator will get a list of signers from the Serai network.
 7. The coordinator will use network provided contact information to send a list of its processor message public keys to each network provided member.
 8. The receiving coordinator will place each message key in the lists on the appropriate coin topic with the `ExternalPublicKeyIn` message.
