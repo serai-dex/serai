@@ -52,14 +52,6 @@ impl Default for RpcResponseError {
     }
 }
 
-/*#[derive(Deserialize, Debug, Clone)]
-pub(crate) struct RpcResponse<T> {
-    pub(crate) result: Option<T>,
-    #[serde(default)]
-    pub(crate) id: Option<i64>,
-    #[serde(default)]
-    pub(crate) error: Option<RpcResponseError>,
-}*/
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub(crate) enum RpcResponse<T> {
