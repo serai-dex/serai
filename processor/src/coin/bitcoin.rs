@@ -3,17 +3,15 @@ use bitcoin_hashes::hex::{FromHex, ToHex};
 use std::str::FromStr;
 use transcript::RecommendedTranscript;
 
-use frost::{
-  curve::Secp256k1,
-  ThresholdKeys,
-};
+use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin::{
   Block, OutPoint,
-  util::address::Address, consensus::encode,
-  Txid, schnorr::TweakedPublicKey,
+  schnorr::TweakedPublicKey,
+  util::address::Address,
+  consensus::encode,
   XOnlyPublicKey, SchnorrSighashType,
-  psbt::{PartiallySignedTransaction,PsbtSighashType},
+  psbt::{PartiallySignedTransaction, PsbtSighashType},
 };
 
 use bitcoin_serai::{
@@ -28,7 +26,7 @@ use k256::{
   elliptic_curve::sec1::{ToEncodedPoint, Tag},
 };
 use crate::{
-  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin}
+  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin},
 };
 
 impl BlockTrait for Block {
@@ -40,7 +38,7 @@ impl BlockTrait for Block {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Fee {
-  pub per_weight: u64
+  pub per_weight: u64,
 }
 
 impl Fee {
@@ -52,11 +50,10 @@ impl Fee {
 #[derive(Clone, Debug)]
 pub struct Bitcoin {
   pub(crate) rpc: Rpc,
-  
 }
 impl Bitcoin {
   pub async fn new(url: String) -> Bitcoin {
-    Bitcoin { rpc: Rpc::new(url).unwrap()}
+    Bitcoin { rpc: Rpc::new(url).unwrap() }
   }
 }
 
@@ -125,7 +122,7 @@ impl Coin for Bitcoin {
     debug_assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
     let xonly_pubkey =
       XOnlyPublicKey::from_slice(&key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
-    let tweaked_pubkey = bitcoin::schnorr::TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
+    let tweaked_pubkey = TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
     Address::p2tr_tweaked(tweaked_pubkey, bitcoin::Network::Regtest)
   }
 
@@ -156,10 +153,7 @@ impl Coin for Bitcoin {
       for (index, output_tx) in one_transaction.output.iter().enumerate() {
         if output_tx.script_pubkey == main_addr.script_pubkey() {
           outputs.push(Output(SpendableOutput {
-            output: OutPoint{
-              txid: one_transaction.txid(),
-              vout: u32::try_from(index).unwrap(),
-            },
+            output: OutPoint { txid: one_transaction.txid(), vout: u32::try_from(index).unwrap() },
             amount: output_tx.value,
           }));
         }
@@ -202,22 +196,21 @@ impl Coin for Bitcoin {
       });
     }
 
-    let transaction_weight = BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, false);
+    let transaction_weight =
+      BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, false);
     let mut actual_fee = fee.calculate(transaction_weight);
     let target_sat = actual_fee + payment_sat;
     if input_sat < target_sat {
       return Err(CoinError::NotEnoughFunds);
-    }
-    else if input_sat != target_sat {
-      let transaction_weight = BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, true);
+    } else if input_sat != target_sat {
+      let transaction_weight =
+        BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, true);
       actual_fee = fee.calculate(transaction_weight);
       let target_sat = actual_fee + payment_sat;
       if target_sat < input_sat {
         let rest_sat = input_sat - target_sat;
-        vout_alt_list.push(bitcoin::TxOut {
-          value: rest_sat,
-          script_pubkey: change_addr.script_pubkey(),
-        });
+        vout_alt_list
+          .push(bitcoin::TxOut { value: rest_sat, script_pubkey: change_addr.script_pubkey() });
       }
     }
 
@@ -229,13 +222,23 @@ impl Coin for Bitcoin {
     };
     let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction.clone()).unwrap();
     for (i, one_input) in (&inputs).iter().enumerate() {
-      let one_transaction = self.rpc.get_transaction(&one_input.0.output.txid, None, None).await.unwrap();
-      let xonly_pubkey = XOnlyPublicKey::from_slice(&keys.group_key().to_encoded_point(true).x().to_owned().unwrap()).unwrap();
-      psbt.inputs[i].witness_utxo = Some(one_transaction.output[usize::try_from(one_input.0.output.vout).unwrap()].clone());
+      let one_transaction =
+        self.rpc.get_transaction(&one_input.0.output.txid, None, None).await.unwrap();
+      let xonly_pubkey = XOnlyPublicKey::from_slice(
+        &keys.group_key().to_encoded_point(true).x().to_owned().unwrap(),
+      )
+      .unwrap();
+      psbt.inputs[i].witness_utxo =
+        Some(one_transaction.output[usize::try_from(one_input.0.output.vout).unwrap()].clone());
       psbt.inputs[i].sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
     }
-    return Ok(SignableTransaction { keys: keys, transcript: transcript, number: block_number+1, actual: BSignableTransaction{tx: psbt, fee:actual_fee} });
+    return Ok(SignableTransaction {
+      keys: keys,
+      transcript: transcript,
+      number: block_number + 1,
+      actual: BSignableTransaction { tx: psbt, fee: actual_fee },
+    });
   }
 
   async fn attempt_send(
@@ -243,15 +246,11 @@ impl Coin for Bitcoin {
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError> {
     transaction
-    .actual
-    .clone()
-    .multisig(
-      transaction.keys.clone(),
-      transaction.transcript.clone(),
-      transaction.number,
-    )
-    .await
-    .map_err(|_| CoinError::ConnectionError)
+      .actual
+      .clone()
+      .multisig(transaction.keys.clone(), transaction.transcript.clone(), transaction.number)
+      .await
+      .map_err(|_| CoinError::ConnectionError)
   }
 
   async fn publish_transaction(
@@ -266,10 +265,7 @@ impl Coin for Bitcoin {
       .enumerate()
       .map(|(i, output)| {
         let one_output = SpendableOutput {
-          output : OutPoint {
-            txid: target_tx.txid(),
-            vout: u32::try_from(i).unwrap(),
-          },
+          output: OutPoint { txid: target_tx.txid(), vout: u32::try_from(i).unwrap() },
           amount: output.value,
         };
         Output(one_output).id()
@@ -294,30 +290,36 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn mine_block(&self) {
-    use bitcoin::{Address, PrivateKey, PublicKey, Network, 
-                  secp256k1::{SecretKey, rand, Secp256k1}};
+    use bitcoin::{
+      Address, PrivateKey, PublicKey, Network,
+      secp256k1::{SecretKey, rand, Secp256k1},
+    };
 
     let secp = Secp256k1::new();
     let secret_key = SecretKey::new(&mut rand::thread_rng());
     let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(&secp, &private_key);
-    
+
     let new_addr = Address::p2wpkh(&public_key, Network::Regtest).unwrap();
     self.rpc.generate_to_address(1, &new_addr.to_string()).await.unwrap();
   }
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
-    use bitcoin::{Address, PrivateKey, PublicKey,
-        OutPoint, Sequence, Witness, Script, PackedLockTime, Network, 
-        blockdata::{script::Builder,transaction::{TxIn, TxOut, Transaction}},
-        secp256k1::{rand, Secp256k1, Message, SecretKey}};
+    use bitcoin::{
+      Address, PrivateKey, PublicKey, OutPoint, Sequence, Witness, Script, PackedLockTime, Network,
+      blockdata::{
+        script::Builder,
+        transaction::{TxIn, TxOut, Transaction},
+      },
+      secp256k1::{rand, Secp256k1, Message, SecretKey},
+    };
 
     let secp = Secp256k1::new();
     let secret_key = SecretKey::new(&mut rand::thread_rng());
     let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(&secp, &private_key);
-    
+
     let main_addr = Address::p2pkh(&public_key, Network::Regtest);
 
     let mut vin_list = Vec::new();
@@ -332,41 +334,34 @@ impl Coin for Bitcoin {
 
     let block_number = new_block + 1;
     let active_block = self.get_block(block_number).await.unwrap();
-    
+
     let block_details = self.rpc.get_block(&active_block.block_hash()).await.unwrap();
     let first_tx = &block_details.txdata[0];
     let mut amount = 0;
     for (index, output_tx) in first_tx.output.iter().enumerate() {
       if output_tx.script_pubkey == main_addr.script_pubkey() {
         vin_list.push(TxIn {
-          previous_output: 
-          OutPoint {
-              txid: first_tx.txid(),
-              vout: u32::try_from(index).unwrap(),
-          },
-          script_sig: Script::default(), 
+          previous_output: OutPoint { txid: first_tx.txid(), vout: u32::try_from(index).unwrap() },
+          script_sig: Script::default(),
           sequence: Sequence(u32::MAX),
-          witness: Witness::default(), 
+          witness: Witness::default(),
         });
         amount = output_tx.value;
-        vout_list.push(TxOut {
-          value: amount - 10000,
-          script_pubkey: address.script_pubkey(),
-        });
+        vout_list.push(TxOut { value: amount - 10000, script_pubkey: address.script_pubkey() });
       }
     }
 
-    let mut new_transaction = Transaction {
-      version: 2,
-      lock_time: PackedLockTime(0),
-      input: vin_list,
-      output: vout_list,
-    };
-    
+    let mut new_transaction =
+      Transaction { version: 2, lock_time: PackedLockTime(0), input: vin_list, output: vout_list };
+
     let transactions_sighash = new_transaction.signature_hash(0, &main_addr.script_pubkey(), 1);
-    let mut signed_der = secp.sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner).serialize_der().to_vec();
+    let mut signed_der = secp
+      .sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner)
+      .serialize_der()
+      .to_vec();
     signed_der.push(1);
-    new_transaction.input[0].script_sig = Builder::new().push_slice(&signed_der).push_key(&public_key).into_script();
+    new_transaction.input[0].script_sig =
+      Builder::new().push_slice(&signed_der).push_key(&public_key).into_script();
 
     self.rpc.send_raw_transaction(&new_transaction).await.unwrap();
   }
