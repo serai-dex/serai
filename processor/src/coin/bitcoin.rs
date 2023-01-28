@@ -108,6 +108,22 @@ impl Bitcoin {
     let address = Address::p2pkh(&public_key, Network::Regtest);
     (private_key, public_key, address)
   }
+
+  #[cfg(test)]
+  fn test_get_spendables(block : &Block, address : &Address) -> Vec<SpendableOutput> {
+    let mut outputs = Vec::new();
+    for one_tx in &block.txdata {
+      for (index, output_tx) in one_tx.output.iter().enumerate() {
+        if output_tx.script_pubkey == address.script_pubkey() {
+          outputs.push(SpendableOutput {
+            output: OutPoint { txid: one_tx.txid(), vout: u32::try_from(index).unwrap() },
+            amount: output_tx.value,
+          });
+        }
+      }
+    }
+    return outputs;
+  }
 }
 
 #[async_trait]
@@ -331,10 +347,6 @@ impl Coin for Bitcoin {
     };
 
     let (private_key, public_key, main_addr) = Self::test_address_with_key();
-
-    let mut vin_list = Vec::new();
-    let mut vout_list = Vec::new();
-
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     self
       .rpc
@@ -349,19 +361,17 @@ impl Coin for Bitcoin {
       self.mine_block().await;
     }
 
+    let mut vin_list = Vec::new();
+    let mut vout_list = Vec::new();
     let active_block = self.get_block(new_block).await.unwrap();
-    let first_tx = &active_block.txdata[0];
-    for (index, output_tx) in first_tx.output.iter().enumerate() {
-      if output_tx.script_pubkey == main_addr.script_pubkey() {
-        vin_list.push(TxIn {
-          previous_output: OutPoint { txid: first_tx.txid(), vout: u32::try_from(index).unwrap() },
-          script_sig: Script::default(),
-          sequence: Sequence(u32::MAX),
-          witness: Witness::default(),
-        });
-        vout_list.push(TxOut { value: output_tx.value - 10000, script_pubkey: address.script_pubkey() });
-      }
-    }
+    let spendables = Self::test_get_spendables(&active_block, &main_addr);
+    vin_list.push(TxIn {
+      previous_output: OutPoint { txid: spendables[0].output.txid, vout: spendables[0].output.vout },
+      script_sig: Script::default(),
+      sequence: Sequence(u32::MAX),
+      witness: Witness::default(),
+    });
+    vout_list.push(TxOut { value: spendables[0].amount - 10000, script_pubkey: address.script_pubkey() });
 
     let mut new_transaction =
       Transaction { version: 2, lock_time: PackedLockTime(0), input: vin_list, output: vout_list };
