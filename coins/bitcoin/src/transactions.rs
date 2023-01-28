@@ -4,7 +4,7 @@ use bitcoin::{
     sighash::{SchnorrSighashType, SighashCache, Prevouts},
   },
   psbt::{serialize::Serialize, PartiallySignedTransaction},
-  Witness, TxOut,
+  Witness, TxOut, Address,
 };
 use frost::{
   algorithm::Schnorr,
@@ -70,7 +70,7 @@ impl SignableTransaction {
     return Ok(TransactionMachine { signable: self, transcript, sigs });
   }
 
-  pub fn calculate_weight(total_inputs: usize, address: &bitcoin::Address, change: bool) -> usize {
+  pub fn calculate_weight(total_inputs: usize, payments: &[(Address, u64)], change: bool) -> usize {
     // version number + segwit marker + segwit flag
     let mut total_weight = 4 * 4;
     total_weight += 1;
@@ -86,12 +86,13 @@ impl SignableTransaction {
     total_weight += total_inputs * 4 * 4;
     // OUTPUTS
     let total_outputs = 1 + usize::from(change);
-
     total_weight += 1 * 4;
     total_weight += total_outputs * 8 * 4;
     total_weight += total_outputs * 1 * 4;
-    // Script pubkey
-    total_weight += (address.script_pubkey().as_bytes().len()) * 1 * 4;
+    // Script pubkey of payment address
+    for (address, _) in payments.iter() {
+      total_weight += (address.script_pubkey().as_bytes().len()) * 1 * 4;
+    }
     if change {
       // Change address script pubkey byte
       total_weight += 34 * 4;

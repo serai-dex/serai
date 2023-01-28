@@ -225,11 +225,11 @@ impl Coin for Bitcoin {
       });
     }
 
-    let mut actual_fee = fee.calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, false) * 2);
+    let mut actual_fee = fee.calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, false) * 2);
     if payment_sat > input_sat - actual_fee {
       return Err(CoinError::NotEnoughFunds);
     } else if input_sat != payment_sat {
-      actual_fee = fee.calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments[0].0, true) * 2);
+      actual_fee = fee.calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, true) * 2);
       //TODO: we need to drop outputs worth less than payment_sat
       if payment_sat < (input_sat - actual_fee) {
         let rest_sat = input_sat - actual_fee - payment_sat;
