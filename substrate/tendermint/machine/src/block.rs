@@ -14,7 +14,7 @@ use crate::{
 pub(crate) struct BlockData<N: Network> {
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
-  pub(crate) proposal: N::Block,
+  pub(crate) proposal: Option<N::Block>,
 
   pub(crate) log: MessageLog<N>,
   pub(crate) slashes: HashSet<N::ValidatorId>,
@@ -35,7 +35,7 @@ impl<N: Network> BlockData<N> {
     weights: Arc<N::Weights>,
     number: BlockNumber,
     validator_id: Option<N::ValidatorId>,
-    proposal: N::Block,
+    proposal: Option<N::Block>,
   ) -> BlockData<N> {
     BlockData {
       number,
@@ -106,12 +106,8 @@ impl<N: Network> BlockData<N> {
 
     // 14-21
     if Some(proposer) == self.validator_id {
-      let (round, block) = if let Some((round, block)) = &self.valid {
-        (Some(*round), block.clone())
-      } else {
-        (None, self.proposal.clone())
-      };
-      Some(Data::Proposal(round, block))
+      let (round, block) = self.valid.clone().unzip();
+      block.or_else(|| self.proposal.clone()).map(|block| Data::Proposal(round, block))
     } else {
       self.round_mut().set_timeout(Step::Propose);
       None

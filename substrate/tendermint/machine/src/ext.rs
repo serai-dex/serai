@@ -270,5 +270,5 @@ pub trait Network: Send + Sync {
     &mut self,
     block: Self::Block,
     commit: Commit<Self::SignatureScheme>,
-  ) -> Self::Block;
+  ) -> Option<Self::Block>;
 }

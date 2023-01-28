@@ -140,11 +140,11 @@ impl Network for TestNetwork {
     &mut self,
     block: TestBlock,
     commit: Commit<TestSignatureScheme>,
-  ) -> TestBlock {
+  ) -> Option<TestBlock> {
     dbg!("Adding ", &block);
     assert!(block.valid.is_ok());
     assert!(self.verify_commit(block.id(), &commit));
-    TestBlock { id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(), valid: Ok(()) }
+    Some(TestBlock { id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(), valid: Ok(()) })
   }
 }
 
