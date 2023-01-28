@@ -319,7 +319,7 @@ impl Coin for Bitcoin {
     let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(&secp, &private_key);
     
-    let main_addr = Address::p2wpkh(&public_key, Network::Regtest).unwrap();
+    let main_addr = Address::p2pkh(&public_key, Network::Regtest).unwrap();
 
     let mut vin_list = Vec::new();
     let mut vout_list = Vec::new();
@@ -364,8 +364,7 @@ impl Coin for Bitcoin {
       output: vout_list,
     };
     
-    let script_code = Address::p2pkh(&public_key, Network::Regtest).script_pubkey();
-    let transactions_sighash = new_transaction.signature_hash(0, &script_code, EcdsaSighashType::All.to_u32());
+    let transactions_sighash = new_transaction.signature_hash(0, &main_addr.script_pubkey(), EcdsaSighashType::All.to_u32());
     let mut signed_der = secp.sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner).serialize_der().to_vec();
     signed_der.push(1);
     new_transaction.input[0].script_sig = Builder::new().push_slice(&signed_der).push_key(&public_key).into_script();
