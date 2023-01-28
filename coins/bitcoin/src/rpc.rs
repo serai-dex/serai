@@ -117,11 +117,4 @@ impl Rpc {
     let args = handle_defaults(&mut ext_args, &[Null]);
     Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction".to_string(), &args).await?)
   }
-
-  pub async fn generate_to_address(&self, nblocks: usize, address: &str) -> Result<Vec<String>, RpcError> {
-    let mut ext_args = [into_json(nblocks)?, into_json(address)?, 100000000.into()];
-    let defaults = [Null, Null, 100000000.into()];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<Vec<String>>("generatetoaddress".to_string(), &args).await.unwrap())
-  }
 }

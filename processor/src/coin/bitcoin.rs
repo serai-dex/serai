@@ -301,7 +301,14 @@ impl Coin for Bitcoin {
     let public_key = PublicKey::from_private_key(&secp, &private_key);
 
     let new_addr = Address::p2wpkh(&public_key, Network::Regtest).unwrap();
-    self.rpc.generate_to_address(1, &new_addr.to_string()).await.unwrap();
+    self
+      .rpc
+      .rpc_call::<Vec<String>>(
+        "generatetoaddress".to_string(),
+        &[1.into(), serde_json::to_value(&new_addr.to_string()).unwrap()],
+      )
+      .await
+      .unwrap();
   }
 
   #[cfg(test)]
@@ -326,7 +333,14 @@ impl Coin for Bitcoin {
     let mut vout_list = Vec::new();
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
-    self.rpc.generate_to_address(1, &main_addr.to_string()).await.unwrap();
+    self
+      .rpc
+      .rpc_call::<Vec<String>>(
+        "generatetoaddress".to_string(),
+        &[1.into(), serde_json::to_value(&main_addr.to_string()).unwrap()],
+      )
+      .await
+      .unwrap();
 
     for _ in 0..100 {
       self.mine_block().await;
