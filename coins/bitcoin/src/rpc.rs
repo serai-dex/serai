@@ -3,7 +3,7 @@ use std::{fmt::Debug, str::FromStr, result::Result};
 use serde_json::Value::Null;
 
 use bitcoin::{
-  hashes::hex::FromHex, Transaction,
+  hashes::hex::{FromHex, ToHex}, Transaction,
 };
 use bitcoincore_rpc_json::*;
 use crate::rpc_helper::*;

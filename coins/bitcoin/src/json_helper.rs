@@ -1,7 +1,5 @@
 // Code originally thanks to https://github.com/rust-bitcoin/rust-bitcoincore-rpc
 use crate::rpc_helper::*;
-use bitcoin::Transaction;
-use bitcoin::hashes::hex::ToHex;
 
 pub(crate) fn handle_defaults<'a, 'b>(
     args: &'a mut [serde_json::Value],

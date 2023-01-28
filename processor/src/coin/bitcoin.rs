@@ -311,7 +311,7 @@ impl Coin for Bitcoin {
     use bitcoin::{Address, PrivateKey, PublicKey,
         OutPoint, Sequence, Witness,util::sighash::SighashCache,
         Script, PackedLockTime,EcdsaSighashType, Network, 
-        blockdata::transaction::{TxIn, TxOut, Transaction},
+        blockdata::{script::Builder,transaction::{TxIn, TxOut, Transaction}},
         secp256k1::{rand, Secp256k1, Message, SecretKey}};
 
     let secp = Secp256k1::new();
@@ -364,14 +364,11 @@ impl Coin for Bitcoin {
       output: vout_list,
     };
     
-    let mut sig_hasher = SighashCache::new(&new_transaction);
     let script_code = Address::p2pkh(&public_key, Network::Regtest).script_pubkey();
-    let transactions_sighash = sig_hasher.segwit_signature_hash(0, &script_code, amount, EcdsaSighashType::All).unwrap();
-    let signed_der = secp.sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner).serialize_der();
-    let mut signed_witness = Witness::new();
-    signed_witness.push_bitcoin_signature(&signed_der, EcdsaSighashType::All);
-    signed_witness.push(public_key.to_bytes());
-    new_transaction.input[0].witness = signed_witness;
+    let transactions_sighash = new_transaction.signature_hash(0, &script_code, EcdsaSighashType::All.to_u32());
+    let mut signed_der = secp.sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner).serialize_der().to_vec();
+    signed_der.push(1);
+    new_transaction.input[0].script_sig = Builder::new().push_slice(&signed_der).push_key(&public_key).into_script();
 
     self.rpc.send_raw_transaction(&new_transaction).await.unwrap();
   }
