@@ -32,10 +32,12 @@ impl Rpc {
       .await?
       .text()
       .await?;
+      
     let parsed_res: RpcResponse<Response> = serde_json::from_str(&res).map_err(|_| RpcError::ParsingError)?;
-    match parsed_res.error {
-      None => Ok(parsed_res.result.unwrap()),
-      Some(r) => Err(RpcError::CustomError(r.message)),
+    
+    match parsed_res {
+      RpcResponse::Err { error } => Err(RpcError::CustomError(error)),
+      RpcResponse::Ok { result } => Ok(result),
     }
   }
 
