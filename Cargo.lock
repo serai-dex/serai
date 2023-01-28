@@ -4106,6 +4106,7 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "thiserror",
+ "tokens-pallet",
 ]
 
 [[package]]
@@ -4116,7 +4117,7 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "serde",
- "sp-core",
+ "tokens-primitives",
 ]
 
 [[package]]
@@ -6408,7 +6409,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa52e972a9a719cecb6864fb88568781eb706bac2cd1d4f04a648542dbf78069"
 dependencies = [
  "bitflags",
- "cfg-if 1.0.0",
+ "cfg-if",
  "libc",
  "memoffset 0.6.5",
 ]
@@ -8008,7 +8009,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21eed90ec8570952d53b772ecf8f206aa1ec9a3d76b2521c56c42973f2d91ee9"
 dependencies = [
  "base64 0.21.0",
- "bytes 1.3.0",
+ "bytes",
  "encoding_rs",
  "futures-core",
  "futures-util",
@@ -9498,14 +9499,15 @@ checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 name = "serai-client"
 version = "0.1.0"
 dependencies = [
- "in-instructions-primitives",
  "jsonrpsee-server",
  "lazy_static",
  "parity-scale-codec",
+ "rand_core 0.6.4",
+ "scale-info",
  "scale-value",
  "serai-primitives",
  "serai-runtime",
- "serde",
+ "sp-core",
  "subxt",
  "thiserror",
  "tokio 1.24.2",
@@ -9556,6 +9558,7 @@ dependencies = [
  "scale-info",
  "serde",
  "sp-core",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -9633,6 +9636,7 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+ "tokens-pallet",
  "validator-sets-pallet",
 ]
 
@@ -11173,10 +11177,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
+name = "tokens-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-assets",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "tokens-primitives",
+]
+
+[[package]]
+name = "tokens-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serde",
+ "sp-runtime",
+]
+
+[[package]]
 name = "tokio"
-version = "0.2.25"
+version = "1.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6703a273949a90131b290be1fe7b039d0fc884aa1935860dfcbe056f28cd8092"
+checksum = "597a12a59981d9e3c38d216785b0c37399f6e415e8d0712047620f189371b0bb"
 dependencies = [
  "bytes 0.5.6",
  "fnv",

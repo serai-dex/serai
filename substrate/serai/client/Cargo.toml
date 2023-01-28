@@ -15,18 +15,21 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 thiserror = "1"
 
-serde = { version = "1", features = ["derive"] }
-
 scale = { package = "parity-scale-codec", version = "3" }
+scale-info = "2"
 scale-value = "0.6"
-subxt = "0.25"
+
+sp-core = { git = "https://github.com/serai-dex/substrate", version = "7" }
 
 serai-primitives = { path = "../primitives", version = "0.1" }
-in-instructions-primitives = { path = "../../in-instructions/primitives", version = "0.1" }
 serai-runtime = { path = "../../runtime", version = "0.1" }
+
+subxt = "0.25"
 
 [dev-dependencies]
 lazy_static = "1"
+
+rand_core = "0.6"
 
 tokio = "1"
 

@@ -77,9 +77,9 @@ impl TendermintClientMinimal for TendermintValidatorFirm {
   // guaranteed not to grow the block?
   const PROPOSED_BLOCK_SIZE_LIMIT: usize = { BLOCK_SIZE as usize };
   // 3 seconds
-  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 1000) as u32 };
+  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2) as u32 };
   // 1 second
-  const LATENCY_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 3 / 1000) as u32 };
+  const LATENCY_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 3) as u32 };
 
   type Block = Block;
   type Backend = sc_client_db::Backend<Block>;
@@ -102,7 +102,7 @@ impl TendermintValidator for TendermintValidatorFirm {
 pub fn new_partial(
   config: &Configuration,
 ) -> Result<(TendermintImport<TendermintValidatorFirm>, PartialComponents), ServiceError> {
-  debug_assert_eq!(TARGET_BLOCK_TIME, 6000);
+  debug_assert_eq!(TARGET_BLOCK_TIME, 6);
 
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));

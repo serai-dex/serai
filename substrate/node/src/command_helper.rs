@@ -67,7 +67,7 @@ pub fn create_benchmark_extrinsic(
 
   UncheckedExtrinsic::new_signed(
     call.clone(),
-    sender.public(),
+    sender.public().into(),
     SignedPayload::from_raw(
       call,
       extra.clone(),
