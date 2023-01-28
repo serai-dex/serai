@@ -319,7 +319,7 @@ impl Coin for Bitcoin {
     let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(&secp, &private_key);
     
-    let main_addr = Address::p2pkh(&public_key, Network::Regtest).unwrap();
+    let main_addr = Address::p2pkh(&public_key, Network::Regtest);
 
     let mut vin_list = Vec::new();
     let mut vout_list = Vec::new();
