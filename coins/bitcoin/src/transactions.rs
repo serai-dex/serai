@@ -54,7 +54,7 @@ impl SignableTransaction {
       transcript.append_message(b"input_hash", txid);
       transcript.append_message(b"input_output_index", input.previous_output.vout.to_le_bytes());
       transcript.append_message(
-        b"input_shared_key",
+        b"input_internal_key",
         self.tx.inputs[i].tap_internal_key.unwrap().serialize(),
       );
 
