@@ -33,6 +33,7 @@ fn test_signing() {
     &Sha256::digest(MESSAGE),
   );
 
+  //TODO: Implement BitcoinSchnorr Algorithm later to handle this
   let mut _offset = 0;
   (_sig.R, _offset) = make_even(_sig.R);
   _sig.s += Scalar::from(_offset);
