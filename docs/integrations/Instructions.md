@@ -40,10 +40,10 @@ Serai token. If an Application Call, the encoded call will be executed.
 
 ### Refundable In Instruction
 
-  - `origin` (Option\<ExternalAddress>): Address, from the network of origin,
-which sent coins in.
-  - `instruction` (InInstruction):       The action to perform with the incoming
-coins.
+  - `origin`      (Option\<ExternalAddress>): Address, from the network of
+origin, which sent coins in.
+  - `instruction` (InInstruction):            The action to perform with the
+incoming coins.
 
 Networks may automatically provide `origin`. If they do, the instruction may
 still provide `origin`, overriding the automatically provided value.
@@ -51,19 +51,18 @@ still provide `origin`, overriding the automatically provided value.
 If the instruction fails, coins are scheduled to be returned to `origin`,
 if provided.
 
-### Destination
-
-Destination is an enum of SeraiAddress and ExternalAddress.
-
 ### Out Instruction
 
-  - `destination` (Destination):   Address to receive coins to.
-  - `data`        (Option\<Data>): The data to call the destination with.
+  - `address` (ExternalAddress): Address to transfer the coins included with
+this instruction to.
+  - `data`    (Option<Data>):    Data to include when transferring coins.
 
-Transfer the coins included with this instruction to the specified address with
-the specified data. No validation of external addresses/data is performed
-on-chain. If data is specified for a chain not supporting data, it is silently
-dropped.
+No validation of external addresses/data is performed on-chain. If data is
+specified for a chain not supporting data, it is silently dropped.
+
+### Destination
+
+Destination is an enum of SeraiAddress and OutInstruction.
 
 ### Shorthand
 
@@ -80,7 +79,7 @@ covered by Shorthand.
   - `origin`  (Option\<ExternalAddress>): Refundable In Instruction's `origin`.
   - `coin`    (Coin):                     Coin to swap funds for.
   - `minimum` (Amount):                   Minimum amount of `coin` to receive.
-  - `out`     (Out Instruction):          Final destination for funds.
+  - `out`     (Destination):              Final destination for funds.
 
 which expands to:
 

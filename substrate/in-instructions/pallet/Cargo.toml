@@ -29,6 +29,8 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 serai-primitives = { path = "../../serai/primitives", default-features = false }
 in-instructions-primitives = { path = "../primitives", default-features = false }
 
+tokens-pallet = { path = "../../tokens/pallet", default-features = false }
+
 [features]
 std = [
   "thiserror",
@@ -47,5 +49,7 @@ std = [
 
   "serai-primitives/std",
   "in-instructions-primitives/std",
+
+  "tokens-pallet/std",
 ]
 default = ["std"]

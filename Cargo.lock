@@ -1049,9 +1049,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.78"
+version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a20104e2335ce8a659d6dd92a51a767a0c062599c73b343fd152cb401e828c3d"
+checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
 dependencies = [
  "jobserver",
 ]
@@ -1263,9 +1263,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.1.2"
+version = "4.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e638668a62aced2c9fb72b5135a33b4a500485ccf2a0e402e09aa04ab2fc115"
+checksum = "f13b9c79b5d1dd500d20ef541215a6423c75829ef43117e1b4d17fd8af0b5d76"
 dependencies = [
  "bitflags",
  "clap_derive 4.1.0",
@@ -1638,9 +1638,9 @@ dependencies = [
 
 [[package]]
 name = "crc"
-version = "3.0.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53757d12b596c16c78b83458d732a5d1a17ab3f53f2f7412f6fb57cc8a140ab3"
+checksum = "86ec7a15cbe22e59248fc7eadb1907dab5ba09372595da4d73dd805ed4417dfe"
 dependencies = [
  "crc-catalog",
 ]
@@ -1852,9 +1852,9 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.87"
+version = "1.0.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b61a7545f753a88bcbe0a70de1fcc0221e10bfc752f576754fa91e663db1622e"
+checksum = "322296e2f2e5af4270b54df9e85a02ff037e271af20ba3e7fe1575515dc840b8"
 dependencies = [
  "cc",
  "cxxbridge-flags",
@@ -1864,9 +1864,9 @@ dependencies = [
 
 [[package]]
 name = "cxx-build"
-version = "1.0.87"
+version = "1.0.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f464457d494b5ed6905c63b0c4704842aba319084a0a3561cdc1359536b53200"
+checksum = "017a1385b05d631e7875b1f151c9f012d37b53491e2a87f65bff5c262b2111d8"
 dependencies = [
  "cc",
  "codespan-reporting",
@@ -1879,15 +1879,15 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.87"
+version = "1.0.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43c7119ce3a3701ed81aca8410b9acf6fc399d2629d057b87e2efa4e63a3aaea"
+checksum = "c26bbb078acf09bc1ecda02d4223f03bdd28bd4874edcb0379138efc499ce971"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.87"
+version = "1.0.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65e07508b90551e610910fa648a1878991d367064997a596135b86df30daf07e"
+checksum = "357f40d1f06a24b60ae1fe122542c1fb05d28d32acb2aed064e84bc2ad1e252e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2361,9 +2361,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90e5c1c8368803113bf0c9584fc495a58b86dc8a29edbf8fe877d21d9507e797"
+checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
 name = "elliptic-curve"
@@ -3084,7 +3084,7 @@ dependencies = [
  "Inflector",
  "array-bytes",
  "chrono",
- "clap 4.1.2",
+ "clap 4.1.4",
  "comfy-table",
  "frame-benchmarking",
  "frame-support",
@@ -4106,6 +4106,7 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "thiserror",
+ "tokens-pallet",
 ]
 
 [[package]]
@@ -4116,7 +4117,7 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "serde",
- "sp-core",
+ "tokens-primitives",
 ]
 
 [[package]]
@@ -6197,9 +6198,9 @@ dependencies = [
 
 [[package]]
 name = "multihash-derive"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc076939022111618a5026d3be019fd8b366e76314538ff9a1b59ffbcbf98bcd"
+checksum = "1d6d4752e6230d8ef7adf7bd5d8c4b1f6561c1014c5ba9a37445ccefe18aa1db"
 dependencies = [
  "proc-macro-crate",
  "proc-macro-error",
@@ -6356,9 +6357,9 @@ dependencies = [
 
 [[package]]
 name = "netlink-packet-utils"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25af9cf0dc55498b7bd94a1508af7a78706aa0ab715a73c5169273e03c84845e"
+checksum = "0ede8a08c71ad5a95cdd0e4e52facd37190977039a4704eb82a283f713747d34"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -6522,18 +6523,18 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.5.7"
+version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf5395665662ef45796a4ff5486c5d41d29e0c09640af4c5f17fd94ee2c119c9"
+checksum = "8d829733185c1ca374f17e52b762f24f535ec625d2cc1f070e34c8a9068f341b"
 dependencies = [
  "num_enum_derive",
 ]
 
 [[package]]
 name = "num_enum_derive"
-version = "0.5.7"
+version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b0498641e53dd6ac1a4f22547548caa6864cc4933784319cd1775271c5a46ce"
+checksum = "2be1598bf1c313dcdd12092e3f1920f463462525a21b7b4e11b4168353d0123e"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -6850,9 +6851,9 @@ dependencies = [
 
 [[package]]
 name = "parity-db"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a7511a0bec4a336b5929999d02b560d2439c993cccf98c26481484e811adc43"
+checksum = "dd684a725651d9588ef21f140a328b6b4f64e646b2e931f3e6f14f75eedf9980"
 dependencies = [
  "blake2",
  "crc32fast",
@@ -6869,9 +6870,9 @@ dependencies = [
 
 [[package]]
 name = "parity-scale-codec"
-version = "3.2.2"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7ab01d0f889e957861bc65888d5ccbe82c158d0270136ba46820d43837cdf72"
+checksum = "c3840933452adf7b3b9145e27086a5a3376c619dca1a21b1e5a5af0d54979bed"
 dependencies = [
  "arrayvec 0.7.2",
  "bitvec 1.0.1",
@@ -7042,9 +7043,9 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "pest"
-version = "2.5.3"
+version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4257b4a04d91f7e9e6290be5d3da4804dd5784fafde3a497d73eb2b4a158c30a"
+checksum = "4ab62d2fa33726dbe6321cc97ef96d8cde531e3eeaf858a058de53a8a6d40d8f"
 dependencies = [
  "thiserror",
  "ucd-trie",
@@ -7052,9 +7053,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.5.3"
+version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "241cda393b0cdd65e62e07e12454f1f25d57017dcc514b1514cd3c4645e3a0a6"
+checksum = "8bf026e2d0581559db66d837fe5242320f525d85c76283c61f4d51a1238d65ea"
 dependencies = [
  "pest",
  "pest_generator",
@@ -7062,9 +7063,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.5.3"
+version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46b53634d8c8196302953c74d5352f33d0c512a9499bd2ce468fc9f4128fa27c"
+checksum = "2b27bd18aa01d91c8ed2b61ea23406a676b42d82609c6e2581fba42f0c15f17f"
 dependencies = [
  "pest",
  "pest_meta",
@@ -7075,9 +7076,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.5.3"
+version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ef4f1332a8d4678b41966bb4cc1d0676880e84183a1ecc3f4b69f03e99c7a51"
+checksum = "9f02b677c1859756359fc9983c2e56a0237f18624a3789528804406b7e915e5d"
 dependencies = [
  "once_cell",
  "pest",
@@ -7356,11 +7357,10 @@ dependencies = [
 
 [[package]]
 name = "proc-macro-crate"
-version = "1.2.1"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eda0fc3b0fb7c975631757e14d9049da17374063edb6ebbcbc54d880d4fe94e9"
+checksum = "e17d47ce914bf4de440332250b0edd23ce48c005f59fab39d3335866b114f11a"
 dependencies = [
- "once_cell",
  "thiserror",
  "toml",
 ]
@@ -8455,7 +8455,7 @@ source = "git+https://github.com/serai-dex/substrate#ffc7ad1791f90147a3f14f43051
 dependencies = [
  "array-bytes",
  "chrono",
- "clap 4.1.2",
+ "clap 4.1.4",
  "fdlimit",
  "futures",
  "libp2p 0.50.0",
@@ -9443,9 +9443,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "645926f31b250a2dca3c232496c2d898d91036e45ca0e97e0e2390c54e11be36"
+checksum = "7c4437699b6d34972de58652c68b98cb5b53a4199ab126db8e20ec8ded29a721"
 dependencies = [
  "bitflags",
  "core-foundation",
@@ -9498,14 +9498,15 @@ checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 name = "serai-client"
 version = "0.1.0"
 dependencies = [
- "in-instructions-primitives",
  "jsonrpsee-server",
  "lazy_static",
  "parity-scale-codec",
+ "rand_core 0.6.4",
+ "scale-info",
  "scale-value",
  "serai-primitives",
  "serai-runtime",
- "serde",
+ "sp-core",
  "subxt",
  "thiserror",
  "tokio 1.24.2",
@@ -9516,7 +9517,7 @@ name = "serai-node"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "clap 4.1.2",
+ "clap 4.1.4",
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "in-instructions-client",
@@ -9556,6 +9557,7 @@ dependencies = [
  "scale-info",
  "serde",
  "sp-core",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -9633,6 +9635,7 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+ "tokens-pallet",
  "validator-sets-pallet",
 ]
 
@@ -10563,9 +10566,9 @@ dependencies = [
 
 [[package]]
 name = "ss58-registry"
-version = "1.37.0"
+version = "1.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d44528162f980c0e03c71e005d334332c8da0aec9f2b0b4bdc557ed4a9f24776"
+checksum = "e40c020d72bc0a9c5660bb71e4a6fdef081493583062c474740a7d59f55f0e7b"
 dependencies = [
  "Inflector",
  "num-format",
@@ -11171,6 +11174,30 @@ name = "tinyvec_macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
+
+[[package]]
+name = "tokens-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-assets",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "tokens-primitives",
+]
+
+[[package]]
+name = "tokens-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serde",
+ "sp-runtime",
+]
 
 [[package]]
 name = "tokio"
