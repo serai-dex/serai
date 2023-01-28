@@ -5,11 +5,7 @@ use k256::{
   ProjectivePoint, U256, Scalar,sha2::digest::generic_array::GenericArray,
   sha2::digest::generic_array::typenum::U32,
 };
-use bitcoin::{
-  util::sighash,
-  psbt::PartiallySignedTransaction,
-  SchnorrSighashType,
-};
+
 use lazy_static::lazy_static;
 
 pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
@@ -46,35 +42,4 @@ impl Hram<Secp256k1> for BitcoinHram {
 
     Scalar::from_uint_reduced(U256::from_be_slice(&data.finalize()))
   }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum SignerError {
-  MissingWitnessUtxo,
-  InputIndexOutOfRange,
-}
-
-pub(crate) fn taproot_key_spend_signature_hash(
-  psbt: &PartiallySignedTransaction,
-  input_index: usize,
-) -> Result<(bitcoin::util::taproot::TapSighashHash, SchnorrSighashType), SignerError> {
-  if input_index >= psbt.inputs.len() || input_index >= psbt.unsigned_tx.input.len() {
-    return Err(SignerError::InputIndexOutOfRange);
-  }
-
-  let sighash_type = SchnorrSighashType::All.into();
-  let witness_utxos = (0..psbt.inputs.len()).map(|i| psbt.inputs[i].witness_utxo.clone()).collect::<Vec<_>>();
-  let mut all_witness_utxos = vec![];
-
-  let mut cache = sighash::SighashCache::new(&psbt.unsigned_tx);
-  let prevouts = if witness_utxos.iter().all(Option::is_some) {
-    all_witness_utxos.extend(witness_utxos.iter().filter_map(|x| x.as_ref()));
-    sighash::Prevouts::All(&all_witness_utxos)
-  } else {
-    return Err(SignerError::MissingWitnessUtxo);
-  };
-
-  let hash = cache.taproot_key_spend_signature_hash(input_index, &prevouts, sighash_type);
-
-  Ok((hash.unwrap(), sighash_type))
 }

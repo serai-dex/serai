@@ -1,10 +1,10 @@
 use bitcoin::{
   util::{
     schnorr::SchnorrSig,
-    sighash::SchnorrSighashType,
+    sighash::{SchnorrSighashType, SighashCache, Prevouts},
   },
   psbt::{serialize::Serialize, PartiallySignedTransaction},
-  Witness,
+  Witness, TxOut,
 };
 use frost::{
   algorithm::Schnorr,
@@ -15,7 +15,7 @@ use frost::{
     AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
   },
 };
-use crate::crypto::{BitcoinHram, make_even, taproot_key_spend_signature_hash};
+use crate::crypto::{BitcoinHram, make_even};
 use rand_core::RngCore;
 
 use core::fmt::Debug;
@@ -70,9 +70,9 @@ impl SignableTransaction {
     return Ok(TransactionMachine { signable: self, transcript, sigs });
   }
 
-  pub fn calculate_weight(total_inputs: usize, address: &bitcoin::Address, change: bool) -> usize{
-    // version number + segwit marker + segwit flag 
-    let mut total_weight= 4 * 4;
+  pub fn calculate_weight(total_inputs: usize, address: &bitcoin::Address, change: bool) -> usize {
+    // version number + segwit marker + segwit flag
+    let mut total_weight = 4 * 4;
     total_weight += 1;
     total_weight += 1;
     // number of input
@@ -105,7 +105,6 @@ impl SignableTransaction {
 
     return total_weight;
   }
-
 }
 
 pub struct TransactionMachine {
@@ -169,7 +168,11 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
     );
   }
 
-  fn from_cache(_: (), _: ThresholdKeys<Secp256k1>, _: CachedPreprocess) -> Result<Self, FrostError> {
+  fn from_cache(
+    _: (),
+    _: ThresholdKeys<Secp256k1>,
+    _: CachedPreprocess,
+  ) -> Result<Self, FrostError> {
     unimplemented!(
       "Bitcoin transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"
@@ -211,7 +214,17 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
       .drain(..)
       .enumerate()
       .map(|(index, sig)| {
-        let (tx_sighash, _) = taproot_key_spend_signature_hash(&self.signable.tx, index).unwrap();
+        let inputs = &self.signable.tx.inputs;
+        let all_witness_utxos = (0..inputs.len())
+          .map(|i| &inputs[i].witness_utxo)
+          .filter_map(|x| x.as_ref())
+          .collect::<Vec<_>>();
+        let prevouts = Prevouts::All(&all_witness_utxos);
+
+        let tx_sighash = SighashCache::new(&self.signable.tx.unsigned_tx)
+          .taproot_key_spend_signature_hash(index, &prevouts, SchnorrSighashType::All)
+          .unwrap();
+
         let (sig, share) = sig.sign(commitments.remove(0), &tx_sighash)?;
         shares.push(share);
         Ok(sig)
@@ -240,7 +253,8 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
       (schnorr_signature.R, _offset) = make_even(schnorr_signature.R);
       schnorr_signature.s += Scalar::from(_offset);
 
-      let temp_sig = secp256k1::schnorr::Signature::from_slice(&schnorr_signature.serialize()[1..65]).unwrap();
+      let temp_sig =
+        secp256k1::schnorr::Signature::from_slice(&schnorr_signature.serialize()[1..65]).unwrap();
       let sig = SchnorrSig { sig: temp_sig, hash_ty: SchnorrSighashType::All };
       self.tx.inputs[i].tap_key_sig = Some(sig);
 
