@@ -66,10 +66,6 @@ async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
 
-  for (_, key) in keys.iter_mut() {
-    coin.tweak_keys(key);
-  }
-
   let threshold = keys[&1].params().t();
   let mut networks = LocalNetwork::new(threshold);
 
