@@ -42,8 +42,8 @@ Serai token. If an Application Call, the encoded call will be executed.
 
   - `origin`      (Option\<ExternalAddress>): Address, from the network of
 origin, which sent coins in.
-  - `instruction` (InInstruction):       The action to perform with the incoming
-coins.
+  - `instruction` (InInstruction):            The action to perform with the
+incoming coins.
 
 Networks may automatically provide `origin`. If they do, the instruction may
 still provide `origin`, overriding the automatically provided value.

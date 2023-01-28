@@ -12,16 +12,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-thiserror = { version = "1", optional = true }
-
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
-
-serde = { version = "1", optional = true }
-
-sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-inherents = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -29,21 +21,12 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 pallet-assets = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 serai-primitives = { path = "../../serai/primitives", default-features = false }
-in-instructions-primitives = { path = "../../in-instructions/primitives", default-features = false }
 tokens-primitives = { path = "../primitives", default-features = false }
 
 [features]
 std = [
-  "thiserror",
-
   "scale/std",
   "scale-info/std",
-
-  "serde",
-
-  "sp-std/std",
-  "sp-inherents/std",
-  "sp-runtime/std",
 
   "frame-system/std",
   "frame-support/std",
@@ -51,6 +34,5 @@ std = [
   "pallet-assets/std",
 
   "serai-primitives/std",
-  "in-instructions-primitives/std",
 ]
 default = ["std"]

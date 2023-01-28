@@ -1,5 +1,7 @@
 use core::time::Duration;
 
+use rand_core::{RngCore, OsRng};
+
 use sp_core::Pair;
 use serai_runtime::in_instructions::{Batch, Update};
 
@@ -18,23 +20,29 @@ use serai_client::{
 };
 
 mod runner;
-use runner::{provide_updates, URL};
+use runner::{URL, provide_updates};
 
 serai_test!(
   async fn burn() {
     let coin = BITCOIN;
-    let id = BlockHash([0xaa; 32]);
-    let block_number = BlockNumber(123);
+    let mut id = BlockHash([0; 32]);
+    OsRng.fill_bytes(&mut id.0);
+    let block_number = BlockNumber(u32::try_from(OsRng.next_u64() >> 32).unwrap());
 
     let pair = insecure_pair_from_name("Alice");
     let public = pair.public();
     let address = SeraiAddress::from(public);
 
-    let amount = Amount(101);
+    let amount = Amount(OsRng.next_u64());
     let balance = Balance { coin, amount };
 
-    let external_address = ExternalAddress::new(b"external".to_vec()).unwrap();
-    let data = Data::new(b"data".to_vec()).unwrap();
+    let mut rand_bytes = vec![0; 32];
+    OsRng.fill_bytes(&mut rand_bytes);
+    let external_address = ExternalAddress::new(rand_bytes).unwrap();
+
+    let mut rand_bytes = vec![0; 32];
+    OsRng.fill_bytes(&mut rand_bytes);
+    let data = Data::new(rand_bytes).unwrap();
 
     let batch = Batch {
       id,

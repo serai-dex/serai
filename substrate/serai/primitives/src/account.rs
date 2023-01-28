@@ -3,7 +3,7 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
-use sp_core::sr25519::{Public, Signature as RistrettoSignature;
+use sp_core::sr25519::{Public, Signature as RistrettoSignature};
 #[cfg(feature = "std")]
 use sp_core::{Pair as PairTrait, sr25519::Pair};
 
@@ -21,21 +21,25 @@ impl SeraiAddress {
     SeraiAddress(key)
   }
 }
+
 impl From<[u8; 32]> for SeraiAddress {
   fn from(key: [u8; 32]) -> SeraiAddress {
     SeraiAddress(key)
   }
 }
+
 impl From<PublicKey> for SeraiAddress {
   fn from(key: PublicKey) -> SeraiAddress {
     SeraiAddress(key.0)
   }
 }
+
 impl From<SeraiAddress> for PublicKey {
   fn from(address: SeraiAddress) -> PublicKey {
     PublicKey::from_raw(address.0)
   }
 }
+
 #[cfg(feature = "std")]
 impl std::fmt::Display for SeraiAddress {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,10 +65,10 @@ impl StaticLookup for AccountLookup {
   type Source = SeraiAddress;
   type Target = PublicKey;
   fn lookup(source: SeraiAddress) -> Result<PublicKey, LookupError> {
-    Ok(PublicKey::from_raw(source.0))
+    Ok(source.into())
   }
   fn unlookup(source: PublicKey) -> SeraiAddress {
-    SeraiAddress(source.0)
+    source.into()
   }
 }
 

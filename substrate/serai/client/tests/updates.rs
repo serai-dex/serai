@@ -1,3 +1,5 @@
+use rand_core::{RngCore, OsRng};
+
 use serai_runtime::in_instructions::{Batch, Update};
 
 use serai_client::{
@@ -8,16 +10,18 @@ use serai_client::{
 };
 
 mod runner;
-use runner::{provide_updates, URL};
+use runner::{URL, provide_updates};
 
 serai_test!(
   async fn publish_updates() {
     let coin = BITCOIN;
-    let id = BlockHash([0xaa; 32]);
-    let block_number = BlockNumber(123);
+    let mut id = BlockHash([0; 32]);
+    OsRng.fill_bytes(&mut id.0);
+    let block_number = BlockNumber(u32::try_from(OsRng.next_u64() >> 32).unwrap());
 
-    let address = SeraiAddress::new([0xff; 32]);
-    let amount = Amount(101);
+    let mut address = SeraiAddress::new([0; 32]);
+    OsRng.fill_bytes(&mut address.0);
+    let amount = Amount(OsRng.next_u64());
 
     let batch = Batch {
       id,

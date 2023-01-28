@@ -47,6 +47,12 @@ impl ExternalAddress {
   }
 }
 
+impl AsRef<[u8]> for ExternalAddress {
+  fn as_ref(&self) -> &[u8] {
+    self.0.as_ref()
+  }
+}
+
 // Should be enough for a Uniswap v3 call
 pub const MAX_DATA_LEN: u32 = 512;
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
@@ -65,5 +71,11 @@ impl Data {
   #[cfg(feature = "std")]
   pub fn consume(self) -> Vec<u8> {
     self.0.into_inner()
+  }
+}
+
+impl AsRef<[u8]> for Data {
+  fn as_ref(&self) -> &[u8] {
+    self.0.as_ref()
   }
 }

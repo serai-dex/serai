@@ -253,8 +253,8 @@ type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSIO
 
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
-  fn convert(address: PublicKey) -> Option<PublicKey> {
-    Some(address)
+  fn convert(key: PublicKey) -> Option<PublicKey> {
+    Some(key)
   }
 }
 
@@ -410,7 +410,7 @@ sp_api::impl_runtime_apis! {
     }
 
     fn validators() -> Vec<PublicKey> {
-      Session::validators().iter().map(|validator| PublicKey::from_raw(validator.0)).collect()
+      Session::validators().drain(..).map(Into::into).collect()
     }
   }
 
