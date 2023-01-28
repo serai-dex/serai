@@ -309,8 +309,7 @@ impl Coin for Bitcoin {
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
     use bitcoin::{Address, PrivateKey, PublicKey,
-        OutPoint, Sequence, Witness,util::sighash::SighashCache,
-        Script, PackedLockTime,EcdsaSighashType, Network, 
+        OutPoint, Sequence, Witness, Script, PackedLockTime, Network, 
         blockdata::{script::Builder,transaction::{TxIn, TxOut, Transaction}},
         secp256k1::{rand, Secp256k1, Message, SecretKey}};
 
@@ -364,7 +363,7 @@ impl Coin for Bitcoin {
       output: vout_list,
     };
     
-    let transactions_sighash = new_transaction.signature_hash(0, &main_addr.script_pubkey(), EcdsaSighashType::All.to_u32());
+    let transactions_sighash = new_transaction.signature_hash(0, &main_addr.script_pubkey(), 1);
     let mut signed_der = secp.sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner).serialize_der().to_vec();
     signed_der.push(1);
     new_transaction.input[0].script_sig = Builder::new().push_slice(&signed_der).push_key(&public_key).into_script();
