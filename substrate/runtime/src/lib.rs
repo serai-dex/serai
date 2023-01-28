@@ -16,6 +16,7 @@ pub use pallet_balances as balances;
 pub use pallet_transaction_payment as transaction_payment;
 
 pub use pallet_assets as assets;
+pub use tokens_pallet as tokens;
 pub use in_instructions_pallet as in_instructions;
 
 pub use validator_sets_pallet as validator_sets;
@@ -33,15 +34,15 @@ use sp_version::NativeVersion;
 
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
-  traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
+  traits::{Convert, OpaqueKeys, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{PublicKey, Signature, SeraiAddress, Coin};
+use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount, Coin};
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64},
+  traits::{ConstU8, ConstU32, ConstU64, Contains},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
@@ -55,14 +56,6 @@ use session::PeriodicSessions;
 
 /// An index to a block.
 pub type BlockNumber = u32;
-
-/// Balance of an account.
-// Distinct from serai-primitives Amount due to Substrate's requirements on this type.
-// If Amount could be dropped in here, it would be.
-// While Amount could have all the necessary traits implemented, not only are they many, yet it'd
-// make Amount a larger type, providing more operations than desired.
-// The current type's minimalism sets clear bounds on usage.
-pub type Balance = u64;
 
 /// Index of a transaction in the chain, for a given account.
 pub type Index = u32;
@@ -104,10 +97,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 // 1 MB
 pub const BLOCK_SIZE: u32 = 1024 * 1024;
 // 6 seconds
-pub const TARGET_BLOCK_TIME: u64 = 6000;
+pub const TARGET_BLOCK_TIME: u64 = 6;
 
 /// Measured in blocks.
-pub const MINUTES: BlockNumber = 60_000 / (TARGET_BLOCK_TIME as BlockNumber);
+pub const MINUTES: BlockNumber = 60 / (TARGET_BLOCK_TIME as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
@@ -134,13 +127,44 @@ parameter_types! {
     );
 }
 
+pub struct CallFilter;
+impl Contains<RuntimeCall> for CallFilter {
+  fn contains(call: &RuntimeCall) -> bool {
+    if let RuntimeCall::Balances(call) = call {
+      return matches!(call, balances::Call::transfer { .. } | balances::Call::transfer_all { .. });
+    }
+
+    if let RuntimeCall::Assets(call) = call {
+      return matches!(
+        call,
+        assets::Call::approve_transfer { .. } |
+          assets::Call::cancel_approval { .. } |
+          assets::Call::transfer { .. } |
+          assets::Call::transfer_approved { .. }
+      );
+    }
+    if let RuntimeCall::Tokens(call) = call {
+      return matches!(call, tokens::Call::burn { .. });
+    }
+    if let RuntimeCall::InInstructions(call) = call {
+      return matches!(call, in_instructions::Call::update { .. });
+    }
+
+    if let RuntimeCall::ValidatorSets(call) = call {
+      return matches!(call, validator_sets::Call::vote { .. });
+    }
+
+    false
+  }
+}
+
 impl system::Config for Runtime {
-  type BaseCallFilter = support::traits::Everything;
+  type BaseCallFilter = CallFilter;
   type BlockWeights = BlockWeights;
   type BlockLength = BlockLength;
-  type AccountId = SeraiAddress;
+  type AccountId = PublicKey;
   type RuntimeCall = RuntimeCall;
-  type Lookup = IdentityLookup<SeraiAddress>;
+  type Lookup = AccountLookup;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
@@ -157,7 +181,7 @@ impl system::Config for Runtime {
   type OnKilledAccount = ();
   type OnSetCode = ();
 
-  type AccountData = balances::AccountData<Balance>;
+  type AccountData = balances::AccountData<SubstrateAmount>;
   type SystemWeightInfo = ();
   type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
@@ -168,7 +192,7 @@ impl balances::Config for Runtime {
   type MaxLocks = ConstU32<50>;
   type MaxReserves = ();
   type ReserveIdentifier = [u8; 8];
-  type Balance = Balance;
+  type Balance = SubstrateAmount;
   type RuntimeEvent = RuntimeEvent;
   type DustRemoval = ();
   type ExistentialDeposit = ConstU64<500>;
@@ -176,9 +200,18 @@ impl balances::Config for Runtime {
   type WeightInfo = balances::weights::SubstrateWeight<Runtime>;
 }
 
+impl transaction_payment::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
+  type OperationalFeeMultiplier = ConstU8<5>;
+  type WeightToFee = IdentityFee<SubstrateAmount>;
+  type LengthToFee = IdentityFee<SubstrateAmount>;
+  type FeeMultiplierUpdate = ();
+}
+
 impl assets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type Balance = Balance;
+  type Balance = SubstrateAmount;
   type Currency = Balances;
 
   type AssetId = Coin;
@@ -186,8 +219,8 @@ impl assets::Config for Runtime {
   type StringLimit = ConstU32<32>;
 
   // Don't allow anyone to create assets
-  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<SeraiAddress>>;
-  type ForceOrigin = system::EnsureRoot<SeraiAddress>;
+  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<PublicKey>>;
+  type ForceOrigin = system::EnsureRoot<PublicKey>;
 
   // Don't charge fees nor kill accounts
   type RemoveItemsLimit = ConstU32<0>;
@@ -207,13 +240,8 @@ impl assets::Config for Runtime {
   type BenchmarkHelper = ();
 }
 
-impl transaction_payment::Config for Runtime {
+impl tokens::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
-  type OperationalFeeMultiplier = ConstU8<5>;
-  type WeightToFee = IdentityFee<Balance>;
-  type LengthToFee = IdentityFee<Balance>;
-  type FeeMultiplierUpdate = ();
 }
 
 impl in_instructions::Config for Runtime {
@@ -236,7 +264,7 @@ impl validator_sets::Config for Runtime {
 
 impl session::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type ValidatorId = SeraiAddress;
+  type ValidatorId = PublicKey;
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Sessions;
   type NextSessionRotation = Sessions;
@@ -283,6 +311,7 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Assets: assets,
+    Tokens: tokens,
     InInstructions: in_instructions,
 
     ValidatorSets: validator_sets,
@@ -381,31 +410,31 @@ sp_api::impl_runtime_apis! {
     }
 
     fn validators() -> Vec<PublicKey> {
-      Session::validators()
+      Session::validators().drain(..).map(Into::into).collect()
     }
   }
 
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, SeraiAddress, Index> for Runtime {
-    fn account_nonce(account: SeraiAddress) -> Index {
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Index> for Runtime {
+    fn account_nonce(account: PublicKey) -> Index {
       System::account_nonce(account)
     }
   }
 
   impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<
     Block,
-    Balance
+    SubstrateAmount
   > for Runtime {
     fn query_info(
       uxt: <Block as BlockT>::Extrinsic,
       len: u32,
-    ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<Balance> {
+    ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<SubstrateAmount> {
       TransactionPayment::query_info(uxt, len)
     }
 
     fn query_fee_details(
       uxt: <Block as BlockT>::Extrinsic,
       len: u32,
-    ) -> transaction_payment::FeeDetails<Balance> {
+    ) -> transaction_payment::FeeDetails<SubstrateAmount> {
       TransactionPayment::query_fee_details(uxt, len)
     }
   }

@@ -25,6 +25,9 @@ members = [
   "substrate/serai/primitives",
   "substrate/serai/client",
 
+  "substrate/tokens/primitives",
+  "substrate/tokens/pallet",
+
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",
   "substrate/in-instructions/client",

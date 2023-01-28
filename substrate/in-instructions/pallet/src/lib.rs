@@ -13,7 +13,7 @@ use sp_inherents::{InherentIdentifier, IsFatalError};
 
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::{BlockNumber, BlockHash, Coin};
+use serai_primitives::{BlockNumber, BlockHash, Coin, WithAmount, Balance};
 
 pub use in_instructions_primitives as primitives;
 use primitives::InInstruction;
@@ -24,7 +24,7 @@ pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Batch {
   pub id: BlockHash,
-  pub instructions: Vec<InInstruction>,
+  pub instructions: Vec<WithAmount<InInstruction>>,
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
@@ -89,10 +89,12 @@ pub mod pallet {
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
 
+  use tokens_pallet::{Config as TokensConfig, Pallet as Tokens};
+
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<BlockNumber = u32> {
+  pub trait Config: frame_system::Config<BlockNumber = u32> + TokensConfig {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -100,6 +102,7 @@ pub mod pallet {
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
     Batch { coin: Coin, id: BlockHash },
+    Failure { coin: Coin, id: BlockHash, index: u32 },
   }
 
   #[pallet::pallet]
@@ -122,23 +125,43 @@ pub mod pallet {
     }
   }
 
+  impl<T: Config> Pallet<T> {
+    fn execute(coin: Coin, instruction: WithAmount<InInstruction>) -> Result<(), ()> {
+      match instruction.data {
+        InInstruction::Transfer(address) => {
+          Tokens::<T>::mint(address, Balance { coin, amount: instruction.amount })
+        }
+        _ => panic!("unsupported instruction"),
+      }
+      Ok(())
+    }
+  }
+
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
-    #[pallet::weight((0, DispatchClass::Mandatory))] // TODO
-    pub fn execute(origin: OriginFor<T>, updates: Updates) -> DispatchResult {
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    pub fn update(origin: OriginFor<T>, mut updates: Updates) -> DispatchResult {
       ensure_none(origin)?;
       assert!(!Once::<T>::exists());
       Once::<T>::put(true);
 
-      for (coin, update) in updates.iter().enumerate() {
+      for (coin, update) in updates.iter_mut().enumerate() {
         if let Some(update) = update {
           let coin = coin_from_index(coin);
           BlockNumbers::<T>::insert(coin, update.block_number);
 
-          for batch in &update.batches {
-            // TODO: EXECUTE
+          for batch in update.batches.iter_mut() {
             Self::deposit_event(Event::Batch { coin, id: batch.id });
+            for (i, instruction) in batch.instructions.drain(..).enumerate() {
+              if Self::execute(coin, instruction).is_err() {
+                Self::deposit_event(Event::Failure {
+                  coin,
+                  id: batch.id,
+                  index: u32::try_from(i).unwrap(),
+                });
+              }
+            }
           }
         }
       }
@@ -157,7 +180,7 @@ pub mod pallet {
       data
         .get_data::<Updates>(&INHERENT_IDENTIFIER)
         .unwrap()
-        .map(|updates| Call::execute { updates })
+        .map(|updates| Call::update { updates })
     }
 
     // Assumes that only not yet handled batches are provided as inherent data
@@ -167,7 +190,7 @@ pub mod pallet {
       let expected = data.get_data::<Updates>(&INHERENT_IDENTIFIER).unwrap().unwrap();
       // Match to be exhaustive
       let updates = match call {
-        Call::execute { ref updates } => updates,
+        Call::update { ref updates } => updates,
         _ => Err(InherentError::InvalidCall)?,
       };
 

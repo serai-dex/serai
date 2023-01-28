@@ -1,19 +1,36 @@
 use thiserror::Error;
 
-use serde::Serialize;
-use scale::Decode;
+use scale::{Encode, Decode};
+mod scale_value;
+pub(crate) use crate::scale_value::{scale_value, scale_composite};
+use ::scale_value::Value;
 
-use subxt::{tx::BaseExtrinsicParams, Config as SubxtConfig, OnlineClient};
+use subxt::{
+  utils::Encoded,
+  tx::{
+    Signer, DynamicTxPayload, BaseExtrinsicParams, BaseExtrinsicParamsBuilder, TxClient,
+  },
+  Config as SubxtConfig, OnlineClient,
+};
 
 pub use serai_primitives as primitives;
 use primitives::{Signature, SeraiAddress};
 
-use serai_runtime::{system::Config, Runtime};
+use serai_runtime::{
+  system::Config, support::traits::PalletInfo as PalletInfoTrait, PalletInfo, Runtime,
+};
 
+pub mod tokens;
 pub mod in_instructions;
 
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Encode, Decode)]
+pub struct Tip {
+  #[codec(compact)]
+  pub tip: u64,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct SeraiConfig;
+pub struct SeraiConfig;
 impl SubxtConfig for SeraiConfig {
   type BlockNumber = <Runtime as Config>::BlockNumber;
 
@@ -28,7 +45,7 @@ impl SubxtConfig for SeraiConfig {
   type Header = <Runtime as Config>::Header;
   type Signature = Signature;
 
-  type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, ()>;
+  type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, Tip>;
 }
 
 #[derive(Clone, Error, Debug)]
@@ -47,21 +64,16 @@ impl Serai {
     Ok(Serai(OnlineClient::<SeraiConfig>::from_url(url).await.map_err(|_| SeraiError::RpcError)?))
   }
 
-  async fn storage<K: Serialize, R: Decode>(
+  async fn storage<R: Decode>(
     &self,
     pallet: &'static str,
     name: &'static str,
-    key: Option<K>,
+    keys: Option<Vec<Value>>,
     block: [u8; 32],
   ) -> Result<Option<R>, SeraiError> {
-    let mut keys = vec![];
-    if let Some(key) = key {
-      keys.push(scale_value::serde::to_value(key).unwrap());
-    }
-
     let storage = self.0.storage();
-    let address = subxt::dynamic::storage(pallet, name, keys);
-    debug_assert!(storage.validate(&address).is_ok());
+    let address = subxt::dynamic::storage(pallet, name, keys.unwrap_or(vec![]));
+    debug_assert!(storage.validate(&address).is_ok(), "invalid storage address");
 
     storage
       .fetch(&address, Some(block.into()))
@@ -71,7 +83,46 @@ impl Serai {
       .transpose()
   }
 
+  async fn events<P: 'static, E: Decode>(
+    &self,
+    block: [u8; 32],
+    filter: impl Fn(&E) -> bool,
+  ) -> Result<Vec<E>, SeraiError> {
+    let mut res = vec![];
+    for event in
+      self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?.iter()
+    {
+      let event = event.map_err(|_| SeraiError::InvalidRuntime)?;
+      if PalletInfo::index::<P>().unwrap() == usize::from(event.pallet_index()) {
+        let mut with_variant: &[u8] =
+          &[[event.variant_index()].as_ref(), event.field_bytes()].concat();
+        let event = E::decode(&mut with_variant).map_err(|_| SeraiError::InvalidRuntime)?;
+        if filter(&event) {
+          res.push(event);
+        }
+      }
+    }
+    Ok(res)
+  }
+
   pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
     Ok(self.0.rpc().finalized_head().await.map_err(|_| SeraiError::RpcError)?.into())
+  }
+
+  pub fn sign<S: Send + Sync + Signer<SeraiConfig>>(
+    &self,
+    signer: &S,
+    payload: &DynamicTxPayload<'static>,
+    nonce: u32,
+    params: BaseExtrinsicParamsBuilder<SeraiConfig, Tip>,
+  ) -> Result<Encoded, SeraiError> {
+    TxClient::new(self.0.offline())
+      .create_signed_with_nonce(payload, signer, nonce, params)
+      .map(|tx| Encoded(tx.into_encoded()))
+      .map_err(|_| SeraiError::InvalidRuntime)
+  }
+
+  pub async fn publish(&self, tx: &Encoded) -> Result<[u8; 32], SeraiError> {
+    self.0.rpc().submit_extrinsic(tx).await.map(Into::into).map_err(|_| SeraiError::RpcError)
   }
 }
