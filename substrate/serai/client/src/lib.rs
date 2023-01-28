@@ -7,9 +7,7 @@ use ::scale_value::Value;
 
 use subxt::{
   utils::Encoded,
-  tx::{
-    Signer, DynamicTxPayload, BaseExtrinsicParams, BaseExtrinsicParamsBuilder, TxClient,
-  },
+  tx::{Signer, DynamicTxPayload, BaseExtrinsicParams, BaseExtrinsicParamsBuilder, TxClient},
   Config as SubxtConfig, OnlineClient,
 };
 
