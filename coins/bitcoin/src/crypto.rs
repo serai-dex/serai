@@ -31,9 +31,7 @@ impl Hram<Secp256k1> for BitcoinHram {
 
     let r_encoded_point = R.to_encoded_point(true);
     let a_encoded_point = A.to_encoded_point(true);
-    //let tag_hash:GenericArray<u8, U32> = Sha256::digest(b"BIP0340/challenge");
     let mut data = Sha256::new();
-    //data.update(TAG_HASH.as_ref());
     data.update(&*TAG_HASH);
     data.update(&*TAG_HASH);
     data.update(r_encoded_point.x().unwrap());
