@@ -9,6 +9,8 @@ mod coin;
 use coin::{CoinError, Coin};
 
 mod scanner;
+mod scheduler;
+
 mod wallet;
 
 #[cfg(test)]
