@@ -53,7 +53,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
     .drain()
     .map(|(i, core)| {
       assert_eq!(
-        &ThresholdCore::<C>::deserialize::<&[u8]>(&mut core.serialize().as_ref()).unwrap(),
+        &ThresholdCore::<C>::read::<&[u8]>(&mut core.serialize().as_ref()).unwrap(),
         &core
       );
       (i, ThresholdKeys::new(core))
