@@ -1,24 +1,38 @@
+use core::time::Duration;
+
+use async_trait::async_trait;
+
+use tokio::{sync::mpsc, time::timeout};
+
+use frost::{curve::Ciphersuite, ThresholdKeys};
+
+use crate::coin::{Block, Coin};
+
 /// A block number from the Substrate chain, considered a canonical orderer by all instances.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct CanonicalNumber(u64);
+
+// TODO: Either move everything over or get rid of this
 /// A block number of some arbitrary chain, later-affirmed by the Substrate chain.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ChainNumber(u64);
 
-/// Instructions for the scanner.
-pub enum Instruction<C: Ciphersuite> {
+/// Orders for the scanner.
+#[derive(Clone, Debug)]
+pub enum ScannerOrder<C: Ciphersuite> {
   /// Update the keys being scanned for.
   /// If no keys have been prior set, these will become the keys with no further actions.
   /// If keys have been prior set, both keys will be scanned for as detailed in the Multisig
   /// documentation. The old keys will eventually stop being scanned for, leaving just the
   /// updated-to keys.
-  UpdateKeys {
-    activation_number: ChainNumber,
-    keys: FrostKeys<C>,
-  },
+  UpdateKeys { activation_number: ChainNumber, keys: ThresholdKeys<C> },
 }
 
-enum ScannerEvent<C: Coin> {
-// Needs to be reported to Substrate
-  Block(usize, <C::Block as Block>::Id),
+#[derive(Clone, Debug)]
+pub enum ScannerEvent<C: Coin> {
+  // Needs to be reported to Substrate
+  Block(ChainNumber, <C::Block as Block>::Id),
+
   // Needs to be processed/sent up to Substrate
   ExternalOutput(C::Output),
 
@@ -50,35 +64,97 @@ enum ScannerEvent<C: Coin> {
   ChangeOutput(C::Output),
 }
 
-impl Scanner<C: Coin> {
-  fn new(coin: Arc<C>) -> (InChannelForInstrs, OutChannelForOutputs) {
+pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
+pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
+#[async_trait]
+pub trait ScannerDb<C: Ciphersuite>: Send + Sync {
+  async fn get_latest_scanned_block(&self, key: C::G) -> ChainNumber;
+  async fn save_scanned_block(&mut self, key: C::G, block: ChainNumber);
+}
+
+#[derive(Debug)]
+pub struct Scanner<C: Coin, D: ScannerDb<C::Curve>> {
+  coin: C,
+  db: D,
+  keys: Vec<ThresholdKeys<C::Curve>>,
+
+  orders: mpsc::UnboundedReceiver<ScannerOrder<C::Curve>>,
+  events: mpsc::UnboundedSender<ScannerEvent<C>>,
+}
+
+#[derive(Debug)]
+pub struct ScannerHandle<C: Coin> {
+  orders: ScannerOrderChannel<C::Curve>,
+  events: ScannerEventChannel<C>,
+}
+
+impl<C: Coin + 'static, D: ScannerDb<C::Curve> + 'static> Scanner<C, D> {
+  #[allow(clippy::new_ret_no_self)]
+  fn new(coin: C, db: D) -> ScannerHandle<C> {
+    let (orders_send, orders_recv) = mpsc::unbounded_channel();
+    let (events_send, events_recv) = mpsc::unbounded_channel();
+    tokio::spawn(
+      Scanner { coin, db, keys: vec![], orders: orders_recv, events: events_send }.run(),
+    );
+    ScannerHandle { orders: orders_send, events: events_recv }
   }
 
   // An async function, to be spawned on a task, to discover and report outputs
-  async fn run(self) {
+  async fn run(mut self) {
     loop {
-      let latest = self.coin.get_latest_block_number();
-      for i in (self.latest + 1) ..= latest {
-        let block = self.coin.get_block(i);
-        let mut outputs = scan block for all active keys;
+      // Scan new blocks
+      {
+        let latest = match self.coin.get_latest_block_number().await {
+          Ok(latest) => latest,
+          Err(_) => {
+            log::warn!("Couldn't get {}'s latest block number", C::ID);
+            break;
+          }
+        };
 
-        emit ScannerEvent::Block(i, block.id());
-        for output in outputs.drain(..) {
-          match output.kind() {
-            OutputType::External => emit ScannerEvent::ExternalOutput,
-            OutputType::Branch => emit ScannerEvent::BranchOutput,
-            OutputType::Change => emit ScannerEvent::ChangeOutput,
+        for key in &self.keys {
+          let latest_scanned =
+            usize::try_from(self.db.get_latest_scanned_block(key.group_key()).await.0).unwrap();
+          for i in (latest_scanned + 1) ..= latest {
+            // TODO: Check for key deprecation
+
+            let block = match self.coin.get_block(i).await {
+              Ok(block) => block,
+              Err(_) => {
+                log::warn!("Couldn't get {} block {i}", C::ID);
+                break;
+              }
+            };
+
+            let outputs = match self.coin.get_outputs(&block, key.group_key()).await {
+              Ok(outputs) => outputs,
+              Err(_) => {
+                log::warn!("Couldn't scan {} block {i}", C::ID);
+                break;
+              }
+            };
+
+            // TODO: Process outputs
+            /*
+            emit ScannerEvent::Block(i, block.id());
+            for output in outputs.drain(..) {
+              match output.kind() {
+                OutputType::External => emit ScannerEvent::ExternalOutput,
+                OutputType::Branch => emit ScannerEvent::BranchOutput,
+                OutputType::Change => emit ScannerEvent::ChangeOutput,
+              }
+            }
+            */
+
+            self.db.save_scanned_block(key.group_key(), ChainNumber(i.try_into().unwrap())).await;
           }
         }
       }
-      self.latest = latest;
 
-      // TODO: Use a timeout on the future instead?
-      let sleep = sleep(Duration::from_secs(1));
-      futures::select! {
-        self.instructions.read() => {},
-        sleep => {},
+      // Handle any new orders
+      if let Ok(order) = timeout(Duration::from_secs(1), self.orders.recv()).await {
+        todo!();
       }
     }
   }

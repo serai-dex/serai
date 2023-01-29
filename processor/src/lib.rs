@@ -8,6 +8,7 @@ use frost::{curve::Ciphersuite, FrostError};
 mod coin;
 use coin::{CoinError, Coin};
 
+mod scanner;
 mod wallet;
 
 #[cfg(test)]
@@ -38,6 +39,6 @@ pub enum SignError {
 pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
   <C::Curve as Ciphersuite>::hash_to_F(
     b"Serai DEX Additional Key",
-    &[C::ID, &k.to_le_bytes()].concat(),
+    &[C::ID.as_bytes(), &k.to_le_bytes()].concat(),
   )
 }

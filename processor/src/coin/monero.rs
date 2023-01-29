@@ -151,7 +151,7 @@ impl Coin for Monero {
 
   type Address = MoneroAddress;
 
-  const ID: &'static [u8] = b"Monero";
+  const ID: &'static str = "Monero";
   const CONFIRMATIONS: usize = 10;
   // Testnet TX bb4d188a4c571f2f0de70dca9d475abc19078c10ffa8def26dd4f63ce1bcfd79 uses 146 inputs
   // while using less than 100kb of space, albeit with just 2 outputs (though outputs share a BP)

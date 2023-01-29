@@ -1,4 +1,4 @@
-use std::marker::Send;
+use core::{marker::Send, fmt::Debug};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -19,8 +19,8 @@ pub enum CoinError {
   ConnectionError,
 }
 
-pub trait Block: Sized + Clone {
-  type Id: Clone + Copy + AsRef<[u8]>;
+pub trait Block: Send + Sync + Sized + Clone {
+  type Id: Send + Sync + Clone + Copy + Debug + AsRef<[u8]>;
   fn id(&self) -> Self::Id;
 }
 
@@ -31,8 +31,8 @@ pub enum OutputType {
   Change,
 }
 
-pub trait Output: Sized + Clone {
-  type Id: Clone + Copy + AsRef<[u8]>;
+pub trait Output: Send + Sync + Sized + Clone {
+  type Id: Send + Sync + Clone + Copy + Debug + AsRef<[u8]>;
 
   fn kind(&self) -> OutputType;
 
@@ -44,7 +44,7 @@ pub trait Output: Sized + Clone {
 }
 
 #[async_trait]
-pub trait Coin {
+pub trait Coin: Send + Sync {
   type Curve: Curve;
 
   type Fee: Copy;
@@ -57,7 +57,7 @@ pub trait Coin {
 
   type Address: Send;
 
-  const ID: &'static [u8];
+  const ID: &'static str;
   const CONFIRMATIONS: usize;
   const MAX_INPUTS: usize;
   const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not

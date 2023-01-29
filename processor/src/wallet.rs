@@ -225,7 +225,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   }
 
   pub fn add_keys(&mut self, keys: &WalletKeys<C::Curve>) {
-    self.pending.push((self.acknowledged_block(keys.creation_block), keys.bind(C::ID)));
+    self.pending.push((self.acknowledged_block(keys.creation_block), keys.bind(C::ID.as_bytes())));
   }
 
   pub fn address(&self) -> C::Address {
