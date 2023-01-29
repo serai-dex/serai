@@ -251,6 +251,7 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
       let mut schnorr_signature = schnorr.complete(
         shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>(),
       )?;
+      //TODO: Implement BitcoinSchnorr Algorithm later to handle this
       let mut _offset = 0;
       (schnorr_signature.R, _offset) = make_even(schnorr_signature.R);
       schnorr_signature.s += Scalar::from(_offset);

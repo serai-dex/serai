@@ -22,7 +22,6 @@ fn test_signing() {
   }
 
   let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true).to_hex().to_string();
-  dbg!(pubkey_compressed);
   
   let algo = Schnorr::<Secp256k1, BitcoinHram>::new();
   let mut _sig = sign(
@@ -33,7 +32,6 @@ fn test_signing() {
     &Sha256::digest(MESSAGE),
   );
 
-  //TODO: Implement BitcoinSchnorr Algorithm later to handle this
   let mut _offset = 0;
   (_sig.R, _offset) = make_even(_sig.R);
   _sig.s += Scalar::from(_offset);
