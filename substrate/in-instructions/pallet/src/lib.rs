@@ -94,7 +94,7 @@ pub mod pallet {
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<BlockNumber = u32> + TokensConfig {
+  pub trait Config: frame_system::Config<BlockNumber = u64> + TokensConfig {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 

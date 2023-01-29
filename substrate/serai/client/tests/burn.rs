@@ -27,7 +27,7 @@ serai_test!(
     let coin = BITCOIN;
     let mut id = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut id.0);
-    let block_number = BlockNumber(u32::try_from(OsRng.next_u64() >> 32).unwrap());
+    let block_number = BlockNumber(OsRng.next_u64());
 
     let pair = insecure_pair_from_name("Alice");
     let public = pair.public();

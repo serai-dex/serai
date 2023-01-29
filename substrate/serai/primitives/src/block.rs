@@ -11,9 +11,9 @@ use sp_core::H256;
   Clone, Copy, Default, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct BlockNumber(pub u32);
-impl From<u32> for BlockNumber {
-  fn from(number: u32) -> BlockNumber {
+pub struct BlockNumber(pub u64);
+impl From<u64> for BlockNumber {
+  fn from(number: u64) -> BlockNumber {
     BlockNumber(number)
   }
 }

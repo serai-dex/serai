@@ -55,7 +55,7 @@ use transaction_payment::CurrencyAdapter;
 use session::PeriodicSessions;
 
 /// An index to a block.
-pub type BlockNumber = u32;
+pub type BlockNumber = u64;
 
 /// Index of a transaction in the chain, for a given account.
 pub type Index = u32;
@@ -100,7 +100,7 @@ pub const BLOCK_SIZE: u32 = 1024 * 1024;
 pub const TARGET_BLOCK_TIME: u64 = 6;
 
 /// Measured in blocks.
-pub const MINUTES: BlockNumber = 60 / (TARGET_BLOCK_TIME as BlockNumber);
+pub const MINUTES: BlockNumber = 60 / TARGET_BLOCK_TIME;
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
@@ -249,7 +249,7 @@ impl in_instructions::Config for Runtime {
 }
 
 const SESSION_LENGTH: BlockNumber = 5 * DAYS;
-type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
+type Sessions = PeriodicSessions<ConstU64<{ SESSION_LENGTH }>, ConstU64<{ SESSION_LENGTH }>>;
 
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
