@@ -58,7 +58,7 @@ impl Network for LocalNetwork {
   }
 }
 
-pub async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
+pub async fn test_send<C: Coin>(coin: C, fee: C::Fee) {
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
   let latest = coin.get_latest_block_number().await.unwrap();

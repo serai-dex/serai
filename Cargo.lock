@@ -8052,6 +8052,8 @@ dependencies = [
  "futures",
  "group",
  "hex",
+ "lazy_static",
+ "log",
  "modular-frost",
  "monero-serai",
  "rand_core 0.6.4",

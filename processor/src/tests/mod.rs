@@ -1,4 +1,37 @@
+pub(crate) mod util;
+
 mod send;
 pub(crate) use send::test_send;
 
-mod monero;
+mod scan;
+pub(crate) use scan::test_scan;
+
+#[macro_export]
+macro_rules! sequential {
+  () => {
+    lazy_static! {
+      static ref SEQUENTIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::new(());
+    }
+  };
+}
+
+#[macro_export]
+macro_rules! async_sequential {
+  ($(async fn $name: ident() $body: block)*) => {
+    $(
+      #[tokio::test]
+      async fn $name() {
+        let guard = SEQUENTIAL.lock().await;
+        let local = tokio::task::LocalSet::new();
+        local.run_until(async move {
+          if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
+            drop(guard);
+            Err(err).unwrap()
+          }
+        }).await;
+      }
+    )*
+  }
+}
+
+mod literal;
