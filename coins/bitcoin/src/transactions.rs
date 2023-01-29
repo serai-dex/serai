@@ -4,7 +4,7 @@ use bitcoin::{
     sighash::{SchnorrSighashType, SighashCache, Prevouts},
   },
   psbt::{serialize::Serialize, PartiallySignedTransaction},
-  Witness, TxOut, Address,
+  Witness, VarInt, Address,
 };
 use frost::{
   algorithm::Schnorr,
@@ -85,16 +85,17 @@ impl SignableTransaction {
     total_weight += total_inputs * 1 * 4;
     total_weight += total_inputs * 4 * 4;
     // OUTPUTS
-    let total_outputs = payments.len() + usize::from(change);
     total_weight += 1 * 4;
-    total_weight += total_outputs * 8 * 4;
-    total_weight += total_outputs * 1 * 4;
-    // 8 byte value - txout script length - 1 byte and script pubkey of payment address
+    // 8 byte value - txout script length - [1-9] byte for script length and script pubkey
     for (address, _) in payments.iter() {
+      total_weight += 8 * 4;
+      total_weight += VarInt(u64::try_from(address.script_pubkey().len()).unwrap()).len() * 4;
       total_weight += (address.script_pubkey().len()) * 1 * 4;
     }
     if change {
-      // Change address script pubkey byte
+      // Change address script pubkey byte (p2tr)
+      total_weight += 8 * 4;
+      total_weight += 1 * 4;
       total_weight += 34 * 4;
     }
     // Stack size of p2tr
