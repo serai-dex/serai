@@ -18,8 +18,11 @@ use monero_rpc::{
 };
 
 use monero_serai::{
-  wallet::address::{Network, AddressSpec, SubaddressIndex},
-  wallet::{Scanner, address::MoneroAddress},
+  wallet::{
+    address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
+    extra::MAX_TX_EXTRA_NONCE_SIZE,
+    Scanner,
+  },
   rpc::Rpc,
   transaction::Transaction,
 };
@@ -197,6 +200,38 @@ test!(
       assert_eq!(transfer.amount.as_pico(), 1000000);
       assert_eq!(transfer.subaddr_index, Index { major: 0, minor: 0 });
       assert_eq!(transfer.payment_id.0, PaymentId::from_slice(&data.1));
+    },
+  ),
+);
+
+test!(
+  test_send_to_wallet_rpc_with_arb_data,
+  (
+    |_, mut builder: Builder, _| async move {
+      // initialize rpc
+      let (wallet_rpc, _, wallet_rpc_addr) = initialize_rpcs().await;
+
+      // add destination
+      builder.add_payment(
+        MoneroAddress::from_str(Network::Mainnet, &wallet_rpc_addr.to_string()).unwrap(),
+        1000000,
+      );
+
+      // Make 2 data that is full 255 bytes
+      for _ in 0 .. 2 {
+        let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE];
+        assert!(builder.add_data(data).is_ok());
+      }
+
+      (builder.build().unwrap(), (wallet_rpc,))
+    },
+    |_, tx: Transaction, _, data: (WalletClient,)| async move {
+      // confirm receipt
+      data.0.refresh(None).await.unwrap();
+      let transfer =
+        data.0.get_transfer(Hash::from_slice(&tx.hash()), None).await.unwrap().unwrap();
+      assert_eq!(transfer.amount.as_pico(), 1000000);
+      assert_eq!(transfer.subaddr_index, Index { major: 0, minor: 0 });
     },
   ),
 );
