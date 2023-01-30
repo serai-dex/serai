@@ -9,7 +9,7 @@ use transcript::RecommendedTranscript;
 use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_serai::{
-  transaction::Transaction,
+  transaction::Transaction as MTransaction,
   block::Block as MBlock,
   rpc::Rpc,
   wallet::{
@@ -20,8 +20,8 @@ use monero_serai::{
 };
 
 use crate::{
-  additional_key,
   coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin},
+  Transaction, additional_key,
 };
 
 #[derive(Clone, Debug)]
@@ -140,7 +140,7 @@ impl Coin for Monero {
   type Curve = Ed25519;
 
   type Fee = Fee;
-  type Transaction = Transaction;
+  type Transaction = MTransaction;
   type Block = Block;
 
   type Output = Output;
@@ -217,9 +217,8 @@ impl Coin for Monero {
     keys: ThresholdKeys<Ed25519>,
     transcript: RecommendedTranscript,
     block_number: usize,
-    mut inputs: Vec<Output>,
-    payments: &[(MoneroAddress, u64)],
-    change: Option<dfg::EdwardsPoint>,
+    mut tx: Transaction<Self>,
+    change: dfg::EdwardsPoint,
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
     Ok(SignableTransaction {
@@ -228,9 +227,13 @@ impl Coin for Monero {
       height: block_number + 1,
       actual: MSignableTransaction::new(
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
-        inputs.drain(..).map(|input| input.0).collect(),
-        payments.to_vec(),
-        change.map(|change| Self::address_internal(change, CHANGE_SUBADDRESS)),
+        tx.inputs.drain(..).map(|input| input.0).collect(),
+        tx.payments.drain(..).map(|payment| (payment.address, payment.amount)).collect(),
+        if tx.change {
+          Some(change).map(|change| Self::address_internal(change, CHANGE_SUBADDRESS))
+        } else {
+          None
+        },
         vec![],
         fee,
       )

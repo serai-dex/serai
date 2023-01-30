@@ -13,7 +13,7 @@ use frost::{
 
 use crate::{
   coin::{CoinError, Output, Coin},
-  SignError, Network,
+  Payment, Transaction, SignError, Network,
 };
 
 pub struct WalletKeys<C: Curve> {
@@ -301,7 +301,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
       while !outputs.is_empty() {
-        let (inputs, outputs) = select_inputs_outputs::<C>(outputs, &mut payments);
+        let (inputs, mut outputs) = select_inputs_outputs::<C>(outputs, &mut payments);
         // If we can no longer process any payments, move to the next set of keys
         if outputs.is_empty() {
           debug_assert_eq!(inputs.len(), 0);
@@ -324,9 +324,15 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
             keys.clone(),
             transcript,
             acknowledged_block,
-            inputs,
-            &outputs,
-            Some(keys.group_key()),
+            Transaction {
+              inputs,
+              payments: outputs
+                .drain(..)
+                .map(|(address, amount)| Payment { address, amount })
+                .collect(),
+              change: true,
+            },
+            keys.group_key(),
             fee,
           )
           .await?;

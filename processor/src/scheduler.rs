@@ -2,13 +2,10 @@ use std::collections::{VecDeque, HashMap};
 
 use frost::curve::Ciphersuite;
 
-use crate::coin::{Output, Coin};
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Payment<C: Coin> {
-  address: C::Address,
-  amount: u64,
-}
+use crate::{
+  coin::{Output, Coin},
+  Payment, Transaction,
+};
 
 /// Stateless, deterministic output/payment manager.
 #[derive(Debug)]
@@ -30,13 +27,6 @@ pub struct Scheduler<C: Coin> {
 
   // Payments awaiting scheduling due to the output availability problem
   payments: VecDeque<Payment<C>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Transaction<C: Coin> {
-  inputs: Vec<C::Output>,
-  payments: Vec<Payment<C>>,
-  change: bool,
 }
 
 impl<C: Coin> Scheduler<C> {

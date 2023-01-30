@@ -11,7 +11,9 @@ use frost::{
 };
 
 pub mod monero;
-pub use self::monero::Monero;
+pub use monero::Monero;
+
+use crate::Transaction;
 
 #[derive(Clone, Copy, Error, Debug)]
 pub enum CoinError {
@@ -80,53 +82,79 @@ pub trait Output: Send + Sync + Sized + Clone + Debug {
 
 #[async_trait]
 pub trait Coin: 'static + Send + Sync + Clone + Debug {
+  /// The elliptic curve used for this coin.
   type Curve: Curve;
 
+  /// The type representing the fee for this coin.
+  // This should likely be a u64, wrapped in a type which implements appropriate fee logic.
   type Fee: Copy;
+
+  /// The type representing the transaction for this coin.
   type Transaction;
+  /// The type representing the block for this coin.
   type Block: Block;
 
+  /// The type containing all information on a scanned output.
+  // This is almost certainly distinct from the coin's native output type.
   type Output: Output;
+  /// The type containing all information on a planned transaction, waiting to be signed.
   type SignableTransaction;
+  /// The FROST machine to sign a transaction.
   type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
 
+  /// The type representing an address.
+  // This should NOT be a String, yet a tailored type representing an efficient binary encoding,
+  // as detailed in the integration documentation.
   type Address: Send + Sync + Clone + Debug;
 
+  /// String ID for this coin.
   const ID: &'static str;
+  /// The amount of confirmations required to consider a block 'final'.
   const CONFIRMATIONS: usize;
+  /// The maximum amount of inputs which will fit in a TX.
+  /// This should be equal to MAX_OUTPUTS unless one is specifically limited.
+  /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
   const MAX_INPUTS: usize;
-  const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
+  /// The maximum amount of outputs which will fit in a TX.
+  /// This should be equal to MAX_INPUTS unless one is specifically limited.
+  /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
+  const MAX_OUTPUTS: usize;
 
   /// Address for the given group key to receive external coins to.
   fn address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
+  // This is purely used for debugging purposes. Any output may be used to execute a branch.
   fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
+  /// Get the latest block's number.
   async fn get_latest_block_number(&self) -> Result<usize, CoinError>;
+  /// Get a block by its number.
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError>;
+  /// Get the outputs within a block for a specific key.
   async fn get_outputs(
     &self,
     block: &Self::Block,
     key: <Self::Curve as Ciphersuite>::G,
   ) -> Result<Vec<Self::Output>, CoinError>;
 
-  #[allow(clippy::too_many_arguments)]
+  /// Prepare a SignableTransaction for a transaction.
   async fn prepare_send(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     transcript: RecommendedTranscript,
     block_number: usize,
-    inputs: Vec<Self::Output>,
-    payments: &[(Self::Address, u64)],
-    change: Option<<Self::Curve as Ciphersuite>::G>,
+    tx: Transaction<Self>,
+    change: <Self::Curve as Ciphersuite>::G,
     fee: Self::Fee,
   ) -> Result<Self::SignableTransaction, CoinError>;
 
+  /// Attempt to sign a SignableTransaction.
   async fn attempt_send(
     &self,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError>;
 
+  /// Publish a transaction.
   async fn publish_transaction(
     &self,
     tx: &Self::Transaction,

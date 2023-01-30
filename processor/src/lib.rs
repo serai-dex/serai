@@ -16,6 +16,19 @@ mod wallet;
 #[cfg(test)]
 mod tests;
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Payment<C: Coin> {
+  address: C::Address,
+  amount: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct Transaction<C: Coin> {
+  pub inputs: Vec<C::Output>,
+  pub payments: Vec<Payment<C>>,
+  pub change: bool,
+}
+
 #[derive(Clone, Error, Debug)]
 pub enum NetworkError {}
 
