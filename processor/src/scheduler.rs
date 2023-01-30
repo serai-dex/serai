@@ -64,6 +64,12 @@ impl<C: Coin> Scheduler<C> {
     };
 
     // If we have more payments than we can handle in a single TX, create plans for them
+    // TODO: This isn't perfect. For 258 outputs, and a MAX_OUTPUTS of 16, this will create:
+    // 15 branches of 16 leaves
+    // 1 branch of:
+    // - 1 branch of 16 leaves
+    // - 2 leaves
+    // If this was perfect, the heaviest branch would have 1 branch of 3 leaves and 15 leaves
     while payments.len() > max {
       // The resulting TX will have the remaining payments and a new branch payment
       let to_remove = (payments.len() + 1) - C::MAX_OUTPUTS;
