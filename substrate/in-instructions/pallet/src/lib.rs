@@ -3,12 +3,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use scale::{Encode, Decode};
-use scale_info::TypeInfo;
 
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
-
-use sp_std::vec::Vec;
 use sp_inherents::{InherentIdentifier, IsFatalError};
 
 use sp_runtime::RuntimeDebug;
@@ -16,28 +11,9 @@ use sp_runtime::RuntimeDebug;
 use serai_primitives::{BlockNumber, BlockHash, Coin, WithAmount, Balance};
 
 pub use in_instructions_primitives as primitives;
-use primitives::InInstruction;
+use primitives::{InInstruction, Updates};
 
 pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"ininstrs";
-
-#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct Batch {
-  pub id: BlockHash,
-  pub instructions: Vec<WithAmount<InInstruction>>,
-}
-
-#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct Update {
-  // Coin's latest block number
-  pub block_number: BlockNumber,
-  pub batches: Vec<Batch>,
-}
-
-// None if the current block producer isn't operating over this coin or otherwise failed to get
-// data
-pub type Updates = Vec<Option<Update>>;
 
 #[derive(Clone, Copy, Encode, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Decode, thiserror::Error))]

@@ -1,3 +1,6 @@
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
@@ -13,7 +16,7 @@ use crate::RefundableInInstruction;
 use crate::InInstruction;
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub enum Shorthand {
   Raw(Data),
   Swap {

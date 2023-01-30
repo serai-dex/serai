@@ -3,6 +3,9 @@ use core::{
   fmt::Debug,
 };
 
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 #[cfg(feature = "std")]
@@ -18,7 +21,7 @@ pub type SubstrateAmount = u64;
 #[derive(
   Clone, Copy, PartialEq, Eq, PartialOrd, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct Amount(pub SubstrateAmount);
 
 impl Add for Amount {
@@ -44,7 +47,7 @@ impl Mul for Amount {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct WithAmount<
   T: Clone + PartialEq + Eq + Debug + Encode + Decode + MaxEncodedLen + TypeInfo,
 > {
