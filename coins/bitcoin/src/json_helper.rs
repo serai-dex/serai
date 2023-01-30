@@ -1,9 +1,9 @@
 // Code originally thanks to https://github.com/rust-bitcoin/rust-bitcoincore-rpc
 use crate::rpc_helper::*;
 
-pub(crate) fn handle_defaults<'a, 'b>(
+pub(crate) fn handle_defaults<'a>(
   args: &'a mut [serde_json::Value],
-  defaults: &'b [serde_json::Value],
+  defaults: &[serde_json::Value],
 ) -> &'a [serde_json::Value] {
   assert!(args.len() >= defaults.len());
 
@@ -16,7 +16,7 @@ pub(crate) fn handle_defaults<'a, 'b>(
     if args[args_i] == serde_json::Value::Null {
       if first_non_null_optional_idx.is_some() {
         if defaults[defaults_i] == serde_json::Value::Null {
-          panic!("Missing `default` for argument idx {}", args_i);
+          panic!("Missing `default` for argument idx {args_i}");
         }
         args[args_i] = defaults[defaults_i].clone();
       }
@@ -45,5 +45,5 @@ pub(crate) fn opt_into_json<T>(opt: Option<T>) -> Result<serde_json::Value, RpcE
 where
   T: serde::ser::Serialize,
 {
-  Ok(into_json(Some(opt))?)
+  into_json(Some(opt))
 }

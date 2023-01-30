@@ -67,7 +67,7 @@ impl SignableTransaction {
       transcript.append_message(b"output_amount", payment.value.to_le_bytes());
     }
 
-    return Ok(TransactionMachine { signable: self, transcript, sigs });
+    Ok(TransactionMachine { signable: self, transcript, sigs })
   }
 
   pub fn calculate_weight(total_inputs: usize, payments: &[(Address, u64)], change: bool) -> usize {
@@ -76,36 +76,36 @@ impl SignableTransaction {
     total_weight += 1;
     total_weight += 1;
     // number of input
-    total_weight += 1 * 4;
+    total_weight += 4;
     // Previous output hash
     total_weight += total_inputs * 32 * 4;
     // Previous output index
     total_weight += total_inputs * 4 * 4;
     // Script length - Scriptsig is empty
-    total_weight += total_inputs * 1 * 4;
+    total_weight += total_inputs * 4;
     total_weight += total_inputs * 4 * 4;
     // OUTPUTS
-    total_weight += 1 * 4;
+    total_weight += 4;
     // 8 byte value - txout script length - [1-9] byte for script length and script pubkey
     for (address, _) in payments.iter() {
       total_weight += 8 * 4;
       total_weight += VarInt(u64::try_from(address.script_pubkey().len()).unwrap()).len() * 4;
-      total_weight += (address.script_pubkey().len()) * 1 * 4;
+      total_weight += (address.script_pubkey().len()) * 4;
     }
     if change {
       // Change address script pubkey byte (p2tr)
       total_weight += 8 * 4;
-      total_weight += 1 * 4;
+      total_weight += 4;
       total_weight += 34 * 4;
     }
     // Stack size of p2tr
-    total_weight += total_inputs * 1 * 1;
-    total_weight += total_inputs * 1 * 1;
-    total_weight += total_inputs * 65 * 1;
+    total_weight += total_inputs;
+    total_weight += total_inputs;
+    total_weight += total_inputs * 65;
     // locktime
     total_weight += 4 * 4;
 
-    return total_weight;
+    total_weight
   }
 }
 
@@ -196,7 +196,7 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
       ))?;
     }
 
-    let included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
+    let included = commitments.keys().cloned().collect::<Vec<_>>();
     let mut commitments = (0 .. self.sigs.len())
       .map(|c| {
         included
@@ -232,7 +232,7 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
         Ok(sig)
       })
       .collect::<Result<_, _>>()?;
-    Ok((TransactionSignatureMachine { tx: self.signable.tx, sigs: sigs }, shares))
+    Ok((TransactionSignatureMachine { tx: self.signable.tx, sigs }, shares))
   }
 }
 

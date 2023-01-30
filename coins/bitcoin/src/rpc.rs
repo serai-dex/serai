@@ -1,5 +1,6 @@
+use core::fmt::Debug;
+
 use serde::de::DeserializeOwned;
-use std::{fmt::Debug, str::FromStr, result::Result};
 use serde_json::Value::Null;
 
 use bitcoin::{
@@ -17,7 +18,7 @@ pub struct Rpc {
 
 impl Rpc {
   pub fn new(url: String) -> Result<Rpc, RpcError> {
-    Ok(Rpc { url: url })
+    Ok(Rpc { url })
   }
 
   pub async fn rpc_call<Response: DeserializeOwned + Debug>(
@@ -44,14 +45,14 @@ impl Rpc {
   }
 
   pub async fn get_latest_block_number(&self) -> Result<usize, RpcError> {
-    Ok(self.rpc_call::<usize>("getblockcount".to_string(), &[]).await?)
+    self.rpc_call::<usize>("getblockcount".to_string(), &[]).await
   }
 
   pub async fn get_block_number(&self, block_hash: &str) -> Result<usize, RpcError> {
     let mut ext_args = [into_json(block_hash)?];
     let defaults = [Null];
     let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), &args).await?.height)
+    Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), args).await?.height)
   }
 
   pub async fn get_block(
@@ -61,13 +62,13 @@ impl Rpc {
     let mut ext_args = [into_json(block_hash)?, 0.into()];
     let defaults = [Null, 0.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let hex: String = self.rpc_call("getblock".to_string(), &args).await?;
+    let hex: String = self.rpc_call("getblock".to_string(), args).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
 
   pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash, RpcError> {
-    Ok(self.rpc_call::<bitcoin::BlockHash>("getbestblockhash".to_string(), &[]).await?)
+    self.rpc_call::<bitcoin::BlockHash>("getbestblockhash".to_string(), &[]).await
   }
 
   pub async fn get_spendable(
@@ -85,7 +86,7 @@ impl Rpc {
     ];
     let defaults = [into_json(1)?, into_json(9999999)?, Null, into_json(true)?];
     let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call("listunspent".to_string(), &args).await?)
+    self.rpc_call("listunspent".to_string(), args).await
   }
 
   pub async fn get_o_indexes(
@@ -95,13 +96,13 @@ impl Rpc {
     addresses: Option<Vec<&str>>,
     include_unsafe: Option<bool>,
   ) -> Result<Vec<ListUnspentResultEntry>, RpcError> {
-    Ok(self.get_spendable(minconf, maxconf, addresses, include_unsafe).await?)
+    self.get_spendable(minconf, maxconf, addresses, include_unsafe).await
   }
 
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash, RpcError> {
     let mut ext_args = [into_json(height)?];
     let args = handle_defaults(&mut ext_args, &[Null]);
-    Ok(self.rpc_call::<bitcoin::BlockHash>("getblockhash".to_string(), &args).await?)
+    self.rpc_call::<bitcoin::BlockHash>("getblockhash".to_string(), args).await
   }
 
   pub async fn get_transaction(
@@ -113,7 +114,7 @@ impl Rpc {
     let mut ext_args = [into_json(txid)?, opt_into_json(verbose)?, opt_into_json(block_hash)?];
     let defaults = [Null, into_json(false)?, into_json("")?];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let hex: String = self.rpc_call::<String>("getrawtransaction".to_string(), &args).await?;
+    let hex: String = self.rpc_call::<String>("getrawtransaction".to_string(), args).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
@@ -121,6 +122,6 @@ impl Rpc {
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid, RpcError> {
     let mut ext_args = [bitcoin::consensus::encode::serialize(tx).to_vec().to_hex().into()];
     let args = handle_defaults(&mut ext_args, &[Null]);
-    Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction".to_string(), &args).await?)
+    self.rpc_call::<bitcoin::Txid>("sendrawtransaction".to_string(), args).await
   }
 }

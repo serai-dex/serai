@@ -25,18 +25,18 @@ lazy_static! {
   static ref TAG_HASH: GenericArray<u8, U32> = Sha256::digest(b"BIP0340/challenge");
 }
 
-#[allow(clippy::non_snake_case)]
+#[allow(non_snake_case)]
 impl Hram<Secp256k1> for BitcoinHram {
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
     let (R, _) = make_even(*R);
 
-    let r_encoded_point = R.to_encoded_point(true);
-    let a_encoded_point = A.to_encoded_point(true);
+    let R_encoded_point = R.to_encoded_point(true);
+    let A_encoded_point = A.to_encoded_point(true);
     let mut data = Sha256::new();
-    data.update(&*TAG_HASH);
-    data.update(&*TAG_HASH);
-    data.update(r_encoded_point.x().unwrap());
-    data.update(a_encoded_point.x().unwrap());
+    data.update(*TAG_HASH);
+    data.update(*TAG_HASH);
+    data.update(R_encoded_point.x().unwrap());
+    data.update(A_encoded_point.x().unwrap());
     data.update(m);
 
     Scalar::from_uint_reduced(U256::from_be_slice(&data.finalize()))

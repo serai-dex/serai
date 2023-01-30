@@ -38,18 +38,6 @@ pub enum RpcError {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub(crate) struct RpcResponseError {
-  pub(crate) code: i64,
-  pub(crate) message: String,
-}
-
-impl Default for RpcResponseError {
-  fn default() -> Self {
-    RpcResponseError { code: -1, message: String::from("") }
-  }
-}
-
-#[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub(crate) enum RpcResponse<T> {
   Err { error: String },
