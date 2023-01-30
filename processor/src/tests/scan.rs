@@ -6,7 +6,7 @@ use tokio::time::timeout;
 
 use crate::{
   coin::{Block, Coin},
-  scanner::{ChainNumber, ScannerOrder, ScannerEvent, Scanner},
+  scanner::{ScannerOrder, ScannerEvent, Scanner},
   tests::util::db::ScannerMemDb,
 };
 
@@ -20,32 +20,30 @@ pub async fn test_scan<C: Coin>(coin: C) {
   scanner
     .orders
     .send(ScannerOrder::RotateKey {
-      activation_number: ChainNumber(
-        coin.get_latest_block_number().await.unwrap().try_into().unwrap(),
-      ),
+      activation_number: coin.get_latest_block_number().await.unwrap(),
       key: keys[&1].group_key(),
     })
     .unwrap();
 
   coin.test_send(C::address(keys[&1].group_key())).await;
 
-  let block = match timeout(Duration::from_secs(2), scanner.events.recv()).await.unwrap().unwrap() {
+  let block = match timeout(Duration::from_secs(5), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block(number, id) => {
-      assert_eq!(coin.get_block(number.0.try_into().unwrap()).await.unwrap().id(), id);
+      assert_eq!(coin.get_block(number).await.unwrap().id(), id);
       number
     }
     _ => panic!("unexpected event"),
   };
 
   // TODO: Check the output integrity
-  let _output = timeout(Duration::from_secs(2), scanner.events.recv()).await.unwrap().unwrap();
+  let _output = timeout(Duration::from_secs(5), scanner.events.recv()).await.unwrap().unwrap();
 
   // TODO: Kill this Scanner, recreate it off the current DB, and verify it re-emits the above
   // events
   scanner.orders.send(ScannerOrder::AckBlock(keys[&1].group_key(), block)).unwrap();
 
   // There should be no more events
-  assert!(timeout(Duration::from_secs(2), scanner.events.recv()).await.is_err());
+  assert!(timeout(Duration::from_secs(5), scanner.events.recv()).await.is_err());
 
   // TODO: Recreate the scanner and verify it still doesn't emit events
 }

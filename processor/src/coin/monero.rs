@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use zeroize::Zeroizing;
 
+#[cfg(test)]
 use curve25519_dalek::scalar::Scalar;
 
 use dalek_ff_group as dfg;

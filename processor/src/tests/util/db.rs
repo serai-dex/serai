@@ -7,12 +7,12 @@ use frost::curve::Ciphersuite;
 
 use crate::{
   coin::{Block, Coin},
-  scanner::{ChainNumber, ScannerDb},
+  scanner::ScannerDb,
 };
 
 pub(crate) struct ScannerMemDb {
-  latest_scanned_block: HashMap<Vec<u8>, ChainNumber>,
-  block: HashMap<ChainNumber, Vec<u8>>,
+  latest_scanned_block: HashMap<Vec<u8>, usize>,
+  block: HashMap<usize, Vec<u8>>,
 }
 
 impl ScannerMemDb {
@@ -29,19 +29,15 @@ impl Default for ScannerMemDb {
 
 #[async_trait]
 impl<C: Coin> ScannerDb<C> for ScannerMemDb {
-  async fn get_latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> ChainNumber {
-    self
-      .latest_scanned_block
-      .get(&key.to_bytes().as_ref().to_vec())
-      .cloned()
-      .unwrap_or(ChainNumber(0))
+  async fn get_latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
+    self.latest_scanned_block.get(&key.to_bytes().as_ref().to_vec()).cloned().unwrap_or(0)
   }
 
-  async fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: ChainNumber) {
+  async fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize) {
     self.latest_scanned_block.insert(key.to_bytes().as_ref().to_vec(), block);
   }
 
-  async fn get_block(&self, number: ChainNumber) -> Option<<C::Block as Block>::Id> {
+  async fn get_block(&self, number: usize) -> Option<<C::Block as Block>::Id> {
     self.block.get(&number).map(|bytes| {
       let mut id = <C::Block as Block>::Id::default();
       id.as_mut().copy_from_slice(bytes);
@@ -49,7 +45,7 @@ impl<C: Coin> ScannerDb<C> for ScannerMemDb {
     })
   }
 
-  async fn save_block(&mut self, number: ChainNumber, id: <C::Block as Block>::Id) {
+  async fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id) {
     self.block.insert(number, id.as_ref().to_vec());
   }
 }

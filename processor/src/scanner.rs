@@ -10,15 +10,6 @@ use frost::curve::Ciphersuite;
 
 use crate::coin::{Block, Coin};
 
-/// A block number from the Substrate chain, considered a canonical orderer by all instances.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct CanonicalNumber(pub u64);
-
-// TODO: Either move everything over or get rid of this
-/// A block number of some arbitrary chain, later-affirmed by the Substrate chain.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct ChainNumber(pub u64);
-
 /// Orders for the scanner.
 #[derive(Clone, Debug)]
 pub enum ScannerOrder<C: Ciphersuite> {
@@ -27,15 +18,15 @@ pub enum ScannerOrder<C: Ciphersuite> {
   /// If a key has been prior set, both keys will be scanned for as detailed in the Multisig
   /// documentation. The old key will eventually stop being scanned for, leaving just the
   /// updated-to key.
-  RotateKey { activation_number: ChainNumber, key: C::G },
+  RotateKey { activation_number: usize, key: C::G },
   /// Acknowledge having handled a block for a key
-  AckBlock(C::G, ChainNumber),
+  AckBlock(C::G, usize),
 }
 
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<C: Coin> {
   // Block acknowledged. This number should be used for the Updates provided to Substrate
-  Block(ChainNumber, <C::Block as Block>::Id),
+  Block(usize, <C::Block as Block>::Id),
   // Outputs received
   Outputs(<C::Curve as Ciphersuite>::G, <C::Block as Block>::Id, Vec<C::Output>),
 }
@@ -45,11 +36,11 @@ pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
 #[async_trait]
 pub trait ScannerDb<C: Coin>: Send + Sync {
-  async fn get_latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> ChainNumber;
-  async fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: ChainNumber);
+  async fn get_latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize;
+  async fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize);
 
-  async fn get_block(&self, number: ChainNumber) -> Option<<C::Block as Block>::Id>;
-  async fn save_block(&mut self, number: ChainNumber, id: <C::Block as Block>::Id);
+  async fn get_block(&self, number: usize) -> Option<<C::Block as Block>::Id>;
+  async fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id);
 }
 
 #[derive(Debug)]
@@ -100,8 +91,7 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
           let key_vec = key.to_bytes().as_ref().to_vec();
           let latest_scanned = {
             // Grab the latest scanned block according to the DB
-            let db_scanned =
-              usize::try_from(self.db.get_latest_scanned_block(key).await.0).unwrap();
+            let db_scanned = self.db.get_latest_scanned_block(key).await;
             // We may, within this process's lifetime, have scanned more blocks
             // If they're still being processed, we will not have officially written them to the DB
             // as scanned yet
@@ -125,7 +115,6 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
               }
             };
 
-            let i = ChainNumber(i.try_into().unwrap());
             let first = if let Some(id) = self.db.get_block(i).await {
               // TODO: Also check this block builds off the previous block
               if id != block.id() {
@@ -169,7 +158,7 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
             // Send all outputs
             self.events.send(ScannerEvent::Outputs(key, block.id(), outputs)).unwrap();
             // Write this number as scanned so we won't re-fire these outputs
-            ram_scanned.insert(key_vec.clone(), i.0.try_into().unwrap());
+            ram_scanned.insert(key_vec.clone(), i);
           }
         }
       }
