@@ -3,7 +3,8 @@ use std::{fmt::Debug, str::FromStr, result::Result};
 use serde_json::Value::Null;
 
 use bitcoin::{
-  hashes::hex::{FromHex, ToHex}, Transaction,
+  hashes::hex::{FromHex, ToHex},
+  Transaction,
 };
 use bitcoincore_rpc_json::*;
 use crate::rpc_helper::*;
@@ -32,9 +33,10 @@ impl Rpc {
       .await?
       .text()
       .await?;
-      
-    let parsed_res: RpcResponse<Response> = serde_json::from_str(&res).map_err(|_| RpcError::ParsingError)?;
-    
+
+    let parsed_res: RpcResponse<Response> =
+      serde_json::from_str(&res).map_err(|_| RpcError::ParsingError)?;
+
     match parsed_res {
       RpcResponse::Err { error } => Err(RpcError::CustomError(error)),
       RpcResponse::Ok { result } => Ok(result),
@@ -52,7 +54,10 @@ impl Rpc {
     Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), &args).await?.height)
   }
 
-  pub async fn get_block(&self, block_hash: &bitcoin::BlockHash) -> Result<bitcoin::Block, RpcError> {
+  pub async fn get_block(
+    &self,
+    block_hash: &bitcoin::BlockHash,
+  ) -> Result<bitcoin::Block, RpcError> {
     let mut ext_args = [into_json(block_hash)?, 0.into()];
     let defaults = [Null, 0.into()];
     let args = handle_defaults(&mut ext_args, &defaults);
@@ -113,8 +118,7 @@ impl Rpc {
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
 
-  pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid, RpcError>
-  {
+  pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid, RpcError> {
     let mut ext_args = [bitcoin::consensus::encode::serialize(tx).to_vec().to_hex().into()];
     let args = handle_defaults(&mut ext_args, &[Null]);
     Ok(self.rpc_call::<bitcoin::Txid>("sendrawtransaction".to_string(), &args).await?)

@@ -110,7 +110,7 @@ impl Bitcoin {
   }
 
   #[cfg(test)]
-  fn test_get_spendables(block : &Block, address : &Address) -> Vec<SpendableOutput> {
+  fn test_get_spendables(block: &Block, address: &Address) -> Vec<SpendableOutput> {
     let mut outputs = Vec::new();
     for one_tx in &block.txdata {
       for (index, output_tx) in one_tx.output.iter().enumerate() {
@@ -225,11 +225,13 @@ impl Coin for Bitcoin {
       });
     }
 
-    let mut actual_fee = fee.calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, false) * 2);
+    let mut actual_fee = fee
+      .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, false) * 2);
     if payment_sat > input_sat - actual_fee {
       return Err(CoinError::NotEnoughFunds);
     } else if input_sat != payment_sat {
-      actual_fee = fee.calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, true) * 2);
+      actual_fee = fee
+        .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, true) * 2);
       //TODO: we need to drop outputs worth less than payment_sat
       if payment_sat < (input_sat - actual_fee) {
         let rest_sat = input_sat - actual_fee - payment_sat;
@@ -356,8 +358,8 @@ impl Coin for Bitcoin {
       )
       .await
       .unwrap();
-    
-    for _ in 0..100 {
+
+    for _ in 0 .. 100 {
       self.mine_block().await;
     }
 
@@ -366,12 +368,16 @@ impl Coin for Bitcoin {
     let active_block = self.get_block(new_block).await.unwrap();
     let spendables = Self::test_get_spendables(&active_block, &main_addr);
     vin_list.push(TxIn {
-      previous_output: OutPoint { txid: spendables[0].output.txid, vout: spendables[0].output.vout },
+      previous_output: OutPoint {
+        txid: spendables[0].output.txid,
+        vout: spendables[0].output.vout,
+      },
       script_sig: Script::default(),
       sequence: Sequence(u32::MAX),
       witness: Witness::default(),
     });
-    vout_list.push(TxOut { value: spendables[0].amount - 10000, script_pubkey: address.script_pubkey() });
+    vout_list
+      .push(TxOut { value: spendables[0].amount - 10000, script_pubkey: address.script_pubkey() });
 
     let mut new_transaction =
       Transaction { version: 2, lock_time: PackedLockTime(0), input: vin_list, output: vout_list };

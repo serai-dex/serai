@@ -1,4 +1,3 @@
-
 #[test]
 fn test_signing() {
   use secp256k1::Message;
@@ -22,7 +21,7 @@ fn test_signing() {
   }
 
   let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true).to_hex().to_string();
-  
+
   let algo = Schnorr::<Secp256k1, BitcoinHram>::new();
   let mut _sig = sign(
     &mut OsRng,
@@ -36,7 +35,7 @@ fn test_signing() {
   (_sig.R, _offset) = make_even(_sig.R);
   _sig.s += Scalar::from(_offset);
 
-  let sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1..65]).unwrap();
+  let sig = secp256k1::schnorr::Signature::from_slice(&_sig.serialize()[1 .. 65]).unwrap();
   let msg = Message::from(sha256::Hash::hash(&MESSAGE));
   let pubkey_compressed = &keys[&1].group_key().to_encoded_point(true);
   let pubkey =

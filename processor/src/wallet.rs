@@ -225,7 +225,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
   pub fn add_keys(&mut self, keys: &WalletKeys<C::Curve>) {
     self.pending.push((self.acknowledged_block(keys.creation_block), keys.bind(C::ID)));
-    for (_,key) in self.pending.iter_mut() {
+    for (_, key) in self.pending.iter_mut() {
       self.coin.tweak_keys(key);
     }
   }
@@ -242,7 +242,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
     // Will never scan the genesis block, which shouldn't be an issue
     for b in (self.scanned_block() + 1) ..= confirmed_block {
-
       // If any keys activated at this block, shift them over
       {
         let mut k = 0;
@@ -260,12 +259,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
       let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
         let res_output = self.coin.get_outputs(&block, keys.group_key()).await?;
-        outputs.extend(
-          res_output
-            .iter()
-            .cloned()
-            .filter(|output| self.db.add_output(output)),
-        );
+        outputs.extend(res_output.iter().cloned().filter(|output| self.db.add_output(output)));
       }
 
       self.db.scanned_to_block(b);

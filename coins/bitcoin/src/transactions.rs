@@ -197,7 +197,7 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
     }
 
     let included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
-    let mut commitments = (0..self.sigs.len())
+    let mut commitments = (0 .. self.sigs.len())
       .map(|c| {
         included
           .iter()
@@ -217,7 +217,7 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
       .enumerate()
       .map(|(index, sig)| {
         let inputs = &self.signable.tx.inputs;
-        let all_witness_utxos = (0..inputs.len())
+        let all_witness_utxos = (0 .. inputs.len())
           .map(|i| &inputs[i].witness_utxo)
           .filter_map(|x| x.as_ref())
           .collect::<Vec<_>>();
@@ -257,7 +257,7 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
       schnorr_signature.s += Scalar::from(_offset);
 
       let temp_sig =
-        secp256k1::schnorr::Signature::from_slice(&schnorr_signature.serialize()[1..65]).unwrap();
+        secp256k1::schnorr::Signature::from_slice(&schnorr_signature.serialize()[1 .. 65]).unwrap();
       let sig = SchnorrSig { sig: temp_sig, hash_ty: SchnorrSighashType::All };
       self.tx.inputs[i].tap_key_sig = Some(sig);
 

@@ -4,7 +4,7 @@ use bitcoin_hashes::hex::FromHex;
 #[derive(Clone, Debug)]
 pub struct SpendableOutput {
   pub output: OutPoint,
-  pub amount:u64,
+  pub amount: u64,
 }
 
 impl SpendableOutput {
@@ -19,9 +19,9 @@ impl SpendableOutput {
     let mut amount_buff = [0; 8];
     r.read(&mut amount_buff)?;
     let amount = u64::from_le_bytes(amount_buff);
-    Ok(SpendableOutput { output: OutPoint{txid: tx_obj, vout: vout}, amount: amount })
+    Ok(SpendableOutput { output: OutPoint { txid: tx_obj, vout: vout }, amount: amount })
   }
-  
+
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = encode::serialize(&self.output);
     res.extend(encode::serialize(&self.amount));

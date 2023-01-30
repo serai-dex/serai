@@ -2,7 +2,8 @@ use sha2::{Digest, Sha256};
 use frost::{algorithm::Hram, curve::Secp256k1};
 use k256::{
   elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, sec1::Tag},
-  ProjectivePoint, U256, Scalar,sha2::digest::generic_array::GenericArray,
+  ProjectivePoint, U256, Scalar,
+  sha2::digest::generic_array::GenericArray,
   sha2::digest::generic_array::typenum::U32,
 };
 
@@ -21,7 +22,7 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
 pub struct BitcoinHram {}
 
 lazy_static! {
-  static ref TAG_HASH : GenericArray<u8, U32> = Sha256::digest(b"BIP0340/challenge");
+  static ref TAG_HASH: GenericArray<u8, U32> = Sha256::digest(b"BIP0340/challenge");
 }
 
 #[allow(clippy::non_snake_case)]
