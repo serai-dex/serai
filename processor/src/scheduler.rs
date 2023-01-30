@@ -1,5 +1,7 @@
 use std::collections::{VecDeque, HashMap};
 
+use frost::curve::Ciphersuite;
+
 use crate::coin::{Output, Coin};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -11,6 +13,8 @@ pub struct Payment<C: Coin> {
 /// Stateless, deterministic output/payment manager.
 #[derive(Debug)]
 pub struct Scheduler<C: Coin> {
+  key: <C::Curve as Ciphersuite>::G,
+
   // Flattened map of amounts to payments.
   // These amounts are known to be upcoming and when they do show up, the included payments should
   // be continued
@@ -28,14 +32,29 @@ pub struct Scheduler<C: Coin> {
   payments: VecDeque<Payment<C>>,
 }
 
+#[derive(Clone, Debug)]
+pub struct Transaction<C: Coin> {
+  inputs: Vec<C::Output>,
+  payments: Vec<Payment<C>>,
+  change: C::Address,
+}
+
 impl<C: Coin> Scheduler<C> {
-  pub fn new() -> Self {
-    Scheduler { plans: HashMap::new(), utxos: vec![], payments: VecDeque::new() }
+  pub fn new(key: <C::Curve as Ciphersuite>::G) -> Self {
+    Scheduler { key, plans: HashMap::new(), utxos: vec![], payments: VecDeque::new() }
+  }
+
+  fn execute(&mut self, inputs: Vec<C::Output>, payments: Vec<Payment<C>>) -> Transaction<C> {
+    // If we have more payments than we can handle in a single TX, create branches for them and the
+    // first TX for those branches
+    todo!()
   }
 
   // When Substrate emits `Updates` for a coin, all outputs should be added up to the
   // acknowledged block.
-  pub fn add_outputs(&mut self, mut utxos: Vec<C::Output>) {
+  pub fn add_outputs(&mut self, mut utxos: Vec<C::Output>) -> Vec<Transaction<C>> {
+    let mut txs = vec![];
+
     for utxo in utxos.drain(..) {
       // If we can fulfill planned TXs with this output, do so
       // We could limit this to UTXOs where `utxo.kind() == OutputType::Branch`, yet there's no
@@ -45,23 +64,28 @@ impl<C: Coin> Scheduler<C> {
         let payments = plans.pop_front().unwrap();
         debug_assert_eq!(utxo.amount(), payments.iter().map(|payment| payment.amount).sum::<u64>());
 
-        // TODO: Create a TX for these payments, and if there's more than we can fit, create
-        // branches. Subsidize the TX fee across all included payments.
-
-        // If we've executed all plans for this output amount, remove it from the map
+        // If we've grabbedthe last plan for this output amount, remove it from the map
         if plans.is_empty() {
           self.plans.remove(&utxo.amount());
         }
+
+        // Create a TX for these payments
+        // TODO: Subsidize the TX fee across all included payments.
+        txs.push(self.execute(vec![utxo], payments));
       } else {
         self.utxos.push(utxo);
       }
     }
+
     // Sort the UTXOs by amount
     utxos.sort_by(|a, b| a.amount().cmp(&b.amount()).reverse());
+
+    // Return the now possible TXs
+    txs
   }
 
   // Schedule a series of payments. This should be called after `add_outputs`.
-  pub fn schedule(&mut self, mut payments: Vec<Payment<C>>) {
+  pub fn schedule(&mut self, mut payments: Vec<Payment<C>>) -> Vec<Transaction<C>> {
     debug_assert!(!payments.is_empty(), "tried to schedule zero payments");
 
     // Add all new payments to the list of pending payments
@@ -71,7 +95,7 @@ impl<C: Coin> Scheduler<C> {
 
     // If we don't have UTXOs available, don't try to continue
     if self.utxos.is_empty() {
-      return;
+      return vec![];
     }
 
     // We always want to aggregate our UTXOs into a single UTXO in the name of simplicity
@@ -94,7 +118,14 @@ impl<C: Coin> Scheduler<C> {
       }
     }
 
-    // TODO: Create TXs aggregating UTXO chunks
+    let mut aggregating = vec![];
+    for chunk in utxo_chunks.drain(..) {
+      aggregating.push(Transaction {
+        inputs: chunk,
+        payments: vec![],
+        change: C::branch_address(self.key),
+      })
+    }
 
     // We want to use all possible UTXOs for all possible payments
     let mut balance = utxos.iter().map(Output::amount).sum::<u64>();
@@ -118,14 +149,8 @@ impl<C: Coin> Scheduler<C> {
 
     // Now that we have the list of payments we can successfully handle right now, create the TX
     // for them
-    // If we have more payments than we can handle in a single TX, create branches for them and the
-    // first TX for those branches
-    todo!();
-  }
-}
-
-impl<C: Coin> Default for Scheduler<C> {
-  fn default() -> Self {
-    Scheduler::new()
+    let mut txs = vec![self.execute(utxos, executing)];
+    txs.append(&mut aggregating);
+    txs
   }
 }

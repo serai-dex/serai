@@ -27,7 +27,7 @@ pub async fn test_scan<C: Coin>(coin: C) {
     })
     .unwrap();
 
-  coin.test_send(coin.address(keys[&1].group_key())).await;
+  coin.test_send(C::address(keys[&1].group_key())).await;
 
   let block = match timeout(Duration::from_secs(2), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block(number, id) => {

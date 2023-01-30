@@ -98,10 +98,9 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
 
   /// Address for the given group key to receive external coins to.
-  // Doesn't have to take self, enables some level of caching which is pleasant
-  fn address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  fn address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
-  fn branch_address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError>;
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError>;

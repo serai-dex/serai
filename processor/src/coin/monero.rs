@@ -89,31 +89,29 @@ pub struct SignableTransaction {
 #[derive(Clone, Debug)]
 pub struct Monero {
   pub(crate) rpc: Rpc,
-  view: Zeroizing<Scalar>,
 }
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    Monero { rpc: Rpc::new(url).unwrap(), view: Zeroizing::new(additional_key::<Monero>(0).0) }
+    Monero { rpc: Rpc::new(url).unwrap() }
   }
 
-  fn view_pair(&self, spend: dfg::EdwardsPoint) -> ViewPair {
-    ViewPair::new(spend.0, self.view.clone())
+  fn view_pair(spend: dfg::EdwardsPoint) -> ViewPair {
+    ViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0))
   }
 
   fn address_internal(
-    &self,
     spend: dfg::EdwardsPoint,
     subaddress: Option<SubaddressIndex>,
   ) -> MoneroAddress {
-    self.view_pair(spend).address(
+    Self::view_pair(spend).address(
       Network::Mainnet,
       AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
     )
   }
 
-  fn scanner(&self, spend: dfg::EdwardsPoint) -> Scanner {
-    let mut scanner = Scanner::from_view(self.view_pair(spend), None);
+  fn scanner(spend: dfg::EdwardsPoint) -> Scanner {
+    let mut scanner = Scanner::from_view(Self::view_pair(spend), None);
     debug_assert!(EXTERNAL_SUBADDRESS.is_none());
     scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
     scanner.register_subaddress(CHANGE_SUBADDRESS.unwrap());
@@ -162,12 +160,12 @@ impl Coin for Monero {
   const MAX_INPUTS: usize = 128;
   const MAX_OUTPUTS: usize = 16;
 
-  fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    self.address_internal(key, EXTERNAL_SUBADDRESS)
+  fn address(key: dfg::EdwardsPoint) -> Self::Address {
+    Self::address_internal(key, EXTERNAL_SUBADDRESS)
   }
 
-  fn branch_address(&self, key: dfg::EdwardsPoint) -> Self::Address {
-    self.address_internal(key, BRANCH_SUBADDRESS)
+  fn branch_address(key: dfg::EdwardsPoint) -> Self::Address {
+    Self::address_internal(key, BRANCH_SUBADDRESS)
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -186,8 +184,7 @@ impl Coin for Monero {
     block: &Self::Block,
     key: dfg::EdwardsPoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
-    let mut transactions = self
-      .scanner(key)
+    let mut transactions = Self::scanner(key)
       .scan(&self.rpc, &block.1)
       .await
       .map_err(|_| CoinError::ConnectionError)?
@@ -233,7 +230,7 @@ impl Coin for Monero {
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
-        change.map(|change| self.address_internal(change, CHANGE_SUBADDRESS)),
+        change.map(|change| Self::address_internal(change, CHANGE_SUBADDRESS)),
         vec![],
         fee,
       )

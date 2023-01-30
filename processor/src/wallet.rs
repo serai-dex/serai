@@ -229,7 +229,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   }
 
   pub fn address(&self) -> C::Address {
-    self.coin.address(self.keys[self.keys.len() - 1].0.group_key())
+    C::address(self.keys[self.keys.len() - 1].0.group_key())
   }
 
   pub async fn poll(&mut self) -> Result<(), CoinError> {
