@@ -23,13 +23,13 @@ impl Rpc {
 
   pub async fn rpc_call<Response: DeserializeOwned + Debug>(
     &self,
-    method: String,
+    method: &str,
     params: &[serde_json::Value],
   ) -> Result<Response, RpcError> {
     let client = reqwest::Client::new();
     let res = client
       .post(&self.url)
-      .json(&RpcParams { jsonrpc: "2.0".to_string(), id: (), method, params })
+      .json(&RpcParams { jsonrpc: "2.0".into(), id: (), method: method.into(), params })
       .send()
       .await?
       .text()
@@ -45,64 +45,28 @@ impl Rpc {
   }
 
   pub async fn get_latest_block_number(&self) -> Result<usize, RpcError> {
-    self.rpc_call::<usize>("getblockcount".to_string(), &[]).await
+    self.rpc_call::<usize>("getblockcount", &[]).await
   }
 
   pub async fn get_block_number(&self, block_hash: &str) -> Result<usize, RpcError> {
-    let mut ext_args = [into_json(block_hash)?];
-    let defaults = [Null];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    Ok(self.rpc_call::<GetBlockResult>("getblock".to_string(), args).await?.height)
+    Ok(self.rpc_call::<GetBlockResult>("getblock", &[into_json(block_hash)?]).await?.height)
   }
 
   pub async fn get_block(
     &self,
     block_hash: &bitcoin::BlockHash,
   ) -> Result<bitcoin::Block, RpcError> {
-    let mut ext_args = [into_json(block_hash)?, 0.into()];
-    let defaults = [Null, 0.into()];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    let hex: String = self.rpc_call("getblock".to_string(), args).await?;
+    let hex: String = self.rpc_call("getblock", &[into_json(block_hash)?, 0.into()]).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
 
   pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash, RpcError> {
-    self.rpc_call::<bitcoin::BlockHash>("getbestblockhash".to_string(), &[]).await
-  }
-
-  pub async fn get_spendable(
-    &self,
-    minconf: Option<usize>,
-    maxconf: Option<usize>,
-    addresses: Option<Vec<&str>>,
-    include_unsafe: Option<bool>,
-  ) -> Result<Vec<ListUnspentResultEntry>, RpcError> {
-    let mut ext_args = [
-      opt_into_json(minconf)?,
-      opt_into_json(maxconf)?,
-      opt_into_json(addresses)?,
-      opt_into_json(include_unsafe)?,
-    ];
-    let defaults = [into_json(1)?, into_json(9999999)?, Null, into_json(true)?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    self.rpc_call("listunspent".to_string(), args).await
-  }
-
-  pub async fn get_o_indexes(
-    &self,
-    minconf: Option<usize>,
-    maxconf: Option<usize>,
-    addresses: Option<Vec<&str>>,
-    include_unsafe: Option<bool>,
-  ) -> Result<Vec<ListUnspentResultEntry>, RpcError> {
-    self.get_spendable(minconf, maxconf, addresses, include_unsafe).await
+    self.rpc_call::<bitcoin::BlockHash>("getbestblockhash", &[]).await
   }
 
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash, RpcError> {
-    let mut ext_args = [into_json(height)?];
-    let args = handle_defaults(&mut ext_args, &[Null]);
-    self.rpc_call::<bitcoin::BlockHash>("getblockhash".to_string(), args).await
+    self.rpc_call::<bitcoin::BlockHash>("getblockhash", &[into_json(height)?]).await
   }
 
   pub async fn get_transaction(
@@ -114,14 +78,17 @@ impl Rpc {
     let mut ext_args = [into_json(txid)?, opt_into_json(verbose)?, opt_into_json(block_hash)?];
     let defaults = [Null, into_json(false)?, into_json("")?];
     let args = handle_defaults(&mut ext_args, &defaults);
-    let hex: String = self.rpc_call::<String>("getrawtransaction".to_string(), args).await?;
+    let hex: String = self.rpc_call::<String>("getrawtransaction", args).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
 
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid, RpcError> {
-    let mut ext_args = [bitcoin::consensus::encode::serialize(tx).to_vec().to_hex().into()];
-    let args = handle_defaults(&mut ext_args, &[Null]);
-    self.rpc_call::<bitcoin::Txid>("sendrawtransaction".to_string(), args).await
+    self
+      .rpc_call::<bitcoin::Txid>(
+        "sendrawtransaction",
+        &[bitcoin::consensus::encode::serialize(tx).to_vec().to_hex().into()],
+      )
+      .await
   }
 }

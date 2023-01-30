@@ -325,7 +325,7 @@ impl Coin for Bitcoin {
     self
       .rpc
       .rpc_call::<Vec<String>>(
-        "generatetoaddress".to_string(),
+        "generatetoaddress",
         &[1.into(), serde_json::to_value(&new_addr.to_string()).unwrap()],
       )
       .await
@@ -348,7 +348,7 @@ impl Coin for Bitcoin {
     self
       .rpc
       .rpc_call::<Vec<String>>(
-        "generatetoaddress".to_string(),
+        "generatetoaddress",
         &[1.into(), serde_json::to_value(&main_addr.to_string()).unwrap()],
       )
       .await
