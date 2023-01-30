@@ -90,7 +90,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   type SignableTransaction;
   type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
 
-  type Address: Send;
+  type Address: Send + Sync + Clone + Debug;
 
   const ID: &'static str;
   const CONFIRMATIONS: usize;
