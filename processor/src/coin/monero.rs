@@ -266,7 +266,8 @@ impl Coin for Monero {
     Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
   }
 
-  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>) {}
+  // Monero doesn't require/benefit from tweaking
+  fn tweak_keys(&self, _: &mut ThresholdKeys<Self::Curve>) {}
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {

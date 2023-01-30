@@ -1,9 +1,4 @@
 use async_trait::async_trait;
-use bitcoin_hashes::hex::{FromHex, ToHex};
-use std::str::FromStr;
-use transcript::RecommendedTranscript;
-
-use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin::{
   Block, OutPoint,
@@ -14,20 +9,21 @@ use bitcoin::{
   psbt::{PartiallySignedTransaction, PsbtSighashType},
 };
 
-use bitcoin_serai::{
-  rpc::Rpc,
-  crypto::make_even,
-  wallet::SpendableOutput,
-  transactions::{TransactionMachine, SignableTransaction as BSignableTransaction},
-};
-
+use transcript::RecommendedTranscript;
 use k256::{
   ProjectivePoint, Scalar,
   elliptic_curve::sec1::{ToEncodedPoint, Tag},
 };
-use crate::{
-  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin},
+use frost::{curve::Secp256k1, ThresholdKeys};
+
+use bitcoin_serai::{
+  rpc::Rpc,
+  crypto::make_even,
+  SpendableOutput,
+  transactions::{TransactionMachine, SignableTransaction as BSignableTransaction},
 };
+
+use crate::coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin};
 
 impl BlockTrait for Block {
   type Id = [u8; 32];
@@ -57,7 +53,7 @@ impl From<SpendableOutput> for Output {
 impl OutputTrait for Output {
   type Id = [u8; 36];
 
-  //TODO: Implement later
+  // TODO: Implement later
   fn kind(&self) -> OutputType {
     OutputType::External
   }
@@ -122,7 +118,7 @@ impl Bitcoin {
         }
       }
     }
-    return outputs;
+    outputs
   }
 }
 
@@ -150,12 +146,12 @@ impl Coin for Bitcoin {
   fn address(&self, key: ProjectivePoint) -> Self::Address {
     debug_assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
     let xonly_pubkey =
-      XOnlyPublicKey::from_slice(&key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
+      XOnlyPublicKey::from_slice(key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
     let tweaked_pubkey = TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
     Address::p2tr_tweaked(tweaked_pubkey, bitcoin::Network::Regtest)
   }
 
-  //TODO: Implement later
+  // TODO: Implement later
   fn branch_address(&self, key: ProjectivePoint) -> Self::Address {
     self.address(key)
   }
@@ -196,7 +192,7 @@ impl Coin for Bitcoin {
     keys: ThresholdKeys<Secp256k1>,
     transcript: RecommendedTranscript,
     block_number: usize,
-    mut inputs: Vec<Output>,
+    inputs: Vec<Output>,
     payments: &[(Address, u64)],
     change: Option<ProjectivePoint>,
     fee: Fee,
@@ -226,13 +222,13 @@ impl Coin for Bitcoin {
     }
 
     let mut actual_fee = fee
-      .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, false) * 2);
+      .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), payments, false) * 2);
     if payment_sat > input_sat - actual_fee {
       return Err(CoinError::NotEnoughFunds);
     } else if input_sat != payment_sat {
       actual_fee = fee
-        .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), &payments, true) * 2);
-      //TODO: we need to drop outputs worth less than payment_sat
+        .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), payments, true) * 2);
+      // TODO: we need to drop outputs worth less than payment_sat
       if payment_sat < (input_sat - actual_fee) {
         let rest_sat = input_sat - actual_fee - payment_sat;
         vout_alt_list
@@ -247,21 +243,20 @@ impl Coin for Bitcoin {
       output: vout_alt_list,
     };
     let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction.clone()).unwrap();
-    for (i, one_input) in (&inputs).iter().enumerate() {
+    for (i, one_input) in inputs.iter().enumerate() {
       let one_transaction =
         self.rpc.get_transaction(&one_input.0.output.txid, None, None).await.unwrap();
-      let xonly_pubkey = XOnlyPublicKey::from_slice(
-        &keys.group_key().to_encoded_point(true).x().to_owned().unwrap(),
-      )
-      .unwrap();
+      let xonly_pubkey =
+        XOnlyPublicKey::from_slice(keys.group_key().to_encoded_point(true).x().to_owned().unwrap())
+          .unwrap();
       psbt.inputs[i].witness_utxo =
         Some(one_transaction.output[usize::try_from(one_input.0.output.vout).unwrap()].clone());
       psbt.inputs[i].sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
       psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
     }
     return Ok(SignableTransaction {
-      keys: keys,
-      transcript: transcript,
+      keys,
+      transcript,
       number: block_number + 1,
       actual: BSignableTransaction { tx: psbt, fee: actual_fee },
     });
@@ -310,7 +305,7 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
-    //TODO: Add fee estimation (42 satoshi / byte)
+    // TODO: Add fee estimation (42 satoshi / byte)
     Self::Fee { per_weight: 11 }
   }
 

@@ -578,7 +578,6 @@ name = "bitcoin-serai"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
- "bitcoin_hashes",
  "bitcoincore-rpc-json",
  "flexible-transcript",
  "hex",
