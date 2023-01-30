@@ -577,27 +577,21 @@ dependencies = [
 name = "bitcoin-serai"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bitcoin",
  "bitcoin_hashes",
  "bitcoincore-rpc-json",
- "dalek-ff-group",
- "dleq",
  "flexible-transcript",
  "hex",
  "k256",
  "lazy_static",
- "log",
  "modular-frost",
  "rand_core 0.6.4",
  "reqwest",
  "secp256k1",
  "serde",
- "serde_derive",
  "serde_json",
  "sha2 0.10.6",
  "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -8098,7 +8092,6 @@ dependencies = [
  "bitcoin",
  "bitcoin-serai",
  "bitcoin_hashes",
- "bitcoincore-rpc-json",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "flexible-transcript",
@@ -8112,7 +8105,6 @@ dependencies = [
  "secp256k1",
  "serde",
  "serde_json",
- "sha2 0.10.6",
  "thiserror",
  "tokio",
  "zeroize",
