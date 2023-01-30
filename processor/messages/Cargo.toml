@@ -1,0 +1,23 @@
+[package]
+name = "processor-messages"
+version = "0.1.0"
+description = "Messages sent and received by the processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/messages"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+zeroize = { version = "1", features = ["derive"] }
+
+serde = { version = "1", features = ["derive"] }
+
+serai-primitives = { path = "../../substrate/serai/primitives" }
+in-instructions-primitives = { path = "../../substrate/in-instructions/primitives" }
+tokens-primitives = { path = "../../substrate/tokens/primitives" }

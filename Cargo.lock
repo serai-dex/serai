@@ -3580,10 +3580,8 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
- "serde",
  "sp-inherents",
  "sp-runtime",
- "sp-std",
  "thiserror",
  "tokens-pallet",
 ]
@@ -3596,7 +3594,9 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "serde",
+ "sp-runtime",
  "tokens-primitives",
+ "zeroize",
 ]
 
 [[package]]
@@ -6129,6 +6129,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "processor"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "curve25519-dalek 3.2.0",
+ "dalek-ff-group",
+ "flexible-transcript",
+ "futures",
+ "group",
+ "hex",
+ "lazy_static",
+ "log",
+ "modular-frost",
+ "monero-serai",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
+name = "processor-messages"
+version = "0.1.0"
+dependencies = [
+ "in-instructions-primitives",
+ "serai-primitives",
+ "serde",
+ "tokens-primitives",
+ "zeroize",
+]
+
+[[package]]
 name = "prometheus"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8039,28 +8073,6 @@ dependencies = [
  "serde",
  "sp-core",
  "sp-runtime",
-]
-
-[[package]]
-name = "serai-processor"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "curve25519-dalek 3.2.0",
- "dalek-ff-group",
- "flexible-transcript",
- "futures",
- "group",
- "hex",
- "lazy_static",
- "log",
- "modular-frost",
- "monero-serai",
- "rand_core 0.6.4",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
  "zeroize",
 ]
 
@@ -9575,6 +9587,7 @@ dependencies = [
  "serai-primitives",
  "serde",
  "sp-runtime",
+ "zeroize",
 ]
 
 [[package]]
@@ -10057,6 +10070,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "zeroize",
 ]
 
 [[package]]

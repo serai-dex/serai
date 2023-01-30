@@ -1,5 +1,5 @@
 [package]
-name = "serai-processor"
+name = "processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
 license = "AGPL-3.0-only"
@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 # Macros
 async-trait = "0.1"
 lazy_static = "1"
-zeroize = "1.5"
+zeroize = "1"
 thiserror = "1"
 rand_core = "0.6"
 
@@ -39,8 +39,8 @@ tokio = { version = "1", features = ["full"] }
 [dev-dependencies]
 hex = "0.4"
 
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 futures = "0.3"
 
