@@ -87,7 +87,9 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
       // Scan new blocks
       {
         let latest = match self.coin.get_latest_block_number().await {
-          Ok(latest) => latest,
+          // Only scan confirmed blocks, which we consider effectively finalized
+          // CONFIRMATIONS - 1 as whatever's in the latest block already has 1 confirm
+          Ok(latest) => latest.saturating_sub(C::CONFIRMATIONS.saturating_sub(1)),
           Err(_) => {
             log::warn!("Couldn't get {}'s latest block number", C::ID);
             break;
@@ -125,6 +127,7 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
 
             let i = ChainNumber(i.try_into().unwrap());
             let first = if let Some(id) = self.db.get_block(i).await {
+              // TODO: Also check this block builds off the previous block
               if id != block.id() {
                 panic!("{} reorg'd from {id:?} to {:?}", C::ID, block.id());
               }
