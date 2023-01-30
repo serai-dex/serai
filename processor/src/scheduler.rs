@@ -36,7 +36,7 @@ pub struct Scheduler<C: Coin> {
 pub struct Transaction<C: Coin> {
   inputs: Vec<C::Output>,
   payments: Vec<Payment<C>>,
-  change: C::Address,
+  change: bool,
 }
 
 impl<C: Coin> Scheduler<C> {
@@ -44,10 +44,43 @@ impl<C: Coin> Scheduler<C> {
     Scheduler { key, plans: HashMap::new(), utxos: vec![], payments: VecDeque::new() }
   }
 
-  fn execute(&mut self, inputs: Vec<C::Output>, payments: Vec<Payment<C>>) -> Transaction<C> {
-    // If we have more payments than we can handle in a single TX, create branches for them and the
-    // first TX for those branches
-    todo!()
+  fn execute(&mut self, inputs: Vec<C::Output>, mut payments: Vec<Payment<C>>) -> Transaction<C> {
+    let mut change = false;
+    let mut max = C::MAX_OUTPUTS;
+
+    let payment_amounts =
+      |payments: &Vec<Payment<C>>| payments.iter().map(|payment| payment.amount).sum::<u64>();
+
+    // Requires a change output
+    if inputs.iter().map(Output::amount).sum::<u64>() != payment_amounts(&payments) {
+      change = true;
+      max -= 1;
+    }
+
+    let mut add_plan = |payments| {
+      let amount = payment_amounts(&payments);
+      self.plans.entry(amount).or_insert(VecDeque::new()).push_back(payments);
+      amount
+    };
+
+    // If we have more payments than we can handle in a single TX, create plans for them
+    while payments.len() > max {
+      // The resulting TX will have the remaining payments and a new branch payment
+      let to_remove = (payments.len() + 1) - C::MAX_OUTPUTS;
+      // Don't remove more than possible
+      let to_remove = to_remove.min(C::MAX_OUTPUTS);
+
+      // Create the plan
+      let removed = payments.drain((payments.len() - to_remove) ..).collect::<Vec<_>>();
+      debug_assert_eq!(removed.len(), to_remove);
+      let amount = add_plan(removed);
+
+      // Create the payment for the plan
+      // Push it to the front so it's not moved into a branch until all lower-depth items are
+      payments.insert(0, Payment { address: C::branch_address(self.key), amount });
+    }
+
+    Transaction { inputs, payments, change }
   }
 
   // When Substrate emits `Updates` for a coin, all outputs should be added up to the
@@ -120,11 +153,7 @@ impl<C: Coin> Scheduler<C> {
 
     let mut aggregating = vec![];
     for chunk in utxo_chunks.drain(..) {
-      aggregating.push(Transaction {
-        inputs: chunk,
-        payments: vec![],
-        change: C::branch_address(self.key),
-      })
+      aggregating.push(Transaction { inputs: chunk, payments: vec![], change: true })
     }
 
     // We want to use all possible UTXOs for all possible payments
