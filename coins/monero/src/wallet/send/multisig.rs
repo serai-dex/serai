@@ -248,7 +248,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // Find out who's included
     // This may not be a valid set of signers yet the algorithm machine will error if it's not
     commitments.remove(&self.i); // Remove, if it was included for some reason
-    let mut included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
+    let mut included = commitments.keys().cloned().collect::<Vec<_>>();
     included.push(self.i);
     included.sort_unstable();
 

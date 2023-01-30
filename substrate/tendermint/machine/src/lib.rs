@@ -135,7 +135,8 @@ pub struct TendermintMachine<N: Network> {
 
   queue: VecDeque<MessageFor<N>>,
   msg_recv: mpsc::UnboundedReceiver<SignedMessageFor<N>>,
-  step_recv: mpsc::UnboundedReceiver<(BlockNumber, Commit<N::SignatureScheme>, N::Block)>,
+  #[allow(clippy::type_complexity)]
+  step_recv: mpsc::UnboundedReceiver<(BlockNumber, Commit<N::SignatureScheme>, Option<N::Block>)>,
 
   block: BlockData<N>,
 }
@@ -143,7 +144,7 @@ pub struct TendermintMachine<N: Network> {
 pub type StepSender<N> = mpsc::UnboundedSender<(
   BlockNumber,
   Commit<<N as Network>::SignatureScheme>,
-  <N as Network>::Block,
+  Option<<N as Network>::Block>,
 )>;
 
 pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
@@ -186,7 +187,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   // 53-54
-  async fn reset(&mut self, end_round: RoundNumber, proposal: N::Block) {
+  async fn reset(&mut self, end_round: RoundNumber, proposal: Option<N::Block>) {
     // Ensure we have the end time data for the last round
     self.block.populate_end_time(end_round);
 
@@ -209,7 +210,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.round(RoundNumber(0), Some(round_end));
   }
 
-  async fn reset_by_commit(&mut self, commit: Commit<N::SignatureScheme>, proposal: N::Block) {
+  async fn reset_by_commit(
+    &mut self,
+    commit: Commit<N::SignatureScheme>,
+    proposal: Option<N::Block>,
+  ) {
     let mut round = self.block.round().number;
     // If this commit is for a round we don't have, jump up to it
     while self.block.end_time[&round].canonical() < commit.end_time {
@@ -271,7 +276,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
           msg_recv,
           step_recv,
 
-          block: BlockData::new(weights, BlockNumber(last_block.0 + 1), validator_id, proposal),
+          block: BlockData::new(
+            weights,
+            BlockNumber(last_block.0 + 1),
+            validator_id,
+            Some(proposal),
+          ),
         };
 
         // The end time of the last block is the start time for this one

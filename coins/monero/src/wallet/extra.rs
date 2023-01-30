@@ -112,16 +112,20 @@ impl ExtraField {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) struct Extra(Vec<ExtraField>);
 impl Extra {
-  pub(crate) fn keys(&self) -> Vec<EdwardsPoint> {
-    let mut keys = Vec::with_capacity(2);
+  pub(crate) fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
+    let mut key = None;
+    let mut additional = None;
     for field in &self.0 {
       match field.clone() {
-        ExtraField::PublicKey(key) => keys.push(key),
-        ExtraField::PublicKeys(additional) => keys.extend(additional),
+        ExtraField::PublicKey(this_key) => key = key.or(Some(this_key)),
+        ExtraField::PublicKeys(these_additional) => {
+          additional = additional.or(Some(these_additional))
+        }
         _ => (),
       }
     }
-    keys
+    // Don't return any keys if this was non-standard and didn't include the primary key
+    key.map(|key| (key, additional))
   }
 
   pub(crate) fn payment_id(&self) -> Option<PaymentId> {
@@ -149,13 +153,11 @@ impl Extra {
     res
   }
 
-  pub(crate) fn new(mut keys: Vec<EdwardsPoint>) -> Extra {
+  pub(crate) fn new(key: EdwardsPoint, additional: Vec<EdwardsPoint>) -> Extra {
     let mut res = Extra(Vec::with_capacity(3));
-    if !keys.is_empty() {
-      res.push(ExtraField::PublicKey(keys[0]));
-    }
-    if keys.len() > 1 {
-      res.push(ExtraField::PublicKeys(keys.drain(1 ..).collect()));
+    res.push(ExtraField::PublicKey(key));
+    if !additional.is_empty() {
+      res.push(ExtraField::PublicKeys(additional));
     }
     res
   }

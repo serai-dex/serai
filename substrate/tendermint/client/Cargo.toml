@@ -33,8 +33,6 @@ sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 
 sp-tendermint = { path = "../primitives" }
 
-sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
-sc-executor = { git = "https://github.com/serai-dex/substrate" }
 sc-network-common = { git = "https://github.com/serai-dex/substrate" }
 sc-network = { git = "https://github.com/serai-dex/substrate" }
 sc-network-gossip = { git = "https://github.com/serai-dex/substrate" }

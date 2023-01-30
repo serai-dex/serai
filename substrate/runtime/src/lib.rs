@@ -1,53 +1,61 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![recursion_limit = "256"]
 
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+// Re-export all components
+pub use serai_primitives as primitives;
+
+pub use frame_system as system;
+pub use frame_support as support;
+
+pub use pallet_balances as balances;
+pub use pallet_transaction_payment as transaction_payment;
+
+pub use pallet_assets as assets;
+pub use tokens_pallet as tokens;
+pub use in_instructions_pallet as in_instructions;
+
+pub use validator_sets_pallet as validator_sets;
+
+pub use pallet_session as session;
+pub use pallet_tendermint as tendermint;
+
+// Actually used by the runtime
 use sp_core::OpaqueMetadata;
-pub use sp_core::sr25519::{Public, Signature};
+use sp_std::prelude::*;
+
+use sp_version::RuntimeVersion;
+#[cfg(feature = "std")]
+use sp_version::NativeVersion;
+
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
-  traits::{Convert, OpaqueKeys, IdentityLookup, BlakeTwo256, Block as BlockT},
+  traits::{Convert, OpaqueKeys, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
-use sp_std::prelude::*;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
-use sp_version::RuntimeVersion;
 
-use frame_support::{
-  traits::{ConstU8, ConstU32, ConstU64},
+use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount, Coin};
+
+use support::{
+  traits::{ConstU8, ConstU32, ConstU64, Contains},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
   parameter_types, construct_runtime,
 };
-pub use frame_system::Call as SystemCall;
 
-use serai_primitives::Coin;
+use transaction_payment::CurrencyAdapter;
 
-pub use pallet_balances::Call as BalancesCall;
-pub use pallet_assets::Call as AssetsCall;
-use pallet_transaction_payment::CurrencyAdapter;
-
-use pallet_session::PeriodicSessions;
+use session::PeriodicSessions;
 
 /// An index to a block.
 pub type BlockNumber = u32;
-
-/// Account ID type, equivalent to a public key
-pub type AccountId = Public;
-
-/// Balance of an account.
-// Distinct from serai-primitives Amount due to Substrate's requirements on this type.
-// If Amount could be dropped in here, it would be.
-// While Amount could have all the necessary traits implemented, not only are they many, yet it'd
-// make Amount a larger type, providing more operations than desired.
-// The current type's minimalism sets clear bounds on usage.
-pub type Balance = u64;
 
 /// Index of a transaction in the chain, for a given account.
 pub type Index = u32;
@@ -58,7 +66,7 @@ pub type Hash = sp_core::H256;
 pub mod opaque {
   use super::*;
 
-  pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
+  use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
 
   pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
   pub type Block = generic::Block<Header, UncheckedExtrinsic>;
@@ -89,10 +97,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 // 1 MB
 pub const BLOCK_SIZE: u32 = 1024 * 1024;
 // 6 seconds
-pub const TARGET_BLOCK_TIME: u64 = 6000;
+pub const TARGET_BLOCK_TIME: u64 = 6;
 
 /// Measured in blocks.
-pub const MINUTES: BlockNumber = 60_000 / (TARGET_BLOCK_TIME as BlockNumber);
+pub const MINUTES: BlockNumber = 60 / (TARGET_BLOCK_TIME as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
@@ -110,22 +118,53 @@ parameter_types! {
   pub const SS58Prefix: u8 = 42; // TODO: Remove for Bech32m
 
   // 1 MB block size limit
-  pub BlockLength: frame_system::limits::BlockLength =
-    frame_system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
-  pub BlockWeights: frame_system::limits::BlockWeights =
-    frame_system::limits::BlockWeights::with_sensible_defaults(
+  pub BlockLength: system::limits::BlockLength =
+    system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
+  pub BlockWeights: system::limits::BlockWeights =
+    system::limits::BlockWeights::with_sensible_defaults(
       Weight::from_ref_time(2u64 * WEIGHT_REF_TIME_PER_SECOND).set_proof_size(u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
 }
 
-impl frame_system::Config for Runtime {
-  type BaseCallFilter = frame_support::traits::Everything;
+pub struct CallFilter;
+impl Contains<RuntimeCall> for CallFilter {
+  fn contains(call: &RuntimeCall) -> bool {
+    if let RuntimeCall::Balances(call) = call {
+      return matches!(call, balances::Call::transfer { .. } | balances::Call::transfer_all { .. });
+    }
+
+    if let RuntimeCall::Assets(call) = call {
+      return matches!(
+        call,
+        assets::Call::approve_transfer { .. } |
+          assets::Call::cancel_approval { .. } |
+          assets::Call::transfer { .. } |
+          assets::Call::transfer_approved { .. }
+      );
+    }
+    if let RuntimeCall::Tokens(call) = call {
+      return matches!(call, tokens::Call::burn { .. });
+    }
+    if let RuntimeCall::InInstructions(call) = call {
+      return matches!(call, in_instructions::Call::update { .. });
+    }
+
+    if let RuntimeCall::ValidatorSets(call) = call {
+      return matches!(call, validator_sets::Call::vote { .. });
+    }
+
+    false
+  }
+}
+
+impl system::Config for Runtime {
+  type BaseCallFilter = CallFilter;
   type BlockWeights = BlockWeights;
   type BlockLength = BlockLength;
-  type AccountId = AccountId;
+  type AccountId = PublicKey;
   type RuntimeCall = RuntimeCall;
-  type Lookup = IdentityLookup<AccountId>;
+  type Lookup = AccountLookup;
   type Index = Index;
   type BlockNumber = BlockNumber;
   type Hash = Hash;
@@ -142,28 +181,37 @@ impl frame_system::Config for Runtime {
   type OnKilledAccount = ();
   type OnSetCode = ();
 
-  type AccountData = pallet_balances::AccountData<Balance>;
+  type AccountData = balances::AccountData<SubstrateAmount>;
   type SystemWeightInfo = ();
   type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
-  type MaxConsumers = frame_support::traits::ConstU32<16>;
+  type MaxConsumers = support::traits::ConstU32<16>;
 }
 
-impl pallet_balances::Config for Runtime {
+impl balances::Config for Runtime {
   type MaxLocks = ConstU32<50>;
   type MaxReserves = ();
   type ReserveIdentifier = [u8; 8];
-  type Balance = Balance;
+  type Balance = SubstrateAmount;
   type RuntimeEvent = RuntimeEvent;
   type DustRemoval = ();
   type ExistentialDeposit = ConstU64<500>;
   type AccountStore = System;
-  type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
+  type WeightInfo = balances::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_assets::Config for Runtime {
+impl transaction_payment::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type Balance = Balance;
+  type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
+  type OperationalFeeMultiplier = ConstU8<5>;
+  type WeightToFee = IdentityFee<SubstrateAmount>;
+  type LengthToFee = IdentityFee<SubstrateAmount>;
+  type FeeMultiplierUpdate = ();
+}
+
+impl assets::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type Balance = SubstrateAmount;
   type Currency = Balances;
 
   type AssetId = Coin;
@@ -171,9 +219,8 @@ impl pallet_assets::Config for Runtime {
   type StringLimit = ConstU32<32>;
 
   // Don't allow anyone to create assets
-  type CreateOrigin =
-    frame_support::traits::AsEnsureOriginWithArg<frame_system::EnsureNever<AccountId>>;
-  type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<PublicKey>>;
+  type ForceOrigin = system::EnsureRoot<PublicKey>;
 
   // Don't charge fees nor kill accounts
   type RemoveItemsLimit = ConstU32<0>;
@@ -184,71 +231,70 @@ impl pallet_assets::Config for Runtime {
   type ApprovalDeposit = ConstU64<0>;
 
   // Unused hooks
+  type CallbackHandle = ();
   type Freezer = ();
   type Extra = ();
 
-  type WeightInfo = pallet_assets::weights::SubstrateWeight<Runtime>;
+  type WeightInfo = assets::weights::SubstrateWeight<Runtime>;
   #[cfg(feature = "runtime-benchmarks")]
   type BenchmarkHelper = ();
 }
 
-impl pallet_transaction_payment::Config for Runtime {
+impl tokens::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
-  type OperationalFeeMultiplier = ConstU8<5>;
-  type WeightToFee = IdentityFee<Balance>;
-  type LengthToFee = IdentityFee<Balance>;
-  type FeeMultiplierUpdate = ();
+}
+
+impl in_instructions::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
 }
 
 const SESSION_LENGTH: BlockNumber = 5 * DAYS;
 type Sessions = PeriodicSessions<ConstU32<{ SESSION_LENGTH }>, ConstU32<{ SESSION_LENGTH }>>;
 
 pub struct IdentityValidatorIdOf;
-impl Convert<Public, Option<Public>> for IdentityValidatorIdOf {
-  fn convert(key: Public) -> Option<Public> {
+impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
+  fn convert(key: PublicKey) -> Option<PublicKey> {
     Some(key)
   }
 }
 
-impl validator_sets_pallet::Config for Runtime {
+impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-impl pallet_session::Config for Runtime {
+impl session::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type ValidatorId = AccountId;
+  type ValidatorId = PublicKey;
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Sessions;
   type NextSessionRotation = Sessions;
   type SessionManager = ();
   type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
   type Keys = SessionKeys;
-  type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+  type WeightInfo = session::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_tendermint::Config for Runtime {}
+impl tendermint::Config for Runtime {}
 
-pub type Address = AccountId;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedExtra = (
-  frame_system::CheckNonZeroSender<Runtime>,
-  frame_system::CheckSpecVersion<Runtime>,
-  frame_system::CheckTxVersion<Runtime>,
-  frame_system::CheckGenesis<Runtime>,
-  frame_system::CheckEra<Runtime>,
-  frame_system::CheckNonce<Runtime>,
-  frame_system::CheckWeight<Runtime>,
-  pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+  system::CheckNonZeroSender<Runtime>,
+  system::CheckSpecVersion<Runtime>,
+  system::CheckTxVersion<Runtime>,
+  system::CheckGenesis<Runtime>,
+  system::CheckEra<Runtime>,
+  system::CheckNonce<Runtime>,
+  system::CheckWeight<Runtime>,
+  transaction_payment::ChargeTransactionPayment<Runtime>,
 );
 pub type UncheckedExtrinsic =
-  generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+  generic::UncheckedExtrinsic<SeraiAddress, RuntimeCall, Signature, SignedExtra>;
 pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 pub type Executive = frame_executive::Executive<
   Runtime,
   Block,
-  frame_system::ChainContext<Runtime>,
+  system::ChainContext<Runtime>,
   Runtime,
   AllPalletsWithSystem,
 >;
@@ -259,14 +305,19 @@ construct_runtime!(
     NodeBlock = Block,
     UncheckedExtrinsic = UncheckedExtrinsic
   {
-    System: frame_system,
-    Balances: pallet_balances,
-    Assets: pallet_assets,
-    TransactionPayment: pallet_transaction_payment,
+    System: system,
 
-    ValidatorSets: validator_sets_pallet,
-    Session: pallet_session,
-    Tendermint: pallet_tendermint,
+    Balances: balances,
+    TransactionPayment: transaction_payment,
+
+    Assets: assets,
+    Tokens: tokens,
+    InInstructions: in_instructions,
+
+    ValidatorSets: validator_sets,
+
+    Session: session,
+    Tendermint: tendermint,
   }
 );
 
@@ -278,8 +329,8 @@ extern crate frame_benchmarking;
 mod benches {
   define_benchmarks!(
     [frame_benchmarking, BaselineBench::<Runtime>]
-    [frame_system, SystemBench::<Runtime>]
-    [pallet_balances, Balances]
+    [system, SystemBench::<Runtime>]
+    [balances, Balances]
   );
 }
 
@@ -358,31 +409,32 @@ sp_api::impl_runtime_apis! {
       Tendermint::session()
     }
 
-    fn validators() -> Vec<Public> {
-      Session::validators()
+    fn validators() -> Vec<PublicKey> {
+      Session::validators().drain(..).map(Into::into).collect()
     }
   }
 
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
-    fn account_nonce(account: AccountId) -> Index {
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Index> for Runtime {
+    fn account_nonce(account: PublicKey) -> Index {
       System::account_nonce(account)
     }
   }
 
   impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<
     Block,
-    Balance
+    SubstrateAmount
   > for Runtime {
     fn query_info(
       uxt: <Block as BlockT>::Extrinsic,
       len: u32,
-    ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<Balance> {
+    ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<SubstrateAmount> {
       TransactionPayment::query_info(uxt, len)
     }
+
     fn query_fee_details(
       uxt: <Block as BlockT>::Extrinsic,
       len: u32,
-    ) -> pallet_transaction_payment::FeeDetails<Balance> {
+    ) -> transaction_payment::FeeDetails<SubstrateAmount> {
       TransactionPayment::query_fee_details(uxt, len)
     }
   }

@@ -54,19 +54,21 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
 #[allow(non_snake_case)]
 pub(crate) fn shared_key(
   uniqueness: Option<[u8; 32]>,
-  s: &Scalar,
+  s: &Zeroizing<Scalar>,
   P: &EdwardsPoint,
   o: usize,
 ) -> (u8, Scalar, [u8; 8]) {
   // 8Ra
-  let mut output_derivation = (s * P).mul_by_cofactor().compress().to_bytes().to_vec();
+  let mut output_derivation = (s.deref() * P).mul_by_cofactor().compress().to_bytes().to_vec();
+
+  let mut payment_id_xor = [0; 8];
+  payment_id_xor
+    .copy_from_slice(&hash(&[output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
+
   // || o
   write_varint(&o.try_into().unwrap(), &mut output_derivation).unwrap();
 
   let view_tag = hash(&[b"view_tag".as_ref(), &output_derivation].concat())[0];
-  let mut payment_id_xor = [0; 8];
-  payment_id_xor
-    .copy_from_slice(&hash(&[output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
 
   // uniqueness ||
   let shared_key = if let Some(uniqueness) = uniqueness {
@@ -104,6 +106,14 @@ pub struct ViewPair {
 impl ViewPair {
   pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> ViewPair {
     ViewPair { spend, view }
+  }
+
+  pub fn spend(&self) -> EdwardsPoint {
+    self.spend
+  }
+
+  pub fn view(&self) -> EdwardsPoint {
+    self.view.deref() * &ED25519_BASEPOINT_TABLE
   }
 
   fn subaddress_derivation(&self, index: SubaddressIndex) -> Scalar {

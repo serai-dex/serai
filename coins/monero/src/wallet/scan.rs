@@ -272,13 +272,18 @@ impl Scanner {
   /// Scan a transaction to discover the received outputs.
   pub fn scan_transaction(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
     let extra = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref());
-    let keys;
     let extra = if let Ok(extra) = extra {
-      keys = extra.keys();
       extra
     } else {
       return Timelocked(tx.prefix.timelock, vec![]);
     };
+
+    let (tx_key, additional) = if let Some((tx_key, additional)) = extra.keys() {
+      (tx_key, additional)
+    } else {
+      return Timelocked(tx.prefix.timelock, vec![]);
+    };
+
     let payment_id = extra.payment_id();
 
     let mut res = vec![];
@@ -296,7 +301,19 @@ impl Scanner {
       }
       let output_key = output_key.unwrap();
 
-      for key in &keys {
+      for key in [Some(Some(&tx_key)), additional.as_ref().map(|additional| additional.get(o))] {
+        let key = if let Some(Some(key)) = key {
+          key
+        } else if let Some(None) = key {
+          // This is non-standard. There were additional keys, yet not one for this output
+          // https://github.com/monero-project/monero/
+          //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
+          //   src/cryptonote_basic/cryptonote_format_utils.cpp#L1062
+          // TODO: Should this return? Where does Monero set the trap handler for this exception?
+          continue;
+        } else {
+          break;
+        };
         let (view_tag, shared_key, payment_id_xor) = shared_key(
           if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix.inputs)) } else { None },
           &self.pair.view,

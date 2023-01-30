@@ -45,11 +45,14 @@ default = "deny"
 
 exceptions = [
   { allow = ["AGPL-3.0"], name = "ethereum-serai" },
+
   { allow = ["AGPL-3.0"], name = "serai-processor" },
 
-  { allow = ["AGPL-3.0"], name = "serai-primitives" },
+  { allow = ["AGPL-3.0"], name = "tokens-pallet" },
 
-  { allow = ["AGPL-3.0"], name = "validator-sets-primitives" },
+  { allow = ["AGPL-3.0"], name = "in-instructions-pallet" },
+  { allow = ["AGPL-3.0"], name = "in-instructions-client" },
+
   { allow = ["AGPL-3.0"], name = "validator-sets-pallet" },
 
   { allow = ["AGPL-3.0"], name = "sp-tendermint" },
@@ -58,6 +61,8 @@ exceptions = [
 
   { allow = ["AGPL-3.0"], name = "serai-runtime" },
   { allow = ["AGPL-3.0"], name = "serai-node" },
+
+  { allow = ["AGPL-3.0"], name = "serai-client" },
 ]
 
 [[licenses.clarify]]
