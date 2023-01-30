@@ -1,10 +1,5 @@
 use thiserror::Error;
-use bitcoin::{
-  self, secp256k1,
-  hashes::{
-    hex::{self},
-  },
-};
+use bitcoin::{self, secp256k1, hashes::hex};
 use serde::{Deserialize, Serialize};
 
 #[derive(Error, Debug)]

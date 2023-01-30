@@ -1,3 +1,15 @@
+use std::{
+  io::{self, Read},
+  collections::{HashMap, BTreeMap},
+};
+
+use rand_core::RngCore;
+
+use transcript::{Transcript, RecommendedTranscript};
+
+use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
+use frost::{algorithm::Schnorr, curve::Secp256k1, FrostError, ThresholdKeys, sign::*};
+
 use bitcoin::{
   util::{
     schnorr::SchnorrSig,
@@ -6,28 +18,10 @@ use bitcoin::{
   psbt::{serialize::Serialize, PartiallySignedTransaction},
   Witness, VarInt, Address,
 };
-use frost::{
-  algorithm::Schnorr,
-  curve::Secp256k1,
-  FrostError, ThresholdKeys,
-  sign::{
-    Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine, SignatureMachine,
-    AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
-  },
-};
+
 use crate::crypto::{BitcoinHram, make_even};
-use rand_core::RngCore;
 
-use core::fmt::Debug;
-use std::{
-  io::{self, Read},
-  collections::{HashMap, BTreeMap},
-};
-
-use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
-use transcript::{Transcript, RecommendedTranscript};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignableTransaction {
   pub tx: PartiallySignedTransaction,
   pub fee: u64,
@@ -257,7 +251,8 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
       schnorr_signature.s += Scalar::from(_offset);
 
       let temp_sig =
-        secp256k1::schnorr::Signature::from_slice(&schnorr_signature.serialize()[1 .. 65]).unwrap();
+        bitcoin::secp256k1::schnorr::Signature::from_slice(&schnorr_signature.serialize()[1 .. 65])
+          .unwrap();
       let sig = SchnorrSig { sig: temp_sig, hash_ty: SchnorrSighashType::All };
       self.tx.inputs[i].tap_key_sig = Some(sig);
 

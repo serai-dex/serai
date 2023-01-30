@@ -1,13 +1,15 @@
-use sha2::{Digest, Sha256};
-use frost::{algorithm::Hram, curve::Secp256k1};
-use k256::{
-  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, sec1::Tag},
-  ProjectivePoint, U256, Scalar,
-  sha2::digest::generic_array::GenericArray,
-  sha2::digest::generic_array::typenum::U32,
-};
-
 use lazy_static::lazy_static;
+
+use sha2::{Digest, Sha256};
+
+use k256::{
+  elliptic_curve::{
+    ops::Reduce,
+    sec1::{Tag, ToEncodedPoint},
+  },
+  U256, Scalar, ProjectivePoint,
+};
+use frost::{algorithm::Hram, curve::Secp256k1};
 
 pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   let mut c = 0;
@@ -22,7 +24,7 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
 pub struct BitcoinHram {}
 
 lazy_static! {
-  static ref TAG_HASH: GenericArray<u8, U32> = Sha256::digest(b"BIP0340/challenge");
+  static ref TAG_HASH: [u8; 32] = Sha256::digest(b"BIP0340/challenge").into();
 }
 
 #[allow(non_snake_case)]
@@ -30,13 +32,11 @@ impl Hram<Secp256k1> for BitcoinHram {
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
     let (R, _) = make_even(*R);
 
-    let R_encoded_point = R.to_encoded_point(true);
-    let A_encoded_point = A.to_encoded_point(true);
     let mut data = Sha256::new();
     data.update(*TAG_HASH);
     data.update(*TAG_HASH);
-    data.update(R_encoded_point.x().unwrap());
-    data.update(A_encoded_point.x().unwrap());
+    data.update(R.to_encoded_point(true).x().unwrap());
+    data.update(A.to_encoded_point(true).x().unwrap());
     data.update(m);
 
     Scalar::from_uint_reduced(U256::from_be_slice(&data.finalize()))

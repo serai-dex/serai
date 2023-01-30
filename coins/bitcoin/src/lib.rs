@@ -1,6 +1,9 @@
-pub mod rpc_helper;
+mod rpc_helper;
+mod json_helper;
 pub mod rpc;
+
 pub mod crypto;
-pub mod wallet;
+mod wallet;
+pub use wallet::*;
+
 pub mod transactions;
-pub mod json_helper;

@@ -1,5 +1,4 @@
-use bitcoin::{Txid, OutPoint, consensus::encode};
-use bitcoin_hashes::hex::FromHex;
+use bitcoin::{hashes::hex::FromHex, consensus::encode, Txid, OutPoint};
 
 #[derive(Clone, Debug)]
 pub struct SpendableOutput {
