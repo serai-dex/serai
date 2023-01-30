@@ -18,8 +18,11 @@ use monero_rpc::{
 };
 
 use monero_serai::{
-  wallet::address::{Network, AddressSpec, SubaddressIndex},
-  wallet::{Scanner, address::MoneroAddress},
+  wallet::{
+    address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
+    extra::MAX_TX_EXTRA_NONCE_SIZE,
+    Scanner,
+  },
   rpc::Rpc,
   transaction::Transaction,
 };
@@ -216,7 +219,7 @@ test!(
 
       // Make 2 data that is full 255 bytes
       for _ in 0 .. 2 {
-        let data = vec![b'a'; 255];
+        let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE];
         assert!(builder.add_data(data).is_ok());
       }
 
