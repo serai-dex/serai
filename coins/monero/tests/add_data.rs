@@ -1,12 +1,15 @@
-use monero_serai::{wallet::TransactionError, transaction::Transaction};
+use monero_serai::{
+  wallet::{TransactionError, extra::MAX_TX_EXTRA_NONCE_SIZE},
+  transaction::Transaction,
+};
 
 mod runner;
 
 test!(
-  add_single_data_less_than_255,
+  add_single_data_less_than_max,
   (
     |_, mut builder: Builder, addr| async move {
-      let arbitrary_data = vec![b'\0', 254];
+      let arbitrary_data = vec![b'\0', (MAX_TX_EXTRA_NONCE_SIZE as u8) - 1];
 
       // make sure we can add to tx
       let result = builder.add_data(arbitrary_data.clone());
@@ -24,10 +27,10 @@ test!(
 );
 
 test!(
-  add_multiple_data_less_than_255,
+  add_multiple_data_less_than_max,
   (
     |_, mut builder: Builder, addr| async move {
-      let data = vec![b'\0', 254];
+      let data = vec![b'\0', (MAX_TX_EXTRA_NONCE_SIZE as u8) - 1];
 
       // Add tx multiple times
       for _ in 0 .. 5 {
@@ -47,11 +50,11 @@ test!(
 );
 
 test!(
-  add_single_data_more_than_255,
+  add_single_data_more_than_max,
   (
     |_, mut builder: Builder, addr| async move {
       // Make a data that is bigger than 255 bytes
-      let mut data = vec![b'a'; 256];
+      let mut data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE + 1];
 
       // Make sure we get an error if we try to add it to the TX
       assert_eq!(builder.add_data(data.clone()), Err(TransactionError::TooMuchData));
