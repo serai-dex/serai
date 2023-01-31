@@ -1,5 +1,5 @@
 use std::{
-  io::{self, Read},
+  io::{self, Read, Write},
   collections::HashMap,
 };
 
@@ -17,25 +17,32 @@ use frost::{
 
 use bitcoin::{
   hashes::Hash,
-  consensus::encode::{Encodable, Decodable, serialize},
+  consensus::encode::{Decodable, serialize},
   util::sighash::{SchnorrSighashType, SighashCache, Prevouts},
   OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Address,
 };
 
 use crate::crypto::{BitcoinHram, make_even};
 
+/// A spendable output.
 #[derive(Clone, Debug)]
 pub struct SpendableOutput {
+  /// The scalar offset to obtain the key usable to spend this output.
+  /// Enables HDKD systems.
   pub offset: Scalar,
+  /// The output to spend.
   pub output: TxOut,
+  /// The TX ID and vout of the output to spend.
   pub outpoint: OutPoint,
 }
 
 impl SpendableOutput {
+  /// Obtain a unique ID for this output.
   pub fn id(&self) -> [u8; 36] {
     serialize(&self.outpoint).try_into().unwrap()
   }
 
+  /// Read a SpendableOutput from a generic satisfying Read.
   pub fn read<R: Read>(r: &mut R) -> io::Result<SpendableOutput> {
     Ok(SpendableOutput {
       offset: Secp256k1::read_F(r)?,
@@ -46,14 +53,22 @@ impl SpendableOutput {
     })
   }
 
+  /// Write a SpendableOutput to a generic satisfying Write.
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    w.write_all(&self.offset.to_bytes())?;
+    w.write_all(&serialize(&self.output))?;
+    w.write_all(&serialize(&self.outpoint))
+  }
+
+  /// Serialize a SpendableOutput to a Vec<u8>.
   pub fn serialize(&self) -> Vec<u8> {
-    let mut res = self.offset.to_bytes().to_vec();
-    self.output.consensus_encode(&mut res).unwrap();
-    self.outpoint.consensus_encode(&mut res).unwrap();
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
     res
   }
 }
 
+/// A signable transaction, clone-able across attempts.
 #[derive(Clone, Debug)]
 pub struct SignableTransaction(Transaction, Vec<Scalar>, Vec<TxOut>);
 
@@ -82,6 +97,7 @@ impl SignableTransaction {
     u64::try_from(tx.weight()).unwrap()
   }
 
+  /// Create a new signable-transaction.
   pub fn new(
     mut inputs: Vec<SpendableOutput>,
     payments: &[(Address, u64)],
@@ -130,6 +146,7 @@ impl SignableTransaction {
     ))
   }
 
+  /// Create a multisig machine for this transaction.
   pub async fn multisig(
     self,
     keys: ThresholdKeys<Secp256k1>,
@@ -165,6 +182,7 @@ impl SignableTransaction {
   }
 }
 
+/// A FROST signing machine to produce a Bitcoin transaction.
 pub struct TransactionMachine {
   tx: SignableTransaction,
   transcript: RecommendedTranscript,

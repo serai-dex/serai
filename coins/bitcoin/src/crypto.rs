@@ -14,17 +14,19 @@ use bitcoin::XOnlyPublicKey;
 
 use frost::{algorithm::Hram, curve::Secp256k1};
 
-/// Get the x coordinate of a non-infinity, even point.
+/// Get the x coordinate of a non-infinity, even point. Panics on invalid input.
 pub fn x(key: &ProjectivePoint) -> [u8; 32] {
   let encoded = key.to_encoded_point(true);
   assert_eq!(encoded.tag(), Tag::CompressedEvenY);
   (*encoded.x().expect("point at infinity")).into()
 }
 
+/// Convert a non-infinite even point to a XOnlyPublicKey. Panics on invalid input.
 pub fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
   XOnlyPublicKey::from_slice(&x(key)).unwrap()
 }
 
+/// Make a point even, returning the even version and the offset required for it to be even.
 pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   let mut c = 0;
   while key.to_encoded_point(true).tag() == Tag::CompressedOddY {
@@ -34,7 +36,8 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   (key, c)
 }
 
-#[derive(Clone)]
+/// A BIP-340 compatible HRAm for use with the modular-frost Schnorr Algorithm.
+#[derive(Clone, Copy, Debug)]
 pub struct BitcoinHram {}
 
 lazy_static! {
