@@ -110,7 +110,7 @@ macro_rules! serai_test {
             tokio::time::sleep(Duration::from_secs(1)).await;
           }
           // TODO: https://github.com/serai-dex/serai/247
-          tokio::time::sleep(Duration::from_secs(5)).await
+          tokio::time::sleep(Duration::from_secs(5)).await;
           command
         };
 
