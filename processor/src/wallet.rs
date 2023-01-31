@@ -225,7 +225,10 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   }
 
   pub fn add_keys(&mut self, keys: &WalletKeys<C::Curve>) {
-    self.pending.push((self.acknowledged_block(keys.creation_block), keys.bind(C::ID.as_bytes())));
+    let creation_block = keys.creation_block;
+    let mut keys = keys.bind(C::ID.as_bytes());
+    C::tweak_keys(&mut keys);
+    self.pending.push((self.acknowledged_block(creation_block), keys));
   }
 
   pub fn address(&self) -> C::Address {
@@ -262,8 +265,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
             .coin
             .get_outputs(&block, keys.group_key())
             .await?
-            .iter()
-            .cloned()
+            .drain(..)
             .filter(|output| self.db.add_output(output)),
         );
       }
@@ -282,7 +284,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   pub async fn prepare_sends(
     &mut self,
     canonical: usize,
-    payments: Vec<(C::Address, u64)>,
+    mut payments: Vec<(C::Address, u64)>,
     fee: C::Fee,
   ) -> Result<(Vec<(C::Address, u64)>, Vec<C::SignableTransaction>), CoinError> {
     if payments.is_empty() {
@@ -296,7 +298,6 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     // As each payment re-appears, let mut payments = schedule[payment] where the only input is
     // the source payment
     // let (mut payments, schedule) = schedule(payments);
-    let mut payments = payments;
 
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
@@ -348,7 +349,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     &mut self,
     network: &mut N,
     prepared: C::SignableTransaction,
-  ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
+  ) -> Result<Vec<u8>, SignError> {
     let attempt = self.coin.attempt_send(prepared).await.map_err(SignError::CoinError)?;
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);

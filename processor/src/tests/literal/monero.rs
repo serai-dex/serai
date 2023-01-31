@@ -1,7 +1,5 @@
-use lazy_static::lazy_static;
-
 use crate::{
-  coin::{Coin, Monero},
+  coin::Monero,
   tests::{test_scan, test_send},
 };
 
@@ -13,9 +11,7 @@ async fn monero() -> Monero {
 
 async_sequential! {
   async fn monero_send() {
-    let monero = monero().await;
-    let fee = monero.get_fee().await;
-    test_send(monero, fee).await;
+    test_send(monero().await).await;
   }
 }
 

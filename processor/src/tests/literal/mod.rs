@@ -1,1 +1,2 @@
+mod bitcoin;
 mod monero;

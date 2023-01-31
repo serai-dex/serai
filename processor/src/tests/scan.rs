@@ -11,7 +11,8 @@ use crate::{
 };
 
 pub async fn test_scan<C: Coin>(coin: C) {
-  let keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
+  let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng).remove(&1).unwrap();
+  C::tweak_keys(&mut keys);
 
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
@@ -21,11 +22,11 @@ pub async fn test_scan<C: Coin>(coin: C) {
     .orders
     .send(ScannerOrder::RotateKey {
       activation_number: coin.get_latest_block_number().await.unwrap(),
-      key: keys[&1].group_key(),
+      key: keys.group_key(),
     })
     .unwrap();
 
-  coin.test_send(C::address(keys[&1].group_key())).await;
+  coin.test_send(C::address(keys.group_key())).await;
 
   let block = match timeout(Duration::from_secs(5), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block(number, id) => {
@@ -40,7 +41,7 @@ pub async fn test_scan<C: Coin>(coin: C) {
 
   // TODO: Kill this Scanner, recreate it off the current DB, and verify it re-emits the above
   // events
-  scanner.orders.send(ScannerOrder::AckBlock(keys[&1].group_key(), block)).unwrap();
+  scanner.orders.send(ScannerOrder::AckBlock(keys.group_key(), block)).unwrap();
 
   // There should be no more events
   assert!(timeout(Duration::from_secs(5), scanner.events.recv()).await.is_err());

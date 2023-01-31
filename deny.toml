@@ -44,6 +44,7 @@ allow-osi-fsf-free = "neither"
 default = "deny"
 
 exceptions = [
+  { allow = ["AGPL-3.0"], name = "bitcoin-serai" },
   { allow = ["AGPL-3.0"], name = "ethereum-serai" },
 
   { allow = ["AGPL-3.0"], name = "processor-messages" },

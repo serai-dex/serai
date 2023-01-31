@@ -161,6 +161,9 @@ impl Coin for Monero {
   const MAX_INPUTS: usize = 128;
   const MAX_OUTPUTS: usize = 16;
 
+  // Monero doesn't require/benefit from tweaking
+  fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
+
   fn address(key: dfg::EdwardsPoint) -> Self::Address {
     Self::address_internal(key, EXTERNAL_SUBADDRESS)
   }
@@ -230,11 +233,7 @@ impl Coin for Monero {
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         tx.inputs.drain(..).map(|input| input.0).collect(),
         tx.payments.drain(..).map(|payment| (payment.address, payment.amount)).collect(),
-        if tx.change {
-          Some(change).map(|change| Self::address_internal(change, CHANGE_SUBADDRESS))
-        } else {
-          None
-        },
+        if tx.change { Some(Self::address_internal(change, CHANGE_SUBADDRESS)) } else { None },
         vec![],
         fee,
       )
@@ -259,12 +258,9 @@ impl Coin for Monero {
       .map_err(|_| CoinError::ConnectionError)
   }
 
-  async fn publish_transaction(
-    &self,
-    tx: &Self::Transaction,
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError> {
     self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-    Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
+    Ok(tx.hash().to_vec())
   }
 
   #[cfg(test)]

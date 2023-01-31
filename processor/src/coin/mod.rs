@@ -1,4 +1,5 @@
-use core::{marker::Send, fmt::Debug};
+use core::fmt::Debug;
+use std::io;
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -10,6 +11,9 @@ use frost::{
   sign::PreprocessMachine,
 };
 
+pub mod bitcoin;
+pub use self::bitcoin::Bitcoin;
+
 pub mod monero;
 pub use monero::Monero;
 
@@ -19,16 +23,15 @@ use crate::Transaction;
 pub enum CoinError {
   #[error("failed to connect to coin daemon")]
   ConnectionError,
+  #[error("not enough funds")] // TODO: Remove this
+  NotEnoughFunds,
 }
 
 pub trait Id:
-  Send + Sync + Clone + Copy + Default + PartialEq + AsRef<[u8]> + AsMut<[u8]> + Debug
+  Send + Sync + Clone + Default + PartialEq + AsRef<[u8]> + AsMut<[u8]> + Debug
 {
 }
-impl<I: Send + Sync + Clone + Copy + Default + PartialEq + AsRef<[u8]> + AsMut<[u8]> + Debug> Id
-  for I
-{
-}
+impl<I: Send + Sync + Clone + Default + PartialEq + AsRef<[u8]> + AsMut<[u8]> + Debug> Id for I {}
 
 pub trait Block: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
@@ -66,6 +69,27 @@ pub enum OutputType {
 
   // Should be added to the available UTXO pool with no further action
   Change,
+}
+
+impl OutputType {
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&[match self {
+      OutputType::External => 0,
+      OutputType::Branch => 1,
+      OutputType::Change => 2,
+    }])
+  }
+
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut byte = [0; 1];
+    reader.read_exact(&mut byte)?;
+    Ok(match byte[0] {
+      0 => OutputType::External,
+      1 => OutputType::Branch,
+      2 => OutputType::Change,
+      _ => Err(io::Error::new(io::ErrorKind::Other, "invalid OutputType"))?,
+    })
+  }
 }
 
 pub trait Output: Send + Sync + Sized + Clone + Debug {
@@ -120,6 +144,8 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
   const MAX_OUTPUTS: usize;
 
+  fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
+
   /// Address for the given group key to receive external coins to.
   fn address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
@@ -155,10 +181,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   ) -> Result<Self::TransactionMachine, CoinError>;
 
   /// Publish a transaction.
-  async fn publish_transaction(
-    &self,
-    tx: &Self::Transaction,
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError>;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;

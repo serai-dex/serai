@@ -109,6 +109,8 @@ macro_rules! serai_test {
           while Serai::new(URL).await.unwrap().get_latest_block_hash().await.is_err() {
             tokio::time::sleep(Duration::from_secs(1)).await;
           }
+          // TODO: https://github.com/serai-dex/serai/247
+          tokio::time::sleep(Duration::from_secs(5)).await;
           command
         };
 

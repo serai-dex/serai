@@ -1,5 +1,5 @@
-# Prepare Environment
 FROM alpine:latest as builder
+
 # https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.1.0.tar.bz2
 # Verification will fail if MONERO_VERSION doesn't match the latest
 # due to the way monero publishes releases. They overwrite a single hashes.txt file
@@ -38,5 +38,3 @@ COPY ./scripts /scripts
 
 EXPOSE 18080 18081
 VOLUME /home/monero/.bitmonero
-
-CMD ["monerod"]

@@ -9,7 +9,7 @@ pub(crate) use scan::test_scan;
 #[macro_export]
 macro_rules! sequential {
   () => {
-    lazy_static! {
+    lazy_static::lazy_static! {
       static ref SEQUENTIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::new(());
     }
   };

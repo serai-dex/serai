@@ -58,7 +58,9 @@ impl Network for LocalNetwork {
   }
 }
 
-pub async fn test_send<C: Coin>(coin: C, fee: C::Fee) {
+pub async fn test_send<C: Coin>(coin: C) {
+  let fee = coin.get_fee().await;
+
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
   let latest = coin.get_latest_block_number().await.unwrap();
@@ -94,7 +96,7 @@ pub async fn test_send<C: Coin>(coin: C, fee: C::Fee) {
     let latest = coin.get_latest_block_number().await.unwrap();
     wallet.acknowledge_block(1, latest - (C::CONFIRMATIONS - 1));
     let signable = wallet
-      .prepare_sends(1, vec![(wallet.address(), 10000000000)], fee)
+      .prepare_sends(1, vec![(wallet.address(), 100000000)], fee)
       .await
       .unwrap()
       .1
@@ -102,5 +104,5 @@ pub async fn test_send<C: Coin>(coin: C, fee: C::Fee) {
     futures.push(wallet.attempt_send(network, signable));
   }
 
-  println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap().0));
+  println!("{:?}", hex::encode(futures::future::join_all(futures).await.swap_remove(0).unwrap()));
 }
