@@ -7,6 +7,7 @@ use bitcoin::{
   consensus::encode,
   XOnlyPublicKey, SchnorrSighashType,
   psbt::{PartiallySignedTransaction, PsbtSighashType},
+  hashes::Hash,
 };
 
 use transcript::RecommendedTranscript;
@@ -28,7 +29,7 @@ use crate::coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTr
 impl BlockTrait for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    self.block_hash().as_ref().try_into().unwrap()
+    self.block_hash().as_hash().into_inner()
   }
 }
 
@@ -39,7 +40,7 @@ pub struct Fee {
 
 impl Fee {
   pub fn calculate(&self, weight: usize) -> u64 {
-    (self.per_weight * u64::try_from(weight).unwrap()) - 1
+    self.per_weight * u64::try_from(weight).unwrap()
   }
 }
 
@@ -161,9 +162,8 @@ impl Coin for Bitcoin {
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
-    let block_hash = self.rpc.get_block_hash(number).await.unwrap();
-    let info = self.rpc.get_block(&block_hash).await.unwrap();
-    Ok(info)
+    let block_hash = self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?;
+    self.rpc.get_block(&block_hash).await.map_err(|_| CoinError::ConnectionError)
   }
 
   async fn get_outputs(
@@ -172,7 +172,7 @@ impl Coin for Bitcoin {
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let main_addr = self.address(key);
-    let block_details = self.rpc.get_block(&block.block_hash()).await.unwrap();
+    let block_details = self.rpc.get_block(&block.block_hash()).await.map_err(|_| CoinError::ConnectionError)?;
     let mut outputs = Vec::new();
     for one_transaction in block_details.txdata {
       for (index, output_tx) in one_transaction.output.iter().enumerate() {
@@ -199,7 +199,7 @@ impl Coin for Bitcoin {
   ) -> Result<Self::SignableTransaction, CoinError> {
     let mut vin_alt_list = Vec::new();
     let mut vout_alt_list = Vec::new();
-    let change_addr = self.address(change.unwrap());
+    let change = change.map(|change| self.address(change));
 
     let mut input_sat = 0;
     for one_input in &inputs {
@@ -231,8 +231,10 @@ impl Coin for Bitcoin {
       // TODO: we need to drop outputs worth less than payment_sat
       if payment_sat < (input_sat - actual_fee) {
         let rest_sat = input_sat - actual_fee - payment_sat;
-        vout_alt_list
-          .push(bitcoin::TxOut { value: rest_sat, script_pubkey: change_addr.script_pubkey() });
+        if let Some(change) = change {
+          vout_alt_list
+            .push(bitcoin::TxOut { value: rest_sat, script_pubkey: change.script_pubkey() });
+        }
       }
     }
 
@@ -353,7 +355,7 @@ impl Coin for Bitcoin {
       )
       .await
       .unwrap();
-    
+
     self
       .rpc
       .rpc_call::<Vec<String>>(
