@@ -38,4 +38,4 @@ runs:
         RPC_USER=serai
         RPC_PASS=seraidex
 
-        bitcoind -regtest -txindex -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS -daemon
+        bitcoind -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS -daemon

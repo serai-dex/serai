@@ -333,7 +333,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     &mut self,
     network: &mut N,
     prepared: C::SignableTransaction,
-  ) -> Result<(Vec<u8>, Vec<<C::Output as Output>::Id>), SignError> {
+  ) -> Result<Vec<u8>, SignError> {
     let attempt = self.coin.attempt_send(prepared).await.map_err(SignError::CoinError)?;
 
     let (attempt, commitments) = attempt.preprocess(&mut OsRng);

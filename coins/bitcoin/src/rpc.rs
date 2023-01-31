@@ -76,15 +76,11 @@ impl Rpc {
 
   pub async fn get_transaction(
     &self,
+    block_hash: &BlockHash,
     txid: &Txid,
-    block_hash: Option<&BlockHash>,
   ) -> Result<Transaction, RpcError> {
-    let hex = self
-      .rpc_call::<String>(
-        "getrawtransaction",
-        json!([txid.to_hex(), false, block_hash.map(|hash| hash.to_hex())]),
-      )
-      .await?;
+    let hex =
+      self.rpc_call::<String>("getrawtransaction", json!([txid, false, block_hash])).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
     encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }

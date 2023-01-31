@@ -258,12 +258,9 @@ impl Coin for Monero {
       .map_err(|_| CoinError::ConnectionError)
   }
 
-  async fn publish_transaction(
-    &self,
-    tx: &Self::Transaction,
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as OutputTrait>::Id>), CoinError> {
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError> {
     self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-    Ok((tx.hash().to_vec(), tx.prefix.outputs.iter().map(|output| output.key.to_bytes()).collect()))
+    Ok(tx.hash().to_vec())
   }
 
   // Monero doesn't require/benefit from tweaking

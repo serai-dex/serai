@@ -98,10 +98,7 @@ pub trait Coin {
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError>;
 
-  async fn publish_transaction(
-    &self,
-    tx: &Self::Transaction,
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError>;
 
   fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>);
 
