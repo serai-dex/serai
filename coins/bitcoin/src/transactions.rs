@@ -18,7 +18,7 @@ use bitcoin::{
     sighash::{SchnorrSighashType, SighashCache, Prevouts},
   },
   psbt::{serialize::Serialize, PartiallySignedTransaction},
-  VarInt, Witness, Transaction, Address,
+  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Address,
 };
 
 use crate::crypto::{BitcoinHram, make_even};
@@ -59,42 +59,32 @@ impl SignableTransaction {
     Ok(TransactionMachine { signable: self, transcript, sigs })
   }
 
-  pub fn calculate_weight(inputs: usize, payments: &[(Address, u64)], change: bool) -> usize {
-    // version number + segwit marker + segwit flag
-    let mut weight = 4 * 4;
-    weight += 1;
-    weight += 1;
-    // number of input
-    weight += 4;
-    // Previous output hash
-    weight += inputs * 32 * 4;
-    // Previous output index
-    weight += inputs * 4 * 4;
-    // Script length - Scriptsig is empty
-    weight += inputs * 4;
-    weight += inputs * 4 * 4;
-    // OUTPUTS
-    weight += 4;
-    // 8 byte value - txout script length - [1-9] byte for script length and script pubkey
-    for (address, _) in payments.iter() {
-      weight += 8 * 4;
-      weight += VarInt(u64::try_from(address.script_pubkey().len()).unwrap()).len() * 4;
-      weight += (address.script_pubkey().len()) * 4;
+  pub fn calculate_weight(
+    inputs: usize,
+    payments: &[(Address, u64)],
+    change: Option<&Address>,
+  ) -> usize {
+    let mut tx = Transaction {
+      version: 2,
+      lock_time: PackedLockTime::ZERO,
+      input: vec![
+        TxIn {
+          previous_output: OutPoint::default(),
+          script_sig: Script::new(),
+          sequence: Sequence::MAX,
+          witness: Witness::from_vec(vec![vec![0; 64]])
+        };
+        inputs
+      ],
+      output: payments
+        .iter()
+        .map(|payment| TxOut { value: payment.1, script_pubkey: payment.0.script_pubkey() })
+        .collect(),
+    };
+    if let Some(change) = change {
+      tx.output.push(TxOut { value: 0, script_pubkey: change.script_pubkey() });
     }
-    if change {
-      // Change address script pubkey byte (p2tr)
-      weight += 8 * 4;
-      weight += 4;
-      weight += 34 * 4;
-    }
-    // Stack size of p2tr
-    weight += inputs;
-    weight += inputs;
-    weight += inputs * 65;
-    // locktime
-    weight += 4 * 4;
-
-    weight
+    tx.weight()
   }
 }
 
@@ -208,7 +198,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       .enumerate()
       .map(|(index, sig)| {
         let tx_sighash = cache
-          .taproot_key_spend_signature_hash(index, &prevouts, SchnorrSighashType::All)
+          .taproot_key_spend_signature_hash(index, &prevouts, SchnorrSighashType::Default)
           .unwrap();
 
         let (sig, share) = sig.sign(commitments[index].clone(), &tx_sighash)?;
@@ -245,7 +235,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
       script_witness.push(
         SchnorrSig {
           sig: Signature::from_slice(&sig.serialize()[1 .. 65]).unwrap(),
-          hash_ty: SchnorrSighashType::All,
+          hash_ty: SchnorrSighashType::Default,
         }
         .serialize(),
       );

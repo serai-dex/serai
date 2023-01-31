@@ -186,8 +186,6 @@ impl Coin for Bitcoin {
     change: Option<ProjectivePoint>,
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
-    let change = change.map(|change| self.address(change));
-
     let input_sat = inputs.iter().map(|input| input.amount()).sum::<u64>();
     let txins = inputs
       .iter()
@@ -206,7 +204,7 @@ impl Coin for Bitcoin {
       .collect::<Vec<_>>();
 
     let actual_fee =
-      fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, false));
+      fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, None));
 
     if payment_sat > (input_sat - actual_fee) {
       return Err(CoinError::NotEnoughFunds);
@@ -214,8 +212,9 @@ impl Coin for Bitcoin {
 
     // If there's a change address, check if there's a meaningful change
     if let Some(change) = change {
+      let change = self.address(change);
       let fee_with_change =
-        fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, true));
+        fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, Some(&change)));
       // If there's a non-zero change, add it
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
         txouts.push(TxOut { value, script_pubkey: change.script_pubkey() });
