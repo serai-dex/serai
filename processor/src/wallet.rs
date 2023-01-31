@@ -276,7 +276,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   pub async fn prepare_sends(
     &mut self,
     canonical: usize,
-    payments: Vec<(C::Address, u64)>,
+    mut payments: Vec<(C::Address, u64)>,
     fee: C::Fee,
   ) -> Result<(Vec<(C::Address, u64)>, Vec<C::SignableTransaction>), CoinError> {
     if payments.is_empty() {
@@ -290,7 +290,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     // As each payment re-appears, let mut payments = schedule[payment] where the only input is
     // the source payment
     // let (mut payments, schedule) = schedule(payments);
-    let mut payments = payments;
+
     let mut txs = vec![];
     for (keys, outputs) in self.keys.iter_mut() {
       while !outputs.is_empty() {
@@ -310,6 +310,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           u64::try_from(acknowledged_block).unwrap().to_le_bytes(),
         );
         transcript.append_message(b"index", u64::try_from(txs.len()).unwrap().to_le_bytes());
+
         let tx = self
           .coin
           .prepare_send(
@@ -326,6 +327,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
         txs.push(tx);
       }
     }
+
     Ok((payments, txs))
   }
 
