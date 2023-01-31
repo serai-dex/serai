@@ -74,17 +74,6 @@ impl Rpc {
     encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }
 
-  pub async fn get_transaction(
-    &self,
-    block_hash: &BlockHash,
-    txid: &Txid,
-  ) -> Result<Transaction, RpcError> {
-    let hex =
-      self.rpc_call::<String>("getrawtransaction", json!([txid, false, block_hash])).await?;
-    let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
-    encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
-  }
-
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<Txid, RpcError> {
     self.rpc_call("sendrawtransaction", json!([encode::serialize_hex(tx)])).await
   }
