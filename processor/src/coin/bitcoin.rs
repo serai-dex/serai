@@ -162,7 +162,8 @@ impl Coin for Bitcoin {
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
-    let block_hash = self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?;
+    let block_hash =
+      self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?;
     self.rpc.get_block(&block_hash).await.map_err(|_| CoinError::ConnectionError)
   }
 
@@ -172,7 +173,8 @@ impl Coin for Bitcoin {
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let main_addr = self.address(key);
-    let block_details = self.rpc.get_block(&block.block_hash()).await.map_err(|_| CoinError::ConnectionError)?;
+    let block_details =
+      self.rpc.get_block(&block.block_hash()).await.map_err(|_| CoinError::ConnectionError)?;
     let mut outputs = Vec::new();
     for one_transaction in block_details.txdata {
       for (index, output_tx) in one_transaction.output.iter().enumerate() {
@@ -246,8 +248,7 @@ impl Coin for Bitcoin {
     };
     let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction.clone()).unwrap();
     for (i, one_input) in inputs.iter().enumerate() {
-      let one_transaction =
-        self.rpc.get_transaction(&one_input.0.output.txid, None).await.unwrap();
+      let one_transaction = self.rpc.get_transaction(&one_input.0.output.txid, None).await.unwrap();
       let xonly_pubkey =
         XOnlyPublicKey::from_slice(keys.group_key().to_encoded_point(true).x().to_owned().unwrap())
           .unwrap();
