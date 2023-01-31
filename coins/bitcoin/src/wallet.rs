@@ -103,7 +103,6 @@ impl SignableTransaction {
       .collect::<Vec<_>>();
 
     let actual_fee = fee * Self::calculate_weight(txins.len(), payments, None);
-
     if payment_sat > (input_sat - actual_fee) {
       return None;
     }
@@ -267,16 +266,17 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       .sigs
       .drain(..)
       .enumerate()
-      .map(|(index, sig)| {
+      .map(|(i, sig)| {
         let tx_sighash = cache
-          .taproot_key_spend_signature_hash(index, &prevouts, SchnorrSighashType::Default)
+          .taproot_key_spend_signature_hash(i, &prevouts, SchnorrSighashType::Default)
           .unwrap();
 
-        let (sig, share) = sig.sign(commitments[index].clone(), &tx_sighash)?;
+        let (sig, share) = sig.sign(commitments[i].clone(), &tx_sighash)?;
         shares.push(share);
         Ok(sig)
       })
       .collect::<Result<_, _>>()?;
+
     Ok((TransactionSignatureMachine { pst: self.pst, sigs }, shares))
   }
 }
