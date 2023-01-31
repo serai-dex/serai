@@ -23,11 +23,11 @@ use k256::{
 use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin_serai::{
-  rpc::Rpc,
   crypto::{x_only, make_even},
-  transactions::{
+  wallet::{
     SpendableOutput, TransactionMachine, SignableTransaction as BSignableTransaction,
   },
+  rpc::Rpc,
 };
 
 use crate::coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin};

@@ -1,3 +1,3 @@
 pub mod crypto;
-pub mod transactions;
+pub mod wallet;
 pub mod rpc;
