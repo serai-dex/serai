@@ -225,10 +225,10 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
   }
 
   pub fn add_keys(&mut self, keys: &WalletKeys<C::Curve>) {
-    self.pending.push((self.acknowledged_block(keys.creation_block), keys.bind(C::ID)));
-    for (_, key) in self.pending.iter_mut() {
-      self.coin.tweak_keys(key);
-    }
+    let creation_block = keys.creation_block;
+    let mut keys = keys.bind(C::ID);
+    self.coin.tweak_keys(&mut keys);
+    self.pending.push((self.acknowledged_block(creation_block), keys));
   }
 
   pub fn address(&self) -> C::Address {
@@ -260,8 +260,14 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
 
       let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
-        let res_output = self.coin.get_outputs(&block, keys.group_key()).await?;
-        outputs.extend(res_output.iter().cloned().filter(|output| self.db.add_output(output)));
+        outputs.extend(
+          self
+            .coin
+            .get_outputs(&block, keys.group_key())
+            .await?
+            .drain(..)
+            .filter(|output| self.db.add_output(output)),
+        );
       }
 
       self.db.scanned_to_block(b);

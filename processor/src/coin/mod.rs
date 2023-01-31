@@ -1,4 +1,4 @@
-use std::{marker::Send};
+use std::marker::Send;
 
 use async_trait::async_trait;
 use thiserror::Error;
