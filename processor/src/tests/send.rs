@@ -94,7 +94,7 @@ pub async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
     let latest = coin.get_latest_block_number().await.unwrap();
     wallet.acknowledge_block(1, latest - (C::CONFIRMATIONS - 1));
     let signable = wallet
-      .prepare_sends(1, vec![(wallet.address(), 10000000000)], fee)
+      .prepare_sends(1, vec![(wallet.address(), 100000000)], fee)
       .await
       .unwrap()
       .1

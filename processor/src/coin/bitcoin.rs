@@ -353,6 +353,15 @@ impl Coin for Bitcoin {
       )
       .await
       .unwrap();
+    
+    self
+      .rpc
+      .rpc_call::<Vec<String>>(
+        "generatetoaddress",
+        &[1.into(), serde_json::to_value(&address.to_string()).unwrap()],
+      )
+      .await
+      .unwrap();
 
     for _ in 0 .. 100 {
       self.mine_block().await;
