@@ -129,6 +129,11 @@ impl Coin for Bitcoin {
   const MAX_INPUTS: usize = 128;
   const MAX_OUTPUTS: usize = 16;
 
+  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>) {
+    let (_, offset) = make_even(key.group_key());
+    *key = key.offset(Scalar::from(offset));
+  }
+
   fn address(&self, key: ProjectivePoint) -> Self::Address {
     debug_assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
     Address::p2tr_tweaked(
@@ -254,11 +259,6 @@ impl Coin for Bitcoin {
 
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError> {
     Ok(self.rpc.send_raw_transaction(tx).await.unwrap().to_vec())
-  }
-
-  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>) {
-    let (_, offset) = make_even(key.group_key());
-    *key = key.offset(Scalar::from(offset));
   }
 
   #[cfg(test)]

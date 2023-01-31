@@ -67,6 +67,8 @@ pub trait Coin {
   const MAX_INPUTS: usize;
   const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
 
+  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>);
+
   /// Address for the given group key to receive external coins to.
   // Doesn't have to take self, enables some level of caching which is pleasant
   fn address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
@@ -99,8 +101,6 @@ pub trait Coin {
   ) -> Result<Self::TransactionMachine, CoinError>;
 
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError>;
-
-  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>);
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;

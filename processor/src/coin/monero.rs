@@ -162,6 +162,9 @@ impl Coin for Monero {
   const MAX_INPUTS: usize = 128;
   const MAX_OUTPUTS: usize = 16;
 
+  // Monero doesn't require/benefit from tweaking
+  fn tweak_keys(&self, _: &mut ThresholdKeys<Self::Curve>) {}
+
   fn address(&self, key: dfg::EdwardsPoint) -> Self::Address {
     self.address_internal(key, EXTERNAL_SUBADDRESS)
   }
@@ -262,9 +265,6 @@ impl Coin for Monero {
     self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
     Ok(tx.hash().to_vec())
   }
-
-  // Monero doesn't require/benefit from tweaking
-  fn tweak_keys(&self, _: &mut ThresholdKeys<Self::Curve>) {}
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
