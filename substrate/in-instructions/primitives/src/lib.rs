@@ -11,6 +11,8 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
+#[cfg(not(feature = "std"))]
+use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
 use serai_primitives::{BlockNumber, BlockHash, SeraiAddress, ExternalAddress, Data, WithAmount};

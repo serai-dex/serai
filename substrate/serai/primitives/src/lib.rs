@@ -35,6 +35,7 @@ pub const MAX_ADDRESS_LEN: u32 = 74;
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct ExternalAddress(BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>);
 
+#[cfg(feature = "std")]
 impl Zeroize for ExternalAddress {
   fn zeroize(&mut self) {
     self.0.as_mut().zeroize()
@@ -69,6 +70,7 @@ pub const MAX_DATA_LEN: u32 = 512;
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Data(BoundedVec<u8, ConstU32<{ MAX_DATA_LEN }>>);
 
+#[cfg(feature = "std")]
 impl Zeroize for Data {
   fn zeroize(&mut self) {
     self.0.as_mut().zeroize()

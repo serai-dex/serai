@@ -3,7 +3,6 @@ use core::time::Duration;
 use rand_core::{RngCore, OsRng};
 
 use sp_core::Pair;
-use serai_runtime::in_instructions::{Batch, Update};
 
 use tokio::time::sleep;
 
@@ -14,7 +13,7 @@ use serai_client::{
     BITCOIN, BlockNumber, BlockHash, SeraiAddress, Amount, WithAmount, Balance, Data,
     ExternalAddress, insecure_pair_from_name,
   },
-  in_instructions::primitives::InInstruction,
+  in_instructions::primitives::{InInstruction, Batch, Update},
   tokens::{primitives::OutInstruction, TokensEvent},
   Serai,
 };

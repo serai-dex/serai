@@ -1,11 +1,12 @@
 use rand_core::{RngCore, OsRng};
 
-use serai_runtime::in_instructions::{Batch, Update};
-
 use serai_client::{
   primitives::{BITCOIN, BlockNumber, BlockHash, SeraiAddress, Amount, WithAmount, Balance},
   tokens::TokensEvent,
-  in_instructions::{primitives::InInstruction, InInstructionsEvent},
+  in_instructions::{
+    primitives::{InInstruction, Batch, Update},
+    InInstructionsEvent,
+  },
   Serai,
 };
 

@@ -5,8 +5,11 @@ use lazy_static::lazy_static;
 
 use tokio::{sync::Mutex, time::sleep};
 
-use serai_runtime::in_instructions::Update;
-use serai_client::{primitives::Coin, in_instructions::InInstructionsEvent, Serai};
+use serai_client::{
+  primitives::Coin,
+  in_instructions::{primitives::Updates, InInstructionsEvent},
+  Serai,
+};
 
 use jsonrpsee_server::RpcModule;
 
@@ -17,7 +20,7 @@ lazy_static! {
 }
 
 #[allow(dead_code)]
-pub async fn provide_updates(updates: Vec<Option<Update>>) -> [u8; 32] {
+pub async fn provide_updates(updates: Updates) -> [u8; 32] {
   let done = Arc::new(Mutex::new(false));
   let done_clone = done.clone();
   let updates_clone = updates.clone();

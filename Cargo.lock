@@ -3641,6 +3641,7 @@ dependencies = [
  "serai-primitives",
  "serde",
  "sp-runtime",
+ "sp-std",
  "tokens-primitives",
  "zeroize",
 ]
