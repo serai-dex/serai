@@ -369,9 +369,8 @@ fn initialize_consumer(
           info!("Received Signer List");
 
           let mut signer_index = 0;
-          let mut signer_count;
           let signers: Vec<String> = serde_json::from_str(&signer_list).unwrap();
-          let signer_index = signers.iter().position(|&r| r == &name_arg).unwrap();
+          //let signer_index = signers.iter().position(|&r| r == &name_arg).unwrap();
           
           // TODO: Add logic to create threshold params based on signer count
         }
