@@ -2,10 +2,9 @@ use std::io;
 
 use async_trait::async_trait;
 
+#[rustfmt::skip]
 use bitcoin::{
-  hashes::Hash, schnorr::TweakedPublicKey, consensus::encode, psbt::PartiallySignedTransaction,
-  PackedLockTime, OutPoint, Script, Sequence, Witness, TxIn, TxOut, Transaction, Block, Network,
-  Address,
+  hashes::Hash, schnorr::TweakedPublicKey, OutPoint, Transaction, Block, Network, Address
 };
 
 #[cfg(test)]
@@ -13,6 +12,7 @@ use bitcoin::{
   secp256k1::{SECP256K1, SecretKey, Message},
   PrivateKey, PublicKey, EcdsaSighashType,
   blockdata::script::Builder,
+  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut,
 };
 
 use transcript::RecommendedTranscript;
@@ -25,8 +25,9 @@ use frost::{curve::Secp256k1, ThresholdKeys};
 use bitcoin_serai::{
   rpc::Rpc,
   crypto::{x_only, make_even},
-  SpendableOutput,
-  transactions::{TransactionMachine, SignableTransaction as BSignableTransaction},
+  transactions::{
+    SpendableOutput, TransactionMachine, SignableTransaction as BSignableTransaction,
+  },
 };
 
 use crate::coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin};
@@ -39,15 +40,7 @@ impl BlockTrait for Block {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Fee {
-  pub per_weight: u64,
-}
-
-impl Fee {
-  pub fn calculate(&self, weight: usize) -> u64 {
-    self.per_weight * u64::try_from(weight).unwrap()
-  }
-}
+pub struct Fee(u64);
 
 #[derive(Clone, Debug)]
 pub struct Output(SpendableOutput);
@@ -60,7 +53,7 @@ impl OutputTrait for Output {
   }
 
   fn id(&self) -> Self::Id {
-    encode::serialize(&self.0.outpoint).try_into().unwrap()
+    self.0.id()
   }
 
   fn amount(&self) -> u64 {
@@ -181,59 +174,22 @@ impl Coin for Bitcoin {
     keys: ThresholdKeys<Secp256k1>,
     transcript: RecommendedTranscript,
     _: usize,
-    inputs: Vec<Output>,
+    mut inputs: Vec<Output>,
     payments: &[(Address, u64)],
     change: Option<ProjectivePoint>,
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
-    let input_sat = inputs.iter().map(|input| input.amount()).sum::<u64>();
-    let txins = inputs
-      .iter()
-      .map(|input| TxIn {
-        previous_output: input.0.outpoint,
-        script_sig: Script::new(),
-        sequence: Sequence::MAX,
-        witness: Witness::new(),
-      })
-      .collect::<Vec<_>>();
-
-    let payment_sat = payments.iter().map(|payment| payment.1).sum::<u64>();
-    let mut txouts = payments
-      .iter()
-      .map(|payment| TxOut { value: payment.1, script_pubkey: payment.0.script_pubkey() })
-      .collect::<Vec<_>>();
-
-    let actual_fee =
-      fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, None));
-
-    if payment_sat > (input_sat - actual_fee) {
-      return Err(CoinError::NotEnoughFunds);
-    }
-
-    // If there's a change address, check if there's a meaningful change
-    if let Some(change) = change {
-      let change = self.address(change);
-      let fee_with_change =
-        fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, Some(&change)));
-      // If there's a non-zero change, add it
-      if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
-        txouts.push(TxOut { value, script_pubkey: change.script_pubkey() });
-      }
-    }
-
-    // TODO: Drop outputs which BTC will consider spam (outputs worth less than the cost to spend
-    // them)
-
-    let new_transaction =
-      Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: txins, output: txouts };
-
-    let mut pst = PartiallySignedTransaction::from_unsigned_tx(new_transaction).unwrap();
-    debug_assert_eq!(pst.inputs.len(), inputs.len());
-    for (pst, input) in pst.inputs.iter_mut().zip(inputs.iter()) {
-      pst.witness_utxo = Some(input.0.output.clone());
-    }
-
-    Ok(SignableTransaction { keys, transcript, actual: BSignableTransaction { tx: pst } })
+    Ok(SignableTransaction {
+      keys,
+      transcript,
+      actual: BSignableTransaction::new(
+        inputs.drain(..).map(|input| input.0).collect(),
+        payments,
+        change.map(|change| self.address(change)),
+        fee.0,
+      )
+      .ok_or(CoinError::NotEnoughFunds)?,
+    })
   }
 
   async fn attempt_send(
@@ -254,7 +210,7 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
-    Self::Fee { per_weight: 1 }
+    Fee(1)
   }
 
   #[cfg(test)]
