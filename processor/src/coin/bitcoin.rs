@@ -94,6 +94,17 @@ impl Bitcoin {
   }
 
   #[cfg(test)]
+  pub async fn fresh_chain(&self) {
+    if self.rpc.get_latest_block_number().await.unwrap() > 0 {
+      self
+        .rpc
+        .rpc_call("invalidateblock", serde_json::json!([self.rpc.get_block_hash(1).await.unwrap()]))
+        .await
+        .unwrap()
+    }
+  }
+
+  #[cfg(test)]
   fn test_address_with_key() -> (bitcoin::PrivateKey, bitcoin::PublicKey, Address) {
     use bitcoin::{PrivateKey, PublicKey, Network};
     use secp256k1::{rand, Secp256k1, SecretKey};
@@ -104,22 +115,6 @@ impl Bitcoin {
     let public_key = PublicKey::from_private_key(&secp, &private_key);
     let address = Address::p2pkh(&public_key, Network::Regtest);
     (private_key, public_key, address)
-  }
-
-  #[cfg(test)]
-  fn test_get_spendables(block: &Block, address: &Address) -> Vec<SpendableOutput> {
-    let mut outputs = Vec::new();
-    for one_tx in &block.txdata {
-      for (index, output_tx) in one_tx.output.iter().enumerate() {
-        if output_tx.script_pubkey == address.script_pubkey() {
-          outputs.push(SpendableOutput {
-            output: OutPoint { txid: one_tx.txid(), vout: u32::try_from(index).unwrap() },
-            amount: output_tx.value,
-          });
-        }
-      }
-    }
-    outputs
   }
 }
 
@@ -173,26 +168,24 @@ impl Coin for Bitcoin {
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let main_addr = self.address(key);
-    let block_details =
-      self.rpc.get_block(&block.block_hash()).await.map_err(|_| CoinError::ConnectionError)?;
+
     let mut outputs = Vec::new();
-    for one_transaction in block_details.txdata {
-      for (index, output_tx) in one_transaction.output.iter().enumerate() {
-        if output_tx.script_pubkey == main_addr.script_pubkey() {
+    // Skip the coinbase transaction which is burdened by maturity
+    for tx in &block.txdata[1 ..] {
+      for (vout, output) in tx.output.iter().enumerate() {
+        if output.script_pubkey == main_addr.script_pubkey() {
           outputs.push(Output(
             block.block_hash(),
             SpendableOutput {
-              output: OutPoint {
-                txid: one_transaction.txid(),
-                vout: u32::try_from(index).unwrap(),
-              },
-              amount: output_tx.value,
+              output: OutPoint { txid: tx.txid(), vout: u32::try_from(vout).unwrap() },
+              amount: output.value,
             },
           ));
         }
       }
     }
-    return Ok(outputs);
+
+    Ok(outputs)
   }
 
   async fn prepare_send(
@@ -342,45 +335,39 @@ impl Coin for Bitcoin {
       .await
       .unwrap();
 
-    self
-      .rpc
-      .rpc_call::<Vec<String>>("generatetoaddress", serde_json::json!([1, address.to_string()]))
-      .await
-      .unwrap();
-
     for _ in 0 .. 100 {
       self.mine_block().await;
     }
 
-    let mut vin_list = Vec::new();
-    let mut vout_list = Vec::new();
-    let active_block = self.get_block(new_block).await.unwrap();
-    let spendables = Self::test_get_spendables(&active_block, &main_addr);
-    vin_list.push(TxIn {
-      previous_output: OutPoint {
-        txid: spendables[0].output.txid,
-        vout: spendables[0].output.vout,
-      },
-      script_sig: Script::default(),
-      sequence: Sequence(u32::MAX),
-      witness: Witness::default(),
-    });
-    vout_list
-      .push(TxOut { value: spendables[0].amount - 10000, script_pubkey: address.script_pubkey() });
-
-    let mut new_transaction =
-      Transaction { version: 2, lock_time: PackedLockTime(0), input: vin_list, output: vout_list };
+    let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
+    let mut tx = Transaction {
+      version: 2,
+      lock_time: PackedLockTime(0),
+      input: vec![TxIn {
+        previous_output: OutPoint { txid: tx.txid(), vout: 0 },
+        script_sig: Script::default(),
+        sequence: Sequence(u32::MAX),
+        witness: Witness::default(),
+      }],
+      output: vec![TxOut {
+        value: tx.output[0].value - 10000,
+        script_pubkey: address.script_pubkey(),
+      }],
+    };
 
     let secp = Secp256k1::new();
-    let transactions_sighash = new_transaction.signature_hash(0, &main_addr.script_pubkey(), 1);
+    let transactions_sighash = tx.signature_hash(0, &main_addr.script_pubkey(), 1);
     let mut signed_der = secp
       .sign_ecdsa_low_r(&Message::from(transactions_sighash.as_hash()), &private_key.inner)
       .serialize_der()
       .to_vec();
     signed_der.push(1);
-    new_transaction.input[0].script_sig =
+    tx.input[0].script_sig =
       Builder::new().push_slice(&signed_der).push_key(&public_key).into_script();
 
-    self.rpc.send_raw_transaction(&new_transaction).await.unwrap();
+    self.rpc.send_raw_transaction(&tx).await.unwrap();
+    for _ in 0 .. 3 {
+      self.mine_block().await;
+    }
   }
 }
