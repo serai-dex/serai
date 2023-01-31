@@ -90,7 +90,7 @@ pub struct Bitcoin {
 }
 impl Bitcoin {
   pub async fn new(url: String) -> Bitcoin {
-    Bitcoin { rpc: Rpc::new(url).unwrap() }
+    Bitcoin { rpc: Rpc::new(url) }
   }
 
   #[cfg(test)]

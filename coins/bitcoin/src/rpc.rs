@@ -1,23 +1,40 @@
 use core::fmt::Debug;
 
-use serde::de::DeserializeOwned;
+use thiserror::Error;
+
+use serde::{Deserialize, de::DeserializeOwned};
+use serde_json::json;
 
 use bitcoin::{
   hashes::hex::{FromHex, ToHex},
+  consensus::encode,
   Transaction,
 };
 use bitcoincore_rpc_json::*;
-use crate::rpc_helper::*;
-use crate::json_helper::*;
 
-#[derive(Debug, Clone)]
-pub struct Rpc {
-  url: String,
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum RpcResponse<T> {
+  Ok { result: T },
+  Err { error: String },
+}
+
+#[derive(Clone, Debug)]
+pub struct Rpc(String);
+
+#[derive(Clone, PartialEq, Eq, Debug, Error)]
+pub enum RpcError {
+  #[error("couldn't connect to node")]
+  ConnectionError,
+  #[error("request had an error: {0}")]
+  RequestError(String),
+  #[error("node sent an invalid response")]
+  InvalidResponse,
 }
 
 impl Rpc {
-  pub fn new(url: String) -> Result<Rpc, RpcError> {
-    Ok(Rpc { url })
+  pub fn new(url: String) -> Rpc {
+    Rpc(url)
   }
 
   pub async fn rpc_call<Response: DeserializeOwned + Debug>(
@@ -27,45 +44,42 @@ impl Rpc {
   ) -> Result<Response, RpcError> {
     let client = reqwest::Client::new();
     let res = client
-      .post(&self.url)
-      .json(&RpcParams { jsonrpc: "2.0".into(), id: (), method: method.into(), params })
+      .post(&self.0)
+      .json(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
       .send()
-      .await?
+      .await
+      .map_err(|_| RpcError::ConnectionError)?
       .text()
-      .await?;
+      .await
+      .map_err(|_| RpcError::ConnectionError)?;
 
-    let parsed_res: RpcResponse<Response> =
-      serde_json::from_str(&res).map_err(|_| RpcError::ParsingError)?;
-
-    match parsed_res {
-      RpcResponse::Err { error } => Err(RpcError::CustomError(error)),
+    let res: RpcResponse<Response> =
+      serde_json::from_str(&res).map_err(|_| RpcError::InvalidResponse)?;
+    match res {
       RpcResponse::Ok { result } => Ok(result),
+      RpcResponse::Err { error } => Err(RpcError::RequestError(error)),
     }
   }
 
   pub async fn get_latest_block_number(&self) -> Result<usize, RpcError> {
-    self.rpc_call::<usize>("getblockcount", &[]).await
-  }
-
-  pub async fn get_block_number(&self, block_hash: &str) -> Result<usize, RpcError> {
-    Ok(self.rpc_call::<GetBlockResult>("getblock", &[block_hash.into()]).await?.height)
+    self.rpc_call("getblockcount", &[]).await
   }
 
   pub async fn get_block(
     &self,
     block_hash: &bitcoin::BlockHash,
   ) -> Result<bitcoin::Block, RpcError> {
-    let hex: String = self.rpc_call("getblock", &[block_hash.to_hex().into(), 0.into()]).await?;
-    let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
-    Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
+    let hex = self.rpc_call::<String>("getblock", &[block_hash.to_hex().into(), 0.into()]).await?;
+    let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
+    encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }
 
   pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash, RpcError> {
-    self.rpc_call::<bitcoin::BlockHash>("getbestblockhash", &[]).await
+    self.rpc_call("getbestblockhash", &[]).await
   }
 
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash, RpcError> {
-    self.rpc_call::<bitcoin::BlockHash>("getblockhash", &[height.into()]).await
+    self.rpc_call("getblockhash", &[height.into()]).await
   }
 
   pub async fn get_transaction(
@@ -73,18 +87,17 @@ impl Rpc {
     txid: &bitcoin::Txid,
     block_hash: Option<&bitcoin::BlockHash>,
   ) -> Result<Transaction, RpcError> {
-    let args = [txid.to_hex().into(), false.into(), opt_into_json(block_hash)?];
-    let hex: String = self.rpc_call::<String>("getrawtransaction", &args).await?;
-    let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
-    Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
+    let hex = self
+      .rpc_call::<String>(
+        "getrawtransaction",
+        &[txid.to_hex().into(), false.into(), block_hash.map(|hash| hash.to_hex()).into()],
+      )
+      .await?;
+    let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
+    encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }
 
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid, RpcError> {
-    self
-      .rpc_call::<bitcoin::Txid>(
-        "sendrawtransaction",
-        &[bitcoin::consensus::encode::serialize(tx).to_vec().to_hex().into()],
-      )
-      .await
+    self.rpc_call("sendrawtransaction", &[encode::serialize_hex(tx).into()]).await
   }
 }
