@@ -1,8 +1,9 @@
 use ethereum_serai::{
   crypto::PublicKey,
-  router_contract::{router_execute, router_set_public_key, deploy_router_contract, router_mod},
+  router::router::Transaction,
+  router_contract::{router_execute, router_set_public_key, deploy_router_contract},
 };
-use frost::{curve::Secp256k1, FrostKeys};
+use frost::{curve::Secp256k1, ThresholdKeys};
 use k256::ProjectivePoint;
 use ethers::{
   prelude::*,
@@ -26,7 +27,7 @@ async fn test_deploy_router_contract() {
 
 #[tokio::test]
 async fn test_router_execute() {
-  let (keys, group_key): (HashMap<u16, FrostKeys<Secp256k1>>, ProjectivePoint) =
+  let (keys, group_key): (HashMap<u16, ThresholdKeys<Secp256k1>>, ProjectivePoint) =
     generate_keys().await;
 
   let anvil = Anvil::new().spawn();
@@ -45,17 +46,13 @@ async fn test_router_execute() {
   let value = U256([0u64; 4]);
   let gas = U256::from(7000000); // arbitrary
   let data = Bytes::from([0]);
-  let tx = router_mod::Transaction {
-    to: to.clone(),
-    value: value.clone(),
-    gas: gas.clone(),
-    data: data.clone(),
-  };
+  let tx =
+    Transaction { to: to.clone(), value: value.clone(), gas: gas.clone(), data: data.clone() };
   let txs = vec![tx];
 
   // try with wrong message
   const MESSAGE: &'static [u8] = b"Hello, World!";
-  let processed_sig = hash_and_sign(MESSAGE, &keys, &group_key, chain_id).await;
+  let processed_sig = hash_and_sign(MESSAGE, keys.clone(), &group_key, chain_id).await;
   let res = router_execute(&contract, txs.clone(), &processed_sig).await;
   // assert!(res.is_err()); // should revert as signature is for incorrect message
 
@@ -72,7 +69,7 @@ async fn test_router_execute() {
     ])]),
   ];
   let encoded_calldata = abi::encode(&tokens);
-  let processed_sig = hash_and_sign(&encoded_calldata, &keys, &group_key, chain_id).await;
+  let processed_sig = hash_and_sign(&encoded_calldata, keys, &group_key, chain_id).await;
   let receipt = router_execute(&contract, txs.clone(), &processed_sig).await.unwrap().unwrap();
   //assert_eq!(receipt.status.unwrap(), U64::from(1));
   println!("gas used: {:?}", receipt.cumulative_gas_used);

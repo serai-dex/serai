@@ -1,7 +1,19 @@
-use ethereum_serai::schnorr_contract::{call_verify, deploy_schnorr_verifier_contract};
-use frost::{curve::Secp256k1, FrostKeys};
-use k256::ProjectivePoint;
-use ethers::{prelude::*, utils::Anvil};
+use rand_core::OsRng;
+
+use k256::{elliptic_curve::bigint::ArrayEncoding, ProjectivePoint, U256};
+
+use ethers::{
+  prelude::*,
+  utils::{keccak256, Anvil, AnvilInstance},
+};
+
+use frost::{
+  curve::Secp256k1,
+  algorithm::Schnorr as Algo,
+  ThresholdKeys,
+  tests::{algorithm_machines, key_gen, sign},
+};
+
 use std::{convert::TryFrom, collections::HashMap, sync::Arc, time::Duration};
 
 mod utils;
@@ -20,7 +32,7 @@ async fn test_deploy_schnorr_contract() {
 
 #[tokio::test]
 async fn test_ecrecover_hack() {
-  let (keys, group_key): (HashMap<u16, FrostKeys<Secp256k1>>, ProjectivePoint) =
+  let (keys, group_key): (HashMap<u16, ThresholdKeys<Secp256k1>>, ProjectivePoint) =
     generate_keys().await;
 
   let anvil = Anvil::new().spawn();
