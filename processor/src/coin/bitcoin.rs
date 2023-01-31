@@ -81,7 +81,6 @@ impl OutputTrait for Output {
 pub struct SignableTransaction {
   keys: ThresholdKeys<Secp256k1>,
   transcript: RecommendedTranscript,
-  number: usize,
   actual: BSignableTransaction,
 }
 
@@ -200,7 +199,7 @@ impl Coin for Bitcoin {
     &self,
     keys: ThresholdKeys<Secp256k1>,
     transcript: RecommendedTranscript,
-    block_number: usize,
+    _: usize,
     inputs: Vec<Output>,
     payments: &[(Address, u64)],
     change: Option<ProjectivePoint>,
@@ -268,7 +267,6 @@ impl Coin for Bitcoin {
     return Ok(SignableTransaction {
       keys,
       transcript,
-      number: block_number + 1,
       actual: BSignableTransaction { tx: psbt, fee: actual_fee },
     });
   }
@@ -280,7 +278,7 @@ impl Coin for Bitcoin {
     transaction
       .actual
       .clone()
-      .multisig(transaction.keys.clone(), transaction.transcript.clone(), transaction.number)
+      .multisig(transaction.keys.clone(), transaction.transcript.clone())
       .await
       .map_err(|_| CoinError::ConnectionError)
   }
