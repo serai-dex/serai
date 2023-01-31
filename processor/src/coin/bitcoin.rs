@@ -113,7 +113,7 @@ impl Coin for Bitcoin {
   type Curve = Secp256k1;
 
   type Fee = Fee;
-  type Transaction = PartiallySignedTransaction;
+  type Transaction = Transaction;
   type Block = Block;
 
   type Output = Output;
@@ -255,9 +255,7 @@ impl Coin for Bitcoin {
   }
 
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError> {
-    let tx = tx.clone().extract_tx();
-    let id = self.rpc.send_raw_transaction(&tx).await.unwrap();
-    Ok(id.to_vec())
+    Ok(self.rpc.send_raw_transaction(tx).await.unwrap().to_vec())
   }
 
   fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>) {

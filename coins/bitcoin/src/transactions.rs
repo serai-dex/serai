@@ -16,7 +16,7 @@ use bitcoin::{
     sighash::{SchnorrSighashType, SighashCache, Prevouts},
   },
   psbt::{serialize::Serialize, PartiallySignedTransaction},
-  Witness, VarInt, Address,
+  Witness, VarInt, Address, Transaction,
 };
 
 use crate::crypto::{BitcoinHram, make_even};
@@ -119,7 +119,7 @@ pub struct TransactionSignatureMachine {
 
 impl PreprocessMachine for TransactionMachine {
   type Preprocess = Vec<Preprocess<Secp256k1, ()>>;
-  type Signature = PartiallySignedTransaction;
+  type Signature = Transaction;
   type SignMachine = TransactionSignMachine;
 
   fn preprocess<R: RngCore + rand_core::CryptoRng>(
@@ -147,7 +147,7 @@ impl PreprocessMachine for TransactionMachine {
   }
 }
 
-impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
+impl SignMachine<Transaction> for TransactionSignMachine {
   type Params = ();
   type Keys = ThresholdKeys<Secp256k1>;
   type Preprocess = Vec<Preprocess<Secp256k1, ()>>;
@@ -227,7 +227,7 @@ impl SignMachine<PartiallySignedTransaction> for TransactionSignMachine {
   }
 }
 
-impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachine {
+impl SignatureMachine<Transaction> for TransactionSignatureMachine {
   type SignatureShare = Vec<SignatureShare<Secp256k1>>;
 
   fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare> {
@@ -237,7 +237,7 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
   fn complete(
     mut self,
     shares: HashMap<u16, Self::SignatureShare>,
-  ) -> Result<PartiallySignedTransaction, FrostError> {
+  ) -> Result<Transaction, FrostError> {
     for (i, schnorr) in self.sigs.drain(..).enumerate() {
       let mut schnorr_signature = schnorr.complete(
         shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>(),
@@ -262,6 +262,6 @@ impl SignatureMachine<PartiallySignedTransaction> for TransactionSignatureMachin
       self.tx.inputs[i].witness_script = None;
       self.tx.inputs[i].bip32_derivation = BTreeMap::new();
     }
-    Ok(self.tx)
+    Ok(self.tx.extract_tx())
   }
 }
