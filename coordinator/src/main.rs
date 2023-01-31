@@ -83,7 +83,7 @@ async fn main() {
   let sig_name_arg = name_arg.to_string().to_owned();
   tokio::spawn(async move {
     let signature_process =
-      SignatureProcess::new(sig_config.get_chain(), sig_kafka_config.clone(), sig_name_arg);
+      SignatureProcess::new(sig_config.get_chain(), sig_kafka_config.clone(), sig_name_arg, sig_config.get_network().signers);
     signature_process.run().await;
   });
   

@@ -23,7 +23,7 @@ use group::{
 
 use ciphersuite::Ciphersuite;
 
-mod encryption;
+pub mod encryption;
 
 /// The distributed key generation protocol described in the
 /// [FROST paper](https://eprint.iacr.org/2020/852).

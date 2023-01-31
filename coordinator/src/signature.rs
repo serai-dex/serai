@@ -17,6 +17,7 @@ pub struct SignatureProcess {
   chain_config: ChainConfig,
   kafka_config: KafkaConfig,
   name: String,
+  signers: Vec<config::Value>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -59,6 +60,9 @@ pub enum SignatureMessageType {
   // The coordinator sends recieved processor pubkey to its processor.
   ProcessorPubkeyToProcessor,
 
+  // The coordinator sends signer list to processor.
+  CoordinatorSignerListToProcessor,
+
   // Default message type.
   Default,
 }
@@ -86,6 +90,9 @@ impl fmt::Display for SignatureMessageType {
       }
       SignatureMessageType::ProcessorPubkeyToProcessor => {
         write!(f, "processor_pubkey_to_processor")
+      }
+      SignatureMessageType::CoordinatorSignerListToProcessor => {
+        write!(f, "coordinator_signer_list_to_processor")
       }
       SignatureMessageType::Default => write!(f, "Default"),
     }
@@ -116,6 +123,9 @@ pub fn parse_message_type(message_type: &str) -> SignatureMessageType {
     "processor_secure_test_message_to_coordinator" => {
       msg_type = SignatureMessageType::ProcessorSecureTestMessageToCoordinator;
     }
+    "coordinator_signer_list_to_processor" => {
+      msg_type = SignatureMessageType::CoordinatorSignerListToProcessor;
+    }
     _ => {}
   }
   msg_type
@@ -126,11 +136,12 @@ pub fn parse_message_type(message_type: &str) -> SignatureMessageType {
 // General Messages are contained in partition 0
 // Secure Messages are contained in parition 1
 impl SignatureProcess {
-  pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String) -> Self {
+  pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String, signers: Vec<config::Value>) -> Self {
     info!("New Signature Process");
     let chain_config = chain_config;
     let kafka_config = kafka_config;
-    Self { chain_config: chain_config, name: name, kafka_config: kafka_config }
+    let signers = signers;
+    Self { chain_config: chain_config, name: name, kafka_config: kafka_config, signers: signers }
   }
 
   pub async fn run(self) {
@@ -147,6 +158,7 @@ impl SignatureProcess {
           _key.to_string().to_owned(),
           self.kafka_config.clone().to_owned(),
           self.name.to_string(),
+          self.signers.clone(),
         )
         .await;
       }
@@ -159,8 +171,11 @@ impl SignatureProcess {
 }
 
 // Spawn a thread for each coin that is active
-async fn spawn_processor_thread(coin: String, kafka_config: KafkaConfig, name: String) {
+async fn spawn_processor_thread(coin: String, kafka_config: KafkaConfig, name: String, signers: Vec<config::Value>) {
   tokio::spawn(async move {
+    // Send signers to processor
+    send_signers_to_processor(&kafka_config, &name, &coin.to_string(), &signers).await;
+
     // Initialize consumers to read the processor pubkey, general/secure test messages
     consume_messages_from_processor(&kafka_config, &name, &coin.to_string());
 
@@ -466,4 +481,34 @@ async fn send_general_and_secure_test_message(
 
   // Add small delay for checking pubkeys
   tokio::time::sleep(Duration::from_millis(500)).await;
+}
+
+// Send signers to processor
+async fn send_signers_to_processor(kafka_config: &KafkaConfig, name: &String, coin: &String, signers: &Vec<config::Value> ){
+
+  // Create message containing signers
+  let mut signers_list = Vec::new();
+  for signer in signers {
+    signers_list.push(signer.to_string());
+  }
+
+  let msg = serde_json::to_string(&signers_list).unwrap();
+
+  let producer: ThreadedProducer<_> = ClientConfig::new()
+  .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
+  .create()
+  .expect("invalid producer config");
+
+  // Sends message to Kafka
+  producer
+  .send(
+    BaseRecord::to(&format!("{}_processor_{}", &name, &coin.to_string().to_lowercase()))
+      .key(&format!("{}", SignatureMessageType::CoordinatorSignerListToProcessor.to_string()))
+      .payload(&msg)
+      .partition(0),
+  )
+  .expect("failed to send message");
+
+  // Flushes producer
+  producer.flush(Duration::from_secs(10));
 }

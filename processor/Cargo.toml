@@ -62,6 +62,14 @@ smol = "1.2.4"
 tokio = { version = "1", features = ["full"] }
 env_perm = "0.1.3"
 
+ciphersuite = { path = "../crypto/ciphersuite", version = "0.1", features = ["std"] }
+subtle = "2"
+chacha20 = { version = "0.9", features = ["zeroize"] }
+multiexp = { path = "../crypto/multiexp", version = "0.2", features = ["batch"] }
+schnorr = { package = "schnorr-signatures", path = "../crypto/schnorr", version = "0.2" }
+dleq = { path = "../crypto/dleq", version = "0.2", features = ["serialize"] }
+dkg = { path = "../crypto/dkg" }
+
 [dev-dependencies]
 rand_core = "0.6"
 

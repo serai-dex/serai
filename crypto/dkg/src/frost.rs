@@ -370,7 +370,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
     mut self,
     rng: &mut R,
     mut shares: HashMap<u16, EncryptedMessage<C, SecretShare<C::F>>>,
-  ) -> Result<BlameMachine<C>, FrostError<C>> {
+  ) -> Result<(BlameMachine<C>, C::G), FrostError<C>> {
     validate_map(&shares, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
 
     let mut batch = BatchVerifier::new(shares.len());
@@ -423,16 +423,19 @@ impl<C: Ciphersuite> KeyMachine<C> {
     }
 
     let KeyMachine { commitments, encryption, params, secret } = self;
-    Ok(BlameMachine {
-      commitments,
-      encryption,
-      result: ThresholdCore {
-        params,
-        secret_share: secret,
-        group_key: stripes[0],
-        verification_shares,
+    Ok((
+      BlameMachine {
+        commitments,
+        encryption,
+        result: ThresholdCore {
+          params,
+          secret_share: secret,
+          group_key: stripes[0],
+          verification_shares,
+        },
       },
-    })
+      stripes[0],
+    ))
   }
 }
 
