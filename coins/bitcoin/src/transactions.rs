@@ -182,9 +182,24 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       ))?;
     }
 
-    let mut commitments = (0 .. self.sigs.len())
-      .map(|c| commitments.iter().map(|(l, commitments)| (*l, commitments[c].clone())).collect())
+    let commitments = (0 .. self.sigs.len())
+      .map(|c| {
+        commitments
+          .iter()
+          .map(|(l, commitments)| (*l, commitments[c].clone()))
+          .collect::<HashMap<_, _>>()
+      })
       .collect::<Vec<_>>();
+
+    let mut cache = SighashCache::new(&self.signable.tx.unsigned_tx);
+    let witness = self
+      .signable
+      .tx
+      .inputs
+      .iter()
+      .map(|input| input.witness_utxo.clone().expect("no witness"))
+      .collect::<Vec<_>>();
+    let prevouts = Prevouts::All(&witness);
 
     let mut shares = Vec::with_capacity(self.sigs.len());
     let sigs = self
@@ -192,18 +207,11 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       .drain(..)
       .enumerate()
       .map(|(index, sig)| {
-        let inputs = &self.signable.tx.inputs;
-        let all_witness_utxos = (0 .. inputs.len())
-          .map(|i| &inputs[i].witness_utxo)
-          .filter_map(|x| x.as_ref())
-          .collect::<Vec<_>>();
-        let prevouts = Prevouts::All(&all_witness_utxos);
-
-        let tx_sighash = SighashCache::new(&self.signable.tx.unsigned_tx)
+        let tx_sighash = cache
           .taproot_key_spend_signature_hash(index, &prevouts, SchnorrSighashType::All)
           .unwrap();
 
-        let (sig, share) = sig.sign(commitments.remove(0), &tx_sighash)?;
+        let (sig, share) = sig.sign(commitments[index].clone(), &tx_sighash)?;
         shares.push(share);
         Ok(sig)
       })
