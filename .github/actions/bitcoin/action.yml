@@ -24,11 +24,12 @@ runs:
         RUNNER_OS=linux
         RUNNER_ARCH=x86_64
 
+        BASE=bitcoin-${{ inputs.version }}
         FILE=$BASE-$RUNNER_ARCH-$RUNNER_OS-gnu.tar.gz
         wget https://bitcoincore.org/bin/bitcoin-core-${{ inputs.version }}/$FILE
         tar xzvf $FILE
 
-        cd bitcoin-${{ inputs.version }}
+        cd $BASE
         sudo mv bin/* /bin && sudo mv lib/* /lib
 
     - name: Bitcoin Regtest Daemon
