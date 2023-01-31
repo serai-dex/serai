@@ -3,11 +3,7 @@ use std::io;
 use async_trait::async_trait;
 
 use bitcoin::{
-  hashes::Hash,
-  schnorr::TweakedPublicKey,
-  SchnorrSighashType,
-  consensus::encode,
-  psbt::{PartiallySignedTransaction, PsbtSighashType},
+  hashes::Hash, schnorr::TweakedPublicKey, consensus::encode, psbt::PartiallySignedTransaction,
   PackedLockTime, OutPoint, Script, Sequence, Witness, TxIn, TxOut, Transaction, Block, Network,
   Address,
 };
@@ -229,8 +225,6 @@ impl Coin for Bitcoin {
     // TODO: Drop outputs which BTC will consider spam (outputs worth less than the cost to spend
     // them)
 
-    let x_only = x_only(&keys.group_key());
-
     let new_transaction =
       Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: txins, output: txouts };
 
@@ -238,8 +232,6 @@ impl Coin for Bitcoin {
     debug_assert_eq!(pst.inputs.len(), inputs.len());
     for (pst, input) in pst.inputs.iter_mut().zip(inputs.iter()) {
       pst.witness_utxo = Some(input.0.output.clone());
-      pst.sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
-      pst.tap_internal_key = Some(x_only);
     }
 
     Ok(SignableTransaction { keys, transcript, actual: BSignableTransaction { tx: pst } })
