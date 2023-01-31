@@ -12,7 +12,7 @@ use frost::{
   tests::{algorithm_machines, key_gen, sign},
 };
 
-use bitcoin_serai::crypto::{BitcoinHram, x_only, make_even};
+use crate::crypto::{BitcoinHram, x_only, make_even};
 
 #[test]
 fn test_signing() {
