@@ -247,7 +247,7 @@ impl Coin for Bitcoin {
     let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction.clone()).unwrap();
     for (i, one_input) in inputs.iter().enumerate() {
       let one_transaction =
-        self.rpc.get_transaction(&one_input.0.output.txid, None, None).await.unwrap();
+        self.rpc.get_transaction(&one_input.0.output.txid, None).await.unwrap();
       let xonly_pubkey =
         XOnlyPublicKey::from_slice(keys.group_key().to_encoded_point(true).x().to_owned().unwrap())
           .unwrap();

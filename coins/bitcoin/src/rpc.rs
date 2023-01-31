@@ -1,7 +1,6 @@
 use core::fmt::Debug;
 
 use serde::de::DeserializeOwned;
-use serde_json::Value::Null;
 
 use bitcoin::{
   hashes::hex::{FromHex, ToHex},
@@ -49,14 +48,14 @@ impl Rpc {
   }
 
   pub async fn get_block_number(&self, block_hash: &str) -> Result<usize, RpcError> {
-    Ok(self.rpc_call::<GetBlockResult>("getblock", &[into_json(block_hash)?]).await?.height)
+    Ok(self.rpc_call::<GetBlockResult>("getblock", &[block_hash.into()]).await?.height)
   }
 
   pub async fn get_block(
     &self,
     block_hash: &bitcoin::BlockHash,
   ) -> Result<bitcoin::Block, RpcError> {
-    let hex: String = self.rpc_call("getblock", &[into_json(block_hash)?, 0.into()]).await?;
+    let hex: String = self.rpc_call("getblock", &[block_hash.to_hex().into(), 0.into()]).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
@@ -66,19 +65,16 @@ impl Rpc {
   }
 
   pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash, RpcError> {
-    self.rpc_call::<bitcoin::BlockHash>("getblockhash", &[into_json(height)?]).await
+    self.rpc_call::<bitcoin::BlockHash>("getblockhash", &[height.into()]).await
   }
 
   pub async fn get_transaction(
     &self,
     txid: &bitcoin::Txid,
-    verbose: Option<bool>,
     block_hash: Option<&bitcoin::BlockHash>,
   ) -> Result<Transaction, RpcError> {
-    let mut ext_args = [into_json(txid)?, opt_into_json(verbose)?, opt_into_json(block_hash)?];
-    let defaults = [Null, into_json(false)?, into_json("")?];
-    let args = handle_defaults(&mut ext_args, &defaults);
-    let hex: String = self.rpc_call::<String>("getrawtransaction", args).await?;
+    let args = [txid.to_hex().into(), false.into(), opt_into_json(block_hash)?];
+    let hex: String = self.rpc_call::<String>("getrawtransaction", &args).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)?;
     Ok(bitcoin::consensus::encode::deserialize(&bytes)?)
   }
