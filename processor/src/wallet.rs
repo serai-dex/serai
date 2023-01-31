@@ -138,6 +138,7 @@ fn select_outputs<C: Coin>(
     }
     // Doesn't break in this else case as a smaller payment may still fit
   }
+
   outputs
 }
 
@@ -256,6 +257,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
           }
         }
       }
+
       let block = self.coin.get_block(b).await?;
       for (keys, outputs) in self.keys.iter_mut() {
         let res_output = self.coin.get_outputs(&block, keys.group_key()).await?;
