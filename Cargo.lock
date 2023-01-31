@@ -4916,7 +4916,6 @@ dependencies = [
  "flexible-transcript",
  "group",
  "hex",
- "hkdf",
  "minimal-ed448",
  "multiexp",
  "rand_chacha 0.3.1",

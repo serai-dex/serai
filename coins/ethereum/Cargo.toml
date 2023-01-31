@@ -16,8 +16,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 thiserror = "1"
 rand_core = "0.6"
 
-serde_json = "1.0"
-serde = "1.0"
+serde_json = "1"
+serde = "1"
 
 sha3 = "0.10"
 

@@ -16,7 +16,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 thiserror = "1"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { version = "1", features = ["zeroize_derive"] }
 zalloc = { path = "../zalloc" }
 rand_core = "0.6"
 

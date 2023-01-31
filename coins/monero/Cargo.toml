@@ -21,8 +21,8 @@ rand_chacha = { version = "0.3", optional = true }
 rand = "0.8"
 rand_distr = "0.4"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
-subtle = "2.4"
+zeroize = { version = "1", features = ["zeroize_derive"] }
+subtle = "2"
 
 sha3 = "0.10"
 
@@ -39,11 +39,11 @@ dleq = { path = "../../crypto/dleq", version = "0.2", features = ["serialize"], 
 monero-generators = { path = "generators", version = "0.1" }
 
 hex = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 base58-monero = "1"
-monero-epee-bin-serde = "1.0"
+monero-epee-bin-serde = "1"
 
 digest_auth = "0.3"
 reqwest = { version = "0.11", features = ["json"] }
