@@ -9,7 +9,21 @@ use k256::{
   },
   U256, Scalar, ProjectivePoint,
 };
+
+use bitcoin::XOnlyPublicKey;
+
 use frost::{algorithm::Hram, curve::Secp256k1};
+
+/// Get the x coordinate of a non-infinity, even point.
+pub fn x(key: &ProjectivePoint) -> [u8; 32] {
+  let encoded = key.to_encoded_point(true);
+  assert_eq!(encoded.tag(), Tag::CompressedEvenY);
+  (*encoded.x().expect("point at infinity")).into()
+}
+
+pub fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
+  XOnlyPublicKey::from_slice(&x(key)).unwrap()
+}
 
 pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   let mut c = 0;
@@ -35,8 +49,8 @@ impl Hram<Secp256k1> for BitcoinHram {
     let mut data = Sha256::new();
     data.update(*TAG_HASH);
     data.update(*TAG_HASH);
-    data.update(R.to_encoded_point(true).x().unwrap());
-    data.update(A.to_encoded_point(true).x().unwrap());
+    data.update(x(&R));
+    data.update(x(A));
     data.update(m);
 
     Scalar::from_uint_reduced(U256::from_be_slice(&data.finalize()))

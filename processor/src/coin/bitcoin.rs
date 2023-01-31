@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use bitcoin::{
   hashes::Hash,
   schnorr::TweakedPublicKey,
-  XOnlyPublicKey, SchnorrSighashType,
+  SchnorrSighashType,
   consensus::encode,
   psbt::{PartiallySignedTransaction, PsbtSighashType},
   PackedLockTime, OutPoint, Script, Sequence, Witness, TxIn, TxOut, Transaction, Block, Network,
@@ -28,7 +28,7 @@ use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin_serai::{
   rpc::Rpc,
-  crypto::make_even,
+  crypto::{x_only, make_even},
   SpendableOutput,
   transactions::{TransactionMachine, SignableTransaction as BSignableTransaction},
 };
@@ -131,10 +131,10 @@ impl Coin for Bitcoin {
 
   fn address(&self, key: ProjectivePoint) -> Self::Address {
     debug_assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
-    let xonly_pubkey =
-      XOnlyPublicKey::from_slice(key.to_encoded_point(true).x().to_owned().unwrap()).unwrap();
-    let tweaked_pubkey = TweakedPublicKey::dangerous_assume_tweaked(xonly_pubkey);
-    Address::p2tr_tweaked(tweaked_pubkey, Network::Regtest)
+    Address::p2tr_tweaked(
+      TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)),
+      Network::Regtest,
+    )
   }
 
   // TODO: Implement later
@@ -224,9 +224,7 @@ impl Coin for Bitcoin {
     // TODO: Drop outputs which BTC will consider spam (outputs worth less than the cost to spend
     // them)
 
-    let xonly_pubkey =
-      XOnlyPublicKey::from_slice(keys.group_key().to_encoded_point(true).x().to_owned().unwrap())
-        .unwrap();
+    let x_only = x_only(&keys.group_key());
 
     let new_transaction =
       Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: txins, output: txouts };
@@ -236,7 +234,7 @@ impl Coin for Bitcoin {
     for (pst, input) in pst.inputs.iter_mut().zip(inputs.iter()) {
       pst.witness_utxo = Some(input.0.output.clone());
       pst.sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
-      pst.tap_internal_key = Some(xonly_pubkey);
+      pst.tap_internal_key = Some(x_only);
     }
 
     Ok(SignableTransaction { keys, transcript, actual: BSignableTransaction { tx: pst } })
@@ -259,9 +257,6 @@ impl Coin for Bitcoin {
   }
 
   fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>) {
-    if key.group_key().to_encoded_point(true).tag() == Tag::CompressedEvenY {
-      return;
-    }
     let (_, offset) = make_even(key.group_key());
     *key = key.offset(Scalar::from(offset));
   }
