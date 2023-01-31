@@ -8,9 +8,8 @@ use serde_json::json;
 use bitcoin::{
   hashes::hex::{FromHex, ToHex},
   consensus::encode,
-  Transaction,
+  Txid, Transaction, BlockHash, Block,
 };
-use bitcoincore_rpc_json::*;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
@@ -40,7 +39,7 @@ impl Rpc {
   pub async fn rpc_call<Response: DeserializeOwned + Debug>(
     &self,
     method: &str,
-    params: &[serde_json::Value],
+    params: serde_json::Value,
   ) -> Result<Response, RpcError> {
     let client = reqwest::Client::new();
     let res = client
@@ -62,42 +61,35 @@ impl Rpc {
   }
 
   pub async fn get_latest_block_number(&self) -> Result<usize, RpcError> {
-    self.rpc_call("getblockcount", &[]).await
+    self.rpc_call("getblockcount", json!([])).await
   }
 
-  pub async fn get_block(
-    &self,
-    block_hash: &bitcoin::BlockHash,
-  ) -> Result<bitcoin::Block, RpcError> {
-    let hex = self.rpc_call::<String>("getblock", &[block_hash.to_hex().into(), 0.into()]).await?;
+  pub async fn get_block_hash(&self, number: usize) -> Result<BlockHash, RpcError> {
+    self.rpc_call("getblockhash", json!([number])).await
+  }
+
+  pub async fn get_block(&self, block_hash: &BlockHash) -> Result<Block, RpcError> {
+    let hex = self.rpc_call::<String>("getblock", json!([block_hash.to_hex(), 0])).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
     encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }
 
-  pub async fn get_best_block_hash(&self) -> Result<bitcoin::BlockHash, RpcError> {
-    self.rpc_call("getbestblockhash", &[]).await
-  }
-
-  pub async fn get_block_hash(&self, height: usize) -> Result<bitcoin::BlockHash, RpcError> {
-    self.rpc_call("getblockhash", &[height.into()]).await
-  }
-
   pub async fn get_transaction(
     &self,
-    txid: &bitcoin::Txid,
-    block_hash: Option<&bitcoin::BlockHash>,
+    txid: &Txid,
+    block_hash: Option<&BlockHash>,
   ) -> Result<Transaction, RpcError> {
     let hex = self
       .rpc_call::<String>(
         "getrawtransaction",
-        &[txid.to_hex().into(), false.into(), block_hash.map(|hash| hash.to_hex()).into()],
+        json!([txid.to_hex(), false, block_hash.map(|hash| hash.to_hex())]),
       )
       .await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
     encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }
 
-  pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<bitcoin::Txid, RpcError> {
-    self.rpc_call("sendrawtransaction", &[encode::serialize_hex(tx).into()]).await
+  pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<Txid, RpcError> {
+    self.rpc_call("sendrawtransaction", json!([encode::serialize_hex(tx)])).await
   }
 }
