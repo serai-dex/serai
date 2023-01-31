@@ -106,15 +106,6 @@ impl Bitcoin {
         .unwrap()
     }
   }
-
-  #[cfg(test)]
-  fn test_address_with_key() -> (PrivateKey, PublicKey, Address) {
-    let secret_key = SecretKey::new(&mut rand_core::OsRng);
-    let private_key = PrivateKey::new(secret_key, Network::Regtest);
-    let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-    let address = Address::p2pkh(&public_key, Network::Regtest);
-    (private_key, public_key, address)
-  }
 }
 
 #[async_trait]
@@ -194,11 +185,10 @@ impl Coin for Bitcoin {
     change: Option<ProjectivePoint>,
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
-    let mut vout_alt_list = Vec::new();
     let change = change.map(|change| self.address(change));
 
     let input_sat = inputs.iter().map(|input| input.amount()).sum::<u64>();
-    let vin_alt_list = inputs
+    let txins = inputs
       .iter()
       .map(|input| TxIn {
         previous_output: input.0.outpoint,
@@ -208,50 +198,48 @@ impl Coin for Bitcoin {
       })
       .collect::<Vec<_>>();
 
-    let mut payment_sat = 0;
-    for one_payment in payments {
-      payment_sat += one_payment.1;
-      vout_alt_list
-        .push(TxOut { value: one_payment.1, script_pubkey: one_payment.0.script_pubkey() });
+    let payment_sat = payments.iter().map(|payment| payment.1).sum::<u64>();
+    let mut txouts = payments
+      .iter()
+      .map(|payment| TxOut { value: payment.1, script_pubkey: payment.0.script_pubkey() })
+      .collect::<Vec<_>>();
+
+    let actual_fee =
+      fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, false));
+
+    if payment_sat > (input_sat - actual_fee) {
+      return Err(CoinError::NotEnoughFunds);
     }
 
-    let mut actual_fee = fee
-      .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), payments, false) * 2);
-    if payment_sat > input_sat - actual_fee {
-      return Err(CoinError::NotEnoughFunds);
-    } else if input_sat != payment_sat {
-      actual_fee = fee
-        .calculate(BSignableTransaction::calculate_weight(vin_alt_list.len(), payments, true) * 2);
-      // TODO: we need to drop outputs worth less than payment_sat
-      if payment_sat < (input_sat - actual_fee) {
-        let rest_sat = input_sat - actual_fee - payment_sat;
-        if let Some(change) = change {
-          vout_alt_list.push(TxOut { value: rest_sat, script_pubkey: change.script_pubkey() });
-        }
+    // If there's a change address, check if there's a meaningful change
+    if let Some(change) = change {
+      let fee_with_change =
+        fee.calculate(BSignableTransaction::calculate_weight(txins.len(), payments, true));
+      // If there's a non-zero change, add it
+      if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
+        txouts.push(TxOut { value, script_pubkey: change.script_pubkey() });
       }
     }
 
-    let new_transaction = Transaction {
-      version: 2,
-      lock_time: PackedLockTime(0),
-      input: vin_alt_list,
-      output: vout_alt_list,
-    };
-    let mut psbt = PartiallySignedTransaction::from_unsigned_tx(new_transaction).unwrap();
-    for (i, one_input) in inputs.iter().enumerate() {
-      let xonly_pubkey =
-        XOnlyPublicKey::from_slice(keys.group_key().to_encoded_point(true).x().to_owned().unwrap())
-          .unwrap();
-      psbt.inputs[i].witness_utxo = Some(one_input.0.output.clone());
-      psbt.inputs[i].sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
-      psbt.inputs[i].tap_internal_key = Some(xonly_pubkey);
+    // TODO: Drop outputs which BTC will consider spam (outputs worth less than the cost to spend
+    // them)
+
+    let xonly_pubkey =
+      XOnlyPublicKey::from_slice(keys.group_key().to_encoded_point(true).x().to_owned().unwrap())
+        .unwrap();
+
+    let new_transaction =
+      Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: txins, output: txouts };
+
+    let mut pst = PartiallySignedTransaction::from_unsigned_tx(new_transaction).unwrap();
+    debug_assert_eq!(pst.inputs.len(), inputs.len());
+    for (pst, input) in pst.inputs.iter_mut().zip(inputs.iter()) {
+      pst.witness_utxo = Some(input.0.output.clone());
+      pst.sighash_type = Some(PsbtSighashType::from(SchnorrSighashType::All));
+      pst.tap_internal_key = Some(xonly_pubkey);
     }
 
-    Ok(SignableTransaction {
-      keys,
-      transcript,
-      actual: BSignableTransaction { tx: psbt, fee: actual_fee },
-    })
+    Ok(SignableTransaction { keys, transcript, actual: BSignableTransaction { tx: pst } })
   }
 
   async fn attempt_send(
@@ -302,7 +290,11 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) {
-    let (private_key, public_key, main_addr) = Self::test_address_with_key();
+    let secret_key = SecretKey::new(&mut rand_core::OsRng);
+    let private_key = PrivateKey::new(secret_key, Network::Regtest);
+    let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
+    let main_addr = Address::p2pkh(&public_key, Network::Regtest);
+
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     self
       .rpc
@@ -318,7 +310,7 @@ impl Coin for Bitcoin {
     let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
     let mut tx = Transaction {
       version: 2,
-      lock_time: PackedLockTime(0),
+      lock_time: PackedLockTime::ZERO,
       input: vec![TxIn {
         previous_output: OutPoint { txid: tx.txid(), vout: 0 },
         script_sig: Script::default(),

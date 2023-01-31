@@ -24,7 +24,6 @@ use crate::crypto::{BitcoinHram, make_even};
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignableTransaction {
   pub tx: PartiallySignedTransaction,
-  pub fee: u64,
 }
 
 impl SignableTransaction {
