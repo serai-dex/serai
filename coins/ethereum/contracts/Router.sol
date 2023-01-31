@@ -11,13 +11,12 @@ contract Router is Schnorr, ReentrancyGuard {
     // nonce is incremented for each batch of transactions executed
     uint256 public nonce; 
 
-    struct RPublicKey {
-        uint8 parity;
-        bytes32 px;
-    }
+    // fixed parity for the public keys used in this contract
+    uint8 constant public KEY_PARITY = 27;
 
-    // current aggregated validator public key 
-    RPublicKey public publicKey;
+    // current aggregated validator public key's x-coordinate
+    // note: this key must always use the fixed parity defined above
+    bytes32 public publicKey;
 
     struct RTransaction {
         address to;
@@ -34,10 +33,10 @@ contract Router is Schnorr, ReentrancyGuard {
     // success is a uint256 representing a bitfield of transaction successes
     event Executed(uint256 nonce, uint256 success);
 
+    // error types
     error Unauthorized();
     error PublicKeyAlreadySet();
     error VerificationError();
-
 
     constructor() {
         owner = msg.sender;
@@ -51,21 +50,20 @@ contract Router is Schnorr, ReentrancyGuard {
     // setPublicKey can be called by the contract owner to set the current public key,
     // only if the public key has not been set.
     function setPublicKey(
-        RPublicKey memory _publicKey
+        bytes32 _publicKey
     ) public onlyOwner {
-        if(publicKey.px != 0) revert PublicKeyAlreadySet();
-        publicKey.parity = _publicKey.parity;
-        publicKey.px = _publicKey.px;
+        if(publicKey != 0) revert PublicKeyAlreadySet();
+        publicKey = _publicKey;
     }
 
     // updatePublicKey validates the given Schnorr signature against the current public key,
     // and if successful, updates the contract's public key to the given one.
     function updatePublicKey(
-        RPublicKey memory _publicKey,
+       bytes32 _publicKey,
         RSignature memory sig
     ) public {
-        bytes32 message = keccak256(abi.encodePacked(_publicKey.parity, _publicKey.px));
-        if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
+        bytes32 message = keccak256(abi.encodePacked(KEY_PARITY, _publicKey));
+        if (!verify(KEY_PARITY, publicKey, message, sig.e, sig.s)) revert VerificationError();
         publicKey = _publicKey;
     }
 
@@ -79,7 +77,7 @@ contract Router is Schnorr, ReentrancyGuard {
         RSignature memory sig
     ) public nonReentrant returns (bool) {
         bytes32 message = keccak256(abi.encode(nonce, transactions));
-        if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
+        if (!verify(KEY_PARITY, publicKey, message, sig.e, sig.s)) revert VerificationError();
 
         uint256 successes;
 

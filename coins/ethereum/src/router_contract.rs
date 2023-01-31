@@ -21,9 +21,7 @@ impl From<&ProcessedSignature> for Rsignature {
   }
 }
 
-pub async fn deploy_router_contract<M: Middleware + 'static>(
-  client: Arc<M /*SignerMiddleware<Provider<Http>, LocalWallet>*/>,
-) -> Result<Router<M>> {
+pub async fn deploy_router_contract<M: Middleware + 'static>(client: Arc<M>) -> Result<Router<M>> {
   let path = "./artifacts/Router.sol/Router.json";
   let artifact: ContractBytecode = serde_json::from_reader(File::open(path).unwrap()).unwrap();
   let abi = artifact.abi.unwrap();
@@ -38,7 +36,7 @@ pub async fn router_set_public_key<M: Middleware + 'static>(
   contract: &Router<M>,
   public_key: &PublicKey,
 ) -> std::result::Result<Option<TransactionReceipt>, eyre::ErrReport> {
-  let tx = contract.set_public_key(public_key.into());
+  let tx = contract.set_public_key(public_key.px.to_bytes().into());
   let pending_tx = tx.send().await?;
   let receipt = pending_tx.await?;
   Ok(receipt)
@@ -49,7 +47,7 @@ pub async fn router_update_public_key<M: Middleware + 'static>(
   public_key: &PublicKey,
   signature: &ProcessedSignature,
 ) -> std::result::Result<Option<TransactionReceipt>, eyre::ErrReport> {
-  let tx = contract.update_public_key(public_key.into(), signature.into());
+  let tx = contract.update_public_key(public_key.px.to_bytes().into(), signature.into());
   let pending_tx = tx.send().await?;
   let receipt = pending_tx.await?;
   Ok(receipt)

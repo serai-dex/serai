@@ -27,9 +27,6 @@ async fn test_deploy_router_contract() {
 
 #[tokio::test]
 async fn test_router_execute() {
-  let (keys, group_key): (HashMap<u16, ThresholdKeys<Secp256k1>>, ProjectivePoint) =
-    generate_keys().await;
-
   let anvil = Anvil::new().spawn();
   let wallet: LocalWallet = anvil.keys()[0].clone().into();
   let provider =
@@ -39,7 +36,19 @@ async fn test_router_execute() {
 
   // deploy and set public key
   let contract = deploy_router_contract(client.clone()).await.unwrap();
-  let public_key = PublicKey::new(&group_key);
+
+  let (mut keys, mut group_key): (HashMap<u16, ThresholdKeys<Secp256k1>>, ProjectivePoint) =
+    generate_keys().await;
+  let mut public_key: PublicKey = PublicKey::new(&group_key);
+  loop {
+    if public_key.parity == contract.key_parity().await.unwrap() {
+      break;
+    }
+
+    (keys, group_key) = generate_keys().await;
+    public_key = PublicKey::new(&group_key);
+  }
+
   router_set_public_key(&contract, &public_key).await.unwrap();
 
   let to = H160([0u8; 20]);
