@@ -11,14 +11,9 @@ use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use frost::{curve::Secp256k1, ThresholdKeys, FrostError, algorithm::Schnorr, sign::*};
 
 use bitcoin::{
-  secp256k1::schnorr::Signature,
   hashes::Hash,
   consensus::encode::{Encodable, Decodable, serialize},
-  util::{
-    schnorr::SchnorrSig,
-    sighash::{SchnorrSighashType, SighashCache, Prevouts},
-  },
-  psbt::{serialize::Serialize, PartiallySignedTransaction},
+  util::sighash::{SchnorrSighashType, SighashCache, Prevouts},
   OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Address,
 };
 
@@ -52,7 +47,7 @@ impl SpendableOutput {
 }
 
 #[derive(Clone, Debug)]
-pub struct SignableTransaction(PartiallySignedTransaction);
+pub struct SignableTransaction(Transaction, Vec<TxOut>);
 
 impl SignableTransaction {
   fn calculate_weight(inputs: usize, payments: &[(Address, u64)], change: Option<&Address>) -> u64 {
@@ -80,13 +75,13 @@ impl SignableTransaction {
   }
 
   pub fn new(
-    inputs: Vec<SpendableOutput>,
+    mut inputs: Vec<SpendableOutput>,
     payments: &[(Address, u64)],
     change: Option<Address>,
     fee: u64,
   ) -> Option<SignableTransaction> {
     let input_sat = inputs.iter().map(|input| input.output.value).sum::<u64>();
-    let txins = inputs
+    let tx_ins = inputs
       .iter()
       .map(|input| TxIn {
         previous_output: input.outpoint,
@@ -97,38 +92,32 @@ impl SignableTransaction {
       .collect::<Vec<_>>();
 
     let payment_sat = payments.iter().map(|payment| payment.1).sum::<u64>();
-    let mut txouts = payments
+    let mut tx_outs = payments
       .iter()
       .map(|payment| TxOut { value: payment.1, script_pubkey: payment.0.script_pubkey() })
       .collect::<Vec<_>>();
 
-    let actual_fee = fee * Self::calculate_weight(txins.len(), payments, None);
+    let actual_fee = fee * Self::calculate_weight(tx_ins.len(), payments, None);
     if payment_sat > (input_sat - actual_fee) {
       return None;
     }
 
     // If there's a change address, check if there's a meaningful change
     if let Some(change) = change.as_ref() {
-      let fee_with_change = fee * Self::calculate_weight(txins.len(), payments, Some(change));
+      let fee_with_change = fee * Self::calculate_weight(tx_ins.len(), payments, Some(change));
       // If there's a non-zero change, add it
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
-        txouts.push(TxOut { value, script_pubkey: change.script_pubkey() });
+        tx_outs.push(TxOut { value, script_pubkey: change.script_pubkey() });
       }
     }
 
     // TODO: Drop outputs which BTC will consider spam (outputs worth less than the cost to spend
     // them)
 
-    let new_transaction =
-      Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: txins, output: txouts };
-
-    let mut pst = PartiallySignedTransaction::from_unsigned_tx(new_transaction).unwrap();
-    debug_assert_eq!(pst.inputs.len(), inputs.len());
-    for (pst, input) in pst.inputs.iter_mut().zip(inputs.iter()) {
-      pst.witness_utxo = Some(input.output.clone());
-    }
-
-    Some(SignableTransaction(pst))
+    Some(SignableTransaction(
+      Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: tx_ins, output: tx_outs },
+      inputs.drain(..).map(|input| input.output).collect(),
+    ))
   }
 
   pub async fn multisig(
@@ -140,7 +129,7 @@ impl SignableTransaction {
     transcript.append_message(b"root_key", keys.group_key().to_encoded_point(true).as_bytes());
 
     // Transcript the inputs and outputs
-    let tx = &self.0.unsigned_tx;
+    let tx = &self.0;
     for input in &tx.input {
       transcript.append_message(b"input_hash", input.previous_output.txid.as_hash().into_inner());
       transcript.append_message(b"input_output_index", input.previous_output.vout.to_le_bytes());
@@ -158,25 +147,14 @@ impl SignableTransaction {
       );
     }
 
-    Ok(TransactionMachine { pst: self.0, transcript, sigs })
+    Ok(TransactionMachine { tx: self, transcript, sigs })
   }
 }
 
 pub struct TransactionMachine {
-  pst: PartiallySignedTransaction,
+  tx: SignableTransaction,
   transcript: RecommendedTranscript,
   sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
-}
-
-pub struct TransactionSignMachine {
-  pst: PartiallySignedTransaction,
-  transcript: RecommendedTranscript,
-  sigs: Vec<AlgorithmSignMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
-}
-
-pub struct TransactionSignatureMachine {
-  pst: PartiallySignedTransaction,
-  sigs: Vec<AlgorithmSignatureMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
 }
 
 impl PreprocessMachine for TransactionMachine {
@@ -199,8 +177,14 @@ impl PreprocessMachine for TransactionMachine {
       })
       .collect();
 
-    (TransactionSignMachine { pst: self.pst, transcript: self.transcript, sigs }, preprocesses)
+    (TransactionSignMachine { tx: self.tx, transcript: self.transcript, sigs }, preprocesses)
   }
+}
+
+pub struct TransactionSignMachine {
+  tx: SignableTransaction,
+  transcript: RecommendedTranscript,
+  sigs: Vec<AlgorithmSignMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
 }
 
 impl SignMachine<Transaction> for TransactionSignMachine {
@@ -252,14 +236,8 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       })
       .collect::<Vec<_>>();
 
-    let mut cache = SighashCache::new(&self.pst.unsigned_tx);
-    let witness = self
-      .pst
-      .inputs
-      .iter()
-      .map(|input| input.witness_utxo.clone().expect("no witness"))
-      .collect::<Vec<_>>();
-    let prevouts = Prevouts::All(&witness);
+    let mut cache = SighashCache::new(&self.tx.0);
+    let prevouts = Prevouts::All(&self.tx.1);
 
     let mut shares = Vec::with_capacity(self.sigs.len());
     let sigs = self
@@ -277,8 +255,13 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       })
       .collect::<Result<_, _>>()?;
 
-    Ok((TransactionSignatureMachine { pst: self.pst, sigs }, shares))
+    Ok((TransactionSignatureMachine { tx: self.tx.0, sigs }, shares))
   }
+}
+
+pub struct TransactionSignatureMachine {
+  tx: Transaction,
+  sigs: Vec<AlgorithmSignatureMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
 }
 
 impl SignatureMachine<Transaction> for TransactionSignatureMachine {
@@ -290,11 +273,11 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
 
   fn complete(
     mut self,
-    shares: HashMap<u16, Self::SignatureShare>,
+    mut shares: HashMap<u16, Self::SignatureShare>,
   ) -> Result<Transaction, FrostError> {
-    for (i, schnorr) in self.sigs.drain(..).enumerate() {
+    for (input, schnorr) in self.tx.input.iter_mut().zip(self.sigs.drain(..)) {
       let mut sig = schnorr.complete(
-        shares.iter().map(|(l, shares)| (*l, shares[i].clone())).collect::<HashMap<_, _>>(),
+        shares.iter_mut().map(|(l, shares)| (*l, shares.remove(0))).collect::<HashMap<_, _>>(),
       )?;
 
       // TODO: Implement BitcoinSchnorr Algorithm to handle this
@@ -302,17 +285,11 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
       (sig.R, offset) = make_even(sig.R);
       sig.s += Scalar::from(offset);
 
-      let mut script_witness: Witness = Witness::new();
-      script_witness.push(
-        SchnorrSig {
-          sig: Signature::from_slice(&sig.serialize()[1 .. 65]).unwrap(),
-          hash_ty: SchnorrSighashType::Default,
-        }
-        .serialize(),
-      );
-      self.pst.inputs[i].final_script_witness = Some(script_witness);
+      let mut witness: Witness = Witness::new();
+      witness.push(&sig.serialize()[1 .. 65]);
+      input.witness = witness;
     }
 
-    Ok(self.pst.extract_tx())
+    Ok(self.tx)
   }
 }
