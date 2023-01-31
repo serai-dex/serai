@@ -1,0 +1,42 @@
+name: bitcoin-regtest
+description: Spawns a regtest Bitcoin daemon
+
+inputs:
+  version:
+    description: "Version to download and run"
+    required: false
+    default: 24.0.1
+
+runs:
+  using: "composite"
+  steps:
+    - name: Bitcoin Daemon Cache
+      id: cache-bitcoind
+      uses: actions/cache@v3
+      with:
+        path: bitcoind
+        key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+
+    - name: Download the Bitcoin Daemon
+      if: steps.cache-bitcoind.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        RUNNER_OS=linux
+        RUNNER_ARCH=x86_64
+
+        FILE=$BASE-$RUNNER_ARCH-$RUNNER_OS-gnu.tar.gz
+        wget https://bitcoincore.org/bin/bitcoin-core-${{ inputs.version }}/$FILE
+        tar xzvf $FILE
+
+        cd bitcoin-${{ inputs.version }}
+        sudo mv bin/* /bin && sudo mv lib/* /lib
+
+    - name: Bitcoin Regtest Daemon
+      shell: bash
+      run: |
+        RPC_USER=serai
+        RPC_PASS=seraidex
+        MINER=bcrt1q7kc7tm3a4qljpw4gg5w73cgya6g9nfydtessgs
+
+        bitcoind -regtest -txindex -fallbackfee=0.000001 -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS -rpcallowip=0.0.0.0/0 -rpcbind=127.0.0.1
+        bitcoin-cli -regtest -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS generatetoaddress 100 $MINER
