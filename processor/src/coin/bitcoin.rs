@@ -183,6 +183,7 @@ impl Coin for Bitcoin {
       actual: BSignableTransaction::new(
         inputs.drain(..).map(|input| input.0).collect(),
         payments,
+        // TODO: Diversify to a proper change address
         change.map(|change| self.address(change)),
         fee.0,
       )
