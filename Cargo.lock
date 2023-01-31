@@ -8078,7 +8078,6 @@ dependencies = [
  "async-trait",
  "bitcoin",
  "bitcoin-serai",
- "bitcoin_hashes",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "flexible-transcript",

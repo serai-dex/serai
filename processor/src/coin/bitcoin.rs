@@ -24,9 +24,7 @@ use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin_serai::{
   crypto::{x_only, make_even},
-  wallet::{
-    SpendableOutput, TransactionMachine, SignableTransaction as BSignableTransaction,
-  },
+  wallet::{SpendableOutput, TransactionMachine, SignableTransaction as BSignableTransaction},
   rpc::Rpc,
 };
 
