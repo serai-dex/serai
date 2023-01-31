@@ -48,10 +48,6 @@ contract Router is Schnorr, ReentrancyGuard {
         _;
     }
 
-    function getNonce() external view returns (uint256) {
-        return nonce;
-    }
-
     // setPublicKey can be called by the contract owner to set the current public key,
     // only if the public key has not been set.
     function setPublicKey(
@@ -82,23 +78,22 @@ contract Router is Schnorr, ReentrancyGuard {
         Transaction[] calldata transactions, 
         Signature memory sig
     ) public nonReentrant returns (bool) {
-        return true;
-        // bytes32 message = keccak256(abi.encode(nonce, transactions));
-        // if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
+        bytes32 message = keccak256(abi.encode(nonce, transactions));
+        if (!verify(publicKey.parity, publicKey.px, message, sig.e, sig.s)) revert VerificationError();
 
-        // uint256 successes;
+        uint256 successes;
 
-        // for(uint256 i = 0; i < transactions.length; i++) {
-        //     (bool success, ) = transactions[i].to.call{value: transactions[i].value, gas: transactions[i].gas}(
-        //         transactions[i].data
-        //     );
-        //     assembly {
-        //         successes := or(successes, shl(i, success))
-        //     }
-        // }
+        for(uint256 i = 0; i < transactions.length; i++) {
+            (bool success, ) = transactions[i].to.call{value: transactions[i].value, gas: transactions[i].gas}(
+                transactions[i].data
+            );
+            assembly {
+                successes := or(successes, shl(i, success))
+            }
+        }
 
-        // emit Executed(nonce, successes);
-        // nonce++;
-        // return successes != 0;
+        emit Executed(nonce, successes);
+        nonce++;
+        return successes != 0;
     }
 }
