@@ -152,6 +152,8 @@ services:
     volumes:
       - "./coins/bitcoin/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
+    ports:
+      - "18443:18443"
 
   ethereum:
     profiles:

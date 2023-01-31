@@ -10,6 +10,9 @@ use frost::{
   sign::PreprocessMachine,
 };
 
+pub mod bitcoin;
+pub use self::bitcoin::Bitcoin;
+
 pub mod monero;
 pub use self::monero::Monero;
 
@@ -17,6 +20,8 @@ pub use self::monero::Monero;
 pub enum CoinError {
   #[error("failed to connect to coin daemon")]
   ConnectionError,
+  #[error("not enough funds")]
+  NotEnoughFunds,
 }
 
 pub trait Block: Sized + Clone {
@@ -62,6 +67,8 @@ pub trait Coin {
   const MAX_INPUTS: usize;
   const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
 
+  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>);
+
   /// Address for the given group key to receive external coins to.
   // Doesn't have to take self, enables some level of caching which is pleasant
   fn address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
@@ -93,10 +100,7 @@ pub trait Coin {
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError>;
 
-  async fn publish_transaction(
-    &self,
-    tx: &Self::Transaction,
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError>;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;
