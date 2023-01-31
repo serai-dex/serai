@@ -8,7 +8,12 @@ use rand_core::RngCore;
 use transcript::{Transcript, RecommendedTranscript};
 
 use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
-use frost::{curve::Secp256k1, ThresholdKeys, FrostError, algorithm::Schnorr, sign::*};
+use frost::{
+  curve::{Ciphersuite, Secp256k1},
+  ThresholdKeys, FrostError,
+  algorithm::Schnorr,
+  sign::*,
+};
 
 use bitcoin::{
   hashes::Hash,
@@ -21,6 +26,7 @@ use crate::crypto::{BitcoinHram, make_even};
 
 #[derive(Clone, Debug)]
 pub struct SpendableOutput {
+  pub offset: Scalar,
   pub output: TxOut,
   pub outpoint: OutPoint,
 }
@@ -32,6 +38,7 @@ impl SpendableOutput {
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<SpendableOutput> {
     Ok(SpendableOutput {
+      offset: Secp256k1::read_F(r)?,
       output: TxOut::consensus_decode(r)
         .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid TxOut"))?,
       outpoint: OutPoint::consensus_decode(r)
@@ -40,14 +47,15 @@ impl SpendableOutput {
   }
 
   pub fn serialize(&self) -> Vec<u8> {
-    let mut res = serialize(&self.output);
+    let mut res = self.offset.to_bytes().to_vec();
+    self.output.consensus_encode(&mut res).unwrap();
     self.outpoint.consensus_encode(&mut res).unwrap();
     res
   }
 }
 
 #[derive(Clone, Debug)]
-pub struct SignableTransaction(Transaction, Vec<TxOut>);
+pub struct SignableTransaction(Transaction, Vec<Scalar>, Vec<TxOut>);
 
 impl SignableTransaction {
   fn calculate_weight(inputs: usize, payments: &[(Address, u64)], change: Option<&Address>) -> u64 {
@@ -81,6 +89,7 @@ impl SignableTransaction {
     fee: u64,
   ) -> Option<SignableTransaction> {
     let input_sat = inputs.iter().map(|input| input.output.value).sum::<u64>();
+    let offsets = inputs.iter().map(|input| input.offset).collect();
     let tx_ins = inputs
       .iter()
       .map(|input| TxIn {
@@ -116,6 +125,7 @@ impl SignableTransaction {
 
     Some(SignableTransaction(
       Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: tx_ins, output: tx_outs },
+      offsets,
       inputs.drain(..).map(|input| input.output).collect(),
     ))
   }
@@ -140,10 +150,14 @@ impl SignableTransaction {
     }
 
     let mut sigs = vec![];
-    for _ in 0 .. tx.input.len() {
+    for i in 0 .. tx.input.len() {
       // TODO: Use the above transcript here
       sigs.push(
-        AlgorithmMachine::new(Schnorr::<Secp256k1, BitcoinHram>::new(), keys.clone()).unwrap(),
+        AlgorithmMachine::new(
+          Schnorr::<Secp256k1, BitcoinHram>::new(),
+          keys.clone().offset(self.1[i]),
+        )
+        .unwrap(),
       );
     }
 
@@ -237,7 +251,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       .collect::<Vec<_>>();
 
     let mut cache = SighashCache::new(&self.tx.0);
-    let prevouts = Prevouts::All(&self.tx.1);
+    let prevouts = Prevouts::All(&self.tx.2);
 
     let mut shares = Vec::with_capacity(self.sigs.len());
     let sigs = self

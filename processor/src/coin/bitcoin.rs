@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, collections::HashMap};
 
 use async_trait::async_trait;
 
@@ -41,13 +41,12 @@ impl BlockTrait for Block {
 pub struct Fee(u64);
 
 #[derive(Clone, Debug)]
-pub struct Output(SpendableOutput);
+pub struct Output(SpendableOutput, OutputType);
 impl OutputTrait for Output {
   type Id = [u8; 36];
 
-  // TODO: Implement later
   fn kind(&self) -> OutputType {
-    OutputType::External
+    self.1
   }
 
   fn id(&self) -> Self::Id {
@@ -59,11 +58,13 @@ impl OutputTrait for Output {
   }
 
   fn serialize(&self) -> Vec<u8> {
-    self.0.serialize()
+    let mut res = self.0.serialize();
+    self.1.write(&mut res).unwrap();
+    res
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    SpendableOutput::read(reader).map(Output)
+    Ok(Output(SpendableOutput::read(reader)?, OutputType::read(reader)?))
   }
 }
 
@@ -74,10 +75,32 @@ pub struct SignableTransaction {
   actual: BSignableTransaction,
 }
 
+fn next_key(mut key: ProjectivePoint, i: usize) -> (ProjectivePoint, Scalar) {
+  let mut offset = Scalar::ZERO;
+  for _ in 0 .. i {
+    key += ProjectivePoint::GENERATOR;
+    offset += Scalar::ONE;
+
+    let even_offset;
+    (key, even_offset) = make_even(key);
+    offset += Scalar::from(even_offset);
+  }
+  (key, offset)
+}
+
+fn branch(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
+  next_key(key, 1)
+}
+
+fn change(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
+  next_key(key, 2)
+}
+
 #[derive(Clone, Debug)]
 pub struct Bitcoin {
   pub(crate) rpc: Rpc,
 }
+
 impl Bitcoin {
   pub async fn new(url: String) -> Bitcoin {
     Bitcoin { rpc: Rpc::new(url) }
@@ -129,9 +152,8 @@ impl Coin for Bitcoin {
     )
   }
 
-  // TODO: Implement later
   fn branch_address(&self, key: ProjectivePoint) -> Self::Address {
-    self.address(key)
+    self.address(branch(key).0)
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -149,17 +171,31 @@ impl Coin for Bitcoin {
     block: &Self::Block,
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
-    let main_addr = self.address(key);
+    let external = (key, Scalar::ZERO);
+    let branch = branch(key);
+    let change = change(key);
+
+    let entry =
+      |pair: (_, _), kind| (self.address(pair.0).script_pubkey().to_bytes(), (pair.1, kind));
+    let scripts = HashMap::from([
+      entry(external, OutputType::External),
+      entry(branch, OutputType::Branch),
+      entry(change, OutputType::Change),
+    ]);
 
     let mut outputs = Vec::new();
     // Skip the coinbase transaction which is burdened by maturity
     for tx in &block.txdata[1 ..] {
       for (vout, output) in tx.output.iter().enumerate() {
-        if output.script_pubkey == main_addr.script_pubkey() {
-          outputs.push(Output(SpendableOutput {
-            output: output.clone(),
-            outpoint: OutPoint { txid: tx.txid(), vout: u32::try_from(vout).unwrap() },
-          }));
+        if let Some(info) = scripts.get(&output.script_pubkey.to_bytes()) {
+          outputs.push(Output(
+            SpendableOutput {
+              offset: info.0,
+              output: output.clone(),
+              outpoint: OutPoint { txid: tx.txid(), vout: u32::try_from(vout).unwrap() },
+            },
+            info.1,
+          ));
         }
       }
     }
@@ -174,7 +210,7 @@ impl Coin for Bitcoin {
     _: usize,
     mut inputs: Vec<Output>,
     payments: &[(Address, u64)],
-    change: Option<ProjectivePoint>,
+    change_key: Option<ProjectivePoint>,
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
     Ok(SignableTransaction {
@@ -183,8 +219,7 @@ impl Coin for Bitcoin {
       actual: BSignableTransaction::new(
         inputs.drain(..).map(|input| input.0).collect(),
         payments,
-        // TODO: Diversify to a proper change address
-        change.map(|change| self.address(change)),
+        change_key.map(|change_key| self.address(change(change_key).0)),
         fee.0,
       )
       .ok_or(CoinError::NotEnoughFunds)?,

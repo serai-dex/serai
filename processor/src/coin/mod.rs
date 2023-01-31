@@ -1,4 +1,4 @@
-use std::marker::Send;
+use std::io;
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -34,6 +34,27 @@ pub enum OutputType {
   External,
   Branch,
   Change,
+}
+
+impl OutputType {
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&[match self {
+      OutputType::External => 0,
+      OutputType::Branch => 1,
+      OutputType::Change => 2,
+    }])
+  }
+
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut byte = [0; 1];
+    reader.read_exact(&mut byte)?;
+    Ok(match byte[0] {
+      0 => OutputType::External,
+      1 => OutputType::Branch,
+      2 => OutputType::Change,
+      _ => Err(io::Error::new(io::ErrorKind::Other, "invalid OutputType"))?,
+    })
+  }
 }
 
 pub trait Output: Sized + Clone {
