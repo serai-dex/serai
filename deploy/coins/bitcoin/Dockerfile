@@ -8,7 +8,7 @@ ENV BITCOIN_DATA=/home/bitcoin/.bitcoin
 WORKDIR /home/bitcoin
 
 RUN apk update \
-  && apk --no-cache add ca-certificates gnupg bash su-exec 
+  && apk --no-cache add ca-certificates gnupg bash su-exec
 
 # Get Binary
 # TODO: When bitcoin.org publishes 23.0, retrieve checksums from there.
@@ -49,6 +49,3 @@ COPY ./scripts /scripts
 
 EXPOSE 8332 8333 18332 18333 18443 18444
 VOLUME ["/home/bitcoin/.bitcoin"]
-
-# Run
-CMD ["bitcoind"]
