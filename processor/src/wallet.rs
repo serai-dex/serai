@@ -155,10 +155,10 @@ fn refine_inputs<C: Coin>(
     s += 1;
   }
   // Add them back to the inputs pool
-  inputs.extend(selected.drain(..s));
+  inputs.extend(selected.drain(.. s));
 
   // Replace large inputs with smaller ones
-  for s in (0..selected.len()).rev() {
+  for s in (0 .. selected.len()).rev() {
     for input in inputs.iter_mut() {
       // Doesn't break due to inputs no longer being sorted
       // This could be made faster if we prioritized small input usage over transaction size/fees
@@ -242,7 +242,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
     let confirmed_block = self.coin.get_latest_block_number().await? - (C::CONFIRMATIONS - 1);
 
     // Will never scan the genesis block, which shouldn't be an issue
-    for b in (self.scanned_block() + 1)..=confirmed_block {
+    for b in (self.scanned_block() + 1) ..= confirmed_block {
       // If any keys activated at this block, shift them over
       {
         let mut k = 0;

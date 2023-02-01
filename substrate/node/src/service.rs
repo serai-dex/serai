@@ -136,7 +136,6 @@ pub fn new_partial(
   let finality_notification_stream = client.finality_notification_stream();
 
   // listen to finality_notification_stream and output events from all pallets
-  
   let client = Arc::new(client);
 
   let telemetry = telemetry.map(|(worker, telemetry)| {
@@ -225,10 +224,8 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     let pool = transaction_pool.clone();
 
     Box::new(move |deny_unsafe, _| {
-      let deps =
-      crate::rpc::FullDeps { client: client.clone(), pool: pool.clone(), deny_unsafe };
-      crate::rpc::create_full(deps)
-      .map_err(Into::into)
+      let deps = crate::rpc::FullDeps { client: client.clone(), pool: pool.clone(), deny_unsafe };
+      crate::rpc::create_full(deps).map_err(Into::into)
     })
   };
 
@@ -245,7 +242,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   //  pool: pool.clone(),
   //});
 
-  let _rpc_handlers =  sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+  let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
     client: client.clone(),
     keystore: keystore_container.sync_keystore(),

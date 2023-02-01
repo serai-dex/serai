@@ -299,7 +299,7 @@ impl Coin for Monero {
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
 
     self.mine_block().await;
-    for _ in 0..7 {
+    for _ in 0 .. 7 {
       self.mine_block().await;
     }
 

@@ -26,7 +26,7 @@ impl LocalNetwork {
   fn new(size: u16) -> Vec<LocalNetwork> {
     let rounds = Arc::new(RwLock::new(vec![]));
     let mut res = vec![];
-    for i in 1..=size {
+    for i in 1 ..= size {
       res.push(LocalNetwork { i, size, round: 0, rounds: rounds.clone() });
     }
     res
@@ -68,7 +68,7 @@ pub async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   let mut networks = LocalNetwork::new(threshold);
 
   let mut wallets = vec![];
-  for i in 1..=threshold {
+  for i in 1 ..= threshold {
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_block(0, latest);
     wallet.add_keys(&WalletKeys::new(keys.remove(&i).unwrap(), 0));

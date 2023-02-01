@@ -297,7 +297,7 @@ fn initialize_consumer(
           // let other_commitments =
           //   EncryptionKeyMessage::<C, Commitments<C>>::read::<&[u8]>(&value, params).unwrap();
 
-          // // If the session id is already in the hashmap, 
+          // // If the session id is already in the hashmap,
           // add the commitments to the session machine
           // if validator_set_instance.contains_key(&session_id) {
           //   let session_machine = validator_set_instance.get_mut(&session_id).unwrap();
@@ -346,7 +346,7 @@ fn initialize_consumer(
           // let share =
           // EncryptedMessage::<C, SecretShare<C::F>>::read::<&[u8]>(value, params).unwrap();
 
-          // If the session id is already in the hashmap, 
+          // If the session id is already in the hashmap,
           // add the commitments to the session machine
           // let session_machine = validator_set_instance.get_mut(&session_id).unwrap();
           // session_machine.shares.insert(other_i, share).unwrap();
@@ -358,7 +358,7 @@ fn initialize_consumer(
           //   let (machine, _key) =
           //   session_machine.machine.
           //   calculate_share(&mut OsRng, session_machine.shares).unwrap();
-          //   // Assume the process succeeded, 
+          //   // Assume the process succeeded,
           //   // though this should only be done after everyone votes on the key
           //   let _keys = machine.complete();
           //}
