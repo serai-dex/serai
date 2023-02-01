@@ -152,7 +152,7 @@ impl SignatureProcess {
   pub async fn run(self) {
     info!("Starting Signature Process");
 
-    // Initialize consumers to read signer list, the coordinator pubkey, general/secure test messages
+    // Initialize consumers to read signer list, coordinator pubkey, general/secure test messages
     consume_messages_from_coordinator(&self.kafka_config, &self.name, &self.coin);
 
     // Initialize producer to send processor pubkeys to coordinator on general partition
@@ -246,7 +246,7 @@ fn initialize_consumer(
           info!("Received {} Public Key: {}", &key, &public_key);
           env::set_var(format!("COORD_{}_PUB", name_arg.to_uppercase()), public_key);
 
-          // Once the public key is received, the consumer will start to read secure messages from partition 1
+          // Once the public key is received, the consumer will read secure messages
           if !pubkey_ready {
             tpl.add_partition(&topic_copy, 1);
             consumer.assign(&tpl).unwrap();
@@ -297,7 +297,8 @@ fn initialize_consumer(
           // let other_commitments =
           //   EncryptionKeyMessage::<C, Commitments<C>>::read::<&[u8]>(&value, params).unwrap();
 
-          // // If the session id is already in the hashmap, add the commitments to the session machine
+          // // If the session id is already in the hashmap, 
+          // add the commitments to the session machine
           // if validator_set_instance.contains_key(&session_id) {
           //   let session_machine = validator_set_instance.get_mut(&session_id).unwrap();
           //   session_machine.add_commitments(other_i, other_commitments).unwrap();
@@ -341,11 +342,12 @@ fn initialize_consumer(
           let value = msg.payload().unwrap();
           info!("Received Shares");
 
-          // // Receive our shares from everyone else
+          // Receive our shares from everyone else
           // let share =
-          //   EncryptedMessage::<C, SecretShare<C::F>>::read::<&[u8]>(value, params).unwrap();
+          // EncryptedMessage::<C, SecretShare<C::F>>::read::<&[u8]>(value, params).unwrap();
 
-          // // If the session id is already in the hashmap, add the commitments to the session machine
+          // If the session id is already in the hashmap, 
+          // add the commitments to the session machine
           // let session_machine = validator_set_instance.get_mut(&session_id).unwrap();
           // session_machine.shares.insert(other_i, share).unwrap();
 
@@ -354,8 +356,10 @@ fn initialize_consumer(
           //   info!("All shares received");
           //   // Calculate our share
           //   let (machine, _key) =
-          //     session_machine.machine.calculate_share(&mut OsRng, session_machine.shares).unwrap();
-          //   // Assume the process succeeded, though this should only be done ater everyone votes on the key
+          //   session_machine.machine.
+          //   calculate_share(&mut OsRng, session_machine.shares).unwrap();
+          //   // Assume the process succeeded, 
+          //   // though this should only be done after everyone votes on the key
           //   let _keys = machine.complete();
           //}
         }
