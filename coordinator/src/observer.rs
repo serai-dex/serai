@@ -29,7 +29,15 @@ enum ObserverMessage {
 impl fmt::Display for ObserverMessage {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match &*self {
-            ObserverMessage::BlockUpdate { block_hash, block_number, parent_hash, state_root, extrinsics_root } => write!(f, "BlockUpdate {{ block_hash: {}, block_number: {}, parent_hash: {}, state_root: {}, extrinsics_root: {} }}", block_hash, block_number, parent_hash, state_root, extrinsics_root),
+            ObserverMessage::BlockUpdate { block_hash, block_number, parent_hash, state_root, extrinsics_root }
+            => write!(f,
+              "BlockUpdate {{
+              block_hash: {},
+              block_number: {},
+              parent_hash: {},
+              state_root: {},
+              extrinsics_root: {} }}",
+            block_hash, block_number, parent_hash, state_root, extrinsics_root),
         }
   }
 }

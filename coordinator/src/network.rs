@@ -41,7 +41,7 @@ use crate::{
 
 use std::sync::mpsc::{Sender, Receiver};
 
-// Used when a consumer needs to communicate the coordinators own processor pubkeys through a channel.
+// Used when a consumer needs to communicate the processor pubkeys through a channel.
 // The receiver for the channel will then communicate the pubkeys to the other coordinators.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProcessorChannelMessage {
@@ -179,7 +179,8 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
               let signer_pubkey = message_box::PublicKey::from_trusted_str(pubkey_string);
               let _decoded_msg = decrypt_secure_msg(&reciever_name, &secure_message, signer_pubkey);
             }
-            // Coordinator has received a secure message containing a processor pubkey from a signer.
+            // Coordinator has received a secure message 
+            // containing a processor pubkey from a signer.
             NetworkMessageType::ProcessorPubkey => {
               // Create Producer to communicate processor pubkey with Kafka
               info!("Secure Processor Pubkey recieved!");
@@ -338,9 +339,14 @@ impl NetworkProcess {
     };
 
     let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
-      .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
-      .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
-      .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
+      // This is set to aid debugging by not cluttering the log space
+      .heartbeat_interval(Duration::from_secs(10))
+      // This sets the kind of message validation. 
+      // The default is Strict (enforce message signing)
+      .validation_mode(ValidationMode::Strict)
+      // content-address messages. 
+      // No two messages of the same content will be propagated.
+      .message_id_fn(message_id_fn)
       .build()
       .expect("Valid config");
 
@@ -395,9 +401,9 @@ impl NetworkProcess {
       .insert(self.signer_name.clone(), pubkey_string);
 
     loop {
-      if &swarm.behaviour_mut().network_state.signers.len()
-        == &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len()
-        && swarm.behaviour_mut().network_state.signers.len() > 1
+      if &swarm.behaviour_mut().network_state.signers.len() ==
+        &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len() && 
+        swarm.behaviour_mut().network_state.signers.len() > 1
       {
         // Add small delay for kafka to process message.
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -440,9 +446,11 @@ impl NetworkProcess {
       tokio::select! {
         _ = network_tick() => {
           // This tick is used to trigger sending messages after a connection is established
-          // Sending messages immdediatly after connection is established without a tick causes the messages to be dropped
+          // Sending messages immediately after connection is 
+          // established without a tick causes the messages to be dropped
           // Check if we need to communicate pubkey to new signers
-          if &swarm.behaviour_mut().network_state.signers.len() > &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len() {
+          if &swarm.behaviour_mut().network_state.signers.len() 
+          > &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len() {
                 let receiver_pub_key = &mut self.signer_name.to_string().to_uppercase();
                 receiver_pub_key.push_str("_PUB");
 
@@ -467,21 +475,26 @@ impl NetworkProcess {
                   libp2p::swarm::SwarmEvent::Behaviour(_) => {
                     info!("Behavior Event");
                   }
-                  libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, concurrent_dial_errors } => {
+                  libp2p::swarm::SwarmEvent::ConnectionEstablished 
+                  { peer_id, endpoint, num_established, concurrent_dial_errors } => {
                     info!("Connection Established");
                     swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                   },
-                  libp2p::swarm::SwarmEvent::ConnectionClosed { peer_id, endpoint, num_established, cause } => {
+                  libp2p::swarm::SwarmEvent::ConnectionClosed 
+                  { peer_id, endpoint, num_established, cause } => {
                     info!("Connection Closed");
                     swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
                   }
-                  libp2p::swarm::SwarmEvent::IncomingConnection { local_addr, send_back_addr } => {
+                  libp2p::swarm::SwarmEvent::IncomingConnection 
+                  { local_addr, send_back_addr } => {
                     info!("Incoming Connection");
                   }
-                  libp2p::swarm::SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
+                  libp2p::swarm::SwarmEvent::IncomingConnectionError 
+                  { local_addr, send_back_addr, error } => {
                     info!("Incoming Error");
                   }
-                  libp2p::swarm::SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                  libp2p::swarm::SwarmEvent::OutgoingConnectionError 
+                  { peer_id, error } => {
                     info!("Outgoing Connection Error");
                   }
                   libp2p::swarm::SwarmEvent::BannedPeer { peer_id, endpoint } => {
