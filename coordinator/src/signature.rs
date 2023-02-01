@@ -136,7 +136,12 @@ pub fn parse_message_type(message_type: &str) -> SignatureMessageType {
 // General Messages are contained in partition 0
 // Secure Messages are contained in parition 1
 impl SignatureProcess {
-  pub fn new(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String, signers: Vec<config::Value>) -> Self {
+  pub fn new(
+    chain_config: ChainConfig,
+    kafka_config: KafkaConfig,
+    name: String,
+    signers: Vec<config::Value>,
+  ) -> Self {
     info!("New Signature Process");
     let chain_config = chain_config;
     let kafka_config = kafka_config;
@@ -171,7 +176,12 @@ impl SignatureProcess {
 }
 
 // Spawn a thread for each coin that is active
-async fn spawn_processor_thread(coin: String, kafka_config: KafkaConfig, name: String, signers: Vec<config::Value>) {
+async fn spawn_processor_thread(
+  coin: String,
+  kafka_config: KafkaConfig,
+  name: String,
+  signers: Vec<config::Value>,
+) {
   tokio::spawn(async move {
     // Send signers to processor
     send_signers_to_processor(&kafka_config, &name, &coin.to_string(), &signers).await;
@@ -484,8 +494,12 @@ async fn send_general_and_secure_test_message(
 }
 
 // Send signers to processor
-async fn send_signers_to_processor(kafka_config: &KafkaConfig, name: &String, coin: &String, signers: &Vec<config::Value> ){
-
+async fn send_signers_to_processor(
+  kafka_config: &KafkaConfig,
+  name: &String,
+  coin: &String,
+  signers: &Vec<config::Value>,
+) {
   // Create message containing signers
   let mut signers_list = Vec::new();
   for signer in signers {
@@ -495,19 +509,19 @@ async fn send_signers_to_processor(kafka_config: &KafkaConfig, name: &String, co
   let msg = serde_json::to_string(&signers_list).unwrap();
 
   let producer: ThreadedProducer<_> = ClientConfig::new()
-  .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
-  .create()
-  .expect("invalid producer config");
+    .set("bootstrap.servers", format!("{}:{}", kafka_config.host, kafka_config.port))
+    .create()
+    .expect("invalid producer config");
 
   // Sends message to Kafka
   producer
-  .send(
-    BaseRecord::to(&format!("{}_processor_{}", &name, &coin.to_string().to_lowercase()))
-      .key(&format!("{}", SignatureMessageType::CoordinatorSignerListToProcessor.to_string()))
-      .payload(&msg)
-      .partition(0),
-  )
-  .expect("failed to send message");
+    .send(
+      BaseRecord::to(&format!("{}_processor_{}", &name, &coin.to_string().to_lowercase()))
+        .key(&format!("{}", SignatureMessageType::CoordinatorSignerListToProcessor.to_string()))
+        .payload(&msg)
+        .partition(0),
+    )
+    .expect("failed to send message");
 
   // Flushes producer
   producer.flush(Duration::from_secs(10));

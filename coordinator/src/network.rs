@@ -228,7 +228,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
 
               // Flushes producer
               producer.flush(Duration::from_secs(10));
-            },
+            }
           }
         } else {
           error!("Unable to decode message! Due to {:?}", deser.unwrap_err());

@@ -35,7 +35,7 @@ pub fn message_box_test() {
 
   let a_box = message_box::MessageBox::new(a_id, a_privkey, a_others);
   let b_box = message_box::MessageBox::new(b_id, b_privkey, b_others);
-  
+
   let msg = "Message Box Test";
 
   let enc = a_box.encrypt_to_string(&b_id, &msg);

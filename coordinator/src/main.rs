@@ -73,20 +73,26 @@ async fn main() {
   let core_name_arg = name_arg.to_string().to_owned();
 
   tokio::spawn(async move {
-    let core_process = CoreProcess::new(core_config.get_core(), core_config.get_chain(), core_kafka_config.clone());
+    let core_process =
+      CoreProcess::new(core_config.get_core(), core_config.get_chain(), core_kafka_config.clone());
     core_process.run(core_name_arg).await;
-  }).await.unwrap();
+  })
+  .await
+  .unwrap();
 
   // Start Signature Process
   let sig_config = config.clone();
   let sig_kafka_config = config.clone().get_kafka();
   let sig_name_arg = name_arg.to_string().to_owned();
   tokio::spawn(async move {
-    let signature_process =
-      SignatureProcess::new(sig_config.get_chain(), sig_kafka_config.clone(), sig_name_arg, sig_config.get_network().signers);
+    let signature_process = SignatureProcess::new(
+      sig_config.get_chain(),
+      sig_kafka_config.clone(),
+      sig_name_arg,
+      sig_config.get_network().signers,
+    );
     signature_process.run().await;
   });
-  
 
   // Initial Heartbeat to Processors
   //  * version check
@@ -96,7 +102,11 @@ async fn main() {
   let observer_name_arg = name_arg.to_string().to_owned();
   // Start Serai Observer
   tokio::spawn(async move {
-    let observer_process = observer::ObserverProcess::new(observer_config, observer_kafka_config.clone(), observer_name_arg);
+    let observer_process = observer::ObserverProcess::new(
+      observer_config,
+      observer_kafka_config.clone(),
+      observer_name_arg,
+    );
     observer_process.run().await;
   });
 
@@ -108,6 +118,7 @@ async fn main() {
   let network_config = config.clone();
   let network_name_arg = name_arg.to_string().to_owned();
 
-  let network_process = NetworkProcess::new(network_name_arg.to_string(), network_config.get_network().signers);
+  let network_process =
+    NetworkProcess::new(network_name_arg.to_string(), network_config.get_network().signers);
   network_process.run(network_config.get_chain(), network_config.get_kafka()).await;
 }

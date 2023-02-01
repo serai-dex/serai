@@ -233,17 +233,13 @@ impl Clone for ConfigType {
 ///  or an error if the configuration could not be loaded
 /// or parsed.
 
-pub fn load_config(
-  run_mode: RunMode,
-  path: &str,
-) -> Result<Config, ConfigError> {
+pub fn load_config(run_mode: RunMode, path: &str) -> Result<Config, ConfigError> {
   // Load the configuration file
   let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
 
   // if runmode is not set, use the default, else load the config file based on the mode specified
-  
+
   println!("Loading config for mode: {}", run_mode);
-  
 
   let config = Config::builder()
     .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
@@ -293,7 +289,7 @@ impl ChainConfig {
     let btc = config.get_bool("chain_btc").unwrap();
     let eth = config.get_bool("chain_eth").unwrap();
     let xmr = config.get_bool("chain_xmr").unwrap();
-    Self { btc, eth, xmr}
+    Self { btc, eth, xmr }
   }
   pub fn get_btc(&self) -> bool {
     self.btc
@@ -419,9 +415,7 @@ impl CoordinatorConfig {
         port: s.get_string("kafka.port").unwrap(),
         offset_reset: s.get_string("kafka.offset_reset").unwrap(),
       },
-      network: NetworkConfig {
-        signers: s.get_array("network.signers").unwrap(),
-      },
+      network: NetworkConfig { signers: s.get_array("network.signers").unwrap() },
     };
 
     match mode {
@@ -471,8 +465,8 @@ impl CoordinatorConfig {
   pub fn get_kafka(&self) -> KafkaConfig {
     self.kafka.clone()
   }
-   // get the network config
-   pub fn get_network(&self) -> NetworkConfig {
+  // get the network config
+  pub fn get_network(&self) -> NetworkConfig {
     self.network.clone()
   }
 }
@@ -498,7 +492,11 @@ pub fn initialize_keys(name: String) {
   }
 }
 
-async fn initialize_kafka_topics(chain_config: ChainConfig, kafka_config: KafkaConfig, name: String) {
+async fn initialize_kafka_topics(
+  chain_config: ChainConfig,
+  kafka_config: KafkaConfig,
+  name: String,
+) {
   let j = serde_json::to_string(&chain_config).unwrap();
   let topic_ref: HashMap<String, bool> = serde_json::from_str(&j).unwrap();
 
