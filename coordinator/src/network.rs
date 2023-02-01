@@ -596,7 +596,7 @@ fn build_secure_msg(sender_name: &str, receiver_pubkey: PublicKey, msg: &str) ->
   message_box_pubkey.insert(receiver_pubkey, receiver_pubkey);
 
   let message_box = MessageBox::new(sender_pub, sender_priv, message_box_pubkey);
-  return message_box.encrypt_to_string(&receiver_pubkey, &msg.clone());
+  return message_box.encrypt_to_string(&receiver_pubkey, &<&str>::clone(&msg));
 }
 
 // Decrypt secure message
@@ -619,7 +619,7 @@ fn decrypt_secure_msg(receiver_name: &str, secured_msg: &str, sender_pubkey: Pub
   message_box_pubkey.insert(sender_pubkey, sender_pubkey);
 
   let message_box = MessageBox::new(receiver_pub, receiver_priv, message_box_pubkey);
-  return message_box.decrypt_from_str(&sender_pubkey, &secured_msg.clone()).unwrap();
+  return message_box.decrypt_from_str(&sender_pubkey, &<&str>::clone(&secured_msg)).unwrap();
 }
 
 // Initialize consumers to read the processor pubkey & general test messages on partition 0
