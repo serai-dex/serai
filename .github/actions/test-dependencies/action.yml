@@ -12,6 +12,11 @@ inputs:
     required: false
     default: v0.18.0.0
 
+  bitcoin-version:
+    description: "Bitcoin version to download and run as a regtest node"
+    required: false
+    default: 24.0.1
+
   serai:
     description: "Run a Serai development node in the background"
     required: false
@@ -34,6 +39,11 @@ runs:
       uses: ./.github/actions/monero
       with:
         version: ${{ inputs.monero-version }}
+
+    - name: Run a Bitcoin Regtest Node
+      uses: ./.github/actions/bitcoin
+      with:
+        version: ${{ inputs.bitcoin-version }}
 
     - name: Run a Monero Wallet-RPC
       uses: ./.github/actions/monero-wallet-rpc
