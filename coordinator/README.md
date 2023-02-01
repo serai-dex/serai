@@ -9,7 +9,13 @@ The Coordinator is a service that coordinates the processor infrastructure to pr
 
 ## Build, Run, Test
 
-TBA
+
+`cargo run -- --config_dir ../deploy/coordinator/config`
+
+or
+
+`cd serai/deploy`
+`docker compose --profile coordinator up --build`
 
 ## Requirements
 
