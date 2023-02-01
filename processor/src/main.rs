@@ -74,6 +74,6 @@ async fn main() {
   // Start Signature Process
   let sig_config = config.clone();
   let signature_process =
-      SignatureProcess::new(sig_config.get_coin(), sig_config.get_kafka(), name_arg);
+    SignatureProcess::new(sig_config.get_coin(), sig_config.get_kafka(), name_arg);
   signature_process.run().await;
 }

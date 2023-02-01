@@ -171,11 +171,7 @@ impl SignatureProcess {
 }
 
 // Initialize consumers to read the coordinator pubkey, general/secure test messages
-fn consume_messages_from_coordinator(
-  kafka_config: &KafkaConfig,
-  name: &str,
-  coin: &str,
-) {
+fn consume_messages_from_coordinator(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   let group_id = &mut name.to_string().to_lowercase();
   group_id.push_str("_processor_");
   group_id.push_str(&mut coin.to_owned().to_string().to_lowercase());
@@ -371,7 +367,7 @@ fn initialize_consumer(
           let mut signer_index = 0;
           let signers: Vec<String> = serde_json::from_str(&signer_list).unwrap();
           //let signer_index = signers.iter().position(|&r| r == &name_arg).unwrap();
-          
+
           // TODO: Add logic to create threshold params based on signer count
         }
         _ => {}
