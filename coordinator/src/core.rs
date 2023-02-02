@@ -113,7 +113,7 @@ fn start_logger(log_thread: bool, rust_log: String, log_filter: &String) {
 }
 
 /// RunMode is Used to determine execution environment
-#[derive(Copy, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum RunMode {
   Development,
@@ -143,32 +143,11 @@ impl std::str::FromStr for RunMode {
   }
 }
 
-impl fmt::Debug for RunMode {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self {
-      RunMode::Development => write!(f, "development"),
-      RunMode::Test => write!(f, "test"),
-      RunMode::Production => write!(f, "production"),
-    }
-  }
-}
-
-impl Clone for RunMode {
-  fn clone(&self) -> Self {
-    match self {
-      RunMode::Development => RunMode::Development,
-      RunMode::Test => RunMode::Test,
-      RunMode::Production => RunMode::Production,
-    }
-  }
-}
-
-#[derive(Copy, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum ConfigType {
   Core,
   Chain,
-  Health,
   Observer,
   Kafka,
   Network,
@@ -183,32 +162,6 @@ impl fmt::Display for ConfigType {
       ConfigType::Observer => write!(f, "observer"),
       ConfigType::Kafka => write!(f, "kafka"),
       ConfigType::Network => write!(f, "network"),
-    }
-  }
-}
-
-impl fmt::Debug for ConfigType {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self {
-      ConfigType::Core => write!(f, "core"),
-      ConfigType::Chain => write!(f, "chains"),
-      ConfigType::Health => write!(f, "health"),
-      ConfigType::Observer => write!(f, "observer"),
-      ConfigType::Kafka => write!(f, "kafka"),
-      ConfigType::Network => write!(f, "network"),
-    }
-  }
-}
-
-impl Clone for ConfigType {
-  fn clone(&self) -> Self {
-    match self {
-      ConfigType::Core => ConfigType::Core,
-      ConfigType::Chain => ConfigType::Chain,
-      ConfigType::Health => ConfigType::Health,
-      ConfigType::Observer => ConfigType::Observer,
-      ConfigType::Kafka => ConfigType::Kafka,
-      ConfigType::Network => ConfigType::Network,
     }
   }
 }

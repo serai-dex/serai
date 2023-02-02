@@ -1,7 +1,7 @@
-use std::{env, str};
+use std::{str, env};
 use rdkafka::{
-  consumer::{ConsumerContext, Rebalance},
   producer::ProducerContext,
+  consumer::{ConsumerContext, Rebalance},
   ClientContext, Message, Offset,
 };
 

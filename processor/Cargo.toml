@@ -1,5 +1,5 @@
 [package]
-name = "serai-processor"
+name = "processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
 license = "AGPL-3.0-only"
@@ -10,7 +10,7 @@ edition = "2021"
 publish = false
 
 [[bin]]
-name = "serai-processor"
+name = "processor"
 
 [package.metadata.docs.rs]
 all-features = true
