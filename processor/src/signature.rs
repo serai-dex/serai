@@ -12,11 +12,11 @@ use log::info;
 use serde::Deserialize;
 use crate::core::KafkaConfig;
 
+/*
 // DKG
 use rand_core::OsRng;
 use ciphersuite::{Ciphersuite, Ristretto};
-use tokio::sync::mpsc::{self, UnboundedSender, UnboundedReceiver};
-use dkg::{
+use frost::dkg::{
   ThresholdParams,
   encryption::{EncryptionKeyMessage, EncryptedMessage},
   frost::{Commitments, SecretShare, KeyGenMachine},
@@ -37,6 +37,7 @@ impl<C: Ciphersuite> SessionMachine<C> {
     Self { machine, commitments, shares }
   }
 }
+*/
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum MessageType {
@@ -146,7 +147,7 @@ pub struct SignatureProcess {
 impl SignatureProcess {
   pub fn new(coin: String, kafka_config: KafkaConfig, name: String) -> Self {
     info!("New Signature Process");
-    Self { coin: coin, name: name, kafka_config: kafka_config }
+    Self { coin, name, kafka_config }
   }
 
   pub async fn run(self) {
@@ -164,31 +165,27 @@ impl SignatureProcess {
     // Initialize a producer that sends a general & secure test message
     produce_general_and_secure_test_message(&self.kafka_config, &self.name, &self.coin).await;
   }
-
-  fn stop(self) {
-    info!("Stopping Signature Process");
-  }
 }
 
 // Initialize consumers to read the coordinator pubkey, general/secure test messages
 fn consume_messages_from_coordinator(kafka_config: &KafkaConfig, name: &str, coin: &str) {
   let group_id = &mut name.to_string().to_lowercase();
   group_id.push_str("_processor_");
-  group_id.push_str(&mut coin.to_owned().to_string().to_lowercase());
+  group_id.push_str(&coin.to_owned().to_lowercase());
   let mut topic: String = String::from(name);
   topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
-  let pub_env_key = &mut coin.to_string().to_owned().to_uppercase();
+  let pub_env_key = &mut coin.to_owned().to_uppercase();
   pub_env_key.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
-  let priv_env_key = &mut coin.to_string().to_owned().to_uppercase();
+  let priv_env_key = &mut coin.to_owned().to_uppercase();
   priv_env_key.push_str(format!("_{}_PRIV", &name.to_uppercase()).as_str());
   initialize_consumer(
     kafka_config,
-    &group_id,
+    group_id,
     &topic,
     Some(priv_env_key.to_string()),
-    Some(&coin.to_string()),
-    &name,
+    Some(coin),
+    name,
   );
 }
 
@@ -198,7 +195,7 @@ fn initialize_consumer(
   group_id: &str,
   topic: &str,
   priv_env_key: Option<String>,
-  coin: Option<&String>,
+  coin: Option<&str>,
   name: &str,
 ) {
   let consumer: BaseConsumer = ClientConfig::new()
@@ -209,23 +206,17 @@ fn initialize_consumer(
     .expect("invalid consumer config");
 
   let mut priv_env_key_ref: String = "".to_string();
-  match priv_env_key {
-    Some(p) => {
-      priv_env_key_ref = String::from(p);
-    }
-    None => {}
+  if let Some(p) = priv_env_key {
+    priv_env_key_ref = p;
   }
 
   let mut coin_ref: String = "".to_string();
-  match coin {
-    Some(p) => {
-      coin_ref = String::from(p);
-    }
-    None => {}
+  if let Some(p) = coin {
+    coin_ref = String::from(p);
   }
 
   let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
-  tpl.add_partition(&topic, 0);
+  tpl.add_partition(topic, 0);
   consumer.assign(&tpl).unwrap();
 
   let topic_copy = topic.to_owned();
@@ -238,7 +229,7 @@ fn initialize_consumer(
     for msg_result in &consumer {
       let msg = msg_result.unwrap();
       let key: &str = msg.key_view().unwrap().unwrap();
-      let msg_type = parse_message_type(&key);
+      let msg_type = parse_message_type(key);
       match msg_type {
         MessageType::CoordinatorPubkeyToProcessor => {
           let value = msg.payload().unwrap();
@@ -268,7 +259,7 @@ fn initialize_consumer(
           let pubkey = message_box::PublicKey::from_trusted_str(&pubkey_string);
 
           let coin_priv = message_box::PrivateKey::from_string(
-            env::var(priv_env_key_ref.to_string()).unwrap().to_string(),
+            env::var(&priv_env_key_ref).unwrap().to_string(),
           );
 
           let processor_id = retrieve_message_box_id(&coin_ref.to_uppercase());
@@ -281,14 +272,14 @@ fn initialize_consumer(
 
           // Decrypt message using Message Box
           let encoded_string =
-            message_box.decrypt_from_str(&message_box::ids::COORDINATOR, &encrypted_msg).unwrap();
+            message_box.decrypt_from_str(&message_box::ids::COORDINATOR, encrypted_msg).unwrap();
           let decoded_string = String::from_utf8(encoded_string).unwrap();
           info!("Received Encrypted Message from {}", &key);
           info!("Decrypted Message: {}", &decoded_string);
         }
         MessageType::CoordinatorCommitmentsToProcessor => {
           // Receive commitments
-          let value = msg.payload().unwrap();
+          //let value = msg.payload().unwrap();
           info!("Received Commitments from {}", &key);
 
           // // Receive everyone else's commitments
@@ -339,7 +330,7 @@ fn initialize_consumer(
           // }
         }
         MessageType::CoordinatorSharesToProcessor => {
-          let value = msg.payload().unwrap();
+          //let value = msg.payload().unwrap();
           info!("Received Shares");
 
           // Receive our shares from everyone else
@@ -364,12 +355,12 @@ fn initialize_consumer(
           //}
         }
         MessageType::CoordinatorSignerListToProcessor => {
-          let value = msg.payload().unwrap();
-          let signer_list = str::from_utf8(value).unwrap();
+          //let value = msg.payload().unwrap();
+          //let signer_list = str::from_utf8(value).unwrap();
           info!("Received Signer List");
 
-          let mut signer_index = 0;
-          let signers: Vec<String> = serde_json::from_str(&signer_list).unwrap();
+          //let mut signer_index = 0;
+          //let signers: Vec<String> = serde_json::from_str(signer_list).unwrap();
           //let signer_index = signers.iter().position(|&r| r == &name_arg).unwrap();
 
           // TODO: Add logic to create threshold params based on signer count
@@ -382,12 +373,12 @@ fn initialize_consumer(
 
 // Initialize producer to send processor pubkeys to coordinator on general partition
 fn produce_processor_pubkey(kafka_config: &KafkaConfig, name: &str, coin: &str) {
-  let mut topic: String = String::from(name);
+  let mut topic = String::from(name);
   topic.push_str("_processor_");
   topic.push_str(&coin.to_string().to_lowercase());
   let env_key = &mut coin.to_string().to_uppercase();
   env_key.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
-  send_processor_pubkey(&kafka_config, &topic, env_key.to_string(), coin);
+  send_processor_pubkey(kafka_config, &topic, env_key.to_string(), coin);
 }
 
 // Sends processor pubkeys to coordinator on general partition
@@ -398,7 +389,7 @@ fn send_processor_pubkey(kafka_config: &KafkaConfig, topic: &str, env_key: Strin
     .expect("invalid producer config");
 
   // Load Processor Pubkeys
-  let coin_pub = env::var(env_key.to_string());
+  let coin_pub = env::var(env_key);
   let coin_msg = coin_pub.unwrap();
 
   info!("Sending {} Public Key to Corodinator", coin.to_uppercase());
@@ -406,8 +397,8 @@ fn send_processor_pubkey(kafka_config: &KafkaConfig, topic: &str, env_key: Strin
   // Send pubkey to kafka topic
   producer
     .send(
-      BaseRecord::to(&topic)
-        .key(&format!("{}", MessageType::ProcessorPubkeyToCoordinator.to_string()))
+      BaseRecord::to(topic)
+        .key(&MessageType::ProcessorPubkeyToCoordinator.to_string())
         .payload(&coin_msg)
         .partition(0),
     )
@@ -423,7 +414,7 @@ async fn process_received_pubkey(name: &str) {
   let mut coord_key_found = false;
   while !coord_key_found {
     let coord_pub_check = env::var(format!("COORD_{}_PUB", &name.to_uppercase()).as_str());
-    if !coord_pub_check.is_err() {
+    if coord_pub_check.is_ok() {
       coord_key_found = true;
     } else {
       // Add small delay for checking pubkeys
@@ -433,15 +424,13 @@ async fn process_received_pubkey(name: &str) {
 }
 
 // Requests Coin ID from Message Box
-fn retrieve_message_box_id(coin: &String) -> &'static str {
-  let id = match coin.as_str() {
-    "SRI" => message_box::ids::SRI_PROCESSOR,
+fn retrieve_message_box_id(coin: &str) -> &'static str {
+  match coin {
     "BTC" => message_box::ids::BTC_PROCESSOR,
     "ETH" => message_box::ids::ETH_PROCESSOR,
     "XMR" => message_box::ids::XMR_PROCESSOR,
     &_ => "",
-  };
-  id
+  }
 }
 
 // Initialize a producer that sends a general & secure test message
@@ -464,12 +453,12 @@ async fn produce_general_and_secure_test_message(
   );
 
   send_general_and_secure_test_message(
-    &kafka_config,
+    kafka_config,
     &topic,
     env_key.to_string(),
-    &processor_id,
+    processor_id,
     msg.as_bytes().to_vec(),
-    &name,
+    name,
   )
   .await;
 }
@@ -490,12 +479,11 @@ async fn send_general_and_secure_test_message(
     .expect("invalid producer config");
 
   // Load Processor private key environment variable
-  let coin_priv =
-    message_box::PrivateKey::from_string(env::var(env_key.to_string()).unwrap().to_string());
+  let coin_priv = message_box::PrivateKey::from_string(env::var(&env_key).unwrap());
 
   // Load Pubkeys for processors
   let pubkey = message_box::PublicKey::from_trusted_str(
-    &env::var(format!("COORD_{}_PUB", &name.to_uppercase())).unwrap().to_string(),
+    &env::var(format!("COORD_{}_PUB", &name.to_uppercase())).unwrap(),
   );
   let mut message_box_pubkey = HashMap::new();
   message_box_pubkey.insert(message_box::ids::COORDINATOR, pubkey);
@@ -507,8 +495,8 @@ async fn send_general_and_secure_test_message(
   // Parition 0 is General
   producer
     .send(
-      BaseRecord::to(&topic)
-        .key(&format!("{}", MessageType::ProcessorGeneralMessageToCoordinator.to_string()))
+      BaseRecord::to(topic)
+        .key(&MessageType::ProcessorGeneralMessageToCoordinator.to_string())
         .payload(&msg)
         .partition(0),
     )
@@ -517,8 +505,8 @@ async fn send_general_and_secure_test_message(
   // Partition 1 is Secure
   producer
     .send(
-      BaseRecord::to(&topic)
-        .key(&format!("{}", MessageType::ProcessorSecureTestMessageToCoordinator.to_string()))
+      BaseRecord::to(topic)
+        .key(&MessageType::ProcessorSecureTestMessageToCoordinator.to_string())
         .payload(&enc)
         .partition(1),
     )

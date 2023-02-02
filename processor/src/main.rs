@@ -1,6 +1,5 @@
 mod core;
 mod signature;
-use std::io;
 
 use clap::{App, Arg};
 

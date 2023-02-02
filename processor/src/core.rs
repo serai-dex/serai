@@ -8,12 +8,7 @@ use env_logger::Builder;
 use log::info;
 use log::{LevelFilter, Record};
 // Key Generation
-use message_box;
-use std::alloc::System;
-use zalloc::ZeroizingAlloc;
 use group::ff::PrimeField;
-#[global_allocator]
-static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CoreProcess {
@@ -23,7 +18,7 @@ pub struct CoreProcess {
 
 impl CoreProcess {
   pub fn new(core_config: CoreConfig, coin: String) -> Self {
-    Self { core_config: core_config, coin: coin }
+    Self { core_config, coin }
   }
 
   pub fn run(self, name: String) {
@@ -33,13 +28,9 @@ impl CoreProcess {
     // Check coordinator pubkey env variable
     initialize_keys(&self.coin, &name);
   }
-
-  fn stop(self) {
-    info!("Stopping Core Process");
-  }
 }
 
-fn start_logger(log_thread: bool, rust_log: String, log_filter: &String) {
+fn start_logger(log_thread: bool, rust_log: String, log_filter: &str) {
   let output_format = move |formatter: &mut Formatter, record: &Record| {
     let thread_name = if log_thread {
       format!("(t: {}) ", thread::current().name().unwrap_or("unknown"))
@@ -49,9 +40,9 @@ fn start_logger(log_thread: bool, rust_log: String, log_filter: &String) {
 
     let local_time: DateTime<Local> = Local::now();
     let time_str = local_time.format("%H:%M:%S%.3f").to_string();
-    write!(
+    writeln!(
       formatter,
-      "{} {}{} - {} - {}\n",
+      "{} {}{} - {} - {}",
       time_str,
       thread_name,
       record.level(),
@@ -97,7 +88,7 @@ impl std::str::FromStr for RunMode {
       "development" => Ok(RunMode::Development),
       "test" => Ok(RunMode::Test),
       "production" => Ok(RunMode::Production),
-      _ => Err(format!("{} is not a valid config option", s)),
+      _ => Err(format!("{s} is not a valid config option")),
     }
   }
 }
@@ -122,12 +113,11 @@ impl Clone for RunMode {
   }
 }
 
-#[derive(Copy, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum ConfigType {
   Core,
   Chain,
-  Health,
   Observer,
   Kafka,
 }
@@ -137,33 +127,8 @@ impl fmt::Display for ConfigType {
     match self {
       ConfigType::Core => write!(f, "core"),
       ConfigType::Chain => write!(f, "chains"),
-      ConfigType::Health => write!(f, "health"),
       ConfigType::Observer => write!(f, "observer"),
       ConfigType::Kafka => write!(f, "kafka"),
-    }
-  }
-}
-
-impl fmt::Debug for ConfigType {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self {
-      ConfigType::Core => write!(f, "core"),
-      ConfigType::Chain => write!(f, "chains"),
-      ConfigType::Health => write!(f, "health"),
-      ConfigType::Observer => write!(f, "observer"),
-      ConfigType::Kafka => write!(f, "kafka"),
-    }
-  }
-}
-
-impl Clone for ConfigType {
-  fn clone(&self) -> Self {
-    match self {
-      ConfigType::Core => ConfigType::Core,
-      ConfigType::Chain => ConfigType::Chain,
-      ConfigType::Health => ConfigType::Health,
-      ConfigType::Observer => ConfigType::Observer,
-      ConfigType::Kafka => ConfigType::Kafka,
     }
   }
 }
@@ -176,54 +141,12 @@ pub struct CoreConfig {
   log_filter: String,
 }
 
-impl CoreConfig {
-  fn new(config: Config) -> Self {
-    let host = config.get_string("host").unwrap();
-    let port = config.get_string("port").unwrap();
-    let log_filter = config.get_string("log_filter").unwrap();
-    Self { host, port, log_filter }
-  }
-  pub fn get_host(&self) -> String {
-    self.host.clone()
-  }
-  pub fn get_port(&self) -> String {
-    self.port.clone()
-  }
-  pub fn get_log_filter(&self) -> String {
-    self.log_filter.clone()
-  }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[allow(unused)]
-struct HealthConfig {}
-
-impl HealthConfig {
-  pub fn new() -> Self {
-    Self {}
-  }
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 struct ObserverConfig {
   host: String,
   port: String,
   poll_interval: u16,
-}
-
-impl ObserverConfig {
-  pub fn get_host(&self) -> String {
-    self.host.clone()
-  }
-
-  pub fn get_port(&self) -> String {
-    self.port.clone()
-  }
-
-  pub fn get_poll_interval(&self) -> u16 {
-    self.poll_interval
-  }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -234,24 +157,6 @@ pub struct KafkaConfig {
   pub offset_reset: String,
 }
 
-impl KafkaConfig {
-  fn new(config: Config) -> Self {
-    let host = config.get_string("host").unwrap();
-    let port = config.get_string("port").unwrap();
-    let offset_reset = config.get_string("offset_reset").unwrap();
-    Self { host, port, offset_reset }
-  }
-  pub fn get_host(&self) -> String {
-    self.host.clone()
-  }
-  pub fn get_port(&self) -> String {
-    self.port.clone()
-  }
-  pub fn get_offset_reset(&self) -> String {
-    self.offset_reset.clone()
-  }
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct ProcessorConfig {
@@ -259,7 +164,6 @@ pub struct ProcessorConfig {
   path: String,
   options: RunMode,
   core: CoreConfig,
-  health: HealthConfig,
   observer: ObserverConfig,
   kafka: KafkaConfig,
 }
@@ -279,15 +183,10 @@ pub struct ProcessorConfig {
 /// or parsed.
 
 pub fn load_config(run_mode: RunMode, path: &str) -> Result<Config, ConfigError> {
-  // Load the configuration file
-  let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
-
-  // if runmode is not set, use the default, else load the config file based on the mode specified
-
-  println!("Loading config for mode: {}", run_mode);
+  println!("Loading config for mode: {run_mode}");
 
   let config = Config::builder()
-    .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
+    .add_source(File::with_name(&format!("{path}/{run_mode}")))
     .build()
     .unwrap();
 
@@ -306,15 +205,14 @@ impl ProcessorConfig {
 
     // switch based on mode to build config
     let config = ProcessorConfig {
-      coin: coin,
+      coin,
       path: String::from("./config/"),
-      options: mode.clone(),
+      options: mode,
       core: CoreConfig {
         port: s.get_string("core.port").unwrap(),
         host: s.get_string("core.host").unwrap(),
         log_filter: s.get_string("core.log_filter").unwrap(),
       },
-      health: HealthConfig {},
       observer: ObserverConfig {
         host: String::from("localhost"),
         port: String::from("5050"),
@@ -350,14 +248,6 @@ impl ProcessorConfig {
   pub fn get_coin(&self) -> String {
     self.coin.clone()
   }
-  // get the config path
-  pub fn get_path(&self) -> String {
-    self.path.clone()
-  }
-  // get the config options
-  pub fn get_options(&self) -> RunMode {
-    self.options.clone()
-  }
   // get the core config
   pub fn get_core(&self) -> CoreConfig {
     self.core.clone()
@@ -368,34 +258,22 @@ impl ProcessorConfig {
   }
 }
 
-// Accepts startup argument specifying which coin package to start
-pub fn initialize_coin(coin: &str) {
-  info!("Received Coin Request: {}", coin);
-
-  match coin {
-    "btc" => {}
-    "eth" => {}
-    "xmr" => {}
-    _ => info!("coin unavailable {}", coin),
-  }
-}
-
 // Generates Private / Public key pair
-pub fn initialize_keys(coin: &String, name: &String) {
+pub fn initialize_keys(coin: &str, name: &str) {
   let mut env_privkey = String::from(coin).to_uppercase();
   env_privkey.push_str(format!("_{}_PRIV", &name.to_uppercase()).as_str());
 
   // Checks if coin keys are set
-  let priv_check = env::var(&env_privkey.to_string());
+  let priv_check = env::var(&env_privkey);
   if priv_check.is_err() {
     // Generates new private / public key
     let (privkey, pubkey) = message_box::key_gen();
-    let mut privkey_bytes = unsafe { privkey.inner().to_repr() };
+    let privkey_bytes = unsafe { privkey.inner().to_repr() };
     // Sets private / public key to environment variables
-    env::set_var(&env_privkey, hex::encode(&privkey_bytes.as_ref()));
+    env::set_var(&env_privkey, hex::encode(privkey_bytes));
 
     let mut env_pubkey = String::from(coin).to_uppercase();
     env_pubkey.push_str(format!("_{}_PUB", &name.to_uppercase()).as_str());
-    env::set_var(&env_pubkey, hex::encode(&pubkey.to_bytes()));
+    env::set_var(&env_pubkey, hex::encode(pubkey.to_bytes()));
   }
 }
