@@ -98,6 +98,7 @@ pub(crate) fn validate_map<T, B: Clone + PartialEq + Eq + Debug>(
 /// Parameters for a multisig.
 // These fields should not be made public as they should be static
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ThresholdParams {
   /// Participants needed to sign on behalf of the group.
   t: u16,

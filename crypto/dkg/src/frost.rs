@@ -1,8 +1,4 @@
-use core::{
-  marker::PhantomData,
-  ops::Deref,
-  fmt::{Debug, Formatter},
-};
+use core::{marker::PhantomData, ops::Deref, fmt};
 use std::{
   io::{self, Read, Write},
   collections::HashMap,
@@ -181,8 +177,8 @@ impl<F: PrimeField> AsMut<[u8]> for SecretShare<F> {
     self.0.as_mut()
   }
 }
-impl<F: PrimeField> Debug for SecretShare<F> {
-  fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+impl<F: PrimeField> fmt::Debug for SecretShare<F> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt.debug_struct("SecretShare").finish_non_exhaustive()
   }
 }
@@ -222,6 +218,18 @@ pub struct SecretShareMachine<C: Ciphersuite> {
   coefficients: Vec<Zeroizing<C::F>>,
   our_commitments: Vec<C::G>,
   encryption: Encryption<C>,
+}
+
+impl<C: Ciphersuite> fmt::Debug for SecretShareMachine<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("SecretShareMachine")
+      .field("params", &self.params)
+      .field("context", &self.context)
+      .field("our_commitments", &self.our_commitments)
+      .field("encryption", &self.encryption)
+      .finish_non_exhaustive()
+  }
 }
 
 impl<C: Ciphersuite> SecretShareMachine<C> {
@@ -309,6 +317,17 @@ pub struct KeyMachine<C: Ciphersuite> {
   secret: Zeroizing<C::F>,
   commitments: HashMap<u16, Vec<C::G>>,
   encryption: Encryption<C>,
+}
+
+impl<C: Ciphersuite> fmt::Debug for KeyMachine<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("KeyMachine")
+      .field("params", &self.params)
+      .field("commitments", &self.commitments)
+      .field("encryption", &self.encryption)
+      .finish_non_exhaustive()
+  }
 }
 
 impl<C: Ciphersuite> Zeroize for KeyMachine<C> {

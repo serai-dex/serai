@@ -32,8 +32,11 @@ ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.2" }
 dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
 
+serde = { version = "1", features = ["derive"], optional = true }
+
 [dev-dependencies]
 ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std", "ristretto"] }
 
 [features]
+serde = ["dep:serde"]
 tests = []
