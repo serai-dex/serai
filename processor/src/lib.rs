@@ -8,6 +8,8 @@ use frost::{curve::Ciphersuite, FrostError};
 mod coin;
 use coin::{CoinError, Coin};
 
+mod key_gen;
+
 mod scanner;
 mod scheduler;
 
@@ -15,6 +17,11 @@ mod wallet;
 
 #[cfg(test)]
 mod tests;
+
+pub trait Db: Send + Sync {
+  fn put(&mut self, key: &[u8], value: &[u8]);
+  fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
+}
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Payment<C: Coin> {

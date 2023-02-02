@@ -7,7 +7,7 @@ use tokio::time::timeout;
 use crate::{
   coin::{Block, Coin},
   scanner::{ScannerOrder, ScannerEvent, Scanner},
-  tests::util::db::ScannerMemDb,
+  tests::util::db::MemDb,
 };
 
 pub async fn test_scan<C: Coin>(coin: C) {
@@ -17,7 +17,7 @@ pub async fn test_scan<C: Coin>(coin: C) {
   // Mine blocks so there's a confirmed block
   coin.mine_block().await;
 
-  let mut scanner = Scanner::new(coin.clone(), ScannerMemDb::new());
+  let mut scanner = Scanner::new(coin.clone(), MemDb::new());
   scanner
     .orders
     .send(ScannerOrder::RotateKey {

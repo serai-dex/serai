@@ -18,6 +18,9 @@ zeroize = { version = "1", features = ["derive"] }
 
 serde = { version = "1", features = ["derive"] }
 
+dkg = { path = "../../crypto/dkg", features = ["serde"] }
+
 serai-primitives = { path = "../../substrate/serai/primitives" }
 in-instructions-primitives = { path = "../../substrate/in-instructions/primitives" }
 tokens-primitives = { path = "../../substrate/tokens/primitives" }
+validator-sets-primitives = { path = "../../substrate/validator-sets/primitives" }

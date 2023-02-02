@@ -1938,6 +1938,7 @@ dependencies = [
  "multiexp",
  "rand_core 0.6.4",
  "schnorr-signatures",
+ "serde",
  "subtle",
  "thiserror",
  "zeroize",
@@ -6179,6 +6180,7 @@ name = "processor"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bincode",
  "bitcoin",
  "bitcoin-serai",
  "curve25519-dalek 3.2.0",
@@ -6192,12 +6194,14 @@ dependencies = [
  "log",
  "modular-frost",
  "monero-serai",
+ "processor-messages",
  "rand_core 0.6.4",
  "secp256k1",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
+ "validator-sets-primitives",
  "zeroize",
 ]
 
@@ -6205,10 +6209,12 @@ dependencies = [
 name = "processor-messages"
 version = "0.1.0"
 dependencies = [
+ "dkg",
  "in-instructions-primitives",
  "serai-primitives",
  "serde",
  "tokens-primitives",
+ "validator-sets-primitives",
  "zeroize",
 ]
 

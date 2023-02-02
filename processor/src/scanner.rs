@@ -1,14 +1,17 @@
 use core::time::Duration;
 use std::collections::HashMap;
 
-use async_trait::async_trait;
-
 use tokio::{sync::mpsc, time::timeout};
 
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
-use crate::coin::{Block, Coin};
+use crate::{
+  Db,
+  coin::{Block, Coin},
+};
+
+const CHANNEL_EXPECT: &str = "Scanner handler was dropped. Shutting down?";
 
 /// Orders for the scanner.
 #[derive(Clone, Debug)]
@@ -34,13 +37,45 @@ pub enum ScannerEvent<C: Coin> {
 pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
 pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
-#[async_trait]
-pub trait ScannerDb<C: Coin>: Send + Sync {
-  async fn get_latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize;
-  async fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize);
+fn scanner_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
+  [b"SCANNER", dst, key].concat().to_vec()
+}
 
-  async fn get_block(&self, number: usize) -> Option<<C::Block as Block>::Id>;
-  async fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id);
+fn scanned_block_key<G: GroupEncoding>(key: G) -> Vec<u8> {
+  scanner_key(b"scanned_block", key.to_bytes().as_ref())
+}
+
+fn block_key(number: usize) -> Vec<u8> {
+  scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes().as_ref())
+}
+
+pub trait ScannerDb<C: Coin>: Send + Sync {
+  fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize);
+  fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize;
+
+  fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id);
+  fn block(&self, number: usize) -> Option<<C::Block as Block>::Id>;
+}
+
+impl<D: Db, C: Coin> ScannerDb<C> for D {
+  fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize) {
+    self.put(&scanned_block_key(key), &u64::try_from(block).unwrap().to_le_bytes())
+  }
+  fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
+    let bytes = self.get(&scanned_block_key(key)).unwrap_or(vec![0; 8]);
+    u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
+  }
+
+  fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id) {
+    self.put(&block_key(number), id.as_ref())
+  }
+  fn block(&self, number: usize) -> Option<<C::Block as Block>::Id> {
+    self.get(&block_key(number)).map(|id| {
+      let mut res = <C::Block as Block>::Id::default();
+      res.as_mut().copy_from_slice(&id);
+      res
+    })
+  }
 }
 
 #[derive(Debug)]
@@ -91,7 +126,7 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
           let key_vec = key.to_bytes().as_ref().to_vec();
           let latest_scanned = {
             // Grab the latest scanned block according to the DB
-            let db_scanned = self.db.get_latest_scanned_block(key).await;
+            let db_scanned = self.db.latest_scanned_block(key);
             // We may, within this process's lifetime, have scanned more blocks
             // If they're still being processed, we will not have officially written them to the DB
             // as scanned yet
@@ -115,14 +150,14 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
               }
             };
 
-            let first = if let Some(id) = self.db.get_block(i).await {
+            let first = if let Some(id) = self.db.block(i) {
               // TODO: Also check this block builds off the previous block
               if id != block.id() {
                 panic!("{} reorg'd from {id:?} to {:?}", C::ID, block.id());
               }
               false
             } else {
-              self.db.save_block(i, block.id()).await;
+              self.db.save_block(i, block.id());
               true
             };
 
@@ -152,11 +187,14 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
             // This is intended for group acknowledgement of what block we're on, not only
             // providing a heartbeat, yet also letting coins like Monero schedule themselves
             if first {
-              self.events.send(ScannerEvent::Block(i, block.id())).unwrap();
+              self.events.send(ScannerEvent::Block(i, block.id())).expect(CHANNEL_EXPECT);
             }
 
             // Send all outputs
-            self.events.send(ScannerEvent::Outputs(key, block.id(), outputs)).unwrap();
+            self
+              .events
+              .send(ScannerEvent::Outputs(key, block.id(), outputs))
+              .expect(CHANNEL_EXPECT);
             // Write this number as scanned so we won't re-fire these outputs
             ram_scanned.insert(key_vec.clone(), i);
           }
@@ -165,12 +203,11 @@ impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
 
       // Handle any new orders
       if let Ok(order) = timeout(Duration::from_secs(1), self.orders.recv()).await {
-        let order = order.expect("Scanner handler was dropped. Shutting down?");
-        match order {
+        match order.expect(CHANNEL_EXPECT) {
           ScannerOrder::RotateKey { key, .. } => {
             self.keys.push(key);
           }
-          ScannerOrder::AckBlock(key, i) => self.db.save_scanned_block(key, i).await,
+          ScannerOrder::AckBlock(key, i) => self.db.save_scanned_block(key, i),
         }
       }
     }
