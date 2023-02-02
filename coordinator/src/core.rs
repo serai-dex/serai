@@ -11,19 +11,12 @@ use log::info;
 use log::{LevelFilter, Record};
 
 // Key Generation
-use message_box;
-use std::alloc::System;
-use zalloc::ZeroizingAlloc;
 use group::ff::PrimeField;
-#[global_allocator]
-static ZALLOC: ZeroizingAlloc<System> = ZeroizingAlloc(System);
 use std::str;
 
 // rdkafka
 use rdkafka::{
-  producer::{BaseRecord, ThreadedProducer},
-  consumer::{BaseConsumer, Consumer},
-  ClientConfig, Message,
+  ClientConfig,
   admin::{AdminClient, TopicReplication, NewTopic, AdminOptions},
   client::DefaultClientContext,
 };
@@ -59,6 +52,11 @@ fn create_admin_client(kafka_config: &KafkaConfig) -> AdminClient<DefaultClientC
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct CoreConfig {
+  log_filter: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct CoreProcess {
   core_config: CoreConfig,
   chain_config: ChainConfig,
@@ -80,10 +78,6 @@ impl CoreProcess {
     // Initialize Kafka topics
     initialize_kafka_topics(self.chain_config, self.kafka_config.clone(), name.clone()).await;
   }
-
-  fn stop(self) {
-    info!("Stopping Core Process");
-  }
 }
 
 fn start_logger(log_thread: bool, rust_log: String, log_filter: &String) {
@@ -96,9 +90,9 @@ fn start_logger(log_thread: bool, rust_log: String, log_filter: &String) {
 
     let local_time: DateTime<Local> = Local::now();
     let time_str = local_time.format("%H:%M:%S%.3f").to_string();
-    write!(
+    writeln!(
       formatter,
-      "{} {}{} - {} - {}\n",
+      "{} {}{} - {} - {}",
       time_str,
       thread_name,
       record.level(),
@@ -144,7 +138,7 @@ impl std::str::FromStr for RunMode {
       "development" => Ok(RunMode::Development),
       "test" => Ok(RunMode::Test),
       "production" => Ok(RunMode::Production),
-      _ => Err(format!("{} is not a valid config option", s)),
+      _ => Err(format!("{s} is not a valid config option")),
     }
   }
 }
@@ -234,45 +228,12 @@ impl Clone for ConfigType {
 /// or parsed.
 
 pub fn load_config(run_mode: RunMode, path: &str) -> Result<Config, ConfigError> {
-  // Load the configuration file
-  let run_mode = env::var("COORDINATOR_MODE").unwrap_or_else(|_| "development".into());
+  println!("Loading config for mode: {run_mode}");
 
-  // if runmode is not set, use the default, else load the config file based on the mode specified
-
-  println!("Loading config for mode: {}", run_mode);
-
-  let config = Config::builder()
-    .add_source(File::with_name(&format!("{}/{}", path, run_mode)))
-    .build()
-    .unwrap();
+  let config =
+    Config::builder().add_source(File::with_name(&format!("{path}/{run_mode}"))).build().unwrap();
 
   Ok(config)
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[allow(unused)]
-pub struct CoreConfig {
-  host: String,
-  port: String,
-  log_filter: String,
-}
-
-impl CoreConfig {
-  fn new(config: Config) -> Self {
-    let host = config.get_string("host").unwrap();
-    let port = config.get_string("port").unwrap();
-    let log_filter = config.get_string("log_filter").unwrap();
-    Self { host, port, log_filter }
-  }
-  pub fn get_host(&self) -> String {
-    self.host.clone()
-  }
-  pub fn get_port(&self) -> String {
-    self.port.clone()
-  }
-  pub fn get_log_filter(&self) -> String {
-    self.log_filter.clone()
-  }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -283,50 +244,11 @@ pub struct ChainConfig {
   xmr: bool,
 }
 
-impl ChainConfig {
-  fn new(config: Config) -> Self {
-    let sri = config.get_bool("chain_sri").unwrap();
-    let btc = config.get_bool("chain_btc").unwrap();
-    let eth = config.get_bool("chain_eth").unwrap();
-    let xmr = config.get_bool("chain_xmr").unwrap();
-    Self { btc, eth, xmr }
-  }
-  pub fn get_btc(&self) -> bool {
-    self.btc
-  }
-  pub fn get_eth(&self) -> bool {
-    self.eth
-  }
-  pub fn get_xmr(&self) -> bool {
-    self.xmr
-  }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[allow(unused)]
-pub struct HealthConfig {}
-
-impl HealthConfig {
-  pub fn new() -> Self {
-    Self {}
-  }
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct ObserverConfig {
   pub host_prefix: String,
   pub port: String,
-}
-
-impl ObserverConfig {
-  pub fn get_host_prefix(&self) -> String {
-    self.host_prefix.clone()
-  }
-
-  pub fn get_port(&self) -> String {
-    self.port.clone()
-  }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -337,35 +259,10 @@ pub struct KafkaConfig {
   pub offset_reset: String,
 }
 
-impl KafkaConfig {
-  fn new(config: Config) -> Self {
-    let host = config.get_string("host").unwrap();
-    let port = config.get_string("port").unwrap();
-    let offset_reset = config.get_string("offset_reset").unwrap();
-    Self { host, port, offset_reset }
-  }
-  pub fn get_host(&self) -> String {
-    self.host.clone()
-  }
-  pub fn get_port(&self) -> String {
-    self.port.clone()
-  }
-  pub fn get_offset_reset(&self) -> String {
-    self.offset_reset.clone()
-  }
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[allow(unused)]
 pub struct NetworkConfig {
   pub signers: Vec<config::Value>,
-}
-
-impl NetworkConfig {
-  fn new(config: Config) -> Self {
-    let signers = config.get_array("signers").unwrap();
-    Self { signers }
-  }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -374,7 +271,6 @@ pub struct CoordinatorConfig {
   path: String,
   options: RunMode,
   core: CoreConfig,
-  health: HealthConfig,
   observer: ObserverConfig,
   chain: ChainConfig,
   kafka: KafkaConfig,
@@ -394,13 +290,8 @@ impl CoordinatorConfig {
     // TODO: improve mapping syntax
     let config = CoordinatorConfig {
       path: String::from("./config/"),
-      options: mode.clone(),
-      core: CoreConfig {
-        port: s.get_string("core.port").unwrap(),
-        host: s.get_string("core.host").unwrap(),
-        log_filter: s.get_string("core.log_filter").unwrap(),
-      },
-      health: HealthConfig {},
+      options: mode,
+      core: CoreConfig { log_filter: s.get_string("core.log_filter").unwrap() },
       observer: ObserverConfig {
         host_prefix: s.get_string("observer.host_prefix").unwrap(),
         port: s.get_string("observer.port").unwrap(),
@@ -437,21 +328,9 @@ impl CoordinatorConfig {
     }
   }
 
-  // get the config path
-  pub fn get_path(&self) -> String {
-    self.path.clone()
-  }
-  // get the config options
-  pub fn get_options(&self) -> RunMode {
-    self.options.clone()
-  }
   // get the core config
   pub fn get_core(&self) -> CoreConfig {
     self.core.clone()
-  }
-  // get the health config
-  pub fn get_health(&self) -> HealthConfig {
-    self.health.clone()
   }
   // get the observer config
   pub fn get_observer(&self) -> ObserverConfig {
@@ -485,8 +364,8 @@ pub fn initialize_keys(name: String) {
     let env_pub_key = format!("COORD_{}_PUB", name.to_uppercase());
 
     // Sets private / public key to environment variables
-    env::set_var(env_priv_key, hex::encode(&private_bytes.as_ref()));
-    env::set_var(env_pub_key, hex::encode(&public.to_bytes()));
+    env::set_var(env_priv_key, hex::encode(private_bytes));
+    env::set_var(env_pub_key, hex::encode(public.to_bytes()));
   } else {
     info!("Keys Found");
   }

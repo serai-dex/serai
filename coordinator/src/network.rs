@@ -1,7 +1,7 @@
 use std::{
   collections::{HashMap, hash_map::DefaultHasher},
   time::Duration,
-  env, io, fmt, str,
+  env, io, str,
   hash::{Hash, Hasher},
 };
 use group::ff::PrimeField;
@@ -11,15 +11,14 @@ use serde::{Deserialize, Serialize};
 use log::{error, info};
 use futures::StreamExt;
 use libp2p::{
-  core::{upgrade},
+  core::upgrade,
   gossipsub::{
     Gossipsub, GossipsubEvent, IdentTopic, self, ValidationMode, GossipsubMessage, MessageId,
     MessageAuthenticity,
   },
-  identity::{self},
-  mplex,
+  identity, mplex,
   noise::{Keypair, NoiseConfig, X25519Spec},
-  swarm::NetworkBehaviourEventProcess,
+  swarm::{SwarmEvent, NetworkBehaviourEventProcess},
   tcp::TcpConfig,
   NetworkBehaviour, PeerId, Swarm, Transport, Multiaddr,
   ping::{self, PingSuccess},
@@ -36,7 +35,7 @@ use dns_lookup::lookup_host;
 use crate::{
   core::ChainConfig,
   core::KafkaConfig,
-  signature::{SignatureMessageType, parse_message_type, Coin, create_coin_hashmap},
+  signature::{SignatureMessageType, parse_message_type, Chain, create_coin_hashmap},
 };
 
 use std::sync::mpsc::{Sender, Receiver};
@@ -90,10 +89,10 @@ impl NetworkState {
   pub fn merge(&mut self, mut other: NetworkState) {
     // Merge signers.
     for (signer_address, signer_name) in other.signers.drain() {
-      if !self.signers.contains_key(&signer_address) {
+      self.signers.entry(signer_address).or_insert_with(|| {
         info!("Connected with signer: {}", &signer_name);
-        self.signers.insert(signer_address, signer_name);
-      }
+        signer_name
+      });
     }
   }
 
@@ -121,13 +120,13 @@ struct NetworkConnection {
 impl NetworkBehaviourEventProcess<PingEvent> for NetworkConnection {
   fn inject_event(&mut self, event: PingEvent) {
     match event {
-      PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+      PingEvent { result: Ok(PingSuccess::Ping { .. }), .. } => {
         //info!("Ping from {} in {:?}", peer, rtt);
       }
-      PingEvent { peer, result: Ok(PingSuccess::Pong) } => {
+      PingEvent { result: Ok(PingSuccess::Pong), .. } => {
         //info!("Pong from {}", peer);
       }
-      PingEvent { peer, result: Err(e) } => {
+      PingEvent { result: Err(_), .. } => {
         //info!("Ping failed with {} from {}", e, peer);
       }
     }
@@ -138,12 +137,12 @@ impl NetworkBehaviourEventProcess<PingEvent> for NetworkConnection {
 impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
   fn inject_event(&mut self, event: GossipsubEvent) {
     match event {
-      GossipsubEvent::Message { propagation_source, message_id, message } => {
+      GossipsubEvent::Message { message, .. } => {
         // Parse the message as bytes
         let deser = bincode::deserialize::<NetworkMessage>(&message.data);
         if let Ok(message) = deser {
           if let Some(user) = &message.receiver_p2p_address {
-            if *user != self.signer_p2p_address.to_string() {
+            if user != &self.signer_p2p_address {
               return; //Don't process messages not intended for us.
             }
           }
@@ -157,18 +156,18 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
             }
             // Coordinator has received a signers coordinator pubkey used for message box.
             NetworkMessageType::CoordinatorPubkey => {
-              let sender: String =
-                self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
+              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address);
               let pubkey = String::from_utf8_lossy(&message.data);
               info!("Coordinator Pubkey recieved! {}: {}", sender, pubkey);
-              if !self.network_state.signer_coordinator_pubkeys.contains_key(&sender) {
-                self.network_state.signer_coordinator_pubkeys.insert(sender, pubkey.to_string());
-              }
+              self
+                .network_state
+                .signer_coordinator_pubkeys
+                .entry(sender)
+                .or_insert_with(|| pubkey.to_string());
             }
             // Coordinator has received a secure message from a signer.
             NetworkMessageType::CoordinatorSecure => {
-              let sender: String =
-                self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
+              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address);
               let secure_message = String::from_utf8_lossy(&message.data);
               info!("Secure Message recieved! {}: {}", sender, secure_message);
 
@@ -184,8 +183,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
             NetworkMessageType::ProcessorPubkey => {
               // Create Producer to communicate processor pubkey with Kafka
               info!("Secure Processor Pubkey recieved!");
-              let sender: String =
-                self.network_state.get_signer_name(&message.sender_p2p_address.to_string());
+              let sender: String = self.network_state.get_signer_name(&message.sender_p2p_address);
               let secure_message = String::from_utf8_lossy(&message.data);
 
               let reciever_name: String =
@@ -219,8 +217,8 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
                   ))
                   .key(&format!(
                     "{}_{}",
-                    processor_channel_message.signer.to_string(),
-                    SignatureMessageType::ProcessorPubkeyToProcessor.to_string()
+                    processor_channel_message.signer,
+                    SignatureMessageType::ProcessorPubkeyToProcessor
                   ))
                   .payload(&processor_channel_message.pubkey)
                   .partition(0),
@@ -254,11 +252,11 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for NetworkConnection {
         self
           .network_state
           .signer_coordinator_pubkeys
-          .remove(&signer_ref.to_string())
+          .remove(&signer_ref)
           .unwrap_or(String::from("Anon"));
         info!("Disconnect from {}", name);
       }
-      GossipsubEvent::GossipsubNotSupported { peer_id } => {}
+      GossipsubEvent::GossipsubNotSupported { .. } => {}
     }
   }
 }
@@ -293,8 +291,7 @@ impl NetworkProcess {
       if name_ref != signer_name {
         let hostname_ref = format!("coordinator-{}", &name_ref);
         let ips_ref_result = lookup_host(&hostname_ref);
-        if !ips_ref_result.is_err() {
-          let ips_ref = ips_ref_result.unwrap();
+        if let Ok(ips_ref) = ips_ref_result {
           let ip_ref = ips_ref[0].to_string();
 
           let mut address_string = "/ip4/".to_string();
@@ -393,7 +390,7 @@ impl NetworkProcess {
     // This is initially used when our network state is merged with the other signers
     let mut sender_name = self.signer_name.clone().to_uppercase();
     sender_name.push_str("_PUB");
-    let pubkey_string = env::var(sender_name).unwrap().to_string();
+    let pubkey_string = env::var(sender_name).unwrap();
     swarm
       .behaviour_mut()
       .network_state
@@ -401,9 +398,9 @@ impl NetworkProcess {
       .insert(self.signer_name.clone(), pubkey_string);
 
     loop {
-      if &swarm.behaviour_mut().network_state.signers.len() ==
-        &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len() &&
-        swarm.behaviour_mut().network_state.signers.len() > 1
+      if (swarm.behaviour_mut().network_state.signers.len() ==
+        swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len()) &&
+        (swarm.behaviour_mut().network_state.signers.len() > 1)
       {
         // Add small delay for kafka to process message.
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -423,7 +420,7 @@ impl NetworkProcess {
                 .network_state
                 .signers
                 .iter()
-                .find(|(_, name)| name.to_owned() == &sender_name)
+                .find(|(_, name)| *name == &sender_name)
                 .unwrap()
                 .0
                 .to_string();
@@ -449,79 +446,68 @@ impl NetworkProcess {
           // Sending messages immediately after connection is
           // established without a tick causes the messages to be dropped
           // Check if we need to communicate pubkey to new signers
-          if &swarm.behaviour_mut().network_state.signers.len()
-          > &swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len() {
-                let receiver_pub_key = &mut self.signer_name.to_string().to_uppercase();
-                receiver_pub_key.push_str("_PUB");
+          let keys_len = swarm.behaviour_mut().network_state.signer_coordinator_pubkeys.len();
+          if swarm.behaviour_mut().network_state.signers.len() > keys_len {
+            let receiver_pub_key = &mut self.signer_name.to_string().to_uppercase();
+            receiver_pub_key.push_str("_PUB");
 
-                let msg = &env::var(receiver_pub_key).unwrap().to_string();
+            let msg = &env::var(receiver_pub_key).unwrap().to_string();
 
-                let message = NetworkMessage {
-                  message_type: NetworkMessageType::CoordinatorPubkey,
-                  data: msg.as_bytes().to_vec(),
-                  receiver_p2p_address: None,
-                  sender_p2p_address: swarm.behaviour_mut().signer_p2p_address.to_owned(),
-                };
+            let message = NetworkMessage {
+              message_type: NetworkMessageType::CoordinatorPubkey,
+              data: msg.as_bytes().to_vec(),
+              receiver_p2p_address: None,
+              sender_p2p_address: swarm.behaviour_mut().signer_p2p_address.to_owned(),
+            };
 
-                info!("Broadcasting Coordinator Pubkey");
-                send_message(&message, &mut swarm, &topic);
-                // Small delay for message processing
-                tokio::time::sleep(Duration::from_millis(100)).await;
+            info!("Broadcasting Coordinator Pubkey");
+            send_message(&message, &mut swarm, &topic);
+            // Small delay for message processing
+            tokio::time::sleep(Duration::from_millis(100)).await;
           }
         }
         event = swarm.select_next_some() => {
-                //println!("Swarm event: {:?}", &event);
-                match event {
-                  libp2p::swarm::SwarmEvent::Behaviour(_) => {
-                    info!("Behavior Event");
-                  }
-                  libp2p::swarm::SwarmEvent::ConnectionEstablished
-                  { peer_id, endpoint, num_established, concurrent_dial_errors } => {
-                    info!("Connection Established");
-                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
-                  },
-                  libp2p::swarm::SwarmEvent::ConnectionClosed
-                  { peer_id, endpoint, num_established, cause } => {
-                    info!("Connection Closed");
-                    swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
-                  }
-                  libp2p::swarm::SwarmEvent::IncomingConnection
-                  { local_addr, send_back_addr } => {
-                    info!("Incoming Connection");
-                  }
-                  libp2p::swarm::SwarmEvent::IncomingConnectionError
-                  { local_addr, send_back_addr, error } => {
-                    info!("Incoming Error");
-                  }
-                  libp2p::swarm::SwarmEvent::OutgoingConnectionError
-                  { peer_id, error } => {
-                    info!("Outgoing Connection Error");
-                  }
-                  libp2p::swarm::SwarmEvent::BannedPeer
-                  { peer_id, endpoint } => {
-                    info!("Banned Peer");
-                  }
-                  libp2p::swarm::SwarmEvent::NewListenAddr
-                  { listener_id, address } => {
-                    info!("New Listen Addr");
-                  }
-                  libp2p::swarm::SwarmEvent::ExpiredListenAddr
-                  { listener_id, address } => {
-                    info!("Expired Listen Addr");
-                  }
-                  libp2p::swarm::SwarmEvent::ListenerClosed
-                  { listener_id, addresses, reason } => {
-                    info!("Listener Closed");
-                  }
-                  libp2p::swarm::SwarmEvent::ListenerError
-                  { listener_id, error } => {
-                    info!("Listener Error");
-                  },
-                  libp2p::swarm::SwarmEvent::Dialing(_)
-                   => {
-                    info!("Dialing");
-                  }
-                }
+          //println!("Swarm event: {:?}", &event);
+          match event {
+            SwarmEvent::Behaviour(_) => {
+              info!("Behavior Event");
+            }
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+              info!("Connection Established");
+              swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+            },
+            SwarmEvent::ConnectionClosed { peer_id, .. } => {
+              info!("Connection Closed");
+              swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+            }
+            SwarmEvent::IncomingConnection { .. } => {
+              info!("Incoming Connection");
+            }
+            SwarmEvent::IncomingConnectionError { .. } => {
+              info!("Incoming Error");
+            }
+            SwarmEvent::OutgoingConnectionError { .. } => {
+              info!("Outgoing Connection Error");
+            }
+            SwarmEvent::BannedPeer { .. } => {
+              info!("Banned Peer");
+            }
+            SwarmEvent::NewListenAddr { .. } => {
+              info!("New Listen Addr");
+            }
+            SwarmEvent::ExpiredListenAddr { .. } => {
+              info!("Expired Listen Addr");
+            }
+            SwarmEvent::ListenerClosed { .. } => {
+              info!("Listener Closed");
+            }
+            SwarmEvent::ListenerError { .. } => {
+              info!("Listener Error");
+            },
+            SwarmEvent::Dialing(_) => {
+              info!("Dialing");
+            }
+          }
         },
         response = response_rcv.recv() => {
             if let Some(message) = response {
@@ -538,10 +524,6 @@ impl NetworkProcess {
     }
 
     io::stdin().read_line(&mut String::new()).unwrap();
-  }
-
-  fn stop(self) {
-    info!("Stopping Network Process");
   }
 }
 
@@ -590,8 +572,8 @@ fn initialize_keys(name: &str) {
     env_pub_key.push_str("_PUB");
 
     // Sets private / public key to environment variables
-    env::set_var(env_priv_key, hex::encode(&private_bytes.as_ref()));
-    env::set_var(env_pub_key, hex::encode(&public.to_bytes()));
+    env::set_var(env_priv_key, hex::encode(private_bytes.as_ref()));
+    env::set_var(env_pub_key, hex::encode(public.to_bytes()));
   }
 }
 
@@ -601,21 +583,20 @@ fn build_secure_msg(sender_name: &str, receiver_pubkey: PublicKey, msg: &str) ->
   sender_pub_key = sender_pub_key.to_uppercase();
   sender_pub_key.push_str("_PUB");
 
-  let pubkey_string = env::var(sender_pub_key).unwrap().to_string();
+  let pubkey_string = env::var(sender_pub_key).unwrap();
   let sender_pub = message_box::PublicKey::from_trusted_str(&pubkey_string);
 
   let mut sender_priv_key = sender_name.to_string();
   sender_priv_key = sender_priv_key.to_uppercase();
   sender_priv_key.push_str("_PRIV");
 
-  let sender_priv =
-    message_box::PrivateKey::from_string(env::var(sender_priv_key).unwrap().to_string());
+  let sender_priv = message_box::PrivateKey::from_string(env::var(sender_priv_key).unwrap());
 
   let mut message_box_pubkey = HashMap::new();
   message_box_pubkey.insert(receiver_pubkey, receiver_pubkey);
 
   let message_box = MessageBox::new(sender_pub, sender_priv, message_box_pubkey);
-  return message_box.encrypt_to_string(&receiver_pubkey, &<&str>::clone(&msg));
+  message_box.encrypt_to_string(&receiver_pubkey, &msg)
 }
 
 // Decrypt secure message
@@ -624,31 +605,30 @@ fn decrypt_secure_msg(receiver_name: &str, secured_msg: &str, sender_pubkey: Pub
   receiver_pub_key = receiver_pub_key.to_uppercase();
   receiver_pub_key.push_str("_PUB");
 
-  let pubkey_string = env::var(receiver_pub_key).unwrap().to_string();
+  let pubkey_string = env::var(receiver_pub_key).unwrap();
   let receiver_pub = message_box::PublicKey::from_trusted_str(&pubkey_string);
 
   let mut receiver_priv_key = receiver_name.to_string();
   receiver_priv_key = receiver_priv_key.to_uppercase();
   receiver_priv_key.push_str("_PRIV");
 
-  let receiver_priv =
-    message_box::PrivateKey::from_string(env::var(receiver_priv_key).unwrap().to_string());
+  let receiver_priv = message_box::PrivateKey::from_string(env::var(receiver_priv_key).unwrap());
 
   let mut message_box_pubkey = HashMap::new();
   message_box_pubkey.insert(sender_pubkey, sender_pubkey);
 
   let message_box = MessageBox::new(receiver_pub, receiver_priv, message_box_pubkey);
-  return message_box.decrypt_from_str(&sender_pubkey, &<&str>::clone(&secured_msg)).unwrap();
+  message_box.decrypt_from_str(&sender_pubkey, secured_msg).unwrap()
 }
 
 // Initialize consumers to read the processor pubkey & general test messages on partition 0
 fn create_processor_consumers(
   kafka_config: &KafkaConfig,
   name: &str,
-  coin_hashmap: &HashMap<Coin, bool>,
+  coin_hashmap: &HashMap<Chain, bool>,
   tx: Sender<ProcessorChannelMessage>,
 ) {
-  for (coin, value) in coin_hashmap.into_iter() {
+  for (coin, value) in coin_hashmap.iter() {
     if value == &true {
       let coin_string = &coin.to_string().clone();
       let mut group_id = name.to_lowercase();
@@ -676,7 +656,8 @@ fn create_processor_consumers(
         for msg_result in &consumer {
           let msg = msg_result.unwrap();
           let key: &str = msg.key_view().unwrap().unwrap();
-          let msg_type = parse_message_type(&key);
+          let msg_type = parse_message_type(key);
+          #[allow(clippy::single_match)]
           match msg_type {
             SignatureMessageType::ProcessorPubkeyToCoordinator => {
               let value = msg.payload().unwrap();

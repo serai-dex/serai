@@ -1,5 +1,5 @@
 use log::info;
-use std::{env, str, fmt};
+use std::{str, fmt};
 
 use subxt::{
   ext::sp_runtime::{generic::Header, traits::BlakeTwo256},
@@ -9,8 +9,7 @@ use subxt::{
 
 use rdkafka::{
   producer::{BaseRecord, ThreadedProducer},
-  consumer::{BaseConsumer, Consumer},
-  ClientConfig, Message,
+  ClientConfig,
 };
 
 use crate::{core::ObserverConfig, core::KafkaConfig};
@@ -27,30 +26,27 @@ enum ObserverMessage {
 }
 
 impl fmt::Display for ObserverMessage {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match &*self {
+  fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    match self {
       ObserverMessage::BlockUpdate {
         block_hash,
         block_number,
         parent_hash,
         state_root,
         extrinsics_root,
-      } => write!(
-        f,
-        "BlockUpdate {{
-           block_hash: {},
-           block_number: {},
-           parent_hash: {},
-           state_root: {},
-           extrinsics_root: {} }}",
-        block_hash, block_number, parent_hash, state_root, extrinsics_root
-      ),
+      } => fmt
+        .debug_struct("ObserverMessage::BlockUpdate")
+        .field("block_hash", block_hash)
+        .field("block_number", block_number)
+        .field("parent_hash", parent_hash)
+        .field("state_root", state_root)
+        .field("extrinsics_root", extrinsics_root)
+        .finish(),
     }
   }
 }
 
 pub struct ObserverProcess {
-  observer_config: ObserverConfig,
   kafka_config: KafkaConfig,
   observer_url: String,
   name: String,
@@ -61,14 +57,9 @@ impl ObserverProcess {
     let mut hostname = "".to_string();
     hostname.push_str(&observer_config.host_prefix);
     hostname.push_str(&name);
-    hostname.push_str(":");
+    hostname.push(':');
     hostname.push_str(&observer_config.port);
-    Self {
-      observer_config: observer_config,
-      kafka_config: kafka_config,
-      observer_url: hostname,
-      name: name,
-    }
+    Self { kafka_config, observer_url: hostname, name }
   }
 
   // write a second version of the run function that deposits blockdata to kafka
@@ -90,7 +81,7 @@ impl ObserverProcess {
       info!("Block: {:?}", block);
       let mut topic = "".to_string();
       topic.push_str(&self.name);
-      topic.push_str("_");
+      topic.push('_');
       topic.push_str("node");
 
       // extract block data to kafka

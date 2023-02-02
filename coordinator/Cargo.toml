@@ -1,65 +1,36 @@
 [package]
-name = "serai-coordinator"
-version = "0.0.1"
+name = "coordinator"
+version = "0.1.0"
 description = "Coordinates all non-consensus activities in the Serai network"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/coordinator"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator"
 keywords = []
 edition = "2021"
 publish = false
 
 [[bin]]
-name = "serai-coordinator"
+name = "coordinator"
 
 [dependencies]
-anyhow = "1.0.65"
-async-trait = "0.1.57"
-thiserror = "1"
-
+chrono = "0.4"
 
 hex = "0.4"
-serde = { version = "1.0.104", features = ["derive"] }
-serde_json = "1.0"
-futures = "0.3.24"
-chrono = "0.4.0"
-clap = "2.18.0"
-log = "0.4.8"
-futures-channel = "0.3.0"
-futures-executor = { version = "0.3.0", optional = true }
-futures-util = { version = "0.3.0", default-features = false }
-tokio = { version = "1.21.2", features = ["full"] }
-calloop = "0.10.1"
-libp2p = "0.45.0"
-timer = "0.2.0"
-rdkafka = "0.28.0"
-libc = "0.2.134"
-config = "0.13.1"
-warp = "0.2"
-lazy_static = "1.4"
-
-async-std = { version = "1.9.0", features = ["attributes"] }
-backoff = "0.1.5"
-
-env_logger = "0.9.0"
-rand = "0.3.15"
-regex = "1.1.6"
-smol = "1.2.4"
-subxt = { git = "https://github.com/paritytech/subxt.git"}
-
-message-box = { path = "../common/message-box" }
-dalek-ff-group = { path = "../crypto/dalek-ff-group" }
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+serde_json = "1"
 
 group = "0.12"
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
-zalloc = { path = "../common/zalloc" }
+message-box = { path = "../common/message-box" }
 
-tokio-test = "*"
-env_perm = "0.1.3"
-actix-rt = "*"
-codec = { package = "parity-scale-codec", version = "3.2", features = ['derive'] }
+subxt = { git = "https://github.com/paritytech/subxt.git", rev = "d41f6574174d0a7d35ffcc6c3ff4d3740f5251ec" }
+dns-lookup = "1"
+libp2p = "0.45"
+rdkafka = "0.28"
 
-bs58 = "0.4.0"
-bincode = "1.3.3"
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
 
-dns-lookup = "1.0.8"
-[workspace]
+clap = "2"
+config = "0.13"
+log = "0.4"
+env_logger = "0.9"

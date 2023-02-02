@@ -1,34 +1,26 @@
-use std::collections::HashMap;
 use std::{env, str};
-use async_std::future;
-use futures::StreamExt;
 use rdkafka::{
-  consumer::{StreamConsumer, Consumer, ConsumerContext, Rebalance},
-  producer::{BaseRecord, ProducerContext, ThreadedProducer},
-  ClientConfig, ClientContext, Message, Offset,
+  consumer::{ConsumerContext, Rebalance},
+  producer::ProducerContext,
+  ClientContext, Message, Offset,
 };
-use message_box::MessageBox;
-
-// Message Box Names
-const A: &'static str = "A";
-const B: &'static str = "B";
 
 fn instantiate_keys() {
   // A_PRIV and B_PRIV are dynamic testing keys for kafka
-  const A_PRIV: &'static str = "543600cc54df140d0186f604b3a606cb3d2103327106703e80c183a481cf2a09";
+  const A_PRIV: &str = "543600cc54df140d0186f604b3a606cb3d2103327106703e80c183a481cf2a09";
   env::set_var("A_PRIV", A_PRIV);
 
-  const A_PUB: &'static str = "ecb27e79e414f51ed0b1b14502611247a99fc81a58ff78604cb7789aaceebf02";
+  const A_PUB: &str = "ecb27e79e414f51ed0b1b14502611247a99fc81a58ff78604cb7789aaceebf02";
   env::set_var("A_PUB", A_PUB);
 
-  const B_PRIV: &'static str = "db97aa4549842b113bf502ec47905a31c0a97837dcaa8e59ed0f12ee6b33a60c";
+  const B_PRIV: &str = "db97aa4549842b113bf502ec47905a31c0a97837dcaa8e59ed0f12ee6b33a60c";
   env::set_var("B_PRIV", B_PRIV);
 
-  const B_PUB: &'static str = "bc5e598f9337bb98b0e58b4b62fd99f2ccefbc5d4befbfe1e16dcbebab44115c";
+  const B_PUB: &str = "bc5e598f9337bb98b0e58b4b62fd99f2ccefbc5d4befbfe1e16dcbebab44115c";
   env::set_var("B_PUB", B_PUB);
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 pub async fn produce_consume_message() {
   instantiate_keys();
   // Parses ENV variables to proper priv/pub keys
@@ -72,7 +64,7 @@ pub async fn produce_consume_message() {
 
   // Sends message to Kafka
   producer
-    .send(BaseRecord::to("test_topic").key(&format!("msg_key-{}", 1)).payload(&enc))
+    .send(BaseRecord::to("test_topic").key(&format!("msg_key-1")).payload(&enc))
     .expect("failed to send message");
 
   let _consumer_future = consumer
@@ -110,7 +102,6 @@ pub async fn produce_consume_message() {
         }
         Err(e) => panic!("Error receiving message: {:?}", e),
       };
-      future::ready(())
     })
     .await;
 }
@@ -120,9 +111,9 @@ struct ConsumerCallbackLogger;
 impl ClientContext for ConsumerCallbackLogger {}
 
 impl ConsumerContext for ConsumerCallbackLogger {
-  fn pre_rebalance<'a>(&self, _rebalance: &rdkafka::consumer::Rebalance<'a>) {}
+  fn pre_rebalance(&self, _rebalance: &rdkafka::consumer::Rebalance) {}
 
-  fn post_rebalance<'a>(&self, rebalance: &rdkafka::consumer::Rebalance<'a>) {
+  fn post_rebalance(&self, rebalance: &rdkafka::consumer::Rebalance) {
     println!("post_rebalance callback");
 
     match rebalance {
@@ -131,11 +122,11 @@ impl ConsumerContext for ConsumerCallbackLogger {
           println!("rebalanced partition {}", e.partition())
         }
       }
-      Rebalance::Revoke(tpl) => {
+      Rebalance::Revoke(_) => {
         println!("ALL partitions have been REVOKED")
       }
       Rebalance::Error(err_info) => {
-        println!("Post Rebalance error {}", err_info)
+        println!("Post Rebalance error {err_info}")
       }
     }
   }
@@ -158,7 +149,7 @@ impl ConsumerContext for ConsumerCallbackLogger {
         }
       }
       Err(err) => {
-        println!("error committing offset - {}", err)
+        println!("error committing offset - {err}")
       }
     }
   }
@@ -177,14 +168,11 @@ impl ProducerContext for ProduceCallbackLogger {
     _delivery_opaque: Self::DeliveryOpaque,
   ) {
     let dr = delivery_result.as_ref();
-    let msg = dr.unwrap();
-
     match dr {
       Ok(msg) => {
         let key: &str = msg.key_view().unwrap().unwrap();
         println!(
-          "Produced message with key {} in offset {} of partition {}",
-          key,
+          "Produced message with key {key} in offset {} of partition {}",
           msg.offset(),
           msg.partition()
         );
@@ -192,7 +180,7 @@ impl ProducerContext for ProduceCallbackLogger {
       Err(producer_err) => {
         let key: &str = producer_err.1.key_view().unwrap().unwrap();
 
-        println!("failed to produce message with key {} - {}", key, producer_err.0,)
+        println!("failed to produce message with key {key} - {}", producer_err.0,)
       }
     }
   }

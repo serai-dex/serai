@@ -22,6 +22,7 @@ members = [
   "coins/monero",
 
   "processor",
+  "coordinator",
 
   "substrate/serai/primitives",
   "substrate/serai/client",
