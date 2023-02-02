@@ -258,9 +258,8 @@ fn initialize_consumer(
             .to_string();
           let pubkey = message_box::PublicKey::from_trusted_str(&pubkey_string);
 
-          let coin_priv = message_box::PrivateKey::from_string(
-            env::var(&priv_env_key_ref).unwrap().to_string(),
-          );
+          let coin_priv =
+            message_box::PrivateKey::from_string(env::var(&priv_env_key_ref).unwrap().to_string());
 
           let processor_id = retrieve_message_box_id(&coin_ref.to_uppercase());
 

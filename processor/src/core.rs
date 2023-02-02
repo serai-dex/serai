@@ -185,10 +185,8 @@ pub struct ProcessorConfig {
 pub fn load_config(run_mode: RunMode, path: &str) -> Result<Config, ConfigError> {
   println!("Loading config for mode: {run_mode}");
 
-  let config = Config::builder()
-    .add_source(File::with_name(&format!("{path}/{run_mode}")))
-    .build()
-    .unwrap();
+  let config =
+    Config::builder().add_source(File::with_name(&format!("{path}/{run_mode}"))).build().unwrap();
 
   Ok(config)
 }
