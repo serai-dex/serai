@@ -19,7 +19,6 @@ use sc_network::NetworkService;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
 use sc_client_api::BlockBackend;
-use sc_client_api::BlockchainEvents;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
@@ -132,10 +131,6 @@ pub fn new_partial(
       telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
       executor,
     )?;
-
-  let finality_notification_stream = client.finality_notification_stream();
-
-  // listen to finality_notification_stream and output events from all pallets
   let client = Arc::new(client);
 
   let telemetry = telemetry.map(|(worker, telemetry)| {
@@ -224,8 +219,12 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     let pool = transaction_pool.clone();
 
     Box::new(move |deny_unsafe, _| {
-      let deps = crate::rpc::FullDeps { client: client.clone(), pool: pool.clone(), deny_unsafe };
-      crate::rpc::create_full(deps).map_err(Into::into)
+      crate::rpc::create_full(crate::rpc::FullDeps {
+        client: client.clone(),
+        pool: pool.clone(),
+        deny_unsafe,
+      })
+      .map_err(Into::into)
     })
   };
 
@@ -236,13 +235,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   };
 
   let registry = config.prometheus_registry().cloned();
-  let _pool = transaction_pool.clone();
-  //let kafkaModule = crate::kafka::create_full(crate::kafka::KafkaDeps {
-  //  client: client.clone(),
-  //  pool: pool.clone(),
-  //});
-
-  let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+  sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     network: network.clone(),
     client: client.clone(),
     keystore: keystore_container.sync_keystore(),

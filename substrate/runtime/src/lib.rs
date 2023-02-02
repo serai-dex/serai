@@ -169,7 +169,7 @@ impl system::Config for Runtime {
   type BlockNumber = BlockNumber;
   type Hash = Hash;
   type Hashing = BlakeTwo256;
-  type Header = generic::Header<BlockNumber, BlakeTwo256>;
+  type Header = Header;
   type RuntimeOrigin = RuntimeOrigin;
   type RuntimeEvent = RuntimeEvent;
   type BlockHashCount = BlockHashCount;
