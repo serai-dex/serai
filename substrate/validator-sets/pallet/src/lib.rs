@@ -101,7 +101,7 @@ pub mod pallet {
       }
 
       ValidatorSets::<T>::set(
-        ValidatorSetInstance(Session(0), ValidatorSetIndex(0)),
+        ValidatorSetInstance { session: Session(0), index: ValidatorSetIndex(0) },
         Some(ValidatorSet {
           bond: self.bond,
           coins: BoundedVec::try_from(self.coins.clone()).unwrap(),
@@ -160,7 +160,7 @@ pub mod pallet {
       let session: Session = Session(0);
 
       // Confirm a key hasn't been set for this set instance
-      let instance = ValidatorSetInstance(session, index);
+      let instance = ValidatorSetInstance { session, index };
       if Keys::<T>::get((instance, coin)).is_some() {
         Err(Error::<T>::AlreadyGeneratedKeys)?;
       }
