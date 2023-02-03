@@ -17,7 +17,7 @@ pub use self::bitcoin::Bitcoin;
 pub mod monero;
 pub use monero::Monero;
 
-use crate::Transaction;
+use crate::Plan;
 
 #[derive(Clone, Copy, Error, Debug)]
 pub enum CoinError {
@@ -104,6 +104,11 @@ pub trait Output: Send + Sync + Sized + Clone + Debug {
   fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
 }
 
+pub trait Transaction: Send + Sync + Sized + Clone + Debug {
+  type Id: 'static + Id;
+  fn id(&self) -> Self::Id;
+}
+
 #[async_trait]
 pub trait Coin: 'static + Send + Sync + Clone + Debug {
   /// The elliptic curve used for this coin.
@@ -114,7 +119,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   type Fee: Copy;
 
   /// The type representing the transaction for this coin.
-  type Transaction: Send;
+  type Transaction: Transaction;
   /// The type representing the block for this coin.
   type Block: Block;
 
@@ -122,7 +127,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   // This is almost certainly distinct from the coin's native output type.
   type Output: Output;
   /// The type containing all information on a planned transaction, waiting to be signed.
-  type SignableTransaction: Send;
+  type SignableTransaction: Send + Sync + Clone + Debug;
   /// The FROST machine to sign a transaction.
   type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
 
@@ -169,7 +174,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
     keys: ThresholdKeys<Self::Curve>,
     transcript: RecommendedTranscript,
     block_number: usize,
-    tx: Transaction<Self>,
+    tx: Plan<Self>,
     change: <Self::Curve as Ciphersuite>::G,
     fee: Self::Fee,
   ) -> Result<Self::SignableTransaction, CoinError>;

@@ -29,7 +29,7 @@ pub mod key_gen {
     // Received shares for the specified key generation protocol.
     KeyGenShares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
     // Confirm a key.
-    ConfirmKey { id: KeyGenId }
+    ConfirmKey { id: KeyGenId },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -63,7 +63,7 @@ pub mod sign {
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created preprocess for the specified signing protocol.
-    SignPreprocess { id: SignId, preprocess: Vec<u8> },
+    SignPreprocess { id: SignId, signers: Vec<u16>, preprocess: Vec<u8> },
     // Signed share for the specified signing protocol.
     SignShare { id: SignId, share: Vec<u8> },
   }
@@ -82,4 +82,16 @@ pub mod substrate {
   pub enum ProcessorMessage {
     Update { block: [u8; 32], instructions: Vec<WithAmount<InInstruction>> },
   }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum CoordinatorMessage {
+  KeyGen(key_gen::CoordinatorMessage),
+  Sign(sign::CoordinatorMessage),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum ProcessorMessage {
+  KeyGen(key_gen::ProcessorMessage),
+  Sign(sign::ProcessorMessage),
 }

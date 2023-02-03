@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 #[rustfmt::skip]
 use bitcoin::{
-  hashes::Hash, schnorr::TweakedPublicKey, OutPoint, Transaction as BTransaction, Block, Network, Address
+  hashes::Hash, schnorr::TweakedPublicKey, OutPoint, Transaction, Block, Network, Address
 };
 
 #[cfg(test)]
@@ -29,8 +29,11 @@ use bitcoin_serai::{
 };
 
 use crate::{
-  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin},
-  Transaction,
+  coin::{
+    CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
+    Transaction as TransactionTrait, Coin,
+  },
+  Plan,
 };
 
 impl BlockTrait for Block {
@@ -89,7 +92,14 @@ impl OutputTrait for Output {
   }
 }
 
-#[derive(Debug)]
+impl TransactionTrait for Transaction {
+  type Id = [u8; 32];
+  fn id(&self) -> Self::Id {
+    self.txid().as_hash().into_inner()
+  }
+}
+
+#[derive(Clone, Debug)]
 pub struct SignableTransaction {
   keys: ThresholdKeys<Secp256k1>,
   transcript: RecommendedTranscript,
@@ -144,7 +154,7 @@ impl Coin for Bitcoin {
   type Curve = Secp256k1;
 
   type Fee = Fee;
-  type Transaction = BTransaction;
+  type Transaction = Transaction;
   type Block = Block;
 
   type Output = Output;
@@ -229,7 +239,7 @@ impl Coin for Bitcoin {
     keys: ThresholdKeys<Secp256k1>,
     transcript: RecommendedTranscript,
     _: usize,
-    mut tx: Transaction<Self>,
+    mut tx: Plan<Self>,
     change_key: ProjectivePoint,
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
@@ -302,7 +312,7 @@ impl Coin for Bitcoin {
 
     // TODO: Consider grabbing bdk as a dev dependency
     let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
-    let mut tx = BTransaction {
+    let mut tx = Transaction {
       version: 2,
       lock_time: PackedLockTime::ZERO,
       input: vec![TxIn {

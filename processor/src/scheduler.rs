@@ -4,7 +4,7 @@ use frost::curve::Ciphersuite;
 
 use crate::{
   coin::{Output, Coin},
-  Payment, Transaction,
+  Payment, Plan,
 };
 
 /// Stateless, deterministic output/payment manager.
@@ -34,7 +34,7 @@ impl<C: Coin> Scheduler<C> {
     Scheduler { key, plans: HashMap::new(), utxos: vec![], payments: VecDeque::new() }
   }
 
-  fn execute(&mut self, inputs: Vec<C::Output>, mut payments: Vec<Payment<C>>) -> Transaction<C> {
+  fn execute(&mut self, inputs: Vec<C::Output>, mut payments: Vec<Payment<C>>) -> Plan<C> {
     let mut change = false;
     let mut max = C::MAX_OUTPUTS;
 
@@ -76,12 +76,12 @@ impl<C: Coin> Scheduler<C> {
       payments.insert(0, Payment { address: C::branch_address(self.key), amount });
     }
 
-    Transaction { inputs, payments, change }
+    Plan { inputs, payments, change }
   }
 
   // When Substrate emits `Updates` for a coin, all outputs should be added up to the
   // acknowledged block.
-  pub fn add_outputs(&mut self, mut utxos: Vec<C::Output>) -> Vec<Transaction<C>> {
+  pub fn add_outputs(&mut self, mut utxos: Vec<C::Output>) -> Vec<Plan<C>> {
     let mut txs = vec![];
 
     for utxo in utxos.drain(..) {
@@ -114,7 +114,7 @@ impl<C: Coin> Scheduler<C> {
   }
 
   // Schedule a series of payments. This should be called after `add_outputs`.
-  pub fn schedule(&mut self, mut payments: Vec<Payment<C>>) -> Vec<Transaction<C>> {
+  pub fn schedule(&mut self, mut payments: Vec<Payment<C>>) -> Vec<Plan<C>> {
     debug_assert!(!payments.is_empty(), "tried to schedule zero payments");
 
     // Add all new payments to the list of pending payments
@@ -149,7 +149,7 @@ impl<C: Coin> Scheduler<C> {
 
     let mut aggregating = vec![];
     for chunk in utxo_chunks.drain(..) {
-      aggregating.push(Transaction { inputs: chunk, payments: vec![], change: true })
+      aggregating.push(Plan { inputs: chunk, payments: vec![], change: true })
     }
 
     // We want to use all possible UTXOs for all possible payments

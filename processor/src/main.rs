@@ -5,13 +5,15 @@ use thiserror::Error;
 
 use frost::{curve::Ciphersuite, FrostError};
 
+use messages::{ProcessorMessage, CoordinatorMessage};
+
 mod coin;
 use coin::{CoinError, Coin};
 
 mod key_gen;
 use key_gen::KeyGen;
 mod signer;
-use signer::Signer;
+use signer::{Signer, SignerOrder, SignerEvent};
 
 mod scanner;
 use scanner::Scanner;
@@ -35,7 +37,7 @@ pub struct Payment<C: Coin> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Transaction<C: Coin> {
+pub struct Plan<C: Coin> {
   pub inputs: Vec<C::Output>,
   pub payments: Vec<Payment<C>>,
   pub change: bool,
@@ -99,9 +101,40 @@ async fn main() {
   let coin = Monero::new("".to_string()).await;
   let db = MemDb::new();
 
-  let _key_gen = KeyGen::<<Monero as Coin>::Curve, _>::new(db.clone());
-  let _signer = Signer::new(coin.clone(), db.clone());
+  let mut key_gen = KeyGen::<<Monero as Coin>::Curve, _>::new(db.clone());
+  let mut signer = Signer::new(coin.clone(), db.clone());
 
   let _scanner = Scanner::new(coin, db);
   let _scheduler = Scheduler::<Monero>::new(<Monero as Coin>::Curve::generator());
+
+  let (to_coordinator, _fake_coordinator_recv) =
+    tokio::sync::mpsc::unbounded_channel::<ProcessorMessage>();
+  let (_fake_coordinator_send, mut from_coordinator) =
+    tokio::sync::mpsc::unbounded_channel::<CoordinatorMessage>();
+
+  loop {
+    tokio::select! {
+      msg = from_coordinator.recv() => {
+        match msg.expect("Coordinator channel was dropped. Shutting down?") {
+          CoordinatorMessage::KeyGen(msg) => key_gen.coordinator.send(msg).unwrap(),
+          CoordinatorMessage::Sign(msg) => {
+            signer.orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
+          }
+        }
+      },
+
+      msg = key_gen.processor.recv() => {
+        to_coordinator.send(ProcessorMessage::KeyGen(msg.unwrap())).unwrap();
+      },
+
+      msg = signer.events.recv() => {
+        match msg.unwrap() {
+          SignerEvent::SignedTransaction { id: _, tx: _ } => todo!(),
+          SignerEvent::ProcessorMessage(msg) => {
+            to_coordinator.send(ProcessorMessage::Sign(msg)).unwrap();
+          },
+        }
+      },
+    }
+  }
 }

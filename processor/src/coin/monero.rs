@@ -10,7 +10,7 @@ use transcript::RecommendedTranscript;
 use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_serai::{
-  transaction::Transaction as MTransaction,
+  transaction::Transaction,
   block::Block as MBlock,
   rpc::Rpc,
   wallet::{
@@ -21,8 +21,11 @@ use monero_serai::{
 };
 
 use crate::{
-  coin::{CoinError, Block as BlockTrait, OutputType, Output as OutputTrait, Coin},
-  Transaction, additional_key,
+  coin::{
+    CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
+    Transaction as TransactionTrait, Coin,
+  },
+  Plan, additional_key,
 };
 
 #[derive(Clone, Debug)]
@@ -78,7 +81,14 @@ impl OutputTrait for Output {
   }
 }
 
-#[derive(Debug)]
+impl TransactionTrait for Transaction {
+  type Id = [u8; 32];
+  fn id(&self) -> Self::Id {
+    self.hash()
+  }
+}
+
+#[derive(Clone, Debug)]
 pub struct SignableTransaction {
   keys: ThresholdKeys<Ed25519>,
   transcript: RecommendedTranscript,
@@ -141,7 +151,7 @@ impl Coin for Monero {
   type Curve = Ed25519;
 
   type Fee = Fee;
-  type Transaction = MTransaction;
+  type Transaction = Transaction;
   type Block = Block;
 
   type Output = Output;
@@ -221,7 +231,7 @@ impl Coin for Monero {
     keys: ThresholdKeys<Ed25519>,
     transcript: RecommendedTranscript,
     block_number: usize,
-    mut tx: Transaction<Self>,
+    mut tx: Plan<Self>,
     change: dfg::EdwardsPoint,
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {

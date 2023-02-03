@@ -13,7 +13,7 @@ use frost::{
 
 use crate::{
   coin::{CoinError, Output, Coin},
-  Payment, Transaction, SignError, Network,
+  Payment, Plan, SignError, Network,
 };
 
 pub struct WalletKeys<C: Curve> {
@@ -325,7 +325,7 @@ impl<D: CoinDb, C: Coin> Wallet<D, C> {
             keys.clone(),
             transcript,
             acknowledged_block,
-            Transaction {
+            Plan {
               inputs,
               payments: outputs
                 .drain(..)
