@@ -1,3 +1,4 @@
+use core::time::Duration;
 use std::collections::HashMap;
 
 use frost::{curve::Ciphersuite, ThresholdParams, tests::clone_without};
@@ -81,4 +82,14 @@ pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
       panic!("didn't get key back");
     }
   }
+
+  for i in 1 ..= 3 {
+    key_gens
+      .get_mut(&i)
+      .unwrap()
+      .coordinator
+      .send(CoordinatorMessage::ConfirmKey { id: ID })
+      .unwrap();
+  }
+  tokio::time::sleep(Duration::from_secs(1)).await;
 }

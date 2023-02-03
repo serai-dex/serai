@@ -34,6 +34,8 @@ pub mod key_gen {
     KeyGenCommitments { id: KeyGenId, commitments: HashMap<u16, Vec<u8>> },
     // Received shares for the specified key generation protocol.
     KeyGenShares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
+    // Confirm a key.
+    ConfirmKey { id: KeyGenId }
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
