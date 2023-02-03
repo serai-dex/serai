@@ -114,7 +114,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   type Fee: Copy;
 
   /// The type representing the transaction for this coin.
-  type Transaction;
+  type Transaction: Send;
   /// The type representing the block for this coin.
   type Block: Block;
 
@@ -122,7 +122,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   // This is almost certainly distinct from the coin's native output type.
   type Output: Output;
   /// The type containing all information on a planned transaction, waiting to be signed.
-  type SignableTransaction;
+  type SignableTransaction: Send;
   /// The FROST machine to sign a transaction.
   type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
 

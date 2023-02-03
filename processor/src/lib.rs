@@ -9,6 +9,7 @@ mod coin;
 use coin::{CoinError, Coin};
 
 mod key_gen;
+mod signer;
 
 mod scanner;
 mod scheduler;

@@ -11,12 +11,6 @@ use in_instructions_primitives::InInstruction;
 use tokens_primitives::OutInstruction;
 use validator_sets_primitives::ValidatorSetInstance;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Serialize, Deserialize)]
-pub struct SignId {
-  pub id: [u8; 32],
-  pub attempt: u32,
-}
-
 pub mod key_gen {
   use super::*;
 
@@ -49,37 +43,43 @@ pub mod key_gen {
   }
 }
 
-pub mod processor {
-  use crate::*;
-
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
-  pub enum SignMessage {
-    // Created commitments for the specified signing protocol.
-    SignCommitments { id: SignId, commitments: Vec<u8> },
-    // Signed share for the specified signing protocol.
-    SignShares { id: SignId, shares: Vec<u8> },
-  }
-
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
-  pub enum SubstrateMessage {
-    Update { block: [u8; 32], instructions: Vec<WithAmount<InInstruction>> },
-  }
-}
-
-pub mod coordinator {
+pub mod sign {
   use super::*;
 
+  #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Serialize, Deserialize)]
+  pub struct SignId {
+    pub id: [u8; 32],
+    pub attempt: u32,
+  }
+
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-  pub enum SignMessage {
-    // Received commitments for the specified signing protocol.
-    SignCommitments { id: SignId, commitments: HashMap<u16, Vec<u8>> },
+  pub enum CoordinatorMessage {
+    // Received preprocesses for the specified signing protocol.
+    SignPreprocesses { id: SignId, preprocesses: HashMap<u16, Vec<u8>> },
     // Received shares for the specified signing protocol.
     SignShares { id: SignId, shares: HashMap<u16, Vec<u8>> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
-  pub enum SubstrateMessage {
+  pub enum ProcessorMessage {
+    // Created preprocess for the specified signing protocol.
+    SignPreprocess { id: SignId, preprocess: Vec<u8> },
+    // Signed share for the specified signing protocol.
+    SignShare { id: SignId, share: Vec<u8> },
+  }
+}
+
+pub mod substrate {
+  use super::*;
+
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  pub enum CoordinatorMessage {
     BlockAcknowledged([u8; 32]),
     Burns(Vec<WithAmount<OutInstruction>>),
+  }
+
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  pub enum ProcessorMessage {
+    Update { block: [u8; 32], instructions: Vec<WithAmount<InInstruction>> },
   }
 }
