@@ -1,4 +1,4 @@
-use core::time::Duration;
+use core::{marker::PhantomData, time::Duration};
 use std::collections::HashMap;
 
 use tokio::{sync::mpsc, time::timeout};
@@ -37,40 +37,32 @@ pub enum ScannerEvent<C: Coin> {
 pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
 pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
-fn scanner_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
-  [b"SCANNER", dst, key].concat().to_vec()
-}
+#[derive(Debug)]
+struct ScannerDb<C: Coin, D: Db>(D, PhantomData<C>);
+impl<C: Coin, D: Db> ScannerDb<C, D> {
+  fn scanner_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
+    [b"SCANNER", dst, key].concat().to_vec()
+  }
 
-fn scanned_block_key<G: GroupEncoding>(key: G) -> Vec<u8> {
-  scanner_key(b"scanned_block", key.to_bytes().as_ref())
-}
-
-fn block_key(number: usize) -> Vec<u8> {
-  scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes().as_ref())
-}
-
-pub trait ScannerDb<C: Coin>: Send + Sync {
-  fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize);
-  fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize;
-
-  fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id);
-  fn block(&self, number: usize) -> Option<<C::Block as Block>::Id>;
-}
-
-impl<D: Db, C: Coin> ScannerDb<C> for D {
+  fn scanned_block_key(key: <C::Curve as Ciphersuite>::G) -> Vec<u8> {
+    Self::scanner_key(b"scanned_block", key.to_bytes().as_ref())
+  }
   fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize) {
-    self.put(&scanned_block_key(key), &u64::try_from(block).unwrap().to_le_bytes())
+    self.0.put(&Self::scanned_block_key(key), &u64::try_from(block).unwrap().to_le_bytes())
   }
   fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
-    let bytes = self.get(&scanned_block_key(key)).unwrap_or(vec![0; 8]);
+    let bytes = self.0.get(&Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
     u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
   }
 
+  fn block_key(number: usize) -> Vec<u8> {
+    Self::scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes().as_ref())
+  }
   fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id) {
-    self.put(&block_key(number), id.as_ref())
+    self.0.put(&Self::block_key(number), id.as_ref())
   }
   fn block(&self, number: usize) -> Option<<C::Block as Block>::Id> {
-    self.get(&block_key(number)).map(|id| {
+    self.0.get(&Self::block_key(number)).map(|id| {
       let mut res = <C::Block as Block>::Id::default();
       res.as_mut().copy_from_slice(&id);
       res
@@ -79,9 +71,9 @@ impl<D: Db, C: Coin> ScannerDb<C> for D {
 }
 
 #[derive(Debug)]
-pub struct Scanner<C: Coin, D: ScannerDb<C>> {
+pub struct Scanner<C: Coin, D: Db> {
   coin: C,
-  db: D,
+  db: ScannerDb<C, D>,
   keys: Vec<<C::Curve as Ciphersuite>::G>,
 
   orders: mpsc::UnboundedReceiver<ScannerOrder<C::Curve>>,
@@ -94,13 +86,20 @@ pub struct ScannerHandle<C: Coin> {
   pub events: ScannerEventChannel<C>,
 }
 
-impl<C: Coin + 'static, D: ScannerDb<C> + 'static> Scanner<C, D> {
+impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(coin: C, db: D) -> ScannerHandle<C> {
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
     tokio::spawn(
-      Scanner { coin, db, keys: vec![], orders: orders_recv, events: events_send }.run(),
+      Scanner {
+        coin,
+        db: ScannerDb(db, PhantomData),
+        keys: vec![],
+        orders: orders_recv,
+        events: events_send,
+      }
+      .run(),
     );
     ScannerHandle { orders: orders_send, events: events_recv }
   }

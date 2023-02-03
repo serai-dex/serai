@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use std::collections::HashMap;
 
 use rand_core::OsRng;
@@ -20,54 +21,36 @@ const CHANNEL_EXPECT: &str = "Key Gen handler was dropped. Shutting down?";
 pub type KeyGenCoordinatorChannel = mpsc::UnboundedSender<CoordinatorMessage>;
 pub type KeyGenProcessorChannel = mpsc::UnboundedReceiver<ProcessorMessage>;
 
-fn key_gen_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
-  [b"KEY_GEN", dst, key].concat().to_vec()
-}
+#[derive(Debug)]
+struct KeyGenDb<C: Ciphersuite, D: Db>(D, PhantomData<C>);
+impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
+  fn key_gen_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
+    [b"KEY_GEN", dst, key].concat().to_vec()
+  }
 
-fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {
-  key_gen_key(b"params", &bincode::serialize(set).unwrap())
-}
-
-fn commitments_key(id: &KeyGenId) -> Vec<u8> {
-  key_gen_key(b"commitments", &bincode::serialize(id).unwrap())
-}
-
-fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
-  key_gen_key(b"keys", &bincode::serialize(set).unwrap())
-}
-
-pub trait KeyGenDb<C: Ciphersuite>: Send + Sync {
-  fn save_params(&mut self, set: &ValidatorSetInstance, params: &ThresholdParams);
-  fn params(&self, set: &ValidatorSetInstance) -> ThresholdParams;
-
-  fn save_commitments(&mut self, id: &KeyGenId, commitments: &HashMap<u16, Vec<u8>>);
-  fn commitments(
-    &self,
-    id: &KeyGenId,
-    params: ThresholdParams,
-  ) -> HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>>;
-
-  fn save_keys(&mut self, set: &ValidatorSetInstance, keys: &ThresholdCore<C>);
-}
-
-impl<D: Db, C: Ciphersuite> KeyGenDb<C> for D {
+  fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {
+    Self::key_gen_key(b"params", &bincode::serialize(set).unwrap())
+  }
   fn save_params(&mut self, set: &ValidatorSetInstance, params: &ThresholdParams) {
-    self.put(&params_key(set), &bincode::serialize(params).unwrap())
+    self.0.put(&Self::params_key(set), &bincode::serialize(params).unwrap())
   }
   fn params(&self, set: &ValidatorSetInstance) -> ThresholdParams {
     // Directly unwraps the .get()  as this will only be called after being set
-    bincode::deserialize(&self.get(&params_key(set)).unwrap()).unwrap()
+    bincode::deserialize(&self.0.get(&Self::params_key(set)).unwrap()).unwrap()
   }
 
+  fn commitments_key(id: &KeyGenId) -> Vec<u8> {
+    Self::key_gen_key(b"commitments", &bincode::serialize(id).unwrap())
+  }
   fn save_commitments(&mut self, id: &KeyGenId, commitments: &HashMap<u16, Vec<u8>>) {
-    self.put(&commitments_key(id), &bincode::serialize(commitments).unwrap())
+    self.0.put(&Self::commitments_key(id), &bincode::serialize(commitments).unwrap())
   }
   fn commitments(
     &self,
     id: &KeyGenId,
     params: ThresholdParams,
   ) -> HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>> {
-    bincode::deserialize::<HashMap<u16, Vec<u8>>>(&self.get(&commitments_key(id)).unwrap())
+    bincode::deserialize::<HashMap<u16, Vec<u8>>>(&self.0.get(&Self::commitments_key(id)).unwrap())
       .unwrap()
       .drain()
       .map(|(i, bytes)| {
@@ -80,14 +63,17 @@ impl<D: Db, C: Ciphersuite> KeyGenDb<C> for D {
       .collect()
   }
 
+  fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
+    Self::key_gen_key(b"keys", &bincode::serialize(set).unwrap())
+  }
   fn save_keys(&mut self, set: &ValidatorSetInstance, keys: &ThresholdCore<C>) {
-    self.put(&keys_key(set), &keys.serialize())
+    self.0.put(&Self::keys_key(set), &keys.serialize())
   }
 }
 
 #[derive(Debug)]
-pub struct KeyGen<C: Ciphersuite, D: KeyGenDb<C>> {
-  db: D,
+pub struct KeyGen<C: Ciphersuite, D: Db> {
+  db: KeyGenDb<C, D>,
 
   active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C>>,
   active_share: HashMap<ValidatorSetInstance, KeyMachine<C>>,
@@ -105,14 +91,14 @@ pub struct KeyGenHandle {
 // Coded so if the processor spontaneously reboot, one of two paths occur:
 // 1) It either didn't send its response, so the attempt will be aborted
 // 2) It did send its response, and has locally saved enough data to continue
-impl<C: Ciphersuite + 'static, D: KeyGenDb<C> + 'static> KeyGen<C, D> {
+impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(db: D) -> KeyGenHandle {
     let (coordinator_send, coordinator_recv) = mpsc::unbounded_channel();
     let (processor_send, processor_recv) = mpsc::unbounded_channel();
     tokio::spawn(
       KeyGen {
-        db,
+        db: KeyGenDb(db, PhantomData::<C>),
         active_commit: HashMap::new(),
         active_share: HashMap::new(),
         incoming: coordinator_recv,

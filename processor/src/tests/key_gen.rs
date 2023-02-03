@@ -12,7 +12,7 @@ const ID: KeyGenId = KeyGenId {
   attempt: 3,
 };
 
-pub async fn test_key_gen<C: 'static + Ciphersuite>() {
+pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
   let mut key_gens = HashMap::new();
   for i in 1 ..= 3 {
     key_gens.insert(i, KeyGen::<C, _>::new(MemDb::new()));
