@@ -39,6 +39,9 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     bincode::deserialize(&self.0.get(&Self::params_key(set)).unwrap()).unwrap()
   }
 
+  // Not scoped to the set since that'd have latter attempts overwrite former
+  // A former attempt may become the finalized attempt, even if it doesn't in a timely manner
+  // Overwriting its commitments would be accordingly poor
   fn commitments_key(id: &KeyGenId) -> Vec<u8> {
     Self::key_gen_key(b"commitments", &bincode::serialize(id).unwrap())
   }
@@ -75,7 +78,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   }
   fn confirm_keys(&mut self, id: &KeyGenId) {
     self.0.put(&Self::keys_key(&id.set), &self.0.get(&Self::generated_keys_key(id)).unwrap());
-    // TODO: Prune other key gen sessions' info
+    // TODO: Prune other key gen attempts' info
   }
 }
 
@@ -83,6 +86,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
 pub struct KeyGen<C: Ciphersuite, D: Db> {
   db: KeyGenDb<C, D>,
 
+  // TODO: Consider always rebuilding
   active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C>>,
   active_share: HashMap<ValidatorSetInstance, KeyMachine<C>>,
 
@@ -138,6 +142,9 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
           if self.active_commit.remove(&id.set).is_none() &&
             self.active_share.remove(&id.set).is_none()
           {
+            // If we haven't handled this set before, save the params
+            // This may overwrite previously written params if we rebooted, yet that isn't a
+            // concern
             self.db.save_params(&id.set, &params);
           }
 
@@ -176,7 +183,11 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
             Err(e) => todo!("malicious signer: {:?}", e),
           };
 
-          // Rebuild the machine. Necessary if the processor rebooted
+          // Get the machine, rebuilding it if we don't have it
+          // We won't if the processor rebooted
+          // This *may* be inconsistent if we receive a KeyGen for attempt x, then commitments for
+          // attempt y
+          // The coordinator is trusted to be proper in this regard
           let machine =
             self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machine(&id, params).0);
 
@@ -213,6 +224,7 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
             Err(e) => todo!("malicious signer: {:?}", e),
           };
 
+          // Same commentary on inconsistency as above exists
           let machine = self.active_share.remove(&id.set).unwrap_or_else(|| {
             key_gen_machine(&id, params)
               .0
