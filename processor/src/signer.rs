@@ -20,8 +20,6 @@ use crate::{
   coin::{Transaction, Coin},
 };
 
-const CHANNEL_EXPECT: &str = "Signer handler was dropped. Shutting down?";
-
 #[derive(Debug)]
 pub enum SignerOrder<C: Coin> {
   SignTransaction { id: [u8; 32], start: SystemTime, tx: C::SignableTransaction },
@@ -152,6 +150,20 @@ impl<C: Coin, D: Db> Signer<C, D> {
 
   // An async function, to be spawned on a task, to handle signing
   async fn run(mut self) {
+    const CHANNEL_MSG: &str = "Signer handler was dropped. Shutting down?";
+    let handle_recv = |channel: Option<_>| {
+      if channel.is_none() {
+        info!("{}", CHANNEL_MSG);
+      }
+      channel
+    };
+    let handle_send = |channel: Result<_, _>| {
+      if channel.is_err() {
+        info!("{}", CHANNEL_MSG);
+      }
+      channel
+    };
+
     // Handle any new messages
     loop {
       // Check if we need to start any new attempts for any current TXs
@@ -211,19 +223,24 @@ impl<C: Coin, D: Db> Signer<C, D> {
           self.preprocessing.insert(id.id, machine);
 
           // Broadcast our preprocess
-          self
-            .events
-            .send(SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess {
-              id,
-              preprocess: preprocess.serialize(),
-            }))
-            .expect(CHANNEL_EXPECT);
+          if handle_send(self.events.send(SignerEvent::ProcessorMessage(
+            ProcessorMessage::Preprocess { id, preprocess: preprocess.serialize() },
+          )))
+          .is_err()
+          {
+            return;
+          }
         }
       }
 
       match timeout(Duration::from_secs(1), self.orders.recv()).await {
         Err(_) => continue,
-        Ok(order) => match order.expect(CHANNEL_EXPECT) {
+        Ok(order) => match {
+          match handle_recv(order) {
+            None => return,
+            Some(order) => order,
+          }
+        } {
           // This needs to be re-issued on boot
           // TOOD: Remove this TODO once this flow is implemented elsewhere
           SignerOrder::SignTransaction { id, start, tx } => {
@@ -268,13 +285,13 @@ impl<C: Coin, D: Db> Signer<C, D> {
             self.signing.insert(id.id, machine);
 
             // Broadcast our share
-            self
-              .events
-              .send(SignerEvent::ProcessorMessage(ProcessorMessage::Share {
-                id,
-                share: share.serialize(),
-              }))
-              .expect(CHANNEL_EXPECT);
+            if handle_send(self.events.send(SignerEvent::ProcessorMessage(
+              ProcessorMessage::Share { id, share: share.serialize() },
+            )))
+            .is_err()
+            {
+              return;
+            }
           }
 
           SignerOrder::CoordinatorMessage(CoordinatorMessage::Shares { id, mut shares }) => {
@@ -317,10 +334,13 @@ impl<C: Coin, D: Db> Signer<C, D> {
               info!("published {:?}", tx.id());
             }
 
-            self
-              .events
-              .send(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() })
-              .expect(CHANNEL_EXPECT);
+            if handle_send(
+              self.events.send(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() }),
+            )
+            .is_err()
+            {
+              return;
+            }
           }
         },
       }

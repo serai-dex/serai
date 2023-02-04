@@ -1,17 +1,16 @@
 use core::{marker::PhantomData, time::Duration};
 use std::collections::HashMap;
 
-use tokio::{sync::mpsc, time::timeout};
-
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
+
+use log::{info, debug, warn};
+use tokio::{sync::mpsc, time::timeout};
 
 use crate::{
   Db,
   coin::{Block, Coin},
 };
-
-const CHANNEL_EXPECT: &str = "Scanner handler was dropped. Shutting down?";
 
 /// Orders for the scanner.
 #[derive(Clone, Debug)]
@@ -106,6 +105,20 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
 
   // An async function, to be spawned on a task, to discover and report outputs
   async fn run(mut self) {
+    const CHANNEL_MSG: &str = "Scanner handler was dropped. Shutting down?";
+    let handle_recv = |channel: Option<_>| {
+      if channel.is_none() {
+        info!("{}", CHANNEL_MSG);
+      }
+      channel
+    };
+    let handle_send = |channel: Result<_, _>| {
+      if channel.is_err() {
+        info!("{}", CHANNEL_MSG);
+      }
+      channel
+    };
+
     let mut ram_scanned = HashMap::new();
 
     loop {
@@ -116,7 +129,7 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
           // CONFIRMATIONS - 1 as whatever's in the latest block already has 1 confirm
           Ok(latest) => latest.saturating_sub(C::CONFIRMATIONS.saturating_sub(1)),
           Err(_) => {
-            log::warn!("Couldn't get {}'s latest block number", C::ID);
+            warn!("Couldn't get {}'s latest block number", C::ID);
             break;
           }
         };
@@ -144,12 +157,14 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
             let block = match self.coin.get_block(i).await {
               Ok(block) => block,
               Err(_) => {
-                log::warn!("Couldn't get {} block {i:?}", C::ID);
+                warn!("Couldn't get {} block {i:?}", C::ID);
                 break;
               }
             };
 
             let first = if let Some(id) = self.db.block(i) {
+              info!("Found new block: {:?}", id);
+
               // TODO: Also check this block builds off the previous block
               if id != block.id() {
                 panic!("{} reorg'd from {id:?} to {:?}", C::ID, block.id());
@@ -163,7 +178,7 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
             let outputs = match self.coin.get_outputs(&block, key).await {
               Ok(outputs) => outputs,
               Err(_) => {
-                log::warn!("Couldn't scan {} block {i:?}", C::ID);
+                warn!("Couldn't scan {} block {i:?}", C::ID);
                 break;
               }
             };
@@ -186,14 +201,18 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
             // This is intended for group acknowledgement of what block we're on, not only
             // providing a heartbeat, yet also letting coins like Monero schedule themselves
             if first {
-              self.events.send(ScannerEvent::Block(i, block.id())).expect(CHANNEL_EXPECT);
+              #[allow(clippy::collapsible_if)]
+              if handle_send(self.events.send(ScannerEvent::Block(i, block.id()))).is_err() {
+                return;
+              }
             }
 
             // Send all outputs
-            self
-              .events
-              .send(ScannerEvent::Outputs(key, block.id(), outputs))
-              .expect(CHANNEL_EXPECT);
+            if handle_send(self.events.send(ScannerEvent::Outputs(key, block.id(), outputs)))
+              .is_err()
+            {
+              return;
+            }
             // Write this number as scanned so we won't re-fire these outputs
             ram_scanned.insert(key_vec.clone(), i);
           }
@@ -202,11 +221,20 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
 
       // Handle any new orders
       if let Ok(order) = timeout(Duration::from_secs(1), self.orders.recv()).await {
-        match order.expect(CHANNEL_EXPECT) {
+        match {
+          match handle_recv(order) {
+            None => return,
+            Some(order) => order,
+          }
+        } {
           ScannerOrder::RotateKey { key, .. } => {
+            info!("Rotating to key {:?}", key);
             self.keys.push(key);
           }
-          ScannerOrder::AckBlock(key, i) => self.db.save_scanned_block(key, i),
+          ScannerOrder::AckBlock(key, i) => {
+            debug!("Block {} acknowledged", i);
+            self.db.save_scanned_block(key, i)
+          }
         }
       }
     }

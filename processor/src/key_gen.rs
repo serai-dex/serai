@@ -3,20 +3,19 @@ use std::collections::HashMap;
 
 use rand_core::OsRng;
 
-use tokio::sync::mpsc;
-
 use group::GroupEncoding;
 use frost::{
   curve::Ciphersuite,
   dkg::{ThresholdParams, ThresholdCore, encryption::*, frost::*},
 };
 
+use log::info;
+use tokio::sync::mpsc;
+
 use validator_sets_primitives::ValidatorSetInstance;
 use messages::key_gen::*;
 
 use crate::Db;
-
-const CHANNEL_EXPECT: &str = "Key Gen handler was dropped. Shutting down?";
 
 pub type KeyGenCoordinatorChannel = mpsc::UnboundedSender<CoordinatorMessage>;
 pub type KeyGenProcessorChannel = mpsc::UnboundedReceiver<ProcessorMessage>;
@@ -123,6 +122,20 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
 
   // An async function, to be spawned on a task, to handle key generations
   async fn run(mut self) {
+    const CHANNEL_MSG: &str = "Key Gen handler was dropped. Shutting down?";
+    let handle_recv = |channel: Option<_>| {
+      if channel.is_none() {
+        info!("{}", CHANNEL_MSG);
+      }
+      channel
+    };
+    let handle_send = |channel: Result<_, _>| {
+      if channel.is_err() {
+        info!("{}", CHANNEL_MSG);
+      }
+      channel
+    };
+
     let key_gen_machine = |id: &KeyGenId, params| {
       // TODO: Also embed the chain ID/genesis block
       let context = format!(
@@ -136,8 +149,15 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
 
     // Handle any new messages
     loop {
-      match self.incoming.recv().await.expect(CHANNEL_EXPECT) {
+      match {
+        match handle_recv(self.incoming.recv().await) {
+          None => return,
+          Some(msg) => msg,
+        }
+      } {
         CoordinatorMessage::GenerateKey { id, params } => {
+          info!("Generating new key. ID: {:?} Params: {:?}", id, params);
+
           // Remove old attempts
           if self.active_commit.remove(&id.set).is_none() &&
             self.active_share.remove(&id.set).is_none()
@@ -151,13 +171,20 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
           let (machine, commitments) = key_gen_machine(&id, params);
           self.active_commit.insert(id.set, machine);
 
-          self
-            .outgoing
-            .send(ProcessorMessage::Commitments { id, commitments: commitments.serialize() })
-            .expect(CHANNEL_EXPECT);
+          if handle_send(
+            self
+              .outgoing
+              .send(ProcessorMessage::Commitments { id, commitments: commitments.serialize() }),
+          )
+          .is_err()
+          {
+            return;
+          }
         }
 
         CoordinatorMessage::Commitments { id, commitments } => {
+          info!("Received commitments for {:?}", id);
+
           if self.active_share.contains_key(&id.set) {
             // We should've been told of a new attempt before receiving commitments again
             // The coordinator is either missing messages or repeating itself
@@ -199,16 +226,19 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
           self.active_share.insert(id.set, machine);
           self.db.save_commitments(&id, &commitments);
 
-          self
-            .outgoing
-            .send(ProcessorMessage::Shares {
-              id,
-              shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
-            })
-            .expect(CHANNEL_EXPECT);
+          if handle_send(self.outgoing.send(ProcessorMessage::Shares {
+            id,
+            shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
+          }))
+          .is_err()
+          {
+            return;
+          }
         }
 
         CoordinatorMessage::Shares { id, mut shares } => {
+          info!("Received shares for {:?}", id);
+
           let params = self.db.params(&id.set);
 
           // Parse the shares
@@ -241,16 +271,18 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
           .complete();
           self.db.save_keys(&id, &keys);
 
-          self
-            .outgoing
-            .send(ProcessorMessage::GeneratedKey {
-              id,
-              key: keys.group_key().to_bytes().as_ref().to_vec(),
-            })
-            .expect(CHANNEL_EXPECT);
+          if handle_send(self.outgoing.send(ProcessorMessage::GeneratedKey {
+            id,
+            key: keys.group_key().to_bytes().as_ref().to_vec(),
+          }))
+          .is_err()
+          {
+            return;
+          }
         }
 
         CoordinatorMessage::ConfirmKey { id } => {
+          info!("Confirmed key from {:?}", id);
           self.db.confirm_keys(&id);
         }
       }
