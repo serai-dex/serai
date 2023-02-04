@@ -104,6 +104,10 @@ impl SignableTransaction {
     change: Option<Address>,
     fee: u64,
   ) -> Option<SignableTransaction> {
+    if inputs.is_empty() || (payments.is_empty() && change.is_none()) {
+      return None;
+    }
+
     let input_sat = inputs.iter().map(|input| input.output.value).sum::<u64>();
     let offsets = inputs.iter().map(|input| input.offset).collect();
     let tx_ins = inputs
@@ -123,7 +127,7 @@ impl SignableTransaction {
       .collect::<Vec<_>>();
 
     let actual_fee = fee * Self::calculate_weight(tx_ins.len(), payments, None);
-    if payment_sat > (input_sat - actual_fee) {
+    if input_sat < (payment_sat + actual_fee) {
       return None;
     }
 
