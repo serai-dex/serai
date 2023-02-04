@@ -20,8 +20,6 @@ use scanner::Scanner;
 mod scheduler;
 use scheduler::Scheduler;
 
-mod wallet;
-
 #[cfg(test)]
 mod tests;
 
