@@ -15,10 +15,10 @@ impl Default for MemDb {
 }
 
 impl Db for MemDb {
-  fn put(&mut self, key: &[u8], value: &[u8]) {
-    self.0.insert(key.to_vec(), value.to_vec());
+  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
+    self.0.insert(key.as_ref().to_vec(), value.as_ref().to_vec());
   }
-  fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-    self.0.get(key).cloned()
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+    self.0.get(key.as_ref()).cloned()
   }
 }

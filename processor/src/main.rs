@@ -3,7 +3,11 @@ use std::{marker::Send, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{curve::Ciphersuite, FrostError};
+use frost::{
+  curve::Ciphersuite,
+  dkg::{ThresholdCore, ThresholdKeys},
+  FrostError,
+};
 
 use messages::{ProcessorMessage, CoordinatorMessage};
 
@@ -26,8 +30,8 @@ mod wallet;
 mod tests;
 
 pub trait Db: 'static + Send + Sync {
-  fn put(&mut self, key: &[u8], value: &[u8]);
-  fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
+  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -87,11 +91,11 @@ impl Default for MemDb {
 }
 
 impl Db for MemDb {
-  fn put(&mut self, key: &[u8], value: &[u8]) {
-    self.0.insert(key.to_vec(), value.to_vec());
+  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
+    self.0.insert(key.as_ref().to_vec(), value.as_ref().to_vec());
   }
-  fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-    self.0.get(key).cloned()
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+    self.0.get(key.as_ref()).cloned()
   }
 }
 
@@ -102,10 +106,14 @@ async fn main() {
   let db = MemDb::new();
 
   let mut key_gen = KeyGen::<<Monero as Coin>::Curve, _>::new(db.clone());
-  let mut signer = Signer::new(coin.clone(), db.clone());
+  let mut signer = Signer::new(
+    db.clone(),
+    coin.clone(),
+    ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut [].as_ref()).unwrap()),
+  );
 
-  let _scanner = Scanner::new(coin, db);
-  let _scheduler = Scheduler::<Monero>::new(<Monero as Coin>::Curve::generator());
+  let scanner = Scanner::new(coin, db);
+  let scheduler = Scheduler::<Monero>::new(<Monero as Coin>::Curve::generator());
 
   let (to_coordinator, _fake_coordinator_recv) =
     tokio::sync::mpsc::unbounded_channel::<ProcessorMessage>();

@@ -48,10 +48,10 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     Self::scanner_key(b"scanned_block", key.to_bytes().as_ref())
   }
   fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize) {
-    self.0.put(&Self::scanned_block_key(key), &u64::try_from(block).unwrap().to_le_bytes())
+    self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes())
   }
   fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
-    let bytes = self.0.get(&Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
+    let bytes = self.0.get(Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
     u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
   }
 
@@ -59,10 +59,10 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     Self::scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes().as_ref())
   }
   fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id) {
-    self.0.put(&Self::block_key(number), id.as_ref())
+    self.0.put(Self::block_key(number), id)
   }
   fn block(&self, number: usize) -> Option<<C::Block as Block>::Id> {
-    self.0.get(&Self::block_key(number)).map(|id| {
+    self.0.get(Self::block_key(number)).map(|id| {
       let mut res = <C::Block as Block>::Id::default();
       res.as_mut().copy_from_slice(&id);
       res

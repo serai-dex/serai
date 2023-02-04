@@ -32,11 +32,11 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     Self::key_gen_key(b"params", &bincode::serialize(set).unwrap())
   }
   fn save_params(&mut self, set: &ValidatorSetInstance, params: &ThresholdParams) {
-    self.0.put(&Self::params_key(set), &bincode::serialize(params).unwrap());
+    self.0.put(Self::params_key(set), bincode::serialize(params).unwrap());
   }
   fn params(&self, set: &ValidatorSetInstance) -> ThresholdParams {
     // Directly unwraps the .get() as this will only be called after being set
-    bincode::deserialize(&self.0.get(&Self::params_key(set)).unwrap()).unwrap()
+    bincode::deserialize(&self.0.get(Self::params_key(set)).unwrap()).unwrap()
   }
 
   // Not scoped to the set since that'd have latter attempts overwrite former
@@ -46,14 +46,14 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     Self::key_gen_key(b"commitments", &bincode::serialize(id).unwrap())
   }
   fn save_commitments(&mut self, id: &KeyGenId, commitments: &HashMap<u16, Vec<u8>>) {
-    self.0.put(&Self::commitments_key(id), &bincode::serialize(commitments).unwrap());
+    self.0.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
   }
   fn commitments(
     &self,
     id: &KeyGenId,
     params: ThresholdParams,
   ) -> HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>> {
-    bincode::deserialize::<HashMap<u16, Vec<u8>>>(&self.0.get(&Self::commitments_key(id)).unwrap())
+    bincode::deserialize::<HashMap<u16, Vec<u8>>>(&self.0.get(Self::commitments_key(id)).unwrap())
       .unwrap()
       .drain()
       .map(|(i, bytes)| {
@@ -70,14 +70,14 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     Self::key_gen_key(b"generated_keys", &bincode::serialize(id).unwrap())
   }
   fn save_keys(&mut self, id: &KeyGenId, keys: &ThresholdCore<C>) {
-    self.0.put(&Self::generated_keys_key(id), &keys.serialize());
+    self.0.put(Self::generated_keys_key(id), keys.serialize());
   }
 
   fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
     Self::key_gen_key(b"keys", &bincode::serialize(set).unwrap())
   }
   fn confirm_keys(&mut self, id: &KeyGenId) {
-    self.0.put(&Self::keys_key(&id.set), &self.0.get(&Self::generated_keys_key(id)).unwrap());
+    self.0.put(Self::keys_key(&id.set), &self.0.get(Self::generated_keys_key(id)).unwrap());
     // TODO: Prune other key gen attempts' info
   }
 }
@@ -137,7 +137,7 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
     // Handle any new messages
     loop {
       match self.incoming.recv().await.expect(CHANNEL_EXPECT) {
-        CoordinatorMessage::KeyGen { id, params } => {
+        CoordinatorMessage::GenerateKey { id, params } => {
           // Remove old attempts
           if self.active_commit.remove(&id.set).is_none() &&
             self.active_share.remove(&id.set).is_none()
@@ -153,11 +153,11 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
 
           self
             .outgoing
-            .send(ProcessorMessage::KeyGenCommitments { id, commitments: commitments.serialize() })
+            .send(ProcessorMessage::Commitments { id, commitments: commitments.serialize() })
             .expect(CHANNEL_EXPECT);
         }
 
-        CoordinatorMessage::KeyGenCommitments { id, commitments } => {
+        CoordinatorMessage::Commitments { id, commitments } => {
           if self.active_share.contains_key(&id.set) {
             // We should've been told of a new attempt before receiving commitments again
             // The coordinator is either missing messages or repeating itself
@@ -201,14 +201,14 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
 
           self
             .outgoing
-            .send(ProcessorMessage::KeyGenShares {
+            .send(ProcessorMessage::Shares {
               id,
               shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
             })
             .expect(CHANNEL_EXPECT);
         }
 
-        CoordinatorMessage::KeyGenShares { id, mut shares } => {
+        CoordinatorMessage::Shares { id, mut shares } => {
           let params = self.db.params(&id.set);
 
           // Parse the shares
@@ -243,7 +243,7 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
 
           self
             .outgoing
-            .send(ProcessorMessage::KeyGenCompletion {
+            .send(ProcessorMessage::GeneratedKey {
               id,
               key: keys.group_key().to_bytes().as_ref().to_vec(),
             })
