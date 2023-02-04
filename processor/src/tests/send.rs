@@ -62,7 +62,9 @@ pub async fn test_send<C: Coin>(coin: C) {
   let fee = coin.get_fee().await;
 
   // Mine blocks so there's a confirmed block
-  coin.mine_block().await;
+  for _ in 0 .. C::CONFIRMATIONS {
+    coin.mine_block().await;
+  }
   let latest = coin.get_latest_block_number().await.unwrap();
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);

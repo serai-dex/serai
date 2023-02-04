@@ -7,7 +7,7 @@ use std::{
 use rand_core::OsRng;
 
 use frost::{
-  ThresholdKeys,
+  ThresholdParams,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
 };
 
@@ -63,7 +63,7 @@ pub struct Signer<C: Coin, D: Db> {
   coin: C,
   db: SignerDb<D>,
 
-  keys: ThresholdKeys<C::Curve>,
+  params: ThresholdParams,
 
   signable: HashMap<[u8; 32], (SystemTime, C::SignableTransaction)>,
   attempt: HashMap<[u8; 32], u32>,
@@ -101,7 +101,7 @@ pub struct SignerHandle<C: Coin> {
 // 2) It did send its response, and has locally saved enough data to continue
 impl<C: Coin, D: Db> Signer<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D, coin: C, keys: ThresholdKeys<C::Curve>) -> SignerHandle<C> {
+  pub fn new(db: D, coin: C, params: ThresholdParams) -> SignerHandle<C> {
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
     tokio::spawn(
@@ -109,7 +109,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
         coin,
         db: SignerDb(db),
 
-        keys,
+        params,
 
         signable: HashMap::new(),
         attempt: HashMap::new(),
@@ -125,8 +125,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
   }
 
   fn verify_id(&self, id: &SignId) -> Result<(), ()> {
-    let params = self.keys.params();
-    if !id.signing_set(&params).contains(&params.i()) {
+    if !id.signing_set(&self.params).contains(&self.params.i()) {
       panic!("coordinator sent us preprocesses for a signing attempt we're not participating in");
     }
 
@@ -159,7 +158,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
       for (id, (start, tx)) in self.signable.iter() {
         const SIGN_TIMEOUT: u64 = 30;
         let attempt = u32::try_from(
-          SystemTime::now().duration_since(*start).unwrap_or(Duration::ZERO).as_secs() %
+          SystemTime::now().duration_since(*start).unwrap_or(Duration::ZERO).as_secs() /
             SIGN_TIMEOUT,
         )
         .unwrap();
@@ -176,8 +175,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
 
           let id = SignId { id, attempt };
           // Only preprocess if we're a signer
-          let params = self.keys.params();
-          if !id.signing_set(&params).contains(&params.i()) {
+          if !id.signing_set(&self.params).contains(&self.params.i()) {
             continue;
           }
           info!("selected to sign {:?}", id);

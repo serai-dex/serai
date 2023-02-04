@@ -3,11 +3,7 @@ use std::{marker::Send, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{
-  curve::Ciphersuite,
-  dkg::{ThresholdCore, ThresholdKeys},
-  FrostError,
-};
+use frost::{curve::Ciphersuite, ThresholdParams, FrostError};
 
 use messages::{ProcessorMessage, CoordinatorMessage};
 
@@ -106,11 +102,7 @@ async fn main() {
   let db = MemDb::new();
 
   let mut key_gen = KeyGen::<<Monero as Coin>::Curve, _>::new(db.clone());
-  let mut signer = Signer::new(
-    db.clone(),
-    coin.clone(),
-    ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut [].as_ref()).unwrap()),
-  );
+  let mut signer = Signer::new(db.clone(), coin.clone(), ThresholdParams::new(0, 0, 0).unwrap());
 
   let scanner = Scanner::new(coin, db);
   let scheduler = Scheduler::<Monero>::new(<Monero as Coin>::Curve::generator());

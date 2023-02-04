@@ -15,7 +15,9 @@ pub async fn test_scan<C: Coin>(coin: C) {
   C::tweak_keys(&mut keys);
 
   // Mine blocks so there's a confirmed block
-  coin.mine_block().await;
+  for _ in 0 .. C::CONFIRMATIONS {
+    coin.mine_block().await;
+  }
 
   let mut scanner = Scanner::new(coin.clone(), MemDb::new());
   scanner

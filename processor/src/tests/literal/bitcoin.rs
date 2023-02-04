@@ -1,6 +1,6 @@
 use crate::{
   coin::Bitcoin,
-  tests::{test_scan, test_send},
+  tests::{test_scan, test_signer, test_send},
 };
 
 sequential!();
@@ -12,13 +12,19 @@ async fn bitcoin() -> Bitcoin {
 }
 
 async_sequential! {
-  async fn bitcoin_send() {
-    test_send(bitcoin().await).await;
+  async fn bitcoin_scan() {
+    test_scan(bitcoin().await).await;
   }
 }
 
 async_sequential! {
-  async fn bitcoin_scan() {
-    test_scan(bitcoin().await).await;
+  async fn bitcoin_signer() {
+    test_signer(bitcoin().await).await;
+  }
+}
+
+async_sequential! {
+  async fn bitcoin_send() {
+    test_send(bitcoin().await).await;
   }
 }

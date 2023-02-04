@@ -3,11 +3,14 @@ pub(crate) mod util;
 mod key_gen;
 pub(crate) use key_gen::test_key_gen;
 
-mod send;
-pub(crate) use send::test_send;
-
 mod scan;
 pub(crate) use scan::test_scan;
+
+mod signer;
+pub(crate) use signer::test_signer;
+
+mod send;
+pub(crate) use send::test_send;
 
 #[macro_export]
 macro_rules! sequential {
