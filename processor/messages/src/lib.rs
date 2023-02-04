@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 use zeroize::Zeroize;
 
+use rand_core::{RngCore, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+use transcript::{Transcript, RecommendedTranscript};
+
 use serde::{Serialize, Deserialize};
 
 use dkg::ThresholdParams;
@@ -23,11 +27,11 @@ pub mod key_gen {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
-    KeyGen { id: KeyGenId, params: ThresholdParams },
+    GenerateKey { id: KeyGenId, params: ThresholdParams },
     // Received commitments for the specified key generation protocol.
-    KeyGenCommitments { id: KeyGenId, commitments: HashMap<u16, Vec<u8>> },
+    Commitments { id: KeyGenId, commitments: HashMap<u16, Vec<u8>> },
     // Received shares for the specified key generation protocol.
-    KeyGenShares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
+    Shares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
     // Confirm a key.
     ConfirmKey { id: KeyGenId },
   }
@@ -35,11 +39,11 @@ pub mod key_gen {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created commitments for the specified key generation protocol.
-    KeyGenCommitments { id: KeyGenId, commitments: Vec<u8> },
+    Commitments { id: KeyGenId, commitments: Vec<u8> },
     // Created shares for the specified key generation protocol.
-    KeyGenShares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
+    Shares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
     // Resulting key from the specified key generation protocol.
-    KeyGenCompletion { id: KeyGenId, key: Vec<u8> },
+    GeneratedKey { id: KeyGenId, key: Vec<u8> },
   }
 }
 
@@ -52,20 +56,41 @@ pub mod sign {
     pub attempt: u32,
   }
 
+  impl SignId {
+    /// Determine a signing set for a given signing session.
+    // TODO: Replace with ROAST or the first available group of signers.
+    // https://github.com/serai-dex/serai/issues/163
+    pub fn signing_set(&self, params: &ThresholdParams) -> Vec<u16> {
+      let mut transcript = RecommendedTranscript::new(b"SignId signing_set");
+      transcript.domain_separate(b"SignId");
+      transcript.append_message(b"id", self.id);
+      transcript.append_message(b"attempt", self.attempt.to_le_bytes());
+
+      let mut candidates = (1 ..= params.n()).collect::<Vec<_>>();
+      let mut rng = ChaCha8Rng::from_seed(transcript.rng_seed(b"signing_set"));
+      while candidates.len() > params.t().into() {
+        candidates.swap_remove(
+          usize::try_from(rng.next_u64() % u64::try_from(candidates.len()).unwrap()).unwrap(),
+        );
+      }
+      candidates
+    }
+  }
+
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     // Received preprocesses for the specified signing protocol.
-    SignPreprocesses { id: SignId, preprocesses: HashMap<u16, Vec<u8>> },
+    Preprocesses { id: SignId, preprocesses: HashMap<u16, Vec<u8>> },
     // Received shares for the specified signing protocol.
-    SignShares { id: SignId, shares: HashMap<u16, Vec<u8>> },
+    Shares { id: SignId, shares: HashMap<u16, Vec<u8>> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created preprocess for the specified signing protocol.
-    SignPreprocess { id: SignId, signers: Vec<u16>, preprocess: Vec<u8> },
+    Preprocess { id: SignId, preprocess: Vec<u8> },
     // Signed share for the specified signing protocol.
-    SignShare { id: SignId, share: Vec<u8> },
+    Share { id: SignId, share: Vec<u8> },
   }
 }
 

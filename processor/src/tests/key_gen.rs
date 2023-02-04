@@ -24,13 +24,12 @@ pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     key_gen
       .coordinator
-      .send(CoordinatorMessage::KeyGen {
+      .send(CoordinatorMessage::GenerateKey {
         id: ID,
         params: ThresholdParams::new(2, 3, u16::try_from(i).unwrap()).unwrap(),
       })
       .unwrap();
-    if let Some(ProcessorMessage::KeyGenCommitments { id, commitments }) =
-      key_gen.processor.recv().await
+    if let Some(ProcessorMessage::Commitments { id, commitments }) = key_gen.processor.recv().await
     {
       assert_eq!(id, ID);
       all_commitments.insert(u16::try_from(i).unwrap(), commitments);
@@ -45,12 +44,12 @@ pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
     let i = u16::try_from(i).unwrap();
     key_gen
       .coordinator
-      .send(CoordinatorMessage::KeyGenCommitments {
+      .send(CoordinatorMessage::Commitments {
         id: ID,
         commitments: clone_without(&all_commitments, &i),
       })
       .unwrap();
-    if let Some(ProcessorMessage::KeyGenShares { id, shares }) = key_gen.processor.recv().await {
+    if let Some(ProcessorMessage::Shares { id, shares }) = key_gen.processor.recv().await {
       assert_eq!(id, ID);
       all_shares.insert(i, shares);
     } else {
@@ -64,7 +63,7 @@ pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
     let i = u16::try_from(i).unwrap();
     key_gen
       .coordinator
-      .send(CoordinatorMessage::KeyGenShares {
+      .send(CoordinatorMessage::Shares {
         id: ID,
         shares: all_shares
           .iter()
@@ -72,7 +71,7 @@ pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
           .collect(),
       })
       .unwrap();
-    if let Some(ProcessorMessage::KeyGenCompletion { id, key }) = key_gen.processor.recv().await {
+    if let Some(ProcessorMessage::GeneratedKey { id, key }) = key_gen.processor.recv().await {
       assert_eq!(id, ID);
       if res.is_none() {
         res = Some(key.clone());

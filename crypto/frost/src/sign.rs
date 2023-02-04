@@ -211,7 +211,7 @@ pub trait SignMachine<S>: Sized + Send {
   /// Preprocess message for this machine.
   type Preprocess: Clone + PartialEq + Writable;
   /// SignatureShare message for this machine.
-  type SignatureShare: Clone + PartialEq + Writable;
+  type SignatureShare: Send + Clone + PartialEq + Writable;
   /// SignatureMachine this SignMachine turns into.
   type SignatureMachine: SignatureMachine<S, SignatureShare = Self::SignatureShare>;
 

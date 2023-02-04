@@ -16,6 +16,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 zeroize = { version = "1", features = ["derive"] }
 
+rand_core = "0.6"
+rand_chacha = "0.3"
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript" }
+
 serde = { version = "1", features = ["derive"] }
 
 dkg = { path = "../../crypto/dkg", features = ["serde"] }
