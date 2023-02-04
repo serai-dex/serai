@@ -194,6 +194,8 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   #[cfg(test)]
   async fn mine_block(&self);
 
+  /// Sends to the specified address.
+  /// Additionally mines enough blocks so that the TX is past the confirmation depth.
   #[cfg(test)]
-  async fn test_send(&self, key: Self::Address);
+  async fn test_send(&self, key: Self::Address) -> Self::Block;
 }

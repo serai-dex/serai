@@ -293,7 +293,7 @@ impl Coin for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn test_send(&self, address: Self::Address) {
+  async fn test_send(&self, address: Self::Address) -> Block {
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
     let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
@@ -340,9 +340,11 @@ impl Coin for Bitcoin {
     der.push(1);
     tx.input[0].script_sig = Builder::new().push_slice(&der).push_key(&public_key).into_script();
 
+    let block = self.get_latest_block_number().await.unwrap() + 1;
     self.rpc.send_raw_transaction(&tx).await.unwrap();
     for _ in 0 .. Self::CONFIRMATIONS {
       self.mine_block().await;
     }
+    self.get_block(block).await.unwrap()
   }
 }

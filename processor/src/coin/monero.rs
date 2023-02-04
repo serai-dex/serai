@@ -280,6 +280,9 @@ impl Coin for Monero {
 
   #[cfg(test)]
   async fn mine_block(&self) {
+    // https://github.com/serai-dex/serai/issues/198
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     #[derive(serde::Deserialize, Debug)]
     struct EmptyResponse {}
     let _: EmptyResponse = self
@@ -290,7 +293,7 @@ impl Coin for Monero {
           "method": "generateblocks",
           "params": {
             "wallet_address": Self::test_address().to_string(),
-            "amount_of_blocks": 10
+            "amount_of_blocks": 1
           },
         })),
       )
@@ -299,14 +302,12 @@ impl Coin for Monero {
   }
 
   #[cfg(test)]
-  async fn test_send(&self, address: Self::Address) {
+  async fn test_send(&self, address: Self::Address) -> Block {
     use zeroize::Zeroizing;
     use rand_core::OsRng;
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
-
-    self.mine_block().await;
-    for _ in 0 .. 7 {
+    for _ in 0 .. 80 {
       self.mine_block().await;
     }
 
@@ -319,6 +320,7 @@ impl Coin for Monero {
 
     let amount = outputs[0].commitment().amount;
     let fee = 3000000000; // TODO
+
     let tx = MSignableTransaction::new(
       self.rpc.get_protocol().await.unwrap(),
       outputs,
@@ -331,7 +333,12 @@ impl Coin for Monero {
     .sign(&mut OsRng, &self.rpc, &Zeroizing::new(Scalar::one()))
     .await
     .unwrap();
+
+    let block = self.get_latest_block_number().await.unwrap() + 1;
     self.rpc.publish_transaction(&tx).await.unwrap();
-    self.mine_block().await;
+    for _ in 0 .. 10 {
+      self.mine_block().await;
+    }
+    self.get_block(block).await.unwrap()
   }
 }
