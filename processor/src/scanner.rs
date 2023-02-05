@@ -14,15 +14,15 @@ use crate::{
 
 /// Orders for the scanner.
 #[derive(Clone, Debug)]
-pub enum ScannerOrder<C: Ciphersuite> {
+pub enum ScannerOrder<C: Coin> {
   /// Rotate the key being scanned for.
   /// If no key has been prior set, this will become the key with no further actions.
   /// If a key has been prior set, both keys will be scanned for as detailed in the Multisig
   /// documentation. The old key will eventually stop being scanned for, leaving just the
   /// updated-to key.
-  RotateKey { activation_number: usize, key: C::G },
+  RotateKey { activation_number: usize, key: <C::Curve as Ciphersuite>::G },
   /// Acknowledge having handled a block for a key
-  AckBlock(C::G, usize),
+  AckBlock(<C::Curve as Ciphersuite>::G, usize),
 }
 
 #[derive(Clone, Debug)]
@@ -69,19 +69,22 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   }
 }
 
+/// The Scanner emits events relating to the blockchain, notably received outputs.
+/// It WILL NOT fail to emit an event, even if it reboots at selected moments.
+/// It MAY fire the same event multiple times.
 #[derive(Debug)]
 pub struct Scanner<C: Coin, D: Db> {
   coin: C,
   db: ScannerDb<C, D>,
   keys: Vec<<C::Curve as Ciphersuite>::G>,
 
-  orders: mpsc::UnboundedReceiver<ScannerOrder<C::Curve>>,
+  orders: mpsc::UnboundedReceiver<ScannerOrder<C>>,
   events: mpsc::UnboundedSender<ScannerEvent<C>>,
 }
 
 #[derive(Debug)]
 pub struct ScannerHandle<C: Coin> {
-  pub orders: ScannerOrderChannel<C::Curve>,
+  pub orders: ScannerOrderChannel<C>,
   pub events: ScannerEventChannel<C>,
 }
 
@@ -146,6 +149,7 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
             // point, re-firing all events along the way, enabling them to be properly processed
             // In order to not re-fire them within this process's lifetime, check our RAM cache
             // of what we've scanned
+            // We are allowed to re-fire them within this lifetime. It's just wasteful
             let ram_scanned = ram_scanned.get(&key_vec).cloned().unwrap_or(0);
             // Pick whichever is higher
             db_scanned.max(ram_scanned)
@@ -194,7 +198,7 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
               continue;
             }
 
-            // Fire the block event. This may be fired multiple times
+            // Fire the block event
             // This is intended for group acknowledgement of what block we're on, not only
             // providing a heartbeat, yet also letting coins like Monero schedule themselves
             if handle_send(self.events.send(ScannerEvent::Block(i, block.id()))).is_err() {
@@ -227,7 +231,7 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
           }
           ScannerOrder::AckBlock(key, i) => {
             debug!("Block {} acknowledged", i);
-            self.db.save_scanned_block(key, i)
+            self.db.save_scanned_block(key, i);
           }
         }
       }

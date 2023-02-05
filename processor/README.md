@@ -46,5 +46,18 @@ accordingly. This is done by scheduling the payments out.
 # Unsolved problems
 
 - Acknowledging a sign ID as signed so we don't continue trying
+
+Immediately, we can just request votes from the live net (requiring active
+67% consensus). Ideally, we do an extra Schnorr signature at time of sign,
+which is then broadcast to everyone, so any one honest node can provide an
+attestation.
+
 - Scheduler uses exact amounts yet we need to handle fees as well
+
+A) Schedule into a pre-fee table and adjust it post-fee
+B) When we receive an output to the branch address, add back the fee to
+   perceived value (post-fee to pre-fee lookup?)
+
 - Coordinator communication
+
+Kafka? RPC ping to them, which we don't count as 'sent' until we get a pong?

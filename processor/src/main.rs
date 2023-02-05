@@ -150,6 +150,8 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
       },
 
       msg = scanner.events.recv() => {
+        // These need to be sent to the coordinator which needs to check they aren't replayed
+        // TODO
         match msg.unwrap() {
           ScannerEvent::Block(number, id) => todo!(),
           ScannerEvent::Outputs(key, block, outputs) => todo!(),

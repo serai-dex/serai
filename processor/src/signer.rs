@@ -57,6 +57,9 @@ impl<D: Db> SignerDb<D> {
   }
 }
 
+/// Coded so if the processor spontaneously reboots, one of two paths occur:
+/// 1) It either didn't send its response, so the attempt will be aborted
+/// 2) It did send its response, and has locally saved enough data to continue
 pub struct Signer<C: Coin, D: Db> {
   coin: C,
   db: SignerDb<D>,
@@ -94,9 +97,6 @@ pub struct SignerHandle<C: Coin> {
   pub events: SignerEventChannel<C>,
 }
 
-// Coded so if the processor spontaneously reboot, one of two paths occur:
-// 1) It either didn't send its response, so the attempt will be aborted
-// 2) It did send its response, and has locally saved enough data to continue
 impl<C: Coin, D: Db> Signer<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(db: D, coin: C, params: ThresholdParams) -> SignerHandle<C> {

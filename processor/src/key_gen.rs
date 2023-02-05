@@ -88,7 +88,8 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   }
   fn keys(&mut self, set: &ValidatorSetInstance) -> ThresholdKeys<C> {
     ThresholdKeys::new(
-      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref()).unwrap(),
+      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref())
+        .unwrap(),
     )
   }
   fn confirm_keys(&mut self, id: &KeyGenId) {
@@ -97,6 +98,9 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   }
 }
 
+/// Coded so if the processor spontaneously reboots, one of two paths occur:
+/// 1) It either didn't send its response, so the attempt will be aborted
+/// 2) It did send its response, and has locally saved enough data to continue
 #[derive(Debug)]
 pub struct KeyGen<C: Ciphersuite, D: Db> {
   db: KeyGenDb<C, D>,
@@ -115,9 +119,6 @@ pub struct KeyGenHandle<C: Ciphersuite> {
   pub events: KeyGenEventChannel<C>,
 }
 
-// Coded so if the processor spontaneously reboot, one of two paths occur:
-// 1) It either didn't send its response, so the attempt will be aborted
-// 2) It did send its response, and has locally saved enough data to continue
 impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(db: D) -> KeyGenHandle<C> {
