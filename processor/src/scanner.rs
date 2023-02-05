@@ -162,18 +162,15 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
               }
             };
 
-            let first = if let Some(id) = self.db.block(i) {
-              info!("Found new block: {:?}", id);
-
+            if let Some(id) = self.db.block(i) {
               // TODO: Also check this block builds off the previous block
               if id != block.id() {
                 panic!("{} reorg'd from {id:?} to {:?}", C::ID, block.id());
               }
-              false
             } else {
+              info!("Found new block: {:?}", block.id());
               self.db.save_block(i, block.id());
-              true
-            };
+            }
 
             let outputs = match self.coin.get_outputs(&block, key).await {
               Ok(outputs) => outputs,
@@ -197,14 +194,11 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
               continue;
             }
 
-            // Fire the block event
+            // Fire the block event. This may be fired multiple times
             // This is intended for group acknowledgement of what block we're on, not only
             // providing a heartbeat, yet also letting coins like Monero schedule themselves
-            if first {
-              #[allow(clippy::collapsible_if)]
-              if handle_send(self.events.send(ScannerEvent::Block(i, block.id()))).is_err() {
-                return;
-              }
+            if handle_send(self.events.send(ScannerEvent::Block(i, block.id()))).is_err() {
+              return;
             }
 
             // Send all outputs
