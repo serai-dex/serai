@@ -3,8 +3,8 @@ pub(crate) mod util;
 mod key_gen;
 pub(crate) use key_gen::test_key_gen;
 
-mod scan;
-pub(crate) use scan::test_scan;
+mod scanner;
+pub(crate) use scanner::test_scanner;
 
 mod signer;
 pub(crate) use signer::test_signer;

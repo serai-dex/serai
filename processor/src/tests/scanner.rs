@@ -10,7 +10,7 @@ use crate::{
   tests::util::db::MemDb,
 };
 
-pub async fn test_scan<C: Coin>(coin: C) {
+pub async fn test_scanner<C: Coin>(coin: C) {
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng).remove(&1).unwrap();
   C::tweak_keys(&mut keys);
 

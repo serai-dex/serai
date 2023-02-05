@@ -1,6 +1,6 @@
 use crate::{
   coin::{Coin, Monero},
-  tests::{test_scan, test_signer},
+  tests::{test_scanner, test_signer},
 };
 
 sequential!();
@@ -14,8 +14,8 @@ async fn monero() -> Monero {
 }
 
 async_sequential! {
-  async fn monero_scan() {
-    test_scan(monero().await).await;
+  async fn monero_scanner() {
+    test_scanner(monero().await).await;
   }
 }
 
