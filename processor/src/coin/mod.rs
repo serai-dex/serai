@@ -92,7 +92,7 @@ impl OutputType {
   }
 }
 
-pub trait Output: Send + Sync + Sized + Clone + Debug {
+pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
   type Id: 'static + Id;
 
   fn kind(&self) -> OutputType;
@@ -110,7 +110,7 @@ pub trait Transaction: Send + Sync + Sized + Clone + Debug {
 }
 
 #[async_trait]
-pub trait Coin: 'static + Send + Sync + Clone + Debug {
+pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The elliptic curve used for this coin.
   type Curve: Curve;
 
@@ -134,7 +134,7 @@ pub trait Coin: 'static + Send + Sync + Clone + Debug {
   /// The type representing an address.
   // This should NOT be a String, yet a tailored type representing an efficient binary encoding,
   // as detailed in the integration documentation.
-  type Address: Send + Sync + Clone + Debug;
+  type Address: Send + Sync + Clone + PartialEq + Eq + Debug;
 
   /// String ID for this coin.
   const ID: &'static str;

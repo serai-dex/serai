@@ -34,7 +34,7 @@ pub struct Payment<C: Coin> {
   amount: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Plan<C: Coin> {
   pub inputs: Vec<C::Output>,
   pub payments: Vec<Payment<C>>,

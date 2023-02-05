@@ -25,7 +25,7 @@ use bitcoin::{
 use crate::crypto::{BitcoinHram, make_even};
 
 /// A spendable output.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SpendableOutput {
   /// The scalar offset to obtain the key usable to spend this output.
   /// Enables HDKD systems.
@@ -69,7 +69,7 @@ impl SpendableOutput {
 }
 
 /// A signable transaction, clone-able across attempts.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignableTransaction(Transaction, Vec<Scalar>, Vec<TxOut>);
 
 impl SignableTransaction {

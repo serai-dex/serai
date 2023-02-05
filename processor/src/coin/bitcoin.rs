@@ -64,7 +64,7 @@ impl AsMut<[u8]> for OutputId {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output(SpendableOutput, OutputType);
 impl OutputTrait for Output {
   type Id = OutputId;
@@ -105,6 +105,12 @@ pub struct SignableTransaction {
   transcript: RecommendedTranscript,
   actual: BSignableTransaction,
 }
+impl PartialEq for SignableTransaction {
+  fn eq(&self, other: &SignableTransaction) -> bool {
+    self.actual == other.actual
+  }
+}
+impl Eq for SignableTransaction {}
 
 fn next_key(mut key: ProjectivePoint, i: usize) -> (ProjectivePoint, Scalar) {
   let mut offset = Scalar::ZERO;
@@ -131,6 +137,14 @@ fn change(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
 pub struct Bitcoin {
   pub(crate) rpc: Rpc,
 }
+// Shim required for testing/debugging purposes due to generic arguments also necessitating trait
+// bounds
+impl PartialEq for Bitcoin {
+  fn eq(&self, _: &Self) -> bool {
+    true
+  }
+}
+impl Eq for Bitcoin {}
 
 impl Bitcoin {
   pub async fn new(url: String) -> Bitcoin {

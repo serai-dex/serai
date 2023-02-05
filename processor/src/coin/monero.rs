@@ -28,7 +28,7 @@ use crate::{
   Plan, additional_key,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Block([u8; 32], MBlock);
 impl BlockTrait for Block {
   type Id = [u8; 32];
@@ -37,7 +37,7 @@ impl BlockTrait for Block {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output(SpendableOutput);
 impl From<SpendableOutput> for Output {
   fn from(output: SpendableOutput) -> Output {
@@ -101,6 +101,14 @@ pub struct SignableTransaction {
 pub struct Monero {
   pub(crate) rpc: Rpc,
 }
+// Shim required for testing/debugging purposes due to generic arguments also necessitating trait
+// bounds
+impl PartialEq for Monero {
+  fn eq(&self, _: &Self) -> bool {
+    true
+  }
+}
+impl Eq for Monero {}
 
 impl Monero {
   pub async fn new(url: String) -> Monero {

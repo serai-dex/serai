@@ -169,5 +169,6 @@ pub async fn test_signer<C: Coin>(coin: C) {
     .await
     .unwrap();
   assert_eq!(outputs.len(), 2);
+  // Check either output since Monero will randomize its output order
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
 }

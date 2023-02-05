@@ -7,7 +7,10 @@ mod scanner;
 pub(crate) use scanner::test_scanner;
 
 mod signer;
-pub(crate) use signer::test_signer;
+pub(crate) use signer::{sign, test_signer};
+
+mod wallet;
+pub(crate) use wallet::test_wallet;
 
 #[macro_export]
 macro_rules! sequential {
