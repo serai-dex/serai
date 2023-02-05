@@ -151,7 +151,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
   // An async function, to be spawned on a task, to handle signing
   async fn run(mut self) {
     const CHANNEL_MSG: &str = "Signer handler was dropped. Shutting down?";
-    let handle_recv = |channel: Option<_>| {
+    let handle_recv = |channel: Option<SignerOrder<C>>| {
       if channel.is_none() {
         info!("{}", CHANNEL_MSG);
       }

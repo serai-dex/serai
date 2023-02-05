@@ -112,7 +112,7 @@ pub trait Transaction: Send + Sync + Sized + Clone + Debug {
 #[async_trait]
 pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The elliptic curve used for this coin.
-  type Curve: Send + Curve;
+  type Curve: Curve;
 
   /// The type representing the fee for this coin.
   // This should likely be a u64, wrapped in a type which implements appropriate fee logic.

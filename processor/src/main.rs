@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use std::{
   sync::{Arc, RwLock},
   collections::HashMap,
@@ -28,7 +29,7 @@ use scheduler::Scheduler;
 #[cfg(test)]
 mod tests;
 
-pub trait Db: 'static + Send + Sync + Clone {
+pub trait Db: 'static + Send + Sync + Clone + Debug {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
 }
