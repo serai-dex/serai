@@ -6,7 +6,7 @@ use rand_core::OsRng;
 use group::GroupEncoding;
 use frost::{
   curve::Ciphersuite,
-  dkg::{ThresholdParams, ThresholdCore, encryption::*, frost::*},
+  dkg::{ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*},
 };
 
 use log::info;
@@ -17,8 +17,19 @@ use messages::key_gen::*;
 
 use crate::Db;
 
-pub type KeyGenCoordinatorChannel = mpsc::UnboundedSender<CoordinatorMessage>;
-pub type KeyGenProcessorChannel = mpsc::UnboundedReceiver<ProcessorMessage>;
+#[derive(Debug)]
+pub enum KeyGenOrder {
+  CoordinatorMessage(CoordinatorMessage),
+}
+
+#[derive(Debug)]
+pub enum KeyGenEvent<C: Ciphersuite> {
+  KeyConfirmed { set: ValidatorSetInstance, params: ThresholdParams, key: C::G },
+  ProcessorMessage(ProcessorMessage),
+}
+
+pub type KeyGenOrderChannel = mpsc::UnboundedSender<KeyGenOrder>;
+pub type KeyGenEventChannel<C> = mpsc::UnboundedReceiver<KeyGenEvent<C>>;
 
 #[derive(Debug)]
 struct KeyGenDb<C: Ciphersuite, D: Db>(D, PhantomData<C>);
@@ -75,6 +86,11 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
     Self::key_gen_key(b"keys", &bincode::serialize(set).unwrap())
   }
+  fn keys(&mut self, set: &ValidatorSetInstance) -> ThresholdKeys<C> {
+    ThresholdKeys::new(
+      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref()).unwrap(),
+    )
+  }
   fn confirm_keys(&mut self, id: &KeyGenId) {
     self.0.put(Self::keys_key(&id.set), &self.0.get(Self::generated_keys_key(id)).unwrap());
     // TODO: Prune other key gen attempts' info
@@ -89,14 +105,14 @@ pub struct KeyGen<C: Ciphersuite, D: Db> {
   active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C>>,
   active_share: HashMap<ValidatorSetInstance, KeyMachine<C>>,
 
-  incoming: mpsc::UnboundedReceiver<CoordinatorMessage>,
-  outgoing: mpsc::UnboundedSender<ProcessorMessage>,
+  orders: mpsc::UnboundedReceiver<KeyGenOrder>,
+  events: mpsc::UnboundedSender<KeyGenEvent<C>>,
 }
 
 #[derive(Debug)]
-pub struct KeyGenHandle {
-  pub coordinator: KeyGenCoordinatorChannel,
-  pub processor: KeyGenProcessorChannel,
+pub struct KeyGenHandle<C: Ciphersuite> {
+  pub orders: KeyGenOrderChannel,
+  pub events: KeyGenEventChannel<C>,
 }
 
 // Coded so if the processor spontaneously reboot, one of two paths occur:
@@ -104,20 +120,20 @@ pub struct KeyGenHandle {
 // 2) It did send its response, and has locally saved enough data to continue
 impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D) -> KeyGenHandle {
-    let (coordinator_send, coordinator_recv) = mpsc::unbounded_channel();
-    let (processor_send, processor_recv) = mpsc::unbounded_channel();
+  pub fn new(db: D) -> KeyGenHandle<C> {
+    let (orders_send, orders_recv) = mpsc::unbounded_channel();
+    let (events_send, events_recv) = mpsc::unbounded_channel();
     tokio::spawn(
       KeyGen {
         db: KeyGenDb(db, PhantomData::<C>),
         active_commit: HashMap::new(),
         active_share: HashMap::new(),
-        incoming: coordinator_recv,
-        outgoing: processor_send,
+        orders: orders_recv,
+        events: events_send,
       }
       .run(),
     );
-    KeyGenHandle { coordinator: coordinator_send, processor: processor_recv }
+    KeyGenHandle { orders: orders_send, events: events_recv }
   }
 
   // An async function, to be spawned on a task, to handle key generations
@@ -150,12 +166,12 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
     // Handle any new messages
     loop {
       match {
-        match handle_recv(self.incoming.recv().await) {
+        match handle_recv(self.orders.recv().await) {
           None => return,
-          Some(msg) => msg,
+          Some(order) => order,
         }
       } {
-        CoordinatorMessage::GenerateKey { id, params } => {
+        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::GenerateKey { id, params }) => {
           info!("Generating new key. ID: {:?} Params: {:?}", id, params);
 
           // Remove old attempts
@@ -171,18 +187,16 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
           let (machine, commitments) = key_gen_machine(&id, params);
           self.active_commit.insert(id.set, machine);
 
-          if handle_send(
-            self
-              .outgoing
-              .send(ProcessorMessage::Commitments { id, commitments: commitments.serialize() }),
-          )
+          if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
+            ProcessorMessage::Commitments { id, commitments: commitments.serialize() },
+          )))
           .is_err()
           {
             return;
           }
         }
 
-        CoordinatorMessage::Commitments { id, commitments } => {
+        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::Commitments { id, commitments }) => {
           info!("Received commitments for {:?}", id);
 
           if self.active_share.contains_key(&id.set) {
@@ -226,17 +240,19 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
           self.active_share.insert(id.set, machine);
           self.db.save_commitments(&id, &commitments);
 
-          if handle_send(self.outgoing.send(ProcessorMessage::Shares {
-            id,
-            shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
-          }))
+          if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
+            ProcessorMessage::Shares {
+              id,
+              shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
+            },
+          )))
           .is_err()
           {
             return;
           }
         }
 
-        CoordinatorMessage::Shares { id, mut shares } => {
+        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::Shares { id, mut shares }) => {
           info!("Received shares for {:?}", id);
 
           let params = self.db.params(&id.set);
@@ -271,19 +287,32 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
           .complete();
           self.db.save_keys(&id, &keys);
 
-          if handle_send(self.outgoing.send(ProcessorMessage::GeneratedKey {
-            id,
-            key: keys.group_key().to_bytes().as_ref().to_vec(),
-          }))
+          if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
+            ProcessorMessage::GeneratedKey {
+              id,
+              key: keys.group_key().to_bytes().as_ref().to_vec(),
+            },
+          )))
           .is_err()
           {
             return;
           }
         }
 
-        CoordinatorMessage::ConfirmKey { id } => {
+        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey { id }) => {
           info!("Confirmed key from {:?}", id);
           self.db.confirm_keys(&id);
+
+          let keys = self.db.keys(&id.set);
+          if handle_send(self.events.send(KeyGenEvent::KeyConfirmed {
+            set: id.set,
+            params: keys.params(),
+            key: keys.group_key(),
+          }))
+          .is_err()
+          {
+            return;
+          }
         }
       }
     }

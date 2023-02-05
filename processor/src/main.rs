@@ -7,7 +7,8 @@ use std::{
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{curve::Ciphersuite, ThresholdParams, FrostError};
+use group::GroupEncoding;
+use frost::{curve::Ciphersuite, FrostError};
 
 use messages::{ProcessorMessage, CoordinatorMessage};
 
@@ -15,7 +16,7 @@ mod coin;
 use coin::{CoinError, Coin};
 
 mod key_gen;
-use key_gen::KeyGen;
+use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen};
 
 mod signer;
 use signer::{SignerOrder, SignerEvent, Signer};
@@ -101,20 +102,17 @@ impl Db for MemDb {
 
 async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone());
-  let mut signer = Signer::new(db.clone(), coin.clone(), ThresholdParams::new(0, 0, 0).unwrap());
+  let mut scanner = Scanner::new(coin.clone(), db.clone());
 
-  let mut scanner = Scanner::new(coin.clone(), db);
+  let mut schedulers = HashMap::new();
+  // TODO: load existing schedulers
+  let mut signers = HashMap::new();
+  // TODO: Load existing signers
 
-  // TODO
-  let group_key = C::Curve::generator();
-  scanner
-    .orders
-    .send(ScannerOrder::RotateKey {
-      activation_number: coin.get_latest_block_number().await.unwrap(),
-      key: group_key,
-    })
-    .unwrap();
-  let scheduler = Scheduler::<C>::new(group_key);
+  let mut track_key = |activation_number, key| {
+    scanner.orders.send(ScannerOrder::RotateKey { activation_number, key }).unwrap();
+    schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
+  };
 
   let (to_coordinator, _fake_coordinator_recv) =
     tokio::sync::mpsc::unbounded_channel::<ProcessorMessage>();
@@ -125,15 +123,30 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
     tokio::select! {
       msg = from_coordinator.recv() => {
         match msg.expect("Coordinator channel was dropped. Shutting down?") {
-          CoordinatorMessage::KeyGen(msg) => key_gen.coordinator.send(msg).unwrap(),
+          CoordinatorMessage::KeyGen(msg) => {
+            key_gen.orders.send(KeyGenOrder::CoordinatorMessage(msg)).unwrap()
+          },
           CoordinatorMessage::Sign(msg) => {
-            signer.orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
-          }
+            todo!()
+            // signer.orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
+          },
         }
       },
 
-      msg = key_gen.processor.recv() => {
-        to_coordinator.send(ProcessorMessage::KeyGen(msg.unwrap())).unwrap();
+      msg = key_gen.events.recv() => {
+        match msg.unwrap() {
+          KeyGenEvent::KeyConfirmed { set, params, key } => {
+            let activation_number = coin.get_latest_block_number().await.unwrap(); // TODO
+            track_key(activation_number, key);
+            signers.insert(
+              key.to_bytes().as_ref().to_vec(),
+              Signer::new(db.clone(), coin.clone(), params)
+            );
+          },
+          KeyGenEvent::ProcessorMessage(msg) => {
+            to_coordinator.send(ProcessorMessage::KeyGen(msg)).unwrap();
+          },
+        }
       },
 
       msg = scanner.events.recv() => {
@@ -143,6 +156,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         }
       },
 
+      /*
       msg = signer.events.recv() => {
         match msg.unwrap() {
           SignerEvent::SignedTransaction { id: _, tx: _ } => todo!(),
@@ -151,6 +165,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
           },
         }
       },
+      */
     }
   }
 }
