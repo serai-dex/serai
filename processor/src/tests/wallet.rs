@@ -33,15 +33,14 @@ pub async fn test_wallet<C: Coin>(coin: C) {
       })
       .unwrap();
 
-    // Sanity check the test_send return value while hre
-    let next_number = coin.get_latest_block_number().await.unwrap();
     let block_id = coin.test_send(C::address(key)).await.id();
-    assert_eq!(coin.get_block(next_number).await.unwrap().id(), block_id);
 
+    let block_number;
     match timeout(Duration::from_secs(5), scanner.events.recv()).await.unwrap().unwrap() {
       ScannerEvent::Block(number, id) => {
-        assert_eq!(number, next_number);
+        assert_eq!(coin.get_block(number).await.unwrap().id(), block_id);
         assert_eq!(id, block_id);
+        block_number = number;
       }
       _ => panic!("unexpected event"),
     };
@@ -50,7 +49,8 @@ pub async fn test_wallet<C: Coin>(coin: C) {
       ScannerEvent::Outputs(this_key, block, outputs) => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
-        (next_number, outputs)
+        assert_eq!(outputs.len(), 1);
+        (block_number, outputs)
       }
       _ => panic!("unexpeced event"),
     }
@@ -62,7 +62,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   #[allow(clippy::inconsistent_digit_grouping)]
   let amount = 1_00_000_000;
-  let mut plans = scheduler.schedule(vec![Payment { address: C::address(key), amount }]);
+  let plans = scheduler.schedule(vec![Payment { address: C::address(key), amount }]);
   assert_eq!(
     plans,
     vec![Plan {
@@ -85,7 +85,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
             keys,
             RecommendedTranscript::new(b"Processor Wallet Test"),
             sync_block,
-            plans.swap_remove(0),
+            plans[0].clone(),
             key,
             fee,
           )

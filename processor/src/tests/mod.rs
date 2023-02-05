@@ -40,4 +40,31 @@ macro_rules! async_sequential {
   }
 }
 
+#[macro_export]
+macro_rules! test_coin {
+  ($coin: ident, $scanner: ident, $signer: ident, $wallet: ident) => {
+    use $crate::tests::{test_scanner, test_signer, test_wallet};
+
+    sequential!();
+
+    async_sequential! {
+      async fn $scanner() {
+        test_scanner($coin().await).await;
+      }
+    }
+
+    async_sequential! {
+      async fn $signer() {
+        test_signer($coin().await).await;
+      }
+    }
+
+    async_sequential! {
+      async fn $wallet() {
+        test_wallet($coin().await).await;
+      }
+    }
+  };
+}
+
 mod literal;

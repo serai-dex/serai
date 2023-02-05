@@ -42,3 +42,9 @@ will do one of two things:
 
 When the Serai chain issues a `Burn` event, the processor should send coins
 accordingly. This is done by scheduling the payments out.
+
+# Unsolved problems
+
+- Acknowledging a sign ID as signed so we don't continue trying
+- Scheduler uses exact amounts yet we need to handle fees as well
+- Coordinator communication

@@ -1,11 +1,15 @@
-use std::collections::HashMap;
+use std::{
+  sync::{Arc, RwLock},
+  collections::HashMap,
+};
 
 use crate::Db;
 
-pub(crate) struct MemDb(HashMap<Vec<u8>, Vec<u8>>);
+#[derive(Clone, Debug)]
+pub struct MemDb(Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>);
 impl MemDb {
   pub(crate) fn new() -> MemDb {
-    MemDb(HashMap::new())
+    MemDb(Arc::new(RwLock::new(HashMap::new())))
   }
 }
 impl Default for MemDb {
@@ -16,9 +20,9 @@ impl Default for MemDb {
 
 impl Db for MemDb {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    self.0.insert(key.as_ref().to_vec(), value.as_ref().to_vec());
+    self.0.write().unwrap().insert(key.as_ref().to_vec(), value.as_ref().to_vec());
   }
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    self.0.get(key.as_ref()).cloned()
+    self.0.read().unwrap().get(key.as_ref()).cloned()
   }
 }

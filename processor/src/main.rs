@@ -1,4 +1,7 @@
-use std::{marker::Send, collections::HashMap};
+use std::{
+  sync::{Arc, RwLock},
+  collections::HashMap,
+};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -12,18 +15,20 @@ use coin::{CoinError, Coin};
 
 mod key_gen;
 use key_gen::KeyGen;
+
 mod signer;
-use signer::{Signer, SignerOrder, SignerEvent};
+use signer::{SignerOrder, SignerEvent, Signer};
 
 mod scanner;
-use scanner::Scanner;
+use scanner::{ScannerOrder, ScannerEvent, Scanner};
+
 mod scheduler;
 use scheduler::Scheduler;
 
 #[cfg(test)]
 mod tests;
 
-pub trait Db: 'static + Send + Sync {
+pub trait Db: 'static + Send + Sync + Clone {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
 }
@@ -70,12 +75,12 @@ pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
   )
 }
 
-// TODO: Grab RocksDB
+// TODO: Replace this with RocksDB
 #[derive(Clone, Debug)]
-struct MemDb(HashMap<Vec<u8>, Vec<u8>>);
+struct MemDb(Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>);
 impl MemDb {
   pub(crate) fn new() -> MemDb {
-    MemDb(HashMap::new())
+    MemDb(Arc::new(RwLock::new(HashMap::new())))
   }
 }
 impl Default for MemDb {
@@ -86,24 +91,29 @@ impl Default for MemDb {
 
 impl Db for MemDb {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    self.0.insert(key.as_ref().to_vec(), value.as_ref().to_vec());
+    self.0.write().unwrap().insert(key.as_ref().to_vec(), value.as_ref().to_vec());
   }
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    self.0.get(key.as_ref()).cloned()
+    self.0.read().unwrap().get(key.as_ref()).cloned()
   }
 }
 
-#[tokio::main]
-async fn main() {
-  use crate::coin::Monero;
-  let coin = Monero::new("".to_string()).await;
-  let db = MemDb::new();
-
-  let mut key_gen = KeyGen::<<Monero as Coin>::Curve, _>::new(db.clone());
+async fn run<C: Coin, D: Db>(db: D, coin: C) {
+  let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone());
   let mut signer = Signer::new(db.clone(), coin.clone(), ThresholdParams::new(0, 0, 0).unwrap());
 
-  let scanner = Scanner::new(coin, db);
-  let scheduler = Scheduler::<Monero>::new(<Monero as Coin>::Curve::generator());
+  let mut scanner = Scanner::new(coin.clone(), db);
+
+  // TODO
+  let group_key = C::Curve::generator();
+  scanner
+    .orders
+    .send(ScannerOrder::RotateKey {
+      activation_number: coin.get_latest_block_number().await.unwrap(),
+      key: group_key,
+    })
+    .unwrap();
+  let scheduler = Scheduler::<C>::new(group_key);
 
   let (to_coordinator, _fake_coordinator_recv) =
     tokio::sync::mpsc::unbounded_channel::<ProcessorMessage>();
@@ -125,6 +135,13 @@ async fn main() {
         to_coordinator.send(ProcessorMessage::KeyGen(msg.unwrap())).unwrap();
       },
 
+      msg = scanner.events.recv() => {
+        match msg.unwrap() {
+          ScannerEvent::Block(number, id) => todo!(),
+          ScannerEvent::Outputs(key, block, outputs) => todo!(),
+        }
+      },
+
       msg = signer.events.recv() => {
         match msg.unwrap() {
           SignerEvent::SignedTransaction { id: _, tx: _ } => todo!(),
@@ -135,4 +152,13 @@ async fn main() {
       },
     }
   }
+}
+
+#[tokio::main]
+async fn main() {
+  use crate::coin::Monero;
+  let coin = Monero::new("".to_string()).await;
+
+  let db = MemDb::new();
+  run(db, coin).await;
 }
