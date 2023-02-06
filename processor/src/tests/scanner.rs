@@ -1,6 +1,9 @@
 use core::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use rand_core::OsRng;
+
+use group::GroupEncoding;
 
 use tokio::time::timeout;
 
@@ -19,25 +22,30 @@ pub async fn test_scanner<C: Coin>(coin: C) {
     coin.mine_block().await;
   }
 
+  let first = Arc::new(Mutex::new(true));
   let db = MemDb::new();
   let new_scanner = || async {
     let scanner = Scanner::new(coin.clone(), db.clone());
-    scanner
-      .orders
-      .send(ScannerOrder::RotateKey {
-        activation_number: coin.get_latest_block_number().await.unwrap(),
-        key: keys.group_key(),
-      })
-      .unwrap();
+    let mut first = first.lock().unwrap();
+    if *first {
+      scanner
+        .orders
+        .send(ScannerOrder::RotateKey {
+          activation_number: coin.get_latest_block_number().await.unwrap(),
+          key: keys.group_key(),
+        })
+        .unwrap();
+      *first = false;
+    }
     scanner
   };
+  let scanner = new_scanner().await;
 
   // Receive funds
   let block_id = coin.test_send(C::address(keys.group_key())).await.id();
 
   // Verify the Scanner picked them up
-  let scanner = new_scanner().await;
-  let verify_event = |mut scanner: ScannerHandle<C>| async {
+  let verify_event = |mut scanner: ScannerHandle<C, MemDb>| async {
     let block_ids =
       match timeout(Duration::from_secs(10), scanner.events.recv()).await.unwrap().unwrap() {
         ScannerEvent::Block(number, id) => {
@@ -45,10 +53,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
           assert_eq!(id, block_id);
           (number, id)
         }
-        e => {
-          dbg!(e);
-          panic!("unexpected event")
-        }
+        _ => panic!("unexpected event"),
       };
 
     match timeout(Duration::from_secs(1), scanner.events.recv()).await.unwrap().unwrap() {
@@ -57,6 +62,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
         assert_eq!(block, block_ids.1);
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::External);
+        assert_eq!(scanner.outputs(key.to_bytes().as_ref(), &block_ids.1), outputs);
       }
       _ => panic!("unexpected event"),
     }

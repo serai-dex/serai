@@ -88,8 +88,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   }
   fn keys(&mut self, set: &ValidatorSetInstance) -> ThresholdKeys<C> {
     ThresholdKeys::new(
-      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref())
-        .unwrap(),
+      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref()).unwrap(),
     )
   }
   fn confirm_keys(&mut self, id: &KeyGenId) {

@@ -100,8 +100,8 @@ pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
   fn id(&self) -> Self::Id;
   fn amount(&self) -> u64;
 
-  fn serialize(&self) -> Vec<u8>;
-  fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
 }
 
 pub trait Transaction: Send + Sync + Sized + Clone + Debug {

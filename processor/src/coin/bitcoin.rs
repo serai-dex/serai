@@ -81,10 +81,9 @@ impl OutputTrait for Output {
     self.0.output.value
   }
 
-  fn serialize(&self) -> Vec<u8> {
-    let mut res = self.0.serialize();
-    self.1.write(&mut res).unwrap();
-    res
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    self.0.write(writer)?;
+    self.1.write(writer)
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {

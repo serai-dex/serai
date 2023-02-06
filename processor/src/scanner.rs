@@ -9,7 +9,7 @@ use tokio::{sync::mpsc, time::timeout};
 
 use crate::{
   Db,
-  coin::{Block, Coin},
+  coin::{Output, Block, Coin},
 };
 
 /// Orders for the scanner.
@@ -36,29 +36,18 @@ pub enum ScannerEvent<C: Coin> {
 pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
 pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct ScannerDb<C: Coin, D: Db>(D, PhantomData<C>);
 impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn scanner_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
     [b"SCANNER", dst, key].concat().to_vec()
   }
 
-  fn scanned_block_key(key: <C::Curve as Ciphersuite>::G) -> Vec<u8> {
-    Self::scanner_key(b"scanned_block", key.to_bytes().as_ref())
-  }
-  fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize) {
-    self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes())
-  }
-  fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
-    let bytes = self.0.get(Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
-    u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
-  }
-
   fn block_key(number: usize) -> Vec<u8> {
     Self::scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes().as_ref())
   }
   fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id) {
-    self.0.put(Self::block_key(number), id)
+    self.0.put(Self::block_key(number), id);
   }
   fn block(&self, number: usize) -> Option<<C::Block as Block>::Id> {
     self.0.get(Self::block_key(number)).map(|id| {
@@ -66,6 +55,62 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
       res.as_mut().copy_from_slice(&id);
       res
     })
+  }
+
+  fn scanned_block_key(key: <C::Curve as Ciphersuite>::G) -> Vec<u8> {
+    Self::scanner_key(b"scanned_block", key.to_bytes().as_ref())
+  }
+  fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize) {
+    self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
+  }
+  fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
+    let bytes = self.0.get(Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
+    u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
+  }
+
+  fn active_keys_key() -> Vec<u8> {
+    Self::scanner_key(b"active_keys", b"")
+  }
+  fn add_active_key(&mut self, key: <C::Curve as Ciphersuite>::G) {
+    let mut keys = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
+    keys.extend(key.to_bytes().as_ref());
+    self.0.put(Self::active_keys_key(), keys);
+  }
+  fn active_keys(&self) -> Vec<<C::Curve as Ciphersuite>::G> {
+    let bytes_vec = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
+    let mut bytes: &[u8] = bytes_vec.as_ref();
+
+    let mut res = Vec::with_capacity(bytes.len() / 32);
+    while !bytes.is_empty() {
+      res.push(C::Curve::read_G(&mut bytes).unwrap());
+    }
+    res
+  }
+
+  fn outputs_key(key: &[u8], block: &<C::Block as Block>::Id) -> Vec<u8> {
+    // This should be safe without the bincode serialize. Using bincode lets us not worry/have to
+    // think about this
+    let db_key = bincode::serialize(&(key, block.as_ref())).unwrap();
+    // Assert this is actually length prefixing
+    debug_assert!(db_key.len() >= (1 + key.len() + 1 + block.as_ref().len()));
+    Self::scanner_key(b"outputs", &db_key)
+  }
+  fn save_outputs(&mut self, key: &[u8], block: &<C::Block as Block>::Id, outputs: &[C::Output]) {
+    let mut bytes = Vec::with_capacity(outputs.len() * 64);
+    for output in outputs {
+      output.write(&mut bytes).unwrap();
+    }
+    self.0.put(Self::outputs_key(key, block), bytes);
+  }
+  fn outputs(&self, key: &[u8], block: &<C::Block as Block>::Id) -> Vec<C::Output> {
+    let bytes_vec = self.0.get(Self::outputs_key(key, block)).unwrap();
+    let mut bytes: &[u8] = bytes_vec.as_ref();
+
+    let mut res = vec![];
+    while !bytes.is_empty() {
+      res.push(C::Output::read(&mut bytes).unwrap());
+    }
+    res
   }
 }
 
@@ -83,27 +128,35 @@ pub struct Scanner<C: Coin, D: Db> {
 }
 
 #[derive(Debug)]
-pub struct ScannerHandle<C: Coin> {
+pub struct ScannerHandle<C: Coin, D: Db> {
+  db: ScannerDb<C, D>,
   pub orders: ScannerOrderChannel<C>,
   pub events: ScannerEventChannel<C>,
 }
 
-impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
+impl<C: Coin, D: Db> ScannerHandle<C, D> {
+  pub fn outputs(&self, key: &[u8], block: &<C::Block as Block>::Id) -> Vec<C::Output> {
+    self.db.outputs(key, block)
+  }
+}
+
+impl<C: Coin, D: Db> Scanner<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(coin: C, db: D) -> ScannerHandle<C> {
+  pub fn new(coin: C, db: D) -> ScannerHandle<C, D> {
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
+    let db = ScannerDb(db.clone(), PhantomData);
     tokio::spawn(
       Scanner {
         coin,
-        db: ScannerDb(db, PhantomData),
-        keys: vec![],
+        db: db.clone(),
+        keys: db.active_keys(),
         orders: orders_recv,
         events: events_send,
       }
       .run(),
     );
-    ScannerHandle { orders: orders_send, events: events_recv }
+    ScannerHandle { db, orders: orders_send, events: events_recv }
   }
 
   // An async function, to be spawned on a task, to discover and report outputs
@@ -183,6 +236,7 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
                 break;
               }
             };
+            self.db.save_outputs(key.to_bytes().as_ref(), &block.id(), &outputs);
 
             // Filter out outputs with IDs we've already handled
             // TODO (here? at site of event recipience?)
@@ -225,8 +279,10 @@ impl<C: Coin + 'static, D: Db + 'static> Scanner<C, D> {
             Some(order) => order,
           }
         } {
-          ScannerOrder::RotateKey { key, .. } => {
+          ScannerOrder::RotateKey { activation_number, key } => {
             info!("Rotating to key {:?}", key);
+            self.db.save_scanned_block(key, activation_number);
+            self.db.add_active_key(key);
             self.keys.push(key);
           }
           ScannerOrder::AckBlock(key, i) => {

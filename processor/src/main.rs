@@ -10,10 +10,10 @@ use thiserror::Error;
 use group::GroupEncoding;
 use frost::{curve::Ciphersuite, FrostError};
 
-use messages::{ProcessorMessage, CoordinatorMessage};
+use messages::{CoordinatorMessage, ProcessorMessage, substrate};
 
 mod coin;
-use coin::{CoinError, Coin};
+use coin::{CoinError, Block, Coin};
 
 mod key_gen;
 use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen};
@@ -130,6 +130,30 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             todo!()
             // signer.orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
           },
+          CoordinatorMessage::Substrate(
+            substrate::CoordinatorMessage::BlockAcknowledged { key, block }
+          ) => {
+            let mut block_id = <C::Block as Block>::Id::default();
+            block_id.as_mut().copy_from_slice(&block);
+
+            let scheduler =
+              schedulers
+                .get_mut(&key)
+                .expect("key we don't have a scheduler for acknowledged a block");
+            let plans = scheduler.add_outputs(scanner.outputs(&key, &block_id));
+            todo!(); // Handle plans
+          }
+          CoordinatorMessage::Substrate(substrate::CoordinatorMessage::Burns(burns)) => {
+            let scheduler = todo!(); // Use the latest key?
+            // TODO: OutInstruction data
+            /*
+            let plans = scheduler.schedule(burns.drain(..).filter_map(|burn| Some(Payment {
+              address: C::Address::try_from(burn.data.address.consume()).ok()?,
+              amount: burn.amount,
+            })));
+            */
+            todo!(); // Handle plans
+          }
         }
       },
 

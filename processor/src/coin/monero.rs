@@ -1,3 +1,5 @@
+use std::io;
+
 use async_trait::async_trait;
 
 use zeroize::Zeroizing;
@@ -72,11 +74,11 @@ impl OutputTrait for Output {
     self.0.commitment().amount
   }
 
-  fn serialize(&self) -> Vec<u8> {
-    self.0.serialize()
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    self.0.write(writer)
   }
 
-  fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     SpendableOutput::read(reader).map(Output)
   }
 }
