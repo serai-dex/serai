@@ -34,12 +34,12 @@ pub type KeyGenEventChannel<C> = mpsc::UnboundedReceiver<KeyGenEvent<C>>;
 #[derive(Debug)]
 struct KeyGenDb<C: Ciphersuite, D: Db>(D, PhantomData<C>);
 impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
-  fn key_gen_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
-    [b"KEY_GEN", dst, key].concat().to_vec()
+  fn key_gen_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
+    [b"KEY_GEN", dst, key.as_ref()].concat().to_vec()
   }
 
   fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {
-    Self::key_gen_key(b"params", &bincode::serialize(set).unwrap())
+    Self::key_gen_key(b"params", bincode::serialize(set).unwrap())
   }
   fn save_params(&mut self, set: &ValidatorSetInstance, params: &ThresholdParams) {
     self.0.put(Self::params_key(set), bincode::serialize(params).unwrap());
@@ -53,7 +53,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   // A former attempt may become the finalized attempt, even if it doesn't in a timely manner
   // Overwriting its commitments would be accordingly poor
   fn commitments_key(id: &KeyGenId) -> Vec<u8> {
-    Self::key_gen_key(b"commitments", &bincode::serialize(id).unwrap())
+    Self::key_gen_key(b"commitments", bincode::serialize(id).unwrap())
   }
   fn save_commitments(&mut self, id: &KeyGenId, commitments: &HashMap<u16, Vec<u8>>) {
     self.0.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
@@ -77,14 +77,14 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   }
 
   fn generated_keys_key(id: &KeyGenId) -> Vec<u8> {
-    Self::key_gen_key(b"generated_keys", &bincode::serialize(id).unwrap())
+    Self::key_gen_key(b"generated_keys", bincode::serialize(id).unwrap())
   }
   fn save_keys(&mut self, id: &KeyGenId, keys: &ThresholdCore<C>) {
     self.0.put(Self::generated_keys_key(id), keys.serialize());
   }
 
   fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
-    Self::key_gen_key(b"keys", &bincode::serialize(set).unwrap())
+    Self::key_gen_key(b"keys", bincode::serialize(set).unwrap())
   }
   fn keys(&mut self, set: &ValidatorSetInstance) -> ThresholdKeys<C> {
     ThresholdKeys::new(

@@ -42,12 +42,12 @@ pub type SignerEventChannel<C> = mpsc::UnboundedReceiver<SignerEvent<C>>;
 #[derive(Debug)]
 struct SignerDb<D: Db>(D);
 impl<D: Db> SignerDb<D> {
-  fn sign_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
-    [b"SIGN", dst, key].concat().to_vec()
+  fn sign_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
+    [b"SIGNER", dst, key.as_ref()].concat().to_vec()
   }
 
   fn attempt_key(id: &SignId) -> Vec<u8> {
-    Self::sign_key(b"attempt", &bincode::serialize(id).unwrap())
+    Self::sign_key(b"attempt", bincode::serialize(id).unwrap())
   }
   fn attempt(&mut self, id: &SignId) {
     self.0.put(Self::attempt_key(id), []);
