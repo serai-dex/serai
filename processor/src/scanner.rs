@@ -123,6 +123,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     block: usize,
   ) -> Vec<<C::Output as Output>::Id> {
     // TODO: Use a TX here
+    self.0.put(Self::scanner_key(b"corrupt", b""), b"");
 
     // Mark all the outputs from this block as seen
     let mut ids = vec![];
@@ -138,6 +139,8 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     }
 
     self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
+
+    self.0.del(Self::scanner_key(b"corrupt", b""));
 
     // Return this block's outputs so they can be pruned from the RAM cache
     ids
@@ -177,6 +180,10 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
 impl<C: Coin, D: Db> Scanner<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(coin: C, db: D) -> ScannerHandle<C, D> {
+    if db.get(ScannerDb::<C, D>::scanner_key(b"corrupt", b"")).is_some() {
+      panic!("scanner DB is corrupt");
+    }
+
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
     let db = ScannerDb(db, PhantomData);

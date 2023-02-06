@@ -25,4 +25,7 @@ impl Db for MemDb {
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
     self.0.read().unwrap().get(key.as_ref()).cloned()
   }
+  fn del(&mut self, key: impl AsRef<[u8]>) {
+    self.0.write().unwrap().remove(key.as_ref());
+  }
 }

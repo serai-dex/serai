@@ -33,6 +33,7 @@ mod tests;
 pub trait Db: 'static + Send + Sync + Clone + Debug {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
+  fn del(&mut self, key: impl AsRef<[u8]>);
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -97,6 +98,9 @@ impl Db for MemDb {
   }
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
     self.0.read().unwrap().get(key.as_ref()).cloned()
+  }
+  fn del(&mut self, key: impl AsRef<[u8]>) {
+    self.0.write().unwrap().remove(key.as_ref());
   }
 }
 
