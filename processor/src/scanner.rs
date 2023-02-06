@@ -1,5 +1,5 @@
 use core::{marker::PhantomData, time::Duration};
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
@@ -39,12 +39,12 @@ pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 #[derive(Clone, Debug)]
 struct ScannerDb<C: Coin, D: Db>(D, PhantomData<C>);
 impl<C: Coin, D: Db> ScannerDb<C, D> {
-  fn scanner_key(dst: &'static [u8], key: &[u8]) -> Vec<u8> {
-    [b"SCANNER", dst, key].concat().to_vec()
+  fn scanner_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
+    [b"SCANNER", dst, key.as_ref()].concat().to_vec()
   }
 
   fn block_key(number: usize) -> Vec<u8> {
-    Self::scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes().as_ref())
+    Self::scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes())
   }
   fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id) {
     self.0.put(Self::block_key(number), id);
@@ -55,17 +55,6 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
       res.as_mut().copy_from_slice(&id);
       res
     })
-  }
-
-  fn scanned_block_key(key: <C::Curve as Ciphersuite>::G) -> Vec<u8> {
-    Self::scanner_key(b"scanned_block", key.to_bytes().as_ref())
-  }
-  fn save_scanned_block(&mut self, key: <C::Curve as Ciphersuite>::G, block: usize) {
-    self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
-  }
-  fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
-    let bytes = self.0.get(Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
-    u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
   }
 
   fn active_keys_key() -> Vec<u8> {
@@ -87,20 +76,32 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     res
   }
 
+  fn seen_key(id: &<C::Output as Output>::Id) -> Vec<u8> {
+    Self::scanner_key(b"seen", id)
+  }
+  fn seen(&self, id: &<C::Output as Output>::Id) -> bool {
+    self.0.get(Self::seen_key(id)).is_some()
+  }
+
   fn outputs_key(key: &[u8], block: &<C::Block as Block>::Id) -> Vec<u8> {
     // This should be safe without the bincode serialize. Using bincode lets us not worry/have to
     // think about this
     let db_key = bincode::serialize(&(key, block.as_ref())).unwrap();
     // Assert this is actually length prefixing
     debug_assert!(db_key.len() >= (1 + key.len() + 1 + block.as_ref().len()));
-    Self::scanner_key(b"outputs", &db_key)
+    Self::scanner_key(b"outputs", db_key)
   }
-  fn save_outputs(&mut self, key: &[u8], block: &<C::Block as Block>::Id, outputs: &[C::Output]) {
+  fn save_outputs(
+    &mut self,
+    key: &<C::Curve as Ciphersuite>::G,
+    block: &<C::Block as Block>::Id,
+    outputs: &[C::Output],
+  ) {
     let mut bytes = Vec::with_capacity(outputs.len() * 64);
     for output in outputs {
       output.write(&mut bytes).unwrap();
     }
-    self.0.put(Self::outputs_key(key, block), bytes);
+    self.0.put(Self::outputs_key(key.to_bytes().as_ref(), block), bytes);
   }
   fn outputs(&self, key: &[u8], block: &<C::Block as Block>::Id) -> Vec<C::Output> {
     let bytes_vec = self.0.get(Self::outputs_key(key, block)).unwrap();
@@ -111,6 +112,39 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
       res.push(C::Output::read(&mut bytes).unwrap());
     }
     res
+  }
+
+  fn scanned_block_key(key: <C::Curve as Ciphersuite>::G) -> Vec<u8> {
+    Self::scanner_key(b"scanned_block", key.to_bytes())
+  }
+  fn save_scanned_block(
+    &mut self,
+    key: <C::Curve as Ciphersuite>::G,
+    block: usize,
+  ) -> Vec<<C::Output as Output>::Id> {
+    // TODO: Use a TX here
+
+    // Mark all the outputs from this block as seen
+    let mut ids = vec![];
+    if let Some(block) = self.block(block) {
+      for output in self.outputs(key.to_bytes().as_ref(), &block) {
+        let id = output.id();
+        self.0.put(Self::seen_key(&id), b"");
+        ids.push(id);
+      }
+    } else {
+      // This can happen when the key is first added
+      assert!(self.0.get(Self::scanned_block_key(key)).is_none());
+    }
+
+    self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
+
+    // Return this block's outputs so they can be pruned from the RAM cache
+    ids
+  }
+  fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
+    let bytes = self.0.get(Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
+    u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
   }
 }
 
@@ -145,7 +179,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
   pub fn new(coin: C, db: D) -> ScannerHandle<C, D> {
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
-    let db = ScannerDb(db.clone(), PhantomData);
+    let db = ScannerDb(db, PhantomData);
     tokio::spawn(
       Scanner {
         coin,
@@ -176,6 +210,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
     };
 
     let mut ram_scanned = HashMap::new();
+    let mut ram_outputs = HashSet::new();
 
     loop {
       // Scan new blocks
@@ -236,21 +271,28 @@ impl<C: Coin, D: Db> Scanner<C, D> {
                 break;
               }
             };
-            self.db.save_outputs(key.to_bytes().as_ref(), &block.id(), &outputs);
 
-            // Filter out outputs with IDs we've already handled
-            // TODO (here? at site of event recipience?)
-            /*
-            let outputs = outputs.drain(..).filter(|output| {
-              let id = output.id().as_ref().to_vec();
-              db.has_output(id) || ram.has_output(id)
-            }).collect::<Vec<_>>();
-            */
+            // Panic if we've already seen these outputs
+            for output in &outputs {
+              let id = output.id();
+              // On Bitcoin, the output ID should be unique for a given chain
+              // On Monero, it's trivial to make an output sharing an ID with another
+              // We should only scan outputs with valid IDs however, which will be unique
+              let seen = self.db.seen(&id);
+              let id = id.as_ref().to_vec();
+              if seen || ram_outputs.contains(&id) {
+                panic!("scanned an output multiple times");
+              }
+              ram_outputs.insert(id);
+            }
 
             // TODO: Still fire an empty Outputs event if we haven't had inputs in a while
             if outputs.is_empty() {
               continue;
             }
+
+            // Save the outputs to disk
+            self.db.save_outputs(&key, &block.id(), &outputs);
 
             // Fire the block event
             // This is intended for group acknowledgement of what block we're on, not only
@@ -280,14 +322,23 @@ impl<C: Coin, D: Db> Scanner<C, D> {
           }
         } {
           ScannerOrder::RotateKey { activation_number, key } => {
+            if !self.keys.is_empty() {
+              // Protonet will have a single, static validator set
+              // TODO
+              panic!("only a single key is supported at this time");
+            }
+
             info!("Rotating to key {:?}", key);
             self.db.save_scanned_block(key, activation_number);
             self.db.add_active_key(key);
             self.keys.push(key);
           }
+
           ScannerOrder::AckBlock(key, i) => {
             debug!("Block {} acknowledged", i);
-            self.db.save_scanned_block(key, i);
+            for output in self.db.save_scanned_block(key, i) {
+              ram_outputs.remove(output.as_ref());
+            }
           }
         }
       }
