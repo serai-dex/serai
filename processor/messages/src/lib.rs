@@ -99,13 +99,13 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
-    BlockAcknowledged { key: Vec<u8>, block: [u8; 32] },
+    BlockAcknowledged { key: Vec<u8>, block: Vec<u8> },
     Burns(Vec<WithAmount<OutInstruction>>),
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    Update { block: [u8; 32], instructions: Vec<WithAmount<InInstruction>> },
+    Update { block: Vec<u8>, instructions: Vec<WithAmount<InInstruction>> },
   }
 }
 
