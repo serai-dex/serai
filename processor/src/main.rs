@@ -7,11 +7,8 @@ use std::{
   collections::HashMap,
 };
 
-use async_trait::async_trait;
-use thiserror::Error;
-
 use group::GroupEncoding;
-use frost::{curve::Ciphersuite, FrostError};
+use frost::curve::Ciphersuite;
 
 use serai_primitives::WithAmount;
 use tokens_primitives::OutInstruction;
@@ -19,7 +16,7 @@ use tokens_primitives::OutInstruction;
 use messages::{CoordinatorMessage, ProcessorMessage, substrate};
 
 mod coin;
-use coin::{CoinError, Block, Coin};
+use coin::{Block, Coin};
 
 mod key_gen;
 use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen};
@@ -122,7 +119,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
     );
   }
 
-  let mut track_key = |schedulers: &mut HashMap<_, _>, activation_number, key| {
+  let track_key = |schedulers: &mut HashMap<_, _>, activation_number, key| {
     scanner.orders.send(ScannerOrder::RotateKey { activation_number, key }).unwrap();
     schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
   };

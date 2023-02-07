@@ -3,8 +3,8 @@ use std::{io, collections::HashMap};
 use async_trait::async_trait;
 
 use bitcoin::{
-  hashes::Hash, schnorr::TweakedPublicKey, OutPoint, Transaction, Block, Network,
-  Address as BAddress,
+  hashes::Hash, schnorr::TweakedPublicKey, psbt::serialize::Serialize, OutPoint, Transaction,
+  Block, Network, Address as BAddress,
 };
 
 #[cfg(test)]
@@ -25,7 +25,7 @@ use frost::{curve::Secp256k1, ThresholdKeys};
 use bitcoin_serai::{
   crypto::{x_only, make_even},
   wallet::{SpendableOutput, TransactionMachine, SignableTransaction as BSignableTransaction},
-  rpc::Rpc,
+  rpc::{RpcError, Rpc},
 };
 
 use crate::{
@@ -278,7 +278,7 @@ impl Coin for Bitcoin {
         Some(Self::address(change(change_key).0).0).filter(|_| tx.change),
         fee.0,
       )
-      .ok_or(CoinError::NotEnoughFunds)?,
+      .unwrap(),
     })
   }
 
@@ -294,8 +294,17 @@ impl Coin for Bitcoin {
       .map_err(|_| CoinError::ConnectionError)
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError> {
-    Ok(self.rpc.send_raw_transaction(tx).await.unwrap().to_vec())
+  fn serialize_transaction(tx: &Self::Transaction) -> Vec<u8> {
+    tx.serialize()
+  }
+
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
+    match self.rpc.send_raw_transaction(tx).await {
+      Ok(_) => (),
+      Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
+      Err(e) => panic!("failed to publish TX {:?}: {e}", tx.txid()),
+    }
+    Ok(())
   }
 
   #[cfg(test)]

@@ -14,7 +14,7 @@ use frost::{curve::Ed25519, ThresholdKeys};
 use monero_serai::{
   transaction::Transaction,
   block::Block as MBlock,
-  rpc::Rpc,
+  rpc::{RpcError, Rpc},
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec, MoneroAddress},
@@ -284,9 +284,16 @@ impl Coin for Monero {
       .map_err(|_| CoinError::ConnectionError)
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError> {
-    self.rpc.publish_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-    Ok(tx.hash().to_vec())
+  fn serialize_transaction(tx: &Self::Transaction) -> Vec<u8> {
+    tx.serialize()
+  }
+
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
+    match self.rpc.publish_transaction(tx).await {
+      Ok(_) => Ok(()),
+      Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
+      Err(e) => panic!("failed to publish TX {:?}: {e}", tx.hash()),
+    }
   }
 
   #[cfg(test)]

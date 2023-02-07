@@ -23,8 +23,6 @@ use crate::Plan;
 pub enum CoinError {
   #[error("failed to connect to coin daemon")]
   ConnectionError,
-  #[error("not enough funds")] // TODO: Remove this
-  NotEnoughFunds,
 }
 
 pub trait Id:
@@ -185,8 +183,11 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError>;
 
+  // Serialize a transaction.
+  fn serialize_transaction(tx: &Self::Transaction) -> Vec<u8>;
+
   /// Publish a transaction.
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError>;
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError>;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;

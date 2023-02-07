@@ -55,6 +55,10 @@ impl<D: Db> SignerDb<D> {
   fn has_attempt(&mut self, id: &SignId) -> bool {
     self.0.get(Self::attempt_key(id)).is_some()
   }
+
+  fn save_transaction(&mut self, id: [u8; 32], tx: Vec<u8>) {
+    self.0.put(Self::sign_key(b"tx", id), tx);
+  }
 }
 
 /// Coded so if the processor spontaneously reboots, one of two paths occur:
@@ -328,6 +332,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
               Err(e) => todo!("malicious signer: {:?}", e),
             };
 
+            self.db.save_transaction(id.id, C::serialize_transaction(&tx));
             if let Err(e) = self.coin.publish_transaction(&tx).await {
               error!("couldn't publish {:?}: {:?}", tx, e);
             } else {
