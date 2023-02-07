@@ -4,7 +4,7 @@ mod bitcoin {
   use crate::coin::Bitcoin;
 
   async fn bitcoin() -> Bitcoin {
-    let bitcoin = Bitcoin::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await;
+    let bitcoin = Bitcoin::new("http://serai:seraidex@127.0.0.1:18443".to_string());
     bitcoin.fresh_chain().await;
     bitcoin
   }
@@ -16,7 +16,7 @@ mod monero {
   use crate::coin::{Coin, Monero};
 
   async fn monero() -> Monero {
-    let monero = Monero::new("http://127.0.0.1:18081".to_string()).await;
+    let monero = Monero::new("http://127.0.0.1:18081".to_string());
     while monero.get_latest_block_number().await.unwrap() < 150 {
       monero.mine_block().await;
     }

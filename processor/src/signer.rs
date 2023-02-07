@@ -6,8 +6,9 @@ use std::{
 
 use rand_core::OsRng;
 
+use group::GroupEncoding;
 use frost::{
-  ThresholdParams,
+  ThresholdKeys,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
 };
 
@@ -68,7 +69,7 @@ pub struct Signer<C: Coin, D: Db> {
   coin: C,
   db: SignerDb<D>,
 
-  params: ThresholdParams,
+  keys: ThresholdKeys<C::Curve>,
 
   signable: HashMap<[u8; 32], (SystemTime, C::SignableTransaction)>,
   attempt: HashMap<[u8; 32], u32>,
@@ -103,7 +104,7 @@ pub struct SignerHandle<C: Coin> {
 
 impl<C: Coin, D: Db> Signer<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D, coin: C, params: ThresholdParams) -> SignerHandle<C> {
+  pub fn new(db: D, coin: C, keys: ThresholdKeys<C::Curve>) -> SignerHandle<C> {
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
     tokio::spawn(
@@ -111,7 +112,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
         coin,
         db: SignerDb(db),
 
-        params,
+        keys,
 
         signable: HashMap::new(),
         attempt: HashMap::new(),
@@ -127,7 +128,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
   }
 
   fn verify_id(&self, id: &SignId) -> Result<(), ()> {
-    if !id.signing_set(&self.params).contains(&self.params.i()) {
+    if !id.signing_set(&self.keys.params()).contains(&self.keys.params().i()) {
       panic!("coordinator sent us preprocesses for a signing attempt we're not participating in");
     }
 
@@ -189,9 +190,9 @@ impl<C: Coin, D: Db> Signer<C, D> {
           let id = *id;
           self.attempt.insert(id, attempt);
 
-          let id = SignId { id, attempt };
+          let id = SignId { key: self.keys.group_key().to_bytes().as_ref().to_vec(), id, attempt };
           // Only preprocess if we're a signer
-          if !id.signing_set(&self.params).contains(&self.params.i()) {
+          if !id.signing_set(&self.keys.params()).contains(&self.keys.params().i()) {
             continue;
           }
           info!("selected to sign {:?}", id);
@@ -332,6 +333,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
               Err(e) => todo!("malicious signer: {:?}", e),
             };
 
+            // Save the transaction in case it's needed for recovery
             self.db.save_transaction(id.id, C::serialize_transaction(&tx));
             if let Err(e) = self.coin.publish_transaction(&tx).await {
               error!("couldn't publish {:?}: {:?}", tx, e);

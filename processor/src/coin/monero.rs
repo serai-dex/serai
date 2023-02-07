@@ -122,7 +122,7 @@ impl PartialEq for Monero {
 impl Eq for Monero {}
 
 impl Monero {
-  pub async fn new(url: String) -> Monero {
+  pub fn new(url: String) -> Monero {
     Monero { rpc: Rpc::new(url).unwrap() }
   }
 

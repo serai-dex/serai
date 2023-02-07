@@ -76,12 +76,12 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   // Execute the plan
   let fee = coin.get_fee().await;
-  let mut params_txs = HashMap::new();
+  let mut keys_txs = HashMap::new();
   for (i, keys) in keys.drain() {
-    params_txs.insert(
+    keys_txs.insert(
       i,
       (
-        keys.params(),
+        keys.clone(),
         coin
           .prepare_send(
             keys,
@@ -97,7 +97,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     );
   }
 
-  sign(coin.clone(), params_txs).await;
+  sign(coin.clone(), keys_txs).await;
   coin.mine_block().await;
   let block = coin.get_block(coin.get_latest_block_number().await.unwrap()).await.unwrap();
   let outputs = coin.get_outputs(&block, key).await.unwrap();

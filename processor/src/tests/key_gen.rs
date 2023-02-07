@@ -98,10 +98,10 @@ pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
       .send(KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey { id: ID }))
       .unwrap();
 
-    if let Some(KeyGenEvent::KeyConfirmed { set, params, key }) = key_gen.events.recv().await {
+    if let Some(KeyGenEvent::KeyConfirmed { set, keys }) = key_gen.events.recv().await {
       assert_eq!(set, ID.set);
-      assert_eq!(params, ThresholdParams::new(2, 3, u16::try_from(i).unwrap()).unwrap());
-      assert_eq!(key.to_bytes().as_ref(), res.as_ref().unwrap());
+      assert_eq!(keys.params(), ThresholdParams::new(2, 3, u16::try_from(i).unwrap()).unwrap());
+      assert_eq!(keys.group_key().to_bytes().as_ref(), res.as_ref().unwrap());
     } else {
       panic!("didn't get key back");
     }

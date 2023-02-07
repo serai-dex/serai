@@ -16,7 +16,7 @@ use tokens_primitives::OutInstruction;
 use messages::{CoordinatorMessage, ProcessorMessage, substrate};
 
 mod coin;
-use coin::{Block, Coin};
+use coin::{Block, Coin, Bitcoin, Monero};
 
 mod key_gen;
 use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen};
@@ -112,11 +112,13 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let mut signers = HashMap::new();
 
   for key in &active_keys {
-    // TODO: load existing schedulers
+    // TODO: Load existing schedulers
+
     signers.insert(
       key.to_bytes().as_ref().to_vec(),
-      Signer::new(db.clone(), coin.clone(), key_gen.params(key)),
+      Signer::new(db.clone(), coin.clone(), key_gen.keys(key)),
     );
+    // TODO: Re-issue SignTransaction orders
   }
 
   let track_key = |schedulers: &mut HashMap<_, _>, activation_number, key| {
@@ -137,8 +139,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             key_gen.orders.send(KeyGenOrder::CoordinatorMessage(msg)).unwrap()
           },
           CoordinatorMessage::Sign(msg) => {
-            todo!()
-            // signer.orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
+            signers[msg.key()].orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
           },
           CoordinatorMessage::Substrate(
             substrate::CoordinatorMessage::BlockAcknowledged { key, block }
@@ -177,12 +178,12 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 
       msg = key_gen.events.recv() => {
         match msg.unwrap() {
-          KeyGenEvent::KeyConfirmed { set, params, key } => {
+          KeyGenEvent::KeyConfirmed { set, keys } => {
             let activation_number = coin.get_latest_block_number().await.unwrap(); // TODO
-            track_key(&mut schedulers, activation_number, key);
+            track_key(&mut schedulers, activation_number, keys.group_key());
             signers.insert(
-              key.to_bytes().as_ref().to_vec(),
-              Signer::new(db.clone(), coin.clone(), params)
+              keys.group_key().to_bytes().as_ref().to_vec(),
+              Signer::new(db.clone(), coin.clone(), keys)
             );
           },
           KeyGenEvent::ProcessorMessage(msg) => {
@@ -214,9 +215,10 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 
 #[tokio::main]
 async fn main() {
-  use crate::coin::Monero;
-  let coin = Monero::new("".to_string()).await;
-
   let db = MemDb::new();
-  run(db, coin).await;
+  match "TODO" {
+    "bitcoin" => run(db, Bitcoin::new("TODO".to_string())).await,
+    "monero" => run(db, Monero::new("TODO".to_string())).await,
+    _ => panic!("unrecognized coin"),
+  }
 }

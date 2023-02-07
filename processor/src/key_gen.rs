@@ -24,7 +24,7 @@ pub enum KeyGenOrder {
 
 #[derive(Debug)]
 pub enum KeyGenEvent<C: Ciphersuite> {
-  KeyConfirmed { set: ValidatorSetInstance, params: ThresholdParams, key: C::G },
+  KeyConfirmed { set: ValidatorSetInstance, keys: ThresholdKeys<C> },
   ProcessorMessage(ProcessorMessage),
 }
 
@@ -39,7 +39,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   }
 
   fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {
-    Self::key_gen_key(b"params_by_set", bincode::serialize(set).unwrap())
+    Self::key_gen_key(b"params", bincode::serialize(set).unwrap())
   }
   fn save_params(&mut self, set: &ValidatorSetInstance, params: &ThresholdParams) {
     self.0.put(Self::params_key(set), bincode::serialize(params).unwrap());
@@ -83,34 +83,19 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     self.0.put(Self::generated_keys_key(id), keys.serialize());
   }
 
-  fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
-    Self::key_gen_key(b"keys", bincode::serialize(set).unwrap())
+  fn keys_key(key: &C::G) -> Vec<u8> {
+    Self::key_gen_key(b"keys", key.to_bytes())
   }
-  fn params_by_key_key(key: &C::G) -> Vec<u8> {
-    Self::key_gen_key(b"params_by_key", key.to_bytes())
+  fn confirm_keys(&mut self, id: &KeyGenId) -> ThresholdKeys<C> {
+    let keys_vec = self.0.get(Self::generated_keys_key(id)).unwrap();
+    let keys = ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut keys_vec.as_ref()).unwrap());
+    self.0.put(Self::keys_key(&keys.group_key()), keys_vec);
+    keys
   }
-  fn confirm_keys(&mut self, id: &KeyGenId) {
-    // TODO: Use a TX here
-    self.0.put(Self::key_gen_key(b"corrupt", b""), b"");
-
-    let keys = self.0.get(Self::generated_keys_key(id)).unwrap();
-    self.0.put(Self::keys_key(&id.set), &keys);
-    let keys = ThresholdKeys::<C>::new(ThresholdCore::read::<&[u8]>(&mut keys.as_ref()).unwrap());
-    self
-      .0
-      .put(Self::params_by_key_key(&keys.group_key()), bincode::serialize(&keys.params()).unwrap());
-
-    // TODO: Prune other key gen attempts' info
-
-    self.0.del(Self::key_gen_key(b"corrupt", b""));
-  }
-  fn keys(&mut self, set: &ValidatorSetInstance) -> ThresholdKeys<C> {
+  fn keys(&self, key: &C::G) -> ThresholdKeys<C> {
     ThresholdKeys::new(
-      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref()).unwrap(),
+      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(key)).unwrap().as_ref()).unwrap(),
     )
-  }
-  fn params_by_key(&self, key: &C::G) -> ThresholdParams {
-    bincode::deserialize(&self.0.get(Self::params_by_key_key(key)).unwrap()).unwrap()
   }
 }
 
@@ -136,8 +121,8 @@ pub struct KeyGenHandle<C: Ciphersuite, D: Db> {
   pub events: KeyGenEventChannel<C>,
 }
 impl<C: Ciphersuite, D: Db> KeyGenHandle<C, D> {
-  pub fn params(&self, key: &C::G) -> ThresholdParams {
-    self.db.params_by_key(key)
+  pub fn keys(&self, key: &C::G) -> ThresholdKeys<C> {
+    self.db.keys(key)
   }
 }
 
@@ -329,15 +314,9 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
 
         KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey { id }) => {
           info!("Confirmed key from {:?}", id);
-          self.db.confirm_keys(&id);
 
-          let keys = self.db.keys(&id.set);
-          if handle_send(self.events.send(KeyGenEvent::KeyConfirmed {
-            set: id.set,
-            params: keys.params(),
-            key: keys.group_key(),
-          }))
-          .is_err()
+          let keys = self.db.confirm_keys(&id);
+          if handle_send(self.events.send(KeyGenEvent::KeyConfirmed { set: id.set, keys })).is_err()
           {
             return;
           }

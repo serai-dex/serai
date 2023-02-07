@@ -155,7 +155,7 @@ impl PartialEq for Bitcoin {
 impl Eq for Bitcoin {}
 
 impl Bitcoin {
-  pub async fn new(url: String) -> Bitcoin {
+  pub fn new(url: String) -> Bitcoin {
     Bitcoin { rpc: Rpc::new(url) }
   }
 

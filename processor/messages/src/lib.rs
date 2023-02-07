@@ -50,8 +50,9 @@ pub mod key_gen {
 pub mod sign {
   use super::*;
 
-  #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Hash, Debug, Zeroize, Serialize, Deserialize)]
   pub struct SignId {
+    pub key: Vec<u8>,
     pub id: [u8; 32],
     pub attempt: u32,
   }
@@ -63,6 +64,7 @@ pub mod sign {
     pub fn signing_set(&self, params: &ThresholdParams) -> Vec<u16> {
       let mut transcript = RecommendedTranscript::new(b"SignId signing_set");
       transcript.domain_separate(b"SignId");
+      transcript.append_message(b"key", &self.key);
       transcript.append_message(b"id", self.id);
       transcript.append_message(b"attempt", self.attempt.to_le_bytes());
 
@@ -91,6 +93,15 @@ pub mod sign {
     Preprocess { id: SignId, preprocess: Vec<u8> },
     // Signed share for the specified signing protocol.
     Share { id: SignId, share: Vec<u8> },
+  }
+
+  impl CoordinatorMessage {
+    pub fn key(&self) -> &[u8] {
+      match self {
+        CoordinatorMessage::Preprocesses { id, .. } => { &id.key },
+        CoordinatorMessage::Shares { id, .. } => { &id.key },
+      }
+    }
   }
 }
 
