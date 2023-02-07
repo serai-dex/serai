@@ -50,7 +50,10 @@ accordingly. This is done by scheduling the payments out.
 Immediately, we can just request votes from the live net (requiring active
 67% consensus). Ideally, we do an extra Schnorr signature at time of sign,
 which is then broadcast to everyone, so any one honest node can provide an
-attestation.
+attestation. This doesn't fully work because a malicious node can withhold their
+TX signature share, yet still provide the completion signature. The completion
+signature would to embed the underlying signature, which can't be done without
+another round.
 
 - Scheduler uses exact amounts yet we need to handle fees as well
 

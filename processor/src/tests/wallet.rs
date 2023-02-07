@@ -24,7 +24,8 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
   let key = keys[&1].group_key();
 
-  let mut scanner = Scanner::new(coin.clone(), MemDb::new());
+  let (mut scanner, active_keys) = Scanner::new(coin.clone(), MemDb::new());
+  assert!(active_keys.is_empty());
   let (sync_block, outputs) = {
     scanner
       .orders

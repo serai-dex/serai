@@ -31,7 +31,7 @@ pub enum KeyGenEvent<C: Ciphersuite> {
 pub type KeyGenOrderChannel = mpsc::UnboundedSender<KeyGenOrder>;
 pub type KeyGenEventChannel<C> = mpsc::UnboundedReceiver<KeyGenEvent<C>>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct KeyGenDb<C: Ciphersuite, D: Db>(D, PhantomData<C>);
 impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   fn key_gen_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
@@ -39,7 +39,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   }
 
   fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {
-    Self::key_gen_key(b"params", bincode::serialize(set).unwrap())
+    Self::key_gen_key(b"params_by_set", bincode::serialize(set).unwrap())
   }
   fn save_params(&mut self, set: &ValidatorSetInstance, params: &ThresholdParams) {
     self.0.put(Self::params_key(set), bincode::serialize(params).unwrap());
@@ -86,14 +86,31 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
     Self::key_gen_key(b"keys", bincode::serialize(set).unwrap())
   }
+  fn params_by_key_key(key: C::G) -> Vec<u8> {
+    Self::key_gen_key(b"params_by_key", key.to_bytes())
+  }
+  fn confirm_keys(&mut self, id: &KeyGenId) {
+    // TODO: Use a TX here
+    self.0.put(Self::key_gen_key(b"corrupt", b""), b"");
+
+    let keys = self.0.get(Self::generated_keys_key(id)).unwrap();
+    self.0.put(Self::keys_key(&id.set), &keys);
+    let keys = ThresholdKeys::<C>::new(ThresholdCore::read::<&[u8]>(&mut keys.as_ref()).unwrap());
+    self
+      .0
+      .put(Self::params_by_key_key(keys.group_key()), bincode::serialize(&keys.params()).unwrap());
+
+    // TODO: Prune other key gen attempts' info
+
+    self.0.del(Self::key_gen_key(b"corrupt", b""));
+  }
   fn keys(&mut self, set: &ValidatorSetInstance) -> ThresholdKeys<C> {
     ThresholdKeys::new(
       ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref()).unwrap(),
     )
   }
-  fn confirm_keys(&mut self, id: &KeyGenId) {
-    self.0.put(Self::keys_key(&id.set), &self.0.get(Self::generated_keys_key(id)).unwrap());
-    // TODO: Prune other key gen attempts' info
+  fn params_by_key(&self, key: C::G) -> ThresholdParams {
+    bincode::deserialize(&self.0.get(Self::params_by_key_key(key)).unwrap()).unwrap()
   }
 }
 
@@ -113,19 +130,30 @@ pub struct KeyGen<C: Ciphersuite, D: Db> {
 }
 
 #[derive(Debug)]
-pub struct KeyGenHandle<C: Ciphersuite> {
+pub struct KeyGenHandle<C: Ciphersuite, D: Db> {
+  db: KeyGenDb<C, D>,
   pub orders: KeyGenOrderChannel,
   pub events: KeyGenEventChannel<C>,
 }
+impl<C: Ciphersuite, D: Db> KeyGenHandle<C, D> {
+  pub fn params(&self, key: C::G) -> ThresholdParams {
+    self.db.params_by_key(key)
+  }
+}
 
-impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
+impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D) -> KeyGenHandle<C> {
+  pub fn new(db: D) -> KeyGenHandle<C, D> {
+    if db.get(KeyGenDb::<C, D>::key_gen_key(b"corrupt", b"")).is_some() {
+      panic!("key gen DB is corrupt");
+    }
+
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
+    let db = KeyGenDb(db, PhantomData::<C>);
     tokio::spawn(
       KeyGen {
-        db: KeyGenDb(db, PhantomData::<C>),
+        db: db.clone(),
         active_commit: HashMap::new(),
         active_share: HashMap::new(),
         orders: orders_recv,
@@ -133,7 +161,7 @@ impl<C: 'static + Send + Ciphersuite, D: Db> KeyGen<C, D> {
       }
       .run(),
     );
-    KeyGenHandle { orders: orders_send, events: events_recv }
+    KeyGenHandle { db, orders: orders_send, events: events_recv }
   }
 
   // An async function, to be spawned on a task, to handle key generations

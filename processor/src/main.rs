@@ -1,6 +1,9 @@
 use core::fmt::Debug;
 use std::{
+  pin::Pin,
   sync::{Arc, RwLock},
+  task::{Poll, Context},
+  future::Future,
   collections::HashMap,
 };
 
@@ -19,7 +22,7 @@ mod key_gen;
 use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen};
 
 mod signer;
-use signer::{SignerOrder, SignerEvent, Signer};
+use signer::{SignerOrder, SignerEvent, Signer, SignerHandle};
 
 mod scanner;
 use scanner::{ScannerOrder, ScannerEvent, Scanner};
@@ -104,14 +107,34 @@ impl Db for MemDb {
   }
 }
 
+struct SignerMessageFuture<'a, C: Coin>(&'a mut HashMap<Vec<u8>, SignerHandle<C>>);
+impl<'a, C: Coin> Future for SignerMessageFuture<'a, C> {
+  type Output = (Vec<u8>, SignerEvent<C>);
+  fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+    for (key, signer) in self.0.iter_mut() {
+      match signer.events.poll_recv(ctx) {
+        Poll::Ready(event) => return Poll::Ready((key.clone(), event.unwrap())),
+        Poll::Pending => {}
+      }
+    }
+    Poll::Pending
+  }
+}
+
 async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone());
-  let mut scanner = Scanner::new(coin.clone(), db.clone());
+  let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
 
   let mut schedulers = HashMap::new();
-  // TODO: load existing schedulers
   let mut signers = HashMap::new();
-  // TODO: Load existing signers
+
+  for key in active_keys {
+    // TODO: load existing schedulers
+    signers.insert(
+      key.to_bytes().as_ref().to_vec(),
+      Signer::new(db.clone(), coin.clone(), key_gen.params(key)),
+    );
+  }
 
   let mut track_key = |activation_number, key| {
     scanner.orders.send(ScannerOrder::RotateKey { activation_number, key }).unwrap();
@@ -186,16 +209,14 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         }
       },
 
-      /*
-      msg = signer.events.recv() => {
-        match msg.unwrap() {
-          SignerEvent::SignedTransaction { id: _, tx: _ } => todo!(),
+      (key, msg) = SignerMessageFuture(&mut signers) => {
+        match msg {
+          SignerEvent::SignedTransaction { id, tx } => todo!(),
           SignerEvent::ProcessorMessage(msg) => {
             to_coordinator.send(ProcessorMessage::Sign(msg)).unwrap();
           },
         }
       },
-      */
     }
   }
 }

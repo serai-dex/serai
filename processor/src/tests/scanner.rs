@@ -25,9 +25,10 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let first = Arc::new(Mutex::new(true));
   let db = MemDb::new();
   let new_scanner = || async {
-    let scanner = Scanner::new(coin.clone(), db.clone());
+    let (scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
     let mut first = first.lock().unwrap();
     if *first {
+      assert!(active_keys.is_empty());
       scanner
         .orders
         .send(ScannerOrder::RotateKey {
@@ -36,6 +37,8 @@ pub async fn test_scanner<C: Coin>(coin: C) {
         })
         .unwrap();
       *first = false;
+    } else {
+      assert_eq!(active_keys.len(), 1);
     }
     scanner
   };

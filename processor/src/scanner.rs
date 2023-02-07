@@ -179,7 +179,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
 
 impl<C: Coin, D: Db> Scanner<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(coin: C, db: D) -> ScannerHandle<C, D> {
+  pub fn new(coin: C, db: D) -> (ScannerHandle<C, D>, Vec<<C::Curve as Ciphersuite>::G>) {
     if db.get(ScannerDb::<C, D>::scanner_key(b"corrupt", b"")).is_some() {
       panic!("scanner DB is corrupt");
     }
@@ -187,17 +187,18 @@ impl<C: Coin, D: Db> Scanner<C, D> {
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
     let db = ScannerDb(db, PhantomData);
+    let keys = db.active_keys();
     tokio::spawn(
       Scanner {
         coin,
         db: db.clone(),
-        keys: db.active_keys(),
+        keys: keys.clone(),
         orders: orders_recv,
         events: events_send,
       }
       .run(),
     );
-    ScannerHandle { db, orders: orders_send, events: events_recv }
+    (ScannerHandle { db, orders: orders_send, events: events_recv }, keys)
   }
 
   // An async function, to be spawned on a task, to discover and report outputs
