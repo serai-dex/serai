@@ -64,12 +64,12 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   #[allow(clippy::inconsistent_digit_grouping)]
   let amount = 1_00_000_000;
-  let plans = scheduler.schedule(vec![Payment { address: C::address(key), amount }]);
+  let plans = scheduler.schedule(vec![Payment { address: C::address(key), data: None, amount }]);
   assert_eq!(
     plans,
     vec![Plan {
       inputs: outputs,
-      payments: vec![Payment { address: C::address(key), amount }],
+      payments: vec![Payment { address: C::address(key), data: None, amount }],
       change: true,
     }]
   );

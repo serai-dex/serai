@@ -2,9 +2,9 @@ use std::{io, collections::HashMap};
 
 use async_trait::async_trait;
 
-#[rustfmt::skip]
 use bitcoin::{
-  hashes::Hash, schnorr::TweakedPublicKey, OutPoint, Transaction, Block, Network, Address
+  hashes::Hash, schnorr::TweakedPublicKey, OutPoint, Transaction, Block, Network,
+  Address as BAddress,
 };
 
 #[cfg(test)]
@@ -132,6 +132,15 @@ fn change(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
   next_key(key, 2)
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Address(BAddress);
+impl TryFrom<Vec<u8>> for Address {
+  type Error = ();
+  fn try_from(data: Vec<u8>) -> Result<Address, ()> {
+    todo!();
+  }
+}
+
 #[derive(Clone, Debug)]
 pub struct Bitcoin {
   pub(crate) rpc: Rpc,
@@ -190,10 +199,10 @@ impl Coin for Bitcoin {
 
   fn address(key: ProjectivePoint) -> Self::Address {
     debug_assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
-    Address::p2tr_tweaked(
+    Address(BAddress::p2tr_tweaked(
       TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)),
       Network::Regtest,
-    )
+    ))
   }
 
   fn branch_address(key: ProjectivePoint) -> Self::Address {
@@ -220,7 +229,7 @@ impl Coin for Bitcoin {
     let change = change(key);
 
     let entry =
-      |pair: (_, _), kind| (Self::address(pair.0).script_pubkey().to_bytes(), (pair.1, kind));
+      |pair: (_, _), kind| (Self::address(pair.0).0.script_pubkey().to_bytes(), (pair.1, kind));
     let scripts = HashMap::from([
       entry(external, OutputType::External),
       entry(branch, OutputType::Branch),
@@ -261,8 +270,12 @@ impl Coin for Bitcoin {
       transcript,
       actual: BSignableTransaction::new(
         tx.inputs.drain(..).map(|input| input.0).collect(),
-        &tx.payments.drain(..).map(|payment| (payment.address, payment.amount)).collect::<Vec<_>>(),
-        Some(Self::address(change(change_key).0)).filter(|_| tx.change),
+        &tx
+          .payments
+          .drain(..)
+          .map(|payment| (payment.address.0, payment.amount))
+          .collect::<Vec<_>>(),
+        Some(Self::address(change(change_key).0).0).filter(|_| tx.change),
         fee.0,
       )
       .ok_or(CoinError::NotEnoughFunds)?,
@@ -298,7 +311,7 @@ impl Coin for Bitcoin {
         "generatetoaddress",
         serde_json::json!([
           1,
-          Address::p2sh(&Script::new(), Network::Regtest).unwrap().to_string()
+          BAddress::p2sh(&Script::new(), Network::Regtest).unwrap().to_string()
         ]),
       )
       .await
@@ -310,7 +323,7 @@ impl Coin for Bitcoin {
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
     let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-    let main_addr = Address::p2pkh(&public_key, Network::Regtest);
+    let main_addr = BAddress::p2pkh(&public_key, Network::Regtest);
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     self
@@ -336,7 +349,7 @@ impl Coin for Bitcoin {
       }],
       output: vec![TxOut {
         value: tx.output[0].value - 10000,
-        script_pubkey: address.script_pubkey(),
+        script_pubkey: address.0.script_pubkey(),
       }],
     };
 

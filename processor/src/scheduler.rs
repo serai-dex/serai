@@ -73,7 +73,7 @@ impl<C: Coin> Scheduler<C> {
 
       // Create the payment for the plan
       // Push it to the front so it's not moved into a branch until all lower-depth items are
-      payments.insert(0, Payment { address: C::branch_address(self.key), amount });
+      payments.insert(0, Payment { address: C::branch_address(self.key), data: None, amount });
     }
 
     Plan { inputs, payments, change }

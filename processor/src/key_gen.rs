@@ -86,7 +86,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   fn keys_key(set: &ValidatorSetInstance) -> Vec<u8> {
     Self::key_gen_key(b"keys", bincode::serialize(set).unwrap())
   }
-  fn params_by_key_key(key: C::G) -> Vec<u8> {
+  fn params_by_key_key(key: &C::G) -> Vec<u8> {
     Self::key_gen_key(b"params_by_key", key.to_bytes())
   }
   fn confirm_keys(&mut self, id: &KeyGenId) {
@@ -98,7 +98,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     let keys = ThresholdKeys::<C>::new(ThresholdCore::read::<&[u8]>(&mut keys.as_ref()).unwrap());
     self
       .0
-      .put(Self::params_by_key_key(keys.group_key()), bincode::serialize(&keys.params()).unwrap());
+      .put(Self::params_by_key_key(&keys.group_key()), bincode::serialize(&keys.params()).unwrap());
 
     // TODO: Prune other key gen attempts' info
 
@@ -109,7 +109,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
       ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(set)).unwrap().as_ref()).unwrap(),
     )
   }
-  fn params_by_key(&self, key: C::G) -> ThresholdParams {
+  fn params_by_key(&self, key: &C::G) -> ThresholdParams {
     bincode::deserialize(&self.0.get(Self::params_by_key_key(key)).unwrap()).unwrap()
   }
 }
@@ -136,7 +136,7 @@ pub struct KeyGenHandle<C: Ciphersuite, D: Db> {
   pub events: KeyGenEventChannel<C>,
 }
 impl<C: Ciphersuite, D: Db> KeyGenHandle<C, D> {
-  pub fn params(&self, key: C::G) -> ThresholdParams {
+  pub fn params(&self, key: &C::G) -> ThresholdParams {
     self.db.params_by_key(key)
   }
 }

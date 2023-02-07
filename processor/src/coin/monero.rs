@@ -99,6 +99,15 @@ pub struct SignableTransaction {
   actual: MSignableTransaction,
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Address(MoneroAddress);
+impl TryFrom<Vec<u8>> for Address {
+  type Error = ();
+  fn try_from(data: Vec<u8>) -> Result<Address, ()> {
+    todo!();
+  }
+}
+
 #[derive(Clone, Debug)]
 pub struct Monero {
   pub(crate) rpc: Rpc,
@@ -121,14 +130,11 @@ impl Monero {
     ViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0))
   }
 
-  fn address_internal(
-    spend: dfg::EdwardsPoint,
-    subaddress: Option<SubaddressIndex>,
-  ) -> MoneroAddress {
-    Self::view_pair(spend).address(
+  fn address_internal(spend: dfg::EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {
+    Address(Self::view_pair(spend).address(
       Network::Mainnet,
       AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
-    )
+    ))
   }
 
   fn scanner(spend: dfg::EdwardsPoint) -> Scanner {
@@ -151,8 +157,8 @@ impl Monero {
   }
 
   #[cfg(test)]
-  fn test_address() -> MoneroAddress {
-    Self::test_view_pair().address(Network::Mainnet, AddressSpec::Standard)
+  fn test_address() -> Address {
+    Address(Self::test_view_pair().address(Network::Mainnet, AddressSpec::Standard))
   }
 }
 
@@ -168,7 +174,7 @@ impl Coin for Monero {
   type SignableTransaction = SignableTransaction;
   type TransactionMachine = TransactionMachine;
 
-  type Address = MoneroAddress;
+  type Address = Address;
 
   const ID: &'static str = "Monero";
   const CONFIRMATIONS: usize = 10;
@@ -252,8 +258,8 @@ impl Coin for Monero {
       actual: MSignableTransaction::new(
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         tx.inputs.drain(..).map(|input| input.0).collect(),
-        tx.payments.drain(..).map(|payment| (payment.address, payment.amount)).collect(),
-        if tx.change { Some(Self::address_internal(change, CHANGE_SUBADDRESS)) } else { None },
+        tx.payments.drain(..).map(|payment| (payment.address.0, payment.amount)).collect(),
+        if tx.change { Some(Self::address_internal(change, CHANGE_SUBADDRESS).0) } else { None },
         vec![],
         fee,
       )
@@ -302,7 +308,7 @@ impl Coin for Monero {
         Some(serde_json::json!({
           "method": "generateblocks",
           "params": {
-            "wallet_address": Self::test_address().to_string(),
+            "wallet_address": Self::test_address().0.to_string(),
             "amount_of_blocks": 1
           },
         })),
@@ -334,8 +340,8 @@ impl Coin for Monero {
     let tx = MSignableTransaction::new(
       self.rpc.get_protocol().await.unwrap(),
       outputs,
-      vec![(address, amount - fee)],
-      Some(Self::test_address()),
+      vec![(address.0, amount - fee)],
+      Some(Self::test_address().0),
       vec![],
       self.rpc.get_fee().await.unwrap(),
     )

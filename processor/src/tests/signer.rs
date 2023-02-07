@@ -147,7 +147,7 @@ pub async fn test_signer<C: Coin>(coin: C) {
             sync_block,
             Plan {
               inputs: outputs.clone(),
-              payments: vec![Payment { address: C::address(key), amount }],
+              payments: vec![Payment { address: C::address(key), data: None, amount }],
               change: true,
             },
             key,

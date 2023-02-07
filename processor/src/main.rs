@@ -13,6 +13,9 @@ use thiserror::Error;
 use group::GroupEncoding;
 use frost::{curve::Ciphersuite, FrostError};
 
+use serai_primitives::WithAmount;
+use tokens_primitives::OutInstruction;
+
 use messages::{CoordinatorMessage, ProcessorMessage, substrate};
 
 mod coin;
@@ -42,6 +45,7 @@ pub trait Db: 'static + Send + Sync + Clone + Debug {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Payment<C: Coin> {
   address: C::Address,
+  data: Option<Vec<u8>>,
   amount: u64,
 }
 
@@ -50,24 +54,6 @@ pub struct Plan<C: Coin> {
   pub inputs: Vec<C::Output>,
   pub payments: Vec<Payment<C>>,
   pub change: bool,
-}
-
-#[derive(Clone, Error, Debug)]
-pub enum NetworkError {}
-
-#[async_trait]
-pub trait Network: Send {
-  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError>;
-}
-
-#[derive(Clone, Error, Debug)]
-pub enum SignError {
-  #[error("FROST had an error {0}")]
-  FrostError(FrostError),
-  #[error("coin had an error {0}")]
-  CoinError(CoinError),
-  #[error("network had an error {0}")]
-  NetworkError(NetworkError),
 }
 
 // Generate a static additional key for a given chain in a globally consistent manner
@@ -125,10 +111,10 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone());
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
 
-  let mut schedulers = HashMap::new();
+  let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
   let mut signers = HashMap::new();
 
-  for key in active_keys {
+  for key in &active_keys {
     // TODO: load existing schedulers
     signers.insert(
       key.to_bytes().as_ref().to_vec(),
@@ -136,7 +122,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
     );
   }
 
-  let mut track_key = |activation_number, key| {
+  let mut track_key = |schedulers: &mut HashMap<_, _>, activation_number, key| {
     scanner.orders.send(ScannerOrder::RotateKey { activation_number, key }).unwrap();
     schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
   };
@@ -170,16 +156,24 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             let plans = scheduler.add_outputs(scanner.outputs(&key, &block_id));
             todo!(); // Handle plans
           }
-          CoordinatorMessage::Substrate(substrate::CoordinatorMessage::Burns(burns)) => {
-            let scheduler = todo!(); // Use the latest key?
-            // TODO: OutInstruction data
-            /*
-            let plans = scheduler.schedule(burns.drain(..).filter_map(|burn| Some(Payment {
-              address: C::Address::try_from(burn.data.address.consume()).ok()?,
-              amount: burn.amount,
-            })));
-            */
-            todo!(); // Handle plans
+          CoordinatorMessage::Substrate(substrate::CoordinatorMessage::Burns(mut burns)) => {
+            // TODO: Rewrite rotation documentation
+            let scheduler = schedulers.get_mut(
+              active_keys.last().expect("burn event despite no keys").to_bytes().as_ref()
+            ).unwrap();
+
+            let mut payments = vec![];
+            for out in burns.drain(..) {
+              let WithAmount { data: OutInstruction { address, data }, amount } = out;
+              if let Ok(address) = C::Address::try_from(address.consume()) {
+                payments.push(
+                  Payment { address, data: data.map(|data| data.consume()), amount: amount.0 }
+                );
+              }
+            }
+
+            // TODO: Handle plans
+            let plans = scheduler.schedule(payments);
           }
         }
       },
@@ -188,7 +182,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         match msg.unwrap() {
           KeyGenEvent::KeyConfirmed { set, params, key } => {
             let activation_number = coin.get_latest_block_number().await.unwrap(); // TODO
-            track_key(activation_number, key);
+            track_key(&mut schedulers, activation_number, key);
             signers.insert(
               key.to_bytes().as_ref().to_vec(),
               Signer::new(db.clone(), coin.clone(), params)
