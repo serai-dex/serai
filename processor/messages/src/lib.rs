@@ -15,6 +15,12 @@ use in_instructions_primitives::InInstruction;
 use tokens_primitives::OutInstruction;
 use validator_sets_primitives::ValidatorSetInstance;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+pub struct SubstrateContext {
+  pub time: u64,
+  pub coin_latest_block_number: u64,
+}
+
 pub mod key_gen {
   use super::*;
 
@@ -33,7 +39,7 @@ pub mod key_gen {
     // Received shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
     // Confirm a key.
-    ConfirmKey { id: KeyGenId },
+    ConfirmKey { context: SubstrateContext, id: KeyGenId },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -107,12 +113,6 @@ pub mod sign {
 
 pub mod substrate {
   use super::*;
-
-  #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
-  pub struct SubstrateContext {
-    pub time: u64,
-    pub coin_latest_block_number: u64,
-  }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {

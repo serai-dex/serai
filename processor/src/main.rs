@@ -18,10 +18,7 @@ use tokio::time::sleep_until;
 use serai_primitives::WithAmount;
 use tokens_primitives::OutInstruction;
 
-use messages::{
-  CoordinatorMessage, ProcessorMessage,
-  substrate::{self, SubstrateContext},
-};
+use messages::{SubstrateContext, substrate, CoordinatorMessage, ProcessorMessage};
 
 mod coin;
 use coin::{Output, Block, Coin, Bitcoin, Monero};
@@ -293,8 +290,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 
       msg = key_gen.events.recv() => {
         match msg.unwrap() {
-          KeyGenEvent::KeyConfirmed { set, keys } => {
-            let activation_number = coin.get_latest_block_number().await.unwrap(); // TODO
+          KeyGenEvent::KeyConfirmed { activation_number, keys } => {
             track_key(&mut schedulers, activation_number, keys.group_key());
             signers.insert(
               keys.group_key().to_bytes().as_ref().to_vec(),

@@ -24,7 +24,7 @@ pub enum KeyGenOrder {
 
 #[derive(Debug)]
 pub enum KeyGenEvent<C: Ciphersuite> {
-  KeyConfirmed { set: ValidatorSetInstance, keys: ThresholdKeys<C> },
+  KeyConfirmed { activation_number: usize, keys: ThresholdKeys<C> },
   ProcessorMessage(ProcessorMessage),
 }
 
@@ -311,11 +311,15 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
           }
         }
 
-        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey { id }) => {
+        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey { context, id }) => {
           info!("Confirmed key from {:?}", id);
 
           let keys = self.db.confirm_keys(&id);
-          if handle_send(self.events.send(KeyGenEvent::KeyConfirmed { set: id.set, keys })).is_err()
+          if handle_send(self.events.send(KeyGenEvent::KeyConfirmed {
+            activation_number: context.coin_latest_block_number.try_into().unwrap(),
+            keys,
+          }))
+          .is_err()
           {
             return;
           }
