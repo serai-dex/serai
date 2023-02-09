@@ -22,7 +22,6 @@ pub enum ScannerOrder<C: Coin> {
   /// updated-to key.
   RotateKey { activation_number: usize, key: <C::Curve as Ciphersuite>::G },
   /// Acknowledge having handled a block for a key
-  // TODO: Move this to Block::Id
   AckBlock(<C::Curve as Ciphersuite>::G, usize),
 }
 
@@ -137,18 +136,19 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     res
   }
 
-  fn scanned_block_key(key: <C::Curve as Ciphersuite>::G) -> Vec<u8> {
+  fn scanned_block_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
     Self::scanner_key(b"scanned_block", key.to_bytes())
   }
   fn save_scanned_block(
     &mut self,
-    key: <C::Curve as Ciphersuite>::G,
+    key: &<C::Curve as Ciphersuite>::G,
     block: usize,
   ) -> Vec<<C::Output as Output>::Id> {
     let first = self.0.get(Self::scanned_block_key(key)).is_none();
     // TODO: Cleanly handle this
+    // TODO: See above commentary on data availability assumption
     if (!first) &&
-      self.0.get(Self::outputs_key(&key, &self.block(block).expect("node behind"))).is_none()
+      self.0.get(Self::outputs_key(key, &self.block(block).expect("node behind"))).is_none()
     {
       panic!("saving we scanned a block despite not having outputs for it");
     }
@@ -158,15 +158,12 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
 
     // Mark all the outputs from this block as seen
     let mut ids = vec![];
-    if let Some(block) = self.block(block) {
-      for output in self.outputs(&key, &block) {
+    if !first {
+      for output in self.outputs(key, &self.block(block).unwrap()) {
         let id = output.id();
         self.0.put(Self::seen_key(&id), b"");
         ids.push(id);
       }
-    } else {
-      // This can happen when the key is first added
-      assert!(first);
     }
 
     self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
@@ -177,7 +174,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     ids
   }
   fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
-    let bytes = self.0.get(Self::scanned_block_key(key)).unwrap_or(vec![0; 8]);
+    let bytes = self.0.get(Self::scanned_block_key(&key)).unwrap_or(vec![0; 8]);
     u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
   }
 }
@@ -305,10 +302,10 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             if let Some(id) = self.db.block(i) {
               // TODO: Also check this block builds off the previous block
               if id != block.id() {
-                panic!("{} reorg'd from {id:?} to {:?}", C::ID, block.id());
+                panic!("{} reorg'd from {id:?} to {:?}", C::ID, hex::encode(block.id()));
               }
             } else {
-              info!("Found new block: {:?}", block.id());
+              info!("Found new block: {}", hex::encode(block.id()));
               self.db.save_block(i, block.id());
             }
 
@@ -369,15 +366,15 @@ impl<C: Coin, D: Db> Scanner<C, D> {
               panic!("only a single key is supported at this time");
             }
 
-            info!("Rotating to key {:?}", key);
-            self.db.save_scanned_block(key, activation_number);
+            info!("Rotating to key {}", hex::encode(key.to_bytes()));
+            assert!(self.db.save_scanned_block(&key, activation_number).is_empty());
             self.db.add_active_key(key);
             self.keys.push(key);
           }
 
-          ScannerOrder::AckBlock(key, i) => {
-            debug!("Block {} acknowledged", i);
-            for output in self.db.save_scanned_block(key, i) {
+          ScannerOrder::AckBlock(key, number) => {
+            debug!("Block {} acknowledged", number);
+            for output in self.db.save_scanned_block(&key, number) {
               ram_outputs.remove(output.as_ref());
             }
           }

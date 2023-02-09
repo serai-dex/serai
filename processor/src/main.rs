@@ -162,7 +162,7 @@ async fn sign_plans<C: Coin, D: Db>(
 
     while let Some(plan) = these_plans.pop_front() {
       let id = plan.id();
-      info!("attempting plan {:?}: {:?}", id, plan);
+      info!("attempting plan {}: {:?}", hex::encode(id), plan);
 
       let keys = key_gen.keys(&plan.key);
       // TODO: Use an fee representative of several blocks
@@ -172,7 +172,7 @@ async fn sign_plans<C: Coin, D: Db>(
       let tx = match coin.prepare_send(keys, block_number, plan.clone(), fee).await {
         Ok(tx) => tx,
         Err(e) => {
-          error!("couldn't prepare a send for plan {:?}: {e}", id);
+          error!("couldn't prepare a send for plan {}: {e}", hex::encode(id));
           // Add back this plan/these plans
           these_plans.push_front(plan);
           plans.push_front((context, these_plans));

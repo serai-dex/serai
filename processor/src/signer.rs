@@ -338,7 +338,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
             if let Err(e) = self.coin.publish_transaction(&tx).await {
               error!("couldn't publish {:?}: {:?}", tx, e);
             } else {
-              info!("published {:?}", tx.id());
+              info!("published {:?}", hex::encode(tx.id()));
             }
 
             if handle_send(
