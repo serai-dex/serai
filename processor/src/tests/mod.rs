@@ -12,6 +12,11 @@ pub(crate) use signer::{sign, test_signer};
 mod wallet;
 pub(crate) use wallet::test_wallet;
 
+// Effective Once
+lazy_static::lazy_static! {
+  static ref INIT_LOGGER: () = env_logger::init();
+}
+
 #[macro_export]
 macro_rules! sequential {
   () => {
@@ -27,6 +32,7 @@ macro_rules! async_sequential {
     $(
       #[tokio::test]
       async fn $name() {
+        *$crate::tests::INIT_LOGGER;
         let guard = SEQUENTIAL.lock().await;
         let local = tokio::task::LocalSet::new();
         local.run_until(async move {

@@ -2,10 +2,9 @@ use std::{time::Duration, collections::HashMap};
 
 use rand_core::OsRng;
 
-use group::GroupEncoding;
 use frost::dkg::tests::key_gen;
 
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 use crate::{
   Payment, Plan,
@@ -25,7 +24,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), MemDb::new());
   assert!(active_keys.is_empty());
-  let (sync_block, outputs) = {
+  let outputs = {
     scanner
       .orders
       .send(ScannerOrder::RotateKey {
@@ -36,24 +35,13 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
     let block_id = coin.test_send(C::address(key)).await.id();
 
-    let block_number;
     match timeout(Duration::from_secs(10), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block(number, id) => {
-        assert_eq!(coin.get_block(number).await.unwrap().id(), block_id);
-        assert_eq!(id, block_id);
-        block_number = number;
-      }
-      _ => panic!("unexpected event"),
-    };
-
-    match timeout(Duration::from_secs(1), scanner.events.recv()).await.unwrap().unwrap() {
       ScannerEvent::Outputs(this_key, block, outputs) => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
-        (block_number, outputs)
+        outputs
       }
-      _ => panic!("unexpeced event"),
     }
   };
 
@@ -77,6 +65,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   // Execute the plan
   let fee = coin.get_fee().await;
   let mut keys_txs = HashMap::new();
+  let sync_block = coin.get_latest_block_number().await.unwrap() - C::CONFIRMATIONS;
   for (i, keys) in keys.drain() {
     keys_txs.insert(
       i,
@@ -86,7 +75,8 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   sign(coin.clone(), keys_txs).await;
   coin.mine_block().await;
-  let block = coin.get_block(coin.get_latest_block_number().await.unwrap()).await.unwrap();
+  let block_number = coin.get_latest_block_number().await.unwrap();
+  let block = coin.get_block(block_number).await.unwrap();
   let outputs = coin.get_outputs(&block, key).await.unwrap();
   assert_eq!(outputs.len(), 2);
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
@@ -95,24 +85,16 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     coin.mine_block().await;
   }
 
-  // Check the Scanner also picks them up
   match timeout(Duration::from_secs(10), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block(number, id) => {
-      assert_eq!(coin.get_block(number).await.unwrap().id(), id);
-      assert_eq!(id, block.id());
-    }
-    _ => panic!("unexpected event"),
-  }
-
-  match timeout(Duration::from_secs(1), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Outputs(this_key, block_id, these_outputs) => {
       assert_eq!(this_key, key);
       assert_eq!(block_id, block.id());
       assert_eq!(these_outputs, outputs);
     }
-    _ => panic!("unexpeced event"),
   }
 
   // Check the Scanner DB can reload the outputs
-  assert_eq!(scanner.outputs(key.to_bytes().as_ref(), &block.id()), outputs);
+  scanner.orders.send(ScannerOrder::AckBlock(key, block_number)).unwrap();
+  sleep(Duration::from_secs(1)).await;
+  assert_eq!(scanner.outputs(&key, &block.id()), outputs);
 }

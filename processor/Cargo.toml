@@ -62,3 +62,5 @@ messages = { package = "processor-messages", path = "./messages" }
 futures = "0.3"
 
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["tests"] }
+
+env_logger = "0.10"

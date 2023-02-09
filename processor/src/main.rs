@@ -216,8 +216,8 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let (_fake_coordinator_send, mut from_coordinator) =
     tokio::sync::mpsc::unbounded_channel::<CoordinatorMessage>();
 
-  // TODO: Re-issue SignTransaction orders
-  let mut plans: VecDeque<(SubstrateContext, VecDeque<Plan<C>>)> = VecDeque::new();
+  // TODO: Reload plans/re-issue SignTransaction orders
+  let mut plans = VecDeque::new();
   let mut plans_timer = None;
 
   loop {
@@ -252,7 +252,12 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
                 schedulers
                   .get_mut(&key)
                   .expect("key we don't have a scheduler for acknowledged a block")
-                  .add_outputs(scanner.outputs(&key, &block_id)),
+                  .add_outputs(
+                    scanner.outputs(
+                      &<C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key.as_ref()).unwrap(),
+                      &block_id
+                    )
+                  ),
               ),
             ));
             sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;
@@ -307,7 +312,6 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         // These need to be sent to the coordinator which needs to check they aren't replayed
         // TODO
         match msg.unwrap() {
-          ScannerEvent::Block(number, id) => todo!(),
           ScannerEvent::Outputs(key, block, outputs) => todo!(),
         }
       },

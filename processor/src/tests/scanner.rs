@@ -3,9 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use rand_core::OsRng;
 
-use group::GroupEncoding;
-
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 use crate::{
   coin::{OutputType, Output, Block, Coin},
@@ -45,40 +43,36 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let scanner = new_scanner().await;
 
   // Receive funds
+  let mut block_number = coin.get_latest_block_number().await.unwrap() + 1;
   let block_id = coin.test_send(C::address(keys.group_key())).await.id();
+  // Find the block number
+  while coin.get_block(block_number).await.unwrap().id() != block_id {
+    block_number += 1;
+  }
 
   // Verify the Scanner picked them up
   let verify_event = |mut scanner: ScannerHandle<C, MemDb>| async {
-    let block_ids =
+    let outputs =
       match timeout(Duration::from_secs(10), scanner.events.recv()).await.unwrap().unwrap() {
-        ScannerEvent::Block(number, id) => {
-          assert_eq!(coin.get_block(number).await.unwrap().id(), id);
-          assert_eq!(id, block_id);
-          (number, id)
+        ScannerEvent::Outputs(key, block, outputs) => {
+          assert_eq!(key, keys.group_key());
+          assert_eq!(block, block_id);
+          assert_eq!(outputs.len(), 1);
+          assert_eq!(outputs[0].kind(), OutputType::External);
+          outputs
         }
-        _ => panic!("unexpected event"),
       };
-
-    match timeout(Duration::from_secs(1), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Outputs(key, block, outputs) => {
-        assert_eq!(key, keys.group_key());
-        assert_eq!(block, block_ids.1);
-        assert_eq!(outputs.len(), 1);
-        assert_eq!(outputs[0].kind(), OutputType::External);
-        assert_eq!(scanner.outputs(key.to_bytes().as_ref(), &block_ids.1), outputs);
-      }
-      _ => panic!("unexpected event"),
-    }
-
-    (scanner, block_ids.0)
+    (scanner, outputs)
   };
-  let (mut scanner, block) = verify_event(scanner).await;
+  let (mut scanner, outputs) = verify_event(scanner).await;
 
   // Create a new scanner off the current DB and verify it re-emits the above events
   verify_event(new_scanner().await).await;
 
   // Acknowledge the block
-  scanner.orders.send(ScannerOrder::AckBlock(keys.group_key(), block)).unwrap();
+  scanner.orders.send(ScannerOrder::AckBlock(keys.group_key(), block_number)).unwrap();
+  sleep(Duration::from_secs(1)).await;
+  assert_eq!(scanner.outputs(&keys.group_key(), &block_id), outputs);
 
   // There should be no more events
   assert!(timeout(Duration::from_secs(10), scanner.events.recv()).await.is_err());

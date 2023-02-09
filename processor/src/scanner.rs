@@ -22,13 +22,12 @@ pub enum ScannerOrder<C: Coin> {
   /// updated-to key.
   RotateKey { activation_number: usize, key: <C::Curve as Ciphersuite>::G },
   /// Acknowledge having handled a block for a key
+  // TODO: Move this to Block::Id
   AckBlock(<C::Curve as Ciphersuite>::G, usize),
 }
 
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<C: Coin> {
-  // Block acknowledged. This number should be used for the Updates provided to Substrate
-  Block(usize, <C::Block as Block<C>>::Id),
   // Outputs received
   Outputs(<C::Curve as Ciphersuite>::G, <C::Block as Block<C>>::Id, Vec<C::Output>),
 }
@@ -36,6 +35,8 @@ pub enum ScannerEvent<C: Coin> {
 pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
 pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
+// TODO: This frequently assumes if called, the data should be available, panicking otherwise
+// Shift that assumption up. This should only panic if it has invalid data.
 #[derive(Clone, Debug)]
 struct ScannerDb<C: Coin, D: Db>(D, PhantomData<C>);
 impl<C: Coin, D: Db> ScannerDb<C, D> {
@@ -44,10 +45,17 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   }
 
   fn block_key(number: usize) -> Vec<u8> {
-    Self::scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes())
+    Self::scanner_key(b"block_id", u64::try_from(number).unwrap().to_le_bytes())
+  }
+  fn block_number_key(id: &<C::Block as Block<C>>::Id) -> Vec<u8> {
+    Self::scanner_key(b"block_number", id)
   }
   fn save_block(&mut self, number: usize, id: <C::Block as Block<C>>::Id) {
+    // TODO: Use a TX here
+    self.0.put(Self::scanner_key(b"corrupt", b""), b"");
+    self.0.put(Self::block_number_key(&id), u64::try_from(number).unwrap().to_le_bytes());
     self.0.put(Self::block_key(number), id);
+    self.0.del(Self::scanner_key(b"corrupt", b""));
   }
   fn block(&self, number: usize) -> Option<<C::Block as Block<C>>::Id> {
     self.0.get(Self::block_key(number)).map(|id| {
@@ -55,6 +63,12 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
       res.as_mut().copy_from_slice(&id);
       res
     })
+  }
+  fn block_number(&self, id: &<C::Block as Block<C>>::Id) -> Option<usize> {
+    self
+      .0
+      .get(Self::block_number_key(id))
+      .map(|number| u64::from_le_bytes(number.try_into().unwrap()).try_into().unwrap())
   }
 
   fn active_keys_key() -> Vec<u8> {
@@ -83,7 +97,12 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     self.0.get(Self::seen_key(id)).is_some()
   }
 
-  fn outputs_key(key: &[u8], block: &<C::Block as Block<C>>::Id) -> Vec<u8> {
+  fn outputs_key(
+    key: &<C::Curve as Ciphersuite>::G,
+    block: &<C::Block as Block<C>>::Id,
+  ) -> Vec<u8> {
+    let key_bytes = key.to_bytes();
+    let key = key_bytes.as_ref();
     // This should be safe without the bincode serialize. Using bincode lets us not worry/have to
     // think about this
     let db_key = bincode::serialize(&(key, block.as_ref())).unwrap();
@@ -101,9 +120,13 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     for output in outputs {
       output.write(&mut bytes).unwrap();
     }
-    self.0.put(Self::outputs_key(key.to_bytes().as_ref(), block), bytes);
+    self.0.put(Self::outputs_key(key, block), bytes);
   }
-  fn outputs(&self, key: &[u8], block: &<C::Block as Block<C>>::Id) -> Vec<C::Output> {
+  fn outputs(
+    &self,
+    key: &<C::Curve as Ciphersuite>::G,
+    block: &<C::Block as Block<C>>::Id,
+  ) -> Vec<C::Output> {
     let bytes_vec = self.0.get(Self::outputs_key(key, block)).unwrap();
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
@@ -122,20 +145,28 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     key: <C::Curve as Ciphersuite>::G,
     block: usize,
   ) -> Vec<<C::Output as Output>::Id> {
+    let first = self.0.get(Self::scanned_block_key(key)).is_none();
+    // TODO: Cleanly handle this
+    if (!first) &&
+      self.0.get(Self::outputs_key(&key, &self.block(block).expect("node behind"))).is_none()
+    {
+      panic!("saving we scanned a block despite not having outputs for it");
+    }
+
     // TODO: Use a TX here
     self.0.put(Self::scanner_key(b"corrupt", b""), b"");
 
     // Mark all the outputs from this block as seen
     let mut ids = vec![];
     if let Some(block) = self.block(block) {
-      for output in self.outputs(key.to_bytes().as_ref(), &block) {
+      for output in self.outputs(&key, &block) {
         let id = output.id();
         self.0.put(Self::seen_key(&id), b"");
         ids.push(id);
       }
     } else {
       // This can happen when the key is first added
-      assert!(self.0.get(Self::scanned_block_key(key)).is_none());
+      assert!(first);
     }
 
     self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
@@ -172,7 +203,16 @@ pub struct ScannerHandle<C: Coin, D: Db> {
 }
 
 impl<C: Coin, D: Db> ScannerHandle<C, D> {
-  pub fn outputs(&self, key: &[u8], block: &<C::Block as Block<C>>::Id) -> Vec<C::Output> {
+  pub fn outputs(
+    &self,
+    key: &<C::Curve as Ciphersuite>::G,
+    block: &<C::Block as Block<C>>::Id,
+  ) -> Vec<C::Output> {
+    // TODO: Cleanly handle this
+    if self.db.block_number(block).unwrap_or(usize::MAX) > self.db.latest_scanned_block(*key) {
+      panic!("node behind");
+    }
+
     self.db.outputs(key, block)
   }
 }
@@ -301,13 +341,6 @@ impl<C: Coin, D: Db> Scanner<C, D> {
 
             // Save the outputs to disk
             self.db.save_outputs(&key, &block.id(), &outputs);
-
-            // Fire the block event
-            // This is intended for group acknowledgement of what block we're on, not only
-            // providing a heartbeat, yet also letting coins like Monero schedule themselves
-            if handle_send(self.events.send(ScannerEvent::Block(i, block.id()))).is_err() {
-              return;
-            }
 
             // Send all outputs
             if handle_send(self.events.send(ScannerEvent::Outputs(key, block.id(), outputs)))
