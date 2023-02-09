@@ -76,7 +76,7 @@ impl<C: Coin> Scheduler<C> {
       payments.insert(0, Payment { address: C::branch_address(self.key), data: None, amount });
     }
 
-    Plan { inputs, payments, change }
+    Plan { key: self.key, inputs, payments, change }
   }
 
   // When Substrate emits `Updates` for a coin, all outputs should be added up to the
@@ -149,7 +149,7 @@ impl<C: Coin> Scheduler<C> {
 
     let mut aggregating = vec![];
     for chunk in utxo_chunks.drain(..) {
-      aggregating.push(Plan { inputs: chunk, payments: vec![], change: true })
+      aggregating.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: true })
     }
 
     // We want to use all possible UTXOs for all possible payments

@@ -108,10 +108,16 @@ pub mod sign {
 pub mod substrate {
   use super::*;
 
+  #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  pub struct SubstrateContext {
+    pub time: u64,
+    pub coin_latest_block_number: u64,
+  }
+
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
-    BlockAcknowledged { key: Vec<u8>, block: Vec<u8> },
-    Burns(Vec<WithAmount<OutInstruction>>),
+    BlockAcknowledged { context: SubstrateContext, key: Vec<u8>, block: Vec<u8> },
+    Burns { context: SubstrateContext, burns: Vec<WithAmount<OutInstruction>> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]

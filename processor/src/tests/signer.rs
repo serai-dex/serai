@@ -5,7 +5,6 @@ use std::{
 
 use rand_core::OsRng;
 
-use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::{
   ThresholdKeys,
@@ -148,9 +147,9 @@ pub async fn test_signer<C: Coin>(coin: C) {
         coin
           .prepare_send(
             keys,
-            RecommendedTranscript::new(b"Processor Signer Test"),
             sync_block,
             Plan {
+              key,
               inputs: outputs.clone(),
               payments: vec![Payment { address: C::address(key), data: None, amount }],
               change: true,

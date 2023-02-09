@@ -134,6 +134,11 @@ fn change(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Address(BAddress);
+impl ToString for Address {
+  fn to_string(&self) -> String {
+    self.0.to_string()
+  }
+}
 impl TryFrom<Vec<u8>> for Address {
   type Error = ();
   fn try_from(data: Vec<u8>) -> Result<Address, ()> {
@@ -259,7 +264,6 @@ impl Coin for Bitcoin {
   async fn prepare_send(
     &self,
     keys: ThresholdKeys<Secp256k1>,
-    transcript: RecommendedTranscript,
     _: usize,
     mut tx: Plan<Self>,
     change_key: ProjectivePoint,
@@ -267,7 +271,7 @@ impl Coin for Bitcoin {
   ) -> Result<Self::SignableTransaction, CoinError> {
     Ok(SignableTransaction {
       keys,
-      transcript,
+      transcript: tx.transcript(),
       actual: BSignableTransaction::new(
         tx.inputs.drain(..).map(|input| input.0).collect(),
         &tx

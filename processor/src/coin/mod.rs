@@ -4,7 +4,6 @@ use std::io;
 use async_trait::async_trait;
 use thiserror::Error;
 
-use transcript::RecommendedTranscript;
 use frost::{
   curve::{Ciphersuite, Curve},
   ThresholdKeys,
@@ -132,7 +131,7 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The type representing an address.
   // This should NOT be a String, yet a tailored type representing an efficient binary encoding,
   // as detailed in the integration documentation.
-  type Address: Send + Sync + Clone + PartialEq + Eq + Debug + TryFrom<Vec<u8>>;
+  type Address: Send + Sync + Clone + PartialEq + Eq + Debug + ToString + TryFrom<Vec<u8>>;
 
   /// String ID for this coin.
   const ID: &'static str;
@@ -170,7 +169,6 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn prepare_send(
     &self,
     keys: ThresholdKeys<Self::Curve>,
-    transcript: RecommendedTranscript,
     block_number: usize,
     tx: Plan<Self>,
     change: <Self::Curve as Ciphersuite>::G,

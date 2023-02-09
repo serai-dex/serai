@@ -106,7 +106,6 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
 pub struct KeyGen<C: Ciphersuite, D: Db> {
   db: KeyGenDb<C, D>,
 
-  // TODO: Consider always rebuilding
   active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C>>,
   active_share: HashMap<ValidatorSetInstance, KeyMachine<C>>,
 

@@ -3,7 +3,6 @@ use std::{time::Duration, collections::HashMap};
 use rand_core::OsRng;
 
 use group::GroupEncoding;
-use transcript::{Transcript, RecommendedTranscript};
 use frost::dkg::tests::key_gen;
 
 use tokio::time::timeout;
@@ -68,6 +67,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   assert_eq!(
     plans,
     vec![Plan {
+      key,
       inputs: outputs,
       payments: vec![Payment { address: C::address(key), data: None, amount }],
       change: true,
@@ -82,17 +82,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
       i,
       (
         keys.clone(),
-        coin
-          .prepare_send(
-            keys,
-            RecommendedTranscript::new(b"Processor Wallet Test"),
-            sync_block,
-            plans[0].clone(),
-            key,
-            fee,
-          )
-          .await
-          .unwrap(),
+        coin.prepare_send(keys, sync_block, plans[0].clone(), key, fee).await.unwrap(),
       ),
     );
   }

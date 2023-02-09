@@ -4,11 +4,15 @@ use std::{
   sync::{Arc, RwLock},
   task::{Poll, Context},
   future::Future,
-  collections::HashMap,
+  time::{Duration, SystemTime},
+  collections::{VecDeque, HashMap},
 };
 
+use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
+
+use log::error;
 
 use serai_primitives::WithAmount;
 use tokens_primitives::OutInstruction;
@@ -16,7 +20,7 @@ use tokens_primitives::OutInstruction;
 use messages::{CoordinatorMessage, ProcessorMessage, substrate};
 
 mod coin;
-use coin::{Block, Coin, Bitcoin, Monero};
+use coin::{Output, Block, Coin, Bitcoin, Monero};
 
 mod key_gen;
 use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen};
@@ -48,9 +52,43 @@ pub struct Payment<C: Coin> {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Plan<C: Coin> {
+  pub key: <C::Curve as Ciphersuite>::G,
   pub inputs: Vec<C::Output>,
   pub payments: Vec<Payment<C>>,
-  pub change: bool,
+  pub change: bool, // TODO: Why is this not Option<C::G>?
+}
+
+impl<C: Coin> Plan<C> {
+  fn transcript(&self) -> RecommendedTranscript {
+    let mut transcript = RecommendedTranscript::new(b"Serai Processor Plan ID");
+    transcript.domain_separate(b"meta");
+    transcript.append_message(b"key", self.key.to_bytes());
+
+    transcript.domain_separate(b"inputs");
+    for input in &self.inputs {
+      transcript.append_message(b"input", input.id());
+    }
+
+    transcript.domain_separate(b"payments");
+    for payment in &self.payments {
+      transcript.append_message(b"address", payment.address.to_string().as_bytes());
+      if let Some(data) = payment.data.as_ref() {
+        transcript.append_message(b"data", data);
+      }
+      transcript.append_message(b"amount", payment.amount.to_le_bytes());
+    }
+
+    transcript.append_message(b"change", [u8::from(self.change)]);
+
+    transcript
+  }
+
+  fn id(&self) -> [u8; 32] {
+    let challenge = self.transcript().challenge(b"id");
+    let mut res = [0; 32];
+    res.copy_from_slice(&challenge[.. 32]);
+    res
+  }
 }
 
 // Generate a static additional key for a given chain in a globally consistent manner
@@ -118,7 +156,6 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
       key.to_bytes().as_ref().to_vec(),
       Signer::new(db.clone(), coin.clone(), key_gen.keys(key)),
     );
-    // TODO: Re-issue SignTransaction orders
   }
 
   let track_key = |schedulers: &mut HashMap<_, _>, activation_number, key| {
@@ -131,9 +168,13 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let (_fake_coordinator_send, mut from_coordinator) =
     tokio::sync::mpsc::unbounded_channel::<CoordinatorMessage>();
 
+  // TODO: Re-issue SignTransaction orders
+  let mut plans = VecDeque::new();
+
   loop {
     tokio::select! {
       msg = from_coordinator.recv() => {
+
         match msg.expect("Coordinator channel was dropped. Shutting down?") {
           CoordinatorMessage::KeyGen(msg) => {
             key_gen.orders.send(KeyGenOrder::CoordinatorMessage(msg)).unwrap()
@@ -142,19 +183,24 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             signers[msg.key()].orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
           },
           CoordinatorMessage::Substrate(
-            substrate::CoordinatorMessage::BlockAcknowledged { key, block }
+            substrate::CoordinatorMessage::BlockAcknowledged { context, key, block }
           ) => {
             let mut block_id = <C::Block as Block>::Id::default();
             block_id.as_mut().copy_from_slice(&block);
 
-            let scheduler =
-              schedulers
-                .get_mut(&key)
-                .expect("key we don't have a scheduler for acknowledged a block");
-            let plans = scheduler.add_outputs(scanner.outputs(&key, &block_id));
-            todo!(); // Handle plans
+            plans.push_back((
+              context,
+              VecDeque::from(
+                schedulers
+                  .get_mut(&key)
+                  .expect("key we don't have a scheduler for acknowledged a block")
+                  .add_outputs(scanner.outputs(&key, &block_id))
+              )
+            ));
           }
-          CoordinatorMessage::Substrate(substrate::CoordinatorMessage::Burns(mut burns)) => {
+          CoordinatorMessage::Substrate(
+            substrate::CoordinatorMessage::Burns { context, mut burns }
+          ) => {
             // TODO: Rewrite rotation documentation
             let scheduler = schedulers.get_mut(
               active_keys.last().expect("burn event despite no keys").to_bytes().as_ref()
@@ -170,8 +216,44 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
               }
             }
 
-            // TODO: Handle plans
-            let plans = scheduler.schedule(payments);
+            plans.push_back((context, VecDeque::from(scheduler.schedule(payments))));
+          }
+        }
+
+        // Start signing for all plans
+        // plans should only have one set of plans unless we prior had a failure in signing plans
+        // In that case, there may be multiple, in which case, we should handle all remaining
+        // TODO: Move this to a dedicated lambda on a timer
+        'outer: while let Some((context, mut these_plans)) = plans.pop_front() {
+          let start =
+            SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(context.time)).unwrap();
+          let block_number = context.coin_latest_block_number.try_into().unwrap();
+
+          while let Some(plan) = these_plans.pop_front() {
+            let keys = key_gen.keys(&plan.key);
+            // TODO: Update rotation documentation
+            // TODO: Use the latest keys for change (not needed for protonet)
+            let change = keys.group_key();
+            // TODO: Use an agreed upon fee
+            let fee = todo!();
+
+            let id = plan.id();
+
+            let tx = match coin.prepare_send(keys, block_number, plan, change, fee).await {
+              Ok(tx) => tx,
+              Err(e) => {
+                error!("couldn't prepare a send for plan {:?}: {e}", plan);
+                // Add back this plan/these plans
+                these_plans.push_front(plan);
+                plans.push_front((context, these_plans));
+                break 'outer;
+              }
+            };
+
+            signers[plan.key.to_bytes().as_ref()]
+              .orders
+              .send(SignerOrder::SignTransaction { id, start, tx })
+              .unwrap();
           }
         }
       },

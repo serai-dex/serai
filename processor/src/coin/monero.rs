@@ -101,6 +101,11 @@ pub struct SignableTransaction {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Address(MoneroAddress);
+impl ToString for Address {
+  fn to_string(&self) -> String {
+    self.0.to_string()
+  }
+}
 impl TryFrom<Vec<u8>> for Address {
   type Error = ();
   fn try_from(data: Vec<u8>) -> Result<Address, ()> {
@@ -245,7 +250,6 @@ impl Coin for Monero {
   async fn prepare_send(
     &self,
     keys: ThresholdKeys<Ed25519>,
-    transcript: RecommendedTranscript,
     block_number: usize,
     mut tx: Plan<Self>,
     change: dfg::EdwardsPoint,
@@ -253,7 +257,7 @@ impl Coin for Monero {
   ) -> Result<SignableTransaction, CoinError> {
     Ok(SignableTransaction {
       keys,
-      transcript,
+      transcript: tx.transcript(),
       height: block_number + 1,
       actual: MSignableTransaction::new(
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
