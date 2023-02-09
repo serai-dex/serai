@@ -4,7 +4,7 @@ use std::{
   sync::{Arc, RwLock},
   task::{Poll, Context},
   future::Future,
-  time::{Duration, SystemTime},
+  time::{Duration, SystemTime, Instant},
   collections::{VecDeque, HashMap},
 };
 
@@ -13,17 +13,21 @@ use group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
 use log::error;
+use tokio::time::sleep_until;
 
 use serai_primitives::WithAmount;
 use tokens_primitives::OutInstruction;
 
-use messages::{CoordinatorMessage, ProcessorMessage, substrate};
+use messages::{
+  CoordinatorMessage, ProcessorMessage,
+  substrate::{self, SubstrateContext},
+};
 
 mod coin;
 use coin::{Output, Block, Coin, Bitcoin, Monero};
 
 mod key_gen;
-use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen};
+use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen, KeyGenHandle};
 
 mod signer;
 use signer::{SignerOrder, SignerEvent, Signer, SignerHandle};
@@ -142,6 +146,52 @@ impl<'a, C: Coin> Future for SignerMessageFuture<'a, C> {
   }
 }
 
+async fn sign_plans<C: Coin, D: Db>(
+  coin: &C,
+  plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
+  timer: &mut Option<Instant>,
+  key_gen: &KeyGenHandle<C::Curve, D>,
+  signers: &HashMap<Vec<u8>, SignerHandle<C>>,
+) {
+  // Clear the timer
+  *timer = None;
+
+  // Iterate over all plans
+  while let Some((context, mut these_plans)) = plans.pop_front() {
+    let start = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(context.time)).unwrap();
+    let block_number = context.coin_latest_block_number.try_into().unwrap();
+
+    while let Some(plan) = these_plans.pop_front() {
+      let keys = key_gen.keys(&plan.key);
+      // TODO: Update rotation documentation
+      // TODO: Use the latest keys for change (not needed for protonet)
+      let change = keys.group_key();
+      // TODO: Use an agreed upon fee
+      let fee = todo!();
+
+      let id = plan.id();
+
+      let tx = match coin.prepare_send(keys, block_number, plan, change, fee).await {
+        Ok(tx) => tx,
+        Err(e) => {
+          error!("couldn't prepare a send for plan {:?}: {e}", plan);
+          // Add back this plan/these plans
+          these_plans.push_front(plan);
+          plans.push_front((context, these_plans));
+          // Try again in 30 seconds
+          *timer = Some(Instant::now().checked_add(Duration::from_secs(30)).unwrap());
+          return;
+        }
+      };
+
+      signers[plan.key.to_bytes().as_ref()]
+        .orders
+        .send(SignerOrder::SignTransaction { id, start, tx })
+        .unwrap();
+    }
+  }
+}
+
 async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone());
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
@@ -169,12 +219,19 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
     tokio::sync::mpsc::unbounded_channel::<CoordinatorMessage>();
 
   // TODO: Re-issue SignTransaction orders
-  let mut plans = VecDeque::new();
+  let mut plans: VecDeque<(SubstrateContext, VecDeque<Plan<C>>)> = VecDeque::new();
+  let mut plans_timer = None;
 
   loop {
+    // This should be long enough it shouldn't trigger if not set.
+    let plans_timer_actual =
+      plans_timer.unwrap_or(Instant::now().checked_add(Duration::from_secs(600)).unwrap());
     tokio::select! {
-      msg = from_coordinator.recv() => {
+      _ = sleep_until(plans_timer_actual.into()) => {
+        sign_plans(&coin, &mut plans, &mut plans_timer, &key_gen, &signers).await;
+      },
 
+      msg = from_coordinator.recv() => {
         match msg.expect("Coordinator channel was dropped. Shutting down?") {
           CoordinatorMessage::KeyGen(msg) => {
             key_gen.orders.send(KeyGenOrder::CoordinatorMessage(msg)).unwrap()
@@ -197,6 +254,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
                   .add_outputs(scanner.outputs(&key, &block_id))
               )
             ));
+            sign_plans(&coin, &mut plans, &mut plans_timer, &key_gen, &signers).await;
           }
           CoordinatorMessage::Substrate(
             substrate::CoordinatorMessage::Burns { context, mut burns }
@@ -217,43 +275,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             }
 
             plans.push_back((context, VecDeque::from(scheduler.schedule(payments))));
-          }
-        }
-
-        // Start signing for all plans
-        // plans should only have one set of plans unless we prior had a failure in signing plans
-        // In that case, there may be multiple, in which case, we should handle all remaining
-        // TODO: Move this to a dedicated lambda on a timer
-        'outer: while let Some((context, mut these_plans)) = plans.pop_front() {
-          let start =
-            SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(context.time)).unwrap();
-          let block_number = context.coin_latest_block_number.try_into().unwrap();
-
-          while let Some(plan) = these_plans.pop_front() {
-            let keys = key_gen.keys(&plan.key);
-            // TODO: Update rotation documentation
-            // TODO: Use the latest keys for change (not needed for protonet)
-            let change = keys.group_key();
-            // TODO: Use an agreed upon fee
-            let fee = todo!();
-
-            let id = plan.id();
-
-            let tx = match coin.prepare_send(keys, block_number, plan, change, fee).await {
-              Ok(tx) => tx,
-              Err(e) => {
-                error!("couldn't prepare a send for plan {:?}: {e}", plan);
-                // Add back this plan/these plans
-                these_plans.push_front(plan);
-                plans.push_front((context, these_plans));
-                break 'outer;
-              }
-            };
-
-            signers[plan.key.to_bytes().as_ref()]
-              .orders
-              .send(SignerOrder::SignTransaction { id, start, tx })
-              .unwrap();
+            sign_plans(&coin, &mut plans, &mut plans_timer, &key_gen, &signers).await;
           }
         }
       },
