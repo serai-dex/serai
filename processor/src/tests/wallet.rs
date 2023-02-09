@@ -70,7 +70,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
       key,
       inputs: outputs,
       payments: vec![Payment { address: C::address(key), data: None, amount }],
-      change: true,
+      change: Some(key),
     }]
   );
 
@@ -80,10 +80,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   for (i, keys) in keys.drain() {
     keys_txs.insert(
       i,
-      (
-        keys.clone(),
-        coin.prepare_send(keys, sync_block, plans[0].clone(), key, fee).await.unwrap(),
-      ),
+      (keys.clone(), coin.prepare_send(keys, sync_block, plans[0].clone(), fee).await.unwrap()),
     );
   }
 

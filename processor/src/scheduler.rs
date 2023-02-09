@@ -76,7 +76,9 @@ impl<C: Coin> Scheduler<C> {
       payments.insert(0, Payment { address: C::branch_address(self.key), data: None, amount });
     }
 
-    Plan { key: self.key, inputs, payments, change }
+    // TODO: Use the latest key for change
+    // TODO: Update rotation documentation
+    Plan { key: self.key, inputs, payments, change: Some(self.key).filter(|_| change) }
   }
 
   // When Substrate emits `Updates` for a coin, all outputs should be added up to the
@@ -93,7 +95,7 @@ impl<C: Coin> Scheduler<C> {
         let payments = plans.pop_front().unwrap();
         debug_assert_eq!(utxo.amount(), payments.iter().map(|payment| payment.amount).sum::<u64>());
 
-        // If we've grabbedthe last plan for this output amount, remove it from the map
+        // If we've grabbed the last plan for this output amount, remove it from the map
         if plans.is_empty() {
           self.plans.remove(&utxo.amount());
         }
@@ -149,7 +151,12 @@ impl<C: Coin> Scheduler<C> {
 
     let mut aggregating = vec![];
     for chunk in utxo_chunks.drain(..) {
-      aggregating.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: true })
+      aggregating.push(Plan {
+        key: self.key,
+        inputs: chunk,
+        payments: vec![],
+        change: Some(self.key),
+      })
     }
 
     // We want to use all possible UTXOs for all possible payments

@@ -172,7 +172,6 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     keys: ThresholdKeys<Self::Curve>,
     block_number: usize,
     tx: Plan<Self>,
-    change: <Self::Curve as Ciphersuite>::G,
     fee: Self::Fee,
   ) -> Result<Self::SignableTransaction, CoinError>;
 

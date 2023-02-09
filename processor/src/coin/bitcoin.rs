@@ -270,7 +270,6 @@ impl Coin for Bitcoin {
     keys: ThresholdKeys<Secp256k1>,
     _: usize,
     mut tx: Plan<Self>,
-    change_key: ProjectivePoint,
     fee: Fee,
   ) -> Result<Self::SignableTransaction, CoinError> {
     Ok(SignableTransaction {
@@ -283,7 +282,7 @@ impl Coin for Bitcoin {
           .drain(..)
           .map(|payment| (payment.address.0, payment.amount))
           .collect::<Vec<_>>(),
-        Some(Self::address(change(change_key).0).0).filter(|_| tx.change),
+        tx.change.map(|key| Self::address(change(key).0).0),
         fee.0,
       )
       .unwrap(),
@@ -310,6 +309,7 @@ impl Coin for Bitcoin {
     match self.rpc.send_raw_transaction(tx).await {
       Ok(_) => (),
       Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
+      // TODO: Distinguish already in pool vs invalid transaction
       Err(e) => panic!("failed to publish TX {:?}: {e}", tx.txid()),
     }
     Ok(())

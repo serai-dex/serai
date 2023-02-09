@@ -152,9 +152,8 @@ pub async fn test_signer<C: Coin>(coin: C) {
               key,
               inputs: outputs.clone(),
               payments: vec![Payment { address: C::address(key), data: None, amount }],
-              change: true,
+              change: Some(key),
             },
-            key,
             fee,
           )
           .await

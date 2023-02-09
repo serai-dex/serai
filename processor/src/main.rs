@@ -59,7 +59,7 @@ pub struct Plan<C: Coin> {
   pub key: <C::Curve as Ciphersuite>::G,
   pub inputs: Vec<C::Output>,
   pub payments: Vec<Payment<C>>,
-  pub change: bool, // TODO: Why is this not Option<C::G>?
+  pub change: Option<<C::Curve as Ciphersuite>::G>,
 }
 
 impl<C: Coin> Plan<C> {
@@ -82,7 +82,9 @@ impl<C: Coin> Plan<C> {
       transcript.append_message(b"amount", payment.amount.to_le_bytes());
     }
 
-    transcript.append_message(b"change", [u8::from(self.change)]);
+    if let Some(change) = self.change {
+      transcript.append_message(b"change", change.to_bytes());
+    }
 
     transcript
   }
@@ -165,16 +167,12 @@ async fn sign_plans<C: Coin, D: Db>(
       let id = plan.id();
       info!("attempting plan {:?}: {:?}", id, plan);
 
-      let key = plan.key;
-      let keys = key_gen.keys(&key);
-      // TODO: Update rotation documentation
-      // TODO: Use the latest keys for change (not needed for protonet)
-      let change = keys.group_key();
+      let keys = key_gen.keys(&plan.key);
       // TODO: Use an fee representative of several blocks
       // TODO: Don't unwrap here
       let fee = coin.get_block(block_number).await.unwrap().median_fee();
 
-      let tx = match coin.prepare_send(keys, block_number, plan.clone(), change, fee).await {
+      let tx = match coin.prepare_send(keys, block_number, plan.clone(), fee).await {
         Ok(tx) => tx,
         Err(e) => {
           error!("couldn't prepare a send for plan {:?}: {e}", id);
@@ -187,7 +185,7 @@ async fn sign_plans<C: Coin, D: Db>(
         }
       };
 
-      signers[key.to_bytes().as_ref()]
+      signers[plan.key.to_bytes().as_ref()]
         .orders
         .send(SignerOrder::SignTransaction { id, start, tx })
         .unwrap();

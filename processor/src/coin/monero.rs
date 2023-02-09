@@ -257,7 +257,6 @@ impl Coin for Monero {
     keys: ThresholdKeys<Ed25519>,
     block_number: usize,
     mut tx: Plan<Self>,
-    change: dfg::EdwardsPoint,
     fee: Fee,
   ) -> Result<SignableTransaction, CoinError> {
     Ok(SignableTransaction {
@@ -268,7 +267,7 @@ impl Coin for Monero {
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         tx.inputs.drain(..).map(|input| input.0).collect(),
         tx.payments.drain(..).map(|payment| (payment.address.0, payment.amount)).collect(),
-        if tx.change { Some(Self::address_internal(change, CHANGE_SUBADDRESS).0) } else { None },
+        tx.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
         vec![],
         fee,
       )
@@ -301,6 +300,7 @@ impl Coin for Monero {
     match self.rpc.publish_transaction(tx).await {
       Ok(_) => Ok(()),
       Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
+      // TODO: Distinguish already in pool vs invalid transaction
       Err(e) => panic!("failed to publish TX {:?}: {e}", tx.hash()),
     }
   }
