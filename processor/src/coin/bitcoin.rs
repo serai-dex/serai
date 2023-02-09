@@ -36,16 +36,6 @@ use crate::{
   Plan,
 };
 
-impl BlockTrait for Block {
-  type Id = [u8; 32];
-  fn id(&self) -> Self::Id {
-    self.block_hash().as_hash().into_inner()
-  }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Fee(u64);
-
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OutputId(pub [u8; 36]);
 impl Default for OutputId {
@@ -91,6 +81,9 @@ impl OutputTrait for Output {
   }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Fee(u64);
+
 impl TransactionTrait for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
@@ -110,6 +103,17 @@ impl PartialEq for SignableTransaction {
   }
 }
 impl Eq for SignableTransaction {}
+
+impl BlockTrait<Bitcoin> for Block {
+  type Id = [u8; 32];
+  fn id(&self) -> Self::Id {
+    self.block_hash().as_hash().into_inner()
+  }
+  fn median_fee(&self) -> Fee {
+    // TODO
+    Fee(20)
+  }
+}
 
 fn next_key(mut key: ProjectivePoint, i: usize) -> (ProjectivePoint, Scalar) {
   let mut offset = Scalar::ZERO;

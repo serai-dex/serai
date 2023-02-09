@@ -31,15 +31,6 @@ use crate::{
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Block([u8; 32], MBlock);
-impl BlockTrait for Block {
-  type Id = [u8; 32];
-  fn id(&self) -> Self::Id {
-    self.0
-  }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output(SpendableOutput);
 impl From<SpendableOutput> for Output {
   fn from(output: SpendableOutput) -> Output {
@@ -97,6 +88,20 @@ pub struct SignableTransaction {
   // Monero height, defined as the length of the chain
   height: usize,
   actual: MSignableTransaction,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Block([u8; 32], MBlock);
+impl BlockTrait<Monero> for Block {
+  type Id = [u8; 32];
+  fn id(&self) -> Self::Id {
+    self.0
+  }
+
+  fn median_fee(&self) -> Fee {
+    // TODO
+    Fee { per_weight: 80000, mask: 10000 }
+  }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

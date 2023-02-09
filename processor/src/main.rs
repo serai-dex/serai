@@ -12,7 +12,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
-use log::error;
+use log::{info, error};
 use tokio::time::sleep_until;
 
 use serai_primitives::WithAmount;
@@ -162,19 +162,22 @@ async fn sign_plans<C: Coin, D: Db>(
     let block_number = context.coin_latest_block_number.try_into().unwrap();
 
     while let Some(plan) = these_plans.pop_front() {
-      let keys = key_gen.keys(&plan.key);
+      let id = plan.id();
+      info!("attempting plan {:?}: {:?}", id, plan);
+
+      let key = plan.key;
+      let keys = key_gen.keys(&key);
       // TODO: Update rotation documentation
       // TODO: Use the latest keys for change (not needed for protonet)
       let change = keys.group_key();
-      // TODO: Use an agreed upon fee
-      let fee = todo!();
+      // TODO: Use an fee representative of several blocks
+      // TODO: Don't unwrap here
+      let fee = coin.get_block(block_number).await.unwrap().median_fee();
 
-      let id = plan.id();
-
-      let tx = match coin.prepare_send(keys, block_number, plan, change, fee).await {
+      let tx = match coin.prepare_send(keys, block_number, plan.clone(), change, fee).await {
         Ok(tx) => tx,
         Err(e) => {
-          error!("couldn't prepare a send for plan {:?}: {e}", plan);
+          error!("couldn't prepare a send for plan {:?}: {e}", id);
           // Add back this plan/these plans
           these_plans.push_front(plan);
           plans.push_front((context, these_plans));
@@ -184,7 +187,7 @@ async fn sign_plans<C: Coin, D: Db>(
         }
       };
 
-      signers[plan.key.to_bytes().as_ref()]
+      signers[key.to_bytes().as_ref()]
         .orders
         .send(SignerOrder::SignTransaction { id, start, tx })
         .unwrap();
@@ -245,7 +248,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             key,
             block,
           }) => {
-            let mut block_id = <C::Block as Block>::Id::default();
+            let mut block_id = <C::Block as Block<C>>::Id::default();
             block_id.as_mut().copy_from_slice(&block);
 
             plans.push_back((

@@ -28,9 +28,9 @@ pub enum ScannerOrder<C: Coin> {
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<C: Coin> {
   // Block acknowledged. This number should be used for the Updates provided to Substrate
-  Block(usize, <C::Block as Block>::Id),
+  Block(usize, <C::Block as Block<C>>::Id),
   // Outputs received
-  Outputs(<C::Curve as Ciphersuite>::G, <C::Block as Block>::Id, Vec<C::Output>),
+  Outputs(<C::Curve as Ciphersuite>::G, <C::Block as Block<C>>::Id, Vec<C::Output>),
 }
 
 pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
@@ -46,12 +46,12 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn block_key(number: usize) -> Vec<u8> {
     Self::scanner_key(b"block", u64::try_from(number).unwrap().to_le_bytes())
   }
-  fn save_block(&mut self, number: usize, id: <C::Block as Block>::Id) {
+  fn save_block(&mut self, number: usize, id: <C::Block as Block<C>>::Id) {
     self.0.put(Self::block_key(number), id);
   }
-  fn block(&self, number: usize) -> Option<<C::Block as Block>::Id> {
+  fn block(&self, number: usize) -> Option<<C::Block as Block<C>>::Id> {
     self.0.get(Self::block_key(number)).map(|id| {
-      let mut res = <C::Block as Block>::Id::default();
+      let mut res = <C::Block as Block<C>>::Id::default();
       res.as_mut().copy_from_slice(&id);
       res
     })
@@ -83,7 +83,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     self.0.get(Self::seen_key(id)).is_some()
   }
 
-  fn outputs_key(key: &[u8], block: &<C::Block as Block>::Id) -> Vec<u8> {
+  fn outputs_key(key: &[u8], block: &<C::Block as Block<C>>::Id) -> Vec<u8> {
     // This should be safe without the bincode serialize. Using bincode lets us not worry/have to
     // think about this
     let db_key = bincode::serialize(&(key, block.as_ref())).unwrap();
@@ -94,7 +94,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn save_outputs(
     &mut self,
     key: &<C::Curve as Ciphersuite>::G,
-    block: &<C::Block as Block>::Id,
+    block: &<C::Block as Block<C>>::Id,
     outputs: &[C::Output],
   ) {
     let mut bytes = Vec::with_capacity(outputs.len() * 64);
@@ -103,7 +103,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     }
     self.0.put(Self::outputs_key(key.to_bytes().as_ref(), block), bytes);
   }
-  fn outputs(&self, key: &[u8], block: &<C::Block as Block>::Id) -> Vec<C::Output> {
+  fn outputs(&self, key: &[u8], block: &<C::Block as Block<C>>::Id) -> Vec<C::Output> {
     let bytes_vec = self.0.get(Self::outputs_key(key, block)).unwrap();
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
@@ -172,7 +172,7 @@ pub struct ScannerHandle<C: Coin, D: Db> {
 }
 
 impl<C: Coin, D: Db> ScannerHandle<C, D> {
-  pub fn outputs(&self, key: &[u8], block: &<C::Block as Block>::Id) -> Vec<C::Output> {
+  pub fn outputs(&self, key: &[u8], block: &<C::Block as Block<C>>::Id) -> Vec<C::Output> {
     self.db.outputs(key, block)
   }
 }

@@ -30,11 +30,6 @@ pub trait Id:
 }
 impl<I: Send + Sync + Clone + Default + PartialEq + AsRef<[u8]> + AsMut<[u8]> + Debug> Id for I {}
 
-pub trait Block: Send + Sync + Sized + Clone + Debug {
-  type Id: 'static + Id;
-  fn id(&self) -> Self::Id;
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputType {
   // Needs to be processed/sent up to Substrate
@@ -106,6 +101,12 @@ pub trait Transaction: Send + Sync + Sized + Clone + Debug {
   fn id(&self) -> Self::Id;
 }
 
+pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
+  type Id: 'static + Id;
+  fn id(&self) -> Self::Id;
+  fn median_fee(&self) -> C::Fee;
+}
+
 #[async_trait]
 pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The elliptic curve used for this coin.
@@ -118,7 +119,7 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The type representing the transaction for this coin.
   type Transaction: Transaction;
   /// The type representing the block for this coin.
-  type Block: Block;
+  type Block: Block<Self>;
 
   /// The type containing all information on a scanned output.
   // This is almost certainly distinct from the coin's native output type.
