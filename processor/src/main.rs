@@ -148,10 +148,10 @@ impl<'a, C: Coin> Future for SignerMessageFuture<'a, C> {
 
 async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
-  plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
-  timer: &mut Option<Instant>,
   key_gen: &KeyGenHandle<C::Curve, D>,
   signers: &HashMap<Vec<u8>, SignerHandle<C>>,
+  plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
+  timer: &mut Option<Instant>,
 ) {
   // Clear the timer
   *timer = None;
@@ -228,20 +228,23 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
       plans_timer.unwrap_or(Instant::now().checked_add(Duration::from_secs(600)).unwrap());
     tokio::select! {
       _ = sleep_until(plans_timer_actual.into()) => {
-        sign_plans(&coin, &mut plans, &mut plans_timer, &key_gen, &signers).await;
+        sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;
       },
 
       msg = from_coordinator.recv() => {
         match msg.expect("Coordinator channel was dropped. Shutting down?") {
           CoordinatorMessage::KeyGen(msg) => {
             key_gen.orders.send(KeyGenOrder::CoordinatorMessage(msg)).unwrap()
-          },
+          }
           CoordinatorMessage::Sign(msg) => {
             signers[msg.key()].orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
-          },
-          CoordinatorMessage::Substrate(
-            substrate::CoordinatorMessage::BlockAcknowledged { context, key, block }
-          ) => {
+          }
+
+          CoordinatorMessage::Substrate(substrate::CoordinatorMessage::BlockAcknowledged {
+            context,
+            key,
+            block,
+          }) => {
             let mut block_id = <C::Block as Block>::Id::default();
             block_id.as_mut().copy_from_slice(&block);
 
@@ -251,31 +254,38 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
                 schedulers
                   .get_mut(&key)
                   .expect("key we don't have a scheduler for acknowledged a block")
-                  .add_outputs(scanner.outputs(&key, &block_id))
-              )
+                  .add_outputs(scanner.outputs(&key, &block_id)),
+              ),
             ));
-            sign_plans(&coin, &mut plans, &mut plans_timer, &key_gen, &signers).await;
+            sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;
           }
-          CoordinatorMessage::Substrate(
-            substrate::CoordinatorMessage::Burns { context, mut burns }
-          ) => {
+
+          CoordinatorMessage::Substrate(substrate::CoordinatorMessage::Burns {
+            context,
+            mut burns
+          }) => {
             // TODO: Rewrite rotation documentation
-            let scheduler = schedulers.get_mut(
-              active_keys.last().expect("burn event despite no keys").to_bytes().as_ref()
-            ).unwrap();
+            let scheduler =
+              schedulers
+                .get_mut(
+                  active_keys.last().expect("burn event despite no keys").to_bytes().as_ref()
+                )
+                .unwrap();
 
             let mut payments = vec![];
             for out in burns.drain(..) {
               let WithAmount { data: OutInstruction { address, data }, amount } = out;
               if let Ok(address) = C::Address::try_from(address.consume()) {
-                payments.push(
-                  Payment { address, data: data.map(|data| data.consume()), amount: amount.0 }
-                );
+                payments.push(Payment {
+                  address,
+                  data: data.map(|data| data.consume()),
+                  amount: amount.0,
+                });
               }
             }
 
             plans.push_back((context, VecDeque::from(scheduler.schedule(payments))));
-            sign_plans(&coin, &mut plans, &mut plans_timer, &key_gen, &signers).await;
+            sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;
           }
         }
       },
