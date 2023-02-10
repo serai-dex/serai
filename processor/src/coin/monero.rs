@@ -306,6 +306,11 @@ impl Coin for Monero {
   }
 
   #[cfg(test)]
+  async fn get_block_number(&self, id: &[u8; 32]) -> Result<usize, CoinError> {
+    Ok(self.rpc.get_block(*id).await.map_err(|_| CoinError::ConnectionError)?.number())
+  }
+
+  #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
     self.rpc.get_fee().await.unwrap()
   }
@@ -313,7 +318,7 @@ impl Coin for Monero {
   #[cfg(test)]
   async fn mine_block(&self) {
     // https://github.com/serai-dex/serai/issues/198
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     #[derive(serde::Deserialize, Debug)]
     struct EmptyResponse {}

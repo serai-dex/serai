@@ -68,6 +68,14 @@ impl Rpc {
     self.rpc_call("getblockhash", json!([number])).await
   }
 
+  pub async fn get_block_number(&self, block_hash: &BlockHash) -> Result<usize, RpcError> {
+    #[derive(Deserialize, Debug)]
+    struct Number {
+      height: usize,
+    }
+    Ok(self.rpc_call::<Number>("getblockheader", json!([block_hash.to_hex()])).await?.height)
+  }
+
   pub async fn get_block(&self, block_hash: &BlockHash) -> Result<Block, RpcError> {
     let hex = self.rpc_call::<String>("getblock", json!([block_hash.to_hex(), 0])).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;

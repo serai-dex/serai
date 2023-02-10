@@ -187,6 +187,13 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Publish a transaction.
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError>;
 
+  /// Get a block's number by its ID.
+  #[cfg(test)]
+  async fn get_block_number(
+    &self,
+    id: &<Self::Block as Block<Self>>::Id,
+  ) -> Result<usize, CoinError>;
+
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;
 

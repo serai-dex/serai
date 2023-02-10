@@ -1,6 +1,9 @@
 use std::io::{self, Read, Write};
 
-use crate::{serialize::*, transaction::Transaction};
+use crate::{
+  serialize::*,
+  transaction::{Input, Transaction},
+};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
@@ -45,6 +48,13 @@ pub struct Block {
 }
 
 impl Block {
+  pub fn number(&self) -> usize {
+    match self.miner_tx.prefix.inputs.get(0) {
+      Some(Input::Gen(number)) => (*number).try_into().unwrap(),
+      _ => panic!("invalid block, miner TX didn't have a Input::Gen"),
+    }
+  }
+
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.header.write(w)?;
     self.miner_tx.write(w)?;

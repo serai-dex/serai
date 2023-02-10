@@ -3,16 +3,17 @@ use std::{io, collections::HashMap};
 use async_trait::async_trait;
 
 use bitcoin::{
-  hashes::Hash, schnorr::TweakedPublicKey, psbt::serialize::Serialize, OutPoint, Transaction,
-  Block, Network, Address as BAddress,
+  hashes::Hash as HashTrait, schnorr::TweakedPublicKey, psbt::serialize::Serialize, OutPoint,
+  Transaction, Block, Network, Address as BAddress,
 };
 
 #[cfg(test)]
 use bitcoin::{
+  hashes::sha256d::Hash,
   secp256k1::{SECP256K1, SecretKey, Message},
   PrivateKey, PublicKey, EcdsaSighashType,
   blockdata::script::Builder,
-  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut,
+  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut, BlockHash,
 };
 
 use transcript::RecommendedTranscript;
@@ -219,7 +220,7 @@ impl Coin for Bitcoin {
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
-    Ok(self.rpc.get_latest_block_number().await.map_err(|_| CoinError::ConnectionError)?)
+    self.rpc.get_latest_block_number().await.map_err(|_| CoinError::ConnectionError)
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
@@ -313,6 +314,15 @@ impl Coin for Bitcoin {
       Err(e) => panic!("failed to publish TX {:?}: {e}", tx.txid()),
     }
     Ok(())
+  }
+
+  #[cfg(test)]
+  async fn get_block_number(&self, id: &[u8; 32]) -> Result<usize, CoinError> {
+    self
+      .rpc
+      .get_block_number(&BlockHash::from_hash(Hash::from_inner(*id)))
+      .await
+      .map_err(|_| CoinError::ConnectionError)
   }
 
   #[cfg(test)]
