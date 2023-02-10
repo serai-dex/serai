@@ -43,12 +43,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let scanner = new_scanner().await;
 
   // Receive funds
-  let mut block_number = coin.get_latest_block_number().await.unwrap() + 1;
   let block_id = coin.test_send(C::address(keys.group_key())).await.id();
-  // Find the block number
-  while coin.get_block(block_number).await.unwrap().id() != block_id {
-    block_number += 1;
-  }
 
   // Verify the Scanner picked them up
   let verify_event = |mut scanner: ScannerHandle<C, MemDb>| async {
@@ -70,7 +65,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   verify_event(new_scanner().await).await;
 
   // Acknowledge the block
-  scanner.orders.send(ScannerOrder::AckBlock(keys.group_key(), block_number)).unwrap();
+  scanner.orders.send(ScannerOrder::AckBlock(keys.group_key(), block_id.clone())).unwrap();
   sleep(Duration::from_secs(1)).await;
   assert_eq!(scanner.outputs(&keys.group_key(), &block_id), outputs);
 

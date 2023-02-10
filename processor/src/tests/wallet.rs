@@ -24,7 +24,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), MemDb::new());
   assert!(active_keys.is_empty());
-  let outputs = {
+  let (block_id, outputs) = {
     scanner
       .orders
       .send(ScannerOrder::RotateKey {
@@ -40,7 +40,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
-        outputs
+        (block_id, outputs)
       }
     }
   };
@@ -65,11 +65,21 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   // Execute the plan
   let fee = coin.get_fee().await;
   let mut keys_txs = HashMap::new();
-  let sync_block = coin.get_latest_block_number().await.unwrap() - C::CONFIRMATIONS;
   for (i, keys) in keys.drain() {
     keys_txs.insert(
       i,
-      (keys.clone(), coin.prepare_send(keys, sync_block, plans[0].clone(), fee).await.unwrap()),
+      (
+        keys.clone(),
+        coin
+          .prepare_send(
+            keys,
+            coin.get_block_number(&block_id).await.unwrap(),
+            plans[0].clone(),
+            fee,
+          )
+          .await
+          .unwrap(),
+      ),
     );
   }
 
@@ -94,7 +104,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
 
   // Check the Scanner DB can reload the outputs
-  scanner.orders.send(ScannerOrder::AckBlock(key, block_number)).unwrap();
+  scanner.orders.send(ScannerOrder::AckBlock(key, block.id())).unwrap();
   sleep(Duration::from_secs(1)).await;
   assert_eq!(scanner.outputs(&key, &block.id()), outputs);
 }

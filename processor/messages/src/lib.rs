@@ -104,8 +104,8 @@ pub mod sign {
   impl CoordinatorMessage {
     pub fn key(&self) -> &[u8] {
       match self {
-        CoordinatorMessage::Preprocesses { id, .. } => { &id.key },
-        CoordinatorMessage::Shares { id, .. } => { &id.key },
+        CoordinatorMessage::Preprocesses { id, .. } => &id.key,
+        CoordinatorMessage::Shares { id, .. } => &id.key,
       }
     }
   }

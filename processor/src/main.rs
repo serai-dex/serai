@@ -240,24 +240,22 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 
           CoordinatorMessage::Substrate(substrate::CoordinatorMessage::BlockAcknowledged {
             context,
-            key,
+            key: key_vec,
             block,
           }) => {
+            let key = <C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
             let mut block_id = <C::Block as Block<C>>::Id::default();
             block_id.as_mut().copy_from_slice(&block);
+
+            scanner.orders.send(ScannerOrder::AckBlock(key, block_id.clone())).unwrap();
 
             plans.push_back((
               context,
               VecDeque::from(
                 schedulers
-                  .get_mut(&key)
+                  .get_mut(&key_vec)
                   .expect("key we don't have a scheduler for acknowledged a block")
-                  .add_outputs(
-                    scanner.outputs(
-                      &<C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key.as_ref()).unwrap(),
-                      &block_id
-                    )
-                  ),
+                  .add_outputs(scanner.outputs(&key, &block_id)),
               ),
             ));
             sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;

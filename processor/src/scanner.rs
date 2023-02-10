@@ -22,7 +22,7 @@ pub enum ScannerOrder<C: Coin> {
   /// updated-to key.
   RotateKey { activation_number: usize, key: <C::Curve as Ciphersuite>::G },
   /// Acknowledge having handled a block for a key
-  AckBlock(<C::Curve as Ciphersuite>::G, usize),
+  AckBlock(<C::Curve as Ciphersuite>::G, <C::Block as Block<C>>::Id),
 }
 
 #[derive(Clone, Debug)]
@@ -34,8 +34,6 @@ pub enum ScannerEvent<C: Coin> {
 pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
 pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
-// TODO: This frequently assumes if called, the data should be available, panicking otherwise
-// Shift that assumption up. This should only panic if it has invalid data.
 #[derive(Clone, Debug)]
 struct ScannerDb<C: Coin, D: Db>(D, PhantomData<C>);
 impl<C: Coin, D: Db> ScannerDb<C, D> {
@@ -49,10 +47,10 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn block_number_key(id: &<C::Block as Block<C>>::Id) -> Vec<u8> {
     Self::scanner_key(b"block_number", id)
   }
-  fn save_block(&mut self, number: usize, id: <C::Block as Block<C>>::Id) {
+  fn save_block(&mut self, number: usize, id: &<C::Block as Block<C>>::Id) {
     // TODO: Use a TX here
     self.0.put(Self::scanner_key(b"corrupt", b""), b"");
-    self.0.put(Self::block_number_key(&id), u64::try_from(number).unwrap().to_le_bytes());
+    self.0.put(Self::block_number_key(id), u64::try_from(number).unwrap().to_le_bytes());
     self.0.put(Self::block_key(number), id);
     self.0.del(Self::scanner_key(b"corrupt", b""));
   }
@@ -125,15 +123,15 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     &self,
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
-  ) -> Vec<C::Output> {
-    let bytes_vec = self.0.get(Self::outputs_key(key, block)).unwrap();
+  ) -> Option<Vec<C::Output>> {
+    let bytes_vec = self.0.get(Self::outputs_key(key, block))?;
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
     let mut res = vec![];
     while !bytes.is_empty() {
       res.push(C::Output::read(&mut bytes).unwrap());
     }
-    res
+    Some(res)
   }
 
   fn scanned_block_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
@@ -144,26 +142,21 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     key: &<C::Curve as Ciphersuite>::G,
     block: usize,
   ) -> Vec<<C::Output as Output>::Id> {
-    let first = self.0.get(Self::scanned_block_key(key)).is_none();
-    // TODO: Cleanly handle this
-    // TODO: See above commentary on data availability assumption
-    if (!first) &&
-      self.0.get(Self::outputs_key(key, &self.block(block).expect("node behind"))).is_none()
-    {
-      panic!("saving we scanned a block despite not having outputs for it");
-    }
+    let new_key = self.0.get(Self::scanned_block_key(key)).is_none();
+    let outputs = self.block(block).and_then(|id| self.outputs(key, &id));
+    // Either this is a new key, with no outputs, or we're acknowledging this block
+    // If we're acknowledging it, we should have outputs available
+    assert_eq!(new_key, outputs.is_none());
 
     // TODO: Use a TX here
     self.0.put(Self::scanner_key(b"corrupt", b""), b"");
 
     // Mark all the outputs from this block as seen
     let mut ids = vec![];
-    if !first {
-      for output in self.outputs(key, &self.block(block).unwrap()) {
-        let id = output.id();
-        self.0.put(Self::seen_key(&id), b"");
-        ids.push(id);
-      }
+    for output in outputs.unwrap_or(vec![]) {
+      let id = output.id();
+      self.0.put(Self::seen_key(&id), b"");
+      ids.push(id);
     }
 
     self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
@@ -205,12 +198,17 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
   ) -> Vec<C::Output> {
+    let outputs = self.db.outputs(key, block);
+    if let Some(outputs) = outputs {
+      return outputs;
+    }
+
     // TODO: Cleanly handle this
     if self.db.block_number(block).unwrap_or(usize::MAX) > self.db.latest_scanned_block(*key) {
       panic!("node behind");
     }
 
-    self.db.outputs(key, block)
+    outputs.expect("asked for outputs of a block without any")
   }
 }
 
@@ -294,19 +292,20 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             let block = match self.coin.get_block(i).await {
               Ok(block) => block,
               Err(_) => {
-                warn!("Couldn't get {} block {i:?}", C::ID);
+                warn!("Couldn't get {} block {i}", C::ID);
                 break;
               }
             };
+            let block_id = block.id();
 
             if let Some(id) = self.db.block(i) {
               // TODO: Also check this block builds off the previous block
               if id != block.id() {
-                panic!("{} reorg'd from {id:?} to {:?}", C::ID, hex::encode(block.id()));
+                panic!("{} reorg'd from {id:?} to {:?}", C::ID, hex::encode(block_id));
               }
             } else {
-              info!("Found new block: {}", hex::encode(block.id()));
-              self.db.save_block(i, block.id());
+              info!("Found new block: {}", hex::encode(&block_id));
+              self.db.save_block(i, &block_id);
             }
 
             let outputs = match self.coin.get_outputs(&block, key).await {
@@ -337,11 +336,10 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             }
 
             // Save the outputs to disk
-            self.db.save_outputs(&key, &block.id(), &outputs);
+            self.db.save_outputs(&key, &block_id, &outputs);
 
             // Send all outputs
-            if handle_send(self.events.send(ScannerEvent::Outputs(key, block.id(), outputs)))
-              .is_err()
+            if handle_send(self.events.send(ScannerEvent::Outputs(key, block_id, outputs))).is_err()
             {
               return;
             }
@@ -372,8 +370,9 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             self.keys.push(key);
           }
 
-          ScannerOrder::AckBlock(key, number) => {
-            debug!("Block {} acknowledged", number);
+          ScannerOrder::AckBlock(key, id) => {
+            debug!("Block {} acknowledged", hex::encode(&id));
+            let number = self.db.block_number(&id).expect("node behind");
             for output in self.db.save_scanned_block(&key, number) {
               ram_outputs.remove(output.as_ref());
             }
