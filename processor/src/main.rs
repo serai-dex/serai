@@ -165,15 +165,20 @@ async fn sign_plans<C: Coin, D: Db>(
 
     while let Some(plan) = these_plans.pop_front() {
       let id = plan.id();
-      info!("attempting plan {}: {:?}", hex::encode(id), plan);
+      info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
-      let keys = key_gen.keys(&plan.key);
-      // TODO: Use an fee representative of several blocks
-      // TODO: Don't unwrap here
-      let fee = coin.get_block(block_number).await.unwrap().median_fee();
+      let prepare_plan = |keys| async {
+        // TODO: Use an fee representative of several blocks
+        let fee = coin.get_block(block_number).await?.median_fee();
+        coin.prepare_send(keys, block_number, plan.clone(), fee).await
+      };
 
-      let tx = match coin.prepare_send(keys, block_number, plan.clone(), fee).await {
-        Ok(tx) => tx,
+      match prepare_plan(key_gen.keys(&plan.key)).await {
+        Ok(tx) => signers[plan.key.to_bytes().as_ref()]
+          .orders
+          .send(SignerOrder::SignTransaction { id, start, tx })
+          .unwrap(),
+
         Err(e) => {
           error!("couldn't prepare a send for plan {}: {e}", hex::encode(id));
           // Add back this plan/these plans
@@ -183,12 +188,7 @@ async fn sign_plans<C: Coin, D: Db>(
           *timer = Some(Instant::now().checked_add(Duration::from_secs(30)).unwrap());
           return;
         }
-      };
-
-      signers[plan.key.to_bytes().as_ref()]
-        .orders
-        .send(SignerOrder::SignTransaction { id, start, tx })
-        .unwrap();
+      }
     }
   }
 }
@@ -337,8 +337,9 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         match msg {
           SignerEvent::SignedTransaction { id, tx } => {
             // If this had an outbound payment, report it up to Substrate for logging purposes
-            // Else, save the hash and its proof so other validators about to start signing
-            // sessions can be told this ID was already signed
+            // Else, save the hash and a proof it matches the plan so other validators about to
+            // start signing sessions can be told this ID was already signed
+            // Also, no longer reload the plan on boot
             // TODO
           },
           SignerEvent::ProcessorMessage(msg) => {

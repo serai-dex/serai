@@ -287,7 +287,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
           };
 
           for i in (latest_scanned + 1) ..= latest {
-            // TODO: Check for key deprecation
+            // TODO: Check for key deprecation. Not needed for protonet
 
             let block = match self.coin.get_block(i).await {
               Ok(block) => block,

@@ -29,10 +29,6 @@ pub enum SignerOrder<C: Coin> {
 
 #[derive(Debug)]
 pub enum SignerEvent<C: Coin> {
-  // TODO: If this TX had payments, publish them to Substrate
-  // TODO: Have a way to tell all other nodes we completed this signing session
-  // Maybe if a node doesn't know, they should ask if it's been done? That voids needing
-  // to publish results on-chain
   SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction>::Id },
   ProcessorMessage(ProcessorMessage),
 }
@@ -246,8 +242,6 @@ impl<C: Coin, D: Db> Signer<C, D> {
             Some(order) => order,
           }
         } {
-          // This needs to be re-issued on boot
-          // TOOD: Remove this TODO once this flow is implemented elsewhere
           SignerOrder::SignTransaction { id, start, tx } => {
             self.signable.insert(id, (start, tx));
           }
