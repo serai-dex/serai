@@ -256,8 +256,7 @@ impl Coin for Monero {
     let mut outputs = Vec::with_capacity(txs.len());
     for mut tx_outputs in txs.drain(..) {
       for (o, output) in tx_outputs.drain(..).enumerate() {
-        // Support multiple outputs to Serai in the TX, each with their own data
-        let mut data = output.arbitrary_data().get(o).cloned().unwrap_or(vec![]);
+        let mut data = output.arbitrary_data().get(0).cloned().unwrap_or(vec![]);
 
         // The Output serialization code above uses u16 to represent length
         data.truncate(u16::MAX.into());
