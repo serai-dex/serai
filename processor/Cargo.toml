@@ -26,6 +26,7 @@ rand_core = "0.6"
 
 # Encoders
 hex = "0.4"
+scale = { package = "parity-scale-codec", version = "3" }
 bincode = "1"
 serde_json = "1"
 
@@ -54,6 +55,7 @@ tokio = { version = "1", features = ["full"] }
 
 serai-primitives = { path = "../substrate/serai/primitives" }
 tokens-primitives = { path = "../substrate/tokens/primitives" }
+in-instructions-primitives = { path = "../substrate/in-instructions/primitives" }
 validator-sets-primitives = { path = "../substrate/validator-sets/primitives" }
 
 messages = { package = "processor-messages", path = "./messages" }

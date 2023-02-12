@@ -15,13 +15,16 @@ use frost::curve::Ciphersuite;
 use log::{info, error};
 use tokio::time::sleep_until;
 
-use serai_primitives::WithAmount;
+use scale::Decode;
+
+use serai_primitives::{Amount, WithAmount};
 use tokens_primitives::OutInstruction;
+use in_instructions_primitives::{Shorthand, RefundableInInstruction};
 
 use messages::{SubstrateContext, substrate, CoordinatorMessage, ProcessorMessage};
 
 mod coin;
-use coin::{Output, Block, Coin, Bitcoin, Monero};
+use coin::{OutputType, Output, Block, Coin, Bitcoin, Monero};
 
 mod key_gen;
 use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen, KeyGenHandle};
@@ -310,13 +313,34 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         // These need to be sent to the coordinator which needs to check they aren't replayed
         // TODO
         match msg.unwrap() {
-          ScannerEvent::Outputs(key, block, outputs) => todo!(),
+          ScannerEvent::Outputs(key, block, outputs) => {
+            to_coordinator.send(ProcessorMessage::Substrate(substrate::ProcessorMessage::Update {
+              key: key.to_bytes().as_ref().to_vec(),
+              block: block.as_ref().to_vec(),
+              instructions: outputs.iter().filter_map(|output| {
+                // If these aren't externally received funds, don't handle it as an instruction
+                if output.kind() != OutputType::External {
+                  return None;
+                }
+
+                let shorthand = Shorthand::decode(&mut output.data()).ok()?;
+                let instruction = RefundableInInstruction::try_from(shorthand).ok()?;
+                // TODO: Set instruction.origin if not set (and handle refunds in general)
+                Some(WithAmount { data: instruction.instruction, amount: Amount(output.amount()) })
+              }).collect(),
+            })).unwrap();
+          },
         }
       },
 
       (key, msg) = SignerMessageFuture(&mut signers) => {
         match msg {
-          SignerEvent::SignedTransaction { id, tx } => todo!(),
+          SignerEvent::SignedTransaction { id, tx } => {
+            // If this had an outbound payment, report it up to Substrate for logging purposes
+            // Else, save the hash and its proof so other validators about to start signing
+            // sessions can be told this ID was already signed
+            // TODO
+          },
           SignerEvent::ProcessorMessage(msg) => {
             to_coordinator.send(ProcessorMessage::Sign(msg)).unwrap();
           },

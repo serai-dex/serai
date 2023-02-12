@@ -56,29 +56,51 @@ impl AsMut<[u8]> for OutputId {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Output(SpendableOutput, OutputType);
+pub struct Output {
+  kind: OutputType,
+  output: SpendableOutput,
+  data: Vec<u8>,
+}
+
 impl OutputTrait for Output {
   type Id = OutputId;
 
   fn kind(&self) -> OutputType {
-    self.1
+    self.kind
   }
 
   fn id(&self) -> Self::Id {
-    OutputId(self.0.id())
+    OutputId(self.output.id())
   }
 
   fn amount(&self) -> u64 {
-    self.0.output.value
+    self.output.output.value
+  }
+
+  fn data(&self) -> &[u8] {
+    todo!()
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    self.0.write(writer)?;
-    self.1.write(writer)
+    self.kind.write(writer)?;
+    self.output.write(writer)?;
+    writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
+    writer.write_all(&self.data)
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Ok(Output(SpendableOutput::read(reader)?, OutputType::read(reader)?))
+    Ok(Output {
+      kind: OutputType::read(reader)?,
+      output: SpendableOutput::read(reader)?,
+      data: {
+        let mut data_len = [0; 2];
+        reader.read_exact(&mut data_len)?;
+
+        let mut data = vec![0; usize::from(u16::from_le_bytes(data_len))];
+        reader.read_exact(&mut data)?;
+        data
+      },
+    })
   }
 }
 
@@ -251,14 +273,20 @@ impl Coin for Bitcoin {
     for tx in &block.txdata[1 ..] {
       for (vout, output) in tx.output.iter().enumerate() {
         if let Some(info) = scripts.get(&output.script_pubkey.to_bytes()) {
-          outputs.push(Output(
-            SpendableOutput {
+          outputs.push(Output {
+            kind: info.1,
+            output: SpendableOutput {
               offset: info.0,
               output: output.clone(),
               outpoint: OutPoint { txid: tx.txid(), vout: u32::try_from(vout).unwrap() },
             },
-            info.1,
-          ));
+            data: {
+              let last = tx.output.last().unwrap();
+              Some(last.script_pubkey.to_bytes()[1 ..].to_vec())
+                .filter(|_| last.script_pubkey.is_op_return())
+                .unwrap_or(vec![])
+            },
+          });
         }
       }
     }
@@ -277,7 +305,7 @@ impl Coin for Bitcoin {
       keys,
       transcript: tx.transcript(),
       actual: BSignableTransaction::new(
-        tx.inputs.drain(..).map(|input| input.0).collect(),
+        tx.inputs.drain(..).map(|input| input.output).collect(),
         &tx
           .payments
           .drain(..)

@@ -92,6 +92,8 @@ pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
   fn id(&self) -> Self::Id;
   fn amount(&self) -> u64;
 
+  fn data(&self) -> &[u8];
+
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
 }

@@ -218,6 +218,10 @@ impl SpendableOutput {
     self.output.commitment()
   }
 
+  pub fn arbitrary_data(&self) -> &[Vec<u8>] {
+    self.output.arbitrary_data()
+  }
+
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.output.write(w)?;
     w.write_all(&self.global_index.to_le_bytes())

@@ -22,6 +22,8 @@ use monero_serai::{
   },
 };
 
+use serai_primitives::MAX_DATA_LEN;
+
 use crate::{
   coin::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
@@ -31,12 +33,7 @@ use crate::{
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Output(SpendableOutput);
-impl From<SpendableOutput> for Output {
-  fn from(output: SpendableOutput) -> Output {
-    Output(output)
-  }
-}
+pub struct Output(SpendableOutput, Vec<u8>);
 
 const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
 const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
@@ -65,12 +62,27 @@ impl OutputTrait for Output {
     self.0.commitment().amount
   }
 
+  fn data(&self) -> &[u8] {
+    &self.1
+  }
+
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    self.0.write(writer)
+    self.0.write(writer)?;
+    writer.write_all(&u16::try_from(self.1.len()).unwrap().to_le_bytes())?;
+    writer.write_all(&self.1)?;
+    Ok(())
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    SpendableOutput::read(reader).map(Output)
+    let output = SpendableOutput::read(reader)?;
+
+    let mut data_len = [0; 2];
+    reader.read_exact(&mut data_len)?;
+
+    let mut data = vec![0; usize::from(u16::from_le_bytes(data_len))];
+    reader.read_exact(&mut data)?;
+
+    Ok(Output(output, data))
   }
 }
 
@@ -224,32 +236,41 @@ impl Coin for Monero {
     block: &Self::Block,
     key: dfg::EdwardsPoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
-    let mut transactions = Self::scanner(key)
+    let mut txs = Self::scanner(key)
       .scan(&self.rpc, &block.1)
       .await
       .map_err(|_| CoinError::ConnectionError)?
       .iter()
-      .map(|outputs| outputs.not_locked())
+      .filter_map(|outputs| Some(outputs.not_locked()).filter(|outputs| !outputs.is_empty()))
       .collect::<Vec<_>>();
 
     // This should be pointless as we shouldn't be able to scan for any other subaddress
     // This just ensures nothing invalid makes it through
-    for transaction in transactions.iter_mut() {
-      *transaction = transaction
-        .drain(..)
-        .filter(|output| {
-          [EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS]
-            .contains(&output.output.metadata.subaddress)
-        })
-        .collect();
+    for tx_outputs in &txs {
+      for output in tx_outputs {
+        assert!([EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS]
+          .contains(&output.output.metadata.subaddress));
+      }
     }
 
-    Ok(
-      transactions
-        .drain(..)
-        .flat_map(|mut outputs| outputs.drain(..).map(Output::from).collect::<Vec<_>>())
-        .collect(),
-    )
+    let mut outputs = Vec::with_capacity(txs.len());
+    for mut tx_outputs in txs.drain(..) {
+      for (o, output) in tx_outputs.drain(..).enumerate() {
+        // Support multiple outputs to Serai in the TX, each with their own data
+        let mut data = output.arbitrary_data().get(o).cloned().unwrap_or(vec![]);
+
+        // The Output serialization code above uses u16 to represent length
+        data.truncate(u16::MAX.into());
+        // Monero data segments should be <= 255 already, and MAX_DATA_LEN is currently 512
+        // This just allows either Monero to change, or MAX_DATA_LEN to change, without introducing
+        // complicationso
+        data.truncate(MAX_DATA_LEN.try_into().unwrap());
+
+        outputs.push(Output(output, data));
+      }
+    }
+
+    Ok(outputs)
   }
 
   async fn prepare_send(
