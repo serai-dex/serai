@@ -97,14 +97,18 @@ impl SignableTransaction {
     u64::try_from(tx.weight()).unwrap()
   }
 
-  /// Create a new signable-transaction.
+  /// Create a new SignableTransaction.
   pub fn new(
     mut inputs: Vec<SpendableOutput>,
     payments: &[(Address, u64)],
     change: Option<Address>,
+    data: Option<Vec<u8>>,
     fee: u64,
   ) -> Option<SignableTransaction> {
-    if inputs.is_empty() || (payments.is_empty() && change.is_none()) {
+    if inputs.is_empty() ||
+      (payments.is_empty() && change.is_none()) ||
+      (data.as_ref().map(|data| data.len()).unwrap_or(0) > 80)
+    {
       return None;
     }
 
@@ -126,15 +130,19 @@ impl SignableTransaction {
       .map(|payment| TxOut { value: payment.1, script_pubkey: payment.0.script_pubkey() })
       .collect::<Vec<_>>();
 
+    // Add the OP_RETURN output
+    if let Some(data) = data {
+      tx_outs.push(TxOut { value: 0, script_pubkey: Script::new_op_return(&data) })
+    }
+
     let actual_fee = fee * Self::calculate_weight(tx_ins.len(), payments, None);
     if input_sat < (payment_sat + actual_fee) {
       return None;
     }
 
-    // If there's a change address, check if there's a meaningful change
+    // If there's a change address, check if there's change to give it
     if let Some(change) = change.as_ref() {
       let fee_with_change = fee * Self::calculate_weight(tx_ins.len(), payments, Some(change));
-      // If there's a non-zero change, add it
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
         tx_outs.push(TxOut { value, script_pubkey: change.script_pubkey() });
       }

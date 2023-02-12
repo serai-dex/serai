@@ -232,7 +232,8 @@ impl Coin for Bitcoin {
   // 100,000 / 192 = 520
   // 520 * 192 leaves 160 bytes of overhead for the transaction structure itself
   const MAX_INPUTS: usize = 520;
-  const MAX_OUTPUTS: usize = 520;
+  // Actually set one less output as we'll add a 32-byte OP_RETURN
+  const MAX_OUTPUTS: usize = 519;
 
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>) {
     let (_, offset) = make_even(key.group_key());
@@ -322,6 +323,8 @@ impl Coin for Bitcoin {
           .map(|payment| (payment.address.0, payment.amount))
           .collect::<Vec<_>>(),
         tx.change.map(|key| Self::address(change(key).0).0),
+        // Use an OP_RETURN, not an address, due to Bitcoin's rules on spam outputs
+        Some(tx.id().into()),
         fee.0,
       )
       .unwrap(),

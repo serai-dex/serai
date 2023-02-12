@@ -288,7 +288,10 @@ impl Coin for Monero {
         tx.inputs.drain(..).map(|input| input.0).collect(),
         tx.payments.drain(..).map(|payment| (payment.address.0, payment.amount)).collect(),
         tx.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
-        vec![],
+        // We could use an output here instead
+        // It's not worth it due to how limited outputs already are and the computational cost of
+        // Bulletproofs
+        vec![tx.id().into()],
         fee,
       )
       .map_err(|_| CoinError::ConnectionError)?,
