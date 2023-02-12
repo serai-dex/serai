@@ -220,9 +220,19 @@ impl Coin for Bitcoin {
   const ID: &'static str = "Bitcoin";
   const CONFIRMATIONS: usize = 3;
 
-  // TODO: Get hard numbers and tune
-  const MAX_INPUTS: usize = 128;
-  const MAX_OUTPUTS: usize = 16;
+  // Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
+  // A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
+  // While our inputs are entirely SegWit, such fine tuning is not necessary and could create
+  // issues in the future (if the size decreases or we mis-evaluate it)
+  // It also offers a minimal amount of benefit when we are able to logarithmically accumulate
+  // inputs
+  // For 128-byte inputs (40-byte output specification, 64-byte signature, whatever overhead) and
+  // 64-byte outputs (40-byte script, 8-byte amount, whatever overhead), they together take up 192
+  // bytes
+  // 100,000 / 192 = 520
+  // 520 * 192 leaves 160 bytes of overhead for the transaction structure itself
+  const MAX_INPUTS: usize = 520;
+  const MAX_OUTPUTS: usize = 520;
 
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>) {
     let (_, offset) = make_even(key.group_key());
