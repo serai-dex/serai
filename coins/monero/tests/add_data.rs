@@ -1,6 +1,6 @@
 use monero_serai::{
-  wallet::{TransactionError, extra::MAX_TX_EXTRA_NONCE_SIZE},
   transaction::Transaction,
+  wallet::{extra::MAX_TX_EXTRA_NONCE_SIZE, TransactionError},
 };
 
 mod runner;

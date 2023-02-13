@@ -19,12 +19,12 @@ use monero_rpc::{
 
 use monero_serai::{
   transaction::Transaction,
+  rpc::Rpc,
   wallet::{
     address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
     extra::MAX_TX_EXTRA_NONCE_SIZE,
     Scanner,
   },
-  rpc::Rpc,
 };
 
 mod runner;

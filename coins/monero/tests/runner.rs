@@ -12,12 +12,12 @@ use tokio::sync::Mutex;
 
 use monero_serai::{
   Protocol, random_scalar,
+  rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
     address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
     SpendableOutput,
   },
-  rpc::Rpc,
 };
 
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {

@@ -25,7 +25,7 @@ pub(crate) mod decoys;
 pub(crate) use decoys::Decoys;
 
 mod send;
-pub use send::{Fee, TransactionError, SignableTransaction, SignableTransactionBuilder};
+pub use send::{Fee, TransactionError, SignableTransaction, SignableTransactionBuilder, Eventuality};
 #[cfg(feature = "multisig")]
 pub use send::TransactionMachine;
 

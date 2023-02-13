@@ -255,7 +255,7 @@ impl Coin for Monero {
 
     let mut outputs = Vec::with_capacity(txs.len());
     for mut tx_outputs in txs.drain(..) {
-      for (o, output) in tx_outputs.drain(..).enumerate() {
+      for output in tx_outputs.drain(..) {
         let mut data = output.arbitrary_data().get(0).cloned().unwrap_or(vec![]);
 
         // The Output serialization code above uses u16 to represent length
@@ -285,13 +285,14 @@ impl Coin for Monero {
       height: block_number + 1,
       actual: MSignableTransaction::new(
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
+        // Use the plan ID as the r_seed
+        // This perfectly binds the plan while simultaneously allowing verifying the plan was
+        // executed with no additional communication
+        Some(Zeroizing::new(tx.id())),
         tx.inputs.drain(..).map(|input| input.0).collect(),
         tx.payments.drain(..).map(|payment| (payment.address.0, payment.amount)).collect(),
         tx.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
-        // We could use an output here instead
-        // It's not worth it due to how limited outputs already are and the computational cost of
-        // Bulletproofs
-        vec![tx.id().into()],
+        vec![],
         fee,
       )
       .map_err(|_| CoinError::ConnectionError)?,
@@ -383,6 +384,7 @@ impl Coin for Monero {
 
     let tx = MSignableTransaction::new(
       self.rpc.get_protocol().await.unwrap(),
+      None,
       outputs,
       vec![(address.0, amount - fee)],
       Some(Self::test_address().0),

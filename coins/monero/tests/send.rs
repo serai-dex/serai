@@ -1,6 +1,6 @@
 use monero_serai::{
-  wallet::{ReceivedOutput, SpendableOutput},
   transaction::Transaction,
+  wallet::{ReceivedOutput, SpendableOutput},
 };
 
 mod runner;
