@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use bitcoin::{
   hashes::Hash as HashTrait, schnorr::TweakedPublicKey, psbt::serialize::Serialize, OutPoint,
-  Transaction, Block, Network, Address as BAddress,
+  blockdata::script::Instruction, Transaction, Block, Network, Address as BAddress,
 };
 
 #[cfg(test)]
@@ -290,12 +290,17 @@ impl Coin for Bitcoin {
               output: output.clone(),
               outpoint: OutPoint { txid: tx.txid(), vout: u32::try_from(vout).unwrap() },
             },
-            data: {
-              let last = tx.output.last().unwrap();
-              Some(last.script_pubkey.to_bytes()[1 ..].to_vec())
-                .filter(|_| last.script_pubkey.is_op_return())
-                .unwrap_or(vec![])
-            },
+            data: (|| {
+              for output in &tx.output {
+                if output.script_pubkey.is_op_return() {
+                  match output.script_pubkey.instructions_minimal().last() {
+                    Some(Ok(Instruction::PushBytes(data))) => return data.to_vec(),
+                    _ => continue,
+                  }
+                }
+              }
+              vec![]
+            })(),
           });
         }
       }
