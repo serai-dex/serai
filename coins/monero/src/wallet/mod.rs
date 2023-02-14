@@ -12,6 +12,7 @@ use curve25519_dalek::{
 use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
 
 pub mod extra;
+pub mod seed;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
 /// Address encoding and decoding functionality.

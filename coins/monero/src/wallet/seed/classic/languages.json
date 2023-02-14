@@ -1,0 +1,54 @@
+[
+    {
+        "name" : "English",
+        "unique_prefix_length": 3
+    },
+    {
+        "name" : "EnglishOld",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "German",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "Dutch",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "French",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "Italian",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "Japanese",
+        "unique_prefix_length": 3
+    },
+    {
+        "name" : "Spanish",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "Portuguese",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "Russian",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "ChineseSimplified",
+        "unique_prefix_length": 1
+    },
+    {
+        "name" : "Esperanto",
+        "unique_prefix_length": 4
+    },
+    {
+        "name" : "Lojban",
+        "unique_prefix_length": 4
+    }
+]
