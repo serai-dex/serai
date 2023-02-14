@@ -347,7 +347,7 @@ impl Scanner {
         // We will not have a torsioned key in our HashMap of keys, so we wouldn't identify it as
         // ours
         // If we did though, it'd enable bypassing the included burning bug protection
-        debug_assert!(output_key.is_torsion_free());
+        assert!(output_key.is_torsion_free());
 
         let mut key_offset = shared_key;
         if let Some(subaddress) = subaddress {
