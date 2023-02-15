@@ -27,7 +27,6 @@ pub struct JsonRpcResponse<T> {
 #[derive(Deserialize, Debug)]
 struct TransactionResponse {
   tx_hash: String,
-  block_height: Option<usize>,
   as_hex: String,
   pruned_as_hex: String,
 }
@@ -248,7 +247,8 @@ impl Rpc {
     txs
       .txs
       .iter()
-      .map(|res| {
+      .enumerate()
+      .map(|(i, res)| {
         let tx = Transaction::read::<&[u8]>(
           &mut rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex })?
             .as_ref(),
@@ -266,6 +266,12 @@ impl Rpc {
           }
         }
 
+        // This does run a few keccak256 hashes, which is pointless if the node is trusted
+        // In exchange, this provides resilience against invalid/malicious nodes
+        if tx.hash() != hashes[i] {
+          Err(RpcError::InvalidNode)?;
+        }
+
         Ok(tx)
       })
       .collect()
@@ -275,19 +281,8 @@ impl Rpc {
     self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
   }
 
-  pub async fn get_transaction_block_number(&self, tx: &[u8]) -> Result<Option<usize>, RpcError> {
-    let txs: TransactionsResponse =
-      self.rpc_call("get_transactions", Some(json!({ "txs_hashes": [hex::encode(tx)] }))).await?;
-
-    if !txs.missed_tx.is_empty() {
-      Err(RpcError::TransactionsNotFound(
-        txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
-      ))?;
-    }
-
-    Ok(txs.txs[0].block_height)
-  }
-
+  /// Get the hash of a block from the node by the block's numbers.
+  /// This function does not verify the returned block hash is actually for the number in question.
   pub async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockHeaderResponse {
@@ -303,6 +298,8 @@ impl Rpc {
     rpc_hex(&header.block_header.hash)?.try_into().map_err(|_| RpcError::InvalidNode)
   }
 
+  /// Get a block from the node by its hash.
+  /// This function does not verify the returned block actually has the hash in question.
   pub async fn get_block(&self, hash: [u8; 32]) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
@@ -312,11 +309,25 @@ impl Rpc {
     let res: BlockResponse =
       self.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await?;
 
+    // TODO: Verify the TXs included are actually committed to by the header
     Block::read::<&[u8]>(&mut rpc_hex(&res.blob)?.as_ref()).map_err(|_| RpcError::InvalidNode)
   }
 
   pub async fn get_block_by_number(&self, number: usize) -> Result<Block, RpcError> {
-    self.get_block(self.get_block_hash(number).await?).await
+    match self.get_block(self.get_block_hash(number).await?).await {
+      Ok(block) => {
+        // Make sure this is actually the block for this number
+        match block.miner_tx.prefix.inputs[0] {
+          Input::Gen(actual) => if usize::try_from(actual).unwrap() == number {
+            Ok(block)
+          } else {
+            Err(RpcError::InvalidNode)
+          },
+          _ => Err(RpcError::InvalidNode),
+        }
+      },
+      e => e,
+    }
   }
 
   pub async fn get_block_transactions(&self, hash: [u8; 32]) -> Result<Vec<Transaction>, RpcError> {
