@@ -9,7 +9,8 @@ pub mod pallet {
   use frame_support::pallet_prelude::*;
 
   use serai_primitives::*;
-  use validator_sets_primitives::*;
+  pub use validator_sets_primitives as primitives;
+  use primitives::*;
 
   #[pallet::config]
   pub trait Config: frame_system::Config + TypeInfo {

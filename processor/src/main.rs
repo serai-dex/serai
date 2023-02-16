@@ -17,9 +17,11 @@ use tokio::time::sleep_until;
 
 use scale::Decode;
 
-use serai_primitives::{Amount, WithAmount};
-use tokens_primitives::OutInstruction;
-use in_instructions_primitives::{Shorthand, RefundableInInstruction};
+use serai_client::{
+  primitives::{Amount, WithAmount},
+  tokens::primitives::OutInstruction,
+  in_instructions::primitives::{Shorthand, RefundableInInstruction},
+};
 
 use messages::{SubstrateContext, substrate, CoordinatorMessage, ProcessorMessage};
 

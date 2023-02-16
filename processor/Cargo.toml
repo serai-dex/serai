@@ -53,10 +53,7 @@ bitcoin = "0.29"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
-serai-primitives = { path = "../substrate/serai/primitives" }
-tokens-primitives = { path = "../substrate/tokens/primitives" }
-in-instructions-primitives = { path = "../substrate/in-instructions/primitives" }
-validator-sets-primitives = { path = "../substrate/validator-sets/primitives" }
+serai-client = { path = "../substrate/serai/client", features = ["monero"] }
 
 messages = { package = "processor-messages", path = "./messages" }
 

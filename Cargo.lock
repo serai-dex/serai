@@ -6190,7 +6190,6 @@ dependencies = [
  "futures",
  "group",
  "hex",
- "in-instructions-primitives",
  "k256",
  "lazy_static",
  "log",
@@ -6200,13 +6199,11 @@ dependencies = [
  "processor-messages",
  "rand_core 0.6.4",
  "secp256k1",
- "serai-primitives",
+ "serai-client",
  "serde",
  "serde_json",
  "thiserror",
- "tokens-primitives",
  "tokio",
- "validator-sets-primitives",
  "zeroize",
 ]
 
@@ -8080,15 +8077,14 @@ checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 name = "serai-client"
 version = "0.1.0"
 dependencies = [
+ "ciphersuite",
  "jsonrpsee-server",
  "lazy_static",
+ "monero-serai",
  "parity-scale-codec",
  "rand_core 0.6.4",
  "scale-info",
- "scale-value",
- "serai-primitives",
  "serai-runtime",
- "sp-core",
  "subxt",
  "thiserror",
  "tokio",

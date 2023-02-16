@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use group::GroupEncoding;
 use frost::{curve::Ciphersuite, ThresholdParams, tests::clone_without};
 
-use validator_sets_primitives::{Session, ValidatorSetIndex, ValidatorSetInstance};
+use serai_client::validator_sets::primitives::{Session, ValidatorSetIndex, ValidatorSetInstance};
 
 use messages::{SubstrateContext, key_gen::*};
 use crate::{

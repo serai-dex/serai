@@ -12,7 +12,7 @@ use frost::{
 use log::info;
 use tokio::sync::mpsc;
 
-use validator_sets_primitives::ValidatorSetInstance;
+use serai_client::validator_sets::primitives::ValidatorSetInstance;
 use messages::key_gen::*;
 
 use crate::Db;

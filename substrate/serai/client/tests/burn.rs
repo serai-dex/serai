@@ -2,11 +2,12 @@ use core::time::Duration;
 
 use rand_core::{RngCore, OsRng};
 
-use sp_core::Pair;
-
 use tokio::time::sleep;
 
-use subxt::tx::{BaseExtrinsicParamsBuilder, PairSigner};
+use subxt::{
+  ext::sp_core::Pair,
+  tx::{BaseExtrinsicParamsBuilder, PairSigner},
+};
 
 use serai_client::{
   primitives::{
