@@ -318,14 +318,16 @@ impl Rpc {
       Ok(block) => {
         // Make sure this is actually the block for this number
         match block.miner_tx.prefix.inputs[0] {
-          Input::Gen(actual) => if usize::try_from(actual).unwrap() == number {
-            Ok(block)
-          } else {
-            Err(RpcError::InvalidNode)
-          },
+          Input::Gen(actual) => {
+            if usize::try_from(actual).unwrap() == number {
+              Ok(block)
+            } else {
+              Err(RpcError::InvalidNode)
+            }
+          }
           _ => Err(RpcError::InvalidNode),
         }
-      },
+      }
       e => e,
     }
   }
