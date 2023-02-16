@@ -8,7 +8,7 @@ use tokio::time::{sleep, timeout};
 
 use crate::{
   Payment, Plan,
-  coin::{Output, Block, Coin},
+  coins::{Output, Block, Coin},
   scanner::{ScannerOrder, ScannerEvent, Scanner},
   scheduler::Scheduler,
   tests::{util::db::MemDb, sign},

@@ -30,7 +30,7 @@ use bitcoin_serai::{
 };
 
 use crate::{
-  coin::{
+  coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, Coin,
   },

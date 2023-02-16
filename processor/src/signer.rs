@@ -18,7 +18,7 @@ use tokio::{time::timeout, sync::mpsc};
 use messages::sign::*;
 use crate::{
   Db,
-  coin::{Transaction, Coin},
+  coins::{Transaction, Coin},
 };
 
 #[derive(Debug)]

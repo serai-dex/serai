@@ -6183,7 +6183,6 @@ dependencies = [
  "bincode",
  "bitcoin",
  "bitcoin-serai",
- "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "env_logger",
  "flexible-transcript",

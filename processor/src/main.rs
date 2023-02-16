@@ -25,8 +25,12 @@ use serai_client::{
 
 use messages::{SubstrateContext, substrate, CoordinatorMessage, ProcessorMessage};
 
-mod coin;
-use coin::{OutputType, Output, Block, Coin, Bitcoin, Monero};
+mod coins;
+use coins::{OutputType, Output, Block, Coin};
+#[cfg(feature = "bitcoin")]
+use coins::Bitcoin;
+#[cfg(feature = "monero")]
+use coins::Monero;
 
 mod key_gen;
 use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen, KeyGenHandle};
@@ -357,7 +361,9 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 async fn main() {
   let db = MemDb::new();
   match "TODO" {
+    #[cfg(feature = "bitcoin")]
     "bitcoin" => run(db, Bitcoin::new("TODO".to_string())).await,
+    #[cfg(feature = "monero")]
     "monero" => run(db, Monero::new("TODO".to_string())).await,
     _ => panic!("unrecognized coin"),
   }

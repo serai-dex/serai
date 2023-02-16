@@ -9,7 +9,7 @@ use tokio::{sync::mpsc, time::timeout};
 
 use crate::{
   Db,
-  coin::{Output, Block, Coin},
+  coins::{Output, Block, Coin},
 };
 
 /// Orders for the scanner.

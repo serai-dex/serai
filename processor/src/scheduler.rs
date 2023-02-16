@@ -3,7 +3,7 @@ use std::collections::{VecDeque, HashMap};
 use frost::curve::Ciphersuite;
 
 use crate::{
-  coin::{Output, Coin},
+  coins::{Output, Coin},
   Payment, Plan,
 };
 

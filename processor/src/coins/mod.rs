@@ -10,10 +10,14 @@ use frost::{
   sign::PreprocessMachine,
 };
 
+#[cfg(feature = "bitcoin")]
 pub mod bitcoin;
+#[cfg(feature = "bitcoin")]
 pub use self::bitcoin::Bitcoin;
 
+#[cfg(feature = "monero")]
 pub mod monero;
+#[cfg(feature = "monero")]
 pub use monero::Monero;
 
 use crate::Plan;

@@ -4,12 +4,15 @@ use async_trait::async_trait;
 
 use zeroize::Zeroizing;
 
-#[cfg(test)]
-use curve25519_dalek::scalar::Scalar;
-
 use transcript::RecommendedTranscript;
-use dalek_ff_group as dfg;
+
+use dalek_ff_group::EdwardsPoint;
 use frost::{curve::Ed25519, ThresholdKeys};
+
+#[cfg(test)]
+use group::ff::Field;
+#[cfg(test)]
+use dalek_ff_group::Scalar;
 
 use monero_serai::{
   transaction::Transaction,
@@ -25,7 +28,7 @@ use monero_serai::{
 pub use serai_client::{primitives::MAX_DATA_LEN, coins::monero::Address};
 
 use crate::{
-  coin::{
+  coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, Coin,
   },
@@ -134,18 +137,18 @@ impl Monero {
     Monero { rpc: Rpc::new(url).unwrap() }
   }
 
-  fn view_pair(spend: dfg::EdwardsPoint) -> ViewPair {
+  fn view_pair(spend: EdwardsPoint) -> ViewPair {
     ViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0))
   }
 
-  fn address_internal(spend: dfg::EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {
+  fn address_internal(spend: EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {
     Address(Self::view_pair(spend).address(
       Network::Mainnet,
       AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
     ))
   }
 
-  fn scanner(spend: dfg::EdwardsPoint) -> Scanner {
+  fn scanner(spend: EdwardsPoint) -> Scanner {
     let mut scanner = Scanner::from_view(Self::view_pair(spend), None);
     debug_assert!(EXTERNAL_SUBADDRESS.is_none());
     scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
@@ -156,7 +159,7 @@ impl Monero {
   #[cfg(test)]
   fn test_view_pair() -> ViewPair {
     use group::Group;
-    ViewPair::new(*dfg::EdwardsPoint::generator(), Zeroizing::new(Scalar::one()))
+    ViewPair::new(*EdwardsPoint::generator(), Zeroizing::new(Scalar::one().0))
   }
 
   #[cfg(test)]
@@ -198,11 +201,11 @@ impl Coin for Monero {
   // Monero doesn't require/benefit from tweaking
   fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 
-  fn address(key: dfg::EdwardsPoint) -> Self::Address {
+  fn address(key: EdwardsPoint) -> Self::Address {
     Self::address_internal(key, EXTERNAL_SUBADDRESS)
   }
 
-  fn branch_address(key: dfg::EdwardsPoint) -> Self::Address {
+  fn branch_address(key: EdwardsPoint) -> Self::Address {
     Self::address_internal(key, BRANCH_SUBADDRESS)
   }
 
@@ -220,7 +223,7 @@ impl Coin for Monero {
   async fn get_outputs(
     &self,
     block: &Self::Block,
-    key: dfg::EdwardsPoint,
+    key: EdwardsPoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let mut txs = Self::scanner(key)
       .scan(&self.rpc, &block.1)
@@ -378,7 +381,7 @@ impl Coin for Monero {
       self.rpc.get_fee().await.unwrap(),
     )
     .unwrap()
-    .sign(&mut OsRng, &self.rpc, &Zeroizing::new(Scalar::one()))
+    .sign(&mut OsRng, &self.rpc, &Zeroizing::new(Scalar::one().0))
     .await
     .unwrap();
 

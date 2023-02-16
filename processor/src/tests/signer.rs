@@ -16,7 +16,7 @@ use tokio::time::timeout;
 use messages::sign::*;
 use crate::{
   Payment, Plan,
-  coin::{Output, Transaction, Coin},
+  coins::{Output, Transaction, Coin},
   signer::{SignerOrder, SignerEvent, Signer},
   tests::util::db::MemDb,
 };

@@ -6,7 +6,7 @@ use rand_core::OsRng;
 use tokio::time::{sleep, timeout};
 
 use crate::{
-  coin::{OutputType, Output, Block, Coin},
+  coins::{OutputType, Output, Block, Coin},
   scanner::{ScannerOrder, ScannerEvent, Scanner, ScannerHandle},
   tests::util::db::MemDb,
 };
