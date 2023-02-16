@@ -8076,6 +8076,7 @@ checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 name = "serai-client"
 version = "0.1.0"
 dependencies = [
+ "bitcoin",
  "ciphersuite",
  "jsonrpsee-server",
  "lazy_static",

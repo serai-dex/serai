@@ -22,18 +22,21 @@ serai-runtime = { path = "../../runtime", version = "0.1" }
 
 subxt = { version = "0.25", optional = true }
 
+bitcoin = { version = "0.29", optional = true }
+
 ciphersuite = { path = "../../../crypto/ciphersuite", version = "0.1", optional = true }
 monero-serai = { path = "../../../coins/monero", version = "0.1.2-alpha", optional = true }
 
 [features]
-coins = []
-monero = ["coins", "ciphersuite/ed25519", "monero-serai"]
-
 serai = ["thiserror", "scale-info", "subxt"]
+
+coins = []
+bitcoin = ["coins", "dep:bitcoin"]
+monero = ["coins", "ciphersuite/ed25519", "monero-serai"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node
-default = ["monero"]
+default = ["bitcoin", "monero"]
 
 [dev-dependencies]
 lazy_static = "1"
