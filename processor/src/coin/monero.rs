@@ -4,12 +4,17 @@ use async_trait::async_trait;
 
 use zeroize::Zeroizing;
 
+use scale::{Encode, Decode};
+
 #[cfg(test)]
 use curve25519_dalek::scalar::Scalar;
 
-use dalek_ff_group as dfg;
 use transcript::RecommendedTranscript;
-use frost::{curve::Ed25519, ThresholdKeys};
+use dalek_ff_group as dfg;
+use frost::{
+  curve::{Curve, Ed25519},
+  ThresholdKeys,
+};
 
 use monero_serai::{
   transaction::Transaction,
@@ -17,7 +22,7 @@ use monero_serai::{
   rpc::{RpcError, Rpc},
   wallet::{
     ViewPair, Scanner,
-    address::{Network, SubaddressIndex, AddressSpec, MoneroAddress},
+    address::{Network, SubaddressIndex, AddressType, AddressMeta, AddressSpec, MoneroAddress},
     Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
@@ -123,10 +128,72 @@ impl ToString for Address {
     self.0.to_string()
   }
 }
+
+// SCALE-encoded variant of Monero addresses.
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+enum MoneroAddressType {
+  Standard,
+  Integrated([u8; 8]),
+  Subaddress,
+  Featured(u8, Option<[u8; 8]>),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+struct EncodedAddress {
+  kind: MoneroAddressType,
+  spend: [u8; 32],
+  view: [u8; 32],
+}
+
 impl TryFrom<Vec<u8>> for Address {
   type Error = ();
   fn try_from(data: Vec<u8>) -> Result<Address, ()> {
-    todo!();
+    let addr = EncodedAddress::decode(&mut data.as_ref()).map_err(|_| ())?;
+    Ok(Address(MoneroAddress::new(
+      AddressMeta::new(
+        Network::Mainnet,
+        match addr.kind {
+          MoneroAddressType::Standard => AddressType::Standard,
+          MoneroAddressType::Integrated(id) => AddressType::Integrated(id),
+          MoneroAddressType::Subaddress => AddressType::Subaddress,
+          MoneroAddressType::Featured(flags, payment_id) => {
+            let subaddress = (flags & 1) != 0;
+            let integrated = (flags & (1 << 1)) != 0;
+            let guaranteed = (flags & (1 << 2)) != 0;
+            if integrated != payment_id.is_some() {
+              Err(())?;
+            }
+            AddressType::Featured { subaddress, payment_id, guaranteed }
+          }
+        },
+      ),
+      Ed25519::read_G(&mut addr.spend.as_ref()).map_err(|_| ())?.0,
+      Ed25519::read_G(&mut addr.view.as_ref()).map_err(|_| ())?.0,
+    )))
+  }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<Vec<u8>> for Address {
+  fn into(self) -> Vec<u8> {
+    EncodedAddress {
+      kind: match self.0.meta.kind {
+        AddressType::Standard => MoneroAddressType::Standard,
+        AddressType::Integrated(payment_id) => MoneroAddressType::Integrated(payment_id),
+        AddressType::Subaddress => MoneroAddressType::Subaddress,
+        AddressType::Featured { subaddress, payment_id, guaranteed } => {
+          MoneroAddressType::Featured(
+            u8::from(subaddress) +
+              (u8::from(payment_id.is_some()) << 1) +
+              (u8::from(guaranteed) << 2),
+            payment_id,
+          )
+        }
+      },
+      spend: self.0.spend.compress().0,
+      view: self.0.view.compress().0,
+    }
+    .encode()
   }
 }
 

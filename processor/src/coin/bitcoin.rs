@@ -78,7 +78,7 @@ impl OutputTrait for Output {
   }
 
   fn data(&self) -> &[u8] {
-    todo!()
+    &self.data
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
