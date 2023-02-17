@@ -105,6 +105,7 @@ pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
 pub trait Transaction: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
+  fn serialize(&self) -> Vec<u8>;
 }
 
 pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
@@ -132,6 +133,8 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   type Output: Output;
   /// The type containing all information on a planned transaction, waiting to be signed.
   type SignableTransaction: Send + Sync + Clone + Debug;
+  /// The type containing all information to check if a plan was completed.
+  type Eventuality: Send + Sync + Clone + Debug;
   /// The FROST machine to sign a transaction.
   type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
 
@@ -178,9 +181,9 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     &self,
     keys: ThresholdKeys<Self::Curve>,
     block_number: usize,
-    tx: Plan<Self>,
+    plan: Plan<Self>,
     fee: Self::Fee,
-  ) -> Result<Self::SignableTransaction, CoinError>;
+  ) -> Result<(Self::SignableTransaction, Self::Eventuality), CoinError>;
 
   /// Attempt to sign a SignableTransaction.
   async fn attempt_send(
@@ -188,11 +191,18 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError>;
 
-  // Serialize a transaction.
-  fn serialize_transaction(tx: &Self::Transaction) -> Vec<u8>;
-
   /// Publish a transaction.
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError>;
+
+  /// Confirm a plan was completed by the specified transaction.
+  // This is allowed to take shortcuts.
+  // This may assume an honest multisig, solely checking the inputs specified were spent.
+  // This may solely check the outputs are equivalent *so long as it's locked to the plan ID*.
+  async fn confirm_completion(
+    &self,
+    eventuality: &Self::Eventuality,
+    tx: &<Self::Transaction as Transaction>::Id,
+  ) -> Result<bool, CoinError>;
 
   /// Get a block's number by its ID.
   #[cfg(test)]

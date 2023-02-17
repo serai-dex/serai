@@ -328,7 +328,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
             };
 
             // Save the transaction in case it's needed for recovery
-            self.db.save_transaction(id.id, C::serialize_transaction(&tx));
+            self.db.save_transaction(id.id, tx.serialize());
             if let Err(e) = self.coin.publish_transaction(&tx).await {
               error!("couldn't publish {:?}: {:?}", tx, e);
             } else {

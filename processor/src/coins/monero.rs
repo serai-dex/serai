@@ -21,7 +21,8 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec},
-    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
+    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, Eventuality,
+    TransactionMachine,
   },
 };
 
@@ -93,6 +94,9 @@ impl TransactionTrait for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
     self.hash()
+  }
+  fn serialize(&self) -> Vec<u8> {
+    self.serialize()
   }
 }
 
@@ -183,6 +187,7 @@ impl Coin for Monero {
 
   type Output = Output;
   type SignableTransaction = SignableTransaction;
+  type Eventuality = Eventuality;
   type TransactionMachine = TransactionMachine;
 
   type Address = Address;
@@ -265,27 +270,29 @@ impl Coin for Monero {
     &self,
     keys: ThresholdKeys<Ed25519>,
     block_number: usize,
-    mut tx: Plan<Self>,
+    mut plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<SignableTransaction, CoinError> {
-    Ok(SignableTransaction {
+  ) -> Result<(SignableTransaction, Eventuality), CoinError> {
+    let signable = SignableTransaction {
       keys,
-      transcript: tx.transcript(),
+      transcript: plan.transcript(),
       height: block_number + 1,
       actual: MSignableTransaction::new(
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         // Use the plan ID as the r_seed
         // This perfectly binds the plan while simultaneously allowing verifying the plan was
         // executed with no additional communication
-        Some(Zeroizing::new(tx.id())),
-        tx.inputs.drain(..).map(|input| input.0).collect(),
-        tx.payments.drain(..).map(|payment| (payment.address.0, payment.amount)).collect(),
-        tx.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
+        Some(Zeroizing::new(plan.id())),
+        plan.inputs.drain(..).map(|input| input.0).collect(),
+        plan.payments.drain(..).map(|payment| (payment.address.0, payment.amount)).collect(),
+        plan.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
         vec![],
         fee,
       )
       .map_err(|_| CoinError::ConnectionError)?,
-    })
+    };
+    let eventuality = signable.actual.eventuality().unwrap();
+    Ok((signable, eventuality))
   }
 
   async fn attempt_send(
@@ -305,10 +312,6 @@ impl Coin for Monero {
       .map_err(|_| CoinError::ConnectionError)
   }
 
-  fn serialize_transaction(tx: &Self::Transaction) -> Vec<u8> {
-    tx.serialize()
-  }
-
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
     match self.rpc.publish_transaction(tx).await {
       Ok(_) => Ok(()),
@@ -316,6 +319,17 @@ impl Coin for Monero {
       // TODO: Distinguish already in pool vs invalid transaction
       Err(e) => panic!("failed to publish TX {:?}: {e}", tx.hash()),
     }
+  }
+
+  async fn confirm_completion(
+    &self,
+    eventuality: &Eventuality,
+    tx: &[u8; 32],
+  ) -> Result<bool, CoinError> {
+    Ok(
+      eventuality
+        .matches(&self.rpc.get_transaction(*tx).await.map_err(|_| CoinError::ConnectionError)?),
+    )
   }
 
   #[cfg(test)]

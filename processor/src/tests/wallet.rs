@@ -65,31 +65,33 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   // Execute the plan
   let fee = coin.get_fee().await;
   let mut keys_txs = HashMap::new();
+  let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
-    keys_txs.insert(
-      i,
-      (
+    let (signable, eventuality) = coin
+      .prepare_send(
         keys.clone(),
-        coin
-          .prepare_send(
-            keys,
-            coin.get_block_number(&block_id).await.unwrap(),
-            plans[0].clone(),
-            fee,
-          )
-          .await
-          .unwrap(),
-      ),
-    );
+        coin.get_block_number(&block_id).await.unwrap(),
+        plans[0].clone(),
+        fee,
+      )
+      .await
+      .unwrap();
+
+    keys_txs.insert(i, (keys, signable));
+    eventualities.push(eventuality);
   }
 
-  sign(coin.clone(), keys_txs).await;
+  let tx = sign(coin.clone(), keys_txs).await;
   coin.mine_block().await;
   let block_number = coin.get_latest_block_number().await.unwrap();
   let block = coin.get_block(block_number).await.unwrap();
   let outputs = coin.get_outputs(&block, key).await.unwrap();
   assert_eq!(outputs.len(), 2);
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
+
+  for eventuality in eventualities {
+    assert!(coin.confirm_completion(&eventuality, &tx).await.unwrap());
+  }
 
   for _ in 1 .. C::CONFIRMATIONS {
     coin.mine_block().await;

@@ -139,32 +139,30 @@ pub async fn test_signer<C: Coin>(coin: C) {
   #[allow(clippy::inconsistent_digit_grouping)]
   let amount = 1_00_000_000;
   let mut keys_txs = HashMap::new();
+  let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
-    keys_txs.insert(
-      i,
-      (
+    let (signable, eventuality) = coin
+      .prepare_send(
         keys.clone(),
-        coin
-          .prepare_send(
-            keys,
-            sync_block,
-            Plan {
-              key,
-              inputs: outputs.clone(),
-              payments: vec![Payment { address: C::address(key), data: None, amount }],
-              change: Some(key),
-            },
-            fee,
-          )
-          .await
-          .unwrap(),
-      ),
-    );
+        sync_block,
+        Plan {
+          key,
+          inputs: outputs.clone(),
+          payments: vec![Payment { address: C::address(key), data: None, amount }],
+          change: Some(key),
+        },
+        fee,
+      )
+      .await
+      .unwrap();
+
+    keys_txs.insert(i, (keys, signable));
+    eventualities.push(eventuality);
   }
 
   // The signer may not publish the TX if it has a connection error
   // It doesn't fail in this case
-  sign(coin.clone(), keys_txs).await;
+  let tx = sign(coin.clone(), keys_txs).await;
   // Mine a block, and scan it, to ensure that the TX actually made it on chain
   coin.mine_block().await;
   let outputs = coin
@@ -174,4 +172,9 @@ pub async fn test_signer<C: Coin>(coin: C) {
   assert_eq!(outputs.len(), 2);
   // Check either output since Monero will randomize its output order
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
+
+  // Check the eventualities pass
+  for eventuality in eventualities {
+    assert!(coin.confirm_completion(&eventuality, &tx).await.unwrap());
+  }
 }

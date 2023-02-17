@@ -9,11 +9,10 @@ use bitcoin::{
 
 #[cfg(test)]
 use bitcoin::{
-  hashes::sha256d::Hash,
   secp256k1::{SECP256K1, SecretKey, Message},
   PrivateKey, PublicKey, EcdsaSighashType,
   blockdata::script::Builder,
-  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut, BlockHash,
+  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut,
 };
 
 use transcript::RecommendedTranscript;
@@ -112,7 +111,12 @@ pub struct Fee(u64);
 impl TransactionTrait for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    self.txid().as_hash().into_inner()
+    let mut hash = self.txid().as_hash().into_inner();
+    hash.reverse();
+    hash
+  }
+  fn serialize(&self) -> Vec<u8> {
+    Serialize::serialize(self)
   }
 }
 
@@ -132,7 +136,9 @@ impl Eq for SignableTransaction {}
 impl BlockTrait<Bitcoin> for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    self.block_hash().as_hash().into_inner()
+    let mut hash = self.block_hash().as_hash().into_inner();
+    hash.reverse();
+    hash
   }
   fn median_fee(&self) -> Fee {
     // TODO
@@ -184,7 +190,10 @@ impl Bitcoin {
     if self.rpc.get_latest_block_number().await.unwrap() > 0 {
       self
         .rpc
-        .rpc_call("invalidateblock", serde_json::json!([self.rpc.get_block_hash(1).await.unwrap()]))
+        .rpc_call(
+          "invalidateblock",
+          serde_json::json!([hex::encode(self.rpc.get_block_hash(1).await.unwrap())]),
+        )
         .await
         .unwrap()
     }
@@ -201,6 +210,7 @@ impl Coin for Bitcoin {
 
   type Output = Output;
   type SignableTransaction = SignableTransaction;
+  type Eventuality = Plan<Self>;
   type TransactionMachine = TransactionMachine;
 
   type Address = Address;
@@ -301,25 +311,28 @@ impl Coin for Bitcoin {
     &self,
     keys: ThresholdKeys<Secp256k1>,
     _: usize,
-    mut tx: Plan<Self>,
+    plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<Self::SignableTransaction, CoinError> {
-    Ok(SignableTransaction {
-      keys,
-      transcript: tx.transcript(),
-      actual: BSignableTransaction::new(
-        tx.inputs.drain(..).map(|input| input.output).collect(),
-        &tx
-          .payments
-          .drain(..)
-          .map(|payment| (payment.address.0, payment.amount))
-          .collect::<Vec<_>>(),
-        tx.change.map(|key| Self::address(change(key).0).0),
-        None,
-        fee.0,
-      )
-      .unwrap(),
-    })
+  ) -> Result<(Self::SignableTransaction, Self::Eventuality), CoinError> {
+    Ok((
+      SignableTransaction {
+        keys,
+        transcript: plan.transcript(),
+        actual: BSignableTransaction::new(
+          plan.inputs.iter().map(|input| input.output.clone()).collect(),
+          &plan
+            .payments
+            .iter()
+            .map(|payment| (payment.address.0.clone(), payment.amount))
+            .collect::<Vec<_>>(),
+          plan.change.map(|key| Self::address(change(key).0).0),
+          None,
+          fee.0,
+        )
+        .unwrap(),
+      },
+      plan,
+    ))
   }
 
   async fn attempt_send(
@@ -334,10 +347,6 @@ impl Coin for Bitcoin {
       .map_err(|_| CoinError::ConnectionError)
   }
 
-  fn serialize_transaction(tx: &Self::Transaction) -> Vec<u8> {
-    tx.serialize()
-  }
-
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
     match self.rpc.send_raw_transaction(tx).await {
       Ok(_) => (),
@@ -348,13 +357,17 @@ impl Coin for Bitcoin {
     Ok(())
   }
 
+  async fn confirm_completion(&self, plan: &Plan<Self>, tx: &[u8; 32]) -> Result<bool, CoinError> {
+    let tx = self.rpc.get_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
+    // Valid given an honest multisig, as assumed
+    // Only the multisig can spend this output and the multisig, if spending this output, will
+    // always create this plan
+    Ok(plan.inputs[0].output.outpoint == tx.input[0].previous_output)
+  }
+
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> Result<usize, CoinError> {
-    self
-      .rpc
-      .get_block_number(&BlockHash::from_hash(Hash::from_inner(*id)))
-      .await
-      .map_err(|_| CoinError::ConnectionError)
+    self.rpc.get_block_number(id).await.map_err(|_| CoinError::ConnectionError)
   }
 
   #[cfg(test)]

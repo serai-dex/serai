@@ -180,7 +180,8 @@ async fn sign_plans<C: Coin, D: Db>(
       };
 
       match prepare_plan(key_gen.keys(&plan.key)).await {
-        Ok(tx) => signers[plan.key.to_bytes().as_ref()]
+        // TODO: Handle the eventuality
+        Ok((tx, _)) => signers[plan.key.to_bytes().as_ref()]
           .orders
           .send(SignerOrder::SignTransaction { id, start, tx })
           .unwrap(),

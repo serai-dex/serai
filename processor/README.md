@@ -47,13 +47,12 @@ accordingly. This is done by scheduling the payments out.
 
 - Acknowledging a sign ID as signed so we don't continue trying
 
-Immediately, we can just request votes from the live net (requiring active
-67% consensus). Ideally, we do an extra Schnorr signature at time of sign,
-which is then broadcast to everyone, so any one honest node can provide an
-attestation. This doesn't fully work because a malicious node can withhold their
-TX signature share, yet still provide the completion signature. The completion
-signature would to embed the underlying signature, which can't be done without
-another round.
+monero-serai now supports `Eventuality`s. When we have a plan to attempt,
+we can create an `Eventuality` and see if it matches a given TX. A signing node
+just has to submit the TX hash.
+
+Bitcoin will have the same TX hash flow, just explicitly matching against the
+inputs/outputs.
 
 - Scheduler uses exact amounts yet we need to handle fees as well
 

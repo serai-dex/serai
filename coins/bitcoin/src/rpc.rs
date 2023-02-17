@@ -6,7 +6,10 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
 use bitcoin::{
-  hashes::hex::{FromHex, ToHex},
+  hashes::{
+    Hash,
+    hex::{FromHex, ToHex},
+  },
   consensus::encode,
   Txid, Transaction, BlockHash, Block,
 };
@@ -64,25 +67,34 @@ impl Rpc {
     self.rpc_call("getblockcount", json!([])).await
   }
 
-  pub async fn get_block_hash(&self, number: usize) -> Result<BlockHash, RpcError> {
-    self.rpc_call("getblockhash", json!([number])).await
+  pub async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
+    let mut hash =
+      self.rpc_call::<BlockHash>("getblockhash", json!([number])).await?.as_hash().into_inner();
+    hash.reverse();
+    Ok(hash)
   }
 
-  pub async fn get_block_number(&self, block_hash: &BlockHash) -> Result<usize, RpcError> {
+  pub async fn get_block_number(&self, hash: &[u8; 32]) -> Result<usize, RpcError> {
     #[derive(Deserialize, Debug)]
     struct Number {
       height: usize,
     }
-    Ok(self.rpc_call::<Number>("getblockheader", json!([block_hash.to_hex()])).await?.height)
+    Ok(self.rpc_call::<Number>("getblockheader", json!([hash.to_hex()])).await?.height)
   }
 
-  pub async fn get_block(&self, block_hash: &BlockHash) -> Result<Block, RpcError> {
-    let hex = self.rpc_call::<String>("getblock", json!([block_hash.to_hex(), 0])).await?;
+  pub async fn get_block(&self, hash: &[u8; 32]) -> Result<Block, RpcError> {
+    let hex = self.rpc_call::<String>("getblock", json!([hash.to_hex(), 0])).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
     encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }
 
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<Txid, RpcError> {
     self.rpc_call("sendrawtransaction", json!([encode::serialize_hex(tx)])).await
+  }
+
+  pub async fn get_transaction(&self, hash: &[u8; 32]) -> Result<Transaction, RpcError> {
+    let hex = self.rpc_call::<String>("getrawtransaction", json!([hash.to_hex()])).await?;
+    let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
+    encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)
   }
 }

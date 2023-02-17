@@ -174,6 +174,7 @@ impl Fee {
 }
 
 /// The eventual output of a SignableTransaction.
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Eventuality {
   protocol: Protocol,
   r_seed: Zeroizing<[u8; 32]>,
