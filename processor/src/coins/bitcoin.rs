@@ -29,6 +29,8 @@ use bitcoin_serai::{
   rpc::{RpcError, Rpc},
 };
 
+use serai_client::coins::bitcoin::Address;
+
 use crate::{
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
@@ -157,20 +159,6 @@ fn branch(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
 
 fn change(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
   next_key(key, 2)
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Address(BAddress);
-impl ToString for Address {
-  fn to_string(&self) -> String {
-    self.0.to_string()
-  }
-}
-impl TryFrom<Vec<u8>> for Address {
-  type Error = ();
-  fn try_from(data: Vec<u8>) -> Result<Address, ()> {
-    todo!();
-  }
 }
 
 #[derive(Clone, Debug)]

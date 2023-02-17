@@ -51,7 +51,7 @@ monero-serai = { path = "../coins/monero", features = ["multisig"], optional = t
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
-serai-client = { path = "../substrate/serai/client", features = ["monero"] }
+serai-client = { path = "../substrate/serai/client", default-features = false }
 
 messages = { package = "processor-messages", path = "./messages" }
 
@@ -64,7 +64,7 @@ env_logger = "0.10"
 
 [features]
 secp256k1 = ["k256", "frost/secp256k1"]
-bitcoin = ["dep:secp256k1", "dep:bitcoin", "secp256k1", "bitcoin-serai"]
+bitcoin = ["dep:secp256k1", "dep:bitcoin", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]
 
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
-monero = ["ed25519", "monero-serai"]
+monero = ["ed25519", "monero-serai", "serai-client/monero"]
