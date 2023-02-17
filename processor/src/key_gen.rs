@@ -92,6 +92,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     self.0.put(Self::keys_key(&keys.group_key()), keys_vec);
     keys
   }
+  // TODO: Tweak these keys
   fn keys(&self, key: &C::G) -> ThresholdKeys<C> {
     ThresholdKeys::new(
       ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(key)).unwrap().as_ref()).unwrap(),
@@ -302,6 +303,7 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
           if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
             ProcessorMessage::GeneratedKey {
               id,
+              // TODO: Tweak this keys
               key: keys.group_key().to_bytes().as_ref().to_vec(),
             },
           )))

@@ -153,6 +153,7 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
   const MAX_OUTPUTS: usize;
 
+  /// Tweak keys for this coin.
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 
   /// Address for the given group key to receive external coins to.
