@@ -1,8 +1,12 @@
 use core::marker::PhantomData;
 use std::collections::HashMap;
 
-use rand_core::OsRng;
+use zeroize::Zeroizing;
 
+use rand_core::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+
+use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::{
   curve::Ciphersuite,
@@ -106,6 +110,7 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
 #[derive(Debug)]
 pub struct KeyGen<C: Ciphersuite, D: Db> {
   db: KeyGenDb<C, D>,
+  entropy: Zeroizing<[u8; 32]>,
 
   active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C>>,
   active_share: HashMap<ValidatorSetInstance, KeyMachine<C>>,
@@ -128,7 +133,7 @@ impl<C: Ciphersuite, D: Db> KeyGenHandle<C, D> {
 
 impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D) -> KeyGenHandle<C, D> {
+  pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGenHandle<C, D> {
     if db.get(KeyGenDb::<C, D>::key_gen_key(b"corrupt", b"")).is_some() {
       panic!("key gen DB is corrupt");
     }
@@ -139,8 +144,11 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
     tokio::spawn(
       KeyGen {
         db: db.clone(),
+        entropy,
+
         active_commit: HashMap::new(),
         active_share: HashMap::new(),
+
         orders: orders_recv,
         events: events_send,
       }
@@ -165,15 +173,26 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
       channel
     };
 
-    let key_gen_machine = |id: &KeyGenId, params| {
+    let context = |id: &KeyGenId| {
       // TODO: Also embed the chain ID/genesis block
-      let context = format!(
+      format!(
         "Serai Key Gen. Session: {}, Index: {}, Attempt: {}",
         id.set.session.0, id.set.index.0, id.attempt
-      );
+      )
+    };
 
-      // TODO: Seeded RNG
-      KeyGenMachine::new(params, context).generate_coefficients(&mut OsRng)
+    let rng = |label, id: KeyGenId| {
+      let mut transcript = RecommendedTranscript::new(label);
+      transcript.append_message(b"entropy", self.entropy.as_ref());
+      transcript.append_message(b"context", context(&id));
+      ChaCha20Rng::from_seed(transcript.rng_seed(b"rng"))
+    };
+    let coefficients_rng = |id| rng(b"Key Gen Coefficients", id);
+    let secret_shares_rng = |id| rng(b"Key Gen Secret Shares", id);
+    let share_rng = |id| rng(b"Key Gen Share", id);
+
+    let key_gen_machine = |id, params| {
+      KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut coefficients_rng(id))
     };
 
     // Handle any new messages
@@ -197,7 +216,7 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
             self.db.save_params(&id.set, &params);
           }
 
-          let (machine, commitments) = key_gen_machine(&id, params);
+          let (machine, commitments) = key_gen_machine(id, params);
           self.active_commit.insert(id.set, machine);
 
           if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
@@ -243,13 +262,13 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
           // attempt y
           // The coordinator is trusted to be proper in this regard
           let machine =
-            self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machine(&id, params).0);
+            self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machine(id, params).0);
 
-          // Doesn't use a seeded RNG since this just determines ephemeral encryption keys
-          let (machine, mut shares) = match machine.generate_secret_shares(&mut OsRng, parsed) {
-            Ok(res) => res,
-            Err(e) => todo!("malicious signer: {:?}", e),
-          };
+          let (machine, mut shares) =
+            match machine.generate_secret_shares(&mut secret_shares_rng(id), parsed) {
+              Ok(res) => res,
+              Err(e) => todo!("malicious signer: {:?}", e),
+            };
           self.active_share.insert(id.set, machine);
           self.db.save_commitments(&id, &commitments);
 
@@ -285,15 +304,15 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
 
           // Same commentary on inconsistency as above exists
           let machine = self.active_share.remove(&id.set).unwrap_or_else(|| {
-            key_gen_machine(&id, params)
+            key_gen_machine(id, params)
               .0
-              .generate_secret_shares(&mut OsRng, self.db.commitments(&id, params))
+              .generate_secret_shares(&mut secret_shares_rng(id), self.db.commitments(&id, params))
               .unwrap()
               .0
           });
 
           // TODO: Handle the blame machine properly
-          let keys = (match machine.calculate_share(&mut OsRng, shares) {
+          let keys = (match machine.calculate_share(&mut share_rng(id), shares) {
             Ok(res) => res,
             Err(e) => todo!("malicious signer: {:?}", e),
           })
@@ -303,7 +322,7 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
           if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
             ProcessorMessage::GeneratedKey {
               id,
-              // TODO: Tweak this keys
+              // TODO: Tweak these keys
               key: keys.group_key().to_bytes().as_ref().to_vec(),
             },
           )))

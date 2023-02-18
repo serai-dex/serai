@@ -1,6 +1,10 @@
 use core::time::Duration;
 use std::collections::HashMap;
 
+use zeroize::Zeroizing;
+
+use rand_core::{RngCore, OsRng};
+
 use group::GroupEncoding;
 use frost::{curve::Ciphersuite, ThresholdParams, tests::clone_without};
 
@@ -17,10 +21,13 @@ const ID: KeyGenId = KeyGenId {
   attempt: 3,
 };
 
+// TODO: Also test destroying and rebuilding KeyGen machines
 pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
   let mut key_gens = HashMap::new();
   for i in 1 ..= 3 {
-    key_gens.insert(i, KeyGen::<C, _>::new(MemDb::new()));
+    let mut entropy = Zeroizing::new([0; 32]);
+    OsRng.fill_bytes(entropy.as_mut());
+    key_gens.insert(i, KeyGen::<C, _>::new(MemDb::new(), entropy));
   }
 
   let mut all_commitments = HashMap::new();

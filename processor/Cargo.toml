@@ -23,6 +23,7 @@ serde = { version = "1", features = ["derive"] }
 
 # Libs
 rand_core = "0.6"
+rand_chacha = "0.3"
 
 # Encoders
 hex = "0.4"

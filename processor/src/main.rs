@@ -8,6 +8,10 @@ use std::{
   collections::{VecDeque, HashMap},
 };
 
+use zeroize::Zeroizing;
+
+use rand_core::{RngCore, OsRng};
+
 use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
@@ -201,7 +205,11 @@ async fn sign_plans<C: Coin, D: Db>(
 }
 
 async fn run<C: Coin, D: Db>(db: D, coin: C) {
-  let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone());
+  // TODO: Save/load this entropy
+  let mut entropy = Zeroizing::new([0; 32]);
+  OsRng.fill_bytes(entropy.as_mut());
+
+  let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone(), entropy);
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
 
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
