@@ -21,11 +21,9 @@ rand_chacha = "0.3"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 subtle = "2"
 
-hex = "0.4"
+hex = { version = "0.4", optional = true }
 
 digest = "0.10"
-
-chacha20 = { version = "0.9", features = ["zeroize"] }
 
 group = "0.12"
 
@@ -44,6 +42,7 @@ dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
 dkg = { path = "../dkg", version = "0.2" }
 
 [dev-dependencies]
+hex = "0.4"
 serde_json = "1"
 
 dkg = { path = "../dkg", version = "0.2", features = ["tests"] }
@@ -57,4 +56,4 @@ p256 = ["ciphersuite/p256"]
 
 ed448 = ["minimal-ed448", "ciphersuite/ed448"]
 
-tests = ["dkg/tests"]
+tests = ["hex", "dkg/tests"]

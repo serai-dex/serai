@@ -11,10 +11,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use group::{
-  ff::{Field, PrimeField},
-  GroupEncoding,
-};
+use group::{ff::PrimeField, GroupEncoding};
 use multiexp::BatchVerifier;
 
 use crate::{
@@ -198,6 +195,8 @@ impl<C: Curve> Writable for SignatureShare<C> {
 #[cfg(any(test, feature = "tests"))]
 impl<C: Curve> SignatureShare<C> {
   pub(crate) fn invalidate(&mut self) {
+    use group::ff::Field;
+
     self.0 += C::F::one();
   }
 }
