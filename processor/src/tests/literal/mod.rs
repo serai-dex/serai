@@ -1,5 +1,3 @@
-mod key_gen;
-
 #[cfg(feature = "bitcoin")]
 mod bitcoin {
   use crate::coins::Bitcoin;
@@ -10,7 +8,7 @@ mod bitcoin {
     bitcoin
   }
 
-  test_coin!(bitcoin, bitcoin_scanner, bitcoin_signer, bitcoin_wallet);
+  test_coin!(Bitcoin, bitcoin, bitcoin_key_gen, bitcoin_scanner, bitcoin_signer, bitcoin_wallet);
 }
 
 #[cfg(feature = "monero")]
@@ -25,5 +23,5 @@ mod monero {
     monero
   }
 
-  test_coin!(monero, monero_scanner, monero_signer, monero_wallet);
+  test_coin!(Monero, monero, monero_key_gen, monero_scanner, monero_signer, monero_wallet);
 }

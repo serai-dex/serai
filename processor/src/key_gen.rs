@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use serai_client::validator_sets::primitives::ValidatorSetInstance;
 use messages::key_gen::*;
 
-use crate::Db;
+use crate::{Db, coins::Coin};
 
 #[derive(Debug)]
 pub enum KeyGenOrder {
@@ -36,8 +36,8 @@ pub type KeyGenOrderChannel = mpsc::UnboundedSender<KeyGenOrder>;
 pub type KeyGenEventChannel<C> = mpsc::UnboundedReceiver<KeyGenEvent<C>>;
 
 #[derive(Clone, Debug)]
-struct KeyGenDb<C: Ciphersuite, D: Db>(D, PhantomData<C>);
-impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
+struct KeyGenDb<C: Coin, D: Db>(D, PhantomData<C>);
+impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn key_gen_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     [b"KEY_GEN", dst, key.as_ref()].concat().to_vec()
   }
@@ -66,15 +66,18 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
     &self,
     id: &KeyGenId,
     params: ThresholdParams,
-  ) -> HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>> {
+  ) -> HashMap<u16, EncryptionKeyMessage<C::Curve, Commitments<C::Curve>>> {
     bincode::deserialize::<HashMap<u16, Vec<u8>>>(&self.0.get(Self::commitments_key(id)).unwrap())
       .unwrap()
       .drain()
       .map(|(i, bytes)| {
         (
           i,
-          EncryptionKeyMessage::<C, Commitments<C>>::read::<&[u8]>(&mut bytes.as_ref(), params)
-            .unwrap(),
+          EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
+            &mut bytes.as_ref(),
+            params,
+          )
+          .unwrap(),
         )
       })
       .collect()
@@ -83,24 +86,25 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
   fn generated_keys_key(id: &KeyGenId) -> Vec<u8> {
     Self::key_gen_key(b"generated_keys", bincode::serialize(id).unwrap())
   }
-  fn save_keys(&mut self, id: &KeyGenId, keys: &ThresholdCore<C>) {
+  fn save_keys(&mut self, id: &KeyGenId, keys: &ThresholdCore<C::Curve>) {
     self.0.put(Self::generated_keys_key(id), keys.serialize());
   }
 
-  fn keys_key(key: &C::G) -> Vec<u8> {
+  fn keys_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
     Self::key_gen_key(b"keys", key.to_bytes())
   }
-  fn confirm_keys(&mut self, id: &KeyGenId) -> ThresholdKeys<C> {
+  fn confirm_keys(&mut self, id: &KeyGenId) -> ThresholdKeys<C::Curve> {
     let keys_vec = self.0.get(Self::generated_keys_key(id)).unwrap();
     let keys = ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut keys_vec.as_ref()).unwrap());
     self.0.put(Self::keys_key(&keys.group_key()), keys_vec);
     keys
   }
-  // TODO: Tweak these keys
-  fn keys(&self, key: &C::G) -> ThresholdKeys<C> {
-    ThresholdKeys::new(
+  fn keys(&self, key: &<C::Curve as Ciphersuite>::G) -> ThresholdKeys<C::Curve> {
+    let mut keys = ThresholdKeys::new(
       ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(key)).unwrap().as_ref()).unwrap(),
-    )
+    );
+    C::tweak_keys(&mut keys);
+    keys
   }
 }
 
@@ -108,30 +112,30 @@ impl<C: Ciphersuite, D: Db> KeyGenDb<C, D> {
 /// 1) It either didn't send its response, so the attempt will be aborted
 /// 2) It did send its response, and has locally saved enough data to continue
 #[derive(Debug)]
-pub struct KeyGen<C: Ciphersuite, D: Db> {
+pub struct KeyGen<C: Coin, D: Db> {
   db: KeyGenDb<C, D>,
   entropy: Zeroizing<[u8; 32]>,
 
-  active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C>>,
-  active_share: HashMap<ValidatorSetInstance, KeyMachine<C>>,
+  active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C::Curve>>,
+  active_share: HashMap<ValidatorSetInstance, KeyMachine<C::Curve>>,
 
   orders: mpsc::UnboundedReceiver<KeyGenOrder>,
-  events: mpsc::UnboundedSender<KeyGenEvent<C>>,
+  events: mpsc::UnboundedSender<KeyGenEvent<C::Curve>>,
 }
 
 #[derive(Debug)]
-pub struct KeyGenHandle<C: Ciphersuite, D: Db> {
+pub struct KeyGenHandle<C: Coin, D: Db> {
   db: KeyGenDb<C, D>,
   pub orders: KeyGenOrderChannel,
-  pub events: KeyGenEventChannel<C>,
+  pub events: KeyGenEventChannel<C::Curve>,
 }
-impl<C: Ciphersuite, D: Db> KeyGenHandle<C, D> {
-  pub fn keys(&self, key: &C::G) -> ThresholdKeys<C> {
+impl<C: Coin, D: Db> KeyGenHandle<C, D> {
+  pub fn keys(&self, key: &<C::Curve as Ciphersuite>::G) -> ThresholdKeys<C::Curve> {
     self.db.keys(key)
   }
 }
 
-impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
+impl<C: Coin, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGenHandle<C, D> {
     if db.get(KeyGenDb::<C, D>::key_gen_key(b"corrupt", b"")).is_some() {
@@ -244,7 +248,7 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
           let parsed = match commitments
             .iter()
             .map(|(i, commitments)| {
-              EncryptionKeyMessage::<C, Commitments<C>>::read::<&[u8]>(
+              EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
                 &mut commitments.as_ref(),
                 params,
               )
@@ -293,8 +297,10 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
           let shares = match shares
             .drain()
             .map(|(i, share)| {
-              EncryptedMessage::<C, SecretShare<C::F>>::read::<&[u8]>(&mut share.as_ref(), params)
-                .map(|share| (i, share))
+              EncryptedMessage::<
+                C::Curve,
+                SecretShare<<C::Curve as Ciphersuite>::F>
+              >::read::<&[u8]>(&mut share.as_ref(), params).map(|share| (i, share))
             })
             .collect()
           {
@@ -319,10 +325,11 @@ impl<C: Ciphersuite, D: Db> KeyGen<C, D> {
           .complete();
           self.db.save_keys(&id, &keys);
 
+          let mut keys = ThresholdKeys::new(keys);
+          C::tweak_keys(&mut keys);
           if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
             ProcessorMessage::GeneratedKey {
               id,
-              // TODO: Tweak these keys
               key: keys.group_key().to_bytes().as_ref().to_vec(),
             },
           )))

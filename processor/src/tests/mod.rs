@@ -48,8 +48,14 @@ macro_rules! async_sequential {
 
 #[macro_export]
 macro_rules! test_coin {
-  ($coin: ident, $scanner: ident, $signer: ident, $wallet: ident) => {
-    use $crate::tests::{test_scanner, test_signer, test_wallet};
+  ($C: ident, $coin: ident, $key_gen: ident, $scanner: ident, $signer: ident, $wallet: ident) => {
+    use $crate::tests::{test_key_gen, test_scanner, test_signer, test_wallet};
+
+    // This doesn't interact with a node and accordingly doesn't need to be run sequentially
+    #[tokio::test]
+    async fn $key_gen() {
+      test_key_gen::<$C>().await;
+    }
 
     sequential!();
 

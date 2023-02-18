@@ -6,12 +6,13 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
 use group::GroupEncoding;
-use frost::{curve::Ciphersuite, ThresholdParams, tests::clone_without};
+use frost::{ThresholdParams, tests::clone_without};
 
 use serai_client::validator_sets::primitives::{Session, ValidatorSetIndex, ValidatorSetInstance};
 
 use messages::{SubstrateContext, key_gen::*};
 use crate::{
+  coins::Coin,
   key_gen::{KeyGenOrder, KeyGenEvent, KeyGen},
   tests::util::db::MemDb,
 };
@@ -22,7 +23,7 @@ const ID: KeyGenId = KeyGenId {
 };
 
 // TODO: Also test destroying and rebuilding KeyGen machines
-pub async fn test_key_gen<C: 'static + Send + Ciphersuite>() {
+pub async fn test_key_gen<C: Coin>() {
   let mut key_gens = HashMap::new();
   for i in 1 ..= 3 {
     let mut entropy = Zeroizing::new([0; 32]);

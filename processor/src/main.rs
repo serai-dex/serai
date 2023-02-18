@@ -160,7 +160,7 @@ impl<'a, C: Coin> Future for SignerMessageFuture<'a, C> {
 
 async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
-  key_gen: &KeyGenHandle<C::Curve, D>,
+  key_gen: &KeyGenHandle<C, D>,
   signers: &HashMap<Vec<u8>, SignerHandle<C>>,
   plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
   timer: &mut Option<Instant>,
@@ -209,7 +209,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let mut entropy = Zeroizing::new([0; 32]);
   OsRng.fill_bytes(entropy.as_mut());
 
-  let mut key_gen = KeyGen::<C::Curve, _>::new(db.clone(), entropy);
+  let mut key_gen = KeyGen::<C, _>::new(db.clone(), entropy);
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
 
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
