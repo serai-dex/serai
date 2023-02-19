@@ -95,7 +95,9 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   }
   fn confirm_keys(&mut self, id: &KeyGenId) -> ThresholdKeys<C::Curve> {
     let keys_vec = self.0.get(Self::generated_keys_key(id)).unwrap();
-    let keys = ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut keys_vec.as_ref()).unwrap());
+    let mut keys =
+      ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut keys_vec.as_ref()).unwrap());
+    C::tweak_keys(&mut keys);
     self.0.put(Self::keys_key(&keys.group_key()), keys_vec);
     keys
   }
