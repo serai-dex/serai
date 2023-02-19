@@ -161,6 +161,7 @@ impl<'a, C: Coin> Future for SignerMessageFuture<'a, C> {
 async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
   key_gen: &KeyGenHandle<C, D>,
+  schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
   signers: &HashMap<Vec<u8>, SignerHandle<C>>,
   plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
   timer: &mut Option<Instant>,
@@ -184,13 +185,23 @@ async fn sign_plans<C: Coin, D: Db>(
       };
 
       match prepare_plan(key_gen.keys(&plan.key)).await {
-        // TODO: Handle the eventuality
-        // TODO: If there's a branch output here, tell the scheduler the actual amount it was
-        // created with
-        Ok((tx, _)) => signers[plan.key.to_bytes().as_ref()]
-          .orders
-          .send(SignerOrder::SignTransaction { id, start, tx })
-          .unwrap(),
+        Ok((tx, branches)) => {
+          let key = plan.key.to_bytes();
+          for branch in branches {
+            schedulers
+              .get_mut(key.as_ref())
+              .expect("didn't have a scheduler for a key we have a plan for")
+              .created_output(branch.expected, branch.actual);
+          }
+
+          // TODO: Handle the eventuality
+          if let Some((tx, _)) = tx {
+            signers[key.as_ref()]
+              .orders
+              .send(SignerOrder::SignTransaction { id, start, tx })
+              .unwrap()
+          }
+        }
 
         Err(e) => {
           error!("couldn't prepare a send for plan {}: {e}", hex::encode(id));
@@ -246,7 +257,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
       plans_timer.unwrap_or(Instant::now().checked_add(Duration::from_secs(600)).unwrap());
     tokio::select! {
       _ = sleep_until(plans_timer_actual.into()) => {
-        sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;
+        sign_plans(&coin, &key_gen, &mut schedulers, &signers, &mut plans, &mut plans_timer).await;
       },
 
       msg = from_coordinator.recv() => {
@@ -278,7 +289,14 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
                   .add_outputs(scanner.outputs(&key, &block_id)),
               ),
             ));
-            sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;
+            sign_plans(
+              &coin,
+              &key_gen,
+              &mut schedulers,
+              &signers,
+              &mut plans,
+              &mut plans_timer
+            ).await;
           }
 
           CoordinatorMessage::Substrate(substrate::CoordinatorMessage::Burns {
@@ -306,7 +324,14 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             }
 
             plans.push_back((context, VecDeque::from(scheduler.schedule(payments))));
-            sign_plans(&coin, &key_gen, &signers, &mut plans, &mut plans_timer).await;
+            sign_plans(
+              &coin,
+              &key_gen,
+              &mut schedulers,
+              &signers,
+              &mut plans,
+              &mut plans_timer
+            ).await;
           }
         }
       },

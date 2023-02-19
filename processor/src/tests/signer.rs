@@ -24,7 +24,7 @@ use crate::{
 pub async fn sign<C: Coin>(
   coin: C,
   mut keys_txs: HashMap<u16, (ThresholdKeys<C::Curve>, C::SignableTransaction)>,
-) -> <C::Transaction as Transaction>::Id {
+) -> <C::Transaction as Transaction<C>>::Id {
   let actual_id = SignId {
     key: keys_txs[&1].0.group_key().to_bytes().as_ref().to_vec(),
     id: [0xaa; 32],
@@ -136,8 +136,7 @@ pub async fn test_signer<C: Coin>(coin: C) {
   let sync_block = coin.get_latest_block_number().await.unwrap() - C::CONFIRMATIONS;
   let fee = coin.get_fee().await;
 
-  #[allow(clippy::inconsistent_digit_grouping)]
-  let amount = 1_00_000_000;
+  let amount = C::DUST;
   let mut keys_txs = HashMap::new();
   let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
@@ -154,6 +153,8 @@ pub async fn test_signer<C: Coin>(coin: C) {
         fee,
       )
       .await
+      .unwrap()
+      .0
       .unwrap();
 
     keys_txs.insert(i, (keys, signable));
@@ -162,7 +163,9 @@ pub async fn test_signer<C: Coin>(coin: C) {
 
   // The signer may not publish the TX if it has a connection error
   // It doesn't fail in this case
-  let tx = sign(coin.clone(), keys_txs).await;
+  let txid = sign(coin.clone(), keys_txs).await;
+  let tx = coin.get_transaction(&txid).await;
+  assert_eq!(tx.id(), txid);
   // Mine a block, and scan it, to ensure that the TX actually made it on chain
   coin.mine_block().await;
   let outputs = coin
@@ -170,11 +173,13 @@ pub async fn test_signer<C: Coin>(coin: C) {
     .await
     .unwrap();
   assert_eq!(outputs.len(), 2);
+  // Adjust the amount for the fees
+  let amount = amount - tx.fee(&coin).await;
   // Check either output since Monero will randomize its output order
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
 
   // Check the eventualities pass
   for eventuality in eventualities {
-    assert!(coin.confirm_completion(&eventuality, &tx).await.unwrap());
+    assert!(coin.confirm_completion(&eventuality, &txid).await.unwrap());
   }
 }

@@ -50,6 +50,8 @@ impl<C: Coin> Scheduler<C> {
   }
 
   fn execute(&mut self, inputs: Vec<C::Output>, mut payments: Vec<Payment<C>>) -> Plan<C> {
+    // This must be equal to plan.key due to how coins detect they created outputs which are to
+    // the branch address
     let branch_address = C::branch_address(self.key);
     // created_output will be called any time we send to a branch address
     // If it's called, and it wasn't expecting to be called, that's almost certainly an error

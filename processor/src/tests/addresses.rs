@@ -38,6 +38,8 @@ async fn spend<C: Coin, D: Db>(
           )
           .await
           .unwrap()
+          .0
+          .unwrap()
           .0,
       ),
     );

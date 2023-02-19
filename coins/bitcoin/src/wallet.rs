@@ -70,7 +70,7 @@ impl SpendableOutput {
 
 /// A signable transaction, clone-able across attempts.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SignableTransaction(Transaction, Vec<Scalar>, Vec<TxOut>);
+pub struct SignableTransaction(Transaction, Vec<Scalar>, Vec<TxOut>, u64);
 
 impl SignableTransaction {
   fn calculate_weight(inputs: usize, payments: &[(Address, u64)], change: Option<&Address>) -> u64 {
@@ -95,6 +95,10 @@ impl SignableTransaction {
       tx.output.push(TxOut { value: 0, script_pubkey: change.script_pubkey() });
     }
     u64::try_from(tx.weight()).unwrap()
+  }
+
+  pub fn fee(&self) -> u64 {
+    self.3
   }
 
   /// Create a new SignableTransaction.
@@ -135,7 +139,7 @@ impl SignableTransaction {
       tx_outs.push(TxOut { value: 0, script_pubkey: Script::new_op_return(&data) })
     }
 
-    let actual_fee = fee * Self::calculate_weight(tx_ins.len(), payments, None);
+    let mut actual_fee = fee * Self::calculate_weight(tx_ins.len(), payments, None);
     if input_sat < (payment_sat + actual_fee) {
       return None;
     }
@@ -145,6 +149,7 @@ impl SignableTransaction {
       let fee_with_change = fee * Self::calculate_weight(tx_ins.len(), payments, Some(change));
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
         tx_outs.push(TxOut { value, script_pubkey: change.script_pubkey() });
+        actual_fee = fee_with_change;
       }
     }
 
@@ -155,6 +160,7 @@ impl SignableTransaction {
       Transaction { version: 2, lock_time: PackedLockTime::ZERO, input: tx_ins, output: tx_outs },
       offsets,
       inputs.drain(..).map(|input| input.output).collect(),
+      actual_fee,
     ))
   }
 

@@ -290,6 +290,10 @@ impl SignableTransaction {
     Ok(SignableTransaction { protocol, r_seed, inputs, payments, data, fee })
   }
 
+  pub fn fee(&self) -> u64 {
+    self.fee
+  }
+
   #[allow(clippy::type_complexity)]
   fn prepare_payments(
     seed: &Zeroizing<[u8; 32]>,
@@ -450,9 +454,11 @@ impl SignableTransaction {
       &mut self.data,
     );
 
+    let mut fee = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
     let mut tx_outputs = Vec::with_capacity(outputs.len());
     let mut ecdh_info = Vec::with_capacity(outputs.len());
     for output in &outputs {
+      fee -= output.commitment.amount;
       tx_outputs.push(Output {
         amount: 0,
         key: output.dest.compress(),
@@ -473,7 +479,7 @@ impl SignableTransaction {
         signatures: vec![],
         rct_signatures: RctSignatures {
           base: RctBase {
-            fee: self.fee,
+            fee,
             ecdh_info,
             commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
           },

@@ -17,8 +17,8 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec},
-    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, Eventuality,
-    TransactionMachine,
+    Fee, SpendableOutput, TransactionError, SignableTransaction as MSignableTransaction,
+    Eventuality, TransactionMachine,
   },
 };
 
@@ -28,7 +28,7 @@ use crate::{
   Payment, Plan, additional_key,
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Coin,
+    Transaction as TransactionTrait, PostFeeBranch, Coin,
   },
 };
 
@@ -86,13 +86,18 @@ impl OutputTrait for Output {
   }
 }
 
-impl TransactionTrait for Transaction {
+#[async_trait]
+impl TransactionTrait<Monero> for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
     self.hash()
   }
   fn serialize(&self) -> Vec<u8> {
     self.serialize()
+  }
+  #[cfg(test)]
+  async fn fee(&self, _: &Monero) -> u64 {
+    self.rct_signatures.base.fee
   }
 }
 
@@ -198,6 +203,9 @@ impl Coin for Monero {
   const MAX_INPUTS: usize = 128;
   const MAX_OUTPUTS: usize = 16;
 
+  // 0.01 XMR
+  const DUST: u64 = 10000000000;
+
   // Monero doesn't require/benefit from tweaking
   fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 
@@ -267,11 +275,11 @@ impl Coin for Monero {
     block_number: usize,
     mut plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<(SignableTransaction, Eventuality), CoinError> {
+  ) -> Result<(Option<(SignableTransaction, Eventuality)>, Vec<PostFeeBranch>), CoinError> {
     // Monero requires at least two outputs
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
     // If we only have one output planned, add a dummy payment
-    if (plan.payments.len() + usize::from(u8::from(plan.change.is_some()))) == 1 {
+    let add_dummy = |plan: &mut Plan<Self>| {
       plan.payments.push(Payment {
         address: Address(
           ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::one().0))
@@ -279,29 +287,113 @@ impl Coin for Monero {
         ),
         amount: 0,
         data: None,
-      })
+      });
+    };
+    let change_only = if (plan.payments.len() + usize::from(u8::from(plan.change.is_some()))) == 1 {
+      add_dummy(&mut plan);
+      true
+    } else {
+      false
+    };
+
+    let protocol = self.rpc.get_protocol().await.unwrap(); // TODO: Make this deterministic
+    let signable = |plan: &Plan<Self>, tx_fee: Option<_>| {
+      let mut payments = vec![];
+      for payment in &plan.payments {
+        // If we're solely estimating the fee, don't actually specify an amount
+        // This won't affect the fee calculation yet will ensure we don't hit an out of funds error
+        payments.push((payment.address.0, if tx_fee.is_none() { 0 } else { payment.amount }));
+      }
+
+      match MSignableTransaction::new(
+        protocol,
+        // Use the plan ID as the r_seed
+        // This perfectly binds the plan while simultaneously allowing verifying the plan was
+        // executed with no additional communication
+        Some(Zeroizing::new(plan.id())),
+        plan.inputs.iter().cloned().map(|input| input.0).collect(),
+        payments,
+        plan.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
+        vec![],
+        fee,
+      ) {
+        Ok(signable) => Ok(Some(signable)),
+        Err(e) => match e {
+          TransactionError::MultiplePaymentIds => todo!("ban payment ID addresses"),
+          TransactionError::NoInputs |
+          TransactionError::NoOutputs |
+          TransactionError::NoChange |
+          TransactionError::TooManyOutputs |
+          TransactionError::TooMuchData |
+          TransactionError::WrongPrivateKey => {
+            panic!("created an Monero invalid transaction: {e}");
+          }
+          TransactionError::ClsagError(_) |
+          TransactionError::InvalidTransaction(_) |
+          TransactionError::FrostError(_) => {
+            panic!("supposedly unreachable (at this time) Monero error: {e}");
+          }
+          TransactionError::NotEnoughFunds(_, _) => {
+            if tx_fee.is_none() {
+              Ok(None)
+            } else {
+              panic!("didn't have enough funds for a Monero TX");
+            }
+          }
+          TransactionError::RpcError(e) => {
+            log::error!("RpcError when preparing transaction: {e:?}");
+            Err(CoinError::ConnectionError)
+          }
+        },
+      }
+    };
+
+    let tx_fee = match signable(&plan, None)? {
+      Some(tx) => tx.fee(),
+      None => {
+        let mut branch_outputs = vec![];
+        for payment in plan.payments {
+          if payment.address == Self::branch_address(plan.key) {
+            branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
+          }
+        }
+        return Ok((None, branch_outputs));
+      }
+    };
+
+    let mut branch_outputs = vec![];
+    if !change_only {
+      // Amortize the transaction fee across outputs
+      let payments_len = u64::try_from(plan.payments.len()).unwrap();
+      // Use a formula which will round up
+      let output_fee = (tx_fee + (payments_len - 1)) / payments_len;
+      for payment in plan.payments.iter_mut() {
+        let post_fee = payment.amount.checked_sub(output_fee);
+        if payment.address == Self::branch_address(plan.key) {
+          branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
+        }
+        payment.amount = post_fee.unwrap_or(0);
+      }
+    }
+    plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
+    if plan.payments.is_empty() {
+      if plan.change.is_none() {
+        for output in &branch_outputs {
+          assert!(output.actual.is_none());
+        }
+        return Ok((None, branch_outputs));
+      }
+      add_dummy(&mut plan);
     }
 
     let signable = SignableTransaction {
       keys,
       transcript: plan.transcript(),
       height: block_number + 1,
-      actual: MSignableTransaction::new(
-        self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
-        // Use the plan ID as the r_seed
-        // This perfectly binds the plan while simultaneously allowing verifying the plan was
-        // executed with no additional communication
-        Some(Zeroizing::new(plan.id())),
-        plan.inputs.drain(..).map(|input| input.0).collect(),
-        plan.payments.drain(..).map(|payment| (payment.address.0, payment.amount)).collect(),
-        plan.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
-        vec![],
-        fee,
-      )
-      .map_err(|_| CoinError::ConnectionError)?,
+      actual: signable(&plan, Some(tx_fee))?.unwrap(),
     };
     let eventuality = signable.actual.eventuality().unwrap();
-    Ok((signable, eventuality))
+    Ok((Some((signable, eventuality)), branch_outputs))
   }
 
   async fn attempt_send(
@@ -344,6 +436,11 @@ impl Coin for Monero {
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block(*id).await.unwrap().number()
+  }
+
+  #[cfg(test)]
+  async fn get_transaction(&self, id: &[u8; 32]) -> Transaction {
+    self.rpc.get_transaction(*id).await.unwrap()
   }
 
   #[cfg(test)]

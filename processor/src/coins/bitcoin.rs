@@ -33,7 +33,7 @@ use serai_client::coins::bitcoin::Address;
 use crate::{
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Coin,
+    Transaction as TransactionTrait, PostFeeBranch, Coin,
   },
   Plan,
 };
@@ -108,7 +108,8 @@ impl OutputTrait for Output {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Fee(u64);
 
-impl TransactionTrait for Transaction {
+#[async_trait]
+impl TransactionTrait<Bitcoin> for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
     let mut hash = self.txid().as_hash().into_inner();
@@ -117,6 +118,22 @@ impl TransactionTrait for Transaction {
   }
   fn serialize(&self) -> Vec<u8> {
     Serialize::serialize(self)
+  }
+  #[cfg(test)]
+  async fn fee(&self, coin: &Bitcoin) -> u64 {
+    let mut value = 0;
+    for input in &self.input {
+      let output = input.previous_output;
+      let mut hash = output.txid.as_hash().into_inner();
+      hash.reverse();
+      value += coin.rpc.get_transaction(&hash).await.unwrap().output
+        [usize::try_from(output.vout).unwrap()]
+      .value;
+    }
+    for output in &self.output {
+      value -= output.value;
+    }
+    value
   }
 }
 
@@ -218,6 +235,10 @@ impl Coin for Bitcoin {
   const ID: &'static str = "Bitcoin";
   const CONFIRMATIONS: usize = 3;
 
+  // 0.0001 BTC
+  #[allow(clippy::inconsistent_digit_grouping)]
+  const DUST: u64 = 1_00_000_000 / 10_000;
+
   // Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
   // A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
   // While our inputs are entirely SegWit, such fine tuning is not necessary and could create
@@ -311,27 +332,77 @@ impl Coin for Bitcoin {
     &self,
     keys: ThresholdKeys<Secp256k1>,
     _: usize,
-    plan: Plan<Self>,
+    mut plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<(Self::SignableTransaction, Self::Eventuality), CoinError> {
+  ) -> Result<(Option<(SignableTransaction, Self::Eventuality)>, Vec<PostFeeBranch>), CoinError> {
+    let signable = |plan: &Plan<Self>, tx_fee: Option<_>| {
+      let mut payments = vec![];
+      for payment in &plan.payments {
+        // If we're solely estimating the fee, don't actually specify an amount
+        // This won't affect the fee calculation yet will ensure we don't hit an out of funds error
+        payments
+          .push((payment.address.0.clone(), if tx_fee.is_none() { 0 } else { payment.amount }));
+      }
+
+      match BSignableTransaction::new(
+        plan.inputs.iter().map(|input| input.output.clone()).collect(),
+        &payments,
+        plan.change.map(|key| Self::address(change(key).0).0),
+        None,
+        fee.0,
+      ) {
+        Some(signable) => Some(signable),
+        // TODO: Use a proper error here
+        None => {
+          if tx_fee.is_none() {
+            // Not enough funds
+            None
+          } else {
+            panic!("didn't have enough funds for a Bitcoin TX");
+          }
+        }
+      }
+    };
+
+    let tx_fee = match signable(&plan, None) {
+      Some(tx) => tx.fee(),
+      None => {
+        let mut branch_outputs = vec![];
+        for payment in plan.payments {
+          if payment.address == Self::branch_address(plan.key) {
+            branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
+          }
+        }
+        return Ok((None, branch_outputs));
+      }
+    };
+
+    let mut branch_outputs = vec![];
+    if !plan.payments.is_empty() {
+      // Amortize the transaction fee across outputs
+      let payments_len = u64::try_from(plan.payments.len()).unwrap();
+      // Use a formula which will round up
+      let output_fee = (tx_fee + (payments_len - 1)) / payments_len;
+      for payment in plan.payments.iter_mut() {
+        let post_fee = payment.amount.checked_sub(output_fee);
+        if payment.address == Self::branch_address(plan.key) {
+          branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
+        }
+        payment.amount = post_fee.unwrap_or(0);
+      }
+      plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
+    }
+
     Ok((
-      SignableTransaction {
-        keys,
-        transcript: plan.transcript(),
-        actual: BSignableTransaction::new(
-          plan.inputs.iter().map(|input| input.output.clone()).collect(),
-          &plan
-            .payments
-            .iter()
-            .map(|payment| (payment.address.0.clone(), payment.amount))
-            .collect::<Vec<_>>(),
-          plan.change.map(|key| Self::address(change(key).0).0),
-          None,
-          fee.0,
-        )
-        .unwrap(),
-      },
-      plan,
+      Some((
+        SignableTransaction {
+          keys,
+          transcript: plan.transcript(),
+          actual: signable(&plan, Some(tx_fee)).unwrap(),
+        },
+        plan,
+      )),
+      branch_outputs,
     ))
   }
 
@@ -368,6 +439,11 @@ impl Coin for Bitcoin {
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block_number(id).await.unwrap()
+  }
+
+  #[cfg(test)]
+  async fn get_transaction(&self, id: &[u8; 32]) -> Transaction {
+    self.rpc.get_transaction(id).await.unwrap()
   }
 
   #[cfg(test)]

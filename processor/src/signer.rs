@@ -29,7 +29,7 @@ pub enum SignerOrder<C: Coin> {
 
 #[derive(Debug)]
 pub enum SignerEvent<C: Coin> {
-  SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction>::Id },
+  SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction<C>>::Id },
   ProcessorMessage(ProcessorMessage),
 }
 

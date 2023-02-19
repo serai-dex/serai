@@ -102,16 +102,26 @@ pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
 }
 
-pub trait Transaction: Send + Sync + Sized + Clone + Debug {
+#[async_trait]
+pub trait Transaction<C: Coin>: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn serialize(&self) -> Vec<u8>;
+
+  #[cfg(test)]
+  async fn fee(&self, coin: &C) -> u64;
 }
 
 pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn median_fee(&self) -> C::Fee;
+}
+
+// The post-fee value of an expected branch.
+pub struct PostFeeBranch {
+  pub expected: u64,
+  pub actual: Option<u64>,
 }
 
 #[async_trait]
@@ -124,7 +134,7 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   type Fee: Copy;
 
   /// The type representing the transaction for this coin.
-  type Transaction: Transaction;
+  type Transaction: Transaction<Self>;
   /// The type representing the block for this coin.
   type Block: Block<Self>;
 
@@ -156,6 +166,10 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
   const MAX_OUTPUTS: usize;
 
+  /// Minimum output value which will be handled.
+  // TODO: Properly filter on this
+  const DUST: u64;
+
   /// Tweak keys for this coin.
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 
@@ -177,13 +191,18 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   ) -> Result<Vec<Self::Output>, CoinError>;
 
   /// Prepare a SignableTransaction for a transaction.
+  /// Returns None for the transaction if the SignableTransaction was dropped due to lack of value.
+  #[rustfmt::skip]
   async fn prepare_send(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     block_number: usize,
     plan: Plan<Self>,
     fee: Self::Fee,
-  ) -> Result<(Self::SignableTransaction, Self::Eventuality), CoinError>;
+  ) -> Result<
+    (Option<(Self::SignableTransaction, Self::Eventuality)>, Vec<PostFeeBranch>),
+    CoinError
+  >;
 
   /// Attempt to sign a SignableTransaction.
   async fn attempt_send(
@@ -201,12 +220,18 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn confirm_completion(
     &self,
     eventuality: &Self::Eventuality,
-    tx: &<Self::Transaction as Transaction>::Id,
+    tx: &<Self::Transaction as Transaction<Self>>::Id,
   ) -> Result<bool, CoinError>;
 
   /// Get a block's number by its ID.
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize;
+
+  #[cfg(test)]
+  async fn get_transaction(
+    &self,
+    id: &<Self::Transaction as Transaction<Self>>::Id,
+  ) -> Self::Transaction;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;

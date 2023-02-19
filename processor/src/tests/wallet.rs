@@ -8,7 +8,7 @@ use tokio::time::{sleep, timeout};
 
 use crate::{
   Payment, Plan,
-  coins::{Output, Block, Coin},
+  coins::{Output, Transaction, Block, Coin},
   scanner::{ScannerOrder, ScannerEvent, Scanner},
   scheduler::Scheduler,
   tests::{util::db::MemDb, sign},
@@ -49,8 +49,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   // Add these outputs, which should return no plans
   assert!(scheduler.add_outputs(outputs.clone()).is_empty());
 
-  #[allow(clippy::inconsistent_digit_grouping)]
-  let amount = 1_00_000_000;
+  let amount = C::DUST;
   let plans = scheduler.schedule(vec![Payment { address: C::address(key), data: None, amount }]);
   assert_eq!(
     plans,
@@ -70,22 +69,26 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     let (signable, eventuality) = coin
       .prepare_send(keys.clone(), coin.get_block_number(&block_id).await, plans[0].clone(), fee)
       .await
+      .unwrap()
+      .0
       .unwrap();
 
     keys_txs.insert(i, (keys, signable));
     eventualities.push(eventuality);
   }
 
-  let tx = sign(coin.clone(), keys_txs).await;
+  let txid = sign(coin.clone(), keys_txs).await;
+  let tx = coin.get_transaction(&txid).await;
   coin.mine_block().await;
   let block_number = coin.get_latest_block_number().await.unwrap();
   let block = coin.get_block(block_number).await.unwrap();
   let outputs = coin.get_outputs(&block, key).await.unwrap();
   assert_eq!(outputs.len(), 2);
+  let amount = amount - tx.fee(&coin).await;
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
 
   for eventuality in eventualities {
-    assert!(coin.confirm_completion(&eventuality, &tx).await.unwrap());
+    assert!(coin.confirm_completion(&eventuality, &txid).await.unwrap());
   }
 
   for _ in 1 .. C::CONFIRMATIONS {
