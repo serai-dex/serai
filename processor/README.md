@@ -52,7 +52,7 @@ we can create an `Eventuality` and see if it matches a given TX. A signing node
 just has to submit the TX hash.
 
 Bitcoin will have the same TX hash flow, just explicitly matching against the
-inputs/outputs.
+inputs.
 
 - Scheduler uses exact amounts yet we need to handle fees as well
 
@@ -63,3 +63,7 @@ B) When we receive an output to the branch address, add back the fee to
 - Coordinator communication
 
 Kafka? RPC ping to them, which we don't count as 'sent' until we get a pong?
+
+# TODO
+
+- Dust Handling

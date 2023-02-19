@@ -12,6 +12,9 @@ pub(crate) use signer::{sign, test_signer};
 mod wallet;
 pub(crate) use wallet::test_wallet;
 
+mod addresses;
+pub(crate) use addresses::test_addresses;
+
 // Effective Once
 lazy_static::lazy_static! {
   static ref INIT_LOGGER: () = env_logger::init();
@@ -48,8 +51,16 @@ macro_rules! async_sequential {
 
 #[macro_export]
 macro_rules! test_coin {
-  ($C: ident, $coin: ident, $key_gen: ident, $scanner: ident, $signer: ident, $wallet: ident) => {
-    use $crate::tests::{test_key_gen, test_scanner, test_signer, test_wallet};
+  (
+    $C: ident,
+    $coin: ident,
+    $key_gen: ident,
+    $scanner: ident,
+    $signer: ident,
+    $wallet: ident,
+    $addresses: ident,
+  ) => {
+    use $crate::tests::{test_key_gen, test_scanner, test_signer, test_wallet, test_addresses};
 
     // This doesn't interact with a node and accordingly doesn't need to be run sequentially
     #[tokio::test]
@@ -74,6 +85,12 @@ macro_rules! test_coin {
     async_sequential! {
       async fn $wallet() {
         test_wallet($coin().await).await;
+      }
+    }
+
+    async_sequential! {
+      async fn $addresses() {
+        test_addresses($coin().await).await;
       }
     }
   };

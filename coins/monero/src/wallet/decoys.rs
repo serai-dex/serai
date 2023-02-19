@@ -37,6 +37,10 @@ async fn select_n<R: RngCore + CryptoRng>(
   used: &mut HashSet<u64>,
   count: usize,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
+  if height > (rpc.get_height().await? - 10) {
+    Err(RpcError::InternalError("decoys being requested from unconfirmed blocks"))?;
+  }
+
   let mut iters = 0;
   let mut confirmed = Vec::with_capacity(count);
   // Retries on failure. Retries are obvious as decoys, yet should be minimal

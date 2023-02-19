@@ -8,7 +8,15 @@ mod bitcoin {
     bitcoin
   }
 
-  test_coin!(Bitcoin, bitcoin, bitcoin_key_gen, bitcoin_scanner, bitcoin_signer, bitcoin_wallet);
+  test_coin!(
+    Bitcoin,
+    bitcoin,
+    bitcoin_key_gen,
+    bitcoin_scanner,
+    bitcoin_signer,
+    bitcoin_wallet,
+    bitcoin_addresses,
+  );
 }
 
 #[cfg(feature = "monero")]
@@ -23,5 +31,13 @@ mod monero {
     monero
   }
 
-  test_coin!(Monero, monero, monero_key_gen, monero_scanner, monero_signer, monero_wallet);
+  test_coin!(
+    Monero,
+    monero,
+    monero_key_gen,
+    monero_scanner,
+    monero_signer,
+    monero_wallet,
+    monero_addresses,
+  );
 }

@@ -6,13 +6,9 @@ use zeroize::Zeroizing;
 
 use transcript::RecommendedTranscript;
 
-use dalek_ff_group::EdwardsPoint;
+use group::{ff::Field, Group};
+use dalek_ff_group::{Scalar, EdwardsPoint};
 use frost::{curve::Ed25519, ThresholdKeys};
-
-#[cfg(test)]
-use group::ff::Field;
-#[cfg(test)]
-use dalek_ff_group::Scalar;
 
 use monero_serai::{
   transaction::Transaction,
@@ -29,11 +25,11 @@ use monero_serai::{
 pub use serai_client::{primitives::MAX_DATA_LEN, coins::monero::Address};
 
 use crate::{
+  Payment, Plan, additional_key,
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, Coin,
   },
-  Plan, additional_key,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -162,7 +158,6 @@ impl Monero {
 
   #[cfg(test)]
   fn test_view_pair() -> ViewPair {
-    use group::Group;
     ViewPair::new(*EdwardsPoint::generator(), Zeroizing::new(Scalar::one().0))
   }
 
@@ -273,6 +268,20 @@ impl Coin for Monero {
     mut plan: Plan<Self>,
     fee: Fee,
   ) -> Result<(SignableTransaction, Eventuality), CoinError> {
+    // Monero requires at least two outputs
+    assert!((!plan.payments.is_empty()) || plan.change.is_some());
+    // If we only have one output planned, add a dummy payment
+    if (plan.payments.len() + usize::from(u8::from(plan.change.is_some()))) == 1 {
+      plan.payments.push(Payment {
+        address: Address(
+          ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::one().0))
+            .address(Network::Mainnet, AddressSpec::Standard),
+        ),
+        amount: 0,
+        data: None,
+      })
+    }
+
     let signable = SignableTransaction {
       keys,
       transcript: plan.transcript(),
