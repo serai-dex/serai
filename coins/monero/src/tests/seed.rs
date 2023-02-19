@@ -1,3 +1,5 @@
+use zeroize::Zeroizing;
+
 use crate::wallet::seed::{Seed, LanguageName};
 
 #[test]
@@ -12,11 +14,11 @@ fn test_classic() {
   seed.push_str("ruby woes dauntless boil family illness inroads northern");
 
   // string -> key
-  let s1 = Seed::from_string(seed).unwrap();
-  let spend_bytes: [u8; 32] = hex::decode(spend).unwrap().try_into().unwrap();
-  assert_eq!(s1.spend(), spend_bytes);
+  let s1 = Seed::from_string(Zeroizing::new(seed)).unwrap();
+  let spend_bytes = Zeroizing::new(hex::decode(spend).unwrap().try_into().unwrap());
+  assert_eq!(s1.entropy(), spend_bytes);
 
   // key -> string
-  let s2 = Seed::from_key(&spend_bytes, LanguageName::English).unwrap();
+  let s2 = Seed::from_entropy(&spend_bytes, LanguageName::English).unwrap();
   assert_eq!(s1, s2);
 }

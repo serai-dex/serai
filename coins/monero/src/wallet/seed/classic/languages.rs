@@ -23,14 +23,14 @@ const PORTUGUESE_WORDS: &str = include_str!("./words/pt.json");
 const CHINESE_SIMPLIFIED_WORDS: &str = include_str!("./words/zh.json");
 
 /// returns all supported languages.
-pub fn all() -> Result<Vec<Language>, SeedError> {
+pub fn all() -> Result<HashMap<LanguageName, Language>, SeedError> {
   #[derive(serde::Deserialize)]
   struct Lang {
     name: String,
     unique_prefix_length: usize,
   }
 
-  let mut langs = vec![];
+  let mut langs = HashMap::new();
   for l in serde_json::from_str::<Vec<Lang>>(LANGUAGES).unwrap() {
     let (lang_name, words) = match l.name.as_str() {
       "Dutch" => (LanguageName::Dutch, DUTCH_WORDS),
@@ -48,19 +48,19 @@ pub fn all() -> Result<Vec<Language>, SeedError> {
       "ChineseSimplified" => (LanguageName::ChineseSimplified, CHINESE_SIMPLIFIED_WORDS),
       _ => Err(SeedError::UnknownLanguage)?,
     };
-    let mut lang = Language {
-      word_list: serde_json::from_str::<Vec<String>>(words).unwrap(),
-      word_map: HashMap::new(),
-      trimmed_word_map: HashMap::new(),
-      language_name: lang_name,
-      unique_prefix_length: l.unique_prefix_length,
+    let lang = match lang_name {
+      LanguageName::EnglishOld => {
+        Language::new(serde_json::from_str(words).unwrap(), l.unique_prefix_length, true, true)?
+      }
+      LanguageName::Spanish => {
+        Language::new(serde_json::from_str(words).unwrap(), l.unique_prefix_length, true, false)?
+      }
+      _ => {
+        Language::new(serde_json::from_str(words).unwrap(), l.unique_prefix_length, false, false)?
+      }
     };
-    match lang.language_name {
-      LanguageName::EnglishOld => lang.populate_maps(true, true)?,
-      LanguageName::Spanish => lang.populate_maps(true, false)?,
-      _ => lang.populate_maps(false, false)?,
-    }
-    langs.push(lang);
+
+    langs.insert(lang_name, lang);
   }
 
   Ok(langs)
