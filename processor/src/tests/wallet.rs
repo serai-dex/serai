@@ -68,12 +68,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
     let (signable, eventuality) = coin
-      .prepare_send(
-        keys.clone(),
-        coin.get_block_number(&block_id).await.unwrap(),
-        plans[0].clone(),
-        fee,
-      )
+      .prepare_send(keys.clone(), coin.get_block_number(&block_id).await, plans[0].clone(), fee)
       .await
       .unwrap();
 

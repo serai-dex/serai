@@ -342,8 +342,8 @@ impl Coin for Monero {
   }
 
   #[cfg(test)]
-  async fn get_block_number(&self, id: &[u8; 32]) -> Result<usize, CoinError> {
-    Ok(self.rpc.get_block(*id).await.map_err(|_| CoinError::ConnectionError)?.number())
+  async fn get_block_number(&self, id: &[u8; 32]) -> usize {
+    self.rpc.get_block(*id).await.unwrap().number()
   }
 
   #[cfg(test)]

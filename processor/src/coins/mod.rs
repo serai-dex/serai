@@ -206,10 +206,7 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
 
   /// Get a block's number by its ID.
   #[cfg(test)]
-  async fn get_block_number(
-    &self,
-    id: &<Self::Block as Block<Self>>::Id,
-  ) -> Result<usize, CoinError>;
+  async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;

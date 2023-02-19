@@ -366,8 +366,8 @@ impl Coin for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn get_block_number(&self, id: &[u8; 32]) -> Result<usize, CoinError> {
-    self.rpc.get_block_number(id).await.map_err(|_| CoinError::ConnectionError)
+  async fn get_block_number(&self, id: &[u8; 32]) -> usize {
+    self.rpc.get_block_number(id).await.unwrap()
   }
 
   #[cfg(test)]
