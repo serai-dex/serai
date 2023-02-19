@@ -125,7 +125,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
     rng,
     rpc,
     ring_len,
-    rpc.get_height().await.map_err(TransactionError::RpcError)? - 10,
+    rpc.get_height().await.map_err(TransactionError::RpcError)? - 1,
     inputs,
   )
   .await

@@ -37,8 +37,8 @@ async fn select_n<R: RngCore + CryptoRng>(
   used: &mut HashSet<u64>,
   count: usize,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
-  if height > (rpc.get_height().await? - 10) {
-    Err(RpcError::InternalError("decoys being requested from unconfirmed blocks"))?;
+  if height >= rpc.get_height().await? {
+    Err(RpcError::InternalError("decoys being requested from too young blocks"))?;
   }
 
   let mut iters = 0;
