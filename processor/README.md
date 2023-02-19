@@ -43,7 +43,7 @@ will do one of two things:
 When the Serai chain issues a `Burn` event, the processor should send coins
 accordingly. This is done by scheduling the payments out.
 
-# Unsolved problems
+# TODO
 
 - Acknowledging a sign ID as signed so we don't continue trying
 
@@ -64,6 +64,6 @@ B) When we receive an output to the branch address, add back the fee to
 
 Kafka? RPC ping to them, which we don't count as 'sent' until we get a pong?
 
-# TODO
-
 - Dust Handling
+
+- Handle reboots

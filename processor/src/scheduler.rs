@@ -12,14 +12,23 @@ use crate::{
 pub struct Scheduler<C: Coin> {
   key: <C::Curve as Ciphersuite>::G,
 
-  // Flattened map of amounts to payments.
-  // These amounts are known to be upcoming and when they do show up, the included payments should
-  // be continued
+  // Serai, when it has more outputs expected than it can handle in a single tranaction, will
+  // schedule the outputs to be handled later. Immediately, it just creates additional outputs
+  // which will eventually handle those outputs
+  //
+  // These maps map output amounts, which we'll receive in the future, to the payments they should
+  // be used on
+  //
+  // When those output amounts appear, their payments should be scheduled
+  // The Vec<Payment> is for all payments that should be done per output instance
+  // The VecDeque allows multiple sets of payments with the same sum amount to properly co-exist
+  //
+  // queued_plans are for outputs which we will create, yet when created, will have their amount
+  // reduced by the fee it cost to be created. The Scheduler will then be told how what amount the
+  // output actually has, and it'll be moved into plans
+  //
   // TODO: Consider edge case where branch/change isn't mined yet keys are deprecated
-  // Continuing them means creating the next set of branches necessary, or leaves as possible
-  // The Vec<Payment> is for all payments that should be done for an output instance
-  // The VecDeque allows multiple sets of payments mutually dependent on an output worth a specific
-  // amount to co-exist and be properly handled
+  queued_plans: HashMap<u64, VecDeque<Vec<Payment<C>>>>,
   plans: HashMap<u64, VecDeque<Vec<Payment<C>>>>,
 
   // UTXOs available
@@ -31,7 +40,17 @@ pub struct Scheduler<C: Coin> {
 
 impl<C: Coin> Scheduler<C> {
   pub fn new(key: <C::Curve as Ciphersuite>::G) -> Self {
-    Scheduler { key, plans: HashMap::new(), utxos: vec![], payments: VecDeque::new() }
+    Scheduler {
+      key,
+      queued_plans: HashMap::new(),
+      plans: HashMap::new(),
+      utxos: vec![],
+      payments: VecDeque::new(),
+    }
+  }
+
+  pub fn key(&self) -> <C::Curve as Ciphersuite>::G {
+    self.key
   }
 
   fn execute(&mut self, inputs: Vec<C::Output>, mut payments: Vec<Payment<C>>) -> Plan<C> {
@@ -49,7 +68,7 @@ impl<C: Coin> Scheduler<C> {
 
     let mut add_plan = |payments| {
       let amount = payment_amounts(&payments);
-      self.plans.entry(amount).or_insert(VecDeque::new()).push_back(payments);
+      self.queued_plans.entry(amount).or_insert(VecDeque::new()).push_back(payments);
       amount
     };
 
@@ -68,7 +87,7 @@ impl<C: Coin> Scheduler<C> {
 
       // Create the plan
       let removed = payments.drain((payments.len() - to_remove) ..).collect::<Vec<_>>();
-      debug_assert_eq!(removed.len(), to_remove);
+      assert_eq!(removed.len(), to_remove);
       let amount = add_plan(removed);
 
       // Create the payment for the plan
@@ -93,7 +112,7 @@ impl<C: Coin> Scheduler<C> {
       if let Some(plans) = self.plans.get_mut(&utxo.amount()) {
         // Execute the first set of payments possible with an output of this amount
         let payments = plans.pop_front().unwrap();
-        debug_assert_eq!(utxo.amount(), payments.iter().map(|payment| payment.amount).sum::<u64>());
+        assert_eq!(utxo.amount(), payments.iter().map(|payment| payment.amount).sum::<u64>());
 
         // If we've grabbed the last plan for this output amount, remove it from the map
         if plans.is_empty() {
@@ -117,7 +136,7 @@ impl<C: Coin> Scheduler<C> {
 
   // Schedule a series of payments. This should be called after `add_outputs`.
   pub fn schedule(&mut self, mut payments: Vec<Payment<C>>) -> Vec<Plan<C>> {
-    debug_assert!(!payments.is_empty(), "tried to schedule zero payments");
+    assert!(!payments.is_empty(), "tried to schedule zero payments");
 
     // Add all new payments to the list of pending payments
     self.payments.extend(payments.drain(..));
@@ -184,5 +203,58 @@ impl<C: Coin> Scheduler<C> {
     let mut txs = vec![self.execute(utxos, executing)];
     txs.append(&mut aggregating);
     txs
+  }
+
+  // Note a branch output as having been created, with the amount it was actually created with,
+  // or not having been created due to being too small
+  // This can be called whenever, so long as it's properly ordered
+  // (it's independent to Serai/the chain we're scheduling over, yet still expects outputs to be
+  // created in the same order Plans are returned in)
+  pub fn created_output(&mut self, expected: u64, actual: Option<u64>) {
+    // Get the payments this output is expected to handle
+    let queued = self.queued_plans.get_mut(&expected).unwrap();
+    let mut payments = queued.pop_front().unwrap();
+    assert_eq!(expected, payments.iter().map(|payment| payment.amount).sum::<u64>());
+    // If this was the last set of payments at this amount, remove it
+    if queued.is_empty() {
+      self.queued_plans.remove(&expected);
+    }
+
+    // If we didn't actually create this output, return, dropping the child payments
+    let actual = match actual {
+      Some(actual) => actual,
+      None => return,
+    };
+
+    // Amortize the fee amongst all payments
+    // While some coins, like Ethereum, may have some payments take notably more gas, those payments
+    // will have their own gas deducted when they're created. The difference in output value present
+    // here is solely the cost of the branch, which is used for all of these payments, regardless of
+    // how much they'll end up costing
+    let diff = actual - expected;
+    let payments_len = u64::try_from(payments.len()).unwrap();
+    let per_payment = diff / payments_len;
+    // The above division isn't perfect.
+    let mut remainder = diff - (per_payment * payments_len);
+
+    let drain = payments.drain(..).collect::<Vec<_>>();
+    for mut payment in drain {
+      if let Some(amount) = payment.amount.checked_sub(per_payment + remainder) {
+        // Only subtract the remainder once.
+        remainder = 0;
+        payment.amount = amount;
+        payments.push(payment);
+      }
+    }
+
+    // If we dropped payments, we'll actualaly have a surplus of value in our inputs
+    // Add any extra value to the first output
+    let surplus = actual - payments.iter().map(|payment| payment.amount).sum::<u64>();
+    payments.last_mut().unwrap().amount += surplus;
+
+    // Sanity check this was done properly
+    assert_eq!(actual, payments.iter().map(|payment| payment.amount).sum::<u64>());
+
+    self.plans.entry(actual).or_insert(VecDeque::new()).push_back(payments);
   }
 }
