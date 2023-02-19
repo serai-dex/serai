@@ -131,11 +131,13 @@ impl<C: Coin> Scheduler<C> {
     utxos.sort_by(|a, b| a.amount().cmp(&b.amount()).reverse());
 
     // Return the now possible TXs
+    log::info!("created {} planned TXs to sign from now recived outputs", txs.len());
     txs
   }
 
   // Schedule a series of payments. This should be called after `add_outputs`.
   pub fn schedule(&mut self, mut payments: Vec<Payment<C>>) -> Vec<Plan<C>> {
+    log::debug!("scheduling payments");
     assert!(!payments.is_empty(), "tried to schedule zero payments");
 
     // Add all new payments to the list of pending payments
@@ -202,6 +204,7 @@ impl<C: Coin> Scheduler<C> {
     // for them
     let mut txs = vec![self.execute(utxos, executing)];
     txs.append(&mut aggregating);
+    log::info!("created {} TXs to sign", txs.len());
     txs
   }
 
@@ -211,6 +214,8 @@ impl<C: Coin> Scheduler<C> {
   // (it's independent to Serai/the chain we're scheduling over, yet still expects outputs to be
   // created in the same order Plans are returned in)
   pub fn created_output(&mut self, expected: u64, actual: Option<u64>) {
+    log::debug!("output expected to have {} had {:?} after fees", expected, actual);
+
     // Get the payments this output is expected to handle
     let queued = self.queued_plans.get_mut(&expected).unwrap();
     let mut payments = queued.pop_front().unwrap();
