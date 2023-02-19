@@ -467,7 +467,8 @@ impl Coin for Monero {
       .ignore_timelock();
 
     let amount = outputs[0].commitment().amount;
-    let fee = 3000000000; // TODO
+    // The dust should always be sufficient for the fee
+    let fee = Monero::DUST;
 
     let tx = MSignableTransaction::new(
       self.rpc.get_protocol().await.unwrap(),

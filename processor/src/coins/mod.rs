@@ -211,7 +211,6 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   const MAX_OUTPUTS: usize;
 
   /// Minimum output value which will be handled.
-  // TODO: Properly filter on this
   const DUST: u64;
 
   /// Tweak keys for this coin.
