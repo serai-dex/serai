@@ -297,21 +297,11 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             for out in burns.drain(..) {
               let WithAmount { data: OutInstruction { address, data }, amount } = out;
               if let Ok(address) = C::Address::try_from(address.consume()) {
-                // We *could* allow burns to a branch address
-                // The reason not to is the scheduler is supposed to receive a notification when
-                // an output to a branch address is created
-                // If the scheduler receives that notification when it isn't supposed to, there's
-                // almost certainly a bug
-                // Unfortunately, we can't assert thete because a burn to the branch address will
-                // trigger that notification, meaning it *can* happen even without a bug
-                // Ban these burns so it can't happen without a fault, allowing us to assert there
-                if C::branch_address(scheduler.key()) != address {
-                  payments.push(Payment {
-                    address,
-                    data: data.map(|data| data.consume()),
-                    amount: amount.0,
-                  });
-                }
+                payments.push(Payment {
+                  address,
+                  data: data.map(|data| data.consume()),
+                  amount: amount.0,
+                });
               }
             }
 

@@ -49,11 +49,17 @@ impl<C: Coin> Scheduler<C> {
     }
   }
 
-  pub fn key(&self) -> <C::Curve as Ciphersuite>::G {
-    self.key
-  }
-
   fn execute(&mut self, inputs: Vec<C::Output>, mut payments: Vec<Payment<C>>) -> Plan<C> {
+    let branch_address = C::branch_address(self.key);
+    // created_output will be called any time we send to a branch address
+    // If it's called, and it wasn't expecting to be called, that's almost certainly an error
+    // The only way it wouldn't be is if someone on Serai triggered a burn to a branch, which is
+    // pointless anyways
+    // If we allow such behavior, we lose the ability to detect the aforementioned class of errors
+    // Ignore these payments so we can safely assert there
+    let mut payments =
+      payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
+
     let mut change = false;
     let mut max = C::MAX_OUTPUTS;
 
@@ -92,7 +98,7 @@ impl<C: Coin> Scheduler<C> {
 
       // Create the payment for the plan
       // Push it to the front so it's not moved into a branch until all lower-depth items are
-      payments.insert(0, Payment { address: C::branch_address(self.key), data: None, amount });
+      payments.insert(0, Payment { address: branch_address.clone(), data: None, amount });
     }
 
     // TODO: Use the latest key for change
@@ -112,7 +118,8 @@ impl<C: Coin> Scheduler<C> {
       if let Some(plans) = self.plans.get_mut(&utxo.amount()) {
         // Execute the first set of payments possible with an output of this amount
         let payments = plans.pop_front().unwrap();
-        assert_eq!(utxo.amount(), payments.iter().map(|payment| payment.amount).sum::<u64>());
+        // They won't be equal if we dropped payments due to being dust
+        assert!(utxo.amount() >= payments.iter().map(|payment| payment.amount).sum::<u64>());
 
         // If we've grabbed the last plan for this output amount, remove it from the map
         if plans.is_empty() {
@@ -136,14 +143,12 @@ impl<C: Coin> Scheduler<C> {
   }
 
   // Schedule a series of payments. This should be called after `add_outputs`.
-  pub fn schedule(&mut self, mut payments: Vec<Payment<C>>) -> Vec<Plan<C>> {
+  pub fn schedule(&mut self, payments: Vec<Payment<C>>) -> Vec<Plan<C>> {
     log::debug!("scheduling payments");
     assert!(!payments.is_empty(), "tried to schedule zero payments");
 
     // Add all new payments to the list of pending payments
-    self.payments.extend(payments.drain(..));
-    // Drop payments to descope the variable
-    drop(payments);
+    self.payments.extend(payments);
 
     // If we don't have UTXOs available, don't try to continue
     if self.utxos.is_empty() {
@@ -242,21 +247,12 @@ impl<C: Coin> Scheduler<C> {
     // The above division isn't perfect.
     let mut remainder = diff - (per_payment * payments_len);
 
-    let drain = payments.drain(..).collect::<Vec<_>>();
-    for mut payment in drain {
-      if let Some(amount) = payment.amount.checked_sub(per_payment + remainder) {
-        // Only subtract the remainder once.
-        remainder = 0;
-        payment.amount = amount;
-        payments.push(payment);
-      }
+    for mut payment in payments.iter_mut() {
+      payment.amount = payment.amount.saturating_sub(per_payment + remainder);
+      // Only subtract the remainder once.
+      remainder = 0;
     }
-
-    // If we dropped payments, we'll actualaly have a surplus of value in our inputs
-    // Add any extra value to the first output
-    let surplus = actual - payments.iter().map(|payment| payment.amount).sum::<u64>();
-    payments.last_mut().unwrap().amount += surplus;
-
+    let payments = payments.drain(..).filter(|payment| payment.amount != 0).collect::<Vec<_>>();
     // Sanity check this was done properly
     assert_eq!(actual, payments.iter().map(|payment| payment.amount).sum::<u64>());
 
