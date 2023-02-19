@@ -376,6 +376,7 @@ impl Coin for Monero {
       }
     }
     plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
+    // If we killed the dummy payment, add it back
     if plan.payments.is_empty() {
       if plan.change.is_none() {
         for output in &branch_outputs {
