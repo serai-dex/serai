@@ -18,16 +18,8 @@ pub enum SeedError {
   UnknownLanguage,
   #[error("unexpected number of words in seed")]
   InvalidSeedLength,
-  #[error("invalid checksum")]
-  InvalidChecksum,
-  #[error("invalid number of words in language word list")]
-  InvalidLanguageWordList,
-  #[error("duplicate prefix is found in the language")]
-  DuplicatePrefix,
-  #[error("prefix is not found in language trimmed words")]
-  UnknownPrefix,
-  #[error("word length size less than language prefix length")]
-  InvalidWordInLanguage,
+  #[error("language english old doesn't support seeds with checksum")]
+  EnglishOldWithChecksum,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -42,7 +34,7 @@ pub enum LanguageName {
   Dutch,
   Portuguese,
   Russian,
-  ChineseSimplified,
+  Chinese,
   Esperanto,
   Lojban,
 }
@@ -57,7 +49,7 @@ impl Seed {
   /// creates a new seed.
   pub fn new(lang: LanguageName) -> Seed {
     // TODO: This should return Polyseed when implemented.
-    Seed::Classic(classic::new(lang, &mut OsRng).unwrap())
+    Seed::Classic(classic::new(lang, &mut OsRng))
   }
 
   /// constructs a seed from seed words.
@@ -73,11 +65,8 @@ impl Seed {
   }
 
   /// constructs a seed from a given key.
-  pub fn from_entropy(
-    key: &Zeroizing<[u8; 32]>,
-    lang_name: LanguageName,
-  ) -> Result<Seed, SeedError> {
-    Ok(Seed::Classic(classic::bytes_to_words(key, lang_name)?))
+  pub fn from_entropy(key: &Zeroizing<[u8; 32]>, lang_name: LanguageName) -> Seed {
+    Seed::Classic(classic::bytes_to_words(key, lang_name))
   }
 
   /// returns seed as String.

@@ -2,6 +2,8 @@ use std::{collections::HashMap, str};
 
 use rand_core::{RngCore, CryptoRng};
 
+use lazy_static::lazy_static;
+
 use crc::{Crc, CRC_32_ISO_HDLC};
 use zeroize::Zeroizing;
 
@@ -9,11 +11,41 @@ use crate::random_scalar;
 
 use super::{SeedError, LanguageName};
 
-mod languages;
+// language words
+const DUTCH_WORDS: &str = include_str!("./words/nl.json");
+const GERMAN_WORDS: &str = include_str!("./words/de.json");
+const FRENCH_WORDS: &str = include_str!("./words/fr.json");
+const LOJBAN_WORDS: &str = include_str!("./words/jbo.json");
+const ENGLISH_WORDS: &str = include_str!("./words/en.json");
+const ITALIAN_WORDS: &str = include_str!("./words/it.json");
+const SPANISH_WORDS: &str = include_str!("./words/es.json");
+const RUSSIAN_WORDS: &str = include_str!("./words/ru.json");
+const CHINESE_WORDS: &str = include_str!("./words/zh.json");
+const JAPANESE_WORDS: &str = include_str!("./words/ja.json");
+const ESPERANTO_WORDS: &str = include_str!("./words/eo.json");
+const ENGLISHOLD_WORDS: &str = include_str!("./words/ang.json");
+const PORTUGUESE_WORDS: &str = include_str!("./words/pt.json");
+
+lazy_static! {
+  pub static ref LANGUAGES: HashMap<LanguageName, Language> = HashMap::from([
+    (LanguageName::Dutch, Language::new(serde_json::from_str(DUTCH_WORDS).unwrap(), 4)),
+    (LanguageName::German, Language::new(serde_json::from_str(GERMAN_WORDS).unwrap(), 4)),
+    (LanguageName::French, Language::new(serde_json::from_str(FRENCH_WORDS).unwrap(), 4)),
+    (LanguageName::Lojban, Language::new(serde_json::from_str(LOJBAN_WORDS).unwrap(), 4)),
+    (LanguageName::English, Language::new(serde_json::from_str(ENGLISH_WORDS).unwrap(), 3)),
+    (LanguageName::Italian, Language::new(serde_json::from_str(ITALIAN_WORDS).unwrap(), 4)),
+    (LanguageName::Spanish, Language::new(serde_json::from_str(SPANISH_WORDS).unwrap(), 4)),
+    (LanguageName::Russian, Language::new(serde_json::from_str(RUSSIAN_WORDS).unwrap(), 4)),
+    (LanguageName::Chinese, Language::new(serde_json::from_str(CHINESE_WORDS).unwrap(), 1)),
+    (LanguageName::Japanese, Language::new(serde_json::from_str(JAPANESE_WORDS).unwrap(), 3)),
+    (LanguageName::Esperanto, Language::new(serde_json::from_str(ESPERANTO_WORDS).unwrap(), 4)),
+    (LanguageName::Portuguese, Language::new(serde_json::from_str(PORTUGUESE_WORDS).unwrap(), 4)),
+    (LanguageName::EnglishOld, Language::new(serde_json::from_str(ENGLISHOLD_WORDS).unwrap(), 4)),
+  ]);
+}
 
 pub const CLASSIC_SEED_LENGTH: usize = 24;
 pub const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
-const LANGUAGE_WORD_COUNT: usize = 1626;
 
 #[derive(Clone)]
 pub struct Language {
@@ -25,16 +57,7 @@ pub struct Language {
 
 impl Language {
   /// creates a new language from words.
-  fn new(
-    words: Vec<String>,
-    prefix_length: usize,
-    allow_short_words: bool,
-    allow_duplicate_prefix: bool,
-  ) -> Result<Language, SeedError> {
-    if words.len() != LANGUAGE_WORD_COUNT {
-      Err(SeedError::InvalidLanguageWordList)?;
-    }
-
+  fn new(words: Vec<String>, prefix_length: usize) -> Language {
     let mut lang = Language {
       word_list: words,
       word_map: HashMap::new(),
@@ -46,32 +69,21 @@ impl Language {
     for (i, word) in lang.word_list.iter().enumerate() {
       lang.word_map.insert(word.clone(), i);
 
-      if word.len() < lang.unique_prefix_length && !allow_short_words {
-        Err(SeedError::InvalidWordInLanguage)?;
-      }
-
       let trimmed = if word.len() > lang.unique_prefix_length {
         utf8_prefix(word, lang.unique_prefix_length)
       } else {
         word.clone()
       };
 
-      if lang.trimmed_word_map.contains_key(&trimmed) && !allow_duplicate_prefix {
-        Err(SeedError::DuplicatePrefix)?;
-      }
-
       lang.trimmed_word_map.insert(trimmed, i);
     }
 
-    Ok(lang)
+    lang
   }
 }
 
 /// returns a new seed for a given lang.
-pub fn new<R: RngCore + CryptoRng>(
-  lang: LanguageName,
-  rng: &mut R,
-) -> Result<Zeroizing<String>, SeedError> {
+pub fn new<R: RngCore + CryptoRng>(lang: LanguageName, rng: &mut R) -> Zeroizing<String> {
   let spend = random_scalar(rng);
   bytes_to_words(spend.as_bytes(), lang)
 }
@@ -115,12 +127,9 @@ pub fn words_to_bytes(seed: &str) -> Result<Zeroizing<[u8; 32]>, SeedError> {
   Ok(Zeroizing::new(result))
 }
 
-pub fn bytes_to_words(
-  key: &[u8; 32],
-  lang_name: LanguageName,
-) -> Result<Zeroizing<String>, SeedError> {
+pub fn bytes_to_words(key: &[u8; 32], lang_name: LanguageName) -> Zeroizing<String> {
   // Grab the language
-  let lang = &languages::all()?[&lang_name];
+  let lang = &LANGUAGES[&lang_name];
 
   // get the language words
   let words = &lang.word_list;
@@ -147,10 +156,14 @@ pub fn bytes_to_words(
     result.push(words[indices[2] as usize].clone());
     result.push(words[indices[3] as usize].clone());
   }
-  let checksum_index = create_checksum_index(&result, lang)?;
-  result.push(result[checksum_index].clone());
 
-  Ok(Zeroizing::new(result.join(" ")))
+  // create a checksum word for all langues except with old english
+  if lang_name != LanguageName::EnglishOld {
+    let checksum_index = create_checksum_index(&result, lang);
+    result.push(result[checksum_index].clone());
+  }
+
+  Zeroizing::new(result.join(" "))
 }
 
 /// takes a seed and returns the code for matching language
@@ -158,11 +171,10 @@ fn find_seed_language(
   seed: &[String],
   has_checksum: bool,
 ) -> Result<(Vec<usize>, Language), SeedError> {
-  let lang_map = languages::all()?;
   let mut matched_indices = vec![];
 
   // Iterate through all the languages
-  for lang in lang_map.values() {
+  for (lang_name, lang) in LANGUAGES.iter() {
     let word_map = &lang.word_map;
     let trimmed_map = &lang.trimmed_word_map;
 
@@ -185,8 +197,14 @@ fn find_seed_language(
       }
     }
 
-    if full_match && has_checksum && !checksum_test(seed, lang)? {
-      full_match = false;
+    if full_match && has_checksum {
+      if lang_name == &LanguageName::EnglishOld {
+        Err(SeedError::EnglishOldWithChecksum)?;
+      }
+
+      if !checksum_test(seed, lang) {
+        full_match = false;
+      }
     }
 
     if full_match {
@@ -204,32 +222,28 @@ fn utf8_prefix(word: &str, prefix_len: usize) -> String {
   word.chars().take(prefix_len).collect()
 }
 
-fn create_checksum_index(words: &[String], lang: &Language) -> Result<usize, SeedError> {
+fn create_checksum_index(words: &[String], lang: &Language) -> usize {
   let mut trimmed_words = String::new();
 
   for w in words {
-    let word = utf8_prefix(w, lang.unique_prefix_length);
-    if !lang.trimmed_word_map.contains_key(&word) {
-      Err(SeedError::UnknownPrefix)?;
-    }
-    trimmed_words.push_str(word.as_str());
+    trimmed_words.push_str(utf8_prefix(w, lang.unique_prefix_length).as_str());
   }
 
   let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
   let mut digest = crc.digest();
   digest.update(trimmed_words.as_bytes());
 
-  Ok((digest.finalize() as usize) % words.len())
+  (digest.finalize() as usize) % words.len()
 }
 
-fn checksum_test(seed: &[String], lang: &Language) -> Result<bool, SeedError> {
+fn checksum_test(seed: &[String], lang: &Language) -> bool {
   if seed.is_empty() {
-    return Ok(false);
+    return false;
   }
 
   // exclude the last word when calculating a checksum.
   let last_word = seed.last().unwrap().clone();
-  let checksum_index = create_checksum_index(&seed[.. seed.len() - 1], lang)?;
+  let checksum_index = create_checksum_index(&seed[.. seed.len() - 1], lang);
   let checksum = seed[checksum_index].clone();
 
   // get the trimmed checksum and trimmed last word
@@ -246,8 +260,8 @@ fn checksum_test(seed: &[String], lang: &Language) -> Result<bool, SeedError> {
 
   // check if they are equal
   if trimmed_checksum != trimmed_last_word {
-    return Ok(false);
+    return false;
   }
 
-  Ok(true)
+  true
 }
