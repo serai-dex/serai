@@ -147,10 +147,11 @@ impl Monero {
   }
 
   fn address_internal(spend: EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {
-    Address(Self::view_pair(spend).address(
+    Address::new(Self::view_pair(spend).address(
       Network::Mainnet,
       AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
     ))
+    .unwrap()
   }
 
   fn scanner(spend: EdwardsPoint) -> Scanner {
@@ -173,7 +174,7 @@ impl Monero {
 
   #[cfg(test)]
   fn test_address() -> Address {
-    Address(Self::test_view_pair().address(Network::Mainnet, AddressSpec::Standard))
+    Address::new(Self::test_view_pair().address(Network::Mainnet, AddressSpec::Standard)).unwrap()
   }
 }
 
@@ -288,10 +289,11 @@ impl Coin for Monero {
         return Ok(None);
       } else if outputs == 1 {
         plan.payments.push(Payment {
-          address: Address(
+          address: Address::new(
             ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::one().0))
               .address(Network::Mainnet, AddressSpec::Standard),
-          ),
+          )
+          .unwrap(),
           amount: 0,
           data: None,
         });
@@ -301,7 +303,10 @@ impl Coin for Monero {
       for payment in &plan.payments {
         // If we're solely estimating the fee, don't actually specify an amount
         // This won't affect the fee calculation yet will ensure we don't hit an out of funds error
-        payments.push((payment.address.0, if tx_fee.is_none() { 0 } else { payment.amount }));
+        payments.push((
+          payment.address.clone().into(),
+          if tx_fee.is_none() { 0 } else { payment.amount },
+        ));
       }
 
       match MSignableTransaction::new(
@@ -312,13 +317,15 @@ impl Coin for Monero {
         Some(Zeroizing::new(plan.id())),
         plan.inputs.iter().cloned().map(|input| input.0).collect(),
         payments,
-        plan.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).0),
+        plan.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).into()),
         vec![],
         fee,
       ) {
         Ok(signable) => Ok(Some(signable)),
         Err(e) => match e {
-          TransactionError::MultiplePaymentIds => todo!("ban payment ID addresses"),
+          TransactionError::MultiplePaymentIds => {
+            panic!("multiple payment IDs despite not supporting integrated addresses");
+          }
           TransactionError::NoInputs |
           TransactionError::NoOutputs |
           TransactionError::NoChange |
@@ -433,7 +440,7 @@ impl Coin for Monero {
         Some(serde_json::json!({
           "method": "generateblocks",
           "params": {
-            "wallet_address": Self::test_address().0.to_string(),
+            "wallet_address": Self::test_address().to_string(),
             "amount_of_blocks": 1
           },
         })),
@@ -466,8 +473,8 @@ impl Coin for Monero {
       self.rpc.get_protocol().await.unwrap(),
       None,
       outputs,
-      vec![(address.0, amount - fee)],
-      Some(Self::test_address().0),
+      vec![(address.into(), amount - fee)],
+      Some(Self::test_address().into()),
       vec![],
       self.rpc.get_fee().await.unwrap(),
     )

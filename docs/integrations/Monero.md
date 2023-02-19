@@ -6,18 +6,24 @@ Monero addresses are structs, defined as follows:
 
   - `kind`:  Enum {
                Standard,
-               Integrated { payment_id: [u8; 8] },
                Subaddress,
-               Featured { flags: u8, payment_id: Option<[u8; 8]> }
+               Featured { flags: u8 }
              }
   - `spend`: [u8; 32]
   - `view`:  [u8; 32]
 
-This definition of Featured Addresses is non-standard given the flags are
-intended to be a VarInt, yet as of now, only half of the bits are used, with no
-further planned features. Accordingly, it should be fine to fix its length,
-which makes it comply with expectations present here. If needed, another enum
-entry for a 2-byte flags Featured Address could be added.
+Integrated addresses are not supported due to only being able to send to one
+per Monero transaction. Supporting them would add a level of complexity
+to Serai which isn't worth it.
+
+This definition of Featured Addresses is non-standard since the flags are
+represented by a u8, not a VarInt. Currently, only half of the bits are used,
+with no further planned features. Accordingly, it should be fine to fix its
+size. If needed, another enum entry for a 2-byte flags Featured Address could be
+added.
+
+This definition is also non-standard by not having a Payment ID field. This is
+per not supporting integrated addresses.
 
 ### In Instructions
 
