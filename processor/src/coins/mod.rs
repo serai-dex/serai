@@ -124,6 +124,50 @@ pub struct PostFeeBranch {
   pub actual: Option<u64>,
 }
 
+// Return the PostFeeBranches needed when dropping a transaction
+pub fn drop_branches<C: Coin>(plan: &Plan<C>) -> Vec<PostFeeBranch> {
+  let mut branch_outputs = vec![];
+  for payment in &plan.payments {
+    if payment.address == C::branch_address(plan.key) {
+      branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
+    }
+  }
+  branch_outputs
+}
+
+// Amortize a fee over the plan's payments
+pub fn amortize_fee<C: Coin>(plan: &mut Plan<C>, tx_fee: u64) -> Vec<PostFeeBranch> {
+  // No payments to amortize over
+  if plan.payments.is_empty() {
+    return vec![];
+  }
+
+  // Amortize the transaction fee across outputs
+  let payments_len = u64::try_from(plan.payments.len()).unwrap();
+  // Use a formula which will round up
+  let output_fee = (tx_fee + (payments_len - 1)) / payments_len;
+
+  let mut branch_outputs = vec![];
+  for payment in plan.payments.iter_mut() {
+    let mut post_fee = payment.amount.checked_sub(output_fee);
+    // If this is under our dust threshold, drop it
+    if let Some(amount) = post_fee {
+      if amount < C::DUST {
+        post_fee = None;
+      }
+    }
+
+    // Note the branch output, if this is one
+    if payment.address == C::branch_address(plan.key) {
+      branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
+    }
+    payment.amount = post_fee.unwrap_or(0);
+  }
+  // Drop payments now worth 0
+  plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
+  branch_outputs
+}
+
 #[async_trait]
 pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The elliptic curve used for this coin.

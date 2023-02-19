@@ -136,7 +136,7 @@ pub async fn test_signer<C: Coin>(coin: C) {
   let sync_block = coin.get_latest_block_number().await.unwrap() - C::CONFIRMATIONS;
   let fee = coin.get_fee().await;
 
-  let amount = C::DUST;
+  let amount = 2 * C::DUST;
   let mut keys_txs = HashMap::new();
   let mut eventualities = vec![];
   for (i, keys) in keys.drain() {

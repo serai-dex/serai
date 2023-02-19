@@ -28,7 +28,7 @@ use crate::{
   Payment, Plan, additional_key,
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, PostFeeBranch, Coin,
+    Transaction as TransactionTrait, PostFeeBranch, Coin, drop_branches, amortize_fee,
   },
 };
 
@@ -276,28 +276,27 @@ impl Coin for Monero {
     mut plan: Plan<Self>,
     fee: Fee,
   ) -> Result<(Option<(SignableTransaction, Eventuality)>, Vec<PostFeeBranch>), CoinError> {
-    // Monero requires at least two outputs
+    // Sanity check this has at least one output planned
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
-    // If we only have one output planned, add a dummy payment
-    let add_dummy = |plan: &mut Plan<Self>| {
-      plan.payments.push(Payment {
-        address: Address(
-          ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::one().0))
-            .address(Network::Mainnet, AddressSpec::Standard),
-        ),
-        amount: 0,
-        data: None,
-      });
-    };
-    let change_only = if (plan.payments.len() + usize::from(u8::from(plan.change.is_some()))) == 1 {
-      add_dummy(&mut plan);
-      true
-    } else {
-      false
-    };
 
     let protocol = self.rpc.get_protocol().await.unwrap(); // TODO: Make this deterministic
-    let signable = |plan: &Plan<Self>, tx_fee: Option<_>| {
+    let signable = |plan: &mut Plan<Self>, tx_fee: Option<_>| {
+      // Monero requires at least two outputs
+      // If we only have one output planned, add a dummy payment
+      let outputs = plan.payments.len() + usize::from(u8::from(plan.change.is_some()));
+      if outputs == 0 {
+        return Ok(None);
+      } else if outputs == 1 {
+        plan.payments.push(Payment {
+          address: Address(
+            ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::one().0))
+              .address(Network::Mainnet, AddressSpec::Standard),
+          ),
+          amount: 0,
+          data: None,
+        });
+      }
+
       let mut payments = vec![];
       for payment in &plan.payments {
         // If we're solely estimating the fee, don't actually specify an amount
@@ -348,50 +347,21 @@ impl Coin for Monero {
       }
     };
 
-    let tx_fee = match signable(&plan, None)? {
+    let tx_fee = match signable(&mut plan, None)? {
       Some(tx) => tx.fee(),
-      None => {
-        let mut branch_outputs = vec![];
-        for payment in plan.payments {
-          if payment.address == Self::branch_address(plan.key) {
-            branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
-          }
-        }
-        return Ok((None, branch_outputs));
-      }
+      None => return Ok((None, drop_branches(&plan))),
     };
 
-    let mut branch_outputs = vec![];
-    if !change_only {
-      // Amortize the transaction fee across outputs
-      let payments_len = u64::try_from(plan.payments.len()).unwrap();
-      // Use a formula which will round up
-      let output_fee = (tx_fee + (payments_len - 1)) / payments_len;
-      for payment in plan.payments.iter_mut() {
-        let post_fee = payment.amount.checked_sub(output_fee);
-        if payment.address == Self::branch_address(plan.key) {
-          branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
-        }
-        payment.amount = post_fee.unwrap_or(0);
-      }
-    }
-    plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
-    // If we killed the dummy payment, add it back
-    if plan.payments.is_empty() {
-      if plan.change.is_none() {
-        for output in &branch_outputs {
-          assert!(output.actual.is_none());
-        }
-        return Ok((None, branch_outputs));
-      }
-      add_dummy(&mut plan);
-    }
+    let branch_outputs = amortize_fee(&mut plan, tx_fee);
 
     let signable = SignableTransaction {
       keys,
       transcript: plan.transcript(),
       height: block_number + 1,
-      actual: signable(&plan, Some(tx_fee))?.unwrap(),
+      actual: match signable(&mut plan, Some(tx_fee))? {
+        Some(signable) => signable,
+        None => return Ok((None, branch_outputs)),
+      },
     };
     let eventuality = signable.actual.eventuality().unwrap();
     Ok((Some((signable, eventuality)), branch_outputs))

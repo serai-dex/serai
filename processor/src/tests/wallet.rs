@@ -49,7 +49,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   // Add these outputs, which should return no plans
   assert!(scheduler.add_outputs(outputs.clone()).is_empty());
 
-  let amount = C::DUST;
+  let amount = 2 * C::DUST;
   let plans = scheduler.schedule(vec![Payment { address: C::address(key), data: None, amount }]);
   assert_eq!(
     plans,

@@ -33,7 +33,7 @@ use serai_client::coins::bitcoin::Address;
 use crate::{
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, PostFeeBranch, Coin,
+    Transaction as TransactionTrait, PostFeeBranch, Coin, drop_branches, amortize_fee,
   },
   Plan,
 };
@@ -366,32 +366,10 @@ impl Coin for Bitcoin {
 
     let tx_fee = match signable(&plan, None) {
       Some(tx) => tx.fee(),
-      None => {
-        let mut branch_outputs = vec![];
-        for payment in plan.payments {
-          if payment.address == Self::branch_address(plan.key) {
-            branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
-          }
-        }
-        return Ok((None, branch_outputs));
-      }
+      None => return Ok((None, drop_branches(&plan))),
     };
 
-    let mut branch_outputs = vec![];
-    if !plan.payments.is_empty() {
-      // Amortize the transaction fee across outputs
-      let payments_len = u64::try_from(plan.payments.len()).unwrap();
-      // Use a formula which will round up
-      let output_fee = (tx_fee + (payments_len - 1)) / payments_len;
-      for payment in plan.payments.iter_mut() {
-        let post_fee = payment.amount.checked_sub(output_fee);
-        if payment.address == Self::branch_address(plan.key) {
-          branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
-        }
-        payment.amount = post_fee.unwrap_or(0);
-      }
-      plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
-    }
+    let branch_outputs = amortize_fee(&mut plan, tx_fee);
 
     Ok((
       Some((
