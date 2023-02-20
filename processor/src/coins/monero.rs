@@ -11,6 +11,7 @@ use dalek_ff_group::{Scalar, EdwardsPoint};
 use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_serai::{
+  Protocol,
   transaction::Transaction,
   block::Block as MBlock,
   rpc::{RpcError, Rpc},
@@ -280,7 +281,10 @@ impl Coin for Monero {
     // Sanity check this has at least one output planned
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
-    let protocol = self.rpc.get_protocol().await.unwrap(); // TODO: Make this deterministic
+    let protocol = Protocol::v16;
+    // Check a fork hasn't occurred which this processor hasn't been updated for
+    assert_eq!(protocol, self.rpc.get_protocol().await.map_err(|_| CoinError::ConnectionError)?);
+
     let signable = |plan: &mut Plan<Self>, tx_fee: Option<_>| {
       // Monero requires at least two outputs
       // If we only have one output planned, add a dummy payment
