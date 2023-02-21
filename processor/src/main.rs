@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 use std::{
+  env,
   pin::Pin,
   sync::{Arc, RwLock},
   task::{Poll, Context},
@@ -49,10 +50,17 @@ use scheduler::Scheduler;
 #[cfg(test)]
 mod tests;
 
-pub trait Db: 'static + Send + Sync + Clone + Debug {
+pub trait DbTxn: Send + Sync + Clone + Debug {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
   fn del(&mut self, key: impl AsRef<[u8]>);
+  fn commit(self);
+}
+
+pub trait Db: 'static + Send + Sync + Clone + Debug {
+  type Transaction: DbTxn;
+  fn txn(&mut self) -> Self::Transaction;
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -130,7 +138,7 @@ impl Default for MemDb {
   }
 }
 
-impl Db for MemDb {
+impl DbTxn for MemDb {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
     self.0.write().unwrap().insert(key.as_ref().to_vec(), value.as_ref().to_vec());
   }
@@ -139,6 +147,17 @@ impl Db for MemDb {
   }
   fn del(&mut self, key: impl AsRef<[u8]>) {
     self.0.write().unwrap().remove(key.as_ref());
+  }
+  fn commit(self) {}
+}
+
+impl Db for MemDb {
+  type Transaction = MemDb;
+  fn txn(&mut self) -> MemDb {
+    Self(self.0.clone())
+  }
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+    self.0.read().unwrap().get(key.as_ref()).cloned()
   }
 }
 
@@ -216,13 +235,23 @@ async fn sign_plans<C: Coin, D: Db>(
 }
 
 async fn run<C: Coin, D: Db>(db: D, coin: C) {
-  // TODO: Load this entropy
-  let mut entropy = Zeroizing::new([todo!(); 32]);
-  let mut transcript = RecommendedTranscript::new(b"Serai Processor Entropy");
-  transcript.append_message(b"entropy", entropy.as_ref());
+  let mut entropy_transcript = {
+    let entropy =
+      Zeroizing::new(env::var("ENTROPY").expect("processor started without specifying entropy"));
+    if entropy.len() != 64 {
+      panic!("entropy isn't the right length");
+    }
+    let bytes = Zeroizing::new(hex::decode(entropy).expect("entropy wasn't hex-formatted"));
+    let mut entropy = Zeroizing::new([0; 32]);
+    entropy.as_mut().copy_from_slice(bytes.as_ref());
 
-  let entropy = |label| {
-    let mut challenge = transcript.challenge(label);
+    let mut transcript = RecommendedTranscript::new(b"Serai Processor Entropy");
+    transcript.append_message(b"entropy", entropy.as_ref());
+    transcript
+  };
+
+  let mut entropy = |label| {
+    let mut challenge = entropy_transcript.challenge(label);
     let mut res = Zeroizing::new([0; 32]);
     res.as_mut().copy_from_slice(&challenge[.. 32]);
     challenge.zeroize();

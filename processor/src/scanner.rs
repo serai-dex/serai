@@ -8,7 +8,7 @@ use log::{info, debug, warn};
 use tokio::{sync::mpsc, time::timeout};
 
 use crate::{
-  Db,
+  DbTxn, Db,
   coins::{Output, Block, Coin},
 };
 
@@ -47,12 +47,14 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn block_number_key(id: &<C::Block as Block<C>>::Id) -> Vec<u8> {
     Self::scanner_key(b"block_number", id)
   }
-  fn save_block(&mut self, number: usize, id: &<C::Block as Block<C>>::Id) {
-    // TODO: Use a TX here
-    self.0.put(Self::scanner_key(b"corrupt", b""), b"");
-    self.0.put(Self::block_number_key(id), u64::try_from(number).unwrap().to_le_bytes());
-    self.0.put(Self::block_key(number), id);
-    self.0.del(Self::scanner_key(b"corrupt", b""));
+  fn save_block(
+    &mut self,
+    txn: &mut D::Transaction,
+    number: usize,
+    id: &<C::Block as Block<C>>::Id,
+  ) {
+    txn.put(Self::block_number_key(id), u64::try_from(number).unwrap().to_le_bytes());
+    txn.put(Self::block_key(number), id);
   }
   fn block(&self, number: usize) -> Option<<C::Block as Block<C>>::Id> {
     self.0.get(Self::block_key(number)).map(|id| {
@@ -71,10 +73,10 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn active_keys_key() -> Vec<u8> {
     Self::scanner_key(b"active_keys", b"")
   }
-  fn add_active_key(&mut self, key: <C::Curve as Ciphersuite>::G) {
+  fn add_active_key(&mut self, txn: &mut D::Transaction, key: <C::Curve as Ciphersuite>::G) {
     let mut keys = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
     keys.extend(key.to_bytes().as_ref());
-    self.0.put(Self::active_keys_key(), keys);
+    txn.put(Self::active_keys_key(), keys);
   }
   fn active_keys(&self) -> Vec<<C::Curve as Ciphersuite>::G> {
     let bytes_vec = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
@@ -109,6 +111,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   }
   fn save_outputs(
     &mut self,
+    txn: &mut D::Transaction,
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
     outputs: &[C::Output],
@@ -117,7 +120,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     for output in outputs {
       output.write(&mut bytes).unwrap();
     }
-    self.0.put(Self::outputs_key(key, block), bytes);
+    txn.put(Self::outputs_key(key, block), bytes);
   }
   fn outputs(
     &self,
@@ -139,6 +142,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   }
   fn save_scanned_block(
     &mut self,
+    txn: &mut D::Transaction,
     key: &<C::Curve as Ciphersuite>::G,
     block: usize,
   ) -> Vec<<C::Output as Output>::Id> {
@@ -148,20 +152,15 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     // If we're acknowledging it, we should have outputs available
     assert_eq!(new_key, outputs.is_none());
 
-    // TODO: Use a TX here
-    self.0.put(Self::scanner_key(b"corrupt", b""), b"");
-
     // Mark all the outputs from this block as seen
     let mut ids = vec![];
     for output in outputs.unwrap_or(vec![]) {
       let id = output.id();
-      self.0.put(Self::seen_key(&id), b"");
+      txn.put(Self::seen_key(&id), b"");
       ids.push(id);
     }
 
-    self.0.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
-
-    self.0.del(Self::scanner_key(b"corrupt", b""));
+    txn.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
 
     // Return this block's outputs so they can be pruned from the RAM cache
     ids
@@ -215,10 +214,6 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
 impl<C: Coin, D: Db> Scanner<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(coin: C, db: D) -> (ScannerHandle<C, D>, Vec<<C::Curve as Ciphersuite>::G>) {
-    if db.get(ScannerDb::<C, D>::scanner_key(b"corrupt", b"")).is_some() {
-      panic!("scanner DB is corrupt");
-    }
-
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
     let db = ScannerDb(db, PhantomData);
@@ -305,7 +300,9 @@ impl<C: Coin, D: Db> Scanner<C, D> {
               }
             } else {
               info!("Found new block: {}", hex::encode(&block_id));
-              self.db.save_block(i, &block_id);
+              let mut txn = self.db.0.txn();
+              self.db.save_block(&mut txn, i, &block_id);
+              txn.commit();
             }
 
             let outputs = match self.coin.get_outputs(&block, key).await {
@@ -336,7 +333,9 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             }
 
             // Save the outputs to disk
-            self.db.save_outputs(&key, &block_id, &outputs);
+            let mut txn = self.db.0.txn();
+            self.db.save_outputs(&mut txn, &key, &block_id, &outputs);
+            txn.commit();
 
             // Send all outputs
             if handle_send(self.events.send(ScannerEvent::Outputs(key, block_id, outputs))).is_err()
@@ -365,15 +364,22 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             }
 
             info!("Rotating to key {}", hex::encode(key.to_bytes()));
-            assert!(self.db.save_scanned_block(&key, activation_number).is_empty());
-            self.db.add_active_key(key);
+            let mut txn = self.db.0.txn();
+            assert!(self.db.save_scanned_block(&mut txn, &key, activation_number).is_empty());
+            self.db.add_active_key(&mut txn, key);
+            txn.commit();
             self.keys.push(key);
           }
 
           ScannerOrder::AckBlock(key, id) => {
             debug!("Block {} acknowledged", hex::encode(&id));
             let number = self.db.block_number(&id).expect("node behind");
-            for output in self.db.save_scanned_block(&key, number) {
+
+            let mut txn = self.db.0.txn();
+            let outputs = self.db.save_scanned_block(&mut txn, &key, number);
+            txn.commit();
+
+            for output in outputs {
               ram_outputs.remove(output.as_ref());
             }
           }

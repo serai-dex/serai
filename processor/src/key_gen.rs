@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use serai_client::validator_sets::primitives::ValidatorSetInstance;
 use messages::key_gen::*;
 
-use crate::{Db, coins::Coin};
+use crate::{DbTxn, Db, coins::Coin};
 
 #[derive(Debug)]
 pub enum KeyGenOrder {
@@ -45,8 +45,13 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {
     Self::key_gen_key(b"params", bincode::serialize(set).unwrap())
   }
-  fn save_params(&mut self, set: &ValidatorSetInstance, params: &ThresholdParams) {
-    self.0.put(Self::params_key(set), bincode::serialize(params).unwrap());
+  fn save_params(
+    &mut self,
+    txn: &mut D::Transaction,
+    set: &ValidatorSetInstance,
+    params: &ThresholdParams,
+  ) {
+    txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
   }
   fn params(&self, set: &ValidatorSetInstance) -> ThresholdParams {
     // Directly unwraps the .get() as this will only be called after being set
@@ -59,8 +64,13 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn commitments_key(id: &KeyGenId) -> Vec<u8> {
     Self::key_gen_key(b"commitments", bincode::serialize(id).unwrap())
   }
-  fn save_commitments(&mut self, id: &KeyGenId, commitments: &HashMap<u16, Vec<u8>>) {
-    self.0.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
+  fn save_commitments(
+    &mut self,
+    txn: &mut D::Transaction,
+    id: &KeyGenId,
+    commitments: &HashMap<u16, Vec<u8>>,
+  ) {
+    txn.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
   }
   fn commitments(
     &self,
@@ -86,19 +96,19 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn generated_keys_key(id: &KeyGenId) -> Vec<u8> {
     Self::key_gen_key(b"generated_keys", bincode::serialize(id).unwrap())
   }
-  fn save_keys(&mut self, id: &KeyGenId, keys: &ThresholdCore<C::Curve>) {
-    self.0.put(Self::generated_keys_key(id), keys.serialize());
+  fn save_keys(&mut self, txn: &mut D::Transaction, id: &KeyGenId, keys: &ThresholdCore<C::Curve>) {
+    txn.put(Self::generated_keys_key(id), keys.serialize());
   }
 
   fn keys_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
     Self::key_gen_key(b"keys", key.to_bytes())
   }
-  fn confirm_keys(&mut self, id: &KeyGenId) -> ThresholdKeys<C::Curve> {
+  fn confirm_keys(&mut self, txn: &mut D::Transaction, id: &KeyGenId) -> ThresholdKeys<C::Curve> {
     let keys_vec = self.0.get(Self::generated_keys_key(id)).unwrap();
     let mut keys =
       ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut keys_vec.as_ref()).unwrap());
     C::tweak_keys(&mut keys);
-    self.0.put(Self::keys_key(&keys.group_key()), keys_vec);
+    txn.put(Self::keys_key(&keys.group_key()), keys_vec);
     keys
   }
   fn keys(&self, key: &<C::Curve as Ciphersuite>::G) -> ThresholdKeys<C::Curve> {
@@ -140,10 +150,6 @@ impl<C: Coin, D: Db> KeyGenHandle<C, D> {
 impl<C: Coin, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGenHandle<C, D> {
-    if db.get(KeyGenDb::<C, D>::key_gen_key(b"corrupt", b"")).is_some() {
-      panic!("key gen DB is corrupt");
-    }
-
     let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
     let db = KeyGenDb(db, PhantomData::<C>);
@@ -219,7 +225,9 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
             // If we haven't handled this set before, save the params
             // This may overwrite previously written params if we rebooted, yet that isn't a
             // concern
-            self.db.save_params(&id.set, &params);
+            let mut txn = self.db.0.txn();
+            self.db.save_params(&mut txn, &id.set, &params);
+            txn.commit();
           }
 
           let (machine, commitments) = key_gen_machine(id, params);
@@ -276,7 +284,10 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
               Err(e) => todo!("malicious signer: {:?}", e),
             };
           self.active_share.insert(id.set, machine);
-          self.db.save_commitments(&id, &commitments);
+
+          let mut txn = self.db.0.txn();
+          self.db.save_commitments(&mut txn, &id, &commitments);
+          txn.commit();
 
           if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
             ProcessorMessage::Shares {
@@ -325,7 +336,10 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
             Err(e) => todo!("malicious signer: {:?}", e),
           })
           .complete();
-          self.db.save_keys(&id, &keys);
+
+          let mut txn = self.db.0.txn();
+          self.db.save_keys(&mut txn, &id, &keys);
+          txn.commit();
 
           let mut keys = ThresholdKeys::new(keys);
           C::tweak_keys(&mut keys);
@@ -342,7 +356,10 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         }
 
         KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey { context, id }) => {
-          let keys = self.db.confirm_keys(&id);
+          let mut txn = self.db.0.txn();
+          let keys = self.db.confirm_keys(&mut txn, &id);
+          txn.commit();
+
           info!("Confirmed key {} from {:?}", hex::encode(keys.group_key().to_bytes()), id);
 
           if handle_send(self.events.send(KeyGenEvent::KeyConfirmed {

@@ -17,7 +17,7 @@ use tokio::{time::timeout, sync::mpsc};
 
 use messages::sign::*;
 use crate::{
-  Db,
+  DbTxn, Db,
   coins::{Transaction, Coin},
 };
 
@@ -46,15 +46,15 @@ impl<D: Db> SignerDb<D> {
   fn attempt_key(id: &SignId) -> Vec<u8> {
     Self::sign_key(b"attempt", bincode::serialize(id).unwrap())
   }
-  fn attempt(&mut self, id: &SignId) {
-    self.0.put(Self::attempt_key(id), []);
+  fn attempt(&mut self, txn: &mut D::Transaction, id: &SignId) {
+    txn.put(Self::attempt_key(id), []);
   }
   fn has_attempt(&mut self, id: &SignId) -> bool {
     self.0.get(Self::attempt_key(id)).is_some()
   }
 
-  fn save_transaction(&mut self, id: [u8; 32], tx: Vec<u8>) {
-    self.0.put(Self::sign_key(b"tx", id), tx);
+  fn save_transaction(&mut self, txn: &mut D::Transaction, id: [u8; 32], tx: Vec<u8>) {
+    txn.put(Self::sign_key(b"tx", id), tx);
   }
 }
 
@@ -209,7 +209,10 @@ impl<C: Coin, D: Db> Signer<C, D> {
             warn!("already attempted {:?}. this is an error if we didn't reboot", id);
             continue;
           }
-          self.db.attempt(&id);
+
+          let mut txn = self.db.0.txn();
+          self.db.attempt(&mut txn, &id);
+          txn.commit();
 
           // Attempt to create the TX
           let machine = match self.coin.attempt_send(tx.clone()).await {
@@ -328,7 +331,11 @@ impl<C: Coin, D: Db> Signer<C, D> {
             };
 
             // Save the transaction in case it's needed for recovery
-            self.db.save_transaction(id.id, tx.serialize());
+            let mut txn = self.db.0.txn();
+            self.db.save_transaction(&mut txn, id.id, tx.serialize());
+            txn.commit();
+
+            // Publish it
             if let Err(e) = self.coin.publish_transaction(&tx).await {
               error!("couldn't publish {:?}: {:?}", tx, e);
             } else {
