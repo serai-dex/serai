@@ -59,3 +59,7 @@ inputs.
 Kafka? RPC ping to them, which we don't count as 'sent' until we get a pong?
 
 - Handle reboots
+
+- Items marked TODO
+
+- Items marked TODO2, yet those only need to be done after protonet

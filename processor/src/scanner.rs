@@ -287,7 +287,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
           };
 
           for i in (latest_scanned + 1) ..= latest {
-            // TODO: Check for key deprecation. Not needed for protonet
+            // TODO2: Check for key deprecation
 
             let block = match self.coin.get_block(i).await {
               Ok(block) => block,
@@ -299,7 +299,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             let block_id = block.id();
 
             if let Some(id) = self.db.block(i) {
-              // TODO: Also check this block builds off the previous block
+              // TODO2: Also check this block builds off the previous block
               if id != block.id() {
                 panic!("{} reorg'd from {id:?} to {:?}", C::ID, hex::encode(block_id));
               }
@@ -364,7 +364,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
           ScannerOrder::RotateKey { activation_number, key } => {
             if !self.keys.is_empty() {
               // Protonet will have a single, static validator set
-              // TODO
+              // TODO2
               panic!("only a single key is supported at this time");
             }
 

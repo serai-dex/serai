@@ -462,7 +462,6 @@ impl Coin for Bitcoin {
       self.mine_block().await;
     }
 
-    // TODO: Consider grabbing bdk as a dev dependency
     let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
     let mut tx = Transaction {
       version: 2,

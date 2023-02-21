@@ -186,7 +186,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     };
 
     let context = |id: &KeyGenId| {
-      // TODO: Also embed the chain ID/genesis block
+      // TODO2: Also embed the chain ID/genesis block
       format!(
         "Serai Key Gen. Session: {}, Index: {}, Attempt: {}",
         id.set.session.0, id.set.index.0, id.attempt
@@ -330,7 +330,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
               .0
           });
 
-          // TODO: Handle the blame machine properly
+          // TODO2: Handle the blame machine properly
           let keys = (match machine.calculate_share(&mut share_rng(id), shares) {
             Ok(res) => res,
             Err(e) => todo!("malicious signer: {:?}", e),

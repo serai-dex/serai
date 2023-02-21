@@ -196,7 +196,7 @@ async fn sign_plans<C: Coin, D: Db>(
       info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
       let prepare_plan = |keys| async {
-        // TODO: Use an fee representative of several blocks
+        // TODO2: Use an fee representative of several blocks
         let fee = coin.get_block(block_number).await?.median_fee();
         coin.prepare_send(keys, block_number, plan.clone(), fee).await
       };
@@ -283,7 +283,7 @@ async fn handle_substrate_message<C: Coin, D: Db>(
     }
 
     substrate::CoordinatorMessage::Burns { context, burns } => {
-      // TODO: Rewrite rotation documentation
+      // TODO2: Rewrite rotation documentation
       let schedule_key = active_keys.last().expect("burn event despite no keys");
       synced(context, *schedule_key)?;
       let scheduler = schedulers.get_mut(schedule_key.to_bytes().as_ref()).unwrap();
@@ -311,7 +311,7 @@ async fn handle_substrate_message<C: Coin, D: Db>(
 async fn run<C: Coin, D: Db>(db: D, coin: C) {
   let mut entropy_transcript = {
     let entropy =
-      Zeroizing::new(env::var("ENTROPY").expect("processor started without specifying entropy"));
+      Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't provided as an env var"));
     if entropy.len() != 64 {
       panic!("entropy isn't the right length");
     }
@@ -439,7 +439,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 
                 let shorthand = Shorthand::decode(&mut output.data()).ok()?;
                 let instruction = RefundableInInstruction::try_from(shorthand).ok()?;
-                // TODO: Set instruction.origin if not set (and handle refunds in general)
+                // TODO2: Set instruction.origin if not set (and handle refunds in general)
                 Some(WithAmount { data: instruction.instruction, amount: Amount(output.amount()) })
               }).collect(),
             })).unwrap();
@@ -451,8 +451,6 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         match msg {
           SignerEvent::SignedTransaction { id, tx } => {
             // If this had an outbound payment, report it up to Substrate for logging purposes
-            // Else, save the hash and a proof it matches the plan so other validators about to
-            // start signing sessions can be told this ID was already signed
             // Also, no longer reload the plan on boot
             // TODO
           },
@@ -467,12 +465,13 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 
 #[tokio::main]
 async fn main() {
-  let db = MemDb::new();
-  match "TODO" {
+  let db = MemDb::new(); // TODO
+  let url = env::var("COIN_RPC").expect("coin rpc wasn't specified as an env var");
+  match env::var("COIN").expect("coin wasn't specified as an env var") {
     #[cfg(feature = "bitcoin")]
-    "bitcoin" => run(db, Bitcoin::new("TODO".to_string())).await,
+    "bitcoin" => run(db, Bitcoin::new(url)).await,
     #[cfg(feature = "monero")]
-    "monero" => run(db, Monero::new("TODO".to_string())).await,
+    "monero" => run(db, Monero::new(url)).await,
     _ => panic!("unrecognized coin"),
   }
 }

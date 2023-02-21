@@ -27,7 +27,7 @@ pub struct Scheduler<C: Coin> {
   // reduced by the fee it cost to be created. The Scheduler will then be told how what amount the
   // output actually has, and it'll be moved into plans
   //
-  // TODO: Consider edge case where branch/change isn't mined yet keys are deprecated
+  // TODO2: Consider edge case where branch/change isn't mined yet keys are deprecated
   queued_plans: HashMap<u64, VecDeque<Vec<Payment<C>>>>,
   plans: HashMap<u64, VecDeque<Vec<Payment<C>>>>,
 
@@ -81,7 +81,7 @@ impl<C: Coin> Scheduler<C> {
     };
 
     // If we have more payments than we can handle in a single TX, create plans for them
-    // TODO: This isn't perfect. For 258 outputs, and a MAX_OUTPUTS of 16, this will create:
+    // TODO2: This isn't perfect. For 258 outputs, and a MAX_OUTPUTS of 16, this will create:
     // 15 branches of 16 leaves
     // 1 branch of:
     // - 1 branch of 16 leaves
@@ -103,8 +103,8 @@ impl<C: Coin> Scheduler<C> {
       payments.insert(0, Payment { address: branch_address.clone(), data: None, amount });
     }
 
-    // TODO: Use the latest key for change
-    // TODO: Update rotation documentation
+    // TODO2: Use the latest key for change
+    // TODO2: Update rotation documentation
     Plan { key: self.key, inputs, payments, change: Some(self.key).filter(|_| change) }
   }
 
