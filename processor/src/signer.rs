@@ -304,6 +304,8 @@ impl<C: Coin, D: Db> Signer<C, D> {
             let machine = match self.signing.remove(&id.id) {
               // Rebooted, RPC error, or some invariant
               None => {
+                // If preprocessing has this ID, it means we were never set the preprocess by the
+                // coordinator
                 if self.preprocessing.contains_key(&id.id) {
                   panic!("never preprocessed yet signing?");
                 }

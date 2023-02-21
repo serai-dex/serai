@@ -192,6 +192,10 @@ pub struct ScannerHandle<C: Coin, D: Db> {
 }
 
 impl<C: Coin, D: Db> ScannerHandle<C, D> {
+  pub fn latest_scanned(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
+    self.db.latest_scanned_block(key)
+  }
+
   pub fn outputs(
     &self,
     key: &<C::Curve as Ciphersuite>::G,
@@ -202,9 +206,10 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
       return outputs;
     }
 
-    // TODO: Cleanly handle this
+    // This can only happen if Substrate acknowleges a block we haven't scanned
+    // The main loop should delay handling Substrate messages for blocks we haven't scanned
     if self.db.block_number(block).unwrap_or(usize::MAX) > self.db.latest_scanned_block(*key) {
-      panic!("node behind");
+      panic!("main loop trying to operate on data we haven't scanned");
     }
 
     outputs.expect("asked for outputs of a block without any")
@@ -373,7 +378,10 @@ impl<C: Coin, D: Db> Scanner<C, D> {
 
           ScannerOrder::AckBlock(key, id) => {
             debug!("Block {} acknowledged", hex::encode(&id));
-            let number = self.db.block_number(&id).expect("node behind");
+            let number = self
+              .db
+              .block_number(&id)
+              .expect("main loop trying to operate on data we haven't scanned");
 
             let mut txn = self.db.0.txn();
             let outputs = self.db.save_scanned_block(&mut txn, &key, number);
