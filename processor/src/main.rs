@@ -8,9 +8,7 @@ use std::{
   collections::{VecDeque, HashMap},
 };
 
-use zeroize::Zeroizing;
-
-use rand_core::{RngCore, OsRng};
+use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
@@ -218,11 +216,20 @@ async fn sign_plans<C: Coin, D: Db>(
 }
 
 async fn run<C: Coin, D: Db>(db: D, coin: C) {
-  // TODO: Save/load this entropy
-  let mut entropy = Zeroizing::new([0; 32]);
-  OsRng.fill_bytes(entropy.as_mut());
+  // TODO: Load this entropy
+  let mut entropy = Zeroizing::new([todo!(); 32]);
+  let mut transcript = RecommendedTranscript::new(b"Serai Processor Entropy");
+  transcript.append_message(b"entropy", entropy.as_ref());
 
-  let mut key_gen = KeyGen::<C, _>::new(db.clone(), entropy);
+  let entropy = |label| {
+    let mut challenge = transcript.challenge(label);
+    let mut res = Zeroizing::new([0; 32]);
+    res.as_mut().copy_from_slice(&challenge[.. 32]);
+    challenge.zeroize();
+    res
+  };
+
+  let mut key_gen = KeyGen::<C, _>::new(db.clone(), entropy(b"key-gen_entropy"));
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
 
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
