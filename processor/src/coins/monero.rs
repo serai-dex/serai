@@ -196,13 +196,11 @@ impl Coin for Monero {
 
   const ID: &'static str = "Monero";
   const CONFIRMATIONS: usize = 10;
-  // Testnet TX bb4d188a4c571f2f0de70dca9d475abc19078c10ffa8def26dd4f63ce1bcfd79 uses 146 inputs
-  // while using less than 100kb of space, albeit with just 2 outputs (though outputs share a BP)
-  // The TX size limit is half the contextual median block weight, where said weight is >= 300,000
-  // This means any TX which fits into 150kb will be accepted by Monero
-  // 128, even with 16 outputs, should fit into 100kb. Further efficiency by 192 may be viable
-  // TODO: Get hard numbers and tune
-  const MAX_INPUTS: usize = 128;
+
+  // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
+  // larger than 150kb. This fits within the 100kb mark
+  // Technically, it can be ~124, yet a small bit of buffer is appreciated
+  const MAX_INPUTS: usize = 120;
   const MAX_OUTPUTS: usize = 16;
 
   // 0.01 XMR
