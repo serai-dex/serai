@@ -358,7 +358,11 @@ macro_rules! dalek_group {
           bytes[31] |= u8::try_from(rng.next_u32() % 2).unwrap() << 7;
           let opt = Self::from_bytes(&bytes);
           if opt.is_some().into() {
-            return opt.unwrap();
+            let opt = opt.unwrap();
+            // Ban identity, per the trait specification
+            if !bool::from(opt.is_identity()) {
+              return opt;
+            }
           }
         }
       }
