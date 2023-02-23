@@ -236,7 +236,9 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     writer.write_all(&self.params.t.to_be_bytes())?;
     writer.write_all(&self.params.n.to_be_bytes())?;
     writer.write_all(&self.params.i.to_be_bytes())?;
-    writer.write_all(self.secret_share.to_repr().as_ref())?;
+    let mut share_bytes = self.secret_share.to_repr();
+    writer.write_all(share_bytes.as_ref())?;
+    share_bytes.as_mut().zeroize();
     for l in 1 ..= self.params.n {
       writer.write_all(self.verification_shares[&l].to_bytes().as_ref())?;
     }
