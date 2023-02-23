@@ -7,7 +7,7 @@
 //! provided.
 
 use core::{
-  fmt::{Debug, Formatter},
+  fmt::{self, Debug},
   ops::Deref,
 };
 use std::{io::Read, sync::Arc, collections::HashMap};
@@ -36,29 +36,59 @@ pub mod promote;
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
 
+/// The ID of a participant, defined as a non-zero u16.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
+pub struct Participant(pub(crate) u16);
+impl Participant {
+  pub fn new(i: u16) -> Option<Participant> {
+    if i == 0 {
+      None
+    } else {
+      Some(Participant(i))
+    }
+  }
+
+  #[allow(clippy::wrong_self_convention)]
+  pub fn to_bytes(&self) -> [u8; 2] {
+    self.0.to_le_bytes()
+  }
+}
+
+impl From<Participant> for u16 {
+  fn from(participant: Participant) -> u16 {
+    participant.0
+  }
+}
+
+impl fmt::Display for Participant {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{}", self.0)
+  }
+}
+
 /// Various errors possible during key generation/signing.
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
-  #[error("a parameter was 0 (required {0}, participants {1})")]
+  #[error("a parameter was 0 (threshold {0}, participants {1})")]
   ZeroParameter(u16, u16),
   #[error("invalid amount of required participants (max {1}, got {0})")]
   InvalidRequiredQuantity(u16, u16),
-  #[error("invalid participant index (0 < index <= {0}, yet index is {1})")]
-  InvalidParticipantIndex(u16, u16),
+  #[error("invalid participant (0 < participant <= {0}, yet participant is {1})")]
+  InvalidParticipant(u16, Participant),
 
   #[error("invalid signing set")]
   InvalidSigningSet,
   #[error("invalid participant quantity (expected {0}, got {1})")]
   InvalidParticipantQuantity(usize, usize),
-  #[error("duplicated participant index ({0})")]
-  DuplicatedIndex(u16),
+  #[error("duplicated participant ({0})")]
+  DuplicatedParticipant(Participant),
   #[error("missing participant {0}")]
-  MissingParticipant(u16),
+  MissingParticipant(Participant),
 
   #[error("invalid proof of knowledge (participant {0})")]
-  InvalidProofOfKnowledge(u16),
+  InvalidProofOfKnowledge(Participant),
   #[error("invalid share (participant {participant}, blame {blame})")]
-  InvalidShare { participant: u16, blame: Option<B> },
+  InvalidShare { participant: Participant, blame: Option<B> },
 
   #[error("internal error ({0})")]
   InternalError(&'static str),
@@ -66,9 +96,9 @@ pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
 
 // Validate a map of values to have the expected included participants
 pub(crate) fn validate_map<T, B: Clone + PartialEq + Eq + Debug>(
-  map: &HashMap<u16, T>,
-  included: &[u16],
-  ours: u16,
+  map: &HashMap<Participant, T>,
+  included: &[Participant],
+  ours: Participant,
 ) -> Result<(), DkgError<B>> {
   if (map.len() + 1) != included.len() {
     Err(DkgError::InvalidParticipantQuantity(included.len(), map.len() + 1))?;
@@ -77,7 +107,7 @@ pub(crate) fn validate_map<T, B: Clone + PartialEq + Eq + Debug>(
   for included in included {
     if *included == ours {
       if map.contains_key(included) {
-        Err(DkgError::DuplicatedIndex(*included))?;
+        Err(DkgError::DuplicatedParticipant(*included))?;
       }
       continue;
     }
@@ -99,11 +129,11 @@ pub struct ThresholdParams {
   /// Amount of participants.
   n: u16,
   /// Index of the participant being acted for.
-  i: u16,
+  i: Participant,
 }
 
 impl ThresholdParams {
-  pub fn new(t: u16, n: u16, i: u16) -> Result<ThresholdParams, DkgError<()>> {
+  pub fn new(t: u16, n: u16, i: Participant) -> Result<ThresholdParams, DkgError<()>> {
     if (t == 0) || (n == 0) {
       Err(DkgError::ZeroParameter(t, n))?;
     }
@@ -113,8 +143,8 @@ impl ThresholdParams {
     if t > n {
       Err(DkgError::InvalidRequiredQuantity(t, n))?;
     }
-    if (i == 0) || (i > n) {
-      Err(DkgError::InvalidParticipantIndex(n, i))?;
+    if u16::from(i) > n {
+      Err(DkgError::InvalidParticipant(n, i))?;
     }
 
     Ok(ThresholdParams { t, n, i })
@@ -126,13 +156,15 @@ impl ThresholdParams {
   pub fn n(&self) -> u16 {
     self.n
   }
-  pub fn i(&self) -> u16 {
+  pub fn i(&self) -> Participant {
     self.i
   }
 }
 
 /// Calculate the lagrange coefficient for a signing set.
-pub fn lagrange<F: PrimeField>(i: u16, included: &[u16]) -> F {
+pub fn lagrange<F: PrimeField>(i: Participant, included: &[Participant]) -> F {
+  let i_f = F::from(u64::from(u16::from(i)));
+
   let mut num = F::one();
   let mut denom = F::one();
   for l in included {
@@ -140,9 +172,9 @@ pub fn lagrange<F: PrimeField>(i: u16, included: &[u16]) -> F {
       continue;
     }
 
-    let share = F::from(u64::from(*l));
+    let share = F::from(u64::from(u16::from(*l)));
     num *= share;
-    denom *= share - F::from(u64::from(i));
+    denom *= share - i_f;
   }
 
   // Safe as this will only be 0 if we're part of the above loop
@@ -162,11 +194,11 @@ pub struct ThresholdCore<C: Ciphersuite> {
   /// Group key.
   group_key: C::G,
   /// Verification shares.
-  verification_shares: HashMap<u16, C::G>,
+  verification_shares: HashMap<Participant, C::G>,
 }
 
-impl<C: Ciphersuite> Debug for ThresholdCore<C> {
-  fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+impl<C: Ciphersuite> fmt::Debug for ThresholdCore<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("ThresholdCore")
       .field("params", &self.params)
@@ -191,16 +223,9 @@ impl<C: Ciphersuite> ThresholdCore<C> {
   pub(crate) fn new(
     params: ThresholdParams,
     secret_share: Zeroizing<C::F>,
-    verification_shares: HashMap<u16, C::G>,
+    verification_shares: HashMap<Participant, C::G>,
   ) -> ThresholdCore<C> {
-    debug_assert!(validate_map::<_, ()>(
-      &verification_shares,
-      &(0 ..= params.n).collect::<Vec<_>>(),
-      0
-    )
-    .is_ok());
-
-    let t = (1 ..= params.t).collect::<Vec<_>>();
+    let t = (1 ..= params.t).map(Participant).collect::<Vec<_>>();
     ThresholdCore {
       params,
       secret_share,
@@ -220,19 +245,19 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     self.group_key
   }
 
-  pub(crate) fn verification_shares(&self) -> HashMap<u16, C::G> {
+  pub(crate) fn verification_shares(&self) -> HashMap<Participant, C::G> {
     self.verification_shares.clone()
   }
 
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
-    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
+    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_le_bytes());
     serialized.extend(C::ID);
-    serialized.extend(self.params.t.to_be_bytes());
-    serialized.extend(self.params.n.to_be_bytes());
-    serialized.extend(self.params.i.to_be_bytes());
+    serialized.extend(self.params.t.to_le_bytes());
+    serialized.extend(self.params.n.to_le_bytes());
+    serialized.extend(self.params.i.to_bytes());
     serialized.extend(self.secret_share.to_repr().as_ref());
-    for l in 1 ..= self.params.n {
+    for l in (1 ..= self.params.n).map(Participant) {
       serialized.extend(self.verification_shares[&l].to_bytes().as_ref());
     }
     serialized
@@ -245,7 +270,7 @@ impl<C: Ciphersuite> ThresholdCore<C> {
 
       let mut id_len = [0; 4];
       reader.read_exact(&mut id_len).map_err(|_| missing.clone())?;
-      if u32::try_from(C::ID.len()).unwrap().to_be_bytes() != id_len {
+      if u32::try_from(C::ID.len()).unwrap().to_le_bytes() != id_len {
         Err(different.clone())?;
       }
 
@@ -262,9 +287,14 @@ impl<C: Ciphersuite> ThresholdCore<C> {
         reader
           .read_exact(&mut value)
           .map_err(|_| DkgError::InternalError("missing participant quantities"))?;
-        Ok(u16::from_be_bytes(value))
+        Ok(u16::from_le_bytes(value))
       };
-      (read_u16()?, read_u16()?, read_u16()?)
+      (
+        read_u16()?,
+        read_u16()?,
+        Participant::new(read_u16()?)
+          .ok_or(DkgError::InternalError("invalid participant index"))?,
+      )
     };
 
     let secret_share = Zeroizing::new(
@@ -272,7 +302,7 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     );
 
     let mut verification_shares = HashMap::new();
-    for l in 1 ..= n {
+    for l in (1 ..= n).map(Participant) {
       verification_shares.insert(
         l,
         <C as Ciphersuite>::read_G(reader)
@@ -306,10 +336,10 @@ pub struct ThresholdKeys<C: Ciphersuite> {
 pub struct ThresholdView<C: Ciphersuite> {
   offset: C::F,
   group_key: C::G,
-  included: Vec<u16>,
+  included: Vec<Participant>,
   secret_share: Zeroizing<C::F>,
-  original_verification_shares: HashMap<u16, C::G>,
-  verification_shares: HashMap<u16, C::G>,
+  original_verification_shares: HashMap<Participant, C::G>,
+  verification_shares: HashMap<Participant, C::G>,
 }
 
 impl<C: Ciphersuite> Zeroize for ThresholdView<C> {
@@ -363,7 +393,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
   }
 
   /// Returns all participants' verification shares without any offsetting.
-  pub(crate) fn verification_shares(&self) -> HashMap<u16, C::G> {
+  pub(crate) fn verification_shares(&self) -> HashMap<Participant, C::G> {
     self.core.verification_shares()
   }
 
@@ -371,7 +401,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     self.core.serialize()
   }
 
-  pub fn view(&self, included: &[u16]) -> Result<ThresholdView<C>, DkgError<()>> {
+  pub fn view(&self, included: &[Participant]) -> Result<ThresholdView<C>, DkgError<()>> {
     if (included.len() < self.params().t.into()) || (usize::from(self.params().n) < included.len())
     {
       Err(DkgError::InvalidSigningSet)?;
@@ -409,7 +439,7 @@ impl<C: Ciphersuite> ThresholdView<C> {
     self.group_key
   }
 
-  pub fn included(&self) -> &[u16] {
+  pub fn included(&self) -> &[Participant] {
     &self.included
   }
 
@@ -417,11 +447,11 @@ impl<C: Ciphersuite> ThresholdView<C> {
     &self.secret_share
   }
 
-  pub fn original_verification_share(&self, l: u16) -> C::G {
+  pub fn original_verification_share(&self, l: Participant) -> C::G {
     self.original_verification_shares[&l]
   }
 
-  pub fn verification_share(&self, l: u16) -> C::G {
+  pub fn verification_share(&self, l: Participant) -> C::G {
     self.verification_shares[&l]
   }
 }

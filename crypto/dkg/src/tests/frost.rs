@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rand_core::{RngCore, CryptoRng};
 
 use crate::{
-  Ciphersuite, ThresholdParams, ThresholdCore,
+  Ciphersuite, Participant, ThresholdParams, ThresholdCore,
   frost::{KeyGenMachine, SecretShare, KeyMachine},
   encryption::{EncryptionKeyMessage, EncryptedMessage},
   tests::{THRESHOLD, PARTICIPANTS, clone_without},
@@ -11,31 +11,30 @@ use crate::{
 
 // Needed so rustfmt doesn't fail to format on line length issues
 type FrostEncryptedMessage<C> = EncryptedMessage<C, SecretShare<<C as Ciphersuite>::F>>;
-type FrostSecretShares<C> = HashMap<u16, FrostEncryptedMessage<C>>;
+type FrostSecretShares<C> = HashMap<Participant, FrostEncryptedMessage<C>>;
 
 // Commit, then return enc key and shares
 #[allow(clippy::type_complexity)]
 fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
-) -> (HashMap<u16, KeyMachine<C>>, HashMap<u16, C::G>, HashMap<u16, FrostSecretShares<C>>) {
+) -> (
+  HashMap<Participant, KeyMachine<C>>,
+  HashMap<Participant, C::G>,
+  HashMap<Participant, FrostSecretShares<C>>,
+) {
   let mut machines = HashMap::new();
   let mut commitments = HashMap::new();
   let mut enc_keys = HashMap::new();
-  for i in 1 ..= PARTICIPANTS {
-    let machine = KeyGenMachine::<C>::new(
-      ThresholdParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
-      "DKG Test Key Generation".to_string(),
-    );
+  for i in (1 ..= PARTICIPANTS).map(Participant) {
+    let params = ThresholdParams::new(THRESHOLD, PARTICIPANTS, i).unwrap();
+    let machine = KeyGenMachine::<C>::new(params, "DKG Test Key Generation".to_string());
     let (machine, these_commitments) = machine.generate_coefficients(rng);
     machines.insert(i, machine);
 
     commitments.insert(
       i,
-      EncryptionKeyMessage::read::<&[u8]>(
-        &mut these_commitments.serialize().as_ref(),
-        ThresholdParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 },
-      )
-      .unwrap(),
+      EncryptionKeyMessage::read::<&[u8]>(&mut these_commitments.serialize().as_ref(), params)
+        .unwrap(),
     );
     enc_keys.insert(i, commitments[&i].enc_key());
   }
@@ -53,7 +52,8 @@ fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
             l,
             EncryptedMessage::read::<&[u8]>(
               &mut share.serialize().as_ref(),
-              ThresholdParams { t: THRESHOLD, n: PARTICIPANTS, i: 1 },
+              // Only t/n actually matters, so hardcode i to 1 here
+              ThresholdParams { t: THRESHOLD, n: PARTICIPANTS, i: Participant(1) },
             )
             .unwrap(),
           )
@@ -68,8 +68,8 @@ fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
 }
 
 fn generate_secret_shares<C: Ciphersuite>(
-  shares: &HashMap<u16, FrostSecretShares<C>>,
-  recipient: u16,
+  shares: &HashMap<Participant, FrostSecretShares<C>>,
+  recipient: Participant,
 ) -> FrostSecretShares<C> {
   let mut our_secret_shares = HashMap::new();
   for (i, shares) in shares {
@@ -84,7 +84,7 @@ fn generate_secret_shares<C: Ciphersuite>(
 /// Fully perform the FROST key generation algorithm.
 pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
-) -> HashMap<u16, ThresholdCore<C>> {
+) -> HashMap<Participant, ThresholdCore<C>> {
   let (mut machines, _, secret_shares) = commit_enc_keys_and_shares::<_, C>(rng);
 
   let mut verification_shares = None;
@@ -122,16 +122,19 @@ mod literal {
 
   use super::*;
 
+  const ONE: Participant = Participant(1);
+  const TWO: Participant = Participant(2);
+
   fn test_blame(
     machines: Vec<BlameMachine<Ristretto>>,
     msg: FrostEncryptedMessage<Ristretto>,
     blame: Option<EncryptionKeyProof<Ristretto>>,
   ) {
     for machine in machines {
-      let (additional, blamed) = machine.blame(1, 2, msg.clone(), blame.clone());
-      assert_eq!(blamed, 1);
+      let (additional, blamed) = machine.blame(ONE, TWO, msg.clone(), blame.clone());
+      assert_eq!(blamed, ONE);
       // Verify additional blame also works
-      assert_eq!(additional.blame(1, 2, msg.clone(), blame.clone()), 1);
+      assert_eq!(additional.blame(ONE, TWO, msg.clone(), blame.clone()), ONE);
     }
   }
 
@@ -142,7 +145,7 @@ mod literal {
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
     // Mutate the PoP of the encrypted message from 1 to 2
-    secret_shares.get_mut(&1).unwrap().get_mut(&2).unwrap().invalidate_pop();
+    secret_shares.get_mut(&ONE).unwrap().get_mut(&TWO).unwrap().invalidate_pop();
 
     let mut blame = None;
     let machines = machines
@@ -150,8 +153,8 @@ mod literal {
       .filter_map(|(i, machine)| {
         let our_secret_shares = generate_secret_shares(&secret_shares, i);
         let machine = machine.calculate_share(&mut OsRng, our_secret_shares);
-        if i == 2 {
-          assert_eq!(machine.err(), Some(DkgError::InvalidShare { participant: 1, blame: None }));
+        if i == TWO {
+          assert_eq!(machine.err(), Some(DkgError::InvalidShare { participant: ONE, blame: None }));
           // Explicitly declare we have a blame object, which happens to be None since invalid PoP
           // is self-explainable
           blame = Some(None);
@@ -162,7 +165,7 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(machines, secret_shares[&1][&2].clone(), blame.unwrap());
+    test_blame(machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
   }
 
   #[test]
@@ -176,7 +179,7 @@ mod literal {
     // We then malleate 1's blame proof, so 1 ends up malicious
     // Doesn't simply invalidate the PoP as that won't have a blame statement
     // By mutating the encrypted data, we do ensure a blame statement is created
-    secret_shares.get_mut(&2).unwrap().get_mut(&1).unwrap().invalidate_msg(&mut OsRng, 2);
+    secret_shares.get_mut(&TWO).unwrap().get_mut(&ONE).unwrap().invalidate_msg(&mut OsRng, TWO);
 
     let mut blame = None;
     let machines = machines
@@ -184,9 +187,9 @@ mod literal {
       .filter_map(|(i, machine)| {
         let our_secret_shares = generate_secret_shares(&secret_shares, i);
         let machine = machine.calculate_share(&mut OsRng, our_secret_shares);
-        if i == 1 {
+        if i == ONE {
           blame = Some(match machine.err() {
-            Some(DkgError::InvalidShare { participant: 2, blame: Some(blame) }) => Some(blame),
+            Some(DkgError::InvalidShare { participant: TWO, blame: Some(blame) }) => Some(blame),
             _ => panic!(),
           });
           None
@@ -197,7 +200,7 @@ mod literal {
       .collect::<Vec<_>>();
 
     blame.as_mut().unwrap().as_mut().unwrap().invalidate_key();
-    test_blame(machines, secret_shares[&2][&1].clone(), blame.unwrap());
+    test_blame(machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
   }
 
   // This should be largely equivalent to the prior test
@@ -206,7 +209,7 @@ mod literal {
     let (mut machines, _, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
-    secret_shares.get_mut(&2).unwrap().get_mut(&1).unwrap().invalidate_msg(&mut OsRng, 2);
+    secret_shares.get_mut(&TWO).unwrap().get_mut(&ONE).unwrap().invalidate_msg(&mut OsRng, TWO);
 
     let mut blame = None;
     let machines = machines
@@ -214,9 +217,9 @@ mod literal {
       .filter_map(|(i, machine)| {
         let our_secret_shares = generate_secret_shares(&secret_shares, i);
         let machine = machine.calculate_share(&mut OsRng, our_secret_shares);
-        if i == 1 {
+        if i == ONE {
           blame = Some(match machine.err() {
-            Some(DkgError::InvalidShare { participant: 2, blame: Some(blame) }) => Some(blame),
+            Some(DkgError::InvalidShare { participant: TWO, blame: Some(blame) }) => Some(blame),
             _ => panic!(),
           });
           None
@@ -227,7 +230,7 @@ mod literal {
       .collect::<Vec<_>>();
 
     blame.as_mut().unwrap().as_mut().unwrap().invalidate_dleq();
-    test_blame(machines, secret_shares[&2][&1].clone(), blame.unwrap());
+    test_blame(machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
   }
 
   #[test]
@@ -235,11 +238,11 @@ mod literal {
     let (mut machines, enc_keys, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
-    secret_shares.get_mut(&1).unwrap().get_mut(&2).unwrap().invalidate_share_serialization(
+    secret_shares.get_mut(&ONE).unwrap().get_mut(&TWO).unwrap().invalidate_share_serialization(
       &mut OsRng,
       b"FROST",
-      1,
-      enc_keys[&2],
+      ONE,
+      enc_keys[&TWO],
     );
 
     let mut blame = None;
@@ -248,9 +251,9 @@ mod literal {
       .filter_map(|(i, machine)| {
         let our_secret_shares = generate_secret_shares(&secret_shares, i);
         let machine = machine.calculate_share(&mut OsRng, our_secret_shares);
-        if i == 2 {
+        if i == TWO {
           blame = Some(match machine.err() {
-            Some(DkgError::InvalidShare { participant: 1, blame: Some(blame) }) => Some(blame),
+            Some(DkgError::InvalidShare { participant: ONE, blame: Some(blame) }) => Some(blame),
             _ => panic!(),
           });
           None
@@ -260,7 +263,7 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(machines, secret_shares[&1][&2].clone(), blame.unwrap());
+    test_blame(machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
   }
 
   #[test]
@@ -268,11 +271,11 @@ mod literal {
     let (mut machines, enc_keys, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
-    secret_shares.get_mut(&1).unwrap().get_mut(&2).unwrap().invalidate_share_value(
+    secret_shares.get_mut(&ONE).unwrap().get_mut(&TWO).unwrap().invalidate_share_value(
       &mut OsRng,
       b"FROST",
-      1,
-      enc_keys[&2],
+      ONE,
+      enc_keys[&TWO],
     );
 
     let mut blame = None;
@@ -281,9 +284,9 @@ mod literal {
       .filter_map(|(i, machine)| {
         let our_secret_shares = generate_secret_shares(&secret_shares, i);
         let machine = machine.calculate_share(&mut OsRng, our_secret_shares);
-        if i == 2 {
+        if i == TWO {
           blame = Some(match machine.err() {
-            Some(DkgError::InvalidShare { participant: 1, blame: Some(blame) }) => Some(blame),
+            Some(DkgError::InvalidShare { participant: ONE, blame: Some(blame) }) => Some(blame),
             _ => panic!(),
           });
           None
@@ -293,6 +296,6 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(machines, secret_shares[&1][&2].clone(), blame.unwrap());
+    test_blame(machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
   }
 }

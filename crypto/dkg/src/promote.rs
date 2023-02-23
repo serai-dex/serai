@@ -14,7 +14,7 @@ use ciphersuite::Ciphersuite;
 use transcript::{Transcript, RecommendedTranscript};
 use dleq::DLEqProof;
 
-use crate::{DkgError, ThresholdCore, ThresholdKeys, validate_map};
+use crate::{Participant, DkgError, ThresholdCore, ThresholdKeys, validate_map};
 
 /// Promote a set of keys to another Ciphersuite definition.
 pub trait CiphersuitePromote<C2: Ciphersuite> {
@@ -27,10 +27,10 @@ pub trait CiphersuitePromote<C2: Ciphersuite> {
   fn promote(self) -> ThresholdKeys<C2>;
 }
 
-fn transcript<G: GroupEncoding>(key: G, i: u16) -> RecommendedTranscript {
+fn transcript<G: GroupEncoding>(key: G, i: Participant) -> RecommendedTranscript {
   let mut transcript = RecommendedTranscript::new(b"DKG Generator Promotion v0.2");
   transcript.append_message(b"group_key", key.to_bytes());
-  transcript.append_message(b"participant", i.to_be_bytes());
+  transcript.append_message(b"participant", i.to_bytes());
   transcript
 }
 
@@ -97,10 +97,10 @@ where
   /// Complete promotion by taking in the proofs from all other participants.
   pub fn complete(
     self,
-    proofs: &HashMap<u16, GeneratorProof<C1>>,
+    proofs: &HashMap<Participant, GeneratorProof<C1>>,
   ) -> Result<ThresholdKeys<C2>, DkgError<()>> {
     let params = self.base.params();
-    validate_map(proofs, &(1 ..= params.n).collect::<Vec<_>>(), params.i)?;
+    validate_map(proofs, &(1 ..= params.n).map(Participant).collect::<Vec<_>>(), params.i)?;
 
     let original_shares = self.base.verification_shares();
 

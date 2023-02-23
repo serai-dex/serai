@@ -131,6 +131,7 @@ macro_rules! test {
         #[cfg(feature = "multisig")]
         use frost::{
           curve::Ed25519,
+          Participant,
           tests::{THRESHOLD, key_gen},
         };
 
@@ -165,7 +166,7 @@ macro_rules! test {
             #[cfg(not(feature = "multisig"))]
             panic!("Multisig branch called without the multisig feature");
             #[cfg(feature = "multisig")]
-            keys[&1].group_key().0
+            keys[&Participant::new(1).unwrap()].group_key().0
           };
 
           let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
@@ -211,7 +212,7 @@ macro_rules! test {
                 #[cfg(feature = "multisig")]
                 {
                   let mut machines = HashMap::new();
-                  for i in 1 ..= THRESHOLD {
+                  for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
                     machines.insert(
                       i,
                       tx

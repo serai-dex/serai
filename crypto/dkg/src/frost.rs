@@ -24,7 +24,7 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 use schnorr::SchnorrSignature;
 
 use crate::{
-  DkgError, ThresholdParams, ThresholdCore, validate_map,
+  Participant, DkgError, ThresholdParams, ThresholdCore, validate_map,
   encryption::{
     ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, EncryptionKeyProof,
     DecryptionError,
@@ -34,11 +34,11 @@ use crate::{
 type FrostError<C> = DkgError<EncryptionKeyProof<C>>;
 
 #[allow(non_snake_case)]
-fn challenge<C: Ciphersuite>(context: &str, l: u16, R: &[u8], Am: &[u8]) -> C::F {
+fn challenge<C: Ciphersuite>(context: &str, l: Participant, R: &[u8], Am: &[u8]) -> C::F {
   let mut transcript = RecommendedTranscript::new(b"DKG FROST v0.2");
   transcript.domain_separate(b"schnorr_proof_of_knowledge");
   transcript.append_message(b"context", context.as_bytes());
-  transcript.append_message(b"participant", l.to_le_bytes());
+  transcript.append_message(b"participant", l.to_bytes());
   transcript.append_message(b"nonce", R);
   transcript.append_message(b"commitments", Am);
   C::hash_to_F(b"DKG-FROST-proof_of_knowledge-0", &transcript.challenge(b"schnorr"))
@@ -150,9 +150,13 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
   }
 }
 
-fn polynomial<F: PrimeField + Zeroize>(coefficients: &[Zeroizing<F>], l: u16) -> Zeroizing<F> {
-  assert!(l != 0, "attempting to evaluate a polynomial with 0");
-  let l = F::from(u64::from(l));
+fn polynomial<F: PrimeField + Zeroize>(
+  coefficients: &[Zeroizing<F>],
+  l: Participant,
+) -> Zeroizing<F> {
+  let l = F::from(u64::from(u16::from(l)));
+  // This should never be reached since Participant is explicitly non-zero
+  assert!(l != F::zero(), "zero participant passed to polynomial");
   let mut share = Zeroizing::new(F::zero());
   for (idx, coefficient) in coefficients.iter().rev().enumerate() {
     *share += coefficient.deref();
@@ -231,11 +235,15 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   fn verify_r1<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    mut commitments: HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>>,
-  ) -> Result<HashMap<u16, Vec<C::G>>, FrostError<C>> {
-    validate_map(&commitments, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
+    mut commitments: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
+  ) -> Result<HashMap<Participant, Vec<C::G>>, FrostError<C>> {
+    validate_map(
+      &commitments,
+      &(1 ..= self.params.n()).map(Participant).collect::<Vec<_>>(),
+      self.params.i(),
+    )?;
 
-    let mut batch = BatchVerifier::<u16, C::G>::new(commitments.len());
+    let mut batch = BatchVerifier::<Participant, C::G>::new(commitments.len());
     let mut commitments = commitments
       .drain()
       .map(|(l, msg)| {
@@ -269,14 +277,16 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   pub fn generate_secret_shares<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    commitments: HashMap<u16, EncryptionKeyMessage<C, Commitments<C>>>,
-  ) -> Result<(KeyMachine<C>, HashMap<u16, EncryptedMessage<C, SecretShare<C::F>>>), FrostError<C>>
-  {
+    commitments: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
+  ) -> Result<
+    (KeyMachine<C>, HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>),
+    FrostError<C>,
+  > {
     let commitments = self.verify_r1(&mut *rng, commitments)?;
 
     // Step 1: Generate secret shares for all other parties
     let mut res = HashMap::new();
-    for l in 1 ..= self.params.n() {
+    for l in (1 ..= self.params.n()).map(Participant) {
       // Don't insert our own shares to the byte buffer which is meant to be sent around
       // An app developer could accidentally send it. Best to keep this black boxed
       if l == self.params.i() {
@@ -308,7 +318,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
 pub struct KeyMachine<C: Ciphersuite> {
   params: ThresholdParams,
   secret: Zeroizing<C::F>,
-  commitments: HashMap<u16, Vec<C::G>>,
+  commitments: HashMap<Participant, Vec<C::G>>,
   encryption: Encryption<C>,
 }
 
@@ -326,8 +336,8 @@ impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
 // Calculate the exponent for a given participant and apply it to a series of commitments
 // Initially used with the actual commitments to verify the secret share, later used with
 // stripes to generate the verification shares
-fn exponential<C: Ciphersuite>(i: u16, values: &[C::G]) -> Vec<(C::F, C::G)> {
-  let i = C::F::from(i.into());
+fn exponential<C: Ciphersuite>(i: Participant, values: &[C::G]) -> Vec<(C::F, C::G)> {
+  let i = C::F::from(u16::from(i).into());
   let mut res = Vec::with_capacity(values.len());
   (0 .. values.len()).fold(C::F::one(), |exp, l| {
     res.push((exp, values[l]));
@@ -337,7 +347,7 @@ fn exponential<C: Ciphersuite>(i: u16, values: &[C::G]) -> Vec<(C::F, C::G)> {
 }
 
 fn share_verification_statements<C: Ciphersuite>(
-  target: u16,
+  target: Participant,
   commitments: &[C::G],
   mut share: Zeroizing<C::F>,
 ) -> Vec<(C::F, C::G)> {
@@ -359,8 +369,8 @@ fn share_verification_statements<C: Ciphersuite>(
 
 #[derive(Clone, Copy, Hash, Debug, Zeroize)]
 enum BatchId {
-  Decryption(u16),
-  Share(u16),
+  Decryption(Participant),
+  Share(Participant),
 }
 
 impl<C: Ciphersuite> KeyMachine<C> {
@@ -370,9 +380,13 @@ impl<C: Ciphersuite> KeyMachine<C> {
   pub fn calculate_share<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    mut shares: HashMap<u16, EncryptedMessage<C, SecretShare<C::F>>>,
+    mut shares: HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>,
   ) -> Result<BlameMachine<C>, FrostError<C>> {
-    validate_map(&shares, &(1 ..= self.params.n()).collect::<Vec<_>>(), self.params.i())?;
+    validate_map(
+      &shares,
+      &(1 ..= self.params.n()).map(Participant).collect::<Vec<_>>(),
+      self.params.i(),
+    )?;
 
     let mut batch = BatchVerifier::new(shares.len());
     let mut blames = HashMap::new();
@@ -412,7 +426,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
 
     // Calculate each user's verification share
     let mut verification_shares = HashMap::new();
-    for i in 1 ..= self.params.n() {
+    for i in (1 ..= self.params.n()).map(Participant) {
       verification_shares.insert(
         i,
         if i == self.params.i() {
@@ -438,7 +452,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
 }
 
 pub struct BlameMachine<C: Ciphersuite> {
-  commitments: HashMap<u16, Vec<C::G>>,
+  commitments: HashMap<Participant, Vec<C::G>>,
   encryption: Encryption<C>,
   result: ThresholdCore<C>,
 }
@@ -469,11 +483,11 @@ impl<C: Ciphersuite> BlameMachine<C> {
 
   fn blame_internal(
     &self,
-    sender: u16,
-    recipient: u16,
+    sender: Participant,
+    recipient: Participant,
     msg: EncryptedMessage<C, SecretShare<C::F>>,
     proof: Option<EncryptionKeyProof<C>>,
-  ) -> u16 {
+  ) -> Participant {
     let share_bytes = match self.encryption.decrypt_with_proof(sender, recipient, msg, proof) {
       Ok(share_bytes) => share_bytes,
       // If there's an invalid signature, the sender did not send a properly formed message
@@ -518,11 +532,11 @@ impl<C: Ciphersuite> BlameMachine<C> {
   /// order to prevent multiple instances of blame over a single incident.
   pub fn blame(
     self,
-    sender: u16,
-    recipient: u16,
+    sender: Participant,
+    recipient: Participant,
     msg: EncryptedMessage<C, SecretShare<C::F>>,
     proof: Option<EncryptionKeyProof<C>>,
-  ) -> (AdditionalBlameMachine<C>, u16) {
+  ) -> (AdditionalBlameMachine<C>, Participant) {
     let faulty = self.blame_internal(sender, recipient, msg, proof);
     (AdditionalBlameMachine(self), faulty)
   }
@@ -543,11 +557,11 @@ impl<C: Ciphersuite> AdditionalBlameMachine<C> {
   /// over a single incident.
   pub fn blame(
     self,
-    sender: u16,
-    recipient: u16,
+    sender: Participant,
+    recipient: Participant,
     msg: EncryptedMessage<C, SecretShare<C::F>>,
     proof: Option<EncryptionKeyProof<C>>,
-  ) -> u16 {
+  ) -> Participant {
     self.0.blame_internal(sender, recipient, msg, proof)
   }
 }

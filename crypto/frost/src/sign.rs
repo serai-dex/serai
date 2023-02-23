@@ -19,7 +19,7 @@ use multiexp::BatchVerifier;
 
 use crate::{
   curve::Curve,
-  FrostError, ThresholdParams, ThresholdKeys, ThresholdView,
+  Participant, FrostError, ThresholdParams, ThresholdKeys, ThresholdView,
   algorithm::{WriteAddendum, Addendum, Algorithm},
   validate_map,
 };
@@ -239,7 +239,7 @@ pub trait SignMachine<S>: Sized {
   /// become the signing set for this session.
   fn sign(
     self,
-    commitments: HashMap<u16, Self::Preprocess>,
+    commitments: HashMap<Participant, Self::Preprocess>,
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, Self::SignatureShare), FrostError>;
 }
@@ -291,7 +291,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
   fn sign(
     mut self,
-    mut preprocesses: HashMap<u16, Preprocess<C, A::Addendum>>,
+    mut preprocesses: HashMap<Participant, Preprocess<C, A::Addendum>>,
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, SignatureShare<C>), FrostError> {
     let multisig_params = self.params.multisig_params();
@@ -307,18 +307,14 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
     if included.len() < usize::from(multisig_params.t()) {
       Err(FrostError::InvalidSigningSet("not enough signers"))?;
     }
-    // Invalid index
-    if included[0] == 0 {
-      Err(FrostError::InvalidParticipantIndex(included[0], multisig_params.n()))?;
-    }
     // OOB index
-    if included[included.len() - 1] > multisig_params.n() {
-      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], multisig_params.n()))?;
+    if u16::from(included[included.len() - 1]) > multisig_params.n() {
+      Err(FrostError::InvalidParticipant(multisig_params.n(), included[included.len() - 1]))?;
     }
     // Same signer included multiple times
     for i in 0 .. (included.len() - 1) {
       if included[i] == included[i + 1] {
-        Err(FrostError::DuplicatedIndex(included[i]))?;
+        Err(FrostError::DuplicatedParticipant(included[i]))?;
       }
     }
 
@@ -332,7 +328,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
     let nonces = self.params.algorithm.nonces();
     #[allow(non_snake_case)]
-    let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(included.len()));
+    let mut B = BindingFactor(HashMap::<Participant, _>::with_capacity(included.len()));
     {
       // Parse the preprocesses
       for l in &included {
@@ -341,7 +337,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
             .params
             .algorithm
             .transcript()
-            .append_message(b"participant", C::F::from(u64::from(*l)).to_repr());
+            .append_message(b"participant", C::F::from(u64::from(u16::from(*l))).to_repr());
         }
 
         if *l == self.params.keys.params().i() {
@@ -449,7 +445,7 @@ pub trait SignatureMachine<S> {
 
   /// Complete signing.
   /// Takes in everyone elses' shares. Returns the signature.
-  fn complete(self, shares: HashMap<u16, Self::SignatureShare>) -> Result<S, FrostError>;
+  fn complete(self, shares: HashMap<Participant, Self::SignatureShare>) -> Result<S, FrostError>;
 }
 
 /// Final step of the state machine for the signing process.
@@ -472,7 +468,7 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
 
   fn complete(
     self,
-    mut shares: HashMap<u16, SignatureShare<C>>,
+    mut shares: HashMap<Participant, SignatureShare<C>>,
   ) -> Result<A::Signature, FrostError> {
     let params = self.params.multisig_params();
     validate_map(&shares, self.view.included(), params.i())?;

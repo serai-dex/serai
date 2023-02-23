@@ -24,7 +24,10 @@ use crate::{
 use crate::ringct::clsag::{ClsagDetails, ClsagMultisig};
 
 #[cfg(feature = "multisig")]
-use frost::tests::{key_gen, algorithm_machines, sign};
+use frost::{
+  Participant,
+  tests::{key_gen, algorithm_machines, sign},
+};
 
 const RING_LEN: u64 = 11;
 const AMOUNT: u64 = 1337;
@@ -93,7 +96,7 @@ fn clsag_multisig() {
       mask = random_scalar(&mut OsRng);
       amount = OsRng.next_u64();
     } else {
-      dest = keys[&1].group_key().0;
+      dest = keys[&Participant::new(1).unwrap()].group_key().0;
       mask = randomness;
       amount = AMOUNT;
     }
@@ -103,7 +106,7 @@ fn clsag_multisig() {
   let mask_sum = random_scalar(&mut OsRng);
   let algorithm = ClsagMultisig::new(
     RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
-    keys[&1].group_key().0,
+    keys[&Participant::new(1).unwrap()].group_key().0,
     Arc::new(RwLock::new(Some(ClsagDetails::new(
       ClsagInput::new(
         Commitment::new(randomness, AMOUNT),

@@ -13,7 +13,7 @@ use dkg::tests::key_gen;
 
 use crate::{
   curve::Curve,
-  ThresholdCore, ThresholdKeys, FrostError,
+  Participant, ThresholdCore, ThresholdKeys, FrostError,
   algorithm::{Schnorr, Hram},
   sign::{
     Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess, SignMachine,
@@ -30,7 +30,7 @@ pub struct Vectors {
   pub shares: Vec<String>,
 
   pub msg: String,
-  pub included: Vec<u16>,
+  pub included: Vec<Participant>,
   pub nonces: Vec<[String; 2]>,
 
   pub sig_shares: Vec<String>,
@@ -58,8 +58,11 @@ impl From<serde_json::Value> for Vectors {
       included: to_str(&value["round_one_outputs"]["participant_list"])
         .split(',')
         .map(u16::from_str)
-        .collect::<Result<_, _>>()
-        .unwrap(),
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .iter()
+        .map(|i| Participant::new(*i).unwrap())
+        .collect(),
       nonces: value["round_one_outputs"]["participants"]
         .as_object()
         .unwrap()
@@ -80,7 +83,7 @@ impl From<serde_json::Value> for Vectors {
 }
 
 // Load these vectors into ThresholdKeys using a custom serialization it'll deserialize
-fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, ThresholdKeys<C>> {
+fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant, ThresholdKeys<C>> {
   let shares = vectors
     .shares
     .iter()
@@ -92,11 +95,11 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, Thresho
   for i in 1 ..= u16::try_from(shares.len()).unwrap() {
     // Manually re-implement the serialization for ThresholdCore to import this data
     let mut serialized = vec![];
-    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
+    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_le_bytes());
     serialized.extend(C::ID);
-    serialized.extend(vectors.threshold.to_be_bytes());
-    serialized.extend(u16::try_from(shares.len()).unwrap().to_be_bytes());
-    serialized.extend(i.to_be_bytes());
+    serialized.extend(vectors.threshold.to_le_bytes());
+    serialized.extend(u16::try_from(shares.len()).unwrap().to_le_bytes());
+    serialized.extend(i.to_le_bytes());
     serialized.extend(shares[usize::from(i) - 1].to_repr().as_ref());
     for share in &verification_shares {
       serialized.extend(share.to_bytes().as_ref());
@@ -105,10 +108,11 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, Thresho
     let these_keys = ThresholdCore::<C>::deserialize::<&[u8]>(&mut serialized.as_ref()).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
-    assert_eq!(these_keys.params().i(), i);
+    let participant = Participant::new(i).unwrap();
+    assert_eq!(these_keys.params().i(), participant);
     assert_eq!(these_keys.secret_share().deref(), &shares[usize::from(i - 1)]);
     assert_eq!(hex::encode(these_keys.group_key().to_bytes().as_ref()), vectors.group_key);
-    keys.insert(i, ThresholdKeys::new(these_keys));
+    keys.insert(participant, ThresholdKeys::new(these_keys));
   }
 
   keys
@@ -124,7 +128,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
     const MSG: &[u8] = b"Hello, World!";
     let sig = sign(&mut *rng, Schnorr::<C, H>::new(), keys.clone(), machines, MSG);
-    assert!(sig.verify(keys[&1].group_key(), H::hram(&sig.R, &keys[&1].group_key(), MSG)));
+    let group_key = keys[&Participant::new(1).unwrap()].group_key();
+    assert!(sig.verify(group_key, H::hram(&sig.R, &group_key, MSG)));
   }
 
   // Test blame on an invalid Schnorr signature share

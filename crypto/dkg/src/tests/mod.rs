@@ -7,7 +7,7 @@ use group::ff::Field;
 
 use ciphersuite::Ciphersuite;
 
-use crate::{ThresholdCore, ThresholdKeys, lagrange};
+use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange};
 
 /// FROST generation test.
 pub mod frost;
@@ -33,7 +33,7 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 }
 
 /// Recover the secret from a collection of keys.
-pub fn recover_key<C: Ciphersuite>(keys: &HashMap<u16, ThresholdKeys<C>>) -> C::F {
+pub fn recover_key<C: Ciphersuite>(keys: &HashMap<Participant, ThresholdKeys<C>>) -> C::F {
   let first = keys.values().next().expect("no keys provided");
   assert!(keys.len() >= first.params().t().into(), "not enough keys provided");
   let included = keys.keys().cloned().collect::<Vec<_>>();
@@ -48,7 +48,7 @@ pub fn recover_key<C: Ciphersuite>(keys: &HashMap<u16, ThresholdKeys<C>>) -> C::
 /// Generate threshold keys for tests.
 pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
-) -> HashMap<u16, ThresholdKeys<C>> {
+) -> HashMap<Participant, ThresholdKeys<C>> {
   let res = frost_gen(rng)
     .drain()
     .map(|(i, core)| {
@@ -59,7 +59,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
       (i, ThresholdKeys::new(core))
     })
     .collect();
-  assert_eq!(C::generator() * recover_key(&res), res[&1].group_key());
+  assert_eq!(C::generator() * recover_key(&res), res[&Participant(1)].group_key());
   res
 }
 

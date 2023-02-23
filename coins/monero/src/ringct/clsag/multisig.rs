@@ -23,7 +23,7 @@ use dleq::DLEqProof;
 use frost::{
   dkg::lagrange,
   curve::Ed25519,
-  FrostError, ThresholdKeys, ThresholdView,
+  Participant, FrostError, ThresholdKeys, ThresholdView,
   algorithm::{WriteAddendum, Algorithm},
 };
 
@@ -146,8 +146,8 @@ pub(crate) fn add_key_image_share(
   image: &mut EdwardsPoint,
   generator: EdwardsPoint,
   offset: Scalar,
-  included: &[u16],
-  participant: u16,
+  included: &[Participant],
+  participant: Participant,
   share: EdwardsPoint,
 ) {
   if image.is_identity() {
@@ -203,7 +203,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   fn process_addendum(
     &mut self,
     view: &ThresholdView<Ed25519>,
-    l: u16,
+    l: Participant,
     addendum: ClsagAddendum,
   ) -> Result<(), FrostError> {
     if self.image.is_identity() {
@@ -212,7 +212,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       self.transcript.append_message(b"mask", self.mask().to_bytes());
     }
 
-    self.transcript.append_message(b"participant", l.to_be_bytes());
+    self.transcript.append_message(b"participant", l.to_bytes());
 
     addendum
       .dleq

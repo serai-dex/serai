@@ -26,7 +26,7 @@ use multiexp::BatchVerifier;
 use schnorr::SchnorrSignature;
 use dleq::DLEqProof;
 
-use crate::ThresholdParams;
+use crate::{Participant, ThresholdParams};
 
 pub trait ReadWrite: Sized {
   fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self>;
@@ -133,7 +133,7 @@ fn cipher<C: Ciphersuite>(dst: &'static [u8], ecdh: &Zeroizing<C::G>) -> ChaCha2
 fn encrypt<R: RngCore + CryptoRng, C: Ciphersuite, E: Encryptable>(
   rng: &mut R,
   dst: &'static [u8],
-  from: u16,
+  from: Participant,
   to: C::G,
   mut msg: Zeroizing<E>,
 ) -> EncryptedMessage<C, E> {
@@ -192,7 +192,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
   }
 
   #[cfg(test)]
-  pub(crate) fn invalidate_msg<R: RngCore + CryptoRng>(&mut self, rng: &mut R, from: u16) {
+  pub(crate) fn invalidate_msg<R: RngCore + CryptoRng>(&mut self, rng: &mut R, from: Participant) {
     // Invalidate the message by specifying a new key/Schnorr PoP
     // This will cause all initial checks to pass, yet a decrypt to gibberish
     let key = Zeroizing::new(C::random_nonzero_F(rng));
@@ -213,7 +213,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     &mut self,
     rng: &mut R,
     dst: &'static [u8],
-    from: u16,
+    from: Participant,
     to: C::G,
   ) {
     use group::ff::PrimeField;
@@ -237,7 +237,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     &mut self,
     rng: &mut R,
     dst: &'static [u8],
-    from: u16,
+    from: Participant,
     to: C::G,
   ) {
     use group::ff::PrimeField;
@@ -292,12 +292,12 @@ impl<C: Ciphersuite> EncryptionKeyProof<C> {
 // This doesn't need to take the msg. It just doesn't hurt as an extra layer.
 // This still doesn't mean the DKG offers an authenticated channel. The per-message keys have no
 // root of trust other than their existence in the assumed-to-exist external authenticated channel.
-fn pop_challenge<C: Ciphersuite>(nonce: C::G, key: C::G, sender: u16, msg: &[u8]) -> C::F {
+fn pop_challenge<C: Ciphersuite>(nonce: C::G, key: C::G, sender: Participant, msg: &[u8]) -> C::F {
   let mut transcript = RecommendedTranscript::new(b"DKG Encryption Key Proof of Possession v0.2");
   transcript.append_message(b"nonce", nonce.to_bytes());
   transcript.append_message(b"key", key.to_bytes());
   // This is sufficient to prevent the attack this is meant to stop
-  transcript.append_message(b"sender", sender.to_le_bytes());
+  transcript.append_message(b"sender", sender.to_bytes());
   // This, as written above, doesn't hurt
   transcript.append_message(b"message", msg);
   // While this is a PoK and a PoP, it's called a PoP here since the important part is its owner
@@ -322,10 +322,10 @@ pub(crate) enum DecryptionError {
 #[derive(Clone)]
 pub(crate) struct Encryption<C: Ciphersuite> {
   dst: &'static [u8],
-  i: u16,
+  i: Participant,
   enc_key: Zeroizing<C::F>,
   enc_pub_key: C::G,
-  enc_keys: HashMap<u16, C::G>,
+  enc_keys: HashMap<Participant, C::G>,
 }
 
 impl<C: Ciphersuite> Zeroize for Encryption<C> {
@@ -339,7 +339,11 @@ impl<C: Ciphersuite> Zeroize for Encryption<C> {
 }
 
 impl<C: Ciphersuite> Encryption<C> {
-  pub(crate) fn new<R: RngCore + CryptoRng>(dst: &'static [u8], i: u16, rng: &mut R) -> Self {
+  pub(crate) fn new<R: RngCore + CryptoRng>(
+    dst: &'static [u8],
+    i: Participant,
+    rng: &mut R,
+  ) -> Self {
     let enc_key = Zeroizing::new(C::random_nonzero_F(rng));
     Self {
       dst,
@@ -356,7 +360,7 @@ impl<C: Ciphersuite> Encryption<C> {
 
   pub(crate) fn register<M: Message>(
     &mut self,
-    participant: u16,
+    participant: Participant,
     msg: EncryptionKeyMessage<C, M>,
   ) -> M {
     if self.enc_keys.contains_key(&participant) {
@@ -369,7 +373,7 @@ impl<C: Ciphersuite> Encryption<C> {
   pub(crate) fn encrypt<R: RngCore + CryptoRng, E: Encryptable>(
     &self,
     rng: &mut R,
-    participant: u16,
+    participant: Participant,
     msg: Zeroizing<E>,
   ) -> EncryptedMessage<C, E> {
     encrypt(rng, self.dst, self.i, self.enc_keys[&participant], msg)
@@ -382,7 +386,7 @@ impl<C: Ciphersuite> Encryption<C> {
     // Uses a distinct batch ID so if this batch verifier is reused, we know its the PoP aspect
     // which failed, and therefore to use None for the blame
     batch_id: I,
-    from: u16,
+    from: Participant,
     mut msg: EncryptedMessage<C, E>,
   ) -> (Zeroizing<E>, EncryptionKeyProof<C>) {
     msg.pop.batch_verify(
@@ -413,8 +417,8 @@ impl<C: Ciphersuite> Encryption<C> {
   // Returns None if the key was wrong.
   pub(crate) fn decrypt_with_proof<E: Encryptable>(
     &self,
-    from: u16,
-    decryptor: u16,
+    from: Participant,
+    decryptor: Participant,
     mut msg: EncryptedMessage<C, E>,
     // There's no encryption key proof if the accusation is of an invalid signature
     proof: Option<EncryptionKeyProof<C>>,

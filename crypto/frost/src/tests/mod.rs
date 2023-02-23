@@ -5,7 +5,7 @@ use rand_core::{RngCore, CryptoRng};
 pub use dkg::tests::{key_gen, recover_key};
 
 use crate::{
-  Curve, ThresholdKeys,
+  Curve, Participant, ThresholdKeys,
   algorithm::Algorithm,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
@@ -36,11 +36,14 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
   algorithm: A,
-  keys: &HashMap<u16, ThresholdKeys<C>>,
-) -> HashMap<u16, AlgorithmMachine<C, A>> {
+  keys: &HashMap<Participant, ThresholdKeys<C>>,
+) -> HashMap<Participant, AlgorithmMachine<C, A>> {
   let mut included = vec![];
-  while included.len() < usize::from(keys[&1].params().t()) {
-    let n = u16::try_from((rng.next_u64() % u64::try_from(keys.len()).unwrap()) + 1).unwrap();
+  while included.len() < usize::from(keys[&Participant::new(1).unwrap()].params().t()) {
+    let n = Participant::new(
+      u16::try_from((rng.next_u64() % u64::try_from(keys.len()).unwrap()) + 1).unwrap(),
+    )
+    .unwrap();
     if included.contains(&n) {
       continue;
     }
@@ -64,15 +67,15 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
 pub(crate) fn commit_and_shares<
   R: RngCore + CryptoRng,
   M: PreprocessMachine,
-  F: FnMut(&mut R, &mut HashMap<u16, M::SignMachine>),
+  F: FnMut(&mut R, &mut HashMap<Participant, M::SignMachine>),
 >(
   rng: &mut R,
-  mut machines: HashMap<u16, M>,
+  mut machines: HashMap<Participant, M>,
   mut cache: F,
   msg: &[u8],
 ) -> (
-  HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::SignatureMachine>,
-  HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::SignatureShare>,
+  HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::SignatureMachine>,
+  HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::SignatureShare>,
 ) {
   let mut commitments = HashMap::new();
   let mut machines = machines
@@ -110,10 +113,10 @@ pub(crate) fn commit_and_shares<
 fn sign_internal<
   R: RngCore + CryptoRng,
   M: PreprocessMachine,
-  F: FnMut(&mut R, &mut HashMap<u16, M::SignMachine>),
+  F: FnMut(&mut R, &mut HashMap<Participant, M::SignMachine>),
 >(
   rng: &mut R,
-  machines: HashMap<u16, M>,
+  machines: HashMap<Participant, M>,
   cache: F,
   msg: &[u8],
 ) -> M::Signature {
@@ -135,7 +138,7 @@ fn sign_internal<
 /// caching.
 pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
   rng: &mut R,
-  machines: HashMap<u16, M>,
+  machines: HashMap<Participant, M>,
   msg: &[u8],
 ) -> M::Signature {
   sign_internal(rng, machines, |_, _| {}, msg)
@@ -146,8 +149,8 @@ pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
 pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
   rng: &mut R,
   params: <M::SignMachine as SignMachine<M::Signature>>::Params,
-  mut keys: HashMap<u16, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
-  machines: HashMap<u16, M>,
+  mut keys: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
+  machines: HashMap<Participant, M>,
   msg: &[u8],
 ) -> M::Signature {
   sign_internal(
