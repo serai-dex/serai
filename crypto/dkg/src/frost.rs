@@ -151,6 +151,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
 }
 
 fn polynomial<F: PrimeField + Zeroize>(coefficients: &[Zeroizing<F>], l: u16) -> Zeroizing<F> {
+  assert!(l != 0, "attempting to evaluate a polynomial with 0");
   let l = F::from(u64::from(l));
   let mut share = Zeroizing::new(F::zero());
   for (idx, coefficient) in coefficients.iter().rev().enumerate() {
