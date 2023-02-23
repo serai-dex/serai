@@ -34,6 +34,7 @@ macro_rules! kp_curve {
       }
 
       fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
+        // Handle dsts which are greater than 255 bytes
         let mut dst = dst;
         let oversize = Sha256::digest([b"H2C-OVERSIZE-DST-".as_ref(), dst].concat());
         if dst.len() > 255 {
@@ -42,11 +43,41 @@ macro_rules! kp_curve {
 
         // While one of these two libraries does support directly hashing to the Scalar field, the
         // other doesn't. While that's probably an oversight, this is a universally working method
-        let mut modulus = [0; 48];
+
+        // This method is from
+        // https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-16.html
+        // Specifically, Section 5
+
+        // While that draft, overall, is intended for hashing to curves, that necessitates
+        // detailing how to hash to a finite field. The draft comments that its mechanism for
+        // doing so, which it uses to derive field elements, is also applicable to the scalar field
+
+        // Unfortunately, there's currently no test vectors for this, despite them being requested
+        // in https://github.com/cfrg/draft-irtf-cfrg-hash-to-curve/issues/343
+
+        // The hash_to_field function is intended to provide unbiased values
+        // In order to do so, a wide reduction from an extra k bits is applied, minimizing bias to
+        // 2^-k
+        // k is intended to be the bits of security of the suite, which is 128 for secp256k1 and
+        // P-256
+        const K: usize = 128;
+
+        // L is the amount of bytes of material which should be used in the wide reduction
+        // The 256 is for the bit-length of the primes, rounded up to the nearest byte threshold
+        // This is a simplification of the formula from the end of section 5
+        const L: usize = (256 + K) / 8; // 48
+
+        // In order to perform this reduction, we need to use 48-byte numbers
+        // First, convert the modulus to a 48-byte number
+        // This is done by getting -1 as bytes, parsing it into a U384, and then adding back one
+        let mut modulus = [0; L];
+        // The byte repr of scalars will be 32 big-endian bytes
+        // Set the lower 32 bytes of our 48-byte array accordingly
         modulus[16 ..].copy_from_slice(&(Self::F::zero() - Self::F::one()).to_bytes());
         let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
 
-        let mut unreduced = U384::from_be_bytes({
+        // The defined P-256 and secp256k1 ciphersuites both use expand_message_xmd
+        let mut wide = U384::from_be_bytes({
           let mut bytes = [0; 48];
           ExpandMsgXmd::<Sha256>::expand_message(&[msg], dst, 48).unwrap().fill_bytes(&mut bytes);
           bytes
@@ -55,9 +86,12 @@ macro_rules! kp_curve {
         .unwrap()
         .to_be_bytes();
 
-        let mut array = *GenericArray::from_slice(&unreduced[16 ..]);
+        // Now that this has been reduced back to a 32-byte value, grab the lower 32-bytes
+        let mut array = *GenericArray::from_slice(&wide[16 ..]);
         let res = $lib::Scalar::from_repr(array).unwrap();
-        unreduced.zeroize();
+
+        // Zeroize the temp values we can due to the possibility hash_to_F is being used for nonces
+        wide.zeroize();
         array.zeroize();
         res
       }
