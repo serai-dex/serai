@@ -177,6 +177,7 @@ constant_time!(Scalar, DScalar);
 math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
 from_uint!(Scalar, DScalar);
 
+// Ed25519 order/scalar modulus
 const MODULUS: U256 =
   U256::from_be_hex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed");
 
@@ -272,19 +273,25 @@ impl PrimeField for Scalar {
     self.0.to_bytes()
   }
 
+  // This was set per the specification in the ff crate docs
+  // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
   const S: u32 = 2;
   fn is_odd(&self) -> Choice {
     choice(self.to_le_bits()[0])
   }
   fn multiplicative_generator() -> Self {
+    // This was calculated with the method from the ff crate docs
+    // SageMath GF(modulus).primitive_element()
     2u64.into()
   }
   fn root_of_unity() -> Self {
-    const ROOT: [u8; 32] = [
+    // This was calculated via the formula from the ff crate docs
+    // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
+    Scalar::from_repr([
       212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
       96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
-    ];
-    Scalar::from_repr(ROOT).unwrap()
+    ])
+    .unwrap()
   }
 }
 
@@ -432,6 +439,11 @@ dalek_group!(
   RISTRETTO_BASEPOINT_POINT,
   RISTRETTO_BASEPOINT_TABLE
 );
+
+#[test]
+fn test_scalar_modulus() {
+  assert_eq!(MODULUS.to_le_bytes(), curve25519_dalek::constants::BASEPOINT_ORDER.to_bytes());
+}
 
 #[test]
 fn test_ed25519_group() {
