@@ -140,9 +140,9 @@ pub fn lagrange<F: PrimeField>(i: u16, included: &[u16]) -> F {
       continue;
     }
 
-    let share = F::from(u64::try_from(*l).unwrap());
+    let share = F::from(u64::from(*l));
     num *= share;
-    denom *= share - F::from(u64::try_from(i).unwrap());
+    denom *= share - F::from(u64::from(i));
   }
 
   // Safe as this will only be 0 if we're part of the above loop
