@@ -1517,6 +1517,7 @@ dependencies = [
  "ff-group-tests",
  "group",
  "rand_core 0.6.4",
+ "sha2 0.9.9",
  "subtle",
  "zeroize",
 ]

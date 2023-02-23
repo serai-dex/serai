@@ -354,15 +354,12 @@ macro_rules! dalek_group {
       type Scalar = Scalar;
       fn random(mut rng: impl RngCore) -> Self {
         loop {
-          let mut bytes = field::FieldElement::random(&mut rng).to_repr();
-          bytes[31] |= u8::try_from(rng.next_u32() % 2).unwrap() << 7;
-          let opt = Self::from_bytes(&bytes);
-          if opt.is_some().into() {
-            let opt = opt.unwrap();
-            // Ban identity, per the trait specification
-            if !bool::from(opt.is_identity()) {
-              return opt;
-            }
+          let mut bytes = [0; 64];
+          rng.fill_bytes(&mut bytes);
+          let point = $Point($DPoint::hash_from_bytes::<sha2::Sha512>(&bytes));
+          // Ban identity, per the trait specification
+          if !bool::from(point.is_identity()) {
+            return point;
           }
         }
       }

@@ -23,6 +23,8 @@ ff = "0.12"
 group = "0.12"
 
 crypto-bigint = "0.4"
+
+sha2 = "0.9"
 curve25519-dalek =  "3.2"
 
 [dev-dependencies]
