@@ -1,6 +1,6 @@
 use zeroize::Zeroize;
 
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 use group::ff::{Field, PrimeField};
 
@@ -34,13 +34,6 @@ macro_rules! kp_curve {
       }
 
       fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-        // Handle dsts which are greater than 255 bytes
-        let mut dst = dst;
-        let oversize = Sha256::digest([b"H2C-OVERSIZE-DST-".as_ref(), dst].concat());
-        if dst.len() > 255 {
-          dst = oversize.as_ref();
-        }
-
         // While one of these two libraries does support directly hashing to the Scalar field, the
         // other doesn't. While that's probably an oversight, this is a universally working method
 
@@ -51,9 +44,6 @@ macro_rules! kp_curve {
         // While that draft, overall, is intended for hashing to curves, that necessitates
         // detailing how to hash to a finite field. The draft comments that its mechanism for
         // doing so, which it uses to derive field elements, is also applicable to the scalar field
-
-        // Unfortunately, there's currently no test vectors for this, despite them being requested
-        // in https://github.com/cfrg/draft-irtf-cfrg-hash-to-curve/issues/343
 
         // The hash_to_field function is intended to provide unbiased values
         // In order to do so, a wide reduction from an extra k bits is applied, minimizing bias to
@@ -99,6 +89,18 @@ macro_rules! kp_curve {
   };
 }
 
+#[cfg(test)]
+fn test_oversize_dst<C: Ciphersuite>() {
+  use sha2::Digest;
+
+  // The draft specifies DSTs >255 bytes should be hashed into a 32-byte DST
+  let oversize_dst = [0x00; 256];
+  let actual_dst = Sha256::digest([b"H2C-OVERSIZE-DST-".as_ref(), &oversize_dst].concat());
+  // Test the hash_to_F function handles this
+  // If it didn't, these would return different values
+  assert_eq!(C::hash_to_F(&oversize_dst, &[]), C::hash_to_F(&actual_dst, &[]));
+}
+
 #[cfg(feature = "secp256k1")]
 kp_curve!("secp256k1", k256, Secp256k1, b"secp256k1");
 #[cfg(feature = "secp256k1")]
@@ -106,8 +108,11 @@ kp_curve!("secp256k1", k256, Secp256k1, b"secp256k1");
 fn test_secp256k1() {
   ff_group_tests::group::test_prime_group_bits::<k256::ProjectivePoint>();
 
-  // Ideally, a test vector from hash to field (not FROST) would be here
+  // Ideally, a test vector from hash_to_field (not FROST) would be here
   // Unfortunately, the IETF draft only provides vectors for field elements, not scalars
+  // Vectors have been requested in
+  // https://github.com/cfrg/draft-irtf-cfrg-hash-to-curve/issues/343
+
   assert_eq!(
     Secp256k1::hash_to_F(
       b"FROST-secp256k1-SHA256-v11nonce",
@@ -124,6 +129,8 @@ fn test_secp256k1() {
     .collect::<Vec<_>>(),
     hex::decode("acc83278035223c1ba464e2d11bfacfc872b2b23e1041cf5f6130da21e4d8068").unwrap()
   );
+
+  test_oversize_dst::<Secp256k1>();
 }
 
 #[cfg(feature = "p256")]
@@ -149,4 +156,6 @@ f4e8cf80aec3f888d997900ac7e3e349944b5a6b47649fc32186d2f1238103c6\
     .collect::<Vec<_>>(),
     hex::decode("f871dfcf6bcd199342651adc361b92c941cb6a0d8c8c1a3b91d79e2c1bf3722d").unwrap()
   );
+
+  test_oversize_dst::<P256>();
 }
