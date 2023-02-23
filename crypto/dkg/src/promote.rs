@@ -61,9 +61,10 @@ impl<C: Ciphersuite> GeneratorProof<C> {
   }
 }
 
-/// Promote a set of keys from one curve to another, where the elliptic curve is the same.
+/// Promote a set of keys from one generator to another, where the elliptic curve is the same.
 /// Since the Ciphersuite trait additionally specifies a generator, this provides an O(n) way to
-/// update the generator used with keys. The key generation protocol itself is exponential.
+/// update the generator used with keys. This outperforms the key generation protocol which is
+// exponential.
 pub struct GeneratorPromotion<C1: Ciphersuite, C2: Ciphersuite> {
   base: ThresholdKeys<C1>,
   proof: GeneratorProof<C1>,
@@ -74,7 +75,7 @@ impl<C1: Ciphersuite, C2: Ciphersuite> GeneratorPromotion<C1, C2>
 where
   C2: Ciphersuite<F = C1::F, G = C1::G>,
 {
-  /// Begin promoting keys from one curve to another. Returns a proof this share was properly
+  /// Begin promoting keys from one generator to another. Returns a proof this share was properly
   /// promoted.
   pub fn promote<R: RngCore + CryptoRng>(
     rng: &mut R,
