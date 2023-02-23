@@ -6,7 +6,7 @@ use group::ff::{Field, PrimeField};
 
 use elliptic_curve::{
   generic_array::GenericArray,
-  bigint::{Encoding, U384},
+  bigint::{CheckedAdd, Encoding, U384},
   hash2curve::{Expander, ExpandMsg, ExpandMsgXmd},
 };
 
@@ -64,7 +64,11 @@ macro_rules! kp_curve {
         // The byte repr of scalars will be 32 big-endian bytes
         // Set the lower 32 bytes of our 48-byte array accordingly
         modulus[16 ..].copy_from_slice(&(Self::F::zero() - Self::F::one()).to_bytes());
-        let modulus = U384::from_be_slice(&modulus).wrapping_add(&U384::ONE);
+        // Use a checked_add + unwrap since this addition cannot fail (being a 32-byte value with
+        // 48-bytes of space)
+        // While a non-panicking saturating_add/wrapping_add could be used, they'd likely be less
+        // performant
+        let modulus = U384::from_be_slice(&modulus).checked_add(&U384::ONE).unwrap();
 
         // The defined P-256 and secp256k1 ciphersuites both use expand_message_xmd
         let mut wide = U384::from_be_bytes({
