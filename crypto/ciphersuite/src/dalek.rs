@@ -17,8 +17,6 @@ macro_rules! dalek_curve {
   ) => {
     use dalek_ff_group::$Point;
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-    pub struct $Ciphersuite;
     impl Ciphersuite for $Ciphersuite {
       type F = Scalar;
       type G = $Point;
@@ -37,6 +35,14 @@ macro_rules! dalek_curve {
   };
 }
 
+/// Ciphersuite for Ristretto.
+///
+/// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
+/// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as
+/// `dst: "abcdef", data: b""`. Please use carefully, not letting dsts be substrings of each other.
+#[cfg(any(test, feature = "ristretto"))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct Ristretto;
 #[cfg(any(test, feature = "ristretto"))]
 dalek_curve!("ristretto", Ristretto, RistrettoPoint, b"ristretto");
 #[cfg(any(test, feature = "ristretto"))]
@@ -60,6 +66,14 @@ fn test_ristretto() {
   );
 }
 
+/// Ciphersuite for Ed25519.
+///
+/// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
+/// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as
+/// `dst: "abcdef", data: b""`. Please use carefully, not letting dsts be substrings of each other.
+#[cfg(feature = "ed25519")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct Ed25519;
 #[cfg(feature = "ed25519")]
 dalek_curve!("ed25519", Ed25519, EdwardsPoint, b"edwards25519");
 #[cfg(feature = "ed25519")]

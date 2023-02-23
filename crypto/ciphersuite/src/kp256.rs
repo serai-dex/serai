@@ -20,8 +20,6 @@ macro_rules! kp_curve {
     $Ciphersuite: ident,
     $ID:          literal
   ) => {
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-    pub struct $Ciphersuite;
     impl Ciphersuite for $Ciphersuite {
       type F = $lib::Scalar;
       type G = $lib::ProjectivePoint;
@@ -105,6 +103,12 @@ fn test_oversize_dst<C: Ciphersuite>() {
   assert_eq!(C::hash_to_F(&oversize_dst, &[]), C::hash_to_F(&actual_dst, &[]));
 }
 
+/// Ciphersuite for Secp256k1.
+///
+/// hash_to_F is implemented via the IETF draft for hash to curve's hash_to_field (v16).
+#[cfg(feature = "secp256k1")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct Secp256k1;
 #[cfg(feature = "secp256k1")]
 kp_curve!("secp256k1", k256, Secp256k1, b"secp256k1");
 #[cfg(feature = "secp256k1")]
@@ -137,6 +141,12 @@ fn test_secp256k1() {
   test_oversize_dst::<Secp256k1>();
 }
 
+/// Ciphersuite for P-256.
+///
+/// hash_to_F is implemented via the IETF draft for hash to curve's hash_to_field (v16).
+#[cfg(feature = "p256")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct P256;
 #[cfg(feature = "p256")]
 kp_curve!("p256", p256, P256, b"P-256");
 #[cfg(feature = "p256")]
