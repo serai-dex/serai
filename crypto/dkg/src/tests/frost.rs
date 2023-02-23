@@ -13,6 +13,8 @@ use crate::{
 type FrostEncryptedMessage<C> = EncryptedMessage<C, SecretShare<<C as Ciphersuite>::F>>;
 type FrostSecretShares<C> = HashMap<Participant, FrostEncryptedMessage<C>>;
 
+const CONTEXT: &str = "DKG Test Key Generation";
+
 // Commit, then return enc key and shares
 #[allow(clippy::type_complexity)]
 fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
@@ -27,7 +29,7 @@ fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
   let mut enc_keys = HashMap::new();
   for i in (1 ..= PARTICIPANTS).map(Participant) {
     let params = ThresholdParams::new(THRESHOLD, PARTICIPANTS, i).unwrap();
-    let machine = KeyGenMachine::<C>::new(params, "DKG Test Key Generation".to_string());
+    let machine = KeyGenMachine::<C>::new(params, CONTEXT.to_string());
     let (machine, these_commitments) = machine.generate_coefficients(rng);
     machines.insert(i, machine);
 
@@ -179,7 +181,12 @@ mod literal {
     // We then malleate 1's blame proof, so 1 ends up malicious
     // Doesn't simply invalidate the PoP as that won't have a blame statement
     // By mutating the encrypted data, we do ensure a blame statement is created
-    secret_shares.get_mut(&TWO).unwrap().get_mut(&ONE).unwrap().invalidate_msg(&mut OsRng, TWO);
+    secret_shares
+      .get_mut(&TWO)
+      .unwrap()
+      .get_mut(&ONE)
+      .unwrap()
+      .invalidate_msg(&mut OsRng, CONTEXT, TWO);
 
     let mut blame = None;
     let machines = machines
@@ -209,7 +216,12 @@ mod literal {
     let (mut machines, _, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
-    secret_shares.get_mut(&TWO).unwrap().get_mut(&ONE).unwrap().invalidate_msg(&mut OsRng, TWO);
+    secret_shares
+      .get_mut(&TWO)
+      .unwrap()
+      .get_mut(&ONE)
+      .unwrap()
+      .invalidate_msg(&mut OsRng, CONTEXT, TWO);
 
     let mut blame = None;
     let machines = machines
@@ -240,7 +252,7 @@ mod literal {
 
     secret_shares.get_mut(&ONE).unwrap().get_mut(&TWO).unwrap().invalidate_share_serialization(
       &mut OsRng,
-      b"FROST",
+      CONTEXT,
       ONE,
       enc_keys[&TWO],
     );
@@ -273,7 +285,7 @@ mod literal {
 
     secret_shares.get_mut(&ONE).unwrap().get_mut(&TWO).unwrap().invalidate_share_value(
       &mut OsRng,
-      b"FROST",
+      CONTEXT,
       ONE,
       enc_keys[&TWO],
     );

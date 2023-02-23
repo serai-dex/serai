@@ -132,7 +132,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     );
 
     // Additionally create an encryption mechanism to protect the secret shares
-    let encryption = Encryption::new(b"FROST", self.params.i, rng);
+    let encryption = Encryption::new(self.context.clone(), self.params.i, rng);
 
     // Step 4: Broadcast
     let msg =
