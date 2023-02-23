@@ -96,6 +96,8 @@ fn ecdh<C: Ciphersuite>(private: &Zeroizing<C::F>, public: C::G) -> Zeroizing<C:
   Zeroizing::new(public * private.deref())
 }
 
+// Each ecdh must be distinct. Reuse of an ecdh for multiple ciphers will cause the messages to be
+// leaked.
 fn cipher<C: Ciphersuite>(dst: &'static [u8], ecdh: &Zeroizing<C::G>) -> ChaCha20 {
   // Ideally, we'd box this transcript with ZAlloc, yet that's only possible on nightly
   // TODO: https://github.com/serai-dex/serai/issues/151
@@ -113,18 +115,18 @@ fn cipher<C: Ciphersuite>(dst: &'static [u8], ecdh: &Zeroizing<C::G>) -> ChaCha2
   key.copy_from_slice(&challenge[.. 32]);
   zeroize(challenge.as_mut());
 
-  // The RecommendedTranscript isn't vulnerable to length extension attacks, yet if it was,
-  // it'd make sense to clone it (and fork it) just to hedge against that
+  // Since the key is single-use, it doesn't matter what we use for the IV
+  // The isssue is key + IV reuse. If we never reuse the key, we can't have the opportunity to
+  // reuse a nonce
+  // Use a static IV in acknowledgement of this
   let mut iv = Cc20Iv::default();
-  let mut challenge = transcript.challenge(b"iv");
-  iv.copy_from_slice(&challenge[.. 12]);
-  zeroize(challenge.as_mut());
+  // The \0 is to satisfy the length requirement (12), not to be null terminated
+  iv.copy_from_slice(b"DKG IV v0.2\0");
 
-  // Same commentary as the transcript regarding ZAlloc
+  // ChaCha20 has the same commentary as the transcript regarding ZAlloc
   // TODO: https://github.com/serai-dex/serai/issues/151
   let res = ChaCha20::new(&key, &iv);
   zeroize(key.as_mut());
-  zeroize(iv.as_mut());
   res
 }
 
@@ -144,6 +146,8 @@ fn encrypt<R: RngCore + CryptoRng, C: Ciphersuite, E: Encryptable>(
   last.as_mut().zeroize();
   */
 
+  // Generate a new key for this message, satisfying cipher's requirement of distinct keys per
+  // message, and enabling revealing this message without revealing any others
   let key = Zeroizing::new(C::random_nonzero_F(rng));
   cipher::<C>(dst, &ecdh::<C>(&key, to)).apply_keystream(msg.as_mut().as_mut());
 
