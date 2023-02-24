@@ -140,6 +140,21 @@ impl<G: PrimeGroup> DLEqProof<G> {
     DLEqProof { c, s }
   }
 
+  // Transcript a specific generator/nonce/point (G/R/A), as used when verifying a proof.
+  // This takes in the generator/point, and then the challenge and solution to calculate the nonce.
+  fn verify_statement<T: Transcript>(
+    transcript: &mut T,
+    generator: G,
+    point: G,
+    c: G::Scalar,
+    s: G::Scalar,
+  ) {
+    // s = r + ca
+    // sG - cA = R
+    // R, A
+    Self::transcript(transcript, generator, (generator * s) - (point * c), point);
+  }
+
   /// Verify the specified points share a discrete logarithm across the specified generators.
   pub fn verify<T: Transcript>(
     &self,
@@ -153,10 +168,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
 
     transcript.domain_separate(b"dleq");
     for (generator, point) in generators.iter().zip(points) {
-      // s = r + ca
-      // sG - cA = R
-      // R, A
-      Self::transcript(transcript, *generator, (*generator * self.s) - (*point * self.c), *point);
+      Self::verify_statement(transcript, *generator, *point, self.c, self.s);
     }
 
     if self.c != challenge(transcript) {
@@ -212,7 +224,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
   where
     G::Scalar: Zeroize,
   {
-    transcript.domain_separate(b"multi-dleq");
+    transcript.domain_separate(b"multi_dleq");
 
     let mut nonces = vec![];
     for (i, (scalar, generators)) in scalars.iter().zip(generators).enumerate() {
@@ -256,7 +268,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
       Err(DLEqError::InvalidProof)?;
     }
 
-    transcript.domain_separate(b"multi-dleq");
+    transcript.domain_separate(b"multi_dleq");
     for (i, (generators, points)) in generators.iter().zip(points).enumerate() {
       if points.len() != generators.len() {
         Err(DLEqError::InvalidProof)?;
@@ -264,12 +276,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
 
       transcript.append_message(b"discrete_logarithm", i.to_le_bytes());
       for (generator, point) in generators.iter().zip(points) {
-        DLEqProof::transcript(
-          transcript,
-          *generator,
-          (*generator * self.s[i]) - (*point * self.c),
-          *point,
-        );
+        DLEqProof::verify_statement(transcript, *generator, *point, self.c, self.s[i]);
       }
     }
 
