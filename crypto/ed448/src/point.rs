@@ -323,6 +323,7 @@ fn test_group() {
   test_sub::<Point>();
   test_mul::<Point>();
   test_order::<Point>();
+  test_random::<_, Point>(&mut rand_core::OsRng);
 
   test_encoding::<Point>();
 }

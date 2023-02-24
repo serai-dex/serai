@@ -1,3 +1,4 @@
+use rand_core::RngCore;
 use group::ff::Field;
 
 /// Perform basic tests on equality.
@@ -106,8 +107,27 @@ pub fn test_cube<F: Field>() {
   assert_eq!(two.cube(), two * two * two, "2^3 != 8");
 }
 
+/// Test random.
+pub fn test_random<R: RngCore, F: Field>(rng: &mut R) {
+  let a = F::random(&mut *rng);
+
+  // Run up to 128 times so small fields, which may occasionally return the same element twice,
+  // are statistically unlikely to fail
+  // Field of order 1 will always fail this test due to lack of distinct elements to sample
+  // from
+  let mut pass = false;
+  for _ in 0 .. 128 {
+    let b = F::random(&mut *rng);
+    // This test passes if a distinct element is returned at least once
+    if b != a {
+      pass = true;
+    }
+  }
+  assert!(pass, "random always returned the same value");
+}
+
 /// Run all tests on fields implementing Field.
-pub fn test_field<F: Field>() {
+pub fn test_field<R: RngCore, F: Field>(rng: &mut R) {
   test_eq::<F>();
   test_conditional_select::<F>();
   test_add::<F>();
@@ -119,4 +139,5 @@ pub fn test_field<F: Field>() {
   test_sqrt::<F>();
   test_is_zero::<F>();
   test_cube::<F>();
+  test_random::<R, F>(rng);
 }

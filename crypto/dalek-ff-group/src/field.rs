@@ -281,5 +281,5 @@ fn test_sqrt_m1() {
 
 #[test]
 fn test_field() {
-  ff_group_tests::prime_field::test_prime_field_bits::<FieldElement>();
+  ff_group_tests::prime_field::test_prime_field_bits::<_, FieldElement>(&mut rand_core::OsRng);
 }

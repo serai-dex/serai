@@ -35,5 +35,5 @@ impl Scalar {
 #[test]
 fn test_scalar_field() {
   // TODO: Move to test_prime_field_bits once the impl is finished
-  ff_group_tests::prime_field::test_prime_field::<Scalar>();
+  ff_group_tests::prime_field::test_prime_field::<_, Scalar>(&mut rand_core::OsRng);
 }

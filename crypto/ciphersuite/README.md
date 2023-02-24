@@ -27,8 +27,8 @@ The domain-separation tag is naively prefixed to the message.
 ### Ed448
 
 Ed448 is offered via [minimal-ed448](https://crates.io/crates/minimal-ed448), an
-explicitly not recommended, unaudited Ed448 implementation, limited to its
-prime-order subgroup.
+explicitly not recommended, unaudited, incomplete Ed448 implementation, limited
+to its prime-order subgroup.
 
 Its `hash_to_F` is the wide reduction of SHAKE256, with a 114-byte output, as
 used in [RFC-8032](https://www.rfc-editor.org/rfc/rfc8032). The

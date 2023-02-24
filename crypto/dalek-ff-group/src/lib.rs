@@ -448,10 +448,10 @@ fn test_scalar_modulus() {
 
 #[test]
 fn test_ed25519_group() {
-  ff_group_tests::group::test_prime_group_bits::<EdwardsPoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, EdwardsPoint>(&mut rand_core::OsRng);
 }
 
 #[test]
 fn test_ristretto_group() {
-  ff_group_tests::group::test_prime_group_bits::<RistrettoPoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, RistrettoPoint>(&mut rand_core::OsRng);
 }

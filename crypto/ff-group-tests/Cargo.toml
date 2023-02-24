@@ -13,6 +13,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rand_core = "0.6"
 group = "0.12"
 
 [dev-dependencies]

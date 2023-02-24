@@ -114,7 +114,7 @@ kp_curve!("secp256k1", k256, Secp256k1, b"secp256k1");
 #[cfg(feature = "secp256k1")]
 #[test]
 fn test_secp256k1() {
-  ff_group_tests::group::test_prime_group_bits::<k256::ProjectivePoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, k256::ProjectivePoint>(&mut rand_core::OsRng);
 
   // Ideally, a test vector from hash_to_field (not FROST) would be here
   // Unfortunately, the IETF draft only provides vectors for field elements, not scalars
@@ -152,7 +152,7 @@ kp_curve!("p256", p256, P256, b"P-256");
 #[cfg(feature = "p256")]
 #[test]
 fn test_p256() {
-  ff_group_tests::group::test_prime_group_bits::<p256::ProjectivePoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, p256::ProjectivePoint>(&mut rand_core::OsRng);
 
   assert_eq!(
     P256::hash_to_F(

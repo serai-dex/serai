@@ -48,7 +48,7 @@ dalek_curve!("ristretto", Ristretto, RistrettoPoint, b"ristretto");
 #[cfg(any(test, feature = "ristretto"))]
 #[test]
 fn test_ristretto() {
-  ff_group_tests::group::test_prime_group_bits::<RistrettoPoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, RistrettoPoint>(&mut rand_core::OsRng);
 
   assert_eq!(
     Ristretto::hash_to_F(
@@ -79,7 +79,7 @@ dalek_curve!("ed25519", Ed25519, EdwardsPoint, b"edwards25519");
 #[cfg(feature = "ed25519")]
 #[test]
 fn test_ed25519() {
-  ff_group_tests::group::test_prime_group_bits::<EdwardsPoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, EdwardsPoint>(&mut rand_core::OsRng);
 
   // Ideally, a test vector from RFC-8032 (not FROST) would be here
   // Unfortunately, the IETF draft doesn't provide any vectors for the derived challenges
