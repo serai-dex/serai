@@ -157,12 +157,20 @@ where
   test_prime_group::<G>();
 }
 
+// Run these tests against k256/p256
+// This ensures that these tests are well formed and won't error for valid implementations,
+// assuming the validity of k256/p256
+// While k256 and p256 may be malformed in a way which coincides with a faulty test, this is
+// considered unlikely
+// The other option, not running against any libraries, would leave faulty tests completely
+// undetected
+
 #[test]
-fn test_k256_group_encoding() {
+fn test_k256() {
   test_prime_group_bits::<k256::ProjectivePoint>();
 }
 
 #[test]
-fn test_p256_group_encoding() {
+fn test_p256() {
   test_prime_group_bits::<p256::ProjectivePoint>();
 }
