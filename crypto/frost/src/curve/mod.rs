@@ -77,6 +77,12 @@ pub trait Curve: Ciphersuite {
 
     let mut repr = secret.to_repr();
 
+    // Perform rejection sampling until we reach a non-zero nonce
+    // While the IETF spec doesn't explicitly require this, generating a zero nonce will produce
+    // commitments which will be rejected for being zero (and if they were used, leak the secret
+    // share)
+    // Rejection sampling here will prevent an honest participant from ever generating 'malicious'
+    // values and ensure safety
     let mut res;
     while {
       seed.extend(repr.as_ref());
