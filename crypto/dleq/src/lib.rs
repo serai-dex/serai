@@ -215,6 +215,7 @@ pub struct MultiDLEqProof<G: PrimeGroup> {
 impl<G: PrimeGroup> MultiDLEqProof<G> {
   /// Prove for each scalar that the series of points created by multiplying it against its
   /// matching generators share a discrete logarithm.
+  /// This function panics if `generators.len() != scalars.len()`.
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
     transcript: &mut T,
@@ -224,6 +225,12 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
   where
     G::Scalar: Zeroize,
   {
+    assert_eq!(
+      generators.len(),
+      scalars.len(),
+      "amount of series of generators doesn't match the amount of scalars"
+    );
+
     transcript.domain_separate(b"multi_dleq");
 
     let mut nonces = vec![];
