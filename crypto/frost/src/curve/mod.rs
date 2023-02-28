@@ -92,10 +92,7 @@ pub trait Curve: Ciphersuite {
       seed = Zeroizing::new(vec![0; 32]);
       rng.fill_bytes(&mut seed);
     }
-
-    for i in repr.as_mut() {
-      i.zeroize();
-    }
+    repr.as_mut().zeroize();
 
     res
   }

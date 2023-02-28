@@ -90,9 +90,7 @@ pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
     // ff mandates this is canonical
     let res = Option::<Self::F>::from(Self::F::from_repr(encoding))
       .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "non-canonical scalar"));
-    for b in encoding.as_mut() {
-      b.zeroize();
-    }
+    encoding.as_mut().zeroize();
     res
   }
 
