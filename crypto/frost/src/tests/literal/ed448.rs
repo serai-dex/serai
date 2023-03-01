@@ -9,6 +9,14 @@ use crate::{
   tests::vectors::{Vectors, test_with_vectors},
 };
 
+// This is a vector from RFC 8032 to sanity check the HRAM is properly implemented
+// The RFC 8032 Ed448 HRAM is much more complex than the other HRAMs, hence why it's helpful to
+// have additional testing for it
+// Additionally, FROST, despite being supposed to use the RFC 8032 HRAMs, originally applied
+// Ed25519's HRAM to both Ed25519 and Ed448
+// This test was useful when proposing the corrections to the spec to demonstrate the correctness
+// the new algorithm/vectors
+// While we could test all Ed448 vectors here, this is sufficient for sanity
 #[test]
 fn ed448_8032_vector() {
   let context = hex::decode("666f6f").unwrap();
