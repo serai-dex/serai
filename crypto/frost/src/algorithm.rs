@@ -87,32 +87,37 @@ pub trait Algorithm<C: Curve>: Clone {
   ) -> Result<Vec<(C::F, C::G)>, ()>;
 }
 
-/// IETF-compliant transcript. This is incredibly naive and should not be used within larger
-/// protocols.
-#[derive(Clone, Debug)]
-pub struct IetfTranscript(Vec<u8>);
-impl Transcript for IetfTranscript {
-  type Challenge = Vec<u8>;
+mod sealed {
+  pub use super::*;
 
-  fn new(_: &'static [u8]) -> IetfTranscript {
-    IetfTranscript(vec![])
-  }
+  /// IETF-compliant transcript. This is incredibly naive and should not be used within larger
+  /// protocols.
+  #[derive(Clone, Debug)]
+  pub struct IetfTranscript(pub(crate) Vec<u8>);
+  impl Transcript for IetfTranscript {
+    type Challenge = Vec<u8>;
 
-  fn domain_separate(&mut self, _: &[u8]) {}
+    fn new(_: &'static [u8]) -> IetfTranscript {
+      IetfTranscript(vec![])
+    }
 
-  fn append_message<M: AsRef<[u8]>>(&mut self, _: &'static [u8], message: M) {
-    self.0.extend(message.as_ref());
-  }
+    fn domain_separate(&mut self, _: &[u8]) {}
 
-  fn challenge(&mut self, _: &'static [u8]) -> Vec<u8> {
-    self.0.clone()
-  }
+    fn append_message<M: AsRef<[u8]>>(&mut self, _: &'static [u8], message: M) {
+      self.0.extend(message.as_ref());
+    }
 
-  // FROST won't use this and this shouldn't be used outside of FROST
-  fn rng_seed(&mut self, _: &'static [u8]) -> [u8; 32] {
-    unimplemented!()
+    fn challenge(&mut self, _: &'static [u8]) -> Vec<u8> {
+      self.0.clone()
+    }
+
+    // FROST won't use this and this shouldn't be used outside of FROST
+    fn rng_seed(&mut self, _: &'static [u8]) -> [u8; 32] {
+      unimplemented!()
+    }
   }
 }
+pub(crate) use sealed::IetfTranscript;
 
 /// HRAm usable by the included Schnorr signature algorithm to generate challenges.
 pub trait Hram<C: Curve>: Clone {
