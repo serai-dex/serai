@@ -16,9 +16,9 @@ use dkg::tests::key_gen;
 use crate::{
   curve::Curve,
   Participant, ThresholdCore, ThresholdKeys, FrostError,
-  algorithm::{Schnorr, Hram},
+  algorithm::{IetfTranscript, Schnorr, Hram},
   sign::{
-    Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess,
+    Writable, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
     PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
   },
   tests::{clone_without, recover_key, algorithm_machines, commit_and_shares, sign},
@@ -36,6 +36,7 @@ pub struct Vectors {
 
   pub nonce_randomness: Vec<[String; 2]>,
   pub nonces: Vec<[String; 2]>,
+  pub commitments: Vec<[String; 2]>,
 
   pub sig_shares: Vec<String>,
 
@@ -81,6 +82,14 @@ impl From<serde_json::Value> for Vectors {
         .unwrap()
         .values()
         .map(|value| [to_str(&value["hiding_nonce"]), to_str(&value["binding_nonce"])])
+        .collect(),
+      commitments: value["round_one_outputs"]["participants"]
+        .as_object()
+        .unwrap()
+        .values()
+        .map(|value| {
+          [to_str(&value["hiding_nonce_commitment"]), to_str(&value["binding_nonce_commitment"])]
+        })
         .collect(),
 
       sig_shares: value["round_two_outputs"]["participants"]
@@ -195,18 +204,33 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
         let nonces = [nonce(0), nonce(1)];
         let these_commitments =
           [C::generator() * nonces[0].deref(), C::generator() * nonces[1].deref()];
-        let machine = machine.unsafe_override_preprocess(
-          vec![Nonce(nonces)],
-          Preprocess {
-            commitments: Commitments {
-              nonces: vec![NonceCommitments {
-                generators: vec![GeneratorCommitments(these_commitments)],
-              }],
-              dleq: None,
-            },
-            addendum: (),
-          },
+
+        assert_eq!(
+          these_commitments[0].to_bytes().as_ref(),
+          hex::decode(&vectors.commitments[c][0]).unwrap()
         );
+        assert_eq!(
+          these_commitments[1].to_bytes().as_ref(),
+          hex::decode(&vectors.commitments[c][1]).unwrap()
+        );
+
+        let preprocess = Preprocess {
+          commitments: Commitments {
+            nonces: vec![NonceCommitments {
+              generators: vec![GeneratorCommitments(these_commitments)],
+            }],
+            dleq: None,
+          },
+          addendum: (),
+        };
+        // FROST doesn't specify how to serialize these together, yet this is sane
+        // (and the simplest option)
+        assert_eq!(
+          preprocess.serialize(),
+          hex::decode(vectors.commitments[c][0].clone() + &vectors.commitments[c][1]).unwrap()
+        );
+
+        let machine = machine.unsafe_override_preprocess(vec![Nonce(nonces)], preprocess);
 
         commitments.insert(
           *i,
@@ -258,7 +282,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   // the current codebase
 
   // A transparent RNG which has a fixed output
-  struct TransparentRng(Option<[u8; 32]>);
+  struct TransparentRng(Vec<[u8; 32]>);
   impl RngCore for TransparentRng {
     fn next_u32(&mut self) -> u32 {
       unimplemented!()
@@ -267,7 +291,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       unimplemented!()
     }
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-      dest.copy_from_slice(&self.0.take().unwrap())
+      dest.copy_from_slice(&self.0.remove(0))
     }
     fn try_fill_bytes(&mut self, _: &mut [u8]) -> Result<(), rand_core::Error> {
       unimplemented!()
@@ -286,21 +310,41 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     let share = Zeroizing::new(
       C::read_F::<&[u8]>(&mut hex::decode(&vectors.shares[l - 1]).unwrap().as_ref()).unwrap(),
     );
-    for nonce in 0 .. 2 {
+
+    let randomness = vectors.nonce_randomness[i]
+      .iter()
+      .map(|randomness| hex::decode(randomness).unwrap().try_into().unwrap())
+      .collect::<Vec<_>>();
+
+    let nonces = vectors.nonces[i]
+      .iter()
+      .map(|nonce| {
+        Zeroizing::new(C::read_F::<&[u8]>(&mut hex::decode(nonce).unwrap().as_ref()).unwrap())
+      })
+      .collect::<Vec<_>>();
+
+    for (randomness, nonce) in randomness.iter().zip(&nonces) {
       // Nonces are only present for participating signers, hence i
-      assert_eq!(
-        C::random_nonce(
-          &share,
-          &mut TransparentRng(Some(
-            hex::decode(&vectors.nonce_randomness[i][nonce]).unwrap().try_into().unwrap()
-          ))
-        ),
-        Zeroizing::new(
-          C::read_F::<&[u8]>(&mut hex::decode(&vectors.nonces[i][nonce]).unwrap().as_ref())
-            .unwrap()
-        )
-      );
+      assert_eq!(C::random_nonce(&share, &mut TransparentRng(vec![*randomness])), *nonce);
     }
+
+    // Also test it at the Commitments level
+    let (generated_nonces, commitments) = Commitments::<C>::new::<_, IetfTranscript>(
+      &mut TransparentRng(randomness),
+      &share,
+      &[vec![C::generator()]],
+      &[],
+    );
+
+    assert_eq!(generated_nonces.len(), 1);
+    assert_eq!(generated_nonces[0].0, [nonces[0].clone(), nonces[1].clone()]);
+
+    let mut commitments_bytes = vec![];
+    commitments.write(&mut commitments_bytes).unwrap();
+    assert_eq!(
+      commitments_bytes,
+      hex::decode(vectors.commitments[i][0].clone() + &vectors.commitments[i][1]).unwrap()
+    );
   }
 
   // This doesn't verify C::random_nonce is called correctly, where the code should call it with
@@ -334,13 +378,13 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
       // Calculate the expected nonces
       let mut expected = (C::generator() *
-        C::random_nonce(keys[i].secret_share(), &mut TransparentRng(Some(randomness.0))).deref())
+        C::random_nonce(keys[i].secret_share(), &mut TransparentRng(vec![randomness.0])).deref())
       .to_bytes()
       .as_ref()
       .to_vec();
       expected.extend(
         (C::generator() *
-          C::random_nonce(keys[i].secret_share(), &mut TransparentRng(Some(randomness.1)))
+          C::random_nonce(keys[i].secret_share(), &mut TransparentRng(vec![randomness.1]))
             .deref())
         .to_bytes()
         .as_ref(),
