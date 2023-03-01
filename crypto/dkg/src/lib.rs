@@ -365,6 +365,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
   /// Offset the keys by a given scalar to allow for account and privacy schemes.
   /// This offset is ephemeral and will not be included when these keys are serialized.
   /// Keys offset multiple times will form a new offset of their sum.
+  #[must_use]
   pub fn offset(&self, offset: C::F) -> ThresholdKeys<C> {
     let mut res = self.clone();
     // Carry any existing offset

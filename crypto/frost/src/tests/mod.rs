@@ -5,10 +5,14 @@ use rand_core::{RngCore, CryptoRng};
 pub use dkg::tests::{key_gen, recover_key};
 
 use crate::{
-  Curve, Participant, ThresholdKeys,
-  algorithm::Algorithm,
+  Curve, Participant, ThresholdKeys, FrostError,
+  algorithm::{Algorithm, Hram, Schnorr},
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
+
+/// Tests for the nonce handling code.
+pub mod nonces;
+use nonces::{test_multi_nonce, test_invalid_commitment, test_invalid_dleq_proof};
 
 /// Vectorized test suite to ensure consistency.
 pub mod vectors;
@@ -62,9 +66,8 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     .collect()
 }
 
-// Run the commit step and generate signature shares
-#[allow(clippy::type_complexity)]
-pub(crate) fn commit_and_shares<
+// Run the preprocess step
+pub(crate) fn preprocess<
   R: RngCore + CryptoRng,
   M: PreprocessMachine,
   F: FnMut(&mut R, &mut HashMap<Participant, M::SignMachine>),
@@ -72,11 +75,7 @@ pub(crate) fn commit_and_shares<
   rng: &mut R,
   mut machines: HashMap<Participant, M>,
   mut cache: F,
-  msg: &[u8],
-) -> (
-  HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::SignatureMachine>,
-  HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::SignatureShare>,
-) {
+) -> (HashMap<Participant, M::SignMachine>, HashMap<Participant, M::Preprocess>) {
   let mut commitments = HashMap::new();
   let mut machines = machines
     .drain()
@@ -92,6 +91,26 @@ pub(crate) fn commit_and_shares<
     .collect::<HashMap<_, _>>();
 
   cache(rng, &mut machines);
+
+  (machines, commitments)
+}
+
+// Run the preprocess and generate signature shares
+#[allow(clippy::type_complexity)]
+pub(crate) fn preprocess_and_shares<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine,
+  F: FnMut(&mut R, &mut HashMap<Participant, M::SignMachine>),
+>(
+  rng: &mut R,
+  machines: HashMap<Participant, M>,
+  cache: F,
+  msg: &[u8],
+) -> (
+  HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::SignatureMachine>,
+  HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::SignatureShare>,
+) {
+  let (mut machines, commitments) = preprocess(rng, machines, cache);
 
   let mut shares = HashMap::new();
   let machines = machines
@@ -120,7 +139,7 @@ fn sign_internal<
   cache: F,
   msg: &[u8],
 ) -> M::Signature {
-  let (mut machines, shares) = commit_and_shares(rng, machines, cache, msg);
+  let (mut machines, shares) = preprocess_and_shares(rng, machines, cache, msg);
 
   let mut signature = None;
   for (i, machine) in machines.drain() {
@@ -171,4 +190,68 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     },
     msg,
   )
+}
+
+/// Test a basic Schnorr signature.
+pub fn test_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
+  const MSG: &[u8] = b"Hello, World!";
+
+  let keys = key_gen(&mut *rng);
+  let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
+  let sig = sign(&mut *rng, Schnorr::<C, H>::new(), keys.clone(), machines, MSG);
+  let group_key = keys[&Participant::new(1).unwrap()].group_key();
+  assert!(sig.verify(group_key, H::hram(&sig.R, &group_key, MSG)));
+}
+
+// Test an offset Schnorr signature.
+pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
+  const MSG: &[u8] = b"Hello, World!";
+
+  let mut keys = key_gen(&mut *rng);
+  let group_key = keys[&Participant::new(1).unwrap()].group_key();
+
+  let offset = C::F::from(5);
+  let offset_key = group_key + (C::generator() * offset);
+  for (_, keys) in keys.iter_mut() {
+    *keys = keys.offset(offset);
+    assert_eq!(keys.group_key(), offset_key);
+  }
+
+  let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
+  let sig = sign(&mut *rng, Schnorr::<C, H>::new(), keys.clone(), machines, MSG);
+  let group_key = keys[&Participant::new(1).unwrap()].group_key();
+  assert!(sig.verify(offset_key, H::hram(&sig.R, &group_key, MSG)));
+}
+
+// Test blame for an invalid Schnorr signature share.
+pub fn test_schnorr_blame<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
+  const MSG: &[u8] = b"Hello, World!";
+
+  let keys = key_gen(&mut *rng);
+  let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
+
+  let (mut machines, shares) = preprocess_and_shares(&mut *rng, machines, |_, _| {}, MSG);
+
+  for (i, machine) in machines.drain() {
+    let mut shares = clone_without(&shares, &i);
+
+    // Select a random participant to give an invalid share
+    let participants = shares.keys().collect::<Vec<_>>();
+    let faulty = *participants
+      [usize::try_from(rng.next_u64() % u64::try_from(participants.len()).unwrap()).unwrap()];
+    shares.get_mut(&faulty).unwrap().invalidate();
+
+    assert_eq!(machine.complete(shares).err(), Some(FrostError::InvalidShare(faulty)));
+  }
+}
+
+// Run a variety of tests against a ciphersuite.
+pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
+  test_schnorr::<R, C, H>(rng);
+  test_offset_schnorr::<R, C, H>(rng);
+  test_schnorr_blame::<R, C, H>(rng);
+
+  test_multi_nonce::<R, C>(rng);
+  test_invalid_commitment::<R, C>(rng);
+  test_invalid_dleq_proof::<R, C>(rng);
 }

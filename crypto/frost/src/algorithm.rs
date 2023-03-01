@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use crate::{Curve, Participant, FrostError, ThresholdKeys, ThresholdView};
+use crate::{Participant, ThresholdKeys, ThresholdView, Curve, FrostError};
 pub use schnorr::SchnorrSignature;
 
 /// Write an addendum to a writer.

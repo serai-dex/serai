@@ -11,17 +11,15 @@ use rand_chacha::ChaCha20Rng;
 
 use group::{ff::PrimeField, GroupEncoding};
 
-use dkg::tests::key_gen;
-
 use crate::{
   curve::Curve,
-  Participant, ThresholdCore, ThresholdKeys, FrostError,
-  algorithm::{IetfTranscript, Schnorr, Hram},
+  Participant, ThresholdCore, ThresholdKeys,
+  algorithm::{IetfTranscript, Hram, Schnorr},
   sign::{
     Writable, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
     PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
   },
-  tests::{clone_without, recover_key, algorithm_machines, commit_and_shares, sign},
+  tests::{clone_without, recover_key, test_ciphersuite},
 };
 
 pub struct Vectors {
@@ -147,36 +145,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   rng: &mut R,
   vectors: Vectors,
 ) {
-  // Test a basic Schnorr signature
-  {
-    let keys = key_gen(&mut *rng);
-    let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
-    const MSG: &[u8] = b"Hello, World!";
-    let sig = sign(&mut *rng, Schnorr::<C, H>::new(), keys.clone(), machines, MSG);
-    let group_key = keys[&Participant::new(1).unwrap()].group_key();
-    assert!(sig.verify(group_key, H::hram(&sig.R, &group_key, MSG)));
-  }
-
-  // Test blame on an invalid Schnorr signature share
-  {
-    let keys = key_gen(&mut *rng);
-    let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
-    const MSG: &[u8] = b"Hello, World!";
-
-    let (mut machines, mut shares) = commit_and_shares(&mut *rng, machines, |_, _| {}, MSG);
-    let faulty = *shares.keys().next().unwrap();
-    shares.get_mut(&faulty).unwrap().invalidate();
-
-    for (i, machine) in machines.drain() {
-      if i == faulty {
-        continue;
-      }
-      assert_eq!(
-        machine.complete(clone_without(&shares, &i)).err(),
-        Some(FrostError::InvalidShare(faulty))
-      );
-    }
-  }
+  test_ciphersuite::<R, C, H>(rng);
 
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
