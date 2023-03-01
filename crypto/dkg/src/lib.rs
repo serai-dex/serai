@@ -401,31 +401,35 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     self.core.serialize()
   }
 
-  pub fn view(&self, included: &[Participant]) -> Result<ThresholdView<C>, DkgError<()>> {
+  pub fn view(&self, mut included: Vec<Participant>) -> Result<ThresholdView<C>, DkgError<()>> {
     if (included.len() < self.params().t.into()) || (usize::from(self.params().n) < included.len())
     {
       Err(DkgError::InvalidSigningSet)?;
     }
+    included.sort();
 
-    let offset_share = self.offset.unwrap_or_else(C::F::zero) *
-      C::F::from(included.len().try_into().unwrap()).invert().unwrap();
-    let offset_verification_share = C::generator() * offset_share;
+    let mut secret_share =
+      Zeroizing::new(lagrange::<C::F>(self.params().i, &included) * self.secret_share().deref());
+
+    let mut verification_shares = self.verification_shares();
+    for (i, share) in verification_shares.iter_mut() {
+      *share *= lagrange::<C::F>(*i, &included);
+    }
+
+    // The offset is included by adding it to the participant with the lowest ID
+    let offset = self.offset.unwrap_or_else(C::F::zero);
+    if included[0] == self.params().i() {
+      *secret_share += offset;
+    }
+    *verification_shares.get_mut(&included[0]).unwrap() += C::generator() * offset;
 
     Ok(ThresholdView {
-      offset: self.offset.unwrap_or_else(C::F::zero),
+      offset,
       group_key: self.group_key(),
-      secret_share: Zeroizing::new(
-        (lagrange::<C::F>(self.params().i, included) * self.secret_share().deref()) + offset_share,
-      ),
+      secret_share,
       original_verification_shares: self.verification_shares(),
-      verification_shares: self
-        .verification_shares()
-        .iter()
-        .map(|(l, share)| {
-          (*l, (*share * lagrange::<C::F>(*l, included)) + offset_verification_share)
-        })
-        .collect(),
-      included: included.to_vec(),
+      verification_shares,
+      included,
     })
   }
 }

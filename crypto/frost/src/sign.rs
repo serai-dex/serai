@@ -318,7 +318,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
       }
     }
 
-    let view = self.params.keys.view(&included).unwrap();
+    let view = self.params.keys.view(included.clone()).unwrap();
     validate_map(&preprocesses, &included, multisig_params.i())?;
 
     {
