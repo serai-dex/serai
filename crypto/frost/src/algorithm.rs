@@ -38,7 +38,7 @@ pub trait Algorithm<C: Curve>: Clone {
   fn transcript(&mut self) -> &mut Self::Transcript;
 
   /// Obtain the list of nonces to generate, as specified by the generators to create commitments
-  /// against per-nonce
+  /// against per-nonce.
   fn nonces(&self) -> Vec<Vec<C::G>>;
 
   /// Generate an addendum to FROST"s preprocessing stage.

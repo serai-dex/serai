@@ -3,10 +3,11 @@
 // Then there is a signature (a modified Chaum Pedersen proof) using multiple nonces at once
 //
 // Accordingly, in order for this library to be robust, it supports generating an arbitrary amount
-// of nonces, each against an arbitrary list of basepoints
+// of nonces, each against an arbitrary list of generators
 //
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
-// When multiple D, E pairs are provided, a DLEq proof is also provided to confirm their integrity
+// When representations across multiple generators are provided, a DLEq proof is also provided to
+// confirm their integrity
 
 use core::ops::Deref;
 use std::{
@@ -72,6 +73,7 @@ impl<C: Curve> GeneratorCommitments<C> {
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct NonceCommitments<C: Curve> {
   // Called generators as these commitments are indexed by generator later on
+  // So to get the commitments for the first generator, it'd be commitments.generators[0]
   pub(crate) generators: Vec<GeneratorCommitments<C>>,
 }
 
@@ -130,9 +132,11 @@ impl<C: Curve> NonceCommitments<C> {
   }
 }
 
+/// Commitments for all the nonces across all their generators.
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Commitments<C: Curve> {
   // Called nonces as these commitments are indexed by nonce
+  // So to get the commitments for the first nonce, it'd be commitments.nonces[0]
   pub(crate) nonces: Vec<NonceCommitments<C>>,
   // DLEq Proof proving that each set of commitments were generated using a single pair of discrete
   // logarithms

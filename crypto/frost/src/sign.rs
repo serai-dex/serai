@@ -221,8 +221,8 @@ pub trait SignMachine<S>: Sized {
   /// security as your private key share.
   fn cache(self) -> CachedPreprocess;
 
-  /// Create a sign machine from a cached preprocess. After this, the preprocess should be fully
-  /// deleted, as it must never be reused. It is
+  /// Create a sign machine from a cached preprocess. After this, the preprocess must be deleted so
+  /// it's never reused. Any reuse would cause the signer to leak their secret share.
   fn from_cache(
     params: Self::Params,
     keys: Self::Keys,
