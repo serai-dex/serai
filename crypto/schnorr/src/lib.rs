@@ -20,6 +20,13 @@ pub mod aggregate;
 mod tests;
 
 /// A Schnorr signature of the form (R, s) where s = r + cx.
+///
+/// These are intended to be strict. It is generic over Ciphersuite which is for PrimeGroups,
+/// and mandates canonical encodings in its read function.
+///
+/// RFC 8032 has an alternative verification formula, 8R = 8s - 8cX, which is intended to handle
+/// torsioned nonces/public keys. Due to this library's strict requirements, such signatures will
+/// not be verifiable with this library.
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct SchnorrSignature<C: Ciphersuite> {

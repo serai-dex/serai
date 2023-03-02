@@ -54,7 +54,7 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
     for (i, sig) in sigs.iter().enumerate() {
       sig.batch_verify(&mut OsRng, &mut batch, i, C::generator() * keys[i].deref(), challenges[i]);
     }
-    batch.verify_with_vartime_blame().unwrap();
+    batch.verify_vartime_with_vartime_blame().unwrap();
   }
 
   // Shift 1 from s from one to another and verify it fails
@@ -70,7 +70,7 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
       }
       sig.batch_verify(&mut OsRng, &mut batch, i, C::generator() * keys[i].deref(), challenges[i]);
     }
-    if let Err(blame) = batch.verify_with_vartime_blame() {
+    if let Err(blame) = batch.verify_vartime_with_vartime_blame() {
       assert!((blame == 1) || (blame == 2));
     } else {
       panic!("Batch verification considered malleated signatures valid");
