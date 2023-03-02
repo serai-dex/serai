@@ -19,6 +19,8 @@ pub use batch::BatchVerifier;
 #[cfg(test)]
 mod tests;
 
+// Convert scalars to `window`-sized bit groups, as needed to index a table
+// This algorithm works for `window <= 8`
 pub(crate) fn prep_bits<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<u8>>
 where
   G::Scalar: PrimeFieldBits,
@@ -31,10 +33,9 @@ where
     let mut bits = pair.0.to_le_bits();
     groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
 
-    #[allow(unused_assignments)]
     for (i, mut raw_bit) in bits.iter_mut().enumerate() {
       let mut bit = u8::from(*raw_bit);
-      *raw_bit = false;
+      (*raw_bit).zeroize();
 
       groupings[p][i / w_usize] |= bit << (i % w_usize);
       bit.zeroize();
@@ -42,20 +43,6 @@ where
   }
 
   groupings
-}
-
-pub(crate) fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
-  let mut tables = Vec::with_capacity(pairs.len());
-  for pair in pairs {
-    let p = tables.len();
-    tables.push(vec![G::identity(); 2_usize.pow(window.into())]);
-    let mut accum = G::identity();
-    for i in 1 .. tables[p].len() {
-      accum += pair.1;
-      tables[p][i] = accum;
-    }
-  }
-  tables
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

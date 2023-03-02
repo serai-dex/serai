@@ -5,6 +5,8 @@ use group::Group;
 
 use crate::prep_bits;
 
+// Pippenger's algorithm for multiexponentation, as published in the SIAM Journal on Computing
+// DOI: 10.1137/0209022
 pub(crate) fn pippenger<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
 where
   G::Scalar: PrimeFieldBits,

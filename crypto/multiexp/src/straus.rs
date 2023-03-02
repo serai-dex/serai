@@ -3,8 +3,25 @@ use zeroize::Zeroize;
 use ff::PrimeFieldBits;
 use group::Group;
 
-use crate::{prep_bits, prep_tables};
+use crate::prep_bits;
 
+// Create tables for every included point of size 2^window
+fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
+  let mut tables = Vec::with_capacity(pairs.len());
+  for pair in pairs {
+    let p = tables.len();
+    tables.push(vec![G::identity(); 2_usize.pow(window.into())]);
+    let mut accum = G::identity();
+    for i in 1 .. tables[p].len() {
+      accum += pair.1;
+      tables[p][i] = accum;
+    }
+  }
+  tables
+}
+
+// Straus's algorithm for multiexponentation, as published in The American Mathematical Monthly
+// DOI: 10.2307/2310929
 pub(crate) fn straus<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
 where
   G::Scalar: PrimeFieldBits + Zeroize,
