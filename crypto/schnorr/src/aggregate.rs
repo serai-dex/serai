@@ -20,15 +20,6 @@ fn digest<D: Digest>() -> D {
   D::new_with_prefix(b"Schnorr Aggregate")
 }
 
-// A secure challenge will include the nonce and whatever message
-// Depending on the environment, a secure challenge *may* not include the public key, even if
-// the modern consensus is it should
-// Accordingly, transcript both here, even if ideally only the latter would need to be
-fn digest_accumulate<D: Digest, G: PrimeGroup>(digest: &mut D, key: G, challenge: G::Scalar) {
-  digest.update(key.to_bytes().as_ref());
-  digest.update(challenge.to_repr().as_ref());
-}
-
 // Performs a big-endian modular reduction of the hash value
 // This is used by the below aggregator to prevent mutability
 // Only an 128-bit scalar is needed to offer 128-bits of security against malleability per
@@ -82,7 +73,7 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
     Ok(SchnorrAggregate { Rs, s: C::read_F(reader)? })
   }
 
-  /// Write a SchnorrAggregate to something implementing Read.
+  /// Write a SchnorrAggregate to something implementing Write.
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(
       &u32::try_from(self.Rs.len())
@@ -104,6 +95,10 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
   }
 
   /// Perform signature verification.
+  ///
+  /// This challenge must be properly crafted, which means being binding to the public key, nonce,
+  /// and any message. Failure to do so will let a malicious adversary to forge signatures for
+  /// different keys/messages.
   #[must_use]
   pub fn verify<D: Clone + Digest>(&self, keys_and_challenges: &[(C::G, C::F)]) -> bool {
     if self.Rs.len() != keys_and_challenges.len() {
@@ -112,7 +107,7 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
 
     let mut digest = digest::<D>();
     for (key, challenge) in keys_and_challenges {
-      digest_accumulate(&mut digest, *key, *challenge);
+      digest.update(challenge.to_repr().as_ref());
     }
 
     let mut pairs = Vec::with_capacity((2 * keys_and_challenges.len()) + 1);
@@ -147,7 +142,7 @@ impl<D: Clone + Digest, C: Ciphersuite> SchnorrAggregator<D, C> {
 
   /// Aggregate a signature.
   pub fn aggregate(&mut self, public_key: C::G, challenge: C::F, sig: SchnorrSignature<C>) {
-    digest_accumulate(&mut self.digest, public_key, challenge);
+    self.digest.update(challenge.to_repr().as_ref());
     self.sigs.push(sig);
   }
 
