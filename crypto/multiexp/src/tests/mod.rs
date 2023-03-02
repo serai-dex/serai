@@ -10,7 +10,12 @@ use group::Group;
 use k256::ProjectivePoint;
 use dalek_ff_group::EdwardsPoint;
 
-use crate::{straus, pippenger, multiexp, multiexp_vartime};
+use crate::{straus, straus_vartime, pippenger, pippenger_vartime, multiexp, multiexp_vartime};
+
+#[cfg(feature = "batch")]
+mod batch;
+#[cfg(feature = "batch")]
+use batch::test_batch;
 
 #[allow(dead_code)]
 fn benchmark_internal<G: Group>(straus_bool: bool)
@@ -85,26 +90,59 @@ fn test_multiexp<G: Group>()
 where
   G::Scalar: PrimeFieldBits + Zeroize,
 {
+  let test = |pairs: &[_], sum| {
+    // These should automatically determine the best algorithm
+    assert_eq!(multiexp(pairs), sum);
+    assert_eq!(multiexp_vartime(pairs), sum);
+
+    // Also explicitly test straus/pippenger for each bit size
+    if !pairs.is_empty() {
+      for window in 1 .. 8 {
+        assert_eq!(straus(pairs, window), sum);
+        assert_eq!(straus_vartime(pairs, window), sum);
+        assert_eq!(pippenger(pairs, window), sum);
+        assert_eq!(pippenger_vartime(pairs, window), sum);
+      }
+    }
+  };
+
+  // Test an empty multiexp is identity
+  test(&[], G::identity());
+
+  // Test an multiexp of identity/zero elements is identity
+  test(&[(G::Scalar::zero(), G::generator())], G::identity());
+  test(&[(G::Scalar::one(), G::identity())], G::identity());
+
+  // Test a variety of multiexp sizes
   let mut pairs = Vec::with_capacity(1000);
   let mut sum = G::identity();
   for _ in 0 .. 10 {
+    // Test a multiexp of a single item
+    // On successive loop iterations, this will test a multiexp with an odd number of pairs
+    pairs.push((G::Scalar::random(&mut OsRng), G::generator() * G::Scalar::random(&mut OsRng)));
+    sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
+    test(&pairs, sum);
+
     for _ in 0 .. 100 {
       pairs.push((G::Scalar::random(&mut OsRng), G::generator() * G::Scalar::random(&mut OsRng)));
       sum += pairs[pairs.len() - 1].1 * pairs[pairs.len() - 1].0;
     }
-    assert_eq!(multiexp(&pairs), sum);
-    assert_eq!(multiexp_vartime(&pairs), sum);
+    test(&pairs, sum);
   }
 }
 
 #[test]
 fn test_secp256k1() {
   test_multiexp::<ProjectivePoint>();
+  #[cfg(feature = "batch")]
+  test_batch::<ProjectivePoint>();
 }
 
 #[test]
 fn test_ed25519() {
   test_multiexp::<EdwardsPoint>();
+  #[cfg(feature = "batch")]
+  test_batch::<EdwardsPoint>();
 }
 
 #[ignore]

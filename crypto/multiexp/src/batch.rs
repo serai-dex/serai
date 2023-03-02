@@ -130,6 +130,14 @@ where
       // If 1 and 2 were valid, this would've only taken 2 rounds to complete
       // To prevent this from being gamed, if there's an odd number of elements, randomize which
       // side the split occurs on
+
+      // This does risk breaking determinism
+      // The concern is if the select split point causes different paths to be taken when multiple
+      // invalid elements exist
+      // While the split point may move an element from the right to the left, always choosing the
+      // left side (if it's invalid) means this will still always return the left-most,
+      // invalid element
+
       if slice.len() % 2 == 1 {
         split += usize::try_from(split_side & 1).unwrap();
         split_side >>= 1;

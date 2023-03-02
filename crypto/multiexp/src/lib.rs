@@ -169,6 +169,7 @@ where
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
     Algorithm::Single => pairs[0].1 * pairs[0].0,
+    // These functions panic if called without any pairs
     Algorithm::Straus(window) => straus(pairs, window),
     Algorithm::Pippenger(window) => pippenger(pairs, window),
   }
