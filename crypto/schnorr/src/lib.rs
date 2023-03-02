@@ -54,6 +54,10 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
   }
 
   /// Sign a Schnorr signature with the given nonce for the specified challenge.
+  ///
+  /// This challenge must be properly crafted, which means being binding to the public key, nonce,
+  /// and any message. Failure to do so will let a malicious adversary to forge signatures for
+  /// different keys/messages.
   pub fn sign(
     private_key: &Zeroizing<C::F>,
     nonce: Zeroizing<C::F>,
@@ -83,12 +87,20 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
   }
 
   /// Verify a Schnorr signature for the given key with the specified challenge.
+  ///
+  /// This challenge must be properly crafted, which means being binding to the public key, nonce,
+  /// and any message. Failure to do so will let a malicious adversary to forge signatures for
+  /// different keys/messages.
   #[must_use]
   pub fn verify(&self, public_key: C::G, challenge: C::F) -> bool {
     multiexp_vartime(&self.batch_statements(public_key, challenge)).is_identity().into()
   }
 
   /// Queue a signature for batch verification.
+  ///
+  /// This challenge must be properly crafted, which means being binding to the public key, nonce,
+  /// and any message. Failure to do so will let a malicious adversary to forge signatures for
+  /// different keys/messages.
   pub fn batch_verify<R: RngCore + CryptoRng, I: Copy + Zeroize>(
     &self,
     rng: &mut R,
