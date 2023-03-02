@@ -79,15 +79,17 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
 }
 
 pub(crate) fn aggregate<C: Ciphersuite>() {
+  const DST: &[u8] = b"Schnorr Aggregator Test";
+
   // Create 5 signatures
   let mut keys = vec![];
   let mut challenges = vec![];
-  let mut aggregator = SchnorrAggregator::<Sha256, C>::new();
+  let mut aggregator = SchnorrAggregator::<Sha256, C>::new(DST);
   for i in 0 .. 5 {
     keys.push(Zeroizing::new(C::random_nonzero_F(&mut OsRng)));
+    // In practice, this MUST be a secure challenge binding to the nonce, key, and any message
     challenges.push(C::random_nonzero_F(&mut OsRng));
     aggregator.aggregate(
-      C::generator() * keys[i].deref(),
       challenges[i],
       SchnorrSignature::<C>::sign(
         &keys[i],
@@ -101,12 +103,13 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
   let aggregate =
     SchnorrAggregate::<C>::read::<&[u8]>(&mut aggregate.serialize().as_ref()).unwrap();
   assert!(aggregate.verify::<Sha256>(
+    DST,
     keys
       .iter()
       .map(|key| C::generator() * key.deref())
       .zip(challenges.iter().cloned())
       .collect::<Vec<_>>()
-      .as_ref()
+      .as_ref(),
   ));
 }
 
