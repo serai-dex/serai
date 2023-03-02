@@ -1,21 +1,21 @@
 use core::ops::Deref;
 
+use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use zeroize::Zeroizing;
-
-use blake2::{digest::typenum::U32, Blake2b};
-type Blake2b256 = Blake2b<U32>;
+use sha2::Sha256;
 
 use group::{ff::Field, Group};
-
 use multiexp::BatchVerifier;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::{Ciphersuite, Ed25519};
+
 use crate::{
   SchnorrSignature,
   aggregate::{SchnorrAggregator, SchnorrAggregate},
 };
+
+mod rfc8032;
 
 pub(crate) fn sign<C: Ciphersuite>() {
   let private_key = Zeroizing::new(C::random_nonzero_F(&mut OsRng));
@@ -82,7 +82,7 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
   // Create 5 signatures
   let mut keys = vec![];
   let mut challenges = vec![];
-  let mut aggregator = SchnorrAggregator::<Blake2b256, C>::new();
+  let mut aggregator = SchnorrAggregator::<Sha256, C>::new();
   for i in 0 .. 5 {
     keys.push(Zeroizing::new(C::random_nonzero_F(&mut OsRng)));
     challenges.push(C::random_nonzero_F(&mut OsRng));
@@ -100,7 +100,7 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
   let aggregate = aggregator.complete().unwrap();
   let aggregate =
     SchnorrAggregate::<C>::read::<&[u8]>(&mut aggregate.serialize().as_ref()).unwrap();
-  assert!(aggregate.verify::<Blake2b256>(
+  assert!(aggregate.verify::<Sha256>(
     keys
       .iter()
       .map(|key| C::generator() * key.deref())
@@ -112,8 +112,8 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
 
 #[test]
 fn test() {
-  sign::<Ristretto>();
-  verify::<Ristretto>();
-  batch_verify::<Ristretto>();
-  aggregate::<Ristretto>();
+  sign::<Ed25519>();
+  verify::<Ed25519>();
+  batch_verify::<Ed25519>();
+  aggregate::<Ed25519>();
 }
