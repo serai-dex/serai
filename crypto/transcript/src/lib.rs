@@ -25,13 +25,19 @@ pub trait Transcript {
   /// Append a message to the transcript.
   fn append_message<M: AsRef<[u8]>>(&mut self, label: &'static [u8], message: M);
 
-  /// Produce a challenge. This MUST update the transcript as it does so, preventing the same
-  /// challenge from being generated multiple times.
+  /// Produce a challenge.
+  ///
+  /// Implementors MUST update the transcript as it does so, preventing the same challenge from
+  /// being generated multiple times.
   fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge;
 
-  /// Produce a RNG seed. Helper function for parties needing to generate random data from an
-  /// agreed upon state. Internally calls the challenge function for the needed bytes, converting
-  /// them to the seed format rand_core expects.
+  /// Produce a RNG seed.
+  ///
+  /// Helper function for parties needing to generate random data from an agreed upon state.
+  ///
+  /// Implementors MAY internally call the challenge function for the needed bytes, and accordingly
+  /// produce a transcript conflict between two transcripts, one which called challenge(label) and
+  /// one which called rng_seed(label) at the same point.
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32];
 }
 
