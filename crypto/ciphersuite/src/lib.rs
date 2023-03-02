@@ -11,7 +11,8 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::Zeroize;
 use subtle::ConstantTimeEq;
 
-use digest::{core_api::BlockSizeUser, Digest};
+use digest::{core_api::BlockSizeUser, Digest, HashMarker};
+use transcript::SecureDigest;
 
 use group::{
   ff::{Field, PrimeField, PrimeFieldBits},
@@ -49,7 +50,7 @@ pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize + ConstantTimeEq;
   /// Hash algorithm used with this curve.
   // Requires BlockSizeUser so it can be used within Hkdf which requies that.
-  type H: Clone + BlockSizeUser + Digest;
+  type H: Clone + BlockSizeUser + Digest + HashMarker + SecureDigest;
 
   /// ID for this curve.
   const ID: &'static [u8];

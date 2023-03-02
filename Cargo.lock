@@ -912,6 +912,7 @@ dependencies = [
  "elliptic-curve",
  "ff",
  "ff-group-tests",
+ "flexible-transcript",
  "group",
  "hex",
  "k256",
@@ -7493,13 +7494,14 @@ dependencies = [
 name = "schnorr-signatures"
 version = "0.2.0"
 dependencies = [
- "blake2",
  "ciphersuite",
  "dalek-ff-group",
- "digest 0.10.6",
+ "flexible-transcript",
  "group",
+ "hex",
  "multiexp",
  "rand_core 0.6.4",
+ "sha2 0.10.6",
  "zeroize",
 ]
 

@@ -13,28 +13,49 @@ use ciphersuite::Ciphersuite;
 
 use crate::SchnorrSignature;
 
-// Performs a big-endian modular reduction of the hash value
-// This is used by the below aggregator to prevent mutability
-// Only an 128-bit scalar is needed to offer 128-bits of security against malleability per
-// https://cr.yp.to/badbatch/badbatch-20120919.pdf
-// Accordingly, while a 256-bit hash used here with a 256-bit ECC will have bias, it shouldn't be
-// an issue
-fn scalar_from_digest<D: Clone + SecureDigest, F: PrimeField>(
-  digest: &mut DigestTranscript<D>,
-) -> F {
-  let bytes = digest.challenge(b"aggregation_weight");
+// Returns a unbiased scalar weight to use on a signature in order to prevent malleability
+fn weight<D: Clone + SecureDigest, F: PrimeField>(digest: &mut DigestTranscript<D>) -> F {
+  let mut bytes = digest.challenge(b"aggregation_weight");
   debug_assert_eq!(bytes.len() % 8, 0);
+  // This should be guaranteed thanks to SecureDigest
+  debug_assert!(bytes.len() >= 32);
 
   let mut res = F::zero();
   let mut i = 0;
-  while i < bytes.len() {
-    if i != 0 {
-      for _ in 0 .. 8 {
+
+  // Derive a scalar from enough bits of entropy that bias is < 2^128
+  // This can't be const due to its usage of a generic
+  // Also due to the usize::try_from, yet that could be replaced with an `as`
+  // The + 7 forces it to round up
+  #[allow(non_snake_case)]
+  let BYTES: usize = usize::try_from(((F::NUM_BITS + 128) + 7) / 8).unwrap();
+
+  let mut remaining = BYTES;
+
+  // We load bits in as u64s
+  const WORD_LEN_IN_BITS: usize = 64;
+  const WORD_LEN_IN_BYTES: usize = WORD_LEN_IN_BITS / 8;
+
+  let mut first = true;
+  while i < remaining {
+    // Shift over the already loaded bits
+    if !first {
+      for _ in 0 .. WORD_LEN_IN_BITS {
         res += res;
       }
     }
-    res += F::from(u64::from_be_bytes(bytes[i .. (i + 8)].try_into().unwrap()));
-    i += 8;
+    first = false;
+
+    // Add the next 64 bits
+    res += F::from(u64::from_be_bytes(bytes[i .. (i + WORD_LEN_IN_BYTES)].try_into().unwrap()));
+    i += WORD_LEN_IN_BYTES;
+
+    // If we've exhausted this challenge, get another
+    if i == bytes.len() {
+      bytes = digest.challenge(b"aggregation_weight_continued");
+      remaining -= i;
+      i = 0;
+    }
   }
   res
 }
@@ -92,16 +113,12 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
   /// The DST used here must prevent a collision with whatever hash function produced the
   /// challenges.
   #[must_use]
-  pub fn verify<D: Clone + SecureDigest>(
-    &self,
-    dst: &'static [u8],
-    keys_and_challenges: &[(C::G, C::F)],
-  ) -> bool {
+  pub fn verify(&self, dst: &'static [u8], keys_and_challenges: &[(C::G, C::F)]) -> bool {
     if self.Rs.len() != keys_and_challenges.len() {
       return false;
     }
 
-    let mut digest = DigestTranscript::<D>::new(dst);
+    let mut digest = DigestTranscript::<C::H>::new(dst);
     digest.domain_separate(b"signatures");
     for (_, challenge) in keys_and_challenges {
       digest.append_message(b"challenge", challenge.to_repr());
@@ -109,7 +126,7 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
 
     let mut pairs = Vec::with_capacity((2 * keys_and_challenges.len()) + 1);
     for (i, (key, challenge)) in keys_and_challenges.iter().enumerate() {
-      let z = scalar_from_digest(&mut digest);
+      let z = weight(&mut digest);
       pairs.push((z, self.Rs[i]));
       pairs.push((z * challenge, *key));
     }
@@ -120,18 +137,18 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
 
 #[allow(non_snake_case)]
 #[derive(Clone, Debug, Zeroize)]
-pub struct SchnorrAggregator<D: Clone + SecureDigest, C: Ciphersuite> {
-  digest: DigestTranscript<D>,
+pub struct SchnorrAggregator<C: Ciphersuite> {
+  digest: DigestTranscript<C::H>,
   sigs: Vec<SchnorrSignature<C>>,
 }
 
-impl<D: Clone + SecureDigest, C: Ciphersuite> SchnorrAggregator<D, C> {
+impl<C: Ciphersuite> SchnorrAggregator<C> {
   /// Create a new aggregator.
   ///
   /// The DST used here must prevent a collision with whatever hash function produced the
   /// challenges.
   pub fn new(dst: &'static [u8]) -> Self {
-    let mut res = Self { digest: DigestTranscript::<D>::new(dst), sigs: vec![] };
+    let mut res = Self { digest: DigestTranscript::<C::H>::new(dst), sigs: vec![] };
     res.digest.domain_separate(b"signatures");
     res
   }
@@ -152,7 +169,7 @@ impl<D: Clone + SecureDigest, C: Ciphersuite> SchnorrAggregator<D, C> {
       SchnorrAggregate { Rs: Vec::with_capacity(self.sigs.len()), s: C::F::zero() };
     for i in 0 .. self.sigs.len() {
       aggregate.Rs.push(self.sigs[i].R);
-      aggregate.s += self.sigs[i].s * scalar_from_digest::<_, C::F>(&mut self.digest);
+      aggregate.s += self.sigs[i].s * weight::<_, C::F>(&mut self.digest);
     }
     Some(aggregate)
   }

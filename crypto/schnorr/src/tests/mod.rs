@@ -3,8 +3,6 @@ use core::ops::Deref;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use sha2::Sha256;
-
 use group::{ff::Field, Group};
 use multiexp::BatchVerifier;
 
@@ -84,7 +82,7 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
   // Create 5 signatures
   let mut keys = vec![];
   let mut challenges = vec![];
-  let mut aggregator = SchnorrAggregator::<Sha256, C>::new(DST);
+  let mut aggregator = SchnorrAggregator::<C>::new(DST);
   for i in 0 .. 5 {
     keys.push(Zeroizing::new(C::random_nonzero_F(&mut OsRng)));
     // In practice, this MUST be a secure challenge binding to the nonce, key, and any message
@@ -102,7 +100,7 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
   let aggregate = aggregator.complete().unwrap();
   let aggregate =
     SchnorrAggregate::<C>::read::<&[u8]>(&mut aggregate.serialize().as_ref()).unwrap();
-  assert!(aggregate.verify::<Sha256>(
+  assert!(aggregate.verify(
     DST,
     keys
       .iter()

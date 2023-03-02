@@ -19,6 +19,7 @@ zeroize = { version = "1.5", features = ["zeroize_derive"] }
 subtle = "2"
 
 digest = "0.10"
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2" }
 sha2 = { version = "0.10", optional = true }
 sha3 = { version = "0.10", optional = true }
 

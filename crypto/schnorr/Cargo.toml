@@ -17,7 +17,6 @@ rand_core = "0.6"
 
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 
-digest = "0.10"
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2" }
 
 group = "0.12"
