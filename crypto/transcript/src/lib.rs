@@ -6,7 +6,12 @@ mod merlin;
 #[cfg(feature = "merlin")]
 pub use crate::merlin::MerlinTranscript;
 
-use digest::{typenum::type_operators::IsGreaterOrEqual, consts::U256, Digest, Output, HashMarker};
+use digest::{
+  typenum::{
+    consts::U32, marker_traits::NonZero, type_operators::IsGreaterOrEqual, operator_aliases::GrEq,
+  },
+  Digest, Output, HashMarker,
+};
 
 pub trait Transcript {
   type Challenge: Clone + Send + Sync + AsRef<[u8]>;
@@ -53,7 +58,15 @@ impl DigestTranscriptMember {
 /// A trait defining cryptographic Digests with at least a 256-byte output size, assuming at least
 /// a 128-bit level of security accordingly.
 pub trait SecureDigest: Digest + HashMarker {}
-impl<D: Digest + HashMarker> SecureDigest for D where D::OutputSize: IsGreaterOrEqual<U256> {}
+impl<D: Digest + HashMarker> SecureDigest for D
+where
+  // This just lets us perform the comparison
+  D::OutputSize: IsGreaterOrEqual<U32>,
+  // Perform the comparison and make sure it's true (not zero), meaning D::OutputSize is >= U32
+  // This should be U32 as it's length in bytes, not bits
+  GrEq<D::OutputSize, U32>: NonZero,
+{
+}
 
 /// A simple transcript format constructed around the specified hash algorithm.
 #[derive(Clone, Debug)]
