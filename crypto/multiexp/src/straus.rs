@@ -31,8 +31,10 @@ where
 
   let mut res = G::identity();
   for b in (0 .. groupings[0].len()).rev() {
-    for _ in 0 .. window {
-      res = res.double();
+    if b != (groupings[0].len() - 1) {
+      for _ in 0 .. window {
+        res = res.double();
+      }
     }
 
     for s in 0 .. tables.len() {
@@ -51,20 +53,24 @@ where
   let groupings = prep_bits(pairs, window);
   let tables = prep_tables(pairs, window);
 
-  let mut res = G::identity();
+  let mut res: Option<G> = None;
   for b in (0 .. groupings[0].len()).rev() {
     if b != (groupings[0].len() - 1) {
       for _ in 0 .. window {
-        res = res.double();
+        res = res.map(|res| res.double());
       }
     }
 
     for s in 0 .. tables.len() {
       if groupings[s][b] != 0 {
-        res += tables[s][usize::from(groupings[s][b])];
+        if let Some(res) = res.as_mut() {
+          *res += tables[s][usize::from(groupings[s][b])];
+        } else {
+          res = Some(tables[s][usize::from(groupings[s][b])]);
+        }
       }
     }
   }
 
-  res
+  res.unwrap_or_else(G::identity)
 }

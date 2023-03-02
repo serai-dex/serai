@@ -15,8 +15,10 @@ where
 
   let mut res = G::identity();
   for n in (0 .. bits[0].len()).rev() {
-    for _ in 0 .. window {
-      res = res.double();
+    if n != (bits[0].len() - 1) {
+      for _ in 0 .. window {
+        res = res.double();
+      }
     }
 
     let mut buckets = vec![G::identity(); 2_usize.pow(window.into())];
@@ -49,18 +51,32 @@ where
       }
     }
 
-    let mut buckets = vec![G::identity(); 2_usize.pow(window.into())];
+    // Use None to represent identity since is_none is likely faster than is_identity
+    let mut buckets = vec![None; 2_usize.pow(window.into())];
     for p in 0 .. bits.len() {
       let nibble = usize::from(bits[p][n]);
       if nibble != 0 {
-        buckets[nibble] += pairs[p].1;
+        if let Some(bucket) = buckets[nibble].as_mut() {
+          *bucket += pairs[p].1;
+        } else {
+          buckets[nibble] = Some(pairs[p].1);
+        }
       }
     }
 
-    let mut intermediate_sum = G::identity();
+    let mut intermediate_sum = None;
     for b in (1 .. buckets.len()).rev() {
-      intermediate_sum += buckets[b];
-      res += intermediate_sum;
+      if let Some(bucket) = buckets[b].as_ref() {
+        if let Some(intermediate_sum) = intermediate_sum.as_mut() {
+          *intermediate_sum += bucket;
+        } else {
+          intermediate_sum = Some(*bucket);
+        }
+      }
+
+      if let Some(intermediate_sum) = intermediate_sum.as_ref() {
+        res += intermediate_sum;
+      }
     }
   }
 
