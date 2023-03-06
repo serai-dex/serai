@@ -437,5 +437,13 @@ sp_api::impl_runtime_apis! {
     ) -> transaction_payment::FeeDetails<SubstrateAmount> {
       TransactionPayment::query_fee_details(uxt, len)
     }
+
+    fn query_weight_to_fee(weight: Weight) -> SubstrateAmount {
+      TransactionPayment::weight_to_fee(weight)
+    }
+
+    fn query_length_to_fee(length: u32) -> SubstrateAmount {
+      TransactionPayment::length_to_fee(length)
+    }
   }
 }
