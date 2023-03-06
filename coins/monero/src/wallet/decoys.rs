@@ -23,6 +23,10 @@ const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
 lazy_static! {
   static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
+  // TODO: Expose an API to reset this in case a reorg occurs/the RPC fails/returns garbage
+  // TODO: This is not currently thread-safe. This needs to be a tokio Mutex held by select until
+  // it returns
+  // TODO: Update this when scanning a block, as possible.
   static ref DISTRIBUTION: Mutex<Vec<u64>> = Mutex::new(Vec::with_capacity(3000000));
 }
 
