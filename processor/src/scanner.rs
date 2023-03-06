@@ -38,7 +38,7 @@ pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 struct ScannerDb<C: Coin, D: Db>(D, PhantomData<C>);
 impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn scanner_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    [b"SCANNER", dst, key.as_ref()].concat().to_vec()
+    D::key(b"SCANNER", dst, key)
   }
 
   fn block_key(number: usize) -> Vec<u8> {

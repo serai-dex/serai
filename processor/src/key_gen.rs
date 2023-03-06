@@ -39,7 +39,7 @@ pub type KeyGenEventChannel<C> = mpsc::UnboundedReceiver<KeyGenEvent<C>>;
 struct KeyGenDb<C: Coin, D: Db>(D, PhantomData<C>);
 impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn key_gen_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    [b"KEY_GEN", dst, key.as_ref()].concat().to_vec()
+    D::key(b"KEY_GEN", dst, key)
   }
 
   fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {

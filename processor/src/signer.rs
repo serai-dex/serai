@@ -45,7 +45,7 @@ pub type SignerEventChannel<C> = mpsc::UnboundedReceiver<SignerEvent<C>>;
 struct SignerDb<C: Coin, D: Db>(D, PhantomData<C>);
 impl<C: Coin, D: Db> SignerDb<C, D> {
   fn sign_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    [b"SIGNER", dst, key.as_ref()].concat().to_vec()
+    D::key(b"SIGNER", dst, key)
   }
 
   fn completed_key(id: [u8; 32]) -> Vec<u8> {
