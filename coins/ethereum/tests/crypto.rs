@@ -21,7 +21,10 @@ fn test_ecrecover() {
     .as_nonzero_scalar()
     .try_sign_prehashed_rfc6979::<Sha256>(Keccak256::digest(MESSAGE), b"")
     .unwrap();
-  assert_eq!(public.verify_digest(Keccak256::new_with_prefix(MESSAGE), &sig).unwrap(), ());
+  #[allow(clippy::unit_cmp)] // Intended to assert this wasn't changed to Result<bool>
+  {
+    assert_eq!(public.verify_digest(Keccak256::new_with_prefix(MESSAGE), &sig).unwrap(), ());
+  }
 
   assert_eq!(
     ecrecover(hash_to_scalar(MESSAGE), recovery_id.unwrap().is_y_odd().into(), *sig.r(), *sig.s())

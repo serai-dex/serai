@@ -76,7 +76,7 @@ pub(crate) struct NonceCommitments<C: Curve> {
 }
 
 impl<C: Curve> NonceCommitments<C> {
-  pub(crate) fn new<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     secret_share: &Zeroizing<C::F>,
     generators: &[C::G],
@@ -97,10 +97,7 @@ impl<C: Curve> NonceCommitments<C> {
     (nonce, NonceCommitments { generators: commitments })
   }
 
-  fn read<R: Read, T: Transcript>(
-    reader: &mut R,
-    generators: &[C::G],
-  ) -> io::Result<NonceCommitments<C>> {
+  fn read<R: Read>(reader: &mut R, generators: &[C::G]) -> io::Result<NonceCommitments<C>> {
     Ok(NonceCommitments {
       generators: (0 .. generators.len())
         .map(|_| GeneratorCommitments::read(reader))
@@ -153,7 +150,7 @@ impl<C: Curve> Commitments<C> {
     let mut dleq_nonces = vec![];
     for generators in planned_nonces {
       let (nonce, these_commitments): (Nonce<C>, _) =
-        NonceCommitments::new::<_, T>(&mut *rng, secret_share, generators);
+        NonceCommitments::new(&mut *rng, secret_share, generators);
 
       if generators.len() > 1 {
         dleq_generators.push(generators.clone());
@@ -201,7 +198,7 @@ impl<C: Curve> Commitments<C> {
     context: &[u8],
   ) -> io::Result<Self> {
     let nonces = (0 .. generators.len())
-      .map(|i| NonceCommitments::read::<_, T>(reader, &generators[i]))
+      .map(|i| NonceCommitments::read(reader, &generators[i]))
       .collect::<Result<Vec<NonceCommitments<C>>, _>>()?;
 
     let mut dleq_generators = vec![];

@@ -8,7 +8,7 @@ use jsonrpsee_http_client::HttpClientBuilder;
 
 use sp_inherents::{Error, InherentData, InherentIdentifier};
 
-use in_instructions_pallet::{INHERENT_IDENTIFIER, Updates, InherentError};
+use in_instructions_pallet::{primitives::Updates, INHERENT_IDENTIFIER, InherentError};
 
 pub struct InherentDataProvider;
 impl InherentDataProvider {
