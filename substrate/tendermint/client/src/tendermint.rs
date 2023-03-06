@@ -14,7 +14,7 @@ use sp_runtime::{
 };
 use sp_inherents::{InherentData, InherentDataProvider, CreateInherentDataProviders};
 use sp_blockchain::HeaderBackend;
-use sp_api::{BlockId, ProvideRuntimeApi};
+use sp_api::ProvideRuntimeApi;
 
 use sp_consensus::Error;
 use sc_consensus::{ForkChoiceStrategy, BlockImportParams};
@@ -121,7 +121,7 @@ impl<T: TendermintValidator> TendermintImport<T> {
     let err = self
       .client
       .runtime_api()
-      .check_inherents(&BlockId::Hash(self.client.info().finalized_hash), block, inherent_data)
+      .check_inherents(self.client.info().finalized_hash, block, inherent_data)
       .map_err(|_| Error::Other(BlockError::Fatal.into()))?;
 
     if err.ok() {
