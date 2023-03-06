@@ -1,29 +1,32 @@
-use ethereum_serai::crypto::*;
-use frost::curve::Secp256k1;
 use k256::{
   elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, sec1::ToEncodedPoint},
   ProjectivePoint, Scalar, U256,
 };
+use frost::curve::Secp256k1;
+
+use ethereum_serai::crypto::*;
 
 #[test]
 fn test_ecrecover() {
-  use k256::ecdsa::{
-    recoverable::Signature,
-    signature::{Signer, Verifier},
-    SigningKey, VerifyingKey,
-  };
   use rand_core::OsRng;
+  use sha2::Sha256;
+  use sha3::{Digest, Keccak256};
+  use k256::ecdsa::{hazmat::SignPrimitive, signature::DigestVerifier, SigningKey, VerifyingKey};
 
   let private = SigningKey::random(&mut OsRng);
   let public = VerifyingKey::from(&private);
 
   const MESSAGE: &[u8] = b"Hello, World!";
-  let sig: Signature = private.sign(MESSAGE);
-  public.verify(MESSAGE, &sig).unwrap();
+  let (sig, recovery_id) = private
+    .as_nonzero_scalar()
+    .try_sign_prehashed_rfc6979::<Sha256>(Keccak256::digest(MESSAGE), b"")
+    .unwrap();
+  assert_eq!(public.verify_digest(Keccak256::new_with_prefix(MESSAGE), &sig).unwrap(), ());
 
   assert_eq!(
-    ecrecover(hash_to_scalar(MESSAGE), sig.as_ref()[64], *sig.r(), *sig.s()).unwrap(),
-    address(&ProjectivePoint::from(public))
+    ecrecover(hash_to_scalar(MESSAGE), recovery_id.unwrap().is_y_odd().into(), *sig.r(), *sig.s())
+      .unwrap(),
+    address(&ProjectivePoint::from(public.as_affine()))
   );
 }
 

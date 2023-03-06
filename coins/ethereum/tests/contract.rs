@@ -2,7 +2,7 @@ use std::{convert::TryFrom, sync::Arc, time::Duration};
 
 use rand_core::OsRng;
 
-use k256::{elliptic_curve::bigint::ArrayEncoding, U256};
+use ::k256::{elliptic_curve::bigint::ArrayEncoding, U256};
 
 use ethers::{
   prelude::*,
