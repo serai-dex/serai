@@ -59,7 +59,9 @@ impl<T: TendermintClient> Refresh<T> {
   // If the session has changed, re-create the struct with the data on it
   fn refresh(&self) {
     let session = self._refresh.read().unwrap().session;
-    if session != self.client.runtime_api().current_session(self.client.info().finalized_hash).unwrap() {
+    if session !=
+      self.client.runtime_api().current_session(self.client.info().finalized_hash).unwrap()
+    {
       *self._refresh.write().unwrap() = TendermintValidatorsStruct::from_module::<T>(&self.client);
     }
   }
