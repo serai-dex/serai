@@ -61,8 +61,8 @@ impl DigestTranscriptMember {
   }
 }
 
-/// A trait defining cryptographic Digests with at least a 256-byte output size, assuming at least
-/// a 128-bit level of security accordingly.
+/// A trait defining cryptographic Digests with at least a 256-bit output size, assuming at least a
+/// 128-bit level of security accordingly.
 pub trait SecureDigest: Digest + HashMarker {}
 impl<D: Digest + HashMarker> SecureDigest for D
 where
