@@ -54,6 +54,10 @@ test!(
       builder.set_r_seed(Zeroizing::new([0xbb; 32]));
       let tx = builder.build().unwrap();
       let eventuality = tx.eventuality().unwrap();
+      assert_eq!(
+        eventuality,
+        Eventuality::read::<&[u8]>(&mut eventuality.serialize().as_ref()).unwrap()
+      );
       (tx, eventuality)
     },
     |_, mut tx: Transaction, _, eventuality: Eventuality| async move {

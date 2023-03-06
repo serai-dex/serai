@@ -29,7 +29,8 @@ use crate::{
   Payment, Plan, additional_key,
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, PostFeeBranch, Coin, drop_branches, amortize_fee,
+    Transaction as TransactionTrait, Eventuality as EventualityTrait, PostFeeBranch, Coin,
+    drop_branches, amortize_fee,
   },
 };
 
@@ -99,6 +100,15 @@ impl TransactionTrait<Monero> for Transaction {
   #[cfg(test)]
   async fn fee(&self, _: &Monero) -> u64 {
     self.rct_signatures.base.fee
+  }
+}
+
+impl EventualityTrait for Eventuality {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    Eventuality::read(reader)
+  }
+  fn serialize(&self) -> Vec<u8> {
+    self.serialize()
   }
 }
 
@@ -397,7 +407,8 @@ impl Coin for Monero {
     match self.rpc.publish_transaction(tx).await {
       Ok(_) => Ok(()),
       Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
-      // TODO: Distinguish already in pool vs invalid transaction
+      // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
+      // invalid transaction
       Err(e) => panic!("failed to publish TX {:?}: {e}", tx.hash()),
     }
   }

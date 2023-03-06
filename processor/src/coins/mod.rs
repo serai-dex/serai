@@ -112,6 +112,11 @@ pub trait Transaction<C: Coin>: Send + Sync + Sized + Clone + Debug {
   async fn fee(&self, coin: &C) -> u64;
 }
 
+pub trait Eventuality: Send + Sync + Clone + Debug {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
+  fn serialize(&self) -> Vec<u8>;
+}
+
 pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
@@ -188,7 +193,7 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The type containing all information on a planned transaction, waiting to be signed.
   type SignableTransaction: Send + Sync + Clone + Debug;
   /// The type containing all information to check if a plan was completed.
-  type Eventuality: Send + Sync + Clone + Debug;
+  type Eventuality: Eventuality;
   /// The FROST machine to sign a transaction.
   type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
 

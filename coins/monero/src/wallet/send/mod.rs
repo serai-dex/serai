@@ -1,4 +1,5 @@
 use core::ops::Deref;
+use std::io;
 
 use thiserror::Error;
 
@@ -17,6 +18,10 @@ use frost::FrostError;
 
 use crate::{
   Protocol, Commitment, hash, random_scalar,
+  serialize::{
+    read_byte, read_bytes, read_u64, read_point, read_vec, write_byte, write_raw_vec, write_point,
+    write_vec,
+  },
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagInput, Clsag},
@@ -589,5 +594,45 @@ impl Eventuality {
     }
 
     true
+  }
+
+  pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+    self.protocol.write(w)?;
+    write_raw_vec(write_byte, self.r_seed.as_ref(), w)?;
+    write_vec(write_point, &self.inputs, w)?;
+
+    fn write_payment<W: io::Write>(payment: &(MoneroAddress, u64), w: &mut W) -> io::Result<()> {
+      write_vec(write_byte, payment.0.to_string().as_bytes(), w)?;
+      w.write_all(&payment.1.to_le_bytes())
+    }
+    write_vec(write_payment, &self.payments, w)?;
+
+    write_vec(write_byte, &self.extra, w)
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(128);
+    self.write(&mut buf).unwrap();
+    buf
+  }
+
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Eventuality> {
+    fn read_payment<R: io::Read>(r: &mut R) -> io::Result<(MoneroAddress, u64)> {
+      Ok((
+        String::from_utf8(read_vec(read_byte, r)?)
+          .ok()
+          .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
+          .ok_or(io::Error::new(io::ErrorKind::Other, "invalid address"))?,
+        read_u64(r)?,
+      ))
+    }
+
+    Ok(Eventuality {
+      protocol: Protocol::read(r)?,
+      r_seed: Zeroizing::new(read_bytes::<_, 32>(r)?),
+      inputs: read_vec(read_point, r)?,
+      payments: read_vec(read_payment, r)?,
+      extra: read_vec(read_byte, r)?,
+    })
   }
 }

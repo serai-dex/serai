@@ -211,11 +211,10 @@ async fn sign_plans<C: Coin, D: Db>(
               .created_output(branch.expected, branch.actual);
           }
 
-          // TODO: Handle the eventuality
-          if let Some((tx, _)) = tx {
+          if let Some((tx, eventuality)) = tx {
             signers[key.as_ref()]
               .orders
-              .send(SignerOrder::SignTransaction { id, start, tx })
+              .send(SignerOrder::SignTransaction { id, start, tx, eventuality })
               .unwrap()
           }
         }
@@ -450,9 +449,15 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
       (key, msg) = SignerMessageFuture(&mut signers) => {
         match msg {
           SignerEvent::SignedTransaction { id, tx } => {
-            // If this had an outbound payment, report it up to Substrate for logging purposes
-            // Also, no longer reload the plan on boot
             // TODO
+            // 1) No longer reload the plan on boot
+            // 2) Communicate to other signers
+            // 3) We need to stop signing whenever a peer informs us or the chain has an
+            //    eventuality
+            // 4) If a peer informed us of an eventuality without an outbound payment, stop
+            //    scanning the chain (or at least ack it's solely for sanity purposes?)
+            // 5) When the chain has an eventuality, if it had an outbound payment, report it up to
+            //    Substrate for logging purposes
           },
           SignerEvent::ProcessorMessage(msg) => {
             to_coordinator.send(ProcessorMessage::Sign(msg)).unwrap();
@@ -467,7 +472,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 async fn main() {
   let db = MemDb::new(); // TODO
   let url = env::var("COIN_RPC").expect("coin rpc wasn't specified as an env var");
-  match env::var("COIN").expect("coin wasn't specified as an env var") {
+  match env::var("COIN").expect("coin wasn't specified as an env var").as_str() {
     #[cfg(feature = "bitcoin")]
     "bitcoin" => run(db, Bitcoin::new(url)).await,
     #[cfg(feature = "monero")]

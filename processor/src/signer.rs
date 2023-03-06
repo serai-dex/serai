@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{marker::PhantomData, fmt};
 use std::{
   time::{SystemTime, Duration},
   collections::HashMap,
@@ -12,18 +12,23 @@ use frost::{
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
 };
 
-use log::{info, warn, error};
+use log::{info, debug, warn, error};
 use tokio::{time::timeout, sync::mpsc};
 
 use messages::sign::*;
 use crate::{
   DbTxn, Db,
-  coins::{Transaction, Coin},
+  coins::{Transaction, Eventuality, Coin},
 };
 
 #[derive(Debug)]
 pub enum SignerOrder<C: Coin> {
-  SignTransaction { id: [u8; 32], start: SystemTime, tx: C::SignableTransaction },
+  SignTransaction {
+    id: [u8; 32],
+    start: SystemTime,
+    tx: C::SignableTransaction,
+    eventuality: C::Eventuality,
+  },
   CoordinatorMessage(CoordinatorMessage),
 }
 
@@ -37,10 +42,46 @@ pub type SignerOrderChannel<C> = mpsc::UnboundedSender<SignerOrder<C>>;
 pub type SignerEventChannel<C> = mpsc::UnboundedReceiver<SignerEvent<C>>;
 
 #[derive(Debug)]
-struct SignerDb<D: Db>(D);
-impl<D: Db> SignerDb<D> {
+struct SignerDb<C: Coin, D: Db>(D, PhantomData<C>);
+impl<C: Coin, D: Db> SignerDb<C, D> {
   fn sign_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     [b"SIGNER", dst, key.as_ref()].concat().to_vec()
+  }
+
+  fn completed_key(id: [u8; 32]) -> Vec<u8> {
+    Self::sign_key(b"completed", id)
+  }
+  fn complete(
+    &mut self,
+    txn: &mut D::Transaction,
+    id: [u8; 32],
+    tx: <C::Transaction as Transaction<C>>::Id,
+  ) {
+    // Transactions can be completed by multiple signatures
+    // Save every solution in order to be robust
+    let mut existing = txn.get(Self::completed_key(id)).unwrap_or(vec![]);
+    existing.extend(tx.as_ref());
+    txn.put(Self::completed_key(id), existing);
+  }
+  fn completed(&self, id: [u8; 32]) -> Option<Vec<u8>> {
+    self.0.get(Self::completed_key(id))
+  }
+
+  fn eventuality_key(id: [u8; 32]) -> Vec<u8> {
+    Self::sign_key(b"eventuality", id)
+  }
+  fn save_eventuality(
+    &mut self,
+    txn: &mut D::Transaction,
+    id: [u8; 32],
+    eventuality: C::Eventuality,
+  ) {
+    txn.put(Self::eventuality_key(id), eventuality.serialize());
+  }
+  fn eventuality(&self, id: [u8; 32]) -> Option<C::Eventuality> {
+    Some(
+      C::Eventuality::read::<&[u8]>(&mut self.0.get(Self::eventuality_key(id))?.as_ref()).unwrap(),
+    )
   }
 
   fn attempt_key(id: &SignId) -> Vec<u8> {
@@ -63,13 +104,14 @@ impl<D: Db> SignerDb<D> {
 /// 2) It did send its response, and has locally saved enough data to continue
 pub struct Signer<C: Coin, D: Db> {
   coin: C,
-  db: SignerDb<D>,
+  db: SignerDb<C, D>,
 
   keys: ThresholdKeys<C::Curve>,
 
   signable: HashMap<[u8; 32], (SystemTime, C::SignableTransaction)>,
   attempt: HashMap<[u8; 32], u32>,
   preprocessing: HashMap<[u8; 32], <C::TransactionMachine as PreprocessMachine>::SignMachine>,
+  #[allow(clippy::type_complexity)]
   signing: HashMap<
     [u8; 32],
     <
@@ -106,7 +148,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
     tokio::spawn(
       Signer {
         coin,
-        db: SignerDb(db),
+        db: SignerDb(db, PhantomData),
 
         keys,
 
@@ -245,7 +287,24 @@ impl<C: Coin, D: Db> Signer<C, D> {
             Some(order) => order,
           }
         } {
-          SignerOrder::SignTransaction { id, start, tx } => {
+          SignerOrder::SignTransaction { id, start, tx, eventuality } => {
+            if let Some(txs) = self.db.completed(id) {
+              debug!("SignTransaction order for ID we've already completed signing");
+
+              let mut tx = <C::Transaction as Transaction<C>>::Id::default();
+              // Use the first instance we noted as having completed
+              let tx_id_len = tx.as_ref().len();
+              tx.as_mut().copy_from_slice(&txs[.. tx_id_len]);
+              if handle_send(self.events.send(SignerEvent::SignedTransaction { id, tx })).is_err() {
+                return;
+              }
+              continue;
+            }
+
+            let mut txn = self.db.0.txn();
+            self.db.save_eventuality(&mut txn, id, eventuality);
+            txn.commit();
+
             self.signable.insert(id, (start, tx));
           }
 
@@ -335,6 +394,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
             // Save the transaction in case it's needed for recovery
             let mut txn = self.db.0.txn();
             self.db.save_transaction(&mut txn, id.id, tx.serialize());
+            self.db.complete(&mut txn, id.id, tx.id());
             txn.commit();
 
             // Publish it
@@ -344,12 +404,66 @@ impl<C: Coin, D: Db> Signer<C, D> {
               info!("published {:?}", hex::encode(tx.id()));
             }
 
+            // Stop trying to sign for this TX
+            assert!(self.signable.remove(&id.id).is_some());
+            assert!(self.attempt.remove(&id.id).is_some());
+            assert!(self.preprocessing.remove(&id.id).is_none());
+            assert!(self.signing.remove(&id.id).is_none());
+
             if handle_send(
               self.events.send(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() }),
             )
             .is_err()
             {
               return;
+            }
+          }
+
+          SignerOrder::CoordinatorMessage(CoordinatorMessage::Completed { id, tx: tx_vec }) => {
+            let mut tx = <C::Transaction as Transaction<C>>::Id::default();
+            if tx.as_ref().len() != tx_vec.len() {
+              warn!(
+                "a validator claimed {} completed {id:?} yet that's not a valid TX ID",
+                hex::encode(&tx)
+              );
+              continue;
+            }
+            tx.as_mut().copy_from_slice(&tx_vec);
+
+            if let Some(eventuality) = self.db.eventuality(id.id) {
+              match self.coin.confirm_completion(&eventuality, &tx).await {
+                Ok(true) => {
+                  // Stop trying to sign for this TX
+                  let mut txn = self.db.0.txn();
+                  self.db.complete(&mut txn, id.id, tx.clone());
+                  txn.commit();
+                  self.signable.remove(&id.id);
+                  self.attempt.remove(&id.id);
+                  self.preprocessing.remove(&id.id);
+                  self.signing.remove(&id.id);
+
+                  if handle_send(self.events.send(SignerEvent::SignedTransaction { id: id.id, tx }))
+                    .is_err()
+                  {
+                    return;
+                  }
+                }
+
+                Ok(false) => {
+                  warn!(
+                    "a validator claimed {} completed {id:?} when it did not",
+                    hex::encode(&tx)
+                  );
+                }
+
+                // Transaction hasn't hit our mempool/was dropped for a different signature
+                // The latter can happen given certain latency conditions/a single malicious signer
+                // In the case of a signle malicious signer, they can drag multiple honest
+                // validators down with them, so we unfortunately can't slash on this case
+                Err(_) => todo!("queue checking eventualities"),
+              }
+            } else {
+              todo!("queue checking eventualities")
             }
           }
         },

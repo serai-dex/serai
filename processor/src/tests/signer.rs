@@ -21,9 +21,10 @@ use crate::{
   tests::util::db::MemDb,
 };
 
+#[allow(clippy::type_complexity)]
 pub async fn sign<C: Coin>(
   coin: C,
-  mut keys_txs: HashMap<u16, (ThresholdKeys<C::Curve>, C::SignableTransaction)>,
+  mut keys_txs: HashMap<u16, (ThresholdKeys<C::Curve>, (C::SignableTransaction, C::Eventuality))>,
 ) -> <C::Transaction as Transaction<C>>::Id {
   let actual_id = SignId {
     key: keys_txs[&1].0.group_key().to_bytes().as_ref().to_vec(),
@@ -49,9 +50,10 @@ pub async fn sign<C: Coin>(
   let start = SystemTime::now();
   for i in 1 ..= signers.len() {
     let i = u16::try_from(i).unwrap();
+    let (tx, eventuality) = txs.remove(&i).unwrap();
     signers[&i]
       .orders
-      .send(SignerOrder::SignTransaction { id: actual_id.id, start, tx: txs.remove(&i).unwrap() })
+      .send(SignerOrder::SignTransaction { id: actual_id.id, start, tx, eventuality })
       .unwrap();
   }
 
@@ -157,8 +159,8 @@ pub async fn test_signer<C: Coin>(coin: C) {
       .0
       .unwrap();
 
-    keys_txs.insert(i, (keys, signable));
-    eventualities.push(eventuality);
+    eventualities.push(eventuality.clone());
+    keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
   // The signer may not publish the TX if it has a connection error

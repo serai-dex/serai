@@ -3,8 +3,13 @@ use std::{io, collections::HashMap};
 use async_trait::async_trait;
 
 use bitcoin::{
-  hashes::Hash as HashTrait, schnorr::TweakedPublicKey, psbt::serialize::Serialize, OutPoint,
-  blockdata::script::Instruction, Transaction, Block, Network, Address as BAddress,
+  hashes::Hash as HashTrait,
+  schnorr::TweakedPublicKey,
+  consensus::{Encodable, Decodable},
+  psbt::serialize::Serialize,
+  OutPoint,
+  blockdata::script::Instruction,
+  Transaction, Block, Network, Address as BAddress,
 };
 
 #[cfg(test)]
@@ -33,7 +38,7 @@ use serai_client::coins::bitcoin::Address;
 use crate::{
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, PostFeeBranch, Coin, drop_branches, amortize_fee,
+    Transaction as TransactionTrait, Eventuality, PostFeeBranch, Coin, drop_branches, amortize_fee,
   },
   Plan,
 };
@@ -137,6 +142,18 @@ impl TransactionTrait<Bitcoin> for Transaction {
   }
 }
 
+impl Eventuality for OutPoint {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    OutPoint::consensus_decode(reader)
+      .map_err(|_| io::Error::new(io::ErrorKind::Other, "couldn't decode outpoint as eventuality"))
+  }
+  fn serialize(&self) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(36);
+    self.consensus_encode(&mut buf).unwrap();
+    buf
+  }
+}
+
 #[derive(Clone, Debug)]
 pub struct SignableTransaction {
   keys: ThresholdKeys<Secp256k1>,
@@ -227,7 +244,10 @@ impl Coin for Bitcoin {
 
   type Output = Output;
   type SignableTransaction = SignableTransaction;
-  type Eventuality = Plan<Self>;
+  // Valid given an honest multisig, as assumed
+  // Only the multisig can spend this output and the multisig, if spending this output, will
+  // always create a specific plan
+  type Eventuality = OutPoint;
   type TransactionMachine = TransactionMachine;
 
   type Address = Address;
@@ -378,7 +398,7 @@ impl Coin for Bitcoin {
           transcript: plan.transcript(),
           actual: signable(&plan, Some(tx_fee)).unwrap(),
         },
-        plan,
+        plan.inputs[0].output.outpoint,
       )),
       branch_outputs,
     ))
@@ -400,18 +420,20 @@ impl Coin for Bitcoin {
     match self.rpc.send_raw_transaction(tx).await {
       Ok(_) => (),
       Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
-      // TODO: Distinguish already in pool vs invalid transaction
+      // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
+      // invalid transaction
       Err(e) => panic!("failed to publish TX {:?}: {e}", tx.txid()),
     }
     Ok(())
   }
 
-  async fn confirm_completion(&self, plan: &Plan<Self>, tx: &[u8; 32]) -> Result<bool, CoinError> {
+  async fn confirm_completion(
+    &self,
+    eventuality: &OutPoint,
+    tx: &[u8; 32],
+  ) -> Result<bool, CoinError> {
     let tx = self.rpc.get_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-    // Valid given an honest multisig, as assumed
-    // Only the multisig can spend this output and the multisig, if spending this output, will
-    // always create this plan
-    Ok(plan.inputs[0].output.outpoint == tx.input[0].previous_output)
+    Ok(eventuality == &tx.input[0].previous_output)
   }
 
   #[cfg(test)]

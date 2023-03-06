@@ -73,8 +73,8 @@ pub async fn test_wallet<C: Coin>(coin: C) {
       .0
       .unwrap();
 
-    keys_txs.insert(i, (keys, signable));
-    eventualities.push(eventuality);
+    eventualities.push(eventuality.clone());
+    keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
   let txid = sign(coin.clone(), keys_txs).await;
