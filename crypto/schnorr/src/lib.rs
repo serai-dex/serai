@@ -46,7 +46,7 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
     writer.write_all(self.s.to_repr().as_ref())
   }
 
-  /// Serialize a SchnorrSignature, returning a Vec<u8>.
+  /// Serialize a SchnorrSignature, returning a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = vec![];
     self.write(&mut buf).unwrap();

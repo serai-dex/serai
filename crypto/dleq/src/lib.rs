@@ -191,7 +191,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
     Ok(DLEqProof { c: read_scalar(r)?, s: read_scalar(r)? })
   }
 
-  /// Serialize a DLEq proof to a Vec<u8>.
+  /// Serialize a DLEq proof to a `Vec<u8>`.
   #[cfg(feature = "serialize")]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
@@ -315,7 +315,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
     Ok(MultiDLEqProof { c, s })
   }
 
-  /// Serialize a multi-DLEq proof to a Vec<u8>.
+  /// Serialize a multi-DLEq proof to a `Vec<u8>`.
   #[cfg(feature = "serialize")]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];

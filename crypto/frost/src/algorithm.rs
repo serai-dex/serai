@@ -155,7 +155,7 @@ impl<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
 impl<C: Curve, H: Hram<C>> IetfSchnorr<C, H> {
   /// Construct a IETF-compatible Schnorr algorithm.
   ///
-  /// Please see the IetfSchnorr documentation for the full details of this.
+  /// Please see the `IetfSchnorr` documentation for the full details of this.
   pub fn ietf() -> IetfSchnorr<C, H> {
     Schnorr::new(IetfTranscript(vec![]))
   }
