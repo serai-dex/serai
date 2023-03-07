@@ -344,6 +344,19 @@ pub struct ThresholdView<C: Ciphersuite> {
   verification_shares: HashMap<Participant, C::G>,
 }
 
+impl<C: Ciphersuite> fmt::Debug for ThresholdView<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("ThresholdView")
+      .field("offset", &self.offset)
+      .field("group_key", &self.group_key)
+      .field("included", &self.included)
+      .field("original_verification_shares", &self.original_verification_shares)
+      .field("verification_shares", &self.verification_shares)
+      .finish_non_exhaustive()
+  }
+}
+
 impl<C: Ciphersuite> Zeroize for ThresholdView<C> {
   fn zeroize(&mut self) {
     self.offset.zeroize();

@@ -1,6 +1,5 @@
-use core::fmt::Debug;
+use core::{ops::Deref, fmt};
 use std::{
-  ops::Deref,
   io::{self, Read, Write},
   collections::HashMap,
 };
@@ -39,8 +38,8 @@ pub trait ReadWrite: Sized {
   }
 }
 
-pub trait Message: Clone + PartialEq + Eq + Debug + Zeroize + ReadWrite {}
-impl<M: Clone + PartialEq + Eq + Debug + Zeroize + ReadWrite> Message for M {}
+pub trait Message: Clone + PartialEq + Eq + fmt::Debug + Zeroize + ReadWrite {}
+impl<M: Clone + PartialEq + Eq + fmt::Debug + Zeroize + ReadWrite> Message for M {}
 
 /// Wraps a message with a key to use for encryption in the future.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
@@ -345,6 +344,18 @@ pub(crate) struct Encryption<C: Ciphersuite> {
   enc_key: Zeroizing<C::F>,
   enc_pub_key: C::G,
   enc_keys: HashMap<Participant, C::G>,
+}
+
+impl<C: Ciphersuite> fmt::Debug for Encryption<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("Encryption")
+      .field("context", &self.context)
+      .field("i", &self.i)
+      .field("enc_pub_key", &self.enc_pub_key)
+      .field("enc_keys", &self.enc_keys)
+      .finish_non_exhaustive()
+  }
 }
 
 impl<C: Ciphersuite> Zeroize for Encryption<C> {

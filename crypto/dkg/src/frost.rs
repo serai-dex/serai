@@ -1,8 +1,4 @@
-use core::{
-  marker::PhantomData,
-  ops::Deref,
-  fmt::{Debug, Formatter},
-};
+use core::{marker::PhantomData, ops::Deref, fmt};
 use std::{
   io::{self, Read, Write},
   collections::HashMap,
@@ -85,6 +81,7 @@ impl<C: Ciphersuite> ReadWrite for Commitments<C> {
 }
 
 /// State machine to begin the key generation protocol.
+#[derive(Debug, Zeroize)]
 pub struct KeyGenMachine<C: Ciphersuite> {
   params: ThresholdParams,
   context: String,
@@ -186,8 +183,8 @@ impl<F: PrimeField> AsMut<[u8]> for SecretShare<F> {
     self.0.as_mut()
   }
 }
-impl<F: PrimeField> Debug for SecretShare<F> {
-  fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+impl<F: PrimeField> fmt::Debug for SecretShare<F> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt.debug_struct("SecretShare").finish_non_exhaustive()
   }
 }
@@ -198,7 +195,7 @@ impl<F: PrimeField> Zeroize for SecretShare<F> {
 }
 // Still manually implement ZeroizeOnDrop to ensure these don't stick around.
 // We could replace Zeroizing<M> with a bound M: ZeroizeOnDrop.
-// Doing so would potentially fail to highlight thr expected behavior with these and remove a layer
+// Doing so would potentially fail to highlight the expected behavior with these and remove a layer
 // of depth.
 impl<F: PrimeField> Drop for SecretShare<F> {
   fn drop(&mut self) {
@@ -227,6 +224,18 @@ pub struct SecretShareMachine<C: Ciphersuite> {
   coefficients: Vec<Zeroizing<C::F>>,
   our_commitments: Vec<C::G>,
   encryption: Encryption<C>,
+}
+
+impl<C: Ciphersuite> fmt::Debug for SecretShareMachine<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("SecretShareMachine")
+      .field("params", &self.params)
+      .field("context", &self.context)
+      .field("our_commitments", &self.our_commitments)
+      .field("encryption", &self.encryption)
+      .finish_non_exhaustive()
+  }
 }
 
 impl<C: Ciphersuite> SecretShareMachine<C> {
@@ -320,6 +329,17 @@ pub struct KeyMachine<C: Ciphersuite> {
   secret: Zeroizing<C::F>,
   commitments: HashMap<Participant, Vec<C::G>>,
   encryption: Encryption<C>,
+}
+
+impl<C: Ciphersuite> fmt::Debug for KeyMachine<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("KeyMachine")
+      .field("params", &self.params)
+      .field("commitments", &self.commitments)
+      .field("encryption", &self.encryption)
+      .finish_non_exhaustive()
+  }
 }
 
 impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
@@ -457,6 +477,16 @@ pub struct BlameMachine<C: Ciphersuite> {
   result: ThresholdCore<C>,
 }
 
+impl<C: Ciphersuite> fmt::Debug for BlameMachine<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("BlameMachine")
+      .field("commitments", &self.commitments)
+      .field("encryption", &self.encryption)
+      .finish_non_exhaustive()
+  }
+}
+
 impl<C: Ciphersuite> Zeroize for BlameMachine<C> {
   fn zeroize(&mut self) {
     for (_, commitments) in self.commitments.iter_mut() {
@@ -542,7 +572,7 @@ impl<C: Ciphersuite> BlameMachine<C> {
   }
 }
 
-#[derive(Zeroize)]
+#[derive(Debug, Zeroize)]
 pub struct AdditionalBlameMachine<C: Ciphersuite>(BlameMachine<C>);
 impl<C: Ciphersuite> AdditionalBlameMachine<C> {
   /// Given an accusation of fault, determine the faulty party (either the sender, who sent an
