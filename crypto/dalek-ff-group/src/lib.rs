@@ -425,7 +425,9 @@ macro_rules! dalek_group {
     // Support being used as a key in a table
     // While it is expensive as a key, due to the field operations required, there's frequently
     // use cases for public key -> value lookups
+    #[allow(unknown_lints)]
     #[allow(clippy::derived_hash_with_manual_eq)]
+    #[allow(clippy::derived_hash_xor_eq)]
     impl Hash for $Point {
       fn hash<H: Hasher>(&self, state: &mut H) {
         self.to_bytes().hash(state);
