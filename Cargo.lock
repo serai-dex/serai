@@ -2007,7 +2007,6 @@ dependencies = [
  "ethers-solc",
  "eyre",
  "group",
- "hex-literal",
  "k256 0.12.0",
  "modular-frost",
  "rand_core 0.6.4",

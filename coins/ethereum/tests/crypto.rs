@@ -2,7 +2,7 @@ use k256::{
   elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, sec1::ToEncodedPoint},
   ProjectivePoint, Scalar, U256,
 };
-use frost::curve::Secp256k1;
+use frost::{curve::Secp256k1, Participant};
 
 use ethereum_serai::crypto::*;
 
@@ -21,7 +21,10 @@ fn test_ecrecover() {
     .as_nonzero_scalar()
     .try_sign_prehashed_rfc6979::<Sha256>(Keccak256::digest(MESSAGE), b"")
     .unwrap();
-  assert_eq!(public.verify_digest(Keccak256::new_with_prefix(MESSAGE), &sig).unwrap(), ());
+  #[allow(clippy::unit_cmp)] // Intended to assert this wasn't changed to Result<bool>
+  {
+    assert_eq!(public.verify_digest(Keccak256::new_with_prefix(MESSAGE), &sig).unwrap(), ());
+  }
 
   assert_eq!(
     ecrecover(hash_to_scalar(MESSAGE), recovery_id.unwrap().is_y_odd().into(), *sig.r(), *sig.s())
@@ -39,7 +42,7 @@ fn test_signing() {
   use rand_core::OsRng;
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
-  let _group_key = keys[&1].group_key();
+  let _group_key = keys[&Participant::new(1).unwrap()].group_key();
 
   const MESSAGE: &[u8] = b"Hello, World!";
 
@@ -62,7 +65,7 @@ fn test_ecrecover_hack() {
   use rand_core::OsRng;
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
-  let group_key = keys[&1].group_key();
+  let group_key = keys[&Participant::new(1).unwrap()].group_key();
   let group_key_encoded = group_key.to_encoded_point(true);
   let group_key_compressed = group_key_encoded.as_ref();
   let group_key_x = Scalar::from_uint_reduced(U256::from_be_slice(&group_key_compressed[1 .. 33]));

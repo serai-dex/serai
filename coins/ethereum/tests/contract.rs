@@ -11,6 +11,7 @@ use ethers::{
 
 use frost::{
   curve::Secp256k1,
+  Participant,
   algorithm::Schnorr as Algo,
   tests::{key_gen, algorithm_machines, sign},
 };
@@ -44,7 +45,7 @@ async fn test_ecrecover_hack() {
   let chain_id = U256::from(chain_id);
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
-  let group_key = keys[&1].group_key();
+  let group_key = keys[&Participant::new(1).unwrap()].group_key();
 
   const MESSAGE: &[u8] = b"Hello, World!";
   let hashed_message = keccak256(MESSAGE);
