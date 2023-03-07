@@ -2,9 +2,10 @@
 #![no_std]
 
 use core::{
-  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   borrow::Borrow,
+  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Iterator, Sum},
+  hash::{Hash, Hasher},
 };
 
 use zeroize::Zeroize;
@@ -411,6 +412,16 @@ macro_rules! dalek_group {
       type Output = $Point;
       fn mul(self, b: Scalar) -> $Point {
         $Point(&b.0 * &self.0)
+      }
+    }
+
+    // Support being used as a key in a table
+    // While it is expensive as a key, due to the field operations required, there's frequently
+    // use cases for public key -> value lookups
+    #[allow(clippy::derived_hash_with_manual_eq)]
+    impl Hash for $Point {
+      fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_bytes().hash(state);
       }
     }
   };
