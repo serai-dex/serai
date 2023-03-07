@@ -6,6 +6,9 @@ mod merlin;
 #[cfg(feature = "merlin")]
 pub use crate::merlin::MerlinTranscript;
 
+#[cfg(any(test, feature = "tests"))]
+pub mod tests;
+
 use digest::{
   typenum::{
     consts::U32, marker_traits::NonZero, type_operators::IsGreaterOrEqual, operator_aliases::GrEq,
