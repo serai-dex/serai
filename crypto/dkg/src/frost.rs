@@ -274,7 +274,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
       })
       .collect::<HashMap<_, _>>();
 
-    batch.verify_with_vartime_blame().map_err(FrostError::InvalidProofOfKnowledge)?;
+    batch.verify_vartime_with_vartime_blame().map_err(FrostError::InvalidProofOfKnowledge)?;
 
     commitments.insert(self.params.i, self.our_commitments.drain(..).collect());
     Ok(commitments)
