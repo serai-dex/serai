@@ -128,7 +128,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
       serialized.extend(share.to_bytes().as_ref());
     }
 
-    let these_keys = ThresholdCore::<C>::deserialize::<&[u8]>(&mut serialized.as_ref()).unwrap();
+    let these_keys = ThresholdCore::<C>::read::<&[u8]>(&mut serialized.as_ref()).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     let participant = Participant::new(i).unwrap();
