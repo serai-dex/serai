@@ -43,7 +43,14 @@ pub mod field;
 
 // Convert a boolean to a Choice in a *presumably* constant time manner
 fn choice(value: bool) -> Choice {
-  Choice::from(u8::from(value))
+  #[cfg(not(feature = "black_box"))]
+  let res = Choice::from(u8::from(value));
+  #[cfg(feature = "black_box")]
+  let res = {
+    use core::hint::black_box;
+    Choice::from(black_box(u8::from(black_box(value))))
+  };
+  res
 }
 
 macro_rules! deref_borrow {

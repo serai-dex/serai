@@ -29,3 +29,6 @@ curve25519-dalek = "^3.2"
 
 [dev-dependencies]
 ff-group-tests = { path = "../ff-group-tests" }
+
+[features]
+black_box = []

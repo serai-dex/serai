@@ -24,7 +24,7 @@ group = "0.12"
 curve25519-dalek = { version = "3", features = ["std"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
-dalek-ff-group = { path = "../crypto/dalek-ff-group" }
+dalek-ff-group = { path = "../crypto/dalek-ff-group", features = ["black_box"] }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
