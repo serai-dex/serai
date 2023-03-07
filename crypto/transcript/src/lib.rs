@@ -50,6 +50,8 @@ enum DigestTranscriptMember {
   Label,
   Value,
   Challenge,
+  Continued,
+  Challenged,
 }
 
 impl DigestTranscriptMember {
@@ -60,6 +62,8 @@ impl DigestTranscriptMember {
       DigestTranscriptMember::Label => 2,
       DigestTranscriptMember::Value => 3,
       DigestTranscriptMember::Challenge => 4,
+      DigestTranscriptMember::Continued => 5,
+      DigestTranscriptMember::Challenged => 6,
     }
   }
 }
@@ -110,7 +114,13 @@ impl<D: Clone + SecureDigest> Transcript for DigestTranscript<D> {
 
   fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge {
     self.append(DigestTranscriptMember::Challenge, label);
-    self.0.clone().finalize()
+    let mut cloned = self.0.clone();
+
+    // Explicitly fork these transcripts to prevent length extension attacks from being possible
+    // (at least, without the additional ability to remove a byte from a finalized hash)
+    self.0.update([DigestTranscriptMember::Continued.as_u8()]);
+    cloned.update([DigestTranscriptMember::Challenged.as_u8()]);
+    cloned.finalize()
   }
 
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {
