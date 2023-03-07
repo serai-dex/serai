@@ -36,7 +36,7 @@ fn test_ecrecover() {
 #[test]
 fn test_signing() {
   use frost::{
-    algorithm::Schnorr,
+    algorithm::IetfSchnorr,
     tests::{algorithm_machines, key_gen, sign},
   };
   use rand_core::OsRng;
@@ -46,12 +46,12 @@ fn test_signing() {
 
   const MESSAGE: &[u8] = b"Hello, World!";
 
-  let algo = Schnorr::<Secp256k1, EthereumHram>::new();
+  let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
   let _sig = sign(
     &mut OsRng,
     algo,
     keys.clone(),
-    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, EthereumHram>::new(), &keys),
+    algorithm_machines(&mut OsRng, IetfSchnorr::<Secp256k1, EthereumHram>::ietf(), &keys),
     MESSAGE,
   );
 }
@@ -59,7 +59,7 @@ fn test_signing() {
 #[test]
 fn test_ecrecover_hack() {
   use frost::{
-    algorithm::Schnorr,
+    algorithm::IetfSchnorr,
     tests::{algorithm_machines, key_gen, sign},
   };
   use rand_core::OsRng;
@@ -76,7 +76,7 @@ fn test_ecrecover_hack() {
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
-  let algo = Schnorr::<Secp256k1, EthereumHram>::new();
+  let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
   let sig = sign(
     &mut OsRng,
     algo.clone(),

@@ -12,7 +12,7 @@ use ethers::{
 use frost::{
   curve::Secp256k1,
   Participant,
-  algorithm::Schnorr as Algo,
+  algorithm::IetfSchnorr,
   tests::{key_gen, algorithm_machines, sign},
 };
 
@@ -52,7 +52,7 @@ async fn test_ecrecover_hack() {
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
-  let algo = Algo::<Secp256k1, crypto::EthereumHram>::new();
+  let algo = IetfSchnorr::<Secp256k1, crypto::EthereumHram>::ietf();
   let sig = sign(
     &mut OsRng,
     algo.clone(),

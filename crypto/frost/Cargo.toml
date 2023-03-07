@@ -39,6 +39,7 @@ dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
 dkg = { path = "../dkg", version = "0.2" }
 
 [dev-dependencies]
+hex = "0.4"
 serde_json = "1"
 
 dkg = { path = "../dkg", version = "0.2", features = ["tests"] }
