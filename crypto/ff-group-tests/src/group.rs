@@ -11,7 +11,7 @@ use crate::prime_field::{test_prime_field, test_prime_field_bits};
 pub fn test_eq<G: Group>() {
   assert_eq!(G::identity(), G::identity(), "identity != identity");
   assert_eq!(G::generator(), G::generator(), "generator != generator");
-  assert!(G::identity() != G::generator(), "identity != generator");
+  assert!(G::identity() != G::generator(), "identity == generator");
 }
 
 /// Test identity.
