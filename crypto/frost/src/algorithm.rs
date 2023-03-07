@@ -127,28 +127,42 @@ pub trait Hram<C: Curve>: Send + Clone {
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F;
 }
 
-/// IETF-compliant Schnorr signature algorithm ((R, s) where s = r + cx).
+/// Schnorr signature algorithm ((R, s) where s = r + cx).
 #[derive(Clone)]
-pub struct Schnorr<C: Curve, H: Hram<C>> {
-  transcript: IetfTranscript,
+pub struct Schnorr<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> {
+  transcript: T,
   c: Option<C::F>,
   _hram: PhantomData<H>,
 }
 
-impl<C: Curve, H: Hram<C>> Default for Schnorr<C, H> {
-  fn default() -> Self {
-    Self::new()
+/// IETF-compliant Schnorr signature algorithm.
+///
+/// This algorithm specifically uses the transcript format defined in the FROST IETF draft.
+/// It's a naive transcript format not viable for usage in larger protocols, yet is presented here
+/// in order to provide compatibility.
+///
+/// Usage of this with key offsets will break the intended compatibility as the IETF draft does not
+/// specify a protocol for offsets.
+pub type IetfSchnorr<C, H> = Schnorr<C, IetfTranscript, H>;
+
+impl<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
+  /// Construct a Schnorr algorithm continuing the specified transcript.
+  pub fn new(transcript: T) -> Schnorr<C, T, H> {
+    Schnorr { transcript, c: None, _hram: PhantomData }
   }
 }
 
-impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
-  pub fn new() -> Schnorr<C, H> {
-    Schnorr { transcript: IetfTranscript(vec![]), c: None, _hram: PhantomData }
+impl<C: Curve, H: Hram<C>> IetfSchnorr<C, H> {
+  /// Construct a IETF-compatible Schnorr algorithm.
+  ///
+  /// Please see the IetfSchnorr documentation for the full details of this.
+  pub fn ietf() -> IetfSchnorr<C, H> {
+    Schnorr::new(IetfTranscript(vec![]))
   }
 }
 
-impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
-  type Transcript = IetfTranscript;
+impl<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> for Schnorr<C, T, H> {
+  type Transcript = T;
   type Addendum = ();
   type Signature = SchnorrSignature<C>;
 

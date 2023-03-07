@@ -16,8 +16,8 @@ use digest::{
   Digest, Output, HashMarker,
 };
 
-pub trait Transcript {
-  type Challenge: Clone + Send + Sync + AsRef<[u8]>;
+pub trait Transcript: Send + Clone {
+  type Challenge: Send + Sync + Clone + AsRef<[u8]>;
 
   /// Create a new transcript with the specified name.
   fn new(name: &'static [u8]) -> Self;
@@ -83,9 +83,9 @@ where
 
 /// A simple transcript format constructed around the specified hash algorithm.
 #[derive(Clone, Debug)]
-pub struct DigestTranscript<D: Clone + SecureDigest>(D);
+pub struct DigestTranscript<D: Send + Clone + SecureDigest>(D);
 
-impl<D: Clone + SecureDigest> DigestTranscript<D> {
+impl<D: Send + Clone + SecureDigest> DigestTranscript<D> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
     self.0.update([kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
@@ -94,7 +94,7 @@ impl<D: Clone + SecureDigest> DigestTranscript<D> {
   }
 }
 
-impl<D: Clone + SecureDigest> Transcript for DigestTranscript<D> {
+impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
 
   fn new(name: &'static [u8]) -> Self {

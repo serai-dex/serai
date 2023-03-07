@@ -16,7 +16,7 @@ use multiexp::multiexp_vartime;
 use crate::SchnorrSignature;
 
 // Returns a unbiased scalar weight to use on a signature in order to prevent malleability
-fn weight<D: Clone + SecureDigest, F: PrimeField>(digest: &mut DigestTranscript<D>) -> F {
+fn weight<D: Send + Clone + SecureDigest, F: PrimeField>(digest: &mut DigestTranscript<D>) -> F {
   let mut bytes = digest.challenge(b"aggregation_weight");
   debug_assert_eq!(bytes.len() % 8, 0);
   // This should be guaranteed thanks to SecureDigest

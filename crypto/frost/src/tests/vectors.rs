@@ -14,7 +14,7 @@ use ciphersuite::group::{ff::PrimeField, GroupEncoding};
 use crate::{
   curve::Curve,
   Participant, ThresholdCore, ThresholdKeys,
-  algorithm::{IetfTranscript, Hram, Schnorr},
+  algorithm::{IetfTranscript, Hram, IetfSchnorr},
   sign::{
     Writable, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
     PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
@@ -160,7 +160,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
     let mut machines = vec![];
     for i in &vectors.included {
-      machines.push((i, AlgorithmMachine::new(Schnorr::<C, H>::new(), keys[i].clone()).unwrap()));
+      machines
+        .push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone()).unwrap()));
     }
 
     let mut commitments = HashMap::new();
@@ -342,7 +343,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     // Create the machines
     let mut machines = vec![];
     for i in &vectors.included {
-      machines.push((i, AlgorithmMachine::new(Schnorr::<C, H>::new(), keys[i].clone()).unwrap()));
+      machines
+        .push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone()).unwrap()));
     }
 
     for (i, machine) in machines.drain(..) {
