@@ -9,7 +9,7 @@ use subtle::{
 
 use crypto_bigint::{Integer, Encoding, U256, U512};
 
-use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
+use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
 use crate::{constant_time, math, from_uint};
 

@@ -12,8 +12,11 @@ use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, Conditio
 
 use crypto_bigint::U512;
 
-use ff::{Field, PrimeField, PrimeFieldBits};
-use group::{Group, GroupEncoding, prime::PrimeGroup};
+use group::{
+  ff::{Field, PrimeField, PrimeFieldBits},
+  Group, GroupEncoding,
+  prime::PrimeGroup,
+};
 
 use crate::{
   scalar::{Scalar, MODULUS as SCALAR_MODULUS},

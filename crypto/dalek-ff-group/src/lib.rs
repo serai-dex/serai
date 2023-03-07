@@ -32,8 +32,11 @@ use dalek::{
   },
 };
 
-use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
-use group::{Group, GroupEncoding, prime::PrimeGroup};
+use group::{
+  ff::{Field, PrimeField, FieldBits, PrimeFieldBits},
+  Group, GroupEncoding,
+  prime::PrimeGroup,
+};
 
 pub mod field;
 

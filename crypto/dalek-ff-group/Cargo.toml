@@ -17,15 +17,15 @@ rand_core = "0.6"
 digest = "0.10"
 
 zeroize = { version = "^1.5", features = ["zeroize_derive"] }
-subtle = "2.4"
+subtle = "^2.4"
 
-ff = "0.12"
+ff = { version = "0.12", features = ["bits"] }
 group = "0.12"
 
 crypto-bigint = "0.4"
 
 sha2 = "0.9"
-curve25519-dalek =  "3.2"
+curve25519-dalek = "^3.2"
 
 [dev-dependencies]
 ff-group-tests = { path = "../ff-group-tests" }

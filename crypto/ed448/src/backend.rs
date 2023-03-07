@@ -11,7 +11,7 @@ macro_rules! field {
     use generic_array::{typenum::U57, GenericArray};
     use crypto_bigint::{Integer, Encoding};
 
-    use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
+    use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
     // Needed to publish for some reason? Yet not actually needed
     #[allow(unused_imports)]

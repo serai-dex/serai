@@ -66,7 +66,7 @@ impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
     buf
   }
 
-  // Used by tests
+  #[cfg(any(test, feature = "tests"))]
   pub(crate) fn enc_key(&self) -> C::G {
     self.enc_key
   }

@@ -18,9 +18,6 @@ thiserror = "1"
 rand_core = "0.6"
 
 zeroize = { version = "^1.5", features = ["zeroize_derive"] }
-subtle = "2"
-
-hex = "0.4"
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
 chacha20 = { version = "0.9", features = ["zeroize"] }
