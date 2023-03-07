@@ -21,11 +21,11 @@ impl WriteAddendum for () {
 }
 
 /// Trait alias for the requirements to be used as an addendum.
-pub trait Addendum: Clone + PartialEq + Debug + WriteAddendum {}
-impl<A: Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
+pub trait Addendum: Send + Clone + PartialEq + Debug + WriteAddendum {}
+impl<A: Send + Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
-pub trait Algorithm<C: Curve>: Clone {
+pub trait Algorithm<C: Curve>: Send + Clone {
   /// The transcript format this algorithm uses. This likely should NOT be the IETF-compatible
   /// transcript included in this crate.
   type Transcript: Clone + Debug + Transcript;
@@ -120,7 +120,7 @@ mod sealed {
 pub(crate) use sealed::IetfTranscript;
 
 /// HRAm usable by the included Schnorr signature algorithm to generate challenges.
-pub trait Hram<C: Curve>: Clone {
+pub trait Hram<C: Curve>: Send + Clone {
   /// HRAm function to generate a challenge.
   /// H2 from the IETF draft, despite having a different argument set (not being pre-formatted).
   #[allow(non_snake_case)]

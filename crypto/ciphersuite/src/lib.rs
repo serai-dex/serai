@@ -42,7 +42,9 @@ mod ed448;
 pub use ed448::*;
 
 /// Unified trait defining a ciphersuite around an elliptic curve.
-pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
+pub trait Ciphersuite:
+  'static + Send + Sync + Clone + Copy + PartialEq + Eq + Debug + Zeroize
+{
   /// Scalar field element type.
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
   type F: PrimeField + PrimeFieldBits + Zeroize;
