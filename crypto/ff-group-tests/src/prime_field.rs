@@ -70,6 +70,24 @@ pub fn test_encoding<F: PrimeField>() {
   test(F::one(), "1");
   test(F::one() + F::one(), "2");
   test(-F::one(), "-1");
+
+  // Also check if a non-canonical encoding is possible
+  let mut high = (F::zero() - F::one()).to_repr();
+  let mut possible_non_canon = false;
+  for byte in high.as_mut() {
+    // The fact a bit isn't set in the highest possible value suggests there's unused bits
+    // If there's unused bits, mark the possibility of a non-canonical encoding and set the bits
+    if *byte != 255 {
+      possible_non_canon = true;
+      *byte = 255;
+      break;
+    }
+  }
+
+  // Any non-canonical encoding should fail to be read
+  if possible_non_canon {
+    assert!(!bool::from(F::from_repr(high).is_some()));
+  }
 }
 
 /// Run all tests on fields implementing PrimeField.
