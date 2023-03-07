@@ -4,12 +4,14 @@ use zeroize::Zeroize;
 
 use transcript::{Transcript, SecureDigest, DigestTranscript};
 
-use group::{
-  ff::{Field, PrimeField},
-  Group, GroupEncoding,
+use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    Group, GroupEncoding,
+  },
+  Ciphersuite,
 };
 use multiexp::multiexp_vartime;
-use ciphersuite::Ciphersuite;
 
 use crate::SchnorrSignature;
 

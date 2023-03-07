@@ -3,10 +3,11 @@ use core::ops::Deref;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use group::{ff::Field, Group};
+use ciphersuite::{
+  group::{ff::Field, Group},
+  Ciphersuite, Ed25519,
+};
 use multiexp::BatchVerifier;
-
-use ciphersuite::{Ciphersuite, Ed25519};
 
 use crate::{
   SchnorrSignature,

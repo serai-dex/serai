@@ -19,9 +19,8 @@ zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2" }
 
-group = "0.12"
-multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 ciphersuite = { path = "../ciphersuite", version = "0.1" }
+multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
 [dev-dependencies]
 hex = "0.4"

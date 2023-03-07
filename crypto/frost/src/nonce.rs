@@ -21,7 +21,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use group::{ff::PrimeField, Group, GroupEncoding};
+use ciphersuite::group::{ff::PrimeField, Group, GroupEncoding};
 use multiexp::multiexp_vartime;
 
 use dleq::MultiDLEqProof;

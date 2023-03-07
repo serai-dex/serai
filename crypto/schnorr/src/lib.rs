@@ -5,14 +5,14 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, Zeroizing};
 
-use group::{
-  ff::{Field, PrimeField},
-  Group, GroupEncoding,
+use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    Group, GroupEncoding,
+  },
+  Ciphersuite,
 };
-
 use multiexp::{multiexp_vartime, BatchVerifier};
-
-use ciphersuite::Ciphersuite;
 
 pub mod aggregate;
 

@@ -7,9 +7,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::GroupEncoding;
-
-use ciphersuite::Ciphersuite;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use transcript::{Transcript, RecommendedTranscript};
 use dleq::DLEqProof;

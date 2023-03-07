@@ -26,11 +26,10 @@ hex = { version = "0.4", optional = true }
 digest = "0.10"
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
 
-group = "0.12"
-ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
-
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
 minimal-ed448 = { path = "../ed448", version = "^0.1.2", optional = true }
+
+ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 

@@ -3,9 +3,7 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::ff::Field;
-
-use ciphersuite::Ciphersuite;
+use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange};
 

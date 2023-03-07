@@ -17,9 +17,8 @@ use chacha20::{
 use transcript::{Transcript, RecommendedTranscript};
 
 #[cfg(test)]
-use group::ff::Field;
-use group::GroupEncoding;
-use ciphersuite::Ciphersuite;
+use ciphersuite::group::ff::Field;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use multiexp::BatchVerifier;
 
 use schnorr::SchnorrSignature;
@@ -222,7 +221,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     from: Participant,
     to: C::G,
   ) {
-    use group::ff::PrimeField;
+    use ciphersuite::group::ff::PrimeField;
 
     let mut repr = <C::F as PrimeField>::Repr::default();
     for b in repr.as_mut().iter_mut() {
@@ -246,7 +245,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     from: Participant,
     to: C::G,
   ) {
-    use group::ff::PrimeField;
+    use ciphersuite::group::ff::PrimeField;
 
     // Assumes the share isn't randomly 1
     let repr = C::F::one().to_repr();

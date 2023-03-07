@@ -7,7 +7,7 @@ use rand_chacha::ChaCha20Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use group::{ff::Field, Group, GroupEncoding};
+use ciphersuite::group::{ff::Field, Group, GroupEncoding};
 
 use dleq::MultiDLEqProof;
 pub use dkg::tests::{key_gen, recover_key};

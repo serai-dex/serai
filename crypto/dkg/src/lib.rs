@@ -16,12 +16,13 @@ use thiserror::Error;
 
 use zeroize::{Zeroize, Zeroizing};
 
-use group::{
-  ff::{Field, PrimeField},
-  GroupEncoding,
+use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    GroupEncoding,
+  },
+  Ciphersuite,
 };
-
-use ciphersuite::Ciphersuite;
 
 /// Encryption types and utilities used to secure DKG messages.
 pub mod encryption;

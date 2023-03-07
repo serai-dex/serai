@@ -10,11 +10,13 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use group::{
-  ff::{Field, PrimeField},
-  Group, GroupEncoding,
+use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    Group, GroupEncoding,
+  },
+  Ciphersuite,
 };
-use ciphersuite::Ciphersuite;
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 use schnorr::SchnorrSignature;

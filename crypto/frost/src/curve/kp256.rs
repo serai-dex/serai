@@ -1,6 +1,4 @@
-use group::GroupEncoding;
-
-use ciphersuite::Ciphersuite;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use crate::{curve::Curve, algorithm::Hram};
 

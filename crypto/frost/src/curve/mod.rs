@@ -8,12 +8,13 @@ use subtle::ConstantTimeEq;
 
 use digest::{Digest, Output};
 
-use group::{
-  ff::{Field, PrimeField},
-  Group,
+pub use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    Group,
+  },
+  Ciphersuite,
 };
-
-pub use ciphersuite::Ciphersuite;
 
 #[cfg(any(feature = "ristretto", feature = "ed25519"))]
 mod dalek;

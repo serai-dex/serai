@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use group::{ff::PrimeField, GroupEncoding};
+use ciphersuite::group::{ff::PrimeField, GroupEncoding};
 
 use crate::{
   curve::Curve,

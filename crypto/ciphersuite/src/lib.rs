@@ -14,6 +14,7 @@ use subtle::ConstantTimeEq;
 use digest::{core_api::BlockSizeUser, Digest, HashMarker};
 use transcript::SecureDigest;
 
+pub use group;
 use group::{
   ff::{Field, PrimeField, PrimeFieldBits},
   Group, GroupOps,
