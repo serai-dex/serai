@@ -15,7 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 rand_core = "0.6"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2" }
 

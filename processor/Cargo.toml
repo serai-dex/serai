@@ -15,7 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 async-trait = "0.1"
-zeroize = "1.5"
+zeroize = "^1.5"
 thiserror = "1"
 rand_core = "0.6"
 

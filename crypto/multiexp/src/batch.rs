@@ -22,7 +22,9 @@ where
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
 #[allow(clippy::type_complexity)]
 #[derive(Clone, Zeroize)]
-pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(Zeroizing<Vec<(Id, Vec<(G::Scalar, G)>)>>)
+pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(
+  Zeroizing<Vec<(Id, Vec<(G::Scalar, G)>)>>,
+)
 where
   <G as Group>::Scalar: PrimeFieldBits + Zeroize;
 
@@ -86,9 +88,7 @@ where
       weight
     };
 
-    self
-      .0
-      .push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
+    self.0.push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
   }
 
   /// Perform batch verification, returning a boolean of if the statements equaled zero.

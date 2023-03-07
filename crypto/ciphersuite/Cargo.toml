@@ -15,7 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 rand_core = "0.6"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 subtle = "2"
 
 digest = "0.10"

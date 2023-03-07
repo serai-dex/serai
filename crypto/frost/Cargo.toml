@@ -18,7 +18,7 @@ thiserror = "1"
 rand_core = "0.6"
 rand_chacha = "0.3"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 subtle = "2"
 
 hex = "0.4"
