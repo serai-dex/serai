@@ -19,6 +19,8 @@ rand_core = "0.6"
 
 zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 
+serde = { version = "1", features = ["derive"], optional = true }
+
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
 chacha20 = { version = "0.9", features = ["zeroize"] }
 
@@ -33,4 +35,5 @@ dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
 ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std", "ristretto"] }
 
 [features]
+serde = ["dep:serde"]
 tests = []

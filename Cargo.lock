@@ -1699,6 +1699,7 @@ dependencies = [
  "multiexp",
  "rand_core 0.6.4",
  "schnorr-signatures",
+ "serde",
  "thiserror",
  "zeroize",
 ]
