@@ -1,4 +1,6 @@
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
+#[cfg(feature = "serialize")]
+use std::io::{Read, Write};
 
 use thiserror::Error;
 
@@ -27,8 +29,28 @@ pub(crate) mod aos;
 mod bits;
 use bits::{BitSignature, Bits};
 
-#[cfg(feature = "serialize")]
-use std::io::{Read, Write};
+// Feature gated due to MSRV requirements
+#[cfg(feature = "black_box")]
+pub(crate) fn black_box<T>(val: T) -> T {
+  core::hint::black_box(val)
+}
+
+#[cfg(not(feature = "black_box"))]
+pub(crate) fn black_box<T>(val: T) -> T {
+  val
+}
+
+fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+  let bit_ref = black_box(bit_ref);
+
+  let mut bit = black_box(*bit_ref);
+  let res = black_box(bit as u8);
+  bit.zeroize();
+  debug_assert!((res | 1) == 1);
+
+  bit_ref.zeroize();
+  res
+}
 
 #[cfg(feature = "serialize")]
 pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G> {
@@ -224,15 +246,13 @@ where
     let mut these_bits: u8 = 0;
     // Needed to zero out the bits
     #[allow(unused_assignments)]
-    for (i, mut raw_bit) in raw_bits.iter_mut().enumerate() {
+    for (i, mut bit) in raw_bits.iter_mut().enumerate() {
       if i == capacity {
         break;
       }
 
-      let mut bit = u8::from(*raw_bit);
-      *raw_bit = false;
-
       // Accumulate this bit
+      let mut bit = u8_from_bool(bit.deref_mut());
       these_bits |= bit << (i % bits_per_group);
       bit.zeroize();
 

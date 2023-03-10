@@ -1,12 +1,36 @@
+use zeroize::Zeroize;
+
+// Feature gated due to MSRV requirements
+#[cfg(feature = "black_box")]
+pub(crate) fn black_box<T>(val: T) -> T {
+  core::hint::black_box(val)
+}
+
+#[cfg(not(feature = "black_box"))]
+pub(crate) fn black_box<T>(val: T) -> T {
+  val
+}
+
+pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+  let bit_ref = black_box(bit_ref);
+
+  let mut bit = black_box(*bit_ref);
+  let res = black_box(bit as u8);
+  bit.zeroize();
+  debug_assert!((res | 1) == 1);
+
+  bit_ref.zeroize();
+  res
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! field {
   ($FieldName: ident, $MODULUS: ident, $WIDE_MODULUS: ident, $NUM_BITS: literal) => {
-    use core::ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign};
-
-    use rand_core::RngCore;
+    use core::ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign};
 
     use subtle::{Choice, CtOption, ConstantTimeEq, ConstantTimeLess, ConditionallySelectable};
+    use rand_core::RngCore;
 
     use generic_array::{typenum::U57, GenericArray};
     use crypto_bigint::{Integer, Encoding};
@@ -17,6 +41,8 @@ macro_rules! field {
     #[allow(unused_imports)]
     use dalek_ff_group::{from_wrapper, math_op};
     use dalek_ff_group::{constant_time, from_uint, math};
+
+    use $crate::backend::u8_from_bool;
 
     fn reduce(x: U1024) -> U512 {
       U512::from_le_slice(&x.reduce(&$WIDE_MODULUS).unwrap().to_le_bytes()[.. 64])
@@ -59,10 +85,11 @@ macro_rules! field {
 
         let mut res = Self(U512::ONE);
         let mut bits = 0;
-        for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+        for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
           bits <<= 1;
-          let bit = u8::from(*bit);
+          let mut bit = u8_from_bool(bit.deref_mut());
           bits |= bit;
+          bit.zeroize();
 
           if ((i + 1) % 4) == 0 {
             if i != 3 {

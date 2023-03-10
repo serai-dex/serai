@@ -39,8 +39,14 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 [features]
 std = []
 serialize = ["std"]
-experimental = ["std", "thiserror", "multiexp"]
+
+# Needed for cross-group DLEqs
+black_box = []
 secure_capacity_difference = []
+experimental = ["std", "thiserror", "multiexp"]
 
 # Only applies to experimental, yet is default to ensure security
+# experimental doesn't mandate it itself in case two curves with extreme
+# capacity differences are desired to be used together, in which case the user
+# must specify experimental without default features
 default = ["secure_capacity_difference"]

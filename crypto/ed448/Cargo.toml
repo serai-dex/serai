@@ -32,3 +32,6 @@ dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 hex = "0.4"
 
 ff-group-tests = { path = "../ff-group-tests" }
+
+[features]
+black_box = []

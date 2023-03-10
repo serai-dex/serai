@@ -3,7 +3,7 @@
 
 use core::{
   borrow::Borrow,
-  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
+  ops::{Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Iterator, Sum},
   hash::{Hash, Hasher},
 };
@@ -41,16 +41,32 @@ use group::{
 
 pub mod field;
 
-// Convert a boolean to a Choice in a *presumably* constant time manner
-fn choice(value: bool) -> Choice {
-  #[cfg(not(feature = "black_box"))]
-  let res = Choice::from(u8::from(value));
-  #[cfg(feature = "black_box")]
-  let res = {
-    use core::hint::black_box;
-    Choice::from(black_box(u8::from(black_box(value))))
-  };
+// Feature gated due to MSRV requirements
+#[cfg(feature = "black_box")]
+pub(crate) fn black_box<T>(val: T) -> T {
+  core::hint::black_box(val)
+}
+
+#[cfg(not(feature = "black_box"))]
+pub(crate) fn black_box<T>(val: T) -> T {
+  val
+}
+
+fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+  let bit_ref = black_box(bit_ref);
+
+  let mut bit = black_box(*bit_ref);
+  let res = black_box(bit as u8);
+  bit.zeroize();
+  debug_assert!((res | 1) == 1);
+
+  bit_ref.zeroize();
   res
+}
+
+// Convert a boolean to a Choice in a *presumably* constant time manner
+fn choice(mut value: bool) -> Choice {
+  Choice::from(u8_from_bool(&mut value))
 }
 
 macro_rules! deref_borrow {
@@ -202,10 +218,11 @@ impl Scalar {
 
     let mut res = Scalar::one();
     let mut bits = 0;
-    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+    for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let bit = u8::from(*bit);
+      let mut bit = u8_from_bool(bit.deref_mut());
       bits |= bit;
+      bit.zeroize();
 
       if ((i + 1) % 4) == 0 {
         if i != 3 {
@@ -288,7 +305,18 @@ impl PrimeField for Scalar {
   // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
   const S: u32 = 2;
   fn is_odd(&self) -> Choice {
-    choice(self.to_le_bits()[0])
+    // This is probably overkill? Yet it's better safe than sorry since this is a complete
+    // decomposition of the scalar
+    let mut bits = self.to_le_bits();
+    let res = choice(bits[0]);
+    // This shouldn't need mut since it should be a mutable reference
+    // Per the bitvec docs, writing through a derefence requires mut, writing through one of its
+    // methods does not
+    // We do not use one of its methods to ensure we write via zeroize
+    for mut bit in bits.iter_mut() {
+      bit.deref_mut().zeroize();
+    }
+    res
   }
   fn multiplicative_generator() -> Self {
     // This was calculated with the method from the ff crate docs

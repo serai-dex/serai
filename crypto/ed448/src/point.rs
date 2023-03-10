@@ -1,5 +1,5 @@
 use core::{
-  ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
+  ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
   iter::Sum,
 };
 
@@ -19,6 +19,7 @@ use group::{
 };
 
 use crate::{
+  backend::u8_from_bool,
   scalar::{Scalar, MODULUS as SCALAR_MODULUS},
   field::{FieldElement, MODULUS as FIELD_MODULUS, Q_4},
 };
@@ -218,7 +219,7 @@ impl<'a> Sum<&'a Point> for Point {
 
 impl Mul<Scalar> for Point {
   type Output = Point;
-  fn mul(self, other: Scalar) -> Point {
+  fn mul(self, mut other: Scalar) -> Point {
     // Precompute the optimal amount that's a multiple of 2
     let mut table = [Point::identity(); 16];
     table[1] = self;
@@ -228,10 +229,11 @@ impl Mul<Scalar> for Point {
 
     let mut res = Self::identity();
     let mut bits = 0;
-    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+    for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let bit = u8::from(*bit);
+      let mut bit = u8_from_bool(bit.deref_mut());
       bits |= bit;
+      bit.zeroize();
 
       if ((i + 1) % 4) == 0 {
         if i != 3 {
@@ -243,6 +245,7 @@ impl Mul<Scalar> for Point {
         bits = 0;
       }
     }
+    other.zeroize();
     res
   }
 }

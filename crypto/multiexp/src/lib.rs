@@ -1,5 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+use core::ops::DerefMut;
+
 use zeroize::Zeroize;
 
 use ff::PrimeFieldBits;
@@ -19,6 +21,29 @@ pub use batch::BatchVerifier;
 #[cfg(test)]
 mod tests;
 
+// Feature gated due to MSRV requirements
+#[cfg(feature = "black_box")]
+pub(crate) fn black_box<T>(val: T) -> T {
+  core::hint::black_box(val)
+}
+
+#[cfg(not(feature = "black_box"))]
+pub(crate) fn black_box<T>(val: T) -> T {
+  val
+}
+
+fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+  let bit_ref = black_box(bit_ref);
+
+  let mut bit = black_box(*bit_ref);
+  let res = black_box(bit as u8);
+  bit.zeroize();
+  debug_assert!((res | 1) == 1);
+
+  bit_ref.zeroize();
+  res
+}
+
 // Convert scalars to `window`-sized bit groups, as needed to index a table
 // This algorithm works for `window <= 8`
 pub(crate) fn prep_bits<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<u8>>
@@ -33,10 +58,8 @@ where
     let mut bits = pair.0.to_le_bits();
     groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
 
-    for (i, mut raw_bit) in bits.iter_mut().enumerate() {
-      let mut bit = u8::from(*raw_bit);
-      (*raw_bit).zeroize();
-
+    for (i, mut bit) in bits.iter_mut().enumerate() {
+      let mut bit = u8_from_bool(bit.deref_mut());
       groupings[p][i / w_usize] |= bit << (i % w_usize);
       bit.zeroize();
     }

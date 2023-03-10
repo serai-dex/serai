@@ -27,4 +27,5 @@ k256 = { version = "0.12", features = ["bits"] }
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
+black_box = []
 batch = ["rand_core"]

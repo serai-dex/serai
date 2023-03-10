@@ -1,5 +1,6 @@
-use core::ops::{Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign};
+use core::ops::{DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign};
 
+use zeroize::Zeroize;
 use rand_core::RngCore;
 
 use subtle::{
@@ -11,7 +12,7 @@ use crypto_bigint::{Integer, Encoding, U256, U512};
 
 use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
-use crate::{constant_time, math, from_uint};
+use crate::{u8_from_bool, constant_time, math, from_uint};
 
 // 2^255 - 19
 // Uses saturating_sub because checked_sub isn't available at compile time
@@ -200,10 +201,11 @@ impl FieldElement {
 
     let mut res = FieldElement::one();
     let mut bits = 0;
-    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+    for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let bit = u8::from(*bit);
+      let mut bit = u8_from_bool(bit.deref_mut());
       bits |= bit;
+      bit.zeroize();
 
       if ((i + 1) % 4) == 0 {
         if i != 3 {
