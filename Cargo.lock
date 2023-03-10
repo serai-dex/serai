@@ -5037,6 +5037,7 @@ name = "monero-serai"
 version = "0.1.2-alpha"
 dependencies = [
  "base58-monero",
+ "crc",
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "digest_auth",

@@ -14,6 +14,9 @@ use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
 pub mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
+/// Seed creation and parsing functionality.
+pub mod seed;
+
 /// Address encoding and decoding functionality.
 pub mod address;
 use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, MoneroAddress};
