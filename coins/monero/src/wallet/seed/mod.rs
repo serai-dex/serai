@@ -1,91 +1,92 @@
-use std::fmt;
+use core::fmt;
 
-use rand_core::OsRng;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use rand_core::{RngCore, CryptoRng};
 
 use thiserror::Error;
 
-mod classic;
-
-use classic::{CLASSIC_SEED_LENGTH, CLASSIC_SEED_LENGTH_WITH_CHECKSUM};
-use zeroize::Zeroizing;
+pub(crate) mod classic;
+use classic::{CLASSIC_SEED_LENGTH, CLASSIC_SEED_LENGTH_WITH_CHECKSUM, ClassicSeed};
 
 /// Error when decoding a seed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum SeedError {
-  #[error("malformed seed")]
-  InvalidSeed,
+  #[error("invalid number of words in seed")]
+  InvalidSeedLength,
   #[error("unknown language")]
   UnknownLanguage,
-  #[error("unexpected number of words in seed")]
-  InvalidSeedLength,
-  #[error("language english old doesn't support seeds with checksum")]
+  #[error("invalid checksum")]
+  InvalidChecksum,
+  #[error("english old seeds don't support checksums")]
   EnglishOldWithChecksum,
+  #[error("invalid seed")]
+  InvalidSeed,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub enum LanguageName {
-  English,
-  EnglishOld,
-  German,
-  Spanish,
-  French,
-  Italian,
-  Japanese,
-  Dutch,
-  Portuguese,
-  Russian,
+pub enum Language {
   Chinese,
+  English,
+  Dutch,
+  French,
+  Spanish,
+  German,
+  Italian,
+  Portuguese,
+  Japanese,
+  Russian,
   Esperanto,
   Lojban,
+  EnglishOld,
 }
 
+/// A Monero seed.
 // TODO: Add polyseed to enum
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum Seed {
-  Classic(Zeroizing<String>),
+  Classic(ClassicSeed),
+}
+
+impl fmt::Debug for Seed {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      Seed::Classic(_) => f.debug_struct("Seed::Classic").finish_non_exhaustive(),
+    }
+  }
 }
 
 impl Seed {
-  /// creates a new seed.
-  pub fn new(lang: LanguageName) -> Seed {
-    // TODO: This should return Polyseed when implemented.
-    Seed::Classic(classic::new(lang, &mut OsRng))
+  /// Create a new seed.
+  pub fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> Seed {
+    Seed::Classic(ClassicSeed::new(rng, lang))
   }
 
-  /// constructs a seed from seed words.
+  /// Parse a seed from a String.
   pub fn from_string(words: Zeroizing<String>) -> Result<Seed, SeedError> {
     match words.split_whitespace().count() {
       CLASSIC_SEED_LENGTH | CLASSIC_SEED_LENGTH_WITH_CHECKSUM => {
-        // convert to bytes to make sure it is valid
-        classic::words_to_bytes(&words)?;
-        Ok(Seed::Classic(words))
+        ClassicSeed::from_string(words).map(Seed::Classic)
       }
       _ => Err(SeedError::InvalidSeedLength)?,
     }
   }
 
-  /// constructs a seed from a given key.
-  pub fn from_entropy(key: &Zeroizing<[u8; 32]>, lang_name: LanguageName) -> Seed {
-    Seed::Classic(classic::bytes_to_words(key, lang_name))
+  /// Create a Seed from entropy.
+  pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<Seed> {
+    ClassicSeed::from_entropy(lang, entropy).map(Seed::Classic)
   }
 
-  /// returns seed as String.
-  pub fn to_string(&self) -> &Zeroizing<String> {
+  /// Convert a seed to a String.
+  pub fn to_string(&self) -> Zeroizing<String> {
     match self {
-      Seed::Classic(words) => words,
+      Seed::Classic(seed) => seed.to_string(),
     }
   }
 
-  /// returns the seed spend key.
+  /// Return the entropy for this seed.
   pub fn entropy(&self) -> Zeroizing<[u8; 32]> {
     match self {
-      Seed::Classic(words) => classic::words_to_bytes(words).unwrap(),
+      Seed::Classic(seed) => seed.entropy(),
     }
-  }
-}
-
-impl fmt::Debug for Seed {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    f.debug_struct("Seed::Classic").finish_non_exhaustive()
   }
 }
