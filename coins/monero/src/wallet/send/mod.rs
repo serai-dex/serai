@@ -308,13 +308,13 @@ impl SignableTransaction {
 
     // Include a random payment ID if we don't actually have one
     // It prevents transactions from leaking if they're sending to integrated addresses or not
-    let id = if let Some(id) = id {
-      id
-    } else {
-      let mut id = [0; 8];
-      rng.fill_bytes(&mut id);
-      id
-    };
+    // Only do this if we only have two outputs though, as Monero won't add a dummy if there's
+    // more than two outputs
+    if outputs.len() <= 2 {
+      let mut rand = [0; 8];
+      rng.fill_bytes(&mut rand);
+      id = id.or(Some(rand));
+    }
 
     let commitments = outputs.iter().map(|output| output.commitment.clone()).collect::<Vec<_>>();
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
@@ -329,9 +329,11 @@ impl SignableTransaction {
         if additional { outputs.iter().map(|output| output.R).collect() } else { vec![] },
       );
 
-      let mut id_vec = Vec::with_capacity(1 + 8);
-      PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
-      extra.push(ExtraField::Nonce(id_vec));
+      if let Some(id) = id {
+        let mut id_vec = Vec::with_capacity(1 + 8);
+        PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
+        extra.push(ExtraField::Nonce(id_vec));
+      }
 
       // Include data if present
       for part in self.data.drain(..) {
