@@ -12,8 +12,16 @@ use crate::serialize::{
 
 pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
 
+pub const PAYMENT_ID_MARKER: u8 = 0;
+pub const ENCRYPTED_PAYMENT_ID_MARKER: u8 = 1;
+// Used as it's the highest value not interpretable as a continued VarInt
+pub const ARBITRARY_DATA_MARKER: u8 = 127;
+
+// 1 byte is used for the marker
+pub const MAX_ARBITRARY_DATA_SIZE: usize = MAX_TX_EXTRA_NONCE_SIZE - 1;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub(crate) enum PaymentId {
+pub enum PaymentId {
   Unencrypted([u8; 32]),
   Encrypted([u8; 8]),
 }
@@ -23,6 +31,7 @@ impl BitXor<[u8; 8]> for PaymentId {
 
   fn bitxor(self, bytes: [u8; 8]) -> PaymentId {
     match self {
+      // Don't perform the xor since this isn't intended to be encrypted with xor
       PaymentId::Unencrypted(_) => self,
       PaymentId::Encrypted(id) => {
         PaymentId::Encrypted((u64::from_le_bytes(id) ^ u64::from_le_bytes(bytes)).to_le_bytes())
@@ -32,21 +41,21 @@ impl BitXor<[u8; 8]> for PaymentId {
 }
 
 impl PaymentId {
-  pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       PaymentId::Unencrypted(id) => {
-        w.write_all(&[0])?;
+        w.write_all(&[PAYMENT_ID_MARKER])?;
         w.write_all(id)?;
       }
       PaymentId::Encrypted(id) => {
-        w.write_all(&[1])?;
+        w.write_all(&[ENCRYPTED_PAYMENT_ID_MARKER])?;
         w.write_all(id)?;
       }
     }
     Ok(())
   }
 
-  fn read<R: Read>(r: &mut R) -> io::Result<PaymentId> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<PaymentId> {
     Ok(match read_byte(r)? {
       0 => PaymentId::Unencrypted(read_bytes(r)?),
       1 => PaymentId::Encrypted(read_bytes(r)?),
@@ -57,7 +66,7 @@ impl PaymentId {
 
 // Doesn't bother with padding nor MinerGate
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub(crate) enum ExtraField {
+pub enum ExtraField {
   PublicKey(EdwardsPoint),
   Nonce(Vec<u8>),
   MergeMining(usize, [u8; 32]),
@@ -65,7 +74,7 @@ pub(crate) enum ExtraField {
 }
 
 impl ExtraField {
-  fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       ExtraField::PublicKey(key) => {
         w.write_all(&[1])?;
@@ -88,7 +97,7 @@ impl ExtraField {
     Ok(())
   }
 
-  fn read<R: Read>(r: &mut R) -> io::Result<ExtraField> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<ExtraField> {
     Ok(match read_byte(r)? {
       1 => ExtraField::PublicKey(read_point(r)?),
       2 => ExtraField::Nonce({
@@ -110,9 +119,9 @@ impl ExtraField {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub(crate) struct Extra(Vec<ExtraField>);
+pub struct Extra(Vec<ExtraField>);
 impl Extra {
-  pub(crate) fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
+  pub fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
     let mut key = None;
     let mut additional = None;
     for field in &self.0 {
@@ -128,7 +137,7 @@ impl Extra {
     key.map(|key| (key, additional))
   }
 
-  pub(crate) fn payment_id(&self) -> Option<PaymentId> {
+  pub fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
         return PaymentId::read::<&[u8]>(&mut data.as_ref()).ok();
@@ -137,17 +146,13 @@ impl Extra {
     None
   }
 
-  pub(crate) fn data(&self) -> Vec<Vec<u8>> {
-    let mut first = true;
+  pub fn data(&self) -> Vec<Vec<u8>> {
     let mut res = vec![];
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
-        // Skip the first Nonce, which should be the payment ID
-        if first {
-          first = false;
-          continue;
+        if data[0] == ARBITRARY_DATA_MARKER {
+          res.push(data[1 ..].to_vec());
         }
-        res.push(data.clone());
       }
     }
     res
@@ -167,25 +172,31 @@ impl Extra {
   }
 
   #[rustfmt::skip]
-  pub(crate) fn fee_weight(outputs: usize, data: &[Vec<u8>]) -> usize {
+  pub(crate) fn fee_weight(outputs: usize, payment_id: bool, data: &[Vec<u8>]) -> usize {
     // PublicKey, key
     (1 + 32) +
     // PublicKeys, length, additional keys
     (1 + 1 + (outputs.saturating_sub(1) * 32)) +
     // PaymentId (Nonce), length, encrypted, ID
-    (1 + 1 + 1 + 8) +
+    (if payment_id { 1 + 1 + 1 + 8 } else { 0 }) +
     // Nonce, length, data (if existent)
     data.iter().map(|v| 1 + varint_len(v.len()) + v.len()).sum::<usize>()
   }
 
-  pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for field in &self.0 {
       field.write(w)?;
     }
     Ok(())
   }
 
-  pub(crate) fn read<R: Read>(r: &mut R) -> io::Result<Extra> {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut buf = vec![];
+    self.write(&mut buf).unwrap();
+    buf
+  }
+
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
     let mut field;
     while {

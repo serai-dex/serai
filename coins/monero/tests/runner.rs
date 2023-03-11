@@ -155,7 +155,7 @@ macro_rules! test {
         use monero_serai::{
           random_scalar,
           wallet::{
-            address::{Network, AddressSpec}, ViewPair, Scanner, SignableTransaction,
+            address::{Network, AddressSpec}, ViewPair, Scanner, Change, SignableTransaction,
             SignableTransactionBuilder,
           },
         };
@@ -196,7 +196,13 @@ macro_rules! test {
           let builder = SignableTransactionBuilder::new(
             rpc.get_protocol().await.unwrap(),
             rpc.get_fee().await.unwrap(),
-            Some(random_address().2),
+            Some(Change::new(
+              &ViewPair::new(
+                &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
+                Zeroizing::new(random_scalar(&mut OsRng))
+              ),
+              false
+            )),
           );
 
           let sign = |tx: SignableTransaction| {

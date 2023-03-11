@@ -14,6 +14,9 @@ use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
 pub mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
+/// Seed creation and parsing functionality.
+pub mod seed;
+
 /// Address encoding and decoding functionality.
 pub mod address;
 use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, MoneroAddress};
@@ -25,7 +28,11 @@ pub(crate) mod decoys;
 pub(crate) use decoys::Decoys;
 
 mod send;
-pub use send::{Fee, TransactionError, SignableTransaction, SignableTransactionBuilder, Eventuality};
+pub use send::{
+  Fee, TransactionError, Change, SignableTransaction, SignableTransactionBuilder, Eventuality,
+};
+#[cfg(feature = "multisig")]
+pub(crate) use send::InternalPayment;
 #[cfg(feature = "multisig")]
 pub use send::TransactionMachine;
 
@@ -54,12 +61,11 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
 #[allow(non_snake_case)]
 pub(crate) fn shared_key(
   uniqueness: Option<[u8; 32]>,
-  s: &Zeroizing<Scalar>,
-  P: &EdwardsPoint,
+  ecdh: EdwardsPoint,
   o: usize,
 ) -> (u8, Scalar, [u8; 8]) {
   // 8Ra
-  let mut output_derivation = (s.deref() * P).mul_by_cofactor().compress().to_bytes().to_vec();
+  let mut output_derivation = ecdh.mul_by_cofactor().compress().to_bytes().to_vec();
 
   let mut payment_id_xor = [0; 8];
   payment_id_xor

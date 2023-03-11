@@ -18,7 +18,7 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec},
-    Fee, SpendableOutput, TransactionError, SignableTransaction as MSignableTransaction,
+    Fee, SpendableOutput, Change, TransactionError, SignableTransaction as MSignableTransaction,
     Eventuality, TransactionMachine,
   },
 };
@@ -329,7 +329,9 @@ impl Coin for Monero {
         Some(Zeroizing::new(plan.id())),
         plan.inputs.iter().cloned().map(|input| input.0).collect(),
         payments,
-        plan.change.map(|key| Self::address_internal(key, CHANGE_SUBADDRESS).into()),
+        plan.change.map(|key| {
+          Change::fingerprintable(Self::address_internal(key, CHANGE_SUBADDRESS).into())
+        }),
         vec![],
         fee,
       ) {
@@ -488,7 +490,7 @@ impl Coin for Monero {
       None,
       outputs,
       vec![(address.into(), amount - fee)],
-      Some(Self::test_address().into()),
+      Some(Change::fingerprintable(Self::test_address().into())),
       vec![],
       self.rpc.get_fee().await.unwrap(),
     )

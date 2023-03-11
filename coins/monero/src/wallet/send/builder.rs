@@ -5,8 +5,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::{
   Protocol,
   wallet::{
-    address::MoneroAddress, Fee, SpendableOutput, SignableTransaction, TransactionError,
-    extra::MAX_TX_EXTRA_NONCE_SIZE,
+    address::MoneroAddress, Fee, SpendableOutput, Change, SignableTransaction, TransactionError,
+    extra::MAX_ARBITRARY_DATA_SIZE,
   },
 };
 
@@ -18,14 +18,14 @@ struct SignableTransactionBuilderInternal {
   r_seed: Option<Zeroizing<[u8; 32]>>,
   inputs: Vec<SpendableOutput>,
   payments: Vec<(MoneroAddress, u64)>,
-  change_address: Option<MoneroAddress>,
+  change_address: Option<Change>,
   data: Vec<Vec<u8>>,
 }
 
 impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
-  fn new(protocol: Protocol, fee: Fee, change_address: Option<MoneroAddress>) -> Self {
+  fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self {
       protocol,
       fee,
@@ -90,7 +90,7 @@ impl SignableTransactionBuilder {
     Self(self.0.clone())
   }
 
-  pub fn new(protocol: Protocol, fee: Fee, change_address: Option<MoneroAddress>) -> Self {
+  pub fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self(Arc::new(RwLock::new(SignableTransactionBuilderInternal::new(
       protocol,
       fee,
@@ -122,7 +122,7 @@ impl SignableTransactionBuilder {
   }
 
   pub fn add_data(&mut self, data: Vec<u8>) -> Result<Self, TransactionError> {
-    if data.len() > MAX_TX_EXTRA_NONCE_SIZE {
+    if data.len() > MAX_ARBITRARY_DATA_SIZE {
       Err(TransactionError::TooMuchData)?;
     }
     self.0.write().unwrap().add_data(data);
@@ -136,7 +136,7 @@ impl SignableTransactionBuilder {
       read.r_seed.clone(),
       read.inputs.clone(),
       read.payments.clone(),
-      read.change_address,
+      read.change_address.clone(),
       read.data.clone(),
       read.fee,
     )

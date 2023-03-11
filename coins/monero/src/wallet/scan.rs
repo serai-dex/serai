@@ -1,3 +1,4 @@
+use core::ops::Deref;
 use std::io::{self, Read, Write};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -320,8 +321,7 @@ impl Scanner {
         };
         let (view_tag, shared_key, payment_id_xor) = shared_key(
           if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix.inputs)) } else { None },
-          &self.pair.view,
-          key,
+          self.pair.view.deref() * key,
           o,
         );
 

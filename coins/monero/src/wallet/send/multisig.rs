@@ -4,6 +4,8 @@ use std::{
   collections::HashMap,
 };
 
+use zeroize::Zeroizing;
+
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -29,7 +31,9 @@ use crate::{
   },
   transaction::{Input, Transaction},
   rpc::Rpc,
-  wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness},
+  wallet::{
+    TransactionError, InternalPayment, SignableTransaction, Decoys, key_image_sort, uniqueness,
+  },
 };
 
 /// FROST signing machine to produce a signed transaction.
@@ -118,8 +122,19 @@ impl SignableTransaction {
     }
 
     for payment in &self.payments {
-      transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
-      transcript.append_message(b"payment_amount", payment.1.to_le_bytes());
+      match payment {
+        InternalPayment::Payment(payment) => {
+          transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
+          transcript.append_message(b"payment_amount", payment.1.to_le_bytes());
+        }
+        InternalPayment::Change(change, amount) => {
+          transcript.append_message(b"change_address", change.address.to_string().as_bytes());
+          if let Some(view) = change.view.as_ref() {
+            transcript.append_message(b"change_view_key", Zeroizing::new(view.to_bytes()));
+          }
+          transcript.append_message(b"change_amount", amount.to_le_bytes());
+        }
+      }
     }
 
     let mut key_images = vec![];

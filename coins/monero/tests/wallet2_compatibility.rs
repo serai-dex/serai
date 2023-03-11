@@ -22,7 +22,7 @@ use monero_serai::{
   rpc::Rpc,
   wallet::{
     address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
-    extra::MAX_TX_EXTRA_NONCE_SIZE,
+    extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra},
     Scanner,
   },
 };
@@ -56,7 +56,7 @@ async fn initialize_rpcs() -> (WalletClient, Rpc, monero_rpc::monero::Address) {
   let wallet_rpc_addr = if address_resp.is_ok() {
     address_resp.unwrap().address
   } else {
-    wallet_rpc.create_wallet("test_wallet".to_string(), None, "English".to_string()).await.unwrap();
+    wallet_rpc.create_wallet("wallet".to_string(), None, "English".to_string()).await.unwrap();
     let addr = wallet_rpc.get_address(0, None).await.unwrap().address;
     daemon_rpc.generate_blocks(&addr.to_string(), 70).await.unwrap();
     addr
@@ -64,7 +64,7 @@ async fn initialize_rpcs() -> (WalletClient, Rpc, monero_rpc::monero::Address) {
   (wallet_rpc, daemon_rpc, wallet_rpc_addr)
 }
 
-async fn test_from_wallet_rpc_to_self(spec: AddressSpec) {
+async fn from_wallet_rpc_to_self(spec: AddressSpec) {
   // initialize rpc
   let (wallet_rpc, daemon_rpc, wallet_rpc_addr) = initialize_rpcs().await;
 
@@ -109,24 +109,23 @@ async fn test_from_wallet_rpc_to_self(spec: AddressSpec) {
 }
 
 async_sequential!(
-  async fn test_receipt_of_wallet_rpc_tx_standard() {
-    test_from_wallet_rpc_to_self(AddressSpec::Standard).await;
+  async fn receipt_of_wallet_rpc_tx_standard() {
+    from_wallet_rpc_to_self(AddressSpec::Standard).await;
   }
 
-  async fn test_receipt_of_wallet_rpc_tx_subaddress() {
-    test_from_wallet_rpc_to_self(AddressSpec::Subaddress(SubaddressIndex::new(0, 1).unwrap()))
-      .await;
+  async fn receipt_of_wallet_rpc_tx_subaddress() {
+    from_wallet_rpc_to_self(AddressSpec::Subaddress(SubaddressIndex::new(0, 1).unwrap())).await;
   }
 
-  async fn test_receipt_of_wallet_rpc_tx_integrated() {
+  async fn receipt_of_wallet_rpc_tx_integrated() {
     let mut payment_id = [0u8; 8];
     OsRng.fill_bytes(&mut payment_id);
-    test_from_wallet_rpc_to_self(AddressSpec::Integrated(payment_id)).await;
+    from_wallet_rpc_to_self(AddressSpec::Integrated(payment_id)).await;
   }
 );
 
 test!(
-  test_send_to_wallet_rpc_standard,
+  send_to_wallet_rpc_standard,
   (
     |_, mut builder: Builder, _| async move {
       // initialize rpc
@@ -151,7 +150,7 @@ test!(
 );
 
 test!(
-  test_send_to_wallet_rpc_subaddress,
+  send_to_wallet_rpc_subaddress,
   (
     |_, mut builder: Builder, _| async move {
       // initialize rpc
@@ -173,12 +172,20 @@ test!(
         data.0.get_transfer(Hash::from_slice(&tx.hash()), None).await.unwrap().unwrap();
       assert_eq!(transfer.amount.as_pico(), 1000000);
       assert_eq!(transfer.subaddr_index, Index { major: 0, minor: data.1 });
+
+      // Make sure only one R was included in TX extra
+      assert!(Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref())
+        .unwrap()
+        .keys()
+        .unwrap()
+        .1
+        .is_none());
     },
   ),
 );
 
 test!(
-  test_send_to_wallet_rpc_integrated,
+  send_to_wallet_rpc_integrated,
   (
     |_, mut builder: Builder, _| async move {
       // initialize rpc
@@ -205,7 +212,7 @@ test!(
 );
 
 test!(
-  test_send_to_wallet_rpc_with_arb_data,
+  send_to_wallet_rpc_with_arb_data,
   (
     |_, mut builder: Builder, _| async move {
       // initialize rpc
@@ -217,9 +224,10 @@ test!(
         1000000,
       );
 
-      // Make 2 data that is full 255 bytes
+      // Make 2 data that is the full 255 bytes
       for _ in 0 .. 2 {
-        let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE];
+        // Subtract 1 since we prefix data with 127
+        let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE - 1];
         assert!(builder.add_data(data).is_ok());
       }
 
