@@ -59,15 +59,14 @@ impl SendOutput {
   fn internal(
     unique: [u8; 32],
     output: (usize, (MoneroAddress, u64)),
-    ecdh_left: &Zeroizing<Scalar>,
-    ecdh_right: &EdwardsPoint,
+    ecdh: EdwardsPoint,
     R: EdwardsPoint,
   ) -> (SendOutput, Option<[u8; 8]>) {
     let o = output.0;
     let output = output.1;
 
     let (view_tag, shared_key, payment_id_xor) =
-      shared_key(Some(unique).filter(|_| output.0.is_guaranteed()), ecdh_left, ecdh_right, o);
+      shared_key(Some(unique).filter(|_| output.0.is_guaranteed()), ecdh, o);
 
     (
       SendOutput {
@@ -93,8 +92,7 @@ impl SendOutput {
     SendOutput::internal(
       unique,
       output,
-      r,
-      &address.view,
+      r.deref() * address.view,
       if !address.is_subaddress() {
         r.deref() * &ED25519_BASEPOINT_TABLE
       } else {
@@ -104,17 +102,11 @@ impl SendOutput {
   }
 
   fn change(
-    ecdh: &EdwardsPoint,
+    ecdh: EdwardsPoint,
     unique: [u8; 32],
     output: (usize, (MoneroAddress, u64)),
   ) -> (SendOutput, Option<[u8; 8]>) {
-    SendOutput::internal(
-      unique,
-      output,
-      &Zeroizing::new(Scalar::one()),
-      ecdh,
-      ED25519_BASEPOINT_POINT,
-    )
+    SendOutput::internal(unique, output, ecdh, ED25519_BASEPOINT_POINT)
   }
 }
 
@@ -440,7 +432,7 @@ impl SignableTransaction {
           // Instead of rA, use Ra, where R is r * subaddress_spend_key
           // change.view must be Some as if it's None, this payment would've been downcast
           let ecdh = tx_public_key * change.view.unwrap().deref();
-          SendOutput::change(&ecdh, uniqueness, (o, (change.address, amount)))
+          SendOutput::change(ecdh, uniqueness, (o, (change.address, amount)))
         }
       };
 
