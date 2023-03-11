@@ -217,9 +217,10 @@ test!(
         1000000,
       );
 
-      // Make 2 data that is full 255 bytes
+      // Make 2 data that is the full 255 bytes
       for _ in 0 .. 2 {
-        let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE];
+        // Subtract 1 since we prefix data with 127
+        let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE - 1];
         assert!(builder.add_data(data).is_ok());
       }
 

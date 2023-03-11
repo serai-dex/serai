@@ -6,7 +6,7 @@ use crate::{
   Protocol,
   wallet::{
     address::MoneroAddress, Fee, SpendableOutput, SignableTransaction, TransactionError,
-    extra::MAX_TX_EXTRA_NONCE_SIZE,
+    extra::MAX_ARBITRARY_DATA_SIZE,
   },
 };
 
@@ -104,7 +104,7 @@ impl SignableTransactionBuilder {
   }
 
   pub fn add_data(&mut self, data: Vec<u8>) -> Result<Self, TransactionError> {
-    if data.len() > MAX_TX_EXTRA_NONCE_SIZE {
+    if data.len() > MAX_ARBITRARY_DATA_SIZE {
       Err(TransactionError::TooMuchData)?;
     }
     self.0.write().unwrap().add_data(data);

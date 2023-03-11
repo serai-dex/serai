@@ -25,8 +25,10 @@ use crate::{
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{
-    address::MoneroAddress, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
-    uniqueness, shared_key, commitment_mask, amount_encryption, extra::MAX_TX_EXTRA_NONCE_SIZE,
+    address::MoneroAddress,
+    SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness, shared_key,
+    commitment_mask, amount_encryption,
+    extra::{ARBITRARY_DATA_MARKER, MAX_ARBITRARY_DATA_SIZE},
   },
 };
 
@@ -196,7 +198,7 @@ impl SignableTransaction {
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure there's only one payment ID
-    {
+    let mut has_payment_id = {
       let mut payment_ids = 0;
       let mut count = |addr: MoneroAddress| {
         if addr.payment_id().is_some() {
@@ -212,7 +214,8 @@ impl SignableTransaction {
       if payment_ids > 1 {
         Err(TransactionError::MultiplePaymentIds)?;
       }
-    }
+      payment_ids == 1
+    };
 
     if inputs.is_empty() {
       Err(TransactionError::NoInputs)?;
@@ -222,7 +225,7 @@ impl SignableTransaction {
     }
 
     for part in &data {
-      if part.len() > MAX_TX_EXTRA_NONCE_SIZE {
+      if part.len() > MAX_ARBITRARY_DATA_SIZE {
         Err(TransactionError::TooMuchData)?;
       }
     }
@@ -235,9 +238,11 @@ impl SignableTransaction {
       Err(TransactionError::NoChange)?;
     }
     let outputs = payments.len() + usize::from(change);
+    // Add a dummy payment ID if there's only 2 payments
+    has_payment_id |= outputs == 2;
 
     // Calculate the extra length
-    let extra = Extra::fee_weight(outputs, data.as_ref());
+    let extra = Extra::fee_weight(outputs, has_payment_id, data.as_ref());
 
     // Calculate the fee.
     let mut fee =
@@ -337,10 +342,13 @@ impl SignableTransaction {
 
       // Include data if present
       for part in self.data.drain(..) {
-        extra.push(ExtraField::Nonce(part));
+        let mut arb = vec![ARBITRARY_DATA_MARKER];
+        arb.extend(part);
+        extra.push(ExtraField::Nonce(arb));
       }
 
-      let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len(), self.data.as_ref()));
+      let mut serialized =
+        Vec::with_capacity(Extra::fee_weight(outputs.len(), id.is_some(), self.data.as_ref()));
       extra.write(&mut serialized).unwrap();
       serialized
     };

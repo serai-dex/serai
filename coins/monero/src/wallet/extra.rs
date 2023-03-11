@@ -12,6 +12,14 @@ use crate::serialize::{
 
 pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
 
+pub const PAYMENT_ID_MARKER: u8 = 0;
+pub const ENCRYPTED_PAYMENT_ID_MARKER: u8 = 1;
+// Used as it's the highest value not interpretable as a continued VarInt
+pub const ARBITRARY_DATA_MARKER: u8 = 127;
+
+// 1 byte is used for the marker
+pub const MAX_ARBITRARY_DATA_SIZE: usize = MAX_TX_EXTRA_NONCE_SIZE - 1;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) enum PaymentId {
   Unencrypted([u8; 32]),
@@ -35,11 +43,11 @@ impl PaymentId {
   pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       PaymentId::Unencrypted(id) => {
-        w.write_all(&[0])?;
+        w.write_all(&[PAYMENT_ID_MARKER])?;
         w.write_all(id)?;
       }
       PaymentId::Encrypted(id) => {
-        w.write_all(&[1])?;
+        w.write_all(&[ENCRYPTED_PAYMENT_ID_MARKER])?;
         w.write_all(id)?;
       }
     }
@@ -138,16 +146,12 @@ impl Extra {
   }
 
   pub(crate) fn data(&self) -> Vec<Vec<u8>> {
-    let mut first = true;
     let mut res = vec![];
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
-        // Skip the first Nonce, which should be the payment ID
-        if first {
-          first = false;
-          continue;
+        if data[0] == ARBITRARY_DATA_MARKER {
+          res.push(data[1 ..].to_vec());
         }
-        res.push(data.clone());
       }
     }
     res
@@ -167,13 +171,13 @@ impl Extra {
   }
 
   #[rustfmt::skip]
-  pub(crate) fn fee_weight(outputs: usize, data: &[Vec<u8>]) -> usize {
+  pub(crate) fn fee_weight(outputs: usize, payment_id: bool, data: &[Vec<u8>]) -> usize {
     // PublicKey, key
     (1 + 32) +
     // PublicKeys, length, additional keys
     (1 + 1 + (outputs.saturating_sub(1) * 32)) +
     // PaymentId (Nonce), length, encrypted, ID
-    (1 + 1 + 1 + 8) +
+    (if payment_id { 1 + 1 + 1 + 8 } else { 0 }) +
     // Nonce, length, data (if existent)
     data.iter().map(|v| 1 + varint_len(v.len()) + v.len()).sum::<usize>()
   }
