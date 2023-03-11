@@ -5,7 +5,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::{
   Protocol,
   wallet::{
-    address::MoneroAddress, Fee, SpendableOutput, SignableTransaction, TransactionError,
+    address::MoneroAddress, Fee, SpendableOutput, Change, SignableTransaction, TransactionError,
     extra::MAX_ARBITRARY_DATA_SIZE,
   },
 };
@@ -17,14 +17,14 @@ struct SignableTransactionBuilderInternal {
 
   inputs: Vec<SpendableOutput>,
   payments: Vec<(MoneroAddress, u64)>,
-  change_address: Option<MoneroAddress>,
+  change_address: Option<Change>,
   data: Vec<Vec<u8>>,
 }
 
 impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
-  fn new(protocol: Protocol, fee: Fee, change_address: Option<MoneroAddress>) -> Self {
+  fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self { protocol, fee, inputs: vec![], payments: vec![], change_address, data: vec![] }
   }
 
@@ -77,7 +77,7 @@ impl SignableTransactionBuilder {
     Self(self.0.clone())
   }
 
-  pub fn new(protocol: Protocol, fee: Fee, change_address: Option<MoneroAddress>) -> Self {
+  pub fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self(Arc::new(RwLock::new(SignableTransactionBuilderInternal::new(
       protocol,
       fee,
@@ -117,7 +117,7 @@ impl SignableTransactionBuilder {
       read.protocol,
       read.inputs.clone(),
       read.payments.clone(),
-      read.change_address,
+      read.change_address.clone(),
       read.data.clone(),
       read.fee,
     )

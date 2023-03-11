@@ -15,7 +15,7 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec, MoneroAddress},
-    Fee, SpendableOutput, SignableTransaction as MSignableTransaction, TransactionMachine,
+    Fee, SpendableOutput, Change, SignableTransaction as MSignableTransaction, TransactionMachine,
   },
 };
 
@@ -236,7 +236,8 @@ impl Coin for Monero {
         self.rpc.get_protocol().await.unwrap(), // TODO: Make this deterministic
         inputs.drain(..).map(|input| input.0).collect(),
         payments.to_vec(),
-        change.map(|change| self.address_internal(change, CHANGE_SUBADDRESS)),
+        change
+          .map(|change| Change::fingerprintable(self.address_internal(change, CHANGE_SUBADDRESS))),
         vec![],
         fee,
       )
@@ -316,7 +317,7 @@ impl Coin for Monero {
       self.rpc.get_protocol().await.unwrap(),
       outputs,
       vec![(address, amount - fee)],
-      Some(Self::test_address()),
+      Some(Change::new(&Self::test_view_pair(), true)),
       vec![],
       self.rpc.get_fee().await.unwrap(),
     )
