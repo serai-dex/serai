@@ -12,6 +12,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+futures = "0.3"
+
 hex-literal = "0.3"
 lazy_static = "1"
 thiserror = "1"
