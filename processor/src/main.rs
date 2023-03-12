@@ -1,8 +1,6 @@
-use core::fmt::Debug;
 use std::{
   env,
   pin::Pin,
-  sync::{Arc, RwLock},
   task::{Poll, Context},
   future::Future,
   time::{Duration, SystemTime, Instant},
@@ -28,6 +26,12 @@ use serai_client::{
 
 use messages::{SubstrateContext, substrate, CoordinatorMessage, ProcessorMessage};
 
+mod db;
+pub use db::*;
+
+mod coordinator;
+pub use coordinator::*;
+
 mod coins;
 use coins::{OutputType, Output, Block, Coin};
 #[cfg(feature = "bitcoin")]
@@ -49,24 +53,6 @@ use scheduler::Scheduler;
 
 #[cfg(test)]
 mod tests;
-
-pub trait DbTxn: Send + Sync + Clone + Debug {
-  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
-  fn del(&mut self, key: impl AsRef<[u8]>);
-  fn commit(self);
-}
-
-pub trait Db: 'static + Send + Sync + Clone + Debug {
-  type Transaction: DbTxn;
-  fn key(db_dst: &'static [u8], item_dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    let db_len = u8::try_from(db_dst.len()).unwrap();
-    let dst_len = u8::try_from(item_dst.len()).unwrap();
-    [[db_len].as_ref(), db_dst, [dst_len].as_ref(), item_dst, key.as_ref()].concat().to_vec()
-  }
-  fn txn(&mut self) -> Self::Transaction;
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
-}
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Payment<C: Coin> {
@@ -127,43 +113,6 @@ pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
     b"Serai DEX Additional Key",
     &[C::ID.as_bytes(), &k.to_le_bytes()].concat(),
   )
-}
-
-// TODO: Replace this with RocksDB
-#[derive(Clone, Debug)]
-struct MemDb(Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>);
-impl MemDb {
-  pub(crate) fn new() -> MemDb {
-    MemDb(Arc::new(RwLock::new(HashMap::new())))
-  }
-}
-impl Default for MemDb {
-  fn default() -> MemDb {
-    MemDb::new()
-  }
-}
-
-impl DbTxn for MemDb {
-  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    self.0.write().unwrap().insert(key.as_ref().to_vec(), value.as_ref().to_vec());
-  }
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    self.0.read().unwrap().get(key.as_ref()).cloned()
-  }
-  fn del(&mut self, key: impl AsRef<[u8]>) {
-    self.0.write().unwrap().remove(key.as_ref());
-  }
-  fn commit(self) {}
-}
-
-impl Db for MemDb {
-  type Transaction = MemDb;
-  fn txn(&mut self) -> MemDb {
-    Self(self.0.clone())
-  }
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    self.0.read().unwrap().get(key.as_ref()).cloned()
-  }
 }
 
 struct SignerMessageFuture<'a, C: Coin>(&'a mut HashMap<Vec<u8>, SignerHandle<C>>);
@@ -312,7 +261,7 @@ async fn handle_substrate_message<C: Coin, D: Db>(
   Ok(())
 }
 
-async fn run<C: Coin, D: Db>(db: D, coin: C) {
+async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: Co) {
   let mut entropy_transcript = {
     let entropy =
       Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't provided as an env var"));
@@ -356,10 +305,8 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
     schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
   };
 
-  let (to_coordinator, _fake_coordinator_recv) =
-    tokio::sync::mpsc::unbounded_channel::<ProcessorMessage>();
-  let (_fake_coordinator_send, mut from_coordinator) =
-    tokio::sync::mpsc::unbounded_channel::<CoordinatorMessage>();
+  // TODO: Load this
+  let mut last_coordinator_msg = 0;
 
   // TODO: Reload these/re-issue any orders
   let mut substrate_messages = vec![];
@@ -398,8 +345,11 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         sign_plans(&coin, &key_gen, &mut schedulers, &signers, &mut plans, &mut plans_timer).await;
       },
 
-      msg = from_coordinator.recv() => {
-        match msg.expect("Coordinator channel was dropped. Shutting down?") {
+      msg = coordinator.recv() => {
+        assert_eq!(msg.id, (last_coordinator_msg + 1));
+        last_coordinator_msg = msg.id;
+
+        match msg.msg.clone() {
           CoordinatorMessage::KeyGen(msg) => {
             key_gen.orders.send(KeyGenOrder::CoordinatorMessage(msg)).unwrap()
           }
@@ -410,6 +360,9 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             substrate_messages.push(msg);
           }
         }
+
+        // TODO: Wait for ack
+        coordinator.ack(msg).await;
       },
 
       msg = key_gen.events.recv() => {
@@ -422,7 +375,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             );
           },
           KeyGenEvent::ProcessorMessage(msg) => {
-            to_coordinator.send(ProcessorMessage::KeyGen(msg)).unwrap();
+            coordinator.send(ProcessorMessage::KeyGen(msg)).await;
           },
         }
       },
@@ -432,7 +385,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
         // TODO
         match msg.unwrap() {
           ScannerEvent::Outputs(key, block, outputs) => {
-            to_coordinator.send(ProcessorMessage::Substrate(substrate::ProcessorMessage::Update {
+            coordinator.send(ProcessorMessage::Substrate(substrate::ProcessorMessage::Update {
               key: key.to_bytes().as_ref().to_vec(),
               block: block.as_ref().to_vec(),
               instructions: outputs.iter().filter_map(|output| {
@@ -446,7 +399,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
                 // TODO2: Set instruction.origin if not set (and handle refunds in general)
                 Some(WithAmount { data: instruction.instruction, amount: Amount(output.amount()) })
               }).collect(),
-            })).unwrap();
+            })).await;
           },
         }
       },
@@ -465,7 +418,7 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
             //    Substrate for logging purposes
           },
           SignerEvent::ProcessorMessage(msg) => {
-            to_coordinator.send(ProcessorMessage::Sign(msg)).unwrap();
+            coordinator.send(ProcessorMessage::Sign(msg)).await;
           },
         }
       },
@@ -476,12 +429,13 @@ async fn run<C: Coin, D: Db>(db: D, coin: C) {
 #[tokio::main]
 async fn main() {
   let db = MemDb::new(); // TODO
+  let coordinator = MemCoordinator::new(); // TODO
   let url = env::var("COIN_RPC").expect("coin rpc wasn't specified as an env var");
   match env::var("COIN").expect("coin wasn't specified as an env var").as_str() {
     #[cfg(feature = "bitcoin")]
-    "bitcoin" => run(db, Bitcoin::new(url)).await,
+    "bitcoin" => run(db, Bitcoin::new(url), coordinator).await,
     #[cfg(feature = "monero")]
-    "monero" => run(db, Monero::new(url)).await,
+    "monero" => run(db, Monero::new(url), coordinator).await,
     _ => panic!("unrecognized coin"),
   }
 }
