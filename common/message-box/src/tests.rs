@@ -51,7 +51,7 @@ macro_rules! message_box_test {
     // Encoded API
     {
       let res = $sign(&a_box, msg.clone()).$encode();
-      let dec = b_box.decode(&$A_id(a_pub), &res).unwrap();
+      let dec = b_box.deserialize(&$A_id(a_pub), &res).unwrap();
       assert_eq!(msg, dec);
     }
   };

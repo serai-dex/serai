@@ -301,7 +301,7 @@ impl InternalMessageBox {
     self.sign_generic(&to, msg)
   }
 
-  pub fn decode<M: Serialize + DeserializeOwned>(
+  pub fn deserialize<M: Serialize + DeserializeOwned>(
     &self,
     from: &'static str,
     msg: &str,
@@ -332,7 +332,11 @@ impl ExternalMessageBox {
     self.sign_generic(&PublicKey(RistrettoPoint::identity()), msg)
   }
 
-  pub fn decode<M: Serialize + DeserializeOwned>(&self, from: &PublicKey, msg: &[u8]) -> Option<M> {
+  pub fn deserialize<M: Serialize + DeserializeOwned>(
+    &self,
+    from: &PublicKey,
+    msg: &[u8],
+  ) -> Option<M> {
     self.verify(from, bincode::deserialize(msg).ok()?)
   }
 }

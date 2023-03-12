@@ -4896,7 +4896,6 @@ dependencies = [
  "schnorr-signatures",
  "serde",
  "serde_json",
- "thiserror",
  "zalloc",
  "zeroize",
 ]
