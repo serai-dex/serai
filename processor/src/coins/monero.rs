@@ -210,6 +210,7 @@ impl Coin for Monero {
   // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
   // larger than 150kb. This fits within the 100kb mark
   // Technically, it can be ~124, yet a small bit of buffer is appreciated
+  // TODO: Test creating a TX this big
   const MAX_INPUTS: usize = 120;
   const MAX_OUTPUTS: usize = 16;
 
@@ -345,6 +346,7 @@ impl Coin for Monero {
           TransactionError::NoChange |
           TransactionError::TooManyOutputs |
           TransactionError::TooMuchData |
+          TransactionError::TooLargeTransaction |
           TransactionError::WrongPrivateKey => {
             panic!("created an Monero invalid transaction: {e}");
           }
