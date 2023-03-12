@@ -130,6 +130,8 @@ pub enum TransactionError {
   TooManyOutputs,
   #[error("too much data")]
   TooMuchData,
+  #[error("too many inputs/too much arbitrary data")]
+  TooLargeTransaction,
   #[error("not enough funds (in {0}, out {1})")]
   NotEnoughFunds(u64, u64),
   #[error("wrong spend private key")]
@@ -326,8 +328,6 @@ impl SignableTransaction {
       }
     }
 
-    // TODO TX MAX SIZE
-
     // If we don't have two outputs, as required by Monero, error
     if (payments.len() == 1) && change_address.is_none() {
       Err(TransactionError::NoChange)?;
@@ -339,8 +339,24 @@ impl SignableTransaction {
     // Calculate the extra length
     let extra = Extra::fee_weight(outputs, has_payment_id, data.as_ref());
 
+    // This is a extremely heavy fee weight estimation which can only be trusted for two things
+    // 1) Ensuring we have enough for whatever fee we end up using
+    // 2) Ensuring we aren't over the max size
+    let estimated_tx_size = Transaction::fee_weight(protocol, inputs.len(), outputs, extra);
+
+    // The actual limit is half the block size, and for the minimum block size of 300k, that'd be
+    // 150k
+    // wallet2 will only create transactions up to 100k bytes however
+    const MAX_TX_SIZE: usize = 100_000;
+
+    // This uses the weight (estimated_tx_size) despite the BP clawback
+    // The clawback *increases* the weight, so this will over-estimate, yet it's still safe
+    if estimated_tx_size >= MAX_TX_SIZE {
+      Err(TransactionError::TooLargeTransaction)?;
+    }
+
     // Calculate the fee.
-    let fee = fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs, extra));
+    let fee = fee_rate.calculate(estimated_tx_size);
 
     // Make sure we have enough funds
     let in_amount = inputs.iter().map(|input| input.commitment().amount).sum::<u64>();

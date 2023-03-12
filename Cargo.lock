@@ -5073,6 +5073,7 @@ dependencies = [
  "digest_auth",
  "dleq",
  "flexible-transcript",
+ "futures",
  "group",
  "hex",
  "hex-literal",

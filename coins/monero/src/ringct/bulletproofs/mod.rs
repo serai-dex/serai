@@ -37,6 +37,7 @@ impl Bulletproofs {
   pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
     let fields = if plus { 6 } else { 9 };
 
+    // TODO: Shouldn't this use u32/u64?
     #[allow(non_snake_case)]
     let mut LR_len = usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
     let padded_outputs = 1 << LR_len;
