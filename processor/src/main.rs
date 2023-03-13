@@ -40,7 +40,7 @@ use coins::Bitcoin;
 use coins::Monero;
 
 mod key_gen;
-use key_gen::{KeyGenOrder, KeyGenEvent, KeyGen, KeyGenHandle};
+use key_gen::{KeyGenEvent, KeyGen};
 
 mod signer;
 use signer::{SignerOrder, SignerEvent, Signer, SignerHandle};
@@ -131,7 +131,7 @@ impl<'a, C: Coin> Future for SignerMessageFuture<'a, C> {
 
 async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
-  key_gen: &KeyGenHandle<C, D>,
+  key_gen: &KeyGen<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
   signers: &HashMap<Vec<u8>, SignerHandle<C>>,
   plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
@@ -191,7 +191,7 @@ async fn sign_plans<C: Coin, D: Db>(
 #[allow(clippy::too_many_arguments)]
 async fn handle_substrate_message<C: Coin, D: Db>(
   coin: &C,
-  key_gen: &KeyGenHandle<C, D>,
+  key_gen: &KeyGen<C, D>,
   scanner: &ScannerHandle<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
   signers: &HashMap<Vec<u8>, SignerHandle<C>>,
@@ -285,6 +285,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
     res
   };
 
+  // We don't need to re-issue GenerateKey orders because the coordinator is expected to
+  // schedule/notify us of new attempts
   let mut key_gen = KeyGen::<C, _>::new(db.clone(), entropy(b"key-gen_entropy"));
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
 
@@ -345,17 +347,37 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
         sign_plans(&coin, &key_gen, &mut schedulers, &signers, &mut plans, &mut plans_timer).await;
       },
 
+      // This blocks the entire processor until it finishes handling this message
+      // KeyGen specifically may take a notable amount of processing time
+      // While that shouldn't be an issue in practice, as after processing an attempt it'll handle
+      // the other messages in the queue, it may be beneficial to parallelize these
+      // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
       msg = coordinator.recv() => {
         assert_eq!(msg.id, (last_coordinator_msg + 1));
         last_coordinator_msg = msg.id;
 
         match msg.msg.clone() {
           CoordinatorMessage::KeyGen(msg) => {
-            key_gen.orders.send(KeyGenOrder::CoordinatorMessage(msg)).unwrap()
+            match key_gen.handle(msg).await {
+              KeyGenEvent::KeyConfirmed { activation_number, keys } => {
+                track_key(&mut schedulers, activation_number, keys.group_key());
+                signers.insert(
+                  keys.group_key().to_bytes().as_ref().to_vec(),
+                  Signer::new(db.clone(), coin.clone(), keys)
+                );
+              },
+
+              // TODO: This may be fired multiple times. What's our plan for that?
+              KeyGenEvent::ProcessorMessage(msg) => {
+                coordinator.send(ProcessorMessage::KeyGen(msg)).await;
+              },
+            }
           }
+
           CoordinatorMessage::Sign(msg) => {
             signers[msg.key()].orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
           }
+
           CoordinatorMessage::Substrate(msg) => {
             substrate_messages.push(msg);
           }
@@ -363,21 +385,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
 
         // TODO: Wait for ack
         coordinator.ack(msg).await;
-      },
-
-      msg = key_gen.events.recv() => {
-        match msg.unwrap() {
-          KeyGenEvent::KeyConfirmed { activation_number, keys } => {
-            track_key(&mut schedulers, activation_number, keys.group_key());
-            signers.insert(
-              keys.group_key().to_bytes().as_ref().to_vec(),
-              Signer::new(db.clone(), coin.clone(), keys)
-            );
-          },
-          KeyGenEvent::ProcessorMessage(msg) => {
-            coordinator.send(ProcessorMessage::KeyGen(msg)).await;
-          },
-        }
       },
 
       msg = scanner.events.recv() => {

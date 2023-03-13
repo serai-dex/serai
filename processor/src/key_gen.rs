@@ -14,7 +14,6 @@ use frost::{
 };
 
 use log::info;
-use tokio::sync::mpsc;
 
 use serai_client::validator_sets::primitives::ValidatorSetInstance;
 use messages::key_gen::*;
@@ -22,18 +21,10 @@ use messages::key_gen::*;
 use crate::{DbTxn, Db, coins::Coin};
 
 #[derive(Debug)]
-pub enum KeyGenOrder {
-  CoordinatorMessage(CoordinatorMessage),
-}
-
-#[derive(Debug)]
 pub enum KeyGenEvent<C: Ciphersuite> {
   KeyConfirmed { activation_number: usize, keys: ThresholdKeys<C> },
   ProcessorMessage(ProcessorMessage),
 }
-
-pub type KeyGenOrderChannel = mpsc::UnboundedSender<KeyGenOrder>;
-pub type KeyGenEventChannel<C> = mpsc::UnboundedReceiver<KeyGenEvent<C>>;
 
 #[derive(Clone, Debug)]
 struct KeyGenDb<C: Coin, D: Db>(D, PhantomData<C>);
@@ -130,61 +121,25 @@ pub struct KeyGen<C: Coin, D: Db> {
 
   active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C::Curve>>,
   active_share: HashMap<ValidatorSetInstance, KeyMachine<C::Curve>>,
-
-  orders: mpsc::UnboundedReceiver<KeyGenOrder>,
-  events: mpsc::UnboundedSender<KeyGenEvent<C::Curve>>,
-}
-
-#[derive(Debug)]
-pub struct KeyGenHandle<C: Coin, D: Db> {
-  db: KeyGenDb<C, D>,
-  pub orders: KeyGenOrderChannel,
-  pub events: KeyGenEventChannel<C::Curve>,
-}
-impl<C: Coin, D: Db> KeyGenHandle<C, D> {
-  pub fn keys(&self, key: &<C::Curve as Ciphersuite>::G) -> ThresholdKeys<C::Curve> {
-    self.db.keys(key)
-  }
 }
 
 impl<C: Coin, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGenHandle<C, D> {
-    let (orders_send, orders_recv) = mpsc::unbounded_channel();
-    let (events_send, events_recv) = mpsc::unbounded_channel();
-    let db = KeyGenDb(db, PhantomData::<C>);
-    tokio::spawn(
-      KeyGen {
-        db: db.clone(),
-        entropy,
+  pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGen<C, D> {
+    KeyGen {
+      db: KeyGenDb(db, PhantomData::<C>),
+      entropy,
 
-        active_commit: HashMap::new(),
-        active_share: HashMap::new(),
-
-        orders: orders_recv,
-        events: events_send,
-      }
-      .run(),
-    );
-    KeyGenHandle { db, orders: orders_send, events: events_recv }
+      active_commit: HashMap::new(),
+      active_share: HashMap::new(),
+    }
   }
 
-  // An async function, to be spawned on a task, to handle key generations
-  async fn run(mut self) {
-    const CHANNEL_MSG: &str = "Key Gen handler was dropped. Shutting down?";
-    let handle_recv = |channel: Option<_>| {
-      if channel.is_none() {
-        info!("{}", CHANNEL_MSG);
-      }
-      channel
-    };
-    let handle_send = |channel: Result<_, _>| {
-      if channel.is_err() {
-        info!("{}", CHANNEL_MSG);
-      }
-      channel
-    };
+  pub fn keys(&self, key: &<C::Curve as Ciphersuite>::G) -> ThresholdKeys<C::Curve> {
+    self.db.keys(key)
+  }
 
+  pub async fn handle(&mut self, msg: CoordinatorMessage) -> KeyGenEvent<C::Curve> {
     let context = |id: &KeyGenId| {
       // TODO2: Also embed the chain ID/genesis block
       format!(
@@ -207,169 +162,143 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
       KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut coefficients_rng(id))
     };
 
-    // Handle any new messages
-    loop {
-      match {
-        match handle_recv(self.orders.recv().await) {
-          None => return,
-          Some(order) => order,
-        }
-      } {
-        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::GenerateKey { id, params }) => {
-          info!("Generating new key. ID: {:?} Params: {:?}", id, params);
+    match msg {
+      CoordinatorMessage::GenerateKey { id, params } => {
+        info!("Generating new key. ID: {:?} Params: {:?}", id, params);
 
-          // Remove old attempts
-          if self.active_commit.remove(&id.set).is_none() &&
-            self.active_share.remove(&id.set).is_none()
-          {
-            // If we haven't handled this set before, save the params
-            // This may overwrite previously written params if we rebooted, yet that isn't a
-            // concern
-            let mut txn = self.db.0.txn();
-            self.db.save_params(&mut txn, &id.set, &params);
-            txn.commit();
-          }
-
-          let (machine, commitments) = key_gen_machine(id, params);
-          self.active_commit.insert(id.set, machine);
-
-          if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
-            ProcessorMessage::Commitments { id, commitments: commitments.serialize() },
-          )))
-          .is_err()
-          {
-            return;
-          }
-        }
-
-        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::Commitments { id, commitments }) => {
-          info!("Received commitments for {:?}", id);
-
-          if self.active_share.contains_key(&id.set) {
-            // We should've been told of a new attempt before receiving commitments again
-            // The coordinator is either missing messages or repeating itself
-            // Either way, it's faulty
-            panic!("commitments when already handled commitments");
-          }
-
-          let params = self.db.params(&id.set);
-
-          // Parse the commitments
-          let parsed = match commitments
-            .iter()
-            .map(|(i, commitments)| {
-              EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
-                &mut commitments.as_ref(),
-                params,
-              )
-              .map(|commitments| (*i, commitments))
-            })
-            .collect()
-          {
-            Ok(commitments) => commitments,
-            Err(e) => todo!("malicious signer: {:?}", e),
-          };
-
-          // Get the machine, rebuilding it if we don't have it
-          // We won't if the processor rebooted
-          // This *may* be inconsistent if we receive a KeyGen for attempt x, then commitments for
-          // attempt y
-          // The coordinator is trusted to be proper in this regard
-          let machine =
-            self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machine(id, params).0);
-
-          let (machine, mut shares) =
-            match machine.generate_secret_shares(&mut secret_shares_rng(id), parsed) {
-              Ok(res) => res,
-              Err(e) => todo!("malicious signer: {:?}", e),
-            };
-          self.active_share.insert(id.set, machine);
-
+        // Remove old attempts
+        if self.active_commit.remove(&id.set).is_none() &&
+          self.active_share.remove(&id.set).is_none()
+        {
+          // If we haven't handled this set before, save the params
+          // This may overwrite previously written params if we rebooted, yet that isn't a
+          // concern
           let mut txn = self.db.0.txn();
-          self.db.save_commitments(&mut txn, &id, &commitments);
+          self.db.save_params(&mut txn, &id.set, &params);
           txn.commit();
-
-          if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
-            ProcessorMessage::Shares {
-              id,
-              shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
-            },
-          )))
-          .is_err()
-          {
-            return;
-          }
         }
 
-        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::Shares { id, mut shares }) => {
-          info!("Received shares for {:?}", id);
+        let (machine, commitments) = key_gen_machine(id, params);
+        self.active_commit.insert(id.set, machine);
 
-          let params = self.db.params(&id.set);
+        KeyGenEvent::ProcessorMessage(ProcessorMessage::Commitments {
+          id,
+          commitments: commitments.serialize(),
+        })
+      }
 
-          // Parse the shares
-          let shares = match shares
-            .drain()
-            .map(|(i, share)| {
-              EncryptedMessage::<
-                C::Curve,
-                SecretShare<<C::Curve as Ciphersuite>::F>
-              >::read::<&[u8]>(&mut share.as_ref(), params).map(|share| (i, share))
-            })
-            .collect()
-          {
-            Ok(shares) => shares,
-            Err(e) => todo!("malicious signer: {:?}", e),
-          };
+      CoordinatorMessage::Commitments { id, commitments } => {
+        info!("Received commitments for {:?}", id);
 
-          // Same commentary on inconsistency as above exists
-          let machine = self.active_share.remove(&id.set).unwrap_or_else(|| {
-            key_gen_machine(id, params)
-              .0
-              .generate_secret_shares(&mut secret_shares_rng(id), self.db.commitments(&id, params))
-              .unwrap()
-              .0
-          });
+        if self.active_share.contains_key(&id.set) {
+          // We should've been told of a new attempt before receiving commitments again
+          // The coordinator is either missing messages or repeating itself
+          // Either way, it's faulty
+          panic!("commitments when already handled commitments");
+        }
 
-          // TODO2: Handle the blame machine properly
-          let keys = (match machine.calculate_share(&mut share_rng(id), shares) {
+        let params = self.db.params(&id.set);
+
+        // Parse the commitments
+        let parsed = match commitments
+          .iter()
+          .map(|(i, commitments)| {
+            EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
+              &mut commitments.as_ref(),
+              params,
+            )
+            .map(|commitments| (*i, commitments))
+          })
+          .collect()
+        {
+          Ok(commitments) => commitments,
+          Err(e) => todo!("malicious signer: {:?}", e),
+        };
+
+        // Get the machine, rebuilding it if we don't have it
+        // We won't if the processor rebooted
+        // This *may* be inconsistent if we receive a KeyGen for attempt x, then commitments for
+        // attempt y
+        // The coordinator is trusted to be proper in this regard
+        let machine =
+          self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machine(id, params).0);
+
+        let (machine, mut shares) =
+          match machine.generate_secret_shares(&mut secret_shares_rng(id), parsed) {
             Ok(res) => res,
             Err(e) => todo!("malicious signer: {:?}", e),
+          };
+        self.active_share.insert(id.set, machine);
+
+        let mut txn = self.db.0.txn();
+        self.db.save_commitments(&mut txn, &id, &commitments);
+        txn.commit();
+
+        KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares {
+          id,
+          shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
+        })
+      }
+
+      CoordinatorMessage::Shares { id, mut shares } => {
+        info!("Received shares for {:?}", id);
+
+        let params = self.db.params(&id.set);
+
+        // Parse the shares
+        let shares = match shares
+          .drain()
+          .map(|(i, share)| {
+            EncryptedMessage::<C::Curve, SecretShare<<C::Curve as Ciphersuite>::F>>::read::<&[u8]>(
+              &mut share.as_ref(),
+              params,
+            )
+            .map(|share| (i, share))
           })
-          .complete();
+          .collect()
+        {
+          Ok(shares) => shares,
+          Err(e) => todo!("malicious signer: {:?}", e),
+        };
 
-          let mut txn = self.db.0.txn();
-          self.db.save_keys(&mut txn, &id, &keys);
-          txn.commit();
+        // Same commentary on inconsistency as above exists
+        let machine = self.active_share.remove(&id.set).unwrap_or_else(|| {
+          key_gen_machine(id, params)
+            .0
+            .generate_secret_shares(&mut secret_shares_rng(id), self.db.commitments(&id, params))
+            .unwrap()
+            .0
+        });
 
-          let mut keys = ThresholdKeys::new(keys);
-          C::tweak_keys(&mut keys);
-          if handle_send(self.events.send(KeyGenEvent::ProcessorMessage(
-            ProcessorMessage::GeneratedKey {
-              id,
-              key: keys.group_key().to_bytes().as_ref().to_vec(),
-            },
-          )))
-          .is_err()
-          {
-            return;
-          }
-        }
+        // TODO2: Handle the blame machine properly
+        let keys = (match machine.calculate_share(&mut share_rng(id), shares) {
+          Ok(res) => res,
+          Err(e) => todo!("malicious signer: {:?}", e),
+        })
+        .complete();
 
-        KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey { context, id }) => {
-          let mut txn = self.db.0.txn();
-          let keys = self.db.confirm_keys(&mut txn, &id);
-          txn.commit();
+        let mut txn = self.db.0.txn();
+        self.db.save_keys(&mut txn, &id, &keys);
+        txn.commit();
 
-          info!("Confirmed key {} from {:?}", hex::encode(keys.group_key().to_bytes()), id);
+        let mut keys = ThresholdKeys::new(keys);
+        C::tweak_keys(&mut keys);
+        KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKey {
+          id,
+          key: keys.group_key().to_bytes().as_ref().to_vec(),
+        })
+      }
 
-          if handle_send(self.events.send(KeyGenEvent::KeyConfirmed {
-            activation_number: context.coin_latest_block_number.try_into().unwrap(),
-            keys,
-          }))
-          .is_err()
-          {
-            return;
-          }
+      CoordinatorMessage::ConfirmKey { context, id } => {
+        let mut txn = self.db.0.txn();
+        let keys = self.db.confirm_keys(&mut txn, &id);
+        txn.commit();
+
+        info!("Confirmed key {} from {:?}", hex::encode(keys.group_key().to_bytes()), id);
+
+        KeyGenEvent::KeyConfirmed {
+          activation_number: context.coin_latest_block_number.try_into().unwrap(),
+          keys,
         }
       }
     }

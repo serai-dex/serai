@@ -13,7 +13,7 @@ use serai_client::validator_sets::primitives::{Session, ValidatorSetIndex, Valid
 use messages::{SubstrateContext, key_gen::*};
 use crate::{
   coins::Coin,
-  key_gen::{KeyGenOrder, KeyGenEvent, KeyGen},
+  key_gen::{KeyGenEvent, KeyGen},
   tests::util::db::MemDb,
 };
 
@@ -37,15 +37,13 @@ pub async fn test_key_gen<C: Coin>() {
   let mut all_commitments = HashMap::new();
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
-    key_gen
-      .orders
-      .send(KeyGenOrder::CoordinatorMessage(CoordinatorMessage::GenerateKey {
-        id: ID,
-        params: ThresholdParams::new(3, 5, u16::try_from(i).unwrap()).unwrap(),
-      }))
-      .unwrap();
-    if let Some(KeyGenEvent::ProcessorMessage(ProcessorMessage::Commitments { id, commitments })) =
-      key_gen.events.recv().await
+    if let KeyGenEvent::ProcessorMessage(ProcessorMessage::Commitments { id, commitments }) =
+      key_gen
+        .handle(CoordinatorMessage::GenerateKey {
+          id: ID,
+          params: ThresholdParams::new(3, 5, u16::try_from(i).unwrap()).unwrap(),
+        })
+        .await
     {
       assert_eq!(id, ID);
       all_commitments.insert(u16::try_from(i).unwrap(), commitments);
@@ -68,15 +66,12 @@ pub async fn test_key_gen<C: Coin>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let i = u16::try_from(i).unwrap();
-    key_gen
-      .orders
-      .send(KeyGenOrder::CoordinatorMessage(CoordinatorMessage::Commitments {
+    if let KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares { id, shares }) = key_gen
+      .handle(CoordinatorMessage::Commitments {
         id: ID,
         commitments: clone_without(&all_commitments, &i),
-      }))
-      .unwrap();
-    if let Some(KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares { id, shares })) =
-      key_gen.events.recv().await
+      })
+      .await
     {
       assert_eq!(id, ID);
       all_shares.insert(i, shares);
@@ -93,18 +88,15 @@ pub async fn test_key_gen<C: Coin>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let i = u16::try_from(i).unwrap();
-    key_gen
-      .orders
-      .send(KeyGenOrder::CoordinatorMessage(CoordinatorMessage::Shares {
+    if let KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKey { id, key }) = key_gen
+      .handle(CoordinatorMessage::Shares {
         id: ID,
         shares: all_shares
           .iter()
           .filter_map(|(l, shares)| if i == *l { None } else { Some((*l, shares[&i].clone())) })
           .collect(),
-      }))
-      .unwrap();
-    if let Some(KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKey { id, key })) =
-      key_gen.events.recv().await
+      })
+      .await
     {
       assert_eq!(id, ID);
       if res.is_none() {
@@ -122,15 +114,12 @@ pub async fn test_key_gen<C: Coin>() {
 
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
-    key_gen
-      .orders
-      .send(KeyGenOrder::CoordinatorMessage(CoordinatorMessage::ConfirmKey {
+    if let KeyGenEvent::KeyConfirmed { activation_number, keys } = key_gen
+      .handle(CoordinatorMessage::ConfirmKey {
         context: SubstrateContext { time: 0, coin_latest_block_number: 111 },
         id: ID,
-      }))
-      .unwrap();
-
-    if let Some(KeyGenEvent::KeyConfirmed { activation_number, keys }) = key_gen.events.recv().await
+      })
+      .await
     {
       assert_eq!(activation_number, 111);
       assert_eq!(keys.params(), ThresholdParams::new(3, 5, u16::try_from(i).unwrap()).unwrap());
