@@ -355,18 +355,75 @@ impl<C: Coin, D: Db> Signer<C, D> {
 
   // An async function, to be spawned on a task, to handle signing
   async fn run(signer_arc: Arc<RwLock<Self>>) {
-    // Handle any new messages
-    loop {
-      // Sleep for a second to prevent hammering the CPU
-      // The first code block, checking if we should start new attempts, is fine with this level of
-      // resolution
-      // This could be further optimized with a select! of if the sign timeouts have expired/a
-      // message is available, yet it'd also be a bit of work
-      // TODO
-      sleep(Duration::from_secs(1)).await;
+    const SIGN_TIMEOUT: u64 = 30;
 
-      // Check if we need to start any new attempts for any current TXs
-      // TODO: The KeyGen expects to be told to start new attempts. Why does this self-start?
+    loop {
+      {
+        let mut signer = signer_arc.write().await;
+        loop {
+          match signer.orders.try_recv() {
+            Ok(order) => match order {
+              SignerOrder::SignTransaction { id, start, tx, eventuality } => {
+                if let Some(txs) = signer.db.completed(id) {
+                  debug!("SignTransaction order for ID we've already completed signing");
+
+                  let mut tx = <C::Transaction as Transaction<C>>::Id::default();
+                  // Use the first instance we noted as having completed
+                  // TODO: Check our node can still get this TX
+                  let tx_id_len = tx.as_ref().len();
+                  tx.as_mut().copy_from_slice(&txs[.. tx_id_len]);
+                  if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
+                    return;
+                  }
+                  continue;
+                }
+
+                let mut txn = signer.db.0.txn();
+                signer.db.save_eventuality(&mut txn, id, eventuality);
+                txn.commit();
+
+                signer.signable.insert(id, (start, tx));
+              }
+            },
+            Err(TryRecvError::Empty) => break,
+            Err(TryRecvError::Disconnected) => {
+              info!("{}", CHANNEL_MSG);
+              return;
+            }
+          }
+        }
+      }
+
+      // Sleep until a timeout expires (or five seconds expire)
+      // Since this code start new sessions, it will delay any ordered signing sessions from
+      // starting for up to 5 seconds, hence why that number can't be too high (such as 30 seconds,
+      // the full timeout)
+      // This won't delay re-attempting any signing session however, nor will it block the handle
+      // function (since this doesn't hold any locks)
+      sleep({
+        let now = SystemTime::now();
+        let mut lowest = Duration::from_secs(5);
+        let signer = signer_arc.read().await;
+        for (id, (start, _)) in &signer.signable {
+          let until = if let Some(attempt) = signer.attempt.get(id) {
+            // Get when this attempt times out
+            (*start + Duration::from_secs(u64::from(attempt + 1) * SIGN_TIMEOUT))
+              .duration_since(now)
+              .unwrap_or(Duration::ZERO)
+          } else {
+            Duration::ZERO
+          };
+
+          if until < lowest {
+            lowest = until;
+          }
+        }
+        lowest
+      })
+      .await;
+
+      // Because a signing attempt has timed out (or five seconds has passed), check all
+      // sessions' timeouts
       {
         let mut signer = signer_arc.write().await;
         let keys = signer.signable.keys().cloned().collect::<Vec<_>>();
@@ -374,7 +431,6 @@ impl<C: Coin, D: Db> Signer<C, D> {
           let (start, tx) = &signer.signable[&id];
           let start = *start;
 
-          const SIGN_TIMEOUT: u64 = 30;
           let attempt = u32::try_from(
             SystemTime::now().duration_since(start).unwrap_or(Duration::ZERO).as_secs() /
               SIGN_TIMEOUT,
@@ -446,40 +502,6 @@ impl<C: Coin, D: Db> Signer<C, D> {
             id,
             preprocess: preprocess.serialize(),
           })) {
-            return;
-          }
-        }
-      }
-
-      {
-        let mut signer = signer_arc.write().await;
-        match signer.orders.try_recv() {
-          Ok(order) => match order {
-            SignerOrder::SignTransaction { id, start, tx, eventuality } => {
-              if let Some(txs) = signer.db.completed(id) {
-                debug!("SignTransaction order for ID we've already completed signing");
-
-                let mut tx = <C::Transaction as Transaction<C>>::Id::default();
-                // Use the first instance we noted as having completed
-                // TODO: Check our node can still get this TX
-                let tx_id_len = tx.as_ref().len();
-                tx.as_mut().copy_from_slice(&txs[.. tx_id_len]);
-                if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
-                  return;
-                }
-                continue;
-              }
-
-              let mut txn = signer.db.0.txn();
-              signer.db.save_eventuality(&mut txn, id, eventuality);
-              txn.commit();
-
-              signer.signable.insert(id, (start, tx));
-            }
-          },
-          Err(TryRecvError::Empty) => {}
-          Err(TryRecvError::Disconnected) => {
-            info!("{}", CHANNEL_MSG);
             return;
           }
         }
