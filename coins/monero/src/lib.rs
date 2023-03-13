@@ -59,7 +59,6 @@ mod tests;
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 #[allow(non_camel_case_types)]
 pub enum Protocol {
-  Unsupported(usize), // TODO: Remove this? This shouldn't be constructable
   v14,
   v16,
   Custom { ring_len: usize, bp_plus: bool },
@@ -69,7 +68,6 @@ impl Protocol {
   /// Amount of ring members under this protocol version.
   pub fn ring_len(&self) -> usize {
     match self {
-      Protocol::Unsupported(_) => panic!("Unsupported protocol version"),
       Protocol::v14 => 11,
       Protocol::v16 => 16,
       Protocol::Custom { ring_len, .. } => *ring_len,
@@ -80,7 +78,6 @@ impl Protocol {
   /// This method will likely be reworked when versions not using Bulletproofs at all are added.
   pub fn bp_plus(&self) -> bool {
     match self {
-      Protocol::Unsupported(_) => panic!("Unsupported protocol version"),
       Protocol::v14 => false,
       Protocol::v16 => true,
       Protocol::Custom { bp_plus, .. } => *bp_plus,
@@ -89,7 +86,6 @@ impl Protocol {
 
   pub(crate) fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      Protocol::Unsupported(_) => panic!("Unsupported protocol version"),
       Protocol::v14 => w.write_all(&[0, 14]),
       Protocol::v16 => w.write_all(&[0, 16]),
       Protocol::Custom { ring_len, bp_plus } => {

@@ -45,6 +45,8 @@ pub enum RpcError {
   ConnectionError,
   #[error("invalid node")]
   InvalidNode,
+  #[error("unsupported protocol version ({0})")]
+  UnsupportedProtocol(usize),
   #[error("transactions not found")]
   TransactionsNotFound(Vec<[u8; 32]>),
   #[error("invalid point ({0})")]
@@ -211,7 +213,7 @@ impl Rpc {
       {
         13 | 14 => Protocol::v14,
         15 | 16 => Protocol::v16,
-        version => Protocol::Unsupported(version),
+        protocol => Err(RpcError::UnsupportedProtocol(protocol))?,
       },
     )
   }

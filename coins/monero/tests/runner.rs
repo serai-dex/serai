@@ -11,7 +11,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 use tokio::sync::Mutex;
 
 use monero_serai::{
-  Protocol, random_scalar,
+  random_scalar,
   rpc::Rpc,
   wallet::{
     ViewPair, Scanner,
@@ -76,6 +76,8 @@ pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput 
 
 pub async fn rpc() -> Rpc {
   let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+  // Make sure we recognize the protocol
+  rpc.get_protocol().await.unwrap();
 
   // Only run once
   if rpc.get_height().await.unwrap() != 1 {
@@ -91,7 +93,6 @@ pub async fn rpc() -> Rpc {
 
   // Mine 40 blocks to ensure decoy availability
   rpc.generate_blocks(&addr, 40).await.unwrap();
-  assert!(!matches!(rpc.get_protocol().await.unwrap(), Protocol::Unsupported(_)));
 
   rpc
 }
