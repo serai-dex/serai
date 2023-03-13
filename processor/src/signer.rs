@@ -367,13 +367,30 @@ impl<C: Coin, D: Db> Signer<C, D> {
                 if let Some(txs) = signer.db.completed(id) {
                   debug!("SignTransaction order for ID we've already completed signing");
 
-                  let mut tx = <C::Transaction as Transaction<C>>::Id::default();
-                  // Use the first instance we noted as having completed
-                  // TODO: Check our node can still get this TX
-                  let tx_id_len = tx.as_ref().len();
-                  tx.as_mut().copy_from_slice(&txs[.. tx_id_len]);
-                  if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
-                    return;
+                  // Use the first instance we noted as having completed *and can still get from
+                  // our node*
+                  let mut tx = None;
+                  let mut buf = <C::Transaction as Transaction<C>>::Id::default();
+                  let tx_id_len = buf.as_ref().len();
+                  assert_eq!(txs.len() % tx_id_len, 0);
+                  for id in 0 .. (txs.len() / tx_id_len) {
+                    let start = id * tx_id_len;
+                    buf.as_mut().copy_from_slice(&txs[start .. (start + tx_id_len)]);
+                    if signer.coin.get_transaction(&buf).await.is_ok() {
+                      tx = Some(buf);
+                      break;
+                    }
+                  }
+
+                  if let Some(tx) = tx {
+                    if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
+                      return;
+                    }
+                  } else {
+                    warn!(
+                      "completed signing {} yet couldn't get any of the completing TXs",
+                      hex::encode(id)
+                    );
                   }
                   continue;
                 }
