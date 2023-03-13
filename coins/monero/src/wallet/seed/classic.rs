@@ -10,13 +10,27 @@ use crc::{Crc, CRC_32_ISO_HDLC};
 
 use curve25519_dalek::scalar::Scalar;
 
-use crate::{
-  random_scalar,
-  wallet::seed::{SeedError, Language},
-};
+use crate::{random_scalar, wallet::seed::SeedError};
 
 pub(crate) const CLASSIC_SEED_LENGTH: usize = 24;
 pub(crate) const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum Language {
+  ChineseSimp,
+  English,
+  Dutch,
+  French,
+  Spanish,
+  German,
+  Italian,
+  Portuguese,
+  Japanese,
+  Russian,
+  Esperanto,
+  Lojban,
+  EnglishOld,
+}
 
 fn trim(word: &str, len: usize) -> Zeroizing<String> {
   Zeroizing::new(word.chars().take(len).collect())
@@ -49,7 +63,6 @@ impl WordList {
 
 lazy_static! {
   static ref LANGUAGES: HashMap<Language, WordList> = HashMap::from([
-    (Language::Chinese, WordList::new(include_str!("./classic/zh.json"), 1)),
     (Language::English, WordList::new(include_str!("./classic/en.json"), 3)),
     (Language::Dutch, WordList::new(include_str!("./classic/nl.json"), 4)),
     (Language::French, WordList::new(include_str!("./classic/fr.json"), 4)),
@@ -62,6 +75,7 @@ lazy_static! {
     (Language::Esperanto, WordList::new(include_str!("./classic/eo.json"), 4)),
     (Language::Lojban, WordList::new(include_str!("./classic/jbo.json"), 4)),
     (Language::EnglishOld, WordList::new(include_str!("./classic/ang.json"), 4)),
+    (Language::ChineseSimp, WordList::new(include_str!("./classic/zh.json"), 1)),
   ]);
 }
 
