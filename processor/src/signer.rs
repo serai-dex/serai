@@ -68,6 +68,7 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
     // Transactions can be completed by multiple signatures
     // Save every solution in order to be robust
     let mut existing = txn.get(Self::completed_key(id)).unwrap_or(vec![]);
+    // TODO: Don't do this if this TX is already present
     existing.extend(tx.as_ref());
     txn.put(Self::completed_key(id), existing);
   }
@@ -329,7 +330,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
           // In the case of a signle malicious signer, they can drag multiple honest
           // validators down with them, so we unfortunately can't slash on this case
           let Ok(tx) = self.coin.get_transaction(&tx).await else {
-            todo!("queue checking eventualities");
+            todo!("queue checking eventualities"); // or give up here?
           };
 
           if self.coin.confirm_completion(&eventuality, &tx) {

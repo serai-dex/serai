@@ -13,8 +13,8 @@ use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
-use log::{info, error};
-use tokio::time::sleep_until;
+use log::{info, warn, error};
+use tokio::time::{sleep, sleep_until};
 
 use scale::Decode;
 
@@ -46,7 +46,7 @@ mod signer;
 use signer::{SignerOrder, SignerEvent, Signer, SignerHandle};
 
 mod scanner;
-use scanner::{ScannerOrder, ScannerEvent, Scanner, ScannerHandle};
+use scanner::{ScannerOrder, ScannerEvent, Scanner};
 
 mod scheduler;
 use scheduler::Scheduler;
@@ -187,80 +187,6 @@ async fn sign_plans<C: Coin, D: Db>(
   }
 }
 
-// These messages require a sufficiently synced coin node
-#[allow(clippy::too_many_arguments)]
-async fn handle_substrate_message<C: Coin, D: Db>(
-  coin: &C,
-  key_gen: &KeyGen<C, D>,
-  scanner: &ScannerHandle<C, D>,
-  schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
-  signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
-  active_keys: &[<C::Curve as Ciphersuite>::G],
-  plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
-  plans_timer: &mut Option<Instant>,
-  msg: &substrate::CoordinatorMessage,
-) -> Result<(), ()> {
-  let synced = |context: &SubstrateContext, key| -> Result<(), ()> {
-    // Check that we've synced this block and can actually operate on it ourselves
-    let latest = scanner.latest_scanned(key);
-    if usize::try_from(context.coin_latest_block_number).unwrap() < latest {
-      log::warn!(
-        "coin node disconnected/desynced from rest of the network. \
-        our block: {latest:?}, network's acknowledged: {}",
-        context.coin_latest_block_number
-      );
-      Err(())?;
-    }
-    Ok(())
-  };
-
-  match msg {
-    substrate::CoordinatorMessage::BlockAcknowledged { context, key: key_vec, block } => {
-      let key = <C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
-      synced(context, key)?;
-      let mut block_id = <C::Block as Block<C>>::Id::default();
-      block_id.as_mut().copy_from_slice(block);
-
-      scanner.orders.send(ScannerOrder::AckBlock(key, block_id.clone())).unwrap();
-
-      plans.push_back((
-        *context,
-        VecDeque::from(
-          schedulers
-            .get_mut(key_vec)
-            .expect("key we don't have a scheduler for acknowledged a block")
-            .add_outputs(scanner.outputs(&key, &block_id)),
-        ),
-      ));
-      sign_plans(coin, key_gen, schedulers, signers, plans, plans_timer).await;
-    }
-
-    substrate::CoordinatorMessage::Burns { context, burns } => {
-      // TODO2: Rewrite rotation documentation
-      let schedule_key = active_keys.last().expect("burn event despite no keys");
-      synced(context, *schedule_key)?;
-      let scheduler = schedulers.get_mut(schedule_key.to_bytes().as_ref()).unwrap();
-
-      let mut payments = vec![];
-      for out in burns.clone() {
-        let WithAmount { data: OutInstruction { address, data }, amount } = out;
-        if let Ok(address) = C::Address::try_from(address.consume()) {
-          payments.push(Payment {
-            address,
-            data: data.map(|data| data.consume()),
-            amount: amount.0,
-          });
-        }
-      }
-
-      plans.push_back((*context, VecDeque::from(scheduler.schedule(payments))));
-      sign_plans(coin, key_gen, schedulers, signers, plans, plans_timer).await;
-    }
-  }
-
-  Ok(())
-}
-
 async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: Co) {
   let mut entropy_transcript = {
     let entropy =
@@ -310,10 +236,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
   // TODO: Load this
   let mut last_coordinator_msg = 0;
 
-  // TODO: Reload these/re-issue any orders
-  let mut substrate_messages = vec![];
-  let mut substrate_timer = None;
-
   // TODO: Reload plans/re-issue SignTransaction orders
   let mut plans = VecDeque::new();
   let mut plans_timer = None;
@@ -322,27 +244,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
     // This should be long enough a timer using this shouldn't trigger unless it's actually set
     let minutes = Instant::now().checked_add(Duration::from_secs(365 * 24 * 60 * 60)).unwrap();
     let this_plans_timer = plans_timer.unwrap_or(minutes);
-    let this_substrate_timer = substrate_timer.unwrap_or(minutes);
 
     tokio::select! {
-      _ = sleep_until(this_substrate_timer.into()) => {
-        let msg = substrate_messages.pop().expect("went a year with no events in the main loop");
-        if handle_substrate_message(
-          &coin,
-          &key_gen,
-          &scanner,
-          &mut schedulers,
-          &signers,
-          &active_keys,
-          &mut plans,
-          &mut plans_timer,
-          &msg,
-        ).await.is_err() {
-          // Push the message back, reset the timer
-          substrate_messages.push(msg);
-          substrate_timer = Some(Instant::now().checked_add(Duration::from_secs(30)).unwrap())
-        }
-      },
       _ = sleep_until(this_plans_timer.into()) => {
         sign_plans(&coin, &key_gen, &mut schedulers, &signers, &mut plans, &mut plans_timer).await;
       },
@@ -355,6 +258,67 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
       msg = coordinator.recv() => {
         assert_eq!(msg.id, (last_coordinator_msg + 1));
         last_coordinator_msg = msg.id;
+
+        // If this message expects a higher block number than we have, halt until synced
+        async fn wait<C: Coin>(coin: &C, needed: u64) {
+          let needed = usize::try_from(needed).unwrap();
+
+          loop {
+            let Ok(actual) = coin.get_latest_block_number().await else {
+              error!("couldn't get the latest block number");
+              // Sleep for a minute as node errors should be incredibly uncommon yet take multiple
+              // seconds to resolve
+              sleep(Duration::from_secs(60)).await;
+              continue;
+            };
+
+            if needed > actual.saturating_sub(C::CONFIRMATIONS) {
+              // This may occur within some natural latency window
+              warn!(
+                "node is desynced. need block {}, have {}",
+                needed + C::CONFIRMATIONS,
+                actual
+              );
+              sleep(Duration::from_secs(5)).await;
+            }
+
+            // TODO: Also check the scanner has scanned, by RAM, up to this block
+            // TODO: Sanity check we got an AckBlock (or this is the AckBlock) the Scanner has
+            // acked
+            /*
+            let synced = |context: &SubstrateContext, key| -> Result<(), ()> {
+              // Check that we've synced this block and can actually operate on it ourselves
+              let latest = scanner.latest_scanned(key);
+              if usize::try_from(context.coin_latest_block_number).unwrap() < latest {
+                log::warn!(
+                  "coin node disconnected/desynced from rest of the network. \
+                  our block: {latest:?}, network's acknowledged: {}",
+                  context.coin_latest_block_number
+                );
+                Err(())?;
+              }
+              Ok(())
+            };
+            */
+            // TODO: Remove old code from scanner handling this exact issue
+            break;
+          }
+        }
+
+        match &msg.msg {
+          CoordinatorMessage::KeyGen(_) => {},
+          CoordinatorMessage::Sign(_) => {},
+          CoordinatorMessage::Substrate(msg) => {
+            match msg {
+              substrate::CoordinatorMessage::BlockAcknowledged { context, .. } => {
+                wait(&coin, context.coin_latest_block_number).await;
+              },
+              substrate::CoordinatorMessage::Burns { context, .. } => {
+                wait(&coin, context.coin_latest_block_number).await;
+              },
+            }
+          },
+        }
 
         match msg.msg.clone() {
           CoordinatorMessage::KeyGen(msg) => {
@@ -379,11 +343,67 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
           }
 
           CoordinatorMessage::Substrate(msg) => {
-            substrate_messages.push(msg);
+            match msg {
+              substrate::CoordinatorMessage::BlockAcknowledged { context, key: key_vec, block } => {
+                let key =
+                  <C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
+                let mut block_id = <C::Block as Block<C>>::Id::default();
+                block_id.as_mut().copy_from_slice(&block);
+
+                // TODO: Convert this to a function
+                scanner.orders.send(ScannerOrder::AckBlock(key, block_id.clone())).unwrap();
+
+                plans.push_back((
+                  context,
+                  VecDeque::from(
+                    schedulers
+                      .get_mut(&key_vec)
+                      .expect("key we don't have a scheduler for acknowledged a block")
+                      .add_outputs(scanner.outputs(&key, &block_id)),
+                  ),
+                ));
+                // TODO: Remove plans_timer. Retry here to sign plans
+                sign_plans(
+                  &coin,
+                  &key_gen,
+                  &mut schedulers,
+                  &signers,
+                  &mut plans,
+                  &mut plans_timer
+                ).await;
+              }
+
+              substrate::CoordinatorMessage::Burns { context, burns } => {
+                // TODO2: Rewrite rotation documentation
+                let schedule_key = active_keys.last().expect("burn event despite no keys");
+                let scheduler = schedulers.get_mut(schedule_key.to_bytes().as_ref()).unwrap();
+
+                let mut payments = vec![];
+                for out in burns.clone() {
+                  let WithAmount { data: OutInstruction { address, data }, amount } = out;
+                  if let Ok(address) = C::Address::try_from(address.consume()) {
+                    payments.push(Payment {
+                      address,
+                      data: data.map(|data| data.consume()),
+                      amount: amount.0,
+                    });
+                  }
+                }
+
+                plans.push_back((context, VecDeque::from(scheduler.schedule(payments))));
+                sign_plans(
+                  &coin,
+                  &key_gen,
+                  &mut schedulers,
+                  &signers,
+                  &mut plans,
+                  &mut plans_timer
+                ).await;
+              }
+            }
           }
         }
 
-        // TODO: Wait for ack
         coordinator.ack(msg).await;
       },
 
