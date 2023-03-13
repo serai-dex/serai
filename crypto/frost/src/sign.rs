@@ -202,7 +202,7 @@ impl<C: Curve> SignatureShare<C> {
 }
 
 /// Trait for the second machine of a two-round signing protocol.
-pub trait SignMachine<S>: Sized + Send {
+pub trait SignMachine<S>: Sized + Send + Sync {
   /// Params used to instantiate this machine which can be used to rebuild from a cache.
   type Params: Clone;
   /// Keys used for signing operations.
@@ -439,7 +439,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 }
 
 /// Trait for the final machine of a two-round signing protocol.
-pub trait SignatureMachine<S>: Send {
+pub trait SignatureMachine<S>: Send + Sync {
   /// SignatureShare message for this machine.
   type SignatureShare: Clone + PartialEq + Writable;
 

@@ -72,12 +72,11 @@ pub async fn sign<C: Coin>(
   let mut shares = HashMap::new();
   for i in &signing_set {
     signers[i]
-      .orders
-      .send(SignerOrder::CoordinatorMessage(CoordinatorMessage::Preprocesses {
+      .handle(CoordinatorMessage::Preprocesses {
         id: actual_id.clone(),
         preprocesses: clone_without(&preprocesses, i),
-      }))
-      .unwrap();
+      })
+      .await;
     if let Some(SignerEvent::ProcessorMessage(ProcessorMessage::Share { id, share })) =
       signers.get_mut(i).unwrap().events.recv().await
     {
@@ -91,12 +90,11 @@ pub async fn sign<C: Coin>(
   let mut tx_id = None;
   for i in &signing_set {
     signers[i]
-      .orders
-      .send(SignerOrder::CoordinatorMessage(CoordinatorMessage::Shares {
+      .handle(CoordinatorMessage::Shares {
         id: actual_id.clone(),
         shares: clone_without(&shares, i),
-      }))
-      .unwrap();
+      })
+      .await;
     if let Some(SignerEvent::SignedTransaction { id, tx }) =
       signers.get_mut(i).unwrap().events.recv().await
     {

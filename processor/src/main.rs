@@ -115,8 +115,8 @@ pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
   )
 }
 
-struct SignerMessageFuture<'a, C: Coin>(&'a mut HashMap<Vec<u8>, SignerHandle<C>>);
-impl<'a, C: Coin> Future for SignerMessageFuture<'a, C> {
+struct SignerMessageFuture<'a, C: Coin, D: Db>(&'a mut HashMap<Vec<u8>, SignerHandle<C, D>>);
+impl<'a, C: Coin, D: Db> Future for SignerMessageFuture<'a, C, D> {
   type Output = (Vec<u8>, SignerEvent<C>);
   fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
     for (key, signer) in self.0.iter_mut() {
@@ -133,7 +133,7 @@ async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
   key_gen: &KeyGen<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
-  signers: &HashMap<Vec<u8>, SignerHandle<C>>,
+  signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
   plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
   timer: &mut Option<Instant>,
 ) {
@@ -194,7 +194,7 @@ async fn handle_substrate_message<C: Coin, D: Db>(
   key_gen: &KeyGen<C, D>,
   scanner: &ScannerHandle<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
-  signers: &HashMap<Vec<u8>, SignerHandle<C>>,
+  signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
   active_keys: &[<C::Curve as Ciphersuite>::G],
   plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
   plans_timer: &mut Option<Instant>,
@@ -375,7 +375,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
           }
 
           CoordinatorMessage::Sign(msg) => {
-            signers[msg.key()].orders.send(SignerOrder::CoordinatorMessage(msg)).unwrap()
+            signers[msg.key()].handle(msg).await;
           }
 
           CoordinatorMessage::Substrate(msg) => {
