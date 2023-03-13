@@ -26,12 +26,11 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   assert!(active_keys.is_empty());
   let (block_id, outputs) = {
     scanner
-      .orders
-      .send(ScannerOrder::RotateKey {
+      .handle(ScannerOrder::RotateKey {
         activation_number: coin.get_latest_block_number().await.unwrap(),
         key,
       })
-      .unwrap();
+      .await;
 
     let block_id = coin.test_send(C::address(key)).await.id();
 
@@ -104,7 +103,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
 
   // Check the Scanner DB can reload the outputs
-  scanner.orders.send(ScannerOrder::AckBlock(key, block.id())).unwrap();
+  scanner.handle(ScannerOrder::AckBlock(key, block.id())).await;
   sleep(Duration::from_secs(1)).await;
-  assert_eq!(scanner.outputs(&key, &block.id()), outputs);
+  assert_eq!(scanner.outputs(&key, &block.id()).await, outputs);
 }

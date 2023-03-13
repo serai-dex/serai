@@ -28,12 +28,11 @@ pub async fn test_scanner<C: Coin>(coin: C) {
     if *first {
       assert!(active_keys.is_empty());
       scanner
-        .orders
-        .send(ScannerOrder::RotateKey {
+        .handle(ScannerOrder::RotateKey {
           activation_number: coin.get_latest_block_number().await.unwrap(),
           key: keys.group_key(),
         })
-        .unwrap();
+        .await;
       *first = false;
     } else {
       assert_eq!(active_keys.len(), 1);
@@ -65,9 +64,9 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   verify_event(new_scanner().await).await;
 
   // Acknowledge the block
-  scanner.orders.send(ScannerOrder::AckBlock(keys.group_key(), block_id.clone())).unwrap();
+  scanner.handle(ScannerOrder::AckBlock(keys.group_key(), block_id.clone())).await;
   sleep(Duration::from_secs(1)).await;
-  assert_eq!(scanner.outputs(&keys.group_key(), &block_id), outputs);
+  assert_eq!(scanner.outputs(&keys.group_key(), &block_id).await, outputs);
 
   // There should be no more events
   assert!(timeout(Duration::from_secs(10), scanner.events.recv()).await.is_err());

@@ -46,7 +46,7 @@ mod signer;
 use signer::{SignerOrder, SignerEvent, Signer, SignerHandle};
 
 mod scanner;
-use scanner::{ScannerOrder, ScannerEvent, Scanner};
+use scanner::{ScannerOrder, ScannerEvent, Scanner, ScannerHandle};
 
 mod scheduler;
 use scheduler::Scheduler;
@@ -228,13 +228,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
     );
   }
 
-  let track_key = |schedulers: &mut HashMap<_, _>, activation_number, key| {
-    scanner.orders.send(ScannerOrder::RotateKey { activation_number, key }).unwrap();
-    schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
-  };
-
-  // TODO: Load this
-  let mut last_coordinator_msg = 0;
+  // TODO: Should this be saved to the DB?
+  let mut last_coordinator_msg = None;
 
   // TODO: Reload plans/re-issue SignTransaction orders
   let mut plans = VecDeque::new();
@@ -256,12 +251,16 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
       // the other messages in the queue, it may be beneficial to parallelize these
       // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
       msg = coordinator.recv() => {
-        assert_eq!(msg.id, (last_coordinator_msg + 1));
-        last_coordinator_msg = msg.id;
+        assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
+        last_coordinator_msg = Some(msg.id);
 
         // If this message expects a higher block number than we have, halt until synced
-        async fn wait<C: Coin>(coin: &C, needed: u64) {
-          let needed = usize::try_from(needed).unwrap();
+        async fn wait<C: Coin, D: Db>(
+          coin: &C,
+          scanner: &ScannerHandle<C, D>,
+          context: &SubstrateContext
+        ) {
+          let needed = usize::try_from(context.coin_latest_block_number).unwrap();
 
           loop {
             let Ok(actual) = coin.get_latest_block_number().await else {
@@ -272,19 +271,35 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
               continue;
             };
 
-            if needed > actual.saturating_sub(C::CONFIRMATIONS) {
+            // Check our daemon has this block
+            // CONFIRMATIONS - 1 since any block's TXs have one confirmation (the block itself)
+            let confirmed = actual.saturating_sub(C::CONFIRMATIONS - 1);
+            if needed > confirmed {
               // This may occur within some natural latency window
               warn!(
                 "node is desynced. need block {}, have {}",
-                needed + C::CONFIRMATIONS,
-                actual
+                // Print the block needed for the needed block to be confirmed
+                needed + (C::CONFIRMATIONS - 1),
+                actual,
               );
-              sleep(Duration::from_secs(5)).await;
+              // Sleep for one second per needed block
+              // If the node is disconnected from the network, this will be faster than it should
+              // be, yet presumably it just neeeds a moment to sync up
+              sleep(Duration::from_secs((needed - confirmed).try_into().unwrap())).await;
             }
 
-            // TODO: Also check the scanner has scanned, by RAM, up to this block
-            // TODO: Sanity check we got an AckBlock (or this is the AckBlock) the Scanner has
-            // acked
+            // Check our scanner has scanned it
+            // This check does void the need for the last one, yet it provides a bit better
+            // debugging
+            let ram_scanned = scanner.ram_scanned().await;
+            if ram_scanned < needed {
+              warn!("scanner is behind. need block {}, scanned up to {}", needed, ram_scanned);
+              sleep(Duration::from_secs((needed - ram_scanned).try_into().unwrap())).await;
+            }
+
+            // TODO: Sanity check we got an AckBlock (or this is the AckBlock) for the block in
+            // question
+
             /*
             let synced = |context: &SubstrateContext, key| -> Result<(), ()> {
               // Check that we've synced this block and can actually operate on it ourselves
@@ -300,6 +315,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
               Ok(())
             };
             */
+
             // TODO: Remove old code from scanner handling this exact issue
             break;
           }
@@ -311,10 +327,10 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
           CoordinatorMessage::Substrate(msg) => {
             match msg {
               substrate::CoordinatorMessage::BlockAcknowledged { context, .. } => {
-                wait(&coin, context.coin_latest_block_number).await;
+                wait(&coin, &scanner, context).await;
               },
               substrate::CoordinatorMessage::Burns { context, .. } => {
-                wait(&coin, context.coin_latest_block_number).await;
+                wait(&coin, &scanner, context).await;
               },
             }
           },
@@ -324,7 +340,9 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
           CoordinatorMessage::KeyGen(msg) => {
             match key_gen.handle(msg).await {
               KeyGenEvent::KeyConfirmed { activation_number, keys } => {
-                track_key(&mut schedulers, activation_number, keys.group_key());
+                let key = keys.group_key();
+                scanner.handle(ScannerOrder::RotateKey { activation_number, key }).await;
+                schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
                 signers.insert(
                   keys.group_key().to_bytes().as_ref().to_vec(),
                   Signer::new(db.clone(), coin.clone(), keys)
@@ -350,8 +368,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                 let mut block_id = <C::Block as Block<C>>::Id::default();
                 block_id.as_mut().copy_from_slice(&block);
 
-                // TODO: Convert this to a function
-                scanner.orders.send(ScannerOrder::AckBlock(key, block_id.clone())).unwrap();
+                scanner.handle(ScannerOrder::AckBlock(key, block_id.clone())).await;
 
                 plans.push_back((
                   context,
@@ -359,7 +376,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                     schedulers
                       .get_mut(&key_vec)
                       .expect("key we don't have a scheduler for acknowledged a block")
-                      .add_outputs(scanner.outputs(&key, &block_id)),
+                      .add_outputs(scanner.outputs(&key, &block_id).await),
                   ),
                 ));
                 // TODO: Remove plans_timer. Retry here to sign plans

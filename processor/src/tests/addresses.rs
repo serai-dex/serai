@@ -75,12 +75,11 @@ pub async fn test_addresses<C: Coin>(coin: C) {
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
   assert!(active_keys.is_empty());
   scanner
-    .orders
-    .send(ScannerOrder::RotateKey {
+    .handle(ScannerOrder::RotateKey {
       activation_number: coin.get_latest_block_number().await.unwrap(),
       key,
     })
-    .unwrap();
+    .await;
 
   // Receive funds to the branch address and make sure it's properly identified
   let block_id = coin.test_send(C::branch_address(key)).await.id();

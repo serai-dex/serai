@@ -1,11 +1,17 @@
 use core::{marker::PhantomData, time::Duration};
-use std::collections::{HashSet, HashMap};
+use std::{
+  sync::Arc,
+  collections::{HashSet, HashMap},
+};
 
 use group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
 use log::{info, debug, warn};
-use tokio::{sync::mpsc, time::timeout};
+use tokio::{
+  sync::{RwLock, mpsc},
+  time::sleep,
+};
 
 use crate::{
   DbTxn, Db,
@@ -31,7 +37,6 @@ pub enum ScannerEvent<C: Coin> {
   Outputs(<C::Curve as Ciphersuite>::G, <C::Block as Block<C>>::Id, Vec<C::Output>),
 }
 
-pub type ScannerOrderChannel<C> = mpsc::UnboundedSender<ScannerOrder<C>>;
 pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
 
 #[derive(Clone, Debug)]
@@ -180,71 +185,116 @@ pub struct Scanner<C: Coin, D: Db> {
   db: ScannerDb<C, D>,
   keys: Vec<<C::Curve as Ciphersuite>::G>,
 
-  orders: mpsc::UnboundedReceiver<ScannerOrder<C>>,
+  ram_scanned: HashMap<Vec<u8>, usize>,
+  ram_outputs: HashSet<Vec<u8>>,
+
   events: mpsc::UnboundedSender<ScannerEvent<C>>,
 }
 
 #[derive(Debug)]
 pub struct ScannerHandle<C: Coin, D: Db> {
-  db: ScannerDb<C, D>,
-  pub orders: ScannerOrderChannel<C>,
+  scanner: Arc<RwLock<Scanner<C, D>>>,
   pub events: ScannerEventChannel<C>,
 }
 
 impl<C: Coin, D: Db> ScannerHandle<C, D> {
-  pub fn latest_scanned(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
-    self.db.latest_scanned_block(key)
+  pub async fn ram_scanned(&self) -> usize {
+    let mut res = None;
+    for scanned in self.scanner.read().await.ram_scanned.values() {
+      if res.is_none() {
+        res = Some(*scanned);
+      }
+      // Returns the lowest scanned value so no matter the keys interacted with, this is
+      // sufficiently scanned
+      res = Some(res.unwrap().min(*scanned));
+    }
+    res.unwrap_or(0)
   }
 
-  pub fn outputs(
+  pub async fn outputs(
     &self,
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
   ) -> Vec<C::Output> {
-    let outputs = self.db.outputs(key, block);
+    let scanner = self.scanner.read().await;
+    let outputs = scanner.db.outputs(key, block);
     if let Some(outputs) = outputs {
       return outputs;
     }
 
     // This can only happen if Substrate acknowleges a block we haven't scanned
     // The main loop should delay handling Substrate messages for blocks we haven't scanned
-    if self.db.block_number(block).unwrap_or(usize::MAX) > self.db.latest_scanned_block(*key) {
+    if scanner.db.block_number(block).unwrap_or(usize::MAX) > scanner.db.latest_scanned_block(*key)
+    {
       panic!("main loop trying to operate on data we haven't scanned");
     }
 
     outputs.expect("asked for outputs of a block without any")
+  }
+
+  pub async fn handle(&self, order: ScannerOrder<C>) {
+    let mut scanner = self.scanner.write().await;
+    match order {
+      ScannerOrder::RotateKey { activation_number, key } => {
+        if !scanner.keys.is_empty() {
+          // Protonet will have a single, static validator set
+          // TODO2
+          panic!("only a single key is supported at this time");
+        }
+
+        info!("Rotating to key {}", hex::encode(key.to_bytes()));
+        let mut txn = scanner.db.0.txn();
+        assert!(scanner.db.save_scanned_block(&mut txn, &key, activation_number).is_empty());
+        scanner.db.add_active_key(&mut txn, key);
+        txn.commit();
+        scanner.keys.push(key);
+      }
+
+      ScannerOrder::AckBlock(key, id) => {
+        debug!("Block {} acknowledged", hex::encode(&id));
+        let number = scanner
+          .db
+          .block_number(&id)
+          .expect("main loop trying to operate on data we haven't scanned");
+
+        let mut txn = scanner.db.0.txn();
+        let outputs = scanner.db.save_scanned_block(&mut txn, &key, number);
+        txn.commit();
+
+        for output in outputs {
+          scanner.ram_outputs.remove(output.as_ref());
+        }
+      }
+    }
   }
 }
 
 impl<C: Coin, D: Db> Scanner<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(coin: C, db: D) -> (ScannerHandle<C, D>, Vec<<C::Curve as Ciphersuite>::G>) {
-    let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
+
     let db = ScannerDb(db, PhantomData);
     let keys = db.active_keys();
-    tokio::spawn(
-      Scanner {
-        coin,
-        db: db.clone(),
-        keys: keys.clone(),
-        orders: orders_recv,
-        events: events_send,
-      }
-      .run(),
-    );
-    (ScannerHandle { db, orders: orders_send, events: events_recv }, keys)
+
+    let scanner = Arc::new(RwLock::new(Scanner {
+      coin,
+      db,
+      keys: keys.clone(),
+
+      ram_scanned: HashMap::new(),
+      ram_outputs: HashSet::new(),
+
+      events: events_send,
+    }));
+    tokio::spawn(Scanner::run(scanner.clone()));
+
+    (ScannerHandle { scanner, events: events_recv }, keys)
   }
 
   // An async function, to be spawned on a task, to discover and report outputs
-  async fn run(mut self) {
+  async fn run(scanner: Arc<RwLock<Self>>) {
     const CHANNEL_MSG: &str = "Scanner handler was dropped. Shutting down?";
-    let handle_recv = |channel: Option<_>| {
-      if channel.is_none() {
-        info!("{}", CHANNEL_MSG);
-      }
-      channel
-    };
     let handle_send = |channel: Result<_, _>| {
       if channel.is_err() {
         info!("{}", CHANNEL_MSG);
@@ -252,27 +302,30 @@ impl<C: Coin, D: Db> Scanner<C, D> {
       channel
     };
 
-    let mut ram_scanned = HashMap::new();
-    let mut ram_outputs = HashSet::new();
-
     loop {
+      // Only check every five seconds for new blocks
+      sleep(Duration::from_secs(5)).await;
+
       // Scan new blocks
       {
-        let latest = match self.coin.get_latest_block_number().await {
+        let mut scanner = scanner.write().await;
+        let latest = scanner.coin.get_latest_block_number().await;
+        let latest = match latest {
           // Only scan confirmed blocks, which we consider effectively finalized
           // CONFIRMATIONS - 1 as whatever's in the latest block already has 1 confirm
           Ok(latest) => latest.saturating_sub(C::CONFIRMATIONS.saturating_sub(1)),
           Err(_) => {
             warn!("Couldn't get {}'s latest block number", C::ID);
-            break;
+            sleep(Duration::from_secs(60)).await;
+            continue;
           }
         };
 
-        for key in self.keys.clone() {
+        for key in scanner.keys.clone() {
           let key_vec = key.to_bytes().as_ref().to_vec();
           let latest_scanned = {
             // Grab the latest scanned block according to the DB
-            let db_scanned = self.db.latest_scanned_block(key);
+            let db_scanned = scanner.db.latest_scanned_block(key);
             // We may, within this process's lifetime, have scanned more blocks
             // If they're still being processed, we will not have officially written them to the DB
             // as scanned yet
@@ -281,7 +334,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             // In order to not re-fire them within this process's lifetime, check our RAM cache
             // of what we've scanned
             // We are allowed to re-fire them within this lifetime. It's just wasteful
-            let ram_scanned = ram_scanned.get(&key_vec).cloned().unwrap_or(0);
+            let ram_scanned = scanner.ram_scanned.get(&key_vec).cloned().unwrap_or(0);
             // Pick whichever is higher
             db_scanned.max(ram_scanned)
           };
@@ -289,7 +342,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
           for i in (latest_scanned + 1) ..= latest {
             // TODO2: Check for key deprecation
 
-            let block = match self.coin.get_block(i).await {
+            let block = match scanner.coin.get_block(i).await {
               Ok(block) => block,
               Err(_) => {
                 warn!("Couldn't get {} block {i}", C::ID);
@@ -298,19 +351,19 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             };
             let block_id = block.id();
 
-            if let Some(id) = self.db.block(i) {
+            if let Some(id) = scanner.db.block(i) {
               // TODO2: Also check this block builds off the previous block
               if id != block.id() {
                 panic!("{} reorg'd from {id:?} to {:?}", C::ID, hex::encode(block_id));
               }
             } else {
               info!("Found new block: {}", hex::encode(&block_id));
-              let mut txn = self.db.0.txn();
-              self.db.save_block(&mut txn, i, &block_id);
+              let mut txn = scanner.db.0.txn();
+              scanner.db.save_block(&mut txn, i, &block_id);
               txn.commit();
             }
 
-            let outputs = match self.coin.get_outputs(&block, key).await {
+            let outputs = match scanner.coin.get_outputs(&block, key).await {
               Ok(outputs) => outputs,
               Err(_) => {
                 warn!("Couldn't scan {} block {i:?}", C::ID);
@@ -324,12 +377,12 @@ impl<C: Coin, D: Db> Scanner<C, D> {
               // On Bitcoin, the output ID should be unique for a given chain
               // On Monero, it's trivial to make an output sharing an ID with another
               // We should only scan outputs with valid IDs however, which will be unique
-              let seen = self.db.seen(&id);
+              let seen = scanner.db.seen(&id);
               let id = id.as_ref().to_vec();
-              if seen || ram_outputs.contains(&id) {
+              if seen || scanner.ram_outputs.contains(&id) {
                 panic!("scanned an output multiple times");
               }
-              ram_outputs.insert(id);
+              scanner.ram_outputs.insert(id);
             }
 
             // TODO: Still fire an empty Outputs event if we haven't had inputs in a while
@@ -338,58 +391,18 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             }
 
             // Save the outputs to disk
-            let mut txn = self.db.0.txn();
-            self.db.save_outputs(&mut txn, &key, &block_id, &outputs);
+            let mut txn = scanner.db.0.txn();
+            scanner.db.save_outputs(&mut txn, &key, &block_id, &outputs);
             txn.commit();
 
             // Send all outputs
-            if handle_send(self.events.send(ScannerEvent::Outputs(key, block_id, outputs))).is_err()
+            if handle_send(scanner.events.send(ScannerEvent::Outputs(key, block_id, outputs)))
+              .is_err()
             {
               return;
             }
             // Write this number as scanned so we won't re-fire these outputs
-            ram_scanned.insert(key_vec.clone(), i);
-          }
-        }
-      }
-
-      // Handle any new orders
-      if let Ok(order) = timeout(Duration::from_secs(1), self.orders.recv()).await {
-        match {
-          match handle_recv(order) {
-            None => return,
-            Some(order) => order,
-          }
-        } {
-          ScannerOrder::RotateKey { activation_number, key } => {
-            if !self.keys.is_empty() {
-              // Protonet will have a single, static validator set
-              // TODO2
-              panic!("only a single key is supported at this time");
-            }
-
-            info!("Rotating to key {}", hex::encode(key.to_bytes()));
-            let mut txn = self.db.0.txn();
-            assert!(self.db.save_scanned_block(&mut txn, &key, activation_number).is_empty());
-            self.db.add_active_key(&mut txn, key);
-            txn.commit();
-            self.keys.push(key);
-          }
-
-          ScannerOrder::AckBlock(key, id) => {
-            debug!("Block {} acknowledged", hex::encode(&id));
-            let number = self
-              .db
-              .block_number(&id)
-              .expect("main loop trying to operate on data we haven't scanned");
-
-            let mut txn = self.db.0.txn();
-            let outputs = self.db.save_scanned_block(&mut txn, &key, number);
-            txn.commit();
-
-            for output in outputs {
-              ram_outputs.remove(output.as_ref());
-            }
+            scanner.ram_scanned.insert(key_vec.clone(), i);
           }
         }
       }
