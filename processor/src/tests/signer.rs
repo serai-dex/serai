@@ -164,7 +164,7 @@ pub async fn test_signer<C: Coin>(coin: C) {
   // The signer may not publish the TX if it has a connection error
   // It doesn't fail in this case
   let txid = sign(coin.clone(), keys_txs).await;
-  let tx = coin.get_transaction(&txid).await;
+  let tx = coin.get_transaction(&txid).await.unwrap();
   assert_eq!(tx.id(), txid);
   // Mine a block, and scan it, to ensure that the TX actually made it on chain
   coin.mine_block().await;
@@ -180,6 +180,6 @@ pub async fn test_signer<C: Coin>(coin: C) {
 
   // Check the eventualities pass
   for eventuality in eventualities {
-    assert!(coin.confirm_completion(&eventuality, &txid).await.unwrap());
+    assert!(coin.confirm_completion(&eventuality, &tx));
   }
 }

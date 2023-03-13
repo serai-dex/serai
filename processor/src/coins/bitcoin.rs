@@ -427,23 +427,17 @@ impl Coin for Bitcoin {
     Ok(())
   }
 
-  async fn confirm_completion(
-    &self,
-    eventuality: &OutPoint,
-    tx: &[u8; 32],
-  ) -> Result<bool, CoinError> {
-    let tx = self.rpc.get_transaction(tx).await.map_err(|_| CoinError::ConnectionError)?;
-    Ok(eventuality == &tx.input[0].previous_output)
+  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, CoinError> {
+    self.rpc.get_transaction(id).await.map_err(|_| CoinError::ConnectionError)
+  }
+
+  fn confirm_completion(&self, eventuality: &OutPoint, tx: &Transaction) -> bool {
+    eventuality == &tx.input[0].previous_output
   }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block_number(id).await.unwrap()
-  }
-
-  #[cfg(test)]
-  async fn get_transaction(&self, id: &[u8; 32]) -> Transaction {
-    self.rpc.get_transaction(id).await.unwrap()
   }
 
   #[cfg(test)]

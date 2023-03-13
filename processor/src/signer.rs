@@ -102,8 +102,8 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
     self.0.get(Self::attempt_key(id)).is_some()
   }
 
-  fn save_transaction(&mut self, txn: &mut D::Transaction, id: [u8; 32], tx: Vec<u8>) {
-    txn.put(Self::sign_key(b"tx", id), tx);
+  fn save_transaction(&mut self, txn: &mut D::Transaction, tx: &C::Transaction) {
+    txn.put(Self::sign_key(b"tx", tx.id()), tx.serialize());
   }
 }
 
@@ -292,7 +292,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
 
         // Save the transaction in case it's needed for recovery
         let mut txn = self.db.0.txn();
-        self.db.save_transaction(&mut txn, id.id, tx.serialize());
+        self.db.save_transaction(&mut txn, &tx);
         self.db.complete(&mut txn, id.id, tx.id());
         txn.commit();
 
@@ -324,33 +324,30 @@ impl<C: Coin, D: Db> Signer<C, D> {
         tx.as_mut().copy_from_slice(&tx_vec);
 
         if let Some(eventuality) = self.db.eventuality(id.id) {
-          match self.coin.confirm_completion(&eventuality, &tx).await {
-            Ok(true) => {
-              // Stop trying to sign for this TX
-              let mut txn = self.db.0.txn();
-              // TODO: Alo save the TX itself, not just its ID
-              self.db.complete(&mut txn, id.id, tx.clone());
-              txn.commit();
-              self.signable.remove(&id.id);
-              self.attempt.remove(&id.id);
-              self.preprocessing.remove(&id.id);
-              self.signing.remove(&id.id);
+          // Transaction hasn't hit our mempool/was dropped for a different signature
+          // The latter can happen given certain latency conditions/a single malicious signer
+          // In the case of a signle malicious signer, they can drag multiple honest
+          // validators down with them, so we unfortunately can't slash on this case
+          let Ok(tx) = self.coin.get_transaction(&tx).await else {
+            todo!("queue checking eventualities");
+          };
 
-              self.emit(SignerEvent::SignedTransaction { id: id.id, tx });
-            }
+          if self.coin.confirm_completion(&eventuality, &tx) {
+            // Stop trying to sign for this TX
+            let mut txn = self.db.0.txn();
+            self.db.save_transaction(&mut txn, &tx);
+            self.db.complete(&mut txn, id.id, tx.id());
+            txn.commit();
 
-            Ok(false) => {
-              warn!("a validator claimed {} completed {id:?} when it did not", hex::encode(&tx));
-            }
+            self.signable.remove(&id.id);
+            self.attempt.remove(&id.id);
+            self.preprocessing.remove(&id.id);
+            self.signing.remove(&id.id);
 
-            // Transaction hasn't hit our mempool/was dropped for a different signature
-            // The latter can happen given certain latency conditions/a single malicious signer
-            // In the case of a signle malicious signer, they can drag multiple honest
-            // validators down with them, so we unfortunately can't slash on this case
-            Err(_) => todo!("queue checking eventualities"),
+            self.emit(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() });
+          } else {
+            warn!("a validator claimed {} completed {id:?} when it did not", hex::encode(&tx.id()));
           }
-        } else {
-          todo!("queue checking eventualities")
         }
       }
     }

@@ -417,25 +417,17 @@ impl Coin for Monero {
     }
   }
 
-  async fn confirm_completion(
-    &self,
-    eventuality: &Eventuality,
-    tx: &[u8; 32],
-  ) -> Result<bool, CoinError> {
-    Ok(
-      eventuality
-        .matches(&self.rpc.get_transaction(*tx).await.map_err(|_| CoinError::ConnectionError)?),
-    )
+  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, CoinError> {
+    self.rpc.get_transaction(*id).await.map_err(|_| CoinError::ConnectionError)
+  }
+
+  fn confirm_completion(&self, eventuality: &Eventuality, tx: &Transaction) -> bool {
+    eventuality.matches(tx)
   }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block(*id).await.unwrap().number()
-  }
-
-  #[cfg(test)]
-  async fn get_transaction(&self, id: &[u8; 32]) -> Transaction {
-    self.rpc.get_transaction(*id).await.unwrap()
   }
 
   #[cfg(test)]

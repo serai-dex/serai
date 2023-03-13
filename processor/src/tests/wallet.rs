@@ -78,7 +78,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
 
   let txid = sign(coin.clone(), keys_txs).await;
-  let tx = coin.get_transaction(&txid).await;
+  let tx = coin.get_transaction(&txid).await.unwrap();
   coin.mine_block().await;
   let block_number = coin.get_latest_block_number().await.unwrap();
   let block = coin.get_block(block_number).await.unwrap();
@@ -88,7 +88,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
 
   for eventuality in eventualities {
-    assert!(coin.confirm_completion(&eventuality, &txid).await.unwrap());
+    assert!(coin.confirm_completion(&eventuality, &tx));
   }
 
   for _ in 1 .. C::CONFIRMATIONS {

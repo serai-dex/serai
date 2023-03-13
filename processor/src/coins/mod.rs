@@ -261,25 +261,21 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Publish a transaction.
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError>;
 
+  /// Get a transaction by its ID.
+  async fn get_transaction(
+    &self,
+    id: &<Self::Transaction as Transaction<Self>>::Id,
+  ) -> Result<Self::Transaction, CoinError>;
+
   /// Confirm a plan was completed by the specified transaction.
   // This is allowed to take shortcuts.
   // This may assume an honest multisig, solely checking the inputs specified were spent.
   // This may solely check the outputs are equivalent *so long as it's locked to the plan ID*.
-  async fn confirm_completion(
-    &self,
-    eventuality: &Self::Eventuality,
-    tx: &<Self::Transaction as Transaction<Self>>::Id,
-  ) -> Result<bool, CoinError>;
+  fn confirm_completion(&self, eventuality: &Self::Eventuality, tx: &Self::Transaction) -> bool;
 
   /// Get a block's number by its ID.
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize;
-
-  #[cfg(test)]
-  async fn get_transaction(
-    &self,
-    id: &<Self::Transaction as Transaction<Self>>::Id,
-  ) -> Self::Transaction;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;
