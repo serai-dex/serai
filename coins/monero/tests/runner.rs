@@ -76,8 +76,6 @@ pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput 
 
 pub async fn rpc() -> Rpc {
   let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
-  // Make sure we recognize the protocol
-  rpc.get_protocol().await.unwrap();
 
   // Only run once
   if rpc.get_height().await.unwrap() != 1 {
@@ -93,6 +91,9 @@ pub async fn rpc() -> Rpc {
 
   // Mine 40 blocks to ensure decoy availability
   rpc.generate_blocks(&addr, 40).await.unwrap();
+
+  // Make sure we recognize the protocol
+  rpc.get_protocol().await.unwrap();
 
   rpc
 }
