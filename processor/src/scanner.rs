@@ -292,16 +292,16 @@ impl<C: Coin, D: Db> Scanner<C, D> {
     (ScannerHandle { scanner, events: events_recv }, keys)
   }
 
+  fn emit(&mut self, event: ScannerEvent<C>) -> bool {
+    if self.events.send(event).is_err() {
+      info!("Scanner handler was dropped. Shutting down?");
+      return false;
+    }
+    true
+  }
+
   // An async function, to be spawned on a task, to discover and report outputs
   async fn run(scanner: Arc<RwLock<Self>>) {
-    const CHANNEL_MSG: &str = "Scanner handler was dropped. Shutting down?";
-    let handle_send = |channel: Result<_, _>| {
-      if channel.is_err() {
-        info!("{}", CHANNEL_MSG);
-      }
-      channel
-    };
-
     loop {
       // Only check every five seconds for new blocks
       sleep(Duration::from_secs(5)).await;
@@ -396,9 +396,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             txn.commit();
 
             // Send all outputs
-            if handle_send(scanner.events.send(ScannerEvent::Outputs(key, block_id, outputs)))
-              .is_err()
-            {
+            if !scanner.emit(ScannerEvent::Outputs(key, block_id, outputs)) {
               return;
             }
             // Write this number as scanned so we won't re-fire these outputs

@@ -3,7 +3,7 @@ use std::{
   pin::Pin,
   task::{Poll, Context},
   future::Future,
-  time::{Duration, SystemTime, Instant},
+  time::{Duration, SystemTime},
   collections::{VecDeque, HashMap},
 };
 
@@ -14,7 +14,7 @@ use group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
 use log::{info, warn, error};
-use tokio::time::{sleep, sleep_until};
+use tokio::time::sleep;
 
 use scale::Decode;
 
@@ -134,55 +134,73 @@ async fn sign_plans<C: Coin, D: Db>(
   key_gen: &KeyGen<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
   signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
-  plans: &mut VecDeque<(SubstrateContext, VecDeque<Plan<C>>)>,
-  timer: &mut Option<Instant>,
+  context: SubstrateContext,
+  plans: Vec<Plan<C>>,
 ) {
-  // Clear the timer
-  *timer = None;
+  let mut plans = VecDeque::from(plans);
+  let start = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(context.time)).unwrap();
+  let block_number = context.coin_latest_block_number.try_into().unwrap();
 
-  // Iterate over all plans
-  while let Some((context, mut these_plans)) = plans.pop_front() {
-    let start = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(context.time)).unwrap();
-    let block_number = context.coin_latest_block_number.try_into().unwrap();
+  let fee;
+  loop {
+    // TODO2: Use an fee representative of several blocks
+    match coin.get_block(block_number).await {
+      Ok(block) => {
+        fee = block.median_fee();
+        break;
+      }
+      Err(e) => {
+        error!("couldn't get block {}: {e}", block_number);
+        // Since this block is considered finalized, we shouldn't be unable to get it unless the
+        // node is offline, hence the long sleep
+        sleep(Duration::from_secs(60)).await;
+      }
+    }
+  }
 
-    while let Some(plan) = these_plans.pop_front() {
-      let id = plan.id();
-      info!("preparing plan {}: {:?}", hex::encode(id), plan);
+  while let Some(plan) = plans.pop_front() {
+    let id = plan.id();
+    info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
-      let prepare_plan = |keys| async {
-        // TODO2: Use an fee representative of several blocks
-        let fee = coin.get_block(block_number).await?.median_fee();
-        coin.prepare_send(keys, block_number, plan.clone(), fee).await
-      };
-
-      match prepare_plan(key_gen.keys(&plan.key)).await {
-        Ok((tx, branches)) => {
-          let key = plan.key.to_bytes();
-          for branch in branches {
-            schedulers
-              .get_mut(key.as_ref())
-              .expect("didn't have a scheduler for a key we have a plan for")
-              .created_output(branch.expected, branch.actual);
-          }
-
-          if let Some((tx, eventuality)) = tx {
-            signers[key.as_ref()]
-              .orders
-              .send(SignerOrder::SignTransaction { id, start, tx, eventuality })
-              .unwrap()
-          }
+    let keys = key_gen.keys(&plan.key);
+    let tx;
+    let branches;
+    loop {
+      match coin.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
+        Ok(prepared) => {
+          (tx, branches) = prepared;
+          break;
         }
-
         Err(e) => {
           error!("couldn't prepare a send for plan {}: {e}", hex::encode(id));
-          // Add back this plan/these plans
-          these_plans.push_front(plan);
-          plans.push_front((context, these_plans));
-          // Try again in 30 seconds
-          *timer = Some(Instant::now().checked_add(Duration::from_secs(30)).unwrap());
-          return;
+          // The processor is either trying to create an invalid TX (fatal) or the node went
+          // offline
+          // The former requires a patch, the latter is a connection issue
+          // If the latter, this is an appropriate sleep. If the former, we should panic, yet
+          // this won't flood the console ad infinitum
+          sleep(Duration::from_secs(60)).await;
         }
       }
+    }
+
+    let key = plan.key.to_bytes();
+    for branch in branches {
+      schedulers
+        .get_mut(key.as_ref())
+        .expect("didn't have a scheduler for a key we have a plan for")
+        .created_output(branch.expected, branch.actual);
+    }
+
+    if let Some((tx, eventuality)) = tx {
+      // TODO:
+      // 1) Make this a function
+      // 2) Have the signer save whatever it's actively signing for
+      // 3) Have the signer load active signing sessions on boot
+      // 4) Handle detection of already signed TXs (either on-chain or notified by a peer)
+      signers[key.as_ref()]
+        .orders
+        .send(SignerOrder::SignTransaction { id, start, tx, eventuality })
+        .unwrap()
     }
   }
 }
@@ -231,20 +249,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
   // TODO: Should this be saved to the DB?
   let mut last_coordinator_msg = None;
 
-  // TODO: Reload plans/re-issue SignTransaction orders
-  let mut plans = VecDeque::new();
-  let mut plans_timer = None;
-
   loop {
-    // This should be long enough a timer using this shouldn't trigger unless it's actually set
-    let minutes = Instant::now().checked_add(Duration::from_secs(365 * 24 * 60 * 60)).unwrap();
-    let this_plans_timer = plans_timer.unwrap_or(minutes);
-
     tokio::select! {
-      _ = sleep_until(this_plans_timer.into()) => {
-        sign_plans(&coin, &key_gen, &mut schedulers, &signers, &mut plans, &mut plans_timer).await;
-      },
-
       // This blocks the entire processor until it finishes handling this message
       // KeyGen specifically may take a notable amount of processing time
       // While that shouldn't be an issue in practice, as after processing an attempt it'll handle
@@ -368,26 +374,15 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                 let mut block_id = <C::Block as Block<C>>::Id::default();
                 block_id.as_mut().copy_from_slice(&block);
 
+                // TODO: Have this return the outputs so we can remove the panicking outputs
+                // function
                 scanner.handle(ScannerOrder::AckBlock(key, block_id.clone())).await;
 
-                plans.push_back((
-                  context,
-                  VecDeque::from(
-                    schedulers
-                      .get_mut(&key_vec)
-                      .expect("key we don't have a scheduler for acknowledged a block")
-                      .add_outputs(scanner.outputs(&key, &block_id).await),
-                  ),
-                ));
-                // TODO: Remove plans_timer. Retry here to sign plans
-                sign_plans(
-                  &coin,
-                  &key_gen,
-                  &mut schedulers,
-                  &signers,
-                  &mut plans,
-                  &mut plans_timer
-                ).await;
+                let plans = schedulers
+                  .get_mut(&key_vec)
+                  .expect("key we don't have a scheduler for acknowledged a block")
+                  .add_outputs(scanner.outputs(&key, &block_id).await);
+                sign_plans(&coin, &key_gen, &mut schedulers, &signers, context, plans).await;
               }
 
               substrate::CoordinatorMessage::Burns { context, burns } => {
@@ -407,15 +402,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                   }
                 }
 
-                plans.push_back((context, VecDeque::from(scheduler.schedule(payments))));
-                sign_plans(
-                  &coin,
-                  &key_gen,
-                  &mut schedulers,
-                  &signers,
-                  &mut plans,
-                  &mut plans_timer
-                ).await;
+                let plans = scheduler.schedule(payments);
+                sign_plans(&coin, &key_gen, &mut schedulers, &signers, context, plans).await;
               }
             }
           }
