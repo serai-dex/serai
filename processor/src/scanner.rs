@@ -18,19 +18,6 @@ use crate::{
   coins::{Output, Block, Coin},
 };
 
-/// Orders for the scanner.
-#[derive(Clone, Debug)]
-pub enum ScannerOrder<C: Coin> {
-  /// Rotate the key being scanned for.
-  /// If no key has been prior set, this will become the key with no further actions.
-  /// If a key has been prior set, both keys will be scanned for as detailed in the Multisig
-  /// documentation. The old key will eventually stop being scanned for, leaving just the
-  /// updated-to key.
-  RotateKey { activation_number: usize, key: <C::Curve as Ciphersuite>::G },
-  /// Acknowledge having handled a block for a key
-  AckBlock(<C::Curve as Ciphersuite>::G, <C::Block as Block<C>>::Id),
-}
-
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<C: Coin> {
   // Outputs received
@@ -150,25 +137,23 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     txn: &mut D::Transaction,
     key: &<C::Curve as Ciphersuite>::G,
     block: usize,
-  ) -> Vec<<C::Output as Output>::Id> {
+  ) -> Vec<C::Output> {
     let new_key = self.0.get(Self::scanned_block_key(key)).is_none();
     let outputs = self.block(block).and_then(|id| self.outputs(key, &id));
     // Either this is a new key, with no outputs, or we're acknowledging this block
     // If we're acknowledging it, we should have outputs available
     assert_eq!(new_key, outputs.is_none());
+    let outputs = outputs.unwrap_or(vec![]);
 
     // Mark all the outputs from this block as seen
-    let mut ids = vec![];
-    for output in outputs.unwrap_or(vec![]) {
-      let id = output.id();
-      txn.put(Self::seen_key(&id), b"");
-      ids.push(id);
+    for output in &outputs {
+      txn.put(Self::seen_key(&output.id()), b"");
     }
 
     txn.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
 
     // Return this block's outputs so they can be pruned from the RAM cache
-    ids
+    outputs
   }
   fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
     let bytes = self.0.get(Self::scanned_block_key(&key)).unwrap_or(vec![0; 8]);
@@ -211,61 +196,49 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     res.unwrap_or(0)
   }
 
-  pub async fn outputs(
-    &self,
-    key: &<C::Curve as Ciphersuite>::G,
-    block: &<C::Block as Block<C>>::Id,
-  ) -> Vec<C::Output> {
-    let scanner = self.scanner.read().await;
-    let outputs = scanner.db.outputs(key, block);
-    if let Some(outputs) = outputs {
-      return outputs;
+  /// Rotate the key being scanned for.
+  ///
+  /// If no key has been prior set, this will become the key with no further actions.
+  ///
+  /// If a key has been prior set, both keys will be scanned for as detailed in the Multisig
+  /// documentation. The old key will eventually stop being scanned for, leaving just the
+  /// updated-to key.
+  pub async fn rotate_key(&self, activation_number: usize, key: <C::Curve as Ciphersuite>::G) {
+    let mut scanner = self.scanner.write().await;
+    if !scanner.keys.is_empty() {
+      // Protonet will have a single, static validator set
+      // TODO2
+      panic!("only a single key is supported at this time");
     }
 
-    // This can only happen if Substrate acknowleges a block we haven't scanned
-    // The main loop should delay handling Substrate messages for blocks we haven't scanned
-    if scanner.db.block_number(block).unwrap_or(usize::MAX) > scanner.db.latest_scanned_block(*key)
-    {
-      panic!("main loop trying to operate on data we haven't scanned");
-    }
-
-    outputs.expect("asked for outputs of a block without any")
+    info!("Rotating to key {}", hex::encode(key.to_bytes()));
+    let mut txn = scanner.db.0.txn();
+    assert!(scanner.db.save_scanned_block(&mut txn, &key, activation_number).is_empty());
+    scanner.db.add_active_key(&mut txn, key);
+    txn.commit();
+    scanner.keys.push(key);
   }
 
-  pub async fn handle(&self, order: ScannerOrder<C>) {
+  /// Acknowledge having handled a block for a key.
+  pub async fn ack_block(
+    &self,
+    key: <C::Curve as Ciphersuite>::G,
+    id: <C::Block as Block<C>>::Id,
+  ) -> Vec<C::Output> {
     let mut scanner = self.scanner.write().await;
-    match order {
-      ScannerOrder::RotateKey { activation_number, key } => {
-        if !scanner.keys.is_empty() {
-          // Protonet will have a single, static validator set
-          // TODO2
-          panic!("only a single key is supported at this time");
-        }
+    debug!("Block {} acknowledged", hex::encode(&id));
+    let number =
+      scanner.db.block_number(&id).expect("main loop trying to operate on data we haven't scanned");
 
-        info!("Rotating to key {}", hex::encode(key.to_bytes()));
-        let mut txn = scanner.db.0.txn();
-        assert!(scanner.db.save_scanned_block(&mut txn, &key, activation_number).is_empty());
-        scanner.db.add_active_key(&mut txn, key);
-        txn.commit();
-        scanner.keys.push(key);
-      }
+    let mut txn = scanner.db.0.txn();
+    let outputs = scanner.db.save_scanned_block(&mut txn, &key, number);
+    txn.commit();
 
-      ScannerOrder::AckBlock(key, id) => {
-        debug!("Block {} acknowledged", hex::encode(&id));
-        let number = scanner
-          .db
-          .block_number(&id)
-          .expect("main loop trying to operate on data we haven't scanned");
-
-        let mut txn = scanner.db.0.txn();
-        let outputs = scanner.db.save_scanned_block(&mut txn, &key, number);
-        txn.commit();
-
-        for output in outputs {
-          scanner.ram_outputs.remove(output.as_ref());
-        }
-      }
+    for output in &outputs {
+      scanner.ram_outputs.remove(output.id().as_ref());
     }
+
+    outputs
   }
 }
 

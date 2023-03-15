@@ -46,7 +46,7 @@ mod signer;
 use signer::{SignerOrder, SignerEvent, Signer, SignerHandle};
 
 mod scanner;
-use scanner::{ScannerOrder, ScannerEvent, Scanner, ScannerHandle};
+use scanner::{ScannerEvent, Scanner, ScannerHandle};
 
 mod scheduler;
 use scheduler::Scheduler;
@@ -232,6 +232,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
   // We don't need to re-issue GenerateKey orders because the coordinator is expected to
   // schedule/notify us of new attempts
   let mut key_gen = KeyGen::<C, _>::new(db.clone(), entropy(b"key-gen_entropy"));
+  // The scanner has no long-standing orders to re-issue
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
 
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
@@ -322,7 +323,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
             };
             */
 
-            // TODO: Remove old code from scanner handling this exact issue
             break;
           }
         }
@@ -347,7 +347,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
             match key_gen.handle(msg).await {
               KeyGenEvent::KeyConfirmed { activation_number, keys } => {
                 let key = keys.group_key();
-                scanner.handle(ScannerOrder::RotateKey { activation_number, key }).await;
+                scanner.rotate_key(activation_number, key).await;
                 schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
                 signers.insert(
                   keys.group_key().to_bytes().as_ref().to_vec(),
@@ -374,14 +374,10 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                 let mut block_id = <C::Block as Block<C>>::Id::default();
                 block_id.as_mut().copy_from_slice(&block);
 
-                // TODO: Have this return the outputs so we can remove the panicking outputs
-                // function
-                scanner.handle(ScannerOrder::AckBlock(key, block_id.clone())).await;
-
                 let plans = schedulers
                   .get_mut(&key_vec)
                   .expect("key we don't have a scheduler for acknowledged a block")
-                  .add_outputs(scanner.outputs(&key, &block_id).await);
+                  .add_outputs(scanner.ack_block(key, block_id).await);
                 sign_plans(&coin, &key_gen, &mut schedulers, &signers, context, plans).await;
               }
 

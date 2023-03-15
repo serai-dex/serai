@@ -4,12 +4,12 @@ use rand_core::OsRng;
 
 use frost::dkg::tests::key_gen;
 
-use tokio::time::{sleep, timeout};
+use tokio::time::timeout;
 
 use crate::{
   Payment, Plan,
   coins::{Output, Transaction, Block, Coin},
-  scanner::{ScannerOrder, ScannerEvent, Scanner},
+  scanner::{ScannerEvent, Scanner},
   scheduler::Scheduler,
   tests::{util::db::MemDb, sign},
 };
@@ -25,12 +25,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), MemDb::new());
   assert!(active_keys.is_empty());
   let (block_id, outputs) = {
-    scanner
-      .handle(ScannerOrder::RotateKey {
-        activation_number: coin.get_latest_block_number().await.unwrap(),
-        key,
-      })
-      .await;
+    scanner.rotate_key(coin.get_latest_block_number().await.unwrap(), key).await;
 
     let block_id = coin.test_send(C::address(key)).await.id();
 
@@ -103,7 +98,5 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
 
   // Check the Scanner DB can reload the outputs
-  scanner.handle(ScannerOrder::AckBlock(key, block.id())).await;
-  sleep(Duration::from_secs(1)).await;
-  assert_eq!(scanner.outputs(&key, &block.id()).await, outputs);
+  assert_eq!(scanner.ack_block(key, block.id()).await, outputs);
 }
