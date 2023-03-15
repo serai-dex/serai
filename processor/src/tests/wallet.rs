@@ -55,6 +55,12 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     }]
   );
 
+  {
+    let mut buf = vec![];
+    plans[0].write(&mut buf).unwrap();
+    assert_eq!(plans[0], Plan::<C>::read::<&[u8]>(&mut buf.as_ref()).unwrap());
+  }
+
   // Execute the plan
   let fee = coin.get_fee().await;
   let mut keys_txs = HashMap::new();

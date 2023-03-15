@@ -282,7 +282,7 @@ impl Coin for Bitcoin {
     assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
     Address(BAddress::p2tr_tweaked(
       TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)),
-      Network::Regtest,
+      Network::Bitcoin,
     ))
   }
 

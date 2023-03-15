@@ -200,7 +200,15 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The type representing an address.
   // This should NOT be a String, yet a tailored type representing an efficient binary encoding,
   // as detailed in the integration documentation.
-  type Address: Send + Sync + Clone + PartialEq + Eq + Debug + ToString + TryFrom<Vec<u8>>;
+  type Address: Send
+    + Sync
+    + Clone
+    + PartialEq
+    + Eq
+    + Debug
+    + ToString
+    + TryInto<Vec<u8>>
+    + TryFrom<Vec<u8>>;
 
   /// String ID for this coin.
   const ID: &'static str;

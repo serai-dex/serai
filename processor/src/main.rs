@@ -26,6 +26,9 @@ use serai_client::{
 
 use messages::{SubstrateContext, substrate, CoordinatorMessage, ProcessorMessage};
 
+mod plan;
+pub use plan::*;
+
 mod db;
 pub use db::*;
 
@@ -53,56 +56,6 @@ use scheduler::Scheduler;
 
 #[cfg(test)]
 mod tests;
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Payment<C: Coin> {
-  address: C::Address,
-  data: Option<Vec<u8>>,
-  amount: u64,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Plan<C: Coin> {
-  pub key: <C::Curve as Ciphersuite>::G,
-  pub inputs: Vec<C::Output>,
-  pub payments: Vec<Payment<C>>,
-  pub change: Option<<C::Curve as Ciphersuite>::G>,
-}
-
-impl<C: Coin> Plan<C> {
-  fn transcript(&self) -> RecommendedTranscript {
-    let mut transcript = RecommendedTranscript::new(b"Serai Processor Plan ID");
-    transcript.domain_separate(b"meta");
-    transcript.append_message(b"key", self.key.to_bytes());
-
-    transcript.domain_separate(b"inputs");
-    for input in &self.inputs {
-      transcript.append_message(b"input", input.id());
-    }
-
-    transcript.domain_separate(b"payments");
-    for payment in &self.payments {
-      transcript.append_message(b"address", payment.address.to_string().as_bytes());
-      if let Some(data) = payment.data.as_ref() {
-        transcript.append_message(b"data", data);
-      }
-      transcript.append_message(b"amount", payment.amount.to_le_bytes());
-    }
-
-    if let Some(change) = self.change {
-      transcript.append_message(b"change", change.to_bytes());
-    }
-
-    transcript
-  }
-
-  fn id(&self) -> [u8; 32] {
-    let challenge = self.transcript().challenge(b"id");
-    let mut res = [0; 32];
-    res.copy_from_slice(&challenge[.. 32]);
-    res
-  }
-}
 
 // Generate a static additional key for a given chain in a globally consistent manner
 // Doesn't consider the current group key to increase the simplicity of verifying Serai's status
@@ -173,6 +126,7 @@ async fn prepare_send<C: Coin, D: Db>(
 }
 
 async fn sign_plans<C: Coin, D: Db>(
+  db: &mut MainDb<C, D>,
   coin: &C,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
   signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
@@ -190,6 +144,7 @@ async fn sign_plans<C: Coin, D: Db>(
     info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
     let key = plan.key.to_bytes();
+    db.save_signing(key.as_ref(), context.coin_latest_block_number, &plan);
     let (tx, branches) = prepare_send(coin, signers, block_number, fee, plan).await;
 
     // TODO: If we reboot mid-sign_plans, for a DB-backed scheduler, these may be partially
@@ -218,7 +173,7 @@ async fn sign_plans<C: Coin, D: Db>(
   }
 }
 
-async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: Co) {
+async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinator: Co) {
   let mut entropy_transcript = {
     let entropy =
       Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't provided as an env var"));
@@ -244,9 +199,9 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
 
   // We don't need to re-issue GenerateKey orders because the coordinator is expected to
   // schedule/notify us of new attempts
-  let mut key_gen = KeyGen::<C, _>::new(db.clone(), entropy(b"key-gen_entropy"));
+  let mut key_gen = KeyGen::<C, _>::new(raw_db.clone(), entropy(b"key-gen_entropy"));
   // The scanner has no long-standing orders to re-issue
-  let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
+  let (mut scanner, active_keys) = Scanner::new(coin.clone(), raw_db.clone());
 
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
   let mut signers = HashMap::new();
@@ -256,9 +211,11 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
 
     signers.insert(
       key.to_bytes().as_ref().to_vec(),
-      Signer::new(db.clone(), coin.clone(), key_gen.keys(key)),
+      Signer::new(raw_db.clone(), coin.clone(), key_gen.keys(key)),
     );
   }
+
+  let mut main_db = MainDb::new(raw_db.clone());
 
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   let mut last_coordinator_msg = None;
@@ -364,7 +321,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                 schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
                 signers.insert(
                   keys.group_key().to_bytes().as_ref().to_vec(),
-                  Signer::new(db.clone(), coin.clone(), keys)
+                  Signer::new(raw_db.clone(), coin.clone(), keys)
                 );
               },
 
@@ -391,7 +348,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                   .get_mut(&key_vec)
                   .expect("key we don't have a scheduler for acknowledged a block")
                   .add_outputs(scanner.ack_block(key, block_id).await);
-                sign_plans(&coin, &mut schedulers, &signers, context, plans).await;
+                sign_plans(&mut main_db, &coin, &mut schedulers, &signers, context, plans).await;
               }
 
               substrate::CoordinatorMessage::Burns { context, burns } => {
@@ -412,7 +369,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                 }
 
                 let plans = scheduler.schedule(payments);
-                sign_plans(&coin, &mut schedulers, &signers, context, plans).await;
+                sign_plans(&mut main_db, &coin, &mut schedulers, &signers, context, plans).await;
               }
             }
           }
