@@ -67,6 +67,8 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   }
   fn add_active_key(&mut self, txn: &mut D::Transaction, key: <C::Curve as Ciphersuite>::G) {
     let mut keys = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
+    // TODO: Don't do this if the key is already marked active (which can happen based on reboot
+    // timing)
     keys.extend(key.to_bytes().as_ref());
     txn.put(Self::active_keys_key(), keys);
   }

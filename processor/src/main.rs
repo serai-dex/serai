@@ -33,7 +33,7 @@ mod coordinator;
 pub use coordinator::*;
 
 mod coins;
-use coins::{OutputType, Output, Block, Coin};
+use coins::{OutputType, Output, PostFeeBranch, Block, Coin};
 #[cfg(feature = "bitcoin")]
 use coins::Bitcoin;
 #[cfg(feature = "monero")]
@@ -129,6 +129,49 @@ impl<'a, C: Coin, D: Db> Future for SignerMessageFuture<'a, C, D> {
   }
 }
 
+async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
+  loop {
+    // TODO2: Use an fee representative of several blocks
+    match coin.get_block(block_number).await {
+      Ok(block) => {
+        return block.median_fee();
+      }
+      Err(e) => {
+        error!("couldn't get block {}: {e}", block_number);
+        // Since this block is considered finalized, we shouldn't be unable to get it unless the
+        // node is offline, hence the long sleep
+        sleep(Duration::from_secs(60)).await;
+      }
+    }
+  }
+}
+
+async fn prepare_send<C: Coin, D: Db>(
+  coin: &C,
+  signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
+  block_number: usize,
+  fee: C::Fee,
+  plan: Plan<C>,
+) -> (Option<(C::SignableTransaction, C::Eventuality)>, Vec<PostFeeBranch>) {
+  let keys = signers[plan.key.to_bytes().as_ref()].keys().await;
+  loop {
+    match coin.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
+      Ok(prepared) => {
+        return prepared;
+      }
+      Err(e) => {
+        error!("couldn't prepare a send for plan {}: {e}", hex::encode(plan.id()));
+        // The processor is either trying to create an invalid TX (fatal) or the node went
+        // offline
+        // The former requires a patch, the latter is a connection issue
+        // If the latter, this is an appropriate sleep. If the former, we should panic, yet
+        // this won't flood the console ad infinitum
+        sleep(Duration::from_secs(60)).await;
+      }
+    }
+  }
+}
+
 async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
@@ -140,49 +183,22 @@ async fn sign_plans<C: Coin, D: Db>(
   let start = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(context.time)).unwrap();
   let block_number = context.coin_latest_block_number.try_into().unwrap();
 
-  let fee;
-  loop {
-    // TODO2: Use an fee representative of several blocks
-    match coin.get_block(block_number).await {
-      Ok(block) => {
-        fee = block.median_fee();
-        break;
-      }
-      Err(e) => {
-        error!("couldn't get block {}: {e}", block_number);
-        // Since this block is considered finalized, we shouldn't be unable to get it unless the
-        // node is offline, hence the long sleep
-        sleep(Duration::from_secs(60)).await;
-      }
-    }
-  }
+  let fee = get_fee(coin, block_number).await;
 
   while let Some(plan) = plans.pop_front() {
     let id = plan.id();
     info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
-    let keys = signers[plan.key.to_bytes().as_ref()].keys().await;
-    let tx;
-    let branches;
-    loop {
-      match coin.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
-        Ok(prepared) => {
-          (tx, branches) = prepared;
-          break;
-        }
-        Err(e) => {
-          error!("couldn't prepare a send for plan {}: {e}", hex::encode(id));
-          // The processor is either trying to create an invalid TX (fatal) or the node went
-          // offline
-          // The former requires a patch, the latter is a connection issue
-          // If the latter, this is an appropriate sleep. If the former, we should panic, yet
-          // this won't flood the console ad infinitum
-          sleep(Duration::from_secs(60)).await;
-        }
-      }
-    }
-
     let key = plan.key.to_bytes();
+    let (tx, branches) = prepare_send(coin, signers, block_number, fee, plan).await;
+
+    // TODO: If we reboot mid-sign_plans, for a DB-backed scheduler, these may be partially
+    // executed
+    // Global TXN object for the entire coordinator message?
+    // Re-ser the scheduler after every sign_plans call?
+    // To clarify, the scheduler is distinct as it mutates itself on new data.
+    // The key_gen/scanner/signer are designed to be deterministic to new data, irrelevant to prior
+    // states.
     for branch in branches {
       schedulers
         .get_mut(key.as_ref())
@@ -193,6 +209,8 @@ async fn sign_plans<C: Coin, D: Db>(
     if let Some((tx, eventuality)) = tx {
       // TODO:
       // 1) Have the signer save whatever it's actively signing for
+      //    This is painful due to the signer having a SignableTransaction. Instead, the above
+      //    prepare_send should be called from the easily storable plan data.
       // 2) Have the signer load active signing sessions on boot
       // 3) Handle detection of already signed TXs (either on-chain or notified by a peer)
       signers[key.as_ref()].sign_transaction(id, start, tx, eventuality).await;
@@ -242,7 +260,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
     );
   }
 
-  // TODO: Should this be saved to the DB?
+  // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   let mut last_coordinator_msg = None;
 
   loop {
