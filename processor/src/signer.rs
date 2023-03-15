@@ -15,10 +15,7 @@ use frost::{
 
 use log::{info, debug, warn, error};
 use tokio::{
-  sync::{
-    RwLock,
-    mpsc::{self, error::TryRecvError},
-  },
+  sync::{RwLock, mpsc},
   time::sleep,
 };
 
@@ -31,22 +28,11 @@ use crate::{
 const CHANNEL_MSG: &str = "Signer handler was dropped. Shutting down?";
 
 #[derive(Debug)]
-pub enum SignerOrder<C: Coin> {
-  SignTransaction {
-    id: [u8; 32],
-    start: SystemTime,
-    tx: C::SignableTransaction,
-    eventuality: C::Eventuality,
-  },
-}
-
-#[derive(Debug)]
 pub enum SignerEvent<C: Coin> {
   SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction<C>>::Id },
   ProcessorMessage(ProcessorMessage),
 }
 
-pub type SignerOrderChannel<C> = mpsc::UnboundedSender<SignerOrder<C>>;
 pub type SignerEventChannel<C> = mpsc::UnboundedReceiver<SignerEvent<C>>;
 
 #[derive(Debug)]
@@ -128,7 +114,6 @@ pub struct Signer<C: Coin, D: Db> {
     >::SignatureMachine,
   >,
 
-  orders: mpsc::UnboundedReceiver<SignerOrder<C>>,
   events: mpsc::UnboundedSender<SignerEvent<C>>,
 }
 
@@ -146,14 +131,12 @@ impl<C: Coin, D: Db> fmt::Debug for Signer<C, D> {
 #[derive(Debug)]
 pub struct SignerHandle<C: Coin, D: Db> {
   signer: Arc<RwLock<Signer<C, D>>>,
-  pub orders: SignerOrderChannel<C>,
   pub events: SignerEventChannel<C>,
 }
 
 impl<C: Coin, D: Db> Signer<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(db: D, coin: C, keys: ThresholdKeys<C::Curve>) -> SignerHandle<C, D> {
-    let (orders_send, orders_recv) = mpsc::unbounded_channel();
     let (events_send, events_recv) = mpsc::unbounded_channel();
 
     let signer = Arc::new(RwLock::new(Signer {
@@ -167,13 +150,12 @@ impl<C: Coin, D: Db> Signer<C, D> {
       preprocessing: HashMap::new(),
       signing: HashMap::new(),
 
-      orders: orders_recv,
       events: events_send,
     }));
 
     tokio::spawn(Signer::run(signer.clone()));
 
-    SignerHandle { signer, orders: orders_send, events: events_recv }
+    SignerHandle { signer, events: events_recv }
   }
 
   fn verify_id(&self, id: &SignId) -> Result<(), ()> {
@@ -327,7 +309,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
         if let Some(eventuality) = self.db.eventuality(id.id) {
           // Transaction hasn't hit our mempool/was dropped for a different signature
           // The latter can happen given certain latency conditions/a single malicious signer
-          // In the case of a signle malicious signer, they can drag multiple honest
+          // In the case of a single malicious signer, they can drag multiple honest
           // validators down with them, so we unfortunately can't slash on this case
           let Ok(tx) = self.coin.get_transaction(&tx).await else {
             todo!("queue checking eventualities"); // or give up here?
@@ -359,65 +341,12 @@ impl<C: Coin, D: Db> Signer<C, D> {
     const SIGN_TIMEOUT: u64 = 30;
 
     loop {
-      {
-        let mut signer = signer_arc.write().await;
-        loop {
-          match signer.orders.try_recv() {
-            Ok(order) => match order {
-              SignerOrder::SignTransaction { id, start, tx, eventuality } => {
-                if let Some(txs) = signer.db.completed(id) {
-                  debug!("SignTransaction order for ID we've already completed signing");
-
-                  // Use the first instance we noted as having completed *and can still get from
-                  // our node*
-                  let mut tx = None;
-                  let mut buf = <C::Transaction as Transaction<C>>::Id::default();
-                  let tx_id_len = buf.as_ref().len();
-                  assert_eq!(txs.len() % tx_id_len, 0);
-                  for id in 0 .. (txs.len() / tx_id_len) {
-                    let start = id * tx_id_len;
-                    buf.as_mut().copy_from_slice(&txs[start .. (start + tx_id_len)]);
-                    if signer.coin.get_transaction(&buf).await.is_ok() {
-                      tx = Some(buf);
-                      break;
-                    }
-                  }
-
-                  if let Some(tx) = tx {
-                    if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
-                      return;
-                    }
-                  } else {
-                    warn!(
-                      "completed signing {} yet couldn't get any of the completing TXs",
-                      hex::encode(id)
-                    );
-                  }
-                  continue;
-                }
-
-                let mut txn = signer.db.0.txn();
-                signer.db.save_eventuality(&mut txn, id, eventuality);
-                txn.commit();
-
-                signer.signable.insert(id, (start, tx));
-              }
-            },
-            Err(TryRecvError::Empty) => break,
-            Err(TryRecvError::Disconnected) => {
-              info!("{}", CHANNEL_MSG);
-              return;
-            }
-          }
-        }
-      }
-
       // Sleep until a timeout expires (or five seconds expire)
       // Since this code start new sessions, it will delay any ordered signing sessions from
-      // starting for up to 5 seconds, hence why that number can't be too high (such as 30 seconds,
+      // starting for up to 5 seconds, hence why this number can't be too high (such as 30 seconds,
       // the full timeout)
-      // This won't delay re-attempting any signing session however, nor will it block the handle
-      // function (since this doesn't hold any locks)
+      // This won't delay re-attempting any signing session however, nor will it block the
+      // sign_transaction function (since this doesn't hold any locks)
       sleep({
         let now = SystemTime::now();
         let mut lowest = Duration::from_secs(5);
@@ -529,6 +458,50 @@ impl<C: Coin, D: Db> Signer<C, D> {
 }
 
 impl<C: Coin, D: Db> SignerHandle<C, D> {
+  pub async fn sign_transaction(
+    &self,
+    id: [u8; 32],
+    start: SystemTime,
+    tx: C::SignableTransaction,
+    eventuality: C::Eventuality,
+  ) {
+    let mut signer = self.signer.write().await;
+
+    if let Some(txs) = signer.db.completed(id) {
+      debug!("SignTransaction order for ID we've already completed signing");
+
+      // Find the first instance we noted as having completed *and can still get from our node*
+      let mut tx = None;
+      let mut buf = <C::Transaction as Transaction<C>>::Id::default();
+      let tx_id_len = buf.as_ref().len();
+      assert_eq!(txs.len() % tx_id_len, 0);
+      for id in 0 .. (txs.len() / tx_id_len) {
+        let start = id * tx_id_len;
+        buf.as_mut().copy_from_slice(&txs[start .. (start + tx_id_len)]);
+        if signer.coin.get_transaction(&buf).await.is_ok() {
+          tx = Some(buf);
+          break;
+        }
+      }
+
+      // Fire the SignedTransaction event again
+      if let Some(tx) = tx {
+        if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
+          return;
+        }
+      } else {
+        warn!("completed signing {} yet couldn't get any of the completing TXs", hex::encode(id));
+      }
+      return;
+    }
+
+    let mut txn = signer.db.0.txn();
+    signer.db.save_eventuality(&mut txn, id, eventuality);
+    txn.commit();
+
+    signer.signable.insert(id, (start, tx));
+  }
+
   pub async fn handle(&self, msg: CoordinatorMessage) {
     self.signer.write().await.handle(msg).await;
   }

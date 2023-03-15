@@ -43,7 +43,7 @@ mod key_gen;
 use key_gen::{KeyGenEvent, KeyGen};
 
 mod signer;
-use signer::{SignerOrder, SignerEvent, Signer, SignerHandle};
+use signer::{SignerEvent, Signer, SignerHandle};
 
 mod scanner;
 use scanner::{ScannerEvent, Scanner, ScannerHandle};
@@ -193,14 +193,10 @@ async fn sign_plans<C: Coin, D: Db>(
 
     if let Some((tx, eventuality)) = tx {
       // TODO:
-      // 1) Make this a function
-      // 2) Have the signer save whatever it's actively signing for
-      // 3) Have the signer load active signing sessions on boot
-      // 4) Handle detection of already signed TXs (either on-chain or notified by a peer)
-      signers[key.as_ref()]
-        .orders
-        .send(SignerOrder::SignTransaction { id, start, tx, eventuality })
-        .unwrap()
+      // 1) Have the signer save whatever it's actively signing for
+      // 2) Have the signer load active signing sessions on boot
+      // 3) Handle detection of already signed TXs (either on-chain or notified by a peer)
+      signers[key.as_ref()].sign_transaction(id, start, tx, eventuality).await;
     }
   }
 }

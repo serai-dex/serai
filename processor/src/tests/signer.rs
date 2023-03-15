@@ -17,7 +17,7 @@ use messages::sign::*;
 use crate::{
   Payment, Plan,
   coins::{Output, Transaction, Coin},
-  signer::{SignerOrder, SignerEvent, Signer},
+  signer::{SignerEvent, Signer},
   tests::util::db::MemDb,
 };
 
@@ -51,10 +51,7 @@ pub async fn sign<C: Coin>(
   for i in 1 ..= signers.len() {
     let i = u16::try_from(i).unwrap();
     let (tx, eventuality) = txs.remove(&i).unwrap();
-    signers[&i]
-      .orders
-      .send(SignerOrder::SignTransaction { id: actual_id.id, start, tx, eventuality })
-      .unwrap();
+    signers[&i].sign_transaction(actual_id.id, start, tx, eventuality).await;
   }
 
   let mut preprocesses = HashMap::new();
