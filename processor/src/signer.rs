@@ -458,6 +458,10 @@ impl<C: Coin, D: Db> Signer<C, D> {
 }
 
 impl<C: Coin, D: Db> SignerHandle<C, D> {
+  pub async fn keys(&self) -> ThresholdKeys<C::Curve> {
+    self.signer.read().await.keys.clone()
+  }
+
   pub async fn sign_transaction(
     &self,
     id: [u8; 32],

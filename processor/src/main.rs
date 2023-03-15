@@ -131,7 +131,6 @@ impl<'a, C: Coin, D: Db> Future for SignerMessageFuture<'a, C, D> {
 
 async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
-  key_gen: &KeyGen<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
   signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
   context: SubstrateContext,
@@ -162,7 +161,7 @@ async fn sign_plans<C: Coin, D: Db>(
     let id = plan.id();
     info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
-    let keys = key_gen.keys(&plan.key);
+    let keys = signers[plan.key.to_bytes().as_ref()].keys().await;
     let tx;
     let branches;
     loop {
@@ -374,7 +373,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                   .get_mut(&key_vec)
                   .expect("key we don't have a scheduler for acknowledged a block")
                   .add_outputs(scanner.ack_block(key, block_id).await);
-                sign_plans(&coin, &key_gen, &mut schedulers, &signers, context, plans).await;
+                sign_plans(&coin, &mut schedulers, &signers, context, plans).await;
               }
 
               substrate::CoordinatorMessage::Burns { context, burns } => {
@@ -395,7 +394,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(db: D, coin: C, mut coordinator: C
                 }
 
                 let plans = scheduler.schedule(payments);
-                sign_plans(&coin, &key_gen, &mut schedulers, &signers, context, plans).await;
+                sign_plans(&coin, &mut schedulers, &signers, context, plans).await;
               }
             }
           }
