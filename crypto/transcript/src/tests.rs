@@ -85,7 +85,14 @@ where
 
 #[test]
 fn test_digest() {
+  test_transcript::<crate::DigestTranscript<sha2::Sha256>>();
   test_transcript::<crate::DigestTranscript<blake2::Blake2b512>>();
+}
+
+#[cfg(feature = "recommended")]
+#[test]
+fn test_recommended() {
+  test_transcript::<crate::RecommendedTranscript>();
 }
 
 #[cfg(feature = "merlin")]

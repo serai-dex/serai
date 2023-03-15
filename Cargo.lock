@@ -2436,6 +2436,7 @@ dependencies = [
  "blake2",
  "digest 0.10.6",
  "merlin 3.0.0",
+ "sha2 0.10.6",
 ]
 
 [[package]]
