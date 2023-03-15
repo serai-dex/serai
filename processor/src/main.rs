@@ -101,12 +101,12 @@ async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
 
 async fn prepare_send<C: Coin, D: Db>(
   coin: &C,
-  signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
+  signer: &SignerHandle<C, D>,
   block_number: usize,
   fee: C::Fee,
   plan: Plan<C>,
 ) -> (Option<(C::SignableTransaction, C::Eventuality)>, Vec<PostFeeBranch>) {
-  let keys = signers[plan.key.to_bytes().as_ref()].keys().await;
+  let keys = signer.keys().await;
   loop {
     match coin.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
       Ok(prepared) => {
@@ -144,8 +144,8 @@ async fn sign_plans<C: Coin, D: Db>(
     info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
     let key = plan.key.to_bytes();
-    db.save_signing(key.as_ref(), context.coin_latest_block_number, &plan);
-    let (tx, branches) = prepare_send(coin, signers, block_number, fee, plan).await;
+    db.save_signing(key.as_ref(), context.coin_latest_block_number, context.time, &plan);
+    let (tx, branches) = prepare_send(coin, &signers[key.as_ref()], block_number, fee, plan).await;
 
     // TODO: If we reboot mid-sign_plans, for a DB-backed scheduler, these may be partially
     // executed
@@ -162,12 +162,7 @@ async fn sign_plans<C: Coin, D: Db>(
     }
 
     if let Some((tx, eventuality)) = tx {
-      // TODO:
-      // 1) Have the signer save whatever it's actively signing for
-      //    This is painful due to the signer having a SignableTransaction. Instead, the above
-      //    prepare_send should be called from the easily storable plan data.
-      // 2) Have the signer load active signing sessions on boot
-      // 3) Handle detection of already signed TXs (either on-chain or notified by a peer)
+      // TODO: Handle detection of already signed TXs (either on-chain or notified by a peer)
       signers[key.as_ref()].sign_transaction(id, start, tx, eventuality).await;
     }
   }
@@ -206,16 +201,33 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
   let mut signers = HashMap::new();
 
+  let mut main_db = MainDb::new(raw_db.clone());
+
   for key in &active_keys {
     // TODO: Load existing schedulers
 
-    signers.insert(
-      key.to_bytes().as_ref().to_vec(),
-      Signer::new(raw_db.clone(), coin.clone(), key_gen.keys(key)),
-    );
-  }
+    let signer = Signer::new(raw_db.clone(), coin.clone(), key_gen.keys(key));
 
-  let mut main_db = MainDb::new(raw_db.clone());
+    // Load any TXs being actively signed
+    let key = key.to_bytes();
+    for (block_number, start, plan) in main_db.signing(key.as_ref()) {
+      let block_number = block_number.try_into().unwrap();
+      let start = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(start)).unwrap();
+
+      let fee = get_fee(&coin, block_number).await;
+
+      let id = plan.id();
+      info!("reloading plan {}: {:?}", hex::encode(id), plan);
+
+      let (Some((tx, eventuality)), _) =
+        prepare_send(&coin, &signer, block_number, fee, plan).await else {
+          panic!("previously created transaction is no longer being created")
+        };
+      signer.sign_transaction(id, start, tx, eventuality).await;
+    }
+
+    signers.insert(key.as_ref().to_vec(), signer);
+  }
 
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   let mut last_coordinator_msg = None;
