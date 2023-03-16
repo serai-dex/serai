@@ -1,6 +1,6 @@
 [package]
 name = "monero-serai"
-version = "0.1.2-alpha"
+version = "0.1.3-alpha"
 description = "A modern Monero transaction library"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero"
@@ -31,14 +31,14 @@ sha3 = "0.10"
 curve25519-dalek = { version = "^3.2", features = ["std"] }
 
 group = "0.12"
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
-multiexp = { path = "../../crypto/multiexp", version = "0.2", features = ["batch"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.2" }
+multiexp = { path = "../../crypto/multiexp", version = "0.3", features = ["batch"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.2", features = ["recommended"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.5", features = ["ed25519"], optional = true }
-dleq = { path = "../../crypto/dleq", version = "0.2", features = ["serialize"], optional = true }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", features = ["recommended"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.6", features = ["ed25519"], optional = true }
+dleq = { path = "../../crypto/dleq", version = "0.3", features = ["serialize"], optional = true }
 
-monero-generators = { path = "generators", version = "0.1" }
+monero-generators = { path = "generators", version = "0.2" }
 
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
@@ -51,8 +51,8 @@ digest_auth = "0.3"
 reqwest = { version = "0.11", features = ["json"] }
 
 [build-dependencies]
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.1" }
-monero-generators = { path = "generators", version = "0.1" }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.2" }
+monero-generators = { path = "generators", version = "0.2" }
 
 [dev-dependencies]
 hex-literal = "0.3"
@@ -60,7 +60,7 @@ hex-literal = "0.3"
 tokio = { version = "1", features = ["full"] }
 monero-rpc = "0.3"
 
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.5", features = ["ed25519", "tests"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.6", features = ["tests"] }
 
 [features]
 multisig = ["rand_chacha", "transcript", "frost", "dleq"]

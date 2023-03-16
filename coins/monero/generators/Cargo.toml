@@ -1,6 +1,6 @@
 [package]
 name = "monero-generators"
-version = "0.1.1"
+version = "0.2.0"
 description = "Monero's hash_to_point and generators"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/generators"
@@ -21,4 +21,4 @@ sha3 = "0.10"
 curve25519-dalek = { version = "3", features = ["std"] }
 
 group = "0.12"
-dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.1.4" }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.2" }
