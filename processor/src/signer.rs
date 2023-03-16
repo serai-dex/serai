@@ -29,7 +29,7 @@ const CHANNEL_MSG: &str = "Signer handler was dropped. Shutting down?";
 
 #[derive(Debug)]
 pub enum SignerEvent<C: Coin> {
-  SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction<C>>::Id },
+  SignedTransaction { id: SignId, tx: <C::Transaction as Transaction<C>>::Id },
   ProcessorMessage(ProcessorMessage),
 }
 
@@ -292,7 +292,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
         assert!(self.preprocessing.remove(&id.id).is_none());
         assert!(self.signing.remove(&id.id).is_none());
 
-        self.emit(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() });
+        self.emit(SignerEvent::SignedTransaction { id, tx: tx.id() });
       }
 
       CoordinatorMessage::Completed { id, tx: tx_vec } => {
@@ -327,7 +327,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
             self.preprocessing.remove(&id.id);
             self.signing.remove(&id.id);
 
-            self.emit(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() });
+            self.emit(SignerEvent::SignedTransaction { id, tx: tx.id() });
           } else {
             warn!("a validator claimed {} completed {id:?} when it did not", hex::encode(&tx.id()));
           }
@@ -490,6 +490,14 @@ impl<C: Coin, D: Db> SignerHandle<C, D> {
 
       // Fire the SignedTransaction event again
       if let Some(tx) = tx {
+        // The attempt doesn't matter here. Ue u32::MAX as it's not a feasible ID, and therefore
+        // clearly invalid
+        // TODO: Remove attempt from this
+        let id = SignId {
+          key: signer.keys.group_key().to_bytes().as_ref().to_vec(),
+          id,
+          attempt: u32::MAX,
+        };
         if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
           return;
         }

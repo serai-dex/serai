@@ -95,7 +95,7 @@ pub async fn sign<C: Coin>(
     if let Some(SignerEvent::SignedTransaction { id, tx }) =
       signers.get_mut(i).unwrap().events.recv().await
     {
-      assert_eq!(id, actual_id.id);
+      assert_eq!(id, actual_id);
       if tx_id.is_none() {
         tx_id = Some(tx.clone());
       }

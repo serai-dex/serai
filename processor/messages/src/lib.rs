@@ -101,6 +101,8 @@ pub mod sign {
     Preprocess { id: SignId, preprocess: Vec<u8> },
     // Signed share for the specified signing protocol.
     Share { id: SignId, share: Vec<u8> },
+    // Completed a signing protocol already.
+    Completed { id: SignId, tx: Vec<u8> },
   }
 
   impl CoordinatorMessage {

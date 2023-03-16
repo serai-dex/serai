@@ -24,7 +24,7 @@ use serai_client::{
   in_instructions::primitives::{Shorthand, RefundableInInstruction},
 };
 
-use messages::{SubstrateContext, substrate, CoordinatorMessage, ProcessorMessage};
+use messages::{SubstrateContext, sign, substrate, CoordinatorMessage, ProcessorMessage};
 
 mod plan;
 pub use plan::*;
@@ -417,14 +417,20 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
       (key, msg) = SignerMessageFuture(&mut signers) => {
         match msg {
           SignerEvent::SignedTransaction { id, tx } => {
+            main_db.finish_signing(&id.key, id.id);
+            coordinator
+              .send(ProcessorMessage::Sign(sign::ProcessorMessage::Completed {
+                id,
+                tx: tx.as_ref().to_vec()
+              }))
+              .await;
+
             // TODO
-            // 1) No longer reload the plan on boot
-            // 2) Communicate to other signers
-            // 3) We need to stop signing whenever a peer informs us or the chain has an
+            // 1) We need to stop signing whenever a peer informs us or the chain has an
             //    eventuality
-            // 4) If a peer informed us of an eventuality without an outbound payment, stop
-            //    scanning the chain (or at least ack it's solely for sanity purposes?)
-            // 5) When the chain has an eventuality, if it had an outbound payment, report it up to
+            // 2) If a peer informed us of an eventuality without an outbound payment, stop
+            //    scanning the chain for it (or at least ack it's solely for sanity purposes?)
+            // 3) When the chain has an eventuality, if it had an outbound payment, report it up to
             //    Substrate for logging purposes
           },
           SignerEvent::ProcessorMessage(msg) => {

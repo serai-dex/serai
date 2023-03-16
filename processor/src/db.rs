@@ -122,4 +122,28 @@ impl<C: Coin, D: Db> MainDb<C, D> {
 
     res
   }
+
+  pub fn finish_signing(&mut self, key: &[u8], id: [u8; 32]) {
+    let mut signing = self.0.get(Self::signing_key(key)).unwrap_or(vec![]);
+    assert_eq!(signing.len() % 32, 0);
+
+    let mut found = false;
+    for i in 0 .. (signing.len() / 32) {
+      let start = i * 32;
+      let end = i + 32;
+      if signing[start .. end] == id {
+        found = true;
+        signing = [&signing[.. start], &signing[end ..]].concat().to_vec();
+        break;
+      }
+    }
+
+    if !found {
+      log::warn!("told to finish signing {} yet wasn't actively signing it", hex::encode(id));
+    }
+
+    let mut txn = self.0.txn();
+    txn.put(Self::signing_key(key), signing);
+    txn.commit();
+  }
 }
