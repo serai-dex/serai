@@ -2,6 +2,10 @@
 
 Ciphersuites for elliptic curves premised on ff/group.
 
+This library, except for the not recommended Ed448 ciphersuite, was
+[audited by Cypher Stack in March 2023](../../audits/Cypher Stack crypto March 2023/Audit.pdf),
+culminating in commit 669d2dbffc1dafb82a09d9419ea182667115df06.
+
 ### Secp256k1/P-256
 
 Secp256k1 and P-256 are offered via [k256](https://crates.io/crates/k256) and

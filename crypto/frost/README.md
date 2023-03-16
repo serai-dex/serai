@@ -11,3 +11,7 @@ integrating with existing systems.
 This library offers ciphersuites compatible with the
 [IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
 11 is supported.
+
+This library was
+[audited by Cypher Stack in March 2023](../../audits/Cypher Stack crypto March 2023/Audit.pdf),
+culminating in commit 669d2dbffc1dafb82a09d9419ea182667115df06.

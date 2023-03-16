@@ -9,6 +9,8 @@ wallet.
 
 ### Layout
 
+- `audits`: Audits for various parts of Serai.
+
 - `docs`: Documentation on the Serai protocol.
 
 - `common`: Crates containing utilities common to a variety of areas under

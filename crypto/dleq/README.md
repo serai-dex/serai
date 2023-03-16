@@ -3,7 +3,11 @@
 Implementation of discrete log equality proofs for curves implementing
 `ff`/`group`. There is also a highly experimental cross-group DLEq proof, under
 the `experimental` feature, which has no formal proofs available yet is
-available here regardless. This library has NOT undergone auditing.
+available here regardless.
+
+This library, except for the `experimental` feature, was
+[audited by Cypher Stack in March 2023](../../audits/Cypher Stack crypto March 2023/Audit.pdf),
+culminating in commit 669d2dbffc1dafb82a09d9419ea182667115df06.
 
 ### Cross-Group DLEq
 

@@ -25,3 +25,7 @@ their type, and their length.
 `MerlinTranscript` was used to justify the API, and if any issues existed with
 `DigestTranscript`, enable a fallback. It was also meant as a way to be
 compatible with existing Rust projects using `merlin`.
+
+This library was
+[audited by Cypher Stack in March 2023](../../audits/Cypher Stack crypto March 2023/Audit.pdf),
+culminating in commit 669d2dbffc1dafb82a09d9419ea182667115df06.
