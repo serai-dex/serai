@@ -184,7 +184,7 @@ fn core(
     let L = (&s[i] * &ED25519_BASEPOINT_TABLE) + (c_p * P[i]) + (c_c * C[i]);
     let PH = hash_to_point(P[i]);
     // Shouldn't be an issue as all of the variables in this vartime statement are public
-    let R = (s[i] * PH) + images_precomp.vartime_multiscalar_mul(&[c_p, c_c]);
+    let R = (s[i] * PH) + images_precomp.vartime_multiscalar_mul([c_p, c_c]);
 
     to_hash.truncate(((2 * n) + 3) * 32);
     to_hash.extend(L.compress().to_bytes());

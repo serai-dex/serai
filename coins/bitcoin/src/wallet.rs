@@ -10,7 +10,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use frost::{
   curve::{Ciphersuite, Secp256k1},
-  ThresholdKeys, FrostError,
+  Participant, ThresholdKeys, FrostError,
   algorithm::Schnorr,
   sign::*,
 };
@@ -168,25 +168,21 @@ impl SignableTransaction {
 
     let mut sigs = vec![];
     for i in 0 .. tx.input.len() {
-      // TODO: Use the above transcript here
+      let mut transcript = transcript.clone();
+      transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
       sigs.push(
-        AlgorithmMachine::new(
-          Schnorr::<Secp256k1, BitcoinHram>::new(),
-          keys.clone().offset(self.1[i]),
-        )
-        .unwrap(),
+        AlgorithmMachine::new(Schnorr::new(transcript), keys.clone().offset(self.1[i])).unwrap(),
       );
     }
 
-    Ok(TransactionMachine { tx: self, transcript, sigs })
+    Ok(TransactionMachine { tx: self, sigs })
   }
 }
 
 /// A FROST signing machine to produce a Bitcoin transaction.
 pub struct TransactionMachine {
   tx: SignableTransaction,
-  transcript: RecommendedTranscript,
-  sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
+  sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<Secp256k1, RecommendedTranscript, BitcoinHram>>>,
 }
 
 impl PreprocessMachine for TransactionMachine {
@@ -209,14 +205,14 @@ impl PreprocessMachine for TransactionMachine {
       })
       .collect();
 
-    (TransactionSignMachine { tx: self.tx, transcript: self.transcript, sigs }, preprocesses)
+    (TransactionSignMachine { tx: self.tx, sigs }, preprocesses)
   }
 }
 
 pub struct TransactionSignMachine {
   tx: SignableTransaction,
-  transcript: RecommendedTranscript,
-  sigs: Vec<AlgorithmSignMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
+  sigs:
+    Vec<AlgorithmSignMachine<Secp256k1, Schnorr<Secp256k1, RecommendedTranscript, BitcoinHram>>>,
 }
 
 impl SignMachine<Transaction> for TransactionSignMachine {
@@ -250,7 +246,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
   fn sign(
     mut self,
-    commitments: HashMap<u16, Self::Preprocess>,
+    commitments: HashMap<Participant, Self::Preprocess>,
     msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
     if !msg.is_empty() {
@@ -293,7 +289,9 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
 pub struct TransactionSignatureMachine {
   tx: Transaction,
-  sigs: Vec<AlgorithmSignatureMachine<Secp256k1, Schnorr<Secp256k1, BitcoinHram>>>,
+  sigs: Vec<
+    AlgorithmSignatureMachine<Secp256k1, Schnorr<Secp256k1, RecommendedTranscript, BitcoinHram>>,
+  >,
 }
 
 impl SignatureMachine<Transaction> for TransactionSignatureMachine {
@@ -305,7 +303,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
 
   fn complete(
     mut self,
-    mut shares: HashMap<u16, Self::SignatureShare>,
+    mut shares: HashMap<Participant, Self::SignatureShare>,
   ) -> Result<Transaction, FrostError> {
     for (input, schnorr) in self.tx.input.iter_mut().zip(self.sigs.drain(..)) {
       let mut sig = schnorr.complete(

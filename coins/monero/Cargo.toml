@@ -12,9 +12,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+futures = "0.3"
+
 lazy_static = "1"
 thiserror = "1"
-crc = "3"
 
 rand_core = "0.6"
 rand_chacha = { version = "0.3", optional = true }
@@ -24,6 +25,7 @@ rand_distr = "0.4"
 zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 subtle = "^2.4"
 
+crc = "3"
 sha3 = "0.10"
 
 curve25519-dalek = { version = "^3.2", features = ["std"] }

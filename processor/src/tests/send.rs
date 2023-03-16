@@ -7,6 +7,8 @@ use async_trait::async_trait;
 
 use rand_core::OsRng;
 
+use frost::Participant;
+
 use crate::{
   NetworkError, Network,
   coin::Coin,
@@ -15,11 +17,11 @@ use crate::{
 
 #[derive(Clone)]
 struct LocalNetwork {
-  i: u16,
+  i: Participant,
   size: u16,
   round: usize,
   #[allow(clippy::type_complexity)]
-  rounds: Arc<RwLock<Vec<HashMap<u16, Vec<u8>>>>>,
+  rounds: Arc<RwLock<Vec<HashMap<Participant, Vec<u8>>>>>,
 }
 
 impl LocalNetwork {
@@ -27,7 +29,12 @@ impl LocalNetwork {
     let rounds = Arc::new(RwLock::new(vec![]));
     let mut res = vec![];
     for i in 1 ..= size {
-      res.push(LocalNetwork { i, size, round: 0, rounds: rounds.clone() });
+      res.push(LocalNetwork {
+        i: Participant::new(i).unwrap(),
+        size,
+        round: 0,
+        rounds: rounds.clone(),
+      });
     }
     res
   }
@@ -35,7 +42,7 @@ impl LocalNetwork {
 
 #[async_trait]
 impl Network for LocalNetwork {
-  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError> {
+  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<Participant, Vec<u8>>, NetworkError> {
     {
       let mut rounds = self.rounds.write().unwrap();
       if rounds.len() == self.round {
@@ -64,14 +71,14 @@ pub async fn test_send<C: Coin + Clone>(coin: C, fee: C::Fee) {
   let latest = coin.get_latest_block_number().await.unwrap();
 
   let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
-  let threshold = keys[&1].params().t();
+  let threshold = keys[&Participant::new(1).unwrap()].params().t();
   let mut networks = LocalNetwork::new(threshold);
 
   let mut wallets = vec![];
   for i in 1 ..= threshold {
     let mut wallet = Wallet::new(MemCoinDb::new(), coin.clone());
     wallet.acknowledge_block(0, latest);
-    wallet.add_keys(&WalletKeys::new(keys.remove(&i).unwrap(), 0));
+    wallet.add_keys(&WalletKeys::new(keys.remove(&Participant::new(i).unwrap()).unwrap(), 0));
     wallets.push(wallet);
   }
 
