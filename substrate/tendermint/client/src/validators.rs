@@ -11,7 +11,7 @@ use sp_application_crypto::{
 use sp_keystore::CryptoStore;
 
 use sp_staking::SessionIndex;
-use sp_api::{BlockId, ProvideRuntimeApi};
+use sp_api::ProvideRuntimeApi;
 
 use sc_client_api::HeaderBackend;
 
@@ -34,8 +34,8 @@ impl TendermintValidatorsStruct {
   fn from_module<T: TendermintClient>(client: &Arc<T::Client>) -> Self {
     let last = client.info().finalized_hash;
     let api = client.runtime_api();
-    let session = api.current_session(&BlockId::Hash(last)).unwrap();
-    let validators = api.validators(&BlockId::Hash(last)).unwrap();
+    let session = api.current_session(last).unwrap();
+    let validators = api.validators(last).unwrap();
 
     Self {
       session,
@@ -59,8 +59,9 @@ impl<T: TendermintClient> Refresh<T> {
   // If the session has changed, re-create the struct with the data on it
   fn refresh(&self) {
     let session = self._refresh.read().unwrap().session;
-    let current_block = BlockId::Hash(self.client.info().finalized_hash);
-    if session != self.client.runtime_api().current_session(&current_block).unwrap() {
+    if session !=
+      self.client.runtime_api().current_session(self.client.info().finalized_hash).unwrap()
+    {
       *self._refresh.write().unwrap() = TendermintValidatorsStruct::from_module::<T>(&self.client);
     }
   }

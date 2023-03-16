@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::{ops::Deref, fmt};
 
 use thiserror::Error;
 
@@ -7,7 +7,13 @@ use rand::seq::SliceRandom;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
+use group::Group;
+use curve25519_dalek::{
+  constants::{ED25519_BASEPOINT_POINT, ED25519_BASEPOINT_TABLE},
+  scalar::Scalar,
+  edwards::EdwardsPoint,
+};
+use dalek_ff_group as dfg;
 
 #[cfg(feature = "multisig")]
 use frost::FrostError;
@@ -23,8 +29,10 @@ use crate::{
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
   rpc::{Rpc, RpcError},
   wallet::{
-    address::MoneroAddress, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort,
-    uniqueness, shared_key, commitment_mask, amount_encryption, extra::MAX_TX_EXTRA_NONCE_SIZE,
+    address::{Network, AddressSpec, MoneroAddress},
+    ViewPair, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness,
+    shared_key, commitment_mask, amount_encryption,
+    extra::{ARBITRARY_DATA_MARKER, MAX_ARBITRARY_DATA_SIZE},
   },
 };
 
@@ -47,25 +55,22 @@ struct SendOutput {
 }
 
 impl SendOutput {
-  fn new<R: RngCore + CryptoRng>(
-    rng: &mut R,
+  #[allow(non_snake_case)]
+  fn internal(
     unique: [u8; 32],
     output: (usize, (MoneroAddress, u64)),
+    ecdh: EdwardsPoint,
+    R: EdwardsPoint,
   ) -> (SendOutput, Option<[u8; 8]>) {
     let o = output.0;
     let output = output.1;
 
-    let r = random_scalar(rng);
     let (view_tag, shared_key, payment_id_xor) =
-      shared_key(Some(unique).filter(|_| output.0.meta.kind.guaranteed()), &r, &output.0.view, o);
+      shared_key(Some(unique).filter(|_| output.0.is_guaranteed()), ecdh, o);
 
     (
       SendOutput {
-        R: if !output.0.meta.kind.subaddress() {
-          &r * &ED25519_BASEPOINT_TABLE
-        } else {
-          r * output.0.spend
-        },
+        R,
         view_tag,
         dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
         commitment: Commitment::new(commitment_mask(shared_key), output.1),
@@ -76,6 +81,32 @@ impl SendOutput {
         .payment_id()
         .map(|id| (u64::from_le_bytes(id) ^ u64::from_le_bytes(payment_id_xor)).to_le_bytes()),
     )
+  }
+
+  fn new(
+    r: &Zeroizing<Scalar>,
+    unique: [u8; 32],
+    output: (usize, (MoneroAddress, u64)),
+  ) -> (SendOutput, Option<[u8; 8]>) {
+    let address = output.1 .0;
+    SendOutput::internal(
+      unique,
+      output,
+      r.deref() * address.view,
+      if !address.is_subaddress() {
+        r.deref() * &ED25519_BASEPOINT_TABLE
+      } else {
+        r.deref() * address.spend
+      },
+    )
+  }
+
+  fn change(
+    ecdh: EdwardsPoint,
+    unique: [u8; 32],
+    output: (usize, (MoneroAddress, u64)),
+  ) -> (SendOutput, Option<[u8; 8]>) {
+    SendOutput::internal(unique, output, ecdh, ED25519_BASEPOINT_POINT)
   }
 }
 
@@ -93,6 +124,8 @@ pub enum TransactionError {
   TooManyOutputs,
   #[error("too much data")]
   TooMuchData,
+  #[error("too many inputs/too much arbitrary data")]
+  TooLargeTransaction,
   #[error("not enough funds (in {0}, out {1})")]
   NotEnoughFunds(u64, u64),
   #[error("wrong spend private key")]
@@ -176,26 +209,71 @@ impl Fee {
 pub struct SignableTransaction {
   protocol: Protocol,
   inputs: Vec<SpendableOutput>,
-  payments: Vec<(MoneroAddress, u64)>,
+  payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
   fee: u64,
 }
 
+/// Specification for a change output.
+#[derive(Clone, PartialEq, Eq, Zeroize)]
+pub struct Change {
+  address: MoneroAddress,
+  view: Option<Zeroizing<Scalar>>,
+}
+
+impl fmt::Debug for Change {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    f.debug_struct("Change").field("address", &self.address).finish_non_exhaustive()
+  }
+}
+
+impl Change {
+  /// Create a change output specification from a ViewPair, as needed to maintain privacy.
+  pub fn new(view: &ViewPair, guaranteed: bool) -> Change {
+    Change {
+      address: view.address(
+        Network::Mainnet,
+        if !guaranteed {
+          AddressSpec::Standard
+        } else {
+          AddressSpec::Featured { subaddress: None, payment_id: None, guaranteed: true }
+        },
+      ),
+      view: Some(view.view.clone()),
+    }
+  }
+
+  /// Create a fingerprintable change output specification which will harm privacy. Only use this
+  /// if you know what you're doing.
+  pub fn fingerprintable(address: MoneroAddress) -> Change {
+    Change { address, view: None }
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub(crate) enum InternalPayment {
+  Payment((MoneroAddress, u64)),
+  Change(Change, u64),
+}
+
 impl SignableTransaction {
-  /// Create a signable transaction. If the change address is specified, leftover funds will be
-  /// sent to it. If the change address isn't specified, up to 16 outputs may be specified, using
-  /// any leftover funds as a bonus to the fee. The optional data field will be embedded in TX
-  /// extra.
+  /// Create a signable transaction.
+  ///
+  /// Up to 16 outputs may be present, including the change output.
+  ///
+  /// If the change address is specified, leftover funds will be sent to it.
+  ///
+  /// Each chunk of data must not exceed MAX_ARBITRARY_DATA_SIZE.
   pub fn new(
     protocol: Protocol,
     inputs: Vec<SpendableOutput>,
     mut payments: Vec<(MoneroAddress, u64)>,
-    change_address: Option<MoneroAddress>,
+    change_address: Option<Change>,
     data: Vec<Vec<u8>>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure there's only one payment ID
-    {
+    let mut has_payment_id = {
       let mut payment_ids = 0;
       let mut count = |addr: MoneroAddress| {
         if addr.payment_id().is_some() {
@@ -205,13 +283,14 @@ impl SignableTransaction {
       for payment in &payments {
         count(payment.0);
       }
-      if let Some(change) = change_address {
-        count(change);
+      if let Some(change) = change_address.as_ref() {
+        count(change.address);
       }
       if payment_ids > 1 {
         Err(TransactionError::MultiplePaymentIds)?;
       }
-    }
+      payment_ids == 1
+    };
 
     if inputs.is_empty() {
       Err(TransactionError::NoInputs)?;
@@ -221,53 +300,55 @@ impl SignableTransaction {
     }
 
     for part in &data {
-      if part.len() > MAX_TX_EXTRA_NONCE_SIZE {
+      if part.len() > MAX_ARBITRARY_DATA_SIZE {
         Err(TransactionError::TooMuchData)?;
       }
     }
 
-    // TODO TX MAX SIZE
-
-    // If we don't have two outputs, as required by Monero, add a second
-    let mut change = payments.len() == 1;
-    if change && change_address.is_none() {
+    // If we don't have two outputs, as required by Monero, error
+    if (payments.len() == 1) && change_address.is_none() {
       Err(TransactionError::NoChange)?;
     }
-    let outputs = payments.len() + usize::from(change);
+    let outputs = payments.len() + usize::from(change_address.is_some());
+    // Add a dummy payment ID if there's only 2 payments
+    has_payment_id |= outputs == 2;
 
     // Calculate the extra length
-    let extra = Extra::fee_weight(outputs, data.as_ref());
+    let extra = Extra::fee_weight(outputs, has_payment_id, data.as_ref());
+
+    // This is a extremely heavy fee weight estimation which can only be trusted for two things
+    // 1) Ensuring we have enough for whatever fee we end up using
+    // 2) Ensuring we aren't over the max size
+    let estimated_tx_size = Transaction::fee_weight(protocol, inputs.len(), outputs, extra);
+
+    // The actual limit is half the block size, and for the minimum block size of 300k, that'd be
+    // 150k
+    // wallet2 will only create transactions up to 100k bytes however
+    const MAX_TX_SIZE: usize = 100_000;
+
+    // This uses the weight (estimated_tx_size) despite the BP clawback
+    // The clawback *increases* the weight, so this will over-estimate, yet it's still safe
+    if estimated_tx_size >= MAX_TX_SIZE {
+      Err(TransactionError::TooLargeTransaction)?;
+    }
 
     // Calculate the fee.
-    let mut fee =
-      fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs, extra));
+    let fee = fee_rate.calculate(estimated_tx_size);
 
     // Make sure we have enough funds
     let in_amount = inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
-    let mut out_amount = payments.iter().map(|payment| payment.1).sum::<u64>() + fee;
+    let out_amount = payments.iter().map(|payment| payment.1).sum::<u64>() + fee;
     if in_amount < out_amount {
       Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
     }
 
-    // If we have yet to add a change output, do so if it's economically viable
-    if (!change) && change_address.is_some() && (in_amount != out_amount) {
-      // Check even with the new fee, there's remaining funds
-      let change_fee =
-        fee_rate.calculate(Transaction::fee_weight(protocol, inputs.len(), outputs + 1, extra)) -
-          fee;
-      if (out_amount + change_fee) < in_amount {
-        change = true;
-        out_amount += change_fee;
-        fee += change_fee;
-      }
-    }
-
-    if change {
-      payments.push((change_address.unwrap(), in_amount - out_amount));
-    }
-
-    if payments.len() > MAX_OUTPUTS {
+    if outputs > MAX_OUTPUTS {
       Err(TransactionError::TooManyOutputs)?;
+    }
+
+    let mut payments = payments.drain(..).map(InternalPayment::Payment).collect::<Vec<_>>();
+    if let Some(change) = change_address {
+      payments.push(InternalPayment::Change(change, in_amount - out_amount));
     }
 
     Ok(SignableTransaction { protocol, inputs, payments, data, fee })
@@ -281,24 +362,109 @@ impl SignableTransaction {
     // Shuffle the payments
     self.payments.shuffle(rng);
 
+    // Used for all non-subaddress outputs, or if there's only one subaddress output and a change
+    let tx_key = Zeroizing::new(random_scalar(rng));
+    let mut tx_public_key = tx_key.deref() * &ED25519_BASEPOINT_TABLE;
+
+    // If any of these outputs are to a subaddress, we need keys distinct to them
+    // The only time this *does not* force having additional keys is when the only other output
+    // is a change output we have the view key for, enabling rewriting rA to aR
+    let mut has_change_view = false;
+    let subaddresses = self
+      .payments
+      .iter()
+      .filter(|payment| match *payment {
+        InternalPayment::Payment(payment) => payment.0.is_subaddress(),
+        InternalPayment::Change(change, _) => {
+          if change.view.is_some() {
+            has_change_view = true;
+            // It should not be possible to construct a change specification to a subaddress with a
+            // view key
+            debug_assert!(!change.address.is_subaddress());
+          }
+          change.address.is_subaddress()
+        }
+      })
+      .count() !=
+      0;
+
+    // We need additional keys if we have any subaddresses
+    let mut additional = subaddresses;
+    // Unless the above change view key path is taken
+    if (self.payments.len() == 2) && has_change_view {
+      additional = false;
+    }
+    let modified_change_ecdh = subaddresses && (!additional);
+
+    // If we're using the aR rewrite, update tx_public_key from rG to rB
+    if modified_change_ecdh {
+      for payment in &self.payments {
+        match payment {
+          InternalPayment::Payment(payment) => {
+            // This should be the only payment and it should be a subaddress
+            debug_assert!(payment.0.is_subaddress());
+            tx_public_key = tx_key.deref() * payment.0.spend;
+          }
+          InternalPayment::Change(_, _) => {}
+        }
+      }
+      debug_assert!(tx_public_key != (tx_key.deref() * &ED25519_BASEPOINT_TABLE));
+    }
+
     // Actually create the outputs
     let mut outputs = Vec::with_capacity(self.payments.len());
     let mut id = None;
-    for payment in self.payments.drain(..).enumerate() {
-      let (output, payment_id) = SendOutput::new(rng, uniqueness, payment);
+    for (o, mut payment) in self.payments.drain(..).enumerate() {
+      // Downcast the change output to a payment output if it doesn't require special handling
+      // regarding it's view key
+      payment = if !modified_change_ecdh {
+        if let InternalPayment::Change(change, amount) = &payment {
+          InternalPayment::Payment((change.address, *amount))
+        } else {
+          payment
+        }
+      } else {
+        payment
+      };
+
+      let (output, payment_id) = match payment {
+        InternalPayment::Payment(payment) => {
+          // If this is a subaddress, generate a dedicated r. Else, reuse the TX key
+          let dedicated = Zeroizing::new(random_scalar(&mut *rng));
+          let use_dedicated = additional && payment.0.is_subaddress();
+          let r = if use_dedicated { &dedicated } else { &tx_key };
+
+          let (mut output, payment_id) = SendOutput::new(r, uniqueness, (o, payment));
+          if modified_change_ecdh {
+            debug_assert_eq!(tx_public_key, output.R);
+          }
+          // If this used tx_key, randomize its R
+          if !use_dedicated {
+            output.R = dfg::EdwardsPoint::random(&mut *rng).0;
+          }
+          (output, payment_id)
+        }
+        InternalPayment::Change(change, amount) => {
+          // Instead of rA, use Ra, where R is r * subaddress_spend_key
+          // change.view must be Some as if it's None, this payment would've been downcast
+          let ecdh = tx_public_key * change.view.unwrap().deref();
+          SendOutput::change(ecdh, uniqueness, (o, (change.address, amount)))
+        }
+      };
+
       outputs.push(output);
       id = id.or(payment_id);
     }
 
     // Include a random payment ID if we don't actually have one
     // It prevents transactions from leaking if they're sending to integrated addresses or not
-    let id = if let Some(id) = id {
-      id
-    } else {
-      let mut id = [0; 8];
-      rng.fill_bytes(&mut id);
-      id
-    };
+    // Only do this if we only have two outputs though, as Monero won't add a dummy if there's
+    // more than two outputs
+    if outputs.len() <= 2 {
+      let mut rand = [0; 8];
+      rng.fill_bytes(&mut rand);
+      id = id.or(Some(rand));
+    }
 
     let commitments = outputs.iter().map(|output| output.commitment.clone()).collect::<Vec<_>>();
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
@@ -308,19 +474,27 @@ impl SignableTransaction {
 
     // Create the TX extra
     let extra = {
-      let mut extra = Extra::new(outputs.iter().map(|output| output.R).collect());
+      let mut extra = Extra::new(
+        tx_public_key,
+        if additional { outputs.iter().map(|output| output.R).collect() } else { vec![] },
+      );
 
-      let mut id_vec = Vec::with_capacity(1 + 8);
-      PaymentId::Encrypted(id).serialize(&mut id_vec).unwrap();
-      extra.push(ExtraField::Nonce(id_vec));
+      if let Some(id) = id {
+        let mut id_vec = Vec::with_capacity(1 + 8);
+        PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
+        extra.push(ExtraField::Nonce(id_vec));
+      }
 
       // Include data if present
       for part in self.data.drain(..) {
-        extra.push(ExtraField::Nonce(part));
+        let mut arb = vec![ARBITRARY_DATA_MARKER];
+        arb.extend(part);
+        extra.push(ExtraField::Nonce(arb));
       }
 
-      let mut serialized = Vec::with_capacity(Extra::fee_weight(outputs.len(), self.data.as_ref()));
-      extra.serialize(&mut serialized).unwrap();
+      let mut serialized =
+        Vec::with_capacity(Extra::fee_weight(outputs.len(), id.is_some(), self.data.as_ref()));
+      extra.write(&mut serialized).unwrap();
       serialized
     };
 

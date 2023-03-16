@@ -14,29 +14,41 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+# Macros
 async-trait = "0.1"
 zeroize = "^1.5"
 thiserror = "1"
 rand_core = "0.6"
 
-group = "0.12"
-
-curve25519-dalek = { version = "3", features = ["std"] }
-
+# Cryptography
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
-dalek-ff-group = { path = "../crypto/dalek-ff-group", features = ["black_box"] }
-frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519"] }
 
+group = "0.12"
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["secp256k1", "ed25519"] }
+
+# Monero
+curve25519-dalek = { version = "3", features = ["std"] }
+dalek-ff-group = { path = "../crypto/dalek-ff-group", features = ["black_box"] }
 monero-serai = { path = "../coins/monero", features = ["multisig"] }
+
+# Bitcoin
+bitcoin-serai = { path = "../coins/bitcoin" }
+
+k256 = { version = "0.12", features = ["arithmetic"] }
+bitcoin = "0.29"
+hex = "0.4"
+secp256k1 = { version = "0.24", features = ["global-context", "rand-std"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [dev-dependencies]
 rand_core = "0.6"
 
 hex = "0.4"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 
-frost = { package = "modular-frost", path = "../crypto/frost", features = ["ed25519", "tests"] }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["tests"] }

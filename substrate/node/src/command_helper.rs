@@ -1,16 +1,19 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use sp_core::{Encode, Pair};
 use sp_keyring::Sr25519Keyring;
-use sp_inherents::{InherentData, InherentDataProvider};
+use sp_inherents::InherentData;
 
 use sp_runtime::OpaqueExtrinsic;
 
 use sc_cli::Result;
 use sc_client_api::BlockBackend;
 
-use serai_runtime as runtime;
-use runtime::SystemCall;
+use serai_runtime::{
+  VERSION, BlockHashCount,
+  system::{self, Call as SystemCall},
+  transaction_payment, RuntimeCall, UncheckedExtrinsic, SignedPayload, Runtime,
+};
 
 use crate::service::FullClient;
 
@@ -45,35 +48,33 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for RemarkBuilder {
 pub fn create_benchmark_extrinsic(
   client: &FullClient,
   sender: sp_core::sr25519::Pair,
-  call: runtime::RuntimeCall,
+  call: RuntimeCall,
   nonce: u32,
-) -> runtime::UncheckedExtrinsic {
+) -> UncheckedExtrinsic {
   let extra = (
-    frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
-    frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
-    frame_system::CheckTxVersion::<runtime::Runtime>::new(),
-    frame_system::CheckGenesis::<runtime::Runtime>::new(),
-    frame_system::CheckEra::<runtime::Runtime>::from(sp_runtime::generic::Era::mortal(
-      u64::from(
-        runtime::BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2),
-      ),
+    system::CheckNonZeroSender::<Runtime>::new(),
+    system::CheckSpecVersion::<Runtime>::new(),
+    system::CheckTxVersion::<Runtime>::new(),
+    system::CheckGenesis::<Runtime>::new(),
+    system::CheckEra::<Runtime>::from(sp_runtime::generic::Era::mortal(
+      u64::from(BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2)),
       client.chain_info().best_number.into(),
     )),
-    frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
-    frame_system::CheckWeight::<runtime::Runtime>::new(),
-    pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
+    system::CheckNonce::<Runtime>::from(nonce),
+    system::CheckWeight::<Runtime>::new(),
+    transaction_payment::ChargeTransactionPayment::<Runtime>::from(0),
   );
 
-  runtime::UncheckedExtrinsic::new_signed(
+  UncheckedExtrinsic::new_signed(
     call.clone(),
-    sender.public(),
-    runtime::SignedPayload::from_raw(
+    sender.public().into(),
+    SignedPayload::from_raw(
       call,
       extra.clone(),
       (
         (),
-        runtime::VERSION.spec_version,
-        runtime::VERSION.transaction_version,
+        VERSION.spec_version,
+        VERSION.transaction_version,
         client.block_hash(0).ok().flatten().unwrap(),
         client.chain_info().best_hash,
         (),
@@ -87,9 +88,5 @@ pub fn create_benchmark_extrinsic(
 }
 
 pub fn inherent_benchmark_data() -> Result<InherentData> {
-  let mut inherent_data = InherentData::new();
-  sp_timestamp::InherentDataProvider::new(Duration::from_millis(0).into())
-    .provide_inherent_data(&mut inherent_data)
-    .map_err(|e| format!("creating inherent data: {e:?}"))?;
-  Ok(inherent_data)
+  Ok(InherentData::new())
 }

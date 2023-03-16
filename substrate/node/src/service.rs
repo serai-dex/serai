@@ -11,6 +11,8 @@ use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
 use sp_api::ProvideRuntimeApi;
 
+use in_instructions_client::InherentDataProvider as InstructionsProvider;
+
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
 use sc_network::NetworkService;
@@ -24,7 +26,7 @@ pub(crate) use sc_tendermint::{
   TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
   TendermintSelectChain, import_queue,
 };
-use serai_runtime::{self, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
+use serai_runtime::{self as runtime, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
 
 type FullBackend = sc_service::TFullBackend<Block>;
 pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
@@ -46,7 +48,7 @@ impl NativeExecutionDispatch for ExecutorDispatch {
   type ExtendHostFunctions = ();
 
   fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-    serai_runtime::api::dispatch(method, data)
+    runtime::api::dispatch(method, data)
   }
 
   fn native_version() -> NativeVersion {
@@ -57,13 +59,13 @@ impl NativeExecutionDispatch for ExecutorDispatch {
 pub struct Cidp;
 #[async_trait::async_trait]
 impl CreateInherentDataProviders<Block, ()> for Cidp {
-  type InherentDataProviders = (sp_timestamp::InherentDataProvider,);
+  type InherentDataProviders = (InstructionsProvider,);
   async fn create_inherent_data_providers(
     &self,
     _: <Block as BlockTrait>::Hash,
     _: (),
   ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
-    Ok((sp_timestamp::InherentDataProvider::from_system_time(),))
+    Ok((InstructionsProvider::new(),))
   }
 }
 
@@ -74,9 +76,9 @@ impl TendermintClientMinimal for TendermintValidatorFirm {
   // guaranteed not to grow the block?
   const PROPOSED_BLOCK_SIZE_LIMIT: usize = { BLOCK_SIZE as usize };
   // 3 seconds
-  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 1000) as u32 };
+  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2) as u32 };
   // 1 second
-  const LATENCY_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 3 / 1000) as u32 };
+  const LATENCY_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 3) as u32 };
 
   type Block = Block;
   type Backend = sc_client_db::Backend<Block>;
@@ -99,7 +101,7 @@ impl TendermintValidator for TendermintValidatorFirm {
 pub fn new_partial(
   config: &Configuration,
 ) -> Result<(TendermintImport<TendermintValidatorFirm>, PartialComponents), ServiceError> {
-  debug_assert_eq!(TARGET_BLOCK_TIME, 6000);
+  debug_assert_eq!(TARGET_BLOCK_TIME, 6);
 
   if config.keystore_remote.is_some() {
     return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
@@ -200,7 +202,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       spawn_handle: task_manager.spawn_handle(),
       import_queue,
       block_announce_validator_builder: None,
-      warp_sync: None,
+      warp_sync_params: None,
     })?;
 
   if config.offchain_worker.enabled {

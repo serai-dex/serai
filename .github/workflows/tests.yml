@@ -26,7 +26,7 @@ jobs:
           rust-components: clippy
 
       - name: Run Clippy
-        run: cargo clippy --all-features --tests -- -D warnings -A dead_code
+        run: cargo clippy --all-features --all-targets -- -D warnings -A dead_code
 
   deny:
     runs-on: ubuntu-latest
@@ -40,10 +40,7 @@ jobs:
           key: rust-advisory-db
 
       - name: Install cargo
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo deny
         run: cargo install --locked cargo-deny
@@ -61,8 +58,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build node
+        run: |
+          cd substrate/node
+          cargo build
+
       - name: Run Tests
-        run: cargo test --all-features
+        run: GITHUB_CI=true cargo test --all-features
 
   fmt:
     runs-on: ubuntu-latest
@@ -73,12 +75,10 @@ jobs:
         id: nightly
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
-      # Doesn't grab the cache as it's not needed
       - name: Install rustfmt
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.nightly.outputs.version }}
-          profile: minimal
           components: rustfmt
 
       - name: Run rustfmt

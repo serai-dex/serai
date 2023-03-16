@@ -1,4 +1,4 @@
-use std::marker::Send;
+use std::io;
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -10,23 +10,63 @@ use frost::{
   sign::PreprocessMachine,
 };
 
+pub mod bitcoin;
+pub use self::bitcoin::Bitcoin;
+
 pub mod monero;
 pub use self::monero::Monero;
 
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Copy, Error, Debug)]
 pub enum CoinError {
   #[error("failed to connect to coin daemon")]
   ConnectionError,
+  #[error("not enough funds")]
+  NotEnoughFunds,
+}
+
+pub trait Block: Sized + Clone {
+  type Id: Clone + Copy + AsRef<[u8]>;
+  fn id(&self) -> Self::Id;
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OutputType {
+  External,
+  Branch,
+  Change,
+}
+
+impl OutputType {
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&[match self {
+      OutputType::External => 0,
+      OutputType::Branch => 1,
+      OutputType::Change => 2,
+    }])
+  }
+
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut byte = [0; 1];
+    reader.read_exact(&mut byte)?;
+    Ok(match byte[0] {
+      0 => OutputType::External,
+      1 => OutputType::Branch,
+      2 => OutputType::Change,
+      _ => Err(io::Error::new(io::ErrorKind::Other, "invalid OutputType"))?,
+    })
+  }
 }
 
 pub trait Output: Sized + Clone {
-  type Id: AsRef<[u8]>;
+  type Id: Clone + Copy + AsRef<[u8]>;
+
+  fn kind(&self) -> OutputType;
 
   fn id(&self) -> Self::Id;
   fn amount(&self) -> u64;
 
   fn serialize(&self) -> Vec<u8>;
-  fn deserialize<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
+  fn read<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self>;
 }
 
 #[async_trait]
@@ -35,7 +75,7 @@ pub trait Coin {
 
   type Fee: Copy;
   type Transaction;
-  type Block;
+  type Block: Block;
 
   type Output: Output;
   type SignableTransaction;
@@ -48,8 +88,13 @@ pub trait Coin {
   const MAX_INPUTS: usize;
   const MAX_OUTPUTS: usize; // TODO: Decide if this includes change or not
 
+  fn tweak_keys(&self, key: &mut ThresholdKeys<Self::Curve>);
+
+  /// Address for the given group key to receive external coins to.
   // Doesn't have to take self, enables some level of caching which is pleasant
   fn address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  /// Address for the given group key to use for scheduled branches.
+  fn branch_address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError>;
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError>;
@@ -59,9 +104,7 @@ pub trait Coin {
     key: <Self::Curve as Ciphersuite>::G,
   ) -> Result<Vec<Self::Output>, CoinError>;
 
-  // TODO: Remove
-  async fn is_confirmed(&self, tx: &[u8]) -> Result<bool, CoinError>;
-
+  #[allow(clippy::too_many_arguments)]
   async fn prepare_send(
     &self,
     keys: ThresholdKeys<Self::Curve>,
@@ -69,6 +112,7 @@ pub trait Coin {
     block_number: usize,
     inputs: Vec<Self::Output>,
     payments: &[(Self::Address, u64)],
+    change: Option<<Self::Curve as Ciphersuite>::G>,
     fee: Self::Fee,
   ) -> Result<Self::SignableTransaction, CoinError>;
 
@@ -77,10 +121,7 @@ pub trait Coin {
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError>;
 
-  async fn publish_transaction(
-    &self,
-    tx: &Self::Transaction,
-  ) -> Result<(Vec<u8>, Vec<<Self::Output as Output>::Id>), CoinError>;
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<Vec<u8>, CoinError>;
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee;

@@ -4,6 +4,8 @@ use std::{
   collections::HashMap,
 };
 
+use zeroize::Zeroizing;
+
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -29,7 +31,9 @@ use crate::{
   },
   transaction::{Input, Transaction},
   rpc::Rpc,
-  wallet::{TransactionError, SignableTransaction, Decoys, key_image_sort, uniqueness},
+  wallet::{
+    TransactionError, InternalPayment, SignableTransaction, Decoys, key_image_sort, uniqueness,
+  },
 };
 
 /// FROST signing machine to produce a signed transaction.
@@ -108,8 +112,19 @@ impl SignableTransaction {
       transcript.append_message(b"input_shared_key", input.key_offset().to_bytes());
     }
     for payment in &self.payments {
-      transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
-      transcript.append_message(b"payment_amount", payment.1.to_le_bytes());
+      match payment {
+        InternalPayment::Payment(payment) => {
+          transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
+          transcript.append_message(b"payment_amount", payment.1.to_le_bytes());
+        }
+        InternalPayment::Change(change, amount) => {
+          transcript.append_message(b"change_address", change.address.to_string().as_bytes());
+          if let Some(view) = change.view.as_ref() {
+            transcript.append_message(b"change_view_key", Zeroizing::new(view.to_bytes()));
+          }
+          transcript.append_message(b"change_amount", amount.to_le_bytes());
+        }
+      }
     }
 
     let mut key_images = vec![];
@@ -123,7 +138,7 @@ impl SignableTransaction {
       let clsag = ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone());
       key_images.push((
         clsag.H,
-        keys.current_offset().unwrap_or(dfg::Scalar::zero()).0 + self.inputs[i].key_offset(),
+        keys.current_offset().unwrap_or_else(dfg::Scalar::zero).0 + self.inputs[i].key_offset(),
       ));
       clsags.push(AlgorithmMachine::new(clsag, offset).map_err(TransactionError::FrostError)?);
     }
@@ -248,7 +263,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // Find out who's included
     // This may not be a valid set of signers yet the algorithm machine will error if it's not
     commitments.remove(&self.i); // Remove, if it was included for some reason
-    let mut included = commitments.keys().into_iter().cloned().collect::<Vec<_>>();
+    let mut included = commitments.keys().cloned().collect::<Vec<_>>();
     included.push(self.i);
     included.sort_unstable();
 

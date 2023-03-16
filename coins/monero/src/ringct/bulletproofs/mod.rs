@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use std::io::{self, Read, Write};
+
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
@@ -35,6 +37,7 @@ impl Bulletproofs {
   pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
     let fields = if plus { 6 } else { 9 };
 
+    // TODO: Shouldn't this use u32/u64?
     #[allow(non_snake_case)]
     let mut LR_len = usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
     let padded_outputs = 1 << LR_len;
@@ -93,11 +96,11 @@ impl Bulletproofs {
     }
   }
 
-  fn serialize_core<W: std::io::Write, F: Fn(&[EdwardsPoint], &mut W) -> std::io::Result<()>>(
+  fn write_core<W: Write, F: Fn(&[EdwardsPoint], &mut W) -> io::Result<()>>(
     &self,
     w: &mut W,
     specific_write_vec: F,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     match self {
       Bulletproofs::Original(bp) => {
         write_point(&bp.A, w)?;
@@ -126,16 +129,22 @@ impl Bulletproofs {
     }
   }
 
-  pub(crate) fn signature_serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
-    self.serialize_core(w, |points, w| write_raw_vec(write_point, points, w))
+  pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    self.write_core(w, |points, w| write_raw_vec(write_point, points, w))
   }
 
-  pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
-    self.serialize_core(w, |points, w| write_vec(write_point, points, w))
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    self.write_core(w, |points, w| write_vec(write_point, points, w))
   }
 
-  /// Deserialize non-plus Bulletproofs.
-  pub fn deserialize<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = vec![];
+    self.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  /// Read Bulletproofs.
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Bulletproofs> {
     Ok(Bulletproofs::Original(OriginalStruct {
       A: read_point(r)?,
       S: read_point(r)?,
@@ -151,8 +160,8 @@ impl Bulletproofs {
     }))
   }
 
-  /// Deserialize Bulletproofs+.
-  pub fn deserialize_plus<R: std::io::Read>(r: &mut R) -> std::io::Result<Bulletproofs> {
+  /// Read Bulletproofs+.
+  pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Bulletproofs> {
     Ok(Bulletproofs::Plus(PlusStruct {
       A: read_point(r)?,
       A1: read_point(r)?,

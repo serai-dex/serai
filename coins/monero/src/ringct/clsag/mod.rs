@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use core::ops::Deref;
+use std::io::{self, Read, Write};
 
 use lazy_static::lazy_static;
 use thiserror::Error;
@@ -313,13 +314,13 @@ impl Clsag {
     (ring_len * 32) + 32 + 32
   }
 
-  pub fn serialize<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_raw_vec(write_scalar, &self.s, w)?;
     w.write_all(&self.c1.to_bytes())?;
     write_point(&self.D, w)
   }
 
-  pub fn deserialize<R: std::io::Read>(decoys: usize, r: &mut R) -> std::io::Result<Clsag> {
+  pub fn read<R: Read>(decoys: usize, r: &mut R) -> io::Result<Clsag> {
     Ok(Clsag { s: read_raw_vec(read_scalar, decoys, r)?, c1: read_scalar(r)?, D: read_point(r)? })
   }
 }

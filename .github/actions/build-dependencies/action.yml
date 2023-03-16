@@ -21,7 +21,7 @@ runs:
   using: "composite"
   steps:
     - name: Install Protobuf
-      uses: arduino/setup-protoc@v1
+      uses: arduino/setup-protoc@master
       with:
         repo-token: ${{ inputs.github-token }}
 
@@ -33,7 +33,7 @@ runs:
         solc-select use 0.8.16
 
     - name: Install Rust
-      uses: ./.github/actions/cached-rust
+      uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
@@ -44,8 +44,7 @@ runs:
       run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
     - name: Install WASM toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ steps.nightly.outputs.version }}
-        profile: minimal
-        target: wasm32-unknown-unknown
+        targets: wasm32-unknown-unknown

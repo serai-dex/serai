@@ -21,9 +21,8 @@ use sp_runtime::{
   Digest,
 };
 use sp_blockchain::HeaderBackend;
-use sp_api::BlockId;
 
-use sp_consensus::{Error, BlockOrigin, Proposer, Environment};
+use sp_consensus::{Error, BlockOrigin, BlockStatus, Proposer, Environment};
 use sc_consensus::import_queue::IncomingBlock;
 
 use sc_service::ImportQueue;
@@ -87,7 +86,6 @@ async fn get_proposal<T: TendermintValidator>(
   env: &Arc<Mutex<T::Environment>>,
   import: &TendermintImport<T>,
   header: &<T::Block as Block>::Header,
-  stub: bool,
 ) -> T::Block {
   let proposer =
     env.lock().await.init(header).await.expect("Failed to create a proposer for the new block");
@@ -96,15 +94,11 @@ async fn get_proposal<T: TendermintValidator>(
     .propose(
       import.inherent_data(*header.parent_hash()).await,
       Digest::default(),
-      if stub {
-        Duration::ZERO
-      } else {
-        // The first processing time is to build the block
-        // The second is for it to be downloaded (assumes a block won't take longer to download
-        // than it'll take to process)
-        // The third is for it to actually be processed
-        Duration::from_secs((T::BLOCK_PROCESSING_TIME_IN_SECONDS / 3).into())
-      },
+      // The first processing time is to build the block
+      // The second is for it to be downloaded (assumes a block won't take longer to download
+      // than it'll take to process)
+      // The third is for it to actually be processed
+      Duration::from_secs((T::BLOCK_PROCESSING_TIME_IN_SECONDS / 3).into()),
       Some(T::PROPOSED_BLOCK_SIZE_LIMIT),
     )
     .await
@@ -119,7 +113,7 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
   }
 
   async fn get_proposal(&self, header: &<T::Block as Block>::Header) -> T::Block {
-    get_proposal(&self.active.as_ref().unwrap().env, &self.import, header, false).await
+    get_proposal(&self.active.as_ref().unwrap().env, &self.import, header).await
   }
 
   /// Create and run a new Tendermint Authority, proposing and voting on blocks.
@@ -200,9 +194,8 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
       };
 
       // Get our first proposal
-      let proposal = authority
-        .get_proposal(&import.client.header(BlockId::Hash(last_hash)).unwrap().unwrap())
-        .await;
+      let proposal =
+        authority.get_proposal(&import.client.header(last_hash).unwrap().unwrap()).await;
 
       // Create the gossip network
       // This has to be spawning the machine, else gossip fails for some reason
@@ -265,9 +258,10 @@ impl<T: TendermintValidator> TendermintAuthority<T> {
             step.send((
               BlockNumber(number),
               Commit::decode(&mut justifications.get(CONSENSUS_ID).unwrap().as_ref()).unwrap(),
-              // This will fail if syncing occurs radically faster than machine stepping takes
-              // TODO: Set true when initial syncing
-              get_proposal(&env, &import, &notif.header, false).await
+              // Creating a proposal will fail if syncing occurs radically faster than machine
+              // stepping takes
+              // Don't create proposals when stepping accordingly
+              None
             )).await.unwrap();
           } else {
             debug!(
@@ -405,7 +399,7 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     let mut queue_write = self.import.queue.write().await;
     *self.import.importing_block.write().unwrap() = Some(hash);
 
-    queue_write.as_mut().unwrap().import_blocks(
+    queue_write.as_mut().unwrap().service_ref().import_blocks(
       BlockOrigin::ConsensusBroadcast, // TODO: Use BlockOrigin::Own when it's our block
       vec![IncomingBlock {
         hash,
@@ -439,9 +433,15 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     &mut self,
     block: T::Block,
     commit: Commit<TendermintValidators<T>>,
-  ) -> T::Block {
+  ) -> Option<T::Block> {
     // Prevent import_block from being called while we run
     let _lock = self.import.sync_lock.lock().await;
+
+    // If we didn't import this block already, return
+    // If it's a legitimate block, we'll pick it up in the standard sync loop
+    if self.import.client.block_status(block.hash()).unwrap() != BlockStatus::InChainWithState {
+      return None;
+    }
 
     // Check if we already imported this externally
     if self.import.client.justifications(block.hash()).unwrap().is_some() {
@@ -489,6 +489,6 @@ impl<T: TendermintValidator> Network for TendermintAuthority<T> {
     // Clear any blocks for the previous slot which we were willing to recheck
     *self.import.recheck.write().unwrap() = HashSet::new();
 
-    self.get_proposal(block.header()).await
+    Some(self.get_proposal(block.header()).await)
   }
 }
