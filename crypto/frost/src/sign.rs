@@ -11,15 +11,12 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use group::{
-  ff::{Field, PrimeField},
-  GroupEncoding,
-};
+use ciphersuite::group::{ff::PrimeField, GroupEncoding};
 use multiexp::BatchVerifier;
 
 use crate::{
   curve::Curve,
-  FrostError, ThresholdParams, ThresholdKeys, ThresholdView,
+  Participant, FrostError, ThresholdParams, ThresholdKeys, ThresholdView,
   algorithm::{WriteAddendum, Addendum, Algorithm},
   validate_map,
 };
@@ -89,7 +86,7 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
 pub struct CachedPreprocess(pub Zeroizing<[u8; 32]>);
 
 /// Trait for the initial state machine of a two-round signing protocol.
-pub trait PreprocessMachine {
+pub trait PreprocessMachine: Send {
   /// Preprocess message for this machine.
   type Preprocess: Clone + PartialEq + Writable;
   /// Signature produced by this machine.
@@ -198,12 +195,14 @@ impl<C: Curve> Writable for SignatureShare<C> {
 #[cfg(any(test, feature = "tests"))]
 impl<C: Curve> SignatureShare<C> {
   pub(crate) fn invalidate(&mut self) {
+    use ciphersuite::group::ff::Field;
+
     self.0 += C::F::one();
   }
 }
 
 /// Trait for the second machine of a two-round signing protocol.
-pub trait SignMachine<S>: Sized {
+pub trait SignMachine<S>: Send + Sized {
   /// Params used to instantiate this machine which can be used to rebuild from a cache.
   type Params: Clone;
   /// Keys used for signing operations.
@@ -221,8 +220,8 @@ pub trait SignMachine<S>: Sized {
   /// security as your private key share.
   fn cache(self) -> CachedPreprocess;
 
-  /// Create a sign machine from a cached preprocess. After this, the preprocess should be fully
-  /// deleted, as it must never be reused. It is
+  /// Create a sign machine from a cached preprocess. After this, the preprocess must be deleted so
+  /// it's never reused. Any reuse would cause the signer to leak their secret share.
   fn from_cache(
     params: Self::Params,
     keys: Self::Keys,
@@ -239,7 +238,7 @@ pub trait SignMachine<S>: Sized {
   /// become the signing set for this session.
   fn sign(
     self,
-    commitments: HashMap<u16, Self::Preprocess>,
+    commitments: HashMap<Participant, Self::Preprocess>,
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, Self::SignatureShare), FrostError>;
 }
@@ -291,7 +290,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
   fn sign(
     mut self,
-    mut preprocesses: HashMap<u16, Preprocess<C, A::Addendum>>,
+    mut preprocesses: HashMap<Participant, Preprocess<C, A::Addendum>>,
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, SignatureShare<C>), FrostError> {
     let multisig_params = self.params.multisig_params();
@@ -307,22 +306,18 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
     if included.len() < usize::from(multisig_params.t()) {
       Err(FrostError::InvalidSigningSet("not enough signers"))?;
     }
-    // Invalid index
-    if included[0] == 0 {
-      Err(FrostError::InvalidParticipantIndex(included[0], multisig_params.n()))?;
-    }
     // OOB index
-    if included[included.len() - 1] > multisig_params.n() {
-      Err(FrostError::InvalidParticipantIndex(included[included.len() - 1], multisig_params.n()))?;
+    if u16::from(included[included.len() - 1]) > multisig_params.n() {
+      Err(FrostError::InvalidParticipant(multisig_params.n(), included[included.len() - 1]))?;
     }
     // Same signer included multiple times
     for i in 0 .. (included.len() - 1) {
       if included[i] == included[i + 1] {
-        Err(FrostError::DuplicatedIndex(included[i]))?;
+        Err(FrostError::DuplicatedParticipant(included[i]))?;
       }
     }
 
-    let view = self.params.keys.view(&included).unwrap();
+    let view = self.params.keys.view(included.clone()).unwrap();
     validate_map(&preprocesses, &included, multisig_params.i())?;
 
     {
@@ -332,7 +327,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
     let nonces = self.params.algorithm.nonces();
     #[allow(non_snake_case)]
-    let mut B = BindingFactor(HashMap::<u16, _>::with_capacity(included.len()));
+    let mut B = BindingFactor(HashMap::<Participant, _>::with_capacity(included.len()));
     {
       // Parse the preprocesses
       for l in &included {
@@ -341,7 +336,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
             .params
             .algorithm
             .transcript()
-            .append_message(b"participant", C::F::from(u64::from(*l)).to_repr());
+            .append_message(b"participant", C::F::from(u64::from(u16::from(*l))).to_repr());
         }
 
         if *l == self.params.keys.params().i() {
@@ -440,7 +435,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 }
 
 /// Trait for the final machine of a two-round signing protocol.
-pub trait SignatureMachine<S> {
+pub trait SignatureMachine<S>: Send {
   /// SignatureShare message for this machine.
   type SignatureShare: Clone + PartialEq + Writable;
 
@@ -449,7 +444,7 @@ pub trait SignatureMachine<S> {
 
   /// Complete signing.
   /// Takes in everyone elses' shares. Returns the signature.
-  fn complete(self, shares: HashMap<u16, Self::SignatureShare>) -> Result<S, FrostError>;
+  fn complete(self, shares: HashMap<Participant, Self::SignatureShare>) -> Result<S, FrostError>;
 }
 
 /// Final step of the state machine for the signing process.
@@ -472,7 +467,7 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
 
   fn complete(
     self,
-    mut shares: HashMap<u16, SignatureShare<C>>,
+    mut shares: HashMap<Participant, SignatureShare<C>>,
   ) -> Result<A::Signature, FrostError> {
     let params = self.params.multisig_params();
     validate_map(&shares, self.view.included(), params.i())?;

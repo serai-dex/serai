@@ -5,21 +5,21 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, CryptoRng};
 
-use group::{ff::PrimeField, GroupEncoding};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
-use dkg::tests::key_gen;
+use ciphersuite::group::{ff::PrimeField, GroupEncoding};
 
 use crate::{
   curve::Curve,
-  ThresholdCore, ThresholdKeys, FrostError,
-  algorithm::{Schnorr, Hram},
+  Participant, ThresholdCore, ThresholdKeys,
+  algorithm::{IetfTranscript, Hram, IetfSchnorr},
   sign::{
-    Nonce, GeneratorCommitments, NonceCommitments, Commitments, Writable, Preprocess, SignMachine,
-    SignatureMachine, AlgorithmMachine,
+    Writable, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
+    PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
   },
-  tests::{clone_without, recover_key, algorithm_machines, commit_and_shares, sign},
+  tests::{clone_without, recover_key, test_ciphersuite},
 };
 
 pub struct Vectors {
@@ -30,14 +30,20 @@ pub struct Vectors {
   pub shares: Vec<String>,
 
   pub msg: String,
-  pub included: Vec<u16>,
+  pub included: Vec<Participant>,
+
+  pub nonce_randomness: Vec<[String; 2]>,
   pub nonces: Vec<[String; 2]>,
+  pub commitments: Vec<[String; 2]>,
 
   pub sig_shares: Vec<String>,
 
   pub sig: String,
 }
 
+// Vectors are expected to be formatted per the IETF proof of concept
+// The included vectors are direcly from
+// https://github.com/cfrg/draft-irtf-cfrg-frost/tree/draft-irtf-cfrg-frost-11/poc
 #[cfg(test)]
 impl From<serde_json::Value> for Vectors {
   fn from(value: serde_json::Value) -> Vectors {
@@ -58,13 +64,33 @@ impl From<serde_json::Value> for Vectors {
       included: to_str(&value["round_one_outputs"]["participant_list"])
         .split(',')
         .map(u16::from_str)
-        .collect::<Result<_, _>>()
-        .unwrap(),
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .iter()
+        .map(|i| Participant::new(*i).unwrap())
+        .collect(),
+
+      nonce_randomness: value["round_one_outputs"]["participants"]
+        .as_object()
+        .unwrap()
+        .values()
+        .map(|value| {
+          [to_str(&value["hiding_nonce_randomness"]), to_str(&value["binding_nonce_randomness"])]
+        })
+        .collect(),
       nonces: value["round_one_outputs"]["participants"]
         .as_object()
         .unwrap()
         .values()
         .map(|value| [to_str(&value["hiding_nonce"]), to_str(&value["binding_nonce"])])
+        .collect(),
+      commitments: value["round_one_outputs"]["participants"]
+        .as_object()
+        .unwrap()
+        .values()
+        .map(|value| {
+          [to_str(&value["hiding_nonce_commitment"]), to_str(&value["binding_nonce_commitment"])]
+        })
         .collect(),
 
       sig_shares: value["round_two_outputs"]["participants"]
@@ -80,7 +106,7 @@ impl From<serde_json::Value> for Vectors {
 }
 
 // Load these vectors into ThresholdKeys using a custom serialization it'll deserialize
-fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, ThresholdKeys<C>> {
+fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant, ThresholdKeys<C>> {
   let shares = vectors
     .shares
     .iter()
@@ -92,23 +118,24 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<u16, Thresho
   for i in 1 ..= u16::try_from(shares.len()).unwrap() {
     // Manually re-implement the serialization for ThresholdCore to import this data
     let mut serialized = vec![];
-    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_be_bytes());
+    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_le_bytes());
     serialized.extend(C::ID);
-    serialized.extend(vectors.threshold.to_be_bytes());
-    serialized.extend(u16::try_from(shares.len()).unwrap().to_be_bytes());
-    serialized.extend(i.to_be_bytes());
+    serialized.extend(vectors.threshold.to_le_bytes());
+    serialized.extend(u16::try_from(shares.len()).unwrap().to_le_bytes());
+    serialized.extend(i.to_le_bytes());
     serialized.extend(shares[usize::from(i) - 1].to_repr().as_ref());
     for share in &verification_shares {
       serialized.extend(share.to_bytes().as_ref());
     }
 
-    let these_keys = ThresholdCore::<C>::deserialize::<&[u8]>(&mut serialized.as_ref()).unwrap();
+    let these_keys = ThresholdCore::<C>::read::<&[u8]>(&mut serialized.as_ref()).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
-    assert_eq!(these_keys.params().i(), i);
+    let participant = Participant::new(i).unwrap();
+    assert_eq!(these_keys.params().i(), participant);
     assert_eq!(these_keys.secret_share().deref(), &shares[usize::from(i - 1)]);
     assert_eq!(hex::encode(these_keys.group_key().to_bytes().as_ref()), vectors.group_key);
-    keys.insert(i, ThresholdKeys::new(these_keys));
+    keys.insert(participant, ThresholdKeys::new(these_keys));
   }
 
   keys
@@ -118,67 +145,49 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   rng: &mut R,
   vectors: Vectors,
 ) {
-  // Test a basic Schnorr signature
-  {
-    let keys = key_gen(&mut *rng);
-    let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
-    const MSG: &[u8] = b"Hello, World!";
-    let sig = sign(&mut *rng, Schnorr::<C, H>::new(), keys.clone(), machines, MSG);
-    assert!(sig.verify(keys[&1].group_key(), H::hram(&sig.R, &keys[&1].group_key(), MSG)));
-  }
-
-  // Test blame on an invalid Schnorr signature share
-  {
-    let keys = key_gen(&mut *rng);
-    let machines = algorithm_machines(&mut *rng, Schnorr::<C, H>::new(), &keys);
-    const MSG: &[u8] = b"Hello, World!";
-
-    let (mut machines, mut shares) = commit_and_shares(&mut *rng, machines, |_, _| {}, MSG);
-    let faulty = *shares.keys().next().unwrap();
-    shares.get_mut(&faulty).unwrap().invalidate();
-
-    for (i, machine) in machines.drain() {
-      if i == faulty {
-        continue;
-      }
-      assert_eq!(
-        machine.complete(clone_without(&shares, &i)).err(),
-        Some(FrostError::InvalidShare(faulty))
-      );
-    }
-  }
+  test_ciphersuite::<R, C, H>(rng);
 
   // Test against the vectors
   let keys = vectors_to_multisig_keys::<C>(&vectors);
-  let group_key =
-    <C as Curve>::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref()).unwrap();
-  let secret =
-    C::read_F::<&[u8]>(&mut hex::decode(&vectors.group_secret).unwrap().as_ref()).unwrap();
-  assert_eq!(C::generator() * secret, group_key);
-  assert_eq!(recover_key(&keys), secret);
+  {
+    let group_key =
+      <C as Curve>::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref())
+        .unwrap();
+    let secret =
+      C::read_F::<&[u8]>(&mut hex::decode(&vectors.group_secret).unwrap().as_ref()).unwrap();
+    assert_eq!(C::generator() * secret, group_key);
+    assert_eq!(recover_key(&keys), secret);
 
-  let mut machines = vec![];
-  for i in &vectors.included {
-    machines.push((i, AlgorithmMachine::new(Schnorr::<C, H>::new(), keys[i].clone()).unwrap()));
-  }
+    let mut machines = vec![];
+    for i in &vectors.included {
+      machines
+        .push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone()).unwrap()));
+    }
 
-  let mut commitments = HashMap::new();
-  let mut c = 0;
-  let mut machines = machines
-    .drain(..)
-    .map(|(i, machine)| {
-      let nonce = |i| {
-        Zeroizing::new(
-          C::read_F::<&[u8]>(&mut hex::decode(&vectors.nonces[c][i]).unwrap().as_ref()).unwrap(),
-        )
-      };
-      let nonces = [nonce(0), nonce(1)];
-      c += 1;
-      let these_commitments =
-        [C::generator() * nonces[0].deref(), C::generator() * nonces[1].deref()];
-      let machine = machine.unsafe_override_preprocess(
-        vec![Nonce(nonces)],
-        Preprocess {
+    let mut commitments = HashMap::new();
+    let mut machines = machines
+      .drain(..)
+      .enumerate()
+      .map(|(c, (i, machine))| {
+        let nonce = |i| {
+          Zeroizing::new(
+            C::read_F::<&[u8]>(&mut hex::decode(&vectors.nonces[c][i]).unwrap().as_ref()).unwrap(),
+          )
+        };
+        let nonces = [nonce(0), nonce(1)];
+        let these_commitments =
+          [C::generator() * nonces[0].deref(), C::generator() * nonces[1].deref()];
+
+        assert_eq!(
+          these_commitments[0].to_bytes().as_ref(),
+          hex::decode(&vectors.commitments[c][0]).unwrap()
+        );
+        assert_eq!(
+          these_commitments[1].to_bytes().as_ref(),
+          hex::decode(&vectors.commitments[c][1]).unwrap()
+        );
+
+        let preprocess = Preprocess {
           commitments: Commitments {
             nonces: vec![NonceCommitments {
               generators: vec![GeneratorCommitments(these_commitments)],
@@ -186,51 +195,177 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
             dleq: None,
           },
           addendum: (),
-        },
+        };
+        // FROST doesn't specify how to serialize these together, yet this is sane
+        // (and the simplest option)
+        assert_eq!(
+          preprocess.serialize(),
+          hex::decode(vectors.commitments[c][0].clone() + &vectors.commitments[c][1]).unwrap()
+        );
+
+        let machine = machine.unsafe_override_preprocess(vec![Nonce(nonces)], preprocess);
+
+        commitments.insert(
+          *i,
+          machine
+            .read_preprocess::<&[u8]>(
+              &mut [
+                these_commitments[0].to_bytes().as_ref(),
+                these_commitments[1].to_bytes().as_ref(),
+              ]
+              .concat()
+              .as_ref(),
+            )
+            .unwrap(),
+        );
+        (i, machine)
+      })
+      .collect::<Vec<_>>();
+
+    let mut shares = HashMap::new();
+    let mut machines = machines
+      .drain(..)
+      .enumerate()
+      .map(|(c, (i, machine))| {
+        let (machine, share) = machine
+          .sign(clone_without(&commitments, i), &hex::decode(&vectors.msg).unwrap())
+          .unwrap();
+
+        let share = {
+          let mut buf = vec![];
+          share.write(&mut buf).unwrap();
+          buf
+        };
+        assert_eq!(share, hex::decode(&vectors.sig_shares[c]).unwrap());
+
+        shares.insert(*i, machine.read_share::<&[u8]>(&mut share.as_ref()).unwrap());
+        (i, machine)
+      })
+      .collect::<HashMap<_, _>>();
+
+    for (i, machine) in machines.drain() {
+      let sig = machine.complete(clone_without(&shares, i)).unwrap();
+      let mut serialized = sig.R.to_bytes().as_ref().to_vec();
+      serialized.extend(sig.s.to_repr().as_ref());
+      assert_eq!(hex::encode(serialized), vectors.sig);
+    }
+  }
+
+  // The above code didn't test the nonce generation due to the infeasibility of doing so against
+  // the current codebase
+
+  // A transparent RNG which has a fixed output
+  struct TransparentRng(Vec<[u8; 32]>);
+  impl RngCore for TransparentRng {
+    fn next_u32(&mut self) -> u32 {
+      unimplemented!()
+    }
+    fn next_u64(&mut self) -> u64 {
+      unimplemented!()
+    }
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+      dest.copy_from_slice(&self.0.remove(0))
+    }
+    fn try_fill_bytes(&mut self, _: &mut [u8]) -> Result<(), rand_core::Error> {
+      unimplemented!()
+    }
+  }
+  // CryptoRng requires the output not reveal any info about any other outputs
+  // Since this only will produce one output, this is actually met, even though it'd be fine to
+  // fake it as this is a test
+  impl CryptoRng for TransparentRng {}
+
+  // Test C::random_nonce matches the expected vectors
+  for (i, l) in vectors.included.iter().enumerate() {
+    let l = usize::from(u16::from(*l));
+
+    // Shares are a zero-indexed array of all participants, hence l - 1
+    let share = Zeroizing::new(
+      C::read_F::<&[u8]>(&mut hex::decode(&vectors.shares[l - 1]).unwrap().as_ref()).unwrap(),
+    );
+
+    let randomness = vectors.nonce_randomness[i]
+      .iter()
+      .map(|randomness| hex::decode(randomness).unwrap().try_into().unwrap())
+      .collect::<Vec<_>>();
+
+    let nonces = vectors.nonces[i]
+      .iter()
+      .map(|nonce| {
+        Zeroizing::new(C::read_F::<&[u8]>(&mut hex::decode(nonce).unwrap().as_ref()).unwrap())
+      })
+      .collect::<Vec<_>>();
+
+    for (randomness, nonce) in randomness.iter().zip(&nonces) {
+      // Nonces are only present for participating signers, hence i
+      assert_eq!(C::random_nonce(&share, &mut TransparentRng(vec![*randomness])), *nonce);
+    }
+
+    // Also test it at the Commitments level
+    let (generated_nonces, commitments) = Commitments::<C>::new::<_, IetfTranscript>(
+      &mut TransparentRng(randomness),
+      &share,
+      &[vec![C::generator()]],
+      &[],
+    );
+
+    assert_eq!(generated_nonces.len(), 1);
+    assert_eq!(generated_nonces[0].0, [nonces[0].clone(), nonces[1].clone()]);
+
+    let mut commitments_bytes = vec![];
+    commitments.write(&mut commitments_bytes).unwrap();
+    assert_eq!(
+      commitments_bytes,
+      hex::decode(vectors.commitments[i][0].clone() + &vectors.commitments[i][1]).unwrap()
+    );
+  }
+
+  // This doesn't verify C::random_nonce is called correctly, where the code should call it with
+  // the output from a ChaCha20 stream
+  // Create a known ChaCha20 stream to verify it ends up at random_nonce properly
+
+  {
+    let mut chacha_seed = [0; 32];
+    rng.fill_bytes(&mut chacha_seed);
+    let mut ours = ChaCha20Rng::from_seed(chacha_seed);
+    let frosts = ours.clone();
+
+    // The machines should geenerate a seed, and then use that seed in a ChaCha20 RNG for nonces
+    let mut preprocess_seed = [0; 32];
+    ours.fill_bytes(&mut preprocess_seed);
+    let mut ours = ChaCha20Rng::from_seed(preprocess_seed);
+
+    // Get the randomness which will be used
+    let mut randomness = ([0; 32], [0; 32]);
+    ours.fill_bytes(&mut randomness.0);
+    ours.fill_bytes(&mut randomness.1);
+
+    // Create the machines
+    let mut machines = vec![];
+    for i in &vectors.included {
+      machines
+        .push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone()).unwrap()));
+    }
+
+    for (i, machine) in machines.drain(..) {
+      let (_, preprocess) = machine.preprocess(&mut frosts.clone());
+
+      // Calculate the expected nonces
+      let mut expected = (C::generator() *
+        C::random_nonce(keys[i].secret_share(), &mut TransparentRng(vec![randomness.0])).deref())
+      .to_bytes()
+      .as_ref()
+      .to_vec();
+      expected.extend(
+        (C::generator() *
+          C::random_nonce(keys[i].secret_share(), &mut TransparentRng(vec![randomness.1]))
+            .deref())
+        .to_bytes()
+        .as_ref(),
       );
 
-      commitments.insert(
-        *i,
-        machine
-          .read_preprocess::<&[u8]>(
-            &mut [
-              these_commitments[0].to_bytes().as_ref(),
-              these_commitments[1].to_bytes().as_ref(),
-            ]
-            .concat()
-            .as_ref(),
-          )
-          .unwrap(),
-      );
-      (i, machine)
-    })
-    .collect::<Vec<_>>();
-
-  let mut shares = HashMap::new();
-  c = 0;
-  let mut machines = machines
-    .drain(..)
-    .map(|(i, machine)| {
-      let (machine, share) =
-        machine.sign(clone_without(&commitments, i), &hex::decode(&vectors.msg).unwrap()).unwrap();
-
-      let share = {
-        let mut buf = vec![];
-        share.write(&mut buf).unwrap();
-        buf
-      };
-      assert_eq!(share, hex::decode(&vectors.sig_shares[c]).unwrap());
-      c += 1;
-
-      shares.insert(*i, machine.read_share::<&[u8]>(&mut share.as_ref()).unwrap());
-      (i, machine)
-    })
-    .collect::<HashMap<_, _>>();
-
-  for (i, machine) in machines.drain() {
-    let sig = machine.complete(clone_without(&shares, i)).unwrap();
-    let mut serialized = sig.R.to_bytes().as_ref().to_vec();
-    serialized.extend(sig.s.to_repr().as_ref());
-    assert_eq!(hex::encode(serialized), vectors.sig);
+      // Ensure they match
+      assert_eq!(preprocess.serialize(), expected);
+    }
   }
 }

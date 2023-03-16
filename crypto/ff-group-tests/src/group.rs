@@ -1,3 +1,4 @@
+use rand_core::RngCore;
 use group::{
   ff::{Field, PrimeFieldBits},
   Group,
@@ -10,7 +11,7 @@ use crate::prime_field::{test_prime_field, test_prime_field_bits};
 pub fn test_eq<G: Group>() {
   assert_eq!(G::identity(), G::identity(), "identity != identity");
   assert_eq!(G::generator(), G::generator(), "generator != generator");
-  assert!(G::identity() != G::generator(), "identity != generator");
+  assert!(G::identity() != G::generator(), "identity == generator");
 }
 
 /// Test identity.
@@ -69,6 +70,11 @@ pub fn test_sum<G: Group>() {
     G::generator().double(),
     "[generator, generator].sum() != two"
   );
+  assert_eq!(
+    [G::generator().double(), G::generator()].iter().sum::<G>(),
+    G::generator().double() + G::generator(),
+    "[generator.double(), generator].sum() != three"
+  );
 }
 
 /// Test negation.
@@ -107,9 +113,31 @@ pub fn test_order<G: Group>() {
   assert_eq!(minus_one + G::generator(), G::identity(), "((modulus - 1) * G) + G wasn't identity");
 }
 
+/// Test random.
+pub fn test_random<R: RngCore, G: Group>(rng: &mut R) {
+  let a = G::random(&mut *rng);
+  assert!(!bool::from(a.is_identity()), "random returned identity");
+
+  // Run up to 128 times so small groups, which may occasionally return the same element twice,
+  // are statistically unlikely to fail
+  // Groups of order <= 2 will always fail this test due to lack of distinct elements to sample
+  // from
+  let mut pass = false;
+  for _ in 0 .. 128 {
+    let b = G::random(&mut *rng);
+    assert!(!bool::from(b.is_identity()), "random returned identity");
+
+    // This test passes if a distinct element is returned at least once
+    if b != a {
+      pass = true;
+    }
+  }
+  assert!(pass, "random always returned the same value");
+}
+
 /// Run all tests on groups implementing Group.
-pub fn test_group<G: Group>() {
-  test_prime_field::<G::Scalar>();
+pub fn test_group<R: RngCore, G: Group>(rng: &mut R) {
+  test_prime_field::<R, G::Scalar>(rng);
 
   test_eq::<G>();
   test_identity::<G>();
@@ -121,6 +149,7 @@ pub fn test_group<G: Group>() {
   test_sub::<G>();
   test_mul::<G>();
   test_order::<G>();
+  test_random::<R, G>(rng);
 }
 
 /// Test encoding and decoding of group elements.
@@ -142,27 +171,35 @@ pub fn test_encoding<G: PrimeGroup>() {
 }
 
 /// Run all tests on groups implementing PrimeGroup (Group + GroupEncoding).
-pub fn test_prime_group<G: PrimeGroup>() {
-  test_group::<G>();
+pub fn test_prime_group<R: RngCore, G: PrimeGroup>(rng: &mut R) {
+  test_group::<R, G>(rng);
 
   test_encoding::<G>();
 }
 
 /// Run all tests offered by this crate on the group.
-pub fn test_prime_group_bits<G: PrimeGroup>()
+pub fn test_prime_group_bits<R: RngCore, G: PrimeGroup>(rng: &mut R)
 where
   G::Scalar: PrimeFieldBits,
 {
-  test_prime_field_bits::<G::Scalar>();
-  test_prime_group::<G>();
+  test_prime_field_bits::<R, G::Scalar>(rng);
+  test_prime_group::<R, G>(rng);
+}
+
+// Run these tests against k256/p256
+// This ensures that these tests are well formed and won't error for valid implementations,
+// assuming the validity of k256/p256
+// While k256 and p256 may be malformed in a way which coincides with a faulty test, this is
+// considered unlikely
+// The other option, not running against any libraries, would leave faulty tests completely
+// undetected
+
+#[test]
+fn test_k256() {
+  test_prime_group_bits::<_, k256::ProjectivePoint>(&mut rand_core::OsRng);
 }
 
 #[test]
-fn test_k256_group_encoding() {
-  test_prime_group_bits::<k256::ProjectivePoint>();
-}
-
-#[test]
-fn test_p256_group_encoding() {
-  test_prime_group_bits::<p256::ProjectivePoint>();
+fn test_p256() {
+  test_prime_group_bits::<_, p256::ProjectivePoint>(&mut rand_core::OsRng);
 }

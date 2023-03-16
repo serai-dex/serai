@@ -14,7 +14,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 lazy_static = "1"
 
-subtle = "2.4"
+subtle = "^2.4"
 
 sha3 = "0.10"
 

@@ -1,5 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+use core::ops::DerefMut;
+
 use zeroize::Zeroize;
 
 use ff::PrimeFieldBits;
@@ -19,6 +21,31 @@ pub use batch::BatchVerifier;
 #[cfg(test)]
 mod tests;
 
+// Feature gated due to MSRV requirements
+#[cfg(feature = "black_box")]
+pub(crate) fn black_box<T>(val: T) -> T {
+  core::hint::black_box(val)
+}
+
+#[cfg(not(feature = "black_box"))]
+pub(crate) fn black_box<T>(val: T) -> T {
+  val
+}
+
+fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+  let bit_ref = black_box(bit_ref);
+
+  let mut bit = black_box(*bit_ref);
+  let res = black_box(bit as u8);
+  bit.zeroize();
+  debug_assert!((res | 1) == 1);
+
+  bit_ref.zeroize();
+  res
+}
+
+// Convert scalars to `window`-sized bit groups, as needed to index a table
+// This algorithm works for `window <= 8`
 pub(crate) fn prep_bits<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<u8>>
 where
   G::Scalar: PrimeFieldBits,
@@ -31,31 +58,14 @@ where
     let mut bits = pair.0.to_le_bits();
     groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
 
-    #[allow(unused_assignments)]
-    for (i, mut raw_bit) in bits.iter_mut().enumerate() {
-      let mut bit = u8::from(*raw_bit);
-      *raw_bit = false;
-
+    for (i, mut bit) in bits.iter_mut().enumerate() {
+      let mut bit = u8_from_bool(bit.deref_mut());
       groupings[p][i / w_usize] |= bit << (i % w_usize);
       bit.zeroize();
     }
   }
 
   groupings
-}
-
-pub(crate) fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
-  let mut tables = Vec::with_capacity(pairs.len());
-  for pair in pairs {
-    let p = tables.len();
-    tables.push(vec![G::identity(); 2_usize.pow(window.into())]);
-    let mut accum = G::identity();
-    for i in 1 .. tables[p].len() {
-      accum += pair.1;
-      tables[p][i] = accum;
-    }
-  }
-  tables
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -169,6 +179,7 @@ where
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
     Algorithm::Single => pairs[0].1 * pairs[0].0,
+    // These functions panic if called without any pairs
     Algorithm::Straus(window) => straus(pairs, window),
     Algorithm::Pippenger(window) => pippenger(pairs, window),
   }

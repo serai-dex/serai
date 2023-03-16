@@ -3,10 +3,11 @@
 // Then there is a signature (a modified Chaum Pedersen proof) using multiple nonces at once
 //
 // Accordingly, in order for this library to be robust, it supports generating an arbitrary amount
-// of nonces, each against an arbitrary list of basepoints
+// of nonces, each against an arbitrary list of generators
 //
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
-// When multiple D, E pairs are provided, a DLEq proof is also provided to confirm their integrity
+// When representations across multiple generators are provided, a DLEq proof is also provided to
+// confirm their integrity
 
 use core::ops::Deref;
 use std::{
@@ -20,12 +21,12 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use group::{ff::PrimeField, Group, GroupEncoding};
+use ciphersuite::group::{ff::PrimeField, Group, GroupEncoding};
 use multiexp::multiexp_vartime;
 
 use dleq::MultiDLEqProof;
 
-use crate::curve::Curve;
+use crate::{curve::Curve, Participant};
 
 // Transcript used to aggregate binomial nonces for usage within a single DLEq proof.
 fn aggregation_transcript<T: Transcript>(context: &[u8]) -> T {
@@ -72,11 +73,12 @@ impl<C: Curve> GeneratorCommitments<C> {
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct NonceCommitments<C: Curve> {
   // Called generators as these commitments are indexed by generator later on
+  // So to get the commitments for the first generator, it'd be commitments.generators[0]
   pub(crate) generators: Vec<GeneratorCommitments<C>>,
 }
 
 impl<C: Curve> NonceCommitments<C> {
-  pub(crate) fn new<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     secret_share: &Zeroizing<C::F>,
     generators: &[C::G],
@@ -97,10 +99,7 @@ impl<C: Curve> NonceCommitments<C> {
     (nonce, NonceCommitments { generators: commitments })
   }
 
-  fn read<R: Read, T: Transcript>(
-    reader: &mut R,
-    generators: &[C::G],
-  ) -> io::Result<NonceCommitments<C>> {
+  fn read<R: Read>(reader: &mut R, generators: &[C::G]) -> io::Result<NonceCommitments<C>> {
     Ok(NonceCommitments {
       generators: (0 .. generators.len())
         .map(|_| GeneratorCommitments::read(reader))
@@ -130,9 +129,11 @@ impl<C: Curve> NonceCommitments<C> {
   }
 }
 
+/// Commitments for all the nonces across all their generators.
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Commitments<C: Curve> {
   // Called nonces as these commitments are indexed by nonce
+  // So to get the commitments for the first nonce, it'd be commitments.nonces[0]
   pub(crate) nonces: Vec<NonceCommitments<C>>,
   // DLEq Proof proving that each set of commitments were generated using a single pair of discrete
   // logarithms
@@ -153,7 +154,7 @@ impl<C: Curve> Commitments<C> {
     let mut dleq_nonces = vec![];
     for generators in planned_nonces {
       let (nonce, these_commitments): (Nonce<C>, _) =
-        NonceCommitments::new::<_, T>(&mut *rng, secret_share, generators);
+        NonceCommitments::new(&mut *rng, secret_share, generators);
 
       if generators.len() > 1 {
         dleq_generators.push(generators.clone());
@@ -201,7 +202,7 @@ impl<C: Curve> Commitments<C> {
     context: &[u8],
   ) -> io::Result<Self> {
     let nonces = (0 .. generators.len())
-      .map(|i| NonceCommitments::read::<_, T>(reader, &generators[i]))
+      .map(|i| NonceCommitments::read(reader, &generators[i]))
       .collect::<Result<Vec<NonceCommitments<C>>, _>>()?;
 
     let mut dleq_generators = vec![];
@@ -247,17 +248,17 @@ pub(crate) struct IndividualBinding<C: Curve> {
   binding_factors: Option<Vec<C::F>>,
 }
 
-pub(crate) struct BindingFactor<C: Curve>(pub(crate) HashMap<u16, IndividualBinding<C>>);
+pub(crate) struct BindingFactor<C: Curve>(pub(crate) HashMap<Participant, IndividualBinding<C>>);
 
 impl<C: Curve> BindingFactor<C> {
-  pub(crate) fn insert(&mut self, i: u16, commitments: Commitments<C>) {
+  pub(crate) fn insert(&mut self, i: Participant, commitments: Commitments<C>) {
     self.0.insert(i, IndividualBinding { commitments, binding_factors: None });
   }
 
   pub(crate) fn calculate_binding_factors<T: Clone + Transcript>(&mut self, transcript: &mut T) {
     for (l, binding) in self.0.iter_mut() {
       let mut transcript = transcript.clone();
-      transcript.append_message(b"participant", C::F::from(u64::from(*l)).to_repr());
+      transcript.append_message(b"participant", C::F::from(u64::from(u16::from(*l))).to_repr());
       // It *should* be perfectly fine to reuse a binding factor for multiple nonces
       // This generates a binding factor per nonce just to ensure it never comes up as a question
       binding.binding_factors = Some(
@@ -268,12 +269,12 @@ impl<C: Curve> BindingFactor<C> {
     }
   }
 
-  pub(crate) fn binding_factors(&self, i: u16) -> &[C::F] {
+  pub(crate) fn binding_factors(&self, i: Participant) -> &[C::F] {
     self.0[&i].binding_factors.as_ref().unwrap()
   }
 
   // Get the bound nonces for a specific party
-  pub(crate) fn bound(&self, l: u16) -> Vec<Vec<C::G>> {
+  pub(crate) fn bound(&self, l: Participant) -> Vec<Vec<C::G>> {
     let mut res = vec![];
     for (i, (nonce, rho)) in
       self.0[&l].commitments.nonces.iter().zip(self.binding_factors(l).iter()).enumerate()

@@ -16,7 +16,7 @@ use dalek_ff_group as dfg;
 use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Ed25519,
-  FrostError, ThresholdKeys,
+  Participant, FrostError, ThresholdKeys,
   sign::{
     Writable, Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine,
     SignatureMachine, AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
@@ -39,7 +39,7 @@ use crate::{
 /// FROST signing machine to produce a signed transaction.
 pub struct TransactionMachine {
   signable: SignableTransaction,
-  i: u16,
+  i: Participant,
   transcript: RecommendedTranscript,
 
   decoys: Vec<Decoys>,
@@ -52,7 +52,7 @@ pub struct TransactionMachine {
 
 pub struct TransactionSignMachine {
   signable: SignableTransaction,
-  i: u16,
+  i: Participant,
   transcript: RecommendedTranscript,
 
   decoys: Vec<Decoys>,
@@ -251,7 +251,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
   fn sign(
     mut self,
-    mut commitments: HashMap<u16, Self::Preprocess>,
+    mut commitments: HashMap<Participant, Self::Preprocess>,
     msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
     if !msg.is_empty() {
@@ -278,7 +278,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // While each CLSAG will do this as they need to for security, they have their own
             // transcripts cloned from this TX's initial premise's transcript. For our TX
             // transcript to have the CLSAG data for entropy, it'll have to be added ourselves here
-            self.transcript.append_message(b"participant", (*l).to_be_bytes());
+            self.transcript.append_message(b"participant", (*l).to_bytes());
 
             let preprocess = if *l == self.i {
               self.our_preprocess[c].clone()
@@ -404,7 +404,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
 
   fn complete(
     mut self,
-    shares: HashMap<u16, Self::SignatureShare>,
+    shares: HashMap<Participant, Self::SignatureShare>,
   ) -> Result<Transaction, FrostError> {
     let mut tx = self.tx;
     match tx.rct_signatures.prunable {

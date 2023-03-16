@@ -15,16 +15,15 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 rand_core = "0.6"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 
-digest = "0.10"
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2" }
 
-group = "0.12"
 ciphersuite = { path = "../ciphersuite", version = "0.1" }
-
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
 [dev-dependencies]
-blake2 = "0.10"
+hex = "0.4"
+sha2 = "0.10"
 dalek-ff-group = { path =  "../dalek-ff-group", version = "^0.1.2" }
-ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["ristretto"] }
+ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["ed25519"] }

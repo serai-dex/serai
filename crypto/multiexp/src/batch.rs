@@ -1,16 +1,32 @@
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use ff::{Field, PrimeFieldBits};
 use group::Group;
 
 use crate::{multiexp, multiexp_vartime};
 
+// Flatten the contained statements to a single Vec.
+// Wrapped in Zeroizing in case any of the included statements contain private values.
+#[allow(clippy::type_complexity)]
+fn flat<Id: Copy + Zeroize, G: Group + Zeroize>(
+  slice: &[(Id, Vec<(G::Scalar, G)>)],
+) -> Zeroizing<Vec<(G::Scalar, G)>>
+where
+  <G as Group>::Scalar: PrimeFieldBits + Zeroize,
+{
+  Zeroizing::new(slice.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
+}
+
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
 #[allow(clippy::type_complexity)]
 #[derive(Clone, Zeroize)]
-pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(Vec<(Id, Vec<(G::Scalar, G)>)>);
+pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(
+  Zeroizing<Vec<(Id, Vec<(G::Scalar, G)>)>>,
+)
+where
+  <G as Group>::Scalar: PrimeFieldBits + Zeroize;
 
 impl<Id: Copy + Zeroize, G: Group + Zeroize> BatchVerifier<Id, G>
 where
@@ -19,7 +35,7 @@ where
   /// Create a new batch verifier, expected to verify the following amount of statements.
   /// This is a size hint and is not required to be accurate.
   pub fn new(capacity: usize) -> BatchVerifier<Id, G> {
-    BatchVerifier(Vec::with_capacity(capacity))
+    BatchVerifier(Zeroizing::new(Vec::with_capacity(capacity)))
   }
 
   /// Queue a statement for batch verification.
@@ -71,31 +87,20 @@ where
       } {}
       weight
     };
+
     self.0.push((id, pairs.into_iter().map(|(scalar, point)| (scalar * u, point)).collect()));
   }
 
   /// Perform batch verification, returning a boolean of if the statements equaled zero.
   #[must_use]
-  pub fn verify_core(&self) -> bool {
-    let mut flat = self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>();
-    let res = multiexp(&flat).is_identity().into();
-    flat.zeroize();
-    res
-  }
-
-  /// Perform batch verification, zeroizing the statements verified.
-  pub fn verify(mut self) -> bool {
-    let res = self.verify_core();
-    self.zeroize();
-    res
+  pub fn verify(&self) -> bool {
+    multiexp(&flat(&self.0)).is_identity().into()
   }
 
   /// Perform batch verification in variable time.
   #[must_use]
   pub fn verify_vartime(&self) -> bool {
-    multiexp_vartime(&self.0.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
-      .is_identity()
-      .into()
+    multiexp_vartime(&flat(&self.0)).is_identity().into()
   }
 
   /// Perform a binary search to identify which statement does not equal 0, returning None if all
@@ -106,12 +111,7 @@ where
     let mut slice = self.0.as_slice();
     while slice.len() > 1 {
       let split = slice.len() / 2;
-      if multiexp_vartime(
-        &slice[.. split].iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>(),
-      )
-      .is_identity()
-      .into()
-      {
+      if multiexp_vartime(&flat(&slice[.. split])).is_identity().into() {
         slice = &slice[split ..];
       } else {
         slice = &slice[.. split];
@@ -126,10 +126,12 @@ where
 
   /// Perform constant time batch verification, and if verification fails, identify one faulty
   /// statement in variable time.
-  pub fn verify_with_vartime_blame(mut self) -> Result<(), Id> {
-    let res = if self.verify_core() { Ok(()) } else { Err(self.blame_vartime().unwrap()) };
-    self.zeroize();
-    res
+  pub fn verify_with_vartime_blame(&self) -> Result<(), Id> {
+    if self.verify() {
+      Ok(())
+    } else {
+      Err(self.blame_vartime().unwrap())
+    }
   }
 
   /// Perform variable time batch verification, and if verification fails, identify one faulty

@@ -11,7 +11,7 @@ use minimal_ed448::{scalar::Scalar, point::Point};
 
 use crate::Ciphersuite;
 
-// Re-define Shake256 as a traditional Digest to meet API expectations
+/// Shake256, fixed to a 114-byte output, as used by Ed448.
 #[derive(Clone, Default)]
 pub struct Shake256_114(Shake256);
 impl BlockSizeUser for Shake256_114 {
@@ -48,6 +48,11 @@ impl FixedOutput for Shake256_114 {
 }
 impl HashMarker for Shake256_114 {}
 
+/// Ciphersuite for Ed448.
+///
+/// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
+/// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as
+/// `dst: "abcdef", data: b""`. Please use carefully, not letting dsts be substrings of each other.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Ed448;
 impl Ciphersuite for Ed448 {

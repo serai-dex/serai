@@ -7,14 +7,12 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::GroupEncoding;
-
-use ciphersuite::Ciphersuite;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use transcript::{Transcript, RecommendedTranscript};
 use dleq::DLEqProof;
 
-use crate::{DkgError, ThresholdCore, ThresholdKeys, validate_map};
+use crate::{Participant, DkgError, ThresholdCore, ThresholdKeys, validate_map};
 
 /// Promote a set of keys to another Ciphersuite definition.
 pub trait CiphersuitePromote<C2: Ciphersuite> {
@@ -27,10 +25,10 @@ pub trait CiphersuitePromote<C2: Ciphersuite> {
   fn promote(self) -> ThresholdKeys<C2>;
 }
 
-fn transcript<G: GroupEncoding>(key: G, i: u16) -> RecommendedTranscript {
+fn transcript<G: GroupEncoding>(key: G, i: Participant) -> RecommendedTranscript {
   let mut transcript = RecommendedTranscript::new(b"DKG Generator Promotion v0.2");
   transcript.append_message(b"group_key", key.to_bytes());
-  transcript.append_message(b"participant", i.to_be_bytes());
+  transcript.append_message(b"participant", i.to_bytes());
   transcript
 }
 
@@ -61,9 +59,10 @@ impl<C: Ciphersuite> GeneratorProof<C> {
   }
 }
 
-/// Promote a set of keys from one curve to another, where the elliptic curve is the same.
+/// Promote a set of keys from one generator to another, where the elliptic curve is the same.
 /// Since the Ciphersuite trait additionally specifies a generator, this provides an O(n) way to
-/// update the generator used with keys. The key generation protocol itself is exponential.
+/// update the generator used with keys. This outperforms the key generation protocol which is
+// exponential.
 pub struct GeneratorPromotion<C1: Ciphersuite, C2: Ciphersuite> {
   base: ThresholdKeys<C1>,
   proof: GeneratorProof<C1>,
@@ -74,7 +73,7 @@ impl<C1: Ciphersuite, C2: Ciphersuite> GeneratorPromotion<C1, C2>
 where
   C2: Ciphersuite<F = C1::F, G = C1::G>,
 {
-  /// Begin promoting keys from one curve to another. Returns a proof this share was properly
+  /// Begin promoting keys from one generator to another. Returns a proof this share was properly
   /// promoted.
   pub fn promote<R: RngCore + CryptoRng>(
     rng: &mut R,
@@ -97,10 +96,10 @@ where
   /// Complete promotion by taking in the proofs from all other participants.
   pub fn complete(
     self,
-    proofs: &HashMap<u16, GeneratorProof<C1>>,
+    proofs: &HashMap<Participant, GeneratorProof<C1>>,
   ) -> Result<ThresholdKeys<C2>, DkgError<()>> {
     let params = self.base.params();
-    validate_map(proofs, &(1 ..= params.n).collect::<Vec<_>>(), params.i)?;
+    validate_map(proofs, &(1 ..= params.n).map(Participant).collect::<Vec<_>>(), params.i)?;
 
     let original_shares = self.base.verification_shares();
 

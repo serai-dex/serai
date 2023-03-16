@@ -1,10 +1,7 @@
 use digest::Digest;
 
-use group::GroupEncoding;
-
 use minimal_ed448::{Scalar, Point};
-
-pub use ciphersuite::{Shake256_114, Ed448};
+pub use ciphersuite::{group::GroupEncoding, Shake256_114, Ed448};
 
 use crate::{curve::Curve, algorithm::Hram};
 

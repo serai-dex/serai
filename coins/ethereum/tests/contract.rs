@@ -2,7 +2,7 @@ use std::{convert::TryFrom, sync::Arc, time::Duration};
 
 use rand_core::OsRng;
 
-use k256::{elliptic_curve::bigint::ArrayEncoding, U256};
+use ::k256::{elliptic_curve::bigint::ArrayEncoding, U256};
 
 use ethers::{
   prelude::*,
@@ -11,7 +11,8 @@ use ethers::{
 
 use frost::{
   curve::Secp256k1,
-  algorithm::Schnorr as Algo,
+  Participant,
+  algorithm::IetfSchnorr,
   tests::{key_gen, algorithm_machines, sign},
 };
 
@@ -44,14 +45,14 @@ async fn test_ecrecover_hack() {
   let chain_id = U256::from(chain_id);
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
-  let group_key = keys[&1].group_key();
+  let group_key = keys[&Participant::new(1).unwrap()].group_key();
 
   const MESSAGE: &[u8] = b"Hello, World!";
   let hashed_message = keccak256(MESSAGE);
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
-  let algo = Algo::<Secp256k1, crypto::EthereumHram>::new();
+  let algo = IetfSchnorr::<Secp256k1, crypto::EthereumHram>::ietf();
   let sig = sign(
     &mut OsRng,
     algo.clone(),

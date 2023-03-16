@@ -18,24 +18,18 @@ thiserror = "1"
 rand_core = "0.6"
 rand_chacha = "0.3"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
-subtle = "2"
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
+subtle = "^2.4"
 
-hex = "0.4"
+hex = { version = "0.4", optional = true }
 
 digest = "0.10"
-
-hkdf = "0.12"
-chacha20 = { version = "0.9", features = ["zeroize"] }
-
-group = "0.12"
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
 minimal-ed448 = { path = "../ed448", version = "^0.1.2", optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
-
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
 
 multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
 
@@ -45,6 +39,7 @@ dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
 dkg = { path = "../dkg", version = "0.2" }
 
 [dev-dependencies]
+hex = "0.4"
 serde_json = "1"
 
 dkg = { path = "../dkg", version = "0.2", features = ["tests"] }
@@ -58,4 +53,4 @@ p256 = ["ciphersuite/p256"]
 
 ed448 = ["minimal-ed448", "ciphersuite/ed448"]
 
-tests = ["dkg/tests"]
+tests = ["hex", "dkg/tests"]

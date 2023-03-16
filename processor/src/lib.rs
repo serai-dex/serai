@@ -3,7 +3,7 @@ use std::{marker::Send, collections::HashMap};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use frost::{curve::Ciphersuite, FrostError};
+use frost::{curve::Ciphersuite, Participant, FrostError};
 
 mod coin;
 use coin::{CoinError, Coin};
@@ -18,7 +18,7 @@ pub enum NetworkError {}
 
 #[async_trait]
 pub trait Network: Send {
-  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<u16, Vec<u8>>, NetworkError>;
+  async fn round(&mut self, data: Vec<u8>) -> Result<HashMap<Participant, Vec<u8>>, NetworkError>;
 }
 
 #[derive(Clone, Error, Debug)]

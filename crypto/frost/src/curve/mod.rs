@@ -8,12 +8,13 @@ use subtle::ConstantTimeEq;
 
 use digest::{Digest, Output};
 
-use group::{
-  ff::{Field, PrimeField},
-  Group,
+pub use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    Group,
+  },
+  Ciphersuite,
 };
-
-pub use ciphersuite::Ciphersuite;
 
 #[cfg(any(feature = "ristretto", feature = "ed25519"))]
 mod dalek;
@@ -77,6 +78,12 @@ pub trait Curve: Ciphersuite {
 
     let mut repr = secret.to_repr();
 
+    // Perform rejection sampling until we reach a non-zero nonce
+    // While the IETF spec doesn't explicitly require this, generating a zero nonce will produce
+    // commitments which will be rejected for being zero (and if they were used, leak the secret
+    // share)
+    // Rejection sampling here will prevent an honest participant from ever generating 'malicious'
+    // values and ensure safety
     let mut res;
     while {
       seed.extend(repr.as_ref());
@@ -86,10 +93,7 @@ pub trait Curve: Ciphersuite {
       seed = Zeroizing::new(vec![0; 32]);
       rng.fill_bytes(&mut seed);
     }
-
-    for i in repr.as_mut() {
-      i.zeroize();
-    }
+    repr.as_mut().zeroize();
 
     res
   }

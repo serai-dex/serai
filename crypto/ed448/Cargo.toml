@@ -16,12 +16,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 lazy_static = "1"
 
 rand_core = "0.6"
-digest = "0.10"
 
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
-subtle = "2.4"
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
+subtle = "^2.4"
 
-ff = "0.12"
+ff = { version = "0.12", features = ["bits"] }
 group = "0.12"
 
 generic-array = "0.14"
@@ -33,3 +32,6 @@ dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2" }
 hex = "0.4"
 
 ff-group-tests = { path = "../ff-group-tests" }
+
+[features]
+black_box = []

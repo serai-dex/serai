@@ -6,10 +6,18 @@ mod merlin;
 #[cfg(feature = "merlin")]
 pub use crate::merlin::MerlinTranscript;
 
-use digest::{typenum::type_operators::IsGreaterOrEqual, consts::U256, Digest, Output, HashMarker};
+#[cfg(any(test, feature = "tests"))]
+pub mod tests;
 
-pub trait Transcript {
-  type Challenge: Clone + Send + Sync + AsRef<[u8]>;
+use digest::{
+  typenum::{
+    consts::U32, marker_traits::NonZero, type_operators::IsGreaterOrEqual, operator_aliases::GrEq,
+  },
+  Digest, Output, HashMarker,
+};
+
+pub trait Transcript: Send + Clone {
+  type Challenge: Send + Sync + Clone + AsRef<[u8]>;
 
   /// Create a new transcript with the specified name.
   fn new(name: &'static [u8]) -> Self;
@@ -20,13 +28,19 @@ pub trait Transcript {
   /// Append a message to the transcript.
   fn append_message<M: AsRef<[u8]>>(&mut self, label: &'static [u8], message: M);
 
-  /// Produce a challenge. This MUST update the transcript as it does so, preventing the same
-  /// challenge from being generated multiple times.
+  /// Produce a challenge.
+  ///
+  /// Implementors MUST update the transcript as it does so, preventing the same challenge from
+  /// being generated multiple times.
   fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge;
 
-  /// Produce a RNG seed. Helper function for parties needing to generate random data from an
-  /// agreed upon state. Internally calls the challenge function for the needed bytes, converting
-  /// them to the seed format rand_core expects.
+  /// Produce a RNG seed.
+  ///
+  /// Helper function for parties needing to generate random data from an agreed upon state.
+  ///
+  /// Implementors MAY internally call the challenge function for the needed bytes, and accordingly
+  /// produce a transcript conflict between two transcripts, one which called challenge(label) and
+  /// one which called rng_seed(label) at the same point.
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32];
 }
 
@@ -36,6 +50,8 @@ enum DigestTranscriptMember {
   Label,
   Value,
   Challenge,
+  Continued,
+  Challenged,
 }
 
 impl DigestTranscriptMember {
@@ -46,20 +62,30 @@ impl DigestTranscriptMember {
       DigestTranscriptMember::Label => 2,
       DigestTranscriptMember::Value => 3,
       DigestTranscriptMember::Challenge => 4,
+      DigestTranscriptMember::Continued => 5,
+      DigestTranscriptMember::Challenged => 6,
     }
   }
 }
 
-/// A trait defining cryptographic Digests with at least a 256-byte output size, assuming at least
-/// a 128-bit level of security accordingly.
+/// A trait defining cryptographic Digests with at least a 256-bit output size, assuming at least a
+/// 128-bit level of security accordingly.
 pub trait SecureDigest: Digest + HashMarker {}
-impl<D: Digest + HashMarker> SecureDigest for D where D::OutputSize: IsGreaterOrEqual<U256> {}
+impl<D: Digest + HashMarker> SecureDigest for D
+where
+  // This just lets us perform the comparison
+  D::OutputSize: IsGreaterOrEqual<U32>,
+  // Perform the comparison and make sure it's true (not zero), meaning D::OutputSize is >= U32
+  // This should be U32 as it's length in bytes, not bits
+  GrEq<D::OutputSize, U32>: NonZero,
+{
+}
 
 /// A simple transcript format constructed around the specified hash algorithm.
 #[derive(Clone, Debug)]
-pub struct DigestTranscript<D: Clone + SecureDigest>(D);
+pub struct DigestTranscript<D: Send + Clone + SecureDigest>(D);
 
-impl<D: Clone + SecureDigest> DigestTranscript<D> {
+impl<D: Send + Clone + SecureDigest> DigestTranscript<D> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
     self.0.update([kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
@@ -68,7 +94,7 @@ impl<D: Clone + SecureDigest> DigestTranscript<D> {
   }
 }
 
-impl<D: Clone + SecureDigest> Transcript for DigestTranscript<D> {
+impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
 
   fn new(name: &'static [u8]) -> Self {
@@ -88,7 +114,13 @@ impl<D: Clone + SecureDigest> Transcript for DigestTranscript<D> {
 
   fn challenge(&mut self, label: &'static [u8]) -> Self::Challenge {
     self.append(DigestTranscriptMember::Challenge, label);
-    self.0.clone().finalize()
+    let mut cloned = self.0.clone();
+
+    // Explicitly fork these transcripts to prevent length extension attacks from being possible
+    // (at least, without the additional ability to remove a byte from a finalized hash)
+    self.0.update([DigestTranscriptMember::Continued.as_u8()]);
+    cloned.update([DigestTranscriptMember::Challenged.as_u8()]);
+    cloned.finalize()
   }
 
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32] {

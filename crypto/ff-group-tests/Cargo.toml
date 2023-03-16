@@ -13,8 +13,9 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rand_core = "0.6"
 group = "0.12"
 
 [dev-dependencies]
-k256 = { version = "0.11", features = ["bits"] }
-p256 = { version = "0.11", features = ["bits"] }
+k256 = { version = "0.12", features = ["bits"] }
+p256 = { version = "0.12", features = ["bits"] }

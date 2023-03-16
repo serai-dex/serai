@@ -11,8 +11,10 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::Zeroize;
 use subtle::ConstantTimeEq;
 
-use digest::{core_api::BlockSizeUser, Digest};
+use digest::{core_api::BlockSizeUser, Digest, HashMarker};
+use transcript::SecureDigest;
 
+pub use group;
 use group::{
   ff::{Field, PrimeField, PrimeFieldBits},
   Group, GroupOps,
@@ -41,7 +43,9 @@ mod ed448;
 pub use ed448::*;
 
 /// Unified trait defining a ciphersuite around an elliptic curve.
-pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
+pub trait Ciphersuite:
+  'static + Send + Sync + Clone + Copy + PartialEq + Eq + Debug + Zeroize
+{
   /// Scalar field element type.
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
   type F: PrimeField + PrimeFieldBits + Zeroize;
@@ -49,7 +53,7 @@ pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize + ConstantTimeEq;
   /// Hash algorithm used with this curve.
   // Requires BlockSizeUser so it can be used within Hkdf which requies that.
-  type H: Clone + BlockSizeUser + Digest;
+  type H: Send + Clone + BlockSizeUser + Digest + HashMarker + SecureDigest;
 
   /// ID for this curve.
   const ID: &'static [u8];
@@ -90,9 +94,7 @@ pub trait Ciphersuite: Clone + Copy + PartialEq + Eq + Debug + Zeroize {
     // ff mandates this is canonical
     let res = Option::<Self::F>::from(Self::F::from_repr(encoding))
       .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "non-canonical scalar"));
-    for b in encoding.as_mut() {
-      b.zeroize();
-    }
+    encoding.as_mut().zeroize();
     res
   }
 

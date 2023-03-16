@@ -21,6 +21,7 @@ pub mod cross_group;
 #[cfg(test)]
 mod tests;
 
+// Produce a non-biased challenge from the transcript in the specified field
 pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   // From here, there are three ways to get a scalar under the ff/group API
   // 1: Scalar::random(ChaCha20Rng::from_seed(self.transcript.rng_seed(b"challenge")))
@@ -80,6 +81,7 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   challenge
 }
 
+// Helper function to read a scalar
 #[cfg(feature = "serialize")]
 fn read_scalar<R: Read, F: PrimeField>(r: &mut R) -> io::Result<F> {
   let mut repr = F::Repr::default();
@@ -91,11 +93,13 @@ fn read_scalar<R: Read, F: PrimeField>(r: &mut R) -> io::Result<F> {
   Ok(scalar.unwrap())
 }
 
-#[derive(Debug)]
+/// Error for DLEq proofs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DLEqError {
   InvalidProof,
 }
 
+/// A proof that points have the same discrete logarithm across generators.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct DLEqProof<G: PrimeGroup> {
   c: G::Scalar,
@@ -110,6 +114,8 @@ impl<G: PrimeGroup> DLEqProof<G> {
     transcript.append_message(b"point", point.to_bytes());
   }
 
+  /// Prove that the points created by `scalar * G`, for each specified generator, share a discrete
+  /// logarithm.
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
     transcript: &mut T,
@@ -134,6 +140,22 @@ impl<G: PrimeGroup> DLEqProof<G> {
     DLEqProof { c, s }
   }
 
+  // Transcript a specific generator/nonce/point (G/R/A), as used when verifying a proof.
+  // This takes in the generator/point, and then the challenge and solution to calculate the nonce.
+  fn verify_statement<T: Transcript>(
+    transcript: &mut T,
+    generator: G,
+    point: G,
+    c: G::Scalar,
+    s: G::Scalar,
+  ) {
+    // s = r + ca
+    // sG - cA = R
+    // R, A
+    Self::transcript(transcript, generator, (generator * s) - (point * c), point);
+  }
+
+  /// Verify the specified points share a discrete logarithm across the specified generators.
   pub fn verify<T: Transcript>(
     &self,
     transcript: &mut T,
@@ -146,10 +168,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
 
     transcript.domain_separate(b"dleq");
     for (generator, point) in generators.iter().zip(points) {
-      // s = r + ca
-      // sG - cA = R
-      // R, A
-      Self::transcript(transcript, *generator, (*generator * self.s) - (*point * self.c), *point);
+      Self::verify_statement(transcript, *generator, *point, self.c, self.s);
     }
 
     if self.c != challenge(transcript) {
@@ -159,17 +178,20 @@ impl<G: PrimeGroup> DLEqProof<G> {
     Ok(())
   }
 
+  /// Write a DLEq proof to something implementing Write.
   #[cfg(feature = "serialize")]
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(self.c.to_repr().as_ref())?;
     w.write_all(self.s.to_repr().as_ref())
   }
 
+  /// Read a DLEq proof from something implementing Read.
   #[cfg(feature = "serialize")]
   pub fn read<R: Read>(r: &mut R) -> io::Result<DLEqProof<G>> {
     Ok(DLEqProof { c: read_scalar(r)?, s: read_scalar(r)? })
   }
 
+  /// Serialize a DLEq proof to a `Vec<u8>`.
   #[cfg(feature = "serialize")]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
@@ -178,6 +200,9 @@ impl<G: PrimeGroup> DLEqProof<G> {
   }
 }
 
+/// A proof that multiple series of points each have a single discrete logarithm across generators.
+/// This is effectively n distinct DLEq proofs, one for each discrete logarithm and its points
+/// across some generators, yet with a smaller overall proof size.
 #[cfg(feature = "std")]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct MultiDLEqProof<G: PrimeGroup> {
@@ -188,6 +213,9 @@ pub struct MultiDLEqProof<G: PrimeGroup> {
 #[cfg(feature = "std")]
 #[allow(non_snake_case)]
 impl<G: PrimeGroup> MultiDLEqProof<G> {
+  /// Prove for each scalar that the series of points created by multiplying it against its
+  /// matching generators share a discrete logarithm.
+  /// This function panics if `generators.len() != scalars.len()`.
   pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     rng: &mut R,
     transcript: &mut T,
@@ -197,7 +225,13 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
   where
     G::Scalar: Zeroize,
   {
-    transcript.domain_separate(b"multi-dleq");
+    assert_eq!(
+      generators.len(),
+      scalars.len(),
+      "amount of series of generators doesn't match the amount of scalars"
+    );
+
+    transcript.domain_separate(b"multi_dleq");
 
     let mut nonces = vec![];
     for (i, (scalar, generators)) in scalars.iter().zip(generators).enumerate() {
@@ -226,6 +260,8 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
     MultiDLEqProof { c, s }
   }
 
+  /// Verify each series of points share a discrete logarithm against their matching series of
+  /// generators.
   pub fn verify<T: Transcript>(
     &self,
     transcript: &mut T,
@@ -239,7 +275,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
       Err(DLEqError::InvalidProof)?;
     }
 
-    transcript.domain_separate(b"multi-dleq");
+    transcript.domain_separate(b"multi_dleq");
     for (i, (generators, points)) in generators.iter().zip(points).enumerate() {
       if points.len() != generators.len() {
         Err(DLEqError::InvalidProof)?;
@@ -247,12 +283,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
 
       transcript.append_message(b"discrete_logarithm", i.to_le_bytes());
       for (generator, point) in generators.iter().zip(points) {
-        DLEqProof::transcript(
-          transcript,
-          *generator,
-          (*generator * self.s[i]) - (*point * self.c),
-          *point,
-        );
+        DLEqProof::verify_statement(transcript, *generator, *point, self.c, self.s[i]);
       }
     }
 
@@ -263,6 +294,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
     Ok(())
   }
 
+  /// Write a multi-DLEq proof to something implementing Write.
   #[cfg(feature = "serialize")]
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(self.c.to_repr().as_ref())?;
@@ -272,6 +304,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
     Ok(())
   }
 
+  /// Read a multi-DLEq proof from something implementing Read.
   #[cfg(feature = "serialize")]
   pub fn read<R: Read>(r: &mut R, discrete_logs: usize) -> io::Result<MultiDLEqProof<G>> {
     let c = read_scalar(r)?;
@@ -282,6 +315,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
     Ok(MultiDLEqProof { c, s })
   }
 
+  /// Serialize a multi-DLEq proof to a `Vec<u8>`.
   #[cfg(feature = "serialize")]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];

@@ -1032,9 +1032,10 @@ dependencies = [
  "elliptic-curve",
  "ff",
  "ff-group-tests",
+ "flexible-transcript",
  "group",
  "hex",
- "k256",
+ "k256 0.12.0",
  "minimal-ed448",
  "p256",
  "rand_core 0.6.4",
@@ -1153,7 +1154,7 @@ dependencies = [
  "digest 0.10.6",
  "getrandom 0.2.8",
  "hmac 0.12.1",
- "k256",
+ "k256 0.11.6",
  "lazy_static",
  "serde",
  "sha2 0.10.6",
@@ -1644,6 +1645,7 @@ dependencies = [
  "ff-group-tests",
  "group",
  "rand_core 0.6.4",
+ "sha2 0.9.9",
  "subtle",
  "zeroize",
 ]
@@ -1948,12 +1950,10 @@ dependencies = [
  "ciphersuite",
  "dleq",
  "flexible-transcript",
- "group",
- "hex",
  "multiexp",
  "rand_core 0.6.4",
  "schnorr-signatures",
- "subtle",
+ "serde",
  "thiserror",
  "zeroize",
 ]
@@ -1969,7 +1969,7 @@ dependencies = [
  "flexible-transcript",
  "group",
  "hex-literal",
- "k256",
+ "k256 0.12.0",
  "multiexp",
  "rand_core 0.6.4",
  "thiserror",
@@ -2036,7 +2036,19 @@ dependencies = [
  "der",
  "elliptic-curve",
  "rfc6979",
- "signature",
+ "signature 1.6.4",
+]
+
+[[package]]
+name = "ecdsa"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12844141594ad74185a926d030f3b605f6a903b4e3fec351f3ea338ac5b7637e"
+dependencies = [
+ "der",
+ "elliptic-curve",
+ "rfc6979",
+ "signature 2.0.0",
 ]
 
 [[package]]
@@ -2045,7 +2057,7 @@ version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
 dependencies = [
- "signature",
+ "signature 1.6.4",
 ]
 
 [[package]]
@@ -2242,11 +2254,12 @@ dependencies = [
  "ethers-solc",
  "eyre",
  "group",
- "k256",
+ "k256 0.12.0",
  "modular-frost",
  "rand_core 0.6.4",
  "serde",
  "serde_json",
+ "sha2 0.10.6",
  "sha3",
  "thiserror",
  "tokio",
@@ -2370,7 +2383,7 @@ dependencies = [
  "ethabi",
  "generic-array 0.14.6",
  "hex",
- "k256",
+ "k256 0.11.6",
  "once_cell",
  "open-fastrlp",
  "proc-macro2",
@@ -2585,8 +2598,9 @@ name = "ff-group-tests"
 version = "0.12.0"
 dependencies = [
  "group",
- "k256",
+ "k256 0.12.0",
  "p256",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -2681,6 +2695,7 @@ dependencies = [
  "blake2",
  "digest 0.10.6",
  "merlin 3.0.0",
+ "sha2 0.10.6",
 ]
 
 [[package]]
@@ -2845,7 +2860,7 @@ dependencies = [
  "frame-metadata",
  "frame-support-procedural",
  "impl-trait-for-tuples",
- "k256",
+ "k256 0.11.6",
  "log",
  "once_cell",
  "parity-scale-codec",
@@ -3334,15 +3349,6 @@ name = "hex-literal"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
-
-[[package]]
-name = "hkdf"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "791a029f6b9fc27657f6f188ec6e5e43f6911f6f878e0dc5501396e09809d437"
-dependencies = [
- "hmac 0.12.1",
-]
 
 [[package]]
 name = "hmac"
@@ -3973,10 +3979,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72c1e0b51e7ec0a97369623508396067a486bd0cbed95a2659a4b863d28cfc8b"
 dependencies = [
  "cfg-if",
- "ecdsa",
+ "ecdsa 0.14.8",
  "elliptic-curve",
  "sha2 0.10.6",
  "sha3",
+]
+
+[[package]]
+name = "k256"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92a55e0ff3b72c262bcf041d9e97f1b84492b68f1c1a384de2323d3dc9403397"
+dependencies = [
+ "cfg-if",
+ "ecdsa 0.15.1",
+ "elliptic-curve",
+ "once_cell",
+ "sha2 0.10.6",
+ "signature 2.0.0",
 ]
 
 [[package]]
@@ -4865,7 +4885,6 @@ version = "0.1.2"
 dependencies = [
  "crypto-bigint",
  "dalek-ff-group",
- "digest 0.10.6",
  "ff",
  "ff-group-tests",
  "generic-array 0.14.6",
@@ -4935,16 +4954,13 @@ dependencies = [
 name = "modular-frost"
 version = "0.5.0"
 dependencies = [
- "chacha20 0.9.0",
  "ciphersuite",
  "dalek-ff-group",
  "digest 0.10.6",
  "dkg",
  "dleq",
  "flexible-transcript",
- "group",
  "hex",
- "hkdf",
  "minimal-ed448",
  "multiexp",
  "rand_chacha 0.3.1",
@@ -5105,7 +5121,7 @@ dependencies = [
  "dalek-ff-group",
  "ff",
  "group",
- "k256",
+ "k256 0.12.0",
  "rand_core 0.6.4",
  "zeroize",
 ]
@@ -5561,23 +5577,13 @@ checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 
 [[package]]
 name = "p256"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
+checksum = "49c124b3cbce43bcbac68c58ec181d98ed6cc7e6d0aa7c3ba97b2563410b0e55"
 dependencies = [
- "ecdsa",
+ "ecdsa 0.15.1",
  "elliptic-curve",
- "sha2 0.10.6",
-]
-
-[[package]]
-name = "p384"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfc8c5bf642dde52bb9e87c0ecd8ca5a76faac2eeed98dedb7c717997e1080aa"
-dependencies = [
- "ecdsa",
- "elliptic-curve",
+ "primeorder",
  "sha2 0.10.6",
 ]
 
@@ -6185,6 +6191,15 @@ checksum = "4ebcd279d20a4a0a2404a33056388e950504d891c855c7975b9a8fef75f3bf04"
 dependencies = [
  "proc-macro2",
  "syn",
+]
+
+[[package]]
+name = "primeorder"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b54f7131b3dba65a2f414cf5bd25b66d4682e4608610668eae785750ba4c5b2"
+dependencies = [
+ "elliptic-curve",
 ]
 
 [[package]]
@@ -7937,13 +7952,13 @@ dependencies = [
 name = "schnorr-signatures"
 version = "0.2.0"
 dependencies = [
- "blake2",
  "ciphersuite",
  "dalek-ff-group",
- "digest 0.10.6",
- "group",
+ "flexible-transcript",
+ "hex",
  "multiexp",
  "rand_core 0.6.4",
+ "sha2 0.10.6",
  "zeroize",
 ]
 
@@ -8418,6 +8433,16 @@ name = "signature"
 version = "1.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
+dependencies = [
+ "digest 0.10.6",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "signature"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fe458c98333f9c8152221191a77e2a44e8325d0193484af2e9421a53019e57d"
 dependencies = [
  "digest 0.10.6",
  "rand_core 0.6.4",
