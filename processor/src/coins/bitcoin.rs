@@ -447,6 +447,10 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn mine_block(&self) {
+    log::debug!(
+      "mining a bitcoin block. latest number: {}",
+      self.get_latest_block_number().await.unwrap()
+    );
     self
       .rpc
       .rpc_call::<Vec<String>>(
@@ -458,6 +462,10 @@ impl Coin for Bitcoin {
       )
       .await
       .unwrap();
+    log::debug!(
+      "mined a bitcoin block. latest number: {}",
+      self.get_latest_block_number().await.unwrap()
+    );
   }
 
   #[cfg(test)]
