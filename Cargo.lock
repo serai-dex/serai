@@ -4916,24 +4916,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "message-box"
-version = "0.1.0"
-dependencies = [
- "base64 0.13.1",
- "bincode",
- "ciphersuite",
- "dalek-ff-group",
- "flexible-transcript",
- "group",
- "rand_core 0.6.4",
- "schnorr-signatures",
- "serde",
- "serde_json",
- "zalloc",
- "zeroize",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"

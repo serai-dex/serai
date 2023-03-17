@@ -15,7 +15,6 @@ members = [
   "crypto/frost",
 
   "common/zalloc",
-  "common/message-box",
 
   "coins/ethereum",
   "coins/monero/generators",
