@@ -11,6 +11,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+zeroize = { version = "^1.5", features = ["derive"], optional = true }
+
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
@@ -22,5 +24,5 @@ serai-primitives = { path = "../../serai/primitives", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
-std = ["scale/std", "scale-info/std", "serde", "sp-runtime/std", "serai-primitives/std"]
+std = ["zeroize", "scale/std", "scale-info/std", "serde", "sp-runtime/std", "serai-primitives/std"]
 default = ["std"]

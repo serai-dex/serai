@@ -47,7 +47,8 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "bitcoin-serai" },
   { allow = ["AGPL-3.0"], name = "ethereum-serai" },
 
-  { allow = ["AGPL-3.0"], name = "serai-processor" },
+  { allow = ["AGPL-3.0"], name = "processor-messages" },
+  { allow = ["AGPL-3.0"], name = "processor" },
 
   { allow = ["AGPL-3.0"], name = "tokens-pallet" },
 

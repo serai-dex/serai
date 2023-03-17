@@ -501,10 +501,8 @@ impl Rpc {
       reason: String,
     }
 
-    let mut buf = Vec::with_capacity(2048);
-    tx.write(&mut buf).unwrap();
     let res: SendRawResponse = self
-      .rpc_call("send_raw_transaction", Some(json!({ "tx_as_hex": hex::encode(&buf) })))
+      .rpc_call("send_raw_transaction", Some(json!({ "tx_as_hex": hex::encode(tx.serialize()) })))
       .await?;
 
     if res.status != "OK" {

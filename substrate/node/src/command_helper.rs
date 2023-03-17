@@ -57,8 +57,8 @@ pub fn create_benchmark_extrinsic(
     system::CheckTxVersion::<Runtime>::new(),
     system::CheckGenesis::<Runtime>::new(),
     system::CheckEra::<Runtime>::from(sp_runtime::generic::Era::mortal(
-      u64::from(BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2)),
-      client.chain_info().best_number.into(),
+      BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2),
+      client.chain_info().best_number,
     )),
     system::CheckNonce::<Runtime>::from(nonce),
     system::CheckWeight::<Runtime>::new(),

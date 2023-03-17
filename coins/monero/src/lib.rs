@@ -3,20 +3,22 @@
 //! A modern Monero transaction library intended for usage in wallets. It prides
 //! itself on accuracy, correctness, and removing common pit falls developers may
 //! face.
-
+//!
 //! monero-serai contains safety features, such as first-class acknowledgement of
 //! the burning bug, yet also a high level API around creating transactions.
 //! monero-serai also offers a FROST-based multisig, which is orders of magnitude
 //! more performant than Monero's.
-
+//!
 //! monero-serai was written for Serai, a decentralized exchange aiming to support
 //! Monero. Despite this, monero-serai is intended to be a widely usable library,
 //! accurate to Monero. monero-serai guarantees the functionality needed for Serai,
 //! yet will not deprive functionality from other users, and may potentially leave
 //! Serai's umbrella at some point.
-
+//!
 //! Various legacy transaction formats are not currently implemented, yet
 //! monero-serai is still increasing its support for various transaction types.
+
+use std::io;
 
 use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
@@ -34,6 +36,7 @@ use curve25519_dalek::{
 pub use monero_generators::H;
 
 mod serialize;
+use serialize::{read_byte, read_u16};
 
 /// RingCT structs and functionality.
 pub mod ringct;
@@ -79,6 +82,45 @@ impl Protocol {
       Protocol::v16 => true,
       Protocol::Custom { bp_plus, .. } => *bp_plus,
     }
+  }
+
+  pub(crate) fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+    match self {
+      Protocol::v14 => w.write_all(&[0, 14]),
+      Protocol::v16 => w.write_all(&[0, 16]),
+      Protocol::Custom { ring_len, bp_plus } => {
+        // Custom, version 0
+        w.write_all(&[1, 0])?;
+        w.write_all(&u16::try_from(*ring_len).unwrap().to_le_bytes())?;
+        w.write_all(&[u8::from(*bp_plus)])
+      }
+    }
+  }
+
+  pub(crate) fn read<R: io::Read>(r: &mut R) -> io::Result<Protocol> {
+    Ok(match read_byte(r)? {
+      // Monero protocol
+      0 => match read_byte(r)? {
+        14 => Protocol::v14,
+        16 => Protocol::v16,
+        _ => Err(io::Error::new(io::ErrorKind::Other, "unrecognized monero protocol"))?,
+      },
+      // Custom
+      1 => match read_byte(r)? {
+        0 => Protocol::Custom {
+          ring_len: read_u16(r)?.into(),
+          bp_plus: match read_byte(r)? {
+            0 => false,
+            1 => true,
+            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid bool serialization"))?,
+          },
+        },
+        _ => {
+          Err(io::Error::new(io::ErrorKind::Other, "unrecognized custom protocol serialization"))?
+        }
+      },
+      _ => Err(io::Error::new(io::ErrorKind::Other, "unrecognized protocol serialization"))?,
+    })
   }
 }
 

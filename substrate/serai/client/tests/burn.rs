@@ -2,21 +2,19 @@ use core::time::Duration;
 
 use rand_core::{RngCore, OsRng};
 
-use sp_core::Pair;
-use serai_runtime::in_instructions::{Batch, Update};
-
 use tokio::time::sleep;
 
-use subxt::tx::{BaseExtrinsicParamsBuilder, PairSigner};
+use sp_core::Pair;
+use subxt::{config::extrinsic_params::BaseExtrinsicParamsBuilder};
 
 use serai_client::{
   primitives::{
     BITCOIN, BlockNumber, BlockHash, SeraiAddress, Amount, WithAmount, Balance, Data,
     ExternalAddress, insecure_pair_from_name,
   },
-  in_instructions::primitives::InInstruction,
+  in_instructions::primitives::{InInstruction, Batch, Update},
   tokens::{primitives::OutInstruction, TokensEvent},
-  Serai,
+  PairSigner, Serai,
 };
 
 mod runner;
@@ -27,7 +25,7 @@ serai_test!(
     let coin = BITCOIN;
     let mut id = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut id.0);
-    let block_number = BlockNumber(u32::try_from(OsRng.next_u64() >> 32).unwrap());
+    let block_number = BlockNumber(OsRng.next_u64());
 
     let pair = insecure_pair_from_name("Alice");
     let public = pair.public();

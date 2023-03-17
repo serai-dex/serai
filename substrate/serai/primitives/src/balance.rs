@@ -1,5 +1,8 @@
 use core::ops::{Add, Sub, Mul};
 
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 #[cfg(feature = "std")]
@@ -9,7 +12,7 @@ use crate::{Coin, Amount};
 
 /// The type used for balances (a Coin and Balance).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct Balance {
   pub coin: Coin,
   pub amount: Amount,

@@ -1,11 +1,15 @@
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
+
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
 /// The type used to identify coins.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct Coin(pub u32);
 impl From<u32> for Coin {
   fn from(coin: u32) -> Coin {

@@ -67,12 +67,16 @@ pub(crate) fn read_byte<R: Read>(r: &mut R) -> io::Result<u8> {
   Ok(read_bytes::<_, 1>(r)?[0])
 }
 
-pub(crate) fn read_u64<R: Read>(r: &mut R) -> io::Result<u64> {
-  read_bytes(r).map(u64::from_le_bytes)
+pub(crate) fn read_u16<R: Read>(r: &mut R) -> io::Result<u16> {
+  read_bytes(r).map(u16::from_le_bytes)
 }
 
 pub(crate) fn read_u32<R: Read>(r: &mut R) -> io::Result<u32> {
   read_bytes(r).map(u32::from_le_bytes)
+}
+
+pub(crate) fn read_u64<R: Read>(r: &mut R) -> io::Result<u64> {
+  read_bytes(r).map(u64::from_le_bytes)
 }
 
 pub(crate) fn read_varint<R: Read>(r: &mut R) -> io::Result<u64> {

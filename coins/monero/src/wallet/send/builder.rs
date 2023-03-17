@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
   Protocol,
@@ -15,6 +15,7 @@ struct SignableTransactionBuilderInternal {
   protocol: Protocol,
   fee: Fee,
 
+  r_seed: Option<Zeroizing<[u8; 32]>>,
   inputs: Vec<SpendableOutput>,
   payments: Vec<(MoneroAddress, u64)>,
   change_address: Option<Change>,
@@ -25,7 +26,19 @@ impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
   fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
-    Self { protocol, fee, inputs: vec![], payments: vec![], change_address, data: vec![] }
+    Self {
+      protocol,
+      fee,
+      r_seed: None,
+      inputs: vec![],
+      payments: vec![],
+      change_address,
+      data: vec![],
+    }
+  }
+
+  fn set_r_seed(&mut self, r_seed: Zeroizing<[u8; 32]>) {
+    self.r_seed = Some(r_seed);
   }
 
   fn add_input(&mut self, input: SpendableOutput) {
@@ -85,6 +98,11 @@ impl SignableTransactionBuilder {
     ))))
   }
 
+  pub fn set_r_seed(&mut self, r_seed: Zeroizing<[u8; 32]>) -> Self {
+    self.0.write().unwrap().set_r_seed(r_seed);
+    self.shallow_copy()
+  }
+
   pub fn add_input(&mut self, input: SpendableOutput) -> Self {
     self.0.write().unwrap().add_input(input);
     self.shallow_copy()
@@ -115,6 +133,7 @@ impl SignableTransactionBuilder {
     let read = self.0.read().unwrap();
     SignableTransaction::new(
       read.protocol,
+      read.r_seed.clone(),
       read.inputs.clone(),
       read.payments.clone(),
       read.change_address.clone(),

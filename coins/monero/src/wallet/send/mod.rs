@@ -1,8 +1,10 @@
 use core::{ops::Deref, fmt};
+use std::io;
 
 use thiserror::Error;
 
-use rand_core::{RngCore, CryptoRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use rand::seq::SliceRandom;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
@@ -19,7 +21,11 @@ use dalek_ff_group as dfg;
 use frost::FrostError;
 
 use crate::{
-  Protocol, Commitment, random_scalar,
+  Protocol, Commitment, hash, random_scalar,
+  serialize::{
+    read_byte, read_bytes, read_u64, read_scalar, read_point, read_vec, write_byte, write_scalar,
+    write_point, write_raw_vec, write_vec,
+  },
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagInput, Clsag},
@@ -156,7 +162,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng>(
     rng,
     rpc,
     ring_len,
-    rpc.get_height().await.map_err(TransactionError::RpcError)? - 10,
+    rpc.get_height().await.map_err(TransactionError::RpcError)? - 1,
     inputs,
   )
   .await
@@ -204,10 +210,30 @@ impl Fee {
   }
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub(crate) enum InternalPayment {
+  Payment((MoneroAddress, u64)),
+  Change(Change, u64),
+}
+
+/// The eventual output of a SignableTransaction.
+///
+/// If the SignableTransaction has a Change with a view key, this will also have the view key.
+/// Accordingly, it must be treated securely.
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub struct Eventuality {
+  protocol: Protocol,
+  r_seed: Zeroizing<[u8; 32]>,
+  inputs: Vec<EdwardsPoint>,
+  payments: Vec<InternalPayment>,
+  extra: Vec<u8>,
+}
+
 /// A signable transaction, either in a single-signer or multisig context.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SignableTransaction {
   protocol: Protocol,
+  r_seed: Option<Zeroizing<[u8; 32]>>,
   inputs: Vec<SpendableOutput>,
   payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
@@ -250,22 +276,19 @@ impl Change {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub(crate) enum InternalPayment {
-  Payment((MoneroAddress, u64)),
-  Change(Change, u64),
-}
-
 impl SignableTransaction {
   /// Create a signable transaction.
   ///
-  /// Up to 16 outputs may be present, including the change output.
+  /// `r_seed` refers to a seed used to derive the transaction's ephemeral keys (colloquially
+  /// called Rs). If None is provided, one will be automatically generated.
   ///
-  /// If the change address is specified, leftover funds will be sent to it.
+  /// Up to 16 outputs may be present, including the change output. If the change address is
+  /// specified, leftover funds will be sent to it.
   ///
-  /// Each chunk of data must not exceed MAX_ARBITRARY_DATA_SIZE.
+  /// Each chunk of data must not exceed MAX_ARBITRARY_DATA_SIZE and will be embedded in TX extra.
   pub fn new(
     protocol: Protocol,
+    r_seed: Option<Zeroizing<[u8; 32]>>,
     inputs: Vec<SpendableOutput>,
     mut payments: Vec<(MoneroAddress, u64)>,
     change_address: Option<Change>,
@@ -351,27 +374,46 @@ impl SignableTransaction {
       payments.push(InternalPayment::Change(change, in_amount - out_amount));
     }
 
-    Ok(SignableTransaction { protocol, inputs, payments, data, fee })
+    Ok(SignableTransaction { protocol, r_seed, inputs, payments, data, fee })
   }
 
-  fn prepare_transaction<R: RngCore + CryptoRng>(
-    &mut self,
-    rng: &mut R,
+  pub fn fee(&self) -> u64 {
+    self.fee
+  }
+
+  #[allow(clippy::type_complexity)]
+  fn prepare_payments(
+    seed: &Zeroizing<[u8; 32]>,
+    inputs: &[EdwardsPoint],
+    payments: &mut Vec<InternalPayment>,
     uniqueness: [u8; 32],
-  ) -> (Transaction, Scalar) {
+  ) -> (EdwardsPoint, Vec<Zeroizing<Scalar>>, Vec<SendOutput>, Option<[u8; 8]>) {
+    let mut rng = {
+      // Hash the inputs into the seed so we don't re-use Rs
+      // Doesn't re-use uniqueness as that's based on key images, which requires interactivity
+      // to generate. The output keys do not
+      // This remains private so long as the seed is private
+      let mut r_uniqueness = vec![];
+      for input in inputs {
+        r_uniqueness.extend(input.compress().to_bytes());
+      }
+      ChaCha20Rng::from_seed(hash(
+        &[b"monero-serai_outputs".as_ref(), seed.as_ref(), &r_uniqueness].concat(),
+      ))
+    };
+
     // Shuffle the payments
-    self.payments.shuffle(rng);
+    payments.shuffle(&mut rng);
 
     // Used for all non-subaddress outputs, or if there's only one subaddress output and a change
-    let tx_key = Zeroizing::new(random_scalar(rng));
+    let tx_key = Zeroizing::new(random_scalar(&mut rng));
     let mut tx_public_key = tx_key.deref() * &ED25519_BASEPOINT_TABLE;
 
     // If any of these outputs are to a subaddress, we need keys distinct to them
     // The only time this *does not* force having additional keys is when the only other output
     // is a change output we have the view key for, enabling rewriting rA to aR
     let mut has_change_view = false;
-    let subaddresses = self
-      .payments
+    let subaddresses = payments
       .iter()
       .filter(|payment| match *payment {
         InternalPayment::Payment(payment) => payment.0.is_subaddress(),
@@ -391,14 +433,14 @@ impl SignableTransaction {
     // We need additional keys if we have any subaddresses
     let mut additional = subaddresses;
     // Unless the above change view key path is taken
-    if (self.payments.len() == 2) && has_change_view {
+    if (payments.len() == 2) && has_change_view {
       additional = false;
     }
     let modified_change_ecdh = subaddresses && (!additional);
 
     // If we're using the aR rewrite, update tx_public_key from rG to rB
     if modified_change_ecdh {
-      for payment in &self.payments {
+      for payment in &*payments {
         match payment {
           InternalPayment::Payment(payment) => {
             // This should be the only payment and it should be a subaddress
@@ -412,9 +454,10 @@ impl SignableTransaction {
     }
 
     // Actually create the outputs
-    let mut outputs = Vec::with_capacity(self.payments.len());
+    let mut additional_keys = vec![];
+    let mut outputs = Vec::with_capacity(payments.len());
     let mut id = None;
-    for (o, mut payment) in self.payments.drain(..).enumerate() {
+    for (o, mut payment) in payments.drain(..).enumerate() {
       // Downcast the change output to a payment output if it doesn't require special handling
       // regarding it's view key
       payment = if !modified_change_ecdh {
@@ -430,7 +473,7 @@ impl SignableTransaction {
       let (output, payment_id) = match payment {
         InternalPayment::Payment(payment) => {
           // If this is a subaddress, generate a dedicated r. Else, reuse the TX key
-          let dedicated = Zeroizing::new(random_scalar(&mut *rng));
+          let dedicated = Zeroizing::new(random_scalar(&mut rng));
           let use_dedicated = additional && payment.0.is_subaddress();
           let r = if use_dedicated { &dedicated } else { &tx_key };
 
@@ -438,9 +481,13 @@ impl SignableTransaction {
           if modified_change_ecdh {
             debug_assert_eq!(tx_public_key, output.R);
           }
-          // If this used tx_key, randomize its R
-          if !use_dedicated {
-            output.R = dfg::EdwardsPoint::random(&mut *rng).0;
+
+          if use_dedicated {
+            additional_keys.push(dedicated);
+          } else {
+            // If this used tx_key, randomize its R
+            // This is so when extra is created, there's a distinct R for it to use
+            output.R = dfg::EdwardsPoint::random(&mut rng).0;
           }
           (output, payment_id)
         }
@@ -466,6 +513,92 @@ impl SignableTransaction {
       id = id.or(Some(rand));
     }
 
+    (tx_public_key, additional_keys, outputs, id)
+  }
+
+  #[allow(non_snake_case)]
+  fn extra(
+    tx_key: EdwardsPoint,
+    additional: bool,
+    Rs: Vec<EdwardsPoint>,
+    id: Option<[u8; 8]>,
+    data: &mut Vec<Vec<u8>>,
+  ) -> Vec<u8> {
+    #[allow(non_snake_case)]
+    let Rs_len = Rs.len();
+    let mut extra = Extra::new(tx_key, if additional { Rs } else { vec![] });
+
+    if let Some(id) = id {
+      let mut id_vec = Vec::with_capacity(1 + 8);
+      PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
+      extra.push(ExtraField::Nonce(id_vec));
+    }
+
+    // Include data if present
+    let extra_len = Extra::fee_weight(Rs_len, id.is_some(), data.as_ref());
+    for part in data.drain(..) {
+      let mut arb = vec![ARBITRARY_DATA_MARKER];
+      arb.extend(part);
+      extra.push(ExtraField::Nonce(arb));
+    }
+
+    let mut serialized = Vec::with_capacity(extra_len);
+    extra.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  /// Returns the eventuality of this transaction.
+  /// The eventuality is defined as the TX extra/outputs this transaction will create, if signed
+  /// with the specified seed. This eventuality can be compared to on-chain transactions to see
+  /// if the transaction has already been signed and published.
+  pub fn eventuality(&self) -> Option<Eventuality> {
+    let inputs = self.inputs.iter().map(|input| input.key()).collect::<Vec<_>>();
+    let (tx_key, additional, outputs, id) = Self::prepare_payments(
+      self.r_seed.as_ref()?,
+      &inputs,
+      &mut self.payments.clone(),
+      // Lie about the uniqueness, used when determining output keys/commitments yet not the
+      // ephemeral keys, which is want we want here
+      // While we do still grab the outputs variable, it's so we can get its Rs
+      [0; 32],
+    );
+    #[allow(non_snake_case)]
+    let Rs = outputs.iter().map(|output| output.R).collect();
+    drop(outputs);
+
+    let additional = !additional.is_empty();
+    let extra = Self::extra(tx_key, additional, Rs, id, &mut self.data.clone());
+
+    Some(Eventuality {
+      protocol: self.protocol,
+      r_seed: self.r_seed.clone()?,
+      inputs,
+      payments: self.payments.clone(),
+      extra,
+    })
+  }
+
+  fn prepare_transaction<R: RngCore + CryptoRng>(
+    &mut self,
+    rng: &mut R,
+    uniqueness: [u8; 32],
+  ) -> (Transaction, Scalar) {
+    // If no seed for the ephemeral keys was provided, make one
+    let r_seed = self.r_seed.clone().unwrap_or_else(|| {
+      let mut res = Zeroizing::new([0; 32]);
+      rng.fill_bytes(res.as_mut());
+      res
+    });
+
+    let (tx_key, additional, outputs, id) = Self::prepare_payments(
+      &r_seed,
+      &self.inputs.iter().map(|input| input.key()).collect::<Vec<_>>(),
+      &mut self.payments,
+      uniqueness,
+    );
+    // This function only cares if additional keys were necessary, not what they were
+    let additional = !additional.is_empty();
+
     let commitments = outputs.iter().map(|output| output.commitment.clone()).collect::<Vec<_>>();
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
 
@@ -473,34 +606,19 @@ impl SignableTransaction {
     let bp = Bulletproofs::prove(rng, &commitments, self.protocol.bp_plus()).unwrap();
 
     // Create the TX extra
-    let extra = {
-      let mut extra = Extra::new(
-        tx_public_key,
-        if additional { outputs.iter().map(|output| output.R).collect() } else { vec![] },
-      );
+    let extra = Self::extra(
+      tx_key,
+      additional,
+      outputs.iter().map(|output| output.R).collect(),
+      id,
+      &mut self.data,
+    );
 
-      if let Some(id) = id {
-        let mut id_vec = Vec::with_capacity(1 + 8);
-        PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
-        extra.push(ExtraField::Nonce(id_vec));
-      }
-
-      // Include data if present
-      for part in self.data.drain(..) {
-        let mut arb = vec![ARBITRARY_DATA_MARKER];
-        arb.extend(part);
-        extra.push(ExtraField::Nonce(arb));
-      }
-
-      let mut serialized =
-        Vec::with_capacity(Extra::fee_weight(outputs.len(), id.is_some(), self.data.as_ref()));
-      extra.write(&mut serialized).unwrap();
-      serialized
-    };
-
+    let mut fee = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
     let mut tx_outputs = Vec::with_capacity(outputs.len());
     let mut ecdh_info = Vec::with_capacity(outputs.len());
     for output in &outputs {
+      fee -= output.commitment.amount;
       tx_outputs.push(Output {
         amount: 0,
         key: output.dest.compress(),
@@ -521,7 +639,7 @@ impl SignableTransaction {
         signatures: vec![],
         rct_signatures: RctSignatures {
           base: RctBase {
-            fee: self.fee,
+            fee,
             ecdh_info,
             commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
           },
@@ -577,5 +695,130 @@ impl SignableTransaction {
       }
     }
     Ok(tx)
+  }
+}
+
+impl Eventuality {
+  /// Enables building a HashMap of Extra -> Eventuality for efficiently checking if an on-chain
+  /// transaction may match this eventuality.
+  /// This extra is cryptographically bound to:
+  /// 1) A specific set of inputs (via their output key)
+  /// 2) A specific seed for the ephemeral keys
+  pub fn extra(&self) -> &[u8] {
+    &self.extra
+  }
+
+  pub fn matches(&self, tx: &Transaction) -> bool {
+    if self.payments.len() != tx.prefix.outputs.len() {
+      return false;
+    }
+
+    // Verify extra.
+    // Even if all the outputs were correct, a malicious extra could still cause a recipient to
+    // fail to receive their funds.
+    // This is the cheapest check available to perform as it does not require TX-specific ECC ops.
+    if self.extra != tx.prefix.extra {
+      return false;
+    }
+
+    // Also ensure no timelock was set.
+    if tx.prefix.timelock != Timelock::None {
+      return false;
+    }
+
+    // Generate the outputs. This is TX-specific due to uniqueness.
+    let (_, _, outputs, _) = SignableTransaction::prepare_payments(
+      &self.r_seed,
+      &self.inputs,
+      &mut self.payments.clone(),
+      uniqueness(&tx.prefix.inputs),
+    );
+
+    for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
+      // Verify the output, commitment, and encrypted amount.
+      if (&Output {
+        amount: 0,
+        key: expected.dest.compress(),
+        view_tag: Some(expected.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
+      } != actual) ||
+        (Some(&expected.commitment.calculate()) != tx.rct_signatures.base.commitments.get(o)) ||
+        (Some(&expected.amount) != tx.rct_signatures.base.ecdh_info.get(o))
+      {
+        return false;
+      }
+    }
+
+    true
+  }
+
+  pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+    self.protocol.write(w)?;
+    write_raw_vec(write_byte, self.r_seed.as_ref(), w)?;
+    write_vec(write_point, &self.inputs, w)?;
+
+    fn write_payment<W: io::Write>(payment: &InternalPayment, w: &mut W) -> io::Result<()> {
+      match payment {
+        InternalPayment::Payment(payment) => {
+          w.write_all(&[0])?;
+          write_vec(write_byte, payment.0.to_string().as_bytes(), w)?;
+          w.write_all(&payment.1.to_le_bytes())
+        }
+        InternalPayment::Change(change, amount) => {
+          w.write_all(&[1])?;
+          write_vec(write_byte, change.address.to_string().as_bytes(), w)?;
+          if let Some(view) = change.view.as_ref() {
+            w.write_all(&[1])?;
+            write_scalar(view, w)?;
+          } else {
+            w.write_all(&[0])?;
+          }
+          w.write_all(&amount.to_le_bytes())
+        }
+      }
+    }
+    write_vec(write_payment, &self.payments, w)?;
+
+    write_vec(write_byte, &self.extra, w)
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(128);
+    self.write(&mut buf).unwrap();
+    buf
+  }
+
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Eventuality> {
+    fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {
+      String::from_utf8(read_vec(read_byte, r)?)
+        .ok()
+        .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
+        .ok_or(io::Error::new(io::ErrorKind::Other, "invalid address"))
+    }
+
+    fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {
+      Ok(match read_byte(r)? {
+        0 => InternalPayment::Payment((read_address(r)?, read_u64(r)?)),
+        1 => InternalPayment::Change(
+          Change {
+            address: read_address(r)?,
+            view: match read_byte(r)? {
+              0 => None,
+              1 => Some(Zeroizing::new(read_scalar(r)?)),
+              _ => Err(io::Error::new(io::ErrorKind::Other, "invalid change payment"))?,
+            },
+          },
+          read_u64(r)?,
+        ),
+        _ => Err(io::Error::new(io::ErrorKind::Other, "invalid payment"))?,
+      })
+    }
+
+    Ok(Eventuality {
+      protocol: Protocol::read(r)?,
+      r_seed: Zeroizing::new(read_bytes::<_, 32>(r)?),
+      inputs: read_vec(read_point, r)?,
+      payments: read_vec(read_payment, r)?,
+      extra: read_vec(read_byte, r)?,
+    })
   }
 }

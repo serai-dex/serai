@@ -1,11 +1,12 @@
 use rand_core::{RngCore, OsRng};
 
-use serai_runtime::in_instructions::{Batch, Update};
-
 use serai_client::{
   primitives::{BITCOIN, BlockNumber, BlockHash, SeraiAddress, Amount, WithAmount, Balance},
   tokens::TokensEvent,
-  in_instructions::{primitives::InInstruction, InInstructionsEvent},
+  in_instructions::{
+    primitives::{InInstruction, Batch, Update},
+    InInstructionsEvent,
+  },
   Serai,
 };
 
@@ -17,7 +18,7 @@ serai_test!(
     let coin = BITCOIN;
     let mut id = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut id.0);
-    let block_number = BlockNumber(u32::try_from(OsRng.next_u64() >> 32).unwrap());
+    let block_number = BlockNumber(OsRng.next_u64());
 
     let mut address = SeraiAddress::new([0; 32]);
     OsRng.fill_bytes(&mut address.0);

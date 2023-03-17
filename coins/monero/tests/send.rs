@@ -1,6 +1,6 @@
 use monero_serai::{
-  wallet::{extra::Extra, address::SubaddressIndex, ReceivedOutput, SpendableOutput},
   transaction::Transaction,
+  wallet::{extra::Extra, address::SubaddressIndex, ReceivedOutput, SpendableOutput},
   rpc::Rpc,
 };
 

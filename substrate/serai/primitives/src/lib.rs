@@ -2,6 +2,9 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 #[cfg(feature = "std")]
@@ -31,6 +34,14 @@ pub const MAX_ADDRESS_LEN: u32 = 74;
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct ExternalAddress(BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>);
+
+#[cfg(feature = "std")]
+impl Zeroize for ExternalAddress {
+  fn zeroize(&mut self) {
+    self.0.as_mut().zeroize()
+  }
+}
+
 impl ExternalAddress {
   #[cfg(feature = "std")]
   pub fn new(address: Vec<u8>) -> Result<ExternalAddress, &'static str> {
@@ -58,6 +69,14 @@ pub const MAX_DATA_LEN: u32 = 512;
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Data(BoundedVec<u8, ConstU32<{ MAX_DATA_LEN }>>);
+
+#[cfg(feature = "std")]
+impl Zeroize for Data {
+  fn zeroize(&mut self) {
+    self.0.as_mut().zeroize()
+  }
+}
+
 impl Data {
   #[cfg(feature = "std")]
   pub fn new(data: Vec<u8>) -> Result<Data, &'static str> {

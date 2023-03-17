@@ -21,14 +21,14 @@ impl WriteAddendum for () {
 }
 
 /// Trait alias for the requirements to be used as an addendum.
-pub trait Addendum: Send + Clone + PartialEq + Debug + WriteAddendum {}
-impl<A: Send + Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
+pub trait Addendum: Send + Sync + Clone + PartialEq + Debug + WriteAddendum {}
+impl<A: Send + Sync + Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
-pub trait Algorithm<C: Curve>: Send + Clone {
+pub trait Algorithm<C: Curve>: Send + Sync + Clone {
   /// The transcript format this algorithm uses. This likely should NOT be the IETF-compatible
   /// transcript included in this crate.
-  type Transcript: Clone + Debug + Transcript;
+  type Transcript: Sync + Clone + Debug + Transcript;
   /// Serializable addendum, used in algorithms requiring more data than just the nonces.
   type Addendum: Addendum;
   /// The resulting type of the signatures this algorithm will produce.
@@ -120,7 +120,7 @@ mod sealed {
 pub(crate) use sealed::IetfTranscript;
 
 /// HRAm usable by the included Schnorr signature algorithm to generate challenges.
-pub trait Hram<C: Curve>: Send + Clone {
+pub trait Hram<C: Curve>: Send + Sync + Clone {
   /// HRAm function to generate a challenge.
   /// H2 from the IETF draft, despite having a different argument set (not being pre-formatted).
   #[allow(non_snake_case)]
@@ -129,7 +129,7 @@ pub trait Hram<C: Curve>: Send + Clone {
 
 /// Schnorr signature algorithm ((R, s) where s = r + cx).
 #[derive(Clone)]
-pub struct Schnorr<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> {
+pub struct Schnorr<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> {
   transcript: T,
   c: Option<C::F>,
   _hram: PhantomData<H>,
@@ -145,7 +145,7 @@ pub struct Schnorr<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> {
 /// specify a protocol for offsets.
 pub type IetfSchnorr<C, H> = Schnorr<C, IetfTranscript, H>;
 
-impl<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
+impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
   /// Construct a Schnorr algorithm continuing the specified transcript.
   pub fn new(transcript: T) -> Schnorr<C, T, H> {
     Schnorr { transcript, c: None, _hram: PhantomData }
@@ -161,7 +161,7 @@ impl<C: Curve, H: Hram<C>> IetfSchnorr<C, H> {
   }
 }
 
-impl<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> for Schnorr<C, T, H> {
+impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> for Schnorr<C, T, H> {
   type Transcript = T;
   type Addendum = ();
   type Signature = SchnorrSignature<C>;

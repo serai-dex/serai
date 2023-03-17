@@ -1,5 +1,9 @@
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
+
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
@@ -10,10 +14,10 @@ use sp_core::H256;
 #[derive(
   Clone, Copy, Default, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct BlockNumber(pub u32);
-impl From<u32> for BlockNumber {
-  fn from(number: u32) -> BlockNumber {
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+pub struct BlockNumber(pub u64);
+impl From<u64> for BlockNumber {
+  fn from(number: u64) -> BlockNumber {
     BlockNumber(number)
   }
 }
@@ -24,7 +28,7 @@ impl From<u32> for BlockNumber {
 // This would require the processor to maintain a mapping of 32-byte IDs to actual hashes, which
 // would be fine
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct BlockHash(pub [u8; 32]);
 
 impl AsRef<[u8]> for BlockHash {

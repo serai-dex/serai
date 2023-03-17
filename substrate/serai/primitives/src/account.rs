@@ -1,5 +1,9 @@
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
+
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
@@ -14,7 +18,7 @@ pub type PublicKey = Public;
 #[derive(
   Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct SeraiAddress(pub [u8; 32]);
 impl SeraiAddress {
   pub fn new(key: [u8; 32]) -> SeraiAddress {

@@ -44,6 +44,12 @@ impl Input {
     }
   }
 
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
+    res
+  }
+
   pub fn read<R: Read>(r: &mut R) -> io::Result<Input> {
     Ok(match read_byte(r)? {
       255 => Input::Gen(read_varint(r)?),
@@ -80,6 +86,12 @@ impl Output {
       w.write_all(&[view_tag])?;
     }
     Ok(())
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(8 + 1 + 32);
+    self.write(&mut res).unwrap();
+    res
   }
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<Output> {
@@ -172,6 +184,12 @@ impl TransactionPrefix {
     w.write_all(&self.extra)
   }
 
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
+    res
+  }
+
   pub fn read<R: Read>(r: &mut R) -> io::Result<TransactionPrefix> {
     let mut prefix = TransactionPrefix {
       version: read_varint(r)?,
@@ -217,6 +235,12 @@ impl Transaction {
     } else {
       panic!("Serializing a transaction with an unknown version");
     }
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(2048);
+    self.write(&mut res).unwrap();
+    res
   }
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<Transaction> {

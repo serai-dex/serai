@@ -39,6 +39,7 @@ use crate::{
 /// FROST signing machine to produce a signed transaction.
 pub struct TransactionMachine {
   signable: SignableTransaction,
+
   i: Participant,
   transcript: RecommendedTranscript,
 
@@ -52,6 +53,7 @@ pub struct TransactionMachine {
 
 pub struct TransactionSignMachine {
   signable: SignableTransaction,
+
   i: Participant,
   transcript: RecommendedTranscript,
 
@@ -93,15 +95,22 @@ impl SignableTransaction {
     // multiple times, already breaking privacy there
 
     transcript.domain_separate(b"monero_transaction");
+
     // Include the height we're using for our data
     // The data itself will be included, making this unnecessary, yet a lot of this is technically
     // unnecessary. Anything which further increases security at almost no cost should be followed
     transcript.append_message(b"height", u64::try_from(height).unwrap().to_le_bytes());
+
     // Also include the spend_key as below only the key offset is included, so this transcripts the
     // sum product
     // Useful as transcripting the sum product effectively transcripts the key image, further
     // guaranteeing the one time properties noted below
     transcript.append_message(b"spend_key", keys.group_key().0.compress().to_bytes());
+
+    if let Some(r_seed) = &self.r_seed {
+      transcript.append_message(b"r_seed", r_seed);
+    }
+
     for input in &self.inputs {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
       // transcript (such as the one used to create one time keys) to be unique
@@ -111,6 +120,7 @@ impl SignableTransaction {
       // to determine RNG seeds and therefore the true spends
       transcript.append_message(b"input_shared_key", input.key_offset().to_bytes());
     }
+
     for payment in &self.payments {
       match payment {
         InternalPayment::Payment(payment) => {
@@ -162,6 +172,7 @@ impl SignableTransaction {
 
     Ok(TransactionMachine {
       signable: self,
+
       i: keys.params().i(),
       transcript,
 
@@ -208,6 +219,7 @@ impl PreprocessMachine for TransactionMachine {
     (
       TransactionSignMachine {
         signable: self.signable,
+
         i: self.i,
         transcript: self.transcript,
 
@@ -324,6 +336,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       sorted_images.sort_by(key_image_sort);
 
       self.signable.prepare_transaction(
+        // Technically, r_seed is used for the transaction keys if it's provided
         &mut ChaCha20Rng::from_seed(self.transcript.rng_seed(b"transaction_keys_bulletproofs")),
         uniqueness(
           &sorted_images

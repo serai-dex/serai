@@ -1,5 +1,5 @@
 [package]
-name = "serai-processor"
+name = "processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
 license = "AGPL-3.0-only"
@@ -16,39 +16,56 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # Macros
 async-trait = "0.1"
-zeroize = "^1.5"
+lazy_static = "1"
+zeroize = "1"
 thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+
+# Libs
 rand_core = "0.6"
+rand_chacha = "0.3"
+
+# Encoders
+hex = "0.4"
+scale = { package = "parity-scale-codec", version = "3" }
+bincode = "1"
+serde_json = "1"
 
 # Cryptography
-transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
-
 group = "0.12"
-frost = { package = "modular-frost", path = "../crypto/frost", features = ["secp256k1", "ed25519"] }
 
-# Monero
-curve25519-dalek = { version = "3", features = ["std"] }
-dalek-ff-group = { path = "../crypto/dalek-ff-group", features = ["black_box"] }
-monero-serai = { path = "../coins/monero", features = ["multisig"] }
+transcript = { package = "flexible-transcript", path = "../crypto/transcript" }
+frost = { package = "modular-frost", path = "../crypto/frost" }
 
 # Bitcoin
-bitcoin-serai = { path = "../coins/bitcoin" }
+secp256k1 = { version = "0.24", features = ["global-context", "rand-std"], optional = true }
+bitcoin = { version = "0.29", optional = true }
 
-k256 = { version = "0.12", features = ["arithmetic"] }
-bitcoin = "0.29"
-hex = "0.4"
-secp256k1 = { version = "0.24", features = ["global-context", "rand-std"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+k256 = { version = "0.12", features = ["arithmetic"], optional = true }
+bitcoin-serai = { path = "../coins/bitcoin", optional = true }
 
-[dev-dependencies]
-rand_core = "0.6"
+# Monero
+dalek-ff-group = { path = "../crypto/dalek-ff-group", optional = true }
+monero-serai = { path = "../coins/monero", features = ["multisig"], optional = true }
 
-hex = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1.0"
-
-futures = "0.3"
+# Application
+log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
+serai-client = { path = "../substrate/serai/client", default-features = false }
+
+messages = { package = "processor-messages", path = "./messages" }
+
+[dev-dependencies]
+futures = "0.3"
+
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["tests"] }
+
+env_logger = "0.10"
+
+[features]
+secp256k1 = ["k256", "frost/secp256k1"]
+bitcoin = ["dep:secp256k1", "dep:bitcoin", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]
+
+ed25519 = ["dalek-ff-group", "frost/ed25519"]
+monero = ["ed25519", "monero-serai", "serai-client/monero"]

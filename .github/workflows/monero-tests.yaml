@@ -53,4 +53,4 @@ jobs:
         if: ${{ matrix.version != 'v0.18.1.2' }}
         run: |
           cargo test --package monero-serai --all-features --test '*'
-          cargo test --package serai-processor monero
+          cargo test --package processor monero
