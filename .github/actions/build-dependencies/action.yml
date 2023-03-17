@@ -25,3 +25,14 @@ runs:
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
+
+    - name: Get nightly version to use
+      id: nightly
+      shell: bash
+      run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
+
+    - name: Install WASM toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.nightly.outputs.version }}
+        targets: wasm32-unknown-unknown
