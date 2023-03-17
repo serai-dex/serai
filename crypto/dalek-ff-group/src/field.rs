@@ -8,7 +8,7 @@ use subtle::{
   ConditionallySelectable,
 };
 
-use crypto_bigint::{Integer, Encoding, U256, U512};
+use crypto_bigint::{Integer, NonZero, Encoding, U256, U512};
 
 use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
@@ -78,7 +78,7 @@ const MOD_3_8: FieldElement =
 const MOD_5_8: FieldElement = FieldElement(MOD_3_8.0.saturating_sub(&U256::ONE));
 
 fn reduce(x: U512) -> U256 {
-  U256::from_le_slice(&x.reduce(&WIDE_MODULUS).unwrap().to_le_bytes()[.. 32])
+  U256::from_le_slice(&x.rem(&NonZero::new(WIDE_MODULUS).unwrap()).to_le_bytes()[.. 32])
 }
 
 constant_time!(FieldElement, U256);
@@ -87,10 +87,7 @@ math!(
   FieldElement,
   |x, y| U256::add_mod(&x, &y, &MODULUS),
   |x, y| U256::sub_mod(&x, &y, &MODULUS),
-  |x, y| {
-    let wide = U256::mul_wide(&x, &y);
-    reduce(U512::from((wide.1, wide.0)))
-  }
+  |x, y| reduce(U512::from(U256::mul_wide(&x, &y)))
 );
 from_uint!(FieldElement, U256);
 
@@ -125,7 +122,7 @@ impl Field for FieldElement {
     FieldElement(reduce(self.0.square()))
   }
   fn double(&self) -> Self {
-    FieldElement((self.0 << 1).reduce(&MODULUS).unwrap())
+    FieldElement((self.0 << 1).rem(&NonZero::new(MODULUS).unwrap()))
   }
 
   fn invert(&self) -> CtOption<Self> {

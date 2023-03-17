@@ -24,7 +24,7 @@ ff = { version = "0.12", features = ["bits"] }
 group = "0.12"
 
 generic-array = "0.14"
-crypto-bigint = { version = "0.4", features = ["zeroize"] }
+crypto-bigint = { version = "0.5", features = ["zeroize"] }
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "0.2" }
 

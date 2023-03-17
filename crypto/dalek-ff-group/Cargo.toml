@@ -22,7 +22,7 @@ subtle = "^2.4"
 ff = { version = "0.12", features = ["bits"] }
 group = "0.12"
 
-crypto-bigint = "0.4"
+crypto-bigint = "0.5"
 
 sha2 = "0.9"
 curve25519-dalek = "^3.2"

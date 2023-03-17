@@ -1489,6 +1489,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "crypto-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c2538c4e68e52548bacb3e83ac549f903d44f011ac9d5abb5e132e67d0808f7"
+dependencies = [
+ "rand_core 0.6.4",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "crypto-common"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1626,7 +1637,7 @@ dependencies = [
 name = "dalek-ff-group"
 version = "0.2.0"
 dependencies = [
- "crypto-bigint",
+ "crypto-bigint 0.5.1",
  "curve25519-dalek 3.2.0",
  "digest 0.10.6",
  "ff",
@@ -2089,7 +2100,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7bb888ab5300a19b8e5bceef25ac745ad065f3c9f7efc6de1b91958110891d3"
 dependencies = [
  "base16ct",
- "crypto-bigint",
+ "crypto-bigint 0.4.9",
  "der",
  "digest 0.10.6",
  "ff",
@@ -4925,7 +4936,7 @@ checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
 name = "minimal-ed448"
 version = "0.2.0"
 dependencies = [
- "crypto-bigint",
+ "crypto-bigint 0.5.1",
  "dalek-ff-group",
  "ff",
  "ff-group-tests",
@@ -6869,7 +6880,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7743f17af12fa0b03b803ba12cd6a8d9483a587e89c69445e3909655c0b9fabb"
 dependencies = [
- "crypto-bigint",
+ "crypto-bigint 0.4.9",
  "hmac 0.12.1",
  "zeroize",
 ]

@@ -33,7 +33,7 @@ macro_rules! field {
     use rand_core::RngCore;
 
     use generic_array::{typenum::U57, GenericArray};
-    use crypto_bigint::{Integer, Encoding};
+    use crypto_bigint::{Integer, NonZero, Encoding};
 
     use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
@@ -45,7 +45,7 @@ macro_rules! field {
     use $crate::backend::u8_from_bool;
 
     fn reduce(x: U1024) -> U512 {
-      U512::from_le_slice(&x.reduce(&$WIDE_MODULUS).unwrap().to_le_bytes()[.. 64])
+      U512::from_le_slice(&x.rem(&NonZero::new($WIDE_MODULUS).unwrap()).to_le_bytes()[.. 64])
     }
 
     constant_time!($FieldName, U512);
@@ -54,10 +54,7 @@ macro_rules! field {
       $FieldName,
       |x, y| U512::add_mod(&x, &y, &$MODULUS.0),
       |x, y| U512::sub_mod(&x, &y, &$MODULUS.0),
-      |x, y| {
-        let wide = U512::mul_wide(&x, &y);
-        reduce(U1024::from((wide.1, wide.0)))
-      }
+      |x, y| reduce(U1024::from(U512::mul_wide(&x, &y)))
     );
     from_uint!($FieldName, U512);
 
@@ -122,7 +119,7 @@ macro_rules! field {
         *self * self
       }
       fn double(&self) -> Self {
-        $FieldName((self.0 << 1).reduce(&$MODULUS.0).unwrap())
+        $FieldName((self.0 << 1).rem(&NonZero::new($MODULUS.0).unwrap()))
       }
 
       fn invert(&self) -> CtOption<Self> {
