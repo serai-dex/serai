@@ -2,7 +2,7 @@ use k256::{
   elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, sec1::ToEncodedPoint},
   ProjectivePoint, Scalar, U256,
 };
-use frost::curve::Secp256k1;
+use frost::{curve::Secp256k1, Participant};
 
 use ethereum_serai::crypto::*;
 
@@ -36,22 +36,22 @@ fn test_ecrecover() {
 #[test]
 fn test_signing() {
   use frost::{
-    algorithm::Schnorr,
+    algorithm::IetfSchnorr,
     tests::{algorithm_machines, key_gen, sign},
   };
   use rand_core::OsRng;
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
-  let _group_key = keys[&1].group_key();
+  let _group_key = keys[&Participant::new(1).unwrap()].group_key();
 
   const MESSAGE: &[u8] = b"Hello, World!";
 
-  let algo = Schnorr::<Secp256k1, EthereumHram>::new();
+  let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
   let _sig = sign(
     &mut OsRng,
     algo,
     keys.clone(),
-    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, EthereumHram>::new(), &keys),
+    algorithm_machines(&mut OsRng, IetfSchnorr::<Secp256k1, EthereumHram>::ietf(), &keys),
     MESSAGE,
   );
 }
@@ -59,13 +59,13 @@ fn test_signing() {
 #[test]
 fn test_ecrecover_hack() {
   use frost::{
-    algorithm::Schnorr,
+    algorithm::IetfSchnorr,
     tests::{algorithm_machines, key_gen, sign},
   };
   use rand_core::OsRng;
 
   let keys = key_gen::<_, Secp256k1>(&mut OsRng);
-  let group_key = keys[&1].group_key();
+  let group_key = keys[&Participant::new(1).unwrap()].group_key();
   let group_key_encoded = group_key.to_encoded_point(true);
   let group_key_compressed = group_key_encoded.as_ref();
   let group_key_x = Scalar::from_uint_reduced(U256::from_be_slice(&group_key_compressed[1 .. 33]));
@@ -76,7 +76,7 @@ fn test_ecrecover_hack() {
 
   let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
-  let algo = Schnorr::<Secp256k1, EthereumHram>::new();
+  let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
   let sig = sign(
     &mut OsRng,
     algo.clone(),

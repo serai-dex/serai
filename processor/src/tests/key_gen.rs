@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
 use group::GroupEncoding;
-use frost::{ThresholdParams, tests::clone_without};
+use frost::{Participant, ThresholdParams, tests::clone_without};
 
 use serai_client::validator_sets::primitives::{Session, ValidatorSetIndex, ValidatorSetInstance};
 
@@ -41,12 +41,13 @@ pub async fn test_key_gen<C: Coin>() {
       key_gen
         .handle(CoordinatorMessage::GenerateKey {
           id: ID,
-          params: ThresholdParams::new(3, 5, u16::try_from(i).unwrap()).unwrap(),
+          params: ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap())
+            .unwrap(),
         })
         .await
     {
       assert_eq!(id, ID);
-      all_commitments.insert(u16::try_from(i).unwrap(), commitments);
+      all_commitments.insert(Participant::new(u16::try_from(i).unwrap()).unwrap(), commitments);
     } else {
       panic!("didn't get commitments back");
     }
@@ -65,7 +66,7 @@ pub async fn test_key_gen<C: Coin>() {
   let mut all_shares = HashMap::new();
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
-    let i = u16::try_from(i).unwrap();
+    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     if let KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares { id, shares }) = key_gen
       .handle(CoordinatorMessage::Commitments {
         id: ID,
@@ -87,7 +88,7 @@ pub async fn test_key_gen<C: Coin>() {
   let mut res = None;
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
-    let i = u16::try_from(i).unwrap();
+    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     if let KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKey { id, key }) = key_gen
       .handle(CoordinatorMessage::Shares {
         id: ID,
@@ -122,7 +123,10 @@ pub async fn test_key_gen<C: Coin>() {
       .await
     {
       assert_eq!(activation_number, 111);
-      assert_eq!(keys.params(), ThresholdParams::new(3, 5, u16::try_from(i).unwrap()).unwrap());
+      assert_eq!(
+        keys.params(),
+        ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap()
+      );
       assert_eq!(keys.group_key().to_bytes().as_ref(), res.as_ref().unwrap());
     } else {
       panic!("didn't get key back");

@@ -1,21 +1,20 @@
 use core::ops::Deref;
 
+use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use zeroize::Zeroizing;
-
-use blake2::{digest::typenum::U32, Blake2b};
-type Blake2b256 = Blake2b<U32>;
-
-use group::{ff::Field, Group};
-
+use ciphersuite::{
+  group::{ff::Field, Group},
+  Ciphersuite, Ed25519,
+};
 use multiexp::BatchVerifier;
 
-use ciphersuite::{Ciphersuite, Ristretto};
 use crate::{
   SchnorrSignature,
   aggregate::{SchnorrAggregator, SchnorrAggregate},
 };
+
+mod rfc8032;
 
 pub(crate) fn sign<C: Ciphersuite>() {
   let private_key = Zeroizing::new(C::random_nonzero_F(&mut OsRng));
@@ -54,7 +53,7 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
     for (i, sig) in sigs.iter().enumerate() {
       sig.batch_verify(&mut OsRng, &mut batch, i, C::generator() * keys[i].deref(), challenges[i]);
     }
-    batch.verify_with_vartime_blame().unwrap();
+    batch.verify_vartime_with_vartime_blame().unwrap();
   }
 
   // Shift 1 from s from one to another and verify it fails
@@ -70,7 +69,7 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
       }
       sig.batch_verify(&mut OsRng, &mut batch, i, C::generator() * keys[i].deref(), challenges[i]);
     }
-    if let Err(blame) = batch.verify_with_vartime_blame() {
+    if let Err(blame) = batch.verify_vartime_with_vartime_blame() {
       assert!((blame == 1) || (blame == 2));
     } else {
       panic!("Batch verification considered malleated signatures valid");
@@ -79,15 +78,17 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
 }
 
 pub(crate) fn aggregate<C: Ciphersuite>() {
+  const DST: &[u8] = b"Schnorr Aggregator Test";
+
   // Create 5 signatures
   let mut keys = vec![];
   let mut challenges = vec![];
-  let mut aggregator = SchnorrAggregator::<Blake2b256, C>::new();
+  let mut aggregator = SchnorrAggregator::<C>::new(DST);
   for i in 0 .. 5 {
     keys.push(Zeroizing::new(C::random_nonzero_F(&mut OsRng)));
+    // In practice, this MUST be a secure challenge binding to the nonce, key, and any message
     challenges.push(C::random_nonzero_F(&mut OsRng));
     aggregator.aggregate(
-      C::generator() * keys[i].deref(),
       challenges[i],
       SchnorrSignature::<C>::sign(
         &keys[i],
@@ -100,20 +101,21 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
   let aggregate = aggregator.complete().unwrap();
   let aggregate =
     SchnorrAggregate::<C>::read::<&[u8]>(&mut aggregate.serialize().as_ref()).unwrap();
-  assert!(aggregate.verify::<Blake2b256>(
+  assert!(aggregate.verify(
+    DST,
     keys
       .iter()
       .map(|key| C::generator() * key.deref())
       .zip(challenges.iter().cloned())
       .collect::<Vec<_>>()
-      .as_ref()
+      .as_ref(),
   ));
 }
 
 #[test]
 fn test() {
-  sign::<Ristretto>();
-  verify::<Ristretto>();
-  batch_verify::<Ristretto>();
-  aggregate::<Ristretto>();
+  sign::<Ed25519>();
+  verify::<Ed25519>();
+  batch_verify::<Ed25519>();
+  aggregate::<Ed25519>();
 }

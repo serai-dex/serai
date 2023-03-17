@@ -1,6 +1,6 @@
 [package]
 name = "flexible-transcript"
-version = "0.2.0"
+version = "0.3.0"
 description = "A simple transcript trait definition, along with viable options"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/transcript"
@@ -18,6 +18,11 @@ digest = "0.10"
 blake2 = { version = "0.10", optional = true }
 merlin = { version = "3", optional = true }
 
+[dev-dependencies]
+sha2 = "0.10"
+blake2 = "0.10"
+
 [features]
 recommended = ["blake2"]
 merlin = ["dep:merlin"]
+tests = []

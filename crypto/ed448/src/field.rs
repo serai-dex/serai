@@ -32,5 +32,5 @@ field!(FieldElement, MODULUS, WIDE_MODULUS, 448);
 #[test]
 fn test_field() {
   // TODO: Move to test_prime_field_bits once the impl is finished
-  ff_group_tests::prime_field::test_prime_field::<FieldElement>();
+  ff_group_tests::prime_field::test_prime_field::<_, FieldElement>(&mut rand_core::OsRng);
 }

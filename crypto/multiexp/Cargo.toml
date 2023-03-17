@@ -1,6 +1,6 @@
 [package]
 name = "multiexp"
-version = "0.2.2"
+version = "0.3.0"
 description = "Multiexponentation algorithms for ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/multiexp"
@@ -13,7 +13,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-zeroize = { version = "1", features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 
 ff = "0.12"
 group = "0.12"
@@ -27,4 +27,5 @@ k256 = { version = "0.12", features = ["bits"] }
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
+black_box = []
 batch = ["rand_core"]

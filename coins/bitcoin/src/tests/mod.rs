@@ -8,7 +8,8 @@ use bitcoin::hashes::{Hash as HashTrait, sha256::Hash};
 use k256::Scalar;
 use frost::{
   curve::Secp256k1,
-  algorithm::Schnorr,
+  Participant,
+  algorithm::IetfSchnorr,
   tests::{algorithm_machines, key_gen, sign},
 };
 
@@ -24,12 +25,12 @@ fn test_signing() {
     *keys = keys.offset(Scalar::from(offset));
   }
 
-  let algo = Schnorr::<Secp256k1, BitcoinHram>::new();
+  let algo = IetfSchnorr::<Secp256k1, BitcoinHram>::ietf();
   let mut sig = sign(
     &mut OsRng,
     algo,
     keys.clone(),
-    algorithm_machines(&mut OsRng, Schnorr::<Secp256k1, BitcoinHram>::new(), &keys),
+    algorithm_machines(&mut OsRng, IetfSchnorr::ietf(), &keys),
     &Sha256::digest(MESSAGE),
   );
 
@@ -41,7 +42,7 @@ fn test_signing() {
     .verify_schnorr(
       &Signature::from_slice(&sig.serialize()[1 .. 65]).unwrap(),
       &Message::from(Hash::hash(MESSAGE)),
-      &x_only(&keys[&1].group_key()),
+      &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )
     .unwrap()
 }

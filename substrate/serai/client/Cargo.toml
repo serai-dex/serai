@@ -24,8 +24,8 @@ subxt = { version = "0.25", optional = true }
 
 bitcoin = { version = "0.29", optional = true }
 
-ciphersuite = { path = "../../../crypto/ciphersuite", version = "0.1", optional = true }
-monero-serai = { path = "../../../coins/monero", version = "0.1.2-alpha", optional = true }
+ciphersuite = { path = "../../../crypto/ciphersuite", version = "0.2", optional = true }
+monero-serai = { path = "../../../coins/monero", version = "0.1.3-alpha", optional = true }
 
 [features]
 serai = ["thiserror", "scale-info", "subxt"]

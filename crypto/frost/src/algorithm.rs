@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::Transcript;
 
-use crate::{Curve, FrostError, ThresholdKeys, ThresholdView};
+use crate::{Participant, ThresholdKeys, ThresholdView, Curve, FrostError};
 pub use schnorr::SchnorrSignature;
 
 /// Write an addendum to a writer.
@@ -28,7 +28,7 @@ impl<A: Send + Sync + Clone + PartialEq + Debug + WriteAddendum> Addendum for A 
 pub trait Algorithm<C: Curve>: Send + Sync + Clone {
   /// The transcript format this algorithm uses. This likely should NOT be the IETF-compatible
   /// transcript included in this crate.
-  type Transcript: Clone + Debug + Transcript;
+  type Transcript: Sync + Clone + Debug + Transcript;
   /// Serializable addendum, used in algorithms requiring more data than just the nonces.
   type Addendum: Addendum;
   /// The resulting type of the signatures this algorithm will produce.
@@ -38,7 +38,7 @@ pub trait Algorithm<C: Curve>: Send + Sync + Clone {
   fn transcript(&mut self) -> &mut Self::Transcript;
 
   /// Obtain the list of nonces to generate, as specified by the generators to create commitments
-  /// against per-nonce
+  /// against per-nonce.
   fn nonces(&self) -> Vec<Vec<C::G>>;
 
   /// Generate an addendum to FROST"s preprocessing stage.
@@ -55,7 +55,7 @@ pub trait Algorithm<C: Curve>: Send + Sync + Clone {
   fn process_addendum(
     &mut self,
     params: &ThresholdView<C>,
-    l: u16,
+    l: Participant,
     reader: Self::Addendum,
   ) -> Result<(), FrostError>;
 
@@ -87,32 +87,37 @@ pub trait Algorithm<C: Curve>: Send + Sync + Clone {
   ) -> Result<Vec<(C::F, C::G)>, ()>;
 }
 
-/// IETF-compliant transcript. This is incredibly naive and should not be used within larger
-/// protocols.
-#[derive(Clone, Debug)]
-pub struct IetfTranscript(Vec<u8>);
-impl Transcript for IetfTranscript {
-  type Challenge = Vec<u8>;
+mod sealed {
+  pub use super::*;
 
-  fn new(_: &'static [u8]) -> IetfTranscript {
-    IetfTranscript(vec![])
-  }
+  /// IETF-compliant transcript. This is incredibly naive and should not be used within larger
+  /// protocols.
+  #[derive(Clone, Debug)]
+  pub struct IetfTranscript(pub(crate) Vec<u8>);
+  impl Transcript for IetfTranscript {
+    type Challenge = Vec<u8>;
 
-  fn domain_separate(&mut self, _: &[u8]) {}
+    fn new(_: &'static [u8]) -> IetfTranscript {
+      IetfTranscript(vec![])
+    }
 
-  fn append_message<M: AsRef<[u8]>>(&mut self, _: &'static [u8], message: M) {
-    self.0.extend(message.as_ref());
-  }
+    fn domain_separate(&mut self, _: &[u8]) {}
 
-  fn challenge(&mut self, _: &'static [u8]) -> Vec<u8> {
-    self.0.clone()
-  }
+    fn append_message<M: AsRef<[u8]>>(&mut self, _: &'static [u8], message: M) {
+      self.0.extend(message.as_ref());
+    }
 
-  // FROST won't use this and this shouldn't be used outside of FROST
-  fn rng_seed(&mut self, _: &'static [u8]) -> [u8; 32] {
-    unimplemented!()
+    fn challenge(&mut self, _: &'static [u8]) -> Vec<u8> {
+      self.0.clone()
+    }
+
+    // FROST won't use this and this shouldn't be used outside of FROST
+    fn rng_seed(&mut self, _: &'static [u8]) -> [u8; 32] {
+      unimplemented!()
+    }
   }
 }
+pub(crate) use sealed::IetfTranscript;
 
 /// HRAm usable by the included Schnorr signature algorithm to generate challenges.
 pub trait Hram<C: Curve>: Send + Sync + Clone {
@@ -122,28 +127,42 @@ pub trait Hram<C: Curve>: Send + Sync + Clone {
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F;
 }
 
-/// IETF-compliant Schnorr signature algorithm ((R, s) where s = r + cx).
+/// Schnorr signature algorithm ((R, s) where s = r + cx).
 #[derive(Clone)]
-pub struct Schnorr<C: Curve, H: Hram<C>> {
-  transcript: IetfTranscript,
+pub struct Schnorr<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> {
+  transcript: T,
   c: Option<C::F>,
   _hram: PhantomData<H>,
 }
 
-impl<C: Curve, H: Hram<C>> Default for Schnorr<C, H> {
-  fn default() -> Self {
-    Self::new()
+/// IETF-compliant Schnorr signature algorithm.
+///
+/// This algorithm specifically uses the transcript format defined in the FROST IETF draft.
+/// It's a naive transcript format not viable for usage in larger protocols, yet is presented here
+/// in order to provide compatibility.
+///
+/// Usage of this with key offsets will break the intended compatibility as the IETF draft does not
+/// specify a protocol for offsets.
+pub type IetfSchnorr<C, H> = Schnorr<C, IetfTranscript, H>;
+
+impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
+  /// Construct a Schnorr algorithm continuing the specified transcript.
+  pub fn new(transcript: T) -> Schnorr<C, T, H> {
+    Schnorr { transcript, c: None, _hram: PhantomData }
   }
 }
 
-impl<C: Curve, H: Hram<C>> Schnorr<C, H> {
-  pub fn new() -> Schnorr<C, H> {
-    Schnorr { transcript: IetfTranscript(vec![]), c: None, _hram: PhantomData }
+impl<C: Curve, H: Hram<C>> IetfSchnorr<C, H> {
+  /// Construct a IETF-compatible Schnorr algorithm.
+  ///
+  /// Please see the `IetfSchnorr` documentation for the full details of this.
+  pub fn ietf() -> IetfSchnorr<C, H> {
+    Schnorr::new(IetfTranscript(vec![]))
   }
 }
 
-impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
-  type Transcript = IetfTranscript;
+impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> for Schnorr<C, T, H> {
+  type Transcript = T;
   type Addendum = ();
   type Signature = SchnorrSignature<C>;
 
@@ -161,7 +180,12 @@ impl<C: Curve, H: Hram<C>> Algorithm<C> for Schnorr<C, H> {
     Ok(())
   }
 
-  fn process_addendum(&mut self, _: &ThresholdView<C>, _: u16, _: ()) -> Result<(), FrostError> {
+  fn process_addendum(
+    &mut self,
+    _: &ThresholdView<C>,
+    _: Participant,
+    _: (),
+  ) -> Result<(), FrostError> {
     Ok(())
   }
 

@@ -1,6 +1,10 @@
+use core::ops::DerefMut;
+
 use ff::PrimeFieldBits;
 
 use zeroize::Zeroize;
+
+use crate::cross_group::u8_from_bool;
 
 /// Convert a uniform scalar into one usable on both fields, clearing the top bits as needed.
 pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
@@ -8,14 +12,15 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
 ) -> (F0, F1) {
   let mutual_capacity = F0::CAPACITY.min(F1::CAPACITY);
 
-  // The security of a mutual key is the security of the lower field. Accordingly, this bans a
-  // difference of more than 4 bits
+  // A mutual key is only as secure as its weakest group
+  // Accordingly, this bans a capacity difference of more than 4 bits to prevent a curve generally
+  // offering n-bits of security from being forced into a situation with much fewer bits
   #[cfg(feature = "secure_capacity_difference")]
-  assert!((F0::CAPACITY.max(F1::CAPACITY) - mutual_capacity) < 4);
+  assert!((F0::CAPACITY.max(F1::CAPACITY) - mutual_capacity) <= 4);
 
   let mut res1 = F0::zero();
   let mut res2 = F1::zero();
-  // Uses the bit view API to ensure a consistent endianess
+  // Uses the bits API to ensure a consistent endianess
   let mut bits = scalar.to_le_bits();
   scalar.zeroize();
   // Convert it to big endian
@@ -24,9 +29,9 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   let mut skip = bits.len() - usize::try_from(mutual_capacity).unwrap();
   // Needed to zero out the bits
   #[allow(unused_assignments)]
-  for mut raw_bit in bits.iter_mut() {
+  for mut bit in bits.iter_mut() {
     if skip > 0 {
-      *raw_bit = false;
+      bit.deref_mut().zeroize();
       skip -= 1;
       continue;
     }
@@ -34,9 +39,7 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
     res1 = res1.double();
     res2 = res2.double();
 
-    let mut bit = u8::from(*raw_bit);
-    *raw_bit = false;
-
+    let mut bit = u8_from_bool(bit.deref_mut());
     res1 += F0::from(bit.into());
     res2 += F1::from(bit.into());
     bit.zeroize();

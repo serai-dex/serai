@@ -8,7 +8,7 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use serde::{Serialize, Deserialize};
 
-use dkg::ThresholdParams;
+use dkg::{Participant, ThresholdParams};
 
 use serai_primitives::WithAmount;
 use in_instructions_primitives::InInstruction;
@@ -35,9 +35,9 @@ pub mod key_gen {
     // Instructs the Processor to begin the key generation process.
     GenerateKey { id: KeyGenId, params: ThresholdParams },
     // Received commitments for the specified key generation protocol.
-    Commitments { id: KeyGenId, commitments: HashMap<u16, Vec<u8>> },
+    Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
+    Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
     // Confirm a key.
     ConfirmKey { context: SubstrateContext, id: KeyGenId },
   }
@@ -47,7 +47,7 @@ pub mod key_gen {
     // Created commitments for the specified key generation protocol.
     Commitments { id: KeyGenId, commitments: Vec<u8> },
     // Created shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: HashMap<u16, Vec<u8>> },
+    Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
     // Resulting key from the specified key generation protocol.
     GeneratedKey { id: KeyGenId, key: Vec<u8> },
   }
@@ -67,14 +67,14 @@ pub mod sign {
     /// Determine a signing set for a given signing session.
     // TODO: Replace with ROAST or the first available group of signers.
     // https://github.com/serai-dex/serai/issues/163
-    pub fn signing_set(&self, params: &ThresholdParams) -> Vec<u16> {
+    pub fn signing_set(&self, params: &ThresholdParams) -> Vec<Participant> {
       let mut transcript = RecommendedTranscript::new(b"SignId signing_set");
       transcript.domain_separate(b"SignId");
       transcript.append_message(b"key", &self.key);
       transcript.append_message(b"id", self.id);
       transcript.append_message(b"attempt", self.attempt.to_le_bytes());
 
-      let mut candidates = (1 ..= params.n()).collect::<Vec<_>>();
+      let mut candidates = (1 ..= params.n()).map(|i| Participant::new(i).unwrap()).collect::<Vec<_>>();
       let mut rng = ChaCha8Rng::from_seed(transcript.rng_seed(b"signing_set"));
       while candidates.len() > params.t().into() {
         candidates.swap_remove(
@@ -88,9 +88,9 @@ pub mod sign {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     // Received preprocesses for the specified signing protocol.
-    Preprocesses { id: SignId, preprocesses: HashMap<u16, Vec<u8>> },
+    Preprocesses { id: SignId, preprocesses: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified signing protocol.
-    Shares { id: SignId, shares: HashMap<u16, Vec<u8>> },
+    Shares { id: SignId, shares: HashMap<Participant, Vec<u8>> },
     // Completed a signing protocol already.
     Completed { id: SignId, tx: Vec<u8> },
   }

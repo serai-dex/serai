@@ -10,7 +10,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::{
   curve::Ciphersuite,
-  dkg::{ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*},
+  dkg::{Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*},
 };
 
 use log::info;
@@ -59,7 +59,7 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     &mut self,
     txn: &mut D::Transaction,
     id: &KeyGenId,
-    commitments: &HashMap<u16, Vec<u8>>,
+    commitments: &HashMap<Participant, Vec<u8>>,
   ) {
     txn.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
   }
@@ -67,21 +67,23 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     &self,
     id: &KeyGenId,
     params: ThresholdParams,
-  ) -> HashMap<u16, EncryptionKeyMessage<C::Curve, Commitments<C::Curve>>> {
-    bincode::deserialize::<HashMap<u16, Vec<u8>>>(&self.0.get(Self::commitments_key(id)).unwrap())
-      .unwrap()
-      .drain()
-      .map(|(i, bytes)| {
-        (
-          i,
-          EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
-            &mut bytes.as_ref(),
-            params,
-          )
-          .unwrap(),
+  ) -> HashMap<Participant, EncryptionKeyMessage<C::Curve, Commitments<C::Curve>>> {
+    bincode::deserialize::<HashMap<Participant, Vec<u8>>>(
+      &self.0.get(Self::commitments_key(id)).unwrap(),
+    )
+    .unwrap()
+    .drain()
+    .map(|(i, bytes)| {
+      (
+        i,
+        EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
+          &mut bytes.as_ref(),
+          params,
         )
-      })
-      .collect()
+        .unwrap(),
+      )
+    })
+    .collect()
   }
 
   fn generated_keys_key(id: &KeyGenId) -> Vec<u8> {

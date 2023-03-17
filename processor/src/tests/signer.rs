@@ -7,7 +7,7 @@ use rand_core::OsRng;
 
 use group::GroupEncoding;
 use frost::{
-  ThresholdKeys,
+  Participant, ThresholdKeys,
   dkg::tests::{key_gen, clone_without},
 };
 
@@ -24,15 +24,18 @@ use crate::{
 #[allow(clippy::type_complexity)]
 pub async fn sign<C: Coin>(
   coin: C,
-  mut keys_txs: HashMap<u16, (ThresholdKeys<C::Curve>, (C::SignableTransaction, C::Eventuality))>,
+  mut keys_txs: HashMap<
+    Participant,
+    (ThresholdKeys<C::Curve>, (C::SignableTransaction, C::Eventuality)),
+  >,
 ) -> <C::Transaction as Transaction<C>>::Id {
   let actual_id = SignId {
-    key: keys_txs[&1].0.group_key().to_bytes().as_ref().to_vec(),
+    key: keys_txs[&Participant::new(1).unwrap()].0.group_key().to_bytes().as_ref().to_vec(),
     id: [0xaa; 32],
     attempt: 0,
   };
 
-  let signing_set = actual_id.signing_set(&keys_txs[&1].0.params());
+  let signing_set = actual_id.signing_set(&keys_txs[&Participant::new(1).unwrap()].0.params());
   let mut keys = HashMap::new();
   let mut txs = HashMap::new();
   for (i, (these_keys, this_tx)) in keys_txs.drain() {
@@ -43,13 +46,13 @@ pub async fn sign<C: Coin>(
 
   let mut signers = HashMap::new();
   for i in 1 ..= keys.len() {
-    let i = u16::try_from(i).unwrap();
+    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     signers.insert(i, Signer::new(MemDb::new(), coin.clone(), keys.remove(&i).unwrap()));
   }
 
   let start = SystemTime::now();
   for i in 1 ..= signers.len() {
-    let i = u16::try_from(i).unwrap();
+    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let (tx, eventuality) = txs.remove(&i).unwrap();
     signers[&i].sign_transaction(actual_id.id, start, tx, eventuality).await;
   }
@@ -106,14 +109,16 @@ pub async fn sign<C: Coin>(
   }
 
   // Make sure the signers not included didn't do anything
-  let mut excluded = (1 ..= signers.len()).collect::<Vec<_>>();
+  let mut excluded = (1 ..= signers.len())
+    .map(|i| Participant::new(u16::try_from(i).unwrap()).unwrap())
+    .collect::<Vec<_>>();
   for i in signing_set {
-    excluded.remove(excluded.binary_search(&usize::from(i)).unwrap());
+    excluded.remove(excluded.binary_search(&i).unwrap());
   }
   for i in excluded {
     assert!(timeout(
       Duration::from_secs(1),
-      signers.get_mut(&u16::try_from(i).unwrap()).unwrap().events.recv()
+      signers.get_mut(&Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap().events.recv()
     )
     .await
     .is_err());
@@ -127,7 +132,7 @@ pub async fn test_signer<C: Coin>(coin: C) {
   for (_, keys) in keys.iter_mut() {
     C::tweak_keys(keys);
   }
-  let key = keys[&1].group_key();
+  let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let outputs = coin.get_outputs(&coin.test_send(C::address(key)).await, key).await.unwrap();
   let sync_block = coin.get_latest_block_number().await.unwrap() - C::CONFIRMATIONS;

@@ -1,3 +1,4 @@
+use rand_core::RngCore;
 use group::ff::{PrimeField, PrimeFieldBits};
 
 use crate::field::test_field;
@@ -29,6 +30,16 @@ pub fn test_is_odd<F: PrimeField>() {
   assert_eq!(F::one().is_odd().unwrap_u8(), 1, "1 was even");
   assert_eq!(F::one().is_even().unwrap_u8(), 0, "1 wasn't odd");
 
+  // Make sure an odd value added to an odd value is even
+  let two = F::one().double();
+  assert_eq!(two.is_odd().unwrap_u8(), 0, "2 was odd");
+  assert_eq!(two.is_even().unwrap_u8(), 1, "2 wasn't even");
+
+  // Make sure an even value added to an even value is even
+  let four = two.double();
+  assert_eq!(four.is_odd().unwrap_u8(), 0, "4 was odd");
+  assert_eq!(four.is_even().unwrap_u8(), 1, "4 wasn't even");
+
   let neg_one = -F::one();
   assert_eq!(neg_one.is_odd().unwrap_u8(), 0, "-1 was odd");
   assert_eq!(neg_one.is_even().unwrap_u8(), 1, "-1 wasn't even");
@@ -49,16 +60,39 @@ pub fn test_encoding<F: PrimeField>() {
       F::from_repr_vartime(repr).unwrap(),
       "{msg} couldn't be encoded and decoded",
     );
+    assert_eq!(
+      bytes.as_ref(),
+      F::from_repr(repr).unwrap().to_repr().as_ref(),
+      "canonical encoding decoded produced distinct encoding"
+    );
   };
   test(F::zero(), "0");
   test(F::one(), "1");
   test(F::one() + F::one(), "2");
   test(-F::one(), "-1");
+
+  // Also check if a non-canonical encoding is possible
+  let mut high = (F::zero() - F::one()).to_repr();
+  let mut possible_non_canon = false;
+  for byte in high.as_mut() {
+    // The fact a bit isn't set in the highest possible value suggests there's unused bits
+    // If there's unused bits, mark the possibility of a non-canonical encoding and set the bits
+    if *byte != 255 {
+      possible_non_canon = true;
+      *byte = 255;
+      break;
+    }
+  }
+
+  // Any non-canonical encoding should fail to be read
+  if possible_non_canon {
+    assert!(!bool::from(F::from_repr(high).is_some()));
+  }
 }
 
 /// Run all tests on fields implementing PrimeField.
-pub fn test_prime_field<F: PrimeField>() {
-  test_field::<F>();
+pub fn test_prime_field<R: RngCore, F: PrimeField>(rng: &mut R) {
+  test_field::<R, F>(rng);
 
   test_zero::<F>();
   test_one::<F>();
@@ -265,6 +299,7 @@ pub fn test_root_of_unity<F: PrimeFieldBits>() {
     }
     bit = bit.double();
   }
+  assert!(bool::from(t.is_odd()), "t wasn't odd");
 
   assert_eq!(pow(F::multiplicative_generator(), t), F::root_of_unity(), "incorrect root of unity");
   assert_eq!(
@@ -275,8 +310,8 @@ pub fn test_root_of_unity<F: PrimeFieldBits>() {
 }
 
 /// Run all tests on fields implementing PrimeFieldBits.
-pub fn test_prime_field_bits<F: PrimeFieldBits>() {
-  test_prime_field::<F>();
+pub fn test_prime_field_bits<R: RngCore, F: PrimeFieldBits>(rng: &mut R) {
+  test_prime_field::<R, F>(rng);
 
   test_to_le_bits::<F>();
   test_char_le_bits::<F>();

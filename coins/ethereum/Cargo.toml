@@ -28,10 +28,10 @@ frost = { package = "modular-frost", path = "../../crypto/frost", features = ["s
 
 eyre = "0.6"
 
-ethers = { version = "1", features = ["abigen", "ethers-solc"] }
+ethers = { version = "2", features = ["abigen", "ethers-solc"] }
 
 [build-dependencies]
-ethers-solc = "1"
+ethers-solc = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }

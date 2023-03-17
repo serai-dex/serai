@@ -2,7 +2,7 @@ use std::{time::Duration, collections::HashMap};
 
 use rand_core::OsRng;
 
-use frost::dkg::tests::key_gen;
+use frost::{Participant, dkg::tests::key_gen};
 
 use tokio::time::timeout;
 
@@ -20,7 +20,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   for (_, keys) in keys.iter_mut() {
     C::tweak_keys(keys);
   }
-  let key = keys[&1].group_key();
+  let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), MemDb::new());
   assert!(active_keys.is_empty());

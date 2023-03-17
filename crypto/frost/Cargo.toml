@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.5.0"
+version = "0.6.0"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
@@ -18,34 +18,31 @@ thiserror = "1"
 rand_core = "0.6"
 rand_chacha = "0.3"
 
-zeroize = { version = "1", features = ["zeroize_derive"] }
-subtle = "2"
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
+subtle = "^2.4"
 
 hex = { version = "0.4", optional = true }
 
 digest = "0.10"
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3", features = ["recommended"] }
 
-group = "0.12"
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.2", optional = true }
+minimal-ed448 = { path = "../ed448", version = "0.2", optional = true }
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "^0.1.2", optional = true }
-minimal-ed448 = { path = "../ed448", version = "^0.1.2", optional = true }
+ciphersuite = { path = "../ciphersuite", version = "0.2", features = ["std"] }
 
-ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std"] }
+multiexp = { path = "../multiexp", version = "0.3", features = ["batch"] }
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2", features = ["recommended"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.3" }
+dleq = { path = "../dleq", version = "0.3", features = ["serialize"] }
 
-multiexp = { path = "../multiexp", version = "0.2", features = ["batch"] }
-
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.2" }
-dleq = { path = "../dleq", version = "0.2", features = ["serialize"] }
-
-dkg = { path = "../dkg", version = "0.2" }
+dkg = { path = "../dkg", version = "0.3" }
 
 [dev-dependencies]
 hex = "0.4"
 serde_json = "1"
 
-dkg = { path = "../dkg", version = "0.2", features = ["tests"] }
+dkg = { path = "../dkg", version = "0.3", features = ["tests"] }
 
 [features]
 ed25519 = ["dalek-ff-group", "ciphersuite/ed25519"]

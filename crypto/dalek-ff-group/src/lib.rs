@@ -3,7 +3,7 @@
 
 use core::{
   borrow::Borrow,
-  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
+  ops::{Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Iterator, Sum},
   hash::{Hash, Hasher},
 };
@@ -33,14 +33,40 @@ use dalek::{
   },
 };
 
-use ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
-use group::{Group, GroupEncoding, prime::PrimeGroup};
+use group::{
+  ff::{Field, PrimeField, FieldBits, PrimeFieldBits},
+  Group, GroupEncoding,
+  prime::PrimeGroup,
+};
 
 pub mod field;
 
+// Feature gated due to MSRV requirements
+#[cfg(feature = "black_box")]
+pub(crate) fn black_box<T>(val: T) -> T {
+  core::hint::black_box(val)
+}
+
+#[cfg(not(feature = "black_box"))]
+pub(crate) fn black_box<T>(val: T) -> T {
+  val
+}
+
+fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+  let bit_ref = black_box(bit_ref);
+
+  let mut bit = black_box(*bit_ref);
+  let res = black_box(bit as u8);
+  bit.zeroize();
+  debug_assert!((res | 1) == 1);
+
+  bit_ref.zeroize();
+  res
+}
+
 // Convert a boolean to a Choice in a *presumably* constant time manner
-fn choice(value: bool) -> Choice {
-  Choice::from(u8::from(value))
+fn choice(mut value: bool) -> Choice {
+  Choice::from(u8_from_bool(&mut value))
 }
 
 macro_rules! deref_borrow {
@@ -178,6 +204,7 @@ constant_time!(Scalar, DScalar);
 math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
 from_uint!(Scalar, DScalar);
 
+// Ed25519 order/scalar modulus
 const MODULUS: U256 =
   U256::from_be_hex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed");
 
@@ -191,10 +218,11 @@ impl Scalar {
 
     let mut res = Scalar::one();
     let mut bits = 0;
-    for (i, bit) in other.to_le_bits().iter().rev().enumerate() {
+    for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let bit = u8::from(*bit);
+      let mut bit = u8_from_bool(bit.deref_mut());
       bits |= bit;
+      bit.zeroize();
 
       if ((i + 1) % 4) == 0 {
         if i != 3 {
@@ -273,19 +301,36 @@ impl PrimeField for Scalar {
     self.0.to_bytes()
   }
 
+  // This was set per the specification in the ff crate docs
+  // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
   const S: u32 = 2;
   fn is_odd(&self) -> Choice {
-    choice(self.to_le_bits()[0])
+    // This is probably overkill? Yet it's better safe than sorry since this is a complete
+    // decomposition of the scalar
+    let mut bits = self.to_le_bits();
+    let res = choice(bits[0]);
+    // This shouldn't need mut since it should be a mutable reference
+    // Per the bitvec docs, writing through a derefence requires mut, writing through one of its
+    // methods does not
+    // We do not use one of its methods to ensure we write via zeroize
+    for mut bit in bits.iter_mut() {
+      bit.deref_mut().zeroize();
+    }
+    res
   }
   fn multiplicative_generator() -> Self {
+    // This was calculated with the method from the ff crate docs
+    // SageMath GF(modulus).primitive_element()
     2u64.into()
   }
   fn root_of_unity() -> Self {
-    const ROOT: [u8; 32] = [
+    // This was calculated via the formula from the ff crate docs
+    // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
+    Scalar::from_repr([
       212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
       96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
-    ];
-    Scalar::from_repr(ROOT).unwrap()
+    ])
+    .unwrap()
   }
 }
 
@@ -348,11 +393,12 @@ macro_rules! dalek_group {
       type Scalar = Scalar;
       fn random(mut rng: impl RngCore) -> Self {
         loop {
-          let mut bytes = field::FieldElement::random(&mut rng).to_repr();
-          bytes[31] |= u8::try_from(rng.next_u32() % 2).unwrap() << 7;
-          let opt = Self::from_bytes(&bytes);
-          if opt.is_some().into() {
-            return opt.unwrap();
+          let mut bytes = [0; 64];
+          rng.fill_bytes(&mut bytes);
+          let point = $Point($DPoint::hash_from_bytes::<sha2::Sha512>(&bytes));
+          // Ban identity, per the trait specification
+          if !bool::from(point.is_identity()) {
+            return point;
           }
         }
       }
@@ -404,7 +450,11 @@ macro_rules! dalek_group {
       }
     }
 
-    #[allow(clippy::derived_hash_with_manual_eq)]
+    // Support being used as a key in a table
+    // While it is expensive as a key, due to the field operations required, there's frequently
+    // use cases for public key -> value lookups
+    #[allow(unknown_lints, renamed_and_removed_lints)]
+    #[allow(clippy::derived_hash_with_manual_eq, clippy::derive_hash_xor_eq)]
     impl Hash for $Point {
       fn hash<H: Hasher>(&self, state: &mut H) {
         self.to_bytes().hash(state);
@@ -442,11 +492,16 @@ dalek_group!(
 );
 
 #[test]
+fn test_scalar_modulus() {
+  assert_eq!(MODULUS.to_le_bytes(), curve25519_dalek::constants::BASEPOINT_ORDER.to_bytes());
+}
+
+#[test]
 fn test_ed25519_group() {
-  ff_group_tests::group::test_prime_group_bits::<EdwardsPoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, EdwardsPoint>(&mut rand_core::OsRng);
 }
 
 #[test]
 fn test_ristretto_group() {
-  ff_group_tests::group::test_prime_group_bits::<RistrettoPoint>();
+  ff_group_tests::group::test_prime_group_bits::<_, RistrettoPoint>(&mut rand_core::OsRng);
 }

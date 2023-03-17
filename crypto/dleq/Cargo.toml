@@ -1,6 +1,6 @@
 [package]
 name = "dleq"
-version = "0.2.0"
+version = "0.3.0"
 description = "Implementation of single and cross-curve Discrete Log Equality proofs"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dleq"
@@ -12,19 +12,19 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-thiserror = "1"
+thiserror = { version = "1", optional = true }
 rand_core = "0.6"
 
-zeroize = { version = "1", features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", features = ["zeroize_derive"] }
 
 digest = "0.10"
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.2" }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3" }
 
 ff = "0.12"
 group = "0.12"
 
-multiexp = { path = "../multiexp", version = "0.2", features = ["batch"], optional = true }
+multiexp = { path = "../multiexp", version = "0.3", features = ["batch"], optional = true }
 
 [dev-dependencies]
 hex-literal = "0.3"
@@ -39,8 +39,14 @@ transcript = { package = "flexible-transcript", path = "../transcript", features
 [features]
 std = []
 serialize = ["std"]
-experimental = ["std", "multiexp"]
+
+# Needed for cross-group DLEqs
+black_box = []
 secure_capacity_difference = []
+experimental = ["std", "thiserror", "multiexp"]
 
 # Only applies to experimental, yet is default to ensure security
+# experimental doesn't mandate it itself in case two curves with extreme
+# capacity differences are desired to be used together, in which case the user
+# must specify experimental without default features
 default = ["secure_capacity_difference"]

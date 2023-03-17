@@ -2,6 +2,10 @@
 
 Ciphersuites for elliptic curves premised on ff/group.
 
+This library, except for the not recommended Ed448 ciphersuite, was
+[audited by Cypher Stack in March 2023](https://github.com/serai-dex/serai/raw/74924095e1a0f266b58181b539d9e74fa35dc37a/audits/Cypher%20Stack%20crypto%20March%202023/Audit.pdf),
+culminating in commit 669d2dbffc1dafb82a09d9419ea182667115df06.
+
 ### Secp256k1/P-256
 
 Secp256k1 and P-256 are offered via [k256](https://crates.io/crates/k256) and
@@ -27,8 +31,8 @@ The domain-separation tag is naively prefixed to the message.
 ### Ed448
 
 Ed448 is offered via [minimal-ed448](https://crates.io/crates/minimal-ed448), an
-explicitly not recommended, unaudited Ed448 implementation, limited to its
-prime-order subgroup.
+explicitly not recommended, unaudited, incomplete Ed448 implementation, limited
+to its prime-order subgroup.
 
 Its `hash_to_F` is the wide reduction of SHAKE256, with a 114-byte output, as
 used in [RFC-8032](https://www.rfc-editor.org/rfc/rfc8032). The

@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use rand_core::OsRng;
 
+use frost::Participant;
+
 use tokio::time::timeout;
 
 use crate::{
@@ -12,7 +14,8 @@ use crate::{
 };
 
 pub async fn test_scanner<C: Coin>(coin: C) {
-  let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng).remove(&1).unwrap();
+  let mut keys =
+    frost::tests::key_gen::<_, C::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
   C::tweak_keys(&mut keys);
 
   // Mine blocks so there's a confirmed block

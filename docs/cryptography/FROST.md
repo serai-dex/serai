@@ -39,10 +39,8 @@ elements instead of `2n`.
 Finally, to support additive offset signing schemes (accounts, stealth
 addresses, randomization), it's possible to specify a scalar offset for keys.
 The public key signed for is also offset by this value. During the signing
-process, the offset is explicitly transcripted. Then, the offset is divided by
-`p`, the amount of participating signers, and each signer adds it to their
-post-interpolation key share. This maintains a leaderless protocol while still
-being correct.
+process, the offset is explicitly transcripted. Then, the offset is added to the
+participant with the lowest ID.
 
 # Caching
 

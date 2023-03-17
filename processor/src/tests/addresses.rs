@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use rand_core::OsRng;
 
-use frost::ThresholdKeys;
+use frost::{Participant, ThresholdKeys};
 
 use tokio::time::timeout;
 
@@ -16,11 +16,11 @@ use crate::{
 
 async fn spend<C: Coin, D: Db>(
   coin: &C,
-  keys: &HashMap<u16, ThresholdKeys<C::Curve>>,
+  keys: &HashMap<Participant, ThresholdKeys<C::Curve>>,
   scanner: &mut ScannerHandle<C, D>,
   outputs: Vec<C::Output>,
 ) -> Vec<C::Output> {
-  let key = keys[&1].group_key();
+  let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut keys_txs = HashMap::new();
   for (i, keys) in keys {
@@ -64,7 +64,7 @@ pub async fn test_addresses<C: Coin>(coin: C) {
   for (_, keys) in keys.iter_mut() {
     C::tweak_keys(keys);
   }
-  let key = keys[&1].group_key();
+  let key = keys[&Participant::new(1).unwrap()].group_key();
 
   // Mine blocks so there's a confirmed block
   for _ in 0 .. C::CONFIRMATIONS {

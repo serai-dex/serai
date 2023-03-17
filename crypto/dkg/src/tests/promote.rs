@@ -5,9 +5,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
 
-use group::Group;
-
-use ciphersuite::Ciphersuite;
+use ciphersuite::{group::Group, Ciphersuite};
 
 use crate::{
   promote::{GeneratorPromotion, GeneratorProof},
