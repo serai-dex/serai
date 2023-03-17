@@ -5,9 +5,14 @@ mod scale_value;
 pub(crate) use scale_value::{scale_value, scale_composite};
 use subxt::ext::scale_value::Value;
 
+use sp_core::{Pair as PairTrait, sr25519::Pair};
 use subxt::{
   utils::Encoded,
-  tx::{Signer, DynamicTxPayload, BaseExtrinsicParams, BaseExtrinsicParamsBuilder, TxClient},
+  config::{
+    substrate::{BlakeTwo256, SubstrateHeader},
+    extrinsic_params::{BaseExtrinsicParams, BaseExtrinsicParamsBuilder},
+  },
+  tx::{Signer, DynamicTxPayload, TxClient},
   Config as SubxtConfig, OnlineClient,
 };
 
@@ -33,17 +38,15 @@ pub struct Tip {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SeraiConfig;
 impl SubxtConfig for SeraiConfig {
-  type BlockNumber = <Runtime as Config>::BlockNumber;
-
   type Hash = <Runtime as Config>::Hash;
-  type Hashing = <Runtime as Config>::Hashing;
+  type Hasher = BlakeTwo256;
 
   type Index = <Runtime as Config>::Index;
   type AccountId = <Runtime as Config>::AccountId;
   // TODO: Bech32m
   type Address = SeraiAddress;
 
-  type Header = <Runtime as Config>::Header;
+  type Header = SubstrateHeader<<Runtime as Config>::BlockNumber, BlakeTwo256>;
   type Signature = Signature;
 
   type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, Tip>;
@@ -77,7 +80,10 @@ impl Serai {
     debug_assert!(storage.validate(&address).is_ok(), "invalid storage address");
 
     storage
-      .fetch(&address, Some(block.into()))
+      .at(Some(block.into()))
+      .await
+      .map_err(|_| SeraiError::RpcError)?
+      .fetch(&address)
       .await
       .map_err(|_| SeraiError::RpcError)?
       .map(|res| R::decode(&mut res.encoded()).map_err(|_| SeraiError::InvalidRuntime))
@@ -125,5 +131,25 @@ impl Serai {
 
   pub async fn publish(&self, tx: &Encoded) -> Result<[u8; 32], SeraiError> {
     self.0.rpc().submit_extrinsic(tx).await.map(Into::into).map_err(|_| SeraiError::RpcError)
+  }
+}
+
+#[derive(Clone)]
+pub struct PairSigner(Pair, <SeraiConfig as SubxtConfig>::AccountId);
+impl PairSigner {
+  pub fn new(pair: Pair) -> Self {
+    let id = pair.public();
+    PairSigner(pair, id)
+  }
+}
+impl Signer<SeraiConfig> for PairSigner {
+  fn account_id(&self) -> &<SeraiConfig as SubxtConfig>::AccountId {
+    &self.1
+  }
+  fn address(&self) -> <SeraiConfig as SubxtConfig>::Address {
+    self.1.into()
+  }
+  fn sign(&self, payload: &[u8]) -> <SeraiConfig as SubxtConfig>::Signature {
+    self.0.sign(payload)
   }
 }

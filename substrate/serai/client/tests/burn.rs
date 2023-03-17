@@ -4,10 +4,8 @@ use rand_core::{RngCore, OsRng};
 
 use tokio::time::sleep;
 
-use subxt::{
-  ext::sp_core::Pair,
-  tx::{BaseExtrinsicParamsBuilder, PairSigner},
-};
+use sp_core::Pair;
+use subxt::{config::extrinsic_params::BaseExtrinsicParamsBuilder};
 
 use serai_client::{
   primitives::{
@@ -16,7 +14,7 @@ use serai_client::{
   },
   in_instructions::primitives::{InInstruction, Batch, Update},
   tokens::{primitives::OutInstruction, TokensEvent},
-  Serai,
+  PairSigner, Serai,
 };
 
 mod runner;
