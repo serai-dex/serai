@@ -74,7 +74,8 @@ pub mod sign {
       transcript.append_message(b"id", self.id);
       transcript.append_message(b"attempt", self.attempt.to_le_bytes());
 
-      let mut candidates = (1 ..= params.n()).map(|i| Participant::new(i).unwrap()).collect::<Vec<_>>();
+      let mut candidates =
+        (1 ..= params.n()).map(|i| Participant::new(i).unwrap()).collect::<Vec<_>>();
       let mut rng = ChaCha8Rng::from_seed(transcript.rng_seed(b"signing_set"));
       while candidates.len() > params.t().into() {
         candidates.swap_remove(
