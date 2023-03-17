@@ -417,9 +417,10 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
       (key, msg) = SignerMessageFuture(&mut signers) => {
         match msg {
           SignerEvent::SignedTransaction { id, tx } => {
-            main_db.finish_signing(&id.key, id.id);
+            main_db.finish_signing(&key, id);
             coordinator
               .send(ProcessorMessage::Sign(sign::ProcessorMessage::Completed {
+                key,
                 id,
                 tx: tx.as_ref().to_vec()
               }))

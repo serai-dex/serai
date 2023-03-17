@@ -93,7 +93,7 @@ pub mod sign {
     // Received shares for the specified signing protocol.
     Shares { id: SignId, shares: HashMap<Participant, Vec<u8>> },
     // Completed a signing protocol already.
-    Completed { id: SignId, tx: Vec<u8> },
+    Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
@@ -103,7 +103,7 @@ pub mod sign {
     // Signed share for the specified signing protocol.
     Share { id: SignId, share: Vec<u8> },
     // Completed a signing protocol already.
-    Completed { id: SignId, tx: Vec<u8> },
+    Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
 
   impl CoordinatorMessage {
@@ -111,7 +111,7 @@ pub mod sign {
       match self {
         CoordinatorMessage::Preprocesses { id, .. } => &id.key,
         CoordinatorMessage::Shares { id, .. } => &id.key,
-        CoordinatorMessage::Completed { id, .. } => &id.key,
+        CoordinatorMessage::Completed { key, .. } => key,
       }
     }
   }

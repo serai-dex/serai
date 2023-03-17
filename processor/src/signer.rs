@@ -29,7 +29,7 @@ const CHANNEL_MSG: &str = "Signer handler was dropped. Shutting down?";
 
 #[derive(Debug)]
 pub enum SignerEvent<C: Coin> {
-  SignedTransaction { id: SignId, tx: <C::Transaction as Transaction<C>>::Id },
+  SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction<C>>::Id },
   ProcessorMessage(ProcessorMessage),
 }
 
@@ -292,10 +292,10 @@ impl<C: Coin, D: Db> Signer<C, D> {
         assert!(self.preprocessing.remove(&id.id).is_none());
         assert!(self.signing.remove(&id.id).is_none());
 
-        self.emit(SignerEvent::SignedTransaction { id, tx: tx.id() });
+        self.emit(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() });
       }
 
-      CoordinatorMessage::Completed { id, tx: tx_vec } => {
+      CoordinatorMessage::Completed { key: _, id, tx: tx_vec } => {
         let mut tx = <C::Transaction as Transaction<C>>::Id::default();
         if tx.as_ref().len() != tx_vec.len() {
           warn!(
@@ -306,7 +306,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
         }
         tx.as_mut().copy_from_slice(&tx_vec);
 
-        if let Some(eventuality) = self.db.eventuality(id.id) {
+        if let Some(eventuality) = self.db.eventuality(id) {
           // Transaction hasn't hit our mempool/was dropped for a different signature
           // The latter can happen given certain latency conditions/a single malicious signer
           // In the case of a single malicious signer, they can drag multiple honest
@@ -319,13 +319,13 @@ impl<C: Coin, D: Db> Signer<C, D> {
             // Stop trying to sign for this TX
             let mut txn = self.db.0.txn();
             self.db.save_transaction(&mut txn, &tx);
-            self.db.complete(&mut txn, id.id, tx.id());
+            self.db.complete(&mut txn, id, tx.id());
             txn.commit();
 
-            self.signable.remove(&id.id);
-            self.attempt.remove(&id.id);
-            self.preprocessing.remove(&id.id);
-            self.signing.remove(&id.id);
+            self.signable.remove(&id);
+            self.attempt.remove(&id);
+            self.preprocessing.remove(&id);
+            self.signing.remove(&id);
 
             self.emit(SignerEvent::SignedTransaction { id, tx: tx.id() });
           } else {
@@ -490,14 +490,6 @@ impl<C: Coin, D: Db> SignerHandle<C, D> {
 
       // Fire the SignedTransaction event again
       if let Some(tx) = tx {
-        // The attempt doesn't matter here. Ue u32::MAX as it's not a feasible ID, and therefore
-        // clearly invalid
-        // TODO: Remove attempt from this
-        let id = SignId {
-          key: signer.keys.group_key().to_bytes().as_ref().to_vec(),
-          id,
-          attempt: u32::MAX,
-        };
         if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
           return;
         }
