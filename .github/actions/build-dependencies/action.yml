@@ -20,31 +20,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install Protobuf
-      uses: arduino/setup-protoc@master
-      with:
-        repo-token: ${{ inputs.github-token }}
-
-    - name: Install solc
-      shell: bash
-      run: |
-        pip3 install solc-select==0.2.1
-        solc-select install 0.8.16
-        solc-select use 0.8.16
-
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
-
-    - name: Get nightly version to use
-      id: nightly
-      shell: bash
-      run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
-
-    - name: Install WASM toolchain
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ steps.nightly.outputs.version }}
-        targets: wasm32-unknown-unknown
