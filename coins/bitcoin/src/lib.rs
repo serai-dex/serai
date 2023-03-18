@@ -1,3 +1,6 @@
+/// The bitcoin Rust library.
+pub use bitcoin;
+
 /// Cryptographic helpers.
 pub mod crypto;
 /// BIP-340 Schnorr signature algorithm.

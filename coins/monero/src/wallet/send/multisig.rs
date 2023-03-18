@@ -150,7 +150,7 @@ impl SignableTransaction {
         clsag.H,
         keys.current_offset().unwrap_or_else(dfg::Scalar::zero).0 + self.inputs[i].key_offset(),
       ));
-      clsags.push(AlgorithmMachine::new(clsag, offset).map_err(TransactionError::FrostError)?);
+      clsags.push(AlgorithmMachine::new(clsag, offset));
     }
 
     // Select decoys

@@ -2,24 +2,6 @@ use std::{io, collections::HashMap};
 
 use async_trait::async_trait;
 
-use bitcoin::{
-  hashes::Hash as HashTrait,
-  schnorr::TweakedPublicKey,
-  consensus::{Encodable, Decodable},
-  psbt::serialize::Serialize,
-  OutPoint,
-  blockdata::script::Instruction,
-  Transaction, Block, Network, Address as BAddress,
-};
-
-#[cfg(test)]
-use bitcoin::{
-  secp256k1::{SECP256K1, SecretKey, Message},
-  PrivateKey, PublicKey, EcdsaSighashType,
-  blockdata::script::Builder,
-  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut,
-};
-
 use transcript::RecommendedTranscript;
 use k256::{
   ProjectivePoint, Scalar,
@@ -28,9 +10,29 @@ use k256::{
 use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin_serai::{
+  bitcoin::{
+    hashes::Hash as HashTrait,
+    schnorr::TweakedPublicKey,
+    consensus::{Encodable, Decodable},
+    psbt::serialize::Serialize,
+    OutPoint,
+    blockdata::script::Instruction,
+    Transaction, Block, Network, Address as BAddress,
+  },
   crypto::{x_only, make_even},
-  wallet::{SpendableOutput, TransactionMachine, SignableTransaction as BSignableTransaction},
+  wallet::{
+    SpendableOutput, TransactionError, SignableTransaction as BSignableTransaction,
+    TransactionMachine,
+  },
   rpc::{RpcError, Rpc},
+};
+
+#[cfg(test)]
+use bitcoin_serai::bitcoin::{
+  secp256k1::{SECP256K1, SecretKey, Message},
+  PrivateKey, PublicKey, EcdsaSighashType,
+  blockdata::script::Builder,
+  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut,
 };
 
 use serai_client::coins::bitcoin::Address;
@@ -255,7 +257,7 @@ impl Coin for Bitcoin {
   const ID: &'static str = "Bitcoin";
   const CONFIRMATIONS: usize = 3;
 
-  // 0.0001 BTC
+  // 0.0001 BTC, 10,000 satoshis
   #[allow(clippy::inconsistent_digit_grouping)]
   const DUST: u64 = 1_00_000_000 / 10_000;
 
@@ -358,10 +360,13 @@ impl Coin for Bitcoin {
     let signable = |plan: &Plan<Self>, tx_fee: Option<_>| {
       let mut payments = vec![];
       for payment in &plan.payments {
-        // If we're solely estimating the fee, don't actually specify an amount
-        // This won't affect the fee calculation yet will ensure we don't hit an out of funds error
-        payments
-          .push((payment.address.0.clone(), if tx_fee.is_none() { 0 } else { payment.amount }));
+        // If we're solely estimating the fee, don't specify the actual amount
+        // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
+        // error
+        payments.push((
+          payment.address.0.clone(),
+          if tx_fee.is_none() { Self::DUST } else { payment.amount },
+        ));
       }
 
       match BSignableTransaction::new(
@@ -371,21 +376,31 @@ impl Coin for Bitcoin {
         None,
         fee.0,
       ) {
-        Some(signable) => Some(signable),
-        // TODO: Use a proper error here
-        None => {
+        Ok(signable) => Some(signable),
+        Err(TransactionError::NoInputs) => {
+          panic!("trying to create a bitcoin transaction without inputs")
+        }
+        // No outputs left and the change isn't worth enough
+        Err(TransactionError::NoOutputs) => None,
+        Err(TransactionError::TooMuchData) => panic!("too much data despite not specifying data"),
+        Err(TransactionError::NotEnoughFunds) => {
           if tx_fee.is_none() {
-            // Not enough funds
+            // Mot even enough funds to pay the fee
             None
           } else {
-            panic!("didn't have enough funds for a Bitcoin TX");
+            panic!("not enough funds for bitcoin TX despite amortizing the fee")
           }
+        }
+        // amortize_fee removes payments which fall below the dust threshold
+        Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
+        Err(TransactionError::TooLargeTransaction) => {
+          panic!("created a too large transaction despite limiting inputs/outputs")
         }
       }
     };
 
     let tx_fee = match signable(&plan, None) {
-      Some(tx) => tx.fee(),
+      Some(tx) => tx.needed_fee(),
       None => return Ok((None, drop_branches(&plan))),
     };
 

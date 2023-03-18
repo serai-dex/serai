@@ -160,8 +160,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
     let mut machines = vec![];
     for i in &vectors.included {
-      machines
-        .push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone()).unwrap()));
+      machines.push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone())));
     }
 
     let mut commitments = HashMap::new();
@@ -343,8 +342,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     // Create the machines
     let mut machines = vec![];
     for i in &vectors.included {
-      machines
-        .push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone()).unwrap()));
+      machines.push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone())));
     }
 
     for (i, machine) in machines.drain(..) {
