@@ -349,6 +349,13 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             // Panic if we've already seen these outputs
             for output in &outputs {
               let id = output.id();
+              info!(
+                "block {} had output {} worth {}",
+                hex::encode(&block_id),
+                hex::encode(&id),
+                output.amount()
+              );
+
               // On Bitcoin, the output ID should be unique for a given chain
               // On Monero, it's trivial to make an output sharing an ID with another
               // We should only scan outputs with valid IDs however, which will be unique
