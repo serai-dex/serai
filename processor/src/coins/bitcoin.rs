@@ -470,6 +470,7 @@ impl Coin for Bitcoin {
 
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) -> Block {
+    log::info!("bitcoin test send");
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
     let private_key = PrivateKey::new(secret_key, Network::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);

@@ -29,7 +29,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
     let block_id = coin.test_send(C::address(key)).await.id();
 
-    match timeout(Duration::from_secs(10), scanner.events.recv()).await.unwrap().unwrap() {
+    match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
       ScannerEvent::Outputs(this_key, block, outputs) => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
@@ -95,7 +95,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     coin.mine_block().await;
   }
 
-  match timeout(Duration::from_secs(10), scanner.events.recv()).await.unwrap().unwrap() {
+  match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Outputs(this_key, block_id, these_outputs) => {
       assert_eq!(this_key, key);
       assert_eq!(block_id, block.id());

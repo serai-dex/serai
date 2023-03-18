@@ -365,6 +365,8 @@ impl<C: Coin, D: Db> Scanner<C, D> {
               continue;
             }
 
+            log::info!("block {} has {} outputs", hex::encode(&block_id), output.len());
+
             // Save the outputs to disk
             let mut txn = scanner.db.0.txn();
             scanner.db.save_outputs(&mut txn, &key, &block_id, &outputs);
