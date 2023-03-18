@@ -215,8 +215,8 @@ impl PartialEq for Bitcoin {
 impl Eq for Bitcoin {}
 
 impl Bitcoin {
-  pub fn new(url: String) -> Bitcoin {
-    Bitcoin { rpc: Rpc::new(url) }
+  pub async fn new(url: String) -> Bitcoin {
+    Bitcoin { rpc: Rpc::new(url).await.expect("couldn't create a Bitcoin RPC") }
   }
 
   #[cfg(test)]

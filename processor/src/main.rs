@@ -450,7 +450,7 @@ async fn main() {
   let url = env::var("COIN_RPC").expect("coin rpc wasn't specified as an env var");
   match env::var("COIN").expect("coin wasn't specified as an env var").as_str() {
     #[cfg(feature = "bitcoin")]
-    "bitcoin" => run(db, Bitcoin::new(url), coordinator).await,
+    "bitcoin" => run(db, Bitcoin::new(url).await, coordinator).await,
     #[cfg(feature = "monero")]
     "monero" => run(db, Monero::new(url), coordinator).await,
     _ => panic!("unrecognized coin"),

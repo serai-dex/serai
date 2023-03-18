@@ -13,7 +13,11 @@ use frost::{
   tests::{algorithm_machines, key_gen, sign},
 };
 
-use crate::{crypto::{x_only, make_even}, algorithm::Schnorr};
+use crate::{
+  crypto::{x_only, make_even},
+  algorithm::Schnorr,
+  rpc::Rpc,
+};
 
 #[test]
 fn test_algorithm() {
@@ -25,7 +29,8 @@ fn test_algorithm() {
     *keys = keys.offset(Scalar::from(offset));
   }
 
-  let algo = Schnorr::<RecommendedTranscript>::new(RecommendedTranscript::new(b"bitcoin-serai sign test"));
+  let algo =
+    Schnorr::<RecommendedTranscript>::new(RecommendedTranscript::new(b"bitcoin-serai sign test"));
   let sig = sign(
     &mut OsRng,
     algo.clone(),
@@ -41,4 +46,15 @@ fn test_algorithm() {
       &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )
     .unwrap()
+}
+
+#[tokio::test]
+async fn test_rpc() {
+  let rpc = Rpc::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await.unwrap();
+
+  let latest = rpc.get_latest_block_number().await.unwrap();
+  assert_eq!(
+    rpc.get_block_number(&rpc.get_block_hash(latest).await.unwrap()).await.unwrap(),
+    latest
+  );
 }

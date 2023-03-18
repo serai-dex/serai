@@ -3,7 +3,7 @@ mod bitcoin {
   use crate::coins::Bitcoin;
 
   async fn bitcoin() -> Bitcoin {
-    let bitcoin = Bitcoin::new("http://serai:seraidex@127.0.0.1:18443".to_string());
+    let bitcoin = Bitcoin::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await;
     bitcoin.fresh_chain().await;
     bitcoin
   }

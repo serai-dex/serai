@@ -4,7 +4,7 @@ pub mod crypto;
 pub mod algorithm;
 /// Wallet functionality to create transactions.
 pub mod wallet;
-/// A minimal async RPC.
+/// A minimal asynchronous Bitcoin RPC client.
 pub mod rpc;
 
 #[cfg(test)]
