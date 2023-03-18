@@ -132,5 +132,4 @@ pub async fn test_key_gen<C: Coin>() {
       panic!("didn't get key back");
     }
   }
-  tokio::time::sleep(Duration::from_secs(1)).await;
 }

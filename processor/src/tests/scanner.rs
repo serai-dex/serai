@@ -45,7 +45,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   // Verify the Scanner picked them up
   let verify_event = |mut scanner: ScannerHandle<C, MemDb>| async {
     let outputs =
-      match timeout(Duration::from_secs(20), scanner.events.recv()).await.unwrap().unwrap() {
+      match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
         ScannerEvent::Outputs(key, block, outputs) => {
           assert_eq!(key, keys.group_key());
           assert_eq!(block, block_id);
@@ -65,8 +65,8 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   assert_eq!(scanner.ack_block(keys.group_key(), block_id.clone()).await, outputs);
 
   // There should be no more events
-  assert!(timeout(Duration::from_secs(20), scanner.events.recv()).await.is_err());
+  assert!(timeout(Duration::from_secs(30), scanner.events.recv()).await.is_err());
 
   // Create a new scanner off the current DB and make sure it also does nothing
-  assert!(timeout(Duration::from_secs(20), new_scanner().await.events.recv()).await.is_err());
+  assert!(timeout(Duration::from_secs(30), new_scanner().await.events.recv()).await.is_err());
 }

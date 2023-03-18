@@ -117,7 +117,7 @@ pub async fn sign<C: Coin>(
   }
   for i in excluded {
     assert!(timeout(
-      Duration::from_secs(1),
+      Duration::from_secs(5),
       signers.get_mut(&Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap().events.recv()
     )
     .await
