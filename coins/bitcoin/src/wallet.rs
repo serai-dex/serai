@@ -11,7 +11,6 @@ use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use frost::{
   curve::{Ciphersuite, Secp256k1},
   Participant, ThresholdKeys, FrostError,
-  algorithm::Schnorr,
   sign::*,
 };
 
@@ -22,7 +21,7 @@ use bitcoin::{
   OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Address,
 };
 
-use crate::crypto::{BitcoinHram, make_even};
+use crate::algorithm::Schnorr;
 
 /// A spendable output.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -200,7 +199,7 @@ impl SignableTransaction {
 /// A FROST signing machine to produce a Bitcoin transaction.
 pub struct TransactionMachine {
   tx: SignableTransaction,
-  sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<Secp256k1, RecommendedTranscript, BitcoinHram>>>,
+  sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,
 }
 
 impl PreprocessMachine for TransactionMachine {
@@ -229,8 +228,7 @@ impl PreprocessMachine for TransactionMachine {
 
 pub struct TransactionSignMachine {
   tx: SignableTransaction,
-  sigs:
-    Vec<AlgorithmSignMachine<Secp256k1, Schnorr<Secp256k1, RecommendedTranscript, BitcoinHram>>>,
+  sigs: Vec<AlgorithmSignMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,
 }
 
 impl SignMachine<Transaction> for TransactionSignMachine {
@@ -307,9 +305,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
 pub struct TransactionSignatureMachine {
   tx: Transaction,
-  sigs: Vec<
-    AlgorithmSignatureMachine<Secp256k1, Schnorr<Secp256k1, RecommendedTranscript, BitcoinHram>>,
-  >,
+  sigs: Vec<AlgorithmSignatureMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,
 }
 
 impl SignatureMachine<Transaction> for TransactionSignatureMachine {
@@ -324,17 +320,12 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
     mut shares: HashMap<Participant, Self::SignatureShare>,
   ) -> Result<Transaction, FrostError> {
     for (input, schnorr) in self.tx.input.iter_mut().zip(self.sigs.drain(..)) {
-      let mut sig = schnorr.complete(
+      let sig = schnorr.complete(
         shares.iter_mut().map(|(l, shares)| (*l, shares.remove(0))).collect::<HashMap<_, _>>(),
       )?;
 
-      // TODO: Implement BitcoinSchnorr Algorithm to handle this
-      let offset;
-      (sig.R, offset) = make_even(sig.R);
-      sig.s += Scalar::from(offset);
-
       let mut witness: Witness = Witness::new();
-      witness.push(&sig.serialize()[1 .. 65]);
+      witness.push(sig.as_ref());
       input.witness = witness;
     }
 

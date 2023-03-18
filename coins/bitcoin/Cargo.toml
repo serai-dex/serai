@@ -11,6 +11,7 @@ edition = "2021"
 lazy_static = "1"
 thiserror = "1"
 
+zeroize = "^1.5"
 rand_core = "0.6"
 
 sha2 = "0.10"

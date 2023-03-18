@@ -2,21 +2,21 @@ use rand_core::OsRng;
 
 use sha2::{Digest, Sha256};
 
-use secp256k1::{SECP256K1, Message, schnorr::Signature};
+use secp256k1::{SECP256K1, Message};
 use bitcoin::hashes::{Hash as HashTrait, sha256::Hash};
 
 use k256::Scalar;
+use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Secp256k1,
   Participant,
-  algorithm::IetfSchnorr,
   tests::{algorithm_machines, key_gen, sign},
 };
 
-use crate::crypto::{BitcoinHram, x_only, make_even};
+use crate::{crypto::{x_only, make_even}, algorithm::Schnorr};
 
 #[test]
-fn test_signing() {
+fn test_algorithm() {
   let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
   const MESSAGE: &[u8] = b"Hello, World!";
 
@@ -25,22 +25,18 @@ fn test_signing() {
     *keys = keys.offset(Scalar::from(offset));
   }
 
-  let algo = IetfSchnorr::<Secp256k1, BitcoinHram>::ietf();
-  let mut sig = sign(
+  let algo = Schnorr::<RecommendedTranscript>::new(RecommendedTranscript::new(b"bitcoin-serai sign test"));
+  let sig = sign(
     &mut OsRng,
-    algo,
+    algo.clone(),
     keys.clone(),
-    algorithm_machines(&mut OsRng, IetfSchnorr::ietf(), &keys),
+    algorithm_machines(&mut OsRng, algo, &keys),
     &Sha256::digest(MESSAGE),
   );
 
-  let offset;
-  (sig.R, offset) = make_even(sig.R);
-  sig.s += Scalar::from(offset);
-
   SECP256K1
     .verify_schnorr(
-      &Signature::from_slice(&sig.serialize()[1 .. 65]).unwrap(),
+      &sig,
       &Message::from(Hash::hash(MESSAGE)),
       &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )

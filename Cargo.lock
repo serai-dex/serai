@@ -600,6 +600,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]
