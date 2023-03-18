@@ -1,4 +1,3 @@
-use core::time::Duration;
 use std::collections::HashMap;
 
 use zeroize::Zeroizing;
