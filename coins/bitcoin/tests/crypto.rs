@@ -3,7 +3,6 @@ use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 
 use secp256k1::{SECP256K1, Message};
-use bitcoin::hashes::{Hash as HashTrait, sha256::Hash};
 
 use k256::Scalar;
 use transcript::{Transcript, RecommendedTranscript};
@@ -13,9 +12,9 @@ use frost::{
   tests::{algorithm_machines, key_gen, sign},
 };
 
-use crate::{
+use bitcoin_serai::{
+  bitcoin::hashes::{Hash as HashTrait, sha256::Hash},
   crypto::{x_only, make_even, Schnorr},
-  rpc::Rpc,
 };
 
 #[test]
@@ -45,15 +44,4 @@ fn test_algorithm() {
       &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )
     .unwrap()
-}
-
-#[tokio::test]
-async fn test_rpc() {
-  let rpc = Rpc::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await.unwrap();
-
-  let latest = rpc.get_latest_block_number().await.unwrap();
-  assert_eq!(
-    rpc.get_block_number(&rpc.get_block_hash(latest).await.unwrap()).await.unwrap(),
-    latest
-  );
 }

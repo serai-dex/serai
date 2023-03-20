@@ -14,11 +14,17 @@ use bitcoin::{
   Txid, Transaction, BlockHash, Block,
 };
 
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
+pub struct Error {
+  code: isize,
+  message: String,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 enum RpcResponse<T> {
   Ok { result: T },
-  Err { error: String },
+  Err { error: Error },
 }
 
 /// A minimal asynchronous Bitcoin RPC client.
@@ -29,8 +35,8 @@ pub struct Rpc(String);
 pub enum RpcError {
   #[error("couldn't connect to node")]
   ConnectionError,
-  #[error("request had an error: {0}")]
-  RequestError(String),
+  #[error("request had an error: {0:?}")]
+  RequestError(Error),
   #[error("node sent an invalid response")]
   InvalidResponse,
 }
@@ -69,7 +75,14 @@ impl Rpc {
   }
 
   /// Get the latest block's number.
+  ///
+  /// The genesis block's 'number' is zero. They increment from there.
   pub async fn get_latest_block_number(&self) -> Result<usize, RpcError> {
+    // getblockcount doesn't return the amount of blocks on the current chain, yet the "height"
+    // of the current chain. The "height" of the current chain is defined as the "height" of the
+    // tip block of the current chain. The "height" of a block is defined as the amount of blocks
+    // present when the block was created. Accordingly, the genesis block has height 0, and
+    // getblockcount will return 0 when it's only the only block, despite their being one block.
     self.rpc_call("getblockcount", json!([])).await
   }
 

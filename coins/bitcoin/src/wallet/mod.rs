@@ -42,8 +42,6 @@ pub fn address(network: Network, key: ProjectivePoint) -> Option<Address> {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ReceivedOutput {
   // The scalar offset to obtain the key usable to spend this output.
-  //
-  // This field exists in order to support HDKD schemes.
   offset: Scalar,
   // The output to spend.
   output: TxOut,
@@ -148,6 +146,10 @@ impl Scanner {
   }
 
   /// Scan a block.
+  ///
+  /// This will also scan the coinbase transaction which is bound by maturity. If received outputs
+  /// must be immediately spendable, a post-processing pass is needed to remove those outputs.
+  /// Alternatively, scan_transaction can be called on `block.txdata[1 ..]`.
   pub fn scan_block(&self, block: &Block) -> Vec<ReceivedOutput> {
     let mut res = vec![];
     for tx in &block.txdata {

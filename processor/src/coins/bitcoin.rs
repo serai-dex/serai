@@ -79,6 +79,14 @@ impl OutputTrait for Output {
   fn id(&self) -> Self::Id {
     let mut res = OutputId::default();
     self.output.outpoint().consensus_encode(&mut res.as_mut()).unwrap();
+    debug_assert_eq!(
+      {
+        let mut outpoint = vec![];
+        self.output.outpoint().consensus_encode(&mut outpoint).unwrap();
+        outpoint
+      },
+      res.as_ref().to_vec()
+    );
     res
   }
 
@@ -189,6 +197,7 @@ lazy_static::lazy_static! {
   static ref CHANGE_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"change");
 }
 
+// Always construct the full scanner in order to ensure there's no collisions
 fn scanner(
   key: ProjectivePoint,
 ) -> (Scanner, HashMap<OutputType, Scalar>, HashMap<Vec<u8>, OutputType>) {
@@ -288,6 +297,8 @@ impl Coin for Bitcoin {
 
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
     *keys = tweak_keys(keys);
+    // Also create a scanner to assert these keys, and all expected paths, are usable
+    scanner(keys.group_key());
   }
 
   fn address(key: ProjectivePoint) -> Address {
@@ -423,12 +434,11 @@ impl Coin for Bitcoin {
     &self,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError> {
-    transaction
+    Ok(transaction
       .actual
       .clone()
-      .multisig(transaction.keys.clone(), transaction.transcript.clone())
-      .await
-      .map_err(|_| CoinError::ConnectionError)
+      .multisig(transaction.keys.clone(), transaction.transcript)
+      .expect("used the wrong keys"))
   }
 
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
@@ -466,10 +476,7 @@ impl Coin for Bitcoin {
       .rpc
       .rpc_call::<Vec<String>>(
         "generatetoaddress",
-        serde_json::json!([
-          1,
-          BAddress::p2sh(&Script::new(), Network::Regtest).unwrap().to_string()
-        ]),
+        serde_json::json!([1, BAddress::p2sh(&Script::new(), Network::Regtest).unwrap()]),
       )
       .await
       .unwrap();

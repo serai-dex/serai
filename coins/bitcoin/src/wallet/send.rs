@@ -15,10 +15,13 @@ use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, sign::*};
 use bitcoin::{
   hashes::Hash,
   util::sighash::{SchnorrSighashType, SighashCache, Prevouts},
-  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Address,
+  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Network, Address,
 };
 
-use crate::{crypto::Schnorr, wallet::ReceivedOutput};
+use crate::{
+  crypto::Schnorr,
+  wallet::{address, ReceivedOutput},
+};
 
 #[rustfmt::skip]
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L27
@@ -192,11 +195,13 @@ impl SignableTransaction {
   }
 
   /// Create a multisig machine for this transaction.
-  pub async fn multisig(
+  ///
+  /// Returns None if the wrong keys are used.
+  pub fn multisig(
     self,
     keys: ThresholdKeys<Secp256k1>,
     mut transcript: RecommendedTranscript,
-  ) -> Result<TransactionMachine, FrostError> {
+  ) -> Option<TransactionMachine> {
     transcript.domain_separate(b"bitcoin_transaction");
     transcript.append_message(b"root_key", keys.group_key().to_encoded_point(true).as_bytes());
 
@@ -215,13 +220,21 @@ impl SignableTransaction {
     for i in 0 .. tx.input.len() {
       let mut transcript = transcript.clone();
       transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
+
+      let offset = keys.clone().offset(self.offsets[i]);
+      if address(Network::Bitcoin, offset.group_key())?.script_pubkey() !=
+        self.prevouts[i].script_pubkey
+      {
+        None?;
+      }
+
       sigs.push(AlgorithmMachine::new(
         Schnorr::new(transcript),
         keys.clone().offset(self.offsets[i]),
       ));
     }
 
-    Ok(TransactionMachine { tx: self, sigs })
+    Some(TransactionMachine { tx: self, sigs })
   }
 }
 
