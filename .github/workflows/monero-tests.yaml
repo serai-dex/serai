@@ -6,10 +6,12 @@ on:
       - develop
     paths:
       - "coins/monero/**"
+      - "processor/**"
 
   pull_request:
     paths:
       - "coins/monero/**"
+      - "processor/**"
 
 jobs:
   # Only run these once since they will be consistent regardless of any node

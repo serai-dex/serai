@@ -290,7 +290,24 @@ impl Coin for Monero {
     // Sanity check this has at least one output planned
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
-    let protocol = Protocol::v16;
+    // Get the protocol for the specified block number
+    // For now, this should just be v16, the latest deployed protocol, since there's no upcoming
+    // hard fork to be mindful of
+    let get_protocol = || Protocol::v16;
+
+    #[cfg(not(test))]
+    let protocol = get_protocol();
+    // If this is a test, we won't be using a mainnet node and need a distinct protocol
+    // determination
+    // Just use whatever the node expects
+    #[cfg(test)]
+    let protocol = self.rpc.get_protocol().await.unwrap();
+
+    // Hedge against the above codegen failing by having an always included runtime check
+    if !cfg!(test) {
+      assert_eq!(protocol, get_protocol());
+    }
+
     // Check a fork hasn't occurred which this processor hasn't been updated for
     assert_eq!(protocol, self.rpc.get_protocol().await.map_err(|_| CoinError::ConnectionError)?);
 
