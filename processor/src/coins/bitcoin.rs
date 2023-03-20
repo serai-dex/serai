@@ -434,11 +434,13 @@ impl Coin for Bitcoin {
     &self,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError> {
-    Ok(transaction
-      .actual
-      .clone()
-      .multisig(transaction.keys.clone(), transaction.transcript)
-      .expect("used the wrong keys"))
+    Ok(
+      transaction
+        .actual
+        .clone()
+        .multisig(transaction.keys.clone(), transaction.transcript)
+        .expect("used the wrong keys"),
+    )
   }
 
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {

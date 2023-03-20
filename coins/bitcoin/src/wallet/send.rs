@@ -117,7 +117,7 @@ impl SignableTransaction {
       Err(TransactionError::NoInputs)?;
     }
 
-    if payments.is_empty() && change.is_none() {
+    if payments.is_empty() && change.is_none() && data.is_none() {
       Err(TransactionError::NoOutputs)?;
     }
 

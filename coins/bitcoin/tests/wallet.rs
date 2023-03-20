@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rand_core::OsRng;
+use rand_core::{RngCore, OsRng};
 
 use transcript::{Transcript, RecommendedTranscript};
 
@@ -12,27 +12,43 @@ use k256::{
   Scalar, ProjectivePoint,
 };
 use frost::{
-  Participant,
+  curve::Secp256k1,
+  Participant, ThresholdKeys,
   tests::{THRESHOLD, key_gen, sign_without_caching},
 };
 
 use bitcoin_serai::{
-  bitcoin::{hashes::Hash as HashTrait, OutPoint, Script, TxOut, Network, Address},
-  wallet::{tweak_keys, address, ReceivedOutput, Scanner, SignableTransaction},
+  bitcoin::{
+    hashes::Hash as HashTrait,
+    blockdata::{
+      opcodes::all::OP_RETURN,
+      script::{Instruction, Instructions},
+    },
+    OutPoint, Script, TxOut, Transaction, Network, Address,
+  },
+  wallet::{tweak_keys, address, ReceivedOutput, Scanner, TransactionError, SignableTransaction},
   rpc::Rpc,
 };
 
 mod runner;
 use runner::rpc;
 
+const FEE: u64 = 20;
+
 fn is_even(key: ProjectivePoint) -> bool {
   key.to_encoded_point(true).tag() == Tag::CompressedEvenY
 }
 
-async fn send(rpc: &Rpc, address: Address) -> usize {
-  let res = rpc.get_latest_block_number().await.unwrap() + 1;
+async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint) -> ReceivedOutput {
+  let block_number = rpc.get_latest_block_number().await.unwrap() + 1;
 
-  rpc.rpc_call::<Vec<String>>("generatetoaddress", serde_json::json!([1, address])).await.unwrap();
+  rpc
+    .rpc_call::<Vec<String>>(
+      "generatetoaddress",
+      serde_json::json!([1, address(Network::Regtest, key).unwrap()]),
+    )
+    .await
+    .unwrap();
 
   // Mine until maturity
   rpc
@@ -43,11 +59,6 @@ async fn send(rpc: &Rpc, address: Address) -> usize {
     .await
     .unwrap();
 
-  res
-}
-
-async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint) -> ReceivedOutput {
-  let block_number = send(rpc, address(Network::Regtest, key).unwrap()).await;
   let block = rpc.get_block(&rpc.get_block_hash(block_number).await.unwrap()).await.unwrap();
 
   let mut outputs = scanner.scan_block(&block);
@@ -63,6 +74,31 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
   );
 
   outputs.swap_remove(0)
+}
+
+fn keys() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, ProjectivePoint) {
+  let mut keys = key_gen(&mut OsRng);
+  for (_, keys) in keys.iter_mut() {
+    *keys = tweak_keys(keys);
+  }
+  let key = keys.values().next().unwrap().group_key();
+  (keys, key)
+}
+
+fn sign(
+  keys: &HashMap<Participant, ThresholdKeys<Secp256k1>>,
+  tx: SignableTransaction,
+) -> Transaction {
+  let mut machines = HashMap::new();
+  for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
+    machines.insert(
+      i,
+      tx.clone()
+        .multisig(keys[&i].clone(), RecommendedTranscript::new(b"bitcoin-serai Test Transaction"))
+        .unwrap(),
+    );
+  }
+  sign_without_caching(&mut OsRng, machines, &[])
 }
 
 #[test]
@@ -143,12 +179,64 @@ async_sequential! {
     );
   }
 
+  async fn test_transaction_errors() {
+    let (_, key) = keys();
+
+    let rpc = rpc().await;
+    let scanner = Scanner::new(key).unwrap();
+
+    let output = send_and_get_output(&rpc, &scanner, key).await;
+    assert_eq!(output.offset(), Scalar::ZERO);
+
+    let inputs = vec![output];
+    let addr = || address(Network::Regtest, key).unwrap();
+    let payments = vec![(addr(), 1000)];
+
+    assert!(SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).is_ok());
+
+    assert_eq!(
+      SignableTransaction::new(vec![], &payments, None, None, FEE),
+      Err(TransactionError::NoInputs)
+    );
+
+    // No change
+    assert!(SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).is_ok());
+    // Consolidation TX
+    assert!(SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).is_ok());
+    // Data
+    assert!(SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).is_ok());
+    // No outputs
+    assert_eq!(
+      SignableTransaction::new(inputs.clone(), &[], None, None, FEE),
+      Err(TransactionError::NoOutputs),
+    );
+
+    assert_eq!(
+      SignableTransaction::new(inputs.clone(), &[(addr(), 1)], None, None, FEE),
+      Err(TransactionError::DustPayment),
+    );
+
+    assert!(
+      SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 80]), FEE).is_ok()
+    );
+    assert_eq!(
+      SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 81]), FEE),
+      Err(TransactionError::TooMuchData),
+    );
+
+    assert_eq!(
+      SignableTransaction::new(inputs.clone(), &[(addr(), inputs[0].value() * 2)], None, None, FEE),
+      Err(TransactionError::NotEnoughFunds),
+    );
+
+    assert_eq!(
+      SignableTransaction::new(inputs, &vec![(addr(), 1000); 10000], None, None, 0),
+      Err(TransactionError::TooLargeTransaction),
+    );
+  }
+
   async fn test_send() {
-    let mut keys = key_gen(&mut OsRng);
-    for (_, keys) in keys.iter_mut() {
-      *keys = tweak_keys(keys);
-    }
-    let key = keys.values().next().unwrap().group_key();
+    let (keys, key) = keys();
 
     let rpc = rpc().await;
     let mut scanner = Scanner::new(key).unwrap();
@@ -172,29 +260,16 @@ async_sequential! {
     let change_key = key + (ProjectivePoint::GENERATOR * change_offset);
     let change_addr = address(Network::Regtest, change_key).unwrap();
 
-    const FEE: u64 = 20;
-
     // Create and sign the TX
     let tx = SignableTransaction::new(
       vec![output.clone(), offset_output.clone()],
       &payments,
       Some(change_addr.clone()),
-      None, // TODO: Test with data
+      None,
       FEE
     ).unwrap();
     let needed_fee = tx.needed_fee();
-
-    let mut machines = HashMap::new();
-    for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
-      machines.insert(
-        i,
-        tx
-          .clone()
-          .multisig(keys[&i].clone(), RecommendedTranscript::new(b"bitcoin-serai Test Transaction"))
-          .unwrap()
-      );
-    }
-    let tx = sign_without_caching(&mut OsRng, machines, &[]);
+    let tx = sign(&keys, tx);
 
     assert_eq!(tx.output.len(), 3);
 
@@ -235,7 +310,38 @@ async_sequential! {
     hash.reverse();
     assert_eq!(tx, rpc.get_transaction(&hash).await.unwrap());
   }
-}
 
-// TODO: Test SignableTransaction error cases
-// TODO: Test x, x_only, make_even?
+  async fn test_data() {
+    let (keys, key) = keys();
+
+    let rpc = rpc().await;
+    let scanner = Scanner::new(key).unwrap();
+
+    let output = send_and_get_output(&rpc, &scanner, key).await;
+    assert_eq!(output.offset(), Scalar::ZERO);
+
+    let data_len = 60 + usize::try_from(OsRng.next_u64() % 21).unwrap();
+    let mut data = vec![0; data_len];
+    OsRng.fill_bytes(&mut data);
+
+    let tx = sign(
+      &keys,
+      SignableTransaction::new(
+        vec![output],
+        &[],
+        address(Network::Regtest, key),
+        Some(data.clone()),
+        FEE
+      ).unwrap()
+    );
+
+    assert!(tx.output[0].script_pubkey.is_op_return());
+    let check = |mut instructions: Instructions| {
+      assert_eq!(instructions.next().unwrap().unwrap(), Instruction::Op(OP_RETURN));
+      assert_eq!(instructions.next().unwrap().unwrap(), Instruction::PushBytes(&data));
+      assert!(instructions.next().is_none());
+    };
+    check(tx.output[0].script_pubkey.instructions());
+    check(tx.output[0].script_pubkey.instructions_minimal());
+  }
+}
