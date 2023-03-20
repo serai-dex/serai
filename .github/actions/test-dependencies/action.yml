@@ -10,17 +10,12 @@ inputs:
   monero-version:
     description: "Monero version to download and run as a regtest node"
     required: false
-    default: v0.18.0.0
+    default: v0.18.2.0
 
   bitcoin-version:
     description: "Bitcoin version to download and run as a regtest node"
     required: false
     default: 24.0.1
-
-  serai:
-    description: "Run a Serai development node in the background"
-    required: false
-    default: false
 
 runs:
   using: "composite"
@@ -47,13 +42,3 @@ runs:
 
     - name: Run a Monero Wallet-RPC
       uses: ./.github/actions/monero-wallet-rpc
-
-    - name: Run a Serai Development Node
-      if: ${{ inputs.serai }}
-      shell: bash
-      run: |
-        cd substrate/node
-        cargo build
-        cd ../..
-
-        ./target/debug/serai-node --dev &
