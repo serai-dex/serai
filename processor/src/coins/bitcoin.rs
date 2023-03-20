@@ -369,12 +369,10 @@ impl Coin for Bitcoin {
       match BSignableTransaction::new(
         plan.inputs.iter().map(|input| input.output.clone()).collect(),
         &payments,
-        plan
-          .change
-          .map(|key| {
-            let (_, offsets, _) = scanner(key);
-            Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])).0
-          }),
+        plan.change.map(|key| {
+          let (_, offsets, _) = scanner(key);
+          Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])).0
+        }),
         None,
         fee.0,
       ) {
