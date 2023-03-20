@@ -7,7 +7,8 @@ available here regardless.
 
 This library, except for the `experimental` feature, was
 [audited by Cypher Stack in March 2023](https://github.com/serai-dex/serai/raw/74924095e1a0f266b58181b539d9e74fa35dc37a/audits/Cypher%20Stack%20crypto%20March%202023/Audit.pdf),
-culminating in commit 669d2dbffc1dafb82a09d9419ea182667115df06.
+culminating in commit 669d2dbffc1dafb82a09d9419ea182667115df06. Any subsequent
+changes have not undergone auditing.
 
 ### Cross-Group DLEq
 
