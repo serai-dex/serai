@@ -7,6 +7,7 @@ use subxt::ext::scale_value::Value;
 
 use sp_core::{Pair as PairTrait, sr25519::Pair};
 use subxt::{
+  error::Error as SubxtError,
   utils::Encoded,
   config::{
     substrate::{BlakeTwo256, SubstrateHeader},
@@ -52,10 +53,10 @@ impl SubxtConfig for SeraiConfig {
   type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, Tip>;
 }
 
-#[derive(Clone, Error, Debug)]
+#[derive(Error, Debug)]
 pub enum SeraiError {
-  #[error("failed to connect to serai")]
-  RpcError,
+  #[error("failed to communicate with serai: {0}")]
+  RpcError(SubxtError),
   #[error("serai-client library was intended for a different runtime version")]
   InvalidRuntime,
 }
@@ -65,7 +66,7 @@ pub struct Serai(OnlineClient<SeraiConfig>);
 
 impl Serai {
   pub async fn new(url: &str) -> Result<Self, SeraiError> {
-    Ok(Serai(OnlineClient::<SeraiConfig>::from_url(url).await.map_err(|_| SeraiError::RpcError)?))
+    Ok(Serai(OnlineClient::<SeraiConfig>::from_url(url).await.map_err(SeraiError::RpcError)?))
   }
 
   async fn storage<R: Decode>(
@@ -82,10 +83,10 @@ impl Serai {
     storage
       .at(Some(block.into()))
       .await
-      .map_err(|_| SeraiError::RpcError)?
+      .map_err(SeraiError::RpcError)?
       .fetch(&address)
       .await
-      .map_err(|_| SeraiError::RpcError)?
+      .map_err(SeraiError::RpcError)?
       .map(|res| R::decode(&mut res.encoded()).map_err(|_| SeraiError::InvalidRuntime))
       .transpose()
   }
@@ -96,8 +97,7 @@ impl Serai {
     filter: impl Fn(&E) -> bool,
   ) -> Result<Vec<E>, SeraiError> {
     let mut res = vec![];
-    for event in
-      self.0.events().at(Some(block.into())).await.map_err(|_| SeraiError::RpcError)?.iter()
+    for event in self.0.events().at(Some(block.into())).await.map_err(SeraiError::RpcError)?.iter()
     {
       let event = event.map_err(|_| SeraiError::InvalidRuntime)?;
       if PalletInfo::index::<P>().unwrap() == usize::from(event.pallet_index()) {
@@ -113,7 +113,7 @@ impl Serai {
   }
 
   pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
-    Ok(self.0.rpc().finalized_head().await.map_err(|_| SeraiError::RpcError)?.into())
+    Ok(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?.into())
   }
 
   pub fn sign<S: Send + Sync + Signer<SeraiConfig>>(
@@ -130,7 +130,7 @@ impl Serai {
   }
 
   pub async fn publish(&self, tx: &Encoded) -> Result<[u8; 32], SeraiError> {
-    self.0.rpc().submit_extrinsic(tx).await.map(Into::into).map_err(|_| SeraiError::RpcError)
+    self.0.rpc().submit_extrinsic(tx).await.map(Into::into).map_err(SeraiError::RpcError)
   }
 }
 

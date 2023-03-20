@@ -43,7 +43,7 @@ pub async fn provide_updates(updates: Updates) -> [u8; 32] {
       }
     })
     .unwrap();
-  let _handle = jsonrpsee_server::ServerBuilder::default()
+  let handle = jsonrpsee_server::ServerBuilder::default()
     .build("127.0.0.1:5134")
     .await
     .unwrap()
@@ -82,6 +82,9 @@ pub async fn provide_updates(updates: Updates) -> [u8; 32] {
     // This will fail if there were more batch events than expected
     assert!(batches.is_empty());
 
+    handle.stop().unwrap();
+    handle.stopped().await;
+
     return latest;
   }
 }
@@ -92,12 +95,21 @@ macro_rules! serai_test {
     $(
       #[tokio::test]
       async fn $name() {
+        use std::process::Command;
+
         let guard = runner::SEQUENTIAL.lock().await;
+
+        let is_running = || {
+          !Command::new("pidof").arg("serai-node").output().unwrap().stdout.is_empty()
+        };
 
         // Spawn a fresh Serai node
         let mut command = {
           use core::time::Duration;
-          use std::{path::Path, process::Command};
+          use std::path::Path;
+
+          // Make sure a node isn't already running
+          assert!(!is_running());
 
           let node = {
             let this_crate = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -116,6 +128,10 @@ macro_rules! serai_test {
           if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             tokio::time::sleep(Duration::from_secs(60)).await;
           }
+
+          // Sanity check the pidof command is well-formed
+          assert!(is_running());
+
           command
         };
 
@@ -128,6 +144,7 @@ macro_rules! serai_test {
           } else {
             command.kill().unwrap();
           }
+          assert!(!is_running());
         }).await;
       }
     )*
