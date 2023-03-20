@@ -3,8 +3,12 @@ use std::{io, collections::HashMap};
 use async_trait::async_trait;
 
 use transcript::RecommendedTranscript;
+use group::ff::PrimeField;
 use k256::{ProjectivePoint, Scalar};
-use frost::{curve::Secp256k1, ThresholdKeys};
+use frost::{
+  curve::{Curve, Secp256k1},
+  ThresholdKeys,
+};
 
 use bitcoin_serai::{
   bitcoin::{
@@ -15,9 +19,9 @@ use bitcoin_serai::{
     blockdata::script::Instruction,
     Transaction, Block, Network,
   },
-  crypto::{make_even, tweak_keys},
   wallet::{
-    address, SpendableOutput, TransactionError, SignableTransaction as BSignableTransaction, TransactionMachine,
+    tweak_keys, address, ReceivedOutput, Scanner, TransactionError,
+    SignableTransaction as BSignableTransaction, TransactionMachine,
   },
   rpc::{RpcError, Rpc},
 };
@@ -61,7 +65,7 @@ impl AsMut<[u8]> for OutputId {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
   kind: OutputType,
-  output: SpendableOutput,
+  output: ReceivedOutput,
   data: Vec<u8>,
 }
 
@@ -96,7 +100,7 @@ impl OutputTrait for Output {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     Ok(Output {
       kind: OutputType::read(reader)?,
-      output: SpendableOutput::read(reader)?,
+      output: ReceivedOutput::read(reader)?,
       data: {
         let mut data_len = [0; 2];
         reader.read_exact(&mut data_len)?;
@@ -179,25 +183,35 @@ impl BlockTrait<Bitcoin> for Block {
   }
 }
 
-fn next_key(mut key: ProjectivePoint, i: usize) -> (ProjectivePoint, Scalar) {
-  let mut offset = Scalar::ZERO;
-  for _ in 0 .. i {
-    key += ProjectivePoint::GENERATOR;
-    offset += Scalar::ONE;
-
-    let even_offset;
-    (key, even_offset) = make_even(key);
-    offset += Scalar::from(even_offset);
-  }
-  (key, offset)
+const KEY_DST: &[u8] = b"Bitcoin Key";
+lazy_static::lazy_static! {
+  static ref BRANCH_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"branch");
+  static ref CHANGE_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"change");
 }
 
-fn branch(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
-  next_key(key, 1)
-}
+fn scanner(
+  key: ProjectivePoint,
+) -> (Scanner, HashMap<OutputType, Scalar>, HashMap<Vec<u8>, OutputType>) {
+  let mut scanner = Scanner::new(key).unwrap();
+  let mut offsets = HashMap::from([(OutputType::External, Scalar::ZERO)]);
 
-fn change(key: ProjectivePoint) -> (ProjectivePoint, Scalar) {
-  next_key(key, 2)
+  let zero = Scalar::ZERO.to_repr();
+  let zero_ref: &[u8] = zero.as_ref();
+  let mut kinds = HashMap::from([(zero_ref.to_vec(), OutputType::External)]);
+
+  let mut register = |kind, offset| {
+    let offset = scanner.register_offset(offset).expect("offset collision");
+    offsets.insert(kind, offset);
+
+    let offset = offset.to_repr();
+    let offset_ref: &[u8] = offset.as_ref();
+    kinds.insert(offset_ref.to_vec(), kind);
+  };
+
+  register(OutputType::Branch, *BRANCH_OFFSET);
+  register(OutputType::Change, *CHANGE_OFFSET);
+
+  (scanner, offsets, kinds)
 }
 
 #[derive(Clone, Debug)]
@@ -281,7 +295,8 @@ impl Coin for Bitcoin {
   }
 
   fn branch_address(key: ProjectivePoint) -> Self::Address {
-    Self::address(branch(key).0)
+    let (_, offsets, _) = scanner(key);
+    Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
@@ -299,39 +314,33 @@ impl Coin for Bitcoin {
     block: &Self::Block,
     key: ProjectivePoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
-    let external = (key, Scalar::ZERO);
-    let branch = branch(key);
-    let change = change(key);
+    let (scanner, _, kinds) = scanner(key);
 
-    let entry =
-      |pair: (_, _), kind| (Self::address(pair.0).0.script_pubkey().to_bytes(), (pair.1, kind));
-    let scripts = HashMap::from([
-      entry(external, OutputType::External),
-      entry(branch, OutputType::Branch),
-      entry(change, OutputType::Change),
-    ]);
-
-    let mut outputs = Vec::new();
+    let mut outputs = vec![];
     // Skip the coinbase transaction which is burdened by maturity
     for tx in &block.txdata[1 ..] {
-      for (vout, output) in tx.output.iter().enumerate() {
-        if let Some(info) = scripts.get(&output.script_pubkey.to_bytes()) {
-          outputs.push(Output {
-            kind: info.1,
-            output: SpendableOutput::new(key, Some(info.0), tx, vout).unwrap(),
-            data: (|| {
-              for output in &tx.output {
-                if output.script_pubkey.is_op_return() {
-                  match output.script_pubkey.instructions_minimal().last() {
-                    Some(Ok(Instruction::PushBytes(data))) => return data.to_vec(),
-                    _ => continue,
-                  }
+      for output in scanner.scan_transaction(tx) {
+        let offset_repr = output.offset().to_repr();
+        let offset_repr_ref: &[u8] = offset_repr.as_ref();
+        let kind = kinds[offset_repr_ref];
+
+        let data = if kind == OutputType::External {
+          (|| {
+            for output in &tx.output {
+              if output.script_pubkey.is_op_return() {
+                match output.script_pubkey.instructions_minimal().last() {
+                  Some(Ok(Instruction::PushBytes(data))) => return data.to_vec(),
+                  _ => continue,
                 }
               }
-              vec![]
-            })(),
-          });
-        }
+            }
+            vec![]
+          })()
+        } else {
+          vec![]
+        };
+
+        outputs.push(Output { kind, output, data })
       }
     }
 
@@ -360,7 +369,12 @@ impl Coin for Bitcoin {
       match BSignableTransaction::new(
         plan.inputs.iter().map(|input| input.output.clone()).collect(),
         &payments,
-        plan.change.map(|key| Self::address(change(key).0).0),
+        plan
+          .change
+          .map(|key| {
+            let (_, offsets, _) = scanner(key);
+            Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])).0
+          }),
         None,
         fee.0,
       ) {

@@ -1,5 +1,5 @@
 use std::{
-  io::{self, Read, Write},
+  io::{self, Read},
   collections::HashMap,
 };
 
@@ -9,22 +9,16 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use k256::{elliptic_curve::sec1::{Tag, ToEncodedPoint}, Scalar, ProjectivePoint};
-use frost::{
-  curve::{Ciphersuite, Secp256k1},
-  Participant, ThresholdKeys, FrostError,
-  sign::*,
-};
+use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
+use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, sign::*};
 
 use bitcoin::{
   hashes::Hash,
-  consensus::encode::{Decodable, serialize},
-  schnorr::TweakedPublicKey,
   util::sighash::{SchnorrSighashType, SighashCache, Prevouts},
-  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Network, Address,
+  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Address,
 };
 
-use crate::{crypto::x_only, algorithm::Schnorr};
+use crate::{crypto::Schnorr, wallet::ReceivedOutput};
 
 #[rustfmt::skip]
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L27
@@ -33,84 +27,6 @@ const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
 #[rustfmt::skip]
 //https://github.com/bitcoin/bitcoin/blob/a245429d680eb95cf4c0c78e58e63e3f0f5d979a/src/test/transaction_tests.cpp#L815-L816
 const DUST: u64 = 674;
-
-/// Return the Taproot address for a public key.
-pub fn address(network: Network, key: ProjectivePoint) -> Option<Address> {
-  if key.to_encoded_point(true).tag() != Tag::CompressedEvenY {
-    return None;
-  }
-
-  Some(Address::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)), network))
-}
-
-/// A spendable output.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SpendableOutput {
-  // The scalar offset to obtain the key usable to spend this output.
-  //
-  // This field exists in order to support HDKD schemes.
-  offset: Scalar,
-  // The output to spend.
-  output: TxOut,
-  // The TX ID and vout of the output to spend.
-  outpoint: OutPoint,
-}
-
-impl SpendableOutput {
-  /// Construct a SpendableOutput from an output.
-  pub fn new(key: ProjectivePoint, offset: Option<Scalar>, tx: &Transaction, o: usize) -> Option<SpendableOutput> {
-    let offset = offset.unwrap_or(Scalar::ZERO);
-    // Uses Network::Bitcoin since network is irrelevant here
-    let address = address(Network::Bitcoin, key + (ProjectivePoint::GENERATOR * offset))?;
-
-    let output = tx.output.get(o)?;
-
-    if output.script_pubkey == address.script_pubkey() {
-      return Some(SpendableOutput {
-        offset,
-        output: output.clone(),
-        outpoint: OutPoint { txid: tx.txid(), vout: u32::try_from(o).unwrap() },
-      });
-    }
-
-    None
-  }
-
-  /// The outpoint for this output.
-  pub fn outpoint(&self) -> &OutPoint {
-    &self.outpoint
-  }
-
-  /// The value of this output.
-  pub fn value(&self) -> u64 {
-    self.output.value
-  }
-
-  /// Read a SpendableOutput from a generic satisfying Read.
-  pub fn read<R: Read>(r: &mut R) -> io::Result<SpendableOutput> {
-    Ok(SpendableOutput {
-      offset: Secp256k1::read_F(r)?,
-      output: TxOut::consensus_decode(r)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid TxOut"))?,
-      outpoint: OutPoint::consensus_decode(r)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid OutPoint"))?,
-    })
-  }
-
-  /// Write a SpendableOutput to a generic satisfying Write.
-  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    w.write_all(&self.offset.to_bytes())?;
-    w.write_all(&serialize(&self.output))?;
-    w.write_all(&serialize(&self.outpoint))
-  }
-
-  /// Serialize a SpendableOutput to a Vec<u8>.
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = vec![];
-    self.write(&mut res).unwrap();
-    res
-  }
-}
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
@@ -188,7 +104,7 @@ impl SignableTransaction {
   ///
   /// If data is specified, an OP_RETURN output will be added with it.
   pub fn new(
-    mut inputs: Vec<SpendableOutput>,
+    mut inputs: Vec<ReceivedOutput>,
     payments: &[(Address, u64)],
     change: Option<Address>,
     data: Option<Vec<u8>>,

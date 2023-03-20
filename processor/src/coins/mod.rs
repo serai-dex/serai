@@ -34,7 +34,7 @@ pub trait Id:
 }
 impl<I: Send + Sync + Clone + Default + PartialEq + AsRef<[u8]> + AsMut<[u8]> + Debug> Id for I {}
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum OutputType {
   // Needs to be processed/sent up to Substrate
   External,

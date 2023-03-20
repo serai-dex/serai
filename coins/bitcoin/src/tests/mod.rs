@@ -14,8 +14,7 @@ use frost::{
 };
 
 use crate::{
-  crypto::{x_only, make_even},
-  algorithm::Schnorr,
+  crypto::{x_only, make_even, Schnorr},
   rpc::Rpc,
 };
 
