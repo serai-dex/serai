@@ -9,7 +9,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
+use k256::{elliptic_curve::sec1::{Tag, ToEncodedPoint}, Scalar, ProjectivePoint};
 use frost::{
   curve::{Ciphersuite, Secp256k1},
   Participant, ThresholdKeys, FrostError,
@@ -19,11 +19,12 @@ use frost::{
 use bitcoin::{
   hashes::Hash,
   consensus::encode::{Decodable, serialize},
+  schnorr::TweakedPublicKey,
   util::sighash::{SchnorrSighashType, SighashCache, Prevouts},
-  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Address,
+  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Network, Address,
 };
 
-use crate::algorithm::Schnorr;
+use crate::{crypto::x_only, algorithm::Schnorr};
 
 #[rustfmt::skip]
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L27
@@ -33,23 +34,56 @@ const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
 //https://github.com/bitcoin/bitcoin/blob/a245429d680eb95cf4c0c78e58e63e3f0f5d979a/src/test/transaction_tests.cpp#L815-L816
 const DUST: u64 = 674;
 
+/// Return the Taproot address for a public key.
+pub fn address(network: Network, key: ProjectivePoint) -> Option<Address> {
+  if key.to_encoded_point(true).tag() != Tag::CompressedEvenY {
+    return None;
+  }
+
+  Some(Address::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)), network))
+}
+
 /// A spendable output.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SpendableOutput {
-  /// The scalar offset to obtain the key usable to spend this output.
-  ///
-  /// This field exists in order to support HDKD schemes.
-  pub offset: Scalar,
-  /// The output to spend.
-  pub output: TxOut,
-  /// The TX ID and vout of the output to spend.
-  pub outpoint: OutPoint,
+  // The scalar offset to obtain the key usable to spend this output.
+  //
+  // This field exists in order to support HDKD schemes.
+  offset: Scalar,
+  // The output to spend.
+  output: TxOut,
+  // The TX ID and vout of the output to spend.
+  outpoint: OutPoint,
 }
 
 impl SpendableOutput {
-  /// The unique ID for this output (TX ID and vout).
-  pub fn id(&self) -> [u8; 36] {
-    serialize(&self.outpoint).try_into().unwrap()
+  /// Construct a SpendableOutput from an output.
+  pub fn new(key: ProjectivePoint, offset: Option<Scalar>, tx: &Transaction, o: usize) -> Option<SpendableOutput> {
+    let offset = offset.unwrap_or(Scalar::ZERO);
+    // Uses Network::Bitcoin since network is irrelevant here
+    let address = address(Network::Bitcoin, key + (ProjectivePoint::GENERATOR * offset))?;
+
+    let output = tx.output.get(o)?;
+
+    if output.script_pubkey == address.script_pubkey() {
+      return Some(SpendableOutput {
+        offset,
+        output: output.clone(),
+        outpoint: OutPoint { txid: tx.txid(), vout: u32::try_from(o).unwrap() },
+      });
+    }
+
+    None
+  }
+
+  /// The outpoint for this output.
+  pub fn outpoint(&self) -> &OutPoint {
+    &self.outpoint
+  }
+
+  /// The value of this output.
+  pub fn value(&self) -> u64 {
+    self.output.value
   }
 
   /// Read a SpendableOutput from a generic satisfying Read.

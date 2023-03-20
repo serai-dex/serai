@@ -1,7 +1,9 @@
 use k256::{
   elliptic_curve::sec1::{Tag, ToEncodedPoint},
-  ProjectivePoint,
+  Scalar, ProjectivePoint,
 };
+
+use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin::XOnlyPublicKey;
 
@@ -26,4 +28,10 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
     c += 1;
   }
   (key, c)
+}
+
+/// Tweak keys to ensure they're usable with Bitcoin.
+pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
+  let (_, offset) = make_even(keys.group_key());
+  keys.offset(Scalar::from(offset))
 }

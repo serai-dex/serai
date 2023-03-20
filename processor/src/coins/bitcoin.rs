@@ -3,26 +3,21 @@ use std::{io, collections::HashMap};
 use async_trait::async_trait;
 
 use transcript::RecommendedTranscript;
-use k256::{
-  ProjectivePoint, Scalar,
-  elliptic_curve::sec1::{ToEncodedPoint, Tag},
-};
+use k256::{ProjectivePoint, Scalar};
 use frost::{curve::Secp256k1, ThresholdKeys};
 
 use bitcoin_serai::{
   bitcoin::{
     hashes::Hash as HashTrait,
-    schnorr::TweakedPublicKey,
     consensus::{Encodable, Decodable},
     psbt::serialize::Serialize,
     OutPoint,
     blockdata::script::Instruction,
-    Transaction, Block, Network, Address as BAddress,
+    Transaction, Block, Network,
   },
-  crypto::{x_only, make_even},
+  crypto::{make_even, tweak_keys},
   wallet::{
-    SpendableOutput, TransactionError, SignableTransaction as BSignableTransaction,
-    TransactionMachine,
+    address, SpendableOutput, TransactionError, SignableTransaction as BSignableTransaction, TransactionMachine,
   },
   rpc::{RpcError, Rpc},
 };
@@ -32,7 +27,7 @@ use bitcoin_serai::bitcoin::{
   secp256k1::{SECP256K1, SecretKey, Message},
   PrivateKey, PublicKey, EcdsaSighashType,
   blockdata::script::Builder,
-  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut,
+  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut, Address as BAddress,
 };
 
 use serai_client::coins::bitcoin::Address;
@@ -78,11 +73,13 @@ impl OutputTrait for Output {
   }
 
   fn id(&self) -> Self::Id {
-    OutputId(self.output.id())
+    let mut res = OutputId::default();
+    self.output.outpoint().consensus_encode(&mut res.as_mut()).unwrap();
+    res
   }
 
   fn amount(&self) -> u64 {
-    self.output.output.value
+    self.output.value()
   }
 
   fn data(&self) -> &[u8] {
@@ -275,17 +272,12 @@ impl Coin for Bitcoin {
   const MAX_INPUTS: usize = 520;
   const MAX_OUTPUTS: usize = 520;
 
-  fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>) {
-    let (_, offset) = make_even(key.group_key());
-    *key = key.offset(Scalar::from(offset));
+  fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
+    *keys = tweak_keys(keys);
   }
 
-  fn address(key: ProjectivePoint) -> Self::Address {
-    assert!(key.to_encoded_point(true).tag() == Tag::CompressedEvenY, "YKey is odd");
-    Address(BAddress::p2tr_tweaked(
-      TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)),
-      Network::Bitcoin,
-    ))
+  fn address(key: ProjectivePoint) -> Address {
+    Address(address(Network::Bitcoin, key).unwrap())
   }
 
   fn branch_address(key: ProjectivePoint) -> Self::Address {
@@ -326,11 +318,7 @@ impl Coin for Bitcoin {
         if let Some(info) = scripts.get(&output.script_pubkey.to_bytes()) {
           outputs.push(Output {
             kind: info.1,
-            output: SpendableOutput {
-              offset: info.0,
-              output: output.clone(),
-              outpoint: OutPoint { txid: tx.txid(), vout: u32::try_from(vout).unwrap() },
-            },
+            output: SpendableOutput::new(key, Some(info.0), tx, vout).unwrap(),
             data: (|| {
               for output in &tx.output {
                 if output.script_pubkey.is_op_return() {
@@ -413,7 +401,7 @@ impl Coin for Bitcoin {
           transcript: plan.transcript(),
           actual: signable(&plan, Some(tx_fee)).unwrap(),
         },
-        plan.inputs[0].output.outpoint,
+        *plan.inputs[0].output.outpoint(),
       )),
       branch_outputs,
     ))
