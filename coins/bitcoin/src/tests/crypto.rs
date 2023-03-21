@@ -12,7 +12,7 @@ use frost::{
   tests::{algorithm_machines, key_gen, sign},
 };
 
-use bitcoin_serai::{
+use crate::{
   bitcoin::hashes::{Hash as HashTrait, sha256::Hash},
   crypto::{x_only, make_even, Schnorr},
 };

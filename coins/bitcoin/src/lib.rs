@@ -14,3 +14,6 @@ pub(crate) mod crypto;
 pub mod wallet;
 /// A minimal asynchronous Bitcoin RPC client.
 pub mod rpc;
+
+#[cfg(test)]
+mod tests;
