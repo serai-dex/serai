@@ -20,7 +20,7 @@ fn test_classic_seed() {
 
   let vectors = [
     Vector {
-      language: classic::Language::ChineseSimp,
+      language: classic::Language::ChineseSimplified,
       seed: "摇 曲 艺 武 滴 然 效 似 赏 式 祥 歌 买 疑 小 碧 堆 博 键 房 鲜 悲 付 喷 武".into(),
       spend: "a5e4fff1706ef9212993a69f246f5c95ad6d84371692d63e9bb0ea112a58340d".into(),
       view: "1176c43ce541477ea2f3ef0b49b25112b084e26b8a843e1304ac4677b74cdf02".into(),
@@ -183,16 +183,13 @@ fn test_classic_seed() {
 }
 
 ////// POLYSEED TESTS ///////////////
-///
-///
 #[test]
 fn test_polyseed() {
   struct Vector {
     language: polyseed::Language,
     seed: String,
-    key: String,
-    birtday: u64,
-    formal: bool,
+    entropy: String,
+    birthday: u64,
   }
 
   let vectors = [
@@ -201,75 +198,122 @@ fn test_polyseed() {
       seed: "raven tail swear infant grief assist regular lamp \
       duck valid someone little harsh puppy airport language"
         .into(),
-      key: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
-      birtday: 1638446400,
-      formal: true,
+      entropy: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
+      birthday: 1638446400,
     },
     Vector {
       language: polyseed::Language::English,
       seed: "raven tail swear infant grief assist regular lamp \
       duck valid someone little harsh puppy airport language "
         .into(),
-      key: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
-      birtday: 1638446400,
-      formal: false,
+      entropy: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
+      birthday: 1638446400,
     },
     Vector {
       language: polyseed::Language::English,
       seed: "rave tail swea infan grie assi regul lamp \
       duck vali some litt hars pupp airp langua"
         .into(),
-      key: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
-      birtday: 1638446400,
-      formal: false,
+      entropy: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
+      birthday: 1638446400,
     },
     Vector {
       language: polyseed::Language::Spanish,
       seed: "eje fin parte célebre tabú pestaña lienzo puma \
       prisión hora regalo lengua existir lápiz lote sonoro"
         .into(),
-      key: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
-      birtday: 3118651200,
-      formal: true,
+      entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
+      birthday: 3118651200,
     },
     Vector {
       language: polyseed::Language::Spanish,
       seed: "eje fin parte celebre tabu pestana lienzo puma \
       prision hora regalo lengua existir lapiz lote sonoro"
         .into(),
-      key: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
-      birtday: 3118651200,
-      formal: false,
+      entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
+      birthday: 3118651200,
     },
     Vector {
       language: polyseed::Language::Spanish,
       seed: "eje fin part cele tabu pest lien puma \
       pris hora rega leng exis lapi lote sono"
         .into(),
-      key: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
-      birtday: 3118651200,
-      formal: false,
+      entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
+      birthday: 3118651200,
+    },
+    Vector {
+      language: polyseed::Language::French,
+      seed: "valable arracher décaler jeudi amusant dresser mener épaissir risible \
+      prouesse réserve ampleur ajuster muter caméra enchère"
+        .into(),
+      entropy: "11cfd870324b26657342c37360c424a14a050b00000000000000000000000000".into(),
+      birthday: 1679314966,
+    },
+    Vector {
+      language: polyseed::Language::Italian,
+      seed: "caduco midollo copione meninge isotopo illogico riflesso tartaruga fermento \
+      olandese normale tristezza episodio voragine forbito achille"
+        .into(),
+      entropy: "7ecc57c9b4652d4e31428f62bec91cfd55500600000000000000000000000000".into(),
+      birthday: 1679316358,
+    },
+    Vector {
+      language: polyseed::Language::Portuguese,
+      seed: "caverna custear azedo adeus senador apertada sedoso omitir \
+      sujeito aurora videira molho cartaz gesso dentista tapar"
+        .into(),
+      entropy: "45473063711376cae38f1b3eba18c874124e1d00000000000000000000000000".into(),
+      birthday: 1679316657,
+    },
+    Vector {
+      language: polyseed::Language::Czech,
+      seed: "usmrtit nora dotaz komunita zavalit funkce mzda sotva akce \
+      vesta kabel herna stodola uvolnit ustrnout email"
+        .into(),
+      entropy: "7ac8a4efd62d9c3c4c02e350d32326df37821c00000000000000000000000000".into(),
+      birthday: 1679316898,
+    },
+    Vector {
+      language: polyseed::Language::Korean,
+      seed: "전망 선풍기 국제 무궁화 설사 기름 이론적 해안 절망 예선 \
+        지우개 보관 절망 말기 시각 귀신"
+        .into(),
+      entropy: "684663fda420298f42ed94b2c512ed38ddf12b00000000000000000000000000".into(),
+      birthday: 1679317073,
+    },
+    Vector {
+      language: polyseed::Language::Japanese,
+      seed: "うちあわせ　ちつじょ　つごう　しはい　けんこう　とおる　てみやげ　はんとし　たんとう \
+      といれ　おさない　おさえる　むかう　ぬぐう　なふだ　せまる"
+        .into(),
+      entropy: "94e6665518a6286c6e3ba508a2279eb62b771f00000000000000000000000000".into(),
+      birthday: 1679318722,
+    },
+    Vector {
+      language: polyseed::Language::ChineseTraditional,
+      seed: "亂 挖 斤 柄 代 圈 枝 轄 魯 論 函 開 勘 番 榮 壁".into(),
+      entropy: "b1594f585987ab0fd5a31da1f0d377dae5283f00000000000000000000000000".into(),
+      birthday: 1679426433,
+    },
+    Vector {
+      language: polyseed::Language::ChineseSimplified,
+      seed: "啊 百 族 府 票 划 伪 仓 叶 虾 借 溜 晨 左 等 鬼".into(),
+      entropy: "21cdd366f337b89b8d1bc1df9fe73047c22b0300000000000000000000000000".into(),
+      birthday: 1679426817,
     },
   ];
-  let features = 0;
   let polyseed_time_step = 2630000;
 
   for v in vectors {
     // string -> key
     let s1 = Seed::from_string(Zeroizing::new(v.seed)).unwrap();
-    let key_bytes = Zeroizing::new(hex::decode(v.key).unwrap().try_into().unwrap());
-    let data = s1.polyseed_data();
-    assert_eq!(data.entropy, key_bytes);
-    assert_eq!(data.features, features);
-    assert!(data.birthday <= v.birtday);
-    assert!(data.birthday + polyseed_time_step > v.birtday);
+    let entropy = Zeroizing::new(hex::decode(v.entropy).unwrap().try_into().unwrap());
+    assert_eq!(s1.entropy(), entropy);
+    assert!(s1.birthday() <= v.birthday);
+    assert!(s1.birthday() + polyseed_time_step > v.birthday);
 
-    if v.formal {
-      // key -> string
-      let data =
-        polyseed::PolySeedData { birthday: v.birtday, features, entropy: key_bytes, checksum: 0 };
-      let s2 = Seed::from_polyseed_data(data, v.language).unwrap();
-      assert_eq!(s1.to_string(), s2.to_string());
-    }
+    // key -> string
+    let s2 = Seed::from(v.birthday, entropy, v.language).unwrap();
+    assert_eq!(s1.to_string(), s2.to_string());
   }
 }

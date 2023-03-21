@@ -4,15 +4,15 @@ use std::{
   time::{SystemTime, UNIX_EPOCH},
 };
 
-use curve25519_dalek::scalar::Scalar;
+use pbkdf2::pbkdf2_hmac;
+use sha3::Sha3_256;
+
 use rand_core::{RngCore, CryptoRng};
 use zeroize::{Zeroize, Zeroizing};
 
 use lazy_static::lazy_static;
 
 use super::SeedError;
-
-use crate::random_scalar;
 
 // features
 const FEATURE_BITS: u32 = 5;
@@ -35,6 +35,10 @@ const CLEAR_MASK: u8 = !((((1 << (2)) - 1) << (8 - (2))) as u8);
 const GF_BITS: u32 = 11;
 const POLY_NUM_CHECK_DIGITS: usize = 1;
 const POLYSEED_MUL2_TABLE: [u16; 8] = [5, 7, 1, 3, 13, 15, 9, 11];
+
+// keygen
+const POLYSEED_SALT: &str = "POLYSEED key";
+const POLYSEED_KEYGEN_ITERATIONS: u32 = 10000;
 
 // words
 pub const POLYSEED_LENGTH: usize = 16;
@@ -59,8 +63,8 @@ pub enum Language {
   Korean,
   Czech,
   Portuguese,
-  ChineseSimp,
-  ChineseTrad,
+  ChineseSimplified,
+  ChineseTraditional,
 }
 
 struct WordList {
@@ -70,8 +74,8 @@ struct WordList {
 }
 
 impl WordList {
-  pub fn new(words: Vec<String>, has_prefix: bool, has_accent: bool) -> WordList {
-    WordList { words, has_prefix, has_accent }
+  pub fn new(words: &str, has_prefix: bool, has_accent: bool) -> WordList {
+    WordList { words: serde_json::from_str(words).unwrap(), has_prefix, has_accent }
   }
 }
 
@@ -89,41 +93,41 @@ const ZH_T_WORDS: &str = include_str!("./polyseed/zh_trad.json");
 
 lazy_static! {
   static ref LANGUAGES: HashMap<Language, WordList> = HashMap::from([
-    (Language::Czech, WordList::new(serde_json::from_str(CS_WORDS).unwrap(), true, false)),
-    (Language::French, WordList::new(serde_json::from_str(FR_WORDS).unwrap(), true, true)),
-    (Language::Korean, WordList::new(serde_json::from_str(KO_WORDS).unwrap(), false, false)),
-    (Language::English, WordList::new(serde_json::from_str(EN_WORDS).unwrap(), true, false)),
-    (Language::Italian, WordList::new(serde_json::from_str(IT_WORDS).unwrap(), true, false)),
-    (Language::Spanish, WordList::new(serde_json::from_str(ES_WORDS).unwrap(), true, true)),
-    (Language::Japanese, WordList::new(serde_json::from_str(JA_WORDS).unwrap(), false, false)),
-    (Language::Portuguese, WordList::new(serde_json::from_str(PT_WORDS).unwrap(), true, false)),
-    (Language::ChineseSimp, WordList::new(serde_json::from_str(ZH_S_WORDS).unwrap(), false, false)),
-    (Language::ChineseTrad, WordList::new(serde_json::from_str(ZH_T_WORDS).unwrap(), false, false)),
+    (Language::Czech, WordList::new(CS_WORDS, true, false)),
+    (Language::French, WordList::new(FR_WORDS, true, true)),
+    (Language::Korean, WordList::new(KO_WORDS, false, false)),
+    (Language::English, WordList::new(EN_WORDS, true, false)),
+    (Language::Italian, WordList::new(IT_WORDS, true, false)),
+    (Language::Spanish, WordList::new(ES_WORDS, true, true)),
+    (Language::Japanese, WordList::new(JA_WORDS, false, false)),
+    (Language::Portuguese, WordList::new(PT_WORDS, true, false)),
+    (Language::ChineseSimplified, WordList::new(ZH_S_WORDS, false, false)),
+    (Language::ChineseTraditional, WordList::new(ZH_T_WORDS, false, false)),
   ]);
 }
 
-pub struct PolySeedData {
+struct PolyseedData {
   pub birthday: u64,
   pub features: u32,
   pub entropy: Zeroizing<[u8; 32]>,
   pub checksum: u16,
 }
 
-impl PolySeedData {
-  /// creates a `PolySeedData` with current time birthday, random entropy and no features.
-  pub fn new<R: RngCore + CryptoRng>(rng: &mut R) -> PolySeedData {
+impl PolyseedData {
+  /// creates a `PolyseedData` with current time birthday, random entropy and no features.
+  pub fn new<R: RngCore + CryptoRng>(rng: &mut R) -> PolyseedData {
     // get birthday
     let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     let birthday = birthday_encode(time);
 
-    // get the entropy
-    let mut key = random_scalar(rng).to_bytes();
-    key[(SECRET_SIZE + 1) ..].fill(0);
-    key[SECRET_SIZE - 1] &= CLEAR_MASK;
-    let entropy = Zeroizing::new(key);
+    // make an entropy
+    let mut entropy = Zeroizing::new([0; 32]);
+    rng.fill_bytes(entropy.as_mut());
+    entropy[SECRET_SIZE ..].fill(0);
+    entropy[SECRET_SIZE - 1] &= CLEAR_MASK;
 
-    // make polyseed data
-    let mut data = PolySeedData { birthday, features: 0, entropy, checksum: 0 };
+    // make the polyseed data
+    let mut data = PolyseedData { birthday, features: 0, entropy, checksum: 0 };
 
     // set the  checksum
     data.checksum = create_checksum(&data);
@@ -131,21 +135,23 @@ impl PolySeedData {
     data
   }
 
-  pub fn from(data: PolySeedData) -> Option<PolySeedData> {
+  pub fn from(features: u32, birthday: u64, entropy: Zeroizing<[u8; 32]>) -> Option<PolyseedData> {
     // check features
-    let features = make_features(data.features);
+    let features = make_features(features);
     if !polyseed_features_supported(features) {
       return None;
     }
 
     // get birthday
-    let birthday = birthday_encode(data.birthday);
+    let birthday = birthday_encode(birthday);
 
-    // make sure it is a valid scalar
-    Scalar::from_canonical_bytes(*data.entropy)?;
+    // make sure it is a valid scalar.
+    if !valid_entropy(&entropy) {
+      return None;
+    }
 
     // make the data
-    let mut data = PolySeedData { birthday, features, entropy: data.entropy, checksum: 0 };
+    let mut data = PolyseedData { birthday, features, entropy, checksum: 0 };
 
     // set the  checksum
     data.checksum = create_checksum(&data);
@@ -155,42 +161,62 @@ impl PolySeedData {
 }
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
-pub struct PolySeed(Zeroizing<String>);
-impl PolySeed {
+pub struct Polyseed(Zeroizing<String>);
+impl Polyseed {
   /// returns a new seed for a given lang.
-  pub fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> PolySeed {
-    poly_encode(PolySeedData::new(rng), lang)
+  pub fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> Polyseed {
+    poly_encode(PolyseedData::new(rng), lang)
   }
 
-  /// returns a new `PolySeed` for a given string.
-  pub fn from_string(words: Zeroizing<String>) -> Result<PolySeed, SeedError> {
-    let data = poly_decode(&words)?;
+  /// returns a new `Polyseed` for a given string.
+  pub fn from_string(words: Zeroizing<String>) -> Result<Polyseed, SeedError> {
+    let (data, lang) = poly_decode(&words)?;
 
     // Make sure this is a valid scalar
-    let mut scalar = Scalar::from_canonical_bytes(*data.entropy);
-    if scalar.is_none() {
-      Err(SeedError::InvalidSeed)?;
+    if !valid_entropy(&data.entropy) {
+      return Err(SeedError::PolyseedInvalidEntropy)?;
     }
-    scalar.zeroize();
 
-    Ok(PolySeed(words))
+    // Call from so a trimmed seed becomes a full seed
+    Ok(Self::from(data.features, data.birthday, data.entropy, lang).unwrap())
   }
 
-  /// returns a new `PolySeed` for a given `PolySeedData`.
-  pub fn from_polyseed_data(data: PolySeedData, lang: Language) -> Option<PolySeed> {
-    PolySeedData::from(data).map(|d| poly_encode(d, lang))
+  /// returns a new `PolySeed` for a given `PolyseedData`.
+  pub fn from(
+    features: u32,
+    birthday: u64,
+    entropy: Zeroizing<[u8; 32]>,
+    lang: Language,
+  ) -> Option<Polyseed> {
+    PolyseedData::from(features, birthday, entropy).map(|d| poly_encode(d, lang))
+  }
+
+  pub fn key(&self) -> Zeroizing<[u8; 32]> {
+    let pass = poly_decode(&self.0).unwrap().0.entropy;
+    let mut key: [u8; 32] = [0; 32];
+    pbkdf2_hmac::<Sha3_256>(
+      (*pass).as_slice(),
+      POLYSEED_SALT.as_bytes(),
+      POLYSEED_KEYGEN_ITERATIONS,
+      &mut key[..],
+    );
+    Zeroizing::new(key)
   }
 
   pub(crate) fn to_string(&self) -> Zeroizing<String> {
     self.0.clone()
   }
 
-  pub(crate) fn polyseed_data(&self) -> PolySeedData {
-    poly_decode(&self.0).unwrap()
+  pub(crate) fn birthday(&self) -> u64 {
+    poly_decode(&self.0).unwrap().0.birthday
+  }
+
+  pub(crate) fn entropy(&self) -> Zeroizing<[u8; 32]> {
+    poly_decode(&self.0).unwrap().0.entropy
   }
 }
 
-fn poly_encode(data: PolySeedData, lang: Language) -> PolySeed {
+fn poly_encode(data: PolyseedData, lang: Language) -> Polyseed {
   // encode polynomial with the existing checksum
   let mut poly = polyseed_data_to_poly(&data);
   poly[0] = data.checksum;
@@ -208,17 +234,17 @@ fn poly_encode(data: PolySeedData, lang: Language) -> PolySeed {
     }
   }
 
-  PolySeed(Zeroizing::new(seed))
+  Polyseed(Zeroizing::new(seed))
 }
 
-fn poly_decode(seed: &str) -> Result<PolySeedData, SeedError> {
+fn poly_decode(seed: &str) -> Result<(PolyseedData, Language), SeedError> {
   // decode words into polynomial coefficients
-  let (mut poly, _) = find_seed_language(seed)?;
+  let (mut poly, lang) = find_seed_language(seed)?;
   poly[POLY_NUM_CHECK_DIGITS] ^= COIN;
 
   // checksum
-  if !poly_check(&poly) {
-    Err(SeedError::PolySeedInvalidPoly)?;
+  if poly_eval(&poly) != 0 {
+    Err(SeedError::PolyseedInvalidPoly)?;
   }
 
   // decode polynomial into seed data
@@ -226,10 +252,10 @@ fn poly_decode(seed: &str) -> Result<PolySeedData, SeedError> {
 
   // check features
   if !polyseed_features_supported(data.features) {
-    Err(SeedError::InvalidSeed)?;
+    Err(SeedError::PolyseedFeatureNotSupported)?;
   }
 
-  Ok(data)
+  Ok((data, lang))
 }
 
 fn find_seed_language(seed: &str) -> Result<(Poly, Language), SeedError> {
@@ -278,7 +304,7 @@ fn find_seed_language(seed: &str) -> Result<(Poly, Language), SeedError> {
   Err(SeedError::UnknownLanguage)?
 }
 
-fn polyseed_data_to_poly(data: &PolySeedData) -> Poly {
+fn polyseed_data_to_poly(data: &PolyseedData) -> Poly {
   let extra_val: u32 = (data.features << DATE_BITS) | (data.birthday as u32);
   let mut extra_bits: u32 = FEATURE_BITS + DATE_BITS;
   let mut word_bits: u32 = 0;
@@ -321,7 +347,7 @@ fn polyseed_data_to_poly(data: &PolySeedData) -> Poly {
   poly
 }
 
-fn poly_to_polyseed_data(poly: Poly) -> PolySeedData {
+fn poly_to_polyseed_data(poly: Poly) -> PolyseedData {
   let mut entropy: [u8; 32] = [0; 32];
   let checksum = poly[0];
 
@@ -369,7 +395,7 @@ fn poly_to_polyseed_data(poly: Poly) -> PolySeedData {
   let birthday = extra_val & DATE_MASK;
   let features = extra_val >> DATE_BITS;
 
-  PolySeedData {
+  PolyseedData {
     birthday: birthday_decode(birthday),
     features,
     entropy: Zeroizing::new(entropy),
@@ -377,7 +403,7 @@ fn poly_to_polyseed_data(poly: Poly) -> PolySeedData {
   }
 }
 
-fn create_checksum(data: &PolySeedData) -> u16 {
+fn create_checksum(data: &PolyseedData) -> u16 {
   let poly = polyseed_data_to_poly(data);
   poly_eval(&poly)
 }
@@ -398,10 +424,6 @@ fn poly_eval(poly: &Poly) -> u16 {
   result
 }
 
-fn poly_check(poly: &Poly) -> bool {
-  poly_eval(poly) == 0
-}
-
 fn make_features(features: u32) -> u32 {
   features & USER_FEATURES_MASK
 }
@@ -416,4 +438,14 @@ fn birthday_encode(time: u64) -> u64 {
 
 fn birthday_decode(birthday: u32) -> u64 {
   EPOCH + (birthday as u64) * TIME_STEP
+}
+
+fn valid_entropy(entropy: &Zeroizing<[u8; 32]>) -> bool {
+  // Last 13 byte should be 0.
+  for i in SECRET_SIZE .. entropy.len() {
+    if entropy[i] != 0 {
+      return false;
+    }
+  }
+  true
 }

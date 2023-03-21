@@ -17,7 +17,7 @@ pub(crate) const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Language {
-  ChineseSimp,
+  ChineseSimplified,
   English,
   Dutch,
   French,
@@ -75,7 +75,7 @@ lazy_static! {
     (Language::Esperanto, WordList::new(include_str!("./classic/eo.json"), 4)),
     (Language::Lojban, WordList::new(include_str!("./classic/jbo.json"), 4)),
     (Language::EnglishOld, WordList::new(include_str!("./classic/ang.json"), 4)),
-    (Language::ChineseSimp, WordList::new(include_str!("./classic/zh.json"), 1)),
+    (Language::ChineseSimplified, WordList::new(include_str!("./classic/zh.json"), 1)),
   ]);
 }
 

@@ -24,6 +24,8 @@ rand_chacha = { version = "0.3", optional = true }
 rand = "0.8"
 rand_distr = "0.4"
 
+pbkdf2 = { version = "0.12", features = ["simple"] }
+
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 subtle = "2.4"
 
