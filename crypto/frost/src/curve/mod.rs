@@ -33,10 +33,14 @@ pub use kp256::{P256, IetfP256Hram};
 #[cfg(feature = "ed448")]
 mod ed448;
 #[cfg(feature = "ed448")]
-pub use ed448::{Ed448, Ietf8032Ed448Hram, IetfEd448Hram};
+pub use ed448::{Ed448, IetfEd448Hram};
+#[cfg(all(test, feature = "ed448"))]
+pub(crate) use ed448::Ietf8032Ed448Hram;
 
-/// FROST Ciphersuite, except for the signing algorithm specific H2, making this solely the curve,
-/// its associated hash function, and the functions derived from it.
+/// FROST Ciphersuite.
+///
+/// This exclude the signing algorithm specific H2, making this solely the curve, its associated
+/// hash function, and the functions derived from it.
 pub trait Curve: Ciphersuite {
   /// Context string for this curve.
   const CONTEXT: &'static [u8];
@@ -98,6 +102,7 @@ pub trait Curve: Ciphersuite {
     res
   }
 
+  /// Read a point from a reader, rejecting identity.
   #[allow(non_snake_case)]
   fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
     let res = <Self as Ciphersuite>::read_G(reader)?;

@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+
 use core::ops::Deref;
 use std::io::{self, Read, Write};
 
@@ -14,6 +17,7 @@ use ciphersuite::{
 };
 use multiexp::{multiexp_vartime, BatchVerifier};
 
+/// Half-aggregation from <https://eprint.iacr.org/2021/350>.
 pub mod aggregate;
 
 #[cfg(test)]

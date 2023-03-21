@@ -11,11 +11,12 @@ impl Curve for Ed448 {
   const CONTEXT: &'static [u8] = CONTEXT;
 }
 
+// The RFC-8032 Ed448 challenge function.
 #[derive(Copy, Clone)]
-pub struct Ietf8032Ed448Hram;
+pub(crate) struct Ietf8032Ed448Hram;
 impl Ietf8032Ed448Hram {
   #[allow(non_snake_case)]
-  pub fn hram(context: &[u8], R: &Point, A: &Point, m: &[u8]) -> Scalar {
+  pub(crate) fn hram(context: &[u8], R: &Point, A: &Point, m: &[u8]) -> Scalar {
     Scalar::wide_reduce(
       Shake256_114::digest(
         [
@@ -32,6 +33,7 @@ impl Ietf8032Ed448Hram {
   }
 }
 
+/// The challenge function for FROST's Ed448 ciphersuite.
 #[derive(Copy, Clone)]
 pub struct IetfEd448Hram;
 impl Hram<Ed448> for IetfEd448Hram {

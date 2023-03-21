@@ -14,7 +14,7 @@ pub fn test_one<F: PrimeField>() {
   assert_eq!(F::one(), F::from(1u64), "1 != 1");
 }
 
-/// Test From<u64> for F works.
+/// Test `From<u64>` for F works.
 pub fn test_from_u64<F: PrimeField>() {
   assert_eq!(F::one().double(), F::from(2u64), "2 != 2");
 }
@@ -279,7 +279,7 @@ pub fn test_s<F: PrimeFieldBits>() {
   assert_eq!(s, F::S, "incorrect S");
 }
 
-// Test the root of unity is correct for the given multiplicative generator.
+/// Test the root of unity is correct for the provided multiplicative generator.
 pub fn test_root_of_unity<F: PrimeFieldBits>() {
   // "It can be calculated by exponentiating `Self::multiplicative_generator` by `t`, where
   // `t = (modulus - 1) >> Self::S`."

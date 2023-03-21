@@ -203,7 +203,7 @@ pub fn test_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   assert!(sig.verify(group_key, H::hram(&sig.R, &group_key, MSG)));
 }
 
-// Test an offset Schnorr signature.
+/// Test an offset Schnorr signature.
 pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   const MSG: &[u8] = b"Hello, World!";
 
@@ -223,7 +223,7 @@ pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &m
   assert!(sig.verify(offset_key, H::hram(&sig.R, &group_key, MSG)));
 }
 
-// Test blame for an invalid Schnorr signature share.
+/// Test blame for an invalid Schnorr signature share.
 pub fn test_schnorr_blame<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   const MSG: &[u8] = b"Hello, World!";
 
@@ -245,7 +245,7 @@ pub fn test_schnorr_blame<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mu
   }
 }
 
-// Run a variety of tests against a ciphersuite.
+/// Run a variety of tests against a ciphersuite.
 pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   test_schnorr::<R, C, H>(rng);
   test_offset_schnorr::<R, C, H>(rng);

@@ -1,10 +1,5 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-
-//! A collection of implementations of various distributed key generation protocols.
-//! They all resolve into the provided Threshold types intended to enable their modularity.
-//! Additional utilities around them, such as promotion from one generator to another, are also
-//! provided.
+#![doc = include_str!("../README.md")]
 
 use core::{
   fmt::{self, Debug},
@@ -43,6 +38,7 @@ pub mod tests;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Participant(pub(crate) u16);
 impl Participant {
+  /// Create a new Participant identifier from a u16.
   pub fn new(i: u16) -> Option<Participant> {
     if i == 0 {
       None
@@ -51,6 +47,7 @@ impl Participant {
     }
   }
 
+  /// Convert a Participant identifier to bytes.
   #[allow(clippy::wrong_self_convention)]
   pub fn to_bytes(&self) -> [u8; 2] {
     self.0.to_le_bytes()
@@ -69,32 +66,38 @@ impl fmt::Display for Participant {
   }
 }
 
-/// Various errors possible during key generation/signing.
+/// Various errors possible during key generation.
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
+  /// A parameter was zero.
   #[error("a parameter was 0 (threshold {0}, participants {1})")]
   ZeroParameter(u16, u16),
-  #[error("invalid amount of required participants (max {1}, got {0})")]
-  InvalidRequiredQuantity(u16, u16),
+  /// The threshold exceeded the amount of participants.
+  #[error("invalid threshold (max {1}, got {0})")]
+  InvalidThreshold(u16, u16),
+  /// Invalid participant identifier.
   #[error("invalid participant (0 < participant <= {0}, yet participant is {1})")]
   InvalidParticipant(u16, Participant),
 
+  /// Invalid signing set.
   #[error("invalid signing set")]
   InvalidSigningSet,
+  /// Invalid amount of participants.
   #[error("invalid participant quantity (expected {0}, got {1})")]
   InvalidParticipantQuantity(usize, usize),
+  /// A participant was duplicated.
   #[error("duplicated participant ({0})")]
   DuplicatedParticipant(Participant),
+  /// A participant was missing.
   #[error("missing participant {0}")]
   MissingParticipant(Participant),
 
+  /// An invalid proof of knowledge was provided.
   #[error("invalid proof of knowledge (participant {0})")]
   InvalidProofOfKnowledge(Participant),
+  /// An invalid DKG share was provided.
   #[error("invalid share (participant {participant}, blame {blame})")]
   InvalidShare { participant: Participant, blame: Option<B> },
-
-  #[error("internal error ({0})")]
-  InternalError(&'static str),
 }
 
 // Validate a map of values to have the expected included participants
@@ -137,6 +140,7 @@ pub struct ThresholdParams {
 }
 
 impl ThresholdParams {
+  /// Create a new set of parameters.
   pub fn new(t: u16, n: u16, i: Participant) -> Result<ThresholdParams, DkgError<()>> {
     if (t == 0) || (n == 0) {
       Err(DkgError::ZeroParameter(t, n))?;
@@ -145,7 +149,7 @@ impl ThresholdParams {
     // When t == n, this shouldn't be used (MuSig2 and other variants of MuSig exist for a reason),
     // but it's not invalid to do so
     if t > n {
-      Err(DkgError::InvalidRequiredQuantity(t, n))?;
+      Err(DkgError::InvalidThreshold(t, n))?;
     }
     if u16::from(i) > n {
       Err(DkgError::InvalidParticipant(n, i))?;
@@ -154,12 +158,15 @@ impl ThresholdParams {
     Ok(ThresholdParams { t, n, i })
   }
 
+  /// Return the threshold for a multisig with these parameters.
   pub fn t(&self) -> u16 {
     self.t
   }
+  /// Return the amount of participants for a multisig with these parameters.
   pub fn n(&self) -> u16 {
     self.n
   }
+  /// Return the participant index of the share with these parameters.
   pub fn i(&self) -> Participant {
     self.i
   }
@@ -237,14 +244,18 @@ impl<C: Ciphersuite> ThresholdCore<C> {
       verification_shares,
     }
   }
+
+  /// Parameters for these keys.
   pub fn params(&self) -> ThresholdParams {
     self.params
   }
 
+  /// Secret share for these keys.
   pub fn secret_share(&self) -> &Zeroizing<C::F> {
     &self.secret_share
   }
 
+  /// Group key for these keys.
   pub fn group_key(&self) -> C::G {
     self.group_key
   }
@@ -253,6 +264,7 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     self.verification_shares.clone()
   }
 
+  /// Write these keys to a type satisfying std::io::Write.
   pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&u32::try_from(C::ID.len()).unwrap().to_le_bytes())?;
     writer.write_all(C::ID)?;
@@ -269,61 +281,56 @@ impl<C: Ciphersuite> ThresholdCore<C> {
     Ok(())
   }
 
+  /// Serialize these keys to a `Vec<u8>`.
   pub fn serialize(&self) -> Zeroizing<Vec<u8>> {
     let mut serialized = Zeroizing::new(vec![]);
     self.write::<Vec<u8>>(serialized.as_mut()).unwrap();
     serialized
   }
 
-  pub fn read<R: io::Read>(reader: &mut R) -> Result<ThresholdCore<C>, DkgError<()>> {
+  /// Read keys from a type satisfying std::io::Read.
+  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<ThresholdCore<C>> {
     {
-      let missing = DkgError::InternalError("ThresholdCore serialization is missing its curve");
-      let different = DkgError::InternalError("deserializing ThresholdCore for another curve");
+      let different =
+        || io::Error::new(io::ErrorKind::Other, "deserializing ThresholdCore for another curve");
 
       let mut id_len = [0; 4];
-      reader.read_exact(&mut id_len).map_err(|_| missing.clone())?;
+      reader.read_exact(&mut id_len)?;
       if u32::try_from(C::ID.len()).unwrap().to_le_bytes() != id_len {
-        Err(different.clone())?;
+        Err(different())?;
       }
 
       let mut id = vec![0; C::ID.len()];
-      reader.read_exact(&mut id).map_err(|_| missing)?;
+      reader.read_exact(&mut id)?;
       if id != C::ID {
-        Err(different)?;
+        Err(different())?;
       }
     }
 
     let (t, n, i) = {
-      let mut read_u16 = || {
+      let mut read_u16 = || -> io::Result<u16> {
         let mut value = [0; 2];
-        reader
-          .read_exact(&mut value)
-          .map_err(|_| DkgError::InternalError("missing participant quantities"))?;
+        reader.read_exact(&mut value)?;
         Ok(u16::from_le_bytes(value))
       };
       (
         read_u16()?,
         read_u16()?,
         Participant::new(read_u16()?)
-          .ok_or(DkgError::InternalError("invalid participant index"))?,
+          .ok_or(io::Error::new(io::ErrorKind::Other, "invalid participant index"))?,
       )
     };
 
-    let secret_share = Zeroizing::new(
-      C::read_F(reader).map_err(|_| DkgError::InternalError("invalid secret share"))?,
-    );
+    let secret_share = Zeroizing::new(C::read_F(reader)?);
 
     let mut verification_shares = HashMap::new();
     for l in (1 ..= n).map(Participant) {
-      verification_shares.insert(
-        l,
-        <C as Ciphersuite>::read_G(reader)
-          .map_err(|_| DkgError::InternalError("invalid verification share"))?,
-      );
+      verification_shares.insert(l, <C as Ciphersuite>::read_G(reader)?);
     }
 
     Ok(ThresholdCore::new(
-      ThresholdParams::new(t, n, i).map_err(|_| DkgError::InternalError("invalid parameters"))?,
+      ThresholdParams::new(t, n, i)
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid parameters"))?,
       secret_share,
       verification_shares,
     ))
@@ -343,7 +350,7 @@ pub struct ThresholdKeys<C: Ciphersuite> {
   pub(crate) offset: Option<C::F>,
 }
 
-/// View of keys passed to algorithm implementations.
+/// View of keys, interpolated and offset for usage.
 #[derive(Clone)]
 pub struct ThresholdView<C: Ciphersuite> {
   offset: C::F,
@@ -383,13 +390,15 @@ impl<C: Ciphersuite> Zeroize for ThresholdView<C> {
 }
 
 impl<C: Ciphersuite> ThresholdKeys<C> {
+  /// Create a new set of ThresholdKeys from a ThresholdCore.
   pub fn new(core: ThresholdCore<C>) -> ThresholdKeys<C> {
     ThresholdKeys { core: Arc::new(core), offset: None }
   }
 
-  /// Offset the keys by a given scalar to allow for account and privacy schemes.
-  /// This offset is ephemeral and will not be included when these keys are serialized.
-  /// Keys offset multiple times will form a new offset of their sum.
+  /// Offset the keys by a given scalar to allow for various account and privacy schemes.
+  ///
+  /// This offset is ephemeral and will not be included when these keys are serialized. It also
+  /// accumulates, so calling offset multiple times will produce a offset of the offsets' sum.
   #[must_use]
   pub fn offset(&self, offset: C::F) -> ThresholdKeys<C> {
     let mut res = self.clone();
@@ -400,33 +409,38 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     res
   }
 
-  /// Returns the current offset in-use for these keys.
+  /// Return the current offset in-use for these keys.
   pub fn current_offset(&self) -> Option<C::F> {
     self.offset
   }
 
+  /// Return the parameters for these keys.
   pub fn params(&self) -> ThresholdParams {
     self.core.params
   }
 
+  /// Return the secret share for these keys.
   pub fn secret_share(&self) -> &Zeroizing<C::F> {
     &self.core.secret_share
   }
 
-  /// Returns the group key with any offset applied.
+  /// Return the group key, with any offset applied.
   pub fn group_key(&self) -> C::G {
     self.core.group_key + (C::generator() * self.offset.unwrap_or_else(C::F::zero))
   }
 
-  /// Returns all participants' verification shares without any offsetting.
+  /// Return all participants' verification shares without any offsetting.
   pub(crate) fn verification_shares(&self) -> HashMap<Participant, C::G> {
     self.core.verification_shares()
   }
 
+  /// Serialize these keys to a `Vec<u8>`.
   pub fn serialize(&self) -> Zeroizing<Vec<u8>> {
     self.core.serialize()
   }
 
+  /// Obtain a view of these keys, with any offset applied, interpolated for the specified signing
+  /// set.
   pub fn view(&self, mut included: Vec<Participant>) -> Result<ThresholdView<C>, DkgError<()>> {
     if (included.len() < self.params().t.into()) || (usize::from(self.params().n) < included.len())
     {
@@ -460,27 +474,39 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
   }
 }
 
+impl<C: Ciphersuite> From<ThresholdCore<C>> for ThresholdKeys<C> {
+  fn from(keys: ThresholdCore<C>) -> ThresholdKeys<C> {
+    ThresholdKeys::new(keys)
+  }
+}
+
 impl<C: Ciphersuite> ThresholdView<C> {
+  /// Return the offset for this view.
   pub fn offset(&self) -> C::F {
     self.offset
   }
 
+  /// Return the group key.
   pub fn group_key(&self) -> C::G {
     self.group_key
   }
 
+  /// Return the included signers.
   pub fn included(&self) -> &[Participant] {
     &self.included
   }
 
+  /// Return the interpolated, offset secret share.
   pub fn secret_share(&self) -> &Zeroizing<C::F> {
     &self.secret_share
   }
 
+  /// Return the original verification share for the specified participant.
   pub fn original_verification_share(&self, l: Participant) -> C::G {
     self.original_verification_shares[&l]
   }
 
+  /// Return the interpolated, offset verification share for the specified participant.
   pub fn verification_share(&self, l: Participant) -> C::G {
     self.verification_shares[&l]
   }

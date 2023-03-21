@@ -1,11 +1,14 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![no_std]
 
+///! A transcript trait valid over a variety of transcript formats.
+
 #[cfg(feature = "merlin")]
 mod merlin;
 #[cfg(feature = "merlin")]
 pub use crate::merlin::MerlinTranscript;
 
+/// Tests for a transcript.
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
 
@@ -16,6 +19,7 @@ use digest::{
   Digest, Output, HashMarker,
 };
 
+/// A transcript trait valid over a variety of transcript formats.
 pub trait Transcript: Send + Clone {
   type Challenge: Send + Sync + Clone + AsRef<[u8]>;
 
@@ -130,6 +134,6 @@ impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
   }
 }
 
-/// The recommended transcript, secure against length-extension attacks.
+/// The recommended transcript, guaranteed to be secure against length-extension attacks.
 #[cfg(feature = "recommended")]
 pub type RecommendedTranscript = DigestTranscript<blake2::Blake2b512>;

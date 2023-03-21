@@ -47,6 +47,7 @@ fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   })
 }
 
+/// Ed448 point.
 #[derive(Clone, Copy, Debug, Zeroize)]
 pub struct Point {
   x: FieldElement,
@@ -270,7 +271,7 @@ impl MulAssign<&Scalar> for Point {
 }
 
 impl Point {
-  pub fn is_torsion_free(&self) -> Choice {
+  fn is_torsion_free(&self) -> Choice {
     (*self * SCALAR_MODULUS).is_identity()
   }
 }

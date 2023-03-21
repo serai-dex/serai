@@ -43,11 +43,11 @@ fn challenge<C: Ciphersuite>(context: &str, l: Participant, R: &[u8], Am: &[u8])
 }
 
 /// The commitments message, intended to be broadcast to all other parties.
-/// Every participant should only provide one set of commitments to all parties.
-/// If any participant sends multiple sets of commitments, they are faulty and should be presumed
-/// malicious.
-/// As this library does not handle networking, it is also unable to detect if any participant is
-/// so faulty. That responsibility lies with the caller.
+///
+/// Every participant should only provide one set of commitments to all parties. If any
+/// participant sends multiple sets of commitments, they are faulty and should be presumed
+/// malicious. As this library does not handle networking, it is unable to detect if any
+/// participant is so faulty. That responsibility lies with the caller.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Commitments<C: Ciphersuite> {
   commitments: Vec<C::G>,
@@ -91,13 +91,14 @@ pub struct KeyGenMachine<C: Ciphersuite> {
 }
 
 impl<C: Ciphersuite> KeyGenMachine<C> {
-  /// Creates a new machine to generate a key for the specified curve in the specified multisig.
+  /// Create a new machine to generate a key.
   // The context string should be unique among multisigs.
   pub fn new(params: ThresholdParams, context: String) -> KeyGenMachine<C> {
     KeyGenMachine { params, context, _curve: PhantomData }
   }
 
   /// Start generating a key according to the FROST DKG spec.
+  ///
   /// Returns a commitments message to be sent to all parties over an authenticated channel. If any
   /// party submits multiple sets of commitments, they MUST be treated as malicious.
   pub fn generate_coefficients<R: RngCore + CryptoRng>(
@@ -168,7 +169,9 @@ fn polynomial<F: PrimeField + Zeroize>(
 
 /// The secret share message, to be sent to the party it's intended for over an authenticated
 /// channel.
+///
 /// If any participant sends multiple secret shares to another participant, they are faulty.
+
 // This should presumably be written as SecretShare(Zeroizing<F::Repr>).
 // It's unfortunately not possible as F::Repr doesn't have Zeroize as a bound.
 // The encryption system also explicitly uses Zeroizing<M> so it can ensure anything being
@@ -281,8 +284,10 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   }
 
   /// Continue generating a key.
+  ///
   /// Takes in everyone else's commitments. Returns a HashMap of encrypted secret shares to be sent
   /// over authenticated channels to their relevant counterparties.
+  ///
   /// If any participant sends multiple secret shares to another participant, they are faulty.
   #[allow(clippy::type_complexity)]
   pub fn generate_secret_shares<R: RngCore + CryptoRng>(
@@ -321,11 +326,11 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   }
 }
 
-/// Advancement of the the secret share state machine protocol.
-/// This machine will 'complete' the protocol, by a local perspective, and can be the last
-/// interactive component. In order to be secure, the parties must confirm having successfully
-/// completed the protocol (an effort out of scope to this library), yet this is modelled by one
-/// more state transition.
+/// Advancement of the the secret share state machine.
+///
+/// This machine will 'complete' the protocol, by a local perspective. In order to be secure,
+/// the parties must confirm having successfully completed the protocol (an effort out of scope to
+/// this library), yet this is modeled by one more state transition (BlameMachine).
 pub struct KeyMachine<C: Ciphersuite> {
   params: ThresholdParams,
   secret: Zeroizing<C::F>,
@@ -397,8 +402,10 @@ enum BatchId {
 
 impl<C: Ciphersuite> KeyMachine<C> {
   /// Calculate our share given the shares sent to us.
+  ///
   /// Returns a BlameMachine usable to determine if faults in the protocol occurred.
-  /// Will error on, and return a blame proof for, the first-observed case of faulty behavior.
+  ///
+  /// This will error on, and return a blame proof for, the first-observed case of faulty behavior.
   pub fn calculate_share<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
@@ -473,6 +480,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
   }
 }
 
+/// A machine capable of handling blame proofs.
 pub struct BlameMachine<C: Ciphersuite> {
   commitments: HashMap<Participant, Vec<C::G>>,
   encryption: Encryption<C>,
@@ -574,6 +582,7 @@ impl<C: Ciphersuite> BlameMachine<C> {
   }
 }
 
+/// A machine capable of handling an arbitrary amount of additional blame proofs.
 #[derive(Debug, Zeroize)]
 pub struct AdditionalBlameMachine<C: Ciphersuite>(BlameMachine<C>);
 impl<C: Ciphersuite> AdditionalBlameMachine<C> {

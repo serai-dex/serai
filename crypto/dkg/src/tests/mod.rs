@@ -7,7 +7,7 @@ use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange};
 
-/// FROST generation test.
+/// FROST key generation testing utility.
 pub mod frost;
 use frost::frost_gen;
 
@@ -17,7 +17,7 @@ use promote::test_generator_promotion;
 
 /// Constant amount of participants to use when testing.
 pub const PARTICIPANTS: u16 = 5;
-/// Constant threshold of participants to use when signing.
+/// Constant threshold of participants to use when testing.
 pub const THRESHOLD: u16 = ((PARTICIPANTS / 3) * 2) + 1;
 
 /// Clone a map without a specific value.

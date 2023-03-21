@@ -22,6 +22,7 @@ use crate::{
   tests::{clone_without, recover_key, test_ciphersuite},
 };
 
+/// Vectors for a ciphersuite.
 pub struct Vectors {
   pub threshold: u16,
 
@@ -141,6 +142,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
   keys
 }
 
+/// Test a Ciphersuite with its vectors.
 pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   rng: &mut R,
   vectors: Vectors,

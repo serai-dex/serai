@@ -66,7 +66,7 @@ fn test_ristretto() {
   );
 }
 
-/// Ciphersuite for Ed25519.
+/// Ciphersuite for Ed25519, inspired by RFC-8032.
 ///
 /// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
 /// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as

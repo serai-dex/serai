@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![doc = include_str!("../README.md")]
 
 use core::ops::Deref;
 
@@ -15,6 +16,8 @@ use group::prime::PrimeGroup;
 #[cfg(feature = "serialize")]
 use std::io::{self, ErrorKind, Error, Read, Write};
 
+/// A cross-group DLEq proof capable of proving that two public keys, across two different curves,
+/// share a private key.
 #[cfg(feature = "experimental")]
 pub mod cross_group;
 
@@ -96,6 +99,7 @@ fn read_scalar<R: Read, F: PrimeField>(r: &mut R) -> io::Result<F> {
 /// Error for DLEq proofs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DLEqError {
+  /// The proof was invalid.
   InvalidProof,
 }
 
@@ -201,6 +205,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
 }
 
 /// A proof that multiple series of points each have a single discrete logarithm across generators.
+///
 /// This is effectively n distinct DLEq proofs, one for each discrete logarithm and its points
 /// across some generators, yet with a smaller overall proof size.
 #[cfg(feature = "std")]

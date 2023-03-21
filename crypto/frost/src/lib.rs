@@ -1,17 +1,5 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-
-//! A modular implementation of FROST for any curve with a ff/group API.
-//! Additionally, custom algorithms may be specified so any signature reducible to
-//! Schnorr-like may be used with FROST.
-//!
-//! A Schnorr algorithm is provided, of the form (R, s) where `s = r + cx`, which
-//! allows specifying the challenge format. This is intended to easily allow
-//! integrating with existing systems.
-//!
-//! This library offers ciphersuites compatible with the
-//! [IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
-//! 11 is supported.
+#![doc = include_str!("../README.md")]
 
 use core::fmt::Debug;
 use std::collections::HashMap;
@@ -53,12 +41,9 @@ pub enum FrostError {
   InvalidPreprocess(Participant),
   #[error("invalid share (participant {0})")]
   InvalidShare(Participant),
-
-  #[error("internal error ({0})")]
-  InternalError(&'static str),
 }
 
-// Validate a map of values to have the expected included participants
+/// Validate a map of values to have the expected participants.
 pub fn validate_map<T>(
   map: &HashMap<Participant, T>,
   included: &[Participant],

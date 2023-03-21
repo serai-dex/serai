@@ -43,9 +43,9 @@ impl<T: Writable> Writable for Vec<T> {
   }
 }
 
-/// Pairing of an Algorithm with a ThresholdKeys instance and this specific signing set.
+// Pairing of an Algorithm with a ThresholdKeys instance.
 #[derive(Clone, Zeroize)]
-pub struct Params<C: Curve, A: Algorithm<C>> {
+struct Params<C: Curve, A: Algorithm<C>> {
   // Skips the algorithm due to being too large a bound to feasibly enforce on users
   #[zeroize(skip)]
   algorithm: A,
@@ -53,11 +53,11 @@ pub struct Params<C: Curve, A: Algorithm<C>> {
 }
 
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
-  pub fn new(algorithm: A, keys: ThresholdKeys<C>) -> Params<C, A> {
+  fn new(algorithm: A, keys: ThresholdKeys<C>) -> Params<C, A> {
     Params { algorithm, keys }
   }
 
-  pub fn multisig_params(&self) -> ThresholdParams {
+  fn multisig_params(&self) -> ThresholdParams {
     self.keys.params()
   }
 }
@@ -66,6 +66,7 @@ impl<C: Curve, A: Algorithm<C>> Params<C, A> {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Preprocess<C: Curve, A: Addendum> {
   pub(crate) commitments: Commitments<C>,
+  /// The addendum used by the algorithm.
   pub addendum: A,
 }
 
@@ -76,9 +77,11 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
   }
 }
 
-/// A cached preprocess. A preprocess MUST only be used once. Reuse will enable third-party
-/// recovery of your private key share. Additionally, this MUST be handled with the same security
-/// as your private key share, as knowledge of it also enables recovery.
+/// A cached preprocess.
+///
+/// A preprocess MUST only be used once. Reuse will enable third-party recovery of your private
+/// key share. Additionally, this MUST be handled with the same security as your private key share,
+/// as knowledge of it also enables recovery.
 // Directly exposes the [u8; 32] member to void needing to route through std::io interfaces.
 // Still uses Zeroizing internally so when users grab it, they have a higher likelihood of
 // appreciating how to handle it and don't immediately start copying it just by grabbing it.
@@ -510,6 +513,6 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     }
 
     // If everyone has a valid share, and there were enough participants, this should've worked
-    Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
+    panic!("everyone had a valid share yet the signature was still invalid");
   }
 }

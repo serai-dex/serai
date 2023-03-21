@@ -22,6 +22,7 @@ macro_rules! dalek_curve {
       const CONTEXT: &'static [u8] = $CONTEXT;
     }
 
+    /// The challenge function for this ciphersuite.
     #[derive(Copy, Clone)]
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {

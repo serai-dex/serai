@@ -3,7 +3,7 @@ use subtle::ConditionallySelectable;
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use group::ff::{Field, PrimeField};
-use dalek_ff_group::field::FieldElement;
+use dalek_ff_group::FieldElement;
 
 use crate::hash;
 

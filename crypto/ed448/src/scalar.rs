@@ -2,13 +2,14 @@ use zeroize::Zeroize;
 
 use crypto_bigint::{U512, U1024};
 
-pub use crate::field;
+use crate::field;
 
+/// Ed448 Scalar field element.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct Scalar(pub(crate) U512);
 
 // 2**446 - 13818066809895115352007386748515426880336692474882178609894547503885
-pub const MODULUS: Scalar = Scalar(U512::from_be_hex(concat!(
+pub(crate) const MODULUS: Scalar = Scalar(U512::from_be_hex(concat!(
   "00000000000000",
   "00",
   "3fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
@@ -27,6 +28,7 @@ const WIDE_MODULUS: U1024 = U1024::from_be_hex(concat!(
 field!(Scalar, MODULUS, WIDE_MODULUS, 446);
 
 impl Scalar {
+  /// Perform a wide reduction to obtain a non-biased Scalar.
   pub fn wide_reduce(bytes: [u8; 114]) -> Scalar {
     Scalar(reduce(U1024::from_le_slice(&[bytes.as_ref(), &[0; 14]].concat())))
   }

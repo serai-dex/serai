@@ -4,11 +4,12 @@ use crypto_bigint::{U512, U1024};
 
 use crate::field;
 
+/// Ed448 field element.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct FieldElement(pub(crate) U512);
 
 // 2**448 - 2**224 - 1
-pub const MODULUS: FieldElement = FieldElement(U512::from_be_hex(concat!(
+pub(crate) const MODULUS: FieldElement = FieldElement(U512::from_be_hex(concat!(
   "00000000000000",
   "00",
   "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",

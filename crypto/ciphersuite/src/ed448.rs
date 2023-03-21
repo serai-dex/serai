@@ -7,7 +7,7 @@ use digest::{
 use sha3::Shake256;
 
 use group::Group;
-use minimal_ed448::{scalar::Scalar, point::Point};
+use minimal_ed448::{Scalar, Point};
 
 use crate::Ciphersuite;
 
@@ -48,7 +48,7 @@ impl FixedOutput for Shake256_114 {
 }
 impl HashMarker for Shake256_114 {}
 
-/// Ciphersuite for Ed448.
+/// Ciphersuite for Ed448, inspired by RFC-8032. This is not recommended for usage.
 ///
 /// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
 /// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as

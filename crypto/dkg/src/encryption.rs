@@ -1,8 +1,5 @@
 use core::{ops::Deref, fmt};
-use std::{
-  io::{self, Read, Write},
-  collections::HashMap,
-};
+use std::{io, collections::HashMap};
 
 use thiserror::Error;
 
@@ -26,19 +23,27 @@ use dleq::DLEqProof;
 
 use crate::{Participant, ThresholdParams};
 
-pub trait ReadWrite: Sized {
-  fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self>;
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+mod sealed {
+  use super::*;
 
-  fn serialize(&self) -> Vec<u8> {
-    let mut buf = vec![];
-    self.write(&mut buf).unwrap();
-    buf
+  pub trait ReadWrite: Sized {
+    fn read<R: io::Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self>;
+    fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;
+
+    fn serialize(&self) -> Vec<u8> {
+      let mut buf = vec![];
+      self.write(&mut buf).unwrap();
+      buf
+    }
   }
-}
 
-pub trait Message: Clone + PartialEq + Eq + fmt::Debug + Zeroize + ReadWrite {}
-impl<M: Clone + PartialEq + Eq + fmt::Debug + Zeroize + ReadWrite> Message for M {}
+  pub trait Message: Clone + PartialEq + Eq + fmt::Debug + Zeroize + ReadWrite {}
+  impl<M: Clone + PartialEq + Eq + fmt::Debug + Zeroize + ReadWrite> Message for M {}
+
+  pub trait Encryptable: Clone + AsRef<[u8]> + AsMut<[u8]> + Zeroize + ReadWrite {}
+  impl<E: Clone + AsRef<[u8]> + AsMut<[u8]> + Zeroize + ReadWrite> Encryptable for E {}
+}
+pub(crate) use sealed::*;
 
 /// Wraps a message with a key to use for encryption in the future.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
@@ -49,11 +54,11 @@ pub struct EncryptionKeyMessage<C: Ciphersuite, M: Message> {
 
 // Doesn't impl ReadWrite so that doesn't need to be imported
 impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
-  pub fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
+  pub fn read<R: io::Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
     Ok(Self { msg: M::read(reader, params)?, enc_key: C::read_G(reader)? })
   }
 
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     self.msg.write(writer)?;
     writer.write_all(self.enc_key.to_bytes().as_ref())
   }
@@ -69,9 +74,6 @@ impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
     self.enc_key
   }
 }
-
-pub trait Encryptable: Clone + AsRef<[u8]> + AsMut<[u8]> + Zeroize + ReadWrite {}
-impl<E: Clone + AsRef<[u8]> + AsMut<[u8]> + Zeroize + ReadWrite> Encryptable for E {}
 
 /// An encrypted message, with a per-message encryption key enabling revealing specific messages
 /// without side effects.
@@ -166,7 +168,7 @@ fn encrypt<R: RngCore + CryptoRng, C: Ciphersuite, E: Encryptable>(
 }
 
 impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
-  pub fn read<R: Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
+  pub fn read<R: io::Read>(reader: &mut R, params: ThresholdParams) -> io::Result<Self> {
     Ok(Self {
       key: C::read_G(reader)?,
       pop: SchnorrSignature::<C>::read(reader)?,
@@ -174,7 +176,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     })
   }
 
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.key.to_bytes().as_ref())?;
     self.pop.write(writer)?;
     self.msg.write(writer)
@@ -254,7 +256,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
   }
 }
 
-/// A proof that the provided point is the legitimately derived shared key for some message.
+/// A proof that the provided encryption key is a legitimately derived shared key for some message.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct EncryptionKeyProof<C: Ciphersuite> {
   key: Zeroizing<C::G>,
@@ -262,11 +264,11 @@ pub struct EncryptionKeyProof<C: Ciphersuite> {
 }
 
 impl<C: Ciphersuite> EncryptionKeyProof<C> {
-  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     Ok(Self { key: Zeroizing::new(C::read_G(reader)?), dleq: DLEqProof::read(reader)? })
   }
 
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.key.to_bytes().as_ref())?;
     self.dleq.write(writer)
   }

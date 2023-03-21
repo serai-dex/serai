@@ -66,8 +66,8 @@ fn weight<D: Send + Clone + SecureDigest, F: PrimeField>(digest: &mut DigestTran
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct SchnorrAggregate<C: Ciphersuite> {
-  pub Rs: Vec<C::G>,
-  pub s: C::F,
+  Rs: Vec<C::G>,
+  s: C::F,
 }
 
 impl<C: Ciphersuite> SchnorrAggregate<C> {
@@ -137,6 +137,7 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
   }
 }
 
+/// A signature aggregator capable of consuming signatures in order to produce an aggregate.
 #[allow(non_snake_case)]
 #[derive(Clone, Debug, Zeroize)]
 pub struct SchnorrAggregator<C: Ciphersuite> {

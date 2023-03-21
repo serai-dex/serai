@@ -73,6 +73,7 @@ macro_rules! field {
     }
 
     impl $FieldName {
+      /// Perform an exponentation.
       pub fn pow(&self, other: $FieldName) -> $FieldName {
         let mut table = [Self(U512::ONE); 16];
         table[1] = *self;

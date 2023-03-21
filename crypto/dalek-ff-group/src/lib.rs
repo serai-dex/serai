@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![no_std]
+#![doc = include_str!("../README.md")]
 
 use core::{
   borrow::Borrow,
@@ -23,15 +24,10 @@ use dalek::{
   constants,
   traits::Identity,
   scalar::Scalar as DScalar,
-  edwards::{
-    EdwardsPoint as DEdwardsPoint, EdwardsBasepointTable as DEdwardsBasepointTable,
-    CompressedEdwardsY as DCompressedEdwards,
-  },
-  ristretto::{
-    RistrettoPoint as DRistrettoPoint, RistrettoBasepointTable as DRistrettoBasepointTable,
-    CompressedRistretto as DCompressedRistretto,
-  },
+  edwards::{EdwardsPoint as DEdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY},
+  ristretto::{RistrettoPoint as DRistrettoPoint, RistrettoBasepointTable, CompressedRistretto},
 };
+pub use constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
 
 use group::{
   ff::{Field, PrimeField, FieldBits, PrimeFieldBits},
@@ -39,7 +35,8 @@ use group::{
   prime::PrimeGroup,
 };
 
-pub mod field;
+mod field;
+pub use field::FieldElement;
 
 // Feature gated due to MSRV requirements
 #[cfg(feature = "black_box")]
@@ -362,7 +359,6 @@ macro_rules! dalek_group {
     $torsion_free: expr,
 
     $Table: ident,
-    $DTable: ident,
 
     $DCompressed: ident,
 
@@ -376,6 +372,7 @@ macro_rules! dalek_group {
     constant_time!($Point, $DPoint);
     math_neg!($Point, Scalar, $DPoint::add, $DPoint::sub, $DPoint::mul);
 
+    /// The basepoint for this curve.
     pub const $BASEPOINT_POINT: $Point = $Point(constants::$BASEPOINT_POINT);
 
     impl Sum<$Point> for $Point {
@@ -437,16 +434,10 @@ macro_rules! dalek_group {
 
     impl PrimeGroup for $Point {}
 
-    /// Wrapper around the dalek Table type, offering efficient multiplication against the
-    /// basepoint.
-    pub struct $Table(pub $DTable);
-    deref_borrow!($Table, $DTable);
-    pub const $BASEPOINT_TABLE: $Table = $Table(constants::$BASEPOINT_TABLE);
-
     impl Mul<Scalar> for &$Table {
       type Output = $Point;
       fn mul(self, b: Scalar) -> $Point {
-        $Point(&b.0 * &self.0)
+        $Point(&b.0 * self)
       }
     }
 
@@ -468,8 +459,7 @@ dalek_group!(
   DEdwardsPoint,
   |point: DEdwardsPoint| point.is_torsion_free(),
   EdwardsBasepointTable,
-  DEdwardsBasepointTable,
-  DCompressedEdwards,
+  CompressedEdwardsY,
   ED25519_BASEPOINT_POINT,
   ED25519_BASEPOINT_TABLE
 );
@@ -485,8 +475,7 @@ dalek_group!(
   DRistrettoPoint,
   |_| true,
   RistrettoBasepointTable,
-  DRistrettoBasepointTable,
-  DCompressedRistretto,
+  CompressedRistretto,
   RISTRETTO_BASEPOINT_POINT,
   RISTRETTO_BASEPOINT_TABLE
 );

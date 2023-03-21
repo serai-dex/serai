@@ -40,14 +40,16 @@ pub(crate) fn generators() -> (Generators<G0>, Generators<G1>) {
         &(hex!("0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0").into()),
       )
       .unwrap(),
-    ),
+    )
+    .unwrap(),
     Generators::new(
       EdwardsPoint::generator(),
       EdwardsPoint::from_bytes(&hex!(
         "8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94"
       ))
       .unwrap(),
-    ),
+    )
+    .unwrap(),
   )
 }
 

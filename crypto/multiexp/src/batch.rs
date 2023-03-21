@@ -104,8 +104,9 @@ where
   }
 
   /// Perform a binary search to identify which statement does not equal 0, returning None if all
-  /// statements do. This function will only return the ID of one invalid statement, even if
-  /// multiple are invalid.
+  /// statements do.
+  ///
+  /// This function will only return the ID of one invalid statement, even if multiple are invalid.
   // A constant time variant may be beneficial for robust protocols
   pub fn blame_vartime(&self) -> Option<Id> {
     let mut slice = self.0.as_slice();

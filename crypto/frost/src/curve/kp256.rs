@@ -17,6 +17,7 @@ macro_rules! kp_curve {
       const CONTEXT: &'static [u8] = $CONTEXT;
     }
 
+    /// The challenge function for this ciphersuite.
     #[derive(Clone)]
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {

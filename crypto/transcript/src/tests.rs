@@ -1,5 +1,6 @@
 use crate::Transcript;
 
+/// Test the sanity of a transcript.
 pub fn test_transcript<T: Transcript>()
 where
   T::Challenge: PartialEq,

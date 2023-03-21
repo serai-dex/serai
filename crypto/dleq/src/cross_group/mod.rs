@@ -18,6 +18,7 @@ use group::{
 };
 use multiexp::BatchVerifier;
 
+/// Scalar utilities.
 pub mod scalar;
 use scalar::{scalar_convert, mutual_scalar_from_bytes};
 
@@ -63,15 +64,25 @@ pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G
   Ok(point.unwrap())
 }
 
+/// A pair of generators, one committing to values (primary), one blinding (alt), for an elliptic
+/// curve.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Generators<G: PrimeGroup> {
+  /// The generator used to commit to values.
+  ///
+  /// This should likely be the curve's traditional 'basepoint'.
   pub primary: G,
+  /// The generator used to blind values. This must be distinct from the primary generator.
   pub alt: G,
 }
 
 impl<G: PrimeGroup> Generators<G> {
-  pub fn new(primary: G, alt: G) -> Generators<G> {
-    Generators { primary, alt }
+  /// Create a new set of generators.
+  pub fn new(primary: G, alt: G) -> Option<Generators<G>> {
+    if primary == alt {
+      None?;
+    }
+    Some(Generators { primary, alt })
   }
 
   fn transcript<T: Transcript>(&self, transcript: &mut T) {
@@ -81,14 +92,19 @@ impl<G: PrimeGroup> Generators<G> {
   }
 }
 
+/// Error for cross-group DLEq proofs.
 #[derive(Error, PartialEq, Eq, Debug)]
 pub enum DLEqError {
+  /// Invalid proof of knowledge.
   #[error("invalid proof of knowledge")]
   InvalidProofOfKnowledge,
+  /// Invalid proof length.
   #[error("invalid proof length")]
   InvalidProofLength,
+  /// Invalid challenge.
   #[error("invalid challenge")]
   InvalidChallenge,
+  /// Invalid proof.
   #[error("invalid proof")]
   InvalidProof,
 }
@@ -115,7 +131,8 @@ pub struct __DLEqProof<
 }
 
 macro_rules! dleq {
-  ($name: ident, $signature: expr, $remainder: literal) => {
+  ($doc_str: expr, $name: ident, $signature: expr, $remainder: literal,) => {
+    #[doc = $doc_str]
     pub type $name<G0, G1> = __DLEqProof<
       G0,
       G1,
@@ -141,21 +158,50 @@ macro_rules! dleq {
 // over both scalar fields, hence its application here as well. This is mainly here as a point of
 // reference for the following DLEq proofs, all which use merged challenges, and isn't performant
 // in comparison to the others
-dleq!(ClassicLinearDLEq, BitSignature::ClassicLinear, false);
+dleq!(
+  "The DLEq proof described in MRL-0010.",
+  ClassicLinearDLEq,
+  BitSignature::ClassicLinear,
+  false,
+);
 
 // Proves for 2-bits at a time to save 3/7 elements of every other bit
 // <9% smaller than CompromiseLinear, yet ~12% slower
-dleq!(ConciseLinearDLEq, BitSignature::ConciseLinear, true);
+dleq!(
+  "A DLEq proof modified from MRL-0010, proving for two bits at a time to save on space.",
+  ConciseLinearDLEq,
+  BitSignature::ConciseLinear,
+  true,
+);
 
 // Uses AOS signatures of the form R, s, to enable the final step of the ring signature to be
 // batch verified, at the cost of adding an additional element per bit
-dleq!(EfficientLinearDLEq, BitSignature::EfficientLinear, false);
+dleq!(
+  "
+    A DLEq proof modified from MRL-0010, using R, s forms instead of c, s forms to enable batch
+    verification at the cost of space usage.
+  ",
+  EfficientLinearDLEq,
+  BitSignature::EfficientLinear,
+  false,
+);
 
 // Proves for 2-bits at a time while using the R, s form. This saves 3/7 elements of every other
 // bit, while adding 1 element to every bit, and is more efficient than ConciseLinear yet less
 // efficient than EfficientLinear due to having more ring signature steps which aren't batched
 // >25% smaller than EfficientLinear and just 11% slower, making it the recommended option
-dleq!(CompromiseLinearDLEq, BitSignature::CompromiseLinear, true);
+dleq!(
+  "
+    A DLEq proof modified from MRL-0010, using R, s forms instead of c, s forms, while proving for
+    two bits at a time, to enable batch verification and take advantage of space savings.
+
+    This isn't quite as efficient as EfficientLinearDLEq, and isn't as compact as
+    ConciseLinearDLEq, yet strikes a strong balance of performance and conciseness.
+  ",
+  CompromiseLinearDLEq,
+  BitSignature::CompromiseLinear,
+  true,
+);
 
 impl<
     G0: PrimeGroup + Zeroize,
@@ -297,10 +343,13 @@ where
     (proof, f)
   }
 
-  /// Prove the cross-Group Discrete Log Equality for the points derived from the scalar created as
-  /// the output of the passed in Digest. Given the non-standard requirements to achieve
-  /// uniformity, needing to be < 2^x instead of less than a prime moduli, this is the simplest way
-  /// to safely and securely generate a Scalar, without risk of failure, nor bias.
+  /// Prove the Cross-Group Discrete Log Equality for the points derived from the scalar created as
+  /// the output of the passed in Digest.
+  ///
+  /// Given the non-standard requirements to achieve uniformity, needing to be < 2^x instead of
+  /// less than a prime moduli, this is the simplest way to safely and securely generate a Scalar,
+  /// without risk of failure nor bias.
+  ///
   /// It also ensures a lack of determinable relation between keys, guaranteeing security in the
   /// currently expected use case for this, atomic swaps, where each swap leaks the key. Knowing
   /// the relationship between keys would allow breaking all swaps after just one.
@@ -323,9 +372,11 @@ where
     Self::prove_internal(rng, transcript, generators, f)
   }
 
-  /// Prove the cross-Group Discrete Log Equality for the points derived from the scalar passed in,
-  /// failing if it's not mutually valid. This allows for rejection sampling externally derived
-  /// scalars until they're safely usable, as needed.
+  /// Prove the Cross-Group Discrete Log Equality for the points derived from the scalar passed in,
+  /// failing if it's not mutually valid.
+  ///
+  /// This allows for rejection sampling externally derived scalars until they're safely usable,
+  /// as needed.
   #[allow(clippy::type_complexity)]
   pub fn prove_without_bias<R: RngCore + CryptoRng, T: Clone + Transcript>(
     rng: &mut R,
@@ -337,7 +388,7 @@ where
       .map(|f1| Self::prove_internal(rng, transcript, generators, (f0, Zeroizing::new(f1))))
   }
 
-  /// Verify a cross-Group Discrete Log Equality statement, returning the points proven for.
+  /// Verify a Cross-Group Discrete Log Equality proof, returning the points proven for.
   pub fn verify<R: RngCore + CryptoRng, T: Clone + Transcript>(
     &self,
     rng: &mut R,
@@ -386,6 +437,7 @@ where
     Ok(keys)
   }
 
+  /// Write a Cross-Group Discrete Log Equality proof to a type satisfying std::io::Write.
   #[cfg(feature = "serialize")]
   pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     for bit in &self.bits {
@@ -398,6 +450,7 @@ where
     self.poks.1.write(w)
   }
 
+  /// Read a Cross-Group Discrete Log Equality proof from a type satisfying std::io::Read.
   #[cfg(feature = "serialize")]
   pub fn read<R: Read>(r: &mut R) -> std::io::Result<Self> {
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();

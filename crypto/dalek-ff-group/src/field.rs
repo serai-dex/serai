@@ -19,6 +19,7 @@ use crate::{u8_from_bool, constant_time, math, from_uint};
 const MODULUS: U256 = U256::from_u8(1).shl_vartime(255).saturating_sub(&U256::from_u8(19));
 const WIDE_MODULUS: U512 = U256::ZERO.concat(&MODULUS);
 
+/// A constant-time implementation of the Ed25519 field.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct FieldElement(U256);
 
@@ -184,11 +185,13 @@ impl PrimeFieldBits for FieldElement {
 }
 
 impl FieldElement {
+  /// Interpret the value as a little-endian integer, square it, and reduce it into a FieldElement.
   pub fn from_square(value: [u8; 32]) -> FieldElement {
     let value = U256::from_le_bytes(value);
     FieldElement(value) * FieldElement(value)
   }
 
+  /// Perform an exponentation.
   pub fn pow(&self, other: FieldElement) -> FieldElement {
     let mut table = [FieldElement::one(); 16];
     table[1] = *self;
