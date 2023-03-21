@@ -1,6 +1,6 @@
 [package]
 name = "ciphersuite"
-version = "0.2.0"
+version = "0.3.0"
 description = "Ciphersuites built around ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite"
@@ -26,13 +26,13 @@ sha3 = { version = "0.10", optional = true }
 ff = { version = "0.12", features = ["bits"] }
 group = "0.12"
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.2", optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.3", optional = true }
 
 elliptic-curve = { version = "0.12", features = ["hash2curve"], optional = true }
 p256 = { version = "0.12", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 k256 = { version = "0.12", features = ["arithmetic", "bits", "hash2curve"], optional = true }
 
-minimal-ed448 = { path = "../ed448", version = "0.2", optional = true }
+minimal-ed448 = { path = "../ed448", version = "0.3", optional = true }
 
 [dev-dependencies]
 hex = "0.4"

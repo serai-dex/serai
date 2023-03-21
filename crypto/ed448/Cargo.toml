@@ -1,6 +1,6 @@
 [package]
 name = "minimal-ed448"
-version = "0.2.0"
+version = "0.3.0"
 description = "Unaudited, inefficient implementation of Ed448 in Rust"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ed448"
@@ -26,7 +26,7 @@ group = "0.12"
 generic-array = "0.14"
 crypto-bigint = { version = "0.5", features = ["zeroize"] }
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.2" }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.3" }
 
 [dev-dependencies]
 hex = "0.4"

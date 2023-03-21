@@ -1,6 +1,6 @@
 [package]
 name = "dkg"
-version = "0.3.0"
+version = "0.4.0"
 description = "Distributed key generation over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg"
@@ -24,14 +24,14 @@ serde = { version = "1", features = ["derive"], optional = true }
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3", features = ["recommended"] }
 chacha20 = { version = "0.9", features = ["zeroize"] }
 
-ciphersuite = { path = "../ciphersuite", version = "0.2", features = ["std"] }
+ciphersuite = { path = "../ciphersuite", version = "0.3", features = ["std"] }
 multiexp = { path = "../multiexp", version = "0.3", features = ["batch"] }
 
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.3" }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.4" }
 dleq = { path = "../dleq", version = "0.3", features = ["serialize"] }
 
 [dev-dependencies]
-ciphersuite = { path = "../ciphersuite", version = "0.2", features = ["ristretto"] }
+ciphersuite = { path = "../ciphersuite", version = "0.3", features = ["ristretto"] }
 
 [features]
 serde = ["dep:serde"]

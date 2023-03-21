@@ -1,6 +1,6 @@
 [package]
 name = "multiexp"
-version = "0.3.0"
+version = "0.3.1"
 description = "Multiexponentation algorithms for ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/multiexp"

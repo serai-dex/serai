@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "bitcoin-serai"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "bitcoin",
  "flexible-transcript",
@@ -1015,7 +1015,7 @@ dependencies = [
 
 [[package]]
 name = "ciphersuite"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dalek-ff-group",
  "digest 0.10.6",
@@ -1637,7 +1637,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "crypto-bigint 0.5.1",
  "curve25519-dalek 3.2.0",
@@ -1945,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "dkg"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chacha20 0.9.0",
  "ciphersuite",
@@ -1961,7 +1961,7 @@ dependencies = [
 
 [[package]]
 name = "dleq"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "blake2",
  "dalek-ff-group",
@@ -2625,7 +2625,7 @@ dependencies = [
 
 [[package]]
 name = "ff-group-tests"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "group",
  "k256 0.12.0",
@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "flexible-transcript"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "blake2",
  "digest 0.10.6",
@@ -4936,7 +4936,7 @@ checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
 
 [[package]]
 name = "minimal-ed448"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "crypto-bigint 0.5.1",
  "dalek-ff-group",
@@ -5007,7 +5007,7 @@ dependencies = [
 
 [[package]]
 name = "modular-frost"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ciphersuite",
  "dalek-ff-group",
@@ -5089,7 +5089,7 @@ dependencies = [
 
 [[package]]
 name = "monero-serai"
-version = "0.1.3-alpha"
+version = "0.1.4-alpha"
 dependencies = [
  "base58-monero",
  "crc",
@@ -5171,7 +5171,7 @@ dependencies = [
 
 [[package]]
 name = "multiexp"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "dalek-ff-group",
  "ff",
@@ -8105,7 +8105,7 @@ dependencies = [
 
 [[package]]
 name = "schnorr-signatures"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ciphersuite",
  "dalek-ff-group",
