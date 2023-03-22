@@ -268,12 +268,18 @@ fn find_seed_language(seed: &str) -> Result<(Poly, Language), SeedError> {
       // find the word index
       let result = if l.has_prefix {
         if l.has_accent {
-          l.words.iter().position(|w| {
-            w.chars()
-              .filter(|c| c.is_ascii())
-              .collect::<String>()
-              .starts_with(&sw.chars().filter(|c| c.is_ascii()).collect::<String>())
-          })
+          let sw_chars = sw.chars().filter(|c| c.is_ascii()).collect::<String>();
+          // if we have no ascii character left, we don't match try to match to any words.
+          if sw_chars.is_empty() {
+            None
+          } else {
+            l.words.iter().position(|w| {
+              w.chars()
+                .filter(|c| c.is_ascii())
+                .collect::<String>()
+                .starts_with(&sw_chars)
+            })
+          }
         } else {
           l.words.iter().position(|w| w.starts_with(sw))
         }
