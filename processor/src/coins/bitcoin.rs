@@ -10,6 +10,8 @@ use frost::{
   ThresholdKeys,
 };
 
+use tokio::time::{Duration, sleep};
+
 use bitcoin_serai::{
   bitcoin::{
     hashes::Hash as HashTrait,
@@ -39,7 +41,8 @@ use serai_client::coins::bitcoin::Address;
 use crate::{
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality, PostFeeBranch, Coin, drop_branches, amortize_fee,
+    Transaction as TransactionTrait, Eventuality, EventualitiesTracker, PostFeeBranch, Coin,
+    drop_branches, amortize_fee,
   },
   Plan,
 };
@@ -154,6 +157,10 @@ impl TransactionTrait<Bitcoin> for Transaction {
 }
 
 impl Eventuality for OutPoint {
+  fn lookup(&self) -> Vec<u8> {
+    self.serialize()
+  }
+
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     OutPoint::consensus_decode(reader)
       .map_err(|_| io::Error::new(io::ErrorKind::Other, "couldn't decode outpoint as eventuality"))
@@ -356,6 +363,69 @@ impl Coin for Bitcoin {
     }
 
     Ok(outputs)
+  }
+
+  async fn get_eventuality_completions(
+    &self,
+    eventualities: &mut EventualitiesTracker<OutPoint>,
+    block: &Self::Block,
+  ) -> HashMap<[u8; 32], [u8; 32]> {
+    let mut res = HashMap::new();
+    if eventualities.map.is_empty() {
+      return res;
+    }
+
+    async fn check_block(
+      eventualities: &mut EventualitiesTracker<OutPoint>,
+      block: &Block,
+      res: &mut HashMap<[u8; 32], [u8; 32]>,
+    ) {
+      for tx in &block.txdata[1 ..] {
+        let input = &tx.input[0].previous_output;
+        if let Some((plan, eventuality)) = eventualities.map.remove(&input.serialize()) {
+          assert_eq!(input, &eventuality);
+          res.insert(plan, tx.id());
+        }
+      }
+
+      eventualities.block_number += 1;
+    }
+
+    let this_block_hash = block.id();
+    let this_block_num = (|| async {
+      loop {
+        match self.rpc.get_block_number(&this_block_hash).await {
+          Ok(number) => return number,
+          Err(e) => {
+            log::error!("couldn't get the block number for {}: {}", hex::encode(this_block_hash), e)
+          }
+        }
+        sleep(Duration::from_secs(60)).await;
+      }
+    })()
+    .await;
+
+    for block_num in (eventualities.block_number + 1) .. this_block_num {
+      let block = {
+        let mut block;
+        while {
+          block = self.get_block(block_num).await;
+          block.is_err()
+        } {
+          log::error!("couldn't get block {}: {}", block_num, block.err().unwrap());
+          sleep(Duration::from_secs(60)).await;
+        }
+        block.unwrap()
+      };
+
+      check_block(eventualities, &block, &mut res).await;
+    }
+
+    // Also check the current block
+    check_block(eventualities, block, &mut res).await;
+    assert_eq!(eventualities.block_number, this_block_num);
+
+    res
   }
 
   async fn prepare_send(

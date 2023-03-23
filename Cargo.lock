@@ -5057,7 +5057,7 @@ dependencies = [
 
 [[package]]
 name = "monero-generators"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",

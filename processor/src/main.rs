@@ -128,6 +128,7 @@ async fn prepare_send<C: Coin, D: Db>(
 async fn sign_plans<C: Coin, D: Db>(
   db: &mut MainDb<C, D>,
   coin: &C,
+  scanner: &ScannerHandle<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
   signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
   context: SubstrateContext,
@@ -162,7 +163,7 @@ async fn sign_plans<C: Coin, D: Db>(
     }
 
     if let Some((tx, eventuality)) = tx {
-      // TODO: Handle detection of already signed TXs (either on-chain or notified by a peer)
+      scanner.register_eventuality(block_number, id, eventuality.clone()).await;
       signers[key.as_ref()].sign_transaction(id, start, tx, eventuality).await;
     }
   }
@@ -223,6 +224,10 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
         prepare_send(&coin, &signer, block_number, fee, plan).await else {
           panic!("previously created transaction is no longer being created")
         };
+
+      scanner.register_eventuality(block_number, id, eventuality.clone()).await;
+      // TODO: Reconsider if the Signer should have the eventuality, or if just the coin/scanner
+      // should
       signer.sign_transaction(id, start, tx, eventuality).await;
     }
 
@@ -360,7 +365,15 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                   .get_mut(&key_vec)
                   .expect("key we don't have a scheduler for acknowledged a block")
                   .add_outputs(scanner.ack_block(key, block_id).await);
-                sign_plans(&mut main_db, &coin, &mut schedulers, &signers, context, plans).await;
+                sign_plans(
+                  &mut main_db,
+                  &coin,
+                  &scanner,
+                  &mut schedulers,
+                  &signers,
+                  context,
+                  plans
+                ).await;
               }
 
               substrate::CoordinatorMessage::Burns { context, burns } => {
@@ -381,7 +394,15 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                 }
 
                 let plans = scheduler.schedule(payments);
-                sign_plans(&mut main_db, &coin, &mut schedulers, &signers, context, plans).await;
+                sign_plans(
+                  &mut main_db,
+                  &coin,
+                  &scanner,
+                  &mut schedulers,
+                  &signers,
+                  context,
+                  plans
+                ).await;
               }
             }
           }

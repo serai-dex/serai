@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use std::io;
+use std::{collections::HashMap, io};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -113,8 +113,42 @@ pub trait Transaction<C: Coin>: Send + Sync + Sized + Clone + Debug {
 }
 
 pub trait Eventuality: Send + Sync + Clone + Debug {
+  fn lookup(&self) -> Vec<u8>;
+
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
   fn serialize(&self) -> Vec<u8>;
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct EventualitiesTracker<E: Eventuality> {
+  // Lookup property (input, nonce, TX extra...) -> (plan ID, eventuality)
+  map: HashMap<Vec<u8>, ([u8; 32], E)>,
+  // Block number we've scanned these eventualities too
+  block_number: usize,
+}
+
+impl<E: Eventuality> EventualitiesTracker<E> {
+  pub fn new() -> Self {
+    EventualitiesTracker { map: HashMap::new(), block_number: usize::MAX }
+  }
+
+  pub fn register(&mut self, block_number: usize, id: [u8; 32], eventuality: E) {
+    log::info!("registering eventuality for {}", hex::encode(id));
+
+    let lookup = eventuality.lookup();
+    if self.map.contains_key(&lookup) {
+      panic!("registering an eventuality multiple times or lookup collision");
+    }
+    self.map.insert(lookup, (id, eventuality));
+    // If our self tracker already went past this block number, set it back
+    self.block_number = self.block_number.min(block_number);
+  }
+}
+
+impl<E: Eventuality> Default for EventualitiesTracker<E> {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
@@ -245,6 +279,14 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     block: &Self::Block,
     key: <Self::Curve as Ciphersuite>::G,
   ) -> Result<Vec<Self::Output>, CoinError>;
+
+  /// Get the registered eventualities completed within this block, and any prior blocks which
+  /// registered eventualities may have been completed in.
+  async fn get_eventuality_completions(
+    &self,
+    eventualities: &mut EventualitiesTracker<Self::Eventuality>,
+    block: &Self::Block,
+  ) -> HashMap<[u8; 32], <Self::Transaction as Transaction<Self>>::Id>;
 
   /// Prepare a SignableTransaction for a transaction.
   /// Returns None for the transaction if the SignableTransaction was dropped due to lack of value.

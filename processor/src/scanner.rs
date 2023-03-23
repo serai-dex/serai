@@ -15,7 +15,7 @@ use tokio::{
 
 use crate::{
   DbTxn, Db,
-  coins::{Output, Block, Coin},
+  coins::{Output, EventualitiesTracker, Block, Coin},
 };
 
 #[derive(Clone, Debug)]
@@ -172,6 +172,8 @@ pub struct Scanner<C: Coin, D: Db> {
   db: ScannerDb<C, D>,
   keys: Vec<<C::Curve as Ciphersuite>::G>,
 
+  eventualities: EventualitiesTracker<C::Eventuality>,
+
   ram_scanned: HashMap<Vec<u8>, usize>,
   ram_outputs: HashSet<Vec<u8>>,
 
@@ -196,6 +198,15 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
       res = Some(res.unwrap().min(*scanned));
     }
     res.unwrap_or(0)
+  }
+
+  pub async fn register_eventuality(
+    &self,
+    block_number: usize,
+    id: [u8; 32],
+    eventuality: C::Eventuality,
+  ) {
+    self.scanner.write().await.eventualities.register(block_number, id, eventuality)
   }
 
   /// Rotate the key being scanned for.
@@ -256,6 +267,8 @@ impl<C: Coin, D: Db> Scanner<C, D> {
       coin,
       db,
       keys: keys.clone(),
+
+      eventualities: EventualitiesTracker::new(),
 
       ram_scanned: HashMap::new(),
       ram_outputs: HashSet::new(),
@@ -336,6 +349,17 @@ impl<C: Coin, D: Db> Scanner<C, D> {
               let mut txn = scanner.db.0.txn();
               scanner.db.save_block(&mut txn, i, &block_id);
               txn.commit();
+            }
+
+            // Clone coin because we can't borrow it while also mutably borrowing the eventualities
+            // Thankfully, coin is written to be a cheap clone
+            let coin = scanner.coin.clone();
+            for (id, tx) in
+              coin.get_eventuality_completions(&mut scanner.eventualities, &block).await
+            {
+              // TODO: Fire Completed
+              let _ = id;
+              let _ = tx;
             }
 
             let outputs = match scanner.coin.get_outputs(&block, key).await {

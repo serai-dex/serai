@@ -1,4 +1,4 @@
-use std::io;
+use std::{time::Duration, collections::HashMap, io};
 
 use async_trait::async_trait;
 
@@ -23,14 +23,16 @@ use monero_serai::{
   },
 };
 
+use tokio::time::sleep;
+
 pub use serai_client::{primitives::MAX_DATA_LEN, coins::monero::Address};
 
 use crate::{
   Payment, Plan, additional_key,
   coins::{
     CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality as EventualityTrait, PostFeeBranch, Coin,
-    drop_branches, amortize_fee,
+    Transaction as TransactionTrait, Eventuality as EventualityTrait, EventualitiesTracker,
+    PostFeeBranch, Coin, drop_branches, amortize_fee,
   },
 };
 
@@ -104,6 +106,14 @@ impl TransactionTrait<Monero> for Transaction {
 }
 
 impl EventualityTrait for Eventuality {
+  // Use the TX extra to look up potential matches
+  // While anyone can forge this, a transaction with distinct outputs won't actually match
+  // Extra includess the one time keys which are derived from the plan ID, so a collision here is a
+  // hash collision
+  fn lookup(&self) -> Vec<u8> {
+    self.extra().to_vec()
+  }
+
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     Eventuality::read(reader)
   }
@@ -137,7 +147,7 @@ impl BlockTrait<Monero> for Block {
 
 #[derive(Clone, Debug)]
 pub struct Monero {
-  pub(crate) rpc: Rpc,
+  rpc: Rpc,
 }
 // Shim required for testing/debugging purposes due to generic arguments also necessitating trait
 // bounds
@@ -278,6 +288,71 @@ impl Coin for Monero {
     }
 
     Ok(outputs)
+  }
+
+  async fn get_eventuality_completions(
+    &self,
+    eventualities: &mut EventualitiesTracker<Eventuality>,
+    block: &Self::Block,
+  ) -> HashMap<[u8; 32], [u8; 32]> {
+    let block = &block.1;
+
+    let mut res = HashMap::new();
+    if eventualities.map.is_empty() {
+      return res;
+    }
+
+    async fn check_block(
+      coin: &Monero,
+      eventualities: &mut EventualitiesTracker<Eventuality>,
+      block: &MBlock,
+      res: &mut HashMap<[u8; 32], [u8; 32]>,
+    ) {
+      for hash in &block.txs {
+        let tx = {
+          let mut tx;
+          while {
+            tx = coin.get_transaction(hash).await;
+            tx.is_err()
+          } {
+            log::error!("couldn't get transaction {}: {}", hex::encode(hash), tx.err().unwrap());
+            sleep(Duration::from_secs(60)).await;
+          }
+          tx.unwrap()
+        };
+
+        if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix.extra) {
+          if eventuality.matches(&tx) {
+            res.insert(eventualities.map.remove(&tx.prefix.extra).unwrap().0, tx.hash());
+          }
+        }
+      }
+
+      eventualities.block_number += 1;
+      assert_eq!(eventualities.block_number, block.number());
+    }
+
+    for block_num in (eventualities.block_number + 1) .. block.number() {
+      let block = {
+        let mut block;
+        while {
+          block = self.get_block(block_num).await;
+          block.is_err()
+        } {
+          log::error!("couldn't get block {}: {}", block_num, block.err().unwrap());
+          sleep(Duration::from_secs(60)).await;
+        }
+        block.unwrap()
+      };
+
+      check_block(self, eventualities, &block.1, &mut res).await;
+    }
+
+    // Also check the current block
+    check_block(self, eventualities, block, &mut res).await;
+    assert_eq!(eventualities.block_number, block.number());
+
+    res
   }
 
   async fn prepare_send(
@@ -455,7 +530,7 @@ impl Coin for Monero {
   #[cfg(test)]
   async fn mine_block(&self) {
     // https://github.com/serai-dex/serai/issues/198
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    sleep(std::time::Duration::from_millis(100)).await;
 
     #[derive(serde::Deserialize, Debug)]
     struct EmptyResponse {}
