@@ -10,6 +10,8 @@ use frost::{
   sign::PreprocessMachine,
 };
 
+use serai_client::primitives::Balance;
+
 #[cfg(feature = "bitcoin")]
 pub mod bitcoin;
 #[cfg(feature = "bitcoin")]
@@ -94,8 +96,11 @@ pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
   fn kind(&self) -> OutputType;
 
   fn id(&self) -> Self::Id;
-  fn amount(&self) -> u64;
 
+  fn balance(&self) -> Balance;
+  fn amount(&self) -> u64 {
+    self.balance().amount.0
+  }
   fn data(&self) -> &[u8];
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;

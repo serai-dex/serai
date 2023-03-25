@@ -140,9 +140,9 @@ impl Metadata {
 /// A received output, defined as its absolute ID, data, and metadara.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ReceivedOutput {
-  pub(crate) absolute: AbsoluteId,
-  pub(crate) data: OutputData,
-  pub(crate) metadata: Metadata,
+  pub absolute: AbsoluteId,
+  pub data: OutputData,
+  pub metadata: Metadata,
 }
 
 impl ReceivedOutput {

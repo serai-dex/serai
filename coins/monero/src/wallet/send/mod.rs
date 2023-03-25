@@ -550,7 +550,7 @@ impl SignableTransaction {
 
     let mut serialized = Vec::with_capacity(extra_len);
     extra.write(&mut serialized).unwrap();
-    debug_assert_eq!(extra_len, extra);
+    debug_assert_eq!(extra_len, serialized.len());
     serialized
   }
 

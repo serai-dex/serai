@@ -7,7 +7,10 @@ use rand_core::{RngCore, OsRng};
 use group::GroupEncoding;
 use frost::{Participant, ThresholdParams, tests::clone_without};
 
-use serai_client::validator_sets::primitives::{Session, ValidatorSetIndex, ValidatorSetInstance};
+use serai_client::{
+  primitives::MONERO_NET_ID,
+  validator_sets::primitives::{Session, ValidatorSet},
+};
 
 use messages::{SubstrateContext, key_gen::*};
 use crate::{
@@ -16,10 +19,8 @@ use crate::{
   tests::util::db::MemDb,
 };
 
-const ID: KeyGenId = KeyGenId {
-  set: ValidatorSetInstance { session: Session(1), index: ValidatorSetIndex(2) },
-  attempt: 3,
-};
+const ID: KeyGenId =
+  KeyGenId { set: ValidatorSet { session: Session(1), network: MONERO_NET_ID }, attempt: 3 };
 
 pub async fn test_key_gen<C: Coin>() {
   let mut entropies = HashMap::new();

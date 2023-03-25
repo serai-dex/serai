@@ -10,10 +10,9 @@ use serde::{Serialize, Deserialize};
 
 use dkg::{Participant, ThresholdParams};
 
-use serai_primitives::WithAmount;
-use in_instructions_primitives::InInstruction;
-use tokens_primitives::OutInstruction;
-use validator_sets_primitives::ValidatorSetInstance;
+use in_instructions_primitives::InInstructionWithBalance;
+use tokens_primitives::OutInstructionWithBalance;
+use validator_sets_primitives::ValidatorSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
@@ -26,7 +25,7 @@ pub mod key_gen {
 
   #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Serialize, Deserialize)]
   pub struct KeyGenId {
-    pub set: ValidatorSetInstance,
+    pub set: ValidatorSet,
     pub attempt: u32,
   }
 
@@ -123,12 +122,12 @@ pub mod substrate {
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     BlockAcknowledged { context: SubstrateContext, key: Vec<u8>, block: Vec<u8> },
-    Burns { context: SubstrateContext, burns: Vec<WithAmount<OutInstruction>> },
+    Burns { context: SubstrateContext, burns: Vec<OutInstructionWithBalance> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    Update { key: Vec<u8>, block: Vec<u8>, instructions: Vec<WithAmount<InInstruction>> },
+    Update { key: Vec<u8>, block: Vec<u8>, instructions: Vec<InInstructionWithBalance> },
   }
 }
 

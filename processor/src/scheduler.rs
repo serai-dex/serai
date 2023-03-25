@@ -117,15 +117,16 @@ impl<C: Coin> Scheduler<C> {
       // If we can fulfill planned TXs with this output, do so
       // We could limit this to UTXOs where `utxo.kind() == OutputType::Branch`, yet there's no
       // practical benefit in doing so
-      if let Some(plans) = self.plans.get_mut(&utxo.amount()) {
+      let amount = utxo.amount();
+      if let Some(plans) = self.plans.get_mut(&amount) {
         // Execute the first set of payments possible with an output of this amount
         let payments = plans.pop_front().unwrap();
         // They won't be equal if we dropped payments due to being dust
-        assert!(utxo.amount() >= payments.iter().map(|payment| payment.amount).sum::<u64>());
+        assert!(amount >= payments.iter().map(|payment| payment.amount).sum::<u64>());
 
         // If we've grabbed the last plan for this output amount, remove it from the map
         if plans.is_empty() {
-          self.plans.remove(&utxo.amount());
+          self.plans.remove(&amount);
         }
 
         // Create a TX for these payments

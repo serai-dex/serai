@@ -19,9 +19,9 @@ use tokio::time::sleep;
 use scale::Decode;
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, Amount, WithAmount},
-  tokens::primitives::OutInstruction,
-  in_instructions::primitives::{Shorthand, RefundableInInstruction},
+  primitives::MAX_DATA_LEN,
+  tokens::primitives::{OutInstruction, OutInstructionWithBalance},
+  in_instructions::primitives::{Shorthand, RefundableInInstruction, InInstructionWithBalance},
 };
 
 use messages::{SubstrateContext, sign, substrate, CoordinatorMessage, ProcessorMessage};
@@ -383,12 +383,15 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
 
                 let mut payments = vec![];
                 for out in burns.clone() {
-                  let WithAmount { data: OutInstruction { address, data }, amount } = out;
+                  let OutInstructionWithBalance {
+                    instruction: OutInstruction { address, data },
+                    balance,
+                  } = out;
                   if let Ok(address) = C::Address::try_from(address.consume()) {
                     payments.push(Payment {
                       address,
                       data: data.map(|data| data.consume()),
-                      amount: amount.0,
+                      amount: balance.amount.0,
                     });
                   }
                 }
@@ -425,20 +428,24 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                   return None;
                 }
 
-                let data = output.data();
-                if data.len() > MAX_DATA_LEN {
+                let mut data = output.data();
+                let max_data_len = MAX_DATA_LEN.try_into().unwrap();
+                if data.len() > max_data_len {
                   error!(
                     "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}",
                     hex::encode(output.id()),
                     data.len(),
                   );
-                  data = data[.. MAX_DATA_LEN];
+                  data = &data[.. max_data_len];
                 }
 
                 let shorthand = Shorthand::decode(&mut data).ok()?;
                 let instruction = RefundableInInstruction::try_from(shorthand).ok()?;
                 // TODO2: Set instruction.origin if not set (and handle refunds in general)
-                Some(WithAmount { data: instruction.instruction, amount: Amount(output.amount()) })
+                Some(InInstructionWithBalance {
+                  instruction: instruction.instruction,
+                  balance: output.balance(),
+                })
               }).collect(),
             })).await;
           },

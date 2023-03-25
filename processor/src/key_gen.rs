@@ -15,7 +15,7 @@ use frost::{
 
 use log::info;
 
-use serai_client::validator_sets::primitives::ValidatorSetInstance;
+use serai_client::validator_sets::primitives::ValidatorSet;
 use messages::key_gen::*;
 
 use crate::{DbTxn, Db, coins::Coin};
@@ -33,18 +33,18 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     D::key(b"KEY_GEN", dst, key)
   }
 
-  fn params_key(set: &ValidatorSetInstance) -> Vec<u8> {
+  fn params_key(set: &ValidatorSet) -> Vec<u8> {
     Self::key_gen_key(b"params", bincode::serialize(set).unwrap())
   }
   fn save_params(
     &mut self,
     txn: &mut D::Transaction,
-    set: &ValidatorSetInstance,
+    set: &ValidatorSet,
     params: &ThresholdParams,
   ) {
     txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
   }
-  fn params(&self, set: &ValidatorSetInstance) -> ThresholdParams {
+  fn params(&self, set: &ValidatorSet) -> ThresholdParams {
     // Directly unwraps the .get() as this will only be called after being set
     bincode::deserialize(&self.0.get(Self::params_key(set)).unwrap()).unwrap()
   }
@@ -121,8 +121,8 @@ pub struct KeyGen<C: Coin, D: Db> {
   db: KeyGenDb<C, D>,
   entropy: Zeroizing<[u8; 32]>,
 
-  active_commit: HashMap<ValidatorSetInstance, SecretShareMachine<C::Curve>>,
-  active_share: HashMap<ValidatorSetInstance, KeyMachine<C::Curve>>,
+  active_commit: HashMap<ValidatorSet, SecretShareMachine<C::Curve>>,
+  active_share: HashMap<ValidatorSet, KeyMachine<C::Curve>>,
 }
 
 impl<C: Coin, D: Db> KeyGen<C, D> {
@@ -145,8 +145,8 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     let context = |id: &KeyGenId| {
       // TODO2: Also embed the chain ID/genesis block
       format!(
-        "Serai Key Gen. Session: {}, Index: {}, Attempt: {}",
-        id.set.session.0, id.set.index.0, id.attempt
+        "Serai Key Gen. Session: {:?}, Network: {:?}, Attempt: {}",
+        id.set.session, id.set.network, id.attempt
       )
     };
 

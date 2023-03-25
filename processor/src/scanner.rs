@@ -377,7 +377,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
                 "block {} had output {} worth {}",
                 hex::encode(&block_id),
                 hex::encode(&id),
-                output.amount()
+                output.amount(),
               );
 
               // On Bitcoin, the output ID should be unique for a given chain

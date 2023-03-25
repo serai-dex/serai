@@ -25,7 +25,10 @@ use monero_serai::{
 
 use tokio::time::sleep;
 
-pub use serai_client::{primitives::MAX_DATA_LEN, coins::monero::Address};
+pub use serai_client::{
+  primitives::{MAX_DATA_LEN, MONERO, Amount, Balance},
+  coins::monero::Address,
+};
 
 use crate::{
   Payment, Plan, additional_key,
@@ -62,8 +65,8 @@ impl OutputTrait for Output {
     self.0.output.data.key.compress().to_bytes()
   }
 
-  fn amount(&self) -> u64 {
-    self.0.commitment().amount
+  fn balance(&self) -> Balance {
+    Balance { coin: MONERO, amount: Amount(self.0.commitment().amount) }
   }
 
   fn data(&self) -> &[u8] {

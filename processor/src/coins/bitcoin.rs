@@ -36,7 +36,10 @@ use bitcoin_serai::bitcoin::{
   PackedLockTime, Sequence, Script, Witness, TxIn, TxOut, Address as BAddress,
 };
 
-use serai_client::{primitives::MAX_DATA_LEN, coins::bitcoin::Address};
+use serai_client::{
+  primitives::{MAX_DATA_LEN, BITCOIN, Amount, Balance},
+  coins::bitcoin::Address,
+};
 
 use crate::{
   coins::{
@@ -93,8 +96,8 @@ impl OutputTrait for Output {
     res
   }
 
-  fn amount(&self) -> u64 {
-    self.output.value()
+  fn balance(&self) -> Balance {
+    Balance { coin: BITCOIN, amount: Amount(self.output.value()) }
   }
 
   fn data(&self) -> &[u8] {
@@ -342,7 +345,7 @@ impl Coin for Bitcoin {
         let offset_repr_ref: &[u8] = offset_repr.as_ref();
         let kind = kinds[offset_repr_ref];
 
-        let data = if kind == OutputType::External {
+        let mut data = if kind == OutputType::External {
           (|| {
             for output in &tx.output {
               if output.script_pubkey.is_op_return() {
