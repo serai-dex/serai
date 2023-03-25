@@ -50,7 +50,11 @@ fn testnet_genesis(
     session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
     validator_sets: ValidatorSetsConfig {
       bond: Amount(1_000_000 * 10_u64.pow(8)),
-      coins: vec![BITCOIN, ETHER, DAI, MONERO],
+      networks: vec![
+        (BITCOIN_NET_ID, BITCOIN_NET.clone()),
+        (ETHEREUM_NET_ID, ETHEREUM_NET.clone()),
+        (MONERO_NET_ID, MONERO_NET.clone()),
+      ],
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },
   }

@@ -2,30 +2,18 @@
 
 Validator Sets are defined at the protocol level, with the following parameters:
 
-  - `bond`         (Amount):     Amount of bond per key-share.
-  - `coins`        (Vec\<Coin>): List of coins within this set.
-  - `participants` (Vec\<Coin>): List of participants within this set.
+  - `bond`         (Amount):             Amount of bond per key-share.
+  - `network`      (Network):            The network this validator set operates
+                                         over.
+  - `participants` (Vec\<SeraiAddress>): List of participants within this set.
 
-Validator Sets are referred to by `ValidatorSetIndex` yet have their data
-accessible via `ValidatorSetInstance`.
+Validator Sets are referred to by `NetworkId` yet have their data accessible via
+`ValidatorSetInstance`.
 
-At launch, there will solely be Validator Set 0, managing Bitcoin, Ether, DAI,
-and Monero.
+### Participation in consensus
 
-### Participation in the BFT process
-
-All Validator Sets participate in the BFT process described under
-[Consensus](./Consensus.md). Specifically, a block containing In Instructions
-for a coin must be approved by the BFT majority of the Validator Set responsible
-for it, along with the BFT majority of the network by bond.
-
-At this time, In Instructions for a coin are only expected to be included when a
-validator from the Validator Set managing the coin is the producer of the block
-in question.
-
-Since there is currently only one Validator Set, the aforementioned BFT
-conditions collapse to simply the BFT majority by bond. Ensuring BFT majority
-per responsible Validator Set is accordingly unimplemented for now.
+All Validator Sets participate in consensus. In the future, a dedicated group
+to order Serai is planned.
 
 ### Multisig
 

@@ -30,7 +30,7 @@ sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
 frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate" }
 
-serai-runtime = { path = "../runtime" }
+serai-runtime = { path = "../runtime", features = ["std"] }
 
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }

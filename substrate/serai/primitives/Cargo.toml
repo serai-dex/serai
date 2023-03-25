@@ -12,6 +12,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+lazy_static = { version = "1", optional = true }
+
 zeroize = { version = "^1.5", features = ["derive"], optional = true }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
@@ -23,5 +25,5 @@ sp-core = { git = "https://github.com/serai-dex/substrate", default-features = f
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
-std = ["zeroize", "scale/std", "scale-info/std", "serde", "sp-core/std", "sp-runtime/std"]
+std = ["lazy_static", "zeroize", "scale/std", "scale-info/std", "serde", "sp-core/std", "sp-runtime/std"]
 default = ["std"]

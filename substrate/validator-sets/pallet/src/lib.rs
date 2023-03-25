@@ -20,44 +20,31 @@ pub mod pallet {
   #[pallet::genesis_config]
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct GenesisConfig<T: Config> {
-    /// Bond requirement to join the initial validator set.
+    /// Bond requirement to join the initial validator sets.
     /// Every participant at genesis will automatically be assumed to have this much bond.
     /// This bond cannot be withdrawn however as there's no stake behind it.
     pub bond: Amount,
-    /// Coins to spawn the network with in the initial validator set.
-    pub coins: Vec<Coin>,
-    /// List of participants to place in the genesis set.
+    /// Networks to spawn Serai with.
+    pub networks: Vec<(NetworkId, Network)>,
+    /// List of participants to place in the initial validator sets.
     pub participants: Vec<T::AccountId>,
   }
 
   #[cfg(feature = "std")]
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig { bond: Amount(1), coins: vec![], participants: vec![] }
+      GenesisConfig { bond: Amount(1), networks: vec![], participants: vec![] }
     }
   }
-
-  // Max of 16 coins per validator set
-  // At launch, we'll have BTC, ETH, DAI, and XMR
-  // In the future, these will be split into separate validator sets, so we're already not
-  // planning expansion beyond just a few coins per validator set
-  // The only case which really makes sense for multiple coins in a validator set is:
-  // 1) The coins are small, easy to run, and make no sense to be in their own set
-  // In this case, it's still hard to ask validators to run 16 different nodes
-  // 2) The coins are all on the same network yet there's no DEX on-chain
-  // In these cases, it'd be hard to find and justify 16 different coins from that single chain
-  // This could probably be just 8, yet 16 is a hedge for the unforseen
-  // If necessary, this can be increased with a fork
-  type MaxCoinsPerSet = ConstU32<16>;
 
   // Support keys up to 96 bytes (BLS12-381 G2)
   const MAX_KEY_LEN: u32 = 96;
   type MaxKeyLen = ConstU32<MAX_KEY_LEN>;
 
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-  pub struct ValidatorSet<T: Config> {
+  pub struct ValidatorSetData<T: Config> {
     bond: Amount,
-    coins: BoundedVec<Coin, MaxCoinsPerSet>,
+    network: Network,
 
     // Participant and their amount bonded to this set
     // Limit each set to 100 participants for now
@@ -72,15 +59,14 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn validator_set)]
   pub type ValidatorSets<T: Config> =
-    StorageMap<_, Twox64Concat, ValidatorSetInstance, ValidatorSet<T>, OptionQuery>;
+    StorageMap<_, Twox64Concat, ValidatorSet, ValidatorSetData<T>, OptionQuery>;
 
   type Key = BoundedVec<u8, MaxKeyLen>;
 
-  /// The key for a given validator set instance coin.
+  /// The key for a given validator set instance.
   #[pallet::storage]
   #[pallet::getter(fn key)]
-  pub type Keys<T: Config> =
-    StorageMap<_, Twox64Concat, (ValidatorSetInstance, Coin), Key, OptionQuery>;
+  pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, Key, OptionQuery>;
 
   /// If an account has voted for a specific key or not. Prevents them from voting multiple times.
   #[pallet::storage]
@@ -91,7 +77,7 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn vote_count)]
   pub type VoteCount<T: Config> =
-    StorageMap<_, Blake2_128Concat, (ValidatorSetInstance, Coin, Key), u16, ValueQuery>;
+    StorageMap<_, Blake2_128Concat, (ValidatorSet, Key), u16, ValueQuery>;
 
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
@@ -100,15 +86,14 @@ pub mod pallet {
       for participant in self.participants.clone() {
         participants.push((participant, self.bond));
       }
+      let participants = BoundedVec::try_from(participants).unwrap();
 
-      ValidatorSets::<T>::set(
-        ValidatorSetInstance { session: Session(0), index: ValidatorSetIndex(0) },
-        Some(ValidatorSet {
-          bond: self.bond,
-          coins: BoundedVec::try_from(self.coins.clone()).unwrap(),
-          participants: BoundedVec::try_from(participants).unwrap(),
-        }),
-      );
+      for (id, network) in self.networks.clone() {
+        ValidatorSets::<T>::set(
+          ValidatorSet { session: Session(0), network: id },
+          Some(ValidatorSetData { bond: self.bond, network, participants: participants.clone() }),
+        );
+      }
     }
   }
 
@@ -117,15 +102,13 @@ pub mod pallet {
   pub enum Event<T: Config> {
     Vote {
       voter: T::AccountId,
-      instance: ValidatorSetInstance,
-      coin: Coin,
+      set: ValidatorSet,
       key: Key,
       // Amount of votes the key now has
       votes: u16,
     },
     KeyGen {
-      instance: ValidatorSetInstance,
-      coin: Coin,
+      set: ValidatorSet,
       key: Key,
     },
   }
@@ -146,12 +129,7 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
     #[pallet::weight(0)] // TODO
-    pub fn vote(
-      origin: OriginFor<T>,
-      index: ValidatorSetIndex,
-      coin: Coin,
-      key: Key,
-    ) -> DispatchResult {
+    pub fn vote(origin: OriginFor<T>, network: NetworkId, key: Key) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       // TODO: Do we need to check the key is within the length bounds?
       // The docs suggest the BoundedVec will create/write, yet not read, which could be an issue
@@ -161,15 +139,14 @@ pub mod pallet {
       let session: Session = Session(0);
 
       // Confirm a key hasn't been set for this set instance
-      let instance = ValidatorSetInstance { session, index };
-      if Keys::<T>::get((instance, coin)).is_some() {
+      let set = ValidatorSet { session, network };
+      if Keys::<T>::get(set).is_some() {
         Err(Error::<T>::AlreadyGeneratedKeys)?;
       }
 
       // Confirm the signer is a validator in the set
-      let set = ValidatorSets::<T>::get(instance).ok_or(Error::<T>::NonExistentValidatorSet)?;
-
-      if set.participants.iter().any(|participant| participant.0 == signer) {
+      let data = ValidatorSets::<T>::get(set).ok_or(Error::<T>::NonExistentValidatorSet)?;
+      if data.participants.iter().any(|participant| participant.0 == signer) {
         Err(Error::<T>::NotValidator)?;
       }
 
@@ -180,17 +157,17 @@ pub mod pallet {
       Voted::<T>::set((&signer, &key), Some(()));
 
       // Add their vote
-      let votes = VoteCount::<T>::mutate((instance, coin, &key), |value| {
+      let votes = VoteCount::<T>::mutate((set, &key), |value| {
         *value += 1;
         *value
       });
 
-      Self::deposit_event(Event::Vote { voter: signer, instance, coin, key: key.clone(), votes });
+      Self::deposit_event(Event::Vote { voter: signer, set, key: key.clone(), votes });
 
       // If we've reached consensus, set the key
-      if usize::try_from(votes).unwrap() == set.participants.len() {
-        Keys::<T>::set((instance, coin), Some(key.clone()));
-        Self::deposit_event(Event::KeyGen { instance, coin, key });
+      if usize::try_from(votes).unwrap() == data.participants.len() {
+        Keys::<T>::set(set, Some(key.clone()));
+        Self::deposit_event(Event::KeyGen { set, key });
       }
 
       Ok(())
