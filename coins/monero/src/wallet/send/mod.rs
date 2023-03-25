@@ -339,6 +339,12 @@ impl SignableTransaction {
     // Calculate the extra length
     let extra = Extra::fee_weight(outputs, has_payment_id, data.as_ref());
 
+    // https://github.com/monero-project/monero/pull/8733
+    const MAX_EXTRA_SIZE: usize = 1060;
+    if extra > MAX_EXTRA_SIZE {
+      Err(TransactionError::TooMuchData)?;
+    }
+
     // This is a extremely heavy fee weight estimation which can only be trusted for two things
     // 1) Ensuring we have enough for whatever fee we end up using
     // 2) Ensuring we aren't over the max size
@@ -544,6 +550,7 @@ impl SignableTransaction {
 
     let mut serialized = Vec::with_capacity(extra_len);
     extra.write(&mut serialized).unwrap();
+    debug_assert_eq!(extra_len, extra);
     serialized
   }
 

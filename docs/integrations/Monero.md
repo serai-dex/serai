@@ -28,7 +28,9 @@ per not supporting integrated addresses.
 ### In Instructions
 
 Monero In Instructions are present via `tx.extra`, specifically via inclusion
-in a `TX_EXTRA_NONCE` tag, and accordingly limited to 255 bytes.
+in a `TX_EXTRA_NONCE` tag. The tag is followed by the VarInt length of its
+contents, and then additionally marked by a byte `127`. The following data is
+limited to 254 bytes.
 
 ### Out Instructions
 
