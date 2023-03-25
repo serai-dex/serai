@@ -1,6 +1,6 @@
 # Getting Started
-## Run Serai Node Locally
-### System Dependencies
+
+### Dependencies
 
 ##### Ubuntu
 
@@ -26,6 +26,7 @@ brew install rustup
 
 ```
 rustup update
+rustup toolchain install stable
 rustup toolchain install nightly
 rustup target add wasm32-unknown-unknown --toolchain nightly
 ```
@@ -62,7 +63,11 @@ cargo build --release
 
 ### Run Tests
 
-Running tests requires a Monero regtest node running in the background.
+Running tests requires:
+
+- A Bitcoin regtest node
+- A Monero regtest node
+- A monero-wallet-rpc instance
 
 ```
 cargo test --all-features
@@ -74,9 +79,11 @@ cargo test --all-features
 ./target/release/serai-node --dev
 ```
 
-## Run Serai with Orchestration
+### Run Serai with Orchestration
 
-In the deploy directory, you can find our orchestration components for running the entire infrastructure of Serai in a local environment using Docker Compose or Kubernetes.
+Under `/deploy`, you can find our orchestration components for running the
+entire infrastructure of Serai in a local environment using Docker Compose or
+Kubernetes.
 
 [Run Serai with Docker Compose](../deploy/README.md)
 
