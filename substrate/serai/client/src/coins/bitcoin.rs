@@ -53,8 +53,8 @@ impl TryFrom<Vec<u8>> for Address {
         EncodedAddress::P2WSH(hash) => {
           Payload::WitnessProgram { version: WitnessVersion::V0, program: hash.to_vec() }
         }
-        EncodedAddress::P2TR(hash) => {
-          Payload::WitnessProgram { version: WitnessVersion::V1, program: hash.to_vec() }
+        EncodedAddress::P2TR(key) => {
+          Payload::WitnessProgram { version: WitnessVersion::V1, program: key.to_vec() }
         }
       },
     }))

@@ -36,7 +36,7 @@ use bitcoin_serai::bitcoin::{
   PackedLockTime, Sequence, Script, Witness, TxIn, TxOut, Address as BAddress,
 };
 
-use serai_client::coins::bitcoin::Address;
+use serai_client::{primitives::MAX_DATA_LEN, coins::bitcoin::Address};
 
 use crate::{
   coins::{
@@ -357,6 +357,7 @@ impl Coin for Bitcoin {
         } else {
           vec![]
         };
+        data.truncate(MAX_DATA_LEN.try_into().unwrap());
 
         outputs.push(Output { kind, output, data })
       }

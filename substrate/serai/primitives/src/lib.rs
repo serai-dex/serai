@@ -27,9 +27,10 @@ pub use balance::*;
 mod account;
 pub use account::*;
 
-// Monero, our current longest address candidate, has a longest address of featured with payment ID
-// 1 (enum) + 1 (flags) + 64 (two keys) + 8 (payment ID) = 74
-pub const MAX_ADDRESS_LEN: u32 = 74;
+// Monero, our current longest address candidate, has a longest address of featured
+// 1 (enum) + 1 (flags) + 64 (two keys) = 66
+// When JAMTIS arrives, it'll become 114 bytes
+pub const MAX_ADDRESS_LEN: u32 = 128;
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]

@@ -19,7 +19,7 @@ use tokio::time::sleep;
 use scale::Decode;
 
 use serai_client::{
-  primitives::{Amount, WithAmount},
+  primitives::{MAX_DATA_LEN, Amount, WithAmount},
   tokens::primitives::OutInstruction,
   in_instructions::primitives::{Shorthand, RefundableInInstruction},
 };
@@ -425,7 +425,17 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                   return None;
                 }
 
-                let shorthand = Shorthand::decode(&mut output.data()).ok()?;
+                let data = output.data();
+                if data.len() > MAX_DATA_LEN {
+                  error!(
+                    "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}",
+                    hex::encode(output.id()),
+                    data.len(),
+                  );
+                  data = data[.. MAX_DATA_LEN];
+                }
+
+                let shorthand = Shorthand::decode(&mut data).ok()?;
                 let instruction = RefundableInInstruction::try_from(shorthand).ok()?;
                 // TODO2: Set instruction.origin if not set (and handle refunds in general)
                 Some(WithAmount { data: instruction.instruction, amount: Amount(output.amount()) })
