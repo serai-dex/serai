@@ -5,7 +5,8 @@ use futures::stream::StreamExt;
 use sp_timestamp::InherentDataProvider as TimestampInherent;
 use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInherent};
 
-use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
+use sp_io::SubstrateHostFunctions;
+use sc_executor::{sp_wasm_interface::ExtendedHostFunctions, WasmExecutor};
 
 use sc_network_common::sync::warp::WarpSyncParams;
 use sc_network::{Event, NetworkEventStream};
@@ -15,29 +16,20 @@ use sc_client_api::BlockBackend;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
-use serai_runtime::{self as runtime, opaque::Block, RuntimeApi};
+use serai_runtime::{opaque::Block, RuntimeApi};
 
 use sc_consensus_babe::{self, SlotProportion};
 use sc_consensus_grandpa as grandpa;
 
-pub struct ExecutorDispatch;
-impl NativeExecutionDispatch for ExecutorDispatch {
-  #[cfg(feature = "runtime-benchmarks")]
-  type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
-  #[cfg(not(feature = "runtime-benchmarks"))]
-  type ExtendHostFunctions = ();
-
-  fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-    runtime::api::dispatch(method, data)
-  }
-
-  fn native_version() -> NativeVersion {
-    serai_runtime::native_version()
-  }
-}
+#[cfg(not(feature = "runtime-benchmarks"))]
+pub type Executor = WasmExecutor<ExtendedHostFunctions<SubstrateHostFunctions, ()>>;
+#[cfg(feature = "runtime-benchmarks")]
+pub type Executor = WasmExecutor<
+  ExtendedHostFunctions<SubstrateHostFunctions, frame_benchmarking::benchmarking::HostFunctions>,
+>;
 
 type FullBackend = sc_service::TFullBackend<Block>;
-pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
+pub type FullClient = TFullClient<Block, RuntimeApi, Executor>;
 
 type SelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 type GrandpaBlockImport = grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, SelectChain>;
@@ -77,10 +69,11 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     })
     .transpose()?;
 
-  let executor = NativeElseWasmExecutor::<ExecutorDispatch>::new(
+  let executor = Executor::new(
     config.wasm_method,
     config.default_heap_pages,
     config.max_runtime_instances,
+    None,
     config.runtime_cache_size,
   );
 

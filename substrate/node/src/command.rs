@@ -99,7 +99,29 @@ pub fn run() -> sc_cli::Result<()> {
     }),
 
     Some(Subcommand::Benchmark(cmd)) => cli.create_runner(cmd)?.sync_run(|config| match cmd {
-      BenchmarkCmd::Pallet(cmd) => cmd.run::<Block, service::ExecutorDispatch>(config),
+      BenchmarkCmd::Pallet(cmd) => {
+        use sc_executor::{NativeVersion, NativeExecutionDispatch};
+
+        use serai_runtime as runtime;
+
+        struct ExecutorDispatch;
+        impl NativeExecutionDispatch for ExecutorDispatch {
+          #[cfg(feature = "runtime-benchmarks")]
+          type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
+          #[cfg(not(feature = "runtime-benchmarks"))]
+          type ExtendHostFunctions = ();
+
+          fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
+            runtime::api::dispatch(method, data)
+          }
+
+          fn native_version() -> NativeVersion {
+            runtime::native_version()
+          }
+        }
+
+        cmd.run::<Block, ExecutorDispatch>(config)
+      }
 
       BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.client),
 
