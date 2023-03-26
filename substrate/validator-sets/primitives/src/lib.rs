@@ -17,7 +17,7 @@ use serai_primitives::NetworkId;
 pub struct Session(pub u32);
 
 /// The type used to identify a specific validator set during a specific session.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct ValidatorSet {
   pub session: Session,

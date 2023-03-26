@@ -3740,18 +3740,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "in-instructions-client"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "in-instructions-pallet",
- "jsonrpsee-core",
- "jsonrpsee-http-client",
- "parity-scale-codec",
- "sp-inherents",
-]
-
-[[package]]
 name = "in-instructions-pallet"
 version = "0.1.0"
 dependencies = [
@@ -3761,7 +3749,6 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
- "sp-inherents",
  "sp-runtime",
  "thiserror",
  "tokens-pallet",
@@ -3775,6 +3762,7 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "serde",
+ "sp-application-crypto",
  "sp-runtime",
  "sp-std 5.0.0",
  "tokens-primitives",
@@ -8460,7 +8448,6 @@ version = "0.1.0"
 dependencies = [
  "bitcoin",
  "ciphersuite",
- "jsonrpsee-server",
  "lazy_static",
  "monero-serai",
  "parity-scale-codec",
@@ -8481,7 +8468,6 @@ dependencies = [
  "clap 4.1.13",
  "frame-benchmarking",
  "frame-benchmarking-cli",
- "in-instructions-client",
  "jsonrpsee",
  "pallet-transaction-payment-rpc",
  "sc-basic-authorship",

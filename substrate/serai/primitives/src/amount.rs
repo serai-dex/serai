@@ -45,12 +45,3 @@ impl Mul for Amount {
     Amount(self.0.checked_mul(other.0).unwrap())
   }
 }
-
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
-pub struct WithAmount<
-  T: Clone + PartialEq + Eq + Debug + Encode + Decode + MaxEncodedLen + TypeInfo,
-> {
-  pub data: T,
-  pub amount: Amount,
-}

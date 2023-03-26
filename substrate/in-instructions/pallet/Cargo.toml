@@ -1,7 +1,7 @@
 [package]
 name = "in-instructions-pallet"
 version = "0.1.0"
-description = "Execute calls via In Instructions from inherent transactions"
+description = "Execute calls via In Instructions from unsigned transactions"
 license = "AGPL-3.0-only"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
@@ -17,7 +17,6 @@ thiserror = { version = "1", optional = true }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-sp-inherents = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -35,7 +34,6 @@ std = [
   "scale/std",
   "scale-info/std",
 
-  "sp-inherents/std",
   "sp-runtime/std",
 
   "frame-system/std",

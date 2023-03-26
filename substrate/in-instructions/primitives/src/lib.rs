@@ -11,11 +11,13 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
+use sp_application_crypto::sr25519::Signature;
+
 #[cfg(not(feature = "std"))]
 use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::{BlockNumber, BlockHash, SeraiAddress, ExternalAddress, Data, WithAmount};
+use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, Data};
 
 mod shorthand;
 pub use shorthand::*;
@@ -40,28 +42,40 @@ pub enum InInstruction {
   Call(ApplicationCall),
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct RefundableInInstruction {
   pub origin: Option<ExternalAddress>,
   pub instruction: InInstruction,
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+pub struct InInstructionWithBalance {
+  pub instruction: InInstruction,
+  pub balance: Balance,
+}
+
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct Batch {
-  pub id: BlockHash,
-  pub instructions: Vec<WithAmount<InInstruction>>,
+  pub network: NetworkId,
+  pub id: u32,
+  pub block: BlockHash,
+  pub instructions: Vec<InInstructionWithBalance>,
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
-pub struct Update {
-  // Coin's latest block number
-  pub block_number: BlockNumber,
-  pub batches: Vec<Batch>,
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct SignedBatch {
+  pub batch: Batch,
+  pub signature: Signature,
 }
 
-// None if the current block producer isn't operating over this coin or otherwise failed to get
-// data
-pub type Updates = Vec<Option<Update>>;
+#[cfg(feature = "std")]
+impl Zeroize for SignedBatch {
+  fn zeroize(&mut self) {
+    self.batch.zeroize();
+    self.signature.as_mut().zeroize();
+  }
+}

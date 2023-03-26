@@ -50,8 +50,6 @@ sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
-in-instructions-client = { path = "../in-instructions/client" }
-
 sc-tendermint = { path = "../tendermint/client" }
 
 [build-dependencies]

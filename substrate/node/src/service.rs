@@ -11,8 +11,6 @@ use sp_inherents::CreateInherentDataProviders;
 use sp_consensus::DisableProofRecording;
 use sp_api::ProvideRuntimeApi;
 
-use in_instructions_client::InherentDataProvider as InstructionsProvider;
-
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
 use sc_transaction_pool::FullPool;
 use sc_network::NetworkService;
@@ -59,13 +57,13 @@ impl NativeExecutionDispatch for ExecutorDispatch {
 pub struct Cidp;
 #[async_trait::async_trait]
 impl CreateInherentDataProviders<Block, ()> for Cidp {
-  type InherentDataProviders = (InstructionsProvider,);
+  type InherentDataProviders = ();
   async fn create_inherent_data_providers(
     &self,
     _: <Block as BlockTrait>::Hash,
     _: (),
   ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
-    Ok((InstructionsProvider::new(),))
+    Ok(())
   }
 }
 

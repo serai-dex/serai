@@ -147,7 +147,7 @@ impl Contains<RuntimeCall> for CallFilter {
       return matches!(call, tokens::Call::burn { .. });
     }
     if let RuntimeCall::InInstructions(call) = call {
-      return matches!(call, in_instructions::Call::update { .. });
+      return matches!(call, in_instructions::Call::execute_batch { .. });
     }
 
     if let RuntimeCall::ValidatorSets(call) = call {

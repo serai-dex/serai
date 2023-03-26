@@ -45,5 +45,3 @@ lazy_static = "1"
 rand_core = "0.6"
 
 tokio = "1"
-
-jsonrpsee-server = "0.16"

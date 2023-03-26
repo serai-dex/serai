@@ -1,10 +1,10 @@
 use serai_runtime::{in_instructions, InInstructions, Runtime};
 pub use in_instructions::primitives;
+use primitives::SignedBatch;
 
-use crate::{
-  primitives::{Coin, BlockNumber},
-  Serai, SeraiError, scale_value,
-};
+use subxt::{tx, utils::Encoded};
+
+use crate::{Serai, SeraiError, scale_composite};
 
 const PALLET: &str = "InInstructions";
 
@@ -22,16 +22,11 @@ impl Serai {
       .await
   }
 
-  pub async fn get_coin_block_number(
-    &self,
-    coin: Coin,
-    block: [u8; 32],
-  ) -> Result<BlockNumber, SeraiError> {
-    Ok(
-      self
-        .storage(PALLET, "BlockNumbers", Some(vec![scale_value(coin)]), block)
-        .await?
-        .unwrap_or(BlockNumber(0)),
-    )
+  pub fn execute_batch(&self, batch: SignedBatch) -> Result<Encoded, SeraiError> {
+    self.unsigned(&tx::dynamic(
+      PALLET,
+      "execute_batch",
+      scale_composite(in_instructions::Call::<Runtime>::execute_batch { batch }),
+    ))
   }
 }

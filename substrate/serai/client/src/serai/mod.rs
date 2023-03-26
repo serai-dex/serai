@@ -6,6 +6,8 @@ pub(crate) use scale_value::{scale_value, scale_composite};
 use subxt::ext::scale_value::Value;
 
 use sp_core::{Pair as PairTrait, sr25519::Pair};
+
+pub use subxt;
 use subxt::{
   error::Error as SubxtError,
   utils::Encoded,
@@ -14,6 +16,7 @@ use subxt::{
     extrinsic_params::{BaseExtrinsicParams, BaseExtrinsicParamsBuilder},
   },
   tx::{Signer, DynamicTxPayload, TxClient},
+  rpc::types::ChainBlock,
   Config as SubxtConfig, OnlineClient,
 };
 
@@ -36,6 +39,8 @@ pub struct Tip {
   pub tip: u64,
 }
 
+pub type Header = SubstrateHeader<<Runtime as Config>::BlockNumber, BlakeTwo256>;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SeraiConfig;
 impl SubxtConfig for SeraiConfig {
@@ -47,11 +52,13 @@ impl SubxtConfig for SeraiConfig {
   // TODO: Bech32m
   type Address = SeraiAddress;
 
-  type Header = SubstrateHeader<<Runtime as Config>::BlockNumber, BlakeTwo256>;
+  type Header = Header;
   type Signature = Signature;
 
   type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, Tip>;
 }
+
+pub type Block = ChainBlock<SeraiConfig>;
 
 #[derive(Error, Debug)]
 pub enum SeraiError {
@@ -114,6 +121,41 @@ impl Serai {
 
   pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
     Ok(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?.into())
+  }
+
+  pub async fn get_block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
+    let Some(res) =
+      self.0.rpc().block(Some(hash.into())).await.map_err(SeraiError::RpcError)? else {
+        return Ok(None);
+      };
+
+    // Only return finalized blocks
+    let Some(justifications) = res.justifications.as_ref() else { return Ok(None); };
+    if justifications.is_empty() {
+      return Ok(None);
+    }
+
+    Ok(Some(res.block))
+  }
+
+  // Ideally, this would be get_block_hash, not get_block_by_number
+  // Unfortunately, in order to only operate over only finalized data, we have to check the
+  // returned hash is for a finalized block. We can only do that by calling subxt's `block`, which
+  // will return the block and any justifications
+  // If we're already putting in all the work to get the block, we may as well just return it here
+  pub async fn get_block_by_number(&self, number: u64) -> Result<Option<Block>, SeraiError> {
+    let Some(hash) =
+      self.0.rpc().block_hash(Some(number.into())).await.map_err(SeraiError::RpcError)? else {
+        return Ok(None);
+      };
+    self.get_block(hash.into()).await
+  }
+
+  pub fn unsigned(&self, payload: &DynamicTxPayload<'static>) -> Result<Encoded, SeraiError> {
+    TxClient::new(self.0.offline())
+      .create_unsigned(payload)
+      .map(|tx| Encoded(tx.into_encoded()))
+      .map_err(|_| SeraiError::InvalidRuntime)
   }
 
   pub fn sign<S: Send + Sync + Signer<SeraiConfig>>(

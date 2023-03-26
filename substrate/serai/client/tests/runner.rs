@@ -1,17 +1,14 @@
 use core::time::Duration;
-use std::sync::Arc;
 
 use lazy_static::lazy_static;
 
 use tokio::{sync::Mutex, time::sleep};
 
 use serai_client::{
-  primitives::Coin,
-  in_instructions::{primitives::Updates, InInstructionsEvent},
+  subxt::config::Header,
+  in_instructions::{primitives::SignedBatch, InInstructionsEvent},
   Serai,
 };
-
-use jsonrpsee_server::RpcModule;
 
 pub const URL: &str = "ws://127.0.0.1:9944";
 
@@ -20,73 +17,64 @@ lazy_static! {
 }
 
 #[allow(dead_code)]
-pub async fn provide_updates(updates: Updates) -> [u8; 32] {
-  let done = Arc::new(Mutex::new(false));
-  let done_clone = done.clone();
-  let updates_clone = updates.clone();
+pub async fn provide_batch(batch: SignedBatch) -> [u8; 32] {
+  let serai = Serai::new(URL).await.unwrap();
 
-  let mut rpc = RpcModule::new(());
-  rpc
-    .register_async_method("processor_coinUpdates", move |_, _| {
-      let done_clone = done_clone.clone();
-      let updates_clone = updates_clone.clone();
-      async move {
-        // Sleep to prevent a race condition where we submit the inherents for this block and the
-        // next one, then remove them, making them unverifiable, causing the node to panic for
-        // being self-malicious
-        sleep(Duration::from_millis(500)).await;
-        if !*done_clone.lock().await {
-          Ok(updates_clone)
-        } else {
-          Ok(vec![])
-        }
-      }
-    })
-    .unwrap();
-  let handle = jsonrpsee_server::ServerBuilder::default()
-    .build("127.0.0.1:5134")
+  let mut latest = serai
+    .get_block(serai.get_latest_block_hash().await.unwrap())
     .await
     .unwrap()
-    .start(rpc)
-    .unwrap();
+    .unwrap()
+    .header()
+    .number();
 
-  let serai = Serai::new(URL).await.unwrap();
-  loop {
-    let latest = serai.get_latest_block_hash().await.unwrap();
-    let mut batches = serai.get_batch_events(latest).await.unwrap();
-    if batches.is_empty() {
-      sleep(Duration::from_millis(50)).await;
-      continue;
-    }
-    *done.lock().await = true;
+  let execution = serai.execute_batch(batch.clone()).unwrap();
+  serai.publish(&execution).await.unwrap();
 
-    for (index, update) in updates.iter().enumerate() {
-      if let Some(update) = update {
-        let coin_by_index = Coin(u32::try_from(index).unwrap() + 1);
+  // Get the block it was included in
+  let mut block;
+  let mut ticks = 0;
+  'get_block: loop {
+    latest += 1;
 
-        for expected in &update.batches {
-          match batches.swap_remove(0) {
-            InInstructionsEvent::Batch { coin, id } => {
-              assert_eq!(coin, coin_by_index);
-              assert_eq!(expected.id, id);
-            }
-            _ => panic!("get_batches returned non-batch"),
-          }
+    block = {
+      let mut block;
+      while {
+        block = serai.get_block_by_number(latest).await.unwrap();
+        block.is_none()
+      } {
+        sleep(Duration::from_secs(1)).await;
+        ticks += 1;
+
+        if ticks > 60 {
+          panic!("60 seconds without inclusion in a finalized block");
         }
-        assert_eq!(
-          serai.get_coin_block_number(coin_by_index, latest).await.unwrap(),
-          update.block_number
-        );
+      }
+      block.unwrap()
+    };
+
+    for extrinsic in block.extrinsics {
+      if extrinsic.0 == execution.0[2 ..] {
+        break 'get_block;
       }
     }
-    // This will fail if there were more batch events than expected
-    assert!(batches.is_empty());
-
-    handle.stop().unwrap();
-    handle.stopped().await;
-
-    return latest;
   }
+  let block = block.header.hash().into();
+
+  let batches = serai.get_batch_events(block).await.unwrap();
+  // TODO: impl From<Batch> for BatchEvent?
+  assert_eq!(
+    batches,
+    vec![InInstructionsEvent::Batch {
+      network: batch.batch.network,
+      id: batch.batch.id,
+      block: batch.batch.block,
+    }],
+  );
+
+  // TODO: Check the tokens events
+
+  block
 }
 
 #[macro_export]

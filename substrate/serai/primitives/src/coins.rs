@@ -10,7 +10,7 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 use serde::{Serialize, Deserialize};
 
 /// The type used to identify networks.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct NetworkId(pub u16);
 impl From<u16> for NetworkId {
@@ -24,7 +24,7 @@ pub const ETHEREUM_NET_ID: NetworkId = NetworkId(1);
 pub const MONERO_NET_ID: NetworkId = NetworkId(2);
 
 /// The type used to identify coins.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct Coin(pub u32);
 impl From<u32> for Coin {
