@@ -172,15 +172,20 @@ impl Extra {
   }
 
   #[rustfmt::skip]
-  pub(crate) fn fee_weight(outputs: usize, payment_id: bool, data: &[Vec<u8>]) -> usize {
+  pub(crate) fn fee_weight(
+    outputs: usize,
+    additional: bool,
+    payment_id: bool,
+    data: &[Vec<u8>]
+  ) -> usize {
     // PublicKey, key
     (1 + 32) +
     // PublicKeys, length, additional keys
-    (1 + 1 + (outputs.saturating_sub(1) * 32)) +
+    (if additional { 1 + 1 + (outputs * 32) } else { 0 }) +
     // PaymentId (Nonce), length, encrypted, ID
     (if payment_id { 1 + 1 + 1 + 8 } else { 0 }) +
-    // Nonce, length, data (if existent)
-    data.iter().map(|v| 1 + varint_len(v.len()) + v.len()).sum::<usize>()
+    // Nonce, length, ARBITRARY_DATA_MARKER, data
+    data.iter().map(|v| 1 + varint_len(1 + v.len()) + 1 + v.len()).sum::<usize>()
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {

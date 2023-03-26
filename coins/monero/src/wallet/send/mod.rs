@@ -337,7 +337,8 @@ impl SignableTransaction {
     has_payment_id |= outputs == 2;
 
     // Calculate the extra length
-    let extra = Extra::fee_weight(outputs, has_payment_id, data.as_ref());
+    // Assume additional keys are needed in order to cause a worst-case estimation
+    let extra = Extra::fee_weight(outputs, true, has_payment_id, data.as_ref());
 
     // https://github.com/monero-project/monero/pull/8733
     const MAX_EXTRA_SIZE: usize = 1060;
@@ -541,7 +542,7 @@ impl SignableTransaction {
     }
 
     // Include data if present
-    let extra_len = Extra::fee_weight(Rs_len, id.is_some(), data.as_ref());
+    let extra_len = Extra::fee_weight(Rs_len, additional, id.is_some(), data.as_ref());
     for part in data.drain(..) {
       let mut arb = vec![ARBITRARY_DATA_MARKER];
       arb.extend(part);
