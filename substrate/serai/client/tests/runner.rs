@@ -25,7 +25,7 @@ pub async fn provide_batch(batch: SignedBatch) -> [u8; 32] {
     .await
     .unwrap()
     .unwrap()
-    .header()
+    .header
     .number();
 
   let execution = serai.execute_batch(batch.clone()).unwrap();

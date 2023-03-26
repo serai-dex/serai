@@ -3,9 +3,9 @@ use sp_core::Pair as PairTrait;
 use sc_service::ChainType;
 
 use serai_runtime::{
-  primitives::*, tokens::primitives::ADDRESS as TOKENS_ADDRESS, tendermint::crypto::Public,
-  WASM_BINARY, opaque::SessionKeys, GenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
-  ValidatorSetsConfig, SessionConfig,
+  primitives::*, tokens::primitives::ADDRESS as TOKENS_ADDRESS, WASM_BINARY, opaque::SessionKeys,
+  BABE_GENESIS_EPOCH_CONFIG, GenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
+  ValidatorSetsConfig, SessionConfig, BabeConfig, GrandpaConfig, AuthorityDiscoveryConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
@@ -21,7 +21,11 @@ fn testnet_genesis(
 ) -> GenesisConfig {
   let session_key = |name| {
     let key = account_from_name(name);
-    (key, key, SessionKeys { tendermint: Public::from(key) })
+    (
+      key,
+      key,
+      SessionKeys { babe: key.into(), grandpa: key.into(), authority_discovery: key.into() },
+    )
   };
 
   GenesisConfig {
@@ -47,7 +51,6 @@ fn testnet_genesis(
       accounts: vec![],
     },
 
-    session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
     validator_sets: ValidatorSetsConfig {
       bond: Amount(1_000_000 * 10_u64.pow(8)),
       networks: vec![
@@ -57,6 +60,11 @@ fn testnet_genesis(
       ],
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },
+    session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
+    babe: BabeConfig { authorities: vec![], epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG) },
+    grandpa: GrandpaConfig { authorities: vec![] },
+
+    authority_discovery: AuthorityDiscoveryConfig { keys: vec![] },
   }
 }
 

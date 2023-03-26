@@ -28,6 +28,11 @@ wallet.
 - `processor`: A generic chain processor to process data for Serai and process
   events from Serai, executing transactions as expected and needed.
 
+- `tendermint`: An abstracted implementation of the Tendermint BFT algorithm,
+  planned to be used in our own micro-blockchain for temporal data needed to
+  coordinate the Serai validators, yet irrelevant to the Serai network as a
+  whole.
+
 - `substrate`: Substrate crates used to instantiate the Serai network.
 
 - `deploy`: Scripts to deploy a Serai node/test environment.

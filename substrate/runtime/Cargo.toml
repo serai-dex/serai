@@ -19,16 +19,22 @@ scale-info = { version = "2", default-features = false, features = ["derive"] }
 
 sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+sp-offchain = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-version = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-inherents = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-offchain = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+sp-authority-discovery = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 sp-transaction-pool = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-block-builder = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
-
-sp-tendermint = { path = "../tendermint/primitives", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -36,6 +42,8 @@ frame-executive = { git = "https://github.com/serai-dex/substrate", default-feat
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
 serai-primitives = { path = "../serai/primitives", default-features = false }
+
+pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-assets = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -46,7 +54,10 @@ in-instructions-pallet = { path = "../in-instructions/pallet", default-features 
 
 validator-sets-pallet = { path = "../validator-sets/pallet", default-features = false }
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
-pallet-tendermint = { path = "../tendermint/pallet", default-features = false }
+pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+pallet-authority-discovery = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -61,22 +72,30 @@ std = [
 
   "sp-core/std",
   "sp-std/std",
+
+  "sp-offchain/std",
   "sp-version/std",
   "sp-inherents/std",
-  "sp-offchain/std",
+
   "sp-session/std",
+  "sp-consensus-babe/std",
+  "sp-consensus-grandpa/std",
+
+  "sp-authority-discovery/std",
+
   "sp-transaction-pool/std",
   "sp-block-builder/std",
+
   "sp-runtime/std",
   "sp-api/std",
-
-  "sp-tendermint/std",
 
   "frame-system/std",
   "frame-support/std",
   "frame-executive/std",
 
   "serai-primitives/std",
+
+  "pallet-timestamp/std",
 
   "pallet-balances/std",
   "pallet-transaction-payment/std",
@@ -87,7 +106,10 @@ std = [
 
   "validator-sets-pallet/std",
   "pallet-session/std",
-  "pallet-tendermint/std",
+  "pallet-babe/std",
+  "pallet-grandpa/std",
+
+  "pallet-authority-discovery/std",
 
   "frame-system-rpc-runtime-api/std",
   "pallet-transaction-payment-rpc-runtime-api/std",
@@ -102,10 +124,13 @@ runtime-benchmarks = [
   "frame-support/runtime-benchmarks",
   "frame-benchmarking/runtime-benchmarks",
 
+  "pallet-timestamp/runtime-benchmarks",
+
   "pallet-balances/runtime-benchmarks",
   "pallet-assets/runtime-benchmarks",
 
-  "pallet-tendermint/runtime-benchmarks",
+	"pallet-babe/runtime-benchmarks",
+	"pallet-grandpa/runtime-benchmarks",
 ]
 
 default = ["std"]

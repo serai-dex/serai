@@ -2,7 +2,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use scale::{Encode, Decode};
+use scale::Encode;
 
 use sp_runtime::RuntimeDebug;
 
@@ -12,7 +12,7 @@ pub use in_instructions_primitives as primitives;
 use primitives::{InInstruction, InInstructionWithBalance, SignedBatch};
 
 #[derive(Clone, Copy, Encode, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Decode, thiserror::Error))]
+#[cfg_attr(feature = "std", derive(scale::Decode, thiserror::Error))]
 pub enum PalletError {
   #[cfg_attr(feature = "std", error("batch for unrecognized network"))]
   UnrecognizedNetwork,
@@ -42,7 +42,6 @@ pub mod pallet {
   }
 
   #[pallet::pallet]
-  #[pallet::generate_store(pub(crate) trait Store)]
   pub struct Pallet<T>(PhantomData<T>);
 
   // Latest block number agreed upon for a coin

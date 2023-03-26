@@ -1,42 +1,24 @@
-use std::{
-  error::Error,
-  boxed::Box,
-  sync::Arc,
-  time::{UNIX_EPOCH, SystemTime, Duration},
-  str::FromStr,
-};
+use std::{boxed::Box, sync::Arc};
 
-use sp_runtime::traits::{Block as BlockTrait};
-use sp_inherents::CreateInherentDataProviders;
-use sp_consensus::DisableProofRecording;
-use sp_api::ProvideRuntimeApi;
+use futures::stream::StreamExt;
+
+use sp_timestamp::InherentDataProvider as TimestampInherent;
+use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInherent};
 
 use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
-use sc_transaction_pool::FullPool;
-use sc_network::NetworkService;
+
+use sc_network_common::sync::warp::WarpSyncParams;
+use sc_network::{Event, NetworkEventStream};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
 use sc_client_api::BlockBackend;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
-pub(crate) use sc_tendermint::{
-  TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
-  TendermintSelectChain, import_queue,
-};
-use serai_runtime::{self as runtime, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
+use serai_runtime::{self as runtime, opaque::Block, RuntimeApi};
 
-type FullBackend = sc_service::TFullBackend<Block>;
-pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
-
-type PartialComponents = sc_service::PartialComponents<
-  FullClient,
-  FullBackend,
-  TendermintSelectChain<Block, FullBackend>,
-  sc_consensus::DefaultImportQueue<Block, FullClient>,
-  sc_transaction_pool::FullPool<Block, FullClient>,
-  Option<Telemetry>,
->;
+use sc_consensus_babe::{self, SlotProportion};
+use sc_consensus_grandpa as grandpa;
 
 pub struct ExecutorDispatch;
 impl NativeExecutionDispatch for ExecutorDispatch {
@@ -54,57 +36,36 @@ impl NativeExecutionDispatch for ExecutorDispatch {
   }
 }
 
-pub struct Cidp;
-#[async_trait::async_trait]
-impl CreateInherentDataProviders<Block, ()> for Cidp {
-  type InherentDataProviders = ();
-  async fn create_inherent_data_providers(
-    &self,
-    _: <Block as BlockTrait>::Hash,
-    _: (),
-  ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
-    Ok(())
-  }
+type FullBackend = sc_service::TFullBackend<Block>;
+pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
+
+type SelectChain = sc_consensus::LongestChain<FullBackend, Block>;
+type GrandpaBlockImport = grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, SelectChain>;
+type BabeBlockImport = sc_consensus_babe::BabeBlockImport<Block, FullClient, GrandpaBlockImport>;
+
+type PartialComponents = sc_service::PartialComponents<
+  FullClient,
+  FullBackend,
+  SelectChain,
+  sc_consensus::DefaultImportQueue<Block, FullClient>,
+  sc_transaction_pool::FullPool<Block, FullClient>,
+  (
+    BabeBlockImport,
+    sc_consensus_babe::BabeLink<Block>,
+    grandpa::LinkHalf<Block, FullClient, SelectChain>,
+    grandpa::SharedVoterState,
+    Option<Telemetry>,
+  ),
+>;
+
+fn create_inherent_data_providers(
+  slot_duration: SlotDuration,
+) -> (BabeInherent, TimestampInherent) {
+  let timestamp = TimestampInherent::from_system_time();
+  (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
 
-pub struct TendermintValidatorFirm;
-impl TendermintClientMinimal for TendermintValidatorFirm {
-  // TODO: This is passed directly to propose, which warns not to use the hard limit as finalize
-  // may grow the block. We don't use storage proofs and use the Executive finalize_block. Is that
-  // guaranteed not to grow the block?
-  const PROPOSED_BLOCK_SIZE_LIMIT: usize = { BLOCK_SIZE as usize };
-  // 3 seconds
-  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2) as u32 };
-  // 1 second
-  const LATENCY_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 3) as u32 };
-
-  type Block = Block;
-  type Backend = sc_client_db::Backend<Block>;
-  type Api = <FullClient as ProvideRuntimeApi<Block>>::Api;
-  type Client = FullClient;
-}
-
-impl TendermintValidator for TendermintValidatorFirm {
-  type CIDP = Cidp;
-  type Environment = sc_basic_authorship::ProposerFactory<
-    FullPool<Block, FullClient>,
-    Self::Backend,
-    Self::Client,
-    DisableProofRecording,
-  >;
-
-  type Network = Arc<NetworkService<Block, <Block as BlockTrait>::Hash>>;
-}
-
-pub fn new_partial(
-  config: &Configuration,
-) -> Result<(TendermintImport<TendermintValidatorFirm>, PartialComponents), ServiceError> {
-  debug_assert_eq!(TARGET_BLOCK_TIME, 6);
-
-  if config.keystore_remote.is_some() {
-    return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
-  }
-
+pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceError> {
   let telemetry = config
     .telemetry_endpoints
     .clone()
@@ -136,6 +97,8 @@ pub fn new_partial(
     telemetry
   });
 
+  let select_chain = sc_consensus::LongestChain::new(backend.clone());
+
   let transaction_pool = sc_transaction_pool::BasicPool::new_full(
     config.transaction_pool.clone(),
     config.role.is_authority().into(),
@@ -144,55 +107,69 @@ pub fn new_partial(
     client.clone(),
   );
 
-  let (authority, import_queue) = import_queue(
-    &task_manager.spawn_essential_handle(),
+  let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
+    &client,
+    select_chain.clone(),
+    telemetry.as_ref().map(Telemetry::handle),
+  )?;
+  let justification_import = grandpa_block_import.clone();
+
+  let (block_import, babe_link) = sc_consensus_babe::block_import(
+    sc_consensus_babe::configuration(&*client)?,
+    grandpa_block_import,
+    client.clone(),
+  )?;
+
+  let slot_duration = babe_link.config().slot_duration();
+  let import_queue = sc_consensus_babe::import_queue(
+    babe_link.clone(),
+    block_import.clone(),
+    Some(Box::new(justification_import)),
+    client.clone(),
+    select_chain.clone(),
+    move |_, _| async move { Ok(create_inherent_data_providers(slot_duration)) },
+    &task_manager.spawn_essential_handle(),
     config.prometheus_registry(),
-  );
+    telemetry.as_ref().map(Telemetry::handle),
+  )?;
 
-  let select_chain = TendermintSelectChain::new(backend.clone());
-
-  Ok((
-    authority,
-    sc_service::PartialComponents {
-      client,
-      backend,
-      task_manager,
-      import_queue,
-      keystore_container,
-      select_chain,
-      transaction_pool,
-      other: telemetry,
-    },
-  ))
+  Ok(sc_service::PartialComponents {
+    client,
+    backend,
+    task_manager,
+    keystore_container,
+    select_chain,
+    import_queue,
+    transaction_pool,
+    other: (block_import, babe_link, grandpa_link, grandpa::SharedVoterState::empty(), telemetry),
+  })
 }
 
 pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
-  let (
-    authority,
-    sc_service::PartialComponents {
-      client,
-      backend,
-      mut task_manager,
-      import_queue,
-      keystore_container,
-      select_chain: _,
-      other: mut telemetry,
-      transaction_pool,
-    },
-  ) = new_partial(&config)?;
+  let sc_service::PartialComponents {
+    client,
+    backend,
+    mut task_manager,
+    import_queue,
+    keystore_container,
+    select_chain,
+    transaction_pool,
+    other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
+  } = new_partial(&config)?;
 
-  let is_authority = config.role.is_authority();
-  let genesis = client.block_hash(0).unwrap().unwrap();
-  let tendermint_protocol = sc_tendermint::protocol_name(genesis, config.chain_spec.fork_id());
-  if is_authority {
-    config
-      .network
-      .extra_sets
-      .push(sc_tendermint::set_config(tendermint_protocol.clone(), BLOCK_SIZE.into()));
-  }
+  let publish_non_global_ips = config.network.allow_non_globals_in_dht;
+  let grandpa_protocol_name =
+    grandpa::protocol_standard_name(&client.block_hash(0).unwrap().unwrap(), &config.chain_spec);
 
-  let (network, system_rpc_tx, tx_handler_controller, network_starter) =
+  config.network.extra_sets.push(grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone()));
+  let warp_sync = Arc::new(grandpa::warp_proof::NetworkProvider::new(
+    backend.clone(),
+    grandpa_link.shared_authority_set().clone(),
+    vec![],
+  ));
+
+  let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
     sc_service::build_network(sc_service::BuildNetworkParams {
       config: &config,
       client: client.clone(),
@@ -200,7 +177,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
       spawn_handle: task_manager.spawn_handle(),
       import_queue,
       block_announce_validator_builder: None,
-      warp_sync_params: None,
+      warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
     })?;
 
   if config.offchain_worker.enabled {
@@ -212,7 +189,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     );
   }
 
-  let rpc_extensions_builder = {
+  let rpc_builder = {
     let client = client.clone();
     let pool = transaction_pool.clone();
 
@@ -226,48 +203,113 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     })
   };
 
-  let genesis_time = if config.chain_spec.id() != "devnet" {
-    UNIX_EPOCH + Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap())
-  } else {
-    SystemTime::now()
-  };
+  let enable_grandpa = !config.disable_grandpa;
+  let role = config.role.clone();
+  let force_authoring = config.force_authoring;
+  let name = config.network.node_name.clone();
+  let prometheus_registry = config.prometheus_registry().cloned();
 
-  let registry = config.prometheus_registry().cloned();
+  let keystore = keystore_container.keystore();
+
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-    network: network.clone(),
-    client: client.clone(),
-    keystore: keystore_container.sync_keystore(),
-    task_manager: &mut task_manager,
-    transaction_pool: transaction_pool.clone(),
-    rpc_builder: rpc_extensions_builder,
+    config,
     backend,
+    client: client.clone(),
+    keystore: keystore.clone(),
+    network: network.clone(),
+    rpc_builder,
+    transaction_pool: transaction_pool.clone(),
+    task_manager: &mut task_manager,
     system_rpc_tx,
     tx_handler_controller,
-    config,
+    sync_service: sync_service.clone(),
     telemetry: telemetry.as_mut(),
   })?;
 
-  if is_authority {
-    task_manager.spawn_essential_handle().spawn(
-      "tendermint",
-      None,
-      TendermintAuthority::new(
-        genesis_time,
-        tendermint_protocol,
-        authority,
-        keystore_container.keystore(),
-        Cidp,
-        task_manager.spawn_essential_handle(),
-        sc_basic_authorship::ProposerFactory::new(
-          task_manager.spawn_handle(),
-          client,
-          transaction_pool,
-          registry.as_ref(),
-          telemetry.map(|telemtry| telemtry.handle()),
-        ),
-        network,
-        None,
+  if let sc_service::config::Role::Authority { .. } = &role {
+    let slot_duration = babe_link.config().slot_duration();
+    let babe_config = sc_consensus_babe::BabeParams {
+      keystore: keystore.clone(),
+      client: client.clone(),
+      select_chain,
+      env: sc_basic_authorship::ProposerFactory::new(
+        task_manager.spawn_handle(),
+        client.clone(),
+        transaction_pool,
+        prometheus_registry.as_ref(),
+        telemetry.as_ref().map(Telemetry::handle),
       ),
+      block_import,
+      sync_oracle: sync_service.clone(),
+      justification_sync_link: sync_service.clone(),
+      create_inherent_data_providers: move |_, _| async move {
+        Ok(create_inherent_data_providers(slot_duration))
+      },
+      force_authoring,
+      backoff_authoring_blocks: None::<()>,
+      babe_link,
+      block_proposal_slot_portion: SlotProportion::new(0.5),
+      max_block_proposal_slot_portion: None,
+      telemetry: telemetry.as_ref().map(Telemetry::handle),
+    };
+
+    task_manager.spawn_essential_handle().spawn_blocking(
+      "babe-proposer",
+      Some("block-authoring"),
+      sc_consensus_babe::start_babe(babe_config)?,
+    );
+  }
+
+  if role.is_authority() {
+    task_manager.spawn_handle().spawn(
+      "authority-discovery-worker",
+      Some("networking"),
+      sc_authority_discovery::new_worker_and_service_with_config(
+        #[allow(clippy::field_reassign_with_default)]
+        {
+          let mut worker = sc_authority_discovery::WorkerConfig::default();
+          worker.publish_non_global_ips = publish_non_global_ips;
+          worker
+        },
+        client,
+        network.clone(),
+        Box::pin(network.event_stream("authority-discovery").filter_map(|e| async move {
+          match e {
+            Event::Dht(e) => Some(e),
+            _ => None,
+          }
+        })),
+        sc_authority_discovery::Role::PublishAndDiscover(keystore.clone()),
+        prometheus_registry.clone(),
+      )
+      .0
+      .run(),
+    );
+  }
+
+  if enable_grandpa {
+    task_manager.spawn_essential_handle().spawn_blocking(
+      "grandpa-voter",
+      None,
+      grandpa::run_grandpa_voter(grandpa::GrandpaParams {
+        config: grandpa::Config {
+          gossip_duration: std::time::Duration::from_millis(333),
+          justification_period: 512,
+          name: Some(name),
+          observer_enabled: false,
+          keystore: if role.is_authority() { Some(keystore) } else { None },
+          local_role: role,
+          telemetry: telemetry.as_ref().map(Telemetry::handle),
+          protocol_name: grandpa_protocol_name,
+        },
+        link: grandpa_link,
+        network,
+        sync: Arc::new(sync_service),
+        telemetry: telemetry.as_ref().map(Telemetry::handle),
+        voting_rule: grandpa::VotingRulesBuilder::default().build(),
+        prometheus_registry,
+        shared_voter_state,
+      })?,
     );
   }
 

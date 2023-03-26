@@ -12,6 +12,7 @@ use subxt::{
   error::Error as SubxtError,
   utils::Encoded,
   config::{
+    Header as HeaderTrait,
     substrate::{BlakeTwo256, SubstrateHeader},
     extrinsic_params::{BaseExtrinsicParams, BaseExtrinsicParamsBuilder},
   },
@@ -66,6 +67,8 @@ pub enum SeraiError {
   RpcError(SubxtError),
   #[error("serai-client library was intended for a different runtime version")]
   InvalidRuntime,
+  #[error("node is faulty")]
+  InvalidNode,
 }
 
 #[derive(Clone)]
@@ -123,6 +126,44 @@ impl Serai {
     Ok(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?.into())
   }
 
+  // There is no provided method for this
+  // TODO: Add one to Serai
+  pub async fn is_finalized(&self, header: &Header) -> Result<Option<bool>, SeraiError> {
+    // Get the latest finalized block
+    let finalized = self.get_latest_block_hash().await?.into();
+    // If the latest finalized block is this block, return true
+    if finalized == header.hash() {
+      return Ok(Some(true));
+    }
+
+    let Some(finalized) =
+      self.0.rpc().header(Some(finalized)).await.map_err(SeraiError::RpcError)? else {
+        return Ok(None);
+      };
+
+    // If the finalized block has a lower number, this block can't be finalized
+    if finalized.number() < header.number() {
+      return Ok(Some(false));
+    }
+
+    // This block, if finalized, comes before the finalized block
+    // If we request the hash of this block's number, Substrate will return the hash on the main
+    // chain
+    // If that hash is this hash, this block is finalized
+    let Some(hash) =
+      self
+        .0
+        .rpc()
+        .block_hash(Some(header.number().into()))
+        .await
+        .map_err(SeraiError::RpcError)? else {
+          // This is an error since there is a block at this index
+          return Err(SeraiError::InvalidNode);
+        };
+
+    Ok(Some(header.hash() == hash))
+  }
+
   pub async fn get_block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
     let Some(res) =
       self.0.rpc().block(Some(hash.into())).await.map_err(SeraiError::RpcError)? else {
@@ -130,8 +171,7 @@ impl Serai {
       };
 
     // Only return finalized blocks
-    let Some(justifications) = res.justifications.as_ref() else { return Ok(None); };
-    if justifications.is_empty() {
+    if self.is_finalized(&res.block.header).await? != Some(true) {
       return Ok(None);
     }
 
@@ -140,9 +180,9 @@ impl Serai {
 
   // Ideally, this would be get_block_hash, not get_block_by_number
   // Unfortunately, in order to only operate over only finalized data, we have to check the
-  // returned hash is for a finalized block. We can only do that by calling subxt's `block`, which
-  // will return the block and any justifications
-  // If we're already putting in all the work to get the block, we may as well just return it here
+  // returned hash is for a finalized block. We can only do that by calling the extensive
+  // is_finalized method, which at least requires the header
+  // In practice, the block is likely more useful than the header
   pub async fn get_block_by_number(&self, number: u64) -> Result<Option<Block>, SeraiError> {
     let Some(hash) =
       self.0.rpc().block_hash(Some(number.into())).await.map_err(SeraiError::RpcError)? else {

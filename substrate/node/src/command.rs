@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serai_runtime::Block;
 
 use sc_service::{PruningMode, PartialComponents};
@@ -9,7 +11,7 @@ use crate::{
   chain_spec,
   cli::{Cli, Subcommand},
   command_helper::{RemarkBuilder, inherent_benchmark_data},
-  service,
+  service::{self, FullClient},
 };
 
 impl SubstrateCli for Cli {
@@ -62,23 +64,23 @@ pub fn run() -> sc_cli::Result<()> {
 
     Some(Subcommand::CheckBlock(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?.1;
+        service::new_partial(&config)?;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
     Some(Subcommand::ExportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.1;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
       Ok((cmd.run(client, config.database), task_manager))
     }),
 
     Some(Subcommand::ExportState(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.1;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
       Ok((cmd.run(client, config.chain_spec), task_manager))
     }),
 
     Some(Subcommand::ImportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?.1;
+        service::new_partial(&config)?;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
@@ -87,15 +89,19 @@ pub fn run() -> sc_cli::Result<()> {
     }
 
     Some(Subcommand::Revert(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, backend, .. } =
-        service::new_partial(&config)?.1;
-      Ok((cmd.run(client, backend, None), task_manager))
+      let PartialComponents { client, task_manager, backend, .. } = service::new_partial(&config)?;
+      let aux_revert = Box::new(|client: Arc<FullClient>, backend, blocks| {
+        sc_consensus_babe::revert(client.clone(), backend, blocks)?;
+        sc_consensus_grandpa::revert(client, blocks)?;
+        Ok(())
+      });
+      Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
     }),
 
     Some(Subcommand::Benchmark(cmd)) => cli.create_runner(cmd)?.sync_run(|config| match cmd {
       BenchmarkCmd::Pallet(cmd) => cmd.run::<Block, service::ExecutorDispatch>(config),
 
-      BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.1.client),
+      BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.client),
 
       #[cfg(not(feature = "runtime-benchmarks"))]
       BenchmarkCmd::Storage(_) => {
@@ -104,12 +110,12 @@ pub fn run() -> sc_cli::Result<()> {
 
       #[cfg(feature = "runtime-benchmarks")]
       BenchmarkCmd::Storage(cmd) => {
-        let PartialComponents { client, backend, .. } = service::new_partial(&config)?.1;
+        let PartialComponents { client, backend, .. } = service::new_partial(&config)?;
         cmd.run(config, client, backend.expose_db(), backend.expose_storage())
       }
 
       BenchmarkCmd::Overhead(cmd) => {
-        let client = service::new_partial(&config)?.1.client;
+        let client = service::new_partial(&config)?.client;
         cmd.run(
           config,
           client.clone(),
@@ -120,7 +126,7 @@ pub fn run() -> sc_cli::Result<()> {
       }
 
       BenchmarkCmd::Extrinsic(cmd) => {
-        let client = service::new_partial(&config)?.1.client;
+        let client = service::new_partial(&config)?.client;
         cmd.run(
           client.clone(),
           inherent_benchmark_data()?,

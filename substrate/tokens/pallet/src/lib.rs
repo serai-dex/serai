@@ -34,7 +34,6 @@ pub mod pallet {
   }
 
   #[pallet::pallet]
-  #[pallet::generate_store(pub(crate) trait Store)]
   pub struct Pallet<T>(PhantomData<T>);
 
   impl<T: Config> Pallet<T> {

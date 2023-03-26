@@ -6,7 +6,7 @@ ADD common /serai/common
 ADD crypto /serai/crypto
 ADD coins /serai/coins
 ADD processor /serai/processor
-ADD contracts /serai/contracts
+ADD tendermint /serai/tendermint
 ADD substrate /serai/substrate
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai

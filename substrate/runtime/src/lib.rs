@@ -12,6 +12,8 @@ pub use serai_primitives as primitives;
 pub use frame_system as system;
 pub use frame_support as support;
 
+pub use pallet_timestamp as timestamp;
+
 pub use pallet_balances as balances;
 pub use pallet_transaction_payment as transaction_payment;
 
@@ -22,7 +24,10 @@ pub use in_instructions_pallet as in_instructions;
 pub use validator_sets_pallet as validator_sets;
 
 pub use pallet_session as session;
-pub use pallet_tendermint as tendermint;
+pub use pallet_babe as babe;
+pub use pallet_grandpa as grandpa;
+
+pub use pallet_authority_discovery as authority_discovery;
 
 // Actually used by the runtime
 use sp_core::OpaqueMetadata;
@@ -52,7 +57,9 @@ use support::{
 
 use transaction_payment::CurrencyAdapter;
 
-use session::PeriodicSessions;
+use babe::AuthorityId as BabeId;
+use grandpa::AuthorityId as GrandpaId;
+use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 
 /// An index to a block.
 pub type BlockNumber = u64;
@@ -74,7 +81,9 @@ pub mod opaque {
 
   impl_opaque_keys! {
     pub struct SessionKeys {
-      pub tendermint: Tendermint,
+      pub babe: Babe,
+      pub grandpa: Grandpa,
+      pub authority_discovery: AuthorityDiscovery,
     }
   }
 }
@@ -94,6 +103,11 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   state_version: 1,
 };
 
+#[cfg(feature = "std")]
+pub fn native_version() -> NativeVersion {
+  NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
+}
+
 // 1 MB
 pub const BLOCK_SIZE: u32 = 1024 * 1024;
 // 6 seconds
@@ -104,10 +118,13 @@ pub const MINUTES: BlockNumber = 60 / TARGET_BLOCK_TIME;
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-  NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
-}
+pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
+
+pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
+  sp_consensus_babe::BabeEpochConfiguration {
+    c: PRIMARY_PROBABILITY,
+    allowed_slots: sp_consensus_babe::AllowedSlots::PrimaryAndSecondaryPlainSlots,
+  };
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
@@ -122,14 +139,20 @@ parameter_types! {
     system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
   pub BlockWeights: system::limits::BlockWeights =
     system::limits::BlockWeights::with_sensible_defaults(
-      Weight::from_ref_time(2u64 * WEIGHT_REF_TIME_PER_SECOND).set_proof_size(u64::MAX),
+      Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
+
+  pub const MaxAuthorities: u32 = 100;
 }
 
 pub struct CallFilter;
 impl Contains<RuntimeCall> for CallFilter {
   fn contains(call: &RuntimeCall) -> bool {
+    if let RuntimeCall::Timestamp(call) = call {
+      return matches!(call, timestamp::Call::set { .. });
+    }
+
     if let RuntimeCall::Balances(call) = call {
       return matches!(call, balances::Call::transfer { .. } | balances::Call::transfer_all { .. });
     }
@@ -188,14 +211,29 @@ impl system::Config for Runtime {
   type MaxConsumers = support::traits::ConstU32<16>;
 }
 
+impl timestamp::Config for Runtime {
+  type Moment = u64;
+  type OnTimestampSet = Babe;
+  type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME * 1000) / 2 }>;
+  type WeightInfo = ();
+}
+
 impl balances::Config for Runtime {
-  type MaxLocks = ConstU32<50>;
-  type MaxReserves = ();
-  type ReserveIdentifier = [u8; 8];
-  type Balance = SubstrateAmount;
   type RuntimeEvent = RuntimeEvent;
+
+  type Balance = SubstrateAmount;
+
+  type ReserveIdentifier = ();
+  type HoldIdentifier = ();
+  type FreezeIdentifier = ();
+
+  type MaxLocks = ();
+  type MaxReserves = ();
+  type MaxHolds = ();
+  type MaxFreezes = ();
+
   type DustRemoval = ();
-  type ExistentialDeposit = ConstU64<500>;
+  type ExistentialDeposit = ConstU64<1>;
   type AccountStore = System;
   type WeightInfo = balances::weights::SubstrateWeight<Runtime>;
 }
@@ -248,8 +286,9 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-const SESSION_LENGTH: BlockNumber = 5 * DAYS;
-type Sessions = PeriodicSessions<ConstU64<{ SESSION_LENGTH }>, ConstU64<{ SESSION_LENGTH }>>;
+impl validator_sets::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
 
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
@@ -258,23 +297,49 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
   }
 }
 
-impl validator_sets::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
-
 impl session::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type ValidatorId = PublicKey;
   type ValidatorIdOf = IdentityValidatorIdOf;
-  type ShouldEndSession = Sessions;
-  type NextSessionRotation = Sessions;
-  type SessionManager = ();
+  type ShouldEndSession = Babe;
+  type NextSessionRotation = Babe;
+  type SessionManager = (); // TODO?
   type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
   type Keys = SessionKeys;
   type WeightInfo = session::weights::SubstrateWeight<Runtime>;
 }
 
-impl tendermint::Config for Runtime {}
+impl babe::Config for Runtime {
+  #[allow(clippy::identity_op)]
+  type EpochDuration = ConstU64<{ 1 * DAYS }>;
+  type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
+  type EpochChangeTrigger = pallet_babe::ExternalTrigger;
+  type DisabledValidators = Session;
+
+  type WeightInfo = ();
+
+  type MaxAuthorities = MaxAuthorities;
+
+  // TODO: Handle equivocation reports
+  type KeyOwnerProof = sp_core::Void;
+  type EquivocationReportSystem = ();
+}
+
+impl grandpa::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+
+  type WeightInfo = ();
+  type MaxAuthorities = MaxAuthorities;
+
+  // TODO: Handle equivocation reports
+  type MaxSetIdSessionEntries = ConstU64<0>;
+  type KeyOwnerProof = sp_core::Void;
+  type EquivocationReportSystem = ();
+}
+
+impl authority_discovery::Config for Runtime {
+  type MaxAuthorities = MaxAuthorities;
+}
 
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
@@ -307,6 +372,8 @@ construct_runtime!(
   {
     System: system,
 
+    Timestamp: timestamp,
+
     Balances: balances,
     TransactionPayment: transaction_payment,
 
@@ -317,7 +384,10 @@ construct_runtime!(
     ValidatorSets: validator_sets,
 
     Session: session,
-    Tendermint: tendermint,
+    Babe: babe,
+    Grandpa: grandpa,
+
+    AuthorityDiscovery: authority_discovery,
   }
 );
 
@@ -329,8 +399,15 @@ extern crate frame_benchmarking;
 mod benches {
   define_benchmarks!(
     [frame_benchmarking, BaselineBench::<Runtime>]
+
     [system, SystemBench::<Runtime>]
+
+    [pallet_timestamp, Timestamp]
+
     [balances, Balances]
+
+    [babe, Babe]
+    [grandpa, Grandpa]
   );
 }
 
@@ -352,6 +429,14 @@ sp_api::impl_runtime_apis! {
   impl sp_api::Metadata<Block> for Runtime {
     fn metadata() -> OpaqueMetadata {
       OpaqueMetadata::new(Runtime::metadata().into())
+    }
+
+    fn metadata_at_version(version: u32) -> Option<OpaqueMetadata> {
+      Runtime::metadata_at_version(version)
+    }
+
+    fn metadata_versions() -> sp_std::vec::Vec<u32> {
+      Runtime::metadata_versions()
     }
   }
 
@@ -404,13 +489,69 @@ sp_api::impl_runtime_apis! {
     }
   }
 
-  impl sp_tendermint::TendermintApi<Block> for Runtime {
-    fn current_session() -> u32 {
-      Tendermint::session()
+  impl sp_consensus_babe::BabeApi<Block> for Runtime {
+    fn configuration() -> sp_consensus_babe::BabeConfiguration {
+      use support::traits::Get;
+
+      let epoch_config = Babe::epoch_config().unwrap_or(BABE_GENESIS_EPOCH_CONFIG);
+      sp_consensus_babe::BabeConfiguration {
+        slot_duration: Babe::slot_duration(),
+        epoch_length: <Runtime as babe::Config>::EpochDuration::get(),
+        c: epoch_config.c,
+        authorities: Babe::authorities().to_vec(),
+        randomness: Babe::randomness(),
+        allowed_slots: epoch_config.allowed_slots,
+      }
     }
 
-    fn validators() -> Vec<PublicKey> {
-      Session::validators().drain(..).map(Into::into).collect()
+    fn current_epoch_start() -> sp_consensus_babe::Slot {
+      Babe::current_epoch_start()
+    }
+
+    fn current_epoch() -> sp_consensus_babe::Epoch {
+      Babe::current_epoch()
+    }
+
+    fn next_epoch() -> sp_consensus_babe::Epoch {
+      Babe::next_epoch()
+    }
+
+    fn generate_key_ownership_proof(
+      _: sp_consensus_babe::Slot,
+      _: BabeId,
+    ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
+      None
+    }
+
+    fn submit_report_equivocation_unsigned_extrinsic(
+      _: sp_consensus_babe::EquivocationProof<<Block as BlockT>::Header>,
+      _: sp_consensus_babe::OpaqueKeyOwnershipProof,
+    ) -> Option<()> {
+      None
+    }
+  }
+
+  impl sp_consensus_grandpa::GrandpaApi<Block> for Runtime {
+    fn grandpa_authorities() -> sp_consensus_grandpa::AuthorityList {
+      Grandpa::grandpa_authorities()
+    }
+
+    fn current_set_id() -> sp_consensus_grandpa::SetId {
+      Grandpa::current_set_id()
+    }
+
+    fn submit_report_equivocation_unsigned_extrinsic(
+      _: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
+      _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
+    ) -> Option<()> {
+      None
+    }
+
+    fn generate_key_ownership_proof(
+      _set_id: sp_consensus_grandpa::SetId,
+      _authority_id: GrandpaId,
+    ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
+      None
     }
   }
 
@@ -444,6 +585,12 @@ sp_api::impl_runtime_apis! {
 
     fn query_length_to_fee(length: u32) -> SubstrateAmount {
       TransactionPayment::length_to_fee(length)
+    }
+  }
+
+  impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
+    fn authorities() -> Vec<AuthorityDiscoveryId> {
+      AuthorityDiscovery::authorities()
     }
   }
 }

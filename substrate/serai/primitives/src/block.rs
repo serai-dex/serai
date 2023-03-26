@@ -10,7 +10,6 @@ use serde::{Serialize, Deserialize};
 use sp_core::H256;
 
 /// The type used to identify block numbers.
-// Doesn't re-export tendermint-machine's due to traits.
 #[derive(
   Clone, Copy, Default, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
