@@ -350,9 +350,8 @@ fn test_sqrt_m1() {
   // 2 ** ((MODULUS - 1) // 4) % MODULUS
   assert_eq!(
     SQRT_M1,
-    FieldElement::from(2u8).pow(FieldElement(
-      (FieldElement::zero() - FieldElement::one()).0.wrapping_div(&U256::from(4u8))
-    ))
+    FieldElement::from(2u8)
+      .pow(FieldElement((FieldElement::ZERO - FieldElement::ONE).0.wrapping_div(&U256::from(4u8))))
   );
 }
 

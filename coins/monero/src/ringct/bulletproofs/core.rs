@@ -80,8 +80,8 @@ pub(crate) fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, Scalar
       if j < sv.len() {
         bit = Choice::from((sv[j][i / 8] >> (i % 8)) & 1);
       }
-      aL.0[(j * N) + i] = Scalar::conditional_select(&Scalar::zero(), &Scalar::one(), bit);
-      aR.0[(j * N) + i] = Scalar::conditional_select(&-Scalar::one(), &Scalar::zero(), bit);
+      aL.0[(j * N) + i] = Scalar::conditional_select(&Scalar::ZERO, &Scalar::ONE, bit);
+      aR.0[(j * N) + i] = Scalar::conditional_select(&-Scalar::ONE, &Scalar::ZERO, bit);
     }
   }
 
@@ -129,7 +129,7 @@ lazy_static! {
 }
 
 pub(crate) fn challenge_products(w: &[Scalar], winv: &[Scalar]) -> Vec<Scalar> {
-  let mut products = vec![Scalar::zero(); 1 << w.len()];
+  let mut products = vec![Scalar::ZERO; 1 << w.len()];
   products[0] = winv[0];
   products[1] = w[0];
   for j in 1 .. w.len() {

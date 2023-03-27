@@ -105,13 +105,19 @@ pub enum DLEqError {
 
 /// A proof that points have the same discrete logarithm across generators.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub struct DLEqProof<G: PrimeGroup> {
+pub struct DLEqProof<G: PrimeGroup>
+where
+  G::Scalar: Zeroize,
+{
   c: G::Scalar,
   s: G::Scalar,
 }
 
 #[allow(non_snake_case)]
-impl<G: PrimeGroup> DLEqProof<G> {
+impl<G: PrimeGroup> DLEqProof<G>
+where
+  G::Scalar: Zeroize,
+{
   fn transcript<T: Transcript>(transcript: &mut T, generator: G, nonce: G, point: G) {
     transcript.append_message(b"generator", generator.to_bytes());
     transcript.append_message(b"nonce", nonce.to_bytes());
@@ -125,10 +131,7 @@ impl<G: PrimeGroup> DLEqProof<G> {
     transcript: &mut T,
     generators: &[G],
     scalar: &Zeroizing<G::Scalar>,
-  ) -> DLEqProof<G>
-  where
-    G::Scalar: Zeroize,
-  {
+  ) -> DLEqProof<G> {
     let r = Zeroizing::new(G::Scalar::random(rng));
 
     transcript.domain_separate(b"dleq");
@@ -210,14 +213,20 @@ impl<G: PrimeGroup> DLEqProof<G> {
 /// across some generators, yet with a smaller overall proof size.
 #[cfg(feature = "std")]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct MultiDLEqProof<G: PrimeGroup> {
+pub struct MultiDLEqProof<G: PrimeGroup>
+where
+  G::Scalar: Zeroize,
+{
   c: G::Scalar,
   s: Vec<G::Scalar>,
 }
 
 #[cfg(feature = "std")]
 #[allow(non_snake_case)]
-impl<G: PrimeGroup> MultiDLEqProof<G> {
+impl<G: PrimeGroup> MultiDLEqProof<G>
+where
+  G::Scalar: Zeroize,
+{
   /// Prove for each scalar that the series of points created by multiplying it against its
   /// matching generators share a discrete logarithm.
   /// This function panics if `generators.len() != scalars.len()`.
@@ -226,10 +235,7 @@ impl<G: PrimeGroup> MultiDLEqProof<G> {
     transcript: &mut T,
     generators: &[Vec<G>],
     scalars: &[Zeroizing<G::Scalar>],
-  ) -> MultiDLEqProof<G>
-  where
-    G::Scalar: Zeroize,
-  {
+  ) -> MultiDLEqProof<G> {
     assert_eq!(
       generators.len(),
       scalars.len(),

@@ -110,8 +110,8 @@ where
   test(&[], G::identity());
 
   // Test an multiexp of identity/zero elements is identity
-  test(&[(G::Scalar::zero(), G::generator())], G::identity());
-  test(&[(G::Scalar::one(), G::identity())], G::identity());
+  test(&[(G::Scalar::ZERO, G::generator())], G::identity());
+  test(&[(G::Scalar::ONE, G::identity())], G::identity());
 
   // Test a variety of multiexp sizes
   let mut pairs = Vec::with_capacity(1000);

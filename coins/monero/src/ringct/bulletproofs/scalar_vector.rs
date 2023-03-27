@@ -48,14 +48,14 @@ math_op!(Mul, mul, |(a, b): (&Scalar, &Scalar)| *a * *b);
 
 impl ScalarVector {
   pub(crate) fn new(len: usize) -> ScalarVector {
-    ScalarVector(vec![Scalar::zero(); len])
+    ScalarVector(vec![Scalar::ZERO; len])
   }
 
   pub(crate) fn powers(x: Scalar, len: usize) -> ScalarVector {
     debug_assert!(len != 0);
 
     let mut res = Vec::with_capacity(len);
-    res.push(Scalar::one());
+    res.push(Scalar::ONE);
     for i in 1 .. len {
       res.push(res[i - 1] * x);
     }

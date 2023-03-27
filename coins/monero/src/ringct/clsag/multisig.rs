@@ -304,7 +304,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     Ok(vec![
       (share, dfg::EdwardsPoint::generator()),
       (dfg::Scalar(interim.p), verification_share),
-      (-dfg::Scalar::one(), nonces[0][0]),
+      (-dfg::Scalar::ONE, nonces[0][0]),
     ])
   }
 }

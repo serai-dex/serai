@@ -38,8 +38,6 @@ macro_rules! field {
       iter::{Sum, Product},
     };
 
-    use rand_core::RngCore;
-
     use subtle::{Choice, CtOption, ConstantTimeEq, ConstantTimeLess, ConditionallySelectable};
     use rand_core::RngCore;
 

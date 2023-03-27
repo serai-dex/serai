@@ -252,6 +252,7 @@ pub struct AlgorithmSignMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
   seed: CachedPreprocess,
 
+  #[zeroize(skip)]
   commitments_challenge: <A::Transcript as Transcript>::Challenge,
   pub(crate) nonces: Vec<Nonce<C>>,
   // Skips the preprocess due to being too large a bound to feasibly enforce on users

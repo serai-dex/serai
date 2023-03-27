@@ -2,11 +2,11 @@ use zeroize::Zeroize;
 
 use sha2::Sha256;
 
-use group::ff::{Field, PrimeField};
+use group::ff::PrimeField;
 
 use elliptic_curve::{
   generic_array::GenericArray,
-  bigint::{CheckedAdd, Encoding, U384},
+  bigint::{NonZero, CheckedAdd, Encoding, U384},
   hash2curve::{Expander, ExpandMsg, ExpandMsgXmd},
 };
 
@@ -61,7 +61,7 @@ macro_rules! kp_curve {
         let mut modulus = [0; L];
         // The byte repr of scalars will be 32 big-endian bytes
         // Set the lower 32 bytes of our 48-byte array accordingly
-        modulus[16 ..].copy_from_slice(&(Self::F::zero() - Self::F::one()).to_bytes());
+        modulus[16 ..].copy_from_slice(&(Self::F::ZERO - Self::F::ONE).to_bytes());
         // Use a checked_add + unwrap since this addition cannot fail (being a 32-byte value with
         // 48-bytes of space)
         // While a non-panicking saturating_add/wrapping_add could be used, they'd likely be less
@@ -71,11 +71,12 @@ macro_rules! kp_curve {
         // The defined P-256 and secp256k1 ciphersuites both use expand_message_xmd
         let mut wide = U384::from_be_bytes({
           let mut bytes = [0; 48];
-          ExpandMsgXmd::<Sha256>::expand_message(&[msg], dst, 48).unwrap().fill_bytes(&mut bytes);
+          ExpandMsgXmd::<Sha256>::expand_message(&[msg], &[dst], 48)
+            .unwrap()
+            .fill_bytes(&mut bytes);
           bytes
         })
-        .reduce(&modulus)
-        .unwrap()
+        .rem(&NonZero::new(modulus).unwrap())
         .to_be_bytes();
 
         // Now that this has been reduced back to a 32-byte value, grab the lower 32-bytes

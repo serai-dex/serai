@@ -71,7 +71,7 @@ impl HramTrait<Secp256k1> for Hram {
     data.update(x(A));
     data.update(m);
 
-    Scalar::from_uint_reduced(U256::from_be_slice(&data.finalize()))
+    Scalar::reduce(U256::from_be_slice(&data.finalize()))
   }
 }
 

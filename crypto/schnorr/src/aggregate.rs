@@ -139,10 +139,16 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
 
 /// A signature aggregator capable of consuming signatures in order to produce an aggregate.
 #[allow(non_snake_case)]
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug)]
 pub struct SchnorrAggregator<C: Ciphersuite> {
   digest: DigestTranscript<C::H>,
   sigs: Vec<SchnorrSignature<C>>,
+}
+
+impl<C: Ciphersuite> Zeroize for SchnorrAggregator<C> {
+  fn zeroize(&mut self) {
+    self.sigs.zeroize();
+  }
 }
 
 impl<C: Ciphersuite> SchnorrAggregator<C> {
@@ -168,8 +174,7 @@ impl<C: Ciphersuite> SchnorrAggregator<C> {
       return None;
     }
 
-    let mut aggregate =
-      SchnorrAggregate { Rs: Vec::with_capacity(self.sigs.len()), s: C::F::ZERO };
+    let mut aggregate = SchnorrAggregate { Rs: Vec::with_capacity(self.sigs.len()), s: C::F::ZERO };
     for i in 0 .. self.sigs.len() {
       aggregate.Rs.push(self.sigs[i].R);
       aggregate.s += self.sigs[i].s * weight::<_, C::F>(&mut self.digest);
