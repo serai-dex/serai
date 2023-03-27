@@ -12,8 +12,6 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-hex-literal = { version = "0.3", optional = true }
-
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
@@ -116,8 +114,6 @@ std = [
 ]
 
 runtime-benchmarks = [
-  "hex-literal",
-
   "sp-runtime/runtime-benchmarks",
 
   "frame-system/runtime-benchmarks",

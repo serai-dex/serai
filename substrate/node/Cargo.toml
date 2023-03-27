@@ -12,8 +12,6 @@ publish = false
 name = "serai-node"
 
 [dependencies]
-async-trait = "0.1"
-
 clap = { version = "4", features = ["derive"] }
 
 futures = "0.3"
@@ -28,7 +26,6 @@ sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
 sp-api = { git = "https://github.com/serai-dex/substrate" }
 sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
-sp-consensus = { git = "https://github.com/serai-dex/substrate" }
 sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
 
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
@@ -41,18 +38,13 @@ sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
 sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
 sc-executor = { git = "https://github.com/serai-dex/substrate" }
 sc-service = { git = "https://github.com/serai-dex/substrate" }
-sc-client-db = { git = "https://github.com/serai-dex/substrate" }
 sc-client-api = { git = "https://github.com/serai-dex/substrate" }
 sc-network-common = { git = "https://github.com/serai-dex/substrate" }
 sc-network = { git = "https://github.com/serai-dex/substrate" }
+
 sc-consensus = { git = "https://github.com/serai-dex/substrate" }
-
 sc-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-babe-rpc = { git = "https://github.com/serai-dex/substrate" }
-
 sc-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-grandpa-rpc = { git = "https://github.com/serai-dex/substrate" }
-
 sc-authority-discovery = { git = "https://github.com/serai-dex/substrate" }
 
 sc-telemetry = { git = "https://github.com/serai-dex/substrate" }

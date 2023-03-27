@@ -7630,28 +7630,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-consensus-babe-rpc"
-version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#a4cb49764a438bc9066451ac5956ecf3e12de6de"
-dependencies = [
- "futures",
- "jsonrpsee",
- "sc-consensus-babe",
- "sc-consensus-epochs",
- "sc-rpc-api",
- "serde",
- "sp-api",
- "sp-application-crypto",
- "sp-blockchain",
- "sp-consensus",
- "sp-consensus-babe",
- "sp-core",
- "sp-keystore",
- "sp-runtime",
- "thiserror",
-]
-
-[[package]]
 name = "sc-consensus-epochs"
 version = "0.10.0-dev"
 source = "git+https://github.com/serai-dex/substrate#a4cb49764a438bc9066451ac5956ecf3e12de6de"
@@ -7701,26 +7679,6 @@ dependencies = [
  "sp-keystore",
  "sp-runtime",
  "substrate-prometheus-endpoint",
- "thiserror",
-]
-
-[[package]]
-name = "sc-consensus-grandpa-rpc"
-version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#a4cb49764a438bc9066451ac5956ecf3e12de6de"
-dependencies = [
- "finality-grandpa",
- "futures",
- "jsonrpsee",
- "log",
- "parity-scale-codec",
- "sc-client-api",
- "sc-consensus-grandpa",
- "sc-rpc",
- "serde",
- "sp-blockchain",
- "sp-core",
- "sp-runtime",
  "thiserror",
 ]
 
@@ -8730,7 +8688,6 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "clap 4.1.13",
  "frame-benchmarking",
  "frame-benchmarking-cli",
@@ -8741,12 +8698,9 @@ dependencies = [
  "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
- "sc-client-db",
  "sc-consensus",
  "sc-consensus-babe",
- "sc-consensus-babe-rpc",
  "sc-consensus-grandpa",
- "sc-consensus-grandpa-rpc",
  "sc-executor",
  "sc-network",
  "sc-network-common",
@@ -8759,7 +8713,6 @@ dependencies = [
  "sp-api",
  "sp-block-builder",
  "sp-blockchain",
- "sp-consensus",
  "sp-consensus-babe",
  "sp-core",
  "sp-inherents",
@@ -8793,7 +8746,6 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
- "hex-literal",
  "in-instructions-pallet",
  "pallet-assets",
  "pallet-authority-discovery",
