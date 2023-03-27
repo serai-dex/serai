@@ -22,18 +22,8 @@ volumes:
   serai-dave:
   serai-eve:
   serai-ferdie:
-  genesis-volume:
 
 services:
-  genesis:
-    image: genesis:dev
-    build:
-      context: ./genesis/
-      dockerfile: Dockerfile
-    entrypoint: /entry-dev.sh
-    volumes:
-      - genesis-volume:/temp
-
   _serai:
     &serai_defaults
     restart: unless-stopped
@@ -48,9 +38,6 @@ services:
     entrypoint: /scripts/entry-dev.sh
     volumes:
       - "./serai/scripts:/scripts"
-      - genesis-volume:/temp
-    depends_on:
-      - genesis
 
   serai-base:
     <<: *serai_defaults
