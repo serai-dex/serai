@@ -166,14 +166,14 @@ impl Field for FieldElement {
 impl PrimeField for FieldElement {
   type Repr = [u8; 32];
 
+  // Big endian representation of the modulus
   const MODULUS: &'static str = "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed";
 
   const NUM_BITS: u32 = 255;
   const CAPACITY: u32 = 254;
 
-  // TODO
   const TWO_INV: Self = FieldElement(U256::from_be_hex(
-    "0000000000000000000000000000000000000000000000000000000000000000",
+    "3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7",
   ));
 
   // This was calculated with the method from the ff crate docs
@@ -188,14 +188,14 @@ impl PrimeField for FieldElement {
   const ROOT_OF_UNITY: Self = FieldElement(U256::from_be_hex(
     "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
   ));
-  // TODO
   const ROOT_OF_UNITY_INV: Self = FieldElement(U256::from_be_hex(
-    "0000000000000000000000000000000000000000000000000000000000000000",
+    "547cdb7fb03e20f4d4b2ff66c2042858d0bce7f952d01b873b11e4d8b5f15f3d",
   ));
 
-  // TODO
+  // This was calculated via the formula from the ff crate docs
+  // Self::MULTIPLICATIVE_GENERATOR ** (2 ** Self::S)
   const DELTA: Self = FieldElement(U256::from_be_hex(
-    "0000000000000000000000000000000000000000000000000000000000000000",
+    "0000000000000000000000000000000000000000000000000000000000000010",
   ));
 
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
@@ -337,6 +337,20 @@ fn test_wide_modulus() {
   let mut wide = [0; 64];
   wide[.. 32].copy_from_slice(&MODULUS.to_le_bytes());
   assert_eq!(wide, WIDE_MODULUS.to_le_bytes());
+}
+
+#[test]
+fn test_inv_consts() {
+  assert_eq!(FieldElement::from(2u8).invert().unwrap(), FieldElement::TWO_INV);
+  assert_eq!(FieldElement::ROOT_OF_UNITY.invert().unwrap(), FieldElement::ROOT_OF_UNITY_INV);
+}
+
+#[test]
+fn test_delta() {
+  assert_eq!(
+    FieldElement::MULTIPLICATIVE_GENERATOR.pow(FieldElement::from(2u8).pow(FieldElement::S.into())),
+    FieldElement::DELTA
+  );
 }
 
 #[test]

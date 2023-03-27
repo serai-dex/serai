@@ -1,5 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![no_std]
+#![no_std] // Prevents writing new code, in what should be a simple wrapper, which requires std
 #![doc = include_str!("../README.md")]
 
 use core::{
@@ -300,9 +300,9 @@ impl PrimeField for Scalar {
   const NUM_BITS: u32 = 253;
   const CAPACITY: u32 = 252;
 
-  // TODO
   const TWO_INV: Scalar = Scalar(DScalar::from_bits([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    247, 233, 122, 46, 141, 49, 9, 44, 107, 206, 123, 81, 239, 124, 111, 10, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 8,
   ]));
 
   // This was calculated with the method from the ff crate docs
@@ -317,25 +317,26 @@ impl PrimeField for Scalar {
   const S: u32 = 2;
 
   // This was calculated via the formula from the ff crate docs
-  // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
+  // Self::MULTIPLICATIVE_GENERATOR ** ((modulus - 1) >> Self::S)
   const ROOT_OF_UNITY: Scalar = Scalar(DScalar::from_bits([
     212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
     96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
   ]));
-  // TODO
   const ROOT_OF_UNITY_INV: Scalar = Scalar(DScalar::from_bits([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    25, 204, 55, 113, 58, 237, 138, 153, 215, 24, 41, 96, 139, 163, 238, 5, 134, 61, 62, 84, 159,
+    146, 194, 130, 24, 126, 134, 31, 239, 140, 181, 6,
   ]));
 
-  // TODO
+  // This was calculated via the formula from the ff crate docs
+  // Self::MULTIPLICATIVE_GENERATOR ** (2 ** Self::S)
   const DELTA: Scalar = Scalar(DScalar::from_bits([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   ]));
 
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
-    // TODO: This unwrap_or isn't constant time, yet we don't exactly have an alternative...
-    CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(scalar.is_some()))
+    // TODO: This unwrap_or_else isn't constant time, yet we don't exactly have an alternative...
+    CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(black_box(scalar).is_some()))
   }
   fn to_repr(&self) -> [u8; 32] {
     self.0.to_bytes()
@@ -468,7 +469,10 @@ macro_rules! dalek_group {
         let decompressed = $DCompressed(*bytes).decompress();
         // TODO: Same note on unwrap_or as above
         let point = decompressed.unwrap_or($DPoint::identity());
-        CtOption::new($Point(point), choice(decompressed.is_some()) & choice($torsion_free(point)))
+        CtOption::new(
+          $Point(point),
+          choice(black_box(decompressed).is_some()) & choice($torsion_free(point)),
+        )
       }
 
       fn from_bytes_unchecked(bytes: &Self::Repr) -> CtOption<Self> {
@@ -531,6 +535,23 @@ dalek_group!(
 #[test]
 fn test_scalar_modulus() {
   assert_eq!(MODULUS.to_le_bytes(), curve25519_dalek::constants::BASEPOINT_ORDER.to_bytes());
+}
+
+#[test]
+fn test_inv_consts() {
+  assert_eq!(Scalar::from(2u8).invert().unwrap(), Scalar::TWO_INV);
+  assert_eq!(DScalar::from(2u8).invert(), Scalar::TWO_INV.0);
+
+  assert_eq!(Scalar::ROOT_OF_UNITY.invert().unwrap(), Scalar::ROOT_OF_UNITY_INV);
+  assert_eq!(Scalar::ROOT_OF_UNITY.0.invert(), Scalar::ROOT_OF_UNITY_INV.0);
+}
+
+#[test]
+fn test_delta() {
+  assert_eq!(
+    Scalar::MULTIPLICATIVE_GENERATOR.pow(Scalar::from(2u8).pow(Scalar::S.into())),
+    Scalar::DELTA
+  );
 }
 
 #[test]
