@@ -19,7 +19,7 @@ fn test_ecrecover() {
   const MESSAGE: &[u8] = b"Hello, World!";
   let (sig, recovery_id) = private
     .as_nonzero_scalar()
-    .try_sign_prehashed_rfc6979::<Sha256>(Keccak256::digest(MESSAGE), b"")
+    .try_sign_prehashed_rfc6979::<Sha256>(&Keccak256::digest(MESSAGE), b"")
     .unwrap();
   #[allow(clippy::unit_cmp)] // Intended to assert this wasn't changed to Result<bool>
   {
@@ -68,7 +68,7 @@ fn test_ecrecover_hack() {
   let group_key = keys[&Participant::new(1).unwrap()].group_key();
   let group_key_encoded = group_key.to_encoded_point(true);
   let group_key_compressed = group_key_encoded.as_ref();
-  let group_key_x = Scalar::from_uint_reduced(U256::from_be_slice(&group_key_compressed[1 .. 33]));
+  let group_key_x = Scalar::reduce(U256::from_be_slice(&group_key_compressed[1 .. 33]));
 
   const MESSAGE: &[u8] = b"Hello, World!";
   let hashed_message = keccak256(MESSAGE);

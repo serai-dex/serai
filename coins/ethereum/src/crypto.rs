@@ -2,7 +2,9 @@ use sha3::{Digest, Keccak256};
 
 use group::Group;
 use k256::{
-  elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, sec1::ToEncodedPoint, DecompressPoint},
+  elliptic_curve::{
+    bigint::ArrayEncoding, ops::Reduce, point::DecompressPoint, sec1::ToEncodedPoint,
+  },
   AffinePoint, ProjectivePoint, Scalar, U256,
 };
 
@@ -13,7 +15,7 @@ pub fn keccak256(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {
-  Scalar::from_uint_reduced(U256::from_be_slice(&keccak256(data)))
+  Scalar::reduce(U256::from_be_slice(&keccak256(data)))
 }
 
 pub fn address(point: &ProjectivePoint) -> [u8; 20] {
@@ -56,7 +58,7 @@ impl Hram<Secp256k1> for EthereumHram {
     let mut data = address(R).to_vec();
     data.append(&mut a_encoded);
     data.append(&mut m.to_vec());
-    Scalar::from_uint_reduced(U256::from_be_slice(&keccak256(&data)))
+    Scalar::reduce(U256::from_be_slice(&keccak256(&data)))
   }
 }
 
@@ -92,7 +94,7 @@ pub fn process_signature_for_contract(
 ) -> ProcessedSignature {
   let encoded_pk = A.to_encoded_point(true);
   let px = &encoded_pk.as_ref()[1 .. 33];
-  let px_scalar = Scalar::from_uint_reduced(U256::from_be_slice(px));
+  let px_scalar = Scalar::reduce(U256::from_be_slice(px));
   let e = EthereumHram::hram(R, A, &[chain_id.to_be_byte_array().as_slice(), &m].concat());
   ProcessedSignature {
     s,
