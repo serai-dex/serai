@@ -172,6 +172,7 @@ impl PrimeField for FieldElement {
   const NUM_BITS: u32 = 255;
   const CAPACITY: u32 = 254;
 
+  // 2.invert()
   const TWO_INV: Self = FieldElement(U256::from_be_hex(
     "3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7",
   ));
@@ -184,10 +185,11 @@ impl PrimeField for FieldElement {
   const S: u32 = 2;
 
   // This was calculated via the formula from the ff crate docs
-  // Self::multiplicative_generator() ** ((modulus - 1) >> Self::S)
+  // Self::MULTIPLICATIVE_GENERATOR ** ((modulus - 1) >> Self::S)
   const ROOT_OF_UNITY: Self = FieldElement(U256::from_be_hex(
     "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
   ));
+  // Self::ROOT_OF_UNITY.invert()
   const ROOT_OF_UNITY_INV: Self = FieldElement(U256::from_be_hex(
     "547cdb7fb03e20f4d4b2ff66c2042858d0bce7f952d01b873b11e4d8b5f15f3d",
   ));
