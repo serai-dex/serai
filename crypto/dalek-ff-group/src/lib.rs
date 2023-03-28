@@ -293,6 +293,7 @@ impl PrimeField for Scalar {
   const NUM_BITS: u32 = 253;
   const CAPACITY: u32 = 252;
 
+  // 2.invert()
   const TWO_INV: Scalar = Scalar(DScalar::from_bits([
     247, 233, 122, 46, 141, 49, 9, 44, 107, 206, 123, 81, 239, 124, 111, 10, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 8,
@@ -315,6 +316,7 @@ impl PrimeField for Scalar {
     212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
     96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
   ]));
+  // Self::ROOT_OF_UNITY.invert()
   const ROOT_OF_UNITY_INV: Scalar = Scalar(DScalar::from_bits([
     25, 204, 55, 113, 58, 237, 138, 153, 215, 24, 41, 96, 139, 163, 238, 5, 134, 61, 62, 84, 159,
     146, 194, 130, 24, 126, 134, 31, 239, 140, 181, 6,
