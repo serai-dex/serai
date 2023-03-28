@@ -14,7 +14,7 @@ runs:
       id: cache-bitcoind
       uses: actions/cache@v3
       with:
-        path: bitcoind
+        path: bitcoin.tar.gz
         key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
     - name: Download the Bitcoin Daemon
@@ -23,12 +23,15 @@ runs:
       run: |
         RUNNER_OS=linux
         RUNNER_ARCH=x86_64
+        FILE=bitcoin-${{ inputs.version }}-$RUNNER_ARCH-$RUNNER_OS-gnu.tar.gz
 
-        BASE=bitcoin-${{ inputs.version }}
-        FILE=$BASE-$RUNNER_ARCH-$RUNNER_OS-gnu.tar.gz
         wget https://bitcoincore.org/bin/bitcoin-core-${{ inputs.version }}/$FILE
-        tar xzvf $FILE
+        mv $FILE bitcoin.tar.gz
 
+    - name: Extract the Bitcoin Daemon
+      shell: bash
+      run: |
+        tar xzvf bitcoin.tar.gz
         cd bitcoin-${{ inputs.version }}
         sudo mv bin/* /bin && sudo mv lib/* /lib
 
