@@ -203,3 +203,15 @@ fn test_k256() {
 fn test_p256() {
   test_prime_group_bits::<_, p256::ProjectivePoint>(&mut rand_core::OsRng);
 }
+
+#[test]
+fn test_bls12_381() {
+  test_prime_group_bits::<_, bls12_381::G1Projective>(&mut rand_core::OsRng);
+  test_prime_group_bits::<_, bls12_381::G2Projective>(&mut rand_core::OsRng);
+}
+
+#[test]
+fn test_pallas_vesta() {
+  test_prime_group_bits::<_, pasta_curves::pallas::Point>(&mut rand_core::OsRng);
+  test_prime_group_bits::<_, pasta_curves::vesta::Point>(&mut rand_core::OsRng);
+}
