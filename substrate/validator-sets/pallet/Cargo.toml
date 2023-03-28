@@ -15,6 +15,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -25,6 +27,8 @@ validator-sets-primitives = { path = "../primitives", default-features = false }
 std = [
   "scale/std",
   "scale-info/std",
+
+  "sp-core/std",
 
   "frame-system/std",
   "frame-support/std",

@@ -10883,6 +10883,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
+ "sp-core",
  "validator-sets-primitives",
 ]
 

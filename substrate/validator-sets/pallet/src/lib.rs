@@ -5,6 +5,8 @@ pub mod pallet {
   use scale::{Encode, Decode};
   use scale_info::TypeInfo;
 
+  use sp_core::sr25519;
+
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
@@ -61,22 +63,28 @@ pub mod pallet {
     StorageMap<_, Twox64Concat, ValidatorSet, ValidatorSetData<T>, OptionQuery>;
 
   type Key = BoundedVec<u8, MaxKeyLen>;
+  // A validator set's key pair is defined as their Ristretto key, used for signing InInstructions,
+  // and their key on the external network
+  type KeyPair = (sr25519::Public, Key);
 
-  /// The key for a given validator set instance.
+  /// The key pair for a given validator set instance.
   #[pallet::storage]
   #[pallet::getter(fn key)]
-  pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, Key, OptionQuery>;
+  pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
 
-  /// If an account has voted for a specific key or not. Prevents them from voting multiple times.
+  /// If an account has voted for a specific key pair or not.
+  // This prevents a validator from voting multiple times.
   #[pallet::storage]
   #[pallet::getter(fn voted)]
-  pub type Voted<T: Config> = StorageMap<_, Blake2_128Concat, (T::AccountId, Key), (), OptionQuery>;
+  pub type Voted<T: Config> =
+    StorageMap<_, Blake2_128Concat, (T::AccountId, KeyPair), (), OptionQuery>;
 
-  /// How many times a key has been voted for. Once consensus is reached, the keys will be adopted.
+  /// How many times a key pair has been voted for. Once consensus is reached, the keys will be
+  /// adopted.
   #[pallet::storage]
   #[pallet::getter(fn vote_count)]
   pub type VoteCount<T: Config> =
-    StorageMap<_, Blake2_128Concat, (ValidatorSet, Key), u16, ValueQuery>;
+    StorageMap<_, Blake2_128Concat, (ValidatorSet, KeyPair), u16, ValueQuery>;
 
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
@@ -102,13 +110,13 @@ pub mod pallet {
     Vote {
       voter: T::AccountId,
       set: ValidatorSet,
-      key: Key,
+      key_pair: KeyPair,
       // Amount of votes the key now has
       votes: u16,
     },
     KeyGen {
       set: ValidatorSet,
-      key: Key,
+      key_pair: KeyPair,
     },
   }
 
@@ -128,7 +136,7 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
     #[pallet::weight(0)] // TODO
-    pub fn vote(origin: OriginFor<T>, network: NetworkId, key: Key) -> DispatchResult {
+    pub fn vote(origin: OriginFor<T>, network: NetworkId, key_pair: KeyPair) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       // TODO: Do we need to check the key is within the length bounds?
       // The docs suggest the BoundedVec will create/write, yet not read, which could be an issue
@@ -150,23 +158,23 @@ pub mod pallet {
       }
 
       // Confirm this signer hasn't already voted for these keys
-      if Voted::<T>::get((&signer, &key)).is_some() {
+      if Voted::<T>::get((&signer, &key_pair)).is_some() {
         Err(Error::<T>::AlreadyVoted)?;
       }
-      Voted::<T>::set((&signer, &key), Some(()));
+      Voted::<T>::set((&signer, &key_pair), Some(()));
 
       // Add their vote
-      let votes = VoteCount::<T>::mutate((set, &key), |value| {
+      let votes = VoteCount::<T>::mutate((set, &key_pair), |value| {
         *value += 1;
         *value
       });
 
-      Self::deposit_event(Event::Vote { voter: signer, set, key: key.clone(), votes });
+      Self::deposit_event(Event::Vote { voter: signer, set, key_pair: key_pair.clone(), votes });
 
       // If we've reached consensus, set the key
       if usize::try_from(votes).unwrap() == data.participants.len() {
-        Keys::<T>::set(set, Some(key.clone()));
-        Self::deposit_event(Event::KeyGen { set, key });
+        Keys::<T>::set(set, Some(key_pair.clone()));
+        Self::deposit_event(Event::KeyGen { set, key_pair });
       }
 
       Ok(())
