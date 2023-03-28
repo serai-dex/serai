@@ -1658,6 +1658,7 @@ dependencies = [
  "ff-group-tests",
  "group 0.13.0",
  "rand_core 0.6.4",
+ "rustversion",
  "sha2 0.9.9",
  "subtle",
  "zeroize",
@@ -1995,6 +1996,7 @@ dependencies = [
  "k256",
  "multiexp",
  "rand_core 0.6.4",
+ "rustversion",
  "thiserror",
  "zeroize",
 ]
@@ -2798,7 +2800,10 @@ dependencies = [
  "blake2",
  "digest 0.10.6",
  "merlin 3.0.0",
+ "rustversion",
  "sha2 0.10.6",
+ "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -5046,6 +5051,7 @@ dependencies = [
  "hex",
  "lazy_static",
  "rand_core 0.6.4",
+ "rustversion",
  "subtle",
  "zeroize",
 ]
@@ -5278,6 +5284,7 @@ dependencies = [
  "group 0.13.0",
  "k256",
  "rand_core 0.6.4",
+ "rustversion",
  "zeroize",
 ]
 

@@ -13,6 +13,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rustversion = "1"
+
 lazy_static = "1"
 
 rand_core = "0.6"
@@ -30,6 +32,3 @@ crypto-bigint = { version = "0.5", features = ["zeroize"] }
 hex = "0.4"
 
 ff-group-tests = { path = "../ff-group-tests" }
-
-[features]
-black_box = []

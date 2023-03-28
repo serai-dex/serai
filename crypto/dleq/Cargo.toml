@@ -12,6 +12,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rustversion = "1"
+
 thiserror = { version = "1", optional = true }
 rand_core = "0.6"
 
@@ -41,7 +43,6 @@ std = []
 serialize = ["std"]
 
 # Needed for cross-group DLEqs
-black_box = []
 secure_capacity_difference = []
 experimental = ["std", "thiserror", "multiexp"]
 

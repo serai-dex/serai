@@ -38,14 +38,11 @@ use group::{
 mod field;
 pub use field::FieldElement;
 
-// Feature gated due to MSRV requirements
-#[cfg(feature = "black_box")]
-pub(crate) fn black_box<T>(val: T) -> T {
-  core::hint::black_box(val)
-}
-
-#[cfg(not(feature = "black_box"))]
-pub(crate) fn black_box<T>(val: T) -> T {
+// Use black_box when possible
+#[rustversion::since(1.66)]
+use core::hint::black_box;
+#[rustversion::before(1.66)]
+fn black_box<T>(val: T) -> T {
   val
 }
 

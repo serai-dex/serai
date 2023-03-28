@@ -13,6 +13,11 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rustversion = "1"
+
+subtle = "^2.4"
+zeroize = "^1.5"
+
 digest = "0.10"
 
 blake2 = { version = "0.10", optional = true }
