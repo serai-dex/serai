@@ -106,7 +106,7 @@ impl<C: Curve> Algorithm<C> for MultiNonce<C> {
     self.nonces = Some(nonce_sums.to_vec());
 
     // Sum the nonces so we can later check they actually have a relationship to nonce_sums
-    let mut res = C::F::zero();
+    let mut res = C::F::ZERO;
 
     // Weight each nonce
     // This is probably overkill, since their unweighted forms would practically still require

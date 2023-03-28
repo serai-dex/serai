@@ -1,6 +1,6 @@
 [package]
 name = "ff-group-tests"
-version = "0.12.2"
+version = "0.13.0"
 description = "A collection of sanity tests for implementors of ff/group APIs"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ff-group-tests"
@@ -14,8 +14,15 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rand_core = "0.6"
-group = "0.12"
+
+subtle = "^2.4"
+
+group = "0.13"
 
 [dev-dependencies]
-k256 = { version = "0.12", features = ["bits"] }
-p256 = { version = "0.12", features = ["bits"] }
+k256 = { version = "0.13", features = ["bits"] }
+p256 = { version = "0.13", features = ["bits"] }
+
+bls12_381 = "0.8"
+
+pasta_curves = "0.5"

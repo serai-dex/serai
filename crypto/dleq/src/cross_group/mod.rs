@@ -269,15 +269,15 @@ where
       SchnorrPoK::<G1>::prove(rng, transcript, generators.1.primary, &f.1),
     );
 
-    let mut blinding_key_total = (G0::Scalar::zero(), G1::Scalar::zero());
+    let mut blinding_key_total = (G0::Scalar::ZERO, G1::Scalar::ZERO);
     let mut blinding_key = |rng: &mut R, last| {
       let blinding_key = (
         Self::blinding_key(&mut *rng, &mut blinding_key_total.0, last),
         Self::blinding_key(&mut *rng, &mut blinding_key_total.1, last),
       );
       if last {
-        debug_assert_eq!(blinding_key_total.0, G0::Scalar::zero());
-        debug_assert_eq!(blinding_key_total.1, G1::Scalar::zero());
+        debug_assert_eq!(blinding_key_total.0, G0::Scalar::ZERO);
+        debug_assert_eq!(blinding_key_total.1, G1::Scalar::ZERO);
       }
       blinding_key
     };

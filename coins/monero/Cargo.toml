@@ -30,7 +30,7 @@ sha3 = "0.10"
 
 curve25519-dalek = { version = "^3.2", features = ["std"] }
 
-group = "0.12"
+group = "0.13"
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3" }
 multiexp = { path = "../../crypto/multiexp", version = "0.3", features = ["batch"] }
 

@@ -28,7 +28,7 @@ pub(crate) fn sign<C: Ciphersuite>() {
 // This verifies invalid signatures don't pass, using zero signatures, which should effectively be
 // random
 pub(crate) fn verify<C: Ciphersuite>() {
-  assert!(!SchnorrSignature::<C> { R: C::G::identity(), s: C::F::zero() }
+  assert!(!SchnorrSignature::<C> { R: C::G::identity(), s: C::F::ZERO }
     .verify(C::generator() * C::random_nonzero_F(&mut OsRng), C::random_nonzero_F(&mut OsRng)));
 }
 
@@ -62,10 +62,10 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
     let mut batch = BatchVerifier::new(5);
     for (i, mut sig) in sigs.clone().drain(..).enumerate() {
       if i == 1 {
-        sig.s += C::F::one();
+        sig.s += C::F::ONE;
       }
       if i == 2 {
-        sig.s -= C::F::one();
+        sig.s -= C::F::ONE;
       }
       sig.batch_verify(&mut OsRng, &mut batch, i, C::generator() * keys[i].deref(), challenges[i]);
     }

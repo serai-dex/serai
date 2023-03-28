@@ -21,8 +21,8 @@ digest = "0.10"
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3" }
 
-ff = "0.12"
-group = "0.12"
+ff = "0.13"
+group = "0.13"
 
 multiexp = { path = "../multiexp", version = "0.3", features = ["batch"], optional = true }
 
@@ -31,7 +31,7 @@ hex-literal = "0.3"
 
 blake2 = "0.10"
 
-k256 = { version = "0.12", features = ["arithmetic", "bits"] }
+k256 = { version = "0.13", features = ["arithmetic", "bits"] }
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"] }

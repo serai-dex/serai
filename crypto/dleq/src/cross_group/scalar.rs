@@ -18,8 +18,8 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   #[cfg(feature = "secure_capacity_difference")]
   assert!((F0::CAPACITY.max(F1::CAPACITY) - mutual_capacity) <= 4);
 
-  let mut res1 = F0::zero();
-  let mut res2 = F1::zero();
+  let mut res1 = F0::ZERO;
+  let mut res2 = F1::ZERO;
   // Uses the bits API to ensure a consistent endianess
   let mut bits = scalar.to_le_bits();
   scalar.zeroize();
@@ -66,7 +66,7 @@ pub fn mutual_scalar_from_bytes<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits
   let capacity = usize::try_from(F0::CAPACITY.min(F1::CAPACITY)).unwrap();
   debug_assert!((bytes.len() * 8) >= capacity);
 
-  let mut accum = F0::zero();
+  let mut accum = F0::ZERO;
   for b in 0 .. capacity {
     accum = accum.double();
     accum += F0::from(((bytes[b / 8] >> (b % 8)) & 1).into());

@@ -79,7 +79,7 @@ pub trait Ciphersuite:
     let mut res;
     while {
       res = Self::F::random(&mut *rng);
-      res.ct_eq(&Self::F::zero()).into()
+      res.ct_eq(&Self::F::ZERO).into()
     } {}
     res
   }

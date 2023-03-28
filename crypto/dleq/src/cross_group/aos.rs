@@ -42,7 +42,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> Re<G0, G1> {
   }
 
   pub(crate) fn e_default() -> Re<G0, G1> {
-    Re::e(G0::Scalar::zero())
+    Re::e(G0::Scalar::ZERO)
   }
 }
 
@@ -114,7 +114,7 @@ where
     debug_assert!((RING_LEN == 2) || (RING_LEN == 4));
     debug_assert_eq!(RING_LEN, ring.len());
 
-    let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
+    let mut s = [(G0::Scalar::ZERO, G1::Scalar::ZERO); RING_LEN];
 
     let mut r = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
     #[allow(non_snake_case)]
@@ -178,8 +178,8 @@ where
 
         let mut statements =
           Self::R_batch(generators, *self.s.last().unwrap(), *ring.last().unwrap(), e);
-        statements.0.push((G0::Scalar::one(), R0_0));
-        statements.1.push((G1::Scalar::one(), R1_0));
+        statements.0.push((G0::Scalar::ONE, R0_0));
+        statements.1.push((G1::Scalar::ONE, R1_0));
         batch.0.queue(&mut *rng, (), statements.0);
         batch.1.queue(&mut *rng, (), statements.1);
       }
@@ -239,7 +239,7 @@ where
       Re::e(ref mut e) => *e = read_scalar(r)?,
     }
 
-    let mut s = [(G0::Scalar::zero(), G1::Scalar::zero()); RING_LEN];
+    let mut s = [(G0::Scalar::ZERO, G1::Scalar::ZERO); RING_LEN];
     for s in s.iter_mut() {
       *s = (read_scalar(r)?, read_scalar(r)?);
     }

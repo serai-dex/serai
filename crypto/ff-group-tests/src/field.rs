@@ -1,109 +1,183 @@
 use rand_core::RngCore;
+use subtle::Choice;
 use group::ff::Field;
 
 /// Perform basic tests on equality.
 pub fn test_eq<F: Field>() {
-  let zero = F::zero();
-  let one = F::one();
+  let zero = F::ZERO;
+  let one = F::ONE;
 
   assert!(zero != one, "0 == 1");
   assert!(!bool::from(zero.ct_eq(&one)), "0 ct_eq 1");
 
-  assert_eq!(zero, F::zero(), "0 != 0");
-  assert!(bool::from(zero.ct_eq(&F::zero())), "0 !ct_eq 0");
+  assert_eq!(zero, F::ZERO, "0 != 0");
+  assert!(bool::from(zero.ct_eq(&F::ZERO)), "0 !ct_eq 0");
 
-  assert_eq!(one, F::one(), "1 != 1");
-  assert!(bool::from(one.ct_eq(&F::one())), "1 !ct_eq 1");
+  assert_eq!(one, F::ONE, "1 != 1");
+  assert!(bool::from(one.ct_eq(&F::ONE)), "1 !ct_eq 1");
 }
 
 /// Verify conditional selection works. Doesn't verify it's actually constant time.
 pub fn test_conditional_select<F: Field>() {
-  let zero = F::zero();
-  let one = F::one();
+  let zero = F::ZERO;
+  let one = F::ONE;
   assert_eq!(F::conditional_select(&zero, &one, 0.into()), zero, "couldn't select when false");
   assert_eq!(F::conditional_select(&zero, &one, 1.into()), one, "couldn't select when true");
 }
 
 /// Perform basic tests on addition.
 pub fn test_add<F: Field>() {
-  assert_eq!(F::zero() + F::zero(), F::zero(), "0 + 0 != 0");
-  assert_eq!(F::zero() + F::one(), F::one(), "0 + 1 != 1");
-  assert_eq!(F::one() + F::zero(), F::one(), "1 + 0 != 1");
+  assert_eq!(F::ZERO + F::ZERO, F::ZERO, "0 + 0 != 0");
+  assert_eq!(F::ZERO + F::ONE, F::ONE, "0 + 1 != 1");
+  assert_eq!(F::ONE + F::ZERO, F::ONE, "1 + 0 != 1");
   // Only PrimeField offers From<u64>
   // Accordingly, we assume either double or addition is correct
   // They either have to be matchingly correct or matchingly incorrect, yet we can't
   // reliably determine that here
-  assert_eq!(F::one() + F::one(), F::one().double(), "1 + 1 != 2");
+  assert_eq!(F::ONE + F::ONE, F::ONE.double(), "1 + 1 != 2");
+}
+
+/// Perform basic tests on sum.
+pub fn test_sum<F: Field>() {
+  assert_eq!((&[] as &[F]).iter().sum::<F>(), F::ZERO, "[].sum() != 0");
+  assert_eq!([F::ZERO].iter().sum::<F>(), F::ZERO, "[0].sum() != 0");
+  assert_eq!([F::ONE].iter().sum::<F>(), F::ONE, "[1].sum() != 1");
+
+  let two = F::ONE + F::ONE;
+  assert_eq!([F::ONE, F::ONE].iter().sum::<F>(), two, "[1, 1].sum() != 2");
+  assert_eq!([two, F::ONE].iter().sum::<F>(), two + F::ONE, "[2, 1].sum() != 3");
+  assert_eq!([two, F::ZERO, F::ONE].iter().sum::<F>(), two + F::ONE, "[2, 0, 1].sum() != 3");
 }
 
 /// Perform basic tests on subtraction.
 pub fn test_sub<F: Field>() {
-  assert_eq!(F::zero() - F::zero(), F::zero(), "0 - 0 != 0");
-  assert_eq!(F::one() - F::zero(), F::one(), "1 - 0 != 1");
-  assert_eq!(F::one() - F::one(), F::zero(), "1 - 1 != 0");
+  #[allow(clippy::eq_op)]
+  let expr = F::ZERO - F::ZERO;
+  assert_eq!(expr, F::ZERO, "0 - 0 != 0");
+  assert_eq!(F::ONE - F::ZERO, F::ONE, "1 - 0 != 1");
+  #[allow(clippy::eq_op)]
+  let expr = F::ONE - F::ONE;
+  assert_eq!(expr, F::ZERO, "1 - 1 != 0");
 }
 
 /// Perform basic tests on negation.
 pub fn test_neg<F: Field>() {
-  assert_eq!(-F::zero(), F::zero(), "-0 != 0");
-  assert_eq!(-(-F::one()), F::one(), "-(-1) != 1");
-  assert_eq!(F::one() + (-F::one()), F::zero(), "1 + -1 != 0");
-  assert_eq!(F::one() - (-F::one()), F::one().double(), "1 - -1 != 2");
+  assert_eq!(-F::ZERO, F::ZERO, "-0 != 0");
+  assert_eq!(-(-F::ONE), F::ONE, "-(-1) != 1");
+  assert_eq!(F::ONE + (-F::ONE), F::ZERO, "1 + -1 != 0");
+  assert_eq!(F::ONE - (-F::ONE), F::ONE.double(), "1 - -1 != 2");
 }
 
 /// Perform basic tests on multiplication.
 pub fn test_mul<F: Field>() {
-  assert_eq!(F::zero() * F::zero(), F::zero(), "0 * 0 != 0");
-  assert_eq!(F::one() * F::zero(), F::zero(), "1 * 0 != 0");
-  assert_eq!(F::one() * F::one(), F::one(), "1 * 1 != 1");
-  let two = F::one().double();
-  assert_eq!(two * (two + F::one()), two + two + two, "2 * 3 != 6");
+  assert_eq!(F::ZERO * F::ZERO, F::ZERO, "0 * 0 != 0");
+  assert_eq!(F::ONE * F::ZERO, F::ZERO, "1 * 0 != 0");
+  assert_eq!(F::ONE * F::ONE, F::ONE, "1 * 1 != 1");
+  let two = F::ONE.double();
+  assert_eq!(two * (two + F::ONE), two + two + two, "2 * 3 != 6");
+}
+
+/// Perform basic tests on product.
+pub fn test_product<F: Field>() {
+  assert_eq!((&[] as &[F]).iter().product::<F>(), F::ONE, "[].product() != 1");
+  assert_eq!([F::ZERO].iter().product::<F>(), F::ZERO, "[0].product() != 0");
+  assert_eq!([F::ONE].iter().product::<F>(), F::ONE, "[1].product() != 1");
+
+  assert_eq!([F::ONE, F::ONE].iter().product::<F>(), F::ONE, "[1, 1].product() != 2");
+  let two = F::ONE + F::ONE;
+  assert_eq!([two, F::ONE].iter().product::<F>(), two, "[2, 1].product() != 2");
+  assert_eq!([two, two].iter().product::<F>(), two + two, "[2, 2].product() != 4");
+  assert_eq!([two, two, F::ONE].iter().product::<F>(), two + two, "[2, 2, 1].product() != 4");
+  assert_eq!([two, F::ZERO, F::ONE].iter().product::<F>(), F::ZERO, "[2, 0, 1].product() != 0");
 }
 
 /// Perform basic tests on the square function.
 pub fn test_square<F: Field>() {
-  assert_eq!(F::zero().square(), F::zero(), "0^2 != 0");
-  assert_eq!(F::one().square(), F::one(), "1^2 != 1");
-  let two = F::one().double();
+  assert_eq!(F::ZERO.square(), F::ZERO, "0^2 != 0");
+  assert_eq!(F::ONE.square(), F::ONE, "1^2 != 1");
+  let two = F::ONE.double();
   assert_eq!(two.square(), two + two, "2^2 != 4");
-  let three = two + F::one();
+  let three = two + F::ONE;
   assert_eq!(three.square(), three * three, "3^2 != 9");
 }
 
 /// Perform basic tests on the invert function.
 pub fn test_invert<F: Field>() {
-  assert!(bool::from(F::zero().invert().is_none()), "0.invert() is some");
-  assert_eq!(F::one().invert().unwrap(), F::one(), "1.invert() != 1");
+  assert!(bool::from(F::ZERO.invert().is_none()), "0.invert() is some");
+  assert_eq!(F::ONE.invert().unwrap(), F::ONE, "1.invert() != 1");
 
-  let two = F::one().double();
-  let three = two + F::one();
+  let two = F::ONE.double();
+  let three = two + F::ONE;
   assert_eq!(two * three.invert().unwrap() * three, two, "2 * 3.invert() * 3 != 2");
 }
 
-/// Perform basic tests on the sqrt function.
+/// Perform basic tests on the sqrt functions.
 pub fn test_sqrt<F: Field>() {
-  assert_eq!(F::zero().sqrt().unwrap(), F::zero(), "sqrt(0) != 0");
-  assert_eq!(F::one().sqrt().unwrap(), F::one(), "sqrt(1) != 1");
+  assert_eq!(F::ZERO.sqrt().unwrap(), F::ZERO, "sqrt(0) != 0");
+  assert!(
+    (F::ONE.sqrt().unwrap() == F::ONE) || (F::ONE.sqrt().unwrap() == -F::ONE),
+    "sqrt(1) != 1"
+  );
 
-  let mut has_root = F::one().double();
+  let mut has_root = F::ONE.double();
   while bool::from(has_root.sqrt().is_none()) {
-    has_root += F::one();
+    has_root += F::ONE;
   }
+
+  // The following code doesn't assume which root is returned, yet it does assume a consistent root
+  // is returned
   let root = has_root.sqrt().unwrap();
   assert_eq!(root * root, has_root, "sqrt(x)^2 != x");
+
+  let check = |value: (_, _), expected: (_, F), msg| {
+    assert_eq!(bool::from(value.0), bool::from(expected.0), "{}", msg);
+    assert!((value.1 == expected.1) || (value.1 == -expected.1), "{}", msg);
+  };
+  check(
+    F::sqrt_ratio(&has_root, &F::ONE),
+    (Choice::from(1), root),
+    "sqrt_ratio didn't return the root with a divisor of 1",
+  );
+  check(
+    F::sqrt_ratio(&(has_root * F::ONE.double()), &F::ONE.double()),
+    (Choice::from(1), root),
+    "sqrt_ratio didn't return the root with a divisor of 2",
+  );
+
+  check(F::sqrt_alt(&F::ZERO), F::sqrt_ratio(&F::ZERO, &F::ONE), "sqrt_alt(0) != sqrt_ratio(0, 1)");
+  check(F::sqrt_alt(&F::ONE), F::sqrt_ratio(&F::ONE, &F::ONE), "sqrt_alt(1) != sqrt_ratio(1, 1)");
+  check(F::sqrt_alt(&has_root), (Choice::from(1), root), "sqrt_alt(square) != (1, root)");
+
+  // Check 0 divisors are properly implemented
+  check(
+    F::sqrt_ratio(&has_root, &F::ZERO),
+    (Choice::from(0), F::ZERO),
+    "sqrt_ratio didn't return the right value for a 0 divisor",
+  );
+
+  // Check non-squares are appropriately marked
+  let mut no_root = has_root + F::ONE;
+  while bool::from(no_root.sqrt().is_some()) {
+    no_root += F::ONE;
+  }
+  assert!(
+    !bool::from(F::sqrt_ratio(&no_root, &F::ONE).0),
+    "sqrt_ratio claimed non-square had root"
+  );
+  assert!(!bool::from(F::sqrt_alt(&no_root).0), "sqrt_alt claimed non-square had root");
 }
 
 /// Perform basic tests on the is_zero functions.
 pub fn test_is_zero<F: Field>() {
-  assert!(bool::from(F::zero().is_zero()), "0 is not 0");
-  assert!(F::zero().is_zero_vartime(), "0 is not 0");
+  assert!(bool::from(F::ZERO.is_zero()), "0 is not 0");
+  assert!(F::ZERO.is_zero_vartime(), "0 is not 0");
 }
 
 /// Perform basic tests on the cube function.
 pub fn test_cube<F: Field>() {
-  assert_eq!(F::zero().cube(), F::zero(), "0^3 != 0");
-  assert_eq!(F::one().cube(), F::one(), "1^3 != 1");
-  let two = F::one().double();
+  assert_eq!(F::ZERO.cube(), F::ZERO, "0^3 != 0");
+  assert_eq!(F::ONE.cube(), F::ONE, "1^3 != 1");
+  let two = F::ONE.double();
   assert_eq!(two.cube(), two * two * two, "2^3 != 8");
 }
 
@@ -130,14 +204,22 @@ pub fn test_random<R: RngCore, F: Field>(rng: &mut R) {
 pub fn test_field<R: RngCore, F: Field>(rng: &mut R) {
   test_eq::<F>();
   test_conditional_select::<F>();
+
   test_add::<F>();
+  test_sum::<F>();
+
   test_sub::<F>();
   test_neg::<F>();
+
   test_mul::<F>();
+  test_product::<F>();
+
   test_square::<F>();
   test_invert::<F>();
   test_sqrt::<F>();
   test_is_zero::<F>();
+
   test_cube::<F>();
+
   test_random::<R, F>(rng);
 }

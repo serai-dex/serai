@@ -36,7 +36,7 @@ pub fn recover_key<C: Ciphersuite>(keys: &HashMap<Participant, ThresholdKeys<C>>
   assert!(keys.len() >= first.params().t().into(), "not enough keys provided");
   let included = keys.keys().cloned().collect::<Vec<_>>();
 
-  let group_private = keys.iter().fold(C::F::zero(), |accum, (i, keys)| {
+  let group_private = keys.iter().fold(C::F::ZERO, |accum, (i, keys)| {
     accum + (lagrange::<C::F>(*i, &included) * keys.secret_share().deref())
   });
   assert_eq!(C::generator() * group_private, first.group_key(), "failed to recover keys");

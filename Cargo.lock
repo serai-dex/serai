@@ -585,7 +585,7 @@ dependencies = [
  "bitcoin",
  "flexible-transcript",
  "hex",
- "k256 0.12.0",
+ "k256",
  "lazy_static",
  "modular-frost",
  "rand_core 0.6.4",
@@ -734,6 +734,19 @@ name = "block-padding"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
+
+[[package]]
+name = "bls12_381"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7bc6d6292be3a19e6379786dac800f551e5865a5bb51ebbe3064ab80433f403"
+dependencies = [
+ "ff 0.13.0",
+ "group 0.13.0",
+ "pairing",
+ "rand_core 0.6.4",
+ "subtle",
+]
 
 [[package]]
 name = "bounded-collections"
@@ -1017,15 +1030,15 @@ version = "0.3.0"
 dependencies = [
  "dalek-ff-group",
  "digest 0.10.6",
- "elliptic-curve 0.12.3",
- "ff 0.12.1",
+ "elliptic-curve 0.13.2",
+ "ff 0.13.0",
  "ff-group-tests",
  "flexible-transcript",
- "group 0.12.1",
+ "group 0.13.0",
  "hex",
- "k256 0.12.0",
+ "k256",
  "minimal-ed448",
- "p256 0.12.0",
+ "p256 0.13.0",
  "rand_core 0.6.4",
  "sha2 0.10.6",
  "sha3",
@@ -1141,7 +1154,7 @@ dependencies = [
  "digest 0.10.6",
  "getrandom 0.2.8",
  "hmac 0.12.1",
- "k256 0.13.0",
+ "k256",
  "lazy_static",
  "serde",
  "sha2 0.10.6",
@@ -1641,9 +1654,9 @@ dependencies = [
  "crypto-bigint 0.5.1",
  "curve25519-dalek 3.2.0",
  "digest 0.10.6",
- "ff 0.12.1",
+ "ff 0.13.0",
  "ff-group-tests",
- "group 0.12.1",
+ "group 0.13.0",
  "rand_core 0.6.4",
  "sha2 0.9.9",
  "subtle",
@@ -1975,11 +1988,11 @@ dependencies = [
  "blake2",
  "dalek-ff-group",
  "digest 0.10.6",
- "ff 0.12.1",
+ "ff 0.13.0",
  "flexible-transcript",
- "group 0.12.1",
+ "group 0.13.0",
  "hex-literal",
- "k256 0.12.0",
+ "k256",
  "multiexp",
  "rand_core 0.6.4",
  "thiserror",
@@ -2047,18 +2060,6 @@ dependencies = [
  "elliptic-curve 0.12.3",
  "rfc6979 0.3.1",
  "signature 1.6.4",
-]
-
-[[package]]
-name = "ecdsa"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12844141594ad74185a926d030f3b605f6a903b4e3fec351f3ea338ac5b7637e"
-dependencies = [
- "der 0.6.1",
- "elliptic-curve 0.12.3",
- "rfc6979 0.3.1",
- "signature 2.0.0",
 ]
 
 [[package]]
@@ -2190,7 +2191,7 @@ dependencies = [
  "base64 0.13.1",
  "bytes",
  "hex",
- "k256 0.13.0",
+ "k256",
  "log",
  "rand 0.8.5",
  "rlp",
@@ -2323,8 +2324,8 @@ dependencies = [
  "ethers",
  "ethers-solc",
  "eyre",
- "group 0.12.1",
- "k256 0.12.0",
+ "group 0.13.0",
+ "k256",
  "modular-frost",
  "rand_core 0.6.4",
  "serde",
@@ -2455,7 +2456,7 @@ dependencies = [
  "generic-array 0.14.6",
  "getrandom 0.2.8",
  "hex",
- "k256 0.13.0",
+ "k256",
  "num_enum",
  "once_cell",
  "open-fastrlp",
@@ -2677,7 +2678,6 @@ version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d013fc25338cc558c5c2cfbad646908fb23591e2404481826742b651c9af7160"
 dependencies = [
- "bitvec 1.0.1",
  "rand_core 0.6.4",
  "subtle",
 ]
@@ -2688,18 +2688,22 @@ version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ded41244b729663b1e574f1b4fb731469f69f79c17667b5d776b16cda0479449"
 dependencies = [
+ "bitvec 1.0.1",
  "rand_core 0.6.4",
  "subtle",
 ]
 
 [[package]]
 name = "ff-group-tests"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
- "group 0.12.1",
- "k256 0.12.0",
- "p256 0.12.0",
+ "bls12_381",
+ "group 0.13.0",
+ "k256",
+ "p256 0.13.0",
+ "pasta_curves",
  "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
@@ -2960,7 +2964,7 @@ dependencies = [
  "frame-metadata",
  "frame-support-procedural",
  "impl-trait-for-tuples",
- "k256 0.13.0",
+ "k256",
  "log",
  "once_cell",
  "parity-scale-codec",
@@ -4121,23 +4125,8 @@ dependencies = [
 
 [[package]]
 name = "k256"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92a55e0ff3b72c262bcf041d9e97f1b84492b68f1c1a384de2323d3dc9403397"
-dependencies = [
- "cfg-if",
- "ecdsa 0.15.1",
- "elliptic-curve 0.12.3",
- "once_cell",
- "sha2 0.10.6",
- "signature 2.0.0",
-]
-
-[[package]]
-name = "k256"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "955890845095ccf31ef83ad41a05aabb4d8cc23dc3cac5a9f5c89cf26dd0da75"
+source = "git+https://github.com/RustCrypto/elliptic-curves?rev=43d95961b77ad18e54d2874403052fdee248076c#43d95961b77ad18e54d2874403052fdee248076c"
 dependencies = [
  "cfg-if",
  "ecdsa 0.16.1",
@@ -4226,6 +4215,9 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+dependencies = [
+ "spin",
+]
 
 [[package]]
 name = "lazycell"
@@ -5047,11 +5039,10 @@ name = "minimal-ed448"
 version = "0.3.0"
 dependencies = [
  "crypto-bigint 0.5.1",
- "dalek-ff-group",
- "ff 0.12.1",
+ "ff 0.13.0",
  "ff-group-tests",
  "generic-array 0.14.6",
- "group 0.12.1",
+ "group 0.13.0",
  "hex",
  "lazy_static",
  "rand_core 0.6.4",
@@ -5169,7 +5160,7 @@ version = "0.3.0"
 dependencies = [
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
- "group 0.12.1",
+ "group 0.13.0",
  "lazy_static",
  "sha3",
  "subtle",
@@ -5207,7 +5198,7 @@ dependencies = [
  "dleq",
  "flexible-transcript",
  "futures",
- "group 0.12.1",
+ "group 0.13.0",
  "hex",
  "hex-literal",
  "lazy_static",
@@ -5283,9 +5274,9 @@ name = "multiexp"
 version = "0.3.1"
 dependencies = [
  "dalek-ff-group",
- "ff 0.12.1",
- "group 0.12.1",
- "k256 0.12.0",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "k256",
  "rand_core 0.6.4",
  "zeroize",
 ]
@@ -5759,12 +5750,11 @@ dependencies = [
 
 [[package]]
 name = "p256"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49c124b3cbce43bcbac68c58ec181d98ed6cc7e6d0aa7c3ba97b2563410b0e55"
+version = "0.13.0"
+source = "git+https://github.com/RustCrypto/elliptic-curves?rev=43d95961b77ad18e54d2874403052fdee248076c#43d95961b77ad18e54d2874403052fdee248076c"
 dependencies = [
- "ecdsa 0.15.1",
- "elliptic-curve 0.12.3",
+ "ecdsa 0.16.1",
+ "elliptic-curve 0.13.2",
  "primeorder",
  "sha2 0.10.6",
 ]
@@ -5788,6 +5778,15 @@ checksum = "a1914cd452d8fccd6f9db48147b29fd4ae05bea9dc5d9ad578509f72415de282"
 dependencies = [
  "cfg-if",
  "libm 0.1.4",
+]
+
+[[package]]
+name = "pairing"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81fec4625e73cf41ef4bb6846cafa6d44736525f442ba45e407c4a000a13996f"
+dependencies = [
+ "group 0.13.0",
 ]
 
 [[package]]
@@ -6101,6 +6100,21 @@ checksum = "7676374caaee8a325c9e7a2ae557f216c5563a171d6997b0ef8a65af35147700"
 dependencies = [
  "base64ct",
  "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
+name = "pasta_curves"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3e57598f73cc7e1b2ac63c79c517b31a0877cd7c402cdcaa311b5208de7a095"
+dependencies = [
+ "blake2b_simd",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "lazy_static",
+ "rand 0.8.5",
+ "static_assertions",
  "subtle",
 ]
 
@@ -6479,11 +6493,10 @@ dependencies = [
 
 [[package]]
 name = "primeorder"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b54f7131b3dba65a2f414cf5bd25b66d4682e4608610668eae785750ba4c5b2"
+version = "0.13.0"
+source = "git+https://github.com/RustCrypto/elliptic-curves?rev=43d95961b77ad18e54d2874403052fdee248076c#43d95961b77ad18e54d2874403052fdee248076c"
 dependencies = [
- "elliptic-curve 0.12.3",
+ "elliptic-curve 0.13.2",
 ]
 
 [[package]]
@@ -6554,9 +6567,9 @@ dependencies = [
  "env_logger",
  "flexible-transcript",
  "futures",
- "group 0.12.1",
+ "group 0.13.0",
  "hex",
- "k256 0.12.0",
+ "k256",
  "lazy_static",
  "log",
  "modular-frost",
@@ -11899,23 +11912,22 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.5.7"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c394b5bd0c6f669e7275d9c20aa90ae064cb22e75a1cad54e1b34088034b149f"
+checksum = "2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9"
 dependencies = [
  "zeroize_derive",
 ]
 
 [[package]]
 name = "zeroize_derive"
-version = "1.3.3"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44bf07cb3e50ea2003396695d58bf46bc9887a1f362260446fad6bc4e79bd36c"
+checksum = "57090580b8b26d9fd2288c4ac982b3b3c6446cd8e91112bcf672d5ddb2f17441"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
- "synstructure",
+ "syn 2.0.10",
 ]
 
 [[package]]

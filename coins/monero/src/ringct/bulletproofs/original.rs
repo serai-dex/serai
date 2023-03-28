@@ -15,7 +15,7 @@ use crate::{Commitment, ringct::bulletproofs::core::*};
 include!(concat!(env!("OUT_DIR"), "/generators.rs"));
 
 lazy_static! {
-  static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::one(); N]);
+  static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::ONE; N]);
   static ref IP12: Scalar = inner_product(&ONE_N, &TWO_N);
 }
 
@@ -250,7 +250,7 @@ impl OriginalStruct {
     proof.push((z3, *H));
     proof.push((-Scalar(self.mu), G));
 
-    proof.push((Scalar::one(), A));
+    proof.push((Scalar::ONE, A));
     proof.push((x, S));
 
     {

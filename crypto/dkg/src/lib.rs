@@ -176,8 +176,8 @@ impl ThresholdParams {
 pub fn lagrange<F: PrimeField>(i: Participant, included: &[Participant]) -> F {
   let i_f = F::from(u64::from(u16::from(i)));
 
-  let mut num = F::one();
-  let mut denom = F::one();
+  let mut num = F::ONE;
+  let mut denom = F::ONE;
   for l in included {
     if i == *l {
       continue;
@@ -405,7 +405,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     // Carry any existing offset
     // Enables schemes like Monero's subaddresses which have a per-subaddress offset and then a
     // one-time-key offset
-    res.offset = Some(offset + res.offset.unwrap_or_else(C::F::zero));
+    res.offset = Some(offset + res.offset.unwrap_or(C::F::ZERO));
     res
   }
 
@@ -426,7 +426,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
 
   /// Return the group key, with any offset applied.
   pub fn group_key(&self) -> C::G {
-    self.core.group_key + (C::generator() * self.offset.unwrap_or_else(C::F::zero))
+    self.core.group_key + (C::generator() * self.offset.unwrap_or(C::F::ZERO))
   }
 
   /// Return all participants' verification shares without any offsetting.
@@ -457,7 +457,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     }
 
     // The offset is included by adding it to the participant with the lowest ID
-    let offset = self.offset.unwrap_or_else(C::F::zero);
+    let offset = self.offset.unwrap_or(C::F::ZERO);
     if included[0] == self.params().i() {
       *secret_share += offset;
     }

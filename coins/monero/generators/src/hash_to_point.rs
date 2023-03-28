@@ -13,7 +13,7 @@ pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   let A = FieldElement::from(486662u64);
 
   let v = FieldElement::from_square(hash(&bytes)).double();
-  let w = v + FieldElement::one();
+  let w = v + FieldElement::ONE;
   let x = w.square() + (-A.square() * v);
 
   // This isn't the complete X, yet its initial value

@@ -156,8 +156,8 @@ fn polynomial<F: PrimeField + Zeroize>(
 ) -> Zeroizing<F> {
   let l = F::from(u64::from(u16::from(l)));
   // This should never be reached since Participant is explicitly non-zero
-  assert!(l != F::zero(), "zero participant passed to polynomial");
-  let mut share = Zeroizing::new(F::zero());
+  assert!(l != F::ZERO, "zero participant passed to polynomial");
+  let mut share = Zeroizing::new(F::ZERO);
   for (idx, coefficient) in coefficients.iter().rev().enumerate() {
     *share += coefficient.deref();
     if idx != (coefficients.len() - 1) {
@@ -366,7 +366,7 @@ impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
 fn exponential<C: Ciphersuite>(i: Participant, values: &[C::G]) -> Vec<(C::F, C::G)> {
   let i = C::F::from(u16::from(i).into());
   let mut res = Vec::with_capacity(values.len());
-  (0 .. values.len()).fold(C::F::one(), |exp, l| {
+  (0 .. values.len()).fold(C::F::ONE, |exp, l| {
     res.push((exp, values[l]));
     exp * i
   });
@@ -389,7 +389,7 @@ fn share_verification_statements<C: Ciphersuite>(
   // converts whatever we give to an iterator and then builds a Vec internally, welcoming copies
   let neg_share_pub = C::generator() * -*share;
   share.zeroize();
-  values.push((C::F::one(), neg_share_pub));
+  values.push((C::F::ONE, neg_share_pub));
 
   values
 }

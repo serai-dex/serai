@@ -108,7 +108,7 @@ pub fn test_mul<G: Group>() {
 
 /// Test `((order - 1) * G) + G == identity`.
 pub fn test_order<G: Group>() {
-  let minus_one = G::generator() * (G::Scalar::zero() - G::Scalar::one());
+  let minus_one = G::generator() * (G::Scalar::ZERO - G::Scalar::ONE);
   assert!(minus_one != G::identity(), "(modulus - 1) * G was identity");
   assert_eq!(minus_one + G::generator(), G::identity(), "((modulus - 1) * G) + G wasn't identity");
 }
@@ -202,4 +202,16 @@ fn test_k256() {
 #[test]
 fn test_p256() {
   test_prime_group_bits::<_, p256::ProjectivePoint>(&mut rand_core::OsRng);
+}
+
+#[test]
+fn test_bls12_381() {
+  test_prime_group_bits::<_, bls12_381::G1Projective>(&mut rand_core::OsRng);
+  test_prime_group_bits::<_, bls12_381::G2Projective>(&mut rand_core::OsRng);
+}
+
+#[test]
+fn test_pallas_vesta() {
+  test_prime_group_bits::<_, pasta_curves::pallas::Point>(&mut rand_core::OsRng);
+  test_prime_group_bits::<_, pasta_curves::vesta::Point>(&mut rand_core::OsRng);
 }

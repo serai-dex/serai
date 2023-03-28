@@ -31,7 +31,7 @@ fn hash_plus<C: IntoIterator<Item = DalekPoint>>(commitments: C) -> (Scalar, Vec
 // d[j*N+i] = z**(2*(j+1)) * 2**i
 fn d(z: Scalar, M: usize, MN: usize) -> (ScalarVector, ScalarVector) {
   let zpow = ScalarVector::even_powers(z, 2 * M);
-  let mut d = vec![Scalar::zero(); MN];
+  let mut d = vec![Scalar::ZERO; MN];
   for j in 0 .. M {
     for i in 0 .. N {
       d[(j * N) + i] = zpow[j] * TWO_N[i];
@@ -239,7 +239,7 @@ impl PlusStruct {
     // Invert B, instead of the Scalar, as the latter is only 2x as expensive yet enables reduction
     // to a single addition under vartime for the first BP verified in the batch, which is expected
     // to be much more significant
-    proof.push((Scalar::one(), -B));
+    proof.push((Scalar::ONE, -B));
     proof.push((-e, A1));
     proof.push((minus_esq, A));
     proof.push((Scalar(self.d1), G));

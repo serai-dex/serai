@@ -34,14 +34,13 @@ where
   valid(batch);
 
   // Test a batch with one set of statements
-  let valid_statements =
-    vec![(-G::Scalar::one(), G::generator()), (G::Scalar::one(), G::generator())];
+  let valid_statements = vec![(-G::Scalar::ONE, G::generator()), (G::Scalar::ONE, G::generator())];
   let mut batch = BatchVerifier::new(1);
   batch.queue(&mut OsRng, 0, valid_statements.clone());
   valid(batch);
 
   // Test a batch with an invalid set of statements fails properly
-  let invalid_statements = vec![(-G::Scalar::one(), G::generator())];
+  let invalid_statements = vec![(-G::Scalar::ONE, G::generator())];
   let mut batch = BatchVerifier::new(1);
   batch.queue(&mut OsRng, 0, invalid_statements.clone());
   invalid(batch, 0);

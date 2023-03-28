@@ -23,11 +23,70 @@ pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   res
 }
 
-#[doc(hidden)]
-#[macro_export]
+macro_rules! math_op {
+  (
+    $Value: ident,
+    $Other: ident,
+    $Op: ident,
+    $op_fn: ident,
+    $Assign: ident,
+    $assign_fn: ident,
+    $function: expr
+  ) => {
+    impl $Op<$Other> for $Value {
+      type Output = $Value;
+      fn $op_fn(self, other: $Other) -> Self::Output {
+        Self($function(self.0, other.0))
+      }
+    }
+    impl $Assign<$Other> for $Value {
+      fn $assign_fn(&mut self, other: $Other) {
+        self.0 = $function(self.0, other.0);
+      }
+    }
+    impl<'a> $Op<&'a $Other> for $Value {
+      type Output = $Value;
+      fn $op_fn(self, other: &'a $Other) -> Self::Output {
+        Self($function(self.0, other.0))
+      }
+    }
+    impl<'a> $Assign<&'a $Other> for $Value {
+      fn $assign_fn(&mut self, other: &'a $Other) {
+        self.0 = $function(self.0, other.0);
+      }
+    }
+  };
+}
+
+macro_rules! from_wrapper {
+  ($wrapper: ident, $inner: ident, $uint: ident) => {
+    impl From<$uint> for $wrapper {
+      fn from(a: $uint) -> $wrapper {
+        Self($inner::from(a))
+      }
+    }
+  };
+}
+
 macro_rules! field {
-  ($FieldName: ident, $MODULUS: ident, $WIDE_MODULUS: ident, $NUM_BITS: literal) => {
-    use core::ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign};
+  (
+    $FieldName: ident,
+
+    $MODULUS_STR: ident,
+    $MODULUS: ident,
+    $WIDE_MODULUS: ident,
+
+    $NUM_BITS: literal,
+
+    $TWO_INV: expr,
+    $MULTIPLICATIVE_GENERATOR: literal,
+    $ROOT_OF_UNITY_INV: expr,
+    $DELTA: expr,
+  ) => {
+    use core::{
+      ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
+      iter::{Sum, Product},
+    };
 
     use subtle::{Choice, CtOption, ConstantTimeEq, ConstantTimeLess, ConditionallySelectable};
     use rand_core::RngCore;
@@ -35,12 +94,7 @@ macro_rules! field {
     use generic_array::{typenum::U57, GenericArray};
     use crypto_bigint::{Integer, NonZero, Encoding};
 
-    use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
-
-    // Needed to publish for some reason? Yet not actually needed
-    #[allow(unused_imports)]
-    use dalek_ff_group::{from_wrapper, math_op};
-    use dalek_ff_group::{constant_time, from_uint, math};
+    use ff::{Field, PrimeField, FieldBits, PrimeFieldBits, helpers::sqrt_ratio_generic};
 
     use $crate::backend::u8_from_bool;
 
@@ -48,15 +102,37 @@ macro_rules! field {
       U512::from_le_slice(&x.rem(&NonZero::new($WIDE_MODULUS).unwrap()).to_le_bytes()[.. 64])
     }
 
-    constant_time!($FieldName, U512);
-    math!(
-      $FieldName,
-      $FieldName,
-      |x, y| U512::add_mod(&x, &y, &$MODULUS.0),
-      |x, y| U512::sub_mod(&x, &y, &$MODULUS.0),
-      |x, y| reduce(U1024::from(U512::mul_wide(&x, &y)))
-    );
-    from_uint!($FieldName, U512);
+    impl ConstantTimeEq for $FieldName {
+      fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+      }
+    }
+
+    impl ConditionallySelectable for $FieldName {
+      fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        $FieldName(U512::conditional_select(&a.0, &b.0, choice))
+      }
+    }
+
+    math_op!($FieldName, $FieldName, Add, add, AddAssign, add_assign, |x, y| U512::add_mod(
+      &x,
+      &y,
+      &$MODULUS.0
+    ));
+    math_op!($FieldName, $FieldName, Sub, sub, SubAssign, sub_assign, |x, y| U512::sub_mod(
+      &x,
+      &y,
+      &$MODULUS.0
+    ));
+    math_op!($FieldName, $FieldName, Mul, mul, MulAssign, mul_assign, |x, y| reduce(U1024::from(
+      U512::mul_wide(&x, &y)
+    )));
+
+    from_wrapper!($FieldName, U512, u8);
+    from_wrapper!($FieldName, U512, u16);
+    from_wrapper!($FieldName, U512, u32);
+    from_wrapper!($FieldName, U512, u64);
+    from_wrapper!($FieldName, U512, u128);
 
     impl Neg for $FieldName {
       type Output = $FieldName;
@@ -104,18 +180,15 @@ macro_rules! field {
     }
 
     impl Field for $FieldName {
+      const ZERO: Self = Self(U512::ZERO);
+      const ONE: Self = Self(U512::ONE);
+
       fn random(mut rng: impl RngCore) -> Self {
         let mut bytes = [0; 128];
         rng.fill_bytes(&mut bytes);
         $FieldName(reduce(U1024::from_le_slice(bytes.as_ref())))
       }
 
-      fn zero() -> Self {
-        Self(U512::ZERO)
-      }
-      fn one() -> Self {
-        Self(U512::ONE)
-      }
       fn square(&self) -> Self {
         *self * self
       }
@@ -134,12 +207,32 @@ macro_rules! field {
         let res = self.pow(MOD_1_4);
         CtOption::new(res, res.square().ct_eq(self))
       }
+
+      fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
+        sqrt_ratio_generic(num, div)
+      }
     }
 
     impl PrimeField for $FieldName {
       type Repr = GenericArray<u8, U57>;
+
+      const MODULUS: &'static str = $MODULUS_STR;
+
       const NUM_BITS: u32 = $NUM_BITS;
       const CAPACITY: u32 = $NUM_BITS - 1;
+
+      const TWO_INV: Self = $FieldName(U512::from_le_hex($TWO_INV));
+
+      const MULTIPLICATIVE_GENERATOR: Self = Self(U512::from_u8($MULTIPLICATIVE_GENERATOR));
+      // True for both the Ed448 Scalar field and FieldElement field
+      const S: u32 = 1;
+
+      // Both fields have their root of unity as -1
+      const ROOT_OF_UNITY: Self = Self($MODULUS.0.saturating_sub(&U512::from_u8(1)));
+      const ROOT_OF_UNITY_INV: Self = $FieldName(U512::from_le_hex($ROOT_OF_UNITY_INV));
+
+      const DELTA: Self = $FieldName(U512::from_le_hex($DELTA));
+
       fn from_repr(bytes: Self::Repr) -> CtOption<Self> {
         let res = $FieldName(U512::from_le_slice(&[bytes.as_ref(), [0; 7].as_ref()].concat()));
         CtOption::new(res, res.0.ct_lt(&$MODULUS.0))
@@ -150,16 +243,8 @@ macro_rules! field {
         repr
       }
 
-      // True for both the Ed448 Scalar field and FieldElement field
-      const S: u32 = 1;
       fn is_odd(&self) -> Choice {
         self.0.is_odd()
-      }
-      fn multiplicative_generator() -> Self {
-        unimplemented!()
-      }
-      fn root_of_unity() -> Self {
-        unimplemented!()
       }
     }
 
@@ -174,6 +259,38 @@ macro_rules! field {
 
       fn char_le_bits() -> FieldBits<Self::ReprBits> {
         MODULUS.to_le_bits()
+      }
+    }
+
+    impl Sum<$FieldName> for $FieldName {
+      fn sum<I: Iterator<Item = $FieldName>>(iter: I) -> $FieldName {
+        let mut res = $FieldName::ZERO;
+        for item in iter {
+          res += item;
+        }
+        res
+      }
+    }
+
+    impl<'a> Sum<&'a $FieldName> for $FieldName {
+      fn sum<I: Iterator<Item = &'a $FieldName>>(iter: I) -> $FieldName {
+        iter.cloned().sum()
+      }
+    }
+
+    impl Product<$FieldName> for $FieldName {
+      fn product<I: Iterator<Item = $FieldName>>(iter: I) -> $FieldName {
+        let mut res = $FieldName::ONE;
+        for item in iter {
+          res *= item;
+        }
+        res
+      }
+    }
+
+    impl<'a> Product<&'a $FieldName> for $FieldName {
+      fn product<I: Iterator<Item = &'a $FieldName>>(iter: I) -> $FieldName {
+        iter.cloned().product()
       }
     }
   };

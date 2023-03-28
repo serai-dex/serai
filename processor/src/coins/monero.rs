@@ -188,7 +188,7 @@ impl Monero {
 
   #[cfg(test)]
   fn test_view_pair() -> ViewPair {
-    ViewPair::new(*EdwardsPoint::generator(), Zeroizing::new(Scalar::one().0))
+    ViewPair::new(*EdwardsPoint::generator(), Zeroizing::new(Scalar::ONE.0))
   }
 
   #[cfg(test)]
@@ -398,7 +398,7 @@ impl Coin for Monero {
       } else if outputs == 1 {
         plan.payments.push(Payment {
           address: Address::new(
-            ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::one().0))
+            ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::ONE.0))
               .address(Network::Mainnet, AddressSpec::Standard),
           )
           .unwrap(),
@@ -584,7 +584,7 @@ impl Coin for Monero {
       self.rpc.get_fee().await.unwrap(),
     )
     .unwrap()
-    .sign(&mut OsRng, &self.rpc, &Zeroizing::new(Scalar::one().0))
+    .sign(&mut OsRng, &self.rpc, &Zeroizing::new(Scalar::ONE.0))
     .await
     .unwrap();
 

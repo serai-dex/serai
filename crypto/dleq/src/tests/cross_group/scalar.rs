@@ -10,13 +10,13 @@ use crate::cross_group::scalar::{scalar_normalize, scalar_convert};
 #[test]
 fn test_scalar() {
   assert_eq!(
-    scalar_normalize::<_, DalekScalar>(K256Scalar::zero()),
-    (K256Scalar::zero(), DalekScalar::zero())
+    scalar_normalize::<_, DalekScalar>(K256Scalar::ZERO),
+    (K256Scalar::ZERO, DalekScalar::ZERO)
   );
 
   assert_eq!(
-    scalar_normalize::<_, DalekScalar>(K256Scalar::one()),
-    (K256Scalar::one(), DalekScalar::one())
+    scalar_normalize::<_, DalekScalar>(K256Scalar::ONE),
+    (K256Scalar::ONE, DalekScalar::ONE)
   );
 
   let mut initial;
