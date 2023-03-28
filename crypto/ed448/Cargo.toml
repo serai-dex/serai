@@ -26,8 +26,6 @@ group = "0.13"
 generic-array = "0.14"
 crypto-bigint = { version = "0.5", features = ["zeroize"] }
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.3" }
-
 [dev-dependencies]
 hex = "0.4"
 

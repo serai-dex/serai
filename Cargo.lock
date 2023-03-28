@@ -736,6 +736,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
+name = "bls12_381"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7bc6d6292be3a19e6379786dac800f551e5865a5bb51ebbe3064ab80433f403"
+dependencies = [
+ "ff 0.13.0",
+ "group 0.13.0",
+ "pairing",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "bounded-collections"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2684,9 +2697,11 @@ dependencies = [
 name = "ff-group-tests"
 version = "0.13.0"
 dependencies = [
+ "bls12_381",
  "group 0.13.0",
  "k256",
  "p256 0.13.0",
+ "pasta_curves",
  "rand_core 0.6.4",
 ]
 
@@ -4110,8 +4125,7 @@ dependencies = [
 [[package]]
 name = "k256"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "955890845095ccf31ef83ad41a05aabb4d8cc23dc3cac5a9f5c89cf26dd0da75"
+source = "git+https://github.com/RustCrypto/elliptic-curves?rev=43d95961b77ad18e54d2874403052fdee248076c#43d95961b77ad18e54d2874403052fdee248076c"
 dependencies = [
  "cfg-if",
  "ecdsa 0.16.1",
@@ -4200,6 +4214,9 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+dependencies = [
+ "spin",
+]
 
 [[package]]
 name = "lazycell"
@@ -5021,7 +5038,6 @@ name = "minimal-ed448"
 version = "0.3.0"
 dependencies = [
  "crypto-bigint 0.5.1",
- "dalek-ff-group",
  "ff 0.13.0",
  "ff-group-tests",
  "generic-array 0.14.6",
@@ -5734,8 +5750,7 @@ dependencies = [
 [[package]]
 name = "p256"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7270da3e5caa82afd3deb054cc237905853813aea3859544bc082c3fe55b8d47"
+source = "git+https://github.com/RustCrypto/elliptic-curves?rev=43d95961b77ad18e54d2874403052fdee248076c#43d95961b77ad18e54d2874403052fdee248076c"
 dependencies = [
  "ecdsa 0.16.1",
  "elliptic-curve 0.13.2",
@@ -5762,6 +5777,15 @@ checksum = "a1914cd452d8fccd6f9db48147b29fd4ae05bea9dc5d9ad578509f72415de282"
 dependencies = [
  "cfg-if",
  "libm 0.1.4",
+]
+
+[[package]]
+name = "pairing"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81fec4625e73cf41ef4bb6846cafa6d44736525f442ba45e407c4a000a13996f"
+dependencies = [
+ "group 0.13.0",
 ]
 
 [[package]]
@@ -6075,6 +6099,21 @@ checksum = "7676374caaee8a325c9e7a2ae557f216c5563a171d6997b0ef8a65af35147700"
 dependencies = [
  "base64ct",
  "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
+name = "pasta_curves"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3e57598f73cc7e1b2ac63c79c517b31a0877cd7c402cdcaa311b5208de7a095"
+dependencies = [
+ "blake2b_simd",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "lazy_static",
+ "rand 0.8.5",
+ "static_assertions",
  "subtle",
 ]
 
@@ -6454,8 +6493,7 @@ dependencies = [
 [[package]]
 name = "primeorder"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7613fdcc0831c10060fa69833ea8fa2caa94b6456f51e25356a885b530a2e3d0"
+source = "git+https://github.com/RustCrypto/elliptic-curves?rev=43d95961b77ad18e54d2874403052fdee248076c#43d95961b77ad18e54d2874403052fdee248076c"
 dependencies = [
  "elliptic-curve 0.13.2",
 ]

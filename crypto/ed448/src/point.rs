@@ -317,22 +317,7 @@ impl PrimeGroup for Point {}
 
 #[test]
 fn test_group() {
-  // TODO: Move to test_prime_group_bits once the impl is finished
-  use ff_group_tests::group::*;
-
-  test_eq::<Point>();
-  test_identity::<Point>();
-  test_generator::<Point>();
-  test_double::<Point>();
-  test_add::<Point>();
-  test_sum::<Point>();
-  test_neg::<Point>();
-  test_sub::<Point>();
-  test_mul::<Point>();
-  test_order::<Point>();
-  test_random::<_, Point>(&mut rand_core::OsRng);
-
-  test_encoding::<Point>();
+  ff_group_tests::group::test_prime_group_bits::<_, Point>(&mut rand_core::OsRng);
 }
 
 #[test]
