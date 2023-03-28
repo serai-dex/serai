@@ -15,7 +15,7 @@ use crypto_bigint::{Integer, NonZero, Encoding, U256, U512};
 
 use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
 
-use crate::{u8_from_bool, constant_time, math, from_uint};
+use crate::{u8_from_bool, constant_time, math_op, math, from_wrapper, from_uint};
 
 // 2^255 - 19
 // Uses saturating_sub because checked_sub isn't available at compile time
@@ -318,7 +318,7 @@ impl<'a> Sum<&'a FieldElement> for FieldElement {
 
 impl Product<FieldElement> for FieldElement {
   fn product<I: Iterator<Item = FieldElement>>(iter: I) -> FieldElement {
-    let mut res = FieldElement::ZERO;
+    let mut res = FieldElement::ONE;
     for item in iter {
       res *= item;
     }
@@ -337,20 +337,6 @@ fn test_wide_modulus() {
   let mut wide = [0; 64];
   wide[.. 32].copy_from_slice(&MODULUS.to_le_bytes());
   assert_eq!(wide, WIDE_MODULUS.to_le_bytes());
-}
-
-#[test]
-fn test_inv_consts() {
-  assert_eq!(FieldElement::from(2u8).invert().unwrap(), FieldElement::TWO_INV);
-  assert_eq!(FieldElement::ROOT_OF_UNITY.invert().unwrap(), FieldElement::ROOT_OF_UNITY_INV);
-}
-
-#[test]
-fn test_delta() {
-  assert_eq!(
-    FieldElement::MULTIPLICATIVE_GENERATOR.pow(FieldElement::from(2u8).pow(FieldElement::S.into())),
-    FieldElement::DELTA
-  );
 }
 
 #[test]

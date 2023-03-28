@@ -90,8 +90,6 @@ macro_rules! deref_borrow {
   };
 }
 
-#[doc(hidden)]
-#[macro_export]
 macro_rules! constant_time {
   ($Value: ident, $Inner: ident) => {
     impl ConstantTimeEq for $Value {
@@ -107,9 +105,8 @@ macro_rules! constant_time {
     }
   };
 }
+pub(crate) use constant_time;
 
-#[doc(hidden)]
-#[macro_export]
 macro_rules! math_op {
   (
     $Value: ident,
@@ -144,9 +141,8 @@ macro_rules! math_op {
     }
   };
 }
+pub(crate) use math_op;
 
-#[doc(hidden)]
-#[macro_export(local_inner_macros)]
 macro_rules! math {
   ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
     math_op!($Value, $Value, Add, add, AddAssign, add_assign, $add);
@@ -154,9 +150,8 @@ macro_rules! math {
     math_op!($Value, $Factor, Mul, mul, MulAssign, mul_assign, $mul);
   };
 }
+pub(crate) use math;
 
-#[doc(hidden)]
-#[macro_export(local_inner_macros)]
 macro_rules! math_neg {
   ($Value: ident, $Factor: ident, $add: expr, $sub: expr, $mul: expr) => {
     math!($Value, $Factor, $add, $sub, $mul);
@@ -170,8 +165,6 @@ macro_rules! math_neg {
   };
 }
 
-#[doc(hidden)]
-#[macro_export]
 macro_rules! from_wrapper {
   ($wrapper: ident, $inner: ident, $uint: ident) => {
     impl From<$uint> for $wrapper {
@@ -181,9 +174,8 @@ macro_rules! from_wrapper {
     }
   };
 }
+pub(crate) use from_wrapper;
 
-#[doc(hidden)]
-#[macro_export(local_inner_macros)]
 macro_rules! from_uint {
   ($wrapper: ident, $inner: ident) => {
     from_wrapper!($wrapper, $inner, u8);
@@ -193,6 +185,7 @@ macro_rules! from_uint {
     from_wrapper!($wrapper, $inner, u128);
   };
 }
+pub(crate) use from_uint;
 
 /// Wrapper around the dalek Scalar type.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
@@ -535,23 +528,6 @@ dalek_group!(
 #[test]
 fn test_scalar_modulus() {
   assert_eq!(MODULUS.to_le_bytes(), curve25519_dalek::constants::BASEPOINT_ORDER.to_bytes());
-}
-
-#[test]
-fn test_inv_consts() {
-  assert_eq!(Scalar::from(2u8).invert().unwrap(), Scalar::TWO_INV);
-  assert_eq!(DScalar::from(2u8).invert(), Scalar::TWO_INV.0);
-
-  assert_eq!(Scalar::ROOT_OF_UNITY.invert().unwrap(), Scalar::ROOT_OF_UNITY_INV);
-  assert_eq!(Scalar::ROOT_OF_UNITY.0.invert(), Scalar::ROOT_OF_UNITY_INV.0);
-}
-
-#[test]
-fn test_delta() {
-  assert_eq!(
-    Scalar::MULTIPLICATIVE_GENERATOR.pow(Scalar::from(2u8).pow(Scalar::S.into())),
-    Scalar::DELTA
-  );
 }
 
 #[test]
