@@ -1,4 +1,5 @@
 use rand_core::RngCore;
+use subtle::Choice;
 use group::ff::Field;
 
 /// Perform basic tests on equality.
@@ -110,17 +111,60 @@ pub fn test_invert<F: Field>() {
   assert_eq!(two * three.invert().unwrap() * three, two, "2 * 3.invert() * 3 != 2");
 }
 
-/// Perform basic tests on the sqrt function.
+/// Perform basic tests on the sqrt functions.
 pub fn test_sqrt<F: Field>() {
   assert_eq!(F::ZERO.sqrt().unwrap(), F::ZERO, "sqrt(0) != 0");
-  assert_eq!(F::ONE.sqrt().unwrap(), F::ONE, "sqrt(1) != 1");
+  assert!(
+    (F::ONE.sqrt().unwrap() == F::ONE) || (F::ONE.sqrt().unwrap() == -F::ONE),
+    "sqrt(1) != 1"
+  );
 
   let mut has_root = F::ONE.double();
   while bool::from(has_root.sqrt().is_none()) {
     has_root += F::ONE;
   }
+
+  // The following code doesn't assume which root is returned, yet it does assume a consistent root
+  // is returned
   let root = has_root.sqrt().unwrap();
   assert_eq!(root * root, has_root, "sqrt(x)^2 != x");
+
+  let check = |value: (_, _), expected: (_, F), msg| {
+    assert_eq!(bool::from(value.0), bool::from(expected.0), "{}", msg);
+    assert!((value.1 == expected.1) || (value.1 == -expected.1), "{}", msg);
+  };
+  check(
+    F::sqrt_ratio(&has_root, &F::ONE),
+    (Choice::from(1), root),
+    "sqrt_ratio didn't return the root with a divisor of 1",
+  );
+  check(
+    F::sqrt_ratio(&(has_root * F::ONE.double()), &F::ONE.double()),
+    (Choice::from(1), root),
+    "sqrt_ratio didn't return the root with a divisor of 2",
+  );
+
+  check(F::sqrt_alt(&F::ZERO), F::sqrt_ratio(&F::ZERO, &F::ONE), "sqrt_alt(0) != sqrt_ratio(0, 1)");
+  check(F::sqrt_alt(&F::ONE), F::sqrt_ratio(&F::ONE, &F::ONE), "sqrt_alt(1) != sqrt_ratio(1, 1)");
+  check(F::sqrt_alt(&has_root), (Choice::from(1), root), "sqrt_alt(square) != (1, root)");
+
+  // Check 0 divisors are properly implemented
+  check(
+    F::sqrt_ratio(&has_root, &F::ZERO),
+    (Choice::from(0), F::ZERO),
+    "sqrt_ratio didn't return the right value for a 0 divisor",
+  );
+
+  // Check non-squares are appropriately marked
+  let mut no_root = has_root + F::ONE;
+  while bool::from(no_root.sqrt().is_some()) {
+    no_root += F::ONE;
+  }
+  assert!(
+    !bool::from(F::sqrt_ratio(&no_root, &F::ONE).0),
+    "sqrt_ratio claimed non-square had root"
+  );
+  assert!(!bool::from(F::sqrt_alt(&no_root).0), "sqrt_alt claimed non-square had root");
 }
 
 /// Perform basic tests on the is_zero functions.

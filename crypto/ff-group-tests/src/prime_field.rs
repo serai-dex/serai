@@ -16,14 +16,16 @@ pub fn test_one<F: PrimeField>() {
 
 /// Test `From<u64>` for F works.
 pub fn test_from_u64<F: PrimeField>() {
-  assert_eq!(F::ONE, F::from(1u64), "1 != 1");
-  assert_eq!(F::ONE.double(), F::from(2u64), "2 != 2");
-  assert_eq!(F::ONE.double() + F::ONE, F::from(3u64), "3 != 3");
+  assert_eq!(F::ZERO, F::from(0u64), "0 != 0u64");
+  assert_eq!(F::ONE, F::from(1u64), "1 != 1u64");
+  assert_eq!(F::ONE.double(), F::from(2u64), "2 != 2u64");
+  assert_eq!(F::ONE.double() + F::ONE, F::from(3u64), "3 != 3u64");
 }
 
 /// Test from_u128 for F works.
 pub fn test_from_u128<F: PrimeField>() {
-  assert_eq!(F::from(1u64), F::from_u128(1u128), "1u64 != 1u128");
+  assert_eq!(F::ZERO, F::from_u128(0u128), "0 != 0u128");
+  assert_eq!(F::ONE, F::from_u128(1u128), "1 != 1u128");
   assert_eq!(F::from(2u64), F::from_u128(2u128), "2u64 != 2u128");
   assert_eq!(F::from(3u64), F::from_u128(3u128), "3u64 != 3u128");
 }
@@ -202,7 +204,7 @@ pub fn test_capacity<F: PrimeField + PrimeFieldBits>() {
       F::CAPACITY,
       "field has a power of two modulus yet CAPACITY doesn't equal NUM_BITS",
     );
-    assert_eq!(val + F::ONE, F::ZERO);
+    assert_eq!(val + F::ONE, F::ZERO, "CAPACITY set bits, + 1, != zero for a binary field");
     return;
   }
 
@@ -282,8 +284,12 @@ pub fn test_pow<F: PrimeFieldBits>() {
 
 /// Test the inverted constants are correct.
 pub fn test_inv_consts<F: PrimeFieldBits>() {
-  assert_eq!(F::TWO_INV, F::from(2u64).invert().unwrap());
-  assert_eq!(F::ROOT_OF_UNITY_INV, F::ROOT_OF_UNITY.invert().unwrap());
+  assert_eq!(F::TWO_INV, F::from(2u64).invert().unwrap(), "F::TWO_INV != 2.invert()");
+  assert_eq!(
+    F::ROOT_OF_UNITY_INV,
+    F::ROOT_OF_UNITY.invert().unwrap(),
+    "F::ROOT_OF_UNITY_INV != F::ROOT_OF_UNITY.invert()"
+  );
 }
 
 /// Test S is correct.
@@ -326,7 +332,7 @@ pub fn test_root_of_unity<F: PrimeFieldBits>() {
   assert_eq!(
     pow(F::ROOT_OF_UNITY, pow(F::from(2u64), F::from(F::S.into()))),
     F::ONE,
-    "root of unity raised to 2^S wasn't 1"
+    "root of unity raised to 2^S wasn't 1",
   );
 }
 
@@ -335,6 +341,7 @@ pub fn test_delta<F: PrimeFieldBits>() {
   assert_eq!(
     pow(F::MULTIPLICATIVE_GENERATOR, pow(F::from(2u64), F::from(u64::from(F::S)))),
     F::DELTA,
+    "F::DELTA is incorrect"
   );
 }
 

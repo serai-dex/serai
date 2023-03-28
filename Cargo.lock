@@ -2703,6 +2703,7 @@ dependencies = [
  "p256 0.13.0",
  "pasta_curves",
  "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
