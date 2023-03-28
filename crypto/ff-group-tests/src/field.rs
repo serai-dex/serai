@@ -36,6 +36,18 @@ pub fn test_add<F: Field>() {
   assert_eq!(F::ONE + F::ONE, F::ONE.double(), "1 + 1 != 2");
 }
 
+/// Perform basic tests on sum.
+pub fn test_sum<F: Field>() {
+  assert_eq!((&[] as &[F]).iter().sum::<F>(), F::ZERO, "[].sum() != 0");
+  assert_eq!([F::ZERO].iter().sum::<F>(), F::ZERO, "[0].sum() != 0");
+  assert_eq!([F::ONE].iter().sum::<F>(), F::ONE, "[1].sum() != 1");
+
+  let two = F::ONE + F::ONE;
+  assert_eq!([F::ONE, F::ONE].iter().sum::<F>(), two, "[1, 1].sum() != 2");
+  assert_eq!([two, F::ONE].iter().sum::<F>(), two + F::ONE, "[2, 1].sum() != 3");
+  assert_eq!([two, F::ZERO, F::ONE].iter().sum::<F>(), two + F::ONE, "[2, 0, 1].sum() != 3");
+}
+
 /// Perform basic tests on subtraction.
 pub fn test_sub<F: Field>() {
   #[allow(clippy::eq_op)]
@@ -62,6 +74,20 @@ pub fn test_mul<F: Field>() {
   assert_eq!(F::ONE * F::ONE, F::ONE, "1 * 1 != 1");
   let two = F::ONE.double();
   assert_eq!(two * (two + F::ONE), two + two + two, "2 * 3 != 6");
+}
+
+/// Perform basic tests on product.
+pub fn test_product<F: Field>() {
+  assert_eq!((&[] as &[F]).iter().product::<F>(), F::ONE, "[].product() != 1");
+  assert_eq!([F::ZERO].iter().product::<F>(), F::ZERO, "[0].product() != 0");
+  assert_eq!([F::ONE].iter().product::<F>(), F::ONE, "[1].product() != 1");
+
+  assert_eq!([F::ONE, F::ONE].iter().product::<F>(), F::ONE, "[1, 1].product() != 2");
+  let two = F::ONE + F::ONE;
+  assert_eq!([two, F::ONE].iter().product::<F>(), two, "[2, 1].product() != 2");
+  assert_eq!([two, two].iter().product::<F>(), two + two, "[2, 2].product() != 4");
+  assert_eq!([two, two, F::ONE].iter().product::<F>(), two + two, "[2, 2, 1].product() != 4");
+  assert_eq!([two, F::ZERO, F::ONE].iter().product::<F>(), F::ZERO, "[2, 0, 1].product() != 0");
 }
 
 /// Perform basic tests on the square function.
@@ -134,14 +160,22 @@ pub fn test_random<R: RngCore, F: Field>(rng: &mut R) {
 pub fn test_field<R: RngCore, F: Field>(rng: &mut R) {
   test_eq::<F>();
   test_conditional_select::<F>();
+
   test_add::<F>();
+  test_sum::<F>();
+
   test_sub::<F>();
   test_neg::<F>();
+
   test_mul::<F>();
+  test_product::<F>();
+
   test_square::<F>();
   test_invert::<F>();
   test_sqrt::<F>();
   test_is_zero::<F>();
+
   test_cube::<F>();
+
   test_random::<R, F>(rng);
 }

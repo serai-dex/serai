@@ -60,3 +60,7 @@ monero-serai = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
+
+[patch.crates-io]
+k256 = { git = "https://github.com/RustCrypto/elliptic-curves", rev = "43d95961b77ad18e54d2874403052fdee248076c" }
+p256 = { git = "https://github.com/RustCrypto/elliptic-curves", rev = "43d95961b77ad18e54d2874403052fdee248076c" }

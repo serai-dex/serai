@@ -16,7 +16,16 @@ pub fn test_one<F: PrimeField>() {
 
 /// Test `From<u64>` for F works.
 pub fn test_from_u64<F: PrimeField>() {
+  assert_eq!(F::ONE, F::from(1u64), "1 != 1");
   assert_eq!(F::ONE.double(), F::from(2u64), "2 != 2");
+  assert_eq!(F::ONE.double() + F::ONE, F::from(3u64), "3 != 3");
+}
+
+/// Test from_u128 for F works.
+pub fn test_from_u128<F: PrimeField>() {
+  assert_eq!(F::from(1u64), F::from_u128(1u128), "1u64 != 1u128");
+  assert_eq!(F::from(2u64), F::from_u128(2u128), "2u64 != 2u128");
+  assert_eq!(F::from(3u64), F::from_u128(3u128), "3u64 != 3u128");
 }
 
 /// Test is_odd/is_even works.
@@ -97,6 +106,7 @@ pub fn test_prime_field<R: RngCore, F: PrimeField>(rng: &mut R) {
   test_zero::<F>();
   test_one::<F>();
   test_from_u64::<F>();
+  test_from_u128::<F>();
   test_is_odd::<F>();
 
   // Do a sanity check on the CAPACITY. A full test can't be done at this time
@@ -226,8 +236,6 @@ pub fn test_pow<F: PrimeFieldBits>() {
   assert_eq!(pow(three, two), three * three);
   assert_eq!(pow(three, three), three * three * three);
 
-  // TODO: Test against Field::pow once updated to ff 0.13
-
   // Choose a small base without a notably uniform bit pattern
   let bit_0 = F::ONE;
   let base = {
@@ -241,28 +249,41 @@ pub fn test_pow<F: PrimeFieldBits>() {
     bit_7 + bit_6 + bit_5 + bit_2 + bit_0
   };
 
-  // Ensure pow_vartime returns 1 when the base is raised to 0, handling malleated inputs
-  assert_eq!(base.pow_vartime([]), F::ONE, "pow_vartime x^0 ([]) != 1");
+  // Ensure pow/pow_vartime return 1 when the base is raised to 0, handling malleated inputs
+  assert_eq!(base.pow([]), F::ONE, "pow x^0 ([]) != 1");
+  assert_eq!(base.pow_vartime([]), F::ONE, "pow x^0 ([]) != 1");
+  assert_eq!(base.pow([0]), F::ONE, "pow_vartime x^0 ([0]) != 1");
   assert_eq!(base.pow_vartime([0]), F::ONE, "pow_vartime x^0 ([0]) != 1");
+  assert_eq!(base.pow([0, 0]), F::ONE, "pow x^0 ([0, 0]) != 1");
   assert_eq!(base.pow_vartime([0, 0]), F::ONE, "pow_vartime x^0 ([0, 0]) != 1");
 
-  // Ensure pow_vartime returns the base when raised to 1, handling malleated inputs
-  assert_eq!(base.pow_vartime([1]), base, "pow_vartime x^1 ([1]) != x");
+  // Ensure pow/pow_vartime return the base when raised to 1, handling malleated inputs
+  assert_eq!(base.pow([1]), base, "pow x^1 ([1]) != x");
+  assert_eq!(base.pow_vartime([1, 0]), base, "pow_vartime x^1 ([1, 0]) != x");
+  assert_eq!(base.pow([1]), base, "pow x^1 ([1]) != x");
   assert_eq!(base.pow_vartime([1, 0]), base, "pow_vartime x^1 ([1, 0]) != x");
 
-  // Ensure pow_vartime can handle multiple u64s properly
+  // Ensure pow/pow_vartime can handle multiple u64s properly
   // Create a scalar which exceeds u64
   let mut bit_64 = bit_0;
   for _ in 0 .. 64 {
     bit_64 = bit_64.double();
   }
   // Run the tests
+  assert_eq!(base.pow([0, 1]), pow(base, bit_64), "pow x^(2^64) != x^(2^64)");
   assert_eq!(base.pow_vartime([0, 1]), pow(base, bit_64), "pow_vartime x^(2^64) != x^(2^64)");
+  assert_eq!(base.pow([1, 1]), pow(base, bit_64 + F::ONE), "pow x^(2^64 + 1) != x^(2^64 + 1)");
   assert_eq!(
     base.pow_vartime([1, 1]),
     pow(base, bit_64 + F::ONE),
     "pow_vartime x^(2^64 + 1) != x^(2^64 + 1)"
   );
+}
+
+/// Test the inverted constants are correct.
+pub fn test_inv_consts<F: PrimeFieldBits>() {
+  assert_eq!(F::TWO_INV, F::from(2u64).invert().unwrap());
+  assert_eq!(F::ROOT_OF_UNITY_INV, F::ROOT_OF_UNITY.invert().unwrap());
 }
 
 /// Test S is correct.
@@ -309,6 +330,14 @@ pub fn test_root_of_unity<F: PrimeFieldBits>() {
   );
 }
 
+/// Test DELTA is correct.
+pub fn test_delta<F: PrimeFieldBits>() {
+  assert_eq!(
+    pow(F::MULTIPLICATIVE_GENERATOR, pow(F::from(2u64), F::from(u64::from(F::S)))),
+    F::DELTA,
+  );
+}
+
 /// Run all tests on fields implementing PrimeFieldBits.
 pub fn test_prime_field_bits<R: RngCore, F: PrimeFieldBits>(rng: &mut R) {
   test_prime_field::<R, F>(rng);
@@ -317,8 +346,11 @@ pub fn test_prime_field_bits<R: RngCore, F: PrimeFieldBits>(rng: &mut R) {
   test_char_le_bits::<F>();
 
   test_pow::<F>();
+
+  test_inv_consts::<F>();
   test_s::<F>();
   test_root_of_unity::<F>();
+  test_delta::<F>();
 
   test_num_bits::<F>();
   test_capacity::<F>();
