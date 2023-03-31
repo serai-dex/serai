@@ -1,8 +1,4 @@
-use core::time::Duration;
-
 use rand_core::{RngCore, OsRng};
-
-use tokio::time::sleep;
 
 use sp_core::{sr25519::Signature, Pair};
 use subxt::{config::extrinsic_params::BaseExtrinsicParamsBuilder};
@@ -21,7 +17,7 @@ use serai_client::{
 };
 
 mod runner;
-use runner::{URL, provide_batch};
+use runner::{URL, publish_tx, provide_batch};
 
 serai_test!(
   async fn burn() {
@@ -75,22 +71,15 @@ serai_test!(
     let burn = Serai::burn(balance, out.clone());
 
     let signer = PairSigner::new(pair);
-    serai
-      .publish(&serai.sign(&signer, &burn, 0, BaseExtrinsicParamsBuilder::new()).unwrap())
-      .await
-      .unwrap();
+    let block = publish_tx(
+      &serai,
+      &serai.sign(&signer, &burn, 0, BaseExtrinsicParamsBuilder::new()).unwrap(),
+    )
+    .await;
 
-    loop {
-      let block = serai.get_latest_block_hash().await.unwrap();
-      let events = serai.get_burn_events(block).await.unwrap();
-      if events.is_empty() {
-        sleep(Duration::from_millis(50)).await;
-        continue;
-      }
-      assert_eq!(events, vec![TokensEvent::Burn { address, balance, instruction: out }]);
-      assert_eq!(serai.get_token_supply(block, coin).await.unwrap(), Amount(0));
-      assert_eq!(serai.get_token_balance(block, coin, address).await.unwrap(), Amount(0));
-      break;
-    }
+    let events = serai.get_burn_events(block).await.unwrap();
+    assert_eq!(events, vec![TokensEvent::Burn { address, balance, instruction: out }]);
+    assert_eq!(serai.get_token_supply(block, coin).await.unwrap(), Amount(0));
+    assert_eq!(serai.get_token_balance(block, coin, address).await.unwrap(), Amount(0));
   }
 );

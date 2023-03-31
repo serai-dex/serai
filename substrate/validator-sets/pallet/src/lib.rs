@@ -5,8 +5,6 @@ pub mod pallet {
   use scale::{Encode, Decode};
   use scale_info::TypeInfo;
 
-  use sp_core::sr25519;
-
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
@@ -15,7 +13,7 @@ pub mod pallet {
   use primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + TypeInfo {
+  pub trait Config: frame_system::Config<AccountId = sp_core::sr25519::Public> + TypeInfo {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
   }
 
@@ -39,20 +37,6 @@ pub mod pallet {
     }
   }
 
-  // Support keys up to 96 bytes (BLS12-381 G2)
-  const MAX_KEY_LEN: u32 = 96;
-  type MaxKeyLen = ConstU32<MAX_KEY_LEN>;
-
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-  pub struct ValidatorSetData<T: Config> {
-    bond: Amount,
-    network: Network,
-
-    // Participant and their amount bonded to this set
-    // Limit each set to 100 participants for now
-    participants: BoundedVec<(T::AccountId, Amount), ConstU32<100>>,
-  }
-
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
@@ -60,16 +44,11 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn validator_set)]
   pub type ValidatorSets<T: Config> =
-    StorageMap<_, Twox64Concat, ValidatorSet, ValidatorSetData<T>, OptionQuery>;
-
-  type Key = BoundedVec<u8, MaxKeyLen>;
-  // A validator set's key pair is defined as their Ristretto key, used for signing InInstructions,
-  // and their key on the external network
-  type KeyPair = (sr25519::Public, Key);
+    StorageMap<_, Twox64Concat, ValidatorSet, ValidatorSetData, OptionQuery>;
 
   /// The key pair for a given validator set instance.
   #[pallet::storage]
-  #[pallet::getter(fn key)]
+  #[pallet::getter(fn keys)]
   pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
 
   /// If an account has voted for a specific key pair or not.
@@ -153,7 +132,7 @@ pub mod pallet {
 
       // Confirm the signer is a validator in the set
       let data = ValidatorSets::<T>::get(set).ok_or(Error::<T>::NonExistentValidatorSet)?;
-      if data.participants.iter().any(|participant| participant.0 == signer) {
+      if !data.participants.iter().any(|participant| participant.0 == signer) {
         Err(Error::<T>::NotValidator)?;
       }
 

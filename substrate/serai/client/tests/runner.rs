@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use tokio::{sync::Mutex, time::sleep};
 
 use serai_client::{
-  subxt::config::Header,
+  subxt::{config::Header, utils::Encoded},
   in_instructions::{primitives::SignedBatch, InInstructionsEvent},
   Serai,
 };
@@ -17,9 +17,7 @@ lazy_static! {
 }
 
 #[allow(dead_code)]
-pub async fn provide_batch(batch: SignedBatch) -> [u8; 32] {
-  let serai = Serai::new(URL).await.unwrap();
-
+pub async fn publish_tx(serai: &Serai, tx: &Encoded) -> [u8; 32] {
   let mut latest = serai
     .get_block(serai.get_latest_block_hash().await.unwrap())
     .await
@@ -28,16 +26,15 @@ pub async fn provide_batch(batch: SignedBatch) -> [u8; 32] {
     .header
     .number();
 
-  let execution = serai.execute_batch(batch.clone()).unwrap();
-  serai.publish(&execution).await.unwrap();
+  serai.publish(tx).await.unwrap();
 
   // Get the block it was included in
-  let mut block;
+  // TODO: Add an RPC method for this/check the guarantee on the subscription
   let mut ticks = 0;
-  'get_block: loop {
+  loop {
     latest += 1;
 
-    block = {
+    let block = {
       let mut block;
       while {
         block = serai.get_block_by_number(latest).await.unwrap();
@@ -54,12 +51,19 @@ pub async fn provide_batch(batch: SignedBatch) -> [u8; 32] {
     };
 
     for extrinsic in block.extrinsics {
-      if extrinsic.0 == execution.0[2 ..] {
-        break 'get_block;
+      if extrinsic.0 == tx.0[2 ..] {
+        return block.header.hash().into();
       }
     }
   }
-  let block = block.header.hash().into();
+}
+
+#[allow(dead_code)]
+pub async fn provide_batch(batch: SignedBatch) -> [u8; 32] {
+  let serai = Serai::new(URL).await.unwrap();
+
+  let execution = serai.execute_batch(batch.clone()).unwrap();
+  let block = publish_tx(&serai, &execution).await;
 
   let batches = serai.get_batch_events(block).await.unwrap();
   // TODO: impl From<Batch> for BatchEvent?

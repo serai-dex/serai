@@ -10895,6 +10895,7 @@ dependencies = [
  "scale-info",
  "serai-primitives",
  "serde",
+ "sp-core",
  "zeroize",
 ]
 
