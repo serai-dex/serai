@@ -9,7 +9,7 @@ use rand_chacha::ChaCha20Rng;
 use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
 use frost::{
-  curve::Ciphersuite,
+  curve::{Ciphersuite, Ristretto},
   dkg::{Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*},
 };
 
@@ -22,7 +22,11 @@ use crate::{DbTxn, Db, coins::Coin};
 
 #[derive(Debug)]
 pub enum KeyGenEvent<C: Ciphersuite> {
-  KeyConfirmed { activation_number: usize, keys: ThresholdKeys<C> },
+  KeyConfirmed {
+    activation_number: usize,
+    substrate_keys: ThresholdKeys<Ristretto>,
+    coin_keys: ThresholdKeys<C>,
+  },
   ProcessorMessage(ProcessorMessage),
 }
 
@@ -63,53 +67,57 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   ) {
     txn.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
   }
-  fn commitments(
-    &self,
-    id: &KeyGenId,
-    params: ThresholdParams,
-  ) -> HashMap<Participant, EncryptionKeyMessage<C::Curve, Commitments<C::Curve>>> {
+  fn commitments(&self, id: &KeyGenId) -> HashMap<Participant, Vec<u8>> {
     bincode::deserialize::<HashMap<Participant, Vec<u8>>>(
       &self.0.get(Self::commitments_key(id)).unwrap(),
     )
     .unwrap()
-    .drain()
-    .map(|(i, bytes)| {
-      (
-        i,
-        EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
-          &mut bytes.as_ref(),
-          params,
-        )
-        .unwrap(),
-      )
-    })
-    .collect()
   }
 
   fn generated_keys_key(id: &KeyGenId) -> Vec<u8> {
     Self::key_gen_key(b"generated_keys", bincode::serialize(id).unwrap())
   }
-  fn save_keys(&mut self, txn: &mut D::Transaction, id: &KeyGenId, keys: &ThresholdCore<C::Curve>) {
-    txn.put(Self::generated_keys_key(id), keys.serialize());
+  fn save_keys(
+    &mut self,
+    txn: &mut D::Transaction,
+    id: &KeyGenId,
+    substrate_keys: &ThresholdCore<Ristretto>,
+    coin_keys: &ThresholdCore<C::Curve>,
+  ) {
+    let mut keys = substrate_keys.serialize();
+    keys.extend(coin_keys.serialize().iter());
+    txn.put(Self::generated_keys_key(id), keys);
   }
 
   fn keys_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
     Self::key_gen_key(b"keys", key.to_bytes())
   }
-  fn confirm_keys(&mut self, txn: &mut D::Transaction, id: &KeyGenId) -> ThresholdKeys<C::Curve> {
-    let keys_vec = self.0.get(Self::generated_keys_key(id)).unwrap();
-    let mut keys =
-      ThresholdKeys::new(ThresholdCore::read::<&[u8]>(&mut keys_vec.as_ref()).unwrap());
-    C::tweak_keys(&mut keys);
-    txn.put(Self::keys_key(&keys.group_key()), keys_vec);
+  #[allow(clippy::type_complexity)]
+  fn read_keys(
+    &self,
+    key: &[u8],
+  ) -> (Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>)) {
+    let keys_vec = self.0.get(key).unwrap();
+    let mut keys_ref: &[u8] = keys_vec.as_ref();
+    let substrate_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
+    let mut coin_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
+    C::tweak_keys(&mut coin_keys);
+    (keys_vec, (substrate_keys, coin_keys))
+  }
+  fn confirm_keys(
+    &mut self,
+    txn: &mut D::Transaction,
+    id: &KeyGenId,
+  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
+    let (keys_vec, keys) = self.read_keys(&Self::generated_keys_key(id));
+    txn.put(Self::keys_key(&keys.1.group_key()), keys_vec);
     keys
   }
-  fn keys(&self, key: &<C::Curve as Ciphersuite>::G) -> ThresholdKeys<C::Curve> {
-    let mut keys = ThresholdKeys::new(
-      ThresholdCore::read::<&[u8]>(&mut self.0.get(Self::keys_key(key)).unwrap().as_ref()).unwrap(),
-    );
-    C::tweak_keys(&mut keys);
-    keys
+  fn keys(
+    &self,
+    key: &<C::Curve as Ciphersuite>::G,
+  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
+    self.read_keys(&Self::keys_key(key)).1
   }
 }
 
@@ -121,8 +129,9 @@ pub struct KeyGen<C: Coin, D: Db> {
   db: KeyGenDb<C, D>,
   entropy: Zeroizing<[u8; 32]>,
 
-  active_commit: HashMap<ValidatorSet, SecretShareMachine<C::Curve>>,
-  active_share: HashMap<ValidatorSet, KeyMachine<C::Curve>>,
+  active_commit:
+    HashMap<ValidatorSet, (SecretShareMachine<Ristretto>, SecretShareMachine<C::Curve>)>,
+  active_share: HashMap<ValidatorSet, (KeyMachine<Ristretto>, KeyMachine<C::Curve>)>,
 }
 
 impl<C: Coin, D: Db> KeyGen<C, D> {
@@ -137,7 +146,10 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     }
   }
 
-  pub fn keys(&self, key: &<C::Curve as Ciphersuite>::G) -> ThresholdKeys<C::Curve> {
+  pub fn keys(
+    &self,
+    key: &<C::Curve as Ciphersuite>::G,
+  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
     self.db.keys(key)
   }
 
@@ -160,8 +172,11 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     let secret_shares_rng = |id| rng(b"Key Gen Secret Shares", id);
     let share_rng = |id| rng(b"Key Gen Share", id);
 
-    let key_gen_machine = |id, params| {
-      KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut coefficients_rng(id))
+    let key_gen_machines = |id, params| {
+      let mut rng = coefficients_rng(id);
+      let substrate = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
+      let coin = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
+      ((substrate.0, coin.0), (substrate.1, coin.1))
     };
 
     match msg {
@@ -180,13 +195,12 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           txn.commit();
         }
 
-        let (machine, commitments) = key_gen_machine(id, params);
-        self.active_commit.insert(id.set, machine);
+        let (machines, commitments) = key_gen_machines(id, params);
+        let mut serialized = commitments.0.serialize();
+        serialized.extend(commitments.1.serialize());
+        self.active_commit.insert(id.set, machines);
 
-        KeyGenEvent::ProcessorMessage(ProcessorMessage::Commitments {
-          id,
-          commitments: commitments.serialize(),
-        })
+        KeyGenEvent::ProcessorMessage(ProcessorMessage::Commitments { id, commitments: serialized })
       }
 
       CoordinatorMessage::Commitments { id, commitments } => {
@@ -201,106 +215,168 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
 
         let params = self.db.params(&id.set);
 
-        // Parse the commitments
-        let parsed = match commitments
-          .iter()
-          .map(|(i, commitments)| {
-            EncryptionKeyMessage::<C::Curve, Commitments<C::Curve>>::read::<&[u8]>(
-              &mut commitments.as_ref(),
-              params,
-            )
-            .map(|commitments| (*i, commitments))
-          })
-          .collect()
-        {
-          Ok(commitments) => commitments,
-          Err(e) => todo!("malicious signer: {:?}", e),
-        };
-
-        // Get the machine, rebuilding it if we don't have it
+        // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
         // This *may* be inconsistent if we receive a KeyGen for attempt x, then commitments for
         // attempt y
         // The coordinator is trusted to be proper in this regard
-        let machine =
-          self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machine(id, params).0);
+        let machines =
+          self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machines(id, params).0);
 
-        let (machine, mut shares) =
-          match machine.generate_secret_shares(&mut secret_shares_rng(id), parsed) {
-            Ok(res) => res,
+        let mut rng = secret_shares_rng(id);
+
+        let mut commitments_ref: HashMap<Participant, &[u8]> =
+          commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
+
+        #[allow(clippy::type_complexity)]
+        fn handle_machine<C: Ciphersuite>(
+          rng: &mut ChaCha20Rng,
+          params: ThresholdParams,
+          machine: SecretShareMachine<C>,
+          commitments_ref: &mut HashMap<Participant, &[u8]>,
+        ) -> (KeyMachine<C>, HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>) {
+          // Parse the commitments
+          let parsed = match commitments_ref
+            .iter_mut()
+            .map(|(i, commitments)| {
+              EncryptionKeyMessage::<C, Commitments<C>>::read(commitments, params)
+                .map(|commitments| (*i, commitments))
+            })
+            .collect()
+          {
+            Ok(commitments) => commitments,
             Err(e) => todo!("malicious signer: {:?}", e),
           };
-        self.active_share.insert(id.set, machine);
+
+          match machine.generate_secret_shares(rng, parsed) {
+            Ok(res) => res,
+            Err(e) => todo!("malicious signer: {:?}", e),
+          }
+        }
+
+        let (substrate_machine, mut substrate_shares) =
+          handle_machine::<Ristretto>(&mut rng, params, machines.0, &mut commitments_ref);
+        let (coin_machine, coin_shares) =
+          handle_machine(&mut rng, params, machines.1, &mut commitments_ref);
+
+        self.active_share.insert(id.set, (substrate_machine, coin_machine));
+
+        let mut shares: HashMap<_, _> =
+          substrate_shares.drain().map(|(i, share)| (i, share.serialize())).collect();
+        for (i, share) in shares.iter_mut() {
+          share.extend(coin_shares[i].serialize());
+        }
 
         let mut txn = self.db.0.txn();
         self.db.save_commitments(&mut txn, &id, &commitments);
         txn.commit();
 
-        KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares {
-          id,
-          shares: shares.drain().map(|(i, share)| (i, share.serialize())).collect(),
-        })
+        KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares { id, shares })
       }
 
-      CoordinatorMessage::Shares { id, mut shares } => {
+      CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
         let params = self.db.params(&id.set);
 
-        // Parse the shares
-        let shares = match shares
-          .drain()
-          .map(|(i, share)| {
-            EncryptedMessage::<C::Curve, SecretShare<<C::Curve as Ciphersuite>::F>>::read::<&[u8]>(
-              &mut share.as_ref(),
-              params,
-            )
-            .map(|share| (i, share))
-          })
-          .collect()
-        {
-          Ok(shares) => shares,
-          Err(e) => todo!("malicious signer: {:?}", e),
-        };
-
         // Same commentary on inconsistency as above exists
-        let machine = self.active_share.remove(&id.set).unwrap_or_else(|| {
-          key_gen_machine(id, params)
-            .0
-            .generate_secret_shares(&mut secret_shares_rng(id), self.db.commitments(&id, params))
-            .unwrap()
-            .0
+        let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
+          let machines = key_gen_machines(id, params).0;
+          let mut rng = secret_shares_rng(id);
+          let commitments = self.db.commitments(&id);
+
+          let mut commitments_ref: HashMap<Participant, &[u8]> =
+            commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
+
+          fn parse_commitments<C: Ciphersuite>(
+            params: ThresholdParams,
+            commitments_ref: &mut HashMap<Participant, &[u8]>,
+          ) -> HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>> {
+            commitments_ref
+              .iter_mut()
+              .map(|(i, commitments)| {
+                (*i, EncryptionKeyMessage::<C, Commitments<C>>::read(commitments, params).unwrap())
+              })
+              .collect()
+          }
+
+          (
+            machines
+              .0
+              .generate_secret_shares(&mut rng, parse_commitments(params, &mut commitments_ref))
+              .unwrap()
+              .0,
+            machines
+              .1
+              .generate_secret_shares(&mut rng, parse_commitments(params, &mut commitments_ref))
+              .unwrap()
+              .0,
+          )
         });
 
-        // TODO2: Handle the blame machine properly
-        let keys = (match machine.calculate_share(&mut share_rng(id), shares) {
-          Ok(res) => res,
-          Err(e) => todo!("malicious signer: {:?}", e),
-        })
-        .complete();
+        let mut rng = share_rng(id);
+
+        let mut shares_ref: HashMap<Participant, &[u8]> =
+          shares.iter().map(|(i, shares)| (*i, shares.as_ref())).collect();
+
+        fn handle_machine<C: Ciphersuite>(
+          rng: &mut ChaCha20Rng,
+          params: ThresholdParams,
+          machine: KeyMachine<C>,
+          shares_ref: &mut HashMap<Participant, &[u8]>,
+        ) -> ThresholdCore<C> {
+          // Parse the shares
+          let shares = match shares_ref
+            .iter_mut()
+            .map(|(i, share)| {
+              EncryptedMessage::<C, SecretShare<C::F>>::read(share, params).map(|share| (*i, share))
+            })
+            .collect()
+          {
+            Ok(shares) => shares,
+            Err(e) => todo!("malicious signer: {:?}", e),
+          };
+
+          // TODO2: Handle the blame machine properly
+          (match machine.calculate_share(rng, shares) {
+            Ok(res) => res,
+            Err(e) => todo!("malicious signer: {:?}", e),
+          })
+          .complete()
+        }
+
+        let substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
+        let coin_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
 
         let mut txn = self.db.0.txn();
-        self.db.save_keys(&mut txn, &id, &keys);
+        self.db.save_keys(&mut txn, &id, &substrate_keys, &coin_keys);
         txn.commit();
 
-        let mut keys = ThresholdKeys::new(keys);
-        C::tweak_keys(&mut keys);
-        KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKey {
+        let mut coin_keys = ThresholdKeys::new(coin_keys);
+        C::tweak_keys(&mut coin_keys);
+        KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKeyPair {
           id,
-          key: keys.group_key().to_bytes().as_ref().to_vec(),
+          substrate_key: substrate_keys.group_key().to_bytes(),
+          coin_key: coin_keys.group_key().to_bytes().as_ref().to_vec(),
         })
       }
 
-      CoordinatorMessage::ConfirmKey { context, id } => {
+      CoordinatorMessage::ConfirmKeyPair { context, id } => {
         let mut txn = self.db.0.txn();
-        let keys = self.db.confirm_keys(&mut txn, &id);
+        let (substrate_keys, coin_keys) = self.db.confirm_keys(&mut txn, &id);
         txn.commit();
 
-        info!("Confirmed key {} from {:?}", hex::encode(keys.group_key().to_bytes()), id);
+        info!(
+          "Confirmed key pair {} {} from {:?}",
+          hex::encode(substrate_keys.group_key().to_bytes()),
+          hex::encode(coin_keys.group_key().to_bytes()),
+          id
+        );
 
         KeyGenEvent::KeyConfirmed {
           activation_number: context.coin_latest_block_number.try_into().unwrap(),
-          keys,
+          substrate_keys,
+          coin_keys,
         }
       }
     }

@@ -35,7 +35,7 @@ serde_json = "1"
 group = "0.13"
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript" }
-frost = { package = "modular-frost", path = "../crypto/frost" }
+frost = { package = "modular-frost", path = "../crypto/frost", features = ["ristretto"] }
 
 # Bitcoin
 secp256k1 = { version = "0.24", features = ["global-context", "rand-std"], optional = true }

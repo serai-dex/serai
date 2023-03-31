@@ -207,7 +207,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
   for key in &active_keys {
     // TODO: Load existing schedulers
 
-    let signer = Signer::new(raw_db.clone(), coin.clone(), key_gen.keys(key));
+    // TODO: Handle the Ristretto key
+    let signer = Signer::new(raw_db.clone(), coin.clone(), key_gen.keys(key).1);
 
     // Load any TXs being actively signed
     let key = key.to_bytes();
@@ -332,7 +333,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
         match msg.msg.clone() {
           CoordinatorMessage::KeyGen(msg) => {
             match key_gen.handle(msg).await {
-              KeyGenEvent::KeyConfirmed { activation_number, keys } => {
+              KeyGenEvent::KeyConfirmed { activation_number, substrate_keys, coin_keys } => {
+                let keys = coin_keys;
                 let key = keys.group_key();
                 scanner.rotate_key(activation_number, key).await;
                 schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));

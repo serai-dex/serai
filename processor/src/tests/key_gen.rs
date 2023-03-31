@@ -89,7 +89,11 @@ pub async fn test_key_gen<C: Coin>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKey { id, key }) = key_gen
+    if let KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKeyPair {
+      id,
+      substrate_key,
+      coin_key,
+    }) = key_gen
       .handle(CoordinatorMessage::Shares {
         id: ID,
         shares: all_shares
@@ -101,9 +105,9 @@ pub async fn test_key_gen<C: Coin>() {
     {
       assert_eq!(id, ID);
       if res.is_none() {
-        res = Some(key.clone());
+        res = Some((substrate_key, coin_key.clone()));
       }
-      assert_eq!(res.as_ref().unwrap(), &key);
+      assert_eq!(res.as_ref().unwrap(), &(substrate_key, coin_key));
     } else {
       panic!("didn't get key back");
     }
@@ -115,19 +119,25 @@ pub async fn test_key_gen<C: Coin>() {
 
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
-    if let KeyGenEvent::KeyConfirmed { activation_number, keys } = key_gen
-      .handle(CoordinatorMessage::ConfirmKey {
+    if let KeyGenEvent::KeyConfirmed { activation_number, substrate_keys, coin_keys } = key_gen
+      .handle(CoordinatorMessage::ConfirmKeyPair {
         context: SubstrateContext { time: 0, coin_latest_block_number: 111 },
         id: ID,
       })
       .await
     {
       assert_eq!(activation_number, 111);
+      let params =
+        ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap();
+      assert_eq!(substrate_keys.params(), params);
+      assert_eq!(coin_keys.params(), params);
       assert_eq!(
-        keys.params(),
-        ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap()
+        &(
+          substrate_keys.group_key().to_bytes(),
+          coin_keys.group_key().to_bytes().as_ref().to_vec()
+        ),
+        res.as_ref().unwrap()
       );
-      assert_eq!(keys.group_key().to_bytes().as_ref(), res.as_ref().unwrap());
     } else {
       panic!("didn't get key back");
     }

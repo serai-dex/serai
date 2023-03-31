@@ -37,8 +37,8 @@ pub mod key_gen {
     Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
-    // Confirm a key.
-    ConfirmKey { context: SubstrateContext, id: KeyGenId },
+    // Confirm a key pair.
+    ConfirmKeyPair { context: SubstrateContext, id: KeyGenId },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -47,8 +47,8 @@ pub mod key_gen {
     Commitments { id: KeyGenId, commitments: Vec<u8> },
     // Created shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
-    // Resulting key from the specified key generation protocol.
-    GeneratedKey { id: KeyGenId, key: Vec<u8> },
+    // Resulting keys from the specified key generation protocol.
+    GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], coin_key: Vec<u8> },
   }
 }
 
