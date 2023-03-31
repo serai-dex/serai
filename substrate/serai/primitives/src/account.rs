@@ -53,7 +53,7 @@ impl std::fmt::Display for SeraiAddress {
 }
 
 #[cfg(feature = "std")]
-pub fn insecure_pair_from_name(name: &'static str) -> Pair {
+pub fn insecure_pair_from_name(name: &str) -> Pair {
   Pair::from_string(&format!("//{name}"), None).unwrap()
 }
 

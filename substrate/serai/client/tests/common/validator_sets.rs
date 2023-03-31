@@ -2,7 +2,7 @@ use sp_core::Pair;
 
 use serai_client::{
   subxt::config::extrinsic_params::BaseExtrinsicParamsBuilder,
-  primitives::insecure_pair_from_name,
+  primitives::{SeraiAddress, insecure_pair_from_name},
   validator_sets::{
     primitives::{ValidatorSet, KeyPair},
     ValidatorSetsEvent,
@@ -13,19 +13,20 @@ use serai_client::{
 use crate::common::{serai, tx::publish_tx};
 
 #[allow(dead_code)]
-pub async fn vote_in_key(set: ValidatorSet, key_pair: KeyPair) -> [u8; 32] {
+pub async fn vote_in_keys(set: ValidatorSet, key_pair: KeyPair) -> [u8; 32] {
   let pair = insecure_pair_from_name("Alice");
   let public = pair.public();
 
   let serai = serai().await;
 
   // Vote in a key pair
+  let address = SeraiAddress::from(pair.public());
   let block = publish_tx(
     &serai
       .sign(
         &PairSigner::new(pair),
         &Serai::vote(set.network, key_pair.clone()),
-        0,
+        serai.get_nonce(&address).await.unwrap(),
         BaseExtrinsicParamsBuilder::new(),
       )
       .unwrap(),

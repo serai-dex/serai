@@ -189,6 +189,15 @@ impl Serai {
     self.get_block(hash.into()).await
   }
 
+  pub async fn get_nonce(&self, address: &SeraiAddress) -> Result<u32, SeraiError> {
+    self
+      .0
+      .rpc()
+      .system_account_next_index(&sp_core::sr25519::Public(address.0).to_string())
+      .await
+      .map_err(SeraiError::RpcError)
+  }
+
   pub fn unsigned(&self, payload: &DynamicTxPayload<'static>) -> Result<Encoded, SeraiError> {
     TxClient::new(self.0.offline())
       .create_unsigned(payload)

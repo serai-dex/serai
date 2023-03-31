@@ -12,7 +12,7 @@ use serai_client::{
 };
 
 mod common;
-use common::{serai, validator_sets::vote_in_key};
+use common::{serai, validator_sets::vote_in_keys};
 
 serai_test!(
   async fn vote_keys() {
@@ -38,9 +38,9 @@ serai_test!(
     let participants_ref: &[_] = set_data.participants.as_ref();
     assert_eq!(participants_ref, [(public, set_data.bond)].as_ref());
 
-    let block = vote_in_key(set, key_pair.clone()).await;
+    let block = vote_in_keys(set, key_pair.clone()).await;
 
-    // While the vote_in_key function should handle this, it's beneficial to independently test it
+    // While the vote_in_keys function should handle this, it's beneficial to independently test it
     assert_eq!(
       serai.get_vote_events(block).await.unwrap(),
       vec![ValidatorSetsEvent::Vote { voter: public, set, key_pair: key_pair.clone(), votes: 1 }]
