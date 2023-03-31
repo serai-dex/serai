@@ -27,6 +27,7 @@ brew install rustup
 ```
 rustup update
 rustup toolchain install stable
+rustup target add wasm32-unknown-unknown
 rustup toolchain install nightly
 rustup target add wasm32-unknown-unknown --toolchain nightly
 ```
