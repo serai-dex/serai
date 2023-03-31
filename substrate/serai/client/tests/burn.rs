@@ -1,13 +1,16 @@
 use rand_core::{RngCore, OsRng};
 
-use sp_core::{sr25519::Signature, Pair};
-use subxt::{config::extrinsic_params::BaseExtrinsicParamsBuilder};
+use scale::Encode;
+
+use sp_core::Pair;
 
 use serai_client::{
+  subxt::config::extrinsic_params::BaseExtrinsicParamsBuilder,
   primitives::{
     BITCOIN_NET_ID, BITCOIN, BlockHash, SeraiAddress, Amount, Balance, Data, ExternalAddress,
     insecure_pair_from_name,
   },
+  validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::{
     InInstructionsEvent,
     primitives::{InInstruction, InInstructionWithBalance, Batch, SignedBatch},
@@ -16,8 +19,8 @@ use serai_client::{
   PairSigner, Serai,
 };
 
-mod runner;
-use runner::{URL, publish_tx, provide_batch};
+mod common;
+use common::{serai, tx::publish_tx, validator_sets::vote_in_key, in_instructions::provide_batch};
 
 serai_test!(
   async fn burn() {
@@ -27,7 +30,7 @@ serai_test!(
     let mut block_hash = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut block_hash.0);
 
-    let pair = insecure_pair_from_name("Alice");
+    let pair = insecure_pair_from_name("Dave");
     let public = pair.public();
     let address = SeraiAddress::from(public);
 
@@ -44,10 +47,15 @@ serai_test!(
         balance,
       }],
     };
-    let signed = SignedBatch { batch, signature: Signature::from_raw([0; 64]) };
+
+    let batch_pair = insecure_pair_from_name("Bitcoin");
+    let key_pair = (batch_pair.public(), vec![].try_into().unwrap());
+    vote_in_key(ValidatorSet { session: Session(0), network }, key_pair).await;
+    let signature = batch_pair.sign(&batch.encode());
+    let signed = SignedBatch { batch, signature };
     let block = provide_batch(signed).await;
 
-    let serai = Serai::new(URL).await.unwrap();
+    let serai = serai().await;
     let batches = serai.get_batch_events(block).await.unwrap();
     assert_eq!(batches, vec![InInstructionsEvent::Batch { network, id, block: block_hash }]);
 
@@ -68,12 +76,15 @@ serai_test!(
     let data = Data::new(rand_bytes).unwrap();
 
     let out = OutInstruction { address: external_address, data: Some(data) };
-    let burn = Serai::burn(balance, out.clone());
-
-    let signer = PairSigner::new(pair);
     let block = publish_tx(
-      &serai,
-      &serai.sign(&signer, &burn, 0, BaseExtrinsicParamsBuilder::new()).unwrap(),
+      &serai
+        .sign(
+          &PairSigner::new(pair),
+          &Serai::burn(balance, out.clone()),
+          0,
+          BaseExtrinsicParamsBuilder::new(),
+        )
+        .unwrap(),
     )
     .await;
 

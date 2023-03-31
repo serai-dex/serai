@@ -2,7 +2,6 @@
 
 #[frame_support::pallet]
 pub mod pallet {
-  use scale::{Encode, Decode};
   use scale_info::TypeInfo;
 
   use frame_system::pallet_prelude::*;

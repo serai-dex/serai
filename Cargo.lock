@@ -3861,9 +3861,11 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
+ "sp-application-crypto",
  "sp-runtime",
  "thiserror",
  "tokens-pallet",
+ "validator-sets-pallet",
 ]
 
 [[package]]

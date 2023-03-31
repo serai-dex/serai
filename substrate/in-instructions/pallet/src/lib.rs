@@ -22,15 +22,23 @@ pub enum PalletError {
 
 #[frame_support::pallet]
 pub mod pallet {
+  use sp_application_crypto::RuntimePublic;
+
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
 
   use tokens_pallet::{Config as TokensConfig, Pallet as Tokens};
+  use validator_sets_pallet::{
+    primitives::{Session, ValidatorSet},
+    Config as ValidatorSetsConfig, Pallet as ValidatorSets,
+  };
 
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<BlockNumber = u64> + TokensConfig {
+  pub trait Config:
+    frame_system::Config<BlockNumber = u64> + ValidatorSetsConfig + TokensConfig
+  {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -101,9 +109,31 @@ pub mod pallet {
 
       let network = batch.batch.network;
 
-      // TODO: Get the key for this network or Err(UnrecognizedNetwork)
+      // TODO: Get the latest session
+      let session = Session(0);
 
-      // TODO: Verify the signature or Err(InvalidSignature)
+      let mut set = ValidatorSet { session, network };
+      // TODO: If this session just set their keys, it'll invalidate anything in the mempool
+      // Should there be a transitory period/future-set cut off?
+      let key = if let Some(keys) = ValidatorSets::<T>::keys(set) {
+        keys.0
+      } else {
+        // If this set hasn't set their keys yet, use the previous set's
+        if set.session.0 == 0 {
+          Err(InvalidTransaction::BadProof)?;
+        }
+        set.session.0 -= 1;
+
+        if let Some(keys) = ValidatorSets::<T>::keys(set) {
+          keys.0
+        } else {
+          Err(InvalidTransaction::BadProof)?
+        }
+      };
+
+      if !key.verify(&batch.batch.encode(), &batch.signature) {
+        Err(InvalidTransaction::BadProof)?;
+      }
 
       // Verify the batch is sequential
       // Batches has the last ID set. The next ID should be it + 1

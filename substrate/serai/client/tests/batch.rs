@@ -1,10 +1,15 @@
 use rand_core::{RngCore, OsRng};
 
-use sp_core::sr25519::Signature;
+use scale::Encode;
+
+use sp_core::Pair;
 
 use serai_client::{
-  primitives::{BITCOIN_NET_ID, BITCOIN, BlockHash, SeraiAddress, Amount, Balance},
+  primitives::{
+    BITCOIN_NET_ID, BITCOIN, BlockHash, SeraiAddress, Amount, Balance, insecure_pair_from_name,
+  },
   tokens::TokensEvent,
+  validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::{
     primitives::{InInstruction, InInstructionWithBalance, Batch, SignedBatch},
     InInstructionsEvent,
@@ -12,8 +17,8 @@ use serai_client::{
   Serai,
 };
 
-mod runner;
-use runner::{URL, provide_batch};
+mod common;
+use common::{serai, validator_sets::vote_in_key, in_instructions::provide_batch};
 
 serai_test!(
   async fn publish_batch() {
@@ -39,10 +44,15 @@ serai_test!(
         balance,
       }],
     };
-    let signed = SignedBatch { batch, signature: Signature::from_raw([0; 64]) };
+
+    let batch_pair = insecure_pair_from_name("Bitcoin");
+    let key_pair = (batch_pair.public(), vec![].try_into().unwrap());
+    vote_in_key(ValidatorSet { session: Session(0), network: BITCOIN_NET_ID }, key_pair).await;
+    let signature = batch_pair.sign(&batch.encode());
+    let signed = SignedBatch { batch, signature };
     let block = provide_batch(signed).await;
 
-    let serai = Serai::new(URL).await.unwrap();
+    let serai = serai().await;
     let batches = serai.get_batch_events(block).await.unwrap();
     assert_eq!(batches, vec![InInstructionsEvent::Batch { network, id, block: block_hash }]);
 

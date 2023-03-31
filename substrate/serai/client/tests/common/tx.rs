@@ -1,0 +1,51 @@
+use core::time::Duration;
+
+use tokio::time::sleep;
+
+use serai_client::subxt::{config::Header, utils::Encoded};
+
+use crate::common::serai;
+
+#[allow(dead_code)]
+pub async fn publish_tx(tx: &Encoded) -> [u8; 32] {
+  let serai = serai().await;
+
+  let mut latest = serai
+    .get_block(serai.get_latest_block_hash().await.unwrap())
+    .await
+    .unwrap()
+    .unwrap()
+    .header
+    .number();
+
+  serai.publish(tx).await.unwrap();
+
+  // Get the block it was included in
+  // TODO: Add an RPC method for this/check the guarantee on the subscription
+  let mut ticks = 0;
+  loop {
+    latest += 1;
+
+    let block = {
+      let mut block;
+      while {
+        block = serai.get_block_by_number(latest).await.unwrap();
+        block.is_none()
+      } {
+        sleep(Duration::from_secs(1)).await;
+        ticks += 1;
+
+        if ticks > 60 {
+          panic!("60 seconds without inclusion in a finalized block");
+        }
+      }
+      block.unwrap()
+    };
+
+    for extrinsic in block.extrinsics {
+      if extrinsic.0 == tx.0[2 ..] {
+        return block.header.hash().into();
+      }
+    }
+  }
+}
