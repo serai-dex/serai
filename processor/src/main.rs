@@ -333,7 +333,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
         match msg.msg.clone() {
           CoordinatorMessage::KeyGen(msg) => {
             match key_gen.handle(msg).await {
-              KeyGenEvent::KeyConfirmed { activation_number, substrate_keys, coin_keys } => {
+              // TODO: Handle substrate_keys
+              KeyGenEvent::KeyConfirmed { activation_number, substrate_keys: _, coin_keys } => {
                 let keys = coin_keys;
                 let key = keys.group_key();
                 scanner.rotate_key(activation_number, key).await;

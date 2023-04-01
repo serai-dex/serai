@@ -87,7 +87,7 @@ impl Rpc {
   pub fn new(mut url: String) -> Result<Rpc, RpcError> {
     // Parse out the username and password
     let userpass = if url.contains('@') {
-      let url_clone = url.clone();
+      let url_clone = url;
       let split_url = url_clone.split('@').collect::<Vec<_>>();
       if split_url.len() != 2 {
         Err(RpcError::InvalidNode)?;
