@@ -42,7 +42,7 @@ macro_rules! serai_test {
 
           let node = {
             let this_crate = Path::new(env!("CARGO_MANIFEST_DIR"));
-            let top_level = this_crate.join("../../../");
+            let top_level = this_crate.join("../../");
             top_level.join("target/debug/serai-node")
           };
 
