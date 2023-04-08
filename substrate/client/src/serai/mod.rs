@@ -156,7 +156,7 @@ impl Serai {
         .await
         .map_err(SeraiError::RpcError)? else {
           // This is an error since there is a block at this index
-          return Err(SeraiError::InvalidNode);
+          Err(SeraiError::InvalidNode)?
         };
 
     Ok(Some(header.hash() == hash))

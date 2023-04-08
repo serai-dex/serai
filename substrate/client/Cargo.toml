@@ -3,7 +3,7 @@ name = "serai-client"
 version = "0.1.0"
 description = "Client library for the Serai network"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/client"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["serai"]
 edition = "2021"
@@ -18,15 +18,15 @@ thiserror = { version = "1", optional = true }
 scale = { package = "parity-scale-codec", version = "3" }
 scale-info = { version = "2", optional = true }
 
-serai-runtime = { path = "../../runtime", version = "0.1" }
+serai-runtime = { path = "../runtime", version = "0.1" }
 
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 subxt = { version = "0.27", default-features = false, features = ["jsonrpsee-ws"], optional = true }
 
 bitcoin = { version = "0.29", optional = true }
 
-ciphersuite = { path = "../../../crypto/ciphersuite", version = "0.3", optional = true }
-monero-serai = { path = "../../../coins/monero", version = "0.1.4-alpha", optional = true }
+ciphersuite = { path = "../../crypto/ciphersuite", version = "0.3", optional = true }
+monero-serai = { path = "../../coins/monero", version = "0.1.4-alpha", optional = true }
 
 [features]
 serai = ["thiserror", "scale-info", "subxt"]

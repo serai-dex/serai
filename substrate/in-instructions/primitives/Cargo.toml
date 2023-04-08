@@ -22,7 +22,7 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-serai-primitives = { path = "../../serai/primitives", default-features = false }
+serai-primitives = { path = "../..//primitives", default-features = false }
 tokens-primitives = { path = "../../tokens/primitives", default-features = false }
 
 [features]

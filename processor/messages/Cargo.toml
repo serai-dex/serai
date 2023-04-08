@@ -24,7 +24,7 @@ serde = { version = "1", features = ["derive"] }
 
 dkg = { path = "../../crypto/dkg", features = ["serde"] }
 
-serai-primitives = { path = "../../substrate/serai/primitives" }
+serai-primitives = { path = "../../substrate/primitives" }
 in-instructions-primitives = { path = "../../substrate/in-instructions/primitives" }
 tokens-primitives = { path = "../../substrate/tokens/primitives" }
 validator-sets-primitives = { path = "../../substrate/validator-sets/primitives" }

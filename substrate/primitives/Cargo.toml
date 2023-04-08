@@ -3,7 +3,7 @@ name = "serai-primitives"
 version = "0.1.0"
 description = "Primitives for the Serai blockchain"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/serai/primitives"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/primitives"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 

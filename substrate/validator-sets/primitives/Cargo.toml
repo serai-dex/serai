@@ -21,7 +21,7 @@ serde = { version = "1", features = ["derive"], optional = true }
 
 sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-serai-primitives = { path = "../../serai/primitives", default-features = false }
+serai-primitives = { path = "../..//primitives", default-features = false }
 
 [features]
 std = ["zeroize", "scale/std", "scale-info/std", "serde", "sp-core/std", "serai-primitives/std"]
