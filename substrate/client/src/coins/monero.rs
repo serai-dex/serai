@@ -68,8 +68,8 @@ impl TryFrom<Vec<u8>> for Address {
           }
         },
       ),
-      Ed25519::read_G(&mut addr.spend.as_ref()).map_err(|_| ())?.0,
-      Ed25519::read_G(&mut addr.view.as_ref()).map_err(|_| ())?.0,
+      Ed25519::read_G::<&[u8]>(&mut addr.spend.as_ref()).map_err(|_| ())?.0,
+      Ed25519::read_G::<&[u8]>(&mut addr.view.as_ref()).map_err(|_| ())?.0,
     )))
   }
 }

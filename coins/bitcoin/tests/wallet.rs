@@ -20,11 +20,9 @@ use frost::{
 use bitcoin_serai::{
   bitcoin::{
     hashes::Hash as HashTrait,
-    blockdata::{
-      opcodes::all::OP_RETURN,
-      script::{Instruction, Instructions},
-    },
-    OutPoint, Script, TxOut, Transaction, Network, Address,
+    blockdata::opcodes::all::OP_RETURN,
+    script::{PushBytesBuf, Instruction, Instructions, Script},
+    OutPoint, TxOut, Transaction, Network, Address,
   },
   wallet::{tweak_keys, address, ReceivedOutput, Scanner, TransactionError, SignableTransaction},
   rpc::Rpc,
@@ -54,7 +52,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
   rpc
     .rpc_call::<Vec<String>>(
       "generatetoaddress",
-      serde_json::json!([100, Address::p2sh(&Script::new(), Network::Regtest).unwrap()]),
+      serde_json::json!([100, Address::p2sh(Script::empty(), Network::Regtest).unwrap()]),
     )
     .await
     .unwrap();
@@ -306,7 +304,7 @@ async_sequential! {
     // This also tests send_raw_transaction and get_transaction, which the RPC test can't
     // effectively test
     rpc.send_raw_transaction(&tx).await.unwrap();
-    let mut hash = tx.txid().as_hash().into_inner();
+    let mut hash = *tx.txid().as_raw_hash().as_byte_array();
     hash.reverse();
     assert_eq!(tx, rpc.get_transaction(&hash).await.unwrap());
   }
@@ -338,7 +336,10 @@ async_sequential! {
     assert!(tx.output[0].script_pubkey.is_op_return());
     let check = |mut instructions: Instructions| {
       assert_eq!(instructions.next().unwrap().unwrap(), Instruction::Op(OP_RETURN));
-      assert_eq!(instructions.next().unwrap().unwrap(), Instruction::PushBytes(&data));
+      assert_eq!(
+        instructions.next().unwrap().unwrap(),
+        Instruction::PushBytes(&PushBytesBuf::try_from(data.clone()).unwrap()),
+      );
       assert!(instructions.next().is_none());
     };
     check(tx.output[0].script_pubkey.instructions());

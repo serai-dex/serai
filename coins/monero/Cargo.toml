@@ -55,7 +55,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3" }
 monero-generators = { path = "generators", version = "0.3" }
 
 [dev-dependencies]
-hex-literal = "0.3"
+hex-literal = "0.4"
 
 tokio = { version = "1", features = ["full"] }
 monero-rpc = "0.3"

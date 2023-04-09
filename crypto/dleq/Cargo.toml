@@ -29,7 +29,7 @@ group = "0.13"
 multiexp = { path = "../multiexp", version = "0.3", features = ["batch"], optional = true }
 
 [dev-dependencies]
-hex-literal = "0.3"
+hex-literal = "0.4"
 
 blake2 = "0.10"
 

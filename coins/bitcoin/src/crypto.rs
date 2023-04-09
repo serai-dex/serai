@@ -23,7 +23,7 @@ use frost::{
   algorithm::{Hram as HramTrait, Algorithm, Schnorr as FrostSchnorr},
 };
 
-use bitcoin::XOnlyPublicKey;
+use bitcoin::key::XOnlyPublicKey;
 
 /// Get the x coordinate of a non-infinity, even point. Panics on invalid input.
 pub fn x(key: &ProjectivePoint) -> [u8; 32] {

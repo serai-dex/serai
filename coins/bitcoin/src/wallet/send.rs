@@ -13,9 +13,10 @@ use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, sign::*};
 
 use bitcoin::{
-  hashes::Hash,
-  util::sighash::{SchnorrSighashType, SighashCache, Prevouts},
-  OutPoint, Script, Sequence, Witness, TxIn, TxOut, PackedLockTime, Transaction, Network, Address,
+  sighash::{TapSighashType, SighashCache, Prevouts},
+  absolute::LockTime,
+  script::{PushBytesBuf, ScriptBuf},
+  OutPoint, Sequence, Witness, TxIn, TxOut, Transaction, Network, Address,
 };
 
 use crate::{
@@ -61,18 +62,18 @@ impl SignableTransaction {
     // Expand this a full transaction in order to use the bitcoin library's weight function
     let mut tx = Transaction {
       version: 2,
-      lock_time: PackedLockTime::ZERO,
+      lock_time: LockTime::ZERO,
       input: vec![
         TxIn {
           // This is a fixed size
           // See https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
           previous_output: OutPoint::default(),
           // This is empty for a Taproot spend
-          script_sig: Script::new(),
+          script_sig: ScriptBuf::new(),
           // This is fixed size, yet we do use Sequence::MAX
           sequence: Sequence::MAX,
           // Our witnesses contains a single 64-byte signature
-          witness: Witness::from_vec(vec![vec![0; 64]])
+          witness: Witness::from_slice(&[vec![0; 64]])
         };
         inputs
       ],
@@ -137,7 +138,7 @@ impl SignableTransaction {
       .iter()
       .map(|input| TxIn {
         previous_output: input.outpoint,
-        script_sig: Script::new(),
+        script_sig: ScriptBuf::new(),
         sequence: Sequence::MAX,
         witness: Witness::new(),
       })
@@ -151,7 +152,13 @@ impl SignableTransaction {
 
     // Add the OP_RETURN output
     if let Some(data) = data {
-      tx_outs.push(TxOut { value: 0, script_pubkey: Script::new_op_return(&data) })
+      tx_outs.push(TxOut {
+        value: 0,
+        script_pubkey: ScriptBuf::new_op_return(
+          &PushBytesBuf::try_from(data)
+            .expect("data didn't fit into PushBytes depsite being checked"),
+        ),
+      })
     }
 
     let mut weight = Self::calculate_weight(tx_ins.len(), payments, None);
@@ -182,12 +189,7 @@ impl SignableTransaction {
     }
 
     Ok(SignableTransaction {
-      tx: Transaction {
-        version: 2,
-        lock_time: PackedLockTime::ZERO,
-        input: tx_ins,
-        output: tx_outs,
-      },
+      tx: Transaction { version: 2, lock_time: LockTime::ZERO, input: tx_ins, output: tx_outs },
       offsets,
       prevouts: inputs.drain(..).map(|input| input.output).collect(),
       needed_fee,
@@ -208,7 +210,7 @@ impl SignableTransaction {
     // Transcript the inputs and outputs
     let tx = &self.tx;
     for input in &tx.input {
-      transcript.append_message(b"input_hash", input.previous_output.txid.as_hash().into_inner());
+      transcript.append_message(b"input_hash", input.previous_output.txid);
       transcript.append_message(b"input_output_index", input.previous_output.vout.to_le_bytes());
     }
     for payment in &tx.output {
@@ -335,9 +337,10 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       .map(|(i, sig)| {
         let (sig, share) = sig.sign(
           commitments[i].clone(),
-          &cache
-            .taproot_key_spend_signature_hash(i, &prevouts, SchnorrSighashType::Default)
-            .unwrap(),
+          cache
+            .taproot_key_spend_signature_hash(i, &prevouts, TapSighashType::Default)
+            .unwrap()
+            .as_ref(),
         )?;
         shares.push(share);
         Ok(sig)
@@ -369,7 +372,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
         shares.iter_mut().map(|(l, shares)| (*l, shares.remove(0))).collect::<HashMap<_, _>>(),
       )?;
 
-      let mut witness: Witness = Witness::new();
+      let mut witness = Witness::new();
       witness.push(sig.as_ref());
       input.witness = witness;
     }

@@ -6,10 +6,7 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
 use bitcoin::{
-  hashes::{
-    Hash,
-    hex::{FromHex, ToHex},
-  },
+  hashes::{Hash, hex::FromHex},
   consensus::encode,
   Txid, Transaction, BlockHash, Block,
 };
@@ -88,8 +85,11 @@ impl Rpc {
 
   /// Get the hash of a block by the block's number.
   pub async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
-    let mut hash =
-      self.rpc_call::<BlockHash>("getblockhash", json!([number])).await?.as_hash().into_inner();
+    let mut hash = *self
+      .rpc_call::<BlockHash>("getblockhash", json!([number]))
+      .await?
+      .as_raw_hash()
+      .as_byte_array();
     // bitcoin stores the inner bytes in reverse order.
     hash.reverse();
     Ok(hash)
@@ -101,16 +101,16 @@ impl Rpc {
     struct Number {
       height: usize,
     }
-    Ok(self.rpc_call::<Number>("getblockheader", json!([hash.to_hex()])).await?.height)
+    Ok(self.rpc_call::<Number>("getblockheader", json!([hex::encode(hash)])).await?.height)
   }
 
   /// Get a block by its hash.
   pub async fn get_block(&self, hash: &[u8; 32]) -> Result<Block, RpcError> {
-    let hex = self.rpc_call::<String>("getblock", json!([hash.to_hex(), 0])).await?;
+    let hex = self.rpc_call::<String>("getblock", json!([hex::encode(hash), 0])).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
     let block: Block = encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)?;
 
-    let mut block_hash = block.block_hash().as_hash().into_inner();
+    let mut block_hash = *block.block_hash().as_raw_hash().as_byte_array();
     block_hash.reverse();
     if hash != &block_hash {
       Err(RpcError::InvalidResponse)?;
@@ -130,11 +130,11 @@ impl Rpc {
 
   /// Get a transaction by its hash.
   pub async fn get_transaction(&self, hash: &[u8; 32]) -> Result<Transaction, RpcError> {
-    let hex = self.rpc_call::<String>("getrawtransaction", json!([hash.to_hex()])).await?;
+    let hex = self.rpc_call::<String>("getrawtransaction", json!([hex::encode(hash)])).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
     let tx: Transaction = encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)?;
 
-    let mut tx_hash = tx.txid().as_hash().into_inner();
+    let mut tx_hash = *tx.txid().as_raw_hash().as_byte_array();
     tx_hash.reverse();
     if hash != &tx_hash {
       Err(RpcError::InvalidResponse)?;

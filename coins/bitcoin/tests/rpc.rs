@@ -18,7 +18,7 @@ async_sequential! {
     // Test get_block by checking the received block's hash matches the request
     let block = rpc.get_block(&hash).await.unwrap();
     // Hashes are stored in reverse. It's bs from Satoshi
-    let mut block_hash = block.block_hash().as_hash().into_inner();
+    let mut block_hash = *block.block_hash().as_raw_hash().as_byte_array();
     block_hash.reverse();
     assert_eq!(hash, block_hash);
   }

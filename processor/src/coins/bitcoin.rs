@@ -16,10 +16,8 @@ use bitcoin_serai::{
   bitcoin::{
     hashes::Hash as HashTrait,
     consensus::{Encodable, Decodable},
-    psbt::serialize::Serialize,
-    OutPoint,
-    blockdata::script::Instruction,
-    Transaction, Block, Network,
+    script::Instruction,
+    OutPoint, Transaction, Block, Network,
   },
   wallet::{
     tweak_keys, address, ReceivedOutput, Scanner, TransactionError,
@@ -31,9 +29,11 @@ use bitcoin_serai::{
 #[cfg(test)]
 use bitcoin_serai::bitcoin::{
   secp256k1::{SECP256K1, SecretKey, Message},
-  PrivateKey, PublicKey, EcdsaSighashType,
-  blockdata::script::Builder,
-  PackedLockTime, Sequence, Script, Witness, TxIn, TxOut, Address as BAddress,
+  PrivateKey, PublicKey,
+  sighash::{EcdsaSighashType, SighashCache},
+  script::{PushBytesBuf, Builder},
+  absolute::LockTime,
+  Sequence, Script, Witness, TxIn, TxOut, Address as BAddress,
 };
 
 use serai_client::{
@@ -134,19 +134,21 @@ pub struct Fee(u64);
 impl TransactionTrait<Bitcoin> for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    let mut hash = self.txid().as_hash().into_inner();
+    let mut hash = *self.txid().as_raw_hash().as_byte_array();
     hash.reverse();
     hash
   }
   fn serialize(&self) -> Vec<u8> {
-    Serialize::serialize(self)
+    let mut buf = vec![];
+    self.consensus_encode(&mut buf).unwrap();
+    buf
   }
   #[cfg(test)]
   async fn fee(&self, coin: &Bitcoin) -> u64 {
     let mut value = 0;
     for input in &self.input {
       let output = input.previous_output;
-      let mut hash = output.txid.as_hash().into_inner();
+      let mut hash = *output.txid.as_raw_hash().as_byte_array();
       hash.reverse();
       value += coin.rpc.get_transaction(&hash).await.unwrap().output
         [usize::try_from(output.vout).unwrap()]
@@ -191,7 +193,7 @@ impl Eq for SignableTransaction {}
 impl BlockTrait<Bitcoin> for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    let mut hash = self.block_hash().as_hash().into_inner();
+    let mut hash = *self.block_hash().as_raw_hash().as_byte_array();
     hash.reverse();
     hash
   }
@@ -350,7 +352,7 @@ impl Coin for Bitcoin {
             for output in &tx.output {
               if output.script_pubkey.is_op_return() {
                 match output.script_pubkey.instructions_minimal().last() {
-                  Some(Ok(Instruction::PushBytes(data))) => return data.to_vec(),
+                  Some(Ok(Instruction::PushBytes(data))) => return data.as_bytes().to_vec(),
                   _ => continue,
                 }
               }
@@ -552,7 +554,7 @@ impl Coin for Bitcoin {
       .rpc
       .rpc_call::<Vec<String>>(
         "generatetoaddress",
-        serde_json::json!([1, BAddress::p2sh(&Script::new(), Network::Regtest).unwrap()]),
+        serde_json::json!([1, BAddress::p2sh(Script::empty(), Network::Regtest).unwrap()]),
       )
       .await
       .unwrap();
@@ -579,10 +581,10 @@ impl Coin for Bitcoin {
     let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
     let mut tx = Transaction {
       version: 2,
-      lock_time: PackedLockTime::ZERO,
+      lock_time: LockTime::ZERO,
       input: vec![TxIn {
         previous_output: OutPoint { txid: tx.txid(), vout: 0 },
-        script_sig: Script::default(),
+        script_sig: Script::empty().into(),
         sequence: Sequence(u32::MAX),
         witness: Witness::default(),
       }],
@@ -595,15 +597,20 @@ impl Coin for Bitcoin {
     let mut der = SECP256K1
       .sign_ecdsa_low_r(
         &Message::from(
-          tx.signature_hash(0, &main_addr.script_pubkey(), EcdsaSighashType::All.to_u32())
-            .as_hash(),
+          SighashCache::new(&tx)
+            .legacy_signature_hash(0, &main_addr.script_pubkey(), EcdsaSighashType::All.to_u32())
+            .unwrap()
+            .to_raw_hash(),
         ),
         &private_key.inner,
       )
       .serialize_der()
       .to_vec();
     der.push(1);
-    tx.input[0].script_sig = Builder::new().push_slice(&der).push_key(&public_key).into_script();
+    tx.input[0].script_sig = Builder::new()
+      .push_slice(PushBytesBuf::try_from(der).unwrap())
+      .push_key(&public_key)
+      .into_script();
 
     let block = self.get_latest_block_number().await.unwrap() + 1;
     self.rpc.send_raw_transaction(&tx).await.unwrap();

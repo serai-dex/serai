@@ -164,7 +164,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
 
     let rng = |label, id: KeyGenId| {
       let mut transcript = RecommendedTranscript::new(label);
-      transcript.append_message(b"entropy", self.entropy.as_ref());
+      transcript.append_message(b"entropy", &self.entropy);
       transcript.append_message(b"context", context(&id));
       ChaCha20Rng::from_seed(transcript.rng_seed(b"rng"))
     };

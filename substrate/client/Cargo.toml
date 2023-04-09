@@ -23,7 +23,7 @@ serai-runtime = { path = "../runtime", version = "0.1" }
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 subxt = { version = "0.27", default-features = false, features = ["jsonrpsee-ws"], optional = true }
 
-bitcoin = { version = "0.29", optional = true }
+bitcoin = { version = "0.30", optional = true }
 
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.3", optional = true }
 monero-serai = { path = "../../coins/monero", version = "0.1.4-alpha", optional = true }

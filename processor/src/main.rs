@@ -178,17 +178,19 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
     }
     let bytes = Zeroizing::new(hex::decode(entropy).expect("entropy wasn't hex-formatted"));
     let mut entropy = Zeroizing::new([0; 32]);
-    entropy.as_mut().copy_from_slice(bytes.as_ref());
+    let entropy_mut: &mut [u8] = entropy.as_mut();
+    entropy_mut.copy_from_slice(bytes.as_ref());
 
     let mut transcript = RecommendedTranscript::new(b"Serai Processor Entropy");
-    transcript.append_message(b"entropy", entropy.as_ref());
+    transcript.append_message(b"entropy", entropy);
     transcript
   };
 
   let mut entropy = |label| {
     let mut challenge = entropy_transcript.challenge(label);
     let mut res = Zeroizing::new([0; 32]);
-    res.as_mut().copy_from_slice(&challenge[.. 32]);
+    let res_mut: &mut [u8] = res.as_mut();
+    res_mut.copy_from_slice(&challenge[.. 32]);
     challenge.zeroize();
     res
   };

@@ -14,8 +14,8 @@ use frost::{
 
 use bitcoin::{
   consensus::encode::{Decodable, serialize},
-  schnorr::TweakedPublicKey,
-  OutPoint, Script, TxOut, Transaction, Block, Network, Address,
+  key::TweakedPublicKey,
+  OutPoint, ScriptBuf, TxOut, Transaction, Block, Network, Address,
 };
 
 use crate::crypto::{x_only, make_even};
@@ -95,7 +95,7 @@ impl ReceivedOutput {
 #[derive(Clone, Debug)]
 pub struct Scanner {
   key: ProjectivePoint,
-  scripts: HashMap<Script, Scalar>,
+  scripts: HashMap<ScriptBuf, Scalar>,
 }
 
 impl Scanner {
