@@ -26,6 +26,7 @@ allow = [
 
   # Attribution required
   "MIT",
+  "MITNFA",
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
@@ -44,7 +45,6 @@ allow-osi-fsf-free = "neither"
 default = "deny"
 
 exceptions = [
-  { allow = ["AGPL-3.0"], name = "bitcoin-serai" },
   { allow = ["AGPL-3.0"], name = "ethereum-serai" },
 
   { allow = ["AGPL-3.0"], name = "processor-messages" },
@@ -80,6 +80,7 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
+  "https://github.com/RustCrypto/elliptic-curves",
+  "https://github.com/serai-dex/substrate-bip39",
   "https://github.com/serai-dex/substrate",
-  "https://github.com/RustCrypto/elliptic-curves"
 ]
