@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+
 use std::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
@@ -9,10 +12,16 @@ use transcript::{Transcript, MerlinTranscript};
 use group::{ff::PrimeField, GroupEncoding};
 use ciphersuite::{Ciphersuite, Ristretto};
 use schnorr::SchnorrSignature;
-use frost::{
+
+use ::frost::{
   Participant, ThresholdKeys, ThresholdView, FrostError,
   algorithm::{Hram, Algorithm, Schnorr},
 };
+
+/// The [modular-frost](https://docs.rs/modular-frost) library.
+pub mod frost {
+  pub use ::frost::*;
+}
 
 use schnorrkel::{PublicKey, Signature, context::SigningTranscript, signing_context};
 
@@ -41,6 +50,7 @@ impl Hram<Ristretto> for SchnorrkelHram {
   }
 }
 
+/// FROST Schnorrkel algorithm.
 #[derive(Clone)]
 pub struct Schnorrkel {
   context: &'static [u8],
@@ -49,6 +59,7 @@ pub struct Schnorrkel {
 }
 
 impl Schnorrkel {
+  /// Create a new algorithm with the specified context.
   pub fn new(context: &'static [u8]) -> Schnorrkel {
     Schnorrkel {
       context,
