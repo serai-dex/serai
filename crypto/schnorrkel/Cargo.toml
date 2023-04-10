@@ -14,15 +14,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rand_core = "0.6"
-zeroize = "1.5"
+zeroize = "^1.5"
 
-group = "0.12"
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3", features = ["merlin"] }
 
-ciphersuite = { path = "../ciphersuite", version = "0.1", features = ["std", "ristretto"] }
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.2" }
-frost = { path = "../frost", package = "modular-frost", version = "0.5", features = ["ristretto"] }
+group = "0.13"
+
+ciphersuite = { path = "../ciphersuite", version = "0.3", features = ["std", "ristretto"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.4" }
+frost = { path = "../frost", package = "modular-frost", version = "0.7", features = ["ristretto"] }
 
 schnorrkel = "0.10"
 
 [dev-dependencies]
-frost = { path = "../frost", package = "modular-frost", version = "0.5", features = ["ristretto", "tests"] }
+frost = { path = "../frost", package = "modular-frost", features = ["tests"] }

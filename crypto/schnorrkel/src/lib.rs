@@ -4,12 +4,14 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroizing;
 
+use transcript::{Transcript, MerlinTranscript};
+
 use group::{ff::PrimeField, GroupEncoding};
 use ciphersuite::{Ciphersuite, Ristretto};
 use schnorr::SchnorrSignature;
 use frost::{
-  ThresholdKeys, ThresholdView, FrostError,
-  algorithm::{IetfTranscript, Hram, Algorithm, Schnorr},
+  Participant, ThresholdKeys, ThresholdView, FrostError,
+  algorithm::{Hram, Algorithm, Schnorr},
 };
 
 use schnorrkel::{PublicKey, Signature, context::SigningTranscript, signing_context};
@@ -42,18 +44,22 @@ impl Hram<Ristretto> for SchnorrkelHram {
 #[derive(Clone)]
 pub struct Schnorrkel {
   context: &'static [u8],
-  schnorr: Schnorr<Ristretto, SchnorrkelHram>,
+  schnorr: Schnorr<Ristretto, MerlinTranscript, SchnorrkelHram>,
   msg: Option<Vec<u8>>,
 }
 
 impl Schnorrkel {
   pub fn new(context: &'static [u8]) -> Schnorrkel {
-    Schnorrkel { context, schnorr: Schnorr::new(), msg: None }
+    Schnorrkel {
+      context,
+      schnorr: Schnorr::new(MerlinTranscript::new(b"FROST Schnorrkel")),
+      msg: None,
+    }
   }
 }
 
 impl Algorithm<Ristretto> for Schnorrkel {
-  type Transcript = IetfTranscript;
+  type Transcript = MerlinTranscript;
   type Addendum = ();
   type Signature = Signature;
 
@@ -79,7 +85,7 @@ impl Algorithm<Ristretto> for Schnorrkel {
   fn process_addendum(
     &mut self,
     _: &ThresholdView<Ristretto>,
-    _: u16,
+    _: Participant,
     _: (),
   ) -> Result<(), FrostError> {
     Ok(())

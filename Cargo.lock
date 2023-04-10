@@ -3081,6 +3081,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "frost-schnorrkel"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "flexible-transcript",
+ "group 0.13.0",
+ "modular-frost",
+ "rand_core 0.6.4",
+ "schnorr-signatures",
+ "schnorrkel",
+ "zeroize",
+]
+
+[[package]]
 name = "fs-err"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
