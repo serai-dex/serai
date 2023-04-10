@@ -31,8 +31,8 @@ pub enum Application {
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
 pub struct ApplicationCall {
-  application: Application,
-  data: Data,
+  pub application: Application,
+  pub data: Data,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]

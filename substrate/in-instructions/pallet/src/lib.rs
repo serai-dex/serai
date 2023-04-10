@@ -83,6 +83,9 @@ pub mod pallet {
         block: batch.block,
       });
       for (i, instruction) in batch.instructions.drain(..).enumerate() {
+        // TODO: Check this balance's coin belongs to this network
+        // If they don't, the validator set should be completely slashed, without question
+
         if Self::execute(instruction).is_err() {
           Self::deposit_event(Event::InstructionFailure {
             network: batch.network,
