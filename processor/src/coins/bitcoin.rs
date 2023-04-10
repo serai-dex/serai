@@ -288,7 +288,7 @@ impl Coin for Bitcoin {
 
   const NETWORK: NetworkId = BITCOIN_NET_ID;
   const ID: &'static str = "Bitcoin";
-  const CONFIRMATIONS: usize = 3;
+  const CONFIRMATIONS: usize = 6;
 
   // 0.0001 BTC, 10,000 satoshis
   #[allow(clippy::inconsistent_digit_grouping)]
