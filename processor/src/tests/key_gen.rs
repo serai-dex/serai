@@ -8,7 +8,7 @@ use group::GroupEncoding;
 use frost::{Participant, ThresholdParams, tests::clone_without};
 
 use serai_client::{
-  primitives::MONERO_NET_ID,
+  primitives::{MONERO_NET_ID, BlockHash},
   validator_sets::primitives::{Session, ValidatorSet},
 };
 
@@ -119,14 +119,14 @@ pub async fn test_key_gen<C: Coin>() {
 
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
-    if let KeyGenEvent::KeyConfirmed { activation_number, substrate_keys, coin_keys } = key_gen
+    if let KeyGenEvent::KeyConfirmed { activation_block, substrate_keys, coin_keys } = key_gen
       .handle(CoordinatorMessage::ConfirmKeyPair {
-        context: SubstrateContext { time: 0, coin_latest_block_number: 111 },
+        context: SubstrateContext { time: 0, coin_latest_finalized_block: BlockHash([0x11; 32]) },
         id: ID,
       })
       .await
     {
-      assert_eq!(activation_number, 111);
+      assert_eq!(activation_block, BlockHash([0x11; 32]));
       let params =
         ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap();
       assert_eq!(substrate_keys.params(), params);

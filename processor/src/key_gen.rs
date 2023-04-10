@@ -15,7 +15,7 @@ use frost::{
 
 use log::info;
 
-use serai_client::validator_sets::primitives::ValidatorSet;
+use serai_client::{primitives::BlockHash, validator_sets::primitives::ValidatorSet};
 use messages::key_gen::*;
 
 use crate::{DbTxn, Db, coins::Coin};
@@ -23,7 +23,7 @@ use crate::{DbTxn, Db, coins::Coin};
 #[derive(Debug)]
 pub enum KeyGenEvent<C: Ciphersuite> {
   KeyConfirmed {
-    activation_number: usize,
+    activation_block: BlockHash,
     substrate_keys: ThresholdKeys<Ristretto>,
     coin_keys: ThresholdKeys<C>,
   },
@@ -374,7 +374,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         );
 
         KeyGenEvent::KeyConfirmed {
-          activation_number: context.coin_latest_block_number.try_into().unwrap(),
+          activation_block: context.coin_latest_finalized_block,
           substrate_keys,
           coin_keys,
         }

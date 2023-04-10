@@ -10,14 +10,15 @@ use serde::{Serialize, Deserialize};
 
 use dkg::{Participant, ThresholdParams};
 
-use in_instructions_primitives::InInstructionWithBalance;
+use serai_primitives::BlockHash;
+use in_instructions_primitives::SignedBatch;
 use tokens_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::ValidatorSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
   pub time: u64,
-  pub coin_latest_block_number: u64,
+  pub coin_latest_finalized_block: BlockHash,
 }
 
 pub mod key_gen {
@@ -39,6 +40,16 @@ pub mod key_gen {
     Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
     // Confirm a key pair.
     ConfirmKeyPair { context: SubstrateContext, id: KeyGenId },
+  }
+
+  impl CoordinatorMessage {
+    pub fn required_block(&self) -> Option<BlockHash> {
+      if let CoordinatorMessage::ConfirmKeyPair { context, .. } = self {
+        Some(context.coin_latest_finalized_block)
+      } else {
+        None
+      }
+    }
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -95,6 +106,12 @@ pub mod sign {
     Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
 
+  impl CoordinatorMessage {
+    pub fn required_block(&self) -> Option<BlockHash> {
+      None
+    }
+  }
+
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created preprocess for the specified signing protocol.
@@ -116,18 +133,72 @@ pub mod sign {
   }
 }
 
+pub mod coordinator {
+  use super::*;
+
+  #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+  pub enum CoordinatorMessage {
+    // The validators have off-chain agreeance on this block being finalized. That means it should
+    // be signed and published to Substrate.
+    BlockFinalized { key: Vec<u8>, block: BlockHash },
+
+    // Uses Vec<u8> instead of [u8; 64] since serde Deserialize isn't implemented for [u8; 64]
+    BlockPreprocesses { key: Vec<u8>, block: BlockHash, preprocesses: HashMap<Participant, Vec<u8>> },
+    BlockShares { key: Vec<u8>, block: BlockHash, shares: HashMap<Participant, [u8; 32]> },
+    // Needed so a client which didn't participate in signing can still realize signing completed
+    BlockSigned { key: Vec<u8>, block: BlockHash, signature: Vec<u8> },
+  }
+
+  impl CoordinatorMessage {
+    pub fn required_block(&self) -> Option<BlockHash> {
+      Some(match self {
+        CoordinatorMessage::BlockFinalized { block, .. } => *block,
+        CoordinatorMessage::BlockPreprocesses { block, .. } => *block,
+        CoordinatorMessage::BlockShares { block, .. } => *block,
+        CoordinatorMessage::BlockSigned { block, .. } => *block,
+      })
+    }
+  }
+
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  pub enum ProcessorMessage {
+    // This should become an inherent transaction by the block producer.
+    // As an inherent, this should be ~41 bytes per update.
+    // Ideally, we don't need to put finalized_block on chain though.
+    Block { key: Vec<u8>, latest_number: u64, finalized_block: BlockHash },
+
+    BlockPreprocess { key: Vec<u8>, block: BlockHash, preprocess: Vec<u8> },
+    BlockSign { key: Vec<u8>, block: BlockHash, share: [u8; 32] },
+  }
+}
+
 pub mod substrate {
   use super::*;
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
-    BlockAcknowledged { context: SubstrateContext, key: Vec<u8>, block: Vec<u8> },
+    // Substrate acknwoledged the block, meaning it should be acted upon.
+    //
+    // This still needs to come from Substrate, not from the validator-chain, due to it mutating
+    // the scheduler, which the Substrate chain primarily does. To have two causes of mutation
+    // requires a definitive ordering, which isn't achievable when we have distinct consensus.
+    BlockAcknowledged { context: SubstrateContext, key: Vec<u8>, block: BlockHash },
     Burns { context: SubstrateContext, burns: Vec<OutInstructionWithBalance> },
+  }
+
+  impl CoordinatorMessage {
+    pub fn required_block(&self) -> Option<BlockHash> {
+      let context = match self {
+        CoordinatorMessage::BlockAcknowledged { context, .. } => context,
+        CoordinatorMessage::Burns { context, .. } => context,
+      };
+      Some(context.coin_latest_finalized_block)
+    }
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    Update { key: Vec<u8>, block: Vec<u8>, instructions: Vec<InInstructionWithBalance> },
+    Update { key: Vec<u8>, batch: SignedBatch },
   }
 }
 
@@ -135,12 +206,25 @@ pub mod substrate {
 pub enum CoordinatorMessage {
   KeyGen(key_gen::CoordinatorMessage),
   Sign(sign::CoordinatorMessage),
+  Coordinator(coordinator::CoordinatorMessage),
   Substrate(substrate::CoordinatorMessage),
+}
+
+impl CoordinatorMessage {
+  pub fn required_block(&self) -> Option<BlockHash> {
+    match self {
+      CoordinatorMessage::KeyGen(msg) => msg.required_block(),
+      CoordinatorMessage::Sign(msg) => msg.required_block(),
+      CoordinatorMessage::Coordinator(msg) => msg.required_block(),
+      CoordinatorMessage::Substrate(msg) => msg.required_block(),
+    }
+  }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ProcessorMessage {
   KeyGen(key_gen::ProcessorMessage),
   Sign(sign::ProcessorMessage),
+  Coordinator(coordinator::ProcessorMessage),
   Substrate(substrate::ProcessorMessage),
 }

@@ -232,6 +232,10 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     scanner.keys.push(key);
   }
 
+  pub async fn block_number(&self, id: &<C::Block as Block<C>>::Id) -> Option<usize> {
+    self.scanner.read().await.db.block_number(id)
+  }
+
   /// Acknowledge having handled a block for a key.
   pub async fn ack_block(
     &self,
@@ -341,7 +345,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
 
             if let Some(id) = scanner.db.block(i) {
               // TODO2: Also check this block builds off the previous block
-              if id != block.id() {
+              if id != block_id {
                 panic!("{} reorg'd from {id:?} to {:?}", C::ID, hex::encode(block_id));
               }
             } else {

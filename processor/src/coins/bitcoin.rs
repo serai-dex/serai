@@ -37,7 +37,7 @@ use bitcoin_serai::bitcoin::{
 };
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, BITCOIN, Amount, Balance},
+  primitives::{MAX_DATA_LEN, BITCOIN, BITCOIN_NET_ID, NetworkId, Amount, Balance},
   coins::bitcoin::Address,
 };
 
@@ -286,6 +286,7 @@ impl Coin for Bitcoin {
 
   type Address = Address;
 
+  const NETWORK: NetworkId = BITCOIN_NET_ID;
   const ID: &'static str = "Bitcoin";
   const CONFIRMATIONS: usize = 3;
 

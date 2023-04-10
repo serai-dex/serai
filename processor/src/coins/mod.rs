@@ -10,7 +10,7 @@ use frost::{
   sign::PreprocessMachine,
 };
 
-use serai_client::primitives::Balance;
+use serai_client::primitives::{NetworkId, Balance};
 
 #[cfg(feature = "bitcoin")]
 pub mod bitcoin;
@@ -157,6 +157,7 @@ impl<E: Eventuality> Default for EventualitiesTracker<E> {
 }
 
 pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
+  // This is currently bounded to being 32-bytes.
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn median_fee(&self) -> C::Fee;
@@ -249,6 +250,8 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     + TryInto<Vec<u8>>
     + TryFrom<Vec<u8>>;
 
+  /// Network ID for this coin.
+  const NETWORK: NetworkId;
   /// String ID for this coin.
   const ID: &'static str;
   /// The amount of confirmations required to consider a block 'final'.

@@ -37,6 +37,9 @@ group = "0.13"
 transcript = { package = "flexible-transcript", path = "../crypto/transcript" }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ristretto"] }
 
+# Substrate
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 # Bitcoin
 secp256k1 = { version = "0.27", features = ["global-context", "rand-std"], optional = true }
 k256 = { version = "0.13", features = ["arithmetic"], optional = true }
@@ -50,7 +53,7 @@ monero-serai = { path = "../coins/monero", features = ["multisig"], optional = t
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
-serai-client = { path = "../substrate//client", default-features = false }
+serai-client = { path = "../substrate/client", default-features = false }
 
 messages = { package = "processor-messages", path = "./messages" }
 

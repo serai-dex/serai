@@ -6593,6 +6593,7 @@ dependencies = [
  "serai-client",
  "serde",
  "serde_json",
+ "sp-application-crypto",
  "thiserror",
  "tokio",
  "zeroize",
