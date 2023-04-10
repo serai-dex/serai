@@ -22,7 +22,7 @@ use serai_client::{
   primitives::{MAX_DATA_LEN, BlockHash},
   tokens::primitives::{OutInstruction, OutInstructionWithBalance},
   in_instructions::primitives::{
-    Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch, SignedBatch,
+    Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch,
   },
 };
 
@@ -50,6 +50,9 @@ use key_gen::{KeyGenEvent, KeyGen};
 mod signer;
 use signer::{SignerEvent, Signer, SignerHandle};
 
+mod substrate_signer;
+use substrate_signer::{SubstrateSignerEvent, SubstrateSigner, SubstrateSignerHandle};
+
 mod scanner;
 use scanner::{ScannerEvent, Scanner, ScannerHandle};
 
@@ -73,6 +76,20 @@ pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
 struct SignerMessageFuture<'a, C: Coin, D: Db>(&'a mut HashMap<Vec<u8>, SignerHandle<C, D>>);
 impl<'a, C: Coin, D: Db> Future for SignerMessageFuture<'a, C, D> {
   type Output = (Vec<u8>, SignerEvent<C>);
+  fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+    for (key, signer) in self.0.iter_mut() {
+      match signer.events.poll_recv(ctx) {
+        Poll::Ready(event) => return Poll::Ready((key.clone(), event.unwrap())),
+        Poll::Pending => {}
+      }
+    }
+    Poll::Pending
+  }
+}
+
+struct SubstrateSignerMessageFuture<'a, D: Db>(&'a mut HashMap<Vec<u8>, SubstrateSignerHandle<D>>);
+impl<'a, D: Db> Future for SubstrateSignerMessageFuture<'a, D> {
+  type Output = (Vec<u8>, SubstrateSignerEvent);
   fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
     for (key, signer) in self.0.iter_mut() {
       match signer.events.poll_recv(ctx) {
@@ -179,6 +196,12 @@ async fn sign_plans<C: Coin, D: Db>(
 }
 
 async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinator: Co) {
+  // We currently expect a contextless bidirectional mapping between these two values
+  // (which is that any value of A can be interpreted as B and vice versa)
+  // While we can write a contextual mapping, we have yet to do so
+  // This check ensures no coin which doesn't have a bidirectional mapping is defined
+  assert_eq!(<C::Block as Block<C>>::Id::default().as_ref().len(), BlockHash([0u8; 32]).0.len());
+
   let mut entropy_transcript = {
     let entropy =
       Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't provided as an env var"));
@@ -211,6 +234,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), raw_db.clone());
 
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
+  let mut substrate_signers = HashMap::new();
   let mut signers = HashMap::new();
 
   let mut main_db = MainDb::new(raw_db.clone());
@@ -218,8 +242,15 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
   for key in &active_keys {
     // TODO: Load existing schedulers
 
-    // TODO: Handle the Ristretto key
-    let signer = Signer::new(raw_db.clone(), coin.clone(), key_gen.keys(key).1);
+    let (substrate_keys, coin_keys) = key_gen.keys(key);
+
+    let substrate_key = substrate_keys.group_key();
+    let substrate_signer = SubstrateSigner::new(raw_db.clone(), substrate_keys);
+    // We don't have to load any state for this since the Scanner will re-fire any events
+    // necessary
+    substrate_signers.insert(substrate_key.to_bytes().to_vec(), substrate_signer);
+
+    let signer = Signer::new(raw_db.clone(), coin.clone(), coin_keys);
 
     // Load any TXs being actively signed
     let key = key.to_bytes();
@@ -319,10 +350,13 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
         match msg.msg.clone() {
           CoordinatorMessage::KeyGen(msg) => {
             match key_gen.handle(msg).await {
-              // TODO: Handle substrate_keys
-              KeyGenEvent::KeyConfirmed { activation_block, substrate_keys: _, coin_keys } => {
-                let keys = coin_keys;
-                let key = keys.group_key();
+              KeyGenEvent::KeyConfirmed { activation_block, substrate_keys, coin_keys } => {
+                substrate_signers.insert(
+                  substrate_keys.group_key().to_bytes().to_vec(),
+                  SubstrateSigner::new(raw_db.clone(), substrate_keys),
+                );
+
+                let key = coin_keys.group_key();
 
                 let mut activation_block_hash = <C::Block as Block<C>>::Id::default();
                 activation_block_hash.as_mut().copy_from_slice(&activation_block.0);
@@ -335,8 +369,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                 scanner.rotate_key(activation_number, key).await;
                 schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
                 signers.insert(
-                  keys.group_key().to_bytes().as_ref().to_vec(),
-                  Signer::new(raw_db.clone(), coin.clone(), keys)
+                  key.to_bytes().as_ref().to_vec(),
+                  Signer::new(raw_db.clone(), coin.clone(), coin_keys)
                 );
               },
 
@@ -345,13 +379,15 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                 coordinator.send(ProcessorMessage::KeyGen(msg)).await;
               },
             }
-          }
+          },
 
           CoordinatorMessage::Sign(msg) => {
             signers[msg.key()].handle(msg).await;
-          }
+          },
 
-          CoordinatorMessage::Coordinator(_) => todo!(),
+          CoordinatorMessage::Coordinator(msg) => {
+            substrate_signers[msg.key()].handle(msg).await;
+          },
 
           CoordinatorMessage::Substrate(msg) => {
             match msg {
@@ -422,7 +458,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
         // These need to be sent to the coordinator which needs to check they aren't replayed
         // TODO
         match msg.unwrap() {
-          ScannerEvent::Outputs(key, block, outputs) => {
+          ScannerEvent::Block(key, block, time, outputs) => {
             let key = key.to_bytes().as_ref().to_vec();
 
             let mut block_hash = [0; 32];
@@ -462,26 +498,38 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
               }).collect()
             };
 
-            coordinator.send(ProcessorMessage::Substrate(
-              messages::substrate::ProcessorMessage::Update {
+            substrate_signers[&key].sign(time, batch).await;
+          },
+        }
+      },
+
+      (key, msg) = SubstrateSignerMessageFuture(&mut substrate_signers) => {
+        match msg {
+          SubstrateSignerEvent::ProcessorMessage(msg) => {
+            coordinator.send(ProcessorMessage::Coordinator(msg)).await;
+          },
+          SubstrateSignerEvent::SignedBatch(batch) => {
+            coordinator
+              .send(ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
                 key,
-                batch: SignedBatch {
-                  batch,
-                  signature: sp_application_crypto::sr25519::Signature([0; 64]),
-                },
-              }
-            )).await;
+                batch,
+              }))
+              .await;
           },
         }
       },
 
       (key, msg) = SignerMessageFuture(&mut signers) => {
         match msg {
+          SignerEvent::ProcessorMessage(msg) => {
+            coordinator.send(ProcessorMessage::Sign(msg)).await;
+          },
+
           SignerEvent::SignedTransaction { id, tx } => {
             main_db.finish_signing(&key, id);
             coordinator
               .send(ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
-                key,
+                key: key.to_vec(),
                 id,
                 tx: tx.as_ref().to_vec()
               }))
@@ -494,9 +542,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
             //    scanning the chain for it (or at least ack it's solely for sanity purposes?)
             // 3) When the chain has an eventuality, if it had an outbound payment, report it up to
             //    Substrate for logging purposes
-          },
-          SignerEvent::ProcessorMessage(msg) => {
-            coordinator.send(ProcessorMessage::Sign(msg)).await;
           },
         }
       },

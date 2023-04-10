@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, fmt};
+use core::fmt;
 use std::{
   sync::Arc,
   time::{SystemTime, Duration},
@@ -7,76 +7,55 @@ use std::{
 
 use rand_core::OsRng;
 
+use scale::Encode;
+
 use group::GroupEncoding;
 use frost::{
+  curve::Ristretto,
   ThresholdKeys,
-  sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
+  sign::{
+    Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
+    AlgorithmSignMachine, AlgorithmSignatureMachine,
+  },
 };
+use frost_schnorrkel::Schnorrkel;
 
-use log::{info, debug, warn, error};
+use log::{info, debug, warn};
 use tokio::{
   sync::{RwLock, mpsc},
   time::sleep,
 };
 
-use messages::sign::*;
-use crate::{
-  DbTxn, Db,
-  coins::{Transaction, Eventuality, Coin},
-};
+use serai_client::in_instructions::primitives::{Batch, SignedBatch};
 
-const CHANNEL_MSG: &str = "Signer handler was dropped. Shutting down?";
+use messages::{sign::SignId, coordinator::*};
+use crate::{DbTxn, Db};
+
+const CHANNEL_MSG: &str = "SubstrateSigner handler was dropped. Shutting down?";
 
 #[derive(Debug)]
-pub enum SignerEvent<C: Coin> {
-  SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction<C>>::Id },
+pub enum SubstrateSignerEvent {
   ProcessorMessage(ProcessorMessage),
+  SignedBatch(SignedBatch),
 }
 
-pub type SignerEventChannel<C> = mpsc::UnboundedReceiver<SignerEvent<C>>;
+pub type SubstrateSignerEventChannel = mpsc::UnboundedReceiver<SubstrateSignerEvent>;
 
 #[derive(Debug)]
-struct SignerDb<C: Coin, D: Db>(D, PhantomData<C>);
-impl<C: Coin, D: Db> SignerDb<C, D> {
+struct SubstrateSignerDb<D: Db>(D);
+impl<D: Db> SubstrateSignerDb<D> {
   fn sign_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    D::key(b"SIGNER", dst, key)
+    D::key(b"SUBSTRATE_SIGNER", dst, key)
   }
 
   fn completed_key(id: [u8; 32]) -> Vec<u8> {
     Self::sign_key(b"completed", id)
   }
-  fn complete(
-    &mut self,
-    txn: &mut D::Transaction,
-    id: [u8; 32],
-    tx: <C::Transaction as Transaction<C>>::Id,
-  ) {
-    // Transactions can be completed by multiple signatures
-    // Save every solution in order to be robust
-    let mut existing = txn.get(Self::completed_key(id)).unwrap_or(vec![]);
-    // TODO: Don't do this if this TX is already present
-    existing.extend(tx.as_ref());
-    txn.put(Self::completed_key(id), existing);
+  fn complete(&mut self, txn: &mut D::Transaction, id: [u8; 32]) {
+    txn.put(Self::completed_key(id), [1]);
   }
-  fn completed(&self, id: [u8; 32]) -> Option<Vec<u8>> {
-    self.0.get(Self::completed_key(id))
-  }
-
-  fn eventuality_key(id: [u8; 32]) -> Vec<u8> {
-    Self::sign_key(b"eventuality", id)
-  }
-  fn save_eventuality(
-    &mut self,
-    txn: &mut D::Transaction,
-    id: [u8; 32],
-    eventuality: C::Eventuality,
-  ) {
-    txn.put(Self::eventuality_key(id), eventuality.serialize());
-  }
-  fn eventuality(&self, id: [u8; 32]) -> Option<C::Eventuality> {
-    Some(
-      C::Eventuality::read::<&[u8]>(&mut self.0.get(Self::eventuality_key(id))?.as_ref()).unwrap(),
-    )
+  fn completed(&self, id: [u8; 32]) -> bool {
+    self.0.get(Self::completed_key(id)).is_some()
   }
 
   fn attempt_key(id: &SignId) -> Vec<u8> {
@@ -89,36 +68,28 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
     self.0.get(Self::attempt_key(id)).is_some()
   }
 
-  fn save_transaction(&mut self, txn: &mut D::Transaction, tx: &C::Transaction) {
-    txn.put(Self::sign_key(b"tx", tx.id()), tx.serialize());
+  fn save_batch(&mut self, txn: &mut D::Transaction, batch: &SignedBatch) {
+    txn.put(Self::sign_key(b"batch", batch.batch.block), batch.encode());
   }
 }
 
-pub struct Signer<C: Coin, D: Db> {
-  coin: C,
-  db: SignerDb<C, D>,
+pub struct SubstrateSigner<D: Db> {
+  db: SubstrateSignerDb<D>,
 
-  keys: ThresholdKeys<C::Curve>,
+  keys: ThresholdKeys<Ristretto>,
 
-  signable: HashMap<[u8; 32], (SystemTime, C::SignableTransaction)>,
+  signable: HashMap<[u8; 32], (SystemTime, Batch)>,
   attempt: HashMap<[u8; 32], u32>,
-  preprocessing: HashMap<[u8; 32], <C::TransactionMachine as PreprocessMachine>::SignMachine>,
-  #[allow(clippy::type_complexity)]
-  signing: HashMap<
-    [u8; 32],
-    <
-      <C::TransactionMachine as PreprocessMachine>::SignMachine as SignMachine<C::Transaction>
-    >::SignatureMachine,
-  >,
+  preprocessing: HashMap<[u8; 32], AlgorithmSignMachine<Ristretto, Schnorrkel>>,
+  signing: HashMap<[u8; 32], AlgorithmSignatureMachine<Ristretto, Schnorrkel>>,
 
-  events: mpsc::UnboundedSender<SignerEvent<C>>,
+  events: mpsc::UnboundedSender<SubstrateSignerEvent>,
 }
 
-impl<C: Coin, D: Db> fmt::Debug for Signer<C, D> {
+impl<D: Db> fmt::Debug for SubstrateSigner<D> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
-      .debug_struct("Signer")
-      .field("coin", &self.coin)
+      .debug_struct("SubstrateSigner")
       .field("signable", &self.signable)
       .field("attempt", &self.attempt)
       .finish_non_exhaustive()
@@ -126,19 +97,18 @@ impl<C: Coin, D: Db> fmt::Debug for Signer<C, D> {
 }
 
 #[derive(Debug)]
-pub struct SignerHandle<C: Coin, D: Db> {
-  signer: Arc<RwLock<Signer<C, D>>>,
-  pub events: SignerEventChannel<C>,
+pub struct SubstrateSignerHandle<D: Db> {
+  signer: Arc<RwLock<SubstrateSigner<D>>>,
+  pub events: SubstrateSignerEventChannel,
 }
 
-impl<C: Coin, D: Db> Signer<C, D> {
+impl<D: Db> SubstrateSigner<D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D, coin: C, keys: ThresholdKeys<C::Curve>) -> SignerHandle<C, D> {
+  pub fn new(db: D, keys: ThresholdKeys<Ristretto>) -> SubstrateSignerHandle<D> {
     let (events_send, events_recv) = mpsc::unbounded_channel();
 
-    let signer = Arc::new(RwLock::new(Signer {
-      coin,
-      db: SignerDb(db, PhantomData),
+    let signer = Arc::new(RwLock::new(SubstrateSigner {
+      db: SubstrateSignerDb(db),
 
       keys,
 
@@ -150,9 +120,9 @@ impl<C: Coin, D: Db> Signer<C, D> {
       events: events_send,
     }));
 
-    tokio::spawn(Signer::run(signer.clone()));
+    tokio::spawn(SubstrateSigner::run(signer.clone()));
 
-    SignerHandle { signer, events: events_recv }
+    SubstrateSignerHandle { signer, events: events_recv }
   }
 
   fn verify_id(&self, id: &SignId) -> Result<(), ()> {
@@ -182,7 +152,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
     Ok(())
   }
 
-  fn emit(&mut self, event: SignerEvent<C>) -> bool {
+  fn emit(&mut self, event: SubstrateSignerEvent) -> bool {
     if self.events.send(event).is_err() {
       info!("{}", CHANNEL_MSG);
       false
@@ -193,7 +163,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
 
   async fn handle(&mut self, msg: CoordinatorMessage) {
     match msg {
-      CoordinatorMessage::Preprocesses { id, mut preprocesses } => {
+      CoordinatorMessage::BatchPreprocesses { id, mut preprocesses } => {
         if self.verify_id(&id).is_err() {
           return;
         }
@@ -220,21 +190,22 @@ impl<C: Coin, D: Db> Signer<C, D> {
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
-        // Use an empty message, as expected of TransactionMachines
-        let (machine, share) = match machine.sign(preprocesses, &[]) {
+        let (machine, share) = match machine.sign(preprocesses, &self.signable[&id.id].1.encode()) {
           Ok(res) => res,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
         self.signing.insert(id.id, machine);
 
         // Broadcast our share
-        self.emit(SignerEvent::ProcessorMessage(ProcessorMessage::Share {
+        let mut share_bytes = [0; 32];
+        share_bytes.copy_from_slice(&share.serialize());
+        self.emit(SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare {
           id,
-          share: share.serialize(),
+          share: share_bytes,
         }));
       }
 
-      CoordinatorMessage::Shares { id, mut shares } => {
+      CoordinatorMessage::BatchShares { id, mut shares } => {
         if self.verify_id(&id).is_err() {
           return;
         }
@@ -265,70 +236,46 @@ impl<C: Coin, D: Db> Signer<C, D> {
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
-        let tx = match machine.complete(shares) {
+        let sig = match machine.complete(shares) {
           Ok(res) => res,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
-        // Save the transaction in case it's needed for recovery
+        let batch =
+          SignedBatch { batch: self.signable.remove(&id.id).unwrap().1, signature: sig.into() };
+
+        // Save the batch in case it's needed for recovery
         let mut txn = self.db.0.txn();
-        self.db.save_transaction(&mut txn, &tx);
-        self.db.complete(&mut txn, id.id, tx.id());
+        self.db.save_batch(&mut txn, &batch);
+        self.db.complete(&mut txn, id.id);
         txn.commit();
 
-        // Publish it
-        if let Err(e) = self.coin.publish_transaction(&tx).await {
-          error!("couldn't publish {:?}: {:?}", tx, e);
-        } else {
-          info!("published {:?}", hex::encode(tx.id()));
-        }
-
-        // Stop trying to sign for this TX
-        assert!(self.signable.remove(&id.id).is_some());
+        // Stop trying to sign for this batch
         assert!(self.attempt.remove(&id.id).is_some());
         assert!(self.preprocessing.remove(&id.id).is_none());
         assert!(self.signing.remove(&id.id).is_none());
 
-        self.emit(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() });
+        self.emit(SubstrateSignerEvent::SignedBatch(batch));
       }
 
-      CoordinatorMessage::Completed { key: _, id, tx: tx_vec } => {
-        let mut tx = <C::Transaction as Transaction<C>>::Id::default();
-        if tx.as_ref().len() != tx_vec.len() {
-          warn!(
-            "a validator claimed {} completed {id:?} yet that's not a valid TX ID",
-            hex::encode(&tx)
-          );
-          return;
-        }
-        tx.as_mut().copy_from_slice(&tx_vec);
+      CoordinatorMessage::BatchSigned { key: _, block } => {
+        // Stop trying to sign for this batch
+        let mut txn = self.db.0.txn();
+        self.db.complete(&mut txn, block.0);
+        txn.commit();
 
-        if let Some(eventuality) = self.db.eventuality(id) {
-          // Transaction hasn't hit our mempool/was dropped for a different signature
-          // The latter can happen given certain latency conditions/a single malicious signer
-          // In the case of a single malicious signer, they can drag multiple honest
-          // validators down with them, so we unfortunately can't slash on this case
-          let Ok(tx) = self.coin.get_transaction(&tx).await else {
-            todo!("queue checking eventualities"); // or give up here?
-          };
+        self.signable.remove(&block.0);
+        self.attempt.remove(&block.0);
+        self.preprocessing.remove(&block.0);
+        self.signing.remove(&block.0);
 
-          if self.coin.confirm_completion(&eventuality, &tx) {
-            // Stop trying to sign for this TX
-            let mut txn = self.db.0.txn();
-            self.db.save_transaction(&mut txn, &tx);
-            self.db.complete(&mut txn, id, tx.id());
-            txn.commit();
+        // This doesn't emit SignedBatch because it doesn't have access to the SignedBatch
+        // The coordinator is expected to only claim a batch was signed if it's on the Substrate
+        // chain, hence why it's unnecessary to check it/back it up here
 
-            self.signable.remove(&id);
-            self.attempt.remove(&id);
-            self.preprocessing.remove(&id);
-            self.signing.remove(&id);
-
-            self.emit(SignerEvent::SignedTransaction { id, tx: tx.id() });
-          } else {
-            warn!("a validator claimed {} completed {id:?} when it did not", hex::encode(&tx.id()));
-          }
-        }
+        // This also doesn't emit any further events since all mutation happen on the
+        // substrate::CoordinatorMessage::BlockAcknowledged message (which SignedBatch is meant to
+        // end up triggering)
       }
     }
   }
@@ -372,7 +319,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
         let mut signer = signer_arc.write().await;
         let keys = signer.signable.keys().cloned().collect::<Vec<_>>();
         for id in keys {
-          let (start, tx) = &signer.signable[&id];
+          let (start, _) = &signer.signable[&id];
           let start = *start;
 
           let attempt = u32::try_from(
@@ -388,11 +335,6 @@ impl<C: Coin, D: Db> Signer<C, D> {
             }
           }
 
-          // Start this attempt
-          // Clone the TX so we don't have an immutable borrow preventing the below mutable actions
-          // (also because we do need an owned tx anyways)
-          let tx = tx.clone();
-
           // Delete any existing machines
           signer.preprocessing.remove(&id);
           signer.signing.remove(&id);
@@ -400,8 +342,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
           // Update the attempt number so we don't re-enter this conditional
           signer.attempt.insert(id, attempt);
 
-          let id =
-            SignId { key: signer.keys.group_key().to_bytes().as_ref().to_vec(), id, attempt };
+          let id = SignId { key: signer.keys.group_key().to_bytes().to_vec(), id, attempt };
           // Only preprocess if we're a signer
           if !id.signing_set(&signer.keys.params()).contains(&signer.keys.params().i()) {
             continue;
@@ -429,23 +370,16 @@ impl<C: Coin, D: Db> Signer<C, D> {
           signer.db.attempt(&mut txn, &id);
           txn.commit();
 
-          // Attempt to create the TX
-          let machine = match signer.coin.attempt_send(tx).await {
-            Err(e) => {
-              error!("failed to attempt {:?}: {:?}", id, e);
-              continue;
-            }
-            Ok(machine) => machine,
-          };
+          // b"substrate" is a literal from sp-core
+          let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), signer.keys.clone());
 
           let (machine, preprocess) = machine.preprocess(&mut OsRng);
           signer.preprocessing.insert(id.id, machine);
 
           // Broadcast our preprocess
-          if !signer.emit(SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess {
-            id,
-            preprocess: preprocess.serialize(),
-          })) {
+          if !signer.emit(SubstrateSignerEvent::ProcessorMessage(
+            ProcessorMessage::BatchPreprocess { id, preprocess: preprocess.serialize() },
+          )) {
             return;
           }
         }
@@ -454,53 +388,15 @@ impl<C: Coin, D: Db> Signer<C, D> {
   }
 }
 
-impl<C: Coin, D: Db> SignerHandle<C, D> {
-  pub async fn keys(&self) -> ThresholdKeys<C::Curve> {
-    self.signer.read().await.keys.clone()
-  }
-
-  pub async fn sign_transaction(
-    &self,
-    id: [u8; 32],
-    start: SystemTime,
-    tx: C::SignableTransaction,
-    eventuality: C::Eventuality,
-  ) {
+impl<D: Db> SubstrateSignerHandle<D> {
+  pub async fn sign(&self, start: SystemTime, batch: Batch) {
     let mut signer = self.signer.write().await;
-
-    if let Some(txs) = signer.db.completed(id) {
-      debug!("SignTransaction order for ID we've already completed signing");
-
-      // Find the first instance we noted as having completed *and can still get from our node*
-      let mut tx = None;
-      let mut buf = <C::Transaction as Transaction<C>>::Id::default();
-      let tx_id_len = buf.as_ref().len();
-      assert_eq!(txs.len() % tx_id_len, 0);
-      for id in 0 .. (txs.len() / tx_id_len) {
-        let start = id * tx_id_len;
-        buf.as_mut().copy_from_slice(&txs[start .. (start + tx_id_len)]);
-        if signer.coin.get_transaction(&buf).await.is_ok() {
-          tx = Some(buf);
-          break;
-        }
-      }
-
-      // Fire the SignedTransaction event again
-      if let Some(tx) = tx {
-        if !signer.emit(SignerEvent::SignedTransaction { id, tx }) {
-          return;
-        }
-      } else {
-        warn!("completed signing {} yet couldn't get any of the completing TXs", hex::encode(id));
-      }
+    if signer.db.completed(batch.block.0) {
+      debug!("Sign batch order for ID we've already completed signing");
+      // See BatchSigned for commentary on why this simply returns
       return;
     }
-
-    let mut txn = signer.db.0.txn();
-    signer.db.save_eventuality(&mut txn, id, eventuality);
-    txn.commit();
-
-    signer.signable.insert(id, (start, tx));
+    signer.signable.insert(batch.block.0, (start, batch));
   }
 
   pub async fn handle(&self, msg: CoordinatorMessage) {

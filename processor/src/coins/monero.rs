@@ -1,4 +1,8 @@
-use std::{time::Duration, collections::HashMap, io};
+use std::{
+  time::{SystemTime, Duration},
+  collections::HashMap,
+  io,
+};
 
 use async_trait::async_trait;
 
@@ -140,6 +144,10 @@ impl BlockTrait<Monero> for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
     self.0
+  }
+
+  fn time(&self) -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_secs(self.1.header.timestamp)
   }
 
   fn median_fee(&self) -> Fee {

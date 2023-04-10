@@ -106,12 +106,6 @@ pub mod sign {
     Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
 
-  impl CoordinatorMessage {
-    pub fn required_block(&self) -> Option<BlockHash> {
-      None
-    }
-  }
-
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created preprocess for the specified signing protocol.
@@ -123,6 +117,10 @@ pub mod sign {
   }
 
   impl CoordinatorMessage {
+    pub fn required_block(&self) -> Option<BlockHash> {
+      None
+    }
+
     pub fn key(&self) -> &[u8] {
       match self {
         CoordinatorMessage::Preprocesses { id, .. } => &id.key,
@@ -134,41 +132,39 @@ pub mod sign {
 }
 
 pub mod coordinator {
-  use super::*;
+  use super::{sign::SignId, *};
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
-    // The validators have off-chain agreeance on this block being finalized. That means it should
-    // be signed and published to Substrate.
-    BlockFinalized { key: Vec<u8>, block: BlockHash },
-
     // Uses Vec<u8> instead of [u8; 64] since serde Deserialize isn't implemented for [u8; 64]
-    BlockPreprocesses { key: Vec<u8>, block: BlockHash, preprocesses: HashMap<Participant, Vec<u8>> },
-    BlockShares { key: Vec<u8>, block: BlockHash, shares: HashMap<Participant, [u8; 32]> },
+    BatchPreprocesses { id: SignId, preprocesses: HashMap<Participant, Vec<u8>> },
+    BatchShares { id: SignId, shares: HashMap<Participant, [u8; 32]> },
     // Needed so a client which didn't participate in signing can still realize signing completed
-    BlockSigned { key: Vec<u8>, block: BlockHash, signature: Vec<u8> },
+    BatchSigned { key: Vec<u8>, block: BlockHash },
   }
 
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
       Some(match self {
-        CoordinatorMessage::BlockFinalized { block, .. } => *block,
-        CoordinatorMessage::BlockPreprocesses { block, .. } => *block,
-        CoordinatorMessage::BlockShares { block, .. } => *block,
-        CoordinatorMessage::BlockSigned { block, .. } => *block,
+        CoordinatorMessage::BatchPreprocesses { id, .. } => BlockHash(id.id),
+        CoordinatorMessage::BatchShares { id, .. } => BlockHash(id.id),
+        CoordinatorMessage::BatchSigned { block, .. } => *block,
       })
+    }
+
+    pub fn key(&self) -> &[u8] {
+      match self {
+        CoordinatorMessage::BatchPreprocesses { id, .. } => &id.key,
+        CoordinatorMessage::BatchShares { id, .. } => &id.key,
+        CoordinatorMessage::BatchSigned { key, .. } => key,
+      }
     }
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    // This should become an inherent transaction by the block producer.
-    // As an inherent, this should be ~41 bytes per update.
-    // Ideally, we don't need to put finalized_block on chain though.
-    Block { key: Vec<u8>, latest_number: u64, finalized_block: BlockHash },
-
-    BlockPreprocess { key: Vec<u8>, block: BlockHash, preprocess: Vec<u8> },
-    BlockSign { key: Vec<u8>, block: BlockHash, share: [u8; 32] },
+    BatchPreprocess { id: SignId, preprocess: Vec<u8> },
+    BatchShare { id: SignId, share: [u8; 32] },
   }
 }
 

@@ -49,7 +49,7 @@ async fn spend<C: Coin, D: Db>(
     coin.mine_block().await;
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Outputs(this_key, _, outputs) => {
+    ScannerEvent::Block(this_key, _, _, outputs) => {
       assert_eq!(this_key, key);
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
@@ -82,7 +82,7 @@ pub async fn test_addresses<C: Coin>(coin: C) {
   // Verify the Scanner picked them up
   let outputs =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Outputs(this_key, block, outputs) => {
+      ScannerEvent::Block(this_key, block, _, outputs) => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);

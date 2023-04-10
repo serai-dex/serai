@@ -6591,6 +6591,7 @@ dependencies = [
  "dalek-ff-group",
  "env_logger",
  "flexible-transcript",
+ "frost-schnorrkel",
  "futures",
  "group 0.13.0",
  "hex",
