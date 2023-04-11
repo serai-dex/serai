@@ -89,6 +89,7 @@ impl<T: Transaction> Block<T> {
 
   pub fn verify(
     &self,
+    genesis: [u8; 32],
     last_block: [u8; 32],
     locally_provided: &mut HashSet<[u8; 32]>,
     next_nonces: &mut HashMap<<Ristretto as Ciphersuite>::G, u32>,
@@ -99,7 +100,7 @@ impl<T: Transaction> Block<T> {
 
     let mut txs = Vec::with_capacity(self.transactions.len());
     for tx in &self.transactions {
-      match verify_transaction(tx, locally_provided, next_nonces) {
+      match verify_transaction(tx, genesis, locally_provided, next_nonces) {
         Ok(()) => {}
         Err(e) => Err(BlockError::TransactionError(e))?,
       }
