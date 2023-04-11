@@ -8,4 +8,11 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+thiserror = "1"
+
+blake2 = "0.10"
+
+ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", features = ["ristretto"] }
+schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
+
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
