@@ -14,23 +14,23 @@ Once the key is voted in, it'll become active.
 
 ### Scanning
 
-The processor is expected to scan all sufficiently confirmed blocks from a given
-coin. This will create a list of outputs, considered pending.
+Sufficiently confirmed block become finalized in the eyes of the procesor.
+Finalized blocks are scanned and have their outputs emitted, though not acted
+on.
 
 ### Reporting
 
-These outputs are to be placed in a `Batch`, identified by the block containing
-them. Batches are provided in an `Update` to Serai, paired by an agreed upon
-block number.
+The processor reports finalized blocks to the coordinator. Once the group
+acknowledges the block as finalized, they begin a threshold signing protocol
+to sign the block's outputs as a `Batch`.
 
-The processor will also produce an `Update` if there have been no batches within
-the confirmation window.
+Once the `Batch` is signed, the processor emits an `Update` with the signed
+batch. Serai includes it, definitively ordering its outputs within the context
+of Serai.
 
 ### Confirmed Outputs
 
-Once outputs have been acknowledged by Serai, they are considered confirmed.
-With their confirmation, the validators are ready to create actions based on
-them.
+With the outputs' ordering, validators are able to act on them.
 
 Actions are triggered by passing the outputs to the scheduler. The scheduler
 will do one of two things:
@@ -45,21 +45,12 @@ accordingly. This is done by scheduling the payments out.
 
 # TODO
 
-- Acknowledging a sign ID as signed so we don't continue trying
-
-monero-serai now supports `Eventuality`s. When we have a plan to attempt,
-we can create an `Eventuality` and see if it matches a given TX. A signing node
-just has to submit the TX hash.
-
-Bitcoin will have the same TX hash flow, just explicitly matching against the
-inputs.
+- Items marked TODO
+- Items marked TODO2, yet those only need to be done after protonet
+- Test the implementors of Coin against the trait API
+- Test the databases
+- Test eventuality handling
 
 - Coordinator communication
 
 Kafka? RPC ping to them, which we don't count as 'sent' until we get a pong?
-
-- Handle reboots
-
-- Items marked TODO
-
-- Items marked TODO2, yet those only need to be done after protonet
