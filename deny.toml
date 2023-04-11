@@ -50,6 +50,7 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "processor-messages" },
   { allow = ["AGPL-3.0"], name = "processor" },
 
+  { allow = ["AGPL-3.0"], name = "tributary-chain" },
   { allow = ["AGPL-3.0"], name = "coordinator" },
 
   { allow = ["AGPL-3.0"], name = "tokens-pallet" },

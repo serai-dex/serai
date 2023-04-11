@@ -24,7 +24,8 @@ members = [
   "processor/messages",
   "processor",
 
-  "coordinator/tendermint",
+  "coordinator/tributary/tendermint",
+  "coordinator/tributary",
   "coordinator",
 
   "substrate/primitives",
