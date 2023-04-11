@@ -9,6 +9,9 @@ pub use transaction::*;
 mod block;
 pub use block::*;
 
+#[cfg(any(test, feature = "tests"))]
+pub mod tests;
+
 /// An item which can be read and written.
 pub trait ReadWrite: Sized {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;

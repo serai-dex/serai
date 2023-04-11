@@ -14,4 +14,16 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+blake2 = "0.10"
+
+frost = { package = "modular-frost", path = "../crypto/frost" }
+
+processor-messages = { package = "processor-messages", path = "../processor/messages" }
+tributary = { package = "tributary-chain", path = "./tributary" }
+
 tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+rand_core = "0.6"
+
+tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }

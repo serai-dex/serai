@@ -10,9 +10,17 @@ edition = "2021"
 [dependencies]
 thiserror = "1"
 
+rand_core = { version = "0.6", optional = true }
+
 blake2 = "0.10"
 
 ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", features = ["ristretto"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
 
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
+
+[dev-dependencies]
+rand_core = "0.6"
+
+[features]
+tests = ["rand_core"]
