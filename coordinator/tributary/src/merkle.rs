@@ -9,7 +9,7 @@ pub(crate) fn merkle(hash_args: &[[u8; 32]]) -> [u8; 32] {
   let zero = [0; 32];
   let mut interim;
   while hashes.len() > 1 {
-    interim = Vec::with_capacity(hashes.len() / 2);
+    interim = Vec::with_capacity((hashes.len() + 1) / 2);
 
     let mut i = 0;
     while i < hashes.len() {
@@ -33,9 +33,5 @@ pub(crate) fn merkle(hash_args: &[[u8; 32]]) -> [u8; 32] {
     hashes = interim;
   }
 
-  let mut res = zero;
-  if let Some(hash) = hashes.get(0) {
-    res.copy_from_slice(hash.as_ref());
-  }
-  res
+  hashes.get(0).copied().map(Into::into).unwrap_or(zero)
 }
