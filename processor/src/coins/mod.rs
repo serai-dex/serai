@@ -148,6 +148,21 @@ impl<E: Eventuality> EventualitiesTracker<E> {
     // If our self tracker already went past this block number, set it back
     self.block_number = self.block_number.min(block_number);
   }
+
+  pub fn drop(&mut self, id: [u8; 32]) {
+    // O(n) due to the lack of a reverse lookup
+    let mut found_key = None;
+    for (key, value) in &self.map {
+      if value.0 == id {
+        found_key = Some(key.clone());
+        break;
+      }
+    }
+
+    if let Some(key) = found_key {
+      self.map.remove(&key);
+    }
+  }
 }
 
 impl<E: Eventuality> Default for EventualitiesTracker<E> {

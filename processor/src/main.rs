@@ -109,7 +109,10 @@ async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
         return block.median_fee();
       }
       Err(e) => {
-        error!("couldn't get block {}: {e}", block_number);
+        error!(
+          "couldn't get block {block_number} in get_fee. {} {}",
+          "this should only happen if the node is offline. error: ", e
+        );
         // Since this block is considered finalized, we shouldn't be unable to get it unless the
         // node is offline, hence the long sleep
         sleep(Duration::from_secs(60)).await;
@@ -455,8 +458,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
       },
 
       msg = scanner.events.recv() => {
-        // These need to be sent to the coordinator which needs to check they aren't replayed
-        // TODO
         match msg.unwrap() {
           ScannerEvent::Block(key, block, time, outputs) => {
             let key = key.to_bytes().as_ref().to_vec();
@@ -500,6 +501,13 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
 
             substrate_signers[&key].sign(time, batch).await;
           },
+
+          ScannerEvent::Completed(id, tx) => {
+            // We don't know which signer had this plan, so inform all of them
+            for (_, signer) in signers.iter_mut() {
+              signer.eventuality_completion(id, &tx).await;
+            }
+          },
         }
       },
 
@@ -526,7 +534,10 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
           },
 
           SignerEvent::SignedTransaction { id, tx } => {
+            // If we die after calling finish_signing, we'll never fire Completed
+            // TODO: Is that acceptable? Do we need to fire Completed before firing finish_signing?
             main_db.finish_signing(&key, id);
+            scanner.drop_eventuality(id).await;
             coordinator
               .send(ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
                 key: key.to_vec(),

@@ -5,7 +5,6 @@ use std::{
 
 use messages::{ProcessorMessage, CoordinatorMessage};
 
-// TODO: Also include the coin block height here so we can delay handling if not synced?
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Message {
   pub id: u64,

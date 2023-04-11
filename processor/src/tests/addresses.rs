@@ -56,6 +56,9 @@ async fn spend<C: Coin, D: Db>(
       assert_eq!(outputs[0].kind(), OutputType::Change);
       outputs
     }
+    ScannerEvent::Completed(_, _) => {
+      panic!("unexpectedly got eventuality completion");
+    }
   }
 }
 
@@ -88,6 +91,9 @@ pub async fn test_addresses<C: Coin>(coin: C) {
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::Branch);
         outputs
+      }
+      ScannerEvent::Completed(_, _) => {
+        panic!("unexpectedly got eventuality completion");
       }
     };
 

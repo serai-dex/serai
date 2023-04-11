@@ -39,6 +39,9 @@ pub async fn test_wallet<C: Coin>(coin: C) {
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
       }
+      ScannerEvent::Completed(_, _) => {
+        panic!("unexpectedly got eventuality completion");
+      }
     }
   };
 
@@ -104,6 +107,9 @@ pub async fn test_wallet<C: Coin>(coin: C) {
       assert_eq!(block_id, block.id());
       assert_eq!(time, block.time());
       assert_eq!(these_outputs, outputs);
+    }
+    ScannerEvent::Completed(_, _) => {
+      panic!("unexpectedly got eventuality completion");
     }
   }
 

@@ -56,6 +56,9 @@ pub async fn test_scanner<C: Coin>(coin: C) {
           assert_eq!(outputs[0].kind(), OutputType::External);
           outputs
         }
+        ScannerEvent::Completed(_, _) => {
+          panic!("unexpectedly got eventuality completion");
+        }
       };
     (scanner, outputs)
   };

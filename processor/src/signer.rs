@@ -49,7 +49,7 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
     &mut self,
     txn: &mut D::Transaction,
     id: [u8; 32],
-    tx: <C::Transaction as Transaction<C>>::Id,
+    tx: &<C::Transaction as Transaction<C>>::Id,
   ) {
     // Transactions can be completed by multiple signatures
     // Save every solution in order to be robust
@@ -165,7 +165,11 @@ impl<C: Coin, D: Db> Signer<C, D> {
       // If we don't have an attempt logged, it's because the coordinator is faulty OR
       // because we rebooted
       None => {
-        warn!("not attempting {:?}. this is an error if we didn't reboot", id);
+        warn!(
+          "not attempting {} #{}. this is an error if we didn't reboot",
+          hex::encode(id.id),
+          id.attempt
+        );
         // Don't panic on the assumption we rebooted
         Err(())?;
       }
@@ -191,6 +195,57 @@ impl<C: Coin, D: Db> Signer<C, D> {
     }
   }
 
+  async fn eventuality_completion(
+    &mut self,
+    id: [u8; 32],
+    tx_id: &<C::Transaction as Transaction<C>>::Id,
+  ) {
+    if let Some(eventuality) = self.db.eventuality(id) {
+      // Transaction hasn't hit our mempool/was dropped for a different signature
+      // The latter can happen given certain latency conditions/a single malicious signer
+      // In the case of a single malicious signer, they can drag multiple honest
+      // validators down with them, so we unfortunately can't slash on this case
+      let Ok(tx) = self.coin.get_transaction(tx_id).await else {
+        warn!(
+          "a validator claimed {} completed {} yet we didn't have that TX in our mempool",
+          hex::encode(tx_id),
+          hex::encode(id),
+        );
+        return;
+      };
+
+      if self.coin.confirm_completion(&eventuality, &tx) {
+        debug!("eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
+
+        // Stop trying to sign for this TX
+        let mut txn = self.db.0.txn();
+        self.db.save_transaction(&mut txn, &tx);
+        self.db.complete(&mut txn, id, tx_id);
+        txn.commit();
+
+        self.signable.remove(&id);
+        self.attempt.remove(&id);
+        self.preprocessing.remove(&id);
+        self.signing.remove(&id);
+
+        self.emit(SignerEvent::SignedTransaction { id, tx: tx.id() });
+      } else {
+        warn!(
+          "a validator claimed {} completed {} when it did not",
+          hex::encode(tx_id),
+          hex::encode(id)
+        );
+      }
+    } else {
+      debug!(
+        "signer {} informed of the completion of {}. {}",
+        hex::encode(self.keys.group_key().to_bytes()),
+        hex::encode(id),
+        "this signer did not have/has already completed that plan",
+      );
+    }
+  }
+
   async fn handle(&mut self, msg: CoordinatorMessage) {
     match msg {
       CoordinatorMessage::Preprocesses { id, mut preprocesses } => {
@@ -201,7 +256,10 @@ impl<C: Coin, D: Db> Signer<C, D> {
         let machine = match self.preprocessing.remove(&id.id) {
           // Either rebooted or RPC error, or some invariant
           None => {
-            warn!("not preprocessing for {:?}. this is an error if we didn't reboot", id);
+            warn!(
+              "not preprocessing for {}. this is an error if we didn't reboot",
+              hex::encode(id.id)
+            );
             return;
           }
           Some(machine) => machine,
@@ -248,7 +306,10 @@ impl<C: Coin, D: Db> Signer<C, D> {
               panic!("never preprocessed yet signing?");
             }
 
-            warn!("not preprocessing for {:?}. this is an error if we didn't reboot", id);
+            warn!(
+              "not preprocessing for {}. this is an error if we didn't reboot",
+              hex::encode(id.id)
+            );
             return;
           }
           Some(machine) => machine,
@@ -273,14 +334,15 @@ impl<C: Coin, D: Db> Signer<C, D> {
         // Save the transaction in case it's needed for recovery
         let mut txn = self.db.0.txn();
         self.db.save_transaction(&mut txn, &tx);
-        self.db.complete(&mut txn, id.id, tx.id());
+        let tx_id = tx.id();
+        self.db.complete(&mut txn, id.id, &tx_id);
         txn.commit();
 
         // Publish it
         if let Err(e) = self.coin.publish_transaction(&tx).await {
           error!("couldn't publish {:?}: {:?}", tx, e);
         } else {
-          info!("published {:?}", hex::encode(tx.id()));
+          info!("published {}", hex::encode(&tx_id));
         }
 
         // Stop trying to sign for this TX
@@ -289,46 +351,23 @@ impl<C: Coin, D: Db> Signer<C, D> {
         assert!(self.preprocessing.remove(&id.id).is_none());
         assert!(self.signing.remove(&id.id).is_none());
 
-        self.emit(SignerEvent::SignedTransaction { id: id.id, tx: tx.id() });
+        self.emit(SignerEvent::SignedTransaction { id: id.id, tx: tx_id });
       }
 
-      CoordinatorMessage::Completed { key: _, id, tx: tx_vec } => {
+      CoordinatorMessage::Completed { key: _, id, tx: mut tx_vec } => {
         let mut tx = <C::Transaction as Transaction<C>>::Id::default();
         if tx.as_ref().len() != tx_vec.len() {
+          tx_vec.truncate(2 * tx.as_ref().len());
           warn!(
-            "a validator claimed {} completed {id:?} yet that's not a valid TX ID",
-            hex::encode(&tx)
+            "a validator claimed {} completed {} yet that's not a valid TX ID",
+            hex::encode(&tx),
+            hex::encode(id),
           );
           return;
         }
         tx.as_mut().copy_from_slice(&tx_vec);
 
-        if let Some(eventuality) = self.db.eventuality(id) {
-          // Transaction hasn't hit our mempool/was dropped for a different signature
-          // The latter can happen given certain latency conditions/a single malicious signer
-          // In the case of a single malicious signer, they can drag multiple honest
-          // validators down with them, so we unfortunately can't slash on this case
-          let Ok(tx) = self.coin.get_transaction(&tx).await else {
-            todo!("queue checking eventualities"); // or give up here?
-          };
-
-          if self.coin.confirm_completion(&eventuality, &tx) {
-            // Stop trying to sign for this TX
-            let mut txn = self.db.0.txn();
-            self.db.save_transaction(&mut txn, &tx);
-            self.db.complete(&mut txn, id, tx.id());
-            txn.commit();
-
-            self.signable.remove(&id);
-            self.attempt.remove(&id);
-            self.preprocessing.remove(&id);
-            self.signing.remove(&id);
-
-            self.emit(SignerEvent::SignedTransaction { id, tx: tx.id() });
-          } else {
-            warn!("a validator claimed {} completed {id:?} when it did not", hex::encode(&tx.id()));
-          }
-        }
+        self.eventuality_completion(id, &tx).await;
       }
     }
   }
@@ -406,7 +445,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
           if !id.signing_set(&signer.keys.params()).contains(&signer.keys.params().i()) {
             continue;
           }
-          info!("selected to sign {:?}", id);
+          info!("selected to sign {} #{}", hex::encode(id.id), id.attempt);
 
           // If we reboot mid-sign, the current design has us abort all signs and wait for latter
           // attempts/new signing protocols
@@ -421,7 +460,11 @@ impl<C: Coin, D: Db> Signer<C, D> {
           //
           // Only run if this hasn't already been attempted
           if signer.db.has_attempt(&id) {
-            warn!("already attempted {:?}. this is an error if we didn't reboot", id);
+            warn!(
+              "already attempted {} #{}. this is an error if we didn't reboot",
+              hex::encode(id.id),
+              id.attempt
+            );
             continue;
           }
 
@@ -432,7 +475,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
           // Attempt to create the TX
           let machine = match signer.coin.attempt_send(tx).await {
             Err(e) => {
-              error!("failed to attempt {:?}: {:?}", id, e);
+              error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
               continue;
             }
             Ok(machine) => machine,
@@ -501,6 +544,14 @@ impl<C: Coin, D: Db> SignerHandle<C, D> {
     txn.commit();
 
     signer.signable.insert(id, (start, tx));
+  }
+
+  pub async fn eventuality_completion(
+    &self,
+    id: [u8; 32],
+    tx: &<C::Transaction as Transaction<C>>::Id,
+  ) {
+    self.signer.write().await.eventuality_completion(id, tx).await;
   }
 
   pub async fn handle(&self, msg: CoordinatorMessage) {

@@ -16,13 +16,15 @@ use tokio::{
 
 use crate::{
   DbTxn, Db,
-  coins::{Output, EventualitiesTracker, Block, Coin},
+  coins::{Output, Transaction, EventualitiesTracker, Block, Coin},
 };
 
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<C: Coin> {
   // Block scanned
   Block(<C::Curve as Ciphersuite>::G, <C::Block as Block<C>>::Id, SystemTime, Vec<C::Output>),
+  // Eventuality completion found on-chain
+  Completed([u8; 32], <C::Transaction as Transaction<C>>::Id),
 }
 
 pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
@@ -68,15 +70,31 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   }
   fn add_active_key(&mut self, txn: &mut D::Transaction, key: <C::Curve as Ciphersuite>::G) {
     let mut keys = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
-    // TODO: Don't do this if the key is already marked active (which can happen based on reboot
-    // timing)
-    keys.extend(key.to_bytes().as_ref());
+
+    let key_bytes = key.to_bytes();
+
+    // Don't add this key if it's already present
+    let key_len = key_bytes.as_ref().len();
+    let mut i = 0;
+    while i < keys.len() {
+      if keys[i .. (i + key_len)].as_ref() == key_bytes.as_ref() {
+        debug!("adding {} as an active key yet it was already present", hex::encode(key_bytes));
+        return;
+      }
+      i += key_len;
+    }
+
+    keys.extend(key_bytes.as_ref());
     txn.put(Self::active_keys_key(), keys);
   }
   fn active_keys(&self) -> Vec<<C::Curve as Ciphersuite>::G> {
     let bytes_vec = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
+    // Assumes keys will be 32 bytes when calculating the capacity
+    // If keys are larger, this may allocate more memory than needed
+    // If keys are smaller, this may require additional allocations
+    // Either are fine
     let mut res = Vec::with_capacity(bytes.len() / 32);
     while !bytes.is_empty() {
       res.push(C::Curve::read_G(&mut bytes).unwrap());
@@ -208,6 +226,10 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     eventuality: C::Eventuality,
   ) {
     self.scanner.write().await.eventualities.register(block_number, id, eventuality)
+  }
+
+  pub async fn drop_eventuality(&self, id: [u8; 32]) {
+    self.scanner.write().await.eventualities.drop(id);
   }
 
   /// Rotate the key being scanned for.
@@ -362,9 +384,17 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             for (id, tx) in
               coin.get_eventuality_completions(&mut scanner.eventualities, &block).await
             {
-              // TODO: Fire Completed
-              let _ = id;
-              let _ = tx;
+              // This should only happen if there's a P2P net desync or there's a malicious
+              // validator
+              warn!(
+                "eventuality {} resolved by {}, as found on chain. this should not happen",
+                hex::encode(id),
+                hex::encode(&tx)
+              );
+
+              if !scanner.emit(ScannerEvent::Completed(id, tx)) {
+                return;
+              }
             }
 
             let outputs = match scanner.coin.get_outputs(&block, key).await {
