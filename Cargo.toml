@@ -26,6 +26,8 @@ members = [
 
   "tendermint",
 
+  "coordinator",
+
   "substrate/primitives",
   "substrate/client",
 
