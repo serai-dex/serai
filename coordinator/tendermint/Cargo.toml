@@ -3,7 +3,7 @@ name = "tendermint-machine"
 version = "0.2.0"
 description = "An implementation of the Tendermint state machine in Rust"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/tendermint"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tendermint"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
