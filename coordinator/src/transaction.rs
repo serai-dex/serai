@@ -45,6 +45,14 @@ impl ReadWrite for SignData {
     writer.write_all(&self.plan)?;
     writer.write_all(&self.attempt.to_le_bytes())?;
 
+    if self.data.len() > u16::MAX.into() {
+      // Currently, the largest sign item would be a Monero transaction
+      // It provides 4 commitments per input (128 bytes), a 64-byte proof for them, along with a
+      // key image and proof (96 bytes)
+      // Even with all of that, we could support 227 inputs in a single TX
+      // Monero is limited to 120 inputs per TX
+      Err(io::Error::new(io::ErrorKind::Other, "signing data exceeded 65535 bytes"))?;
+    }
     writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.data)?;
 
@@ -100,9 +108,9 @@ impl ReadWrite for Transaction {
           let mut share_quantity = [0; 2];
           reader.read_exact(&mut share_quantity)?;
 
-          let mut share_len = [0; 1];
+          let mut share_len = [0; 2];
           reader.read_exact(&mut share_len)?;
-          let share_len = usize::from(share_len[0]);
+          let share_len = usize::from(u16::from_le_bytes(share_len));
 
           let mut shares = HashMap::new();
           for i in 0 .. u16::from_le_bytes(share_quantity) {
@@ -139,6 +147,10 @@ impl ReadWrite for Transaction {
       Transaction::DkgCommitments(attempt, commitments, signed) => {
         writer.write_all(&[0])?;
         writer.write_all(&attempt.to_le_bytes())?;
+        if commitments.len() > u16::MAX.into() {
+          // t commitments and an encryption key mean a u16 is fine until a threshold > 2000 occurs
+          Err(io::Error::new(io::ErrorKind::Other, "dkg commitments exceeded 65535 bytes"))?;
+        }
         writer.write_all(&u16::try_from(commitments.len()).unwrap().to_le_bytes())?;
         writer.write_all(commitments)?;
         signed.write(writer)
@@ -147,6 +159,7 @@ impl ReadWrite for Transaction {
       Transaction::DkgShares(attempt, shares, signed) => {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
+        // Shares are indexed by non-zero u16s (Participants), so this can't fail
         writer.write_all(&u16::try_from(shares.len()).unwrap().to_le_bytes())?;
         let mut share_len = None;
         for participant in 0 .. shares.len() {
@@ -156,7 +169,12 @@ impl ReadWrite for Transaction {
               panic!("variable length shares");
             }
           } else {
-            writer.write_all(&[u8::try_from(share.len()).unwrap()])?;
+            // For BLS12-381 G2, this would be:
+            // - A 32-byte share
+            // - A 96-byte ephemeral key
+            // - A 128-byte signature
+            // Hence why this has to be u16
+            writer.write_all(&u16::try_from(share.len()).unwrap().to_le_bytes())?;
             share_len = Some(share.len());
           }
 
@@ -210,6 +228,7 @@ impl TransactionTrait for Transaction {
   fn hash(&self) -> [u8; 32] {
     let mut tx = self.serialize();
     if let TransactionKind::Signed(signed) = self.kind() {
+      // Make sure the part we're cutting off is the signature
       assert_eq!(&tx[(tx.len() - 64) ..], &signed.signature.serialize());
       tx.truncate(tx.len() - 64);
     }
