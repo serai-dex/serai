@@ -61,7 +61,7 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
 
     let mut i = 0;
     while i < existing.len() {
-      if existing[i .. (i + tx_len)].as_ref() == tx.as_ref() {
+      if &existing[i .. (i + tx_len)] == tx.as_ref() {
         return;
       }
       i += tx_len;

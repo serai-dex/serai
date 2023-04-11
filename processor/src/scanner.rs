@@ -85,7 +85,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     // Don't add this key if it's already present
     let mut i = 0;
     while i < keys.len() {
-      if keys[i .. (i + key_len)].as_ref() == key_bytes.as_ref() {
+      if &keys[i .. (i + key_len)] == key_bytes.as_ref() {
         debug!("adding {} as an active key yet it was already present", hex::encode(key_bytes));
         return;
       }
