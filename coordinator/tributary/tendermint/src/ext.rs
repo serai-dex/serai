@@ -187,14 +187,6 @@ pub trait Block: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {
   fn id(&self) -> Self::Id;
 }
 
-#[cfg(feature = "substrate")]
-impl<B: sp_runtime::traits::Block> Block for B {
-  type Id = B::Hash;
-  fn id(&self) -> B::Hash {
-    self.hash()
-  }
-}
-
 /// Trait representing the distributed system Tendermint is providing consensus over.
 #[async_trait]
 pub trait Network: Send + Sync {
