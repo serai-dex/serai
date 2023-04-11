@@ -135,7 +135,7 @@ impl<D: Db> SubstrateSigner<D> {
       // If we don't have an attempt logged, it's because the coordinator is faulty OR
       // because we rebooted
       None => {
-        warn!("not attempting {:?}. this is an error if we didn't reboot", id);
+        warn!("not attempting {}. this is an error if we didn't reboot", hex::encode(id.id));
         // Don't panic on the assumption we rebooted
         Err(())?;
       }
@@ -171,7 +171,10 @@ impl<D: Db> SubstrateSigner<D> {
         let machine = match self.preprocessing.remove(&id.id) {
           // Either rebooted or RPC error, or some invariant
           None => {
-            warn!("not preprocessing for {:?}. this is an error if we didn't reboot", id);
+            warn!(
+              "not preprocessing for {}. this is an error if we didn't reboot",
+              hex::encode(id.id)
+            );
             return;
           }
           Some(machine) => machine,
@@ -219,7 +222,10 @@ impl<D: Db> SubstrateSigner<D> {
               panic!("never preprocessed yet signing?");
             }
 
-            warn!("not preprocessing for {:?}. this is an error if we didn't reboot", id);
+            warn!(
+              "not preprocessing for {}. this is an error if we didn't reboot",
+              hex::encode(id.id)
+            );
             return;
           }
           Some(machine) => machine,
@@ -347,7 +353,7 @@ impl<D: Db> SubstrateSigner<D> {
           if !id.signing_set(&signer.keys.params()).contains(&signer.keys.params().i()) {
             continue;
           }
-          info!("selected to sign {:?}", id);
+          info!("selected to sign {} #{}", hex::encode(id.id), id.attempt);
 
           // If we reboot mid-sign, the current design has us abort all signs and wait for latter
           // attempts/new signing protocols
@@ -362,7 +368,11 @@ impl<D: Db> SubstrateSigner<D> {
           //
           // Only run if this hasn't already been attempted
           if signer.db.has_attempt(&id) {
-            warn!("already attempted {:?}. this is an error if we didn't reboot", id);
+            warn!(
+              "already attempted {} #{}. this is an error if we didn't reboot",
+              hex::encode(id.id),
+              id.attempt
+            );
             continue;
           }
 

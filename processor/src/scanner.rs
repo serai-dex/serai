@@ -73,8 +73,10 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
 
     let key_bytes = key.to_bytes();
 
-    // Don't add this key if it's already present
     let key_len = key_bytes.as_ref().len();
+    assert_eq!(keys.len() % key_len, 0);
+
+    // Don't add this key if it's already present
     let mut i = 0;
     while i < keys.len() {
       if keys[i .. (i + key_len)].as_ref() == key_bytes.as_ref() {
@@ -330,7 +332,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
           // CONFIRMATIONS - 1 as whatever's in the latest block already has 1 confirm
           Ok(latest) => latest.saturating_sub(C::CONFIRMATIONS.saturating_sub(1)),
           Err(_) => {
-            warn!("Couldn't get {}'s latest block number", C::ID);
+            warn!("couldn't get latest block number");
             sleep(Duration::from_secs(60)).await;
             continue;
           }
@@ -360,7 +362,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             let block = match scanner.coin.get_block(i).await {
               Ok(block) => block,
               Err(_) => {
-                warn!("Couldn't get {} block {i}", C::ID);
+                warn!("couldn't get block {i}");
                 break;
               }
             };
@@ -369,7 +371,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             if let Some(id) = scanner.db.block(i) {
               // TODO2: Also check this block builds off the previous block
               if id != block_id {
-                panic!("{} reorg'd from {id:?} to {:?}", C::ID, hex::encode(block_id));
+                panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));
               }
             } else {
               info!("Found new block: {}", hex::encode(&block_id));
@@ -400,7 +402,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             let outputs = match scanner.coin.get_outputs(&block, key).await {
               Ok(outputs) => outputs,
               Err(_) => {
-                warn!("Couldn't scan {} block {i:?}", C::ID);
+                warn!("Couldn't scan block {i}");
                 break;
               }
             };

@@ -54,7 +54,19 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
     // Transactions can be completed by multiple signatures
     // Save every solution in order to be robust
     let mut existing = txn.get(Self::completed_key(id)).unwrap_or(vec![]);
-    // TODO: Don't do this if this TX is already present
+
+    // Don't add this TX if it's already present
+    let tx_len = tx.as_ref().len();
+    assert_eq!(existing.len() % tx_len, 0);
+
+    let mut i = 0;
+    while i < existing.len() {
+      if existing[i .. (i + tx_len)].as_ref() == tx.as_ref() {
+        return;
+      }
+      i += tx_len;
+    }
+
     existing.extend(tx.as_ref());
     txn.put(Self::completed_key(id), existing);
   }

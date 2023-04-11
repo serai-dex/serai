@@ -517,7 +517,7 @@ impl Coin for Monero {
       Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
       // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
       // invalid transaction
-      Err(e) => panic!("failed to publish TX {:?}: {e}", tx.hash()),
+      Err(e) => panic!("failed to publish TX {}: {e}", hex::encode(tx.hash())),
     }
   }
 
