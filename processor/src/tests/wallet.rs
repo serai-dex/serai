@@ -32,10 +32,11 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     let block_time = block.time();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block(this_key, block, time, outputs) => {
+      ScannerEvent::Block { key: this_key, block, time, batch, outputs } => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
         assert_eq!(time, block_time);
+        assert_eq!(batch, 0);
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
       }
@@ -102,10 +103,11 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
 
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block(this_key, block_id, time, these_outputs) => {
+    ScannerEvent::Block { key: this_key, block: block_id, time, batch, outputs: these_outputs } => {
       assert_eq!(this_key, key);
       assert_eq!(block_id, block.id());
       assert_eq!(time, block.time());
+      assert_eq!(batch, 1);
       assert_eq!(these_outputs, outputs);
     }
     ScannerEvent::Completed(_, _) => {

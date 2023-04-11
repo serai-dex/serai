@@ -22,7 +22,13 @@ use crate::{
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<C: Coin> {
   // Block scanned
-  Block(<C::Curve as Ciphersuite>::G, <C::Block as Block<C>>::Id, SystemTime, Vec<C::Output>),
+  Block {
+    key: <C::Curve as Ciphersuite>::G,
+    block: <C::Block as Block<C>>::Id,
+    time: SystemTime,
+    batch: u32,
+    outputs: Vec<C::Output>,
+  },
   // Eventuality completion found on-chain
   Completed([u8; 32], <C::Transaction as Transaction<C>>::Id),
 }
@@ -111,18 +117,17 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     self.0.get(Self::seen_key(id)).is_some()
   }
 
+  fn next_batch_key() -> Vec<u8> {
+    Self::scanner_key(b"next_batch", [])
+  }
+  fn batch_key(key: &<C::Curve as Ciphersuite>::G, block: &<C::Block as Block<C>>::Id) -> Vec<u8> {
+    Self::scanner_key(b"batch", [key.to_bytes().as_ref(), block.as_ref()].concat())
+  }
   fn outputs_key(
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
   ) -> Vec<u8> {
-    let key_bytes = key.to_bytes();
-    let key = key_bytes.as_ref();
-    // This should be safe without the bincode serialize. Using bincode lets us not worry/have to
-    // think about this
-    let db_key = bincode::serialize(&(key, block.as_ref())).unwrap();
-    // Assert this is actually length prefixing
-    debug_assert!(db_key.len() >= (1 + key.len() + 1 + block.as_ref().len()));
-    Self::scanner_key(b"outputs", db_key)
+    Self::scanner_key(b"outputs", [key.to_bytes().as_ref(), block.as_ref()].concat())
   }
   fn save_outputs(
     &mut self,
@@ -130,12 +135,34 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
     outputs: &[C::Output],
-  ) {
+  ) -> u32 {
+    let batch_key = Self::batch_key(key, block);
+    if let Some(batch) = txn.get(batch_key) {
+      return u32::from_le_bytes(batch.try_into().unwrap());
+    }
+
     let mut bytes = Vec::with_capacity(outputs.len() * 64);
     for output in outputs {
       output.write(&mut bytes).unwrap();
     }
     txn.put(Self::outputs_key(key, block), bytes);
+
+    // This is a new set of outputs, which are expected to be handled in a perfectly ordered
+    // fashion
+
+    // TODO2: This is not currently how this works
+    // There may be new blocks 0 .. 5, which A will scan, yet then B may be activated at block 4
+    // This would cause
+    // 0a, 1a, 2a, 3a, 4a, 5a, 4b, 5b
+    // when it should be
+    // 0a, 1a, 2a, 3a, 4a, 4b, 5a, 5b
+
+    // Because it's a new set of outputs, allocate a batch ID for it
+    let next_bytes = txn.get(Self::next_batch_key()).unwrap_or(vec![0; 4]).try_into().unwrap();
+    let next = u32::from_le_bytes(next_bytes);
+    txn.put(Self::next_batch_key(), (next + 1).to_le_bytes());
+    txn.put(Self::batch_key(key, block), next_bytes);
+    next
   }
   fn outputs(
     &self,
@@ -434,7 +461,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
 
             // Save the outputs to disk
             let mut txn = scanner.db.0.txn();
-            scanner.db.save_outputs(&mut txn, &key, &block_id, &outputs);
+            let batch = scanner.db.save_outputs(&mut txn, &key, &block_id, &outputs);
             txn.commit();
 
             const TIME_TOLERANCE: u64 = 15;
@@ -477,7 +504,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             }
 
             // Send all outputs
-            if !scanner.emit(ScannerEvent::Block(key, block_id, time, outputs)) {
+            if !scanner.emit(ScannerEvent::Block { key, block: block_id, time, batch, outputs }) {
               return;
             }
             // Write this number as scanned so we won't re-fire these outputs

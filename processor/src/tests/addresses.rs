@@ -18,6 +18,7 @@ async fn spend<C: Coin, D: Db>(
   coin: &C,
   keys: &HashMap<Participant, ThresholdKeys<C::Curve>>,
   scanner: &mut ScannerHandle<C, D>,
+  batch: u32,
   outputs: Vec<C::Output>,
 ) -> Vec<C::Output> {
   let key = keys[&Participant::new(1).unwrap()].group_key();
@@ -49,8 +50,9 @@ async fn spend<C: Coin, D: Db>(
     coin.mine_block().await;
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block(this_key, _, _, outputs) => {
+    ScannerEvent::Block { key: this_key, block: _, time: _, batch: this_batch, outputs } => {
       assert_eq!(this_key, key);
+      assert_eq!(this_batch, batch);
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
       assert_eq!(outputs[0].kind(), OutputType::Change);
@@ -85,9 +87,10 @@ pub async fn test_addresses<C: Coin>(coin: C) {
   // Verify the Scanner picked them up
   let outputs =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block(this_key, block, _, outputs) => {
+      ScannerEvent::Block { key: this_key, block, time: _, batch, outputs } => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
+        assert_eq!(batch, 0);
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::Branch);
         outputs
@@ -98,7 +101,7 @@ pub async fn test_addresses<C: Coin>(coin: C) {
     };
 
   // Spend the branch output, creating a change output and ensuring we actually get change
-  let outputs = spend(&coin, &keys, &mut scanner, outputs).await;
+  let outputs = spend(&coin, &keys, &mut scanner, 1, outputs).await;
   // Also test spending the change output
-  spend(&coin, &keys, &mut scanner, outputs).await;
+  spend(&coin, &keys, &mut scanner, 2, outputs).await;
 }

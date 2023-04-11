@@ -408,6 +408,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                   .get_mut(&key_vec)
                   .expect("key we don't have a scheduler for acknowledged a block")
                   .add_outputs(scanner.ack_block(key, block_id).await);
+
                 sign_plans(
                   &mut main_db,
                   &coin,
@@ -459,18 +460,15 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
 
       msg = scanner.events.recv() => {
         match msg.unwrap() {
-          ScannerEvent::Block(key, block, time, outputs) => {
+          ScannerEvent::Block { key, block, time, batch, outputs } => {
             let key = key.to_bytes().as_ref().to_vec();
 
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
 
-            // TODO
-            let id = 0;
-
             let batch = Batch {
               network: C::NETWORK,
-              id,
+              id: batch,
               block: BlockHash(block_hash),
               instructions: outputs.iter().filter_map(|output| {
                 // If these aren't externally received funds, don't handle it as an instruction
