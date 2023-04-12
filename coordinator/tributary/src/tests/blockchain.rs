@@ -35,7 +35,7 @@ fn block_addition() {
   assert_eq!(block.header.parent, genesis);
   assert_eq!(block.header.transactions, [0; 32]);
   blockchain.verify_block(&block).unwrap();
-  blockchain.add_block(&block);
+  assert!(blockchain.add_block(&block));
   assert_eq!(blockchain.tip(), block.hash());
 }
 
@@ -155,7 +155,7 @@ fn signed_transaction() {
 
     // Verify and add the block
     blockchain.verify_block(&block).unwrap();
-    blockchain.add_block(&block);
+    assert!(blockchain.add_block(&block));
     assert_eq!(blockchain.tip(), block.hash());
   };
 
@@ -194,11 +194,11 @@ fn provided_transaction() {
   blockchain.verify_block(&block).unwrap();
 
   // add_block should work for verified blocks
-  blockchain.add_block(&block);
+  assert!(blockchain.add_block(&block));
 
   let block = Block::new(blockchain.tip(), &txs, HashMap::new());
   // The provided transaction should no longer considered provided, causing this error
   assert!(blockchain.verify_block(&block).is_err());
-  // add_block should also work for unverified provided transactions if told to add them
-  blockchain.add_block(&block);
+  // add_block should fail for unverified provided transactions if told to add them
+  assert!(!blockchain.add_block(&block));
 }

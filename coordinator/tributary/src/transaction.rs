@@ -58,8 +58,6 @@ impl ReadWrite for Signed {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TransactionKind<'a> {
   /// This tranaction should be provided by every validator, solely ordered by the block producer.
-  ///
-  /// This transaction is only valid if a supermajority of validators provided it.
   Provided,
 
   /// An unsigned transaction, only able to be included by the block producer.

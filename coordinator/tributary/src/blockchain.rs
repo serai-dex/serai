@@ -54,16 +54,23 @@ impl<T: Transaction> Blockchain<T> {
     block.verify(self.genesis, self.tip, locally_provided, self.next_nonces.clone())
   }
 
-  /// Add a block, assuming it's valid.
-  ///
-  /// Do not call this without either verifying the block or having it confirmed under consensus.
-  /// Doing so will cause a panic or action an invalid transaction.
-  pub fn add_block(&mut self, block: &Block<T>) {
+  /// Add a block.
+  #[must_use]
+  pub fn add_block(&mut self, block: &Block<T>) -> bool {
+    // TODO: Handle desyncs re: provided transactions properly
+    if self.verify_block(block).is_err() {
+      return false;
+    }
+
+    // None of the following assertions should be reachable since we verified the block
     self.tip = block.hash();
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided => {
-          self.provided.withdraw(tx.hash());
+          assert!(
+            self.provided.withdraw(tx.hash()),
+            "verified block had a provided transaction we didn't have"
+          );
         }
         TransactionKind::Unsigned => {}
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {
@@ -72,10 +79,12 @@ impl<T: Transaction> Blockchain<T> {
             .insert(*signer, nonce + 1)
             .expect("block had signed transaction from non-participant");
           if prev != *nonce {
-            panic!("block had an invalid nonce");
+            panic!("verified block had an invalid nonce");
           }
         }
       }
     }
+
+    true
   }
 }
