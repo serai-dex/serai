@@ -54,11 +54,11 @@ fn serialize_transaction() {
   {
     // This supports a variable share length, yet share length is expected to be constant among
     // shares
-    let share_len = usize::try_from(96 + (OsRng.next_u64() % 32)).unwrap();
+    let share_len = usize::try_from(OsRng.next_u64() % 512).unwrap();
     // Create a valid map of shares
     let mut shares = HashMap::new();
-    // Create up to 500 participants
-    for i in 0 .. (OsRng.next_u64() % 500) {
+    // Create up to 512 participants
+    for i in 0 .. (OsRng.next_u64() % 512) {
       let mut share = vec![0; share_len];
       OsRng.fill_bytes(&mut share);
       shares.insert(Participant::new(u16::try_from(i + 1).unwrap()).unwrap(), share);

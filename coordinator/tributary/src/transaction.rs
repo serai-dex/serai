@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use std::{
   io,
   collections::{HashSet, HashMap},
@@ -65,8 +66,11 @@ pub enum TransactionKind {
   Signed(Signed),
 }
 
-pub trait Transaction: Send + Sync + Clone + Eq + ReadWrite {
+pub trait Transaction: Send + Sync + Clone + Eq + Debug + ReadWrite {
   fn kind(&self) -> TransactionKind;
+  /// Return the hash of this transaction.
+  ///
+  /// The hash must NOT commit to the signature.
   fn hash(&self) -> [u8; 32];
 
   fn verify(&self) -> Result<(), TransactionError>;

@@ -6,6 +6,9 @@ pub(crate) use merkle::*;
 mod transaction;
 pub use transaction::*;
 
+mod provided;
+pub use provided::*;
+
 mod block;
 pub use block::*;
 

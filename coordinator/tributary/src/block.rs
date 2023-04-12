@@ -22,7 +22,10 @@ pub enum BlockError {
   TransactionError(TransactionError),
 }
 
-use crate::{ReadWrite, TransactionError, Transaction, merkle, verify_transaction};
+use crate::{
+  ReadWrite, TransactionError, Signed, TransactionKind, Transaction, ProvidedTransactions, merkle,
+  verify_transaction,
+};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
@@ -83,6 +86,47 @@ impl<T: Transaction> ReadWrite for Block<T> {
 }
 
 impl<T: Transaction> Block<T> {
+  /// Create a new block.
+  ///
+  /// mempool is expected to only have valid, non-conflicting transactions.
+  pub fn new(
+    parent: [u8; 32],
+    provided: &ProvidedTransactions<T>,
+    mempool: HashMap<[u8; 32], T>,
+  ) -> Self {
+    let mut txs = vec![];
+    for tx in provided.transactions.values().cloned() {
+      txs.push(tx);
+    }
+    for tx in mempool.values().cloned() {
+      assert!(tx.kind() != TransactionKind::Provided, "provided transaction entered mempool");
+      txs.push(tx);
+    }
+
+    // Sort txs by nonces.
+    let nonce = |tx: &T| {
+      if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
+        nonce
+      } else {
+        0
+      }
+    };
+    txs.sort_by(|a, b| nonce(a).partial_cmp(&nonce(b)).unwrap());
+
+    // Check the sort.
+    let mut last = 0;
+    for tx in &txs {
+      let nonce = nonce(tx);
+      if nonce < last {
+        panic!("failed to sort txs by nonce");
+      }
+      last = nonce;
+    }
+
+    let hashes = txs.iter().map(Transaction::hash).collect::<Vec<_>>();
+    Block { header: BlockHeader { parent, transactions: merkle(&hashes) }, transactions: txs }
+  }
+
   pub fn hash(&self) -> [u8; 32] {
     self.header.hash()
   }

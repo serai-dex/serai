@@ -22,6 +22,6 @@ pub fn random_signed<R: RngCore>(rng: &mut R) -> Signed {
 #[test]
 fn serialize_signed() {
   use crate::ReadWrite;
-  let signed = signed(&mut rand_core::OsRng);
+  let signed = random_signed(&mut rand_core::OsRng);
   assert_eq!(Signed::read::<&[u8]>(&mut signed.serialize().as_ref()).unwrap(), signed);
 }
