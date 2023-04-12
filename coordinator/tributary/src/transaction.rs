@@ -96,6 +96,7 @@ pub(crate) fn verify_transaction<T: Transaction>(
     }
     TransactionKind::Unsigned => {}
     TransactionKind::Signed(Signed { signer, nonce, signature }) => {
+      // TODO: Use presence as a whitelist, erroring on lack of
       if next_nonces.get(&signer).cloned().unwrap_or(0) != nonce {
         Err(TransactionError::Temporal)?;
       }

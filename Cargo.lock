@@ -10684,6 +10684,7 @@ dependencies = [
  "schnorr-signatures",
  "tendermint-machine",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]

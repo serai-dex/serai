@@ -10,6 +10,7 @@ edition = "2021"
 [dependencies]
 thiserror = "1"
 
+zeroize = { version = "^1.5", optional = true }
 rand_core = { version = "0.6", optional = true }
 
 blake2 = "0.10"
@@ -20,7 +21,8 @@ schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
 
 [dev-dependencies]
+zeroize = "^1.5"
 rand_core = "0.6"
 
 [features]
-tests = ["rand_core"]
+tests = ["zeroize", "rand_core"]
