@@ -55,12 +55,8 @@ impl<T: Transaction> Blockchain<T> {
   }
 
   /// Add a block.
-  #[must_use]
-  pub fn add_block(&mut self, block: &Block<T>) -> bool {
-    // TODO: Handle desyncs re: provided transactions properly
-    if self.verify_block(block).is_err() {
-      return false;
-    }
+  pub fn add_block(&mut self, block: &Block<T>) -> Result<(), BlockError> {
+    self.verify_block(block)?;
 
     // None of the following assertions should be reachable since we verified the block
     self.tip = block.hash();
@@ -85,6 +81,6 @@ impl<T: Transaction> Blockchain<T> {
       }
     }
 
-    true
+    Ok(())
   }
 }

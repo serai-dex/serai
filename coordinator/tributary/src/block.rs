@@ -48,7 +48,7 @@ impl ReadWrite for BlockHeader {
 }
 
 impl BlockHeader {
-  fn hash(&self) -> [u8; 32] {
+  pub fn hash(&self) -> [u8; 32] {
     Blake2s256::digest([b"tributary_block".as_ref(), &self.serialize()].concat()).into()
   }
 }

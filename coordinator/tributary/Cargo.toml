@@ -21,7 +21,13 @@ transcript = { package = "flexible-transcript", path = "../../crypto/transcript"
 ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", features = ["ristretto"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
 
+hex = "0.4"
+log = "0.4"
+
+scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
+
+tokio = { version = "1", features = ["macros", "sync", "time", "rt"] }
 
 [dev-dependencies]
 zeroize = "^1.5"

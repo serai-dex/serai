@@ -241,23 +241,30 @@ pub trait Network: Send + Sync {
     commit.validators.iter().map(|v| weights.weight(*v)).sum::<u64>() >= weights.threshold()
   }
 
-  /// Broadcast a message to the other validators. If authenticated channels have already been
-  /// established, this will double-authenticate. Switching to unauthenticated channels in a system
-  /// already providing authenticated channels is not recommended as this is a minor, temporal
-  /// inefficiency while downgrading channels may have wider implications.
+  /// Broadcast a message to the other validators.
+  ///
+  /// If authenticated channels have already been established, this will double-authenticate.
+  /// Switching to unauthenticated channels in a system already providing authenticated channels is
+  /// not recommended as this is a minor, temporal inefficiency, while downgrading channels may
+  /// have wider implications.
   async fn broadcast(&mut self, msg: SignedMessageFor<Self>);
 
   /// Trigger a slash for the validator in question who was definitively malicious.
+  ///
   /// The exact process of triggering a slash is undefined and left to the network as a whole.
   async fn slash(&mut self, validator: Self::ValidatorId);
 
   /// Validate a block.
   async fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
-  /// Add a block, returning the proposal for the next one. It's possible a block, which was never
-  /// validated or even failed validation, may be passed here if a supermajority of validators did
-  /// consider it valid and created a commit for it. This deviates from the paper which will have a
-  /// local node refuse to decide on a block it considers invalid. This library acknowledges the
-  /// network did decide on it, leaving handling of it to the network, and outside of this scope.
+
+  /// Add a block, returning the proposal for the next one.
+  ///
+  /// It's possible a block, which was never validated or even failed validation, may be passed
+  /// here if a supermajority of validators did consider it valid and created a commit for it.
+  ///
+  /// This deviates from the paper which will have a local node refuse to decide on a block it
+  /// considers invalid. This library acknowledges the network did decide on it, leaving handling
+  /// of it to the network, and outside of this scope.
   async fn add_block(
     &mut self,
     block: Self::Block,

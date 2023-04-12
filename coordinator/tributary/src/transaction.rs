@@ -15,12 +15,18 @@ use crate::ReadWrite;
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
-  /// This transaction was perceived as invalid against the current state.
-  #[error("transaction temporally invalid")]
-  Temporal,
-  /// This transaction is definitively invalid.
-  #[error("transaction definitively invalid")]
-  Fatal,
+  /// A provided transaction wasn't locally provided.
+  #[error("provided transaction wasn't locally provided")]
+  MissingProvided([u8; 32]),
+  /// This transaction's signer isn't a participant.
+  #[error("invalid signer")]
+  InvalidSigner,
+  /// This transaction's nonce isn't the prior nonce plus one.
+  #[error("invalid nonce")]
+  InvalidNonce,
+  /// This transaction's signature is invalid.
+  #[error("invalid signature")]
+  InvalidSignature,
 }
 
 /// Data for a signed transaction.
@@ -100,24 +106,25 @@ pub(crate) fn verify_transaction<T: Transaction>(
 
   match tx.kind() {
     TransactionKind::Provided => {
-      if !locally_provided.remove(&tx.hash()) {
-        Err(TransactionError::Temporal)?;
+      let hash = tx.hash();
+      if !locally_provided.remove(&hash) {
+        Err(TransactionError::MissingProvided(hash))?;
       }
     }
     TransactionKind::Unsigned => {}
     TransactionKind::Signed(Signed { signer, nonce, signature }) => {
       if let Some(next_nonce) = next_nonces.get(signer) {
         if nonce != next_nonce {
-          Err(TransactionError::Temporal)?;
+          Err(TransactionError::InvalidNonce)?;
         }
       } else {
         // Not a participant
-        Err(TransactionError::Fatal)?;
+        Err(TransactionError::InvalidSigner)?;
       }
 
       // TODO: Use Schnorr half-aggregation and a batch verification here
       if !signature.verify(*signer, tx.sig_hash(genesis)) {
-        Err(TransactionError::Fatal)?;
+        Err(TransactionError::InvalidSignature)?;
       }
 
       next_nonces.insert(*signer, nonce + 1);
