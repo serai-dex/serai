@@ -92,12 +92,11 @@ fn duplicate_nonces() {
     insert(NonceTransaction::new(0, 0));
     insert(NonceTransaction::new(i, 1));
 
-    let nonces = HashMap::new();
     let res = Block::new(LAST, &ProvidedTransactions::new(), mempool).verify(
       GENESIS,
       LAST,
       HashSet::new(),
-      nonces,
+      HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]),
     );
     if i == 1 {
       res.unwrap();
@@ -125,13 +124,14 @@ fn unsorted_nonces() {
   // Create and verify the block
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
+  let nonces = HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]);
   Block::new(LAST, &ProvidedTransactions::new(), mempool.clone())
-    .verify(GENESIS, LAST, HashSet::new(), HashMap::new())
+    .verify(GENESIS, LAST, HashSet::new(), nonces.clone())
     .unwrap();
 
   let skip = NonceTransaction::new(65, 0);
   mempool.insert(skip.hash(), skip);
   assert!(Block::new(LAST, &ProvidedTransactions::new(), mempool)
-    .verify(GENESIS, LAST, HashSet::new(), HashMap::new())
+    .verify(GENESIS, LAST, HashSet::new(), nonces)
     .is_err());
 }

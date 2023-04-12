@@ -27,17 +27,18 @@ fn mempool_addition() {
   assert_eq!(mempool.next_nonce(&signer), None);
 
   // Add TX 0
-  assert!(mempool.add(&HashMap::new(), first_tx.clone()));
+  let mut blockchain_next_nonces = HashMap::from([(signer, 0)]);
+  assert!(mempool.add(&blockchain_next_nonces, first_tx.clone()));
   assert_eq!(mempool.next_nonce(&signer), Some(1));
 
   // Adding it again should fail
-  assert!(!mempool.add(&HashMap::new(), first_tx.clone()));
+  assert!(!mempool.add(&blockchain_next_nonces, first_tx.clone()));
 
   // Do the same with the next nonce
   let second_tx = signed_transaction(&mut OsRng, genesis, &key, 1);
-  assert!(mempool.add(&HashMap::new(), second_tx.clone()));
+  assert!(mempool.add(&blockchain_next_nonces, second_tx.clone()));
   assert_eq!(mempool.next_nonce(&signer), Some(2));
-  assert!(!mempool.add(&HashMap::new(), second_tx.clone()));
+  assert!(!mempool.add(&blockchain_next_nonces, second_tx.clone()));
 
   // If the mempool doesn't have a nonce for an account, it should successfully use the
   // blockchain's
@@ -45,18 +46,16 @@ fn mempool_addition() {
   let tx = signed_transaction(&mut OsRng, genesis, &second_key, 2);
   let second_signer = tx.1.signer;
   assert_eq!(mempool.next_nonce(&second_signer), None);
-  let mut blockchain_nonces = HashMap::from([(second_signer, 2)]);
-  assert!(mempool.add(&blockchain_nonces, tx.clone()));
+  blockchain_next_nonces.insert(second_signer, 2);
+  assert!(mempool.add(&blockchain_next_nonces, tx.clone()));
   assert_eq!(mempool.next_nonce(&second_signer), Some(3));
 
   // Getting a block should work
-  let block = mempool.block(&HashMap::new());
-  assert_eq!(block, mempool.block(&blockchain_nonces));
-  assert_eq!(block.len(), 3);
+  assert_eq!(mempool.block(&blockchain_next_nonces).len(), 3);
 
   // If the blockchain says an account had its nonce updated, it should cause a prune
-  blockchain_nonces.insert(signer, 1);
-  let block = mempool.block(&blockchain_nonces);
+  blockchain_next_nonces.insert(signer, 1);
+  let block = mempool.block(&blockchain_next_nonces);
   assert_eq!(block.len(), 2);
   assert!(!block.contains_key(&first_tx.hash()));
   assert_eq!(mempool.txs(), &block);

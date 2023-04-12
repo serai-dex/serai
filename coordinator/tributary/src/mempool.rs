@@ -19,15 +19,18 @@ impl<T: Transaction> Mempool<T> {
   /// Returns true if this is a valid, new transaction.
   pub fn add(
     &mut self,
-    blockchain_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
     tx: T,
   ) -> bool {
     match tx.kind() {
       TransactionKind::Signed(Signed { signer, nonce, .. }) => {
         // If the mempool doesn't have a nonce tracked, grab it from the blockchain
         if !self.next_nonces.contains_key(signer) {
-          // TODO: Same commentary here as present in verify_transaction about a whitelist
-          self.next_nonces.insert(*signer, blockchain_nonces.get(signer).cloned().unwrap_or(0));
+          let Some(blockchain_next_nonces) = blockchain_next_nonces.get(signer).cloned() else {
+            // Not a participant
+            return false;
+          };
+          self.next_nonces.insert(*signer, blockchain_next_nonces);
         }
 
         if verify_transaction(&tx, self.genesis, &mut HashSet::new(), &mut self.next_nonces)
@@ -44,6 +47,9 @@ impl<T: Transaction> Mempool<T> {
     }
   }
 
+  // Returns None if the mempool doesn't have a nonce tracked.
+  // The nonce to use when signing should be:
+  // max(blockchain.next_nonce().unwrap(), mempool.next_nonce().unwrap_or(0))
   pub fn next_nonce(&self, signer: &<Ristretto as Ciphersuite>::G) -> Option<u32> {
     self.next_nonces.get(signer).cloned()
   }
@@ -51,7 +57,7 @@ impl<T: Transaction> Mempool<T> {
   /// Get transactions to include in a block.
   pub fn block(
     &mut self,
-    blockchain_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
   ) -> HashMap<[u8; 32], T> {
     let mut res = HashMap::new();
     for hash in self.txs.keys().cloned().collect::<Vec<_>>() {
@@ -59,7 +65,7 @@ impl<T: Transaction> Mempool<T> {
       // Verify this hasn't gone stale
       match tx.kind() {
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {
-          if blockchain_nonces.get(signer).cloned().unwrap_or(0) > *nonce {
+          if blockchain_next_nonces[signer] > *nonce {
             self.txs.remove(&hash);
             continue;
           }

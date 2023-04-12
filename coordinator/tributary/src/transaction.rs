@@ -91,7 +91,7 @@ pub trait Transaction: Send + Sync + Clone + Eq + Debug + ReadWrite {
   }
 }
 
-// This will only cause mutations when the transaction is valid.
+// This will only cause mutations when the transaction is valid
 pub(crate) fn verify_transaction<T: Transaction>(
   tx: &T,
   genesis: [u8; 32],
@@ -108,9 +108,13 @@ pub(crate) fn verify_transaction<T: Transaction>(
     }
     TransactionKind::Unsigned => {}
     TransactionKind::Signed(Signed { signer, nonce, signature }) => {
-      // TODO: Use presence as a whitelist, erroring on lack of
-      if next_nonces.get(signer).cloned().unwrap_or(0) != *nonce {
-        Err(TransactionError::Temporal)?;
+      if let Some(next_nonce) = next_nonces.get(signer) {
+        if nonce != next_nonce {
+          Err(TransactionError::Temporal)?;
+        }
+      } else {
+        // Not a participant
+        Err(TransactionError::Fatal)?;
       }
 
       // TODO: Use Schnorr half-aggregation and a batch verification here

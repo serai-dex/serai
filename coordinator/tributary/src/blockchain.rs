@@ -11,13 +11,18 @@ pub struct Blockchain<T: Transaction> {
   tip: [u8; 32],
   provided: ProvidedTransactions<T>,
   // TODO: Mempool
-  nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+  next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 }
 
 impl<T: Transaction> Blockchain<T> {
-  pub fn new(genesis: [u8; 32]) -> Self {
+  pub fn new(genesis: [u8; 32], participants: &[<Ristretto as Ciphersuite>::G]) -> Self {
     // TODO: Reload provided/nonces
-    Self { genesis, tip: genesis, provided: ProvidedTransactions::new(), nonces: HashMap::new() }
+
+    let mut next_nonces = HashMap::new();
+    for participant in participants {
+      next_nonces.insert(*participant, 0);
+    }
+    Self { genesis, tip: genesis, provided: ProvidedTransactions::new(), next_nonces }
   }
 
   pub fn tip(&self) -> [u8; 32] {
@@ -28,8 +33,9 @@ impl<T: Transaction> Blockchain<T> {
     self.provided.provide(tx)
   }
 
-  pub fn next_nonce(&self, key: <Ristretto as Ciphersuite>::G) -> u32 {
-    self.nonces.get(&key).cloned().unwrap_or(0)
+  /// Returns the next nonce, or None if they aren't a participant.
+  pub fn next_nonce(&self, key: <Ristretto as Ciphersuite>::G) -> Option<u32> {
+    self.next_nonces.get(&key).cloned()
   }
 
   // TODO: Embed mempool
@@ -45,7 +51,7 @@ impl<T: Transaction> Blockchain<T> {
     for provided in self.provided.transactions.keys() {
       locally_provided.insert(*provided);
     }
-    block.verify(self.genesis, self.tip, locally_provided, self.nonces.clone())
+    block.verify(self.genesis, self.tip, locally_provided, self.next_nonces.clone())
   }
 
   /// Add a block, assuming it's valid.
@@ -61,10 +67,12 @@ impl<T: Transaction> Blockchain<T> {
         }
         TransactionKind::Unsigned => {}
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {
-          if let Some(prev) = self.nonces.insert(*signer, nonce + 1) {
-            if prev != *nonce {
-              panic!("block had an invalid nonce");
-            }
+          let prev = self
+            .next_nonces
+            .insert(*signer, nonce + 1)
+            .expect("block had signed transaction from non-participant");
+          if prev != *nonce {
+            panic!("block had an invalid nonce");
           }
         }
       }
