@@ -38,6 +38,9 @@ impl ReadWrite for Signed {
     let mut nonce = [0; 4];
     reader.read_exact(&mut nonce)?;
     let nonce = u32::from_le_bytes(nonce);
+    if nonce >= (u32::MAX - 1) {
+      Err(io::Error::new(io::ErrorKind::Other, "nonce exceeded limit"))?;
+    }
 
     let signature = SchnorrSignature::<Ristretto>::read(reader)?;
 
@@ -88,12 +91,15 @@ pub trait Transaction: Send + Sync + Clone + Eq + Debug + ReadWrite {
   }
 }
 
+// This will only cause mutations when the transaction is valid.
 pub(crate) fn verify_transaction<T: Transaction>(
   tx: &T,
   genesis: [u8; 32],
   locally_provided: &mut HashSet<[u8; 32]>,
   next_nonces: &mut HashMap<<Ristretto as Ciphersuite>::G, u32>,
 ) -> Result<(), TransactionError> {
+  tx.verify()?;
+
   match tx.kind() {
     TransactionKind::Provided => {
       if !locally_provided.remove(&tx.hash()) {
@@ -106,14 +112,15 @@ pub(crate) fn verify_transaction<T: Transaction>(
       if next_nonces.get(signer).cloned().unwrap_or(0) != *nonce {
         Err(TransactionError::Temporal)?;
       }
-      next_nonces.insert(*signer, nonce + 1);
 
       // TODO: Use Schnorr half-aggregation and a batch verification here
       if !signature.verify(*signer, tx.sig_hash(genesis)) {
         Err(TransactionError::Fatal)?;
       }
+
+      next_nonces.insert(*signer, nonce + 1);
     }
   }
 
-  tx.verify()
+  Ok(())
 }

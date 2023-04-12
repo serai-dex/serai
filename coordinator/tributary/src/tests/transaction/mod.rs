@@ -25,7 +25,7 @@ mod provided;
 pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed {
     signer: <Ristretto as Ciphersuite>::G::random(&mut *rng),
-    nonce: u32::try_from(rng.next_u64() >> 32).unwrap(),
+    nonce: u32::try_from(rng.next_u64() >> 32 >> 1).unwrap(),
     signature: SchnorrSignature::<Ristretto> {
       R: <Ristretto as Ciphersuite>::G::random(&mut *rng),
       s: <Ristretto as Ciphersuite>::F::random(rng),

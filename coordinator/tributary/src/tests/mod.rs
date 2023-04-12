@@ -8,3 +8,5 @@ mod merkle;
 mod block;
 #[cfg(test)]
 mod blockchain;
+#[cfg(test)]
+mod mempool;

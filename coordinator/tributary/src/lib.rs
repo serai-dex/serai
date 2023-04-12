@@ -15,6 +15,9 @@ pub use block::*;
 mod blockchain;
 pub use blockchain::*;
 
+mod mempool;
+pub use mempool::*;
+
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
 
