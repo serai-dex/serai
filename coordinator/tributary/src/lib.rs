@@ -7,7 +7,7 @@ mod transaction;
 pub use transaction::*;
 
 mod provided;
-pub use provided::*;
+pub(crate) use provided::*;
 
 mod block;
 pub use block::*;
@@ -17,6 +17,9 @@ pub use blockchain::*;
 
 mod mempool;
 pub use mempool::*;
+
+mod tendermint;
+pub use crate::tendermint::*;
 
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;

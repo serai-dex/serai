@@ -8,12 +8,15 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+async-trait = "0.1"
 thiserror = "1"
 
+subtle = "^2"
 zeroize = { version = "^1.5", optional = true }
 rand_core = { version = "0.6", optional = true }
 
 blake2 = "0.10"
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", features = ["recommended"] }
 
 ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", features = ["ristretto"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
