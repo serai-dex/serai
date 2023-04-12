@@ -18,7 +18,7 @@ pub(crate) fn merkle(hash_args: &[[u8; 32]]) -> [u8; 32] {
           b"branch_hash".as_ref(),
           hashes[i].as_ref(),
           hashes
-            .get(i + i)
+            .get(i + 1)
             .map(|hash| {
               let res: &[u8] = hash.as_ref();
               res
