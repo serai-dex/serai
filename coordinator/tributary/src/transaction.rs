@@ -67,14 +67,20 @@ pub enum TransactionKind<'a> {
 }
 
 pub trait Transaction: Send + Sync + Clone + Eq + Debug + ReadWrite {
+  /// Return what type of transaction this is.
   fn kind(&self) -> TransactionKind<'_>;
+
   /// Return the hash of this transaction.
   ///
   /// The hash must NOT commit to the signature.
   fn hash(&self) -> [u8; 32];
 
+  /// Perform transaction-specific verification.
   fn verify(&self) -> Result<(), TransactionError>;
 
+  /// Obtain the challenge for this transaction's signature.
+  ///
+  /// Do not override this unless you know what you're doing.
   fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
     <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
       &Blake2b512::digest([genesis, self.hash()].concat()).into(),

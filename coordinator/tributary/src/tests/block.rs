@@ -75,7 +75,7 @@ fn empty_block() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
   Block::new(LAST, &ProvidedTransactions::<NonceTransaction>::new(), HashMap::new())
-    .verify(GENESIS, LAST, &mut HashSet::new(), &mut HashMap::new())
+    .verify(GENESIS, LAST, HashSet::new(), HashMap::new())
     .unwrap();
 }
 
@@ -89,19 +89,18 @@ fn duplicate_nonces() {
   for i in [1, 0] {
     let mut mempool = HashMap::new();
     let mut insert = |tx: NonceTransaction| mempool.insert(tx.hash(), tx);
-    insert(NonceTransaction(0, 0));
-    insert(NonceTransaction(i, 1));
+    insert(NonceTransaction::new(0, 0));
+    insert(NonceTransaction::new(i, 1));
 
-    let mut nonces = HashMap::new();
+    let nonces = HashMap::new();
     let res = Block::new(LAST, &ProvidedTransactions::new(), mempool).verify(
       GENESIS,
       LAST,
-      &mut HashSet::new(),
-      &mut nonces,
+      HashSet::new(),
+      nonces,
     );
     if i == 1 {
       res.unwrap();
-      assert_eq!(nonces[&<Ristretto as Ciphersuite>::G::identity()], 2);
     } else {
       assert!(res.is_err());
     }
@@ -119,18 +118,20 @@ fn unsorted_nonces() {
     let nonce = nonces.swap_remove(
       usize::try_from(OsRng.next_u64() % u64::try_from(nonces.len()).unwrap()).unwrap(),
     );
-    let tx = NonceTransaction(nonce, 0);
+    let tx = NonceTransaction::new(nonce, 0);
     mempool.insert(tx.hash(), tx);
   }
 
   // Create and verify the block
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
-  let mut nonces = HashMap::new();
-  Block::new(LAST, &ProvidedTransactions::new(), mempool)
-    .verify(GENESIS, LAST, &mut HashSet::new(), &mut nonces)
+  Block::new(LAST, &ProvidedTransactions::new(), mempool.clone())
+    .verify(GENESIS, LAST, HashSet::new(), HashMap::new())
     .unwrap();
 
-  // Make sure the nonce was properly set
-  assert_eq!(nonces[&<Ristretto as Ciphersuite>::G::identity()], 64);
+  let skip = NonceTransaction::new(65, 0);
+  mempool.insert(skip.hash(), skip);
+  assert!(Block::new(LAST, &ProvidedTransactions::new(), mempool)
+    .verify(GENESIS, LAST, HashSet::new(), HashMap::new())
+    .is_err());
 }

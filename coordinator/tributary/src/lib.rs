@@ -12,6 +12,9 @@ pub use provided::*;
 mod block;
 pub use block::*;
 
+mod blockchain;
+pub use blockchain::*;
+
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
 

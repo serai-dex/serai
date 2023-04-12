@@ -29,8 +29,8 @@ use crate::{
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
-  parent: [u8; 32],
-  transactions: [u8; 32],
+  pub parent: [u8; 32],
+  pub transactions: [u8; 32],
 }
 
 impl ReadWrite for BlockHeader {
@@ -55,8 +55,8 @@ impl BlockHeader {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Block<T: Transaction> {
-  header: BlockHeader,
-  transactions: Vec<T>,
+  pub header: BlockHeader,
+  pub transactions: Vec<T>,
 }
 
 impl<T: Transaction> ReadWrite for Block<T> {
@@ -89,7 +89,7 @@ impl<T: Transaction> Block<T> {
   /// Create a new block.
   ///
   /// mempool is expected to only have valid, non-conflicting transactions.
-  pub fn new(
+  pub(crate) fn new(
     parent: [u8; 32],
     provided: &ProvidedTransactions<T>,
     mempool: HashMap<[u8; 32], T>,
@@ -106,7 +106,7 @@ impl<T: Transaction> Block<T> {
     // Sort txs by nonces.
     let nonce = |tx: &T| {
       if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
-        nonce
+        *nonce
       } else {
         0
       }
@@ -135,8 +135,8 @@ impl<T: Transaction> Block<T> {
     &self,
     genesis: [u8; 32],
     last_block: [u8; 32],
-    locally_provided: &mut HashSet<[u8; 32]>,
-    next_nonces: &mut HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    mut locally_provided: HashSet<[u8; 32]>,
+    mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
   ) -> Result<(), BlockError> {
     if self.header.parent != last_block {
       Err(BlockError::InvalidParent)?;
@@ -144,7 +144,7 @@ impl<T: Transaction> Block<T> {
 
     let mut txs = Vec::with_capacity(self.transactions.len());
     for tx in &self.transactions {
-      match verify_transaction(tx, genesis, locally_provided, next_nonces) {
+      match verify_transaction(tx, genesis, &mut locally_provided, &mut next_nonces) {
         Ok(()) => {}
         Err(e) => Err(BlockError::TransactionError(e))?,
       }

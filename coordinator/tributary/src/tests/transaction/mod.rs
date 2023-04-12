@@ -3,6 +3,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use blake2::{Digest, Blake2s256};
@@ -105,33 +106,42 @@ impl Transaction for SignedTransaction {
   }
 }
 
-pub fn random_signed_transaction<R: RngCore + CryptoRng>(
+pub fn signed_transaction<R: RngCore + CryptoRng>(
   rng: &mut R,
-) -> ([u8; 32], SignedTransaction) {
-  use zeroize::Zeroizing;
-
+  genesis: [u8; 32],
+  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  nonce: u32,
+) -> SignedTransaction {
   let mut data = vec![0; 512];
   rng.fill_bytes(&mut data);
 
-  let key = <Ristretto as Ciphersuite>::F::random(&mut *rng);
-  let signer = <Ristretto as Ciphersuite>::generator() * key;
-  // Shift over an additional bit to ensure it won't overflow when incremented
-  let nonce = u32::try_from(rng.next_u64() >> 32 >> 1).unwrap();
+  let signer = <Ristretto as Ciphersuite>::generator() * **key;
 
   let mut tx =
     SignedTransaction(data, Signed { signer, nonce, signature: random_signed(rng).signature });
 
-  let mut genesis = [0; 32];
-  rng.fill_bytes(&mut genesis);
   tx.1.signature = SchnorrSignature::sign(
-    &Zeroizing::new(key),
+    key,
     Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng)),
     tx.sig_hash(genesis),
   );
 
-  let mut nonces = HashMap::from([(tx.1.signer, tx.1.nonce)]);
+  let mut nonces = HashMap::from([(signer, nonce)]);
   verify_transaction(&tx, genesis, &mut HashSet::new(), &mut nonces).unwrap();
   assert_eq!(nonces, HashMap::from([(tx.1.signer, tx.1.nonce.wrapping_add(1))]));
 
-  (genesis, tx)
+  tx
+}
+
+pub fn random_signed_transaction<R: RngCore + CryptoRng>(
+  rng: &mut R,
+) -> ([u8; 32], SignedTransaction) {
+  let mut genesis = [0; 32];
+  rng.fill_bytes(&mut genesis);
+
+  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut *rng));
+  // Shift over an additional bit to ensure it won't overflow when incremented
+  let nonce = u32::try_from(rng.next_u64() >> 32 >> 1).unwrap();
+
+  (genesis, signed_transaction(rng, genesis, &key, nonce))
 }
