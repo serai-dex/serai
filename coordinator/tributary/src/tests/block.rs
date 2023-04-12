@@ -19,15 +19,35 @@ use crate::{
 // A transaction solely defined by its nonce and a distinguisher (to allow creating distinct TXs
 // sharing a nonce).
 #[derive(Clone, PartialEq, Eq, Debug)]
-struct NonceTransaction(u32, u8);
+struct NonceTransaction(u32, u8, Signed);
+
+impl NonceTransaction {
+  fn new(nonce: u32, distinguisher: u8) -> Self {
+    NonceTransaction(
+      nonce,
+      distinguisher,
+      Signed {
+        signer: <Ristretto as Ciphersuite>::G::identity(),
+        nonce,
+        signature: SchnorrSignature::<Ristretto> {
+          R: <Ristretto as Ciphersuite>::G::identity(),
+          s: <Ristretto as Ciphersuite>::F::ZERO,
+        },
+      },
+    )
+  }
+}
 
 impl ReadWrite for NonceTransaction {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     let mut nonce = [0; 4];
     reader.read_exact(&mut nonce)?;
+    let nonce = u32::from_le_bytes(nonce);
+
     let mut distinguisher = [0];
     reader.read_exact(&mut distinguisher)?;
-    Ok(Self(u32::from_le_bytes(nonce), distinguisher[0]))
+
+    Ok(NonceTransaction::new(nonce, distinguisher[0]))
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -37,15 +57,8 @@ impl ReadWrite for NonceTransaction {
 }
 
 impl Transaction for NonceTransaction {
-  fn kind(&self) -> TransactionKind {
-    TransactionKind::Signed(Signed {
-      signer: <Ristretto as Ciphersuite>::G::identity(),
-      nonce: self.0,
-      signature: SchnorrSignature::<Ristretto> {
-        R: <Ristretto as Ciphersuite>::G::identity(),
-        s: <Ristretto as Ciphersuite>::F::ZERO,
-      },
-    })
+  fn kind(&self) -> TransactionKind<'_> {
+    TransactionKind::Signed(&self.2)
   }
 
   fn hash(&self) -> [u8; 32] {

@@ -51,7 +51,7 @@ impl ReadWrite for ProvidedTransaction {
 }
 
 impl Transaction for ProvidedTransaction {
-  fn kind(&self) -> TransactionKind {
+  fn kind(&self) -> TransactionKind<'_> {
     TransactionKind::Provided
   }
 
@@ -91,8 +91,8 @@ impl ReadWrite for SignedTransaction {
 }
 
 impl Transaction for SignedTransaction {
-  fn kind(&self) -> TransactionKind {
-    TransactionKind::Signed(self.1.clone())
+  fn kind(&self) -> TransactionKind<'_> {
+    TransactionKind::Signed(&self.1)
   }
 
   fn hash(&self) -> [u8; 32] {

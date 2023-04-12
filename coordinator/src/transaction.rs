@@ -210,18 +210,18 @@ impl ReadWrite for Transaction {
 }
 
 impl TransactionTrait for Transaction {
-  fn kind(&self) -> TransactionKind {
+  fn kind(&self) -> TransactionKind<'_> {
     match self {
-      Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed.clone()),
-      Transaction::DkgShares(_, _, signed) => TransactionKind::Signed(signed.clone()),
+      Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed),
+      Transaction::DkgShares(_, _, signed) => TransactionKind::Signed(signed),
 
-      Transaction::SignPreprocess(data) => TransactionKind::Signed(data.signed.clone()),
-      Transaction::SignShare(data) => TransactionKind::Signed(data.signed.clone()),
+      Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
+      Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
 
       Transaction::FinalizedBlock(_) => TransactionKind::Provided,
 
-      Transaction::BatchPreprocess(data) => TransactionKind::Signed(data.signed.clone()),
-      Transaction::BatchShare(data) => TransactionKind::Signed(data.signed.clone()),
+      Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
+      Transaction::BatchShare(data) => TransactionKind::Signed(&data.signed),
     }
   }
 
@@ -229,8 +229,7 @@ impl TransactionTrait for Transaction {
     let mut tx = self.serialize();
     if let TransactionKind::Signed(signed) = self.kind() {
       // Make sure the part we're cutting off is the signature
-      assert_eq!(&tx[(tx.len() - 64) ..], &signed.signature.serialize());
-      tx.truncate(tx.len() - 64);
+      assert_eq!(tx.drain((tx.len() - 64) ..).collect::<Vec<_>>(), signed.signature.serialize());
     }
     Blake2s256::digest(tx).into()
   }

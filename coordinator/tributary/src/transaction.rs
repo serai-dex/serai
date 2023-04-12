@@ -53,7 +53,7 @@ impl ReadWrite for Signed {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum TransactionKind {
+pub enum TransactionKind<'a> {
   /// This tranaction should be provided by every validator, solely ordered by the block producer.
   ///
   /// This transaction is only valid if a supermajority of validators provided it.
@@ -63,11 +63,11 @@ pub enum TransactionKind {
   Unsigned,
 
   /// A signed transaction.
-  Signed(Signed),
+  Signed(&'a Signed),
 }
 
 pub trait Transaction: Send + Sync + Clone + Eq + Debug + ReadWrite {
-  fn kind(&self) -> TransactionKind;
+  fn kind(&self) -> TransactionKind<'_>;
   /// Return the hash of this transaction.
   ///
   /// The hash must NOT commit to the signature.
@@ -97,13 +97,13 @@ pub(crate) fn verify_transaction<T: Transaction>(
     TransactionKind::Unsigned => {}
     TransactionKind::Signed(Signed { signer, nonce, signature }) => {
       // TODO: Use presence as a whitelist, erroring on lack of
-      if next_nonces.get(&signer).cloned().unwrap_or(0) != nonce {
+      if next_nonces.get(signer).cloned().unwrap_or(0) != *nonce {
         Err(TransactionError::Temporal)?;
       }
-      next_nonces.insert(signer, nonce + 1);
+      next_nonces.insert(*signer, nonce + 1);
 
       // TODO: Use Schnorr half-aggregation and a batch verification here
-      if !signature.verify(signer, tx.sig_hash(genesis)) {
+      if !signature.verify(*signer, tx.sig_hash(genesis)) {
         Err(TransactionError::Fatal)?;
       }
     }
