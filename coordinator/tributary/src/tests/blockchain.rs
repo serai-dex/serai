@@ -1,7 +1,7 @@
 use std::collections::{HashSet, HashMap};
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, OsRng};
+use rand::{RngCore, rngs::OsRng};
 
 use blake2::{Digest, Blake2s256};
 
@@ -24,6 +24,7 @@ fn new_blockchain<T: Transaction>(
 ) -> Blockchain<T> {
   let blockchain = Blockchain::new(genesis, participants);
   assert_eq!(blockchain.tip(), genesis);
+  assert_eq!(blockchain.block_number(), 0);
   blockchain
 }
 
@@ -37,6 +38,7 @@ fn block_addition() {
   blockchain.verify_block(&block).unwrap();
   assert!(blockchain.add_block(&block).is_ok());
   assert_eq!(blockchain.tip(), block.hash());
+  assert_eq!(blockchain.block_number(), 1);
 }
 
 #[test]

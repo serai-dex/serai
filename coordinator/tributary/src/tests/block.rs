@@ -3,7 +3,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use rand_core::{RngCore, OsRng};
+use rand::{RngCore, rngs::OsRng};
 
 use blake2::{Digest, Blake2s256};
 

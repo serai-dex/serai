@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, OsRng};
+use rand::{RngCore, rngs::OsRng};
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 

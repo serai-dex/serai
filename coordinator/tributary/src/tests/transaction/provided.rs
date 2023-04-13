@@ -1,6 +1,6 @@
 use std::collections::{HashSet, HashMap};
 
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 
 use crate::{Transaction, verify_transaction, tests::random_provided_transaction};
 

@@ -8,6 +8,7 @@ use crate::{Signed, TransactionKind, Transaction, ProvidedTransactions, BlockErr
 pub struct Blockchain<T: Transaction> {
   genesis: [u8; 32],
   // TODO: db
+  block_number: u64,
   tip: [u8; 32],
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 
@@ -17,7 +18,7 @@ pub struct Blockchain<T: Transaction> {
 
 impl<T: Transaction> Blockchain<T> {
   pub fn new(genesis: [u8; 32], participants: &[<Ristretto as Ciphersuite>::G]) -> Self {
-    // TODO: Reload next_nonces/provided/mempool
+    // TODO: Reload block_number/tip/next_nonces/provided/mempool
 
     let mut next_nonces = HashMap::new();
     for participant in participants {
@@ -27,6 +28,7 @@ impl<T: Transaction> Blockchain<T> {
     Self {
       genesis,
 
+      block_number: 0,
       tip: genesis,
       next_nonces,
 
@@ -37,6 +39,10 @@ impl<T: Transaction> Blockchain<T> {
 
   pub fn tip(&self) -> [u8; 32] {
     self.tip
+  }
+
+  pub fn block_number(&self) -> u64 {
+    self.block_number
   }
 
   pub fn add_transaction(&mut self, tx: T) -> bool {
@@ -73,6 +79,7 @@ impl<T: Transaction> Blockchain<T> {
 
     // None of the following assertions should be reachable since we verified the block
     self.tip = block.hash();
+    self.block_number += 1;
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided => {

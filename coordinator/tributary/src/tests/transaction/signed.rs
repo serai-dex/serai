@@ -1,6 +1,6 @@
 use std::collections::{HashSet, HashMap};
 
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 
 use blake2::{Digest, Blake2s256};
 
@@ -13,7 +13,7 @@ use crate::{
 
 #[test]
 fn serialize_signed() {
-  let signed = random_signed(&mut rand_core::OsRng);
+  let signed = random_signed(&mut rand::rngs::OsRng);
   assert_eq!(Signed::read::<&[u8]>(&mut signed.serialize().as_ref()).unwrap(), signed);
 }
 

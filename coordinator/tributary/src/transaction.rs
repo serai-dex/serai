@@ -73,7 +73,7 @@ pub enum TransactionKind<'a> {
   Signed(&'a Signed),
 }
 
-pub trait Transaction: Send + Sync + Clone + Eq + Debug + ReadWrite {
+pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   /// Return what type of transaction this is.
   fn kind(&self) -> TransactionKind<'_>;
 

@@ -1,10 +1,16 @@
 use core::ops::Deref;
-use std::{sync::Arc, collections::HashMap};
+use std::{
+  sync::{Arc, RwLock},
+  collections::HashMap,
+};
 
 use async_trait::async_trait;
 
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
+
+use rand::{SeedableRng, seq::SliceRandom};
+use rand_chacha::ChaCha12Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
@@ -28,7 +34,10 @@ use tendermint::{
 
 use tokio::time::{Duration, sleep};
 
-use crate::{ReadWrite, Transaction, TransactionError, BlockHeader, Block, BlockError, Blockchain};
+use crate::{
+  TENDERMINT_MESSAGE, ReadWrite, Transaction, TransactionError, BlockHeader, Block, BlockError,
+  Blockchain, P2p,
+};
 
 fn challenge(
   genesis: [u8; 32],
@@ -46,9 +55,15 @@ fn challenge(
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-struct Signer {
+pub(crate) struct Signer {
   genesis: [u8; 32],
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+}
+
+impl Signer {
+  pub(crate) fn new(genesis: [u8; 32], key: Zeroizing<<Ristretto as Ciphersuite>::F>) -> Signer {
+    Signer { genesis, key }
+  }
 }
 
 #[async_trait]
@@ -99,11 +114,38 @@ impl SignerTrait for Signer {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-struct Validators {
+pub(crate) struct Validators {
   genesis: [u8; 32],
-  weight: u64,
+  total_weight: u64,
   weights: HashMap<[u8; 32], u64>,
   robin: Vec<[u8; 32]>,
+}
+
+impl Validators {
+  pub(crate) fn new(
+    genesis: [u8; 32],
+    validators: HashMap<<Ristretto as Ciphersuite>::G, u64>,
+  ) -> Validators {
+    let mut total_weight = 0;
+    let mut weights = HashMap::new();
+
+    let mut transcript = RecommendedTranscript::new(b"Round Robin Randomization");
+    let mut robin = vec![];
+    for (validator, weight) in validators {
+      let validator = validator.to_bytes();
+      // TODO: Make an error out of this
+      assert!(weight != 0);
+      total_weight += weight;
+      weights.insert(validator, weight);
+
+      transcript.append_message(b"validator", validator);
+      transcript.append_message(b"weight", weight.to_le_bytes());
+      robin.extend(vec![validator; usize::try_from(weight).unwrap()]);
+    }
+    robin.shuffle(&mut ChaCha12Rng::from_seed(transcript.rng_seed(b"robin")));
+
+    Validators { genesis, total_weight, weights, robin }
+  }
 }
 
 impl SignatureScheme for Validators {
@@ -151,7 +193,7 @@ impl Weights for Validators {
   type ValidatorId = [u8; 32];
 
   fn total_weight(&self) -> u64 {
-    self.weight
+    self.total_weight
   }
   fn weight(&self, validator: Self::ValidatorId) -> u64 {
     self.weights[&validator]
@@ -170,7 +212,7 @@ impl Weights for Validators {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-struct TendermintBlock(Vec<u8>);
+pub(crate) struct TendermintBlock(pub Vec<u8>);
 impl BlockTrait for TendermintBlock {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
@@ -178,16 +220,17 @@ impl BlockTrait for TendermintBlock {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-struct Network<T: Transaction> {
-  genesis: [u8; 32],
-  signer: Arc<Signer>,
-  validators: Arc<Validators>,
-  blockchain: Blockchain<T>,
+#[derive(Clone, Debug)]
+pub(crate) struct Network<T: Transaction, P: P2p> {
+  pub(crate) genesis: [u8; 32],
+  pub(crate) signer: Arc<Signer>,
+  pub(crate) validators: Arc<Validators>,
+  pub(crate) blockchain: Arc<RwLock<Blockchain<T>>>,
+  pub(crate) p2p: P,
 }
 
 #[async_trait]
-impl<T: Transaction> NetworkTrait for Network<T> {
+impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
   type ValidatorId = [u8; 32];
   type SignatureScheme = Arc<Validators>;
   type Weights = Arc<Validators>;
@@ -206,12 +249,14 @@ impl<T: Transaction> NetworkTrait for Network<T> {
     self.validators.clone()
   }
 
-  async fn broadcast(&mut self, _msg: SignedMessageFor<Self>) {
-    todo!()
+  async fn broadcast(&mut self, msg: SignedMessageFor<Self>) {
+    let mut to_broadcast = vec![TENDERMINT_MESSAGE];
+    to_broadcast.extend(msg.encode());
+    self.p2p.broadcast(to_broadcast).await
   }
   async fn slash(&mut self, validator: Self::ValidatorId) {
     log::error!(
-      "validator {} was slashed on tributary {}",
+      "validator {} triggered a slash event on tributary {}",
       hex::encode(validator),
       hex::encode(self.genesis)
     );
@@ -220,7 +265,7 @@ impl<T: Transaction> NetworkTrait for Network<T> {
   async fn validate(&mut self, block: &Self::Block) -> Result<(), TendermintBlockError> {
     let block =
       Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
-    self.blockchain.verify_block(&block).map_err(|e| match e {
+    self.blockchain.read().unwrap().verify_block(&block).map_err(|e| match e {
       BlockError::TransactionError(TransactionError::MissingProvided(_)) => {
         TendermintBlockError::Temporal
       }
@@ -231,7 +276,7 @@ impl<T: Transaction> NetworkTrait for Network<T> {
   async fn add_block(
     &mut self,
     block: Self::Block,
-    _commit: Commit<Self::SignatureScheme>,
+    commit: Commit<Self::SignatureScheme>,
   ) -> Option<Self::Block> {
     let invalid_block = || {
       // There's a fatal flaw in the code, it's behind a hard fork, or the validators turned
@@ -242,12 +287,15 @@ impl<T: Transaction> NetworkTrait for Network<T> {
       panic!("validators added invalid block to tributary {}", hex::encode(self.genesis));
     };
 
+    assert!(self.verify_commit(block.id(), commit));
+
     let Ok(block) = Block::read::<&[u8]>(&mut block.0.as_ref()) else {
       return invalid_block();
     };
 
     loop {
-      match self.blockchain.add_block(&block) {
+      let block_res = self.blockchain.write().unwrap().add_block(&block);
+      match block_res {
         Ok(()) => break,
         Err(BlockError::TransactionError(TransactionError::MissingProvided(hash))) => {
           log::error!(
@@ -261,7 +309,8 @@ impl<T: Transaction> NetworkTrait for Network<T> {
       }
     }
 
-    // TODO: Handle the commit and return the next proposal
-    todo!()
+    // TODO: Save the commit to disk
+
+    Some(TendermintBlock(self.blockchain.write().unwrap().build_block().serialize()))
   }
 }

@@ -4,7 +4,7 @@ use std::{
 };
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, CryptoRng};
+use rand::{RngCore, CryptoRng};
 
 use blake2::{Digest, Blake2s256};
 

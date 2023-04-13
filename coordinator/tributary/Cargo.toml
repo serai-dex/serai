@@ -12,8 +12,10 @@ async-trait = "0.1"
 thiserror = "1"
 
 subtle = "^2"
-zeroize = { version = "^1.5", optional = true }
-rand_core = { version = "0.6", optional = true }
+zeroize = "^1.5"
+
+rand = "0.8"
+rand_chacha = "0.3"
 
 blake2 = "0.10"
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", features = ["recommended"] }
@@ -25,6 +27,7 @@ hex = "0.4"
 log = "0.4"
 
 scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
+futures = "0.3"
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
 
 tokio = { version = "1", features = ["macros", "sync", "time", "rt"] }
@@ -34,4 +37,4 @@ zeroize = "^1.5"
 rand_core = "0.6"
 
 [features]
-tests = ["zeroize", "rand_core"]
+tests = []
