@@ -394,6 +394,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
 
           CoordinatorMessage::Substrate(msg) => {
             match msg {
+              // TODO: Merge this with Burns so we don't have two distinct scheduling actions
               messages::substrate::CoordinatorMessage::BlockAcknowledged {
                 context,
                 key: key_vec,
