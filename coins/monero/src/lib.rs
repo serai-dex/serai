@@ -20,6 +20,9 @@ pub mod transaction;
 /// Block structs and functionality.
 pub mod block;
 
+#[cfg(test)]
+mod tests;
+
 /// The minimum amount of blocks an output is locked for.
 ///
 /// If Monero suffered a re-organization, any transactions which selected decoys belonging to

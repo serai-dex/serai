@@ -10,8 +10,14 @@ use curve25519_dalek::{EdwardsPoint, Scalar};
 use crate::{io::*, generators::hash_to_point, primitives::keccak256_to_scalar};
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-struct Signature {
+pub(crate) struct Signature {
+  #[cfg(test)]
+  pub(crate) c: Scalar,
+  #[cfg(test)]
+  pub(crate) s: Scalar,
+  #[cfg(not(test))]
   c: Scalar,
+  #[cfg(not(test))]
   s: Scalar,
 }
 
@@ -32,6 +38,9 @@ impl Signature {
 /// This was used by the original Cryptonote transaction protocol and was deprecated with RingCT.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct RingSignature {
+  #[cfg(test)]
+  pub(crate) sigs: Vec<Signature>,
+  #[cfg(not(test))]
   sigs: Vec<Signature>,
 }
 
