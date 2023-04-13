@@ -11,7 +11,7 @@ use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{
-  ext::*, SignedMessageFor, StepSender, MessageSender, TendermintMachine, TendermintHandle,
+  ext::*, SignedMessageFor, SyncedBlockSender, MessageSender, TendermintMachine, TendermintHandle,
 };
 
 type TestValidatorId = u16;
@@ -97,7 +97,7 @@ impl Block for TestBlock {
 }
 
 #[allow(clippy::type_complexity)]
-struct TestNetwork(u16, Arc<RwLock<Vec<(MessageSender<Self>, StepSender<Self>)>>>);
+struct TestNetwork(u16, Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>)>>>);
 
 #[async_trait]
 impl Network for TestNetwork {
@@ -149,13 +149,15 @@ impl Network for TestNetwork {
 }
 
 impl TestNetwork {
-  async fn new(validators: usize) -> Arc<RwLock<Vec<(MessageSender<Self>, StepSender<Self>)>>> {
+  async fn new(
+    validators: usize,
+  ) -> Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>)>>> {
     let arc = Arc::new(RwLock::new(vec![]));
     {
       let mut write = arc.write().await;
       for i in 0 .. validators {
         let i = u16::try_from(i).unwrap();
-        let TendermintHandle { messages, machine, step } = TendermintMachine::new(
+        let TendermintHandle { messages, synced_block, machine } = TendermintMachine::new(
           TestNetwork(i, arc.clone()),
           BlockNumber(1),
           SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
@@ -163,7 +165,7 @@ impl TestNetwork {
         )
         .await;
         tokio::task::spawn(machine.run());
-        write.push((messages, step));
+        write.push((messages, synced_block));
       }
     }
     arc

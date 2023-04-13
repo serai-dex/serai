@@ -117,9 +117,10 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
   }
 }
 
-/// A commit for a specific block. The list of validators have weight exceeding the threshold for
-/// a valid commit.
-#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+/// A commit for a specific block.
+///
+/// The list of validators have weight exceeding the threshold for a valid commit.
+#[derive(PartialEq, Debug, Encode, Decode)]
 pub struct Commit<S: SignatureScheme> {
   /// End time of the round which created this commit, used as the start time of the next block.
   pub end_time: u64,
@@ -127,6 +128,16 @@ pub struct Commit<S: SignatureScheme> {
   pub validators: Vec<S::ValidatorId>,
   /// Aggregate signature.
   pub signature: S::AggregateSignature,
+}
+
+impl<S: SignatureScheme> Clone for Commit<S> {
+  fn clone(&self) -> Self {
+    Self {
+      end_time: self.end_time,
+      validators: self.validators.clone(),
+      signature: self.signature.clone(),
+    }
+  }
 }
 
 /// Weights for the validators present.

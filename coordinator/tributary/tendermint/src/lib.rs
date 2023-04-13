@@ -135,17 +135,18 @@ pub struct TendermintMachine<N: Network> {
 
   queue: VecDeque<MessageFor<N>>,
   msg_recv: mpsc::UnboundedReceiver<SignedMessageFor<N>>,
-  #[allow(clippy::type_complexity)]
-  step_recv: mpsc::UnboundedReceiver<(BlockNumber, Commit<N::SignatureScheme>, Option<N::Block>)>,
+  synced_block_recv: mpsc::UnboundedReceiver<SyncedBlock<N>>,
 
   block: BlockData<N>,
 }
 
-pub type StepSender<N> = mpsc::UnboundedSender<(
-  BlockNumber,
-  Commit<<N as Network>::SignatureScheme>,
-  Option<<N as Network>::Block>,
-)>;
+pub struct SyncedBlock<N: Network> {
+  pub number: BlockNumber,
+  pub block: <N as Network>::Block,
+  pub commit: Commit<<N as Network>::SignatureScheme>,
+}
+
+pub type SyncedBlockSender<N> = mpsc::UnboundedSender<SyncedBlock<N>>;
 
 pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
 
@@ -153,7 +154,7 @@ pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
 pub struct TendermintHandle<N: Network> {
   /// Channel to trigger the machine to move to the next block.
   /// Takes in the the previous block's commit, along with the new proposal.
-  pub step: StepSender<N>,
+  pub synced_block: SyncedBlockSender<N>,
   /// Channel to send messages received from the P2P layer.
   pub messages: MessageSender<N>,
   /// Tendermint machine to be run on an asynchronous task.
@@ -252,9 +253,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
     proposal: N::Block,
   ) -> TendermintHandle<N> {
     let (msg_send, msg_recv) = mpsc::unbounded();
-    let (step_send, step_recv) = mpsc::unbounded();
+    let (synced_block_send, synced_block_recv) = mpsc::unbounded();
     TendermintHandle {
-      step: step_send,
+      synced_block: synced_block_send,
       messages: msg_send,
       machine: {
         let sys_time = sys_time(last_time);
@@ -274,7 +275,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           queue: VecDeque::new(),
           msg_recv,
-          step_recv,
+          synced_block_recv,
 
           block: BlockData::new(
             weights,
@@ -309,12 +310,19 @@ impl<N: Network + 'static> TendermintMachine<N> {
       if let Some((broadcast, msg)) = futures::select_biased! {
         // Handle a new block occuring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
-        msg = self.step_recv.next() => {
-          if let Some((block_number, commit, proposal)) = msg {
+        msg = self.synced_block_recv.next() => {
+          if let Some(SyncedBlock { number, block, commit }) = msg {
             // Commit is for a block we've already moved past
-            if block_number != self.block.number {
+            if number != self.block.number {
               continue;
             }
+
+            // Commit is invalid
+            if !self.network.verify_commit(block.id(), &commit) {
+              continue;
+            }
+
+            let proposal = self.network.add_block(block, commit.clone()).await;
             self.reset_by_commit(commit, proposal).await;
             None
           } else {
