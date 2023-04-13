@@ -287,7 +287,7 @@ impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
       panic!("validators added invalid block to tributary {}", hex::encode(self.genesis));
     };
 
-    assert!(self.verify_commit(block.id(), commit));
+    assert!(self.verify_commit(block.id(), &commit));
 
     let Ok(block) = Block::read::<&[u8]>(&mut block.0.as_ref()) else {
       return invalid_block();
