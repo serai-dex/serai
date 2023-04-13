@@ -290,7 +290,18 @@ impl Transaction {
   }
 
   /// Calculate the hash of this transaction as needed for signing it.
-  pub fn signature_hash(&self) -> [u8; 32] {
+  /// Returns `None`for miner txs.
+  pub fn signature_hash(&self) -> Option<[u8; 32]> {
+    // miner txs doesn't have it.
+    if let Input::Gen(_) = self.prefix.inputs[0] {
+      return None;
+    }
+
+    // it is just tx hash for v1 txs.
+    if self.prefix.version == 1 {
+      return Some(self.hash());
+    }
+
     let mut buf = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);
 
@@ -305,6 +316,6 @@ impl Transaction {
     self.rct_signatures.prunable.signature_write(&mut buf).unwrap();
     sig_hash.extend(hash(&buf));
 
-    hash(&sig_hash)
+    Some(hash(&sig_hash))
   }
 }
