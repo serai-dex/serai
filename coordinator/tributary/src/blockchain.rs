@@ -2,31 +2,45 @@ use std::collections::{HashSet, HashMap};
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use crate::{Signed, TransactionKind, Transaction, ProvidedTransactions, BlockError, Block};
+use crate::{Signed, TransactionKind, Transaction, ProvidedTransactions, BlockError, Block, Mempool};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Blockchain<T: Transaction> {
   genesis: [u8; 32],
   // TODO: db
   tip: [u8; 32],
-  provided: ProvidedTransactions<T>,
-  // TODO: Mempool
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+
+  provided: ProvidedTransactions<T>,
+  mempool: Mempool<T>,
 }
 
 impl<T: Transaction> Blockchain<T> {
   pub fn new(genesis: [u8; 32], participants: &[<Ristretto as Ciphersuite>::G]) -> Self {
-    // TODO: Reload provided/nonces
+    // TODO: Reload next_nonces/provided/mempool
 
     let mut next_nonces = HashMap::new();
     for participant in participants {
       next_nonces.insert(*participant, 0);
     }
-    Self { genesis, tip: genesis, provided: ProvidedTransactions::new(), next_nonces }
+
+    Self {
+      genesis,
+
+      tip: genesis,
+      next_nonces,
+
+      provided: ProvidedTransactions::new(),
+      mempool: Mempool::new(genesis),
+    }
   }
 
   pub fn tip(&self) -> [u8; 32] {
     self.tip
+  }
+
+  pub fn add_transaction(&mut self, tx: T) -> bool {
+    self.mempool.add(&self.next_nonces, tx)
   }
 
   pub fn provide_transaction(&mut self, tx: T) {
@@ -38,9 +52,8 @@ impl<T: Transaction> Blockchain<T> {
     self.next_nonces.get(&key).cloned()
   }
 
-  // TODO: Embed mempool
-  pub fn build_block(&self, txs: HashMap<[u8; 32], T>) -> Block<T> {
-    let block = Block::new(self.tip, &self.provided, txs);
+  pub fn build_block(&mut self) -> Block<T> {
+    let block = Block::new(self.tip, &self.provided, self.mempool.block(&self.next_nonces));
     // build_block should not return invalid blocks
     self.verify_block(&block).unwrap();
     block

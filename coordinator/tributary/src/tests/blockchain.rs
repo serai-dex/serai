@@ -8,7 +8,7 @@ use blake2::{Digest, Blake2s256};
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use crate::{
-  merkle, Transaction, ProvidedTransactions, Block, Blockchain,
+  merkle, Signed, TransactionKind, Transaction, ProvidedTransactions, Block, Blockchain,
   tests::{ProvidedTransaction, SignedTransaction, random_provided_transaction},
 };
 
@@ -31,7 +31,7 @@ fn new_blockchain<T: Transaction>(
 fn block_addition() {
   let genesis = new_genesis();
   let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[]);
-  let block = blockchain.build_block(HashMap::new());
+  let block = blockchain.build_block();
   assert_eq!(block.header.parent, genesis);
   assert_eq!(block.header.transactions, [0; 32]);
   blockchain.verify_block(&block).unwrap();
@@ -42,9 +42,9 @@ fn block_addition() {
 #[test]
 fn invalid_block() {
   let genesis = new_genesis();
-  let blockchain = new_blockchain::<SignedTransaction>(genesis, &[]);
+  let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[]);
 
-  let block = blockchain.build_block(HashMap::new());
+  let block = blockchain.build_block();
 
   // Mutate parent
   {
@@ -92,7 +92,9 @@ fn invalid_block() {
 
   {
     // Add a valid transaction
-    let mut block = blockchain.build_block(HashMap::from([(tx.hash(), tx.clone())]));
+    let mut blockchain = blockchain.clone();
+    assert!(blockchain.add_transaction(tx.clone()));
+    let mut block = blockchain.build_block();
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
     blockchain.verify_block(&block).unwrap();
 
@@ -112,7 +114,9 @@ fn invalid_block() {
 
   {
     // Invalid signature
-    let mut block = blockchain.build_block(HashMap::from([(tx.hash(), tx)]));
+    let mut blockchain = blockchain;
+    assert!(blockchain.add_transaction(tx));
+    let mut block = blockchain.build_block();
     blockchain.verify_block(&block).unwrap();
     block.transactions[0].1.signature.s += <Ristretto as Ciphersuite>::F::ONE;
     assert!(blockchain.verify_block(&block).is_err());
@@ -134,11 +138,36 @@ fn signed_transaction() {
   let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[signer]);
   assert_eq!(blockchain.next_nonce(signer), Some(0));
 
-  let test = |blockchain: &mut Blockchain<SignedTransaction>, mempool: HashMap<_, _>| {
+  let test = |blockchain: &mut Blockchain<SignedTransaction>,
+              mempool: HashMap<[u8; 32], SignedTransaction>| {
     let mut hashes = mempool.keys().cloned().collect::<HashSet<_>>();
 
+    // These transactions do need to be added, in-order, to the mempool for the blockchain to
+    // build a block off them
+    {
+      let mut ordered = HashMap::new();
+      for (_, tx) in mempool.clone().drain() {
+        let nonce = if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
+          *nonce
+        } else {
+          panic!("non-signed TX in test mempool");
+        };
+        ordered.insert(nonce, tx);
+      }
+
+      let mut i = 0;
+      while !ordered.contains_key(&i) {
+        i += 1;
+      }
+      for i in i .. (i + u32::try_from(ordered.len()).unwrap()) {
+        assert!(blockchain.add_transaction(ordered.remove(&i).unwrap()));
+      }
+    }
+
     let tip = blockchain.tip();
-    let block = blockchain.build_block(mempool);
+    let block = blockchain.build_block();
+    // The Block constructor should sort these these, and build_block should've called Block::new
+    assert_eq!(block, Block::new(blockchain.tip(), &ProvidedTransactions::new(), mempool));
     assert_eq!(blockchain.tip(), tip);
     assert_eq!(block.header.parent, tip);
 
