@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
 
@@ -5,10 +7,10 @@ use blake2::{Digest, Blake2s256};
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
-use serai_db::MemDb;
+use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
-  merkle, Transaction, ProvidedTransactions, Block, Blockchain,
+  merkle, Transaction, ProvidedError, ProvidedTransactions, Block, Blockchain,
   tests::{ProvidedTransaction, SignedTransaction, random_provided_transaction},
 };
 
@@ -173,21 +175,33 @@ fn signed_transaction() {
 
 #[test]
 fn provided_transaction() {
-  let mut blockchain = new_blockchain::<ProvidedTransaction>(new_genesis(), &[]);
+  let genesis = new_genesis();
+  let mut blockchain = new_blockchain::<ProvidedTransaction>(genesis, &[]);
 
   let tx = random_provided_transaction(&mut OsRng);
 
   // This should be provideable
-  let mut txs = ProvidedTransactions::new();
-  txs.provide(tx.clone());
-  txs.complete(tx.hash());
+  let mut db = MemDb::new();
+  let mut txs = ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis);
+  txs.provide(tx.clone()).unwrap();
+  assert_eq!(txs.provide(tx.clone()), Err(ProvidedError::AlreadyProvided));
+  assert_eq!(
+    ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis).transactions,
+    VecDeque::from([tx.clone()]),
+  );
+  let mut txn = db.txn();
+  txs.complete(&mut txn, tx.hash());
+  txn.commit();
+  assert!(ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis)
+    .transactions
+    .is_empty());
 
   // Non-provided transactions should fail verification
   let block = Block::new(blockchain.tip(), vec![tx.clone()], vec![]);
   assert!(blockchain.verify_block(&block).is_err());
 
   // Provided transactions should pass verification
-  blockchain.provide_transaction(tx.clone());
+  blockchain.provide_transaction(tx.clone()).unwrap();
   blockchain.verify_block(&block).unwrap();
 
   // add_block should work for verified blocks

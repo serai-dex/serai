@@ -5,8 +5,8 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use serai_db::{DbTxn, Db};
 
 use crate::{
-  ReadWrite, Signed, TransactionKind, Transaction, verify_transaction, ProvidedTransactions,
-  BlockError, Block, Mempool,
+  ReadWrite, Signed, TransactionKind, Transaction, ProvidedError, ProvidedTransactions, BlockError,
+  Block, Mempool,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -18,7 +18,7 @@ pub(crate) struct Blockchain<D: Db, T: Transaction> {
   tip: [u8; 32],
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 
-  provided: ProvidedTransactions<T>,
+  provided: ProvidedTransactions<D, T>,
   mempool: Mempool<T>,
 }
 
@@ -50,7 +50,7 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     genesis: [u8; 32],
     participants: &[<Ristretto as Ciphersuite>::G],
   ) -> Self {
-    // TODO: Reload provided/mempool
+    // TODO: Reload mempool
 
     let mut next_nonces = HashMap::new();
     for participant in participants {
@@ -58,14 +58,14 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     }
 
     let mut res = Self {
-      db: Some(db),
+      db: Some(db.clone()),
       genesis,
 
       block_number: 0,
       tip: genesis,
       next_nonces,
 
-      provided: ProvidedTransactions::new(),
+      provided: ProvidedTransactions::new(db, genesis),
       mempool: Mempool::new(genesis),
     };
 
@@ -102,13 +102,8 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     self.mempool.add(&self.next_nonces, internal, tx)
   }
 
-  pub(crate) fn provide_transaction(&mut self, tx: T) -> bool {
-    // TODO: Should this check be internal to ProvidedTransactions?
-    if verify_transaction(&tx, self.genesis, &mut HashMap::new()).is_err() {
-      return false;
-    }
-    self.provided.provide(tx);
-    true
+  pub(crate) fn provide_transaction(&mut self, tx: T) -> Result<(), ProvidedError> {
+    self.provided.provide(tx)
   }
 
   /// Returns the next nonce for signing, or None if they aren't a participant.
@@ -159,7 +154,7 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided => {
-          self.provided.complete(tx.hash());
+          self.provided.complete(&mut txn, tx.hash());
         }
         TransactionKind::Unsigned => {}
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {

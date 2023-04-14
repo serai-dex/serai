@@ -29,6 +29,7 @@ pub use transaction::*;
 
 mod provided;
 pub(crate) use provided::*;
+pub use provided::ProvidedError;
 
 mod block;
 pub use block::*;
@@ -125,9 +126,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     Self { network, synced_block, messages }
   }
 
-  // TODO: Is there a race condition with providing these? Since the same provided TX provided
-  // twice counts as two transactions
-  pub fn provide_transaction(&self, tx: T) -> bool {
+  pub fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {
     self.network.blockchain.write().unwrap().provide_transaction(tx)
   }
 
