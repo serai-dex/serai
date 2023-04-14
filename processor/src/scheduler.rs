@@ -111,6 +111,8 @@ impl<C: Coin> Scheduler<C> {
   // When Substrate emits `Updates` for a coin, all outputs should be added up to the
   // acknowledged block.
   pub fn add_outputs(&mut self, mut utxos: Vec<C::Output>) -> Vec<Plan<C>> {
+    log::info!("adding {} outputs", utxos.len());
+
     let mut txs = vec![];
 
     for utxo in utxos.drain(..) {
@@ -154,8 +156,12 @@ impl<C: Coin> Scheduler<C> {
 
     // If we don't have UTXOs available, don't try to continue
     if self.utxos.is_empty() {
+      log::info!("no utxos currently avilable");
       return vec![];
     }
+
+    // Sort UTXOs so the highest valued ones are first
+    self.utxos.sort_by(|a, b| a.amount().cmp(&b.amount()).reverse());
 
     // We always want to aggregate our UTXOs into a single UTXO in the name of simplicity
     // We may have more UTXOs than will fit into a TX though
@@ -165,6 +171,8 @@ impl<C: Coin> Scheduler<C> {
     let utxos = self.utxos.drain(..).collect::<Vec<_>>();
     let mut utxo_chunks =
       utxos.chunks(C::MAX_INPUTS).map(|chunk| chunk.to_vec()).collect::<Vec<_>>();
+
+    // Use the first chunk for any scheduled payments, since it has the most value
     let utxos = utxo_chunks.remove(0);
 
     // If the last chunk exists and only has one output, don't try aggregating it
@@ -179,6 +187,10 @@ impl<C: Coin> Scheduler<C> {
 
     let mut txs = vec![];
     for chunk in utxo_chunks.drain(..) {
+      // TODO: While payments have their TXs' fees deducted from themselves, that doesn't hold here
+      // We need to charge a fee before reporting incoming UTXOs to Substrate to cover aggregation
+      // TXs
+      log::debug!("aggregating a chunk of {} inputs", C::MAX_INPUTS);
       txs.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: Some(self.key) })
     }
 
@@ -209,6 +221,8 @@ impl<C: Coin> Scheduler<C> {
     // for them
     if !executing.is_empty() {
       txs.push(self.execute(utxos, executing));
+    } else {
+      self.utxos.extend(utxos);
     }
 
     log::info!(
