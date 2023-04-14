@@ -7,11 +7,13 @@ use frost::{Participant, ThresholdKeys};
 
 use tokio::time::timeout;
 
+use serai_db::MemDb;
+
 use crate::{
   Plan, Db,
   coins::{OutputType, Output, Block, Coin},
   scanner::{ScannerEvent, Scanner, ScannerHandle},
-  tests::{util::db::MemDb, sign},
+  tests::sign,
 };
 
 async fn spend<C: Coin, D: Db>(

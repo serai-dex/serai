@@ -17,13 +17,12 @@ use tokio::time::timeout;
 use scale::Encode;
 use sp_application_crypto::{RuntimePublic, sr25519::Public};
 
+use serai_db::MemDb;
+
 use serai_client::{primitives::*, in_instructions::primitives::*};
 
 use messages::{sign::SignId, coordinator::*};
-use crate::{
-  substrate_signer::{SubstrateSignerEvent, SubstrateSigner},
-  tests::util::db::MemDb,
-};
+use crate::substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
 #[tokio::test]
 async fn test_substrate_signer() {

@@ -21,7 +21,7 @@ use tokio::{
 
 use messages::sign::*;
 use crate::{
-  DbTxn, Db,
+  Get, DbTxn, Db,
   coins::{Transaction, Eventuality, Coin},
 };
 
@@ -46,8 +46,7 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
     Self::sign_key(b"completed", id)
   }
   fn complete(
-    &mut self,
-    txn: &mut D::Transaction,
+    txn: &mut D::Transaction<'_>,
     id: [u8; 32],
     tx: &<C::Transaction as Transaction<C>>::Id,
   ) {
@@ -77,12 +76,7 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
   fn eventuality_key(id: [u8; 32]) -> Vec<u8> {
     Self::sign_key(b"eventuality", id)
   }
-  fn save_eventuality(
-    &mut self,
-    txn: &mut D::Transaction,
-    id: [u8; 32],
-    eventuality: C::Eventuality,
-  ) {
+  fn save_eventuality(txn: &mut D::Transaction<'_>, id: [u8; 32], eventuality: C::Eventuality) {
     txn.put(Self::eventuality_key(id), eventuality.serialize());
   }
   fn eventuality(&self, id: [u8; 32]) -> Option<C::Eventuality> {
@@ -94,14 +88,14 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
   fn attempt_key(id: &SignId) -> Vec<u8> {
     Self::sign_key(b"attempt", bincode::serialize(id).unwrap())
   }
-  fn attempt(&mut self, txn: &mut D::Transaction, id: &SignId) {
+  fn attempt(txn: &mut D::Transaction<'_>, id: &SignId) {
     txn.put(Self::attempt_key(id), []);
   }
   fn has_attempt(&mut self, id: &SignId) -> bool {
     self.0.get(Self::attempt_key(id)).is_some()
   }
 
-  fn save_transaction(&mut self, txn: &mut D::Transaction, tx: &C::Transaction) {
+  fn save_transaction(txn: &mut D::Transaction<'_>, tx: &C::Transaction) {
     txn.put(Self::sign_key(b"tx", tx.id()), tx.serialize());
   }
 }
@@ -231,8 +225,8 @@ impl<C: Coin, D: Db> Signer<C, D> {
 
         // Stop trying to sign for this TX
         let mut txn = self.db.0.txn();
-        self.db.save_transaction(&mut txn, &tx);
-        self.db.complete(&mut txn, id, tx_id);
+        SignerDb::<C, D>::save_transaction(&mut txn, &tx);
+        SignerDb::<C, D>::complete(&mut txn, id, tx_id);
         txn.commit();
 
         self.signable.remove(&id);
@@ -345,9 +339,9 @@ impl<C: Coin, D: Db> Signer<C, D> {
 
         // Save the transaction in case it's needed for recovery
         let mut txn = self.db.0.txn();
-        self.db.save_transaction(&mut txn, &tx);
+        SignerDb::<C, D>::save_transaction(&mut txn, &tx);
         let tx_id = tx.id();
-        self.db.complete(&mut txn, id.id, &tx_id);
+        SignerDb::<C, D>::complete(&mut txn, id.id, &tx_id);
         txn.commit();
 
         // Publish it
@@ -481,7 +475,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
           }
 
           let mut txn = signer.db.0.txn();
-          signer.db.attempt(&mut txn, &id);
+          SignerDb::<C, D>::attempt(&mut txn, &id);
           txn.commit();
 
           // Attempt to create the TX
@@ -552,7 +546,7 @@ impl<C: Coin, D: Db> SignerHandle<C, D> {
     }
 
     let mut txn = signer.db.0.txn();
-    signer.db.save_eventuality(&mut txn, id, eventuality);
+    SignerDb::<C, D>::save_eventuality(&mut txn, id, eventuality);
     txn.commit();
 
     signer.signable.insert(id, (start, tx));

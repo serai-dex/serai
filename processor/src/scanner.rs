@@ -15,7 +15,7 @@ use tokio::{
 };
 
 use crate::{
-  DbTxn, Db,
+  Get, DbTxn, Db,
   coins::{Output, Transaction, EventualitiesTracker, Block, Coin},
 };
 
@@ -48,17 +48,12 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn block_number_key(id: &<C::Block as Block<C>>::Id) -> Vec<u8> {
     Self::scanner_key(b"block_number", id)
   }
-  fn save_block(
-    &mut self,
-    txn: &mut D::Transaction,
-    number: usize,
-    id: &<C::Block as Block<C>>::Id,
-  ) {
+  fn save_block(txn: &mut D::Transaction<'_>, number: usize, id: &<C::Block as Block<C>>::Id) {
     txn.put(Self::block_number_key(id), u64::try_from(number).unwrap().to_le_bytes());
     txn.put(Self::block_key(number), id);
   }
-  fn block(&self, number: usize) -> Option<<C::Block as Block<C>>::Id> {
-    self.0.get(Self::block_key(number)).map(|id| {
+  fn block<G: Get>(getter: &G, number: usize) -> Option<<C::Block as Block<C>>::Id> {
+    getter.get(Self::block_key(number)).map(|id| {
       let mut res = <C::Block as Block<C>>::Id::default();
       res.as_mut().copy_from_slice(&id);
       res
@@ -74,8 +69,8 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn active_keys_key() -> Vec<u8> {
     Self::scanner_key(b"active_keys", b"")
   }
-  fn add_active_key(&mut self, txn: &mut D::Transaction, key: <C::Curve as Ciphersuite>::G) {
-    let mut keys = self.0.get(Self::active_keys_key()).unwrap_or(vec![]);
+  fn add_active_key(txn: &mut D::Transaction<'_>, key: <C::Curve as Ciphersuite>::G) {
+    let mut keys = txn.get(Self::active_keys_key()).unwrap_or(vec![]);
 
     let key_bytes = key.to_bytes();
 
@@ -130,8 +125,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     Self::scanner_key(b"outputs", [key.to_bytes().as_ref(), block.as_ref()].concat())
   }
   fn save_outputs(
-    &mut self,
-    txn: &mut D::Transaction,
+    txn: &mut D::Transaction<'_>,
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
     outputs: &[C::Output],
@@ -165,11 +159,11 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     next
   }
   fn outputs(
-    &self,
+    txn: &D::Transaction<'_>,
     key: &<C::Curve as Ciphersuite>::G,
     block: &<C::Block as Block<C>>::Id,
   ) -> Option<Vec<C::Output>> {
-    let bytes_vec = self.0.get(Self::outputs_key(key, block))?;
+    let bytes_vec = txn.get(Self::outputs_key(key, block))?;
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
     let mut res = vec![];
@@ -183,13 +177,12 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     Self::scanner_key(b"scanned_block", key.to_bytes())
   }
   fn save_scanned_block(
-    &mut self,
-    txn: &mut D::Transaction,
+    txn: &mut D::Transaction<'_>,
     key: &<C::Curve as Ciphersuite>::G,
     block: usize,
   ) -> Vec<C::Output> {
-    let new_key = self.0.get(Self::scanned_block_key(key)).is_none();
-    let outputs = self.block(block).and_then(|id| self.outputs(key, &id));
+    let new_key = txn.get(Self::scanned_block_key(key)).is_none();
+    let outputs = Self::block(txn, block).and_then(|id| Self::outputs(txn, key, &id));
     // Either this is a new key, with no outputs, or we're acknowledging this block
     // If we're acknowledging it, we should have outputs available
     assert_eq!(new_key, outputs.is_none());
@@ -278,8 +271,8 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
 
     info!("Rotating to key {}", hex::encode(key.to_bytes()));
     let mut txn = scanner.db.0.txn();
-    assert!(scanner.db.save_scanned_block(&mut txn, &key, activation_number).is_empty());
-    scanner.db.add_active_key(&mut txn, key);
+    assert!(ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, activation_number).is_empty());
+    ScannerDb::<C, D>::add_active_key(&mut txn, key);
     txn.commit();
     scanner.keys.push(key);
   }
@@ -300,7 +293,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
       scanner.db.block_number(&id).expect("main loop trying to operate on data we haven't scanned");
 
     let mut txn = scanner.db.0.txn();
-    let outputs = scanner.db.save_scanned_block(&mut txn, &key, number);
+    let outputs = ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, number);
     txn.commit();
 
     for output in &outputs {
@@ -395,7 +388,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             };
             let block_id = block.id();
 
-            if let Some(id) = scanner.db.block(i) {
+            if let Some(id) = ScannerDb::<C, D>::block(&scanner.db.0, i) {
               // TODO2: Also check this block builds off the previous block
               if id != block_id {
                 panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));
@@ -403,7 +396,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             } else {
               info!("Found new block: {}", hex::encode(&block_id));
               let mut txn = scanner.db.0.txn();
-              scanner.db.save_block(&mut txn, i, &block_id);
+              ScannerDb::<C, D>::save_block(&mut txn, i, &block_id);
               txn.commit();
             }
 
@@ -461,7 +454,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
 
             // Save the outputs to disk
             let mut txn = scanner.db.0.txn();
-            let batch = scanner.db.save_outputs(&mut txn, &key, &block_id, &outputs);
+            let batch = ScannerDb::<C, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
             txn.commit();
 
             const TIME_TOLERANCE: u64 = 15;

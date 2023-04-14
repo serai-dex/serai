@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "common/zalloc",
+  "common/db",
 
   "crypto/transcript",
 

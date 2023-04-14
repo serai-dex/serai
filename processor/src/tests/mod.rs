@@ -1,5 +1,3 @@
-pub(crate) mod util;
-
 mod key_gen;
 pub(crate) use key_gen::test_key_gen;
 

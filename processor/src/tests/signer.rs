@@ -13,12 +13,13 @@ use frost::{
 
 use tokio::time::timeout;
 
+use serai_db::MemDb;
+
 use messages::sign::*;
 use crate::{
   Payment, Plan,
   coins::{Output, Transaction, Coin},
   signer::{SignerEvent, Signer},
-  tests::util::db::MemDb,
 };
 
 #[allow(clippy::type_complexity)]

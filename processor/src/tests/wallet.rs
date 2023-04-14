@@ -6,12 +6,14 @@ use frost::{Participant, dkg::tests::key_gen};
 
 use tokio::time::timeout;
 
+use serai_db::MemDb;
+
 use crate::{
   Payment, Plan,
   coins::{Output, Transaction, Block, Coin},
   scanner::{ScannerEvent, Scanner},
   scheduler::Scheduler,
-  tests::{util::db::MemDb, sign},
+  tests::sign,
 };
 
 // Tests the Scanner, Scheduler, and Signer together

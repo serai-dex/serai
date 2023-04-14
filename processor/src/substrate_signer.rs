@@ -51,7 +51,7 @@ impl<D: Db> SubstrateSignerDb<D> {
   fn completed_key(id: [u8; 32]) -> Vec<u8> {
     Self::sign_key(b"completed", id)
   }
-  fn complete(&mut self, txn: &mut D::Transaction, id: [u8; 32]) {
+  fn complete(txn: &mut D::Transaction<'_>, id: [u8; 32]) {
     txn.put(Self::completed_key(id), [1]);
   }
   fn completed(&self, id: [u8; 32]) -> bool {
@@ -61,14 +61,14 @@ impl<D: Db> SubstrateSignerDb<D> {
   fn attempt_key(id: &SignId) -> Vec<u8> {
     Self::sign_key(b"attempt", bincode::serialize(id).unwrap())
   }
-  fn attempt(&mut self, txn: &mut D::Transaction, id: &SignId) {
+  fn attempt(txn: &mut D::Transaction<'_>, id: &SignId) {
     txn.put(Self::attempt_key(id), []);
   }
   fn has_attempt(&mut self, id: &SignId) -> bool {
     self.0.get(Self::attempt_key(id)).is_some()
   }
 
-  fn save_batch(&mut self, txn: &mut D::Transaction, batch: &SignedBatch) {
+  fn save_batch(txn: &mut D::Transaction<'_>, batch: &SignedBatch) {
     txn.put(Self::sign_key(b"batch", batch.batch.block), batch.encode());
   }
 }
@@ -252,8 +252,8 @@ impl<D: Db> SubstrateSigner<D> {
 
         // Save the batch in case it's needed for recovery
         let mut txn = self.db.0.txn();
-        self.db.save_batch(&mut txn, &batch);
-        self.db.complete(&mut txn, id.id);
+        SubstrateSignerDb::<D>::save_batch(&mut txn, &batch);
+        SubstrateSignerDb::<D>::complete(&mut txn, id.id);
         txn.commit();
 
         // Stop trying to sign for this batch
@@ -267,7 +267,7 @@ impl<D: Db> SubstrateSigner<D> {
       CoordinatorMessage::BatchSigned { key: _, block } => {
         // Stop trying to sign for this batch
         let mut txn = self.db.0.txn();
-        self.db.complete(&mut txn, block.0);
+        SubstrateSignerDb::<D>::complete(&mut txn, block.0);
         txn.commit();
 
         self.signable.remove(&block.0);
@@ -377,7 +377,7 @@ impl<D: Db> SubstrateSigner<D> {
           }
 
           let mut txn = signer.db.0.txn();
-          signer.db.attempt(&mut txn, &id);
+          SubstrateSignerDb::<D>::attempt(&mut txn, &id);
           txn.commit();
 
           // b"substrate" is a literal from sp-core

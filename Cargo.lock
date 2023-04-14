@@ -6620,6 +6620,7 @@ dependencies = [
  "rand_core 0.6.4",
  "secp256k1",
  "serai-client",
+ "serai-db",
  "serde",
  "serde_json",
  "sp-application-crypto",
@@ -8745,6 +8746,10 @@ dependencies = [
  "thiserror",
  "tokio",
 ]
+
+[[package]]
+name = "serai-db"
+version = "0.1.0"
 
 [[package]]
 name = "serai-node"

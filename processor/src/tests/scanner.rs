@@ -7,10 +7,11 @@ use frost::Participant;
 
 use tokio::time::timeout;
 
+use serai_db::MemDb;
+
 use crate::{
   coins::{OutputType, Output, Block, Coin},
   scanner::{ScannerEvent, Scanner, ScannerHandle},
-  tests::util::db::MemDb,
 };
 
 pub async fn test_scanner<C: Coin>(coin: C) {

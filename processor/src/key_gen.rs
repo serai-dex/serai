@@ -18,7 +18,7 @@ use log::info;
 use serai_client::{primitives::BlockHash, validator_sets::primitives::ValidatorSet};
 use messages::key_gen::*;
 
-use crate::{DbTxn, Db, coins::Coin};
+use crate::{Get, DbTxn, Db, coins::Coin};
 
 #[derive(Debug)]
 pub enum KeyGenEvent<C: Ciphersuite> {
@@ -40,12 +40,7 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn params_key(set: &ValidatorSet) -> Vec<u8> {
     Self::key_gen_key(b"params", bincode::serialize(set).unwrap())
   }
-  fn save_params(
-    &mut self,
-    txn: &mut D::Transaction,
-    set: &ValidatorSet,
-    params: &ThresholdParams,
-  ) {
+  fn save_params(txn: &mut D::Transaction<'_>, set: &ValidatorSet, params: &ThresholdParams) {
     txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
   }
   fn params(&self, set: &ValidatorSet) -> ThresholdParams {
@@ -60,8 +55,7 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     Self::key_gen_key(b"commitments", bincode::serialize(id).unwrap())
   }
   fn save_commitments(
-    &mut self,
-    txn: &mut D::Transaction,
+    txn: &mut D::Transaction<'_>,
     id: &KeyGenId,
     commitments: &HashMap<Participant, Vec<u8>>,
   ) {
@@ -78,8 +72,7 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     Self::key_gen_key(b"generated_keys", bincode::serialize(id).unwrap())
   }
   fn save_keys(
-    &mut self,
-    txn: &mut D::Transaction,
+    txn: &mut D::Transaction<'_>,
     id: &KeyGenId,
     substrate_keys: &ThresholdCore<Ristretto>,
     coin_keys: &ThresholdCore<C::Curve>,
@@ -93,11 +86,11 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     Self::key_gen_key(b"keys", key.to_bytes())
   }
   #[allow(clippy::type_complexity)]
-  fn read_keys(
-    &self,
+  fn read_keys<G: Get>(
+    getter: &G,
     key: &[u8],
   ) -> (Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>)) {
-    let keys_vec = self.0.get(key).unwrap();
+    let keys_vec = getter.get(key).unwrap();
     let mut keys_ref: &[u8] = keys_vec.as_ref();
     let substrate_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
     let mut coin_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
@@ -105,11 +98,10 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     (keys_vec, (substrate_keys, coin_keys))
   }
   fn confirm_keys(
-    &mut self,
-    txn: &mut D::Transaction,
+    txn: &mut D::Transaction<'_>,
     id: &KeyGenId,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
-    let (keys_vec, keys) = self.read_keys(&Self::generated_keys_key(id));
+    let (keys_vec, keys) = Self::read_keys(txn, &Self::generated_keys_key(id));
     txn.put(Self::keys_key(&keys.1.group_key()), keys_vec);
     keys
   }
@@ -117,7 +109,7 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     &self,
     key: &<C::Curve as Ciphersuite>::G,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
-    self.read_keys(&Self::keys_key(key)).1
+    Self::read_keys(&self.0, &Self::keys_key(key)).1
   }
 }
 
@@ -191,7 +183,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           // This may overwrite previously written params if we rebooted, yet that isn't a
           // concern
           let mut txn = self.db.0.txn();
-          self.db.save_params(&mut txn, &id.set, &params);
+          KeyGenDb::<C, D>::save_params(&mut txn, &id.set, &params);
           txn.commit();
         }
 
@@ -268,7 +260,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         }
 
         let mut txn = self.db.0.txn();
-        self.db.save_commitments(&mut txn, &id, &commitments);
+        KeyGenDb::<C, D>::save_commitments(&mut txn, &id, &commitments);
         txn.commit();
 
         KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares { id, shares })
@@ -349,7 +341,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         let coin_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
 
         let mut txn = self.db.0.txn();
-        self.db.save_keys(&mut txn, &id, &substrate_keys, &coin_keys);
+        KeyGenDb::<C, D>::save_keys(&mut txn, &id, &substrate_keys, &coin_keys);
         txn.commit();
 
         let mut coin_keys = ThresholdKeys::new(coin_keys);
@@ -363,7 +355,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
 
       CoordinatorMessage::ConfirmKeyPair { context, id } => {
         let mut txn = self.db.0.txn();
-        let (substrate_keys, coin_keys) = self.db.confirm_keys(&mut txn, &id);
+        let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(&mut txn, &id);
         txn.commit();
 
         info!(

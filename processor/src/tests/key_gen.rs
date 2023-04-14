@@ -7,6 +7,8 @@ use rand_core::{RngCore, OsRng};
 use group::GroupEncoding;
 use frost::{Participant, ThresholdParams, tests::clone_without};
 
+use serai_db::MemDb;
+
 use serai_client::{
   primitives::{MONERO_NET_ID, BlockHash},
   validator_sets::primitives::{Session, ValidatorSet},
@@ -16,7 +18,6 @@ use messages::{SubstrateContext, key_gen::*};
 use crate::{
   coins::Coin,
   key_gen::{KeyGenEvent, KeyGen},
-  tests::util::db::MemDb,
 };
 
 const ID: KeyGenId =
