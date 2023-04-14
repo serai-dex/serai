@@ -1,7 +1,4 @@
-use std::{
-  io,
-  collections::{HashSet, HashMap},
-};
+use std::{io, collections::HashMap};
 
 use zeroize::Zeroizing;
 use rand::{RngCore, CryptoRng};
@@ -18,9 +15,6 @@ use crate::{ReadWrite, Signed, TransactionError, TransactionKind, Transaction, v
 
 #[cfg(test)]
 mod signed;
-
-#[cfg(test)]
-mod provided;
 
 pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed {
@@ -127,7 +121,7 @@ pub fn signed_transaction<R: RngCore + CryptoRng>(
   );
 
   let mut nonces = HashMap::from([(signer, nonce)]);
-  verify_transaction(&tx, genesis, &mut HashSet::new(), &mut nonces).unwrap();
+  verify_transaction(&tx, genesis, &mut nonces).unwrap();
   assert_eq!(nonces, HashMap::from([(tx.1.signer, tx.1.nonce.wrapping_add(1))]));
 
   tx

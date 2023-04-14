@@ -35,8 +35,7 @@ use tendermint::{
 use tokio::time::{Duration, sleep};
 
 use crate::{
-  TENDERMINT_MESSAGE, ReadWrite, Transaction, TransactionError, BlockHeader, Block, BlockError,
-  Blockchain, P2p,
+  TENDERMINT_MESSAGE, ReadWrite, Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
 };
 
 fn challenge(
@@ -266,9 +265,7 @@ impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
     let block =
       Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
     self.blockchain.read().unwrap().verify_block(&block).map_err(|e| match e {
-      BlockError::TransactionError(TransactionError::MissingProvided(_)) => {
-        TendermintBlockError::Temporal
-      }
+      BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
       _ => TendermintBlockError::Fatal,
     })
   }
@@ -297,7 +294,7 @@ impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
       let block_res = self.blockchain.write().unwrap().add_block(&block);
       match block_res {
         Ok(()) => break,
-        Err(BlockError::TransactionError(TransactionError::MissingProvided(hash))) => {
+        Err(BlockError::NonLocalProvided(hash)) => {
           log::error!(
             "missing provided transaction {} which other validators on tributary {} had",
             hex::encode(hash),

@@ -1,9 +1,4 @@
-use std::{
-  io,
-  collections::{HashSet, HashMap},
-};
-
-use rand::{RngCore, rngs::OsRng};
+use std::{io, collections::HashMap};
 
 use blake2::{Digest, Blake2s256};
 
@@ -13,9 +8,8 @@ use ciphersuite::{
 };
 use schnorr::SchnorrSignature;
 
-use crate::{
-  ReadWrite, TransactionError, Signed, TransactionKind, Transaction, ProvidedTransactions, Block,
-};
+use crate::{ReadWrite, TransactionError, Signed, TransactionKind, Transaction, BlockError, Block};
+
 // A transaction solely defined by its nonce and a distinguisher (to allow creating distinct TXs
 // sharing a nonce).
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -74,8 +68,8 @@ impl Transaction for NonceTransaction {
 fn empty_block() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
-  Block::new(LAST, &ProvidedTransactions::<NonceTransaction>::new(), HashMap::new())
-    .verify(GENESIS, LAST, HashSet::new(), HashMap::new())
+  Block::<NonceTransaction>::new(LAST, vec![], vec![])
+    .verify(GENESIS, LAST, &[], HashMap::new())
     .unwrap();
 }
 
@@ -87,51 +81,21 @@ fn duplicate_nonces() {
   // Run once without duplicating a nonce, and once with, so that's confirmed to be the faulty
   // component
   for i in [1, 0] {
-    let mut mempool = HashMap::new();
-    let mut insert = |tx: NonceTransaction| mempool.insert(tx.hash(), tx);
+    let mut mempool = vec![];
+    let mut insert = |tx: NonceTransaction| mempool.push(tx);
     insert(NonceTransaction::new(0, 0));
     insert(NonceTransaction::new(i, 1));
 
-    let res = Block::new(LAST, &ProvidedTransactions::new(), mempool).verify(
+    let res = Block::new(LAST, vec![], mempool).verify(
       GENESIS,
       LAST,
-      HashSet::new(),
+      &[],
       HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]),
     );
     if i == 1 {
       res.unwrap();
     } else {
-      assert!(res.is_err());
+      assert_eq!(res, Err(BlockError::TransactionError(TransactionError::InvalidNonce)));
     }
   }
-}
-
-#[test]
-fn unsorted_nonces() {
-  let mut mempool = HashMap::new();
-  // Create a large amount of nonces so the retrieval from the HashMapis effectively guaranteed to
-  // be out of order
-  let mut nonces = (0 .. 64).collect::<Vec<_>>();
-  // Insert in a random order
-  while !nonces.is_empty() {
-    let nonce = nonces.swap_remove(
-      usize::try_from(OsRng.next_u64() % u64::try_from(nonces.len()).unwrap()).unwrap(),
-    );
-    let tx = NonceTransaction::new(nonce, 0);
-    mempool.insert(tx.hash(), tx);
-  }
-
-  // Create and verify the block
-  const GENESIS: [u8; 32] = [0xff; 32];
-  const LAST: [u8; 32] = [0x01; 32];
-  let nonces = HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]);
-  Block::new(LAST, &ProvidedTransactions::new(), mempool.clone())
-    .verify(GENESIS, LAST, HashSet::new(), nonces.clone())
-    .unwrap();
-
-  let skip = NonceTransaction::new(65, 0);
-  mempool.insert(skip.hash(), skip);
-  assert!(Block::new(LAST, &ProvidedTransactions::new(), mempool)
-    .verify(GENESIS, LAST, HashSet::new(), nonces)
-    .is_err());
 }

@@ -1,4 +1,4 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 
 use rand::rngs::OsRng;
 
@@ -37,7 +37,6 @@ fn signed_transaction() {
   assert!(verify_transaction(
     &tx,
     Blake2s256::digest(genesis).into(),
-    &mut HashSet::new(),
     &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),
   )
   .is_err());
@@ -46,26 +45,18 @@ fn signed_transaction() {
   {
     let mut tx = tx.clone();
     tx.0 = Blake2s256::digest(tx.0).to_vec();
-    assert!(verify_transaction(
-      &tx,
-      genesis,
-      &mut HashSet::new(),
-      &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),
-    )
-    .is_err());
+    assert!(
+      verify_transaction(&tx, genesis, &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),).is_err()
+    );
   }
 
   // Different signer
   {
     let mut tx = tx.clone();
     tx.1.signer += Ristretto::generator();
-    assert!(verify_transaction(
-      &tx,
-      genesis,
-      &mut HashSet::new(),
-      &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),
-    )
-    .is_err());
+    assert!(
+      verify_transaction(&tx, genesis, &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),).is_err()
+    );
   }
 
   // Different nonce
@@ -73,42 +64,30 @@ fn signed_transaction() {
     #[allow(clippy::redundant_clone)] // False positive?
     let mut tx = tx.clone();
     tx.1.nonce = tx.1.nonce.wrapping_add(1);
-    assert!(verify_transaction(
-      &tx,
-      genesis,
-      &mut HashSet::new(),
-      &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),
-    )
-    .is_err());
+    assert!(
+      verify_transaction(&tx, genesis, &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),).is_err()
+    );
   }
 
   // Different signature
   {
     let mut tx = tx.clone();
     tx.1.signature.R += Ristretto::generator();
-    assert!(verify_transaction(
-      &tx,
-      genesis,
-      &mut HashSet::new(),
-      &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),
-    )
-    .is_err());
+    assert!(
+      verify_transaction(&tx, genesis, &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),).is_err()
+    );
   }
   {
     let mut tx = tx.clone();
     tx.1.signature.s += <Ristretto as Ciphersuite>::F::ONE;
-    assert!(verify_transaction(
-      &tx,
-      genesis,
-      &mut HashSet::new(),
-      &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),
-    )
-    .is_err());
+    assert!(
+      verify_transaction(&tx, genesis, &mut HashMap::from([(tx.1.signer, tx.1.nonce)]),).is_err()
+    );
   }
 
   // Sanity check the original TX was never mutated and is valid
   let mut nonces = HashMap::from([(tx.1.signer, tx.1.nonce)]);
-  verify_transaction(&tx, genesis, &mut HashSet::new(), &mut nonces).unwrap();
+  verify_transaction(&tx, genesis, &mut nonces).unwrap();
   assert_eq!(nonces, HashMap::from([(tx.1.signer, tx.1.nonce.wrapping_add(1))]));
 }
 
@@ -119,7 +98,6 @@ fn invalid_nonce() {
   assert!(verify_transaction(
     &tx,
     genesis,
-    &mut HashSet::new(),
     &mut HashMap::from([(tx.1.signer, tx.1.nonce.wrapping_add(1))]),
   )
   .is_err());

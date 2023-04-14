@@ -1,5 +1,3 @@
-use std::collections::{HashSet, HashMap};
-
 use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
 
@@ -8,7 +6,7 @@ use blake2::{Digest, Blake2s256};
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use crate::{
-  merkle, Signed, TransactionKind, Transaction, ProvidedTransactions, Block, Blockchain,
+  merkle, Transaction, ProvidedTransactions, Block, Blockchain,
   tests::{ProvidedTransaction, SignedTransaction, random_provided_transaction},
 };
 
@@ -69,11 +67,7 @@ fn invalid_block() {
   // Not a participant
   {
     // Manually create the block to bypass build_block's checks
-    let block = Block::new(
-      blockchain.tip(),
-      &ProvidedTransactions::new(),
-      HashMap::from([(tx.hash(), tx.clone())]),
-    );
+    let block = Block::new(blockchain.tip(), vec![], vec![tx.clone()]);
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
     assert!(blockchain.verify_block(&block).is_err());
   }
@@ -83,11 +77,7 @@ fn invalid_block() {
 
   // Re-run the not a participant block to make sure it now works
   {
-    let block = Block::new(
-      blockchain.tip(),
-      &ProvidedTransactions::new(),
-      HashMap::from([(tx.hash(), tx.clone())]),
-    );
+    let block = Block::new(blockchain.tip(), vec![], vec![tx.clone()]);
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
     blockchain.verify_block(&block).unwrap();
   }
@@ -95,7 +85,7 @@ fn invalid_block() {
   {
     // Add a valid transaction
     let mut blockchain = blockchain.clone();
-    assert!(blockchain.add_transaction(tx.clone()));
+    assert!(blockchain.add_transaction(true, tx.clone()));
     let mut block = blockchain.build_block();
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
     blockchain.verify_block(&block).unwrap();
@@ -109,15 +99,14 @@ fn invalid_block() {
     // Invalid nonce
     let tx = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 5);
     // Manually create the block to bypass build_block's checks
-    let block =
-      Block::new(blockchain.tip(), &ProvidedTransactions::new(), HashMap::from([(tx.hash(), tx)]));
+    let block = Block::new(blockchain.tip(), vec![], vec![tx]);
     assert!(blockchain.verify_block(&block).is_err());
   }
 
   {
     // Invalid signature
     let mut blockchain = blockchain;
-    assert!(blockchain.add_transaction(tx));
+    assert!(blockchain.add_transaction(true, tx));
     let mut block = blockchain.build_block();
     blockchain.verify_block(&block).unwrap();
     block.transactions[0].1.signature.s += <Ristretto as Ciphersuite>::F::ONE;
@@ -140,49 +129,25 @@ fn signed_transaction() {
   let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[signer]);
   assert_eq!(blockchain.next_nonce(signer), Some(0));
 
-  let test = |blockchain: &mut Blockchain<SignedTransaction>,
-              mempool: HashMap<[u8; 32], SignedTransaction>| {
-    let mut hashes = mempool.keys().cloned().collect::<HashSet<_>>();
-
-    // These transactions do need to be added, in-order, to the mempool for the blockchain to
-    // build a block off them
-    {
-      let mut ordered = HashMap::new();
-      for (_, tx) in mempool.clone().drain() {
-        let nonce = if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
-          *nonce
-        } else {
-          panic!("non-signed TX in test mempool");
-        };
-        ordered.insert(nonce, tx);
-      }
-
-      let mut i = 0;
-      while !ordered.contains_key(&i) {
-        i += 1;
-      }
-      for i in i .. (i + u32::try_from(ordered.len()).unwrap()) {
-        assert!(blockchain.add_transaction(ordered.remove(&i).unwrap()));
-      }
-    }
-
+  let test = |blockchain: &mut Blockchain<SignedTransaction>, mempool: Vec<SignedTransaction>| {
     let tip = blockchain.tip();
+    for tx in mempool.clone() {
+      let next_nonce = blockchain.next_nonce(signer).unwrap();
+      assert!(blockchain.add_transaction(true, tx));
+      assert_eq!(next_nonce + 1, blockchain.next_nonce(signer).unwrap());
+    }
     let block = blockchain.build_block();
-    // The Block constructor should sort these these, and build_block should've called Block::new
-    assert_eq!(block, Block::new(blockchain.tip(), &ProvidedTransactions::new(), mempool));
+    assert_eq!(block, Block::new(blockchain.tip(), vec![], mempool.clone()));
     assert_eq!(blockchain.tip(), tip);
     assert_eq!(block.header.parent, tip);
 
     // Make sure all transactions were included
-    let mut ordered_hashes = vec![];
-    assert_eq!(hashes.len(), block.transactions.len());
-    for transaction in &block.transactions {
-      let hash = transaction.hash();
-      assert!(hashes.remove(&hash));
-      ordered_hashes.push(hash);
-    }
+    assert_eq!(block.transactions, mempool);
     // Make sure the merkle was correct
-    assert_eq!(block.header.transactions, merkle(&ordered_hashes));
+    assert_eq!(
+      block.header.transactions,
+      merkle(&mempool.iter().map(Transaction::hash).collect::<Vec<_>>())
+    );
 
     // Verify and add the block
     blockchain.verify_block(&block).unwrap();
@@ -191,19 +156,13 @@ fn signed_transaction() {
   };
 
   // Test with a single nonce
-  test(&mut blockchain, HashMap::from([(tx.hash(), tx)]));
+  test(&mut blockchain, vec![tx]);
   assert_eq!(blockchain.next_nonce(signer), Some(1));
 
   // Test with a flood of nonces
-  let mut mempool = HashMap::new();
-  let mut nonces = (1 .. 64).collect::<Vec<_>>();
-  // Randomize insertion order into HashMap, even though it should already have unordered iteration
-  while !nonces.is_empty() {
-    let nonce = nonces.swap_remove(
-      usize::try_from(OsRng.next_u64() % u64::try_from(nonces.len()).unwrap()).unwrap(),
-    );
-    let tx = crate::tests::signed_transaction(&mut OsRng, genesis, &key, nonce);
-    mempool.insert(tx.hash(), tx);
+  let mut mempool = vec![];
+  for nonce in 1 .. 64 {
+    mempool.push(crate::tests::signed_transaction(&mut OsRng, genesis, &key, nonce));
   }
   test(&mut blockchain, mempool);
   assert_eq!(blockchain.next_nonce(signer), Some(64));
@@ -214,20 +173,24 @@ fn provided_transaction() {
   let mut blockchain = new_blockchain::<ProvidedTransaction>(new_genesis(), &[]);
 
   let tx = random_provided_transaction(&mut OsRng);
+
+  // This should be provideable
   let mut txs = ProvidedTransactions::new();
   txs.provide(tx.clone());
+  txs.complete(tx.hash());
+
   // Non-provided transactions should fail verification
-  let block = Block::new(blockchain.tip(), &txs, HashMap::new());
+  let block = Block::new(blockchain.tip(), vec![tx.clone()], vec![]);
   assert!(blockchain.verify_block(&block).is_err());
 
   // Provided transactions should pass verification
-  blockchain.provide_transaction(tx);
+  blockchain.provide_transaction(tx.clone());
   blockchain.verify_block(&block).unwrap();
 
   // add_block should work for verified blocks
   assert!(blockchain.add_block(&block).is_ok());
 
-  let block = Block::new(blockchain.tip(), &txs, HashMap::new());
+  let block = Block::new(blockchain.tip(), vec![tx], vec![]);
   // The provided transaction should no longer considered provided, causing this error
   assert!(blockchain.verify_block(&block).is_err());
   // add_block should fail for unverified provided transactions if told to add them

@@ -32,16 +32,25 @@ mod block;
 pub use block::*;
 
 mod blockchain;
-pub use blockchain::*;
+pub(crate) use blockchain::*;
 
 mod mempool;
-pub use mempool::*;
+pub(crate) use mempool::*;
 
 mod tendermint;
 pub(crate) use crate::tendermint::*;
 
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
+
+/// Size limit for an individual transaction.
+pub const TRANSACTION_SIZE_LIMIT: usize = 50_000;
+/// Amount of transactions a single account may have in the mempool.
+pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
+/// Block size limit.
+// This targets a growth limit of roughly 5 GB a day, under load, in order to prevent a malicious
+// participant from flooding disks and causing out of space errors in order processes.
+pub const BLOCK_SIZE_LIMIT: usize = 350_000;
 
 pub(crate) const TRANSACTION_MESSAGE: u8 = 0;
 pub(crate) const TENDERMINT_MESSAGE: u8 = 1;
@@ -108,15 +117,19 @@ impl<T: Transaction, P: P2p> Tributary<T, P> {
     Self { network, synced_block, messages }
   }
 
-  pub fn provide_transaction(&self, tx: T) {
+  pub fn provide_transaction(&self, tx: T) -> bool {
     self.network.blockchain.write().unwrap().provide_transaction(tx)
   }
 
+  pub fn next_nonce(&self, signer: <Ristretto as Ciphersuite>::G) -> Option<u32> {
+    self.network.blockchain.read().unwrap().next_nonce(signer)
+  }
+
   // Returns if the transaction was valid.
-  pub async fn add_transaction(&self, tx: T) -> bool {
+  pub async fn add_transaction(&mut self, tx: T) -> bool {
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
-    let res = self.network.blockchain.write().unwrap().add_transaction(tx);
+    let res = self.network.blockchain.write().unwrap().add_transaction(true, tx);
     if res {
       self.network.p2p.broadcast(to_broadcast).await;
     }
@@ -158,7 +171,7 @@ impl<T: Transaction, P: P2p> Tributary<T, P> {
 
         // TODO: Sync mempools with fellow peers
         // Can we just rebroadcast transactions not included for at least two blocks?
-        self.network.blockchain.write().unwrap().add_transaction(tx)
+        self.network.blockchain.write().unwrap().add_transaction(false, tx)
       }
 
       TENDERMINT_MESSAGE => {

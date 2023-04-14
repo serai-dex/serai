@@ -1,7 +1,4 @@
-use std::{
-  io,
-  collections::{HashSet, HashMap},
-};
+use std::{io, collections::HashMap};
 
 use thiserror::Error;
 
@@ -11,19 +8,31 @@ use ciphersuite::{Ciphersuite, Ristretto};
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum BlockError {
+  /// Block was too large.
+  #[error("block exceeded size limit")]
+  TooLargeBlock,
   /// Header specified a parent which wasn't the chain tip.
   #[error("header doesn't build off the chain tip")]
   InvalidParent,
   /// Header specified an invalid transactions merkle tree hash.
   #[error("header transactions hash is incorrect")]
   InvalidTransactions,
+  /// A provided transaction was placed after a non-provided transaction.
+  #[error("a provided transaction was included after a non-provided transaction")]
+  ProvidedAfterNonProvided,
+  /// The block had a provided transaction this validator has yet to be provided.
+  #[error("block had a provided transaction not yet locally provided: {0:?}")]
+  NonLocalProvided([u8; 32]),
+  /// The provided transaction was distinct from the locally provided transaction.
+  #[error("block had a distinct provided transaction")]
+  DistinctProvided,
   /// An included transaction was invalid.
   #[error("included transaction had an error")]
   TransactionError(TransactionError),
 }
 
 use crate::{
-  ReadWrite, TransactionError, Signed, TransactionKind, Transaction, ProvidedTransactions, merkle,
+  BLOCK_SIZE_LIMIT, ReadWrite, TransactionError, Signed, TransactionKind, Transaction, merkle,
   verify_transaction,
 };
 
@@ -89,21 +98,14 @@ impl<T: Transaction> Block<T> {
   /// Create a new block.
   ///
   /// mempool is expected to only have valid, non-conflicting transactions.
-  pub(crate) fn new(
-    parent: [u8; 32],
-    provided: &ProvidedTransactions<T>,
-    mempool: HashMap<[u8; 32], T>,
-  ) -> Self {
-    let mut txs = vec![];
-    for tx in provided.transactions.values().cloned() {
-      txs.push(tx);
-    }
-    for tx in mempool.values().cloned() {
+  pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<T>) -> Self {
+    let mut txs = provided;
+    for tx in mempool {
       assert!(tx.kind() != TransactionKind::Provided, "provided transaction entered mempool");
       txs.push(tx);
     }
 
-    // Sort txs by nonces.
+    // Check TXs are sorted by nonce.
     let nonce = |tx: &T| {
       if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
         *nonce
@@ -111,9 +113,6 @@ impl<T: Transaction> Block<T> {
         0
       }
     };
-    txs.sort_by(|a, b| nonce(a).partial_cmp(&nonce(b)).unwrap());
-
-    // Check the sort.
     let mut last = 0;
     for tx in &txs {
       let nonce = nonce(tx);
@@ -123,33 +122,62 @@ impl<T: Transaction> Block<T> {
       last = nonce;
     }
 
-    let hashes = txs.iter().map(Transaction::hash).collect::<Vec<_>>();
-    Block { header: BlockHeader { parent, transactions: merkle(&hashes) }, transactions: txs }
+    let mut res =
+      Block { header: BlockHeader { parent, transactions: [0; 32] }, transactions: txs };
+    while res.serialize().len() > BLOCK_SIZE_LIMIT {
+      assert!(res.transactions.pop().is_some());
+    }
+    let hashes = res.transactions.iter().map(Transaction::hash).collect::<Vec<_>>();
+    res.header.transactions = merkle(&hashes);
+    res
   }
 
   pub fn hash(&self) -> [u8; 32] {
     self.header.hash()
   }
 
-  pub fn verify(
+  pub(crate) fn verify(
     &self,
     genesis: [u8; 32],
     last_block: [u8; 32],
-    mut locally_provided: HashSet<[u8; 32]>,
+    locally_provided: &[[u8; 32]],
     mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
   ) -> Result<(), BlockError> {
+    if self.serialize().len() > BLOCK_SIZE_LIMIT {
+      Err(BlockError::TooLargeBlock)?;
+    }
+
     if self.header.parent != last_block {
       Err(BlockError::InvalidParent)?;
     }
 
+    let mut found_non_provided = false;
     let mut txs = Vec::with_capacity(self.transactions.len());
-    for tx in &self.transactions {
-      match verify_transaction(tx, genesis, &mut locally_provided, &mut next_nonces) {
+    for (i, tx) in self.transactions.iter().enumerate() {
+      txs.push(tx.hash());
+
+      if tx.kind() == TransactionKind::Provided {
+        if found_non_provided {
+          Err(BlockError::ProvidedAfterNonProvided)?;
+        }
+
+        let Some(local) = locally_provided.get(i) else {
+          Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+        };
+        if txs.last().unwrap() != local {
+          Err(BlockError::DistinctProvided)?;
+        }
+
+        // We don't need to call verify_transaction since we did when we locally provided this
+        // transaction. Since it's identical, it must be valid
+        continue;
+      }
+
+      found_non_provided = true;
+      match verify_transaction(tx, genesis, &mut next_nonces) {
         Ok(()) => {}
         Err(e) => Err(BlockError::TransactionError(e))?,
       }
-
-      txs.push(tx.hash());
     }
 
     if merkle(&txs) != self.header.transactions {

@@ -1,25 +1,26 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use crate::{Signed, TransactionKind, Transaction, verify_transaction};
+use crate::{ACCOUNT_MEMPOOL_LIMIT, Signed, TransactionKind, Transaction, verify_transaction};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Mempool<T: Transaction> {
+pub(crate) struct Mempool<T: Transaction> {
   genesis: [u8; 32],
   txs: HashMap<[u8; 32], T>,
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 }
 
 impl<T: Transaction> Mempool<T> {
-  pub fn new(genesis: [u8; 32]) -> Self {
+  pub(crate) fn new(genesis: [u8; 32]) -> Self {
     Mempool { genesis, txs: HashMap::new(), next_nonces: HashMap::new() }
   }
 
   /// Returns true if this is a valid, new transaction.
-  pub fn add(
+  pub(crate) fn add(
     &mut self,
     blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    internal: bool,
     tx: T,
   ) -> bool {
     match tx.kind() {
@@ -41,9 +42,13 @@ impl<T: Transaction> Mempool<T> {
           self.next_nonces.insert(*signer, blockchain_next_nonce);
         }
 
-        if verify_transaction(&tx, self.genesis, &mut HashSet::new(), &mut self.next_nonces)
-          .is_err()
-        {
+        // If we have too many transactions from this sender, don't add this yet UNLESS we are
+        // this sender
+        if !internal && (nonce >= &(blockchain_next_nonce + ACCOUNT_MEMPOOL_LIMIT)) {
+          return false;
+        }
+
+        if verify_transaction(&tx, self.genesis, &mut self.next_nonces).is_err() {
           return false;
         }
         assert_eq!(self.next_nonces[signer], nonce + 1);
@@ -56,18 +61,16 @@ impl<T: Transaction> Mempool<T> {
   }
 
   // Returns None if the mempool doesn't have a nonce tracked.
-  // The nonce to use when signing should be:
-  // max(blockchain.next_nonce().unwrap(), mempool.next_nonce().unwrap_or(0))
-  pub fn next_nonce(&self, signer: &<Ristretto as Ciphersuite>::G) -> Option<u32> {
+  pub(crate) fn next_nonce(&self, signer: &<Ristretto as Ciphersuite>::G) -> Option<u32> {
     self.next_nonces.get(signer).cloned()
   }
 
   /// Get transactions to include in a block.
-  pub fn block(
+  pub(crate) fn block(
     &mut self,
     blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
-  ) -> HashMap<[u8; 32], T> {
-    let mut res = HashMap::new();
+  ) -> Vec<T> {
+    let mut res = vec![];
     for hash in self.txs.keys().cloned().collect::<Vec<_>>() {
       let tx = &self.txs[&hash];
       // Verify this hasn't gone stale
@@ -82,13 +85,24 @@ impl<T: Transaction> Mempool<T> {
       }
 
       // Since this TX isn't stale, include it
-      res.insert(hash, tx.clone());
+      res.push(tx.clone());
     }
+
+    // Sort res by nonce.
+    let nonce = |tx: &T| {
+      if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
+        *nonce
+      } else {
+        0
+      }
+    };
+    res.sort_by(|a, b| nonce(a).partial_cmp(&nonce(b)).unwrap());
+
     res
   }
 
   /// Remove a transaction from the mempool.
-  pub fn remove(&mut self, tx: &[u8; 32]) {
+  pub(crate) fn remove(&mut self, tx: &[u8; 32]) {
     self.txs.remove(tx);
   }
 

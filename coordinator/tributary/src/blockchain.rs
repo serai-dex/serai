@@ -1,11 +1,14 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use crate::{Signed, TransactionKind, Transaction, ProvidedTransactions, BlockError, Block, Mempool};
+use crate::{
+  Signed, TransactionKind, Transaction, verify_transaction, ProvidedTransactions, BlockError,
+  Block, Mempool,
+};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Blockchain<T: Transaction> {
+pub(crate) struct Blockchain<T: Transaction> {
   genesis: [u8; 32],
   // TODO: db
   block_number: u64,
@@ -17,7 +20,7 @@ pub struct Blockchain<T: Transaction> {
 }
 
 impl<T: Transaction> Blockchain<T> {
-  pub fn new(genesis: [u8; 32], participants: &[<Ristretto as Ciphersuite>::G]) -> Self {
+  pub(crate) fn new(genesis: [u8; 32], participants: &[<Ristretto as Ciphersuite>::G]) -> Self {
     // TODO: Reload block_number/tip/next_nonces/provided/mempool
 
     let mut next_nonces = HashMap::new();
@@ -37,44 +40,54 @@ impl<T: Transaction> Blockchain<T> {
     }
   }
 
-  pub fn tip(&self) -> [u8; 32] {
+  pub(crate) fn tip(&self) -> [u8; 32] {
     self.tip
   }
 
-  pub fn block_number(&self) -> u64 {
+  pub(crate) fn block_number(&self) -> u64 {
     self.block_number
   }
 
-  pub fn add_transaction(&mut self, tx: T) -> bool {
-    self.mempool.add(&self.next_nonces, tx)
+  pub(crate) fn add_transaction(&mut self, internal: bool, tx: T) -> bool {
+    self.mempool.add(&self.next_nonces, internal, tx)
   }
 
-  pub fn provide_transaction(&mut self, tx: T) {
-    self.provided.provide(tx)
+  pub(crate) fn provide_transaction(&mut self, tx: T) -> bool {
+    // TODO: Should this check be internal to ProvidedTransactions?
+    if verify_transaction(&tx, self.genesis, &mut HashMap::new()).is_err() {
+      return false;
+    }
+    self.provided.provide(tx);
+    true
   }
 
-  /// Returns the next nonce, or None if they aren't a participant.
-  pub fn next_nonce(&self, key: <Ristretto as Ciphersuite>::G) -> Option<u32> {
-    self.next_nonces.get(&key).cloned()
+  /// Returns the next nonce for signing, or None if they aren't a participant.
+  pub(crate) fn next_nonce(&self, key: <Ristretto as Ciphersuite>::G) -> Option<u32> {
+    Some(self.next_nonces.get(&key).cloned()?.max(self.mempool.next_nonce(&key).unwrap_or(0)))
   }
 
-  pub fn build_block(&mut self) -> Block<T> {
-    let block = Block::new(self.tip, &self.provided, self.mempool.block(&self.next_nonces));
+  pub(crate) fn build_block(&mut self) -> Block<T> {
+    let block = Block::new(
+      self.tip,
+      self.provided.transactions.iter().cloned().collect(),
+      self.mempool.block(&self.next_nonces),
+    );
     // build_block should not return invalid blocks
     self.verify_block(&block).unwrap();
     block
   }
 
-  pub fn verify_block(&self, block: &Block<T>) -> Result<(), BlockError> {
-    let mut locally_provided = HashSet::new();
-    for provided in self.provided.transactions.keys() {
-      locally_provided.insert(*provided);
-    }
-    block.verify(self.genesis, self.tip, locally_provided, self.next_nonces.clone())
+  pub(crate) fn verify_block(&self, block: &Block<T>) -> Result<(), BlockError> {
+    block.verify(
+      self.genesis,
+      self.tip,
+      &self.provided.transactions.iter().map(Transaction::hash).collect::<Vec<_>>(),
+      self.next_nonces.clone(),
+    )
   }
 
   /// Add a block.
-  pub fn add_block(&mut self, block: &Block<T>) -> Result<(), BlockError> {
+  pub(crate) fn add_block(&mut self, block: &Block<T>) -> Result<(), BlockError> {
     self.verify_block(block)?;
 
     // None of the following assertions should be reachable since we verified the block
@@ -83,10 +96,7 @@ impl<T: Transaction> Blockchain<T> {
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided => {
-          assert!(
-            self.provided.withdraw(tx.hash()),
-            "verified block had a provided transaction we didn't have"
-          );
+          self.provided.complete(tx.hash());
         }
         TransactionKind::Unsigned => {}
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {
@@ -97,6 +107,8 @@ impl<T: Transaction> Blockchain<T> {
           if prev != *nonce {
             panic!("verified block had an invalid nonce");
           }
+
+          self.mempool.remove(&tx.hash());
         }
       }
     }

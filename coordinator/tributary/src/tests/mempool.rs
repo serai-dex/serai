@@ -6,7 +6,7 @@ use rand::{RngCore, rngs::OsRng};
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use crate::{
-  Transaction, Mempool,
+  ACCOUNT_MEMPOOL_LIMIT, Transaction, Mempool,
   tests::{SignedTransaction, signed_transaction},
 };
 
@@ -28,17 +28,17 @@ fn mempool_addition() {
 
   // Add TX 0
   let mut blockchain_next_nonces = HashMap::from([(signer, 0)]);
-  assert!(mempool.add(&blockchain_next_nonces, first_tx.clone()));
+  assert!(mempool.add(&blockchain_next_nonces, true, first_tx.clone()));
   assert_eq!(mempool.next_nonce(&signer), Some(1));
 
   // Adding it again should fail
-  assert!(!mempool.add(&blockchain_next_nonces, first_tx.clone()));
+  assert!(!mempool.add(&blockchain_next_nonces, true, first_tx.clone()));
 
   // Do the same with the next nonce
   let second_tx = signed_transaction(&mut OsRng, genesis, &key, 1);
-  assert!(mempool.add(&blockchain_next_nonces, second_tx.clone()));
+  assert!(mempool.add(&blockchain_next_nonces, true, second_tx.clone()));
   assert_eq!(mempool.next_nonce(&signer), Some(2));
-  assert!(!mempool.add(&blockchain_next_nonces, second_tx.clone()));
+  assert!(!mempool.add(&blockchain_next_nonces, true, second_tx.clone()));
 
   // If the mempool doesn't have a nonce for an account, it should successfully use the
   // blockchain's
@@ -47,7 +47,7 @@ fn mempool_addition() {
   let second_signer = tx.1.signer;
   assert_eq!(mempool.next_nonce(&second_signer), None);
   blockchain_next_nonces.insert(second_signer, 2);
-  assert!(mempool.add(&blockchain_next_nonces, tx.clone()));
+  assert!(mempool.add(&blockchain_next_nonces, true, tx.clone()));
   assert_eq!(mempool.next_nonce(&second_signer), Some(3));
 
   // Getting a block should work
@@ -55,12 +55,35 @@ fn mempool_addition() {
 
   // If the blockchain says an account had its nonce updated, it should cause a prune
   blockchain_next_nonces.insert(signer, 1);
-  let block = mempool.block(&blockchain_next_nonces);
+  let mut block = mempool.block(&blockchain_next_nonces);
   assert_eq!(block.len(), 2);
-  assert!(!block.contains_key(&first_tx.hash()));
-  assert_eq!(mempool.txs(), &block);
+  assert!(!block.iter().any(|tx| tx.hash() == first_tx.hash()));
+  assert_eq!(mempool.txs(), &block.drain(..).map(|tx| (tx.hash(), tx)).collect::<HashMap<_, _>>());
 
   // Removing should also successfully prune
   mempool.remove(&tx.hash());
   assert_eq!(mempool.txs(), &HashMap::from([(second_tx.hash(), second_tx)]));
+}
+
+#[test]
+fn too_many_mempool() {
+  let (genesis, mut mempool) = new_mempool::<SignedTransaction>();
+
+  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let signer = signed_transaction(&mut OsRng, genesis, &key, 0).1.signer;
+
+  // We should be able to add transactions up to the limit
+  for i in 0 .. ACCOUNT_MEMPOOL_LIMIT {
+    assert!(mempool.add(
+      &HashMap::from([(signer, 0)]),
+      false,
+      signed_transaction(&mut OsRng, genesis, &key, i)
+    ));
+  }
+  // Yet adding more should fail
+  assert!(!mempool.add(
+    &HashMap::from([(signer, 0)]),
+    false,
+    signed_transaction(&mut OsRng, genesis, &key, ACCOUNT_MEMPOOL_LIMIT)
+  ));
 }

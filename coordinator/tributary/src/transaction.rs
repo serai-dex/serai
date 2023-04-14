@@ -1,8 +1,5 @@
 use core::fmt::Debug;
-use std::{
-  io,
-  collections::{HashSet, HashMap},
-};
+use std::{io, collections::HashMap};
 
 use thiserror::Error;
 
@@ -11,13 +8,13 @@ use blake2::{Digest, Blake2b512};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use schnorr::SchnorrSignature;
 
-use crate::ReadWrite;
+use crate::{TRANSACTION_SIZE_LIMIT, ReadWrite};
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
-  /// A provided transaction wasn't locally provided.
-  #[error("provided transaction wasn't locally provided")]
-  MissingProvided([u8; 32]),
+  /// Transaction exceeded the size limit.
+  #[error("transaction was too large")]
+  TooLargeTransaction,
   /// This transaction's signer isn't a participant.
   #[error("invalid signer")]
   InvalidSigner,
@@ -63,7 +60,13 @@ impl ReadWrite for Signed {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TransactionKind<'a> {
-  /// This tranaction should be provided by every validator, solely ordered by the block producer.
+  /// This tranaction should be provided by every validator, in an exact order.
+  ///
+  /// The only malleability is in when this transaction appears on chain. The block producer will
+  /// include it when they have it. Block verification will fail for validators without it.
+  ///
+  /// If a supermajority of validators still produce a commit for a block with a provided
+  /// transaction which isn't locally held, the chain will sleep until it is locally provided.
   Provided,
 
   /// An unsigned transaction, only able to be included by the block producer.
@@ -99,18 +102,16 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
 pub(crate) fn verify_transaction<T: Transaction>(
   tx: &T,
   genesis: [u8; 32],
-  locally_provided: &mut HashSet<[u8; 32]>,
   next_nonces: &mut HashMap<<Ristretto as Ciphersuite>::G, u32>,
 ) -> Result<(), TransactionError> {
+  if tx.serialize().len() > TRANSACTION_SIZE_LIMIT {
+    Err(TransactionError::TooLargeTransaction)?;
+  }
+
   tx.verify()?;
 
   match tx.kind() {
-    TransactionKind::Provided => {
-      let hash = tx.hash();
-      if !locally_provided.remove(&hash) {
-        Err(TransactionError::MissingProvided(hash))?;
-      }
-    }
+    TransactionKind::Provided => {}
     TransactionKind::Unsigned => {}
     TransactionKind::Signed(Signed { signer, nonce, signature }) => {
       if let Some(next_nonce) = next_nonces.get(signer) {
