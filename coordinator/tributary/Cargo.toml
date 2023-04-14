@@ -26,6 +26,8 @@ schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
 hex = "0.4"
 log = "0.4"
 
+serai-db = { path = "../../common/db" }
+
 scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
 futures = "0.3"
 tendermint = { package = "tendermint-machine", path = "./tendermint" }

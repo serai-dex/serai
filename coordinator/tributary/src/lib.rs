@@ -14,10 +14,12 @@ use ciphersuite::{Ciphersuite, Ristretto};
 use scale::Decode;
 use futures::SinkExt;
 use ::tendermint::{
-  ext::{BlockNumber, Commit, Block as BlockTrait, Network as NetworkTrait},
+  ext::{BlockNumber, Commit, Block as BlockTrait, Network},
   SignedMessageFor, SyncedBlock, SyncedBlockSender, MessageSender, TendermintMachine,
   TendermintHandle,
 };
+
+use serai_db::Db;
 
 mod merkle;
 pub(crate) use merkle::*;
@@ -80,15 +82,16 @@ impl<P: P2p> P2p for Arc<P> {
   }
 }
 
-pub struct Tributary<T: Transaction, P: P2p> {
-  network: Network<T, P>,
+pub struct Tributary<D: Db, T: Transaction, P: P2p> {
+  network: TendermintNetwork<D, T, P>,
 
-  synced_block: SyncedBlockSender<Network<T, P>>,
-  messages: MessageSender<Network<T, P>>,
+  synced_block: SyncedBlockSender<TendermintNetwork<D, T, P>>,
+  messages: MessageSender<TendermintNetwork<D, T, P>>,
 }
 
-impl<T: Transaction, P: P2p> Tributary<T, P> {
+impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   pub async fn new(
+    db: D,
     genesis: [u8; 32],
     start_time: u64,
     key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -100,16 +103,21 @@ impl<T: Transaction, P: P2p> Tributary<T, P> {
     let signer = Arc::new(Signer::new(genesis, key));
     let validators = Arc::new(Validators::new(genesis, validators));
 
-    let mut blockchain = Blockchain::new(genesis, &validators_vec);
+    let mut blockchain = Blockchain::new(db, genesis, &validators_vec);
     let block_number = blockchain.block_number();
-    let start_time = start_time; // TODO: Get the start time from the blockchain
+
+    let start_time = if let Some(commit) = blockchain.commit(&blockchain.tip()) {
+      Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time
+    } else {
+      start_time
+    };
     let proposal = TendermintBlock(blockchain.build_block().serialize());
     let blockchain = Arc::new(RwLock::new(blockchain));
 
-    let network = Network { genesis, signer, validators, blockchain, p2p };
+    let network = TendermintNetwork { genesis, signer, validators, blockchain, p2p };
 
     // The genesis block is 0, so we're working on block #1
-    let block_number = BlockNumber(block_number + 1);
+    let block_number = BlockNumber((block_number + 1).into());
     let TendermintHandle { synced_block, messages, machine } =
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
     tokio::task::spawn(machine.run());
@@ -117,6 +125,8 @@ impl<T: Transaction, P: P2p> Tributary<T, P> {
     Self { network, synced_block, messages }
   }
 
+  // TODO: Is there a race condition with providing these? Since the same provided TX provided
+  // twice counts as two transactions
   pub fn provide_transaction(&self, tx: T) -> bool {
     self.network.blockchain.write().unwrap().provide_transaction(tx)
   }
@@ -156,7 +166,7 @@ impl<T: Transaction, P: P2p> Tributary<T, P> {
       return false;
     }
 
-    let number = BlockNumber(block_number + 1);
+    let number = BlockNumber((block_number + 1).into());
     self.synced_block.send(SyncedBlock { number, block, commit }).await.unwrap();
     true
   }
@@ -175,12 +185,14 @@ impl<T: Transaction, P: P2p> Tributary<T, P> {
       }
 
       TENDERMINT_MESSAGE => {
-        let Ok(msg) = SignedMessageFor::<Network<T, P>>::decode::<&[u8]>(&mut &msg[1 ..]) else {
+        let Ok(msg) = SignedMessageFor::<TendermintNetwork<D, T, P>>::decode::<&[u8]>(
+          &mut &msg[1 ..]
+        ) else {
           return false;
         };
 
         // If this message isn't to form consensus on the next block, ignore it
-        if msg.block().0 != (self.network.blockchain.read().unwrap().block_number() + 1) {
+        if msg.block().0 != (self.network.blockchain.read().unwrap().block_number() + 1).into() {
           return false;
         }
 

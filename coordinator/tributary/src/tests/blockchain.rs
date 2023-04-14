@@ -5,6 +5,8 @@ use blake2::{Digest, Blake2s256};
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
+use serai_db::MemDb;
+
 use crate::{
   merkle, Transaction, ProvidedTransactions, Block, Blockchain,
   tests::{ProvidedTransaction, SignedTransaction, random_provided_transaction},
@@ -19,8 +21,8 @@ fn new_genesis() -> [u8; 32] {
 fn new_blockchain<T: Transaction>(
   genesis: [u8; 32],
   participants: &[<Ristretto as Ciphersuite>::G],
-) -> Blockchain<T> {
-  let blockchain = Blockchain::new(genesis, participants);
+) -> Blockchain<MemDb, T> {
+  let blockchain = Blockchain::new(MemDb::new(), genesis, participants);
   assert_eq!(blockchain.tip(), genesis);
   assert_eq!(blockchain.block_number(), 0);
   blockchain
@@ -34,7 +36,7 @@ fn block_addition() {
   assert_eq!(block.header.parent, genesis);
   assert_eq!(block.header.transactions, [0; 32]);
   blockchain.verify_block(&block).unwrap();
-  assert!(blockchain.add_block(&block).is_ok());
+  assert!(blockchain.add_block(&block, vec![]).is_ok());
   assert_eq!(blockchain.tip(), block.hash());
   assert_eq!(blockchain.block_number(), 1);
 }
@@ -129,7 +131,8 @@ fn signed_transaction() {
   let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[signer]);
   assert_eq!(blockchain.next_nonce(signer), Some(0));
 
-  let test = |blockchain: &mut Blockchain<SignedTransaction>, mempool: Vec<SignedTransaction>| {
+  let test = |blockchain: &mut Blockchain<MemDb, SignedTransaction>,
+              mempool: Vec<SignedTransaction>| {
     let tip = blockchain.tip();
     for tx in mempool.clone() {
       let next_nonce = blockchain.next_nonce(signer).unwrap();
@@ -151,7 +154,7 @@ fn signed_transaction() {
 
     // Verify and add the block
     blockchain.verify_block(&block).unwrap();
-    assert!(blockchain.add_block(&block).is_ok());
+    assert!(blockchain.add_block(&block, vec![]).is_ok());
     assert_eq!(blockchain.tip(), block.hash());
   };
 
@@ -188,11 +191,11 @@ fn provided_transaction() {
   blockchain.verify_block(&block).unwrap();
 
   // add_block should work for verified blocks
-  assert!(blockchain.add_block(&block).is_ok());
+  assert!(blockchain.add_block(&block, vec![]).is_ok());
 
   let block = Block::new(blockchain.tip(), vec![tx], vec![]);
   // The provided transaction should no longer considered provided, causing this error
   assert!(blockchain.verify_block(&block).is_err());
   // add_block should fail for unverified provided transactions if told to add them
-  assert!(blockchain.add_block(&block).is_err());
+  assert!(blockchain.add_block(&block, vec![]).is_err());
 }

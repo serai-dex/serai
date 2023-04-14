@@ -23,12 +23,14 @@ use ciphersuite::{
 };
 use schnorr::SchnorrSignature;
 
+use serai_db::Db;
+
 use scale::{Encode, Decode};
 use tendermint::{
   SignedMessageFor,
   ext::{
     BlockNumber, RoundNumber, Signer as SignerTrait, SignatureScheme, Weights, Block as BlockTrait,
-    BlockError as TendermintBlockError, Commit, Network as NetworkTrait,
+    BlockError as TendermintBlockError, Commit, Network,
   },
 };
 
@@ -220,16 +222,18 @@ impl BlockTrait for TendermintBlock {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Network<T: Transaction, P: P2p> {
+pub(crate) struct TendermintNetwork<D: Db, T: Transaction, P: P2p> {
   pub(crate) genesis: [u8; 32],
+
   pub(crate) signer: Arc<Signer>,
   pub(crate) validators: Arc<Validators>,
-  pub(crate) blockchain: Arc<RwLock<Blockchain<T>>>,
+  pub(crate) blockchain: Arc<RwLock<Blockchain<D, T>>>,
+
   pub(crate) p2p: P,
 }
 
 #[async_trait]
-impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
+impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
   type ValidatorId = [u8; 32];
   type SignatureScheme = Arc<Validators>;
   type Weights = Arc<Validators>;
@@ -284,6 +288,7 @@ impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
       panic!("validators added invalid block to tributary {}", hex::encode(self.genesis));
     };
 
+    // Tendermint should only produce valid commits
     assert!(self.verify_commit(block.id(), &commit));
 
     let Ok(block) = Block::read::<&[u8]>(&mut block.0.as_ref()) else {
@@ -291,7 +296,7 @@ impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
     };
 
     loop {
-      let block_res = self.blockchain.write().unwrap().add_block(&block);
+      let block_res = self.blockchain.write().unwrap().add_block(&block, commit.encode());
       match block_res {
         Ok(()) => break,
         Err(BlockError::NonLocalProvided(hash)) => {
@@ -305,8 +310,6 @@ impl<T: Transaction, P: P2p> NetworkTrait for Network<T, P> {
         _ => return invalid_block(),
       }
     }
-
-    // TODO: Save the commit to disk
 
     Some(TendermintBlock(self.blockchain.write().unwrap().build_block().serialize()))
   }
