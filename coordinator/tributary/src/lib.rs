@@ -98,11 +98,11 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     key: Zeroizing<<Ristretto as Ciphersuite>::F>,
     validators: HashMap<<Ristretto as Ciphersuite>::G, u64>,
     p2p: P,
-  ) -> Self {
+  ) -> Option<Self> {
     let validators_vec = validators.keys().cloned().collect::<Vec<_>>();
 
     let signer = Arc::new(Signer::new(genesis, key));
-    let validators = Arc::new(Validators::new(genesis, validators));
+    let validators = Arc::new(Validators::new(genesis, validators)?);
 
     let mut blockchain = Blockchain::new(db, genesis, &validators_vec);
     let block_number = blockchain.block_number();
@@ -123,7 +123,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
     tokio::task::spawn(machine.run());
 
-    Self { network, synced_block, messages }
+    Some(Self { network, synced_block, messages })
   }
 
   pub fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {

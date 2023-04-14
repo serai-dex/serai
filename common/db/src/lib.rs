@@ -29,8 +29,8 @@ pub trait Db: 'static + Send + Sync + Clone + Debug + Get {
 }
 
 /// An atomic operation for the in-memory databae.
-#[derive(Debug)]
 #[must_use]
+#[derive(PartialEq, Eq, Debug)]
 pub struct MemDbTxn<'a>(&'a MemDb, HashMap<Vec<u8>, Vec<u8>>, HashSet<Vec<u8>>);
 
 impl<'a> Get for MemDbTxn<'a> {
@@ -64,6 +64,13 @@ impl<'a> DbTxn for MemDbTxn<'a> {
 /// An in-memory database.
 #[derive(Clone, Debug)]
 pub struct MemDb(Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>);
+
+impl PartialEq for MemDb {
+  fn eq(&self, other: &MemDb) -> bool {
+    *self.0.read().unwrap() == *other.0.read().unwrap()
+  }
+}
+impl Eq for MemDb {}
 
 impl Default for MemDb {
   fn default() -> MemDb {

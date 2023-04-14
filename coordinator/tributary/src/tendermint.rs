@@ -126,7 +126,7 @@ impl Validators {
   pub(crate) fn new(
     genesis: [u8; 32],
     validators: HashMap<<Ristretto as Ciphersuite>::G, u64>,
-  ) -> Validators {
+  ) -> Option<Validators> {
     let mut total_weight = 0;
     let mut weights = HashMap::new();
 
@@ -134,8 +134,9 @@ impl Validators {
     let mut robin = vec![];
     for (validator, weight) in validators {
       let validator = validator.to_bytes();
-      // TODO: Make an error out of this
-      assert!(weight != 0);
+      if weight == 0 {
+        return None;
+      }
       total_weight += weight;
       weights.insert(validator, weight);
 
@@ -145,7 +146,7 @@ impl Validators {
     }
     robin.shuffle(&mut ChaCha12Rng::from_seed(transcript.rng_seed(b"robin")));
 
-    Validators { genesis, total_weight, weights, robin }
+    Some(Validators { genesis, total_weight, weights, robin })
   }
 }
 

@@ -2,18 +2,54 @@ use std::collections::HashMap;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
+use serai_db::{DbTxn, Db};
+
 use crate::{ACCOUNT_MEMPOOL_LIMIT, Signed, TransactionKind, Transaction, verify_transaction};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Mempool<T: Transaction> {
+pub(crate) struct Mempool<D: Db, T: Transaction> {
+  db: D,
   genesis: [u8; 32],
+
   txs: HashMap<[u8; 32], T>,
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 }
 
-impl<T: Transaction> Mempool<T> {
-  pub(crate) fn new(genesis: [u8; 32]) -> Self {
-    Mempool { genesis, txs: HashMap::new(), next_nonces: HashMap::new() }
+impl<D: Db, T: Transaction> Mempool<D, T> {
+  fn transaction_key(&self, hash: &[u8]) -> Vec<u8> {
+    D::key(b"tributary_mempool", b"transaction", [self.genesis.as_ref(), hash].concat())
+  }
+  fn current_mempool_key(&self) -> Vec<u8> {
+    D::key(b"tributary_mempool", b"current", self.genesis)
+  }
+
+  pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
+    let mut res = Mempool { db, genesis, txs: HashMap::new(), next_nonces: HashMap::new() };
+
+    let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
+    let mut hash = [0; 32];
+    let mut i = 0;
+    while i < current_mempool.len() {
+      hash.copy_from_slice(&current_mempool[i .. (i + 32)]);
+      let tx =
+        T::read::<&[u8]>(&mut res.db.get(res.transaction_key(&hash)).unwrap().as_ref()).unwrap();
+
+      match tx.kind() {
+        TransactionKind::Signed(Signed { signer, nonce, .. }) => {
+          if let Some(prev) = res.next_nonces.insert(*signer, nonce + 1) {
+            // These mempool additions should've been ordered
+            assert!(prev < *nonce);
+          }
+        }
+        _ => panic!("mempool database had a non-signed transaction"),
+      }
+
+      debug_assert_eq!(tx.hash(), hash);
+      res.txs.insert(hash, tx);
+      i += 32;
+    }
+
+    res
   }
 
   /// Returns true if this is a valid, new transaction.
@@ -53,7 +89,20 @@ impl<T: Transaction> Mempool<T> {
         }
         assert_eq!(self.next_nonces[signer], nonce + 1);
 
-        self.txs.insert(tx.hash(), tx);
+        let tx_hash = tx.hash();
+
+        let transaction_key = self.transaction_key(&tx_hash);
+        let current_mempool_key = self.current_mempool_key();
+        let mut current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+
+        let mut txn = self.db.txn();
+        txn.put(transaction_key, tx.serialize());
+        current_mempool.extend(tx_hash);
+        txn.put(current_mempool_key, current_mempool);
+        txn.commit();
+
+        self.txs.insert(tx_hash, tx);
+
         true
       }
       _ => false,
@@ -77,7 +126,7 @@ impl<T: Transaction> Mempool<T> {
       match tx.kind() {
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {
           if blockchain_next_nonces[signer] > *nonce {
-            self.txs.remove(&hash);
+            self.remove(&hash);
             continue;
           }
         }
@@ -103,6 +152,27 @@ impl<T: Transaction> Mempool<T> {
 
   /// Remove a transaction from the mempool.
   pub(crate) fn remove(&mut self, tx: &[u8; 32]) {
+    let transaction_key = self.transaction_key(tx);
+    let current_mempool_key = self.current_mempool_key();
+    let current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+
+    let mut i = 0;
+    while i < current_mempool.len() {
+      if &current_mempool[i .. (i + 32)] == tx {
+        break;
+      }
+      i += 32;
+    }
+
+    // This doesn't have to be atomic with any greater operation
+    let mut txn = self.db.txn();
+    txn.del(transaction_key);
+    if i != current_mempool.len() {
+      txn
+        .put(current_mempool_key, [&current_mempool[.. i], &current_mempool[(i + 32) ..]].concat());
+    }
+    txn.commit();
+
     self.txs.remove(tx);
   }
 

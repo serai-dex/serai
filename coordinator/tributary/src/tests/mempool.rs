@@ -5,20 +5,23 @@ use rand::{RngCore, rngs::OsRng};
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
+use serai_db::MemDb;
+
 use crate::{
   ACCOUNT_MEMPOOL_LIMIT, Transaction, Mempool,
   tests::{SignedTransaction, signed_transaction},
 };
 
-fn new_mempool<T: Transaction>() -> ([u8; 32], Mempool<T>) {
+fn new_mempool<T: Transaction>() -> ([u8; 32], MemDb, Mempool<MemDb, T>) {
   let mut genesis = [0; 32];
   OsRng.fill_bytes(&mut genesis);
-  (genesis, Mempool::new(genesis))
+  let db = MemDb::new();
+  (genesis, db.clone(), Mempool::new(db, genesis))
 }
 
 #[test]
 fn mempool_addition() {
-  let (genesis, mut mempool) = new_mempool::<SignedTransaction>();
+  let (genesis, db, mut mempool) = new_mempool::<SignedTransaction>();
 
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
 
@@ -30,6 +33,9 @@ fn mempool_addition() {
   let mut blockchain_next_nonces = HashMap::from([(signer, 0)]);
   assert!(mempool.add(&blockchain_next_nonces, true, first_tx.clone()));
   assert_eq!(mempool.next_nonce(&signer), Some(1));
+
+  // Test reloading works
+  assert_eq!(mempool, Mempool::new(db, genesis));
 
   // Adding it again should fail
   assert!(!mempool.add(&blockchain_next_nonces, true, first_tx.clone()));
@@ -67,7 +73,7 @@ fn mempool_addition() {
 
 #[test]
 fn too_many_mempool() {
-  let (genesis, mut mempool) = new_mempool::<SignedTransaction>();
+  let (genesis, _, mut mempool) = new_mempool::<SignedTransaction>();
 
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
   let signer = signed_transaction(&mut OsRng, genesis, &key, 0).1.signer;

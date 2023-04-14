@@ -19,27 +19,27 @@ pub(crate) struct Blockchain<D: Db, T: Transaction> {
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 
   provided: ProvidedTransactions<D, T>,
-  mempool: Mempool<T>,
+  mempool: Mempool<D, T>,
 }
 
 impl<D: Db, T: Transaction> Blockchain<D, T> {
   fn tip_key(&self) -> Vec<u8> {
-    D::key(b"tributary", b"tip", self.genesis)
+    D::key(b"tributary_blockchain", b"tip", self.genesis)
   }
   fn block_number_key(&self) -> Vec<u8> {
-    D::key(b"tributary", b"block_number", self.genesis)
+    D::key(b"tributary_blockchain", b"block_number", self.genesis)
   }
   fn block_key(&self, hash: &[u8; 32]) -> Vec<u8> {
     // Since block hashes incorporate their parent, and the first parent is the genesis, this is
     // fine not incorporating the hash unless there's a hash collision
-    D::key(b"tributary", b"block", hash)
+    D::key(b"tributary_blockchain", b"block", hash)
   }
   fn commit_key(&self, hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary", b"commit", hash)
+    D::key(b"tributary_blockchain", b"commit", hash)
   }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
     D::key(
-      b"tributary",
+      b"tributary_blockchain",
       b"next_nonce",
       [self.genesis.as_ref(), signer.to_bytes().as_ref()].concat(),
     )
@@ -50,8 +50,6 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     genesis: [u8; 32],
     participants: &[<Ristretto as Ciphersuite>::G],
   ) -> Self {
-    // TODO: Reload mempool
-
     let mut next_nonces = HashMap::new();
     for participant in participants {
       next_nonces.insert(*participant, 0);
@@ -65,8 +63,8 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
       tip: genesis,
       next_nonces,
 
-      provided: ProvidedTransactions::new(db, genesis),
-      mempool: Mempool::new(genesis),
+      provided: ProvidedTransactions::new(db.clone(), genesis),
+      mempool: Mempool::new(db, genesis),
     };
 
     if let Some((block_number, tip)) = {
