@@ -10,6 +10,7 @@ pub trait Get: Send + Sync + Debug {
 }
 
 /// An atomic database operation.
+#[must_use]
 pub trait DbTxn: Send + Sync + Debug + Get {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
   fn del(&mut self, key: impl AsRef<[u8]>);
@@ -29,6 +30,7 @@ pub trait Db: 'static + Send + Sync + Clone + Debug + Get {
 
 /// An atomic operation for the in-memory databae.
 #[derive(Debug)]
+#[must_use]
 pub struct MemDbTxn<'a>(&'a MemDb, HashMap<Vec<u8>, Vec<u8>>, HashSet<Vec<u8>>);
 
 impl<'a> Get for MemDbTxn<'a> {
