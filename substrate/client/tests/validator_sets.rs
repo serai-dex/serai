@@ -10,7 +10,6 @@ use serai_client::{
     primitives::{Session, ValidatorSet},
     ValidatorSetsEvent,
   },
-  subxt::config::Header,
   Serai,
 };
 
@@ -38,9 +37,7 @@ serai_test!(
     // Make sure the genesis is as expected
     assert_eq!(
       serai
-        .get_new_set_events(
-          serai.get_block_by_number(0).await.unwrap().unwrap().header.hash().into()
-        )
+        .get_new_set_events(serai.get_block_by_number(0).await.unwrap().unwrap().hash())
         .await
         .unwrap(),
       [BITCOIN_NET_ID, ETHEREUM_NET_ID, MONERO_NET_ID]

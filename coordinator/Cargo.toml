@@ -14,12 +14,18 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+log = "0.4"
+
 blake2 = "0.10"
 
 frost = { package = "modular-frost", path = "../crypto/frost" }
 
+serai-db = { path = "../common/db" }
+
 processor-messages = { package = "processor-messages", path = "../processor/messages" }
 tributary = { package = "tributary-chain", path = "./tributary" }
+
+serai-client = { path = "../substrate/client", features = ["serai"] }
 
 tokio = { version = "1", features = ["full"] }
 

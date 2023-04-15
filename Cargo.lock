@@ -1305,10 +1305,12 @@ name = "coordinator"
 version = "0.1.0"
 dependencies = [
  "blake2",
+ "log",
  "modular-frost",
  "processor-messages",
  "rand_core 0.6.4",
  "serai-client",
+ "serai-db",
  "tokio",
  "tributary-chain",
 ]

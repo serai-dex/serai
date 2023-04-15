@@ -16,7 +16,7 @@ use subxt::{
     extrinsic_params::{BaseExtrinsicParams, BaseExtrinsicParamsBuilder},
   },
   tx::{Signer, Payload, TxClient},
-  rpc::types::ChainBlock,
+  rpc::types::{ChainBlock, ChainBlockExtrinsic},
   Config as SubxtConfig, OnlineClient,
 };
 
@@ -56,7 +56,32 @@ impl SubxtConfig for SeraiConfig {
   type ExtrinsicParams = BaseExtrinsicParams<SeraiConfig, Tip>;
 }
 
-pub type Block = ChainBlock<SeraiConfig>;
+#[derive(Debug)]
+pub struct Block(ChainBlock<SeraiConfig>);
+impl Block {
+  pub fn hash(&self) -> [u8; 32] {
+    self.0.header.hash().into()
+  }
+  pub fn number(&self) -> u64 {
+    self.0.header.number
+  }
+
+  pub fn header(&self) -> &Header {
+    &self.0.header
+  }
+  pub fn transactions(&self) -> &[ChainBlockExtrinsic] {
+    &self.0.extrinsics
+  }
+}
+
+impl Clone for Block {
+  fn clone(&self) -> Block {
+    Block(ChainBlock::<SeraiConfig> {
+      header: self.0.header.clone(),
+      extrinsics: self.0.extrinsics.clone(),
+    })
+  }
+}
 
 #[derive(Error, Debug)]
 pub enum SeraiError {
@@ -120,6 +145,19 @@ impl Serai {
     Ok(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?.into())
   }
 
+  pub async fn get_latest_block(&self) -> Result<Block, SeraiError> {
+    Ok(Block(
+      self
+        .0
+        .rpc()
+        .block(Some(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?))
+        .await
+        .map_err(SeraiError::RpcError)?
+        .ok_or(SeraiError::InvalidNode)?
+        .block,
+    ))
+  }
+
   // There is no provided method for this
   // TODO: Add one to Serai
   pub async fn is_finalized(&self, header: &Header) -> Result<Option<bool>, SeraiError> {
@@ -169,7 +207,7 @@ impl Serai {
       return Ok(None);
     }
 
-    Ok(Some(res.block))
+    Ok(Some(Block(res.block)))
   }
 
   // Ideally, this would be get_block_hash, not get_block_by_number
