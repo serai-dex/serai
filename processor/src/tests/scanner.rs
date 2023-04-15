@@ -70,7 +70,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   verify_event(new_scanner().await).await;
 
   // Acknowledge the block
-  assert_eq!(scanner.ack_block(keys.group_key(), block_id.clone()).await, outputs);
+  assert_eq!(scanner.ack_up_to_block(keys.group_key(), block_id.clone()).await, outputs);
 
   // There should be no more events
   assert!(timeout(Duration::from_secs(30), scanner.events.recv()).await.is_err());

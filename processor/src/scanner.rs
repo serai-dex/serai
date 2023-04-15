@@ -181,11 +181,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     key: &<C::Curve as Ciphersuite>::G,
     block: usize,
   ) -> Vec<C::Output> {
-    let new_key = txn.get(Self::scanned_block_key(key)).is_none();
     let outputs = Self::block(txn, block).and_then(|id| Self::outputs(txn, key, &id));
-    // Either this is a new key, with no outputs, or we're acknowledging this block
-    // If we're acknowledging it, we should have outputs available
-    assert_eq!(new_key, outputs.is_none());
     let outputs = outputs.unwrap_or(vec![]);
 
     // Mark all the outputs from this block as seen
@@ -199,7 +195,10 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     outputs
   }
   fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
-    let bytes = self.0.get(Self::scanned_block_key(&key)).unwrap_or(vec![0; 8]);
+    let bytes = self
+      .0
+      .get(Self::scanned_block_key(&key))
+      .expect("asking for latest scanned block of key which wasn't rotated to");
     u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
   }
 }
@@ -282,22 +281,30 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
   }
 
   /// Acknowledge having handled a block for a key.
-  pub async fn ack_block(
+  pub async fn ack_up_to_block(
     &self,
     key: <C::Curve as Ciphersuite>::G,
     id: <C::Block as Block<C>>::Id,
   ) -> Vec<C::Output> {
     let mut scanner = self.scanner.write().await;
     debug!("Block {} acknowledged", hex::encode(&id));
+
+    // Get the number for this block
     let number =
       scanner.db.block_number(&id).expect("main loop trying to operate on data we haven't scanned");
+    // Get the number of the last block we acknowledged
+    let prior = scanner.db.latest_scanned_block(key);
 
+    let mut outputs = vec![];
     let mut txn = scanner.db.0.txn();
-    let outputs = ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, number);
+    for number in (prior + 1) ..= number {
+      outputs.extend(ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, number));
+    }
+    // TODO: This likely needs to be atomic with the scheduler?
     txn.commit();
 
     for output in &outputs {
-      scanner.ram_outputs.remove(output.id().as_ref());
+      assert!(scanner.ram_outputs.remove(output.id().as_ref()));
     }
 
     outputs

@@ -173,20 +173,13 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
-    // Substrate acknwoledged the block, meaning it should be acted upon.
-    //
-    // This still needs to come from Substrate, not from the validator-chain, due to it mutating
-    // the scheduler, which the Substrate chain primarily does. To have two causes of mutation
-    // requires a definitive ordering, which isn't achievable when we have distinct consensus.
-    BlockAcknowledged { context: SubstrateContext, key: Vec<u8>, block: BlockHash },
-    Burns { context: SubstrateContext, burns: Vec<OutInstructionWithBalance> },
+    SubstrateBlock { context: SubstrateContext, key: Vec<u8>, burns: Vec<OutInstructionWithBalance> },
   }
 
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
       let context = match self {
-        CoordinatorMessage::BlockAcknowledged { context, .. } => context,
-        CoordinatorMessage::Burns { context, .. } => context,
+        CoordinatorMessage::SubstrateBlock { context, .. } => context,
       };
       Some(context.coin_latest_finalized_block)
     }

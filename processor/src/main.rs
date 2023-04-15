@@ -394,40 +394,22 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
 
           CoordinatorMessage::Substrate(msg) => {
             match msg {
-              // TODO: Merge this with Burns so we don't have two distinct scheduling actions
-              messages::substrate::CoordinatorMessage::BlockAcknowledged {
+              messages::substrate::CoordinatorMessage::SubstrateBlock {
                 context,
                 key: key_vec,
-                block
+                burns,
               } => {
+                let mut block_id = <C::Block as Block<C>>::Id::default();
+                block_id.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
+
                 let key =
                   <C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
-                let mut block_id = <C::Block as Block<C>>::Id::default();
-                block_id.as_mut().copy_from_slice(&block.0);
 
-                let plans = schedulers
-                  .get_mut(&key_vec)
-                  .expect("key we don't have a scheduler for acknowledged a block")
-                  .add_outputs(scanner.ack_block(key, block_id).await);
-
-                sign_plans(
-                  &mut main_db,
-                  &coin,
-                  &scanner,
-                  &mut schedulers,
-                  &signers,
-                  context,
-                  plans
-                ).await;
-              }
-
-              messages::substrate::CoordinatorMessage::Burns { context, burns } => {
-                // TODO2: Rewrite rotation documentation
-                let schedule_key = active_keys.last().expect("burn event despite no keys");
-                let scheduler = schedulers.get_mut(schedule_key.to_bytes().as_ref()).unwrap();
+                // We now have to acknowledge every block for this key up to the acknowledged block
+                let outputs = scanner.ack_up_to_block(key, block_id).await;
 
                 let mut payments = vec![];
-                for out in burns.clone() {
+                for out in burns {
                   let OutInstructionWithBalance {
                     instruction: OutInstruction { address, data },
                     balance,
@@ -441,7 +423,11 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                   }
                 }
 
-                let plans = scheduler.schedule(payments);
+                let plans = schedulers
+                  .get_mut(&key_vec)
+                  .expect("key we don't have a scheduler for acknowledged a block")
+                  .schedule(outputs, payments);
+
                 sign_plans(
                   &mut main_db,
                   &coin,

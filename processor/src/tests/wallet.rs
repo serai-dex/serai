@@ -49,16 +49,14 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   };
 
   let mut scheduler = Scheduler::new(key);
-  // Add these outputs, which should return no plans
-  assert!(scheduler.add_outputs(outputs.clone()).is_empty());
-
   let amount = 2 * C::DUST;
-  let plans = scheduler.schedule(vec![Payment { address: C::address(key), data: None, amount }]);
+  let plans = scheduler
+    .schedule(outputs.clone(), vec![Payment { address: C::address(key), data: None, amount }]);
   assert_eq!(
     plans,
     vec![Plan {
       key,
-      inputs: outputs,
+      inputs: outputs.clone(),
       payments: vec![Payment { address: C::address(key), data: None, amount }],
       change: Some(key),
     }]
@@ -91,6 +89,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   coin.mine_block().await;
   let block_number = coin.get_latest_block_number().await.unwrap();
   let block = coin.get_block(block_number).await.unwrap();
+  let first_outputs = outputs;
   let outputs = coin.get_outputs(&block, key).await.unwrap();
   assert_eq!(outputs.len(), 2);
   let amount = amount - tx.fee(&coin).await;
@@ -118,5 +117,8 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
 
   // Check the Scanner DB can reload the outputs
-  assert_eq!(scanner.ack_block(key, block.id()).await, outputs);
+  assert_eq!(
+    scanner.ack_up_to_block(key, block.id()).await,
+    [first_outputs, outputs].concat().to_vec()
+  );
 }

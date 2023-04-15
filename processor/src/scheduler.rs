@@ -108,9 +108,7 @@ impl<C: Coin> Scheduler<C> {
     Plan { key: self.key, inputs, payments, change: Some(self.key).filter(|_| change) }
   }
 
-  // When Substrate emits `Updates` for a coin, all outputs should be added up to the
-  // acknowledged block.
-  pub fn add_outputs(&mut self, mut utxos: Vec<C::Output>) -> Vec<Plan<C>> {
+  fn add_outputs(&mut self, mut utxos: Vec<C::Output>) -> Vec<Plan<C>> {
     log::info!("adding {} outputs", utxos.len());
 
     let mut txs = vec![];
@@ -139,14 +137,13 @@ impl<C: Coin> Scheduler<C> {
     }
 
     log::info!("{} planned TXs have had their required inputs confirmed", txs.len());
-
-    // Additionally call schedule in case these outputs enable fulfilling scheduled payments
-    txs.extend(self.schedule(vec![]));
     txs
   }
 
-  // Schedule a series of payments. This should be called after `add_outputs`.
-  pub fn schedule(&mut self, payments: Vec<Payment<C>>) -> Vec<Plan<C>> {
+  // Schedule a series of outputs/payments.
+  pub fn schedule(&mut self, utxos: Vec<C::Output>, payments: Vec<Payment<C>>) -> Vec<Plan<C>> {
+    let mut plans = self.add_outputs(utxos);
+
     log::info!("scheduling {} new payments", payments.len());
 
     // Add all new payments to the list of pending payments
@@ -157,7 +154,7 @@ impl<C: Coin> Scheduler<C> {
     // If we don't have UTXOs available, don't try to continue
     if self.utxos.is_empty() {
       log::info!("no utxos currently avilable");
-      return vec![];
+      return plans;
     }
 
     // Sort UTXOs so the highest valued ones are first
@@ -185,13 +182,12 @@ impl<C: Coin> Scheduler<C> {
       }
     }
 
-    let mut txs = vec![];
     for chunk in utxo_chunks.drain(..) {
       // TODO: While payments have their TXs' fees deducted from themselves, that doesn't hold here
       // We need to charge a fee before reporting incoming UTXOs to Substrate to cover aggregation
       // TXs
       log::debug!("aggregating a chunk of {} inputs", C::MAX_INPUTS);
-      txs.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: Some(self.key) })
+      plans.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: Some(self.key) })
     }
 
     // We want to use all possible UTXOs for all possible payments
@@ -220,17 +216,18 @@ impl<C: Coin> Scheduler<C> {
     // Now that we have the list of payments we can successfully handle right now, create the TX
     // for them
     if !executing.is_empty() {
-      txs.push(self.execute(utxos, executing));
+      plans.push(self.execute(utxos, executing));
     } else {
+      // If we don't have any payments to execute, save these UTXOs for later
       self.utxos.extend(utxos);
     }
 
     log::info!(
-      "created {} TXs containing {} payments to sign",
-      txs.len(),
+      "created {} plans containing {} payments to sign",
+      plans.len(),
       payments_at_start - self.payments.len(),
     );
-    txs
+    plans
   }
 
   // Note a branch output as having been created, with the amount it was actually created with,
