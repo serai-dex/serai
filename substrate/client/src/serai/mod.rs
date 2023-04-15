@@ -194,7 +194,7 @@ impl Serai {
       .map_err(SeraiError::RpcError)
   }
 
-  pub fn unsigned<P: 'static, C: Encode>(&self, call: &C) -> Result<Encoded, SeraiError> {
+  fn unsigned<P: 'static, C: Encode>(&self, call: &C) -> Result<Encoded, SeraiError> {
     // TODO: Should Serai purge the old transaction code AND set this to 0/1?
     const TRANSACTION_VERSION: u8 = 4;
 
