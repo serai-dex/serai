@@ -2,9 +2,9 @@ use serai_runtime::{validator_sets, ValidatorSets, Runtime};
 pub use validator_sets::primitives;
 use primitives::{ValidatorSet, ValidatorSetData, KeyPair};
 
-use subxt::tx::{self, DynamicTxPayload};
+use subxt::tx::Payload;
 
-use crate::{primitives::NetworkId, Serai, SeraiError, scale_value, scale_composite};
+use crate::{primitives::NetworkId, Serai, SeraiError, Composite, scale_value, scale_composite};
 
 const PALLET: &str = "ValidatorSets";
 
@@ -58,8 +58,8 @@ impl Serai {
       .await
   }
 
-  pub fn vote(network: NetworkId, key_pair: KeyPair) -> DynamicTxPayload<'static> {
-    tx::dynamic(
+  pub fn vote(network: NetworkId, key_pair: KeyPair) -> Payload<Composite<()>> {
+    Payload::new(
       PALLET,
       "vote",
       scale_composite(validator_sets::Call::<Runtime>::vote { network, key_pair }),

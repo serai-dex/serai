@@ -1,6 +1,9 @@
 use ::scale::Encode;
 use scale_info::{MetaType, TypeInfo, Registry, PortableRegistry};
-use subxt::ext::scale_value::{Composite, ValueDef, Value, scale};
+
+use subxt::ext::scale_value;
+pub(crate) use scale_value::{Composite, Value};
+use scale_value::{ValueDef, scale};
 
 pub(crate) fn scale_value<V: 'static + Encode + TypeInfo>(value: V) -> Value {
   let mut registry = Registry::new();

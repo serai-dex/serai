@@ -21,7 +21,7 @@ scale-info = { version = "2", optional = true }
 serai-runtime = { path = "../runtime", version = "0.1" }
 
 sp-core = { git = "https://github.com/serai-dex/substrate" }
-subxt = { version = "0.27", default-features = false, features = ["jsonrpsee-ws"], optional = true }
+subxt = { version = "0.28", default-features = false, features = ["jsonrpsee-ws"], optional = true }
 
 bitcoin = { version = "0.30", optional = true }
 

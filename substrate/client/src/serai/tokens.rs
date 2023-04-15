@@ -6,9 +6,9 @@ use serai_runtime::{
 pub use tokens::primitives;
 use primitives::OutInstruction;
 
-use subxt::tx::{self, DynamicTxPayload};
+use subxt::tx::Payload;
 
-use crate::{Serai, SeraiError, scale_value, scale_composite};
+use crate::{Serai, SeraiError, Composite, scale_value, scale_composite};
 
 const PALLET: &str = "Tokens";
 
@@ -54,8 +54,8 @@ impl Serai {
     ))
   }
 
-  pub fn burn(balance: Balance, instruction: OutInstruction) -> DynamicTxPayload<'static> {
-    tx::dynamic(
+  pub fn burn(balance: Balance, instruction: OutInstruction) -> Payload<Composite<()>> {
+    Payload::new(
       PALLET,
       "burn",
       scale_composite(tokens::Call::<Runtime>::burn { balance, instruction }),

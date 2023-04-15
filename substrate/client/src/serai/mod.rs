@@ -2,8 +2,7 @@ use thiserror::Error;
 
 use scale::{Encode, Decode};
 mod scale_value;
-pub(crate) use scale_value::{scale_value, scale_composite};
-use subxt::ext::scale_value::Value;
+pub(crate) use scale_value::{Value, Composite, scale_value, scale_composite};
 
 use sp_core::{Pair as PairTrait, sr25519::Pair};
 
@@ -16,7 +15,7 @@ use subxt::{
     substrate::{BlakeTwo256, SubstrateHeader},
     extrinsic_params::{BaseExtrinsicParams, BaseExtrinsicParamsBuilder},
   },
-  tx::{Signer, DynamicTxPayload, TxClient},
+  tx::{Signer, Payload, TxClient},
   rpc::types::ChainBlock,
   Config as SubxtConfig, OnlineClient,
 };
@@ -89,9 +88,7 @@ impl Serai {
     debug_assert!(storage.validate(&address).is_ok(), "invalid storage address");
 
     storage
-      .at(Some(block.into()))
-      .await
-      .map_err(SeraiError::RpcError)?
+      .at(block.into())
       .fetch(&address)
       .await
       .map_err(SeraiError::RpcError)?
@@ -105,8 +102,7 @@ impl Serai {
     filter: impl Fn(&E) -> bool,
   ) -> Result<Vec<E>, SeraiError> {
     let mut res = vec![];
-    for event in self.0.events().at(Some(block.into())).await.map_err(SeraiError::RpcError)?.iter()
-    {
+    for event in self.0.events().at(block.into()).await.map_err(SeraiError::RpcError)?.iter() {
       let event = event.map_err(|_| SeraiError::InvalidRuntime)?;
       if PalletInfo::index::<P>().unwrap() == usize::from(event.pallet_index()) {
         let mut with_variant: &[u8] =
@@ -198,17 +194,28 @@ impl Serai {
       .map_err(SeraiError::RpcError)
   }
 
-  pub fn unsigned(&self, payload: &DynamicTxPayload<'static>) -> Result<Encoded, SeraiError> {
-    TxClient::new(self.0.offline())
-      .create_unsigned(payload)
-      .map(|tx| Encoded(tx.into_encoded()))
-      .map_err(|_| SeraiError::InvalidRuntime)
+  pub fn unsigned<P: 'static, C: Encode>(&self, call: &C) -> Result<Encoded, SeraiError> {
+    // TODO: Should Serai purge the old transaction code AND set this to 0/1?
+    const TRANSACTION_VERSION: u8 = 4;
+
+    // Protocol version
+    let mut bytes = vec![TRANSACTION_VERSION];
+
+    // Pallet index
+    bytes.push(u8::try_from(PalletInfo::index::<P>().unwrap()).unwrap());
+    // Call
+    bytes.extend(call.encode());
+
+    // Prefix the length
+    let mut complete_bytes = scale::Compact(u32::try_from(bytes.len()).unwrap()).encode();
+    complete_bytes.extend(bytes);
+    Ok(Encoded(complete_bytes))
   }
 
   pub fn sign<S: Send + Sync + Signer<SeraiConfig>>(
     &self,
     signer: &S,
-    payload: &DynamicTxPayload<'static>,
+    payload: &Payload<Composite<()>>,
     nonce: u32,
     params: BaseExtrinsicParamsBuilder<SeraiConfig, Tip>,
   ) -> Result<Encoded, SeraiError> {

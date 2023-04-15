@@ -2,11 +2,9 @@ use serai_runtime::{in_instructions, InInstructions, Runtime};
 pub use in_instructions::primitives;
 use primitives::SignedBatch;
 
-use subxt::{tx, utils::Encoded};
+use subxt::utils::Encoded;
 
-use crate::{Serai, SeraiError, scale_composite};
-
-const PALLET: &str = "InInstructions";
+use crate::{Serai, SeraiError};
 
 pub type InInstructionsEvent = in_instructions::Event<Runtime>;
 
@@ -23,10 +21,6 @@ impl Serai {
   }
 
   pub fn execute_batch(&self, batch: SignedBatch) -> Result<Encoded, SeraiError> {
-    self.unsigned(&tx::dynamic(
-      PALLET,
-      "execute_batch",
-      scale_composite(in_instructions::Call::<Runtime>::execute_batch { batch }),
-    ))
+    self.unsigned::<InInstructions, _>(&in_instructions::Call::<Runtime>::execute_batch { batch })
   }
 }
