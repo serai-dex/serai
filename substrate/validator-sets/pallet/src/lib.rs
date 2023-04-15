@@ -64,27 +64,12 @@ pub mod pallet {
   pub type VoteCount<T: Config> =
     StorageMap<_, Blake2_128Concat, (ValidatorSet, KeyPair), u16, ValueQuery>;
 
-  #[pallet::genesis_build]
-  impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
-    fn build(&self) {
-      let mut participants = Vec::new();
-      for participant in self.participants.clone() {
-        participants.push((participant, self.bond));
-      }
-      let participants = BoundedVec::try_from(participants).unwrap();
-
-      for (id, network) in self.networks.clone() {
-        ValidatorSets::<T>::set(
-          ValidatorSet { session: Session(0), network: id },
-          Some(ValidatorSetData { bond: self.bond, network, participants: participants.clone() }),
-        );
-      }
-    }
-  }
-
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
+    NewSet {
+      set: ValidatorSet,
+    },
     Vote {
       voter: T::AccountId,
       set: ValidatorSet,
@@ -96,6 +81,26 @@ pub mod pallet {
       set: ValidatorSet,
       key_pair: KeyPair,
     },
+  }
+
+  #[pallet::genesis_build]
+  impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+    fn build(&self) {
+      let mut participants = Vec::new();
+      for participant in self.participants.clone() {
+        participants.push((participant, self.bond));
+      }
+      let participants = BoundedVec::try_from(participants).unwrap();
+
+      for (id, network) in self.networks.clone() {
+        let set = ValidatorSet { session: Session(0), network: id };
+        ValidatorSets::<T>::set(
+          set,
+          Some(ValidatorSetData { bond: self.bond, network, participants: participants.clone() }),
+        );
+        Pallet::<T>::deposit_event(Event::NewSet { set })
+      }
+    }
   }
 
   #[pallet::error]

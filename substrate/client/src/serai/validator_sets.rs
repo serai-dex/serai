@@ -11,6 +11,15 @@ const PALLET: &str = "ValidatorSets";
 pub type ValidatorSetsEvent = validator_sets::Event<Runtime>;
 
 impl Serai {
+  pub async fn get_new_set_events(
+    &self,
+    block: [u8; 32],
+  ) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
+    self
+      .events::<ValidatorSets, _>(block, |event| matches!(event, ValidatorSetsEvent::NewSet { .. }))
+      .await
+  }
+
   pub async fn get_vote_events(
     &self,
     block: [u8; 32],

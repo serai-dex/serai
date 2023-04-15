@@ -3,11 +3,14 @@ use rand_core::{RngCore, OsRng};
 use sp_core::{sr25519::Public, Pair};
 
 use serai_client::{
-  primitives::{BITCOIN_NET_ID, BITCOIN_NET, insecure_pair_from_name},
+  primitives::{
+    BITCOIN_NET_ID, ETHEREUM_NET_ID, MONERO_NET_ID, BITCOIN_NET, insecure_pair_from_name,
+  },
   validator_sets::{
     primitives::{Session, ValidatorSet},
     ValidatorSetsEvent,
   },
+  subxt::config::Header,
   Serai,
 };
 
@@ -33,6 +36,22 @@ serai_test!(
     let serai = serai().await;
 
     // Make sure the genesis is as expected
+    assert_eq!(
+      serai
+        .get_new_set_events(
+          serai.get_block_by_number(0).await.unwrap().unwrap().header.hash().into()
+        )
+        .await
+        .unwrap(),
+      [BITCOIN_NET_ID, ETHEREUM_NET_ID, MONERO_NET_ID]
+        .iter()
+        .copied()
+        .map(|network| ValidatorSetsEvent::NewSet {
+          set: ValidatorSet { session: Session(0), network }
+        })
+        .collect::<Vec<_>>(),
+    );
+
     let set_data = serai.get_validator_set(set).await.unwrap().unwrap();
     assert_eq!(set_data.network, *BITCOIN_NET);
     let participants_ref: &[_] = set_data.participants.as_ref();
