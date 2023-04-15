@@ -92,6 +92,15 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     self.block_number
   }
 
+  pub(crate) fn block(&self, block: &[u8; 32]) -> Option<Block<T>> {
+    self
+      .db
+      .as_ref()
+      .unwrap()
+      .get(self.block_key(block))
+      .map(|bytes| Block::<T>::read::<&[u8]>(&mut bytes.as_ref()).unwrap())
+  }
+
   pub(crate) fn commit(&self, block: &[u8; 32]) -> Option<Vec<u8>> {
     self.db.as_ref().unwrap().get(self.commit_key(block))
   }

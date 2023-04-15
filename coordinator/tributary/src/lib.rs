@@ -126,6 +126,16 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     Some(Self { network, synced_block, messages })
   }
 
+  pub fn tip(&self) -> [u8; 32] {
+    self.network.blockchain.read().unwrap().tip()
+  }
+  pub fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
+    self.network.blockchain.read().unwrap().block(hash)
+  }
+  pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
+    self.network.blockchain.read().unwrap().commit(hash)
+  }
+
   pub fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {
     self.network.blockchain.write().unwrap().provide_transaction(tx)
   }
