@@ -142,6 +142,10 @@ impl BlockTrait<Monero> for Block {
     self.0
   }
 
+  fn parent(&self) -> Self::Id {
+    self.1.header.previous
+  }
+
   fn median_fee(&self) -> Fee {
     // TODO
     Fee { per_weight: 80000, mask: 10000 }

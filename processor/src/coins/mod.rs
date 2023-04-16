@@ -175,6 +175,7 @@ pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
   // This is currently bounded to being 32-bytes.
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
+  fn parent(&self) -> Self::Id;
   fn median_fee(&self) -> C::Fee;
 }
 

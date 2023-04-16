@@ -395,12 +395,22 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             let block_id = block.id();
 
             if let Some(id) = ScannerDb::<C, D>::block(&scanner.db.0, i) {
-              // TODO2: Also check this block builds off the previous block
               if id != block_id {
                 panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));
               }
             } else {
               info!("Found new block: {}", hex::encode(&block_id));
+
+              if let Some(id) = ScannerDb::<C, D>::block(&scanner.db.0, i.saturating_sub(1)) {
+                if id != block.parent() {
+                  panic!(
+                    "block {} doesn't build off expected parent {}",
+                    hex::encode(block_id),
+                    hex::encode(id),
+                  );
+                }
+              }
+
               let mut txn = scanner.db.0.txn();
               ScannerDb::<C, D>::save_block(&mut txn, i, &block_id);
               txn.commit();

@@ -197,6 +197,13 @@ impl BlockTrait<Bitcoin> for Block {
     hash.reverse();
     hash
   }
+
+  fn parent(&self) -> Self::Id {
+    let mut hash = *self.header.prev_blockhash.as_raw_hash().as_byte_array();
+    hash.reverse();
+    hash
+  }
+
   fn median_fee(&self) -> Fee {
     // TODO
     Fee(20)
