@@ -41,6 +41,7 @@ serai_test!(
     let block = provide_batch(batch).await;
 
     let serai = serai().await;
+    assert_eq!(serai.get_latest_block_for_network(block, network).await.unwrap(), Some(block_hash));
     let batches = serai.get_batch_events(block).await.unwrap();
     assert_eq!(batches, vec![InInstructionsEvent::Batch { network, id, block: block_hash }]);
 

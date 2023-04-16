@@ -52,10 +52,16 @@ pub mod pallet {
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
-  // Latest block number agreed upon for a coin
+  // The amount of batches a network has issued, which is also the ID to use for the next batch
   #[pallet::storage]
-  #[pallet::getter(fn batch)]
+  #[pallet::getter(fn batches)]
   pub(crate) type Batches<T: Config> = StorageMap<_, Blake2_256, NetworkId, u32, OptionQuery>;
+
+  // The latest block a network has acknowledged as finalized
+  #[pallet::storage]
+  #[pallet::getter(fn last_block)]
+  pub(crate) type LatestBlock<T: Config> =
+    StorageMap<_, Blake2_256, NetworkId, BlockHash, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
     fn execute(instruction: InInstructionWithBalance) -> Result<(), ()> {
@@ -77,6 +83,7 @@ pub mod pallet {
       let mut batch = batch.batch;
 
       Batches::<T>::insert(batch.network, batch.id);
+      LatestBlock::<T>::insert(batch.network, batch.block);
       Self::deposit_event(Event::Batch {
         network: batch.network,
         id: batch.id,
