@@ -152,7 +152,11 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
-    SubstrateBlock { context: SubstrateContext, key: Vec<u8>, burns: Vec<OutInstructionWithBalance> },
+    SubstrateBlock {
+      context: SubstrateContext,
+      key: Vec<u8>,
+      burns: Vec<OutInstructionWithBalance>,
+    },
   }
 
   impl CoordinatorMessage {
