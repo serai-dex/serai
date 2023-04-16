@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use scale::{Encode, Decode};
+use scale::{Encode, Decode, Compact};
 mod scale_value;
 pub(crate) use scale_value::{Value, Composite, scale_value, scale_composite};
 
@@ -59,11 +59,45 @@ impl SubxtConfig for SeraiConfig {
 #[derive(Debug)]
 pub struct Block(ChainBlock<SeraiConfig>);
 impl Block {
+  fn new(block: ChainBlock<SeraiConfig>) -> Result<Block, SeraiError> {
+    for extrinsic in &block.extrinsics {
+      if extrinsic.0.len() < 3 {
+        Err(SeraiError::InvalidNode)?;
+      }
+    }
+    Ok(Block(block))
+  }
   pub fn hash(&self) -> [u8; 32] {
     self.0.header.hash().into()
   }
   pub fn number(&self) -> u64 {
     self.0.header.number
+  }
+
+  /// Returns the time of this block, set by its producer, as a unix timestamp.
+  pub fn time(&self) -> Result<u64, SeraiError> {
+    for extrinsic in &self.0.extrinsics {
+      // Inherent/unsigned
+      let inherent = (extrinsic.0[0] >> 7) == 0;
+
+      // To timestamp pallet
+      use serai_runtime::Timestamp;
+      let timestamp =
+        extrinsic.0[1] == u8::try_from(PalletInfo::index::<Timestamp>().unwrap()).unwrap();
+
+      // set call
+      let set = extrinsic.0[2] == 0;
+
+      if inherent && timestamp && set {
+        if extrinsic.0.len() < 4 {
+          Err(SeraiError::InvalidNode)?;
+        }
+        return Ok(
+          Compact::<u64>::decode(&mut &extrinsic.0[3 ..]).map_err(|_| SeraiError::InvalidNode)?.0,
+        );
+      }
+    }
+    Err(SeraiError::InvalidNode)
   }
 
   pub fn header(&self) -> &Header {
@@ -146,7 +180,7 @@ impl Serai {
   }
 
   pub async fn get_latest_block(&self) -> Result<Block, SeraiError> {
-    Ok(Block(
+    Block::new(
       self
         .0
         .rpc()
@@ -155,7 +189,7 @@ impl Serai {
         .map_err(SeraiError::RpcError)?
         .ok_or(SeraiError::InvalidNode)?
         .block,
-    ))
+    )
   }
 
   // There is no provided method for this
@@ -207,7 +241,7 @@ impl Serai {
       return Ok(None);
     }
 
-    Ok(Some(Block(res.block)))
+    Ok(Some(Block::new(res.block)?))
   }
 
   // Ideally, this would be get_block_hash, not get_block_by_number
