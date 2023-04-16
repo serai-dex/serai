@@ -29,8 +29,8 @@ group = "0.13"
 dalek-ff-group = { path = "../dalek-ff-group", version = "0.3", optional = true }
 
 elliptic-curve = { version = "0.13", features = ["hash2curve"], optional = true }
-p256 = { version = "0.13", features = ["arithmetic", "bits", "hash2curve"], optional = true }
-k256 = { version = "0.13", features = ["arithmetic", "bits", "hash2curve"], optional = true }
+p256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits", "hash2curve"], optional = true }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits", "hash2curve"], optional = true }
 
 minimal-ed448 = { path = "../ed448", version = "0.3", optional = true }
 

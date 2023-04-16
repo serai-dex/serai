@@ -23,7 +23,7 @@ sha2 = "0.10"
 sha3 = "0.10"
 
 group = "0.13"
-k256 = { version = "0.13", features = ["arithmetic", "ecdsa"] }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits", "ecdsa"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1", "tests"] }
 
 eyre = "0.6"

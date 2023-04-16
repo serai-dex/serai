@@ -33,7 +33,7 @@ hex-literal = "0.4"
 
 blake2 = "0.10"
 
-k256 = { version = "0.13", features = ["arithmetic", "bits"] }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"] }

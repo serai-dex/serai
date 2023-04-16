@@ -25,7 +25,7 @@ rand_core = { version = "0.6", optional = true }
 [dev-dependencies]
 rand_core = "0.6"
 
-k256 = { version = "0.13", features = ["bits"] }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
