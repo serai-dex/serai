@@ -1,7 +1,12 @@
 #![allow(unused_variables)]
+#![allow(unreachable_code)]
+#![allow(clippy::diverging_sub_expression)]
+
+use zeroize::Zeroizing;
+
+use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use serai_db::{Db, MemDb};
-
 use serai_client::Serai;
 
 mod db;
@@ -18,13 +23,19 @@ mod substrate;
 #[cfg(test)]
 mod tests;
 
-async fn run<D: Db, P: P2p>(db: D, p2p: P, serai: Serai) {
+async fn run<D: Db, P: P2p>(
+  db: D,
+  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  p2p: P,
+  serai: Serai,
+) {
   let mut db = MainDb::new(db);
 
-  let mut last_substrate_block = 0; // TODO: Load from DB
+  let mut last_substrate_block = db.last_substrate_block();
 
   loop {
-    match substrate::handle_new_blocks(&mut db, &p2p, &serai, &mut last_substrate_block).await {
+    match substrate::handle_new_blocks(&mut db, &key, &p2p, &serai, &mut last_substrate_block).await
+    {
       Ok(()) => {}
       Err(e) => log::error!("couldn't communicate with serai node: {e}"),
     }
@@ -38,6 +49,7 @@ async fn run<D: Db, P: P2p>(db: D, p2p: P, serai: Serai) {
 #[tokio::main]
 async fn main() {
   let db = MemDb::new(); // TODO
+  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
   let p2p = LocalP2p {}; // TODO
   let serai = || async {
     loop {
@@ -48,5 +60,5 @@ async fn main() {
       return serai;
     }
   };
-  run(db, p2p, serai().await).await
+  run(db, key, p2p, serai().await).await
 }
