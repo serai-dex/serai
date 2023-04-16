@@ -1,17 +1,12 @@
-use std::{
-  time::{Duration, SystemTime},
-  collections::HashMap,
-};
+use std::collections::HashMap;
 
-use rand_core::OsRng;
+use rand_core::{RngCore, OsRng};
 
 use group::GroupEncoding;
 use frost::{
   Participant, ThresholdKeys,
   dkg::tests::{key_gen, clone_without},
 };
-
-use tokio::time::timeout;
 
 use serai_db::MemDb;
 
@@ -36,35 +31,52 @@ pub async fn sign<C: Coin>(
     attempt: 0,
   };
 
-  let signing_set = actual_id.signing_set(&keys_txs[&Participant::new(1).unwrap()].0.params());
   let mut keys = HashMap::new();
   let mut txs = HashMap::new();
   for (i, (these_keys, this_tx)) in keys_txs.drain() {
-    assert_eq!(actual_id.signing_set(&these_keys.params()), signing_set);
     keys.insert(i, these_keys);
     txs.insert(i, this_tx);
   }
 
   let mut signers = HashMap::new();
+  let mut t = 0;
   for i in 1 ..= keys.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    signers.insert(i, Signer::new(MemDb::new(), coin.clone(), keys.remove(&i).unwrap()));
+    let keys = keys.remove(&i).unwrap();
+    t = keys.params().t();
+    signers.insert(i, Signer::new(MemDb::new(), coin.clone(), keys));
   }
+  drop(keys);
 
-  let start = SystemTime::now();
   for i in 1 ..= signers.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let (tx, eventuality) = txs.remove(&i).unwrap();
-    signers[&i].sign_transaction(actual_id.id, start, tx, eventuality).await;
+    signers.get_mut(&i).unwrap().sign_transaction(actual_id.id, tx, eventuality).await;
   }
 
+  let mut signing_set = vec![];
+  while signing_set.len() < usize::from(t) {
+    let candidate = Participant::new(
+      u16::try_from((OsRng.next_u64() % u64::try_from(signers.len()).unwrap()) + 1).unwrap(),
+    )
+    .unwrap();
+    if signing_set.contains(&candidate) {
+      continue;
+    }
+    signing_set.push(candidate);
+  }
+
+  // All participants should emit a preprocess
   let mut preprocesses = HashMap::new();
-  for i in &signing_set {
-    if let Some(SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess { id, preprocess })) =
-      signers.get_mut(i).unwrap().events.recv().await
+  for i in 1 ..= signers.len() {
+    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
+    if let SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess { id, preprocess }) =
+      signers.get_mut(&i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
-      preprocesses.insert(*i, preprocess);
+      if signing_set.contains(&i) {
+        preprocesses.insert(i, preprocess);
+      }
     } else {
       panic!("didn't get preprocess back");
     }
@@ -72,14 +84,16 @@ pub async fn sign<C: Coin>(
 
   let mut shares = HashMap::new();
   for i in &signing_set {
-    signers[i]
+    signers
+      .get_mut(i)
+      .unwrap()
       .handle(CoordinatorMessage::Preprocesses {
         id: actual_id.clone(),
         preprocesses: clone_without(&preprocesses, i),
       })
       .await;
-    if let Some(SignerEvent::ProcessorMessage(ProcessorMessage::Share { id, share })) =
-      signers.get_mut(i).unwrap().events.recv().await
+    if let SignerEvent::ProcessorMessage(ProcessorMessage::Share { id, share }) =
+      signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
       shares.insert(*i, share);
@@ -90,14 +104,16 @@ pub async fn sign<C: Coin>(
 
   let mut tx_id = None;
   for i in &signing_set {
-    signers[i]
+    signers
+      .get_mut(i)
+      .unwrap()
       .handle(CoordinatorMessage::Shares {
         id: actual_id.clone(),
         shares: clone_without(&shares, i),
       })
       .await;
-    if let Some(SignerEvent::SignedTransaction { id, tx }) =
-      signers.get_mut(i).unwrap().events.recv().await
+    if let SignerEvent::SignedTransaction { id, tx } =
+      signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id.id);
       if tx_id.is_none() {
@@ -109,20 +125,9 @@ pub async fn sign<C: Coin>(
     }
   }
 
-  // Make sure the signers not included didn't do anything
-  let mut excluded = (1 ..= signers.len())
-    .map(|i| Participant::new(u16::try_from(i).unwrap()).unwrap())
-    .collect::<Vec<_>>();
-  for i in signing_set {
-    excluded.remove(excluded.binary_search(&i).unwrap());
-  }
-  for i in excluded {
-    assert!(timeout(
-      Duration::from_secs(5),
-      signers.get_mut(&Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap().events.recv()
-    )
-    .await
-    .is_err());
+  // Make sure there's no events left
+  for (_, mut signer) in signers.drain() {
+    assert!(signer.events.pop_front().is_none());
   }
 
   tx_id.unwrap()

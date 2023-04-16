@@ -21,7 +21,7 @@ impl<C: Coin, D: Db> MainDb<C, D> {
   fn signing_key(key: &[u8]) -> Vec<u8> {
     Self::main_key(b"signing", key)
   }
-  pub fn save_signing(&mut self, key: &[u8], block_number: u64, time: u64, plan: &Plan<C>) {
+  pub fn save_signing(&mut self, key: &[u8], block_number: u64, plan: &Plan<C>) {
     let id = plan.id();
     // Creating a TXN here is arguably an anti-pattern, yet nothing here expects atomicity
     let mut txn = self.0.txn();
@@ -43,7 +43,6 @@ impl<C: Coin, D: Db> MainDb<C, D> {
 
     {
       let mut buf = block_number.to_le_bytes().to_vec();
-      buf.extend(&time.to_le_bytes());
       plan.write(&mut buf).unwrap();
       txn.put(Self::plan_key(&id), &buf);
     }
@@ -51,7 +50,7 @@ impl<C: Coin, D: Db> MainDb<C, D> {
     txn.commit();
   }
 
-  pub fn signing(&self, key: &[u8]) -> Vec<(u64, u64, Plan<C>)> {
+  pub fn signing(&self, key: &[u8]) -> Vec<(u64, Plan<C>)> {
     let signing = self.0.get(Self::signing_key(key)).unwrap_or(vec![]);
     let mut res = vec![];
 
@@ -61,10 +60,9 @@ impl<C: Coin, D: Db> MainDb<C, D> {
       let buf = self.0.get(Self::plan_key(id)).unwrap();
 
       let block_number = u64::from_le_bytes(buf[.. 8].try_into().unwrap());
-      let time = u64::from_le_bytes(buf[8 .. 16].try_into().unwrap());
       let plan = Plan::<C>::read::<&[u8]>(&mut &buf[16 ..]).unwrap();
       assert_eq!(id, &plan.id());
-      res.push((block_number, time, plan));
+      res.push((block_number, plan));
     }
 
     res

@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use std::{time::SystemTime, io, collections::HashMap};
+use std::{io, collections::HashMap};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -175,7 +175,6 @@ pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
   // This is currently bounded to being 32-bytes.
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
-  fn time(&self) -> SystemTime;
   fn median_fee(&self) -> C::Fee;
 }
 

@@ -1,9 +1,5 @@
 use core::fmt;
-use std::{
-  sync::Arc,
-  time::{SystemTime, Duration},
-  collections::HashMap,
-};
+use std::collections::{VecDeque, HashMap};
 
 use rand_core::OsRng;
 
@@ -21,25 +17,17 @@ use frost::{
 use frost_schnorrkel::Schnorrkel;
 
 use log::{info, debug, warn};
-use tokio::{
-  sync::{RwLock, mpsc},
-  time::sleep,
-};
 
 use serai_client::in_instructions::primitives::{Batch, SignedBatch};
 
 use messages::{sign::SignId, coordinator::*};
 use crate::{DbTxn, Db};
 
-const CHANNEL_MSG: &str = "SubstrateSigner handler was dropped. Shutting down?";
-
 #[derive(Debug)]
 pub enum SubstrateSignerEvent {
   ProcessorMessage(ProcessorMessage),
   SignedBatch(SignedBatch),
 }
-
-pub type SubstrateSignerEventChannel = mpsc::UnboundedReceiver<SubstrateSignerEvent>;
 
 #[derive(Debug)]
 struct SubstrateSignerDb<D: Db>(D);
@@ -78,12 +66,12 @@ pub struct SubstrateSigner<D: Db> {
 
   keys: ThresholdKeys<Ristretto>,
 
-  signable: HashMap<[u8; 32], (SystemTime, Batch)>,
+  signable: HashMap<[u8; 32], Batch>,
   attempt: HashMap<[u8; 32], u32>,
   preprocessing: HashMap<[u8; 32], AlgorithmSignMachine<Ristretto, Schnorrkel>>,
   signing: HashMap<[u8; 32], AlgorithmSignatureMachine<Ristretto, Schnorrkel>>,
 
-  events: mpsc::UnboundedSender<SubstrateSignerEvent>,
+  pub events: VecDeque<SubstrateSignerEvent>,
 }
 
 impl<D: Db> fmt::Debug for SubstrateSigner<D> {
@@ -96,18 +84,9 @@ impl<D: Db> fmt::Debug for SubstrateSigner<D> {
   }
 }
 
-#[derive(Debug)]
-pub struct SubstrateSignerHandle<D: Db> {
-  signer: Arc<RwLock<SubstrateSigner<D>>>,
-  pub events: SubstrateSignerEventChannel,
-}
-
 impl<D: Db> SubstrateSigner<D> {
-  #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D, keys: ThresholdKeys<Ristretto>) -> SubstrateSignerHandle<D> {
-    let (events_send, events_recv) = mpsc::unbounded_channel();
-
-    let signer = Arc::new(RwLock::new(SubstrateSigner {
+  pub fn new(db: D, keys: ThresholdKeys<Ristretto>) -> SubstrateSigner<D> {
+    SubstrateSigner {
       db: SubstrateSignerDb(db),
 
       keys,
@@ -117,33 +96,31 @@ impl<D: Db> SubstrateSigner<D> {
       preprocessing: HashMap::new(),
       signing: HashMap::new(),
 
-      events: events_send,
-    }));
-
-    tokio::spawn(SubstrateSigner::run(signer.clone()));
-
-    SubstrateSignerHandle { signer, events: events_recv }
+      events: VecDeque::new(),
+    }
   }
 
   fn verify_id(&self, id: &SignId) -> Result<(), ()> {
-    if !id.signing_set(&self.keys.params()).contains(&self.keys.params().i()) {
-      panic!("coordinator sent us preprocesses for a signing attempt we're not participating in");
-    }
-
     // Check the attempt lines up
     match self.attempt.get(&id.id) {
-      // If we don't have an attempt logged, it's because the coordinator is faulty OR
-      // because we rebooted
+      // If we don't have an attempt logged, it's because the coordinator is faulty OR because we
+      // rebooted
       None => {
-        warn!("not attempting {}. this is an error if we didn't reboot", hex::encode(id.id));
-        // Don't panic on the assumption we rebooted
+        warn!(
+          "not attempting batch {} #{}. this is an error if we didn't reboot",
+          hex::encode(id.id),
+          id.attempt
+        );
         Err(())?;
       }
       Some(attempt) => {
-        // This could be an old attempt, or it may be a 'future' attempt if we rebooted and
-        // our SystemTime wasn't monotonic, as it may be
         if attempt != &id.attempt {
-          debug!("sent signing data for a distinct attempt");
+          warn!(
+            "sent signing data for batch {} #{} yet we have attempt #{}",
+            hex::encode(id.id),
+            id.attempt,
+            attempt
+          );
           Err(())?;
         }
       }
@@ -152,16 +129,91 @@ impl<D: Db> SubstrateSigner<D> {
     Ok(())
   }
 
-  fn emit(&mut self, event: SubstrateSignerEvent) -> bool {
-    if self.events.send(event).is_err() {
-      info!("{}", CHANNEL_MSG);
-      false
-    } else {
-      true
+  async fn attempt(&mut self, id: [u8; 32], attempt: u32) {
+    // See above commentary for why this doesn't emit SignedBatch
+    if self.db.completed(id) {
+      return;
     }
+
+    // Check if we're already working on this attempt
+    if let Some(curr_attempt) = self.attempt.get(&id) {
+      if curr_attempt >= &attempt {
+        warn!(
+          "told to attempt {} #{} yet we're already working on {}",
+          hex::encode(id),
+          attempt,
+          curr_attempt
+        );
+        return;
+      }
+    }
+
+    // Start this attempt
+    if !self.signable.contains_key(&id) {
+      warn!("told to attempt signing a batch we aren't currently signing for");
+      return;
+    };
+
+    // Delete any existing machines
+    self.preprocessing.remove(&id);
+    self.signing.remove(&id);
+
+    // Update the attempt number
+    self.attempt.insert(id, attempt);
+
+    let id = SignId { key: self.keys.group_key().to_bytes().to_vec(), id, attempt };
+    info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
+
+    // If we reboot mid-sign, the current design has us abort all signs and wait for latter
+    // attempts/new signing protocols
+    // This is distinct from the DKG which will continue DKG sessions, even on reboot
+    // This is because signing is tolerant of failures of up to 1/3rd of the group
+    // The DKG requires 100% participation
+    // While we could apply similar tricks as the DKG (a seeded RNG) to achieve support for
+    // reboots, it's not worth the complexity when messing up here leaks our secret share
+    //
+    // Despite this, on reboot, we'll get told of active signing items, and may be in this
+    // branch again for something we've already attempted
+    //
+    // Only run if this hasn't already been attempted
+    if self.db.has_attempt(&id) {
+      warn!(
+        "already attempted {} #{}. this is an error if we didn't reboot",
+        hex::encode(id.id),
+        id.attempt
+      );
+      return;
+    }
+
+    let mut txn = self.db.0.txn();
+    SubstrateSignerDb::<D>::attempt(&mut txn, &id);
+    txn.commit();
+
+    // b"substrate" is a literal from sp-core
+    let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), self.keys.clone());
+
+    let (machine, preprocess) = machine.preprocess(&mut OsRng);
+    self.preprocessing.insert(id.id, machine);
+
+    // Broadcast our preprocess
+    self.events.push_back(SubstrateSignerEvent::ProcessorMessage(
+      ProcessorMessage::BatchPreprocess { id, preprocess: preprocess.serialize() },
+    ));
   }
 
-  async fn handle(&mut self, msg: CoordinatorMessage) {
+  pub async fn sign(&mut self, batch: Batch) {
+    if self.db.completed(batch.block.0) {
+      debug!("Sign batch order for ID we've already completed signing");
+      // See BatchSigned for commentary on why this simply returns
+      return;
+    }
+
+    let id = batch.block.0;
+    self.signable.insert(id, batch);
+    self.attempt(id, 0).await;
+  }
+
+  pub async fn handle(&mut self, msg: CoordinatorMessage) {
     match msg {
       CoordinatorMessage::BatchPreprocesses { id, mut preprocesses } => {
         if self.verify_id(&id).is_err() {
@@ -193,7 +245,7 @@ impl<D: Db> SubstrateSigner<D> {
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
-        let (machine, share) = match machine.sign(preprocesses, &self.signable[&id.id].1.encode()) {
+        let (machine, share) = match machine.sign(preprocesses, &self.signable[&id.id].encode()) {
           Ok(res) => res,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
@@ -202,10 +254,9 @@ impl<D: Db> SubstrateSigner<D> {
         // Broadcast our share
         let mut share_bytes = [0; 32];
         share_bytes.copy_from_slice(&share.serialize());
-        self.emit(SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare {
-          id,
-          share: share_bytes,
-        }));
+        self.events.push_back(SubstrateSignerEvent::ProcessorMessage(
+          ProcessorMessage::BatchShare { id, share: share_bytes },
+        ));
       }
 
       CoordinatorMessage::BatchShares { id, mut shares } => {
@@ -248,7 +299,7 @@ impl<D: Db> SubstrateSigner<D> {
         };
 
         let batch =
-          SignedBatch { batch: self.signable.remove(&id.id).unwrap().1, signature: sig.into() };
+          SignedBatch { batch: self.signable.remove(&id.id).unwrap(), signature: sig.into() };
 
         // Save the batch in case it's needed for recovery
         let mut txn = self.db.0.txn();
@@ -261,7 +312,11 @@ impl<D: Db> SubstrateSigner<D> {
         assert!(self.preprocessing.remove(&id.id).is_none());
         assert!(self.signing.remove(&id.id).is_none());
 
-        self.emit(SubstrateSignerEvent::SignedBatch(batch));
+        self.events.push_back(SubstrateSignerEvent::SignedBatch(batch));
+      }
+
+      CoordinatorMessage::BatchReattempt { id } => {
+        self.attempt(id.id, id.attempt).await;
       }
 
       CoordinatorMessage::BatchSigned { key: _, block } => {
@@ -280,136 +335,9 @@ impl<D: Db> SubstrateSigner<D> {
         // chain, hence why it's unnecessary to check it/back it up here
 
         // This also doesn't emit any further events since all mutation happen on the
-        // substrate::CoordinatorMessage::BlockAcknowledged message (which SignedBatch is meant to
+        // substrate::CoordinatorMessage::SubstrateBlock message (which SignedBatch is meant to
         // end up triggering)
       }
     }
-  }
-
-  // An async function, to be spawned on a task, to handle signing
-  async fn run(signer_arc: Arc<RwLock<Self>>) {
-    const SIGN_TIMEOUT: u64 = 30;
-
-    loop {
-      // Sleep until a timeout expires (or five seconds expire)
-      // Since this code start new sessions, it will delay any ordered signing sessions from
-      // starting for up to 5 seconds, hence why this number can't be too high (such as 30 seconds,
-      // the full timeout)
-      // This won't delay re-attempting any signing session however, nor will it block the
-      // sign_transaction function (since this doesn't hold any locks)
-      sleep({
-        let now = SystemTime::now();
-        let mut lowest = Duration::from_secs(5);
-        let signer = signer_arc.read().await;
-        for (id, (start, _)) in &signer.signable {
-          let until = if let Some(attempt) = signer.attempt.get(id) {
-            // Get when this attempt times out
-            (*start + Duration::from_secs(u64::from(attempt + 1) * SIGN_TIMEOUT))
-              .duration_since(now)
-              .unwrap_or(Duration::ZERO)
-          } else {
-            Duration::ZERO
-          };
-
-          if until < lowest {
-            lowest = until;
-          }
-        }
-        lowest
-      })
-      .await;
-
-      // Because a signing attempt has timed out (or five seconds has passed), check all
-      // sessions' timeouts
-      {
-        let mut signer = signer_arc.write().await;
-        let keys = signer.signable.keys().cloned().collect::<Vec<_>>();
-        for id in keys {
-          let (start, _) = &signer.signable[&id];
-          let start = *start;
-
-          let attempt = u32::try_from(
-            SystemTime::now().duration_since(start).unwrap_or(Duration::ZERO).as_secs() /
-              SIGN_TIMEOUT,
-          )
-          .unwrap();
-
-          // Check if we're already working on this attempt
-          if let Some(curr_attempt) = signer.attempt.get(&id) {
-            if curr_attempt >= &attempt {
-              continue;
-            }
-          }
-
-          // Delete any existing machines
-          signer.preprocessing.remove(&id);
-          signer.signing.remove(&id);
-
-          // Update the attempt number so we don't re-enter this conditional
-          signer.attempt.insert(id, attempt);
-
-          let id = SignId { key: signer.keys.group_key().to_bytes().to_vec(), id, attempt };
-          // Only preprocess if we're a signer
-          if !id.signing_set(&signer.keys.params()).contains(&signer.keys.params().i()) {
-            continue;
-          }
-          info!("selected to sign {} #{}", hex::encode(id.id), id.attempt);
-
-          // If we reboot mid-sign, the current design has us abort all signs and wait for latter
-          // attempts/new signing protocols
-          // This is distinct from the DKG which will continue DKG sessions, even on reboot
-          // This is because signing is tolerant of failures of up to 1/3rd of the group
-          // The DKG requires 100% participation
-          // While we could apply similar tricks as the DKG (a seeded RNG) to achieve support for
-          // reboots, it's not worth the complexity when messing up here leaks our secret share
-          //
-          // Despite this, on reboot, we'll get told of active signing items, and may be in this
-          // branch again for something we've already attempted
-          //
-          // Only run if this hasn't already been attempted
-          if signer.db.has_attempt(&id) {
-            warn!(
-              "already attempted {} #{}. this is an error if we didn't reboot",
-              hex::encode(id.id),
-              id.attempt
-            );
-            continue;
-          }
-
-          let mut txn = signer.db.0.txn();
-          SubstrateSignerDb::<D>::attempt(&mut txn, &id);
-          txn.commit();
-
-          // b"substrate" is a literal from sp-core
-          let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), signer.keys.clone());
-
-          let (machine, preprocess) = machine.preprocess(&mut OsRng);
-          signer.preprocessing.insert(id.id, machine);
-
-          // Broadcast our preprocess
-          if !signer.emit(SubstrateSignerEvent::ProcessorMessage(
-            ProcessorMessage::BatchPreprocess { id, preprocess: preprocess.serialize() },
-          )) {
-            return;
-          }
-        }
-      }
-    }
-  }
-}
-
-impl<D: Db> SubstrateSignerHandle<D> {
-  pub async fn sign(&self, start: SystemTime, batch: Batch) {
-    let mut signer = self.signer.write().await;
-    if signer.db.completed(batch.block.0) {
-      debug!("Sign batch order for ID we've already completed signing");
-      // See BatchSigned for commentary on why this simply returns
-      return;
-    }
-    signer.signable.insert(batch.block.0, (start, batch));
-  }
-
-  pub async fn handle(&self, msg: CoordinatorMessage) {
-    self.signer.write().await.handle(msg).await;
   }
 }

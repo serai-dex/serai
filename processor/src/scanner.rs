@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use std::{
   sync::Arc,
-  time::{SystemTime, Duration},
+  time::Duration,
   collections::{HashSet, HashMap},
 };
 
@@ -25,7 +25,6 @@ pub enum ScannerEvent<C: Coin> {
   Block {
     key: <C::Curve as Ciphersuite>::G,
     block: <C::Block as Block<C>>::Id,
-    time: SystemTime,
     batch: u32,
     outputs: Vec<C::Output>,
   },
@@ -464,47 +463,8 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             let batch = ScannerDb::<C, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
             txn.commit();
 
-            const TIME_TOLERANCE: u64 = 15;
-
-            let now = SystemTime::now();
-            let mut time = block.time();
-
-            // Block is older than the tolerance
-            // This isn't an issue, yet shows our daemon may have fallen behind/been disconnected
-            if now.duration_since(time).unwrap_or(Duration::ZERO) >
-              Duration::from_secs(TIME_TOLERANCE)
-            {
-              warn!(
-                "the time is {} and we only just received a block dated {}",
-                (now.duration_since(SystemTime::UNIX_EPOCH)).expect("now before epoch").as_secs(),
-                (time.duration_since(SystemTime::UNIX_EPOCH))
-                  .expect("block time before epoch")
-                  .as_secs(),
-              );
-            }
-
-            // If this block is in the future, either this server's clock is wrong OR the block's
-            // miner's clock is wrong. The latter is the problem
-            //
-            // This time is used to schedule signing sessions over the content of this block
-            // If it's in the future, the first attempt won't time out until this block is no
-            // longer in the future
-            //
-            // Since we don't need consensus, if this time is more than 15s in the future,
-            // set it to the local time
-            //
-            // As long as a supermajority of nodes set a time within ~15s of each other, this
-            // should be fine
-
-            // TODO2: Make more robust
-            if time.duration_since(now).unwrap_or(Duration::ZERO) >
-              Duration::from_secs(TIME_TOLERANCE)
-            {
-              time = now;
-            }
-
             // Send all outputs
-            if !scanner.emit(ScannerEvent::Block { key, block: block_id, time, batch, outputs }) {
+            if !scanner.emit(ScannerEvent::Block { key, block: block_id, batch, outputs }) {
               return;
             }
             // Write this number as scanned so we won't re-fire these outputs

@@ -122,7 +122,7 @@ pub async fn test_key_gen<C: Coin>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     if let KeyGenEvent::KeyConfirmed { activation_block, substrate_keys, coin_keys } = key_gen
       .handle(CoordinatorMessage::ConfirmKeyPair {
-        context: SubstrateContext { time: 0, coin_latest_finalized_block: BlockHash([0x11; 32]) },
+        context: SubstrateContext { coin_latest_finalized_block: BlockHash([0x11; 32]) },
         id: ID,
       })
       .await

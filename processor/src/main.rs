@@ -1,9 +1,6 @@
 use std::{
   env,
-  pin::Pin,
-  task::{Poll, Context},
-  future::Future,
-  time::{Duration, SystemTime},
+  time::Duration,
   collections::{VecDeque, HashMap},
 };
 
@@ -48,10 +45,10 @@ mod key_gen;
 use key_gen::{KeyGenEvent, KeyGen};
 
 mod signer;
-use signer::{SignerEvent, Signer, SignerHandle};
+use signer::{SignerEvent, Signer};
 
 mod substrate_signer;
-use substrate_signer::{SubstrateSignerEvent, SubstrateSigner, SubstrateSignerHandle};
+use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
 mod scanner;
 use scanner::{ScannerEvent, Scanner, ScannerHandle};
@@ -71,34 +68,6 @@ pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
     b"Serai DEX Additional Key",
     &[C::ID.as_bytes(), &k.to_le_bytes()].concat(),
   )
-}
-
-struct SignerMessageFuture<'a, C: Coin, D: Db>(&'a mut HashMap<Vec<u8>, SignerHandle<C, D>>);
-impl<'a, C: Coin, D: Db> Future for SignerMessageFuture<'a, C, D> {
-  type Output = (Vec<u8>, SignerEvent<C>);
-  fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-    for (key, signer) in self.0.iter_mut() {
-      match signer.events.poll_recv(ctx) {
-        Poll::Ready(event) => return Poll::Ready((key.clone(), event.unwrap())),
-        Poll::Pending => {}
-      }
-    }
-    Poll::Pending
-  }
-}
-
-struct SubstrateSignerMessageFuture<'a, D: Db>(&'a mut HashMap<Vec<u8>, SubstrateSignerHandle<D>>);
-impl<'a, D: Db> Future for SubstrateSignerMessageFuture<'a, D> {
-  type Output = (Vec<u8>, SubstrateSignerEvent);
-  fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-    for (key, signer) in self.0.iter_mut() {
-      match signer.events.poll_recv(ctx) {
-        Poll::Ready(event) => return Poll::Ready((key.clone(), event.unwrap())),
-        Poll::Pending => {}
-      }
-    }
-    Poll::Pending
-  }
 }
 
 async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
@@ -123,7 +92,7 @@ async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
 
 async fn prepare_send<C: Coin, D: Db>(
   coin: &C,
-  signer: &SignerHandle<C, D>,
+  signer: &Signer<C, D>,
   block_number: usize,
   fee: C::Fee,
   plan: Plan<C>,
@@ -152,13 +121,11 @@ async fn sign_plans<C: Coin, D: Db>(
   coin: &C,
   scanner: &ScannerHandle<C, D>,
   schedulers: &mut HashMap<Vec<u8>, Scheduler<C>>,
-  signers: &HashMap<Vec<u8>, SignerHandle<C, D>>,
+  signers: &mut HashMap<Vec<u8>, Signer<C, D>>,
   context: SubstrateContext,
   plans: Vec<Plan<C>>,
 ) {
   let mut plans = VecDeque::from(plans);
-
-  let start = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(context.time)).unwrap();
 
   let mut block_hash = <C::Block as Block<C>>::Id::default();
   block_hash.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
@@ -174,8 +141,9 @@ async fn sign_plans<C: Coin, D: Db>(
     info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
     let key = plan.key.to_bytes();
-    db.save_signing(key.as_ref(), block_number.try_into().unwrap(), context.time, &plan);
-    let (tx, branches) = prepare_send(coin, &signers[key.as_ref()], block_number, fee, plan).await;
+    db.save_signing(key.as_ref(), block_number.try_into().unwrap(), &plan);
+    let (tx, branches) =
+      prepare_send(coin, signers.get_mut(key.as_ref()).unwrap(), block_number, fee, plan).await;
 
     // TODO: If we reboot mid-sign_plans, for a DB-backed scheduler, these may be partially
     // executed
@@ -193,7 +161,7 @@ async fn sign_plans<C: Coin, D: Db>(
 
     if let Some((tx, eventuality)) = tx {
       scanner.register_eventuality(block_number, id, eventuality.clone()).await;
-      signers[key.as_ref()].sign_transaction(id, start, tx, eventuality).await;
+      signers.get_mut(key.as_ref()).unwrap().sign_transaction(id, tx, eventuality).await;
     }
   }
 }
@@ -253,13 +221,12 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
     // necessary
     substrate_signers.insert(substrate_key.to_bytes().to_vec(), substrate_signer);
 
-    let signer = Signer::new(raw_db.clone(), coin.clone(), coin_keys);
+    let mut signer = Signer::new(raw_db.clone(), coin.clone(), coin_keys);
 
     // Load any TXs being actively signed
     let key = key.to_bytes();
-    for (block_number, start, plan) in main_db.signing(key.as_ref()) {
+    for (block_number, plan) in main_db.signing(key.as_ref()) {
       let block_number = block_number.try_into().unwrap();
-      let start = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(start)).unwrap();
 
       let fee = get_fee(&coin, block_number).await;
 
@@ -274,7 +241,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
       scanner.register_eventuality(block_number, id, eventuality.clone()).await;
       // TODO: Reconsider if the Signer should have the eventuality, or if just the coin/scanner
       // should
-      signer.sign_transaction(id, start, tx, eventuality).await;
+      signer.sign_transaction(id, tx, eventuality).await;
     }
 
     signers.insert(key.as_ref().to_vec(), signer);
@@ -284,6 +251,59 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
   let mut last_coordinator_msg = None;
 
   loop {
+    // Check if the signers have events
+    // The signers will only have events after the following select executes, which will then
+    // trigger the loop again, hence why having the code here with no timer is fine
+    for (key, signer) in signers.iter_mut() {
+      while let Some(msg) = signer.events.pop_front() {
+        match msg {
+          SignerEvent::ProcessorMessage(msg) => {
+            coordinator.send(ProcessorMessage::Sign(msg)).await;
+          }
+
+          SignerEvent::SignedTransaction { id, tx } => {
+            // If we die after calling finish_signing, we'll never fire Completed
+            // TODO: Is that acceptable? Do we need to fire Completed before firing finish_signing?
+            main_db.finish_signing(key, id);
+            scanner.drop_eventuality(id).await;
+            coordinator
+              .send(ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
+                key: key.clone(),
+                id,
+                tx: tx.as_ref().to_vec(),
+              }))
+              .await;
+
+            // TODO
+            // 1) We need to stop signing whenever a peer informs us or the chain has an
+            //    eventuality
+            // 2) If a peer informed us of an eventuality without an outbound payment, stop
+            //    scanning the chain for it (or at least ack it's solely for sanity purposes?)
+            // 3) When the chain has an eventuality, if it had an outbound payment, report it up to
+            //    Substrate for logging purposes
+          }
+        }
+      }
+    }
+
+    for (key, signer) in substrate_signers.iter_mut() {
+      while let Some(msg) = signer.events.pop_front() {
+        match msg {
+          SubstrateSignerEvent::ProcessorMessage(msg) => {
+            coordinator.send(ProcessorMessage::Coordinator(msg)).await;
+          }
+          SubstrateSignerEvent::SignedBatch(batch) => {
+            coordinator
+              .send(ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
+                key: key.clone(),
+                batch,
+              }))
+              .await;
+          }
+        }
+      }
+    }
+
     tokio::select! {
       // This blocks the entire processor until it finishes handling this message
       // KeyGen specifically may take a notable amount of processing time
@@ -385,11 +405,11 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
           },
 
           CoordinatorMessage::Sign(msg) => {
-            signers[msg.key()].handle(msg).await;
+            signers.get_mut(msg.key()).unwrap().handle(msg).await;
           },
 
           CoordinatorMessage::Coordinator(msg) => {
-            substrate_signers[msg.key()].handle(msg).await;
+            substrate_signers.get_mut(msg.key()).unwrap().handle(msg).await;
           },
 
           CoordinatorMessage::Substrate(msg) => {
@@ -433,7 +453,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                   &coin,
                   &scanner,
                   &mut schedulers,
-                  &signers,
+                  &mut signers,
                   context,
                   plans
                 ).await;
@@ -447,7 +467,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
 
       msg = scanner.events.recv() => {
         match msg.unwrap() {
-          ScannerEvent::Block { key, block, time, batch, outputs } => {
+          ScannerEvent::Block { key, block, batch, outputs } => {
             let key = key.to_bytes().as_ref().to_vec();
 
             let mut block_hash = [0; 32];
@@ -484,7 +504,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
               }).collect()
             };
 
-            substrate_signers[&key].sign(time, batch).await;
+            substrate_signers.get_mut(&key).unwrap().sign(batch).await;
           },
 
           ScannerEvent::Completed(id, tx) => {
@@ -492,52 +512,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
             for (_, signer) in signers.iter_mut() {
               signer.eventuality_completion(id, &tx).await;
             }
-          },
-        }
-      },
-
-      (key, msg) = SubstrateSignerMessageFuture(&mut substrate_signers) => {
-        match msg {
-          SubstrateSignerEvent::ProcessorMessage(msg) => {
-            coordinator.send(ProcessorMessage::Coordinator(msg)).await;
-          },
-          SubstrateSignerEvent::SignedBatch(batch) => {
-            coordinator
-              .send(ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
-                key,
-                batch,
-              }))
-              .await;
-          },
-        }
-      },
-
-      (key, msg) = SignerMessageFuture(&mut signers) => {
-        match msg {
-          SignerEvent::ProcessorMessage(msg) => {
-            coordinator.send(ProcessorMessage::Sign(msg)).await;
-          },
-
-          SignerEvent::SignedTransaction { id, tx } => {
-            // If we die after calling finish_signing, we'll never fire Completed
-            // TODO: Is that acceptable? Do we need to fire Completed before firing finish_signing?
-            main_db.finish_signing(&key, id);
-            scanner.drop_eventuality(id).await;
-            coordinator
-              .send(ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
-                key: key.to_vec(),
-                id,
-                tx: tx.as_ref().to_vec()
-              }))
-              .await;
-
-            // TODO
-            // 1) We need to stop signing whenever a peer informs us or the chain has an
-            //    eventuality
-            // 2) If a peer informed us of an eventuality without an outbound payment, stop
-            //    scanning the chain for it (or at least ack it's solely for sanity purposes?)
-            // 3) When the chain has an eventuality, if it had an outbound payment, report it up to
-            //    Substrate for logging purposes
           },
         }
       },

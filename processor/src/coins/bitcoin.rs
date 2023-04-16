@@ -1,8 +1,4 @@
-use std::{
-  time::{SystemTime, Duration},
-  io,
-  collections::HashMap,
-};
+use std::{time::Duration, io, collections::HashMap};
 
 use async_trait::async_trait;
 
@@ -200,9 +196,6 @@ impl BlockTrait<Bitcoin> for Block {
     let mut hash = *self.block_hash().as_raw_hash().as_byte_array();
     hash.reverse();
     hash
-  }
-  fn time(&self) -> SystemTime {
-    SystemTime::UNIX_EPOCH + Duration::from_secs(self.header.time.into())
   }
   fn median_fee(&self) -> Fee {
     // TODO

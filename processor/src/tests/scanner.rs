@@ -43,16 +43,14 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   // Receive funds
   let block = coin.test_send(C::address(keys.group_key())).await;
   let block_id = block.id();
-  let block_time = block.time();
 
   // Verify the Scanner picked them up
   let verify_event = |mut scanner: ScannerHandle<C, MemDb>| async {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-        ScannerEvent::Block { key, block, time, batch, outputs } => {
+        ScannerEvent::Block { key, block, batch, outputs } => {
           assert_eq!(key, keys.group_key());
           assert_eq!(block, block_id);
-          assert_eq!(time, block_time);
           assert_eq!(batch, 0);
           assert_eq!(outputs.len(), 1);
           assert_eq!(outputs[0].kind(), OutputType::External);

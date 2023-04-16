@@ -1,9 +1,6 @@
-use std::{
-  time::{Duration, SystemTime},
-  collections::HashMap,
-};
+use std::collections::HashMap;
 
-use rand_core::OsRng;
+use rand_core::{RngCore, OsRng};
 
 use group::GroupEncoding;
 use frost::{
@@ -11,8 +8,6 @@ use frost::{
   Participant,
   dkg::tests::{key_gen, clone_without},
 };
-
-use tokio::time::timeout;
 
 use scale::Encode;
 use sp_application_crypto::{RuntimePublic, sr25519::Public};
@@ -53,29 +48,43 @@ async fn test_substrate_signer() {
     ],
   };
 
-  let signing_set = actual_id.signing_set(&keys[&participant_one].params());
-  for these_keys in keys.values() {
-    assert_eq!(actual_id.signing_set(&these_keys.params()), signing_set);
-  }
-
-  let start = SystemTime::now();
   let mut signers = HashMap::new();
+  let mut t = 0;
   for i in 1 ..= keys.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    let signer = SubstrateSigner::new(MemDb::new(), keys.remove(&i).unwrap());
-    signer.sign(start, batch.clone()).await;
+    let keys = keys.remove(&i).unwrap();
+    t = keys.params().t();
+    let mut signer = SubstrateSigner::new(MemDb::new(), keys);
+    signer.sign(batch.clone()).await;
     signers.insert(i, signer);
   }
+  drop(keys);
 
+  let mut signing_set = vec![];
+  while signing_set.len() < usize::from(t) {
+    let candidate = Participant::new(
+      u16::try_from((OsRng.next_u64() % u64::try_from(signers.len()).unwrap()) + 1).unwrap(),
+    )
+    .unwrap();
+    if signing_set.contains(&candidate) {
+      continue;
+    }
+    signing_set.push(candidate);
+  }
+
+  // All participants should emit a preprocess
   let mut preprocesses = HashMap::new();
-  for i in &signing_set {
-    if let Some(SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchPreprocess {
+  for i in 1 ..= signers.len() {
+    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
+    if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchPreprocess {
       id,
       preprocess,
-    })) = signers.get_mut(i).unwrap().events.recv().await
+    }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
-      preprocesses.insert(*i, preprocess);
+      if signing_set.contains(&i) {
+        preprocesses.insert(i, preprocess);
+      }
     } else {
       panic!("didn't get preprocess back");
     }
@@ -83,16 +92,16 @@ async fn test_substrate_signer() {
 
   let mut shares = HashMap::new();
   for i in &signing_set {
-    signers[i]
+    signers
+      .get_mut(i)
+      .unwrap()
       .handle(CoordinatorMessage::BatchPreprocesses {
         id: actual_id.clone(),
         preprocesses: clone_without(&preprocesses, i),
       })
       .await;
-    if let Some(SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare {
-      id,
-      share,
-    })) = signers.get_mut(i).unwrap().events.recv().await
+    if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare { id, share }) =
+      signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
       shares.insert(*i, share);
@@ -102,15 +111,17 @@ async fn test_substrate_signer() {
   }
 
   for i in &signing_set {
-    signers[i]
+    signers
+      .get_mut(i)
+      .unwrap()
       .handle(CoordinatorMessage::BatchShares {
         id: actual_id.clone(),
         shares: clone_without(&shares, i),
       })
       .await;
 
-    if let Some(SubstrateSignerEvent::SignedBatch(signed_batch)) =
-      signers.get_mut(i).unwrap().events.recv().await
+    if let SubstrateSignerEvent::SignedBatch(signed_batch) =
+      signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(signed_batch.batch, batch);
       assert!(Public::from_raw(actual_id.key.clone().try_into().unwrap())
@@ -120,19 +131,8 @@ async fn test_substrate_signer() {
     }
   }
 
-  // Make sure the signers not included didn't do anything
-  let mut excluded = (1 ..= signers.len())
-    .map(|i| Participant::new(u16::try_from(i).unwrap()).unwrap())
-    .collect::<Vec<_>>();
-  for i in signing_set {
-    excluded.remove(excluded.binary_search(&i).unwrap());
-  }
-  for i in excluded {
-    assert!(timeout(
-      Duration::from_secs(5),
-      signers.get_mut(&Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap().events.recv()
-    )
-    .await
-    .is_err());
+  // Make sure there's no events left
+  for (_, mut signer) in signers.drain() {
+    assert!(signer.events.pop_front().is_none());
   }
 }

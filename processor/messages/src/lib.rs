@@ -2,10 +2,6 @@ use std::collections::HashMap;
 
 use zeroize::Zeroize;
 
-use rand_core::{RngCore, SeedableRng};
-use rand_chacha::ChaCha8Rng;
-use transcript::{Transcript, RecommendedTranscript};
-
 use serde::{Serialize, Deserialize};
 
 use dkg::{Participant, ThresholdParams};
@@ -17,7 +13,6 @@ use validator_sets_primitives::ValidatorSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
-  pub time: u64,
   pub coin_latest_finalized_block: BlockHash,
 }
 
@@ -73,35 +68,14 @@ pub mod sign {
     pub attempt: u32,
   }
 
-  impl SignId {
-    /// Determine a signing set for a given signing session.
-    // TODO: Replace with ROAST or the first available group of signers.
-    // https://github.com/serai-dex/serai/issues/163
-    pub fn signing_set(&self, params: &ThresholdParams) -> Vec<Participant> {
-      let mut transcript = RecommendedTranscript::new(b"SignId signing_set");
-      transcript.domain_separate(b"SignId");
-      transcript.append_message(b"key", &self.key);
-      transcript.append_message(b"id", self.id);
-      transcript.append_message(b"attempt", self.attempt.to_le_bytes());
-
-      let mut candidates =
-        (1 ..= params.n()).map(|i| Participant::new(i).unwrap()).collect::<Vec<_>>();
-      let mut rng = ChaCha8Rng::from_seed(transcript.rng_seed(b"signing_set"));
-      while candidates.len() > params.t().into() {
-        candidates.swap_remove(
-          usize::try_from(rng.next_u64() % u64::try_from(candidates.len()).unwrap()).unwrap(),
-        );
-      }
-      candidates
-    }
-  }
-
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     // Received preprocesses for the specified signing protocol.
     Preprocesses { id: SignId, preprocesses: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified signing protocol.
     Shares { id: SignId, shares: HashMap<Participant, Vec<u8>> },
+    // Re-attempt a signing protocol.
+    Reattempt { id: SignId },
     // Completed a signing protocol already.
     Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
@@ -125,6 +99,7 @@ pub mod sign {
       match self {
         CoordinatorMessage::Preprocesses { id, .. } => &id.key,
         CoordinatorMessage::Shares { id, .. } => &id.key,
+        CoordinatorMessage::Reattempt { id } => &id.key,
         CoordinatorMessage::Completed { key, .. } => key,
       }
     }
@@ -139,6 +114,8 @@ pub mod coordinator {
     // Uses Vec<u8> instead of [u8; 64] since serde Deserialize isn't implemented for [u8; 64]
     BatchPreprocesses { id: SignId, preprocesses: HashMap<Participant, Vec<u8>> },
     BatchShares { id: SignId, shares: HashMap<Participant, [u8; 32]> },
+    // Re-attempt a batch signing protocol.
+    BatchReattempt { id: SignId },
     // Needed so a client which didn't participate in signing can still realize signing completed
     BatchSigned { key: Vec<u8>, block: BlockHash },
   }
@@ -148,6 +125,7 @@ pub mod coordinator {
       Some(match self {
         CoordinatorMessage::BatchPreprocesses { id, .. } => BlockHash(id.id),
         CoordinatorMessage::BatchShares { id, .. } => BlockHash(id.id),
+        CoordinatorMessage::BatchReattempt { id } => BlockHash(id.id),
         CoordinatorMessage::BatchSigned { block, .. } => *block,
       })
     }
@@ -156,6 +134,7 @@ pub mod coordinator {
       match self {
         CoordinatorMessage::BatchPreprocesses { id, .. } => &id.key,
         CoordinatorMessage::BatchShares { id, .. } => &id.key,
+        CoordinatorMessage::BatchReattempt { id } => &id.key,
         CoordinatorMessage::BatchSigned { key, .. } => key,
       }
     }

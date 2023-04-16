@@ -6637,10 +6637,7 @@ name = "processor-messages"
 version = "0.1.0"
 dependencies = [
  "dkg",
- "flexible-transcript",
  "in-instructions-primitives",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
  "serai-primitives",
  "serde",
  "tokens-primitives",
