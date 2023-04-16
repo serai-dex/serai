@@ -14,10 +14,14 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-log = "0.4"
+async-trait = "0.1"
+
+zeroize = "^1.5"
 
 blake2 = "0.10"
 
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
+ciphersuite = { path = "../crypto/ciphersuite" }
 frost = { package = "modular-frost", path = "../crypto/frost" }
 
 serai-db = { path = "../common/db" }
@@ -27,6 +31,7 @@ tributary = { package = "tributary-chain", path = "./tributary" }
 
 serai-client = { path = "../substrate/client", features = ["serai"] }
 
+log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
