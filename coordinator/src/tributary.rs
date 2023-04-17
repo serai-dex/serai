@@ -1,13 +1,28 @@
 use std::{io, collections::HashMap};
 
 use blake2::{Digest, Blake2s256};
+use transcript::{Transcript, RecommendedTranscript};
 
 use frost::Participant;
 
+use serai_client::validator_sets::primitives::ValidatorSet;
+
 #[rustfmt::skip]
 use tributary::{
-  ReadWrite, Signed, TransactionError, TransactionKind, Transaction as TransactionTrait
+  ReadWrite, Signed, TransactionError, TransactionKind, Transaction as TransactionTrait,
 };
+
+pub fn genesis(serai_block: [u8; 32], set: ValidatorSet) -> [u8; 32] {
+  // Calculate the genesis for this Tributary
+  let mut genesis = RecommendedTranscript::new(b"Serai Tributary Genesis");
+  // This locks it to a specific Serai chain
+  genesis.append_message(b"serai_block", serai_block);
+  genesis.append_message(b"session", set.session.0.to_le_bytes());
+  genesis.append_message(b"network", set.network.0.to_le_bytes());
+  let genesis = genesis.challenge(b"genesis");
+  let genesis_ref: &[u8] = genesis.as_ref();
+  genesis_ref[.. 32].try_into().unwrap()
+}
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignData {
