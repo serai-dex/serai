@@ -2,12 +2,16 @@
 #![allow(unreachable_code)]
 #![allow(clippy::diverging_sub_expression)]
 
+use std::time::Duration;
+
 use zeroize::Zeroizing;
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use serai_db::{Db, MemDb};
 use serai_client::Serai;
+
+use tokio::time::sleep;
 
 mod db;
 pub use db::*;
@@ -33,16 +37,26 @@ async fn run<D: Db, P: P2p>(
 
   let mut last_substrate_block = db.last_substrate_block();
 
-  loop {
-    match substrate::handle_new_blocks(&mut db, &key, &p2p, &serai, &mut last_substrate_block).await
-    {
-      Ok(()) => {}
-      Err(e) => log::error!("couldn't communicate with serai node: {e}"),
+  tokio::spawn(async move {
+    loop {
+      match substrate::handle_new_blocks(&mut db, &key, &p2p, &serai, &mut last_substrate_block)
+        .await
+      {
+        Ok(()) => {}
+        Err(e) => {
+          log::error!("couldn't communicate with serai node: {e}");
+          sleep(Duration::from_secs(5)).await;
+        }
+      }
     }
+  });
 
+  loop {
     // Handle all messages from tributaries
 
     // Handle all messages from processors
+
+    todo!()
   }
 }
 
