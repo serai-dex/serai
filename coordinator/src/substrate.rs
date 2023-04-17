@@ -117,7 +117,7 @@ async fn handle_key_gen<D: Db, Pro: Processor>(
     // TODO: Check how the processor handles thi being fired multiple times
     processor
       .send(CoordinatorMessage::KeyGen(
-        processor_messages::key_gen::CoordinatorMessage::ConfirmKeyPair {
+        processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
           context: SubstrateContext {
             coin_latest_finalized_block: serai
               .get_latest_block_for_network(block.hash(), set.network)

@@ -16,18 +16,15 @@ use frost::{
 use log::info;
 
 use serai_client::{primitives::BlockHash, validator_sets::primitives::ValidatorSet};
-use messages::key_gen::*;
+use messages::{SubstrateContext, key_gen::*};
 
 use crate::{Get, DbTxn, Db, coins::Coin};
 
 #[derive(Debug)]
-pub enum KeyGenEvent<C: Ciphersuite> {
-  KeyConfirmed {
-    activation_block: BlockHash,
-    substrate_keys: ThresholdKeys<Ristretto>,
-    coin_keys: ThresholdKeys<C>,
-  },
-  ProcessorMessage(ProcessorMessage),
+pub struct KeyConfirmed<C: Ciphersuite> {
+  pub activation_block: BlockHash,
+  pub substrate_keys: ThresholdKeys<Ristretto>,
+  pub coin_keys: ThresholdKeys<C>,
 }
 
 #[derive(Clone, Debug)]
@@ -145,7 +142,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     self.db.keys(key)
   }
 
-  pub async fn handle(&mut self, msg: CoordinatorMessage) -> KeyGenEvent<C::Curve> {
+  pub async fn handle(&mut self, msg: CoordinatorMessage) -> ProcessorMessage {
     let context = |id: &KeyGenId| {
       // TODO2: Also embed the chain ID/genesis block
       format!(
@@ -192,7 +189,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         serialized.extend(commitments.1.serialize());
         self.active_commit.insert(id.set, machines);
 
-        KeyGenEvent::ProcessorMessage(ProcessorMessage::Commitments { id, commitments: serialized })
+        ProcessorMessage::Commitments { id, commitments: serialized }
       }
 
       CoordinatorMessage::Commitments { id, commitments } => {
@@ -263,7 +260,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         KeyGenDb::<C, D>::save_commitments(&mut txn, &id, &commitments);
         txn.commit();
 
-        KeyGenEvent::ProcessorMessage(ProcessorMessage::Shares { id, shares })
+        ProcessorMessage::Shares { id, shares }
       }
 
       CoordinatorMessage::Shares { id, shares } => {
@@ -346,31 +343,35 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
 
         let mut coin_keys = ThresholdKeys::new(coin_keys);
         C::tweak_keys(&mut coin_keys);
-        KeyGenEvent::ProcessorMessage(ProcessorMessage::GeneratedKeyPair {
+        ProcessorMessage::GeneratedKeyPair {
           id,
           substrate_key: substrate_keys.group_key().to_bytes(),
           coin_key: coin_keys.group_key().to_bytes().as_ref().to_vec(),
-        })
-      }
-
-      CoordinatorMessage::ConfirmKeyPair { context, id } => {
-        let mut txn = self.db.0.txn();
-        let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(&mut txn, &id);
-        txn.commit();
-
-        info!(
-          "Confirmed key pair {} {} from {:?}",
-          hex::encode(substrate_keys.group_key().to_bytes()),
-          hex::encode(coin_keys.group_key().to_bytes()),
-          id
-        );
-
-        KeyGenEvent::KeyConfirmed {
-          activation_block: context.coin_latest_finalized_block,
-          substrate_keys,
-          coin_keys,
         }
       }
+    }
+  }
+
+  pub async fn confirm(
+    &mut self,
+    context: SubstrateContext,
+    id: KeyGenId,
+  ) -> KeyConfirmed<C::Curve> {
+    let mut txn = self.db.0.txn();
+    let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(&mut txn, &id);
+    txn.commit();
+
+    info!(
+      "Confirmed key pair {} {} from {:?}",
+      hex::encode(substrate_keys.group_key().to_bytes()),
+      hex::encode(coin_keys.group_key().to_bytes()),
+      id
+    );
+
+    KeyConfirmed {
+      activation_block: context.coin_latest_finalized_block,
+      substrate_keys,
+      coin_keys,
     }
   }
 }

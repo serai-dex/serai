@@ -33,17 +33,11 @@ pub mod key_gen {
     Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
-    // Confirm a key pair.
-    ConfirmKeyPair { context: SubstrateContext, id: KeyGenId },
   }
 
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
-      if let CoordinatorMessage::ConfirmKeyPair { context, .. } = self {
-        Some(context.coin_latest_finalized_block)
-      } else {
-        None
-      }
+      None
     }
   }
 
@@ -152,6 +146,10 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
+    ConfirmKeyPair {
+      context: SubstrateContext,
+      id: key_gen::KeyGenId,
+    },
     SubstrateBlock {
       context: SubstrateContext,
       key: Vec<u8>,
@@ -162,6 +160,7 @@ pub mod substrate {
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
       let context = match self {
+        CoordinatorMessage::ConfirmKeyPair { context, .. } => context,
         CoordinatorMessage::SubstrateBlock { context, .. } => context,
       };
       Some(context.coin_latest_finalized_block)

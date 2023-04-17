@@ -42,7 +42,7 @@ use coins::Bitcoin;
 use coins::Monero;
 
 mod key_gen;
-use key_gen::{KeyGenEvent, KeyGen};
+use key_gen::{KeyConfirmed, KeyGen};
 
 mod signer;
 use signer::{SignerEvent, Signer};
@@ -288,11 +288,24 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
 
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
-      match tributary_mutable.key_gen.handle(msg).await {
-        // This should only occur when Substrate confirms a key, enabling access of
-        // substrate_mutable
-        // TODO: Move this under Substrate accordingly
-        KeyGenEvent::KeyConfirmed { activation_block, substrate_keys, coin_keys } => {
+      // TODO: This may be fired multiple times. What's our plan for that?
+      coordinator.send(ProcessorMessage::KeyGen(tributary_mutable.key_gen.handle(msg).await)).await;
+    }
+
+    CoordinatorMessage::Sign(msg) => {
+      tributary_mutable.signers.get_mut(msg.key()).unwrap().handle(msg).await;
+    }
+
+    CoordinatorMessage::Coordinator(msg) => {
+      tributary_mutable.substrate_signers.get_mut(msg.key()).unwrap().handle(msg).await;
+    }
+
+    CoordinatorMessage::Substrate(msg) => {
+      match msg {
+        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, id } => {
+          // See TributaryMutable's struct definition for why this block is safe
+          let KeyConfirmed { activation_block, substrate_keys, coin_keys } =
+            tributary_mutable.key_gen.confirm(context, id).await;
           tributary_mutable.substrate_signers.insert(
             substrate_keys.group_key().to_bytes().to_vec(),
             SubstrateSigner::new(raw_db.clone(), substrate_keys),
@@ -312,29 +325,13 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           substrate_mutable
             .schedulers
             .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
+
           tributary_mutable.signers.insert(
             key.to_bytes().as_ref().to_vec(),
             Signer::new(raw_db.clone(), coin.clone(), coin_keys),
           );
         }
 
-        // TODO: This may be fired multiple times. What's our plan for that?
-        KeyGenEvent::ProcessorMessage(msg) => {
-          coordinator.send(ProcessorMessage::KeyGen(msg)).await;
-        }
-      }
-    }
-
-    CoordinatorMessage::Sign(msg) => {
-      tributary_mutable.signers.get_mut(msg.key()).unwrap().handle(msg).await;
-    }
-
-    CoordinatorMessage::Coordinator(msg) => {
-      tributary_mutable.substrate_signers.get_mut(msg.key()).unwrap().handle(msg).await;
-    }
-
-    CoordinatorMessage::Substrate(msg) => {
-      match msg {
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
           key: key_vec,
