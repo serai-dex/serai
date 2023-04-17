@@ -16,21 +16,24 @@ use tokio::time::sleep;
 mod db;
 pub use db::*;
 
-mod transaction;
-pub use transaction::Transaction as TributaryTransaction;
+pub mod tributary;
 
 mod p2p;
 pub use p2p::*;
+
+pub mod processor;
+use processor::Processor;
 
 mod substrate;
 
 #[cfg(test)]
 mod tests;
 
-async fn run<D: Db, P: P2p>(
+async fn run<D: Db, Pro: Processor, P: P2p>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: P,
+  mut processor: Pro,
   serai: Serai,
 ) {
   let mut db = MainDb::new(db);
@@ -39,8 +42,15 @@ async fn run<D: Db, P: P2p>(
 
   tokio::spawn(async move {
     loop {
-      match substrate::handle_new_blocks(&mut db, &key, &p2p, &serai, &mut last_substrate_block)
-        .await
+      match substrate::handle_new_blocks(
+        &mut db,
+        &key,
+        &p2p,
+        &mut processor,
+        &serai,
+        &mut last_substrate_block,
+      )
+      .await
       {
         Ok(()) => {}
         Err(e) => {
@@ -63,16 +73,21 @@ async fn run<D: Db, P: P2p>(
 #[tokio::main]
 async fn main() {
   let db = MemDb::new(); // TODO
+
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
   let p2p = LocalP2p {}; // TODO
+
+  let processor = processor::MemProcessor::new(); // TODO
+
   let serai = || async {
     loop {
       let Ok(serai) = Serai::new("ws://127.0.0.1:9944").await else {
         log::error!("couldn't connect to the Serai node");
+        sleep(Duration::from_secs(5)).await;
         continue
       };
       return serai;
     }
   };
-  run(db, key, p2p, serai().await).await
+  run(db, key, p2p, processor, serai().await).await
 }
