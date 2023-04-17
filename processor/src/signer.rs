@@ -144,7 +144,8 @@ impl<C: Coin, D: Db> Signer<C, D> {
     // Check the attempt lines up
     match self.attempt.get(&id.id) {
       // If we don't have an attempt logged, it's because the coordinator is faulty OR because we
-      // rebooted
+      // rebooted OR we detected the signed transaction on chain, so there's notable network
+      // latency/a malicious validator
       None => {
         warn!(
           "not attempting {} #{}. this is an error if we didn't reboot",

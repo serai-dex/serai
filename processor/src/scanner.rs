@@ -240,7 +240,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
   }
 
   pub async fn register_eventuality(
-    &self,
+    &mut self,
     block_number: usize,
     id: [u8; 32],
     eventuality: C::Eventuality,
@@ -248,7 +248,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     self.scanner.write().await.eventualities.register(block_number, id, eventuality)
   }
 
-  pub async fn drop_eventuality(&self, id: [u8; 32]) {
+  pub async fn drop_eventuality(&mut self, id: [u8; 32]) {
     self.scanner.write().await.eventualities.drop(id);
   }
 
@@ -259,7 +259,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
   /// If a key has been prior set, both keys will be scanned for as detailed in the Multisig
   /// documentation. The old key will eventually stop being scanned for, leaving just the
   /// updated-to key.
-  pub async fn rotate_key(&self, activation_number: usize, key: <C::Curve as Ciphersuite>::G) {
+  pub async fn rotate_key(&mut self, activation_number: usize, key: <C::Curve as Ciphersuite>::G) {
     let mut scanner = self.scanner.write().await;
     if !scanner.keys.is_empty() {
       // Protonet will have a single, static validator set
@@ -281,7 +281,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
 
   /// Acknowledge having handled a block for a key.
   pub async fn ack_up_to_block(
-    &self,
+    &mut self,
     key: <C::Curve as Ciphersuite>::G,
     id: <C::Block as Block<C>>::Id,
   ) -> Vec<C::Output> {

@@ -27,7 +27,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let first = Arc::new(Mutex::new(true));
   let db = MemDb::new();
   let new_scanner = || async {
-    let (scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
+    let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
     let mut first = first.lock().unwrap();
     if *first {
       assert!(active_keys.is_empty());
