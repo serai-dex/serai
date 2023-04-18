@@ -28,6 +28,7 @@ pub mod key_gen {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
+    // TODO: Should this be moved under Substrate?
     GenerateKey { id: KeyGenId, params: ThresholdParams },
     // Received commitments for the specified key generation protocol.
     Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
