@@ -13,6 +13,7 @@ use validator_sets_primitives::{ValidatorSet, KeyPair};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
+  pub serai_time: u64,
   pub coin_latest_finalized_block: BlockHash,
 }
 
@@ -181,12 +182,19 @@ pub enum CoordinatorMessage {
 
 impl CoordinatorMessage {
   pub fn required_block(&self) -> Option<BlockHash> {
-    match self {
+    let required = match self {
       CoordinatorMessage::KeyGen(msg) => msg.required_block(),
       CoordinatorMessage::Sign(msg) => msg.required_block(),
       CoordinatorMessage::Coordinator(msg) => msg.required_block(),
       CoordinatorMessage::Substrate(msg) => msg.required_block(),
+    };
+
+    // 0 is used when Serai hasn't acknowledged *any* block for this network, which also means
+    // there's no need to wait for the block in question
+    if required == Some(BlockHash([0; 32])) {
+      return None;
     }
+    required
   }
 }
 

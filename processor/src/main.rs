@@ -70,24 +70,40 @@ pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
   )
 }
 
-async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
+async fn get_latest_block_number<C: Coin>(coin: &C) -> usize {
   loop {
-    // TODO2: Use an fee representative of several blocks
-    match coin.get_block(block_number).await {
-      Ok(block) => {
-        return block.median_fee();
+    match coin.get_latest_block_number().await {
+      Ok(number) => {
+        return number;
       }
       Err(e) => {
         error!(
-          "couldn't get block {block_number} in get_fee. {} {}",
+          "couldn't get the latest block number in main's error-free get_block. {} {}",
           "this should only happen if the node is offline. error: ", e
         );
-        // Since this block is considered finalized, we shouldn't be unable to get it unless the
-        // node is offline, hence the long sleep
-        sleep(Duration::from_secs(60)).await;
+        sleep(Duration::from_secs(10)).await;
       }
     }
   }
+}
+
+async fn get_block<C: Coin>(coin: &C, block_number: usize) -> C::Block {
+  loop {
+    match coin.get_block(block_number).await {
+      Ok(block) => {
+        return block;
+      }
+      Err(e) => {
+        error!("couldn't get block {block_number} in main's error-free get_block. error: {}", e);
+        sleep(Duration::from_secs(10)).await;
+      }
+    }
+  }
+}
+
+async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
+  // TODO2: Use an fee representative of several blocks
+  get_block(coin, block_number).await.median_fee()
 }
 
 async fn prepare_send<C: Coin>(
@@ -261,11 +277,11 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
     let synced = |context: &SubstrateContext, key| -> Result<(), ()> {
       // Check that we've synced this block and can actually operate on it ourselves
       let latest = scanner.latest_scanned(key);
-      if usize::try_from(context.coin_latest_block_number).unwrap() < latest {
+      if usize::try_from(context.coin_latest_finalized_block).unwrap() < latest {
         log::warn!(
           "coin node disconnected/desynced from rest of the network. \
           our block: {latest:?}, network's acknowledged: {}",
-          context.coin_latest_block_number
+          context.coin_latest_finalized_block,
         );
         Err(())?;
       }
@@ -302,24 +318,58 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
     CoordinatorMessage::Substrate(msg) => {
       match msg {
         messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, set, key_pair } => {
+          // This is the first key pair for this coin so no block has been finalized yet
+          let activation_number = if context.coin_latest_finalized_block.0 == [0; 32] {
+            assert!(tributary_mutable.signers.is_empty());
+            assert!(tributary_mutable.substrate_signers.is_empty());
+            assert!(substrate_mutable.schedulers.is_empty());
+
+            // Wait until a coin's block's time exceeds Serai's time
+            while get_block(
+              coin,
+              get_latest_block_number(coin).await.saturating_sub(C::CONFIRMATIONS),
+            )
+            .await
+            .time() <
+              context.serai_time
+            {
+              info!(
+                "serai confirmed the first key pair for a set. {} {}",
+                "we're waiting for a coin's finalized block's time to exceed unix time ",
+                context.serai_time,
+              );
+              sleep(Duration::from_secs(5)).await;
+            }
+
+            // Find the first block to do so
+            let mut earliest = get_latest_block_number(coin).await.saturating_sub(C::CONFIRMATIONS);
+            assert!(get_block(coin, earliest).await.time() >= context.serai_time);
+            while get_block(coin, earliest - 1).await.time() >= context.serai_time {
+              earliest -= 1;
+            }
+
+            // Use this as the activation block
+            earliest
+          } else {
+            let mut activation_block = <C::Block as Block<C>>::Id::default();
+            activation_block.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
+            // This block_number call is safe since it unwraps
+            substrate_mutable
+              .scanner
+              .block_number(&activation_block)
+              .await
+              .expect("KeyConfirmed from context we haven't synced")
+          };
+
           // See TributaryMutable's struct definition for why this block is safe
-          let KeyConfirmed { activation_block, substrate_keys, coin_keys } =
-            tributary_mutable.key_gen.confirm(txn, context, set, key_pair).await;
+          let KeyConfirmed { substrate_keys, coin_keys } =
+            tributary_mutable.key_gen.confirm(txn, set, key_pair).await;
           tributary_mutable.substrate_signers.insert(
             substrate_keys.group_key().to_bytes().to_vec(),
             SubstrateSigner::new(substrate_keys),
           );
 
           let key = coin_keys.group_key();
-
-          let mut activation_block_hash = <C::Block as Block<C>>::Id::default();
-          activation_block_hash.as_mut().copy_from_slice(&activation_block.0);
-          // This block_number call is safe since it unwraps
-          let activation_number = substrate_mutable
-            .scanner
-            .block_number(&activation_block_hash)
-            .await
-            .expect("KeyConfirmed from context we haven't synced");
 
           substrate_mutable.scanner.rotate_key(txn, activation_number, key).await;
           substrate_mutable

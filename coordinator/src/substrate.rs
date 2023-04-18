@@ -119,10 +119,13 @@ async fn handle_key_gen<D: Db, Pro: Processor>(
       .send(CoordinatorMessage::Substrate(
         processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
           context: SubstrateContext {
+            serai_time: block.time().unwrap(),
             coin_latest_finalized_block: serai
               .get_latest_block_for_network(block.hash(), set.network)
               .await?
-              .unwrap_or(BlockHash([0; 32])), // TODO: Have the processor override this
+              // The processor treats this as a magic value which will cause it to find a network
+              // block which has a time greater than or equal to the Serai time
+              .unwrap_or(BlockHash([0; 32])),
           },
           set,
           key_pair,
@@ -206,7 +209,10 @@ async fn handle_batch_and_burns<D: Db, Pro: Processor>(
     processor
       .send(CoordinatorMessage::Substrate(
         processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
-          context: SubstrateContext { coin_latest_finalized_block },
+          context: SubstrateContext {
+            serai_time: block.time().unwrap(),
+            coin_latest_finalized_block,
+          },
           key: get_coin_key(
             serai,
             // TODO2

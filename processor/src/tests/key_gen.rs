@@ -11,11 +11,11 @@ use serai_db::{DbTxn, Db, MemDb};
 
 use sp_application_crypto::sr25519;
 use serai_client::{
-  primitives::{BlockHash, NetworkId},
+  primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet},
 };
 
-use messages::{SubstrateContext, key_gen::*};
+use messages::key_gen::*;
 use crate::{
   coins::Coin,
   key_gen::{KeyConfirmed, KeyGen},
@@ -134,17 +134,11 @@ pub async fn test_key_gen<C: Coin>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    let KeyConfirmed { activation_block, substrate_keys, coin_keys } = key_gen
-      .confirm(
-        &mut txn,
-        SubstrateContext { coin_latest_finalized_block: BlockHash([0x11; 32]) },
-        ID.set,
-        (sr25519::Public(res.0), res.1.clone().try_into().unwrap()),
-      )
+    let KeyConfirmed { substrate_keys, coin_keys } = key_gen
+      .confirm(&mut txn, ID.set, (sr25519::Public(res.0), res.1.clone().try_into().unwrap()))
       .await;
     txn.commit();
 
-    assert_eq!(activation_block, BlockHash([0x11; 32]));
     let params =
       ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap();
     assert_eq!(substrate_keys.params(), params);

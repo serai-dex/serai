@@ -176,6 +176,7 @@ pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn parent(&self) -> Self::Id;
+  fn time(&self) -> u64;
   fn median_fee(&self) -> C::Fee;
 }
 

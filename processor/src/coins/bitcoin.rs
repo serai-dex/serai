@@ -204,6 +204,10 @@ impl BlockTrait<Bitcoin> for Block {
     hash
   }
 
+  fn time(&self) -> u64 {
+    self.header.time.into()
+  }
+
   fn median_fee(&self) -> Fee {
     // TODO
     Fee(20)

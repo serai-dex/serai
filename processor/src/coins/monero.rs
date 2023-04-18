@@ -146,6 +146,10 @@ impl BlockTrait<Monero> for Block {
     self.1.header.previous
   }
 
+  fn time(&self) -> u64 {
+    self.1.header.timestamp
+  }
+
   fn median_fee(&self) -> Fee {
     // TODO
     Fee { per_weight: 80000, mask: 10000 }

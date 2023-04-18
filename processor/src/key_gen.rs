@@ -15,17 +15,13 @@ use frost::{
 
 use log::info;
 
-use serai_client::{
-  primitives::BlockHash,
-  validator_sets::primitives::{ValidatorSet, KeyPair},
-};
-use messages::{SubstrateContext, key_gen::*};
+use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
+use messages::key_gen::*;
 
 use crate::{Get, DbTxn, Db, coins::Coin};
 
 #[derive(Debug)]
 pub struct KeyConfirmed<C: Ciphersuite> {
-  pub activation_block: BlockHash,
   pub substrate_keys: ThresholdKeys<Ristretto>,
   pub coin_keys: ThresholdKeys<C>,
 }
@@ -364,7 +360,6 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
   pub async fn confirm(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    context: SubstrateContext,
     set: ValidatorSet,
     key_pair: KeyPair,
   ) -> KeyConfirmed<C::Curve> {
@@ -377,10 +372,6 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
       set,
     );
 
-    KeyConfirmed {
-      activation_block: context.coin_latest_finalized_block,
-      substrate_keys,
-      coin_keys,
-    }
+    KeyConfirmed { substrate_keys, coin_keys }
   }
 }
