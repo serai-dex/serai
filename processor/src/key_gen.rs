@@ -28,7 +28,7 @@ pub struct KeyConfirmed<C: Ciphersuite> {
 }
 
 #[derive(Clone, Debug)]
-struct KeyGenDb<C: Coin, D: Db>(D, PhantomData<C>);
+struct KeyGenDb<C: Coin, D: Db>(PhantomData<D>, PhantomData<C>);
 impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn key_gen_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     D::key(b"KEY_GEN", dst, key)
@@ -40,9 +40,9 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   fn save_params(txn: &mut D::Transaction<'_>, set: &ValidatorSet, params: &ThresholdParams) {
     txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
   }
-  fn params(&self, set: &ValidatorSet) -> ThresholdParams {
+  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> ThresholdParams {
     // Directly unwraps the .get() as this will only be called after being set
-    bincode::deserialize(&self.0.get(Self::params_key(set)).unwrap()).unwrap()
+    bincode::deserialize(&getter.get(Self::params_key(set)).unwrap()).unwrap()
   }
 
   // Not scoped to the set since that'd have latter attempts overwrite former
@@ -58,9 +58,9 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   ) {
     txn.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
   }
-  fn commitments(&self, id: &KeyGenId) -> HashMap<Participant, Vec<u8>> {
+  fn commitments<G: Get>(getter: &G, id: &KeyGenId) -> HashMap<Participant, Vec<u8>> {
     bincode::deserialize::<HashMap<Participant, Vec<u8>>>(
-      &self.0.get(Self::commitments_key(id)).unwrap(),
+      &getter.get(Self::commitments_key(id)).unwrap(),
     )
     .unwrap()
   }
@@ -102,11 +102,11 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     txn.put(Self::keys_key(&keys.1.group_key()), keys_vec);
     keys
   }
-  fn keys(
-    &self,
+  fn keys<G: Get>(
+    getter: &G,
     key: &<C::Curve as Ciphersuite>::G,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
-    Self::read_keys(&self.0, &Self::keys_key(key)).1
+    Self::read_keys(getter, &Self::keys_key(key)).1
   }
 }
 
@@ -115,7 +115,7 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
 /// 2) It did send its response, and has locally saved enough data to continue
 #[derive(Debug)]
 pub struct KeyGen<C: Coin, D: Db> {
-  db: KeyGenDb<C, D>,
+  db: D,
   entropy: Zeroizing<[u8; 32]>,
 
   active_commit:
@@ -126,23 +126,23 @@ pub struct KeyGen<C: Coin, D: Db> {
 impl<C: Coin, D: Db> KeyGen<C, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGen<C, D> {
-    KeyGen {
-      db: KeyGenDb(db, PhantomData::<C>),
-      entropy,
-
-      active_commit: HashMap::new(),
-      active_share: HashMap::new(),
-    }
+    KeyGen { db, entropy, active_commit: HashMap::new(), active_share: HashMap::new() }
   }
 
   pub fn keys(
     &self,
     key: &<C::Curve as Ciphersuite>::G,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
-    self.db.keys(key)
+    // This is safe, despite not having a txn, since it's a static value
+    // At worst, it's not set when it's expected to be set, yet that should be handled contextually
+    KeyGenDb::<C, D>::keys(&self.db, key)
   }
 
-  pub async fn handle(&mut self, msg: CoordinatorMessage) -> ProcessorMessage {
+  pub async fn handle(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    msg: CoordinatorMessage,
+  ) -> ProcessorMessage {
     let context = |id: &KeyGenId| {
       // TODO2: Also embed the chain ID/genesis block
       format!(
@@ -177,11 +177,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           self.active_share.remove(&id.set).is_none()
         {
           // If we haven't handled this set before, save the params
-          // This may overwrite previously written params if we rebooted, yet that isn't a
-          // concern
-          let mut txn = self.db.0.txn();
-          KeyGenDb::<C, D>::save_params(&mut txn, &id.set, &params);
-          txn.commit();
+          KeyGenDb::<C, D>::save_params(txn, &id.set, &params);
         }
 
         let (machines, commitments) = key_gen_machines(id, params);
@@ -202,7 +198,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let params = self.db.params(&id.set);
+        let params = KeyGenDb::<C, D>::params(txn, &id.set);
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -256,9 +252,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           share.extend(coin_shares[i].serialize());
         }
 
-        let mut txn = self.db.0.txn();
-        KeyGenDb::<C, D>::save_commitments(&mut txn, &id, &commitments);
-        txn.commit();
+        KeyGenDb::<C, D>::save_commitments(txn, &id, &commitments);
 
         ProcessorMessage::Shares { id, shares }
       }
@@ -266,13 +260,13 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = self.db.params(&id.set);
+        let params = KeyGenDb::<C, D>::params(txn, &id.set);
 
         // Same commentary on inconsistency as above exists
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
           let machines = key_gen_machines(id, params).0;
           let mut rng = secret_shares_rng(id);
-          let commitments = self.db.commitments(&id);
+          let commitments = KeyGenDb::<C, D>::commitments(txn, &id);
 
           let mut commitments_ref: HashMap<Participant, &[u8]> =
             commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
@@ -337,9 +331,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         let substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
         let coin_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
 
-        let mut txn = self.db.0.txn();
-        KeyGenDb::<C, D>::save_keys(&mut txn, &id, &substrate_keys, &coin_keys);
-        txn.commit();
+        KeyGenDb::<C, D>::save_keys(txn, &id, &substrate_keys, &coin_keys);
 
         let mut coin_keys = ThresholdKeys::new(coin_keys);
         C::tweak_keys(&mut coin_keys);
@@ -354,12 +346,11 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
 
   pub async fn confirm(
     &mut self,
+    txn: &mut D::Transaction<'_>,
     context: SubstrateContext,
     id: KeyGenId,
   ) -> KeyConfirmed<C::Curve> {
-    let mut txn = self.db.0.txn();
-    let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(&mut txn, &id);
-    txn.commit();
+    let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(txn, &id);
 
     info!(
       "Confirmed key pair {} {} from {:?}",

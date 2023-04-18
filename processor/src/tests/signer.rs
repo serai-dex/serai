@@ -8,7 +8,7 @@ use frost::{
   dkg::tests::{key_gen, clone_without},
 };
 
-use serai_db::MemDb;
+use serai_db::{DbTxn, Db, MemDb};
 
 use messages::sign::*;
 use crate::{
@@ -39,19 +39,23 @@ pub async fn sign<C: Coin>(
   }
 
   let mut signers = HashMap::new();
+  let mut dbs = HashMap::new();
   let mut t = 0;
   for i in 1 ..= keys.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.remove(&i).unwrap();
     t = keys.params().t();
-    signers.insert(i, Signer::new(MemDb::new(), coin.clone(), keys));
+    signers.insert(i, Signer::<_, MemDb>::new(coin.clone(), keys));
+    dbs.insert(i, MemDb::new());
   }
   drop(keys);
 
   for i in 1 ..= signers.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let (tx, eventuality) = txs.remove(&i).unwrap();
-    signers.get_mut(&i).unwrap().sign_transaction(actual_id.id, tx, eventuality).await;
+    let mut txn = dbs.get_mut(&i).unwrap().txn();
+    signers.get_mut(&i).unwrap().sign_transaction(&mut txn, actual_id.id, tx, eventuality).await;
+    txn.commit();
   }
 
   let mut signing_set = vec![];
@@ -84,14 +88,20 @@ pub async fn sign<C: Coin>(
 
   let mut shares = HashMap::new();
   for i in &signing_set {
+    let mut txn = dbs.get_mut(i).unwrap().txn();
     signers
       .get_mut(i)
       .unwrap()
-      .handle(CoordinatorMessage::Preprocesses {
-        id: actual_id.clone(),
-        preprocesses: clone_without(&preprocesses, i),
-      })
+      .handle(
+        &mut txn,
+        CoordinatorMessage::Preprocesses {
+          id: actual_id.clone(),
+          preprocesses: clone_without(&preprocesses, i),
+        },
+      )
       .await;
+    txn.commit();
+
     if let SignerEvent::ProcessorMessage(ProcessorMessage::Share { id, share }) =
       signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
@@ -104,14 +114,17 @@ pub async fn sign<C: Coin>(
 
   let mut tx_id = None;
   for i in &signing_set {
+    let mut txn = dbs.get_mut(i).unwrap().txn();
     signers
       .get_mut(i)
       .unwrap()
-      .handle(CoordinatorMessage::Shares {
-        id: actual_id.clone(),
-        shares: clone_without(&shares, i),
-      })
+      .handle(
+        &mut txn,
+        CoordinatorMessage::Shares { id: actual_id.clone(), shares: clone_without(&shares, i) },
+      )
       .await;
+    txn.commit();
+
     if let SignerEvent::SignedTransaction { id, tx } =
       signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {

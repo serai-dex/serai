@@ -15,16 +15,24 @@ impl<C: Coin, D: Db> MainDb<C, D> {
     D::key(b"MAIN", dst, key)
   }
 
+  fn handled_key(id: u64) -> Vec<u8> {
+    Self::main_key(b"handled", id.to_le_bytes())
+  }
+  pub fn handled_message(&self, id: u64) -> bool {
+    self.0.get(Self::handled_key(id)).is_some()
+  }
+  pub fn handle_message(txn: &mut D::Transaction<'_>, id: u64) {
+    txn.put(Self::handled_key(id), [])
+  }
+
   fn plan_key(id: &[u8]) -> Vec<u8> {
     Self::main_key(b"plan", id)
   }
   fn signing_key(key: &[u8]) -> Vec<u8> {
     Self::main_key(b"signing", key)
   }
-  pub fn save_signing(&mut self, key: &[u8], block_number: u64, plan: &Plan<C>) {
+  pub fn save_signing(txn: &mut D::Transaction<'_>, key: &[u8], block_number: u64, plan: &Plan<C>) {
     let id = plan.id();
-    // Creating a TXN here is arguably an anti-pattern, yet nothing here expects atomicity
-    let mut txn = self.0.txn();
 
     {
       let mut signing = txn.get(Self::signing_key(key)).unwrap_or(vec![]);
@@ -46,8 +54,6 @@ impl<C: Coin, D: Db> MainDb<C, D> {
       plan.write(&mut buf).unwrap();
       txn.put(Self::plan_key(&id), &buf);
     }
-
-    txn.commit();
   }
 
   pub fn signing(&self, key: &[u8]) -> Vec<(u64, Plan<C>)> {
@@ -68,7 +74,7 @@ impl<C: Coin, D: Db> MainDb<C, D> {
     res
   }
 
-  pub fn finish_signing(&mut self, key: &[u8], id: [u8; 32]) {
+  pub fn finish_signing(&mut self, txn: &mut D::Transaction<'_>, key: &[u8], id: [u8; 32]) {
     let mut signing = self.0.get(Self::signing_key(key)).unwrap_or(vec![]);
     assert_eq!(signing.len() % 32, 0);
 
@@ -87,8 +93,6 @@ impl<C: Coin, D: Db> MainDb<C, D> {
       log::warn!("told to finish signing {} yet wasn't actively signing it", hex::encode(id));
     }
 
-    let mut txn = self.0.txn();
     txn.put(Self::signing_key(key), signing);
-    txn.commit();
   }
 }

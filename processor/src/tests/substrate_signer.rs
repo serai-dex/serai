@@ -12,7 +12,7 @@ use frost::{
 use scale::Encode;
 use sp_application_crypto::{RuntimePublic, sr25519::Public};
 
-use serai_db::MemDb;
+use serai_db::{DbTxn, Db, MemDb};
 
 use serai_client::{primitives::*, in_instructions::primitives::*};
 
@@ -49,14 +49,21 @@ async fn test_substrate_signer() {
   };
 
   let mut signers = HashMap::new();
+  let mut dbs = HashMap::new();
   let mut t = 0;
   for i in 1 ..= keys.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.remove(&i).unwrap();
     t = keys.params().t();
-    let mut signer = SubstrateSigner::new(MemDb::new(), keys);
-    signer.sign(batch.clone()).await;
+
+    let mut signer = SubstrateSigner::<MemDb>::new(keys);
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    signer.sign(&mut txn, batch.clone()).await;
+    txn.commit();
+
     signers.insert(i, signer);
+    dbs.insert(i, db);
   }
   drop(keys);
 
@@ -92,14 +99,20 @@ async fn test_substrate_signer() {
 
   let mut shares = HashMap::new();
   for i in &signing_set {
+    let mut txn = dbs.get_mut(i).unwrap().txn();
     signers
       .get_mut(i)
       .unwrap()
-      .handle(CoordinatorMessage::BatchPreprocesses {
-        id: actual_id.clone(),
-        preprocesses: clone_without(&preprocesses, i),
-      })
+      .handle(
+        &mut txn,
+        CoordinatorMessage::BatchPreprocesses {
+          id: actual_id.clone(),
+          preprocesses: clone_without(&preprocesses, i),
+        },
+      )
       .await;
+    txn.commit();
+
     if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare { id, share }) =
       signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
@@ -111,14 +124,19 @@ async fn test_substrate_signer() {
   }
 
   for i in &signing_set {
+    let mut txn = dbs.get_mut(i).unwrap().txn();
     signers
       .get_mut(i)
       .unwrap()
-      .handle(CoordinatorMessage::BatchShares {
-        id: actual_id.clone(),
-        shares: clone_without(&shares, i),
-      })
+      .handle(
+        &mut txn,
+        CoordinatorMessage::BatchShares {
+          id: actual_id.clone(),
+          shares: clone_without(&shares, i),
+        },
+      )
       .await;
+    txn.commit();
 
     if let SubstrateSignerEvent::SignedBatch(signed_batch) =
       signers.get_mut(i).unwrap().events.pop_front().unwrap()

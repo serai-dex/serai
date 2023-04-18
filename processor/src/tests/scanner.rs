@@ -9,7 +9,7 @@ use tokio::time::timeout;
 
 use serai_client::primitives::BlockHash;
 
-use serai_db::MemDb;
+use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
   coins::{OutputType, Output, Block, Coin},
@@ -20,6 +20,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let mut keys =
     frost::tests::key_gen::<_, C::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
   C::tweak_keys(&mut keys);
+  let group_key = keys.group_key();
 
   // Mine blocks so there's a confirmed block
   for _ in 0 .. C::CONFIRMATIONS {
@@ -30,11 +31,14 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let activation_number = coin.get_latest_block_number().await.unwrap();
   let db = MemDb::new();
   let new_scanner = || async {
+    let mut db = db.clone();
     let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
     let mut first = first.lock().unwrap();
     if *first {
       assert!(active_keys.is_empty());
-      scanner.rotate_key(activation_number, keys.group_key()).await;
+      let mut txn = db.txn();
+      scanner.rotate_key(&mut txn, activation_number, group_key).await;
+      txn.commit();
       *first = false;
     } else {
       assert_eq!(active_keys.len(), 1);
@@ -83,7 +87,14 @@ pub async fn test_scanner<C: Coin>(coin: C) {
     }
     curr_block += 1;
   }
-  assert_eq!(scanner.ack_up_to_block(keys.group_key(), block_id).await, (blocks, outputs));
+
+  let mut cloned_db = db.clone();
+  let mut txn = cloned_db.txn();
+  assert_eq!(
+    scanner.ack_up_to_block(&mut txn, keys.group_key(), block_id).await,
+    (blocks, outputs)
+  );
+  txn.commit();
 
   // There should be no more events
   assert!(timeout(Duration::from_secs(30), scanner.events.recv()).await.is_err());

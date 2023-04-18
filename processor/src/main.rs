@@ -8,7 +8,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
 use group::GroupEncoding;
-use frost::curve::Ciphersuite;
+use frost::{curve::Ciphersuite, ThresholdKeys};
 
 use log::{info, warn, error};
 use tokio::time::sleep;
@@ -90,14 +90,13 @@ async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
   }
 }
 
-async fn prepare_send<C: Coin, D: Db>(
+async fn prepare_send<C: Coin>(
   coin: &C,
-  signer: &Signer<C, D>,
+  keys: ThresholdKeys<C::Curve>,
   block_number: usize,
   fee: C::Fee,
   plan: Plan<C>,
 ) -> (Option<(C::SignableTransaction, C::Eventuality)>, Vec<PostFeeBranch>) {
-  let keys = signer.keys().await;
   loop {
     match coin.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
       Ok(prepared) => {
@@ -173,7 +172,7 @@ struct SubstrateMutable<C: Coin, D: Db> {
 }
 
 async fn sign_plans<C: Coin, D: Db>(
-  db: &mut MainDb<C, D>,
+  txn: &mut D::Transaction<'_>,
   coin: &C,
   substrate_mutable: &mut SubstrateMutable<C, D>,
   signers: &mut HashMap<Vec<u8>, Signer<C, D>>,
@@ -197,17 +196,11 @@ async fn sign_plans<C: Coin, D: Db>(
     info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
     let key = plan.key.to_bytes();
-    db.save_signing(key.as_ref(), block_number.try_into().unwrap(), &plan);
+    MainDb::<C, D>::save_signing(txn, key.as_ref(), block_number.try_into().unwrap(), &plan);
     let (tx, branches) =
-      prepare_send(coin, signers.get_mut(key.as_ref()).unwrap(), block_number, fee, plan).await;
+      prepare_send(coin, signers.get_mut(key.as_ref()).unwrap().keys(), block_number, fee, plan)
+        .await;
 
-    // TODO: If we reboot mid-sign_plans, for a DB-backed scheduler, these may be partially
-    // executed
-    // Global TXN object for the entire coordinator message?
-    // Re-ser the scheduler after every sign_plans call?
-    // To clarify, the scheduler is distinct as it mutates itself on new data.
-    // The key_gen/scanner/signer are designed to be deterministic to new data, irrelevant to prior
-    // states.
     for branch in branches {
       substrate_mutable
         .schedulers
@@ -218,19 +211,18 @@ async fn sign_plans<C: Coin, D: Db>(
 
     if let Some((tx, eventuality)) = tx {
       substrate_mutable.scanner.register_eventuality(block_number, id, eventuality.clone()).await;
-      signers.get_mut(key.as_ref()).unwrap().sign_transaction(id, tx, eventuality).await;
+      signers.get_mut(key.as_ref()).unwrap().sign_transaction(txn, id, tx, eventuality).await;
     }
   }
 }
 
 async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
-  raw_db: &D,
-  main_db: &mut MainDb<C, D>,
+  txn: &mut D::Transaction<'_>,
   coin: &C,
   coordinator: &mut Co,
   tributary_mutable: &mut TributaryMutable<C, D>,
   substrate_mutable: &mut SubstrateMutable<C, D>,
-  msg: Message,
+  msg: &Message,
 ) {
   // If this message expects a higher block number than we have, halt until synced
   async fn wait<C: Coin, D: Db>(scanner: &ScannerHandle<C, D>, block_hash: &BlockHash) {
@@ -293,15 +285,17 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
       // TODO: This may be fired multiple times. What's our plan for that?
-      coordinator.send(ProcessorMessage::KeyGen(tributary_mutable.key_gen.handle(msg).await)).await;
+      coordinator
+        .send(ProcessorMessage::KeyGen(tributary_mutable.key_gen.handle(txn, msg).await))
+        .await;
     }
 
     CoordinatorMessage::Sign(msg) => {
-      tributary_mutable.signers.get_mut(msg.key()).unwrap().handle(msg).await;
+      tributary_mutable.signers.get_mut(msg.key()).unwrap().handle(txn, msg).await;
     }
 
     CoordinatorMessage::Coordinator(msg) => {
-      tributary_mutable.substrate_signers.get_mut(msg.key()).unwrap().handle(msg).await;
+      tributary_mutable.substrate_signers.get_mut(msg.key()).unwrap().handle(txn, msg).await;
     }
 
     CoordinatorMessage::Substrate(msg) => {
@@ -309,10 +303,10 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
         messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, id } => {
           // See TributaryMutable's struct definition for why this block is safe
           let KeyConfirmed { activation_block, substrate_keys, coin_keys } =
-            tributary_mutable.key_gen.confirm(context, id).await;
+            tributary_mutable.key_gen.confirm(txn, context, id).await;
           tributary_mutable.substrate_signers.insert(
             substrate_keys.group_key().to_bytes().to_vec(),
-            SubstrateSigner::new(raw_db.clone(), substrate_keys),
+            SubstrateSigner::new(substrate_keys),
           );
 
           let key = coin_keys.group_key();
@@ -325,15 +319,14 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             .await
             .expect("KeyConfirmed from context we haven't synced");
 
-          substrate_mutable.scanner.rotate_key(activation_number, key).await;
+          substrate_mutable.scanner.rotate_key(txn, activation_number, key).await;
           substrate_mutable
             .schedulers
             .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
 
-          tributary_mutable.signers.insert(
-            key.to_bytes().as_ref().to_vec(),
-            Signer::new(raw_db.clone(), coin.clone(), coin_keys),
-          );
+          tributary_mutable
+            .signers
+            .insert(key.to_bytes().as_ref().to_vec(), Signer::new(coin.clone(), coin_keys));
         }
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
@@ -347,11 +340,12 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           let key = <C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
 
           // We now have to acknowledge every block for this key up to the acknowledged block
-          let (blocks, outputs) = substrate_mutable.scanner.ack_up_to_block(key, block_id).await;
+          let (blocks, outputs) =
+            substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
           // Since this block was acknowledged, we no longer have to sign the batch for it
           for block in blocks {
             for (_, signer) in tributary_mutable.substrate_signers.iter_mut() {
-              signer.batch_signed(block);
+              signer.batch_signed(txn, block);
             }
           }
 
@@ -377,7 +371,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             .schedule(outputs, payments);
 
           sign_plans(
-            main_db,
+            txn,
             coin,
             substrate_mutable,
             // See commentary in TributaryMutable for why this is safe
@@ -390,12 +384,10 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
       }
     }
   }
-
-  coordinator.ack(msg).await;
 }
 
 async fn boot<C: Coin, D: Db>(
-  raw_db: &D,
+  raw_db: &mut D,
   coin: &C,
 ) -> (MainDb<C, D>, TributaryMutable<C, D>, SubstrateMutable<C, D>) {
   let mut entropy_transcript = {
@@ -443,12 +435,12 @@ async fn boot<C: Coin, D: Db>(
     let (substrate_keys, coin_keys) = key_gen.keys(key);
 
     let substrate_key = substrate_keys.group_key();
-    let substrate_signer = SubstrateSigner::new(raw_db.clone(), substrate_keys);
+    let substrate_signer = SubstrateSigner::new(substrate_keys);
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary
     substrate_signers.insert(substrate_key.to_bytes().to_vec(), substrate_signer);
 
-    let mut signer = Signer::new(raw_db.clone(), coin.clone(), coin_keys);
+    let mut signer = Signer::new(coin.clone(), coin_keys);
 
     // Load any TXs being actively signed
     let key = key.to_bytes();
@@ -461,14 +453,17 @@ async fn boot<C: Coin, D: Db>(
       info!("reloading plan {}: {:?}", hex::encode(id), plan);
 
       let (Some((tx, eventuality)), _) =
-      prepare_send(coin, &signer, block_number, fee, plan).await else {
+      prepare_send(coin, signer.keys(), block_number, fee, plan).await else {
         panic!("previously created transaction is no longer being created")
       };
 
       scanner.register_eventuality(block_number, id, eventuality.clone()).await;
       // TODO: Reconsider if the Signer should have the eventuality, or if just the coin/scanner
       // should
-      signer.sign_transaction(id, tx, eventuality).await;
+      let mut txn = raw_db.txn();
+      signer.sign_transaction(&mut txn, id, tx, eventuality).await;
+      // This should only have re-writes of existing data
+      drop(txn);
     }
 
     signers.insert(key.as_ref().to_vec(), signer);
@@ -481,14 +476,14 @@ async fn boot<C: Coin, D: Db>(
   )
 }
 
-async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinator: Co) {
+async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordinator: Co) {
   // We currently expect a contextless bidirectional mapping between these two values
   // (which is that any value of A can be interpreted as B and vice versa)
   // While we can write a contextual mapping, we have yet to do so
   // This check ensures no coin which doesn't have a bidirectional mapping is defined
   assert_eq!(<C::Block as Block<C>>::Id::default().as_ref().len(), BlockHash([0u8; 32]).0.len());
 
-  let (mut main_db, mut tributary_mutable, mut substrate_mutable) = boot(&raw_db, &coin).await;
+  let (mut main_db, mut tributary_mutable, mut substrate_mutable) = boot(&mut raw_db, &coin).await;
 
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   let mut last_coordinator_msg = None;
@@ -505,12 +500,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
           }
 
           SignerEvent::SignedTransaction { id, tx } => {
-            // If we die after calling finish_signing, we'll never fire Completed
-            // TODO: Is that acceptable? Do we need to fire Completed before firing finish_signing?
-            main_db.finish_signing(key, id);
-            // This does mutate the Scanner, yet the eventuality protocol is only run to mutate
-            // the signer, which is Tributary mutable (and what's currently being mutated)
-            substrate_mutable.scanner.drop_eventuality(id).await;
             coordinator
               .send(ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
                 key: key.clone(),
@@ -518,6 +507,13 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
                 tx: tx.as_ref().to_vec(),
               }))
               .await;
+
+            let mut txn = raw_db.txn();
+            // This does mutate the Scanner, yet the eventuality protocol is only run to mutate
+            // the signer, which is Tributary mutable (and what's currently being mutated)
+            substrate_mutable.scanner.drop_eventuality(id).await;
+            main_db.finish_signing(&mut txn, key, id);
+            txn.commit();
 
             // TODO
             // 1) We need to stop signing whenever a peer informs us or the chain has an
@@ -559,33 +555,39 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
         assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
         last_coordinator_msg = Some(msg.id);
 
-        // If we've already handled this message, continue
-        // TODO
+        // Only handle this if we haven't already
+        if !main_db.handled_message(msg.id) {
+          let mut txn = raw_db.txn();
+          MainDb::<C, D>::handle_message(&mut txn, msg.id);
 
-        // This is isolated to better think about how its ordered, or rather, about how the
-        // following cases aren't ordered
-        //
-        // While the coordinator messages are ordered, they're not deterministically ordered
-        // While Tributary-caused messages are deterministically ordered, and Substrate-caused
-        // messages are deterministically-ordered, they're both shoved into this singular queue
-        // The order at which they're shoved in together isn't deterministic
-        //
-        // This should be safe so long as Tributary and Substrate messages don't both expect
-        // mutable references over the same data
-        //
-        // TODO: Better assert/guarantee this
-        handle_coordinator_msg(
-          &raw_db,
-          &mut main_db,
-          &coin,
-          &mut coordinator,
-          &mut tributary_mutable,
-          &mut substrate_mutable,
-          msg,
-        ).await;
+          // This is isolated to better think about how its ordered, or rather, about how the other
+          // cases aren't ordered
+          //
+          // While the coordinator messages are ordered, they're not deterministically ordered
+          // Tributary-caused messages are deterministically ordered, and Substrate-caused messages
+          // are deterministically-ordered, yet they're both shoved into a singular queue
+          // The order at which they're shoved in together isn't deterministic
+          //
+          // This is safe so long as Tributary and Substrate messages don't both expect mutable
+          // references over the same data
+          handle_coordinator_msg(
+            &mut txn,
+            &coin,
+            &mut coordinator,
+            &mut tributary_mutable,
+            &mut substrate_mutable,
+            &msg,
+          ).await;
+
+          txn.commit();
+        }
+
+        coordinator.ack(msg).await;
       },
 
       msg = substrate_mutable.scanner.events.recv() => {
+        let mut txn = raw_db.txn();
+
         match msg.unwrap() {
           ScannerEvent::Block { key, block, batch, outputs } => {
             let key = key.to_bytes().as_ref().to_vec();
@@ -625,16 +627,18 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(raw_db: D, coin: C, mut coordinato
             };
 
             // Start signing this batch
-            tributary_mutable.substrate_signers.get_mut(&key).unwrap().sign(batch).await;
+            tributary_mutable.substrate_signers.get_mut(&key).unwrap().sign(&mut txn, batch).await;
           },
 
           ScannerEvent::Completed(id, tx) => {
             // We don't know which signer had this plan, so inform all of them
             for (_, signer) in tributary_mutable.signers.iter_mut() {
-              signer.eventuality_completion(id, &tx).await;
+              signer.eventuality_completion(&mut txn, id, &tx).await;
             }
           },
         }
+
+        txn.commit();
       },
     }
   }

@@ -6,7 +6,7 @@ use frost::{Participant, dkg::tests::key_gen};
 
 use tokio::time::timeout;
 
-use serai_db::MemDb;
+use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
   Payment, Plan,
@@ -24,10 +24,13 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
-  let (mut scanner, active_keys) = Scanner::new(coin.clone(), MemDb::new());
+  let mut db = MemDb::new();
+  let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
   assert!(active_keys.is_empty());
   let (block_id, outputs) = {
-    scanner.rotate_key(coin.get_latest_block_number().await.unwrap(), key).await;
+    let mut txn = db.txn();
+    scanner.rotate_key(&mut txn, coin.get_latest_block_number().await.unwrap(), key).await;
+    txn.commit();
 
     let block = coin.test_send(C::address(key)).await;
     let block_id = block.id();
@@ -114,8 +117,10 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   }
 
   // Check the Scanner DB can reload the outputs
+  let mut txn = db.txn();
   assert_eq!(
-    scanner.ack_up_to_block(key, block.id()).await.1,
+    scanner.ack_up_to_block(&mut txn, key, block.id()).await.1,
     [first_outputs, outputs].concat().to_vec()
   );
+  txn.commit();
 }

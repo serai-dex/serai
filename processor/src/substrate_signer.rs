@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{marker::PhantomData, fmt};
 use std::collections::{VecDeque, HashMap};
 
 use rand_core::OsRng;
@@ -24,7 +24,7 @@ use serai_client::{
 };
 
 use messages::{sign::SignId, coordinator::*};
-use crate::{DbTxn, Db};
+use crate::{Get, DbTxn, Db};
 
 #[derive(Debug)]
 pub enum SubstrateSignerEvent {
@@ -45,8 +45,8 @@ impl<D: Db> SubstrateSignerDb<D> {
   fn complete(txn: &mut D::Transaction<'_>, id: [u8; 32]) {
     txn.put(Self::completed_key(id), [1]);
   }
-  fn completed(&self, id: [u8; 32]) -> bool {
-    self.0.get(Self::completed_key(id)).is_some()
+  fn completed<G: Get>(getter: &G, id: [u8; 32]) -> bool {
+    getter.get(Self::completed_key(id)).is_some()
   }
 
   fn attempt_key(id: &SignId) -> Vec<u8> {
@@ -55,8 +55,8 @@ impl<D: Db> SubstrateSignerDb<D> {
   fn attempt(txn: &mut D::Transaction<'_>, id: &SignId) {
     txn.put(Self::attempt_key(id), []);
   }
-  fn has_attempt(&mut self, id: &SignId) -> bool {
-    self.0.get(Self::attempt_key(id)).is_some()
+  fn has_attempt<G: Get>(getter: &G, id: &SignId) -> bool {
+    getter.get(Self::attempt_key(id)).is_some()
   }
 
   fn save_batch(txn: &mut D::Transaction<'_>, batch: &SignedBatch) {
@@ -65,7 +65,7 @@ impl<D: Db> SubstrateSignerDb<D> {
 }
 
 pub struct SubstrateSigner<D: Db> {
-  db: SubstrateSignerDb<D>,
+  db: PhantomData<D>,
 
   keys: ThresholdKeys<Ristretto>,
 
@@ -88,9 +88,9 @@ impl<D: Db> fmt::Debug for SubstrateSigner<D> {
 }
 
 impl<D: Db> SubstrateSigner<D> {
-  pub fn new(db: D, keys: ThresholdKeys<Ristretto>) -> SubstrateSigner<D> {
+  pub fn new(keys: ThresholdKeys<Ristretto>) -> SubstrateSigner<D> {
     SubstrateSigner {
-      db: SubstrateSignerDb(db),
+      db: PhantomData,
 
       keys,
 
@@ -129,9 +129,9 @@ impl<D: Db> SubstrateSigner<D> {
     Ok(())
   }
 
-  async fn attempt(&mut self, id: [u8; 32], attempt: u32) {
+  async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], attempt: u32) {
     // See above commentary for why this doesn't emit SignedBatch
-    if self.db.completed(id) {
+    if SubstrateSignerDb::<D>::completed(txn, id) {
       return;
     }
 
@@ -176,7 +176,7 @@ impl<D: Db> SubstrateSigner<D> {
     // branch again for something we've already attempted
     //
     // Only run if this hasn't already been attempted
-    if self.db.has_attempt(&id) {
+    if SubstrateSignerDb::<D>::has_attempt(txn, &id) {
       warn!(
         "already attempted {} #{}. this is an error if we didn't reboot",
         hex::encode(id.id),
@@ -185,9 +185,7 @@ impl<D: Db> SubstrateSigner<D> {
       return;
     }
 
-    let mut txn = self.db.0.txn();
-    SubstrateSignerDb::<D>::attempt(&mut txn, &id);
-    txn.commit();
+    SubstrateSignerDb::<D>::attempt(txn, &id);
 
     // b"substrate" is a literal from sp-core
     let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), self.keys.clone());
@@ -201,8 +199,8 @@ impl<D: Db> SubstrateSigner<D> {
     ));
   }
 
-  pub async fn sign(&mut self, batch: Batch) {
-    if self.db.completed(batch.block.0) {
+  pub async fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) {
+    if SubstrateSignerDb::<D>::completed(txn, batch.block.0) {
       debug!("Sign batch order for ID we've already completed signing");
       // See batch_signed for commentary on why this simply returns
       return;
@@ -210,10 +208,10 @@ impl<D: Db> SubstrateSigner<D> {
 
     let id = batch.block.0;
     self.signable.insert(id, batch);
-    self.attempt(id, 0).await;
+    self.attempt(txn, id, 0).await;
   }
 
-  pub async fn handle(&mut self, msg: CoordinatorMessage) {
+  pub async fn handle(&mut self, txn: &mut D::Transaction<'_>, msg: CoordinatorMessage) {
     match msg {
       CoordinatorMessage::BatchPreprocesses { id, mut preprocesses } => {
         if self.verify_id(&id).is_err() {
@@ -302,10 +300,8 @@ impl<D: Db> SubstrateSigner<D> {
           SignedBatch { batch: self.signable.remove(&id.id).unwrap(), signature: sig.into() };
 
         // Save the batch in case it's needed for recovery
-        let mut txn = self.db.0.txn();
-        SubstrateSignerDb::<D>::save_batch(&mut txn, &batch);
-        SubstrateSignerDb::<D>::complete(&mut txn, id.id);
-        txn.commit();
+        SubstrateSignerDb::<D>::save_batch(txn, &batch);
+        SubstrateSignerDb::<D>::complete(txn, id.id);
 
         // Stop trying to sign for this batch
         assert!(self.attempt.remove(&id.id).is_some());
@@ -316,16 +312,14 @@ impl<D: Db> SubstrateSigner<D> {
       }
 
       CoordinatorMessage::BatchReattempt { id } => {
-        self.attempt(id.id, id.attempt).await;
+        self.attempt(txn, id.id, id.attempt).await;
       }
     }
   }
 
-  pub fn batch_signed(&mut self, block: BlockHash) {
+  pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, block: BlockHash) {
     // Stop trying to sign for this batch
-    let mut txn = self.db.0.txn();
-    SubstrateSignerDb::<D>::complete(&mut txn, block.0);
-    txn.commit();
+    SubstrateSignerDb::<D>::complete(txn, block.0);
 
     self.signable.remove(&block.0);
     self.attempt.remove(&block.0);

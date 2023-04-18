@@ -7,7 +7,7 @@ use frost::{Participant, ThresholdKeys};
 
 use tokio::time::timeout;
 
-use serai_db::MemDb;
+use serai_db::{DbTxn, MemDb};
 
 use crate::{
   Plan, Db,
@@ -78,10 +78,12 @@ pub async fn test_addresses<C: Coin>(coin: C) {
     coin.mine_block().await;
   }
 
-  let db = MemDb::new();
+  let mut db = MemDb::new();
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
   assert!(active_keys.is_empty());
-  scanner.rotate_key(coin.get_latest_block_number().await.unwrap(), key).await;
+  let mut txn = db.txn();
+  scanner.rotate_key(&mut txn, coin.get_latest_block_number().await.unwrap(), key).await;
+  txn.commit();
 
   // Receive funds to the branch address and make sure it's properly identified
   let block_id = coin.test_send(C::branch_address(key)).await.id();
