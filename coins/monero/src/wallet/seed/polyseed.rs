@@ -42,6 +42,7 @@ const POLYSEED_KEYGEN_ITERATIONS: u32 = 10000;
 
 // words
 pub const POLYSEED_LENGTH: usize = 16;
+pub const POLYSEED_PREFIX_LEN: usize = 4;
 const DATA_WORDS: usize = POLYSEED_LENGTH - POLY_NUM_CHECK_DIGITS;
 
 // there is more than 1 coin in the original polyseed implementation
@@ -274,10 +275,7 @@ fn find_seed_language(seed: &str) -> Result<(Poly, Language), SeedError> {
             None
           } else {
             l.words.iter().position(|w| {
-              w.chars()
-                .filter(|c| c.is_ascii())
-                .collect::<String>()
-                .starts_with(&sw_chars)
+              w.chars().filter(|c| c.is_ascii()).collect::<String>().starts_with(&sw_chars)
             })
           }
         } else {

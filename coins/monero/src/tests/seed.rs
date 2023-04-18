@@ -190,6 +190,8 @@ fn test_polyseed() {
     seed: String,
     entropy: String,
     birthday: u64,
+    has_prefix: bool,
+    has_accent: bool,
   }
 
   let vectors = [
@@ -200,22 +202,8 @@ fn test_polyseed() {
         .into(),
       entropy: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
       birthday: 1638446400,
-    },
-    Vector {
-      language: polyseed::Language::English,
-      seed: "raven tail swear infant grief assist regular lamp \
-      duck valid someone little harsh puppy airport language "
-        .into(),
-      entropy: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
-      birthday: 1638446400,
-    },
-    Vector {
-      language: polyseed::Language::English,
-      seed: "rave tail swea infan grie assi regul lamp \
-      duck vali some litt hars pupp airp langua"
-        .into(),
-      entropy: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
-      birthday: 1638446400,
+      has_prefix: true,
+      has_accent: false,
     },
     Vector {
       language: polyseed::Language::Spanish,
@@ -224,22 +212,8 @@ fn test_polyseed() {
         .into(),
       entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
       birthday: 3118651200,
-    },
-    Vector {
-      language: polyseed::Language::Spanish,
-      seed: "eje fin parte celebre tabu pestana lienzo puma \
-      prision hora regalo lengua existir lapiz lote sonoro"
-        .into(),
-      entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
-      birthday: 3118651200,
-    },
-    Vector {
-      language: polyseed::Language::Spanish,
-      seed: "eje fin part cele tabu pest lien puma \
-      pris hora rega leng exis lapi lote sono"
-        .into(),
-      entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
-      birthday: 3118651200,
+      has_prefix: true,
+      has_accent: true,
     },
     Vector {
       language: polyseed::Language::French,
@@ -248,6 +222,8 @@ fn test_polyseed() {
         .into(),
       entropy: "11cfd870324b26657342c37360c424a14a050b00000000000000000000000000".into(),
       birthday: 1679314966,
+      has_prefix: true,
+      has_accent: true,
     },
     Vector {
       language: polyseed::Language::Italian,
@@ -256,6 +232,8 @@ fn test_polyseed() {
         .into(),
       entropy: "7ecc57c9b4652d4e31428f62bec91cfd55500600000000000000000000000000".into(),
       birthday: 1679316358,
+      has_prefix: true,
+      has_accent: false,
     },
     Vector {
       language: polyseed::Language::Portuguese,
@@ -264,6 +242,8 @@ fn test_polyseed() {
         .into(),
       entropy: "45473063711376cae38f1b3eba18c874124e1d00000000000000000000000000".into(),
       birthday: 1679316657,
+      has_prefix: true,
+      has_accent: false,
     },
     Vector {
       language: polyseed::Language::Czech,
@@ -272,6 +252,8 @@ fn test_polyseed() {
         .into(),
       entropy: "7ac8a4efd62d9c3c4c02e350d32326df37821c00000000000000000000000000".into(),
       birthday: 1679316898,
+      has_prefix: true,
+      has_accent: false,
     },
     Vector {
       language: polyseed::Language::Korean,
@@ -280,6 +262,8 @@ fn test_polyseed() {
         .into(),
       entropy: "684663fda420298f42ed94b2c512ed38ddf12b00000000000000000000000000".into(),
       birthday: 1679317073,
+      has_prefix: false,
+      has_accent: false,
     },
     Vector {
       language: polyseed::Language::Japanese,
@@ -288,25 +272,67 @@ fn test_polyseed() {
         .into(),
       entropy: "94e6665518a6286c6e3ba508a2279eb62b771f00000000000000000000000000".into(),
       birthday: 1679318722,
+      has_prefix: false,
+      has_accent: false,
     },
     Vector {
       language: polyseed::Language::ChineseTraditional,
       seed: "亂 挖 斤 柄 代 圈 枝 轄 魯 論 函 開 勘 番 榮 壁".into(),
       entropy: "b1594f585987ab0fd5a31da1f0d377dae5283f00000000000000000000000000".into(),
       birthday: 1679426433,
+      has_prefix: false,
+      has_accent: false,
     },
     Vector {
       language: polyseed::Language::ChineseSimplified,
       seed: "啊 百 族 府 票 划 伪 仓 叶 虾 借 溜 晨 左 等 鬼".into(),
       entropy: "21cdd366f337b89b8d1bc1df9fe73047c22b0300000000000000000000000000".into(),
       birthday: 1679426817,
+      has_prefix: false,
+      has_accent: false,
     },
   ];
   let polyseed_time_step = 2630000;
 
   for v in vectors {
+    let add_whitespace = |mut seed: String| {
+      seed.push(' ');
+      seed
+    };
+
+    let accent_seed = |seed: &str| {
+      seed
+        .split_whitespace()
+        .map(|w| w.chars().filter(|c| c.is_ascii()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+    };
+
+    let trim_seed = |seed: &str| {
+      let seed_to_trim = if v.has_accent { accent_seed(&seed) } else { seed.to_string() };
+      seed_to_trim
+        .split_whitespace()
+        .map(|w| w.chars().take(polyseed::POLYSEED_PREFIX_LEN).collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+    };
+
     // string -> key
-    let s1 = Seed::from_string(Zeroizing::new(v.seed)).unwrap();
+    let s1 = Seed::from_string(Zeroizing::new(v.seed.clone())).unwrap();
+    let whitespaced_seed =
+      Seed::from_string(Zeroizing::new(add_whitespace(v.seed.clone()))).unwrap();
+    assert_eq!(s1, whitespaced_seed);
+    // check trimmed version
+    if v.has_prefix {
+      let trimmed_seed = Seed::from_string(Zeroizing::new(trim_seed(&v.seed))).unwrap();
+      assert_eq!(s1, trimmed_seed);
+    }
+    // check accent version
+    if v.has_accent {
+      let accent_seed = Seed::from_string(Zeroizing::new(accent_seed(&v.seed))).unwrap();
+      assert_eq!(s1, accent_seed);
+    }
+
     let entropy = Zeroizing::new(hex::decode(v.entropy).unwrap().try_into().unwrap());
     assert_eq!(s1.entropy(), entropy);
     assert!(s1.birthday() <= v.birthday);
