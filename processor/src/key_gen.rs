@@ -71,7 +71,7 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     txn: &mut D::Transaction<'_>,
     id: &KeyGenId,
     substrate_keys: &ThresholdCore<Ristretto>,
-    coin_keys: &ThresholdCore<C::Curve>,
+    coin_keys: &ThresholdKeys<C::Curve>,
   ) {
     let mut keys = substrate_keys.serialize();
     keys.extend(coin_keys.serialize().iter());
@@ -108,6 +108,14 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
       txn,
       &Self::generated_keys_key(set, (key_pair.0.as_ref(), key_pair.1.as_ref())),
     );
+    assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
+    assert_eq!(
+      {
+        let coin_key: &[u8] = key_pair.1.as_ref();
+        coin_key
+      },
+      keys.1.group_key().to_bytes().as_ref(),
+    );
     txn.put(Self::keys_key(&keys.1.group_key()), keys_vec);
     keys
   }
@@ -115,7 +123,9 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     getter: &G,
     key: &<C::Curve as Ciphersuite>::G,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
-    Self::read_keys(getter, &Self::keys_key(key)).1
+    let res = Self::read_keys(getter, &Self::keys_key(key)).1;
+    assert_eq!(&res.1.group_key(), key);
+    res
   }
 }
 
@@ -344,10 +354,11 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         let substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
         let coin_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
 
-        KeyGenDb::<C, D>::save_keys(txn, &id, &substrate_keys, &coin_keys);
-
         let mut coin_keys = ThresholdKeys::new(coin_keys);
         C::tweak_keys(&mut coin_keys);
+
+        KeyGenDb::<C, D>::save_keys(txn, &id, &substrate_keys, &coin_keys);
+
         ProcessorMessage::GeneratedKeyPair {
           id,
           substrate_key: substrate_keys.group_key().to_bytes(),
