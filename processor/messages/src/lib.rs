@@ -110,8 +110,6 @@ pub mod coordinator {
     BatchShares { id: SignId, shares: HashMap<Participant, [u8; 32]> },
     // Re-attempt a batch signing protocol.
     BatchReattempt { id: SignId },
-    // Needed so a client which didn't participate in signing can still realize signing completed
-    BatchSigned { key: Vec<u8>, block: BlockHash },
   }
 
   impl CoordinatorMessage {
@@ -120,7 +118,6 @@ pub mod coordinator {
         CoordinatorMessage::BatchPreprocesses { id, .. } => BlockHash(id.id),
         CoordinatorMessage::BatchShares { id, .. } => BlockHash(id.id),
         CoordinatorMessage::BatchReattempt { id } => BlockHash(id.id),
-        CoordinatorMessage::BatchSigned { block, .. } => *block,
       })
     }
 
@@ -129,7 +126,6 @@ pub mod coordinator {
         CoordinatorMessage::BatchPreprocesses { id, .. } => &id.key,
         CoordinatorMessage::BatchShares { id, .. } => &id.key,
         CoordinatorMessage::BatchReattempt { id } => &id.key,
-        CoordinatorMessage::BatchSigned { key, .. } => key,
       }
     }
   }

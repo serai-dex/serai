@@ -14,6 +14,8 @@ use tokio::{
   time::sleep,
 };
 
+use serai_client::primitives::BlockHash;
+
 use crate::{
   Get, DbTxn, Db,
   coins::{Output, Transaction, EventualitiesTracker, Block, Coin},
@@ -175,13 +177,19 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn scanned_block_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
     Self::scanner_key(b"scanned_block", key.to_bytes())
   }
+
+  #[allow(clippy::type_complexity)]
   fn save_scanned_block(
     txn: &mut D::Transaction<'_>,
     key: &<C::Curve as Ciphersuite>::G,
     block: usize,
-  ) -> Vec<C::Output> {
-    let outputs = Self::block(txn, block).and_then(|id| Self::outputs(txn, key, &id));
-    let outputs = outputs.unwrap_or(vec![]);
+  ) -> (Option<<C::Block as Block<C>>::Id>, Vec<C::Output>) {
+    let id = Self::block(txn, block); // It may be None for the first key rotated to
+    let outputs = if let Some(id) = id.as_ref() {
+      Self::outputs(txn, key, id).unwrap_or(vec![])
+    } else {
+      vec![]
+    };
 
     // Mark all the outputs from this block as seen
     for output in &outputs {
@@ -191,7 +199,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     txn.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
 
     // Return this block's outputs so they can be pruned from the RAM cache
-    outputs
+    (id, outputs)
   }
   fn latest_scanned_block(&self, key: <C::Curve as Ciphersuite>::G) -> usize {
     let bytes = self
@@ -269,7 +277,8 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
 
     info!("Rotating to key {}", hex::encode(key.to_bytes()));
     let mut txn = scanner.db.0.txn();
-    assert!(ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, activation_number).is_empty());
+    let (_, outputs) = ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, activation_number);
+    assert!(outputs.is_empty());
     ScannerDb::<C, D>::add_active_key(&mut txn, key);
     txn.commit();
     scanner.keys.push(key);
@@ -284,7 +293,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     &mut self,
     key: <C::Curve as Ciphersuite>::G,
     id: <C::Block as Block<C>>::Id,
-  ) -> Vec<C::Output> {
+  ) -> (Vec<BlockHash>, Vec<C::Output>) {
     let mut scanner = self.scanner.write().await;
     debug!("Block {} acknowledged", hex::encode(&id));
 
@@ -294,11 +303,16 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     // Get the number of the last block we acknowledged
     let prior = scanner.db.latest_scanned_block(key);
 
+    let mut blocks = vec![];
     let mut outputs = vec![];
     let mut txn = scanner.db.0.txn();
     for number in (prior + 1) ..= number {
-      outputs.extend(ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, number));
+      let (block, these_outputs) = ScannerDb::<C, D>::save_scanned_block(&mut txn, &key, number);
+      let block = BlockHash(block.unwrap().as_ref().try_into().unwrap());
+      blocks.push(block);
+      outputs.extend(these_outputs);
     }
+    assert_eq!(blocks.last().unwrap().as_ref(), id.as_ref());
     // TODO: This likely needs to be atomic with the scheduler?
     txn.commit();
 
@@ -306,7 +320,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
       assert!(scanner.ram_outputs.remove(output.id().as_ref()));
     }
 
-    outputs
+    (blocks, outputs)
   }
 }
 

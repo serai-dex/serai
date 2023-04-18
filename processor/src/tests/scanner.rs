@@ -7,6 +7,8 @@ use frost::Participant;
 
 use tokio::time::timeout;
 
+use serai_client::primitives::BlockHash;
+
 use serai_db::MemDb;
 
 use crate::{
@@ -25,13 +27,14 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   }
 
   let first = Arc::new(Mutex::new(true));
+  let activation_number = coin.get_latest_block_number().await.unwrap();
   let db = MemDb::new();
   let new_scanner = || async {
     let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
     let mut first = first.lock().unwrap();
     if *first {
       assert!(active_keys.is_empty());
-      scanner.rotate_key(coin.get_latest_block_number().await.unwrap(), keys.group_key()).await;
+      scanner.rotate_key(activation_number, keys.group_key()).await;
       *first = false;
     } else {
       assert_eq!(active_keys.len(), 1);
@@ -68,7 +71,19 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   verify_event(new_scanner().await).await;
 
   // Acknowledge the block
-  assert_eq!(scanner.ack_up_to_block(keys.group_key(), block_id.clone()).await, outputs);
+
+  // Acknowledging it should yield a list of all blocks since the last acknowledged block
+  let mut blocks = vec![];
+  let mut curr_block = activation_number + 1;
+  loop {
+    let block = coin.get_block(curr_block).await.unwrap().id();
+    blocks.push(BlockHash(block.as_ref().try_into().unwrap()));
+    if block == block_id {
+      break;
+    }
+    curr_block += 1;
+  }
+  assert_eq!(scanner.ack_up_to_block(keys.group_key(), block_id).await, (blocks, outputs));
 
   // There should be no more events
   assert!(timeout(Duration::from_secs(30), scanner.events.recv()).await.is_err());

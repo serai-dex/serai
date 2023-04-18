@@ -141,9 +141,13 @@ struct TributaryMutable<C: Coin, D: Db> {
   key_gen: KeyGen<C, D>,
   signers: HashMap<Vec<u8>, Signer<C, D>>,
 
-  // This isn't mutably borrowed by Substrate. It is also mutably borrowed by the Scanner.
-  // The safety of this is from the Scanner starting new sign tasks, and Tributary only mutating
-  // already-created sign tasks. The Scanner does not mutate sign tasks post-creation.
+  // This is also mutably borrowed by the Scanner.
+  // The Scanner starts new sign tasks.
+  // The Tributary mutates already-created signed tasks, potentially completing them.
+  // Substrate may mark tasks as completed, invalidating any existing mutable borrows.
+  // The safety of this follows as written above.
+
+  // TODO: There should only be one SubstrateSigner at a time (see #277)
   substrate_signers: HashMap<Vec<u8>, SubstrateSigner<D>>,
 }
 
@@ -343,7 +347,13 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           let key = <C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
 
           // We now have to acknowledge every block for this key up to the acknowledged block
-          let outputs = substrate_mutable.scanner.ack_up_to_block(key, block_id).await;
+          let (blocks, outputs) = substrate_mutable.scanner.ack_up_to_block(key, block_id).await;
+          // Since this block was acknowledged, we no longer have to sign the batch for it
+          for block in blocks {
+            for (_, signer) in tributary_mutable.substrate_signers.iter_mut() {
+              signer.batch_signed(block);
+            }
+          }
 
           let mut payments = vec![];
           for out in burns {

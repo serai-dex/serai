@@ -115,7 +115,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   // Check the Scanner DB can reload the outputs
   assert_eq!(
-    scanner.ack_up_to_block(key, block.id()).await,
+    scanner.ack_up_to_block(key, block.id()).await.1,
     [first_outputs, outputs].concat().to_vec()
   );
 }

@@ -18,7 +18,10 @@ use frost_schnorrkel::Schnorrkel;
 
 use log::{info, debug, warn};
 
-use serai_client::in_instructions::primitives::{Batch, SignedBatch};
+use serai_client::{
+  primitives::BlockHash,
+  in_instructions::primitives::{Batch, SignedBatch},
+};
 
 use messages::{sign::SignId, coordinator::*};
 use crate::{DbTxn, Db};
@@ -104,13 +107,10 @@ impl<D: Db> SubstrateSigner<D> {
     // Check the attempt lines up
     match self.attempt.get(&id.id) {
       // If we don't have an attempt logged, it's because the coordinator is faulty OR because we
-      // rebooted
+      // rebooted OR we detected the signed batch on chain
+      // The latter is the expected flow for batches not actively being participated in
       None => {
-        warn!(
-          "not attempting batch {} #{}. this is an error if we didn't reboot",
-          hex::encode(id.id),
-          id.attempt
-        );
+        warn!("not attempting batch {} #{}", hex::encode(id.id), id.attempt);
         Err(())?;
       }
       Some(attempt) => {
@@ -204,7 +204,7 @@ impl<D: Db> SubstrateSigner<D> {
   pub async fn sign(&mut self, batch: Batch) {
     if self.db.completed(batch.block.0) {
       debug!("Sign batch order for ID we've already completed signing");
-      // See BatchSigned for commentary on why this simply returns
+      // See batch_signed for commentary on why this simply returns
       return;
     }
 
@@ -318,26 +318,28 @@ impl<D: Db> SubstrateSigner<D> {
       CoordinatorMessage::BatchReattempt { id } => {
         self.attempt(id.id, id.attempt).await;
       }
-
-      CoordinatorMessage::BatchSigned { key: _, block } => {
-        // Stop trying to sign for this batch
-        let mut txn = self.db.0.txn();
-        SubstrateSignerDb::<D>::complete(&mut txn, block.0);
-        txn.commit();
-
-        self.signable.remove(&block.0);
-        self.attempt.remove(&block.0);
-        self.preprocessing.remove(&block.0);
-        self.signing.remove(&block.0);
-
-        // This doesn't emit SignedBatch because it doesn't have access to the SignedBatch
-        // The coordinator is expected to only claim a batch was signed if it's on the Substrate
-        // chain, hence why it's unnecessary to check it/back it up here
-
-        // This also doesn't emit any further events since all mutation happen on the
-        // substrate::CoordinatorMessage::SubstrateBlock message (which SignedBatch is meant to
-        // end up triggering)
-      }
     }
+  }
+
+  pub fn batch_signed(&mut self, block: BlockHash) {
+    // Stop trying to sign for this batch
+    let mut txn = self.db.0.txn();
+    SubstrateSignerDb::<D>::complete(&mut txn, block.0);
+    txn.commit();
+
+    self.signable.remove(&block.0);
+    self.attempt.remove(&block.0);
+    self.preprocessing.remove(&block.0);
+    self.signing.remove(&block.0);
+
+    // This doesn't emit SignedBatch because it doesn't have access to the SignedBatch
+    // This function is expected to only be called once Substrate acknowledges this block,
+    // which means its batch must have been signed
+    // While a successive batch's signing would also cause this block to be acknowledged, Substrate
+    // guarantees a batch's ordered inclusion
+
+    // This also doesn't emit any further events since all mutation from the Batch being signed
+    // happens on the substrate::CoordinatorMessage::SubstrateBlock message (which SignedBatch is
+    // meant to end up triggering)
   }
 }

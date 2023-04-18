@@ -83,7 +83,7 @@ async fn handle_new_set<D: Db, Pro: Processor, P: P2p>(
     .unwrap();
 
     // Trigger a DKG
-    // TODO: Check how the processor handles thi being fired multiple times
+    // TODO: Check how the processor handles this being fired multiple times
     // We already have a unique event ID based on block, event index (where event index is
     // the one generated in this handle_block function)
     // We could use that on this end and the processor end?
@@ -114,9 +114,9 @@ async fn handle_key_gen<D: Db, Pro: Processor>(
     .expect("KeyGen occurred for a set which doesn't exist")
     .is_some()
   {
-    // TODO: Check how the processor handles thi being fired multiple times
+    // TODO: Check how the processor handles this being fired multiple times
     processor
-      .send(CoordinatorMessage::KeyGen(
+      .send(CoordinatorMessage::Substrate(
         processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
           context: SubstrateContext {
             coin_latest_finalized_block: serai
@@ -168,23 +168,8 @@ async fn handle_batch_and_burns<D: Db, Pro: Processor>(
       // prior batches
       // Since batches within a block are guaranteed to be ordered, thanks to their incremental ID,
       // the last batch will be the latest batch, so its block will be the latest block
+      // This is just a mild optimization to prevent needing an additional RPC call to grab this
       batch_block.insert(network, network_block);
-
-      // TODO: Check how the processor handles thi being fired multiple times
-      processor
-        .send(CoordinatorMessage::Coordinator(
-          processor_messages::coordinator::CoordinatorMessage::BatchSigned {
-            key: get_coin_key(
-              serai,
-              // TODO2
-              ValidatorSet { network, session: Session(0) },
-            )
-            .await?
-            .expect("ValidatorSet without keys signed a batch"),
-            block: network_block,
-          },
-        ))
-        .await;
     } else {
       panic!("Batch event wasn't Batch: {batch:?}");
     }
@@ -228,7 +213,7 @@ async fn handle_batch_and_burns<D: Db, Pro: Processor>(
         .expect("network had a batch/burn yet never set a latest block")
     };
 
-    // TODO: Check how the processor handles thi being fired multiple times
+    // TODO: Check how the processor handles this being fired multiple times
     processor
       .send(CoordinatorMessage::Substrate(
         processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
