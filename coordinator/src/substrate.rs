@@ -124,8 +124,8 @@ async fn handle_key_gen<D: Db, Pro: Processor>(
               .await?
               .unwrap_or(BlockHash([0; 32])), // TODO: Have the processor override this
           },
-          // TODO: Check the DB for which attempt used this key pair
-          id: KeyGenId { set, attempt: todo!() },
+          set,
+          key_pair,
         },
       ))
       .await;

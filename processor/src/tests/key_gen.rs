@@ -9,6 +9,7 @@ use frost::{Participant, ThresholdParams, tests::clone_without};
 
 use serai_db::{DbTxn, Db, MemDb};
 
+use sp_application_crypto::sr25519;
 use serai_client::{
   primitives::{MONERO_NET_ID, BlockHash},
   validator_sets::primitives::{Session, ValidatorSet},
@@ -124,6 +125,7 @@ pub async fn test_key_gen<C: Coin>() {
     }
     txn.commit();
   }
+  let res = res.unwrap();
 
   // Rebuild 1 and 4
   rebuild(&mut key_gens, &dbs, 1);
@@ -136,7 +138,8 @@ pub async fn test_key_gen<C: Coin>() {
       .confirm(
         &mut txn,
         SubstrateContext { coin_latest_finalized_block: BlockHash([0x11; 32]) },
-        ID,
+        ID.set,
+        (sr25519::Public(res.0), res.1.clone().try_into().unwrap()),
       )
       .await;
     txn.commit();
@@ -147,8 +150,8 @@ pub async fn test_key_gen<C: Coin>() {
     assert_eq!(substrate_keys.params(), params);
     assert_eq!(coin_keys.params(), params);
     assert_eq!(
-      &(substrate_keys.group_key().to_bytes(), coin_keys.group_key().to_bytes().as_ref().to_vec()),
-      res.as_ref().unwrap()
+      (substrate_keys.group_key().to_bytes(), coin_keys.group_key().to_bytes().as_ref().to_vec()),
+      res
     );
   }
 }

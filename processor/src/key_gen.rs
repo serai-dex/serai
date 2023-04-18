@@ -15,7 +15,10 @@ use frost::{
 
 use log::info;
 
-use serai_client::{primitives::BlockHash, validator_sets::primitives::ValidatorSet};
+use serai_client::{
+  primitives::BlockHash,
+  validator_sets::primitives::{ValidatorSet, KeyPair},
+};
 use messages::{SubstrateContext, key_gen::*};
 
 use crate::{Get, DbTxn, Db, coins::Coin};
@@ -65,8 +68,8 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     .unwrap()
   }
 
-  fn generated_keys_key(id: &KeyGenId) -> Vec<u8> {
-    Self::key_gen_key(b"generated_keys", bincode::serialize(id).unwrap())
+  fn generated_keys_key(set: ValidatorSet, key_pair: (&[u8], &[u8])) -> Vec<u8> {
+    Self::key_gen_key(b"generated_keys", bincode::serialize(&(set, key_pair)).unwrap())
   }
   fn save_keys(
     txn: &mut D::Transaction<'_>,
@@ -76,7 +79,13 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   ) {
     let mut keys = substrate_keys.serialize();
     keys.extend(coin_keys.serialize().iter());
-    txn.put(Self::generated_keys_key(id), keys);
+    txn.put(
+      Self::generated_keys_key(
+        id.set,
+        (substrate_keys.group_key().to_bytes().as_ref(), coin_keys.group_key().to_bytes().as_ref()),
+      ),
+      keys,
+    );
   }
 
   fn keys_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
@@ -96,9 +105,13 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   }
   fn confirm_keys(
     txn: &mut D::Transaction<'_>,
-    id: &KeyGenId,
+    set: ValidatorSet,
+    key_pair: KeyPair,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
-    let (keys_vec, keys) = Self::read_keys(txn, &Self::generated_keys_key(id));
+    let (keys_vec, keys) = Self::read_keys(
+      txn,
+      &Self::generated_keys_key(set, (key_pair.0.as_ref(), key_pair.1.as_ref())),
+    );
     txn.put(Self::keys_key(&keys.1.group_key()), keys_vec);
     keys
   }
@@ -352,15 +365,16 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     context: SubstrateContext,
-    id: KeyGenId,
+    set: ValidatorSet,
+    key_pair: KeyPair,
   ) -> KeyConfirmed<C::Curve> {
-    let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(txn, &id);
+    let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(txn, set, key_pair);
 
     info!(
-      "Confirmed key pair {} {} from {:?}",
+      "Confirmed key pair {} {} for set {:?}",
       hex::encode(substrate_keys.group_key().to_bytes()),
       hex::encode(coin_keys.group_key().to_bytes()),
-      id
+      set,
     );
 
     KeyConfirmed {

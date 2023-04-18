@@ -301,10 +301,10 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
 
     CoordinatorMessage::Substrate(msg) => {
       match msg {
-        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, id } => {
+        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, set, key_pair } => {
           // See TributaryMutable's struct definition for why this block is safe
           let KeyConfirmed { activation_block, substrate_keys, coin_keys } =
-            tributary_mutable.key_gen.confirm(txn, context, id).await;
+            tributary_mutable.key_gen.confirm(txn, context, set, key_pair).await;
           tributary_mutable.substrate_signers.insert(
             substrate_keys.group_key().to_bytes().to_vec(),
             SubstrateSigner::new(substrate_keys),

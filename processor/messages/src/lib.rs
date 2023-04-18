@@ -9,7 +9,7 @@ use dkg::{Participant, ThresholdParams};
 use serai_primitives::BlockHash;
 use in_instructions_primitives::SignedBatch;
 use tokens_primitives::OutInstructionWithBalance;
-use validator_sets_primitives::ValidatorSet;
+use validator_sets_primitives::{ValidatorSet, KeyPair};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
@@ -141,11 +141,12 @@ pub mod coordinator {
 pub mod substrate {
   use super::*;
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     ConfirmKeyPair {
       context: SubstrateContext,
-      id: key_gen::KeyGenId,
+      set: ValidatorSet,
+      key_pair: KeyPair,
     },
     SubstrateBlock {
       context: SubstrateContext,
