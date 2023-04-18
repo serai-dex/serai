@@ -30,20 +30,20 @@ async fn test_substrate_signer() {
     SignId { key: keys[&participant_one].group_key().to_bytes().to_vec(), id: block.0, attempt: 0 };
 
   let batch = Batch {
-    network: MONERO_NET_ID,
+    network: NetworkId::Monero,
     id: 5,
     block,
     instructions: vec![
       InInstructionWithBalance {
         instruction: InInstruction::Transfer(SeraiAddress([0xbb; 32])),
-        balance: Balance { coin: BITCOIN, amount: Amount(1000) },
+        balance: Balance { coin: Coin::Bitcoin, amount: Amount(1000) },
       },
       InInstructionWithBalance {
         instruction: InInstruction::Call(ApplicationCall {
           application: Application::DEX,
           data: Data::new(vec![0xcc; 128]).unwrap(),
         }),
-        balance: Balance { coin: MONERO, amount: Amount(9999999999999999) },
+        balance: Balance { coin: Coin::Monero, amount: Amount(9999999999999999) },
       },
     ],
   };

@@ -26,7 +26,7 @@ use monero_serai::{
 use tokio::time::sleep;
 
 pub use serai_client::{
-  primitives::{MAX_DATA_LEN, MONERO, MONERO_NET_ID, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, Coin as SeraiCoin, NetworkId, Amount, Balance},
   coins::monero::Address,
 };
 
@@ -66,7 +66,7 @@ impl OutputTrait for Output {
   }
 
   fn balance(&self) -> Balance {
-    Balance { coin: MONERO, amount: Amount(self.0.commitment().amount) }
+    Balance { coin: SeraiCoin::Monero, amount: Amount(self.0.commitment().amount) }
   }
 
   fn data(&self) -> &[u8] {
@@ -221,7 +221,7 @@ impl Coin for Monero {
 
   type Address = Address;
 
-  const NETWORK: NetworkId = MONERO_NET_ID;
+  const NETWORK: NetworkId = NetworkId::Monero;
   const ID: &'static str = "Monero";
   const CONFIRMATIONS: usize = 10;
 

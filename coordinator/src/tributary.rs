@@ -5,6 +5,8 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use frost::Participant;
 
+use scale::Encode;
+
 use serai_client::validator_sets::primitives::ValidatorSet;
 
 #[rustfmt::skip]
@@ -18,7 +20,7 @@ pub fn genesis(serai_block: [u8; 32], set: ValidatorSet) -> [u8; 32] {
   // This locks it to a specific Serai chain
   genesis.append_message(b"serai_block", serai_block);
   genesis.append_message(b"session", set.session.0.to_le_bytes());
-  genesis.append_message(b"network", set.network.0.to_le_bytes());
+  genesis.append_message(b"network", set.network.encode());
   let genesis = genesis.challenge(b"genesis");
   let genesis_ref: &[u8] = genesis.as_ref();
   genesis_ref[.. 32].try_into().unwrap()

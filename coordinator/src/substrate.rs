@@ -177,18 +177,7 @@ async fn handle_batch_and_burns<D: Db, Pro: Processor>(
 
   for burn in serai.get_burn_events(hash).await? {
     if let TokensEvent::Burn { address: _, balance, instruction } = burn {
-      // TODO: Move Network/Coin to an enum and provide this mapping
-      let network = {
-        use serai_client::primitives::*;
-        match balance.coin {
-          BITCOIN => BITCOIN_NET_ID,
-          ETHER => ETHEREUM_NET_ID,
-          DAI => ETHEREUM_NET_ID,
-          MONERO => MONERO_NET_ID,
-          invalid => panic!("burn from unrecognized coin: {invalid:?}"),
-        }
-      };
-
+      let network = balance.coin.network();
       network_had_event(&mut burns, network);
 
       // network_had_event should register an entry in burns

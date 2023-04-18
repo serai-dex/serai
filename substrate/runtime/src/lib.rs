@@ -247,6 +247,21 @@ impl transaction_payment::Config for Runtime {
   type FeeMultiplierUpdate = ();
 }
 
+#[cfg(feature = "runtime-benchmarks")]
+pub struct SeraiAssetBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl assets::BenchmarkHelper<Coin> for SeraiAssetBenchmarkHelper {
+  fn create_asset_id_parameter(id: u32) -> Coin {
+    match (id % 4) + 1 {
+      1 => Coin::Bitcoin,
+      2 => Coin::Ether,
+      3 => Coin::Dai,
+      4 => Coin::Monero,
+      _ => panic!("(id % 4) + 1 wasn't in [1, 4]"),
+    }
+  }
+}
+
 impl assets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type Balance = SubstrateAmount;
@@ -275,7 +290,7 @@ impl assets::Config for Runtime {
 
   type WeightInfo = assets::weights::SubstrateWeight<Runtime>;
   #[cfg(feature = "runtime-benchmarks")]
-  type BenchmarkHelper = ();
+  type BenchmarkHelper = SeraiAssetBenchmarkHelper;
 }
 
 impl tokens::Config for Runtime {

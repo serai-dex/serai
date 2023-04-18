@@ -37,7 +37,7 @@ use bitcoin_serai::bitcoin::{
 };
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, BITCOIN, BITCOIN_NET_ID, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, Coin as SeraiCoin, NetworkId, Amount, Balance},
   coins::bitcoin::Address,
 };
 
@@ -97,7 +97,7 @@ impl OutputTrait for Output {
   }
 
   fn balance(&self) -> Balance {
-    Balance { coin: BITCOIN, amount: Amount(self.output.value()) }
+    Balance { coin: SeraiCoin::Bitcoin, amount: Amount(self.output.value()) }
   }
 
   fn data(&self) -> &[u8] {
@@ -293,7 +293,7 @@ impl Coin for Bitcoin {
 
   type Address = Address;
 
-  const NETWORK: NetworkId = BITCOIN_NET_ID;
+  const NETWORK: NetworkId = NetworkId::Bitcoin;
   const ID: &'static str = "Bitcoin";
   const CONFIRMATIONS: usize = 6;
 

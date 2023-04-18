@@ -24,6 +24,8 @@ transcript = { package = "flexible-transcript", path = "../crypto/transcript", f
 ciphersuite = { path = "../crypto/ciphersuite" }
 frost = { package = "modular-frost", path = "../crypto/frost" }
 
+scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
+
 serai-db = { path = "../common/db" }
 
 processor-messages = { package = "processor-messages", path = "../processor/messages" }

@@ -5,7 +5,7 @@ use sp_core::Pair;
 use serai_client::{
   subxt::config::extrinsic_params::BaseExtrinsicParamsBuilder,
   primitives::{
-    BITCOIN_NET_ID, BITCOIN, BlockHash, SeraiAddress, Amount, Balance, Data, ExternalAddress,
+    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, Data, ExternalAddress,
     insecure_pair_from_name,
   },
   in_instructions::{
@@ -21,7 +21,7 @@ use common::{serai, tx::publish_tx, in_instructions::provide_batch};
 
 serai_test!(
   async fn burn() {
-    let network = BITCOIN_NET_ID;
+    let network = NetworkId::Bitcoin;
     let id = 0;
 
     let mut block_hash = BlockHash([0; 32]);
@@ -31,7 +31,7 @@ serai_test!(
     let public = pair.public();
     let address = SeraiAddress::from(public);
 
-    let coin = BITCOIN;
+    let coin = Coin::Bitcoin;
     let amount = Amount(OsRng.next_u64().saturating_add(1));
     let balance = Balance { coin, amount };
 

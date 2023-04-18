@@ -28,9 +28,10 @@ other properties). The network's key is used for all coins on that network.
 
 | Network  | Curve     | ID |
 |----------|-----------|----|
-| Bitcoin  | Secp256k1 | 0  |
-| Ethereum | Secp256k1 | 1  |
-| Monero   | Ed25519   | 2  |
+| Serai    | Ristretto | 0  |
+| Bitcoin  | Secp256k1 | 1  |
+| Ethereum | Secp256k1 | 2  |
+| Monero   | Ed25519   | 3  |
 
 ### Coins
 

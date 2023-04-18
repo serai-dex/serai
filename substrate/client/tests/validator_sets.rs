@@ -3,9 +3,7 @@ use rand_core::{RngCore, OsRng};
 use sp_core::{sr25519::Public, Pair};
 
 use serai_client::{
-  primitives::{
-    BITCOIN_NET_ID, ETHEREUM_NET_ID, MONERO_NET_ID, BITCOIN_NET, insecure_pair_from_name,
-  },
+  primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
   validator_sets::{
     primitives::{Session, ValidatorSet},
     ValidatorSetsEvent,
@@ -18,7 +16,7 @@ use common::{serai, validator_sets::vote_in_keys};
 
 serai_test!(
   async fn vote_keys() {
-    let network = BITCOIN_NET_ID;
+    let network = NetworkId::Bitcoin;
     let set = ValidatorSet { session: Session(0), network };
 
     let public = insecure_pair_from_name("Alice").public();
@@ -40,7 +38,7 @@ serai_test!(
         .get_new_set_events(serai.get_block_by_number(0).await.unwrap().unwrap().hash())
         .await
         .unwrap(),
-      [BITCOIN_NET_ID, ETHEREUM_NET_ID, MONERO_NET_ID]
+      [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero]
         .iter()
         .copied()
         .map(|network| ValidatorSetsEvent::NewSet {
@@ -50,7 +48,7 @@ serai_test!(
     );
 
     let set_data = serai.get_validator_set(set).await.unwrap().unwrap();
-    assert_eq!(set_data.network, *BITCOIN_NET);
+    assert_eq!(set_data.network, NETWORKS[&NetworkId::Bitcoin]);
     let participants_ref: &[_] = set_data.participants.as_ref();
     assert_eq!(participants_ref, [(public, set_data.bond)].as_ref());
 

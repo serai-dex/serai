@@ -1,7 +1,7 @@
 use rand_core::{RngCore, OsRng};
 
 use serai_client::{
-  primitives::{BITCOIN_NET_ID, BITCOIN, BlockHash, SeraiAddress, Amount, Balance},
+  primitives::{Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress},
   in_instructions::{
     primitives::{InInstruction, InInstructionWithBalance, Batch},
     InInstructionsEvent,
@@ -15,7 +15,7 @@ use common::{serai, in_instructions::provide_batch};
 
 serai_test!(
   async fn publish_batch() {
-    let network = BITCOIN_NET_ID;
+    let network = NetworkId::Bitcoin;
     let id = 0;
 
     let mut block_hash = BlockHash([0; 32]);
@@ -24,7 +24,7 @@ serai_test!(
     let mut address = SeraiAddress::new([0; 32]);
     OsRng.fill_bytes(&mut address.0);
 
-    let coin = BITCOIN;
+    let coin = Coin::Bitcoin;
     let amount = Amount(OsRng.next_u64().saturating_add(1));
     let balance = Balance { coin, amount };
 

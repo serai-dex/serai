@@ -1,4 +1,7 @@
 #[cfg(feature = "std")]
+use std::collections::HashMap;
+
+#[cfg(feature = "std")]
 use zeroize::Zeroize;
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -12,32 +15,35 @@ use serde::{Serialize, Deserialize};
 /// The type used to identify networks.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
-pub struct NetworkId(pub u16);
-impl From<u16> for NetworkId {
-  fn from(network: u16) -> NetworkId {
-    NetworkId(network)
-  }
+pub enum NetworkId {
+  Serai,
+  Bitcoin,
+  Ethereum,
+  Monero,
 }
-
-pub const BITCOIN_NET_ID: NetworkId = NetworkId(0);
-pub const ETHEREUM_NET_ID: NetworkId = NetworkId(1);
-pub const MONERO_NET_ID: NetworkId = NetworkId(2);
 
 /// The type used to identify coins.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
-pub struct Coin(pub u32);
-impl From<u32> for Coin {
-  fn from(coin: u32) -> Coin {
-    Coin(coin)
-  }
+pub enum Coin {
+  Serai,
+  Bitcoin,
+  Ether,
+  Dai,
+  Monero,
 }
 
-pub const SERAI: Coin = Coin(0);
-pub const BITCOIN: Coin = Coin(1);
-pub const ETHER: Coin = Coin(2);
-pub const DAI: Coin = Coin(3);
-pub const MONERO: Coin = Coin(4);
+impl Coin {
+  pub fn network(&self) -> NetworkId {
+    match self {
+      Coin::Serai => NetworkId::Serai,
+      Coin::Bitcoin => NetworkId::Bitcoin,
+      Coin::Ether => NetworkId::Ethereum,
+      Coin::Dai => NetworkId::Ethereum,
+      Coin::Monero => NetworkId::Monero,
+    }
+  }
+}
 
 // Max of 8 coins per network
 // Since Serai isn't interested in listing tokens, as on-chain DEXs will almost certainly have
@@ -68,6 +74,17 @@ impl Zeroize for Network {
 impl Network {
   #[cfg(feature = "std")]
   pub fn new(coins: Vec<Coin>) -> Result<Network, &'static str> {
+    if coins.is_empty() {
+      Err("no coins provided")?;
+    }
+
+    let network = coins[0].network();
+    for coin in coins.iter().skip(1) {
+      if coin.network() != network {
+        Err("coins have different networks")?;
+      }
+    }
+
     Ok(Network {
       coins: coins.try_into().map_err(|_| "coins length exceeds {MAX_COINS_PER_NETWORK}")?,
     })
@@ -80,7 +97,9 @@ impl Network {
 
 #[cfg(feature = "std")]
 lazy_static::lazy_static! {
-  pub static ref BITCOIN_NET: Network = Network::new(vec![BITCOIN]).unwrap();
-  pub static ref ETHEREUM_NET: Network = Network::new(vec![ETHER, DAI]).unwrap();
-  pub static ref MONERO_NET: Network = Network::new(vec![MONERO]).unwrap();
+  pub static ref NETWORKS: HashMap<NetworkId, Network> = HashMap::from([
+    (NetworkId::Bitcoin, Network::new(vec![Coin::Bitcoin]).unwrap()),
+    (NetworkId::Ethereum, Network::new(vec![Coin::Ether, Coin::Dai]).unwrap()),
+    (NetworkId::Monero, Network::new(vec![Coin::Monero]).unwrap()),
+  ]);
 }

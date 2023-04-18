@@ -37,16 +37,16 @@ fn testnet_genesis(
     transaction_payment: Default::default(),
 
     assets: AssetsConfig {
-      assets: [BITCOIN, ETHER, DAI, MONERO]
+      assets: [Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero]
         .iter()
         .map(|coin| (*coin, TOKENS_ADDRESS.into(), true, 1))
         .collect(),
       metadata: vec![
-        (BITCOIN, b"Bitcoin".to_vec(), b"BTC".to_vec(), 8),
+        (Coin::Bitcoin, b"Bitcoin".to_vec(), b"BTC".to_vec(), 8),
         // Reduce to 8 decimals to feasibly fit within u64 (instead of its native u256)
-        (ETHER, b"Ether".to_vec(), b"ETH".to_vec(), 8),
-        (DAI, b"Dai Stablecoin".to_vec(), b"DAI".to_vec(), 8),
-        (MONERO, b"Monero".to_vec(), b"XMR".to_vec(), 12),
+        (Coin::Ether, b"Ether".to_vec(), b"ETH".to_vec(), 8),
+        (Coin::Dai, b"Dai Stablecoin".to_vec(), b"DAI".to_vec(), 8),
+        (Coin::Monero, b"Monero".to_vec(), b"XMR".to_vec(), 12),
       ],
       accounts: vec![],
     },
@@ -54,9 +54,9 @@ fn testnet_genesis(
     validator_sets: ValidatorSetsConfig {
       bond: Amount(1_000_000 * 10_u64.pow(8)),
       networks: vec![
-        (BITCOIN_NET_ID, BITCOIN_NET.clone()),
-        (ETHEREUM_NET_ID, ETHEREUM_NET.clone()),
-        (MONERO_NET_ID, MONERO_NET.clone()),
+        (NetworkId::Bitcoin, NETWORKS[&NetworkId::Bitcoin].clone()),
+        (NetworkId::Ethereum, NETWORKS[&NetworkId::Ethereum].clone()),
+        (NetworkId::Monero, NETWORKS[&NetworkId::Monero].clone()),
       ],
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },

@@ -11,7 +11,7 @@ use serai_db::{DbTxn, Db, MemDb};
 
 use sp_application_crypto::sr25519;
 use serai_client::{
-  primitives::{MONERO_NET_ID, BlockHash},
+  primitives::{BlockHash, NetworkId},
   validator_sets::primitives::{Session, ValidatorSet},
 };
 
@@ -22,7 +22,7 @@ use crate::{
 };
 
 const ID: KeyGenId =
-  KeyGenId { set: ValidatorSet { session: Session(1), network: MONERO_NET_ID }, attempt: 3 };
+  KeyGenId { set: ValidatorSet { session: Session(1), network: NetworkId::Monero }, attempt: 3 };
 
 pub async fn test_key_gen<C: Coin>() {
   let mut entropies = HashMap::new();

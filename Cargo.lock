@@ -1310,6 +1310,7 @@ dependencies = [
  "flexible-transcript",
  "log",
  "modular-frost",
+ "parity-scale-codec",
  "processor-messages",
  "rand_core 0.6.4",
  "serai-client",
