@@ -183,6 +183,7 @@ async fn sign_plans<C: Coin, D: Db>(
 
   let mut block_hash = <C::Block as Block<C>>::Id::default();
   block_hash.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
+  // block_number call is safe since it unwraps
   let block_number = substrate_mutable
     .scanner
     .block_number(&block_hash)
@@ -229,26 +230,26 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
     let mut needed_hash = <C::Block as Block<C>>::Id::default();
     needed_hash.as_mut().copy_from_slice(&block_hash.0);
 
-    let block_number;
-    loop {
+    let block_number = loop {
       // Ensure our scanner has scanned this block, which means our daemon has this block at
       // a sufficient depth
-      let Some(block_number_inner) = scanner.block_number(&needed_hash).await else {
-      warn!(
-        "node is desynced. we haven't scanned {} which should happen after {} confirms",
-        hex::encode(&needed_hash),
-        C::CONFIRMATIONS,
-      );
-      sleep(Duration::from_secs(10)).await;
-      continue;
+      // The block_number may be set even if scanning isn't complete
+      let Some(block_number) = scanner.block_number(&needed_hash).await else {
+        warn!(
+          "node is desynced. we haven't scanned {} which should happen after {} confirms",
+          hex::encode(&needed_hash),
+          C::CONFIRMATIONS,
+        );
+        sleep(Duration::from_secs(10)).await;
+        continue;
+      };
+      break block_number;
     };
-      block_number = block_number_inner;
-      break;
-    }
 
     // While the scanner has cemented this block, that doesn't mean it's been scanned for all
     // keys
     // ram_scanned will return the lowest scanned block number out of all keys
+    // This is a safe call which fulfills the unfulfilled safety requirements from the prior call
     while scanner.ram_scanned().await < block_number {
       sleep(Duration::from_secs(1)).await;
     }
@@ -313,6 +314,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
 
           let mut activation_block_hash = <C::Block as Block<C>>::Id::default();
           activation_block_hash.as_mut().copy_from_slice(&activation_block.0);
+          // This block_number call is safe since it unwraps
           let activation_number = substrate_mutable
             .scanner
             .block_number(&activation_block_hash)

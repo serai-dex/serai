@@ -288,9 +288,10 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     scanner.keys.push(key);
   }
 
+  // This perform a database read which isn't safe with regards to if the value is set or not
+  // It may be set, when it isn't expected to be set, or not set, when it is expected to be set
+  // Since the value is static, if it's set, it's correctly set
   pub async fn block_number(&self, id: &<C::Block as Block<C>>::Id) -> Option<usize> {
-    // This is safe, despite not having a txn, since it's a static value
-    // At worst, it's not set when it's expected to be set, yet that should be handled contextually
     ScannerDb::<C, D>::block_number(&self.scanner.read().await.db, id)
   }
 
@@ -405,6 +406,9 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             let block_id = block.id();
 
             // These block calls are safe, despite not having a txn, since they're static values
+            // only written to/read by this thread
+            // There's also no error caused by them being unexpectedly written (if the commit is
+            // made and then the processor suddenly reboots)
             if let Some(id) = ScannerDb::<C, D>::block(&scanner.db, i) {
               if id != block_id {
                 panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));

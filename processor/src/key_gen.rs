@@ -134,7 +134,11 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     key: &<C::Curve as Ciphersuite>::G,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
     // This is safe, despite not having a txn, since it's a static value
-    // At worst, it's not set when it's expected to be set, yet that should be handled contextually
+    // The only concern is it may not be set when expected, or it may be set unexpectedly
+    // Since this unwraps, it being unset when expected to be set will cause a panic
+    // The only other concern is if it's set when it's not safe to use
+    // The keys are only written on confirmation, and the transaction writing them is atomic to
+    // every associated operation
     KeyGenDb::<C, D>::keys(&self.db, key)
   }
 
