@@ -10,7 +10,7 @@ use rand_core::RngCore;
 use zeroize::Zeroize;
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
 
-use crypto_bigint::U512;
+use crypto_bigint::{U512, modular::constant_mod::Residue};
 
 use group::{
   ff::{Field, PrimeField, PrimeFieldBits},
@@ -20,18 +20,19 @@ use group::{
 
 use crate::{
   backend::u8_from_bool,
-  scalar::{Scalar, MODULUS as SCALAR_MODULUS},
-  field::{FieldElement, MODULUS as FIELD_MODULUS, Q_4},
+  scalar::Scalar,
+  field::{ResidueType, FieldElement, Q_4},
 };
 
-const D: FieldElement = FieldElement(FIELD_MODULUS.0.saturating_sub(&U512::from_u16(39081)));
+const D: FieldElement =
+  FieldElement(ResidueType::sub(&ResidueType::ZERO, &Residue::new(&U512::from_u16(39081))));
 
-const G_Y: FieldElement = FieldElement(U512::from_be_hex(concat!(
+const G_Y: FieldElement = FieldElement(Residue::new(&U512::from_be_hex(concat!(
   "00000000000000",
   "00",
   "693f46716eb6bc248876203756c9c7624bea73736ca3984087789c1e",
   "05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14",
-)));
+))));
 
 fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   let ysq = y.square();
@@ -272,7 +273,7 @@ impl MulAssign<&Scalar> for Point {
 
 impl Point {
   fn is_torsion_free(&self) -> Choice {
-    (*self * SCALAR_MODULUS).is_identity()
+    ((*self * (Scalar::ZERO - Scalar::ONE)) + self).is_identity()
   }
 }
 
