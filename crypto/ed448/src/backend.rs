@@ -69,6 +69,7 @@ macro_rules! field {
   (
     $FieldName: ident,
 
+    $MODULUS_PADDED_STR: ident,
     $MODULUS_STR: ident,
     $MODULUS: ident,
     $WIDE_MODULUS: ident,
@@ -89,11 +90,13 @@ macro_rules! field {
     use rand_core::RngCore;
 
     use generic_array::{typenum::U57, GenericArray};
-    use crypto_bigint::{Integer, NonZero, Encoding};
+    use crypto_bigint::{Integer, NonZero, Encoding, impl_modulus};
 
     use ff::{Field, PrimeField, FieldBits, PrimeFieldBits, helpers::sqrt_ratio_generic};
 
     use $crate::backend::u8_from_bool;
+
+    impl_modulus!(CryptoBigIntModulus, U512, $MODULUS_PADDED_STR);
 
     fn reduce(x: U1024) -> U512 {
       U512::from_le_slice(&x.rem(&NonZero::new($WIDE_MODULUS).unwrap()).to_le_bytes()[.. 64])
@@ -121,9 +124,12 @@ macro_rules! field {
       &y,
       &$MODULUS.0
     ));
-    math_op!($FieldName, $FieldName, Mul, mul, MulAssign, mul_assign, |x, y| reduce(U1024::from(
-      U512::mul_wide(&x, &y)
-    )));
+    math_op!($FieldName, $FieldName, Mul, mul, MulAssign, mul_assign, |x, y| {
+      use crypto_bigint::modular::constant_mod::{ResidueParams, Residue};
+      Residue::<CryptoBigIntModulus, { CryptoBigIntModulus::LIMBS }>::new(&x)
+        .mul(&Residue::<CryptoBigIntModulus, { CryptoBigIntModulus::LIMBS }>::new(&y))
+        .retrieve()
+    });
 
     from_wrapper!($FieldName, U512, u8);
     from_wrapper!($FieldName, U512, u16);

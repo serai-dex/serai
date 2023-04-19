@@ -6,6 +6,13 @@ use crypto_bigint::{U512, U1024};
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct Scalar(pub(crate) U512);
 
+const MODULUS_PADDED_STR: &str = concat!(
+  "00000000000000",
+  "00",
+  "3fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3",
+);
+
 const MODULUS_STR: &str = concat!(
   "3fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
   "7cca23e9c44edb49aed63690216cc2728dc58f552378c292ab5844f3",
@@ -30,6 +37,7 @@ const WIDE_MODULUS: U1024 = U1024::from_be_hex(concat!(
 
 field!(
   Scalar,
+  MODULUS_PADDED_STR,
   MODULUS_STR,
   MODULUS,
   WIDE_MODULUS,

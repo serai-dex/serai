@@ -5091,7 +5091,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
 name = "minimal-ed448"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crypto-bigint 0.5.1",
  "ff 0.13.0",

@@ -6,6 +6,13 @@ use crypto_bigint::{U512, U1024};
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct FieldElement(pub(crate) U512);
 
+const MODULUS_PADDED_STR: &str = concat!(
+  "00000000000000",
+  "00",
+  "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+);
+
 const MODULUS_STR: &str = concat!(
   "fffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
   "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
@@ -33,6 +40,7 @@ pub(crate) const Q_4: FieldElement =
 
 field!(
   FieldElement,
+  MODULUS_PADDED_STR,
   MODULUS_STR,
   MODULUS,
   WIDE_MODULUS,
