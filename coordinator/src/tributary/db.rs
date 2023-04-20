@@ -25,6 +25,14 @@ impl<D: Db> TributaryDb<D> {
     self.0.get(Self::block_key(genesis)).unwrap_or(genesis.to_vec()).try_into().unwrap()
   }
 
+  // This shouldn't need genesis? Yet it's saner to have then quibble about.
+  fn batch_id_key(genesis: &[u8], ext_block: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"batch_id", [genesis, ext_block.as_ref()].concat())
+  }
+  pub fn batch_id<G: Get>(getter: &G, genesis: [u8; 32], ext_block: [u8; 32]) -> Option<[u8; 32]> {
+    getter.get(Self::batch_id_key(&genesis, ext_block)).map(|bytes| bytes.try_into().unwrap())
+  }
+
   fn recognized_id_key(label: &'static str, genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
     Self::tributary_key(b"recognized", [label.as_bytes(), genesis.as_ref(), id.as_ref()].concat())
   }

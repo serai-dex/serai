@@ -46,82 +46,86 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
         Sign,
       }
 
-      let mut handle = |zone, label, needed, id, attempt, mut bytes: Vec<u8>, signed: Signed| {
-        if zone == Zone::Dkg {
-          // Since Dkg doesn't have an ID, solely attempts, this should just be [0; 32]
-          assert_eq!(id, [0; 32], "DKG, which shouldn't have IDs, had a non-0 ID");
-        } else if !TributaryDb::<D>::recognized_id(
-          &txn,
-          match zone {
-            Zone::Dkg => panic!("zone was Dkg despite prior if clause handling Dkg"),
+      impl Zone {
+        fn label(&self) -> &'static str {
+          match self {
+            Zone::Dkg => {
+              panic!("getting the label for dkg despite dkg code paths not needing a label")
+            }
             Zone::Batch => "batch",
             Zone::Sign => "sign",
-          },
-          tributary.genesis(),
-          id,
-        ) {
-          // TODO: Full slash
-          todo!();
+          }
         }
+      }
 
-        // If they've already published a TX for this attempt, slash
-        if let Some(data) =
-          TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, &signed.signer)
-        {
-          if data != bytes {
+      let mut handle =
+        |zone: Zone, label, needed, id, attempt, mut bytes: Vec<u8>, signed: Signed| {
+          if zone == Zone::Dkg {
+            // Since Dkg doesn't have an ID, solely attempts, this should just be [0; 32]
+            assert_eq!(id, [0; 32], "DKG, which shouldn't have IDs, had a non-0 ID");
+          } else if !TributaryDb::<D>::recognized_id(&txn, zone.label(), tributary.genesis(), id) {
             // TODO: Full slash
             todo!();
           }
 
-          // TODO: Slash
-          return None;
-        }
+          // If they've already published a TX for this attempt, slash
+          if let Some(data) =
+            TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, &signed.signer)
+          {
+            if data != bytes {
+              // TODO: Full slash
+              todo!();
+            }
 
-        // If the attempt is lesser than the blockchain's, slash
-        let curr_attempt = TributaryDb::<D>::attempt(&txn, tributary.genesis(), id);
-        if attempt < curr_attempt {
-          // TODO: Slash for being late
-          return None;
-        }
-        if attempt > curr_attempt {
-          // TODO: Full slash
-          todo!();
-        }
-
-        // Store this data
-        let received = TributaryDb::<D>::set_data(
-          label,
-          &mut txn,
-          tributary.genesis(),
-          id,
-          attempt,
-          &signed.signer,
-          &bytes,
-        );
-
-        // If we have all the needed commitments/preprocesses/shares, tell the processor
-        if received == needed {
-          let mut data = HashMap::new();
-          for validator in spec.validators().keys() {
-            data.insert(
-              spec.i(*validator).unwrap(),
-              if validator == &signed.signer {
-                bytes.split_off(0)
-              } else if let Some(data) =
-                TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, validator)
-              {
-                data
-              } else {
-                continue;
-              },
-            );
+            // TODO: Slash
+            return None;
           }
-          assert_eq!(data.len(), usize::from(needed));
 
-          return Some(data);
-        }
-        None
-      };
+          // If the attempt is lesser than the blockchain's, slash
+          let curr_attempt = TributaryDb::<D>::attempt(&txn, tributary.genesis(), id);
+          if attempt < curr_attempt {
+            // TODO: Slash for being late
+            return None;
+          }
+          if attempt > curr_attempt {
+            // TODO: Full slash
+            todo!();
+          }
+
+          // Store this data
+          let received = TributaryDb::<D>::set_data(
+            label,
+            &mut txn,
+            tributary.genesis(),
+            id,
+            attempt,
+            &signed.signer,
+            &bytes,
+          );
+
+          // If we have all the needed commitments/preprocesses/shares, tell the processor
+          if received == needed {
+            let mut data = HashMap::new();
+            for validator in spec.validators().keys() {
+              data.insert(
+                spec.i(*validator).unwrap(),
+                if validator == &signed.signer {
+                  bytes.split_off(0)
+                } else if let Some(data) =
+                  TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, validator)
+                {
+                  data
+                } else {
+                  continue;
+                },
+              );
+            }
+            assert_eq!(data.len(), usize::from(needed));
+
+            return Some(data);
+          }
+          None
+        };
 
       match tx {
         Transaction::DkgCommitments(attempt, bytes, signed) => {
@@ -163,8 +167,25 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
           }
         }
 
-        // TODO
-        Transaction::ExternalBlock(..) => todo!(),
+        Transaction::ExternalBlock(block) => {
+          // Because this external block has been finalized, its batch ID should be authorized
+
+          // If we didn't provide this transaction, we should halt until we do
+          // If we provided a distinct transaction, we should error
+          // If we did provide this transaction, we should've set the batch ID for the block
+          let batch_id =
+            TributaryDb::<D>::batch_id(&txn, tributary.genesis(), block).expect(concat!(
+              "synced a tributary block finalizing a block in a provided transaction despite ",
+              "us not providing that transaction"
+            ));
+
+          TributaryDb::<D>::recognize_id(
+            &mut txn,
+            Zone::Batch.label(),
+            tributary.genesis(),
+            batch_id,
+          );
+        }
         Transaction::SeraiBlock(..) => todo!(),
 
         Transaction::BatchPreprocess(data) => {
