@@ -259,6 +259,7 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
     self.p2p.broadcast(to_broadcast).await
   }
   async fn slash(&mut self, validator: Self::ValidatorId) {
+    // TODO: Handle this slash
     log::error!(
       "validator {} triggered a slash event on tributary {}",
       hex::encode(validator),

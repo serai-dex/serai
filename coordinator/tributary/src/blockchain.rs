@@ -84,6 +84,10 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     res
   }
 
+  pub(crate) fn genesis(&self) -> [u8; 32] {
+    self.genesis
+  }
+
   pub(crate) fn tip(&self) -> [u8; 32] {
     self.tip
   }

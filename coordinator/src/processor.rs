@@ -12,13 +12,14 @@ pub struct Message {
 }
 
 #[async_trait::async_trait]
-pub trait Processor: 'static + Send + Sync {
+pub trait Processor: 'static + Send + Sync + Clone {
   async fn send(&mut self, msg: CoordinatorMessage);
   async fn recv(&mut self) -> Message;
   async fn ack(&mut self, msg: Message);
 }
 
 // TODO: Move this to tests
+#[derive(Clone)]
 pub struct MemProcessor(Arc<RwLock<VecDeque<Message>>>);
 impl MemProcessor {
   #[allow(clippy::new_without_default)]

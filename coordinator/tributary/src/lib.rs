@@ -126,6 +126,9 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     Some(Self { network, synced_block, messages })
   }
 
+  pub fn genesis(&self) -> [u8; 32] {
+    self.network.blockchain.read().unwrap().genesis()
+  }
   pub fn tip(&self) -> [u8; 32] {
     self.network.blockchain.read().unwrap().tip()
   }

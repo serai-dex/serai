@@ -3,27 +3,101 @@ use std::{io, collections::HashMap};
 use blake2::{Digest, Blake2s256};
 use transcript::{Transcript, RecommendedTranscript};
 
+use ciphersuite::{Ciphersuite, Ristretto};
 use frost::Participant;
 
 use scale::Encode;
 
-use serai_client::validator_sets::primitives::ValidatorSet;
+use serai_client::validator_sets::primitives::{ValidatorSet, ValidatorSetData};
 
 #[rustfmt::skip]
 use tributary::{
   ReadWrite, Signed, TransactionError, TransactionKind, Transaction as TransactionTrait,
 };
 
-pub fn genesis(serai_block: [u8; 32], set: ValidatorSet) -> [u8; 32] {
-  // Calculate the genesis for this Tributary
-  let mut genesis = RecommendedTranscript::new(b"Serai Tributary Genesis");
-  // This locks it to a specific Serai chain
-  genesis.append_message(b"serai_block", serai_block);
-  genesis.append_message(b"session", set.session.0.to_le_bytes());
-  genesis.append_message(b"network", set.network.encode());
-  let genesis = genesis.challenge(b"genesis");
-  let genesis_ref: &[u8] = genesis.as_ref();
-  genesis_ref[.. 32].try_into().unwrap()
+mod db;
+pub use db::*;
+
+pub mod scanner;
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TributarySpec {
+  serai_block: [u8; 32],
+  start_time: u64,
+  set: ValidatorSet,
+  validators: Vec<(<Ristretto as Ciphersuite>::G, u64)>,
+}
+
+impl TributarySpec {
+  pub fn new(
+    serai_block: [u8; 32],
+    start_time: u64,
+    set: ValidatorSet,
+    set_data: ValidatorSetData,
+  ) -> TributarySpec {
+    let mut validators = vec![];
+    for (participant, amount) in set_data.participants {
+      // TODO: Ban invalid keys from being validators on the Serai side
+      let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
+        .expect("invalid key registered as participant");
+      // Give one weight on Tributary per bond instance
+      validators.push((participant, amount.0 / set_data.bond.0));
+    }
+
+    Self { serai_block, start_time, set, validators }
+  }
+
+  pub fn set(&self) -> ValidatorSet {
+    self.set
+  }
+
+  pub fn genesis(&self) -> [u8; 32] {
+    // Calculate the genesis for this Tributary
+    let mut genesis = RecommendedTranscript::new(b"Serai Tributary Genesis");
+    // This locks it to a specific Serai chain
+    genesis.append_message(b"serai_block", self.serai_block);
+    genesis.append_message(b"session", self.set.session.0.to_le_bytes());
+    genesis.append_message(b"network", self.set.network.encode());
+    let genesis = genesis.challenge(b"genesis");
+    let genesis_ref: &[u8] = genesis.as_ref();
+    genesis_ref[.. 32].try_into().unwrap()
+  }
+
+  pub fn start_time(&self) -> u64 {
+    self.start_time
+  }
+
+  pub fn n(&self) -> u16 {
+    // TODO: Support multiple key shares
+    // self.validators.iter().map(|(_, weight)| u16::try_from(weight).unwrap()).sum()
+    self.validators().len().try_into().unwrap()
+  }
+
+  pub fn t(&self) -> u16 {
+    (2 * (self.n() / 3)) + 1
+  }
+
+  pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Participant> {
+    let mut i = 1;
+    // TODO: Support multiple key shares
+    for (validator, _weight) in &self.validators {
+      if validator == &key {
+        // return (i .. (i + weight)).to_vec();
+        return Some(Participant::new(i).unwrap());
+      }
+      // i += weight;
+      i += 1;
+    }
+    None
+  }
+
+  pub fn validators(&self) -> HashMap<<Ristretto as Ciphersuite>::G, u64> {
+    let mut res = HashMap::new();
+    for (key, amount) in self.validators.clone() {
+      res.insert(key, amount);
+    }
+    res
+  }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

@@ -132,6 +132,10 @@ impl<T: Transaction> Block<T> {
     res
   }
 
+  pub fn parent(&self) -> [u8; 32] {
+    self.header.parent
+  }
+
   pub fn hash(&self) -> [u8; 32] {
     self.header.hash()
   }
