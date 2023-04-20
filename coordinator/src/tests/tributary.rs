@@ -76,7 +76,7 @@ fn serialize_transaction() {
     OsRng.fill_bytes(&mut ext_block);
     test_read_write(Transaction::ExternalBlock(ext_block));
   }
-  test_read_write(Transaction::SeraiBlock(OsRng.next_u64()));
+  test_read_write(Transaction::SubstrateBlock(OsRng.next_u64()));
 
   test_read_write(Transaction::BatchPreprocess(random_sign_data(&mut OsRng)));
   test_read_write(Transaction::BatchShare(random_sign_data(&mut OsRng)));

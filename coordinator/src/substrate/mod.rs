@@ -197,6 +197,7 @@ async fn handle_batch_and_burns<Pro: Processor>(
             serai_time: block.time().unwrap(),
             coin_latest_finalized_block,
           },
+          block: block.number(),
           key: serai
             .get_keys(ValidatorSet { network, session: Session(0) }) // TODO2
             .await?

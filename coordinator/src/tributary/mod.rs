@@ -162,7 +162,7 @@ pub enum Transaction {
   ExternalBlock([u8; 32]),
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
-  SeraiBlock(u64),
+  SubstrateBlock(u64),
 
   BatchPreprocess(SignData),
   BatchShare(SignData),
@@ -232,7 +232,7 @@ impl ReadWrite for Transaction {
       3 => {
         let mut block = [0; 8];
         reader.read_exact(&mut block)?;
-        Ok(Transaction::SeraiBlock(u64::from_le_bytes(block)))
+        Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
       4 => SignData::read(reader).map(Transaction::BatchPreprocess),
@@ -291,7 +291,7 @@ impl ReadWrite for Transaction {
         writer.write_all(block)
       }
 
-      Transaction::SeraiBlock(block) => {
+      Transaction::SubstrateBlock(block) => {
         writer.write_all(&[3])?;
         writer.write_all(&block.to_le_bytes())
       }
@@ -324,7 +324,7 @@ impl TransactionTrait for Transaction {
       Transaction::DkgShares(_, _, signed) => TransactionKind::Signed(signed),
 
       Transaction::ExternalBlock(_) => TransactionKind::Provided("external"),
-      Transaction::SeraiBlock(_) => TransactionKind::Provided("serai"),
+      Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
       Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
       Transaction::BatchShare(data) => TransactionKind::Signed(&data.signed),

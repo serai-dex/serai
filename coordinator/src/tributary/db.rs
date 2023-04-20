@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 pub use serai_db::*;
@@ -31,6 +33,22 @@ impl<D: Db> TributaryDb<D> {
   }
   pub fn batch_id<G: Get>(getter: &G, genesis: [u8; 32], ext_block: [u8; 32]) -> Option<[u8; 32]> {
     getter.get(Self::batch_id_key(&genesis, ext_block)).map(|bytes| bytes.try_into().unwrap())
+  }
+
+  fn plan_ids_key(genesis: &[u8], block: u64) -> Vec<u8> {
+    Self::tributary_key(b"plan_ids", [genesis, block.to_le_bytes().as_ref()].concat())
+  }
+  pub fn plan_ids<G: Get>(getter: &G, genesis: [u8; 32], block: u64) -> Option<Vec<[u8; 32]>> {
+    getter.get(Self::plan_ids_key(&genesis, block)).map(|bytes| {
+      let mut res = vec![];
+      let mut bytes_ref: &[u8] = bytes.as_ref();
+      while !bytes_ref.is_empty() {
+        let mut id = [0; 32];
+        bytes_ref.read_exact(&mut id).unwrap();
+        res.push(id);
+      }
+      res
+    })
   }
 
   fn recognized_id_key(label: &'static str, genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {

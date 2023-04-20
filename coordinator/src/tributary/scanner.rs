@@ -173,11 +173,10 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
           // If we didn't provide this transaction, we should halt until we do
           // If we provided a distinct transaction, we should error
           // If we did provide this transaction, we should've set the batch ID for the block
-          let batch_id =
-            TributaryDb::<D>::batch_id(&txn, tributary.genesis(), block).expect(concat!(
-              "synced a tributary block finalizing a block in a provided transaction despite ",
-              "us not providing that transaction"
-            ));
+          let batch_id = TributaryDb::<D>::batch_id(&txn, tributary.genesis(), block).expect(
+            "synced a tributary block finalizing a external block in a provided transaction \
+            despite us not providing that transaction",
+          );
 
           TributaryDb::<D>::recognize_id(
             &mut txn,
@@ -186,7 +185,17 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
             batch_id,
           );
         }
-        Transaction::SeraiBlock(..) => todo!(),
+
+        Transaction::SubstrateBlock(block) => {
+          let plan_ids = TributaryDb::<D>::plan_ids(&txn, tributary.genesis(), block).expect(
+            "synced a tributary block finalizing a substrate block in a provided transaction \
+            despite us not providing that transaction",
+          );
+
+          for id in plan_ids {
+            TributaryDb::<D>::recognize_id(&mut txn, Zone::Sign.label(), tributary.genesis(), id);
+          }
+        }
 
         Transaction::BatchPreprocess(data) => {
           if let Some(preprocesses) = handle(
@@ -291,6 +300,8 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
     return;
   }
 
+  // TODO: Only handle n blocks at a time.
+  // This may load the entire chain into RAM as-is.
   let mut blocks = vec![tributary.block(&latest).unwrap()];
   while blocks.last().unwrap().parent() != *last_block {
     blocks.push(tributary.block(&blocks.last().unwrap().parent()).unwrap());
