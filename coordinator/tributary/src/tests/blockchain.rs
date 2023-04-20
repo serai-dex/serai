@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 
 use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
@@ -187,10 +187,10 @@ fn provided_transaction() {
   assert_eq!(txs.provide(tx.clone()), Err(ProvidedError::AlreadyProvided));
   assert_eq!(
     ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis).transactions,
-    VecDeque::from([tx.clone()]),
+    HashMap::from([("provided", VecDeque::from([tx.clone()]))]),
   );
   let mut txn = db.txn();
-  txs.complete(&mut txn, tx.hash());
+  txs.complete(&mut txn, "provided", tx.hash());
   txn.commit();
   assert!(ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis)
     .transactions

@@ -65,12 +65,16 @@ impl ReadWrite for Signed {
 pub enum TransactionKind<'a> {
   /// This tranaction should be provided by every validator, in an exact order.
   ///
+  /// The contained static string names the orderer to use. This allows two distinct provided
+  /// transaction kinds, without a synchronized order, to be ordered within their own kind without
+  /// requiring ordering with each other.
+  ///
   /// The only malleability is in when this transaction appears on chain. The block producer will
   /// include it when they have it. Block verification will fail for validators without it.
   ///
   /// If a supermajority of validators still produce a commit for a block with a provided
   /// transaction which isn't locally held, the chain will sleep until it is locally provided.
-  Provided,
+  Provided(&'static str),
 
   /// An unsigned transaction, only able to be included by the block producer.
   Unsigned,
@@ -114,7 +118,7 @@ pub(crate) fn verify_transaction<T: Transaction>(
   tx.verify()?;
 
   match tx.kind() {
-    TransactionKind::Provided => {}
+    TransactionKind::Provided(_) => {}
     TransactionKind::Unsigned => {}
     TransactionKind::Signed(Signed { signer, nonce, signature }) => {
       if let Some(next_nonce) = next_nonces.get(signer) {

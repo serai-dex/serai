@@ -125,7 +125,7 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
   pub(crate) fn build_block(&mut self) -> Block<T> {
     let block = Block::new(
       self.tip,
-      self.provided.transactions.iter().cloned().collect(),
+      self.provided.transactions.values().flatten().cloned().collect(),
       self.mempool.block(&self.next_nonces),
     );
     // build_block should not return invalid blocks
@@ -137,7 +137,7 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     block.verify(
       self.genesis,
       self.tip,
-      &self.provided.transactions.iter().map(Transaction::hash).collect::<Vec<_>>(),
+      self.provided.transactions.clone(),
       self.next_nonces.clone(),
     )
   }
@@ -164,8 +164,8 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
 
     for tx in &block.transactions {
       match tx.kind() {
-        TransactionKind::Provided => {
-          self.provided.complete(&mut txn, tx.hash());
+        TransactionKind::Provided(order) => {
+          self.provided.complete(&mut txn, order, tx.hash());
         }
         TransactionKind::Unsigned => {}
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {

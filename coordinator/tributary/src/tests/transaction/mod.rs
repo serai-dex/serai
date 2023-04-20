@@ -47,7 +47,7 @@ impl ReadWrite for ProvidedTransaction {
 
 impl Transaction for ProvidedTransaction {
   fn kind(&self) -> TransactionKind<'_> {
-    TransactionKind::Provided
+    TransactionKind::Provided("provided")
   }
 
   fn hash(&self) -> [u8; 32] {

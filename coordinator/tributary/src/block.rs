@@ -1,4 +1,7 @@
-use std::{io, collections::HashMap};
+use std::{
+  io,
+  collections::{VecDeque, HashMap},
+};
 
 use thiserror::Error;
 
@@ -101,7 +104,10 @@ impl<T: Transaction> Block<T> {
   pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<T>) -> Self {
     let mut txs = provided;
     for tx in mempool {
-      assert!(tx.kind() != TransactionKind::Provided, "provided transaction entered mempool");
+      assert!(
+        !matches!(tx.kind(), TransactionKind::Provided(_)),
+        "provided transaction entered mempool"
+      );
       txs.push(tx);
     }
 
@@ -144,7 +150,7 @@ impl<T: Transaction> Block<T> {
     &self,
     genesis: [u8; 32],
     last_block: [u8; 32],
-    locally_provided: &[[u8; 32]],
+    mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
   ) -> Result<(), BlockError> {
     if self.serialize().len() > BLOCK_SIZE_LIMIT {
@@ -157,18 +163,19 @@ impl<T: Transaction> Block<T> {
 
     let mut found_non_provided = false;
     let mut txs = Vec::with_capacity(self.transactions.len());
-    for (i, tx) in self.transactions.iter().enumerate() {
+    for tx in self.transactions.iter() {
       txs.push(tx.hash());
 
-      if tx.kind() == TransactionKind::Provided {
+      if let TransactionKind::Provided(order) = tx.kind() {
         if found_non_provided {
           Err(BlockError::ProvidedAfterNonProvided)?;
         }
 
-        let Some(local) = locally_provided.get(i) else {
-          Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
-        };
-        if txs.last().unwrap() != local {
+        let Some(local) =
+          locally_provided.get_mut(order).and_then(|deque| deque.pop_front()) else {
+            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+          };
+        if tx != &local {
           Err(BlockError::DistinctProvided)?;
         }
 

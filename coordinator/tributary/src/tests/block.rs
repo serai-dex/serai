@@ -69,7 +69,7 @@ fn empty_block() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
   Block::<NonceTransaction>::new(LAST, vec![], vec![])
-    .verify(GENESIS, LAST, &[], HashMap::new())
+    .verify(GENESIS, LAST, HashMap::new(), HashMap::new())
     .unwrap();
 }
 
@@ -89,7 +89,7 @@ fn duplicate_nonces() {
     let res = Block::new(LAST, vec![], mempool).verify(
       GENESIS,
       LAST,
-      &[],
+      HashMap::new(),
       HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]),
     );
     if i == 1 {

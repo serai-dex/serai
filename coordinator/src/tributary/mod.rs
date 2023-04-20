@@ -322,9 +322,8 @@ impl TransactionTrait for Transaction {
       Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed),
       Transaction::DkgShares(_, _, signed) => TransactionKind::Signed(signed),
 
-      // TODO: Tributary requires these be perfectly ordered, yet they have two separate clocks
-      Transaction::ExternalBlock(_) => TransactionKind::Provided,
-      Transaction::SeraiBlock(_) => TransactionKind::Provided,
+      Transaction::ExternalBlock(_) => TransactionKind::Provided("external"),
+      Transaction::SeraiBlock(_) => TransactionKind::Provided("serai"),
 
       Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
       Transaction::BatchShare(data) => TransactionKind::Signed(&data.signed),
