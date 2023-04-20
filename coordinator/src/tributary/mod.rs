@@ -327,6 +327,13 @@ impl TransactionTrait for Transaction {
 
   fn verify(&self) -> Result<(), TransactionError> {
     // TODO: Augment with checks that the Vecs can be deser'd and are for recognized IDs
+
+    if let Transaction::BatchShare(data) = self {
+      if data.data.len() != 32 {
+        Err(TransactionError::InvalidContent)?;
+      }
+    }
+
     Ok(())
   }
 }

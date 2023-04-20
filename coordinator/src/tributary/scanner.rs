@@ -9,7 +9,8 @@ use tributary::{Signed, Block, P2p, Tributary};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
-  CoordinatorMessage,
+  sign::{self, SignId},
+  coordinator, CoordinatorMessage,
 };
 
 use serai_db::DbTxn;
@@ -36,10 +37,10 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
     if !TributaryDb::<D>::handled_event(&db.0, hash, event_id) {
       let mut txn = db.0.txn();
 
-      let mut handle_dkg = |label, attempt, mut bytes: Vec<u8>, signed: Signed| {
+      let mut handle = |label, needed, id, attempt, mut bytes: Vec<u8>, signed: Signed| {
         // If they've already published a TX for this attempt, slash
         if let Some(data) =
-          TributaryDb::<D>::dkg_data(label, &txn, tributary.genesis(), &signed.signer, attempt)
+          TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, &signed.signer)
         {
           if data != bytes {
             // TODO: Full slash
@@ -51,7 +52,7 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
         }
 
         // If the attempt is lesser than the blockchain's, slash
-        let curr_attempt = TributaryDb::<D>::dkg_attempt(&txn, tributary.genesis());
+        let curr_attempt = TributaryDb::<D>::attempt(&txn, tributary.genesis(), id);
         if attempt < curr_attempt {
           // TODO: Slash for being late
           return None;
@@ -62,46 +63,48 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
         }
 
         // Store this data
-        let received = TributaryDb::<D>::set_dkg_data(
+        let received = TributaryDb::<D>::set_data(
           label,
           &mut txn,
           tributary.genesis(),
-          &signed.signer,
+          id,
           attempt,
+          &signed.signer,
           &bytes,
         );
 
-        // If we have all commitments/shares, tell the processor
-        if received == spec.n() {
+        // If we have all the needed commitments/preprocesses/shares, tell the processor
+        if received == needed {
           let mut data = HashMap::new();
           for validator in spec.validators().keys() {
             data.insert(
               spec.i(*validator).unwrap(),
               if validator == &signed.signer {
                 bytes.split_off(0)
+              } else if let Some(data) =
+                TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, validator)
+              {
+                data
               } else {
-                TributaryDb::<D>::dkg_data(label, &txn, tributary.genesis(), validator, attempt)
-                  .unwrap_or_else(|| {
-                    panic!(
-                      "received all DKG data yet couldn't load {} for a validator",
-                      std::str::from_utf8(label).unwrap(),
-                    )
-                  })
+                continue;
               },
             );
           }
+          assert_eq!(data.len(), usize::from(needed));
 
-          return Some((KeyGenId { set: spec.set(), attempt }, data));
+          return Some(data);
         }
         None
       };
 
       match tx {
         Transaction::DkgCommitments(attempt, bytes, signed) => {
-          if let Some((id, commitments)) = handle_dkg(b"commitments", attempt, bytes, signed) {
+          if let Some(commitments) =
+            handle(b"dkg_commitments", spec.n(), [0; 32], attempt, bytes, signed)
+          {
             processor
               .send(CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-                id,
+                id: KeyGenId { set: spec.set(), attempt },
                 commitments,
               }))
               .await;
@@ -122,20 +125,77 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
             )
             .unwrap();
 
-          if let Some((id, shares)) = handle_dkg(b"shares", attempt, bytes, signed) {
+          if let Some(shares) = handle(b"dkg_shares", spec.n(), [0; 32], attempt, bytes, signed) {
             processor
-              .send(CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares { id, shares }))
+              .send(CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
+                id: KeyGenId { set: spec.set(), attempt },
+                shares,
+              }))
               .await;
           }
         }
 
-        Transaction::SignPreprocess(..) => todo!(),
-        Transaction::SignShare(..) => todo!(),
+        Transaction::SignPreprocess(data) => {
+          // TODO: Validate data.plan
+          if let Some(preprocesses) =
+            handle(b"sign_preprocess", spec.t(), data.plan, data.attempt, data.data, data.signed)
+          {
+            processor
+              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
+                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                preprocesses,
+              }))
+              .await;
+          }
+        }
+        Transaction::SignShare(data) => {
+          // TODO: Validate data.plan
+          if let Some(shares) =
+            handle(b"sign_share", spec.t(), data.plan, data.attempt, data.data, data.signed)
+          {
+            processor
+              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
+                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                shares,
+              }))
+              .await;
+          }
+        }
 
+        // TODO
         Transaction::FinalizedBlock(..) => todo!(),
 
-        Transaction::BatchPreprocess(..) => todo!(),
-        Transaction::BatchShare(..) => todo!(),
+        Transaction::BatchPreprocess(data) => {
+          // TODO: Validate data.plan
+          if let Some(preprocesses) =
+            handle(b"batch_preprocess", spec.t(), data.plan, data.attempt, data.data, data.signed)
+          {
+            processor
+              .send(CoordinatorMessage::Coordinator(
+                coordinator::CoordinatorMessage::BatchPreprocesses {
+                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                  preprocesses,
+                },
+              ))
+              .await;
+          }
+        }
+        Transaction::BatchShare(data) => {
+          // TODO: Validate data.plan
+          if let Some(shares) =
+            handle(b"batch_share", spec.t(), data.plan, data.attempt, data.data, data.signed)
+          {
+            processor
+              .send(CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
+                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                shares: shares
+                  .drain()
+                  .map(|(validator, share)| (validator, share.try_into().unwrap()))
+                  .collect(),
+              }))
+              .await;
+          }
+        }
       }
 
       TributaryDb::<D>::handle_event(&mut txn, hash, event_id);
@@ -143,6 +203,8 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
     }
     event_id += 1;
   }
+
+  // TODO: Trigger any necessary re-attempts
 }
 
 pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(

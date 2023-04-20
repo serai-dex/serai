@@ -13,17 +13,20 @@ use crate::{TRANSACTION_SIZE_LIMIT, ReadWrite};
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
   /// Transaction exceeded the size limit.
-  #[error("transaction was too large")]
+  #[error("transaction is too large")]
   TooLargeTransaction,
-  /// This transaction's signer isn't a participant.
+  /// Transaction's signer isn't a participant.
   #[error("invalid signer")]
   InvalidSigner,
-  /// This transaction's nonce isn't the prior nonce plus one.
+  /// Transaction's nonce isn't the prior nonce plus one.
   #[error("invalid nonce")]
   InvalidNonce,
-  /// This transaction's signature is invalid.
+  /// Transaction's signature is invalid.
   #[error("invalid signature")]
   InvalidSignature,
+  /// Transaction's content is invalid.
+  #[error("transaction content is invalid")]
+  InvalidContent,
 }
 
 /// Data for a signed transaction.

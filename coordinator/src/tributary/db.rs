@@ -25,56 +25,72 @@ impl<D: Db> TributaryDb<D> {
     self.0.get(Self::block_key(genesis)).unwrap_or(genesis.to_vec()).try_into().unwrap()
   }
 
-  fn dkg_attempt_key(genesis: [u8; 32]) -> Vec<u8> {
-    Self::tributary_key(b"dkg_attempt", genesis)
+  fn attempt_key(genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
+    let genesis_ref: &[u8] = genesis.as_ref();
+    Self::tributary_key(b"attempt", [genesis_ref, id.as_ref()].concat())
   }
-  pub fn dkg_attempt<G: Get>(getter: &G, genesis: [u8; 32]) -> u32 {
+  pub fn attempt<G: Get>(getter: &G, genesis: [u8; 32], id: [u8; 32]) -> u32 {
     u32::from_le_bytes(
-      getter.get(Self::dkg_attempt_key(genesis)).unwrap_or(vec![0; 4]).try_into().unwrap(),
+      getter.get(Self::attempt_key(genesis, id)).unwrap_or(vec![0; 4]).try_into().unwrap(),
     )
   }
 
-  fn dkg_data_received_key(label: &'static [u8], genesis: &[u8], attempt: u32) -> Vec<u8> {
-    Self::tributary_key(
-      b"dkg_data_received",
-      [label, genesis, attempt.to_le_bytes().as_ref()].concat(),
-    )
-  }
-  fn dkg_data_key(
+  fn data_received_key(
     label: &'static [u8],
-    genesis: &[u8],
-    signer: &<Ristretto as Ciphersuite>::G,
+    genesis: [u8; 32],
+    id: [u8; 32],
     attempt: u32,
   ) -> Vec<u8> {
     Self::tributary_key(
-      b"dkg_data",
-      [label, genesis, signer.to_bytes().as_ref(), attempt.to_le_bytes().as_ref()].concat(),
+      b"data_received",
+      [label, genesis.as_ref(), id.as_ref(), attempt.to_le_bytes().as_ref()].concat(),
     )
   }
-  pub fn dkg_data<G: Get>(
+  fn data_key(
+    label: &'static [u8],
+    genesis: [u8; 32],
+    id: [u8; 32],
+    attempt: u32,
+    signer: &<Ristretto as Ciphersuite>::G,
+  ) -> Vec<u8> {
+    Self::tributary_key(
+      b"data",
+      [
+        label,
+        genesis.as_ref(),
+        id.as_ref(),
+        attempt.to_le_bytes().as_ref(),
+        signer.to_bytes().as_ref(),
+      ]
+      .concat(),
+    )
+  }
+  pub fn data<G: Get>(
     label: &'static [u8],
     getter: &G,
     genesis: [u8; 32],
-    signer: &<Ristretto as Ciphersuite>::G,
+    id: [u8; 32],
     attempt: u32,
+    signer: &<Ristretto as Ciphersuite>::G,
   ) -> Option<Vec<u8>> {
-    getter.get(Self::dkg_data_key(label, &genesis, signer, attempt))
+    getter.get(Self::data_key(label, genesis, id, attempt, signer))
   }
-  pub fn set_dkg_data(
+  pub fn set_data(
     label: &'static [u8],
     txn: &mut D::Transaction<'_>,
     genesis: [u8; 32],
-    signer: &<Ristretto as Ciphersuite>::G,
+    id: [u8; 32],
     attempt: u32,
+    signer: &<Ristretto as Ciphersuite>::G,
     data: &[u8],
   ) -> u16 {
-    let received_key = Self::dkg_data_received_key(label, &genesis, attempt);
+    let received_key = Self::data_received_key(label, genesis, id, attempt);
     let mut received =
       u16::from_le_bytes(txn.get(&received_key).unwrap_or(vec![0; 2]).try_into().unwrap());
     received += 1;
 
     txn.put(received_key, received.to_le_bytes());
-    txn.put(Self::dkg_data_key(label, &genesis, signer, attempt), data);
+    txn.put(Self::data_key(label, genesis, id, attempt, signer), data);
 
     received
   }
