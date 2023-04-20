@@ -162,35 +162,28 @@ macro_rules! math_neg {
   };
 }
 
-macro_rules! from_wrapper {
-  ($wrapper: ident, $inner: ident, $uint: ident) => {
-    impl From<$uint> for $wrapper {
-      fn from(a: $uint) -> $wrapper {
-        Self($inner::from(a))
-      }
-    }
-  };
-}
-pub(crate) use from_wrapper;
-
-macro_rules! from_uint {
-  ($wrapper: ident, $inner: ident) => {
-    from_wrapper!($wrapper, $inner, u8);
-    from_wrapper!($wrapper, $inner, u16);
-    from_wrapper!($wrapper, $inner, u32);
-    from_wrapper!($wrapper, $inner, u64);
-    from_wrapper!($wrapper, $inner, u128);
-  };
-}
-pub(crate) use from_uint;
-
 /// Wrapper around the dalek Scalar type.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct Scalar(pub DScalar);
 deref_borrow!(Scalar, DScalar);
 constant_time!(Scalar, DScalar);
 math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
-from_uint!(Scalar, DScalar);
+
+macro_rules! from_wrapper {
+  ($uint: ident) => {
+    impl From<$uint> for Scalar {
+      fn from(a: $uint) -> Scalar {
+        Scalar(DScalar::from(a))
+      }
+    }
+  };
+}
+
+from_wrapper!(u8);
+from_wrapper!(u16);
+from_wrapper!(u32);
+from_wrapper!(u64);
+from_wrapper!(u128);
 
 // Ed25519 order/scalar modulus
 const MODULUS: U256 =
