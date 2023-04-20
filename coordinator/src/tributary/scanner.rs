@@ -33,11 +33,37 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
   let hash = block.hash();
 
   let mut event_id = 0;
+  #[allow(clippy::explicit_counter_loop)] // event_id isn't TX index. It just currently lines up
   for tx in block.transactions {
     if !TributaryDb::<D>::handled_event(&db.0, hash, event_id) {
       let mut txn = db.0.txn();
 
-      let mut handle = |label, needed, id, attempt, mut bytes: Vec<u8>, signed: Signed| {
+      // Used to determine if an ID is acceptable
+      #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+      enum Zone {
+        Dkg,
+        Batch,
+        Sign,
+      }
+
+      let mut handle = |zone, label, needed, id, attempt, mut bytes: Vec<u8>, signed: Signed| {
+        if zone == Zone::Dkg {
+          // Since Dkg doesn't have an ID, solely attempts, this should just be [0; 32]
+          assert_eq!(id, [0; 32], "DKG, which shouldn't have IDs, had a non-0 ID");
+        } else if !TributaryDb::<D>::recognized_id(
+          &txn,
+          match zone {
+            Zone::Dkg => panic!("zone was Dkg despite prior if clause handling Dkg"),
+            Zone::Batch => "batch",
+            Zone::Sign => "sign",
+          },
+          tributary.genesis(),
+          id,
+        ) {
+          // TODO: Full slash
+          todo!();
+        }
+
         // If they've already published a TX for this attempt, slash
         if let Some(data) =
           TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, &signed.signer)
@@ -100,7 +126,7 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
       match tx {
         Transaction::DkgCommitments(attempt, bytes, signed) => {
           if let Some(commitments) =
-            handle(b"dkg_commitments", spec.n(), [0; 32], attempt, bytes, signed)
+            handle(Zone::Dkg, b"dkg_commitments", spec.n(), [0; 32], attempt, bytes, signed)
           {
             processor
               .send(CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
@@ -114,7 +140,7 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
         Transaction::DkgShares(attempt, mut shares, signed) => {
           if shares.len() != usize::from(spec.n()) {
             // TODO: Full slash
-            continue;
+            todo!();
           }
 
           let bytes = shares
@@ -125,7 +151,9 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
             )
             .unwrap();
 
-          if let Some(shares) = handle(b"dkg_shares", spec.n(), [0; 32], attempt, bytes, signed) {
+          if let Some(shares) =
+            handle(Zone::Dkg, b"dkg_shares", spec.n(), [0; 32], attempt, bytes, signed)
+          {
             processor
               .send(CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
                 id: KeyGenId { set: spec.set(), attempt },
@@ -140,10 +168,15 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
         Transaction::SeraiBlock(..) => todo!(),
 
         Transaction::BatchPreprocess(data) => {
-          // TODO: Validate data.plan
-          if let Some(preprocesses) =
-            handle(b"batch_preprocess", spec.t(), data.plan, data.attempt, data.data, data.signed)
-          {
+          if let Some(preprocesses) = handle(
+            Zone::Batch,
+            b"batch_preprocess",
+            spec.t(),
+            data.plan,
+            data.attempt,
+            data.data,
+            data.signed,
+          ) {
             processor
               .send(CoordinatorMessage::Coordinator(
                 coordinator::CoordinatorMessage::BatchPreprocesses {
@@ -155,10 +188,15 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
           }
         }
         Transaction::BatchShare(data) => {
-          // TODO: Validate data.plan
-          if let Some(shares) =
-            handle(b"batch_share", spec.t(), data.plan, data.attempt, data.data, data.signed)
-          {
+          if let Some(shares) = handle(
+            Zone::Batch,
+            b"batch_share",
+            spec.t(),
+            data.plan,
+            data.attempt,
+            data.data,
+            data.signed,
+          ) {
             processor
               .send(CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
                 id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
@@ -172,10 +210,15 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
         }
 
         Transaction::SignPreprocess(data) => {
-          // TODO: Validate data.plan
-          if let Some(preprocesses) =
-            handle(b"sign_preprocess", spec.t(), data.plan, data.attempt, data.data, data.signed)
-          {
+          if let Some(preprocesses) = handle(
+            Zone::Sign,
+            b"sign_preprocess",
+            spec.t(),
+            data.plan,
+            data.attempt,
+            data.data,
+            data.signed,
+          ) {
             processor
               .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
                 id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
@@ -185,10 +228,15 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
           }
         }
         Transaction::SignShare(data) => {
-          // TODO: Validate data.plan
-          if let Some(shares) =
-            handle(b"sign_share", spec.t(), data.plan, data.attempt, data.data, data.signed)
-          {
+          if let Some(shares) = handle(
+            Zone::Sign,
+            b"sign_share",
+            spec.t(),
+            data.plan,
+            data.attempt,
+            data.data,
+            data.signed,
+          ) {
             processor
               .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
                 id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },

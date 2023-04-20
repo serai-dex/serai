@@ -158,7 +158,8 @@ pub enum Transaction {
   DkgShares(u32, HashMap<Participant, Vec<u8>>, Signed),
 
   // When an external block is finalized, we can allow the associated batch IDs
-  ExternalBlock(u64),
+  // Commits to the full block so eclipsed nodes don't continue on their eclipsed state
+  ExternalBlock([u8; 32]),
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
   SeraiBlock(u64),
@@ -223,9 +224,9 @@ impl ReadWrite for Transaction {
       }
 
       2 => {
-        let mut block = [0; 8];
+        let mut block = [0; 32];
         reader.read_exact(&mut block)?;
-        Ok(Transaction::ExternalBlock(u64::from_le_bytes(block)))
+        Ok(Transaction::ExternalBlock(block))
       }
 
       3 => {
@@ -287,7 +288,7 @@ impl ReadWrite for Transaction {
 
       Transaction::ExternalBlock(block) => {
         writer.write_all(&[2])?;
-        writer.write_all(&block.to_le_bytes())
+        writer.write_all(block)
       }
 
       Transaction::SeraiBlock(block) => {
@@ -343,8 +344,6 @@ impl TransactionTrait for Transaction {
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
-    // TODO: Augment with checks that the Vecs can be deser'd and are for recognized IDs
-
     if let Transaction::BatchShare(data) = self {
       if data.data.len() != 32 {
         Err(TransactionError::InvalidContent)?;

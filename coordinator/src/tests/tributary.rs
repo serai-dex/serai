@@ -71,7 +71,11 @@ fn serialize_transaction() {
     ));
   }
 
-  test_read_write(Transaction::ExternalBlock(OsRng.next_u64()));
+  {
+    let mut ext_block = [0; 32];
+    OsRng.fill_bytes(&mut ext_block);
+    test_read_write(Transaction::ExternalBlock(ext_block));
+  }
   test_read_write(Transaction::SeraiBlock(OsRng.next_u64()));
 
   test_read_write(Transaction::BatchPreprocess(random_sign_data(&mut OsRng)));

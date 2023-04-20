@@ -25,6 +25,26 @@ impl<D: Db> TributaryDb<D> {
     self.0.get(Self::block_key(genesis)).unwrap_or(genesis.to_vec()).try_into().unwrap()
   }
 
+  fn recognized_id_key(label: &'static str, genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"recognized", [label.as_bytes(), genesis.as_ref(), id.as_ref()].concat())
+  }
+  pub fn recognized_id<G: Get>(
+    getter: &G,
+    label: &'static str,
+    genesis: [u8; 32],
+    id: [u8; 32],
+  ) -> bool {
+    getter.get(Self::recognized_id_key(label, genesis, id)).is_some()
+  }
+  pub fn recognize_id(
+    txn: &mut D::Transaction<'_>,
+    label: &'static str,
+    genesis: [u8; 32],
+    id: [u8; 32],
+  ) {
+    txn.put(Self::recognized_id_key(label, genesis, id), [])
+  }
+
   fn attempt_key(genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
     let genesis_ref: &[u8] = genesis.as_ref();
     Self::tributary_key(b"attempt", [genesis_ref, id.as_ref()].concat())
