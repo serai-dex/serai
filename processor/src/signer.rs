@@ -374,9 +374,14 @@ impl<C: Coin, D: Db> Signer<C, D> {
         let preprocesses = match preprocesses
           .drain()
           .map(|(l, preprocess)| {
-            machine
-              .read_preprocess::<&[u8]>(&mut preprocess.as_ref())
-              .map(|preprocess| (l, preprocess))
+            let mut preprocess_ref = preprocess.as_ref();
+            let res = machine
+              .read_preprocess::<&[u8]>(&mut preprocess_ref)
+              .map(|preprocess| (l, preprocess));
+            if !preprocess_ref.is_empty() {
+              todo!("malicious signer: extra bytes");
+            }
+            res
           })
           .collect::<Result<_, _>>()
         {
@@ -424,7 +429,12 @@ impl<C: Coin, D: Db> Signer<C, D> {
         let shares = match shares
           .drain()
           .map(|(l, share)| {
-            machine.read_share::<&[u8]>(&mut share.as_ref()).map(|share| (l, share))
+            let mut share_ref = share.as_ref();
+            let res = machine.read_share::<&[u8]>(&mut share_ref).map(|share| (l, share));
+            if !share_ref.is_empty() {
+              todo!("malicious signer: extra bytes");
+            }
+            res
           })
           .collect::<Result<_, _>>()
         {

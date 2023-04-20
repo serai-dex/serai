@@ -267,6 +267,12 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         let (coin_machine, coin_shares) =
           handle_machine(&mut rng, params, machines.1, &mut commitments_ref);
 
+        for (_, commitments) in commitments_ref {
+          if !commitments.is_empty() {
+            todo!("malicious signer: extra bytes");
+          }
+        }
+
         self.active_share.insert(id.set, (substrate_machine, coin_machine));
 
         let mut shares: HashMap<_, _> =
@@ -353,6 +359,12 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
 
         let substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
         let coin_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
+
+        for (_, shares) in shares_ref {
+          if !shares.is_empty() {
+            todo!("malicious signer: extra bytes");
+          }
+        }
 
         let mut coin_keys = ThresholdKeys::new(coin_keys);
         C::tweak_keys(&mut coin_keys);
