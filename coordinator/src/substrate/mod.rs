@@ -4,7 +4,7 @@ use std::collections::{HashSet, HashMap};
 use zeroize::Zeroizing;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use frost::{Participant, ThresholdParams};
+use frost::ThresholdParams;
 
 use serai_client::{
   SeraiError, Block, Serai,
@@ -17,36 +17,31 @@ use serai_client::{
   tokens::{primitives::OutInstructionWithBalance, TokensEvent},
 };
 
+use serai_db::DbTxn;
+
 use tributary::Tributary;
 
 use processor_messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage};
 
-use crate::{Db, MainDb, P2p, processor::Processor};
+use crate::{Db, P2p, processor::Processor, tributary::TributarySpec};
 
-async fn get_coin_key(serai: &Serai, set: ValidatorSet) -> Result<Option<Vec<u8>>, SeraiError> {
-  Ok(serai.get_keys(set).await?.map(|keys| keys.1.into_inner()))
-}
+mod db;
+pub use db::*;
 
 async fn in_set(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: &Serai,
   set: ValidatorSet,
-) -> Result<Option<Option<Participant>>, SeraiError> {
+) -> Result<Option<bool>, SeraiError> {
   let Some(data) = serai.get_validator_set(set).await? else {
     return Ok(None);
   };
   let key = (Ristretto::generator() * key.deref()).to_bytes();
-  Ok(Some(
-    data
-      .participants
-      .iter()
-      .position(|(participant, _)| participant.0 == key)
-      .map(|index| Participant::new((index + 1).try_into().unwrap()).unwrap()),
-  ))
+  Ok(Some(data.participants.iter().any(|(participant, _)| participant.0 == key)))
 }
 
 async fn handle_new_set<D: Db, Pro: Processor, P: P2p>(
-  db: &mut MainDb<D>,
+  db: D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: &P,
   processor: &mut Pro,
@@ -54,29 +49,18 @@ async fn handle_new_set<D: Db, Pro: Processor, P: P2p>(
   block: &Block,
   set: ValidatorSet,
 ) -> Result<(), SeraiError> {
-  if let Some(i) = in_set(key, serai, set).await?.expect("NewSet for set which doesn't exist") {
+  if in_set(key, serai, set).await?.expect("NewSet for set which doesn't exist") {
     let set_data = serai.get_validator_set(set).await?.expect("NewSet for set which doesn't exist");
 
-    let n = u16::try_from(set_data.participants.len()).unwrap();
-    let t = (2 * (n / 3)) + 1;
-
-    let mut validators = HashMap::new();
-    for (l, (participant, amount)) in set_data.participants.iter().enumerate() {
-      // TODO: Ban invalid keys from being validators on the Serai side
-      let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
-        .expect("invalid key registered as participant");
-      // Give one weight on Tributary per bond instance
-      validators.insert(participant, amount.0 / set_data.bond.0);
-    }
+    let spec = TributarySpec::new(block.hash(), block.time().unwrap(), set, set_data);
 
     // TODO: Do something with this
     let tributary = Tributary::<_, crate::tributary::Transaction, _>::new(
-      // TODO2: Use a DB on a dedicated volume
-      db.0.clone(),
-      crate::tributary::genesis(block.hash(), set),
-      block.time().expect("Serai block didn't have a timestamp set"),
+      db,
+      spec.genesis(),
+      spec.start_time(),
       key.clone(),
-      validators,
+      spec.validators(),
       p2p.clone(),
     )
     .await
@@ -91,7 +75,14 @@ async fn handle_new_set<D: Db, Pro: Processor, P: P2p>(
       .send(CoordinatorMessage::KeyGen(
         processor_messages::key_gen::CoordinatorMessage::GenerateKey {
           id: KeyGenId { set, attempt: 0 },
-          params: ThresholdParams::new(t, n, i).unwrap(),
+          params: ThresholdParams::new(
+            spec.t(),
+            spec.n(),
+            spec
+              .i(Ristretto::generator() * key.deref())
+              .expect("In set for a set we aren't in set for"),
+          )
+          .unwrap(),
         },
       ))
       .await;
@@ -100,8 +91,7 @@ async fn handle_new_set<D: Db, Pro: Processor, P: P2p>(
   Ok(())
 }
 
-async fn handle_key_gen<D: Db, Pro: Processor>(
-  db: &mut MainDb<D>,
+async fn handle_key_gen<Pro: Processor>(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   processor: &mut Pro,
   serai: &Serai,
@@ -109,11 +99,7 @@ async fn handle_key_gen<D: Db, Pro: Processor>(
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
-  if in_set(key, serai, set)
-    .await?
-    .expect("KeyGen occurred for a set which doesn't exist")
-    .is_some()
-  {
+  if in_set(key, serai, set).await?.expect("KeyGen occurred for a set which doesn't exist") {
     // TODO: Check how the processor handles this being fired multiple times
     processor
       .send(CoordinatorMessage::Substrate(
@@ -137,9 +123,7 @@ async fn handle_key_gen<D: Db, Pro: Processor>(
   Ok(())
 }
 
-async fn handle_batch_and_burns<D: Db, Pro: Processor>(
-  db: &mut MainDb<D>,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+async fn handle_batch_and_burns<Pro: Processor>(
   processor: &mut Pro,
   serai: &Serai,
   block: &Block,
@@ -213,13 +197,11 @@ async fn handle_batch_and_burns<D: Db, Pro: Processor>(
             serai_time: block.time().unwrap(),
             coin_latest_finalized_block,
           },
-          key: get_coin_key(
-            serai,
-            // TODO2
-            ValidatorSet { network, session: Session(0) },
-          )
-          .await?
-          .expect("batch/burn for network which never set keys"),
+          key: serai
+            .get_keys(ValidatorSet { network, session: Session(0) }) // TODO2
+            .await?
+            .map(|keys| keys.1.into_inner())
+            .expect("batch/burn for network which never set keys"),
           burns: burns.remove(&network).unwrap(),
         },
       ))
@@ -232,7 +214,7 @@ async fn handle_batch_and_burns<D: Db, Pro: Processor>(
 // Handle a specific Substrate block, returning an error when it fails to get data
 // (not blocking / holding)
 async fn handle_block<D: Db, Pro: Processor, P: P2p>(
-  db: &mut MainDb<D>,
+  db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: &P,
   processor: &mut Pro,
@@ -250,26 +232,31 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
     // Additionally, if the Serai connection also fails 1/100 times, this means a block with 1000
     // events will successfully be incrementally handled (though the Serai connection should be
     // stable)
-    if !db.handled_event(hash, event_id) {
+    if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       if let ValidatorSetsEvent::NewSet { set } = new_set {
-        handle_new_set(db, key, p2p, processor, serai, &block, set).await?;
+        // TODO2: Use a DB on a dedicated volume
+        handle_new_set(db.0.clone(), key, p2p, processor, serai, &block, set).await?;
       } else {
         panic!("NewSet event wasn't NewSet: {new_set:?}");
       }
-      db.handle_event(hash, event_id);
+      let mut txn = db.0.txn();
+      SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
+      txn.commit();
     }
     event_id += 1;
   }
 
   // If a key pair was confirmed, inform the processor
   for key_gen in serai.get_key_gen_events(hash).await? {
-    if !db.handled_event(hash, event_id) {
+    if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
-        handle_key_gen(db, key, processor, serai, &block, set, key_pair).await?;
+        handle_key_gen(key, processor, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }
-      db.handle_event(hash, event_id);
+      let mut txn = db.0.txn();
+      SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
+      txn.commit();
     }
     event_id += 1;
   }
@@ -279,31 +266,33 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
   // following events share data collection
   // This does break the uniqueness of (hash, event_id) -> one event, yet
   // (network, (hash, event_id)) remains valid as a unique ID for an event
-  if !db.handled_event(hash, event_id) {
-    handle_batch_and_burns(db, key, processor, serai, &block).await?;
+  if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
+    handle_batch_and_burns(processor, serai, &block).await?;
   }
-  db.handle_event(hash, event_id);
+  let mut txn = db.0.txn();
+  SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
+  txn.commit();
 
   Ok(())
 }
 
 pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
-  db: &mut MainDb<D>,
+  db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: &P,
   processor: &mut Pro,
   serai: &Serai,
-  last_substrate_block: &mut u64,
+  last_block: &mut u64,
 ) -> Result<(), SeraiError> {
   // Check if there's been a new Substrate block
   let latest = serai.get_latest_block().await?;
   let latest_number = latest.number();
-  if latest_number == *last_substrate_block {
+  if latest_number == *last_block {
     return Ok(());
   }
   let mut latest = Some(latest);
 
-  for b in (*last_substrate_block + 1) ..= latest_number {
+  for b in (*last_block + 1) ..= latest_number {
     handle_block(
       db,
       key,
@@ -320,8 +309,8 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
       },
     )
     .await?;
-    *last_substrate_block += 1;
-    db.set_last_substrate_block(*last_substrate_block);
+    *last_block += 1;
+    db.set_last_block(*last_block);
   }
 
   Ok(())
