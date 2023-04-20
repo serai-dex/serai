@@ -71,11 +71,12 @@ fn serialize_transaction() {
     ));
   }
 
-  test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng)));
-  test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng)));
-
-  test_read_write(Transaction::FinalizedBlock(OsRng.next_u64()));
+  test_read_write(Transaction::ExternalBlock(OsRng.next_u64()));
+  test_read_write(Transaction::SeraiBlock(OsRng.next_u64()));
 
   test_read_write(Transaction::BatchPreprocess(random_sign_data(&mut OsRng)));
   test_read_write(Transaction::BatchShare(random_sign_data(&mut OsRng)));
+
+  test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng)));
+  test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng)));
 }

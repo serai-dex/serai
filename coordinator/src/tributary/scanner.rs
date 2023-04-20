@@ -135,35 +135,9 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
           }
         }
 
-        Transaction::SignPreprocess(data) => {
-          // TODO: Validate data.plan
-          if let Some(preprocesses) =
-            handle(b"sign_preprocess", spec.t(), data.plan, data.attempt, data.data, data.signed)
-          {
-            processor
-              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
-                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-                preprocesses,
-              }))
-              .await;
-          }
-        }
-        Transaction::SignShare(data) => {
-          // TODO: Validate data.plan
-          if let Some(shares) =
-            handle(b"sign_share", spec.t(), data.plan, data.attempt, data.data, data.signed)
-          {
-            processor
-              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
-                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-                shares,
-              }))
-              .await;
-          }
-        }
-
         // TODO
-        Transaction::FinalizedBlock(..) => todo!(),
+        Transaction::ExternalBlock(..) => todo!(),
+        Transaction::SeraiBlock(..) => todo!(),
 
         Transaction::BatchPreprocess(data) => {
           // TODO: Validate data.plan
@@ -192,6 +166,33 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
                   .drain()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))
                   .collect(),
+              }))
+              .await;
+          }
+        }
+
+        Transaction::SignPreprocess(data) => {
+          // TODO: Validate data.plan
+          if let Some(preprocesses) =
+            handle(b"sign_preprocess", spec.t(), data.plan, data.attempt, data.data, data.signed)
+          {
+            processor
+              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
+                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                preprocesses,
+              }))
+              .await;
+          }
+        }
+        Transaction::SignShare(data) => {
+          // TODO: Validate data.plan
+          if let Some(shares) =
+            handle(b"sign_share", spec.t(), data.plan, data.attempt, data.data, data.signed)
+          {
+            processor
+              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
+                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                shares,
               }))
               .await;
           }

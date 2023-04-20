@@ -157,13 +157,17 @@ pub enum Transaction {
   DkgCommitments(u32, Vec<u8>, Signed),
   DkgShares(u32, HashMap<Participant, Vec<u8>>, Signed),
 
-  SignPreprocess(SignData),
-  SignShare(SignData),
-
-  FinalizedBlock(u64),
+  // When an external block is finalized, we can allow the associated batch IDs
+  ExternalBlock(u64),
+  // When a Serai block is finalized, with the contained batches, we can allow the associated plan
+  // IDs
+  SeraiBlock(u64),
 
   BatchPreprocess(SignData),
   BatchShare(SignData),
+
+  SignPreprocess(SignData),
+  SignShare(SignData),
 }
 
 impl ReadWrite for Transaction {
@@ -218,17 +222,24 @@ impl ReadWrite for Transaction {
         Ok(Transaction::DkgShares(attempt, shares, signed))
       }
 
-      2 => SignData::read(reader).map(Transaction::SignPreprocess),
-      3 => SignData::read(reader).map(Transaction::SignShare),
-
-      4 => {
+      2 => {
         let mut block = [0; 8];
         reader.read_exact(&mut block)?;
-        Ok(Transaction::FinalizedBlock(u64::from_le_bytes(block)))
+        Ok(Transaction::ExternalBlock(u64::from_le_bytes(block)))
       }
 
-      5 => SignData::read(reader).map(Transaction::BatchPreprocess),
-      6 => SignData::read(reader).map(Transaction::BatchShare),
+      3 => {
+        let mut block = [0; 8];
+        reader.read_exact(&mut block)?;
+        Ok(Transaction::SeraiBlock(u64::from_le_bytes(block)))
+      }
+
+      4 => SignData::read(reader).map(Transaction::BatchPreprocess),
+      5 => SignData::read(reader).map(Transaction::BatchShare),
+
+      6 => SignData::read(reader).map(Transaction::SignPreprocess),
+      7 => SignData::read(reader).map(Transaction::SignShare),
+
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
     }
   }
@@ -274,26 +285,31 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::SignPreprocess(data) => {
+      Transaction::ExternalBlock(block) => {
         writer.write_all(&[2])?;
-        data.write(writer)
-      }
-      Transaction::SignShare(data) => {
-        writer.write_all(&[3])?;
-        data.write(writer)
+        writer.write_all(&block.to_le_bytes())
       }
 
-      Transaction::FinalizedBlock(block) => {
-        writer.write_all(&[4])?;
+      Transaction::SeraiBlock(block) => {
+        writer.write_all(&[3])?;
         writer.write_all(&block.to_le_bytes())
       }
 
       Transaction::BatchPreprocess(data) => {
-        writer.write_all(&[5])?;
+        writer.write_all(&[4])?;
         data.write(writer)
       }
       Transaction::BatchShare(data) => {
+        writer.write_all(&[5])?;
+        data.write(writer)
+      }
+
+      Transaction::SignPreprocess(data) => {
         writer.write_all(&[6])?;
+        data.write(writer)
+      }
+      Transaction::SignShare(data) => {
+        writer.write_all(&[7])?;
         data.write(writer)
       }
     }
@@ -306,13 +322,15 @@ impl TransactionTrait for Transaction {
       Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed),
       Transaction::DkgShares(_, _, signed) => TransactionKind::Signed(signed),
 
-      Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
-      Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
-
-      Transaction::FinalizedBlock(_) => TransactionKind::Provided,
+      // TODO: Tributary requires these be perfectly ordered, yet they have two separate clocks
+      Transaction::ExternalBlock(_) => TransactionKind::Provided,
+      Transaction::SeraiBlock(_) => TransactionKind::Provided,
 
       Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
       Transaction::BatchShare(data) => TransactionKind::Signed(&data.signed),
+
+      Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
+      Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
     }
   }
 
