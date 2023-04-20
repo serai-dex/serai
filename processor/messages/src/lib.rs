@@ -134,6 +134,7 @@ pub mod coordinator {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
+    SubstrateBlockAck { block: u64, plans: Vec<[u8; 32]> },
     BatchPreprocess { id: SignId, preprocess: Vec<u8> },
     BatchShare { id: SignId, share: [u8; 32] },
   }
@@ -151,6 +152,7 @@ pub mod substrate {
     },
     SubstrateBlock {
       context: SubstrateContext,
+      block: u64,
       key: Vec<u8>,
       burns: Vec<OutInstructionWithBalance>,
     },

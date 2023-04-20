@@ -383,6 +383,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
+          block,
           key: key_vec,
           burns,
         } => {
@@ -421,6 +422,15 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             .get_mut(&key_vec)
             .expect("key we don't have a scheduler for acknowledged a block")
             .schedule(outputs, payments);
+
+          coordinator
+            .send(ProcessorMessage::Coordinator(
+              messages::coordinator::ProcessorMessage::SubstrateBlockAck {
+                block,
+                plans: plans.iter().map(|plan| plan.id()).collect(),
+              },
+            ))
+            .await;
 
           sign_plans(
             txn,
