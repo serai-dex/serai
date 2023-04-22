@@ -1,0 +1,21 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+        with:
+          github-token: ${{ inputs.github-token }}
+
+      - name: Verify no-std builds
+        run: cd tests/no-std && cargo build --target wasm32-unknown-unknown

@@ -1,8 +1,15 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use core::ops::Deref;
-use std::io::{self, Read, Write};
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
+use std_shims::{
+  vec::Vec,
+  io::{self, Read, Write},
+};
 
 use rand_core::{RngCore, CryptoRng};
 

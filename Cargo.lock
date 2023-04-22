@@ -1067,6 +1067,7 @@ dependencies = [
  "rand_core 0.6.4",
  "sha2 0.10.6",
  "sha3",
+ "std-shims",
  "subtle",
  "zeroize",
 ]
@@ -5099,7 +5100,6 @@ dependencies = [
  "generic-array",
  "group 0.13.0",
  "hex",
- "lazy_static",
  "rand_core 0.6.4",
  "rustversion",
  "subtle",
@@ -5219,6 +5219,7 @@ dependencies = [
  "group 0.13.0",
  "lazy_static",
  "sha3",
+ "std-shims",
  "subtle",
 ]
 
@@ -5335,6 +5336,7 @@ dependencies = [
  "k256",
  "rand_core 0.6.4",
  "rustversion",
+ "std-shims",
  "zeroize",
 ]
 
@@ -8571,6 +8573,7 @@ dependencies = [
  "multiexp",
  "rand_core 0.6.4",
  "sha2 0.10.6",
+ "std-shims",
  "zeroize",
 ]
 
@@ -8797,6 +8800,19 @@ dependencies = [
 [[package]]
 name = "serai-db"
 version = "0.1.0"
+
+[[package]]
+name = "serai-no-std"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "dalek-ff-group",
+ "flexible-transcript",
+ "minimal-ed448",
+ "monero-generators",
+ "multiexp",
+ "schnorr-signatures",
+]
 
 [[package]]
 name = "serai-node"
@@ -9903,6 +9919,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "std-shims"
+version = "0.1.0"
+dependencies = [
+ "hashbrown 0.13.2",
 ]
 
 [[package]]

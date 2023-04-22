@@ -2,16 +2,15 @@
 //! An implementation of Monero's `ge_fromfe_frombytes_vartime`, simply called
 //! `hash_to_point` here, is included, as needed to generate generators.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use lazy_static::lazy_static;
 
 use sha3::{Digest, Keccak256};
 
-use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_POINT,
-  edwards::{EdwardsPoint as DalekPoint, CompressedEdwardsY},
-};
+use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint, CompressedEdwardsY};
 
-use group::Group;
+use group::{Group, GroupEncoding};
 use dalek_ff_group::EdwardsPoint;
 
 mod varint;
@@ -27,7 +26,7 @@ fn hash(data: &[u8]) -> [u8; 32] {
 lazy_static! {
   /// Monero alternate generator `H`, used for amounts in Pedersen commitments.
   pub static ref H: DalekPoint =
-    CompressedEdwardsY(hash(&ED25519_BASEPOINT_POINT.compress().to_bytes()))
+    CompressedEdwardsY(hash(&EdwardsPoint::generator().to_bytes()))
       .decompress()
       .unwrap()
       .mul_by_cofactor();

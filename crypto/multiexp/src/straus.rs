@@ -1,3 +1,5 @@
+use std_shims::vec::Vec;
+
 use zeroize::Zeroize;
 
 use ff::PrimeFieldBits;

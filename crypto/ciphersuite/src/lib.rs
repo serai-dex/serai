@@ -1,10 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("lib.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::Debug;
-#[cfg(feature = "std")]
-use std::io::{self, Read};
+#[cfg(any(feature = "alloc", feature = "std"))]
+use std_shims::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -20,7 +20,7 @@ use group::{
   Group, GroupOps,
   prime::PrimeGroup,
 };
-#[cfg(feature = "std")]
+#[cfg(any(feature = "alloc", feature = "std"))]
 use group::GroupEncoding;
 
 #[cfg(feature = "dalek")]
@@ -85,7 +85,7 @@ pub trait Ciphersuite:
   }
 
   /// Read a canonical scalar from something implementing std::io::Read.
-  #[cfg(feature = "std")]
+  #[cfg(any(feature = "alloc", feature = "std"))]
   #[allow(non_snake_case)]
   fn read_F<R: Read>(reader: &mut R) -> io::Result<Self::F> {
     let mut encoding = <Self::F as PrimeField>::Repr::default();
@@ -99,7 +99,7 @@ pub trait Ciphersuite:
   }
 
   /// Read a canonical point from something implementing std::io::Read.
-  #[cfg(feature = "std")]
+  #[cfg(any(feature = "alloc", feature = "std"))]
   #[allow(non_snake_case)]
   fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
     let mut encoding = <Self::G as GroupEncoding>::Repr::default();

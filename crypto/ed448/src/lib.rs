@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![no_std]
 #![doc = include_str!("../README.md")]
+#![no_std]
 
 #[macro_use]
 mod backend;

@@ -1,0 +1,33 @@
+[package]
+name = "serai-no-std"
+version = "0.1.0"
+description = "A crate to test no-std builds of Serai crates work"
+license = "MIT"
+repository = "https://github.com/kayabaNerve/serai/tree/develop/common/std-shims"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["nostd", "no_std", "alloc", "io"]
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+flexible-transcript = { path = "../../crypto/transcript", features = ["recommended", "merlin"] }
+
+dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
+minimal-ed448 = { path = "../../crypto/ed448" }
+
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "secp256k1", "p256", "ed25519", "ristretto", "ed448"] }
+
+multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"] }
+
+# dleq = { path = "../../crypto/dleq" }
+schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
+
+# dkg = { path = "../../crypto/dkg" }
+# modular-frost = { path = "../../crypto/frost" }
+# frost-schnorrkel = { path = "../../crypto/schnorrkel" }
+
+monero-generators = { path = "../../coins/monero/generators", default-features = false, features = ["alloc"] }

@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std_shims::io::{self, Write};
 
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 pub(crate) fn write_varint<W: Write>(varint: &u64, w: &mut W) -> io::Result<()> {

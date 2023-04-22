@@ -31,3 +31,5 @@ This library was
 culminating in commit
 [669d2dbffc1dafb82a09d9419ea182667115df06](https://github.com/serai-dex/serai/tree/669d2dbffc1dafb82a09d9419ea182667115df06).
 Any subsequent changes have not undergone auditing.
+
+This library is usable under no_std.

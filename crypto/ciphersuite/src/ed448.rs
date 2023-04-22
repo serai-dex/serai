@@ -75,8 +75,7 @@ impl Ciphersuite for Ed448 {
 fn test_ed448() {
   use ff::PrimeField;
 
-  // TODO: Enable once ed448 passes these tests
-  //ff_group_tests::group::test_prime_group_bits::<Point>();
+  ff_group_tests::group::test_prime_group_bits::<_, Point>(&mut rand_core::OsRng);
 
   // Ideally, a test vector from RFC-8032 (not FROST) would be here
   // Unfortunately, the IETF draft doesn't provide any vectors for the derived challenges

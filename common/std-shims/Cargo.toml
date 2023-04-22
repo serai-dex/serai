@@ -1,0 +1,20 @@
+[package]
+name = "std-shims"
+version = "0.1.0"
+description = "A series of std shims to make alloc more feasible"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/common/std-shims"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["nostd", "no_std", "alloc", "io"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+hashbrown = "0.13"
+
+[features]
+std = []
+default = ["std"]

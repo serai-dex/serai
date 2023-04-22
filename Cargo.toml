@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "common/std-shims",
   "common/zalloc",
   "common/db",
 
@@ -43,6 +44,8 @@ members = [
 
   "substrate/runtime",
   "substrate/node",
+
+  "tests/no-std",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due

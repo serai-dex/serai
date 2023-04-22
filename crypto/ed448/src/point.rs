@@ -3,8 +3,6 @@ use core::{
   iter::Sum,
 };
 
-use lazy_static::lazy_static;
-
 use rand_core::RngCore;
 
 use zeroize::Zeroize;
@@ -34,6 +32,13 @@ const G_Y: FieldElement = FieldElement(Residue::new(&U512::from_be_hex(concat!(
   "05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14",
 ))));
 
+const G_X: FieldElement = FieldElement(Residue::new(&U512::from_be_hex(concat!(
+  "00000000000000",
+  "00",
+  "4f1970c66bed0ded221d15a622bf36da9e146570470f1767ea6de324",
+  "a3d3a46412ae1af72ab66511433b80e18b00938e2626a82bc70cc05e",
+))));
+
 fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   let ysq = y.square();
   #[allow(non_snake_case)]
@@ -56,9 +61,7 @@ pub struct Point {
   z: FieldElement,
 }
 
-lazy_static! {
-  static ref G: Point = Point { x: recover_x(G_Y).unwrap(), y: G_Y, z: FieldElement::ONE };
-}
+const G: Point = Point { x: G_X, y: G_Y, z: FieldElement::ONE };
 
 impl ConstantTimeEq for Point {
   fn ct_eq(&self, other: &Self) -> Choice {
@@ -184,7 +187,7 @@ impl Group for Point {
     Point { x: FieldElement::ZERO, y: FieldElement::ONE, z: FieldElement::ONE }
   }
   fn generator() -> Self {
-    *G
+    G
   }
   fn is_identity(&self) -> Choice {
     self.ct_eq(&Self::identity())
@@ -319,6 +322,13 @@ impl PrimeGroup for Point {}
 #[test]
 fn test_group() {
   ff_group_tests::group::test_prime_group_bits::<_, Point>(&mut rand_core::OsRng);
+}
+
+#[test]
+fn generator() {
+  assert!(G.x == G_X);
+  assert!(G.y == G_Y);
+  assert!(recover_x(G.y).unwrap() == G.x);
 }
 
 #[test]
