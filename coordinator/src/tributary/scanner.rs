@@ -70,7 +70,7 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
 
           // If they've already published a TX for this attempt, slash
           if let Some(data) =
-            TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, &signed.signer)
+            TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, signed.signer)
           {
             if data != bytes {
               // TODO: Full slash
@@ -99,17 +99,18 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
             tributary.genesis(),
             id,
             attempt,
-            &signed.signer,
+            signed.signer,
             &bytes,
           );
 
           // If we have all the needed commitments/preprocesses/shares, tell the processor
+          // TODO: This needs to be coded by weight, not by validator count
           if received == needed {
             let mut data = HashMap::new();
-            for validator in spec.validators().keys() {
+            for validator in spec.validators().iter().map(|validator| validator.0) {
               data.insert(
-                spec.i(*validator).unwrap(),
-                if validator == &signed.signer {
+                spec.i(validator).unwrap(),
+                if validator == signed.signer {
                   bytes.split_off(0)
                 } else if let Some(data) =
                   TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, validator)

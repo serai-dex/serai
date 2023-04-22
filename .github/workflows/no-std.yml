@@ -1,4 +1,4 @@
-name: Tests
+name: no-std build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

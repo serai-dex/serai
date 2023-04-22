@@ -125,7 +125,7 @@ pub(crate) struct Validators {
 impl Validators {
   pub(crate) fn new(
     genesis: [u8; 32],
-    validators: HashMap<<Ristretto as Ciphersuite>::G, u64>,
+    validators: Vec<(<Ristretto as Ciphersuite>::G, u64)>,
   ) -> Option<Validators> {
     let mut total_weight = 0;
     let mut weights = HashMap::new();

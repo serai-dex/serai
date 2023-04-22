@@ -97,7 +97,7 @@ impl<D: Db> TributaryDb<D> {
     genesis: [u8; 32],
     id: [u8; 32],
     attempt: u32,
-    signer: &<Ristretto as Ciphersuite>::G,
+    signer: <Ristretto as Ciphersuite>::G,
   ) -> Vec<u8> {
     Self::tributary_key(
       b"data",
@@ -117,7 +117,7 @@ impl<D: Db> TributaryDb<D> {
     genesis: [u8; 32],
     id: [u8; 32],
     attempt: u32,
-    signer: &<Ristretto as Ciphersuite>::G,
+    signer: <Ristretto as Ciphersuite>::G,
   ) -> Option<Vec<u8>> {
     getter.get(Self::data_key(label, genesis, id, attempt, signer))
   }
@@ -127,7 +127,7 @@ impl<D: Db> TributaryDb<D> {
     genesis: [u8; 32],
     id: [u8; 32],
     attempt: u32,
-    signer: &<Ristretto as Ciphersuite>::G,
+    signer: <Ristretto as Ciphersuite>::G,
     data: &[u8],
   ) -> u16 {
     let received_key = Self::data_received_key(label, genesis, id, attempt);

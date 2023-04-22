@@ -1316,6 +1316,7 @@ dependencies = [
  "rand_core 0.6.4",
  "serai-client",
  "serai-db",
+ "sp-application-crypto",
  "tokio",
  "tributary-chain",
  "zeroize",

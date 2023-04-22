@@ -91,12 +91,8 @@ impl TributarySpec {
     None
   }
 
-  pub fn validators(&self) -> HashMap<<Ristretto as Ciphersuite>::G, u64> {
-    let mut res = HashMap::new();
-    for (key, amount) in self.validators.clone() {
-      res.insert(key, amount);
-    }
-    res
+  pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {
+    self.validators.clone()
   }
 }
 

@@ -94,7 +94,7 @@ async fn main() {
   let db = MemDb::new(); // TODO
 
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
-  let p2p = LocalP2p {}; // TODO
+  let p2p = LocalP2p::new(1).swap_remove(0); // TODO
 
   let processor = processor::MemProcessor::new(); // TODO
 
