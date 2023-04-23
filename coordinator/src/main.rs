@@ -25,7 +25,7 @@ use processor::Processor;
 mod substrate;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
 async fn run<D: Db, Pro: Processor, P: P2p>(
   raw_db: D,

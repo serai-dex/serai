@@ -31,7 +31,7 @@ impl P2pMessageKind {
 // TODO
 #[async_trait]
 pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
-  async fn broadcast(&self, msg: Vec<u8>);
+  async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>);
   async fn receive(&self) -> Option<(P2pMessageKind, Vec<u8>)>;
 }
 
@@ -51,7 +51,8 @@ impl LocalP2p {
 
 #[async_trait]
 impl P2p for LocalP2p {
-  async fn broadcast(&self, msg: Vec<u8>) {
+  async fn broadcast(&self, kind: P2pMessageKind, mut msg: Vec<u8>) {
+    msg.insert(0, kind.to_byte());
     for (i, msg_queue) in self.1.write().unwrap().iter_mut().enumerate() {
       if i == self.0 {
         continue;
@@ -72,8 +73,7 @@ impl P2p for LocalP2p {
 
 #[async_trait]
 impl TributaryP2p for LocalP2p {
-  async fn broadcast(&self, mut msg: Vec<u8>) {
-    msg.insert(0, P2pMessageKind::Tributary.to_byte());
-    <Self as P2p>::broadcast(self, msg).await
+  async fn broadcast(&self, msg: Vec<u8>) {
+    <Self as P2p>::broadcast(self, P2pMessageKind::Tributary, msg).await
   }
 }

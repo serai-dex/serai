@@ -22,6 +22,7 @@ blake2 = "0.10"
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
 ciphersuite = { path = "../crypto/ciphersuite" }
+schnorr = { package = "schnorr-signatures", path = "../crypto/schnorr" }
 frost = { package = "modular-frost", path = "../crypto/frost" }
 
 scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }

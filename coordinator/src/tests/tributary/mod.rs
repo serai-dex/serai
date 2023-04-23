@@ -10,6 +10,9 @@ use tributary::{ReadWrite, tests::random_signed};
 use crate::tributary::{SignData, Transaction};
 
 mod chain;
+pub use chain::*;
+
+mod tx;
 
 fn random_u32<R: RngCore>(rng: &mut R) -> u32 {
   u32::try_from(rng.next_u64() >> 32).unwrap()

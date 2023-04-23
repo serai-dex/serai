@@ -1314,6 +1314,7 @@ dependencies = [
  "parity-scale-codec",
  "processor-messages",
  "rand_core 0.6.4",
+ "schnorr-signatures",
  "serai-client",
  "serai-db",
  "sp-application-crypto",

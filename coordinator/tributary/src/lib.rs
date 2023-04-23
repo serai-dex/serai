@@ -82,6 +82,7 @@ impl<P: P2p> P2p for Arc<P> {
   }
 }
 
+#[derive(Clone)]
 pub struct Tributary<D: Db, T: Transaction, P: P2p> {
   network: TendermintNetwork<D, T, P>,
 
@@ -121,6 +122,10 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     tokio::task::spawn(machine.run());
 
     Some(Self { network, synced_block, messages })
+  }
+
+  pub fn block_time() -> u32 {
+    TendermintNetwork::<D, T, P>::block_time()
   }
 
   pub fn genesis(&self) -> [u8; 32] {
