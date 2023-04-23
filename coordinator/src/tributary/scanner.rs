@@ -92,6 +92,9 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
             todo!();
           }
 
+          // TODO: We can also full slash if shares before all commitments, or share before the
+          // necessary preprocesses
+
           // Store this data
           let received = TributaryDb::<D>::set_data(
             label,

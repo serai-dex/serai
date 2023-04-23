@@ -20,7 +20,7 @@ pub trait Processor: 'static + Send + Sync + Clone {
 
 // TODO: Move this to tests
 #[derive(Clone)]
-pub struct MemProcessor(Arc<RwLock<VecDeque<Message>>>);
+pub struct MemProcessor(pub Arc<RwLock<VecDeque<CoordinatorMessage>>>);
 impl MemProcessor {
   #[allow(clippy::new_without_default)]
   pub fn new() -> MemProcessor {
@@ -30,8 +30,8 @@ impl MemProcessor {
 
 #[async_trait::async_trait]
 impl Processor for MemProcessor {
-  async fn send(&mut self, _: CoordinatorMessage) {
-    todo!()
+  async fn send(&mut self, msg: CoordinatorMessage) {
+    self.0.write().unwrap().push_back(msg)
   }
   async fn recv(&mut self) -> Message {
     todo!()
