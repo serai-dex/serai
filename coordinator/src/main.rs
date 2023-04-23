@@ -39,9 +39,7 @@ pub mod tests;
 
 // This is a static to satisfy lifetime expectations
 lazy_static::lazy_static! {
-  static ref NEW_TRIBUTARIES: Arc<RwLock<VecDeque<TributarySpec>>> = Arc::new(
-    RwLock::new(VecDeque::new())
-  );
+  static ref NEW_TRIBUTARIES: RwLock<VecDeque<TributarySpec>> = RwLock::new(VecDeque::new());
 }
 
 async fn run<D: Db, Pro: Processor, P: P2p>(
@@ -79,6 +77,8 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
         )
         .await
         {
+          // TODO: Should this use a notification system for new blocks?
+          // Right now it's sleeping for half the block time.
           Ok(()) => sleep(Duration::from_secs(3)).await,
           Err(e) => {
             log::error!("couldn't communicate with serai node: {e}");
@@ -93,8 +93,11 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
   {
     struct ActiveTributary<D: Db, P: P2p> {
       spec: TributarySpec,
-      tributary: Tributary<D, Transaction, P>,
+      tributary: Arc<RwLock<Tributary<D, Transaction, P>>>,
     }
+
+    // Arc so this can be shared between the Tributary scanner task and the P2P task
+    // Write locks on this may take a while to acquire
     let tributaries = Arc::new(RwLock::new(HashMap::<[u8; 32], ActiveTributary<D, P>>::new()));
 
     async fn add_tributary<D: Db, P: P2p>(
@@ -116,7 +119,10 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
       .await
       .unwrap();
 
-      tributaries.insert(tributary.genesis(), ActiveTributary { spec, tributary });
+      tributaries.insert(
+        tributary.genesis(),
+        ActiveTributary { spec, tributary: Arc::new(RwLock::new(tributary)) },
+      );
     }
 
     // Reload active tributaries from the database
@@ -140,10 +146,9 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
       tokio::spawn(async move {
         loop {
           // The following handle_new_blocks function may take an arbitrary amount of time
-          // If registering a new tributary waited for a lock on the tributaries table, the
-          // substrate scanner may wait on a lock for an arbitrary amount of time
-          // By instead using the distinct NEW_TRIBUTARIES, there should be minimal
-          // competition/blocking
+          // Accordingly, it may take a long time to acquire a write lock on the tributaries table
+          // By definition of NEW_TRIBUTARIES, we allow tributaries to be added almost immediately,
+          // meaning the Substrate scanner won't become blocked on this
           {
             let mut new_tributaries = NEW_TRIBUTARIES.write().await;
             while let Some(spec) = new_tributaries.pop_front() {
@@ -159,20 +164,22 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
             }
           }
 
-          // Unknown-length read acquisition. This would risk screwing over the P2P process EXCEPT
-          // they both use read locks. Accordingly, they can co-exist
+          // TODO: Instead of holding this lock long term, should this take in Arc RwLock and
+          // re-acquire read locks?
           for ActiveTributary { spec, tributary } in tributaries.read().await.values() {
             tributary::scanner::handle_new_blocks::<_, _, P>(
               &mut tributary_db,
               &key,
               &mut processor,
               spec,
-              tributary,
+              &*tributary.read().await,
             )
             .await;
           }
 
-          sleep(Duration::from_secs(3)).await;
+          // Sleep for half the block time
+          // TODO: Should we define a notification system for when a new block occurs?
+          sleep(Duration::from_secs(Tributary::<D, Transaction, P>::block_time() / 2)).await;
         }
       });
     }
@@ -190,7 +197,10 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
                 continue;
               };
 
-              if tributary.tributary.handle_message(&msg.msg).await {
+              // This is misleading being read, as it will mutate the Tributary, yet there's
+              // greater efficiency when it is read
+              // The safety of it is also justified by Tributary::handle_message's documentation
+              if tributary.tributary.read().await.handle_message(&msg.msg).await {
                 P2p::broadcast(&p2p, msg.kind, msg.msg).await;
               }
             }
