@@ -1,5 +1,8 @@
 use core::ops::Deref;
-use std::{io, collections::HashMap};
+use std::{
+  io::{self, Read, Write},
+  collections::HashMap,
+};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
@@ -7,13 +10,19 @@ use rand_core::{RngCore, CryptoRng};
 use blake2::{Digest, Blake2s256};
 use transcript::{Transcript, RecommendedTranscript};
 
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use ciphersuite::{
+  group::{ff::Field, GroupEncoding},
+  Ciphersuite, Ristretto,
+};
 use schnorr::SchnorrSignature;
 use frost::Participant;
 
-use scale::Encode;
+use scale::{Encode, Decode};
 
-use serai_client::validator_sets::primitives::{ValidatorSet, ValidatorSetData};
+use serai_client::{
+  primitives::NetworkId,
+  validator_sets::primitives::{Session, ValidatorSet, ValidatorSetData},
+};
 
 #[rustfmt::skip]
 use tributary::{
@@ -98,6 +107,59 @@ impl TributarySpec {
 
   pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {
     self.validators.clone()
+  }
+
+  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&self.serai_block)?;
+    writer.write_all(&self.start_time.to_le_bytes())?;
+    writer.write_all(&self.set.session.0.to_le_bytes())?;
+    let network_encoded = self.set.network.encode();
+    assert_eq!(network_encoded.len(), 1);
+    writer.write_all(&network_encoded)?;
+    writer.write_all(&u32::try_from(self.validators.len()).unwrap().to_le_bytes())?;
+    for validator in &self.validators {
+      writer.write_all(&validator.0.to_bytes())?;
+      writer.write_all(&validator.1.to_le_bytes())?;
+    }
+    Ok(())
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
+    res
+  }
+
+  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+    let mut serai_block = [0; 32];
+    reader.read_exact(&mut serai_block)?;
+
+    let mut start_time = [0; 8];
+    reader.read_exact(&mut start_time)?;
+    let start_time = u64::from_le_bytes(start_time);
+
+    let mut session = [0; 4];
+    reader.read_exact(&mut session)?;
+    let session = Session(u32::from_le_bytes(session));
+
+    let mut network = [0; 1];
+    reader.read_exact(&mut network)?;
+    let network = NetworkId::decode(&mut &network[..])
+      .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid network"))?;
+
+    let mut validators_len = [0; 4];
+    reader.read_exact(&mut validators_len)?;
+    let validators_len = usize::try_from(u32::from_le_bytes(validators_len)).unwrap();
+
+    let mut validators = Vec::with_capacity(validators_len);
+    for _ in 0 .. validators_len {
+      let key = Ristretto::read_G(reader)?;
+      let mut bond = [0; 8];
+      reader.read_exact(&mut bond)?;
+      validators.push((key, u64::from_le_bytes(bond)));
+    }
+
+    Ok(Self { serai_block, start_time, set: ValidatorSet { session, network }, validators })
   }
 }
 

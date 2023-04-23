@@ -23,6 +23,9 @@ use ::tributary::Tributary;
 mod tributary;
 use crate::tributary::{TributarySpec, Transaction};
 
+mod db;
+use db::MainDb;
+
 mod p2p;
 pub use p2p::*;
 
@@ -48,9 +51,9 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
   mut processor: Pro,
   serai: Serai,
 ) {
-  let add_new_tributary = |spec: TributarySpec| async {
+  let add_new_tributary = |db, spec: TributarySpec| async {
+    MainDb(db).add_active_tributary(&spec);
     NEW_TRIBUTARIES.write().await.push_back(spec);
-    // TODO: Save this tributary's information to the databae before returning
   };
 
   {
@@ -92,6 +95,7 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
 
     let mut tributaries = HashMap::<[u8; 32], ActiveTributary<D, P>>::new();
 
+    // TODO: Use a db on a distinct volume
     async fn add_tributary<D: Db, P: P2p>(
       db: D,
       key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -113,7 +117,10 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
       tributaries.insert(tributary.genesis(), ActiveTributary { spec, tributary });
     }
 
-    // TODO: Reload tributaries
+    // TODO: Can MainDb take a borrow?
+    for spec in MainDb(raw_db.clone()).active_tributaries().1 {
+      add_tributary(raw_db.clone(), key.clone(), p2p.clone(), &mut tributaries, spec).await;
+    }
 
     let mut tributary_db = tributary::TributaryDb::new(raw_db.clone());
     tokio::spawn(async move {
@@ -130,7 +137,7 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
           }
         }
 
-        for (genesis, ActiveTributary { spec, tributary }) in tributaries.iter_mut() {
+        for ActiveTributary { spec, tributary } in tributaries.values() {
           tributary::scanner::handle_new_blocks::<_, _, P>(
             &mut tributary_db,
             &key,

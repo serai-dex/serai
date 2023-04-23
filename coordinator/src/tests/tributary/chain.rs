@@ -61,7 +61,9 @@ pub fn new_spec<R: RngCore + CryptoRng>(
       .unwrap(),
   };
 
-  TributarySpec::new(serai_block, start_time, set, set_data)
+  let res = TributarySpec::new(serai_block, start_time, set, set_data);
+  assert_eq!(TributarySpec::read::<&[u8]>(&mut res.serialize().as_ref()).unwrap(), res);
+  res
 }
 
 pub async fn new_tributaries(

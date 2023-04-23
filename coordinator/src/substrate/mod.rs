@@ -41,10 +41,10 @@ async fn in_set(
 async fn handle_new_set<
   D: Db,
   Fut: Future<Output = ()>,
-  ANT: Clone + Fn(TributarySpec) -> Fut,
+  ANT: Clone + Fn(D, TributarySpec) -> Fut,
   Pro: Processor,
 >(
-  db: D,
+  db: &D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   add_new_tributary: ANT,
   processor: &mut Pro,
@@ -56,7 +56,7 @@ async fn handle_new_set<
     let set_data = serai.get_validator_set(set).await?.expect("NewSet for set which doesn't exist");
 
     let spec = TributarySpec::new(block.hash(), block.time().unwrap(), set, set_data);
-    add_new_tributary(spec.clone());
+    add_new_tributary(db.clone(), spec.clone());
 
     // Trigger a DKG
     // TODO: Check how the processor handles this being fired multiple times
@@ -210,7 +210,7 @@ async fn handle_batch_and_burns<Pro: Processor>(
 async fn handle_block<
   D: Db,
   Fut: Future<Output = ()>,
-  ANT: Clone + Fn(TributarySpec) -> Fut,
+  ANT: Clone + Fn(D, TributarySpec) -> Fut,
   Pro: Processor,
   P: P2p,
 >(
@@ -236,7 +236,7 @@ async fn handle_block<
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       if let ValidatorSetsEvent::NewSet { set } = new_set {
         // TODO2: Use a DB on a dedicated volume
-        handle_new_set(db.0.clone(), key, add_new_tributary.clone(), processor, serai, &block, set)
+        handle_new_set(&db.0, key, add_new_tributary.clone(), processor, serai, &block, set)
           .await?;
       } else {
         panic!("NewSet event wasn't NewSet: {new_set:?}");
@@ -281,7 +281,7 @@ async fn handle_block<
 pub async fn handle_new_blocks<
   D: Db,
   Fut: Future<Output = ()>,
-  ANT: Clone + Fn(TributarySpec) -> Fut,
+  ANT: Clone + Fn(D, TributarySpec) -> Fut,
   Pro: Processor,
   P: P2p,
 >(
