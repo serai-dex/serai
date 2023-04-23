@@ -78,35 +78,25 @@ async fn dkg_test() {
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     spec: &TributarySpec,
     tributary: &Tributary<MemDb, Transaction, LocalP2p>,
-  ) -> (TributaryDb<MemDb>, MemProcessor, [u8; 32]) {
+  ) -> (TributaryDb<MemDb>, MemProcessor) {
     let mut scanner_db = TributaryDb(MemDb::new());
     let mut processor = MemProcessor::new();
-    let mut last_block = tributary.genesis();
-    handle_new_blocks(&mut scanner_db, key, &mut processor, spec, tributary, &mut last_block).await;
-    assert!(last_block != tributary.genesis());
-    (scanner_db, processor, last_block)
+    handle_new_blocks(&mut scanner_db, key, &mut processor, spec, tributary).await;
+    (scanner_db, processor)
   }
 
   // Instantiate a scanner and verify it has nothing to report
-  let (mut scanner_db, mut processor, mut last_block) =
-    new_processor(&keys[0], &spec, &tributaries[0].1).await;
+  let (mut scanner_db, mut processor) = new_processor(&keys[0], &spec, &tributaries[0].1).await;
   assert!(processor.0.read().unwrap().is_empty());
 
   // Publish the last commitment
+  let block_before_tx = tributaries[0].1.tip();
   assert!(tributaries[0].1.add_transaction(txs[0].clone()).await);
-  wait_for_tx_inclusion(&tributaries[0].1, last_block, txs[0].hash()).await;
+  wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, txs[0].hash()).await;
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Verify the scanner emits a KeyGen::Commitments message
-  handle_new_blocks(
-    &mut scanner_db,
-    &keys[0],
-    &mut processor,
-    &spec,
-    &tributaries[0].1,
-    &mut last_block,
-  )
-  .await;
+  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
   {
     let mut msgs = processor.0.write().unwrap();
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
@@ -115,7 +105,7 @@ async fn dkg_test() {
 
   // Verify all keys exhibit this scanner behavior
   for (i, key) in keys.iter().enumerate() {
-    let (_, processor, _) = new_processor(key, &spec, &tributaries[i].1).await;
+    let (_, processor) = new_processor(key, &spec, &tributaries[i].1).await;
     let mut msgs = processor.0.write().unwrap();
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert!(msgs.is_empty());
@@ -147,20 +137,13 @@ async fn dkg_test() {
   }
 
   // With just 4 sets of shares, nothing should happen yet
-  handle_new_blocks(
-    &mut scanner_db,
-    &keys[0],
-    &mut processor,
-    &spec,
-    &tributaries[0].1,
-    &mut last_block,
-  )
-  .await;
+  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
   assert!(processor.0.write().unwrap().is_empty());
 
   // Publish the final set of shares
+  let block_before_tx = tributaries[0].1.tip();
   assert!(tributaries[0].1.add_transaction(txs[0].clone()).await);
-  wait_for_tx_inclusion(&tributaries[0].1, last_block, txs[0].hash()).await;
+  wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, txs[0].hash()).await;
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Each scanner should emit a distinct shares message
@@ -185,15 +168,7 @@ async fn dkg_test() {
   };
 
   // Any scanner which has handled the prior blocks should only emit the new event
-  handle_new_blocks(
-    &mut scanner_db,
-    &keys[0],
-    &mut processor,
-    &spec,
-    &tributaries[0].1,
-    &mut last_block,
-  )
-  .await;
+  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
   {
     let mut msgs = processor.0.write().unwrap();
     assert_eq!(msgs.pop_front().unwrap(), shares_for(0));
@@ -202,7 +177,7 @@ async fn dkg_test() {
 
   // Yet new scanners should emit all events
   for (i, key) in keys.iter().enumerate() {
-    let (_, processor, _) = new_processor(key, &spec, &tributaries[i].1).await;
+    let (_, processor) = new_processor(key, &spec, &tributaries[i].1).await;
     let mut msgs = processor.0.write().unwrap();
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert_eq!(msgs.pop_front().unwrap(), shares_for(i));

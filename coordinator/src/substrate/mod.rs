@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::{ops::Deref, future::Future};
 use std::collections::{HashSet, HashMap};
 
 use zeroize::Zeroizing;
@@ -19,8 +19,6 @@ use serai_client::{
 
 use serai_db::DbTxn;
 
-use tributary::Tributary;
-
 use processor_messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage};
 
 use crate::{Db, P2p, processor::Processor, tributary::TributarySpec};
@@ -40,10 +38,15 @@ async fn in_set(
   Ok(Some(data.participants.iter().any(|(participant, _)| participant.0 == key)))
 }
 
-async fn handle_new_set<D: Db, Pro: Processor, P: P2p>(
+async fn handle_new_set<
+  D: Db,
+  Fut: Future<Output = ()>,
+  ANT: Clone + Fn(TributarySpec) -> Fut,
+  Pro: Processor,
+>(
   db: D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  p2p: &P,
+  add_new_tributary: ANT,
   processor: &mut Pro,
   serai: &Serai,
   block: &Block,
@@ -53,24 +56,14 @@ async fn handle_new_set<D: Db, Pro: Processor, P: P2p>(
     let set_data = serai.get_validator_set(set).await?.expect("NewSet for set which doesn't exist");
 
     let spec = TributarySpec::new(block.hash(), block.time().unwrap(), set, set_data);
-
-    // TODO: Do something with this
-    let tributary = Tributary::<_, crate::tributary::Transaction, _>::new(
-      db,
-      spec.genesis(),
-      spec.start_time(),
-      key.clone(),
-      spec.validators(),
-      p2p.clone(),
-    )
-    .await
-    .unwrap();
+    add_new_tributary(spec.clone());
 
     // Trigger a DKG
     // TODO: Check how the processor handles this being fired multiple times
     // We already have a unique event ID based on block, event index (where event index is
     // the one generated in this handle_block function)
     // We could use that on this end and the processor end?
+    // TODO: Should this be handled in the Tributary code?
     processor
       .send(CoordinatorMessage::KeyGen(
         processor_messages::key_gen::CoordinatorMessage::GenerateKey {
@@ -214,9 +207,16 @@ async fn handle_batch_and_burns<Pro: Processor>(
 
 // Handle a specific Substrate block, returning an error when it fails to get data
 // (not blocking / holding)
-async fn handle_block<D: Db, Pro: Processor, P: P2p>(
+async fn handle_block<
+  D: Db,
+  Fut: Future<Output = ()>,
+  ANT: Clone + Fn(TributarySpec) -> Fut,
+  Pro: Processor,
+  P: P2p,
+>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  add_new_tributary: ANT,
   p2p: &P,
   processor: &mut Pro,
   serai: &Serai,
@@ -236,7 +236,8 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       if let ValidatorSetsEvent::NewSet { set } = new_set {
         // TODO2: Use a DB on a dedicated volume
-        handle_new_set(db.0.clone(), key, p2p, processor, serai, &block, set).await?;
+        handle_new_set(db.0.clone(), key, add_new_tributary.clone(), processor, serai, &block, set)
+          .await?;
       } else {
         panic!("NewSet event wasn't NewSet: {new_set:?}");
       }
@@ -277,9 +278,16 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
   Ok(())
 }
 
-pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
+pub async fn handle_new_blocks<
+  D: Db,
+  Fut: Future<Output = ()>,
+  ANT: Clone + Fn(TributarySpec) -> Fut,
+  Pro: Processor,
+  P: P2p,
+>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  add_new_tributary: ANT,
   p2p: &P,
   processor: &mut Pro,
   serai: &Serai,
@@ -297,6 +305,7 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
     handle_block(
       db,
       key,
+      add_new_tributary.clone(),
       p2p,
       processor,
       serai,

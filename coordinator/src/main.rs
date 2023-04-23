@@ -3,7 +3,11 @@
 #![allow(unreachable_code)]
 #![allow(clippy::diverging_sub_expression)]
 
-use std::{time::Duration, collections::HashMap};
+use std::{
+  sync::Arc,
+  time::Duration,
+  collections::{VecDeque, HashMap},
+};
 
 use zeroize::Zeroizing;
 
@@ -12,9 +16,12 @@ use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 use serai_db::{Db, MemDb};
 use serai_client::Serai;
 
-use tokio::time::sleep;
+use tokio::{sync::RwLock, time::sleep};
+
+use ::tributary::Tributary;
 
 mod tributary;
+use crate::tributary::{TributarySpec, Transaction};
 
 mod p2p;
 pub use p2p::*;
@@ -27,6 +34,13 @@ mod substrate;
 #[cfg(test)]
 pub mod tests;
 
+// This is a static to satisfy lifetime expectations
+lazy_static::lazy_static! {
+  static ref NEW_TRIBUTARIES: Arc<RwLock<VecDeque<TributarySpec>>> = Arc::new(
+    RwLock::new(VecDeque::new())
+  );
+}
+
 async fn run<D: Db, Pro: Processor, P: P2p>(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -34,11 +48,17 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
   mut processor: Pro,
   serai: Serai,
 ) {
-  let mut substrate_db = substrate::SubstrateDb::new(raw_db.clone());
-  let mut last_substrate_block = substrate_db.last_block();
-  let mut last_tributary_block = HashMap::<[u8; 32], _>::new();
+  let add_new_tributary = |spec: TributarySpec| async {
+    NEW_TRIBUTARIES.write().await.push_back(spec);
+    // TODO: Save this tributary's information to the databae before returning
+  };
 
   {
+    let mut substrate_db = substrate::SubstrateDb::new(raw_db.clone());
+    let mut last_substrate_block = substrate_db.last_block();
+
+    let p2p = p2p.clone();
+
     let key = key.clone();
     let mut processor = processor.clone();
     tokio::spawn(async move {
@@ -46,6 +66,7 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
         match substrate::handle_new_blocks(
           &mut substrate_db,
           &key,
+          add_new_tributary,
           &p2p,
           &mut processor,
           &serai,
@@ -64,20 +85,62 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
   }
 
   {
-    let mut tributary_db = tributary::TributaryDb::new(raw_db);
+    struct ActiveTributary<D: Db, P: P2p> {
+      spec: TributarySpec,
+      tributary: Tributary<D, Transaction, P>,
+    }
+
+    let mut tributaries = HashMap::<[u8; 32], ActiveTributary<D, P>>::new();
+
+    async fn add_tributary<D: Db, P: P2p>(
+      db: D,
+      key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+      p2p: P,
+      tributaries: &mut HashMap<[u8; 32], ActiveTributary<D, P>>,
+      spec: TributarySpec,
+    ) {
+      let tributary = Tributary::<_, Transaction, _>::new(
+        db,
+        spec.genesis(),
+        spec.start_time(),
+        key,
+        spec.validators(),
+        p2p,
+      )
+      .await
+      .unwrap();
+
+      tributaries.insert(tributary.genesis(), ActiveTributary { spec, tributary });
+    }
+
+    // TODO: Reload tributaries
+
+    let mut tributary_db = tributary::TributaryDb::new(raw_db.clone());
     tokio::spawn(async move {
       loop {
-        for (_, last_block) in last_tributary_block.iter_mut() {
+        // The following handle_new_blocks function may take an arbitrary amount of time
+        // If registering a new tributary waited for a lock on the tributaries table, the substrate
+        // scanner may wait on a lock for an arbitrary amount of time
+        // By instead using the distinct NEW_TRIBUTARIES, there should be minimal
+        // competition/blocking
+        {
+          let mut new_tributaries = NEW_TRIBUTARIES.write().await;
+          while let Some(spec) = new_tributaries.pop_front() {
+            add_tributary(raw_db.clone(), key.clone(), p2p.clone(), &mut tributaries, spec).await;
+          }
+        }
+
+        for (genesis, ActiveTributary { spec, tributary }) in tributaries.iter_mut() {
           tributary::scanner::handle_new_blocks::<_, _, P>(
             &mut tributary_db,
             &key,
             &mut processor,
-            todo!(),
-            todo!(),
-            last_block,
+            spec,
+            tributary,
           )
           .await;
         }
+
         sleep(Duration::from_secs(3)).await;
       }
     });

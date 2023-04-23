@@ -24,7 +24,7 @@ impl<D: Db> TributaryDb<D> {
     txn.commit();
   }
   pub fn last_block(&self, genesis: [u8; 32]) -> [u8; 32] {
-    self.0.get(Self::block_key(genesis)).unwrap_or(genesis.to_vec()).try_into().unwrap()
+    self.0.get(Self::block_key(genesis)).map(|last| last.try_into().unwrap()).unwrap_or(genesis)
   }
 
   // This shouldn't need genesis? Yet it's saner to have then quibble about.

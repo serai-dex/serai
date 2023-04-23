@@ -1,5 +1,5 @@
 use core::ops::Deref;
-use std::collections::HashMap;
+use std::collections::{VecDeque, HashMap};
 
 use zeroize::Zeroizing;
 
@@ -296,25 +296,44 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
   processor: &mut Pro,
   spec: &TributarySpec,
   tributary: &Tributary<D, Transaction, P>,
-  last_block: &mut [u8; 32],
 ) {
+  let last_block = db.last_block(tributary.genesis());
+
   // Check if there's been a new Tributary block
   let latest = tributary.tip();
-  if latest == *last_block {
+  if latest == last_block {
     return;
   }
 
-  // TODO: Only handle n blocks at a time.
-  // This may load the entire chain into RAM as-is.
-  let mut blocks = vec![tributary.block(&latest).unwrap()];
-  while blocks.last().unwrap().parent() != *last_block {
-    blocks.push(tributary.block(&blocks.last().unwrap().parent()).unwrap());
+  let mut blocks = VecDeque::new();
+  // This is a new block, as per the prior if check
+  blocks.push_back(tributary.block(&latest).unwrap());
+
+  let mut block = None;
+  while {
+    let parent = blocks.back().unwrap().parent();
+    // If the parent is the genesis, we've reached the end
+    if parent == tributary.genesis() {
+      false
+    } else {
+      // Get this block
+      block = Some(tributary.block(&parent).unwrap());
+      // If it's the last block we've scanned, it's the end. Else, push it
+      block.as_ref().unwrap().hash() != last_block
+    }
+  } {
+    blocks.push_back(block.take().unwrap());
+
+    // Prevent this from loading the entire chain into RAM by setting a limit of 1000 blocks at a
+    // time (roughly 350 MB under the current block size limit)
+    if blocks.len() > 1000 {
+      blocks.pop_front();
+    }
   }
 
-  while let Some(block) = blocks.pop() {
+  while let Some(block) = blocks.pop_back() {
     let hash = block.hash();
     handle_block(db, key, processor, spec, tributary, block).await;
-    *last_block = hash;
-    db.set_last_block(tributary.genesis(), *last_block);
+    db.set_last_block(tributary.genesis(), hash);
   }
 }

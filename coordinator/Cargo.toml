@@ -15,6 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 async-trait = "0.1"
+lazy_static = "1"
 
 zeroize = "^1.5"
 rand_core = "0.6"
