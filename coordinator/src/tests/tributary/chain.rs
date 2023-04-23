@@ -20,7 +20,7 @@ use tokio::time::sleep;
 
 use serai_db::MemDb;
 
-use tributary::Tributary;
+use tributary::{Transaction as TransactionTrait, Tributary};
 
 use crate::{
   P2pMessageKind, P2p, LocalP2p,
@@ -105,6 +105,44 @@ pub async fn run_tributaries(
     }
 
     sleep(Duration::from_millis(100)).await;
+  }
+}
+
+pub async fn wait_for_tx_inclusion(
+  tributary: &Tributary<MemDb, Transaction, LocalP2p>,
+  mut last_checked: [u8; 32],
+  hash: [u8; 32],
+) -> [u8; 32] {
+  loop {
+    let tip = tributary.tip();
+    if tip == last_checked {
+      sleep(Duration::from_secs(1)).await;
+      continue;
+    }
+
+    let mut queue = vec![tributary.block(&tip).unwrap()];
+    let mut block = None;
+    while {
+      let parent = queue.last().unwrap().parent();
+      if parent == tributary.genesis() {
+        false
+      } else {
+        block = Some(tributary.block(&parent).unwrap());
+        block.as_ref().unwrap().hash() != last_checked
+      }
+    } {
+      queue.push(block.take().unwrap());
+    }
+
+    while let Some(block) = queue.pop() {
+      for tx in &block.transactions {
+        if tx.hash() == hash {
+          return block.hash();
+        }
+      }
+    }
+
+    last_checked = tip;
   }
 }
 

@@ -15,13 +15,13 @@ use processor_messages::{
   CoordinatorMessage,
 };
 
-use tributary::Tributary;
+use tributary::{Transaction as TransactionTrait, Tributary};
 
 use crate::{
   processor::MemProcessor,
   LocalP2p,
   tributary::{TributaryDb, Transaction, TributarySpec, scanner::handle_new_blocks},
-  tests::tributary::{new_keys, new_spec, new_tributaries, run_tributaries},
+  tests::tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
 };
 
 #[tokio::test]
@@ -47,25 +47,16 @@ async fn dkg_commitments_test() {
     txs.push(tx);
   }
 
-  let mut last_block = tributaries[0].1.tip();
+  let block_before_tx = tributaries[0].1.tip();
 
   // Publish all commitments but one
   for (i, tx) in txs.iter().enumerate().skip(1) {
     assert!(tributaries[i].1.add_transaction(tx.clone()).await);
   }
 
-  // Wait until these were included
-  let mut included = 0;
-  while included != (txs.len() - 1) {
-    let tributary = &tributaries[0].1;
-    let tip = tributary.tip();
-    if tip == last_block {
-      sleep(Duration::from_secs(1)).await;
-      continue;
-    }
-    last_block = tip;
-
-    included += tributary.block(&last_block).unwrap().transactions.len();
+  // Wait until these are included
+  for tx in txs.iter().skip(1) {
+    wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, tx.hash()).await;
   }
 
   let expected_msg = CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
@@ -104,6 +95,7 @@ async fn dkg_commitments_test() {
 
     // Publish the last commitment
     assert!(tributaries[0].1.add_transaction(txs[0].clone()).await);
+    wait_for_tx_inclusion(&tributaries[0].1, last_block, txs[0].hash()).await;
     sleep(Duration::from_secs(
       (2 * Tributary::<MemDb, Transaction, LocalP2p>::block_time()).into(),
     ))

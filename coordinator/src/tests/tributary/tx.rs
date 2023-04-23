@@ -6,12 +6,12 @@ use tokio::time::sleep;
 
 use serai_db::MemDb;
 
-use tributary::Tributary;
+use tributary::{Transaction as TransactionTrait, Tributary};
 
 use crate::{
   LocalP2p,
   tributary::Transaction,
-  tests::tributary::{new_keys, new_spec, new_tributaries, run_tributaries},
+  tests::tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
 };
 
 #[tokio::test]
@@ -34,33 +34,19 @@ async fn tx_test() {
   OsRng.fill_bytes(&mut commitments);
 
   // Create the TX with a null signature so we can get its sig hash
+  let block_before_tx = tributaries[sender].1.tip();
   let mut tx =
     Transaction::DkgCommitments(attempt, commitments.clone(), Transaction::empty_signed());
   tx.sign(&mut OsRng, spec.genesis(), &key, 0);
 
   assert!(tributaries[sender].1.add_transaction(tx.clone()).await);
-  // Sleep for two blocks
-  sleep(Duration::from_secs((2 * Tributary::<MemDb, Transaction, LocalP2p>::block_time()).into()))
-    .await;
+  let included_in = wait_for_tx_inclusion(&tributaries[sender].1, block_before_tx, tx.hash()).await;
+  // Also sleep for the block time to ensure the block is synced around before we run checks on it
+  sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // All tributaries should have acknowledged this transaction in a block
-  let mut included_in = None;
   for (_, tributary) in tributaries {
-    if included_in.is_none() {
-      let mut found = tributary.tip();
-
-      let mut block;
-      while {
-        block = tributary.block(&found).unwrap();
-        block.transactions.is_empty()
-      } {
-        found = block.parent();
-      }
-
-      included_in = Some(found);
-    }
-
-    let block = tributary.block(&included_in.unwrap()).unwrap();
+    let block = tributary.block(&included_in).unwrap();
     assert_eq!(block.transactions, vec![tx.clone()]);
   }
 }
