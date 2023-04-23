@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 use std::{
   sync::{Arc, RwLock},
+  io::Read,
   collections::VecDeque,
 };
 
@@ -10,33 +11,81 @@ pub use tributary::P2p as TributaryP2p;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum P2pMessageKind {
-  Tributary,
+  Tributary([u8; 32]),
 }
 
 impl P2pMessageKind {
-  fn to_byte(self) -> u8 {
+  fn serialize(&self) -> Vec<u8> {
     match self {
-      P2pMessageKind::Tributary => 0,
+      P2pMessageKind::Tributary(genesis) => {
+        let mut res = vec![0];
+        res.extend(genesis);
+        res
+      }
     }
   }
 
-  fn from_byte(byte: u8) -> Option<P2pMessageKind> {
-    match byte {
-      0 => Some(P2pMessageKind::Tributary),
+  fn read<R: Read>(reader: &mut R) -> Option<P2pMessageKind> {
+    let mut kind = [0; 1];
+    reader.read_exact(&mut kind).ok()?;
+    match kind[0] {
+      0 => Some({
+        let mut genesis = [0; 32];
+        reader.read_exact(&mut genesis).ok()?;
+        P2pMessageKind::Tributary(genesis)
+      }),
       _ => None,
     }
   }
 }
 
-// TODO
-#[async_trait]
-pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
-  async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>);
-  async fn receive(&self) -> Option<(P2pMessageKind, Vec<u8>)>;
+#[derive(Clone, Debug)]
+pub struct Message<P: P2p> {
+  pub sender: P::Id,
+  pub kind: P2pMessageKind,
+  pub msg: Vec<u8>,
 }
 
+#[async_trait]
+pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
+  type Id: Send + Sync + Clone + Debug;
+
+  async fn send_raw(&self, to: Self::Id, msg: Vec<u8>);
+  async fn broadcast_raw(&self, msg: Vec<u8>);
+  async fn receive_raw(&self) -> (Self::Id, Vec<u8>);
+
+  async fn send(&self, to: Self::Id, kind: P2pMessageKind, msg: Vec<u8>) {
+    let mut actual_msg = kind.serialize();
+    actual_msg.extend(msg);
+    self.send_raw(to, actual_msg).await;
+  }
+  async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>) {
+    let mut actual_msg = kind.serialize();
+    actual_msg.extend(msg);
+    self.broadcast_raw(actual_msg).await;
+  }
+  async fn receive(&self) -> Message<Self> {
+    let (sender, kind, msg) = loop {
+      let (sender, msg) = self.receive_raw().await;
+      if msg.is_empty() {
+        log::error!("empty p2p message from {sender:?}");
+        continue;
+      }
+
+      let mut msg_ref = msg.as_ref();
+      let Some(kind) = P2pMessageKind::read::<&[u8]>(&mut msg_ref) else {
+        log::error!("invalid p2p message kind from {sender:?}");
+        continue;
+      };
+      break (sender, kind, msg_ref.to_vec());
+    };
+    Message { sender, kind, msg }
+  }
+}
+
+#[allow(clippy::type_complexity)]
 #[derive(Clone, Debug)]
-pub struct LocalP2p(usize, Arc<RwLock<Vec<VecDeque<Vec<u8>>>>>);
+pub struct LocalP2p(usize, Arc<RwLock<Vec<VecDeque<(usize, Vec<u8>)>>>>);
 
 impl LocalP2p {
   pub fn new(validators: usize) -> Vec<LocalP2p> {
@@ -51,29 +100,35 @@ impl LocalP2p {
 
 #[async_trait]
 impl P2p for LocalP2p {
-  async fn broadcast(&self, kind: P2pMessageKind, mut msg: Vec<u8>) {
-    msg.insert(0, kind.to_byte());
+  type Id = usize;
+
+  async fn send_raw(&self, to: Self::Id, msg: Vec<u8>) {
+    self.1.write().unwrap()[to].push_back((self.0, msg));
+  }
+
+  async fn broadcast_raw(&self, msg: Vec<u8>) {
     for (i, msg_queue) in self.1.write().unwrap().iter_mut().enumerate() {
       if i == self.0 {
         continue;
       }
-      msg_queue.push_back(msg.clone());
+      msg_queue.push_back((self.0, msg.clone()));
     }
   }
 
-  async fn receive(&self) -> Option<(P2pMessageKind, Vec<u8>)> {
-    let mut msg = self.1.write().unwrap()[self.0].pop_front()?;
-    if msg.is_empty() {
-      log::error!("empty p2p message");
-      return None;
+  async fn receive_raw(&self) -> (Self::Id, Vec<u8>) {
+    // This is a cursed way to implement an async read from a Vec
+    loop {
+      if let Some(res) = self.1.write().unwrap()[self.0].pop_front() {
+        return res;
+      }
+      tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    Some((P2pMessageKind::from_byte(msg.remove(0))?, msg))
   }
 }
 
 #[async_trait]
 impl TributaryP2p for LocalP2p {
-  async fn broadcast(&self, msg: Vec<u8>) {
-    <Self as P2p>::broadcast(self, P2pMessageKind::Tributary, msg).await
+  async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) {
+    <Self as P2p>::broadcast(self, P2pMessageKind::Tributary(genesis), msg).await
   }
 }

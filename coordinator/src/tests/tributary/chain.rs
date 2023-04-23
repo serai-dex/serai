@@ -1,8 +1,8 @@
 use std::time::{Duration, SystemTime};
 
 use zeroize::Zeroizing;
-
 use rand_core::{RngCore, CryptoRng, OsRng};
+use futures::{task::Poll, poll};
 
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
@@ -95,11 +95,12 @@ pub async fn run_tributaries(
 ) {
   loop {
     for (p2p, tributary) in tributaries.iter_mut() {
-      while let Some(msg) = p2p.receive().await {
-        match msg.0 {
-          P2pMessageKind::Tributary => {
-            if tributary.handle_message(&msg.1).await {
-              p2p.broadcast(msg.0, msg.1).await;
+      while let Poll::Ready(msg) = poll!(p2p.receive()) {
+        match msg.kind {
+          P2pMessageKind::Tributary(genesis) => {
+            assert_eq!(genesis, tributary.genesis());
+            if tributary.handle_message(&msg.msg).await {
+              p2p.broadcast(msg.kind, msg.msg).await;
             }
           }
         }
@@ -163,10 +164,11 @@ async fn tributary_test() {
   let timeout = SystemTime::now() + Duration::from_secs(65);
   while (blocks < 10) && (SystemTime::now().duration_since(timeout).is_err()) {
     for (p2p, tributary) in tributaries.iter_mut() {
-      while let Some(msg) = p2p.receive().await {
-        match msg.0 {
-          P2pMessageKind::Tributary => {
-            tributary.handle_message(&msg.1).await;
+      while let Poll::Ready(msg) = poll!(p2p.receive()) {
+        match msg.kind {
+          P2pMessageKind::Tributary(genesis) => {
+            assert_eq!(genesis, tributary.genesis());
+            tributary.handle_message(&msg.msg).await;
           }
         }
       }
@@ -187,10 +189,11 @@ async fn tributary_test() {
 
   // Handle all existing messages
   for (p2p, tributary) in tributaries.iter_mut() {
-    while let Some(msg) = p2p.receive().await {
-      match msg.0 {
-        P2pMessageKind::Tributary => {
-          tributary.handle_message(&msg.1).await;
+    while let Poll::Ready(msg) = poll!(p2p.receive()) {
+      match msg.kind {
+        P2pMessageKind::Tributary(genesis) => {
+          assert_eq!(genesis, tributary.genesis());
+          tributary.handle_message(&msg.msg).await;
         }
       }
     }

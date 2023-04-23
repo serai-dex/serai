@@ -42,4 +42,5 @@ log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
+futures = "0.3"
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }

@@ -1309,6 +1309,7 @@ dependencies = [
  "blake2",
  "ciphersuite",
  "flexible-transcript",
+ "futures",
  "lazy_static",
  "log",
  "modular-frost",

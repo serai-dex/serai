@@ -20,6 +20,8 @@ use ::tendermint::{
 
 use serai_db::Db;
 
+use tokio::sync::RwLock as AsyncRwLock;
+
 mod merkle;
 pub(crate) use merkle::*;
 
@@ -72,22 +74,23 @@ pub trait ReadWrite: Sized {
 
 #[async_trait]
 pub trait P2p: 'static + Send + Sync + Clone + Debug {
-  async fn broadcast(&self, msg: Vec<u8>);
+  async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>);
 }
 
 #[async_trait]
 impl<P: P2p> P2p for Arc<P> {
-  async fn broadcast(&self, msg: Vec<u8>) {
-    (*self).broadcast(msg).await
+  async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) {
+    (*self).broadcast(genesis, msg).await
   }
 }
 
 #[derive(Clone)]
 pub struct Tributary<D: Db, T: Transaction, P: P2p> {
+  genesis: [u8; 32],
   network: TendermintNetwork<D, T, P>,
 
   synced_block: SyncedBlockSender<TendermintNetwork<D, T, P>>,
-  messages: MessageSender<TendermintNetwork<D, T, P>>,
+  messages: Arc<AsyncRwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
 }
 
 impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
@@ -121,7 +124,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
     tokio::task::spawn(machine.run());
 
-    Some(Self { network, synced_block, messages })
+    Some(Self { genesis, network, synced_block, messages: Arc::new(AsyncRwLock::new(messages)) })
   }
 
   pub fn block_time() -> u32 {
@@ -129,7 +132,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   }
 
   pub fn genesis(&self) -> [u8; 32] {
-    self.network.blockchain.read().unwrap().genesis()
+    self.genesis
   }
   pub fn block_number(&self) -> u32 {
     self.network.blockchain.read().unwrap().block_number()
@@ -153,12 +156,14 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   }
 
   // Returns if the transaction was valid.
-  pub async fn add_transaction(&mut self, tx: T) -> bool {
+  // Safe to be &self since the only meaningful usage of self is self.network.blockchain which
+  // successfully acquires its own write lock.
+  pub async fn add_transaction(&self, tx: T) -> bool {
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
     let res = self.network.blockchain.write().unwrap().add_transaction(true, tx);
     if res {
-      self.network.p2p.broadcast(to_broadcast).await;
+      self.network.p2p.broadcast(self.genesis, to_broadcast).await;
     }
     res
   }
@@ -189,7 +194,9 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   }
 
   // Return true if the message should be rebroadcasted.
-  pub async fn handle_message(&mut self, msg: &[u8]) -> bool {
+  // Safe to be &self since the only usage of self is on self.network.blockchain and self.messages,
+  // both which successfully acquire their own write locks and don't rely on each other
+  pub async fn handle_message(&self, msg: &[u8]) -> bool {
     match msg.first() {
       Some(&TRANSACTION_MESSAGE) => {
         let Ok(tx) = T::read::<&[u8]>(&mut &msg[1 ..]) else {
@@ -212,7 +219,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
           return false;
         };
 
-        self.messages.send(msg).await.unwrap();
+        self.messages.write().await.send(msg).await.unwrap();
         false
       }
 

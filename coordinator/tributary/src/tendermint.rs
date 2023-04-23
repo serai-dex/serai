@@ -256,7 +256,7 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
   async fn broadcast(&mut self, msg: SignedMessageFor<Self>) {
     let mut to_broadcast = vec![TENDERMINT_MESSAGE];
     to_broadcast.extend(msg.encode());
-    self.p2p.broadcast(to_broadcast).await
+    self.p2p.broadcast(self.genesis, to_broadcast).await
   }
   async fn slash(&mut self, validator: Self::ValidatorId) {
     // TODO: Handle this slash

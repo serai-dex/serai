@@ -19,7 +19,7 @@ async fn tx_test() {
   let keys = new_keys(&mut OsRng);
   let spec = new_spec(&mut OsRng, &keys);
 
-  let mut tributaries = new_tributaries(&keys, &spec).await;
+  let tributaries = new_tributaries(&keys, &spec).await;
 
   // Run the tributaries in the background
   tokio::spawn(run_tributaries(tributaries.clone()));

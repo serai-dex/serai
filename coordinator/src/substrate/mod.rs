@@ -21,7 +21,7 @@ use serai_db::DbTxn;
 
 use processor_messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage};
 
-use crate::{Db, P2p, processor::Processor, tributary::TributarySpec};
+use crate::{Db, processor::Processor, tributary::TributarySpec};
 
 mod db;
 pub use db::*;
@@ -63,7 +63,6 @@ async fn handle_new_set<
     // We already have a unique event ID based on block, event index (where event index is
     // the one generated in this handle_block function)
     // We could use that on this end and the processor end?
-    // TODO: Should this be handled in the Tributary code?
     processor
       .send(CoordinatorMessage::KeyGen(
         processor_messages::key_gen::CoordinatorMessage::GenerateKey {
@@ -212,12 +211,10 @@ async fn handle_block<
   Fut: Future<Output = ()>,
   ANT: Clone + Fn(D, TributarySpec) -> Fut,
   Pro: Processor,
-  P: P2p,
 >(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   add_new_tributary: ANT,
-  p2p: &P,
   processor: &mut Pro,
   serai: &Serai,
   block: Block,
@@ -235,7 +232,6 @@ async fn handle_block<
     // stable)
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       if let ValidatorSetsEvent::NewSet { set } = new_set {
-        // TODO2: Use a DB on a dedicated volume
         handle_new_set(&db.0, key, add_new_tributary.clone(), processor, serai, &block, set)
           .await?;
       } else {
@@ -283,12 +279,10 @@ pub async fn handle_new_blocks<
   Fut: Future<Output = ()>,
   ANT: Clone + Fn(D, TributarySpec) -> Fut,
   Pro: Processor,
-  P: P2p,
 >(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   add_new_tributary: ANT,
-  p2p: &P,
   processor: &mut Pro,
   serai: &Serai,
   last_block: &mut u64,
@@ -306,7 +300,6 @@ pub async fn handle_new_blocks<
       db,
       key,
       add_new_tributary.clone(),
-      p2p,
       processor,
       serai,
       if b == latest_number {
