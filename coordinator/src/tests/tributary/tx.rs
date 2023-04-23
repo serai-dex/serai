@@ -1,17 +1,12 @@
 use core::time::Duration;
 
-use zeroize::Zeroizing;
-
 use rand_core::{RngCore, OsRng};
-
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
-use schnorr::SchnorrSignature;
 
 use tokio::time::sleep;
 
 use serai_db::MemDb;
 
-use tributary::{Signed, Transaction as TransactionTrait, Tributary};
+use tributary::Tributary;
 
 use crate::{
   LocalP2p,
@@ -33,41 +28,15 @@ async fn tx_test() {
   let sender =
     usize::try_from(OsRng.next_u64() % u64::try_from(tributaries.len()).unwrap()).unwrap();
   let key = keys[sender].clone();
-  let pub_key = Ristretto::generator() * *key;
 
   let attempt = 0;
   let mut commitments = vec![0; 256];
   OsRng.fill_bytes(&mut commitments);
 
   // Create the TX with a null signature so we can get its sig hash
-  let tx = Transaction::DkgCommitments(
-    attempt,
-    commitments.clone(),
-    Signed {
-      signer: pub_key,
-      nonce: 0,
-      signature: SchnorrSignature::<Ristretto> {
-        R: Ristretto::generator(),
-        s: <Ristretto as Ciphersuite>::F::ZERO,
-      },
-    },
-  );
-
-  // Re-create it with the actual signature
-  // We could mutate the existing one, we'd just have to match to the DkgCommitments enum variant
-  let tx = Transaction::DkgCommitments(
-    attempt,
-    commitments,
-    Signed {
-      signer: pub_key,
-      nonce: 0,
-      signature: SchnorrSignature::<Ristretto>::sign(
-        &key,
-        Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)),
-        tx.sig_hash(spec.genesis()),
-      ),
-    },
-  );
+  let mut tx =
+    Transaction::DkgCommitments(attempt, commitments.clone(), Transaction::empty_signed());
+  tx.sign(&mut OsRng, spec.genesis(), &key, 0);
 
   assert!(tributaries[sender].1.add_transaction(tx.clone()).await);
   // Sleep for two blocks

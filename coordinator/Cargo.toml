@@ -17,6 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 async-trait = "0.1"
 
 zeroize = "^1.5"
+rand_core = "0.6"
 
 blake2 = "0.10"
 
@@ -40,6 +41,4 @@ log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
-rand_core = "0.6"
-
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }

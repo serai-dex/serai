@@ -1,9 +1,14 @@
+use core::ops::Deref;
 use std::{io, collections::HashMap};
+
+use zeroize::Zeroizing;
+use rand_core::{RngCore, CryptoRng};
 
 use blake2::{Digest, Blake2s256};
 use transcript::{Transcript, RecommendedTranscript};
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use schnorr::SchnorrSignature;
 use frost::Participant;
 
 use scale::Encode;
@@ -347,5 +352,55 @@ impl TransactionTrait for Transaction {
     }
 
     Ok(())
+  }
+}
+
+impl Transaction {
+  // Used to initially construct transactions so we can then get sig hashes and perform signing
+  pub fn empty_signed() -> Signed {
+    Signed {
+      signer: Ristretto::generator(),
+      nonce: 0,
+      signature: SchnorrSignature::<Ristretto> {
+        R: Ristretto::generator(),
+        s: <Ristretto as Ciphersuite>::F::ZERO,
+      },
+    }
+  }
+
+  // Sign a transaction
+  pub fn sign<R: RngCore + CryptoRng>(
+    &mut self,
+    rng: &mut R,
+    genesis: [u8; 32],
+    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    nonce: u32,
+  ) {
+    fn signed(tx: &mut Transaction) -> &mut Signed {
+      match tx {
+        Transaction::DkgCommitments(_, _, ref mut signed) => signed,
+        Transaction::DkgShares(_, _, ref mut signed) => signed,
+
+        Transaction::ExternalBlock(_) => panic!("signing ExternalBlock"),
+        Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
+
+        Transaction::BatchPreprocess(ref mut data) => &mut data.signed,
+        Transaction::BatchShare(ref mut data) => &mut data.signed,
+
+        Transaction::SignPreprocess(ref mut data) => &mut data.signed,
+        Transaction::SignShare(ref mut data) => &mut data.signed,
+      }
+    }
+
+    let signed_ref = signed(self);
+    signed_ref.signer = Ristretto::generator() * key.deref();
+    signed_ref.nonce = nonce;
+
+    let sig_hash = self.sig_hash(genesis);
+    signed(self).signature = SchnorrSignature::<Ristretto>::sign(
+      key,
+      Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng)),
+      sig_hash,
+    );
   }
 }
