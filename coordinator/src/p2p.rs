@@ -12,6 +12,7 @@ pub use tributary::P2p as TributaryP2p;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum P2pMessageKind {
   Tributary([u8; 32]),
+  Heartbeat([u8; 32]),
 }
 
 impl P2pMessageKind {
@@ -19,6 +20,11 @@ impl P2pMessageKind {
     match self {
       P2pMessageKind::Tributary(genesis) => {
         let mut res = vec![0];
+        res.extend(genesis);
+        res
+      }
+      P2pMessageKind::Heartbeat(genesis) => {
+        let mut res = vec![1];
         res.extend(genesis);
         res
       }
@@ -33,6 +39,11 @@ impl P2pMessageKind {
         let mut genesis = [0; 32];
         reader.read_exact(&mut genesis).ok()?;
         P2pMessageKind::Tributary(genesis)
+      }),
+      1 => Some({
+        let mut genesis = [0; 32];
+        reader.read_exact(&mut genesis).ok()?;
+        P2pMessageKind::Heartbeat(genesis)
       }),
       _ => None,
     }

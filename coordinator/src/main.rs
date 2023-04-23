@@ -5,7 +5,7 @@
 
 use std::{
   sync::Arc,
-  time::Duration,
+  time::{SystemTime, Duration},
   collections::{VecDeque, HashMap},
 };
 
@@ -179,7 +179,37 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
 
           // Sleep for half the block time
           // TODO: Should we define a notification system for when a new block occurs?
-          sleep(Duration::from_secs(Tributary::<D, Transaction, P>::block_time() / 2)).await;
+          sleep(Duration::from_secs((Tributary::<D, Transaction, P>::block_time() / 2).into()))
+            .await;
+        }
+      });
+    }
+
+    // If a Tributary has fallen behind, trigger syncing
+    {
+      let p2p = p2p.clone();
+      let tributaries = tributaries.clone();
+      tokio::spawn(async move {
+        let ten_blocks_of_time =
+          Duration::from_secs((Tributary::<D, Transaction, P>::block_time() * 10).into());
+
+        loop {
+          for ActiveTributary { spec: _, tributary } in tributaries.read().await.values() {
+            let tributary = tributary.read().await;
+            let tip = tributary.tip();
+            let block_time = SystemTime::UNIX_EPOCH +
+              Duration::from_secs(tributary.time_of_block(&tip).unwrap_or(0));
+
+            // Only trigger syncing if the block is more than a minute behind
+            if SystemTime::now() > (block_time + Duration::from_secs(60)) {
+              log::warn!("last known tributary block was over a minute ago");
+              P2p::broadcast(&p2p, P2pMessageKind::Heartbeat(tributary.genesis()), tip.to_vec())
+                .await;
+            }
+          }
+
+          // Only check once every 10 blocks of time
+          sleep(ten_blocks_of_time).await;
         }
       });
     }
@@ -204,6 +234,9 @@ async fn run<D: Db, Pro: Processor, P: P2p>(
                 P2p::broadcast(&p2p, msg.kind, msg.msg).await;
               }
             }
+
+            // TODO: Respond with the missing block, if there are any
+            P2pMessageKind::Heartbeat(genesis) => todo!(),
           }
         }
       });

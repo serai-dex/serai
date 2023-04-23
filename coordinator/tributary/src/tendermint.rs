@@ -310,7 +310,7 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
             hex::encode(hash),
             hex::encode(self.genesis)
           );
-          sleep(Duration::from_secs(Tendermint::<D, T, P>::block_time())).await;
+          sleep(Duration::from_secs(Self::block_time().into())).await;
         }
         _ => return invalid_block(),
       }

@@ -103,6 +103,7 @@ pub async fn run_tributaries(
               p2p.broadcast(msg.kind, msg.msg).await;
             }
           }
+          _ => panic!("unexpected p2p message found"),
         }
       }
     }
@@ -170,6 +171,7 @@ async fn tributary_test() {
             assert_eq!(genesis, tributary.genesis());
             tributary.handle_message(&msg.msg).await;
           }
+          _ => panic!("unexpected p2p message found"),
         }
       }
     }
@@ -195,6 +197,7 @@ async fn tributary_test() {
           assert_eq!(genesis, tributary.genesis());
           tributary.handle_message(&msg.msg).await;
         }
+        _ => panic!("unexpected p2p message found"),
       }
     }
   }
