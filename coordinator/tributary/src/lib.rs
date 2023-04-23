@@ -144,7 +144,13 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     self.network.blockchain.read().unwrap().block(hash)
   }
   pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
-    self.network.blockchain.read().unwrap().commit(hash).map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
+    self
+      .network
+      .blockchain
+      .read()
+      .unwrap()
+      .commit(hash)
+      .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
   }
   pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
     self.network.blockchain.read().unwrap().commit(hash)
