@@ -23,17 +23,18 @@ fn new_genesis() -> [u8; 32] {
 fn new_blockchain<T: Transaction>(
   genesis: [u8; 32],
   participants: &[<Ristretto as Ciphersuite>::G],
-) -> Blockchain<MemDb, T> {
-  let blockchain = Blockchain::new(MemDb::new(), genesis, participants);
+) -> (MemDb, Blockchain<MemDb, T>) {
+  let db = MemDb::new();
+  let blockchain = Blockchain::new(db.clone(), genesis, participants);
   assert_eq!(blockchain.tip(), genesis);
   assert_eq!(blockchain.block_number(), 0);
-  blockchain
+  (db, blockchain)
 }
 
 #[test]
 fn block_addition() {
   let genesis = new_genesis();
-  let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[]);
+  let (db, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
   let block = blockchain.build_block();
   assert_eq!(block.header.parent, genesis);
   assert_eq!(block.header.transactions, [0; 32]);
@@ -41,12 +42,16 @@ fn block_addition() {
   assert!(blockchain.add_block(&block, vec![]).is_ok());
   assert_eq!(blockchain.tip(), block.hash());
   assert_eq!(blockchain.block_number(), 1);
+  assert_eq!(
+    Blockchain::<MemDb, SignedTransaction>::block_after(&db, &block.parent()).unwrap(),
+    block.hash()
+  );
 }
 
 #[test]
 fn invalid_block() {
   let genesis = new_genesis();
-  let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[]);
+  let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
 
   let block = blockchain.build_block();
 
@@ -77,7 +82,7 @@ fn invalid_block() {
   }
 
   // Run the rest of the tests with them as a participant
-  let blockchain = new_blockchain(genesis, &[tx.1.signer]);
+  let (_, blockchain) = new_blockchain(genesis, &[tx.1.signer]);
 
   // Re-run the not a participant block to make sure it now works
   {
@@ -130,7 +135,7 @@ fn signed_transaction() {
   let tx = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0);
   let signer = tx.1.signer;
 
-  let mut blockchain = new_blockchain::<SignedTransaction>(genesis, &[signer]);
+  let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[signer]);
   assert_eq!(blockchain.next_nonce(signer), Some(0));
 
   let test = |blockchain: &mut Blockchain<MemDb, SignedTransaction>,
@@ -176,7 +181,7 @@ fn signed_transaction() {
 #[test]
 fn provided_transaction() {
   let genesis = new_genesis();
-  let mut blockchain = new_blockchain::<ProvidedTransaction>(genesis, &[]);
+  let (_, mut blockchain) = new_blockchain::<ProvidedTransaction>(genesis, &[]);
 
   let tx = random_provided_transaction(&mut OsRng);
 

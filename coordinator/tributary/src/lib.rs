@@ -149,6 +149,9 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
     Blockchain::<D, T>::commit_from_db(&self.db, hash)
   }
+  pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
+    Blockchain::<D, T>::block_after(&self.db, hash)
+  }
   pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
     self
       .commit(hash)

@@ -11,6 +11,7 @@ pub use tributary::P2p as TributaryP2p;
 pub enum P2pMessageKind {
   Tributary([u8; 32]),
   Heartbeat([u8; 32]),
+  Block([u8; 32]),
 }
 
 impl P2pMessageKind {
@@ -23,6 +24,11 @@ impl P2pMessageKind {
       }
       P2pMessageKind::Heartbeat(genesis) => {
         let mut res = vec![1];
+        res.extend(genesis);
+        res
+      }
+      P2pMessageKind::Block(genesis) => {
+        let mut res = vec![2];
         res.extend(genesis);
         res
       }
@@ -43,6 +49,11 @@ impl P2pMessageKind {
         reader.read_exact(&mut genesis).ok()?;
         P2pMessageKind::Heartbeat(genesis)
       }),
+      2 => Some({
+        let mut genesis = [0; 32];
+        reader.read_exact(&mut genesis).ok()?;
+        P2pMessageKind::Block(genesis)
+      }),
       _ => None,
     }
   }
@@ -57,7 +68,7 @@ pub struct Message<P: P2p> {
 
 #[async_trait]
 pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
-  type Id: Send + Sync + Clone + Debug;
+  type Id: Send + Sync + Clone + Copy + Debug;
 
   async fn send_raw(&self, to: Self::Id, msg: Vec<u8>);
   async fn broadcast_raw(&self, msg: Vec<u8>);

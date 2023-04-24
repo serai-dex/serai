@@ -37,6 +37,9 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
   fn commit_key(hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"commit", hash)
   }
+  fn block_after_key(hash: &[u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"block_after", hash)
+  }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
     D::key(
       b"tributary_blockchain",
@@ -105,6 +108,10 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     Self::commit_from_db(self.db.as_ref().unwrap(), block)
   }
 
+  pub(crate) fn block_after(db: &D, block: &[u8; 32]) -> Option<[u8; 32]> {
+    db.get(Self::block_after_key(block)).map(|bytes| bytes.try_into().unwrap())
+  }
+
   pub(crate) fn add_transaction(&mut self, internal: bool, tx: T) -> bool {
     self.mempool.add(&self.next_nonces, internal, tx)
   }
@@ -157,6 +164,8 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
 
     txn.put(Self::block_key(&self.tip), block.serialize());
     txn.put(Self::commit_key(&self.tip), commit);
+
+    txn.put(Self::block_after_key(&block.parent()), block.hash());
 
     for tx in &block.transactions {
       match tx.kind() {

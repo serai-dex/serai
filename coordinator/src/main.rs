@@ -3,6 +3,7 @@
 #![allow(unreachable_code)]
 #![allow(clippy::diverging_sub_expression)]
 
+use core::ops::Deref;
 use std::{
   sync::Arc,
   time::{SystemTime, Duration},
@@ -18,7 +19,7 @@ use serai_client::Serai;
 
 use tokio::{sync::RwLock, time::sleep};
 
-use ::tributary::Tributary;
+use ::tributary::{ReadWrite, Block, Tributary};
 
 mod tributary;
 use crate::tributary::{TributarySpec, Transaction};
@@ -192,18 +193,19 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
 
 #[allow(clippy::type_complexity)]
 pub async fn handle_p2p<D: Db, P: P2p>(
+  our_key: <Ristretto as Ciphersuite>::G,
   p2p: P,
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
 ) {
   loop {
-    let msg = p2p.receive().await;
+    let mut msg = p2p.receive().await;
     match msg.kind {
       P2pMessageKind::Tributary(genesis) => {
         let tributaries_read = tributaries.read().await;
         let Some(tributary) = tributaries_read.get(&genesis) else {
-        log::debug!("received p2p message for unknown network");
-        continue;
-      };
+          log::debug!("received p2p message for unknown network");
+          continue;
+        };
 
         // This is misleading being read, as it will mutate the Tributary, yet there's
         // greater efficiency when it is read
@@ -213,8 +215,74 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         }
       }
 
-      // TODO: Respond with the missing block, if there are any
-      P2pMessageKind::Heartbeat(genesis) => todo!(),
+      P2pMessageKind::Heartbeat(genesis) => {
+        let tributaries_read = tributaries.read().await;
+        let Some(tributary) = tributaries_read.get(&genesis) else {
+          log::debug!("received hearttbeat message for unknown network");
+          continue;
+        };
+
+        if msg.msg.len() != 32 {
+          log::error!("validator sent invalid heartbeat");
+          continue;
+        }
+
+        let tributary_read = tributary.tributary.read().await;
+
+        // Have sqrt(n) nodes reply with the blocks
+        let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
+        // Try to have at least 3 responders
+        if responders < 3 {
+          responders = tributary.spec.n().min(3).into();
+        }
+
+        // Only respond to this if randomly chosen
+        let entropy = u64::from_le_bytes(tributary_read.tip().await[.. 8].try_into().unwrap());
+        // If n = 10, responders = 3, we want start to be 0 ..= 7 (so the highest is 7, 8, 9)
+        // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
+        let start =
+          usize::try_from(entropy % (u64::from(tributary.spec.n() + 1) - responders)).unwrap();
+        let mut selected = false;
+        for validator in
+          &tributary.spec.validators()[start .. (start + usize::try_from(responders).unwrap())]
+        {
+          if our_key == validator.0 {
+            selected = true;
+            break;
+          }
+        }
+        if !selected {
+          continue;
+        }
+
+        let mut latest = msg.msg.try_into().unwrap();
+        // TODO: All of these calls don't *actually* need a read lock, just access to a DB handle
+        // We can reduce lock contention accordingly
+        while let Some(next) = tributary_read.block_after(&latest) {
+          let mut res = tributary_read.block(&next).unwrap().serialize();
+          res.extend(tributary_read.commit(&next).unwrap());
+          p2p.send(msg.sender, P2pMessageKind::Block(tributary.spec.genesis()), res).await;
+          latest = next;
+        }
+      }
+
+      P2pMessageKind::Block(genesis) => {
+        let mut msg_ref: &[u8] = msg.msg.as_ref();
+        let Ok(block) = Block::<Transaction>::read(&mut msg_ref) else {
+          log::error!("received block message with an invalidly serialized block");
+          continue;
+        };
+        // Get just the commit
+        msg.msg.drain((msg.msg.len() - msg_ref.len()) ..);
+
+        let tributaries = tributaries.read().await;
+        let Some(tributary) = tributaries.get(&genesis) else {
+          log::debug!("received block message for unknown network");
+          continue;
+        };
+
+        tributary.tributary.write().await.sync_block(block, msg.msg).await;
+      }
     }
   }
 }
@@ -257,7 +325,7 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
 
   // Handle P2P messages
   // TODO: We also have to broadcast blocks once they're added
-  tokio::spawn(handle_p2p(p2p, tributaries));
+  tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, tributaries));
 
   loop {
     // Handle all messages from processors
