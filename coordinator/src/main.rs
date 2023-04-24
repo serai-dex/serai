@@ -54,8 +54,8 @@ async fn create_new_tributary<D: Db>(db: D, spec: TributarySpec) {
 }
 
 pub struct ActiveTributary<D: Db, P: P2p> {
-  spec: TributarySpec,
-  tributary: Arc<RwLock<Tributary<D, Transaction, P>>>,
+  pub spec: TributarySpec,
+  pub tributary: Arc<RwLock<Tributary<D, Transaction, P>>>,
 }
 
 // Adds a tributary into the specified HahMap
@@ -145,8 +145,9 @@ pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
       }
     }
 
-    // TODO: Instead of holding this lock long term, should this take in Arc RwLock and
-    // re-acquire read locks?
+    // TODO: Make a TributaryReader which only requires a DB handle and safely doesn't require
+    // locks
+    // Use that here
     for ActiveTributary { spec, tributary } in tributaries.read().await.values() {
       tributary::scanner::handle_new_blocks::<_, _, P>(
         &mut tributary_db,
@@ -170,7 +171,7 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
 ) {
   let ten_blocks_of_time =
-    Duration::from_secs((Tributary::<D, Transaction, P>::block_time() * 10).into());
+    Duration::from_secs((10 * Tributary::<D, Transaction, P>::block_time()).into());
 
   loop {
     for ActiveTributary { spec: _, tributary } in tributaries.read().await.values() {
@@ -207,18 +208,16 @@ pub async fn handle_p2p<D: Db, P: P2p>(
           continue;
         };
 
-        // This is misleading being read, as it will mutate the Tributary, yet there's
-        // greater efficiency when it is read
-        // The safety of it is also justified by Tributary::handle_message's documentation
-        if tributary.tributary.read().await.handle_message(&msg.msg).await {
+        if tributary.tributary.write().await.handle_message(&msg.msg).await {
           P2p::broadcast(&p2p, msg.kind, msg.msg).await;
         }
       }
 
+      // TODO: Rate limit this
       P2pMessageKind::Heartbeat(genesis) => {
         let tributaries_read = tributaries.read().await;
         let Some(tributary) = tributaries_read.get(&genesis) else {
-          log::debug!("received hearttbeat message for unknown network");
+          log::debug!("received heartbeat message for unknown network");
           continue;
         };
 
@@ -229,14 +228,21 @@ pub async fn handle_p2p<D: Db, P: P2p>(
 
         let tributary_read = tributary.tributary.read().await;
 
+        /*
         // Have sqrt(n) nodes reply with the blocks
         let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
         // Try to have at least 3 responders
         if responders < 3 {
           responders = tributary.spec.n().min(3).into();
         }
+        */
 
-        // Only respond to this if randomly chosen
+        // Have up to three nodes respond
+        let responders = u64::from(tributary.spec.n().min(3));
+
+        // Decide which nodes will respond by using the latest block's hash as a mutually agreed
+        // upon entropy source
+        // THis isn't a secure source of entropy, yet it's fine for this
         let entropy = u64::from_le_bytes(tributary_read.tip().await[.. 8].try_into().unwrap());
         // If n = 10, responders = 3, we want start to be 0 ..= 7 (so the highest is 7, 8, 9)
         // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
@@ -252,8 +258,11 @@ pub async fn handle_p2p<D: Db, P: P2p>(
           }
         }
         if !selected {
+          log::debug!("received heartbeat and not selected to respond");
           continue;
         }
+
+        log::debug!("received heartbeat and selected to respond");
 
         let mut latest = msg.msg.try_into().unwrap();
         // TODO: All of these calls don't *actually* need a read lock, just access to a DB handle
@@ -273,7 +282,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
           continue;
         };
         // Get just the commit
-        msg.msg.drain((msg.msg.len() - msg_ref.len()) ..);
+        msg.msg.drain(.. (msg.msg.len() - msg_ref.len()));
 
         let tributaries = tributaries.read().await;
         let Some(tributary) = tributaries.get(&genesis) else {
@@ -281,7 +290,12 @@ pub async fn handle_p2p<D: Db, P: P2p>(
           continue;
         };
 
-        tributary.tributary.write().await.sync_block(block, msg.msg).await;
+        // TODO: We take a notable amount of time to add blocks when we're missing provided
+        // transactions
+        // Any tributary with missing provided transactions will cause this P2P loop to halt
+        // Make a separate queue for this
+        let res = tributary.tributary.write().await.sync_block(block, msg.msg).await;
+        log::debug!("received block from {:?}, sync_block returned {}", msg.sender, res);
       }
     }
   }

@@ -106,7 +106,7 @@ pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
 // TODO: Move this to tests
 #[allow(clippy::type_complexity)]
 #[derive(Clone, Debug)]
-pub struct LocalP2p(usize, Arc<RwLock<Vec<VecDeque<(usize, Vec<u8>)>>>>);
+pub struct LocalP2p(usize, pub Arc<RwLock<Vec<VecDeque<(usize, Vec<u8>)>>>>);
 
 impl LocalP2p {
   pub fn new(validators: usize) -> Vec<LocalP2p> {

@@ -17,6 +17,9 @@ mod tx;
 mod dkg;
 // TODO: Test the other transactions
 
+mod handle_p2p;
+mod sync;
+
 fn random_u32<R: RngCore>(rng: &mut R) -> u32 {
   u32::try_from(rng.next_u64() >> 32).unwrap()
 }
