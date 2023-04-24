@@ -37,7 +37,8 @@ use tokio::{
 };
 
 use crate::{
-  TENDERMINT_MESSAGE, ReadWrite, Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
+  TENDERMINT_MESSAGE, BLOCK_MESSAGE, ReadWrite, Transaction, BlockHeader, Block, BlockError,
+  Blockchain, P2p,
 };
 
 fn challenge(
@@ -56,7 +57,7 @@ fn challenge(
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Signer {
+pub struct Signer {
   genesis: [u8; 32],
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
 }
@@ -115,7 +116,7 @@ impl SignerTrait for Signer {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Validators {
+pub struct Validators {
   genesis: [u8; 32],
   total_weight: u64,
   weights: HashMap<[u8; 32], u64>,
@@ -281,7 +282,7 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
 
   async fn add_block(
     &mut self,
-    block: Self::Block,
+    serialized_block: Self::Block,
     commit: Commit<Self::SignatureScheme>,
   ) -> Option<Self::Block> {
     let invalid_block = || {
@@ -294,16 +295,25 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
     };
 
     // Tendermint should only produce valid commits
-    assert!(self.verify_commit(block.id(), &commit));
+    assert!(self.verify_commit(serialized_block.id(), &commit));
 
-    let Ok(block) = Block::read::<&[u8]>(&mut block.0.as_ref()) else {
+    let Ok(block) = Block::read::<&[u8]>(&mut serialized_block.0.as_ref()) else {
       return invalid_block();
     };
 
+    let encoded_commit = commit.encode();
     loop {
-      let block_res = self.blockchain.write().await.add_block(&block, commit.encode());
+      let block_res = self.blockchain.write().await.add_block(&block, encoded_commit.clone());
       match block_res {
-        Ok(()) => break,
+        Ok(()) => {
+          // If we successfully added this block, broadcast it
+          // TODO: Move this under the coordinator once we set up on new block notifications?
+          let mut msg = serialized_block.0;
+          msg.insert(0, BLOCK_MESSAGE);
+          msg.extend(encoded_commit);
+          self.p2p.broadcast(self.genesis, msg).await;
+          break;
+        }
         Err(BlockError::NonLocalProvided(hash)) => {
           log::error!(
             "missing provided transaction {} which other validators on tributary {} had",

@@ -8,11 +8,11 @@ use zeroize::Zeroizing;
 use ciphersuite::{Ciphersuite, Ristretto};
 
 use scale::Decode;
-use futures::SinkExt;
+use futures::{StreamExt, SinkExt};
 use ::tendermint::{
   ext::{BlockNumber, Commit, Block as BlockTrait, Network},
-  SignedMessageFor, SyncedBlock, SyncedBlockSender, MessageSender, TendermintMachine,
-  TendermintHandle,
+  SignedMessageFor, SyncedBlock, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
+  TendermintMachine, TendermintHandle,
 };
 
 use serai_db::Db;
@@ -53,8 +53,9 @@ pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
 // participant from flooding disks and causing out of space errors in order processes.
 pub const BLOCK_SIZE_LIMIT: usize = 350_000;
 
-pub(crate) const TRANSACTION_MESSAGE: u8 = 0;
-pub(crate) const TENDERMINT_MESSAGE: u8 = 1;
+pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
+pub(crate) const BLOCK_MESSAGE: u8 = 1;
+pub(crate) const TRANSACTION_MESSAGE: u8 = 2;
 
 /// An item which can be read and written.
 pub trait ReadWrite: Sized {
@@ -89,6 +90,7 @@ pub struct Tributary<D: Db, T: Transaction, P: P2p> {
   network: TendermintNetwork<D, T, P>,
 
   synced_block: SyncedBlockSender<TendermintNetwork<D, T, P>>,
+  synced_block_result: Arc<RwLock<SyncedBlockResultReceiver>>,
   messages: Arc<RwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
 }
 
@@ -119,11 +121,18 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
 
     let network = TendermintNetwork { genesis, signer, validators, blockchain, p2p };
 
-    let TendermintHandle { synced_block, messages, machine } =
+    let TendermintHandle { synced_block, synced_block_result, messages, machine } =
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
     tokio::task::spawn(machine.run());
 
-    Some(Self { db, genesis, network, synced_block, messages: Arc::new(RwLock::new(messages)) })
+    Some(Self {
+      db,
+      genesis,
+      network,
+      synced_block,
+      synced_block_result: Arc::new(RwLock::new(synced_block_result)),
+      messages: Arc::new(RwLock::new(messages)),
+    })
   }
 
   pub fn block_time() -> u32 {
@@ -148,6 +157,9 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   }
   pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
     Blockchain::<D, T>::commit_from_db(&self.db, hash)
+  }
+  pub fn parsed_commit(&self, hash: &[u8; 32]) -> Option<Commit<Validators>> {
+    self.commit(hash).map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap())
   }
   pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
     Blockchain::<D, T>::block_after(&self.db, hash)
@@ -182,32 +194,35 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   // Sync a block.
   // TODO: Since we have a static validator set, we should only need the tail commit?
   pub async fn sync_block(&mut self, block: Block<T>, commit: Vec<u8>) -> bool {
+    let mut result = self.synced_block_result.write().await;
+
     let (tip, block_number) = {
       let blockchain = self.network.blockchain.read().await;
       (blockchain.tip(), blockchain.block_number())
     };
 
     if block.header.parent != tip {
+      log::debug!("told to sync a block whose parent wasn't our tip");
       return false;
     }
 
     let block = TendermintBlock(block.serialize());
     let Ok(commit) = Commit::<Arc<Validators>>::decode(&mut commit.as_ref()) else {
+      log::error!("sent an invalidly serialized commit");
       return false;
     };
     if !self.network.verify_commit(block.id(), &commit) {
+      log::error!("sent an invalid commit");
       return false;
     }
 
     let number = BlockNumber((block_number + 1).into());
     self.synced_block.send(SyncedBlock { number, block, commit }).await.unwrap();
-    true
+    result.next().await.unwrap()
   }
 
   // Return true if the message should be rebroadcasted.
-  // Safe to be &self since the only usage of self is on self.network.blockchain and self.messages,
-  // both which successfully acquire their own write locks and don't rely on each other
-  pub async fn handle_message(&self, msg: &[u8]) -> bool {
+  pub async fn handle_message(&mut self, msg: &[u8]) -> bool {
     match msg.first() {
       Some(&TRANSACTION_MESSAGE) => {
         let Ok(tx) = T::read::<&[u8]>(&mut &msg[1 ..]) else {
@@ -231,6 +246,19 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
         };
 
         self.messages.write().await.send(msg).await.unwrap();
+        false
+      }
+
+      Some(&BLOCK_MESSAGE) => {
+        let mut msg_ref = &msg[1 ..];
+        let Ok(block) = Block::<T>::read(&mut msg_ref) else {
+          log::error!("received invalid block message");
+          return false;
+        };
+        let commit = msg[(msg.len() - msg_ref.len()) ..].to_vec();
+        if self.sync_block(block, commit).await {
+          log::debug!("synced block over p2p net instead of building the commit ourselves");
+        }
         false
       }
 

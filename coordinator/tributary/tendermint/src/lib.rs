@@ -9,7 +9,7 @@ use std::{
 use parity_scale_codec::{Encode, Decode};
 
 use futures::{
-  FutureExt, StreamExt,
+  FutureExt, StreamExt, SinkExt,
   future::{self, Fuse},
   channel::mpsc,
 };
@@ -135,6 +135,7 @@ pub struct TendermintMachine<N: Network> {
   queue: VecDeque<MessageFor<N>>,
   msg_recv: mpsc::UnboundedReceiver<SignedMessageFor<N>>,
   synced_block_recv: mpsc::UnboundedReceiver<SyncedBlock<N>>,
+  synced_block_result_send: mpsc::UnboundedSender<bool>,
 
   block: BlockData<N>,
 }
@@ -146,6 +147,7 @@ pub struct SyncedBlock<N: Network> {
 }
 
 pub type SyncedBlockSender<N> = mpsc::UnboundedSender<SyncedBlock<N>>;
+pub type SyncedBlockResultReceiver = mpsc::UnboundedReceiver<bool>;
 
 pub type MessageSender<N> = mpsc::UnboundedSender<SignedMessageFor<N>>;
 
@@ -154,6 +156,8 @@ pub struct TendermintHandle<N: Network> {
   /// Channel to trigger the machine to move to the next block.
   /// Takes in the the previous block's commit, along with the new proposal.
   pub synced_block: SyncedBlockSender<N>,
+  /// A channel to communicate the result of a synced_block message.
+  pub synced_block_result: SyncedBlockResultReceiver,
   /// Channel to send messages received from the P2P layer.
   pub messages: MessageSender<N>,
   /// Tendermint machine to be run on an asynchronous task.
@@ -253,8 +257,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
   ) -> TendermintHandle<N> {
     let (msg_send, msg_recv) = mpsc::unbounded();
     let (synced_block_send, synced_block_recv) = mpsc::unbounded();
+    let (synced_block_result_send, synced_block_result_recv) = mpsc::unbounded();
     TendermintHandle {
       synced_block: synced_block_send,
+      synced_block_result: synced_block_result_recv,
       messages: msg_send,
       machine: {
         let sys_time = sys_time(last_time);
@@ -275,6 +281,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           queue: VecDeque::new(),
           msg_recv,
           synced_block_recv,
+          synced_block_result_send,
 
           block: BlockData::new(
             weights,
@@ -313,16 +320,19 @@ impl<N: Network + 'static> TendermintMachine<N> {
           if let Some(SyncedBlock { number, block, commit }) = msg {
             // Commit is for a block we've already moved past
             if number != self.block.number {
+              self.synced_block_result_send.send(false).await.unwrap();
               continue;
             }
 
             // Commit is invalid
             if !self.network.verify_commit(block.id(), &commit) {
+              self.synced_block_result_send.send(false).await.unwrap();
               continue;
             }
 
             let proposal = self.network.add_block(block, commit.clone()).await;
             self.reset_by_commit(commit, proposal).await;
+            self.synced_block_result_send.send(true).await.unwrap();
             None
           } else {
             break;

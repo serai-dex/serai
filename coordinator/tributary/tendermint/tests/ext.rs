@@ -11,7 +11,8 @@ use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{
-  ext::*, SignedMessageFor, SyncedBlockSender, MessageSender, TendermintMachine, TendermintHandle,
+  ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
+  TendermintMachine, TendermintHandle,
 };
 
 type TestValidatorId = u16;
@@ -97,7 +98,10 @@ impl Block for TestBlock {
 }
 
 #[allow(clippy::type_complexity)]
-struct TestNetwork(u16, Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>)>>>);
+struct TestNetwork(
+  u16,
+  Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>,
+);
 
 #[async_trait]
 impl Network for TestNetwork {
@@ -122,7 +126,7 @@ impl Network for TestNetwork {
   }
 
   async fn broadcast(&mut self, msg: SignedMessageFor<Self>) {
-    for (messages, _) in self.1.write().await.iter_mut() {
+    for (messages, _, _) in self.1.write().await.iter_mut() {
       messages.send(msg.clone()).await.unwrap();
     }
   }
@@ -151,21 +155,23 @@ impl Network for TestNetwork {
 impl TestNetwork {
   async fn new(
     validators: usize,
-  ) -> Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>)>>> {
+  ) -> Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>
+  {
     let arc = Arc::new(RwLock::new(vec![]));
     {
       let mut write = arc.write().await;
       for i in 0 .. validators {
         let i = u16::try_from(i).unwrap();
-        let TendermintHandle { messages, synced_block, machine } = TendermintMachine::new(
-          TestNetwork(i, arc.clone()),
-          BlockNumber(1),
-          SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-          TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
-        )
-        .await;
+        let TendermintHandle { messages, synced_block, synced_block_result, machine } =
+          TendermintMachine::new(
+            TestNetwork(i, arc.clone()),
+            BlockNumber(1),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
+          )
+          .await;
         tokio::task::spawn(machine.run());
-        write.push((messages, synced_block));
+        write.push((messages, synced_block, synced_block_result));
       }
     }
     arc
