@@ -43,7 +43,7 @@ fn block_addition() {
   assert_eq!(blockchain.tip(), block.hash());
   assert_eq!(blockchain.block_number(), 1);
   assert_eq!(
-    Blockchain::<MemDb, SignedTransaction>::block_after(&db, &block.parent()).unwrap(),
+    Blockchain::<MemDb, SignedTransaction>::block_after(&db, genesis, &block.parent()).unwrap(),
     block.hash()
   );
 }

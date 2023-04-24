@@ -62,7 +62,7 @@ async fn sync_test() {
   sleep(Duration::from_secs(1)).await;
   // Make sure every tributary has it
   for tributary in &tributaries {
-    assert!(tributary.read().await.block(&tip).is_some());
+    assert!(tributary.read().await.reader().block(&tip).is_some());
   }
 
   // Now that we've confirmed the other tributaries formed a net without issue, drop the syncer's
@@ -100,7 +100,9 @@ async fn sync_test() {
     let tip = tributary.tip().await;
     let syncer_tip = syncer_tributary.tip().await;
     // Allow a one block tolerance in case of race conditions
-    assert!(HashSet::from([tip, tributary.block(&tip).unwrap().parent()]).contains(&syncer_tip));
+    assert!(
+      HashSet::from([tip, tributary.reader().block(&tip).unwrap().parent()]).contains(&syncer_tip)
+    );
     syncer_tip
   };
 
@@ -115,6 +117,7 @@ async fn sync_test() {
   for _ in 0 .. 10 {
     let syncer_tributary = syncer_tributary.read().await;
     if syncer_tributary
+      .reader()
       .parsed_commit(&syncer_tributary.tip().await)
       .unwrap()
       .validators

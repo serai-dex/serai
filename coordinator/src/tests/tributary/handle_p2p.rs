@@ -50,7 +50,7 @@ async fn handle_p2p_test() {
   sleep(Duration::from_secs(1)).await;
   // Make sure every tributary has it
   for tributary in &tributaries {
-    assert!(tributary.read().await.block(&tip).is_some());
+    assert!(tributary.read().await.reader().block(&tip).is_some());
   }
 
   // Then after another block of time, we should have yet another new block
@@ -59,6 +59,6 @@ async fn handle_p2p_test() {
   assert!(new_tip != tip);
   sleep(Duration::from_secs(1)).await;
   for tributary in tributaries {
-    assert!(tributary.read().await.block(&new_tip).is_some());
+    assert!(tributary.read().await.reader().block(&new_tip).is_some());
   }
 }

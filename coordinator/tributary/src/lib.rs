@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::{marker::PhantomData, fmt::Debug};
 use std::{sync::Arc, io};
 
 use async_trait::async_trait;
@@ -150,24 +150,8 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     self.network.blockchain.read().await.tip()
   }
 
-  // Since these values are static, they can be safely read from the database without lock
-  // acquisition
-  pub fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
-    Blockchain::<D, T>::block_from_db(&self.db, hash)
-  }
-  pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
-    Blockchain::<D, T>::commit_from_db(&self.db, hash)
-  }
-  pub fn parsed_commit(&self, hash: &[u8; 32]) -> Option<Commit<Validators>> {
-    self.commit(hash).map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap())
-  }
-  pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
-    Blockchain::<D, T>::block_after(&self.db, hash)
-  }
-  pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
-    self
-      .commit(hash)
-      .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
+  pub fn reader(&self) -> TributaryReader<D, T> {
+    TributaryReader(self.db.clone(), self.genesis, PhantomData)
   }
 
   pub async fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {
@@ -264,5 +248,32 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
 
       _ => false,
     }
+  }
+}
+
+#[derive(Clone)]
+pub struct TributaryReader<D: Db, T: Transaction>(D, [u8; 32], PhantomData<T>);
+impl<D: Db, T: Transaction> TributaryReader<D, T> {
+  pub fn genesis(&self) -> [u8; 32] {
+    self.1
+  }
+  // Since these values are static, they can be safely read from the database without lock
+  // acquisition
+  pub fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
+    Blockchain::<D, T>::block_from_db(&self.0, self.1, hash)
+  }
+  pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
+    Blockchain::<D, T>::commit_from_db(&self.0, self.1, hash)
+  }
+  pub fn parsed_commit(&self, hash: &[u8; 32]) -> Option<Commit<Validators>> {
+    self.commit(hash).map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap())
+  }
+  pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
+    Blockchain::<D, T>::block_after(&self.0, self.1, hash)
+  }
+  pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
+    self
+      .commit(hash)
+      .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
   }
 }

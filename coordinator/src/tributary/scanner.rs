@@ -5,7 +5,7 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use tributary::{Signed, Block, P2p, Tributary};
+use tributary::{Signed, Block, TributaryReader};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
@@ -22,14 +22,14 @@ use crate::{
 };
 
 // Handle a specific Tributary block
-async fn handle_block<D: Db, Pro: Processor, P: P2p>(
+async fn handle_block<D: Db, Pro: Processor>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   processor: &mut Pro,
   spec: &TributarySpec,
-  tributary: &Tributary<D, Transaction, P>,
   block: Block<Transaction>,
 ) {
+  let genesis = spec.genesis();
   let hash = block.hash();
 
   let mut event_id = 0;
@@ -58,78 +58,75 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
         }
       }
 
-      let mut handle =
-        |zone: Zone, label, needed, id, attempt, mut bytes: Vec<u8>, signed: Signed| {
-          if zone == Zone::Dkg {
-            // Since Dkg doesn't have an ID, solely attempts, this should just be [0; 32]
-            assert_eq!(id, [0; 32], "DKG, which shouldn't have IDs, had a non-0 ID");
-          } else if !TributaryDb::<D>::recognized_id(&txn, zone.label(), tributary.genesis(), id) {
+      let mut handle = |zone: Zone,
+                        label,
+                        needed,
+                        id,
+                        attempt,
+                        mut bytes: Vec<u8>,
+                        signed: Signed| {
+        if zone == Zone::Dkg {
+          // Since Dkg doesn't have an ID, solely attempts, this should just be [0; 32]
+          assert_eq!(id, [0; 32], "DKG, which shouldn't have IDs, had a non-0 ID");
+        } else if !TributaryDb::<D>::recognized_id(&txn, zone.label(), genesis, id) {
+          // TODO: Full slash
+          todo!();
+        }
+
+        // If they've already published a TX for this attempt, slash
+        if let Some(data) = TributaryDb::<D>::data(label, &txn, genesis, id, attempt, signed.signer)
+        {
+          if data != bytes {
             // TODO: Full slash
             todo!();
           }
 
-          // If they've already published a TX for this attempt, slash
-          if let Some(data) =
-            TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, signed.signer)
-          {
-            if data != bytes {
-              // TODO: Full slash
-              todo!();
-            }
+          // TODO: Slash
+          return None;
+        }
 
-            // TODO: Slash
-            return None;
+        // If the attempt is lesser than the blockchain's, slash
+        let curr_attempt = TributaryDb::<D>::attempt(&txn, genesis, id);
+        if attempt < curr_attempt {
+          // TODO: Slash for being late
+          return None;
+        }
+        if attempt > curr_attempt {
+          // TODO: Full slash
+          todo!();
+        }
+
+        // TODO: We can also full slash if shares before all commitments, or share before the
+        // necessary preprocesses
+
+        // Store this data
+        let received =
+          TributaryDb::<D>::set_data(label, &mut txn, genesis, id, attempt, signed.signer, &bytes);
+
+        // If we have all the needed commitments/preprocesses/shares, tell the processor
+        // TODO: This needs to be coded by weight, not by validator count
+        if received == needed {
+          let mut data = HashMap::new();
+          for validator in spec.validators().iter().map(|validator| validator.0) {
+            data.insert(
+              spec.i(validator).unwrap(),
+              if validator == signed.signer {
+                bytes.split_off(0)
+              } else if let Some(data) =
+                TributaryDb::<D>::data(label, &txn, genesis, id, attempt, validator)
+              {
+                data
+              } else {
+                continue;
+              },
+            );
           }
+          assert_eq!(data.len(), usize::from(needed));
 
-          // If the attempt is lesser than the blockchain's, slash
-          let curr_attempt = TributaryDb::<D>::attempt(&txn, tributary.genesis(), id);
-          if attempt < curr_attempt {
-            // TODO: Slash for being late
-            return None;
-          }
-          if attempt > curr_attempt {
-            // TODO: Full slash
-            todo!();
-          }
-
-          // TODO: We can also full slash if shares before all commitments, or share before the
-          // necessary preprocesses
-
-          // Store this data
-          let received = TributaryDb::<D>::set_data(
-            label,
-            &mut txn,
-            tributary.genesis(),
-            id,
-            attempt,
-            signed.signer,
-            &bytes,
-          );
-
-          // If we have all the needed commitments/preprocesses/shares, tell the processor
-          // TODO: This needs to be coded by weight, not by validator count
-          if received == needed {
-            let mut data = HashMap::new();
-            for validator in spec.validators().iter().map(|validator| validator.0) {
-              data.insert(
-                spec.i(validator).unwrap(),
-                if validator == signed.signer {
-                  bytes.split_off(0)
-                } else if let Some(data) =
-                  TributaryDb::<D>::data(label, &txn, tributary.genesis(), id, attempt, validator)
-                {
-                  data
-                } else {
-                  continue;
-                },
-              );
-            }
-            assert_eq!(data.len(), usize::from(needed));
-
-            return Some(data);
-          }
-          None
-        };
+          return Some(data);
+        }
+        None
+      };
 
       match tx {
         Transaction::DkgCommitments(attempt, bytes, signed) => {
@@ -177,27 +174,22 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
           // If we didn't provide this transaction, we should halt until we do
           // If we provided a distinct transaction, we should error
           // If we did provide this transaction, we should've set the batch ID for the block
-          let batch_id = TributaryDb::<D>::batch_id(&txn, tributary.genesis(), block).expect(
+          let batch_id = TributaryDb::<D>::batch_id(&txn, genesis, block).expect(
             "synced a tributary block finalizing a external block in a provided transaction \
             despite us not providing that transaction",
           );
 
-          TributaryDb::<D>::recognize_id(
-            &mut txn,
-            Zone::Batch.label(),
-            tributary.genesis(),
-            batch_id,
-          );
+          TributaryDb::<D>::recognize_id(&mut txn, Zone::Batch.label(), genesis, batch_id);
         }
 
         Transaction::SubstrateBlock(block) => {
-          let plan_ids = TributaryDb::<D>::plan_ids(&txn, tributary.genesis(), block).expect(
+          let plan_ids = TributaryDb::<D>::plan_ids(&txn, genesis, block).expect(
             "synced a tributary block finalizing a substrate block in a provided transaction \
             despite us not providing that transaction",
           );
 
           for id in plan_ids {
-            TributaryDb::<D>::recognize_id(&mut txn, Zone::Sign.label(), tributary.genesis(), id);
+            TributaryDb::<D>::recognize_id(&mut txn, Zone::Sign.label(), genesis, id);
           }
         }
 
@@ -290,18 +282,19 @@ async fn handle_block<D: Db, Pro: Processor, P: P2p>(
   // TODO: Trigger any necessary re-attempts
 }
 
-pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
+pub async fn handle_new_blocks<D: Db, Pro: Processor>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   processor: &mut Pro,
   spec: &TributarySpec,
-  tributary: &Tributary<D, Transaction, P>,
+  tributary: &TributaryReader<D, Transaction>,
 ) {
-  let mut last_block = db.last_block(tributary.genesis());
+  let genesis = tributary.genesis();
+  let mut last_block = db.last_block(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
-    handle_block(db, key, processor, spec, tributary, block).await;
+    handle_block(db, key, processor, spec, block).await;
     last_block = next;
-    db.set_last_block(tributary.genesis(), next);
+    db.set_last_block(genesis, next);
   }
 }

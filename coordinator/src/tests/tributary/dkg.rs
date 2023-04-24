@@ -81,7 +81,7 @@ async fn dkg_test() {
   ) -> (TributaryDb<MemDb>, MemProcessor) {
     let mut scanner_db = TributaryDb(MemDb::new());
     let mut processor = MemProcessor::new();
-    handle_new_blocks(&mut scanner_db, key, &mut processor, spec, tributary).await;
+    handle_new_blocks(&mut scanner_db, key, &mut processor, spec, &tributary.reader()).await;
     (scanner_db, processor)
   }
 
@@ -96,7 +96,8 @@ async fn dkg_test() {
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Verify the scanner emits a KeyGen::Commitments message
-  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
+  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1.reader())
+    .await;
   {
     let mut msgs = processor.0.write().await;
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
@@ -137,7 +138,8 @@ async fn dkg_test() {
   }
 
   // With just 4 sets of shares, nothing should happen yet
-  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
+  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1.reader())
+    .await;
   assert!(processor.0.write().await.is_empty());
 
   // Publish the final set of shares
@@ -168,7 +170,8 @@ async fn dkg_test() {
   };
 
   // Any scanner which has handled the prior blocks should only emit the new event
-  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
+  handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1.reader())
+    .await;
   {
     let mut msgs = processor.0.write().await;
     assert_eq!(msgs.pop_front().unwrap(), shares_for(0));

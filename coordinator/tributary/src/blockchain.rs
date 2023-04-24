@@ -29,16 +29,14 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
   fn block_number_key(&self) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block_number", self.genesis)
   }
-  fn block_key(hash: &[u8; 32]) -> Vec<u8> {
-    // Since block hashes incorporate their parent, and the first parent is the genesis, this is
-    // fine not incorporating the hash unless there's a hash collision
-    D::key(b"tributary_blockchain", b"block", hash)
+  fn block_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"block", [genesis, hash].concat())
   }
-  fn commit_key(hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"commit", hash)
+  fn commit_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"commit", [genesis, hash].concat())
   }
-  fn block_after_key(hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block_after", hash)
+  fn block_after_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"block_after", [genesis, hash].concat())
   }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
     D::key(
@@ -95,21 +93,21 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     self.block_number
   }
 
-  pub(crate) fn block_from_db(db: &D, block: &[u8; 32]) -> Option<Block<T>> {
-    db.get(Self::block_key(block))
+  pub(crate) fn block_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Block<T>> {
+    db.get(Self::block_key(&genesis, block))
       .map(|bytes| Block::<T>::read::<&[u8]>(&mut bytes.as_ref()).unwrap())
   }
 
-  pub(crate) fn commit_from_db(db: &D, block: &[u8; 32]) -> Option<Vec<u8>> {
-    db.get(Self::commit_key(block))
+  pub(crate) fn commit_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Vec<u8>> {
+    db.get(Self::commit_key(&genesis, block))
   }
 
   pub(crate) fn commit(&self, block: &[u8; 32]) -> Option<Vec<u8>> {
-    Self::commit_from_db(self.db.as_ref().unwrap(), block)
+    Self::commit_from_db(self.db.as_ref().unwrap(), self.genesis, block)
   }
 
-  pub(crate) fn block_after(db: &D, block: &[u8; 32]) -> Option<[u8; 32]> {
-    db.get(Self::block_after_key(block)).map(|bytes| bytes.try_into().unwrap())
+  pub(crate) fn block_after(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<[u8; 32]> {
+    db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
   }
 
   pub(crate) fn add_transaction(&mut self, internal: bool, tx: T) -> bool {
@@ -162,10 +160,10 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     self.block_number += 1;
     txn.put(self.block_number_key(), self.block_number.to_le_bytes());
 
-    txn.put(Self::block_key(&self.tip), block.serialize());
-    txn.put(Self::commit_key(&self.tip), commit);
+    txn.put(Self::block_key(&self.genesis, &self.tip), block.serialize());
+    txn.put(Self::commit_key(&self.genesis, &self.tip), commit);
 
-    txn.put(Self::block_after_key(&block.parent()), block.hash());
+    txn.put(Self::block_after_key(&self.genesis, &block.parent()), block.hash());
 
     for tx in &block.transactions {
       match tx.kind() {

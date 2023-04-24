@@ -117,6 +117,7 @@ pub async fn wait_for_tx_inclusion(
   mut last_checked: [u8; 32],
   hash: [u8; 32],
 ) -> [u8; 32] {
+  let reader = tributary.reader();
   loop {
     let tip = tributary.tip().await;
     if tip == last_checked {
@@ -124,14 +125,14 @@ pub async fn wait_for_tx_inclusion(
       continue;
     }
 
-    let mut queue = vec![tributary.block(&tip).unwrap()];
+    let mut queue = vec![reader.block(&tip).unwrap()];
     let mut block = None;
     while {
       let parent = queue.last().unwrap().parent();
       if parent == tributary.genesis() {
         false
       } else {
-        block = Some(tributary.block(&parent).unwrap());
+        block = Some(reader.block(&parent).unwrap());
         block.as_ref().unwrap().hash() != last_checked
       }
     } {
