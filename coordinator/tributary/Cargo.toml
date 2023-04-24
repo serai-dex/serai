@@ -34,8 +34,5 @@ tendermint = { package = "tendermint-machine", path = "./tendermint" }
 
 tokio = { version = "1", features = ["macros", "sync", "time", "rt"] }
 
-[dev-dependencies]
-zeroize = "^1.5"
-
 [features]
 tests = []

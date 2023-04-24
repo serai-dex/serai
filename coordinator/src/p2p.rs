@@ -1,11 +1,9 @@
 use core::fmt::Debug;
-use std::{
-  sync::{Arc, RwLock},
-  io::Read,
-  collections::VecDeque,
-};
+use std::{sync::Arc, io::Read, collections::VecDeque};
 
 use async_trait::async_trait;
+
+use tokio::sync::RwLock;
 
 pub use tributary::P2p as TributaryP2p;
 
@@ -94,6 +92,7 @@ pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
   }
 }
 
+// TODO: Move this to tests
 #[allow(clippy::type_complexity)]
 #[derive(Clone, Debug)]
 pub struct LocalP2p(usize, Arc<RwLock<Vec<VecDeque<(usize, Vec<u8>)>>>>);
@@ -114,11 +113,11 @@ impl P2p for LocalP2p {
   type Id = usize;
 
   async fn send_raw(&self, to: Self::Id, msg: Vec<u8>) {
-    self.1.write().unwrap()[to].push_back((self.0, msg));
+    self.1.write().await[to].push_back((self.0, msg));
   }
 
   async fn broadcast_raw(&self, msg: Vec<u8>) {
-    for (i, msg_queue) in self.1.write().unwrap().iter_mut().enumerate() {
+    for (i, msg_queue) in self.1.write().await.iter_mut().enumerate() {
       if i == self.0 {
         continue;
       }
@@ -129,7 +128,7 @@ impl P2p for LocalP2p {
   async fn receive_raw(&self) -> (Self::Id, Vec<u8>) {
     // This is a cursed way to implement an async read from a Vec
     loop {
-      if let Some(res) = self.1.write().unwrap()[self.0].pop_front() {
+      if let Some(res) = self.1.write().await[self.0].pop_front() {
         return res;
       }
       tokio::time::sleep(std::time::Duration::from_millis(100)).await;

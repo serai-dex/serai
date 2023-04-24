@@ -1,8 +1,5 @@
 use core::fmt::Debug;
-use std::{
-  sync::{Arc, RwLock},
-  io,
-};
+use std::{sync::Arc, io};
 
 use async_trait::async_trait;
 
@@ -20,7 +17,7 @@ use ::tendermint::{
 
 use serai_db::Db;
 
-use tokio::sync::RwLock as AsyncRwLock;
+use tokio::sync::RwLock;
 
 mod merkle;
 pub(crate) use merkle::*;
@@ -90,7 +87,7 @@ pub struct Tributary<D: Db, T: Transaction, P: P2p> {
   network: TendermintNetwork<D, T, P>,
 
   synced_block: SyncedBlockSender<TendermintNetwork<D, T, P>>,
-  messages: Arc<AsyncRwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
+  messages: Arc<RwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
 }
 
 impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
@@ -124,7 +121,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
     tokio::task::spawn(machine.run());
 
-    Some(Self { genesis, network, synced_block, messages: Arc::new(AsyncRwLock::new(messages)) })
+    Some(Self { genesis, network, synced_block, messages: Arc::new(RwLock::new(messages)) })
   }
 
   pub fn block_time() -> u32 {
@@ -134,34 +131,37 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   pub fn genesis(&self) -> [u8; 32] {
     self.genesis
   }
-  pub fn block_number(&self) -> u32 {
-    self.network.blockchain.read().unwrap().block_number()
+
+  // TODO: block, time_of_block, and commit shouldn't require acquiring the read lock
+  // These values can be safely read directly from the database since they're static
+  pub async fn block_number(&self) -> u32 {
+    self.network.blockchain.read().await.block_number()
   }
-  pub fn tip(&self) -> [u8; 32] {
-    self.network.blockchain.read().unwrap().tip()
+  pub async fn tip(&self) -> [u8; 32] {
+    self.network.blockchain.read().await.tip()
   }
-  pub fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
-    self.network.blockchain.read().unwrap().block(hash)
+  pub async fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
+    self.network.blockchain.read().await.block(hash)
   }
-  pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
+  pub async fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
     self
       .network
       .blockchain
       .read()
-      .unwrap()
+      .await
       .commit(hash)
       .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
   }
-  pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
-    self.network.blockchain.read().unwrap().commit(hash)
+  pub async fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
+    self.network.blockchain.read().await.commit(hash)
   }
 
-  pub fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {
-    self.network.blockchain.write().unwrap().provide_transaction(tx)
+  pub async fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {
+    self.network.blockchain.write().await.provide_transaction(tx)
   }
 
-  pub fn next_nonce(&self, signer: <Ristretto as Ciphersuite>::G) -> Option<u32> {
-    self.network.blockchain.read().unwrap().next_nonce(signer)
+  pub async fn next_nonce(&self, signer: <Ristretto as Ciphersuite>::G) -> Option<u32> {
+    self.network.blockchain.read().await.next_nonce(signer)
   }
 
   // Returns if the transaction was valid.
@@ -170,7 +170,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   pub async fn add_transaction(&self, tx: T) -> bool {
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
-    let res = self.network.blockchain.write().unwrap().add_transaction(true, tx);
+    let res = self.network.blockchain.write().await.add_transaction(true, tx);
     if res {
       self.network.p2p.broadcast(self.genesis, to_broadcast).await;
     }
@@ -181,7 +181,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
   // TODO: Since we have a static validator set, we should only need the tail commit?
   pub async fn sync_block(&mut self, block: Block<T>, commit: Vec<u8>) -> bool {
     let (tip, block_number) = {
-      let blockchain = self.network.blockchain.read().unwrap();
+      let blockchain = self.network.blockchain.read().await;
       (blockchain.tip(), blockchain.block_number())
     };
 
@@ -215,7 +215,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
 
         // TODO: Sync mempools with fellow peers
         // Can we just rebroadcast transactions not included for at least two blocks?
-        let res = self.network.blockchain.write().unwrap().add_transaction(false, tx);
+        let res = self.network.blockchain.write().await.add_transaction(false, tx);
         log::debug!("received transaction message. valid new transaction: {res}");
         res
       }

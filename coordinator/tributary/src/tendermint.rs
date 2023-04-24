@@ -1,8 +1,5 @@
 use core::ops::Deref;
-use std::{
-  sync::{Arc, RwLock},
-  collections::HashMap,
-};
+use std::{sync::Arc, collections::HashMap};
 
 use async_trait::async_trait;
 
@@ -34,7 +31,10 @@ use tendermint::{
   },
 };
 
-use tokio::time::{Duration, sleep};
+use tokio::{
+  sync::RwLock,
+  time::{Duration, sleep},
+};
 
 use crate::{
   TENDERMINT_MESSAGE, ReadWrite, Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
@@ -273,7 +273,7 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
   async fn validate(&mut self, block: &Self::Block) -> Result<(), TendermintBlockError> {
     let block =
       Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
-    self.blockchain.read().unwrap().verify_block(&block).map_err(|e| match e {
+    self.blockchain.read().await.verify_block(&block).map_err(|e| match e {
       BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
       _ => TendermintBlockError::Fatal,
     })
@@ -301,7 +301,7 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
     };
 
     loop {
-      let block_res = self.blockchain.write().unwrap().add_block(&block, commit.encode());
+      let block_res = self.blockchain.write().await.add_block(&block, commit.encode());
       match block_res {
         Ok(()) => break,
         Err(BlockError::NonLocalProvided(hash)) => {
@@ -316,6 +316,6 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
       }
     }
 
-    Some(TendermintBlock(self.blockchain.write().unwrap().build_block().serialize()))
+    Some(TendermintBlock(self.blockchain.write().await.build_block().serialize()))
   }
 }

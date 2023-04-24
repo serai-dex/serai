@@ -47,7 +47,7 @@ async fn dkg_test() {
     txs.push(tx);
   }
 
-  let block_before_tx = tributaries[0].1.tip();
+  let block_before_tx = tributaries[0].1.tip().await;
 
   // Publish all commitments but one
   for (i, tx) in txs.iter().enumerate().skip(1) {
@@ -87,10 +87,10 @@ async fn dkg_test() {
 
   // Instantiate a scanner and verify it has nothing to report
   let (mut scanner_db, mut processor) = new_processor(&keys[0], &spec, &tributaries[0].1).await;
-  assert!(processor.0.read().unwrap().is_empty());
+  assert!(processor.0.read().await.is_empty());
 
   // Publish the last commitment
-  let block_before_tx = tributaries[0].1.tip();
+  let block_before_tx = tributaries[0].1.tip().await;
   assert!(tributaries[0].1.add_transaction(txs[0].clone()).await);
   wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, txs[0].hash()).await;
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
@@ -98,7 +98,7 @@ async fn dkg_test() {
   // Verify the scanner emits a KeyGen::Commitments message
   handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
   {
-    let mut msgs = processor.0.write().unwrap();
+    let mut msgs = processor.0.write().await;
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert!(msgs.is_empty());
   }
@@ -106,7 +106,7 @@ async fn dkg_test() {
   // Verify all keys exhibit this scanner behavior
   for (i, key) in keys.iter().enumerate() {
     let (_, processor) = new_processor(key, &spec, &tributaries[i].1).await;
-    let mut msgs = processor.0.write().unwrap();
+    let mut msgs = processor.0.write().await;
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert!(msgs.is_empty());
   }
@@ -128,7 +128,7 @@ async fn dkg_test() {
     txs.push(tx);
   }
 
-  let block_before_tx = tributaries[0].1.tip();
+  let block_before_tx = tributaries[0].1.tip().await;
   for (i, tx) in txs.iter().enumerate().skip(1) {
     assert!(tributaries[i].1.add_transaction(tx.clone()).await);
   }
@@ -138,10 +138,10 @@ async fn dkg_test() {
 
   // With just 4 sets of shares, nothing should happen yet
   handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
-  assert!(processor.0.write().unwrap().is_empty());
+  assert!(processor.0.write().await.is_empty());
 
   // Publish the final set of shares
-  let block_before_tx = tributaries[0].1.tip();
+  let block_before_tx = tributaries[0].1.tip().await;
   assert!(tributaries[0].1.add_transaction(txs[0].clone()).await);
   wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, txs[0].hash()).await;
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
@@ -170,7 +170,7 @@ async fn dkg_test() {
   // Any scanner which has handled the prior blocks should only emit the new event
   handle_new_blocks(&mut scanner_db, &keys[0], &mut processor, &spec, &tributaries[0].1).await;
   {
-    let mut msgs = processor.0.write().unwrap();
+    let mut msgs = processor.0.write().await;
     assert_eq!(msgs.pop_front().unwrap(), shares_for(0));
     assert!(msgs.is_empty());
   }
@@ -178,7 +178,7 @@ async fn dkg_test() {
   // Yet new scanners should emit all events
   for (i, key) in keys.iter().enumerate() {
     let (_, processor) = new_processor(key, &spec, &tributaries[i].1).await;
-    let mut msgs = processor.0.write().unwrap();
+    let mut msgs = processor.0.write().await;
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert_eq!(msgs.pop_front().unwrap(), shares_for(i));
     assert!(msgs.is_empty());

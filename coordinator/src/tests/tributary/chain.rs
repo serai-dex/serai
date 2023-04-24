@@ -118,20 +118,20 @@ pub async fn wait_for_tx_inclusion(
   hash: [u8; 32],
 ) -> [u8; 32] {
   loop {
-    let tip = tributary.tip();
+    let tip = tributary.tip().await;
     if tip == last_checked {
       sleep(Duration::from_secs(1)).await;
       continue;
     }
 
-    let mut queue = vec![tributary.block(&tip).unwrap()];
+    let mut queue = vec![tributary.block(&tip).await.unwrap()];
     let mut block = None;
     while {
       let parent = queue.last().unwrap().parent();
       if parent == tributary.genesis() {
         false
       } else {
-        block = Some(tributary.block(&parent).unwrap());
+        block = Some(tributary.block(&parent).await.unwrap());
         block.as_ref().unwrap().hash() != last_checked
       }
     } {
@@ -176,7 +176,7 @@ async fn tributary_test() {
       }
     }
 
-    let tip = tributaries[0].1.tip();
+    let tip = tributaries[0].1.tip().await;
     if tip != last_block {
       last_block = tip;
       blocks += 1;
@@ -202,11 +202,18 @@ async fn tributary_test() {
     }
   }
 
+  // handle_message informed the Tendermint machine, yet it still has to process it
+  // Sleep for a second accordingly
+  // TODO: Is there a better way to handle this?
+  sleep(Duration::from_secs(1)).await;
+
   // All tributaries should agree on the tip
   let mut final_block = None;
   for (_, tributary) in tributaries {
-    final_block = final_block.or_else(|| Some(tributary.tip()));
-    if tributary.tip() != final_block.unwrap() {
+    if final_block.is_none() {
+      final_block = Some(tributary.tip().await);
+    }
+    if tributary.tip().await != final_block.unwrap() {
       panic!("tributary had different tip");
     }
   }

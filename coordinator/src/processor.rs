@@ -1,7 +1,6 @@
-use std::{
-  sync::{Arc, RwLock},
-  collections::VecDeque,
-};
+use std::{sync::Arc, collections::VecDeque};
+
+use tokio::sync::RwLock;
 
 use processor_messages::{ProcessorMessage, CoordinatorMessage};
 
@@ -31,7 +30,7 @@ impl MemProcessor {
 #[async_trait::async_trait]
 impl Processor for MemProcessor {
   async fn send(&mut self, msg: CoordinatorMessage) {
-    self.0.write().unwrap().push_back(msg)
+    self.0.write().await.push_back(msg)
   }
   async fn recv(&mut self) -> Message {
     todo!()

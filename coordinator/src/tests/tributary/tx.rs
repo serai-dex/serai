@@ -34,7 +34,7 @@ async fn tx_test() {
   OsRng.fill_bytes(&mut commitments);
 
   // Create the TX with a null signature so we can get its sig hash
-  let block_before_tx = tributaries[sender].1.tip();
+  let block_before_tx = tributaries[sender].1.tip().await;
   let mut tx =
     Transaction::DkgCommitments(attempt, commitments.clone(), Transaction::empty_signed());
   tx.sign(&mut OsRng, spec.genesis(), &key, 0);
@@ -46,7 +46,7 @@ async fn tx_test() {
 
   // All tributaries should have acknowledged this transaction in a block
   for (_, tributary) in tributaries {
-    let block = tributary.block(&included_in).unwrap();
+    let block = tributary.block(&included_in).await.unwrap();
     assert_eq!(block.transactions, vec![tx.clone()]);
   }
 }
