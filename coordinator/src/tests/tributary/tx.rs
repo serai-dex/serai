@@ -46,7 +46,7 @@ async fn tx_test() {
 
   // All tributaries should have acknowledged this transaction in a block
   for (_, tributary) in tributaries {
-    let block = tributary.block(&included_in).await.unwrap();
+    let block = tributary.block(&included_in).unwrap();
     assert_eq!(block.transactions, vec![tx.clone()]);
   }
 }

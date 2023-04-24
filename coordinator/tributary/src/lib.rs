@@ -83,6 +83,8 @@ impl<P: P2p> P2p for Arc<P> {
 
 #[derive(Clone)]
 pub struct Tributary<D: Db, T: Transaction, P: P2p> {
+  db: D,
+
   genesis: [u8; 32],
   network: TendermintNetwork<D, T, P>,
 
@@ -104,7 +106,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     let signer = Arc::new(Signer::new(genesis, key));
     let validators = Arc::new(Validators::new(genesis, validators)?);
 
-    let mut blockchain = Blockchain::new(db, genesis, &validators_vec);
+    let mut blockchain = Blockchain::new(db.clone(), genesis, &validators_vec);
     let block_number = BlockNumber(blockchain.block_number().into());
 
     let start_time = if let Some(commit) = blockchain.commit(&blockchain.tip()) {
@@ -121,7 +123,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
     tokio::task::spawn(machine.run());
 
-    Some(Self { genesis, network, synced_block, messages: Arc::new(RwLock::new(messages)) })
+    Some(Self { db, genesis, network, synced_block, messages: Arc::new(RwLock::new(messages)) })
   }
 
   pub fn block_time() -> u32 {
@@ -132,28 +134,25 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     self.genesis
   }
 
-  // TODO: block, time_of_block, and commit shouldn't require acquiring the read lock
-  // These values can be safely read directly from the database since they're static
   pub async fn block_number(&self) -> u32 {
     self.network.blockchain.read().await.block_number()
   }
   pub async fn tip(&self) -> [u8; 32] {
     self.network.blockchain.read().await.tip()
   }
-  pub async fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
-    self.network.blockchain.read().await.block(hash)
+
+  // Since these values are static, they can be safely read from the database without lock
+  // acquisition
+  pub fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
+    Blockchain::<D, T>::block_from_db(&self.db, hash)
   }
-  pub async fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
+  pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
+    Blockchain::<D, T>::commit_from_db(&self.db, hash)
+  }
+  pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
     self
-      .network
-      .blockchain
-      .read()
-      .await
       .commit(hash)
       .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
-  }
-  pub async fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
-    self.network.blockchain.read().await.commit(hash)
   }
 
   pub async fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {

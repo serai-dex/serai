@@ -124,14 +124,14 @@ pub async fn wait_for_tx_inclusion(
       continue;
     }
 
-    let mut queue = vec![tributary.block(&tip).await.unwrap()];
+    let mut queue = vec![tributary.block(&tip).unwrap()];
     let mut block = None;
     while {
       let parent = queue.last().unwrap().parent();
       if parent == tributary.genesis() {
         false
       } else {
-        block = Some(tributary.block(&parent).await.unwrap());
+        block = Some(tributary.block(&parent).unwrap());
         block.as_ref().unwrap().hash() != last_checked
       }
     } {

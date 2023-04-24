@@ -175,8 +175,8 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
     for ActiveTributary { spec: _, tributary } in tributaries.read().await.values() {
       let tributary = tributary.read().await;
       let tip = tributary.tip().await;
-      let block_time = SystemTime::UNIX_EPOCH +
-        Duration::from_secs(tributary.time_of_block(&tip).await.unwrap_or(0));
+      let block_time =
+        SystemTime::UNIX_EPOCH + Duration::from_secs(tributary.time_of_block(&tip).unwrap_or(0));
 
       // Only trigger syncing if the block is more than a minute behind
       if SystemTime::now() > (block_time + Duration::from_secs(60)) {

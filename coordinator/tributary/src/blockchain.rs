@@ -29,12 +29,12 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
   fn block_number_key(&self) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block_number", self.genesis)
   }
-  fn block_key(&self, hash: &[u8; 32]) -> Vec<u8> {
+  fn block_key(hash: &[u8; 32]) -> Vec<u8> {
     // Since block hashes incorporate their parent, and the first parent is the genesis, this is
     // fine not incorporating the hash unless there's a hash collision
     D::key(b"tributary_blockchain", b"block", hash)
   }
-  fn commit_key(&self, hash: &[u8; 32]) -> Vec<u8> {
+  fn commit_key(hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"commit", hash)
   }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
@@ -92,17 +92,17 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     self.block_number
   }
 
-  pub(crate) fn block(&self, block: &[u8; 32]) -> Option<Block<T>> {
-    self
-      .db
-      .as_ref()
-      .unwrap()
-      .get(self.block_key(block))
+  pub(crate) fn block_from_db(db: &D, block: &[u8; 32]) -> Option<Block<T>> {
+    db.get(Self::block_key(block))
       .map(|bytes| Block::<T>::read::<&[u8]>(&mut bytes.as_ref()).unwrap())
   }
 
+  pub(crate) fn commit_from_db(db: &D, block: &[u8; 32]) -> Option<Vec<u8>> {
+    db.get(Self::commit_key(block))
+  }
+
   pub(crate) fn commit(&self, block: &[u8; 32]) -> Option<Vec<u8>> {
-    self.db.as_ref().unwrap().get(self.commit_key(block))
+    Self::commit_from_db(self.db.as_ref().unwrap(), block)
   }
 
   pub(crate) fn add_transaction(&mut self, internal: bool, tx: T) -> bool {
@@ -155,8 +155,8 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     self.block_number += 1;
     txn.put(self.block_number_key(), self.block_number.to_le_bytes());
 
-    txn.put(self.block_key(&self.tip), block.serialize());
-    txn.put(self.commit_key(&self.tip), commit);
+    txn.put(Self::block_key(&self.tip), block.serialize());
+    txn.put(Self::commit_key(&self.tip), commit);
 
     for tx in &block.transactions {
       match tx.kind() {

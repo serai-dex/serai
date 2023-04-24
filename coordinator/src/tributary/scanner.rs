@@ -307,7 +307,7 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
 
   let mut blocks = VecDeque::new();
   // This is a new block, as per the prior if check
-  blocks.push_back(tributary.block(&latest).await.unwrap());
+  blocks.push_back(tributary.block(&latest).unwrap());
 
   let mut block = None;
   while {
@@ -317,7 +317,7 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor, P: P2p>(
       false
     } else {
       // Get this block
-      block = Some(tributary.block(&parent).await.unwrap());
+      block = Some(tributary.block(&parent).unwrap());
       // If it's the last block we've scanned, it's the end. Else, push it
       block.as_ref().unwrap().hash() != last_block
     }
