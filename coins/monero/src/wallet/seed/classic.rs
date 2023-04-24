@@ -23,23 +23,23 @@ fn trim(word: &str, len: usize) -> Zeroizing<String> {
 }
 
 struct WordList {
-  word_list: Vec<String>,
-  word_map: HashMap<String, usize>,
+  word_list: Vec<&'static str>,
+  word_map: HashMap<&'static str, usize>,
   trimmed_word_map: HashMap<String, usize>,
   unique_prefix_length: usize,
 }
 
 impl WordList {
-  fn new(words: &'static str, prefix_length: usize) -> WordList {
+  fn new(word_list: Vec<&'static str>, prefix_length: usize) -> WordList {
     let mut lang = WordList {
-      word_list: serde_json::from_str(words).unwrap(),
+      word_list,
       word_map: HashMap::new(),
       trimmed_word_map: HashMap::new(),
       unique_prefix_length: prefix_length,
     };
 
     for (i, word) in lang.word_list.iter().enumerate() {
-      lang.word_map.insert(word.clone(), i);
+      lang.word_map.insert(word, i);
       lang.trimmed_word_map.insert(trim(word, lang.unique_prefix_length).deref().clone(), i);
     }
 
@@ -49,19 +49,19 @@ impl WordList {
 
 lazy_static! {
   static ref LANGUAGES: HashMap<Language, WordList> = HashMap::from([
-    (Language::Chinese, WordList::new(include_str!("./classic/zh.json"), 1)),
-    (Language::English, WordList::new(include_str!("./classic/en.json"), 3)),
-    (Language::Dutch, WordList::new(include_str!("./classic/nl.json"), 4)),
-    (Language::French, WordList::new(include_str!("./classic/fr.json"), 4)),
-    (Language::Spanish, WordList::new(include_str!("./classic/es.json"), 4)),
-    (Language::German, WordList::new(include_str!("./classic/de.json"), 4)),
-    (Language::Italian, WordList::new(include_str!("./classic/it.json"), 4)),
-    (Language::Portuguese, WordList::new(include_str!("./classic/pt.json"), 4)),
-    (Language::Japanese, WordList::new(include_str!("./classic/ja.json"), 3)),
-    (Language::Russian, WordList::new(include_str!("./classic/ru.json"), 4)),
-    (Language::Esperanto, WordList::new(include_str!("./classic/eo.json"), 4)),
-    (Language::Lojban, WordList::new(include_str!("./classic/jbo.json"), 4)),
-    (Language::EnglishOld, WordList::new(include_str!("./classic/ang.json"), 4)),
+    (Language::Chinese, WordList::new(include!("./classic/zh.rs"), 1)),
+    (Language::English, WordList::new(include!("./classic/en.rs"), 3)),
+    (Language::Dutch, WordList::new(include!("./classic/nl.rs"), 4)),
+    (Language::French, WordList::new(include!("./classic/fr.rs"), 4)),
+    (Language::Spanish, WordList::new(include!("./classic/es.rs"), 4)),
+    (Language::German, WordList::new(include!("./classic/de.rs"), 4)),
+    (Language::Italian, WordList::new(include!("./classic/it.rs"), 4)),
+    (Language::Portuguese, WordList::new(include!("./classic/pt.rs"), 4)),
+    (Language::Japanese, WordList::new(include!("./classic/ja.rs"), 3)),
+    (Language::Russian, WordList::new(include!("./classic/ru.rs"), 4)),
+    (Language::Esperanto, WordList::new(include!("./classic/eo.rs"), 4)),
+    (Language::Lojban, WordList::new(include!("./classic/jbo.rs"), 4)),
+    (Language::EnglishOld, WordList::new(include!("./classic/ang.rs"), 4)),
   ]);
 }
 
@@ -118,7 +118,7 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
     // append words to seed
     for i in indices.iter().skip(1) {
       let word = usize::try_from(i % list_len).unwrap();
-      seed.push(Zeroizing::new(words[word].clone()));
+      seed.push(Zeroizing::new(words[word].to_string()));
     }
   }
   segment.zeroize();
@@ -158,14 +158,16 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
       matched_indices.zeroize();
       matched_indices.clear();
 
-      let map_in_use = if has_checksum { &lang.trimmed_word_map } else { &lang.word_map };
-
       // Iterate through all the words and see if they're all present
       for word in &words {
         let trimmed = trim(word, lang.unique_prefix_length);
         let word = if has_checksum { &trimmed } else { word };
 
-        if let Some(index) = map_in_use.get(word.deref()) {
+        if let Some(index) = if has_checksum {
+          lang.trimmed_word_map.get(word.deref())
+        } else {
+          lang.word_map.get(&word.as_str())
+        } {
           matched_indices.push(*index);
         } else {
           continue 'language;
