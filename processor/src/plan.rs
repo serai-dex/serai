@@ -81,6 +81,7 @@ impl<C: Coin> Plan<C> {
   pub fn transcript(&self) -> RecommendedTranscript {
     let mut transcript = RecommendedTranscript::new(b"Serai Processor Plan ID");
     transcript.domain_separate(b"meta");
+    transcript.append_message(b"network", C::ID);
     transcript.append_message(b"key", self.key.to_bytes());
 
     transcript.domain_separate(b"inputs");

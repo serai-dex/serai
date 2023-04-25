@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 
 use dkg::{Participant, ThresholdParams};
 
-use serai_primitives::BlockHash;
+use serai_primitives::{BlockHash, NetworkId};
 use in_instructions_primitives::SignedBatch;
 use tokens_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::{ValidatorSet, KeyPair};
@@ -76,16 +76,6 @@ pub mod sign {
     Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
-  pub enum ProcessorMessage {
-    // Created preprocess for the specified signing protocol.
-    Preprocess { id: SignId, preprocess: Vec<u8> },
-    // Signed share for the specified signing protocol.
-    Share { id: SignId, share: Vec<u8> },
-    // Completed a signing protocol already.
-    Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
-  }
-
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
       None
@@ -99,6 +89,17 @@ pub mod sign {
         CoordinatorMessage::Completed { key, .. } => key,
       }
     }
+  }
+
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  pub enum ProcessorMessage {
+    // Created preprocess for the specified signing protocol.
+    Preprocess { id: SignId, preprocess: Vec<u8> },
+    // Signed share for the specified signing protocol.
+    Share { id: SignId, share: Vec<u8> },
+    // Completed a signing protocol already.
+    // TODO: Move this to SignId
+    Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
 }
 
@@ -134,7 +135,7 @@ pub mod coordinator {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    SubstrateBlockAck { block: u64, plans: Vec<[u8; 32]> },
+    SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<[u8; 32]> },
     BatchPreprocess { id: SignId, preprocess: Vec<u8> },
     BatchShare { id: SignId, share: [u8; 32] },
   }
@@ -152,6 +153,7 @@ pub mod substrate {
     },
     SubstrateBlock {
       context: SubstrateContext,
+      network: NetworkId,
       block: u64,
       key: Vec<u8>,
       burns: Vec<OutInstructionWithBalance>,
@@ -206,4 +208,154 @@ pub enum ProcessorMessage {
   Sign(sign::ProcessorMessage),
   Coordinator(coordinator::ProcessorMessage),
   Substrate(substrate::ProcessorMessage),
+}
+
+const COORDINATOR_UID: u8 = 0;
+const PROCESSSOR_UID: u8 = 1;
+
+const TYPE_KEY_GEN_UID: u8 = 2;
+const TYPE_SIGN_UID: u8 = 3;
+const TYPE_COORDINATOR_UID: u8 = 4;
+const TYPE_SUBSTRATE_UID: u8 = 5;
+
+impl CoordinatorMessage {
+  /// A unique ID for this message, which should be unique across the validator's entire system,
+  /// including all of its processors.
+  ///
+  /// This doesn't use H(msg.serialize()) as it's meant to be unique to intent, not unique to
+  /// values. While the values should be consistent per intent, that assumption isn't required
+  /// here.
+  // TODO: Should this use borsh intead of bincode?
+  pub fn uid(&self) -> Vec<u8> {
+    match self {
+      CoordinatorMessage::KeyGen(msg) => {
+        // Unique since key gen ID embeds the validator set and attempt
+        let (sub, id) = match msg {
+          key_gen::CoordinatorMessage::GenerateKey { id, .. } => (0, id),
+          key_gen::CoordinatorMessage::Commitments { id, .. } => (1, id),
+          key_gen::CoordinatorMessage::Shares { id, .. } => (2, id),
+        };
+
+        let mut res = vec![COORDINATOR_UID, TYPE_KEY_GEN_UID, sub];
+        res.extend(&bincode::serialize(id).unwrap());
+        res
+      }
+      CoordinatorMessage::Sign(msg) => {
+        let (sub, id) = match msg {
+          // Unique since SignId includes a hash of the coin, and specific transaction info
+          sign::CoordinatorMessage::Preprocesses { id, .. } => (0, bincode::serialize(id).unwrap()),
+          sign::CoordinatorMessage::Shares { id, .. } => (1, bincode::serialize(id).unwrap()),
+          sign::CoordinatorMessage::Reattempt { id } => (2, bincode::serialize(id).unwrap()),
+          // TODO: This doesn't embed the attempt. Accordingly, multiple distinct completions will
+          // be flattened. This isn't acceptable.
+          sign::CoordinatorMessage::Completed { id, .. } => (3, id.to_vec()),
+        };
+
+        let mut res = vec![COORDINATOR_UID, TYPE_SIGN_UID, sub];
+        res.extend(&id);
+        res
+      }
+      CoordinatorMessage::Coordinator(msg) => {
+        let (sub, id) = match msg {
+          // Unique since this embeds the batch ID (hash of it, including its network) and attempt
+          coordinator::CoordinatorMessage::BatchPreprocesses { id, .. } => {
+            (0, bincode::serialize(id).unwrap())
+          }
+          coordinator::CoordinatorMessage::BatchShares { id, .. } => {
+            (1, bincode::serialize(id).unwrap())
+          }
+          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => {
+            (2, bincode::serialize(id).unwrap())
+          }
+        };
+
+        let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
+        res.extend(&id);
+        res
+      }
+      CoordinatorMessage::Substrate(msg) => {
+        let (sub, id) = match msg {
+          // Unique since there's only one key pair for a set
+          substrate::CoordinatorMessage::ConfirmKeyPair { set, .. } => {
+            (0, bincode::serialize(set).unwrap())
+          }
+          substrate::CoordinatorMessage::SubstrateBlock { network, block, .. } => {
+            (1, bincode::serialize(&(network, block)).unwrap())
+          }
+        };
+
+        let mut res = vec![COORDINATOR_UID, TYPE_SUBSTRATE_UID, sub];
+        res.extend(&id);
+        res
+      }
+    }
+  }
+}
+
+impl ProcessorMessage {
+  /// A unique ID for this message, which should be unique across the validator's entire system,
+  /// including all of its processors.
+  ///
+  /// This doesn't use H(msg.serialize()) as it's meant to be unique to intent, not unique to
+  /// values. While the values should be consistent per intent, that assumption isn't required
+  /// here.
+  pub fn uid(&self) -> Vec<u8> {
+    match self {
+      ProcessorMessage::KeyGen(msg) => {
+        let (sub, id) = match msg {
+          // Unique since KeyGenId
+          key_gen::ProcessorMessage::Commitments { id, .. } => (0, id),
+          key_gen::ProcessorMessage::Shares { id, .. } => (1, id),
+          key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => (2, id),
+        };
+
+        let mut res = vec![PROCESSSOR_UID, TYPE_KEY_GEN_UID, sub];
+        res.extend(&bincode::serialize(id).unwrap());
+        res
+      }
+      ProcessorMessage::Sign(msg) => {
+        let (sub, id) = match msg {
+          // Unique since SignId
+          sign::ProcessorMessage::Preprocess { id, .. } => (0, bincode::serialize(id).unwrap()),
+          sign::ProcessorMessage::Share { id, .. } => (1, bincode::serialize(id).unwrap()),
+          // Unique since a processor will only sign a TX once
+          sign::ProcessorMessage::Completed { id, .. } => (2, id.to_vec()),
+        };
+
+        let mut res = vec![PROCESSSOR_UID, TYPE_SIGN_UID, sub];
+        res.extend(&id);
+        res
+      }
+      ProcessorMessage::Coordinator(msg) => {
+        let (sub, id) = match msg {
+          coordinator::ProcessorMessage::SubstrateBlockAck { network, block, .. } => {
+            (0, bincode::serialize(&(network, block)).unwrap())
+          }
+          // Unique since SignId
+          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
+            (1, bincode::serialize(id).unwrap())
+          }
+          coordinator::ProcessorMessage::BatchShare { id, .. } => {
+            (2, bincode::serialize(id).unwrap())
+          }
+        };
+
+        let mut res = vec![PROCESSSOR_UID, TYPE_COORDINATOR_UID, sub];
+        res.extend(&id);
+        res
+      }
+      ProcessorMessage::Substrate(msg) => {
+        let (sub, id) = match msg {
+          // Unique since network and ID binding
+          substrate::ProcessorMessage::Update { batch, .. } => {
+            (0, bincode::serialize(&(batch.batch.network, batch.batch.id)).unwrap())
+          }
+        };
+
+        let mut res = vec![PROCESSSOR_UID, TYPE_SUBSTRATE_UID, sub];
+        res.extend(&id);
+        res
+      }
+    }
+  }
 }

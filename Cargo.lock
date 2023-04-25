@@ -6655,6 +6655,7 @@ dependencies = [
 name = "processor-messages"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "dkg",
  "in-instructions-primitives",
  "serai-primitives",

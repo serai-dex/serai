@@ -383,6 +383,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
+          network,
           block,
           key: key_vec,
           burns,
@@ -408,7 +409,11 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
               instruction: OutInstruction { address, data },
               balance,
             } = out;
+            // TODO: Check network is this coin's network
+            assert_eq!(balance.coin.network(), network);
+
             if let Ok(address) = C::Address::try_from(address.consume()) {
+              // TODO: Add coin to payment
               payments.push(Payment {
                 address,
                 data: data.map(|data| data.consume()),
@@ -426,6 +431,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           coordinator
             .send(ProcessorMessage::Coordinator(
               messages::coordinator::ProcessorMessage::SubstrateBlockAck {
+                network,
                 block,
                 plans: plans.iter().map(|plan| plan.id()).collect(),
               },

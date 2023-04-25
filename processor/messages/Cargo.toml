@@ -17,6 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 zeroize = { version = "1", features = ["derive"] }
 
 serde = { version = "1", features = ["derive"] }
+bincode = "1"
 
 dkg = { path = "../../crypto/dkg", features = ["serde"] }
 
