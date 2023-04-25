@@ -31,6 +31,8 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 }
 
 /// Recover the secret from a collection of keys.
+///
+/// This will panic if no keys, an insufficient amount of keys, or the wrong keys are provided.
 pub fn recover_key<C: Ciphersuite>(keys: &HashMap<Participant, ThresholdKeys<C>>) -> C::F {
   let first = keys.values().next().expect("no keys provided");
   assert!(keys.len() >= first.params().t().into(), "not enough keys provided");

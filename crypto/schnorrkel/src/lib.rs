@@ -60,6 +60,8 @@ pub struct Schnorrkel {
 
 impl Schnorrkel {
   /// Create a new algorithm with the specified context.
+  ///
+  /// If the context is greater than or equal to 4 GB in size, this will panic.
   pub fn new(context: &'static [u8]) -> Schnorrkel {
     Schnorrkel {
       context,

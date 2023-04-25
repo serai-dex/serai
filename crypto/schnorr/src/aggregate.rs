@@ -89,6 +89,8 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
   }
 
   /// Write a SchnorrAggregate to something implementing Write.
+  ///
+  /// This will panic if more than 4 billion signatures were aggregated.
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(
       &u32::try_from(self.Rs.len())
