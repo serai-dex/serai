@@ -452,6 +452,8 @@ pub trait SignatureMachine<S>: Send + Sync {
 }
 
 /// Final step of the state machine for the signing process.
+///
+/// This may panic if an invalid algorithm is provided.
 #[allow(non_snake_case)]
 pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
