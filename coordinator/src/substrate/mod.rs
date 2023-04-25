@@ -47,7 +47,7 @@ async fn handle_new_set<
   db: &D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   add_new_tributary: ANT,
-  processor: &mut Pro,
+  processor: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
@@ -85,7 +85,7 @@ async fn handle_new_set<
 
 async fn handle_key_gen<Pro: Processor>(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  processor: &mut Pro,
+  processor: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
@@ -116,7 +116,7 @@ async fn handle_key_gen<Pro: Processor>(
 }
 
 async fn handle_batch_and_burns<Pro: Processor>(
-  processor: &mut Pro,
+  processor: &Pro,
   serai: &Serai,
   block: &Block,
 ) -> Result<(), SeraiError> {
@@ -189,6 +189,7 @@ async fn handle_batch_and_burns<Pro: Processor>(
             serai_time: block.time().unwrap(),
             coin_latest_finalized_block,
           },
+          network,
           block: block.number(),
           key: serai
             .get_keys(ValidatorSet { network, session: Session(0) }) // TODO2
@@ -215,7 +216,7 @@ async fn handle_block<
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   add_new_tributary: ANT,
-  processor: &mut Pro,
+  processor: &Pro,
   serai: &Serai,
   block: Block,
 ) -> Result<(), SeraiError> {
@@ -283,7 +284,7 @@ pub async fn handle_new_blocks<
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   add_new_tributary: ANT,
-  processor: &mut Pro,
+  processor: &Pro,
   serai: &Serai,
   last_block: &mut u64,
 ) -> Result<(), SeraiError> {

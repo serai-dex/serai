@@ -25,7 +25,7 @@ use crate::{
 async fn handle_block<D: Db, Pro: Processor>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  processor: &mut Pro,
+  processor: &Pro,
   spec: &TributarySpec,
   block: Block<Transaction>,
 ) {
@@ -285,7 +285,7 @@ async fn handle_block<D: Db, Pro: Processor>(
 pub async fn handle_new_blocks<D: Db, Pro: Processor>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  processor: &mut Pro,
+  processor: &Pro,
   spec: &TributarySpec,
   tributary: &TributaryReader<D, Transaction>,
 ) {

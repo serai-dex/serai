@@ -164,7 +164,7 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
 
   // Returns if the transaction was valid.
   // Safe to be &self since the only meaningful usage of self is self.network.blockchain which
-  // successfully acquires its own write lock.
+  // successfully acquires its own write lock
   pub async fn add_transaction(&self, tx: T) -> bool {
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();

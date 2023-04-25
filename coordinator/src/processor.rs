@@ -12,7 +12,7 @@ pub struct Message {
 
 #[async_trait::async_trait]
 pub trait Processor: 'static + Send + Sync + Clone {
-  async fn send(&mut self, msg: CoordinatorMessage);
+  async fn send(&self, msg: CoordinatorMessage);
   async fn recv(&mut self) -> Message;
   async fn ack(&mut self, msg: Message);
 }
@@ -29,7 +29,7 @@ impl MemProcessor {
 
 #[async_trait::async_trait]
 impl Processor for MemProcessor {
-  async fn send(&mut self, msg: CoordinatorMessage) {
+  async fn send(&self, msg: CoordinatorMessage) {
     self.0.write().await.push_back(msg)
   }
   async fn recv(&mut self) -> Message {

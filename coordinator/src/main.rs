@@ -11,6 +11,7 @@ use std::{
 };
 
 use zeroize::Zeroizing;
+use rand_core::OsRng;
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
@@ -22,13 +23,15 @@ use tokio::{sync::RwLock, time::sleep};
 use ::tributary::{ReadWrite, Block, Tributary, TributaryReader};
 
 mod tributary;
-use crate::tributary::{TributarySpec, Transaction};
+use crate::tributary::{TributarySpec, SignData, Transaction};
 
 mod db;
 use db::MainDb;
 
 mod p2p;
 pub use p2p::*;
+
+use processor_messages::{key_gen, sign, coordinator, ProcessorMessage};
 
 pub mod processor;
 use processor::Processor;
@@ -67,7 +70,7 @@ async fn add_tributary<D: Db, P: P2p>(
   spec: TributarySpec,
 ) -> TributaryReader<D, Transaction> {
   let tributary = Tributary::<_, Transaction, _>::new(
-    // TODO: Use a db on a distinct volume
+    // TODO2: Use a db on a distinct volume
     db,
     spec.genesis(),
     spec.start_time(),
@@ -91,7 +94,7 @@ async fn add_tributary<D: Db, P: P2p>(
 pub async fn scan_substrate<D: Db, Pro: Processor>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  mut processor: Pro,
+  processor: Pro,
   serai: Serai,
 ) {
   let mut db = substrate::SubstrateDb::new(db);
@@ -102,13 +105,13 @@ pub async fn scan_substrate<D: Db, Pro: Processor>(
       &mut db,
       &key,
       create_new_tributary,
-      &mut processor,
+      &processor,
       &serai,
       &mut last_substrate_block,
     )
     .await
     {
-      // TODO: Should this use a notification system for new blocks?
+      // TODO2: Should this use a notification system for new blocks?
       // Right now it's sleeping for half the block time.
       Ok(()) => sleep(Duration::from_secs(3)).await,
       Err(e) => {
@@ -124,7 +127,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: P,
-  mut processor: Pro,
+  processor: Pro,
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
 ) {
   let mut tributary_readers = vec![];
@@ -160,7 +163,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
       tributary::scanner::handle_new_blocks::<_, _>(
         &mut tributary_db,
         &key,
-        &mut processor,
+        &processor,
         spec,
         reader,
       )
@@ -168,7 +171,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
     }
 
     // Sleep for half the block time
-    // TODO: Should we define a notification system for when a new block occurs?
+    // TODO2: Should we define a notification system for when a new block occurs?
     sleep(Duration::from_secs((Tributary::<D, Transaction, P>::block_time() / 2).into())).await;
   }
 }
@@ -221,7 +224,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         }
       }
 
-      // TODO: Rate limit this
+      // TODO2: Rate limit this
       P2pMessageKind::Heartbeat(genesis) => {
         let tributaries = tributaries.read().await;
         let Some(tributary) = tributaries.get(&genesis) else {
@@ -310,6 +313,110 @@ pub async fn handle_p2p<D: Db, P: P2p>(
   }
 }
 
+#[allow(clippy::type_complexity)]
+pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
+  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  mut processor: Pro,
+  tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
+) {
+  let pub_key = Ristretto::generator() * key.deref();
+
+  loop {
+    let msg = processor.recv().await;
+
+    // TODO: We need (ValidatorSet or key) to genesis hash
+    let genesis = [0; 32];
+
+    let tx = match msg.msg {
+      ProcessorMessage::KeyGen(msg) => match msg {
+        key_gen::ProcessorMessage::Commitments { id, commitments } => {
+          Some(Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed()))
+        }
+        key_gen::ProcessorMessage::Shares { id, shares } => {
+          Some(Transaction::DkgShares(id.attempt, shares, Transaction::empty_signed()))
+        }
+        // TODO
+        key_gen::ProcessorMessage::GeneratedKeyPair { .. } => todo!(),
+      },
+      ProcessorMessage::Sign(msg) => match msg {
+        sign::ProcessorMessage::Preprocess { id, preprocess } => {
+          Some(Transaction::SignPreprocess(SignData {
+            plan: id.id,
+            attempt: id.attempt,
+            data: preprocess,
+            signed: Transaction::empty_signed(),
+          }))
+        }
+        sign::ProcessorMessage::Share { id, share } => Some(Transaction::SignShare(SignData {
+          plan: id.id,
+          attempt: id.attempt,
+          data: share,
+          signed: Transaction::empty_signed(),
+        })),
+        // TODO
+        sign::ProcessorMessage::Completed { .. } => todo!(),
+      },
+      ProcessorMessage::Coordinator(msg) => match msg {
+        // TODO
+        coordinator::ProcessorMessage::SubstrateBlockAck { .. } => todo!(),
+        coordinator::ProcessorMessage::BatchPreprocess { id, preprocess } => {
+          Some(Transaction::BatchPreprocess(SignData {
+            plan: id.id,
+            attempt: id.attempt,
+            data: preprocess,
+            signed: Transaction::empty_signed(),
+          }))
+        }
+        coordinator::ProcessorMessage::BatchShare { id, share } => {
+          Some(Transaction::BatchShare(SignData {
+            plan: id.id,
+            attempt: id.attempt,
+            data: share.to_vec(),
+            signed: Transaction::empty_signed(),
+          }))
+        }
+      },
+      ProcessorMessage::Substrate(msg) => match msg {
+        // TODO
+        processor_messages::substrate::ProcessorMessage::Update { .. } => todo!(),
+      },
+    };
+
+    // If this created a transaction, publish it
+    if let Some(mut tx) = tx {
+      // Get the next nonce
+      // let mut txn = db.txn();
+      // let nonce = MainDb::tx_nonce(&mut txn, msg.id, tributary);
+
+      let nonce = 0; // TODO
+      tx.sign(&mut OsRng, genesis, &key, nonce);
+
+      let tributaries = tributaries.read().await;
+      let Some(tributary) = tributaries.get(&genesis) else {
+      // TODO: This can happen since Substrate tells the Processor to generate commitments
+      // at the same time it tells the Tributary to be created
+      // There's no guarantee the Tributary will have been created though
+      panic!("processor is operating on tributary we don't have");
+    };
+
+      let tributary = tributary.tributary.read().await;
+      if tributary
+        .next_nonce(pub_key)
+        .await
+        .expect("we don't have a nonce, meaning we aren't a participant on this tributary") >
+        nonce
+      {
+        log::warn!("we've already published this transaction. this should only appear on reboot");
+      } else {
+        // We should've created a valid transaction
+        assert!(tributary.add_transaction(tx).await, "created an invalid transaction");
+      }
+
+      // txn.commit();
+    }
+  }
+}
+
 pub async fn run<D: Db, Pro: Processor, P: P2p>(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -344,7 +451,7 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
     raw_db.clone(),
     key.clone(),
     p2p.clone(),
-    processor,
+    processor.clone(),
     tributaries.clone(),
   ));
 
@@ -353,13 +460,10 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
   tokio::spawn(heartbeat_tributaries(p2p.clone(), tributaries.clone()));
 
   // Handle P2P messages
-  // TODO: We also have to broadcast blocks once they're added
-  tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, tributaries));
+  tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, tributaries.clone()));
 
-  loop {
-    // Handle all messages from processors
-    todo!()
-  }
+  // Handle all messages from processors
+  handle_processors(key, processor, tributaries).await;
 }
 
 #[tokio::main]
