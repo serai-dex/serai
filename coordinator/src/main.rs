@@ -393,11 +393,11 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
 
       let tributaries = tributaries.read().await;
       let Some(tributary) = tributaries.get(&genesis) else {
-      // TODO: This can happen since Substrate tells the Processor to generate commitments
-      // at the same time it tells the Tributary to be created
-      // There's no guarantee the Tributary will have been created though
-      panic!("processor is operating on tributary we don't have");
-    };
+        // TODO: This can happen since Substrate tells the Processor to generate commitments
+        // at the same time it tells the Tributary to be created
+        // There's no guarantee the Tributary will have been created though
+        panic!("processor is operating on tributary we don't have");
+      };
 
       let tributary = tributary.tributary.read().await;
       if tributary

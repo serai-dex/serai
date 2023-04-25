@@ -99,6 +99,8 @@ async fn handle_block<D: Db, Pro: Processor>(
         // TODO: We can also full slash if shares before all commitments, or share before the
         // necessary preprocesses
 
+        // TODO: If this is shares, we need to check they are part of the selected signing set
+
         // Store this data
         let received =
           TributaryDb::<D>::set_data(label, &mut txn, genesis, id, attempt, signed.signer, &bytes);
