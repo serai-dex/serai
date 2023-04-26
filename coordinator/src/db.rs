@@ -3,9 +3,9 @@ pub use serai_db::*;
 use crate::tributary::TributarySpec;
 
 #[derive(Debug)]
-pub struct MainDb<D: Db>(pub D);
-impl<D: Db> MainDb<D> {
-  pub fn new(db: D) -> Self {
+pub struct MainDb<'a, D: Db>(&'a mut D);
+impl<'a, D: Db> MainDb<'a, D> {
+  pub fn new(db: &'a mut D) -> Self {
     Self(db)
   }
 

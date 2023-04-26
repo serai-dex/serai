@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unreachable_code)]
 #![allow(clippy::diverging_sub_expression)]
@@ -44,16 +43,6 @@ pub mod tests;
 // This is a static to satisfy lifetime expectations
 lazy_static::lazy_static! {
   static ref NEW_TRIBUTARIES: RwLock<VecDeque<TributarySpec>> = RwLock::new(VecDeque::new());
-}
-
-// Specifies a new tributary
-async fn create_new_tributary<D: Db>(db: D, spec: TributarySpec) {
-  // Save it to the database
-  MainDb(db).add_active_tributary(&spec);
-  // Add it to the queue
-  // If we reboot before this is read from the queue, the fact it was saved to the database
-  // means it'll be handled on reboot
-  NEW_TRIBUTARIES.write().await.push_back(spec);
 }
 
 pub struct ActiveTributary<D: Db, P: P2p> {
@@ -104,7 +93,17 @@ pub async fn scan_substrate<D: Db, Pro: Processor>(
     match substrate::handle_new_blocks(
       &mut db,
       &key,
-      create_new_tributary,
+      |db: &mut D, spec: TributarySpec| {
+        // Save it to the database
+        MainDb::new(db).add_active_tributary(&spec);
+
+        // Add it to the queue
+        // If we reboot before this is read from the queue, the fact it was saved to the database
+        // means it'll be handled on reboot
+        async {
+          NEW_TRIBUTARIES.write().await.push_back(spec);
+        }
+      },
       &processor,
       &serai,
       &mut last_substrate_block,
@@ -409,6 +408,7 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
         log::warn!("we've already published this transaction. this should only appear on reboot");
       } else {
         // We should've created a valid transaction
+        // TODO: Delay SignPreprocess/BatchPreprocess until associated ID is valid
         assert!(tributary.add_transaction(tx).await, "created an invalid transaction");
       }
 
@@ -418,7 +418,7 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
 }
 
 pub async fn run<D: Db, Pro: Processor, P: P2p>(
-  raw_db: D,
+  mut raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: P,
   processor: Pro,
@@ -434,8 +434,7 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
   let tributaries = Arc::new(RwLock::new(HashMap::<[u8; 32], ActiveTributary<D, P>>::new()));
 
   // Reload active tributaries from the database
-  // TODO: Can MainDb take a borrow?
-  for spec in MainDb(raw_db.clone()).active_tributaries().1 {
+  for spec in MainDb::new(&mut raw_db).active_tributaries().1 {
     let _ = add_tributary(
       raw_db.clone(),
       key.clone(),
