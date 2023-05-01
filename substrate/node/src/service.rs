@@ -69,6 +69,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     })
     .transpose()?;
 
+  #[allow(deprecated)]
   let executor = Executor::new(
     config.wasm_method,
     config.default_heap_pages,
@@ -115,7 +116,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   )?;
 
   let slot_duration = babe_link.config().slot_duration();
-  let import_queue = sc_consensus_babe::import_queue(
+  let (import_queue, babe_handle) = sc_consensus_babe::import_queue(
     babe_link.clone(),
     block_import.clone(),
     Some(Box::new(justification_import)),
@@ -126,6 +127,10 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     config.prometheus_registry(),
     telemetry.as_ref().map(Telemetry::handle),
   )?;
+  // This can't be dropped, or BABE breaks
+  // We don't have anything to do with it though
+  // This won't grow in size, so forgetting this isn't a disastrous memleak
+  std::mem::forget(babe_handle);
 
   Ok(sc_service::PartialComponents {
     client,
