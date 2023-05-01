@@ -264,7 +264,7 @@ impl<C: Coin> Scheduler<C> {
     // The above division isn't perfect
     let mut remainder = diff - (per_payment * payments_len);
 
-    for mut payment in payments.iter_mut() {
+    for payment in payments.iter_mut() {
       payment.amount = payment.amount.saturating_sub(per_payment + remainder);
       // Only subtract the remainder once
       remainder = 0;

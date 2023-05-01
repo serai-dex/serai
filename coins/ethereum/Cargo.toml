@@ -28,7 +28,7 @@ frost = { package = "modular-frost", path = "../../crypto/frost", features = ["s
 
 eyre = "0.6"
 
-ethers = { version = "2", features = ["abigen", "ethers-solc"] }
+ethers = { version = "2", default-features = false, features = ["abigen", "ethers-solc"] }
 
 [build-dependencies]
 ethers-solc = "2"

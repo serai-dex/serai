@@ -25,7 +25,7 @@ jobs:
           rust-components: clippy
 
       - name: Run Clippy
-        run: cargo clippy --all-features --all-targets -- -D warnings
+        run: cargo clippy --all-features --all-targets -- -D warnings -A clippy::items_after_test_module
 
   deny:
     runs-on: ubuntu-latest

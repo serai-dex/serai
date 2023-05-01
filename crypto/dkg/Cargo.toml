@@ -35,4 +35,4 @@ ciphersuite = { path = "../ciphersuite", version = "0.3", features = ["ristretto
 
 [features]
 serde = ["dep:serde"]
-tests = []
+tests = ["rand_core/getrandom"]

@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
 #![no_std]
 
-///! A transcript trait valid over a variety of transcript formats.
 use zeroize::Zeroize;
 
 use digest::{

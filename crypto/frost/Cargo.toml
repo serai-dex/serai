@@ -53,4 +53,4 @@ p256 = ["ciphersuite/p256"]
 
 ed448 = ["minimal-ed448", "ciphersuite/ed448"]
 
-tests = ["hex", "dkg/tests"]
+tests = ["hex", "rand_core/getrandom", "dkg/tests"]
