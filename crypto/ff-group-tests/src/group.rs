@@ -33,7 +33,7 @@ pub fn test_generator<G: Group>() {
   assert!(G::generator() != G::identity(), "generator was identity");
   assert!(
     (G::generator() + G::generator()) != G::generator(),
-    "generator added to itself identity"
+    "generator added to itself was identity"
   );
 }
 
