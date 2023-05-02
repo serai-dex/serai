@@ -19,7 +19,7 @@ use monero_rpc::{
 
 use monero_serai::{
   transaction::Transaction,
-  rpc::Rpc,
+  rpc::{HttpRpc, Rpc},
   wallet::{
     address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
     extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra},
@@ -35,7 +35,7 @@ async fn make_integrated_address(payment_id: [u8; 8]) -> String {
     integrated_address: String,
   }
 
-  let rpc = Rpc::new("http://127.0.0.1:6061".to_string()).unwrap();
+  let rpc = HttpRpc::new("http://127.0.0.1:6061".to_string()).unwrap();
   let res = rpc
     .json_rpc_call::<IntegratedAddressResponse>(
       "make_integrated_address",
@@ -47,7 +47,7 @@ async fn make_integrated_address(payment_id: [u8; 8]) -> String {
   res.integrated_address
 }
 
-async fn initialize_rpcs() -> (WalletClient, Rpc, monero_rpc::monero::Address) {
+async fn initialize_rpcs() -> (WalletClient, Rpc<HttpRpc>, monero_rpc::monero::Address) {
   let wallet_rpc =
     monero_rpc::RpcClientBuilder::new().build("http://127.0.0.1:6061").unwrap().wallet();
   let daemon_rpc = runner::rpc().await;

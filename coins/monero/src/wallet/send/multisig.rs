@@ -30,7 +30,7 @@ use crate::{
     RctPrunable,
   },
   transaction::{Input, Transaction},
-  rpc::Rpc,
+  rpc::{RpcConnection, Rpc},
   wallet::{
     TransactionError, InternalPayment, SignableTransaction, Decoys, key_image_sort, uniqueness,
   },
@@ -74,9 +74,9 @@ pub struct TransactionSignatureMachine {
 impl SignableTransaction {
   /// Create a FROST signing machine out of this signable transaction.
   /// The height is the Monero blockchain height to synchronize around.
-  pub async fn multisig(
+  pub async fn multisig<RPC: RpcConnection>(
     self,
-    rpc: &Rpc,
+    rpc: &Rpc<RPC>,
     keys: ThresholdKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
     height: usize,

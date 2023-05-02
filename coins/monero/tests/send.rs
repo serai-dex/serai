@@ -69,7 +69,7 @@ test!(
     },
   ),
   (
-    |rpc: Rpc, _, _, mut outputs: Vec<ReceivedOutput>| async move {
+    |rpc: Rpc<_>, _, _, mut outputs: Vec<ReceivedOutput>| async move {
       let change_view = ViewPair::new(
         &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
         Zeroizing::new(random_scalar(&mut OsRng)),

@@ -33,7 +33,7 @@ use crate::{
     RctBase, RctPrunable, RctSignatures,
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
-  rpc::{Rpc, RpcError},
+  rpc::{RpcError, RpcConnection, Rpc},
   wallet::{
     address::{Network, AddressSpec, MoneroAddress},
     ViewPair, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness,
@@ -147,9 +147,9 @@ pub enum TransactionError {
   FrostError(FrostError),
 }
 
-async fn prepare_inputs<R: RngCore + CryptoRng>(
+async fn prepare_inputs<R: RngCore + CryptoRng, RPC: RpcConnection>(
   rng: &mut R,
-  rpc: &Rpc,
+  rpc: &Rpc<RPC>,
   ring_len: usize,
   inputs: &[SpendableOutput],
   spend: &Zeroizing<Scalar>,
@@ -663,10 +663,10 @@ impl SignableTransaction {
   }
 
   /// Sign this transaction.
-  pub async fn sign<R: RngCore + CryptoRng>(
+  pub async fn sign<R: RngCore + CryptoRng, RPC: RpcConnection>(
     mut self,
     rng: &mut R,
-    rpc: &Rpc,
+    rpc: &Rpc<RPC>,
     spend: &Zeroizing<Scalar>,
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());

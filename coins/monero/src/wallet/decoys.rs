@@ -13,7 +13,7 @@ use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
   wallet::SpendableOutput,
-  rpc::{RpcError, Rpc},
+  rpc::{RpcError, RpcConnection, Rpc},
 };
 
 const LOCK_WINDOW: usize = 10;
@@ -31,9 +31,9 @@ lazy_static! {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn select_n<'a, R: RngCore + CryptoRng>(
+async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
   rng: &mut R,
-  rpc: &Rpc,
+  rpc: &Rpc<RPC>,
   distribution: &MutexGuard<'a, Vec<u64>>,
   height: usize,
   high: u64,
@@ -137,9 +137,9 @@ impl Decoys {
   }
 
   /// Select decoys using the same distribution as Monero.
-  pub async fn select<R: RngCore + CryptoRng>(
+  pub async fn select<R: RngCore + CryptoRng, RPC: RpcConnection>(
     rng: &mut R,
-    rpc: &Rpc,
+    rpc: &Rpc<RPC>,
     ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],

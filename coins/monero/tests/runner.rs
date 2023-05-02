@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use monero_serai::{
   random_scalar,
-  rpc::Rpc,
+  rpc::{HttpRpc, Rpc},
   wallet::{
     ViewPair, Scanner,
     address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
@@ -38,7 +38,7 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
 // TODO: Support transactions already on-chain
 // TODO: Don't have a side effect of mining blocks more blocks than needed under race conditions
 // TODO: mine as much as needed instead of default 10 blocks
-pub async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
+pub async fn mine_until_unlocked(rpc: &Rpc<HttpRpc>, addr: &str, tx_hash: [u8; 32]) {
   // mine until tx is in a block
   let mut height = rpc.get_height().await.unwrap();
   let mut found = false;
@@ -60,7 +60,7 @@ pub async fn mine_until_unlocked(rpc: &Rpc, addr: &str, tx_hash: [u8; 32]) {
 
 // Mines 60 blocks and returns an unlocked miner TX output.
 #[allow(dead_code)]
-pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput {
+pub async fn get_miner_tx_output(rpc: &Rpc<HttpRpc>, view: &ViewPair) -> SpendableOutput {
   let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
 
   // Mine 60 blocks to unlock a miner TX
@@ -74,8 +74,8 @@ pub async fn get_miner_tx_output(rpc: &Rpc, view: &ViewPair) -> SpendableOutput 
   scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
 }
 
-pub async fn rpc() -> Rpc {
-  let rpc = Rpc::new("http://127.0.0.1:18081".to_string()).unwrap();
+pub async fn rpc() -> Rpc<HttpRpc> {
+  let rpc = HttpRpc::new("http://127.0.0.1:18081".to_string()).unwrap();
 
   // Only run once
   if rpc.get_height().await.unwrap() != 1 {

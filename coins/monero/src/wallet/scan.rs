@@ -10,7 +10,7 @@ use crate::{
   serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point, read_raw_vec},
   transaction::{Input, Timelock, Transaction},
   block::Block,
-  rpc::{Rpc, RpcError},
+  rpc::{RpcError, RpcConnection, Rpc},
   wallet::{
     PaymentId, Extra, address::SubaddressIndex, Scanner, uniqueness, shared_key, amount_decryption,
     commitment_mask,
@@ -195,13 +195,19 @@ pub struct SpendableOutput {
 impl SpendableOutput {
   /// Update the spendable output's global index. This is intended to be called if a
   /// re-organization occurred.
-  pub async fn refresh_global_index(&mut self, rpc: &Rpc) -> Result<(), RpcError> {
+  pub async fn refresh_global_index<RPC: RpcConnection>(
+    &mut self,
+    rpc: &Rpc<RPC>,
+  ) -> Result<(), RpcError> {
     self.global_index =
       rpc.get_o_indexes(self.output.absolute.tx).await?[usize::from(self.output.absolute.o)];
     Ok(())
   }
 
-  pub async fn from(rpc: &Rpc, output: ReceivedOutput) -> Result<SpendableOutput, RpcError> {
+  pub async fn from<RPC: RpcConnection>(
+    rpc: &Rpc<RPC>,
+    output: ReceivedOutput,
+  ) -> Result<SpendableOutput, RpcError> {
     let mut output = SpendableOutput { output, global_index: 0 };
     output.refresh_global_index(rpc).await?;
     Ok(output)
@@ -408,9 +414,9 @@ impl Scanner {
   /// transactions is a dead giveaway for which transactions you successfully scanned. This
   /// function obtains the output indexes for the miner transaction, incrementing from there
   /// instead.
-  pub async fn scan(
+  pub async fn scan<RPC: RpcConnection>(
     &mut self,
-    rpc: &Rpc,
+    rpc: &Rpc<RPC>,
     block: &Block,
   ) -> Result<Vec<Timelocked<SpendableOutput>>, RpcError> {
     let mut index = rpc.get_o_indexes(block.miner_tx.hash()).await?[0];

@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use async_trait::async_trait;
 use thiserror::Error;
 
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
@@ -8,7 +9,7 @@ use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 use digest_auth::AuthContext;
-use reqwest::{Client, RequestBuilder};
+use reqwest::Client;
 
 use crate::{
   Protocol,
@@ -73,18 +74,27 @@ fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
   .ok_or_else(|| RpcError::InvalidPoint(point.to_string()))
 }
 
+#[async_trait]
+pub trait RpcConnection: Clone + Debug {
+  /// Perform a POST request to the specified route with the specified body.
+  ///
+  /// The implementor is left to handle anything such as authentication.
+  async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError>;
+}
+
 #[derive(Clone, Debug)]
-pub struct Rpc {
+pub struct HttpRpc {
   client: Client,
   userpass: Option<(String, String)>,
   url: String,
 }
 
-impl Rpc {
-  /// Create a new RPC connection.
+impl HttpRpc {
+  /// Create a new HTTP(S) RPC connection.
+  ///
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
-  pub fn new(mut url: String) -> Result<Rpc, RpcError> {
+  pub fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
     // Parse out the username and password
     let userpass = if url.contains('@') {
       let url_clone = url;
@@ -114,26 +124,80 @@ impl Rpc {
       None
     };
 
-    Ok(Rpc { client: Client::new(), userpass, url })
+    Ok(Rpc(HttpRpc { client: Client::new(), userpass, url }))
   }
+}
 
-  /// Perform a RPC call to the specified method with the provided parameters.
-  /// This is NOT a JSON-RPC call, which use a method of "json_rpc" and are available via
+#[async_trait]
+impl RpcConnection for HttpRpc {
+  async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
+    let mut builder = self.client.post(self.url.clone() + "/" + route).body(body);
+
+    if let Some((user, pass)) = &self.userpass {
+      let req = self.client.post(&self.url).send().await.map_err(|_| RpcError::InvalidNode)?;
+      // Only provide authentication if this daemon actually expects it
+      if let Some(header) = req.headers().get("www-authenticate") {
+        builder = builder.header(
+          "Authorization",
+          digest_auth::parse(header.to_str().map_err(|_| RpcError::InvalidNode)?)
+            .map_err(|_| RpcError::InvalidNode)?
+            .respond(&AuthContext::new_post::<_, _, _, &[u8]>(
+              user,
+              pass,
+              "/".to_string() + route,
+              None,
+            ))
+            .map_err(|_| RpcError::InvalidNode)?
+            .to_header_string(),
+        );
+      }
+    }
+
+    Ok(
+      builder
+        .send()
+        .await
+        .map_err(|_| RpcError::ConnectionError)?
+        .bytes()
+        .await
+        .map_err(|_| RpcError::ConnectionError)?
+        .slice(..)
+        .to_vec(),
+    )
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct Rpc<R: RpcConnection>(R);
+impl<R: RpcConnection> Rpc<R> {
+  /// Perform a RPC call to the specified route with the provided parameters.
+  ///
+  /// This is NOT a JSON-RPC call. They use a route of "json_rpc" and are available via
   /// `json_rpc_call`.
   pub async fn rpc_call<Params: Serialize + Debug, Response: DeserializeOwned + Debug>(
     &self,
-    method: &str,
+    route: &str,
     params: Option<Params>,
   ) -> Result<Response, RpcError> {
-    let mut builder = self.client.post(self.url.clone() + "/" + method);
-    if let Some(params) = params.as_ref() {
-      builder = builder.json(params);
-    }
-
-    self.call_tail(method, builder).await
+    self
+      .call_tail(
+        route,
+        self
+          .0
+          .post(
+            route,
+            if let Some(params) = params {
+              serde_json::to_string(&params).unwrap().into_bytes()
+            } else {
+              vec![]
+            },
+          )
+          .await?,
+      )
+      .await
   }
 
-  /// Perform a JSON-RPC call to the specified method with the provided parameters
+  /// Perform a JSON-RPC call with the specified method with the provided parameters
   pub async fn json_rpc_call<Response: DeserializeOwned + Debug>(
     &self,
     method: &str,
@@ -146,48 +210,25 @@ impl Rpc {
     Ok(self.rpc_call::<_, JsonRpcResponse<Response>>("json_rpc", Some(req)).await?.result)
   }
 
-  /// Perform a binary call to the specified method with the provided parameters.
+  /// Perform a binary call to the specified route with the provided parameters.
   pub async fn bin_call<Response: DeserializeOwned + Debug>(
     &self,
-    method: &str,
+    route: &str,
     params: Vec<u8>,
   ) -> Result<Response, RpcError> {
-    let builder = self.client.post(self.url.clone() + "/" + method).body(params.clone());
-    self.call_tail(method, builder.header("Content-Type", "application/octet-stream")).await
+    self.call_tail(route, self.0.post(route, params).await?).await
   }
 
   async fn call_tail<Response: DeserializeOwned + Debug>(
     &self,
-    method: &str,
-    mut builder: RequestBuilder,
+    route: &str,
+    res: Vec<u8>,
   ) -> Result<Response, RpcError> {
-    if let Some((user, pass)) = &self.userpass {
-      let req = self.client.post(&self.url).send().await.map_err(|_| RpcError::InvalidNode)?;
-      // Only provide authentication if this daemon actually expects it
-      if let Some(header) = req.headers().get("www-authenticate") {
-        builder = builder.header(
-          "Authorization",
-          digest_auth::parse(header.to_str().map_err(|_| RpcError::InvalidNode)?)
-            .map_err(|_| RpcError::InvalidNode)?
-            .respond(&AuthContext::new_post::<_, _, _, &[u8]>(
-              user,
-              pass,
-              "/".to_string() + method,
-              None,
-            ))
-            .map_err(|_| RpcError::InvalidNode)?
-            .to_header_string(),
-        );
-      }
-    }
-
-    let res = builder.send().await.map_err(|_| RpcError::ConnectionError)?;
-
-    Ok(if !method.ends_with(".bin") {
-      serde_json::from_str(&res.text().await.map_err(|_| RpcError::ConnectionError)?)
+    Ok(if !route.ends_with(".bin") {
+      serde_json::from_str(std::str::from_utf8(&res).map_err(|_| RpcError::InvalidNode)?)
         .map_err(|_| RpcError::InternalError("Failed to parse JSON response"))?
     } else {
-      monero_epee_bin_serde::from_bytes(&res.bytes().await.map_err(|_| RpcError::ConnectionError)?)
+      monero_epee_bin_serde::from_bytes(&res)
         .map_err(|_| RpcError::InternalError("Failed to parse binary response"))?
     })
   }
