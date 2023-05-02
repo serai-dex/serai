@@ -14,7 +14,7 @@ use monero_serai::{
   Protocol,
   transaction::Transaction,
   block::Block as MBlock,
-  rpc::{RpcError, Rpc},
+  rpc::{RpcError, HttpRpc, Rpc},
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec},
@@ -158,7 +158,7 @@ impl BlockTrait<Monero> for Block {
 
 #[derive(Clone, Debug)]
 pub struct Monero {
-  rpc: Rpc,
+  rpc: Rpc<HttpRpc>,
 }
 // Shim required for testing/debugging purposes due to generic arguments also necessitating trait
 // bounds
@@ -171,7 +171,7 @@ impl Eq for Monero {}
 
 impl Monero {
   pub fn new(url: String) -> Monero {
-    Monero { rpc: Rpc::new(url).unwrap() }
+    Monero { rpc: HttpRpc::new(url).unwrap() }
   }
 
   fn view_pair(spend: EdwardsPoint) -> ViewPair {
