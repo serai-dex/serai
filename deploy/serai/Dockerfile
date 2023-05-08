@@ -6,8 +6,9 @@ ADD common /serai/common
 ADD crypto /serai/crypto
 ADD coins /serai/coins
 ADD processor /serai/processor
-ADD tendermint /serai/tendermint
+ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
+ADD tests /serai/tests
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
