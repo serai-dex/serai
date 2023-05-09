@@ -27,16 +27,16 @@ impl<D: Db> TributaryDb<D> {
     self.0.get(Self::block_key(genesis)).map(|last| last.try_into().unwrap()).unwrap_or(genesis)
   }
 
-  // This shouldn't need genesis? Yet it's saner to have then quibble about.
-  fn batch_id_key(genesis: &[u8], ext_block: [u8; 32]) -> Vec<u8> {
-    Self::tributary_key(b"batch_id", [genesis, ext_block.as_ref()].concat())
-  }
-  pub fn batch_id<G: Get>(getter: &G, genesis: [u8; 32], ext_block: [u8; 32]) -> Option<[u8; 32]> {
-    getter.get(Self::batch_id_key(&genesis, ext_block)).map(|bytes| bytes.try_into().unwrap())
-  }
-
   fn plan_ids_key(genesis: &[u8], block: u64) -> Vec<u8> {
     Self::tributary_key(b"plan_ids", [genesis, block.to_le_bytes().as_ref()].concat())
+  }
+  pub fn set_plan_ids(
+    txn: &mut D::Transaction<'_>,
+    genesis: [u8; 32],
+    block: u64,
+    plans: &[[u8; 32]],
+  ) {
+    txn.put(Self::plan_ids_key(&genesis, block), plans.concat());
   }
   pub fn plan_ids<G: Get>(getter: &G, genesis: [u8; 32], block: u64) -> Option<Vec<[u8; 32]>> {
     getter.get(Self::plan_ids_key(&genesis, block)).map(|bytes| {

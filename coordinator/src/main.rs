@@ -14,15 +14,25 @@ use rand_core::OsRng;
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
-use serai_db::{Db, MemDb};
+use serai_db::{DbTxn, Db, MemDb};
 use serai_client::Serai;
 
-use tokio::{sync::RwLock, time::sleep};
+use tokio::{
+  sync::{
+    mpsc::{self, UnboundedSender},
+    RwLock,
+  },
+  time::sleep,
+};
 
-use ::tributary::{ReadWrite, Block, Tributary, TributaryReader};
+use ::tributary::{
+  ReadWrite, ProvidedError, TransactionKind, Transaction as TransactionTrait, Block, Tributary,
+  TributaryReader,
+};
 
 mod tributary;
-use crate::tributary::{TributarySpec, SignData, Transaction};
+#[rustfmt::skip]
+use crate::tributary::{TributarySpec, SignData, Transaction, TributaryDb, scanner::RecognizedIdType};
 
 mod db;
 use db::MainDb;
@@ -125,6 +135,7 @@ pub async fn scan_substrate<D: Db, Pro: Processor>(
 pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  recognized_id_send: UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
   p2p: P,
   processor: Pro,
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
@@ -162,6 +173,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
       tributary::scanner::handle_new_blocks::<_, _>(
         &mut tributary_db,
         &key,
+        &recognized_id_send,
         &processor,
         spec,
         reader,
@@ -223,19 +235,18 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         }
       }
 
-      // TODO2: Rate limit this
+      // TODO2: Rate limit this per validator
       P2pMessageKind::Heartbeat(genesis) => {
-        let tributaries = tributaries.read().await;
-        let Some(tributary) = tributaries.get(&genesis) else {
-          log::debug!("received heartbeat message for unknown network");
-          continue;
-        };
-
         if msg.msg.len() != 32 {
           log::error!("validator sent invalid heartbeat");
           continue;
         }
 
+        let tributaries = tributaries.read().await;
+        let Some(tributary) = tributaries.get(&genesis) else {
+          log::debug!("received heartbeat message for unknown network");
+          continue;
+        };
         let tributary_read = tributary.tributary.read().await;
 
         /*
@@ -312,8 +323,30 @@ pub async fn handle_p2p<D: Db, P: P2p>(
   }
 }
 
+pub async fn publish_transaction<D: Db, P: P2p>(
+  tributary: &Tributary<D, Transaction, P>,
+  tx: Transaction,
+) {
+  if let TransactionKind::Signed(signed) = tx.kind() {
+    if tributary
+      .next_nonce(signed.signer)
+      .await
+      .expect("we don't have a nonce, meaning we aren't a participant on this tributary") >
+      signed.nonce
+    {
+      log::warn!("we've already published this transaction. this should only appear on reboot");
+    } else {
+      // We should've created a valid transaction
+      assert!(tributary.add_transaction(tx).await, "created an invalid transaction");
+    }
+  } else {
+    panic!("non-signed transaction passed to publish_transaction");
+  }
+}
+
 #[allow(clippy::type_complexity)]
 pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
+  mut db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   mut processor: Pro,
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
@@ -339,12 +372,20 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
       },
       ProcessorMessage::Sign(msg) => match msg {
         sign::ProcessorMessage::Preprocess { id, preprocess } => {
-          Some(Transaction::SignPreprocess(SignData {
-            plan: id.id,
-            attempt: id.attempt,
-            data: preprocess,
-            signed: Transaction::empty_signed(),
-          }))
+          if id.attempt == 0 {
+            let mut txn = db.txn();
+            MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
+            txn.commit();
+
+            None
+          } else {
+            Some(Transaction::SignPreprocess(SignData {
+              plan: id.id,
+              attempt: id.attempt,
+              data: preprocess,
+              signed: Transaction::empty_signed(),
+            }))
+          }
         }
         sign::ProcessorMessage::Share { id, share } => Some(Transaction::SignShare(SignData {
           plan: id.id,
@@ -356,15 +397,36 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
         sign::ProcessorMessage::Completed { .. } => todo!(),
       },
       ProcessorMessage::Coordinator(msg) => match msg {
-        // TODO
-        coordinator::ProcessorMessage::SubstrateBlockAck { .. } => todo!(),
+        coordinator::ProcessorMessage::SubstrateBlockAck { network: _, block, plans } => {
+          // TODO2: Check this network aligns with this processor
+
+          // Safe to use its own txn since this is static and just needs to be written before we
+          // provide SubstrateBlock
+          let mut txn = db.txn();
+          TributaryDb::<D>::set_plan_ids(&mut txn, genesis, block, &plans);
+          txn.commit();
+
+          Some(Transaction::SubstrateBlock(block))
+        }
         coordinator::ProcessorMessage::BatchPreprocess { id, preprocess } => {
-          Some(Transaction::BatchPreprocess(SignData {
-            plan: id.id,
-            attempt: id.attempt,
-            data: preprocess,
-            signed: Transaction::empty_signed(),
-          }))
+          // If this is the first attempt instance, synchronize around the block first
+          if id.attempt == 0 {
+            // Save the preprocess to disk so we can publish it later
+            // This is fine to use its own TX since it's static and just needs to be written
+            // before this message finishes it handling (or with this message's finished handling)
+            let mut txn = db.txn();
+            MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
+            txn.commit();
+
+            Some(Transaction::ExternalBlock(id.id))
+          } else {
+            Some(Transaction::BatchPreprocess(SignData {
+              plan: id.id,
+              attempt: id.attempt,
+              data: preprocess,
+              signed: Transaction::empty_signed(),
+            }))
+          }
         }
         coordinator::ProcessorMessage::BatchShare { id, share } => {
           Some(Transaction::BatchShare(SignData {
@@ -383,13 +445,6 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
 
     // If this created a transaction, publish it
     if let Some(mut tx) = tx {
-      // Get the next nonce
-      // let mut txn = db.txn();
-      // let nonce = MainDb::tx_nonce(&mut txn, msg.id, tributary);
-
-      let nonce = 0; // TODO
-      tx.sign(&mut OsRng, genesis, &key, nonce);
-
       let tributaries = tributaries.read().await;
       let Some(tributary) = tributaries.get(&genesis) else {
         // TODO: This can happen since Substrate tells the Processor to generate commitments
@@ -399,20 +454,28 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
       };
 
       let tributary = tributary.tributary.read().await;
-      if tributary
-        .next_nonce(pub_key)
-        .await
-        .expect("we don't have a nonce, meaning we aren't a participant on this tributary") >
-        nonce
-      {
-        log::warn!("we've already published this transaction. this should only appear on reboot");
-      } else {
-        // We should've created a valid transaction
-        // TODO: Delay SignPreprocess/BatchPreprocess until associated ID is valid
-        assert!(tributary.add_transaction(tx).await, "created an invalid transaction");
-      }
 
-      // txn.commit();
+      match tx.kind() {
+        TransactionKind::Provided(_) => {
+          let res = tributary.provide_transaction(tx).await;
+          if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
+            panic!("provided an invalid transaction: {res:?}");
+          }
+        }
+        TransactionKind::Signed(_) => {
+          // Get the next nonce
+          // let mut txn = db.txn();
+          // let nonce = MainDb::tx_nonce(&mut txn, msg.id, tributary);
+
+          let nonce = 0; // TODO
+          tx.sign(&mut OsRng, genesis, &key, nonce);
+
+          publish_transaction(&tributary, tx).await;
+
+          // txn.commit();
+        }
+        _ => panic!("created an unexpected transaction"),
+      }
     }
   }
 }
@@ -446,13 +509,61 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
   }
 
   // Handle new blocks for each Tributary
-  tokio::spawn(scan_tributaries(
-    raw_db.clone(),
-    key.clone(),
-    p2p.clone(),
-    processor.clone(),
-    tributaries.clone(),
-  ));
+  let (recognized_id_send, mut recognized_id_recv) = mpsc::unbounded_channel();
+  {
+    let raw_db = raw_db.clone();
+    tokio::spawn(scan_tributaries(
+      raw_db,
+      key.clone(),
+      recognized_id_send,
+      p2p.clone(),
+      processor.clone(),
+      tributaries.clone(),
+    ));
+  }
+
+  // When we reach consensus on a new external block, send our BatchPreprocess for it
+  tokio::spawn({
+    let raw_db = raw_db.clone();
+    let key = key.clone();
+    let tributaries = tributaries.clone();
+    async move {
+      loop {
+        if let Some((genesis, id_type, id)) = recognized_id_recv.recv().await {
+          let mut tx = match id_type {
+            RecognizedIdType::Block => Transaction::BatchPreprocess(SignData {
+              plan: id,
+              attempt: 0,
+              data: MainDb::<D>::first_preprocess(&raw_db, id),
+              signed: Transaction::empty_signed(),
+            }),
+
+            RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
+              plan: id,
+              attempt: 0,
+              data: MainDb::<D>::first_preprocess(&raw_db, id),
+              signed: Transaction::empty_signed(),
+            }),
+          };
+
+          let nonce = 0; // TODO
+          tx.sign(&mut OsRng, genesis, &key, nonce);
+
+          // TODO: Consolidate this code with the above instance
+          let tributaries = tributaries.read().await;
+          let Some(tributary) = tributaries.get(&genesis) else {
+            panic!("tributary we don't have came to consensus on an ExternalBlock");
+          };
+          let tributary = tributary.tributary.read().await;
+
+          publish_transaction(&tributary, tx).await;
+        } else {
+          log::warn!("recognized_id_recv was dropped. are we shutting down?");
+          break;
+        }
+      }
+    }
+  });
 
   // Spawn the heartbeat task, which will trigger syncing if there hasn't been a Tributary block
   // in a while (presumably because we're behind)
@@ -462,7 +573,7 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
   tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, tributaries.clone()));
 
   // Handle all messages from processors
-  handle_processors(key, processor, tributaries).await;
+  handle_processors(raw_db, key, processor, tributaries).await;
 }
 
 #[tokio::main]

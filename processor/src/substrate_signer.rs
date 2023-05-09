@@ -190,6 +190,10 @@ impl<D: Db> SubstrateSigner<D> {
     // b"substrate" is a literal from sp-core
     let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), self.keys.clone());
 
+    // TODO: Use a seeded RNG here so we don't produce distinct messages with the same purpose
+    // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
+    // message, send distinct preprocess, and then attempt a signing session premised on the former
+    // with the latter
     let (machine, preprocess) = machine.preprocess(&mut OsRng);
     self.preprocessing.insert(id.id, machine);
 
@@ -206,6 +210,7 @@ impl<D: Db> SubstrateSigner<D> {
       return;
     }
 
+    // Use the block hash as the ID
     let id = batch.block.0;
     self.signable.insert(id, batch);
     self.attempt(txn, id, 0).await;

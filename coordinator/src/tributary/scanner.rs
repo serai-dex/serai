@@ -5,6 +5,8 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
+use tokio::sync::mpsc::UnboundedSender;
+
 use tributary::{Signed, Block, TributaryReader};
 
 use processor_messages::{
@@ -21,10 +23,17 @@ use crate::{
   tributary::{TributaryDb, TributarySpec, Transaction},
 };
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RecognizedIdType {
+  Block,
+  Plan,
+}
+
 // Handle a specific Tributary block
 async fn handle_block<D: Db, Pro: Processor>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  recognized_id: &UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
   processor: &Pro,
   spec: &TributarySpec,
   block: Block<Transaction>,
@@ -172,16 +181,10 @@ async fn handle_block<D: Db, Pro: Processor>(
 
         Transaction::ExternalBlock(block) => {
           // Because this external block has been finalized, its batch ID should be authorized
-
-          // If we didn't provide this transaction, we should halt until we do
-          // If we provided a distinct transaction, we should error
-          // If we did provide this transaction, we should've set the batch ID for the block
-          let batch_id = TributaryDb::<D>::batch_id(&txn, genesis, block).expect(
-            "synced a tributary block finalizing a external block in a provided transaction \
-            despite us not providing that transaction",
-          );
-
-          TributaryDb::<D>::recognize_id(&mut txn, Zone::Batch.label(), genesis, batch_id);
+          TributaryDb::<D>::recognize_id(&mut txn, Zone::Batch.label(), genesis, block);
+          recognized_id
+            .send((genesis, RecognizedIdType::Block, block))
+            .expect("recognized_id_recv was dropped. are we shutting down?");
         }
 
         Transaction::SubstrateBlock(block) => {
@@ -192,6 +195,9 @@ async fn handle_block<D: Db, Pro: Processor>(
 
           for id in plan_ids {
             TributaryDb::<D>::recognize_id(&mut txn, Zone::Sign.label(), genesis, id);
+            recognized_id
+              .send((genesis, RecognizedIdType::Plan, id))
+              .expect("recognized_id_recv was dropped. are we shutting down?");
           }
         }
 
@@ -287,6 +293,7 @@ async fn handle_block<D: Db, Pro: Processor>(
 pub async fn handle_new_blocks<D: Db, Pro: Processor>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  recognized_id: &UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
   processor: &Pro,
   spec: &TributarySpec,
   tributary: &TributaryReader<D, Transaction>,
@@ -295,7 +302,7 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor>(
   let mut last_block = db.last_block(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
-    handle_block(db, key, processor, spec, block).await;
+    handle_block(db, key, recognized_id, processor, spec, block).await;
     last_block = next;
     db.set_last_block(genesis, next);
   }

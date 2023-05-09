@@ -325,6 +325,10 @@ impl<C: Coin, D: Db> Signer<C, D> {
       Ok(machine) => machine,
     };
 
+    // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
+    // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
+    // message, send distinct preprocess, and then attempt a signing session premised on the former
+    // with the latter
     let (machine, preprocess) = machine.preprocess(&mut OsRng);
     self.preprocessing.insert(id.id, machine);
 

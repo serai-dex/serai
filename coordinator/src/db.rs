@@ -41,4 +41,19 @@ impl<'a, D: Db> MainDb<'a, D> {
     txn.put(key, existing_bytes);
     txn.commit();
   }
+
+  fn first_preprocess_key(id: [u8; 32]) -> Vec<u8> {
+    Self::main_key(b"first_preprocess", id)
+  }
+  pub fn save_first_preprocess(txn: &mut D::Transaction<'_>, id: [u8; 32], preprocess: Vec<u8>) {
+    let key = Self::first_preprocess_key(id);
+    if let Some(existing) = txn.get(&key) {
+      assert_eq!(existing, preprocess, "saved a distinct first preprocess");
+      return;
+    }
+    txn.put(key, preprocess);
+  }
+  pub fn first_preprocess<G: Get>(getter: &G, id: [u8; 32]) -> Vec<u8> {
+    getter.get(Self::first_preprocess_key(id)).expect("asked for first preprocess we never saved")
+  }
 }
