@@ -8,7 +8,7 @@ use rand_core::RngCore;
 use zeroize::Zeroize;
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
 
-use crypto_bigint::{U512, modular::constant_mod::Residue};
+use crypto_bigint::{U448, modular::constant_mod::Residue};
 
 use group::{
   ff::{Field, PrimeField, PrimeFieldBits},
@@ -23,18 +23,14 @@ use crate::{
 };
 
 const D: FieldElement =
-  FieldElement(ResidueType::sub(&ResidueType::ZERO, &Residue::new(&U512::from_u16(39081))));
+  FieldElement(ResidueType::sub(&ResidueType::ZERO, &Residue::new(&U448::from_u16(39081))));
 
-const G_Y: FieldElement = FieldElement(Residue::new(&U512::from_be_hex(concat!(
-  "00000000000000",
-  "00",
+const G_Y: FieldElement = FieldElement(Residue::new(&U448::from_be_hex(concat!(
   "693f46716eb6bc248876203756c9c7624bea73736ca3984087789c1e",
   "05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14",
 ))));
 
-const G_X: FieldElement = FieldElement(Residue::new(&U512::from_be_hex(concat!(
-  "00000000000000",
-  "00",
+const G_X: FieldElement = FieldElement(Residue::new(&U448::from_be_hex(concat!(
   "4f1970c66bed0ded221d15a622bf36da9e146570470f1767ea6de324",
   "a3d3a46412ae1af72ab66511433b80e18b00938e2626a82bc70cc05e",
 ))));

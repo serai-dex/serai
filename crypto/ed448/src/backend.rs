@@ -94,8 +94,8 @@ macro_rules! field {
 
     use $crate::backend::u8_from_bool;
 
-    fn reduce(x: U1024) -> U512 {
-      U512::from_le_slice(&x.rem(&NonZero::new($WIDE_MODULUS).unwrap()).to_le_bytes()[.. 64])
+    fn reduce(x: U896) -> U448 {
+      U448::from_le_slice(&x.rem(&NonZero::new($WIDE_MODULUS).unwrap()).to_le_bytes()[.. 56])
     }
 
     impl ConstantTimeEq for $FieldName {
@@ -117,11 +117,11 @@ macro_rules! field {
     math_op!($FieldName, $FieldName, Mul, mul, MulAssign, mul_assign, |x: $ResidueType, y| x
       .mul(&y));
 
-    from_wrapper!($FieldName, U512, u8);
-    from_wrapper!($FieldName, U512, u16);
-    from_wrapper!($FieldName, U512, u32);
-    from_wrapper!($FieldName, U512, u64);
-    from_wrapper!($FieldName, U512, u128);
+    from_wrapper!($FieldName, U448, u8);
+    from_wrapper!($FieldName, U448, u16);
+    from_wrapper!($FieldName, U448, u32);
+    from_wrapper!($FieldName, U448, u64);
+    from_wrapper!($FieldName, U448, u128);
 
     impl Neg for $FieldName {
       type Output = $FieldName;
@@ -173,9 +173,9 @@ macro_rules! field {
       const ONE: Self = Self(Residue::ONE);
 
       fn random(mut rng: impl RngCore) -> Self {
-        let mut bytes = [0; 128];
+        let mut bytes = [0; 112];
         rng.fill_bytes(&mut bytes);
-        $FieldName(Residue::new(&reduce(U1024::from_le_slice(bytes.as_ref()))))
+        $FieldName(Residue::new(&reduce(U896::from_le_slice(bytes.as_ref()))))
       }
 
       fn square(&self) -> Self {
@@ -187,13 +187,13 @@ macro_rules! field {
 
       fn invert(&self) -> CtOption<Self> {
         const NEG_2: $FieldName =
-          Self($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U512::from_u8(2))));
+          Self($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U448::from_u8(2))));
         CtOption::new(self.pow(NEG_2), !self.is_zero())
       }
 
       fn sqrt(&self) -> CtOption<Self> {
         const MOD_1_4: $FieldName = Self($ResidueType::new(
-          &$MODULUS.saturating_add(&U512::ONE).wrapping_div(&U512::from_u8(4)),
+          &$MODULUS.saturating_add(&U448::ONE).wrapping_div(&U448::from_u8(4)),
         ));
 
         let res = self.pow(MOD_1_4);
@@ -213,27 +213,27 @@ macro_rules! field {
       const NUM_BITS: u32 = $NUM_BITS;
       const CAPACITY: u32 = $NUM_BITS - 1;
 
-      const TWO_INV: Self = $FieldName($ResidueType::new(&U512::from_u8(2)).invert().0);
+      const TWO_INV: Self = $FieldName($ResidueType::new(&U448::from_u8(2)).invert().0);
 
       const MULTIPLICATIVE_GENERATOR: Self =
-        Self(Residue::new(&U512::from_u8($MULTIPLICATIVE_GENERATOR)));
+        Self(Residue::new(&U448::from_u8($MULTIPLICATIVE_GENERATOR)));
       // True for both the Ed448 Scalar field and FieldElement field
       const S: u32 = 1;
 
       // Both fields have their root of unity as -1
       const ROOT_OF_UNITY: Self =
-        Self($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U512::ONE)));
+        Self($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U448::ONE)));
       const ROOT_OF_UNITY_INV: Self = Self(Self::ROOT_OF_UNITY.0.invert().0);
 
-      const DELTA: Self = $FieldName(Residue::new(&U512::from_le_hex($DELTA)));
+      const DELTA: Self = $FieldName(Residue::new(&U448::from_le_hex($DELTA)));
 
       fn from_repr(bytes: Self::Repr) -> CtOption<Self> {
-        let res = U512::from_le_slice(&[bytes.as_ref(), [0; 7].as_ref()].concat());
-        CtOption::new($FieldName(Residue::new(&res)), res.ct_lt(&$MODULUS))
+        let res = U448::from_le_slice(&bytes[.. 56]);
+        CtOption::new($FieldName(Residue::new(&res)), res.ct_lt(&$MODULUS) & bytes[56].ct_eq(&0))
       }
       fn to_repr(&self) -> Self::Repr {
         let mut repr = GenericArray::<u8, U57>::default();
-        repr.copy_from_slice(&self.0.retrieve().to_le_bytes()[.. 57]);
+        repr[.. 56].copy_from_slice(&self.0.retrieve().to_le_bytes());
         repr
       }
 

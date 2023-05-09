@@ -92,9 +92,7 @@ fn test_ed448() {
       .unwrap()
     )
     .to_repr()
-    .iter()
-    .cloned()
-    .collect::<Vec<_>>(),
+    .to_vec(),
     hex::decode(
       "\
 67a6f023e77361707c6e894c625e809e80f33fdb310810053ae29e28\
