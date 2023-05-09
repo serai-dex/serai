@@ -219,14 +219,14 @@ const TYPE_COORDINATOR_UID: u8 = 4;
 const TYPE_SUBSTRATE_UID: u8 = 5;
 
 impl CoordinatorMessage {
-  /// A unique ID for this message, which should be unique across the validator's entire system,
+  /// The intent for this message, which should be unique across the validator's entire system,
   /// including all of its processors.
   ///
   /// This doesn't use H(msg.serialize()) as it's meant to be unique to intent, not unique to
   /// values. While the values should be consistent per intent, that assumption isn't required
   /// here.
   // TODO: Should this use borsh intead of bincode?
-  pub fn uid(&self) -> Vec<u8> {
+  pub fn intent(&self) -> Vec<u8> {
     match self {
       CoordinatorMessage::KeyGen(msg) => {
         // Unique since key gen ID embeds the validator set and attempt
@@ -293,13 +293,13 @@ impl CoordinatorMessage {
 }
 
 impl ProcessorMessage {
-  /// A unique ID for this message, which should be unique across the validator's entire system,
+  /// The intent for this message, which should be unique across the validator's entire system,
   /// including all of its processors.
   ///
   /// This doesn't use H(msg.serialize()) as it's meant to be unique to intent, not unique to
   /// values. While the values should be consistent per intent, that assumption isn't required
   /// here.
-  pub fn uid(&self) -> Vec<u8> {
+  pub fn intent(&self) -> Vec<u8> {
     match self {
       ProcessorMessage::KeyGen(msg) => {
         let (sub, id) = match msg {
