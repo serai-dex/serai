@@ -191,10 +191,17 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     }
 
     let block = TendermintBlock(block.serialize());
-    let Ok(commit) = Commit::<Arc<Validators>>::decode(&mut commit.as_ref()) else {
+    let mut commit_ref = commit.as_ref();
+    let Ok(commit) = Commit::<Arc<Validators>>::decode(&mut commit_ref) else {
       log::error!("sent an invalidly serialized commit");
       return false;
     };
+    // Storage DoS vector. We *could* truncate to solely the relevant portion, trying to save this,
+    // yet then we'd have to test the truncation was performed correctly.
+    if !commit_ref.is_empty() {
+      log::error!("sent an commit with additional data after it");
+      return false;
+    }
     if !self.network.verify_commit(block.id(), &commit) {
       log::error!("sent an invalid commit");
       return false;
