@@ -370,8 +370,18 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   loop {
     let msg = processors.recv().await;
 
-    // TODO: Get genesis hash by msg.network
-    let genesis = [0; 32];
+    // TODO2: This is slow, and only works as long as a network only has a single Tributary
+    // (which means there's a lack of multisig rotation)
+    let genesis = {
+      let mut genesis = None;
+      for tributary in tributaries.read().await.values() {
+        if tributary.spec.set().network == msg.network {
+          genesis = Some(tributary.spec.genesis());
+          break;
+        }
+      }
+      genesis.unwrap()
+    };
 
     let tx = match msg.msg {
       ProcessorMessage::KeyGen(msg) => match msg {
