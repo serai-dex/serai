@@ -31,8 +31,7 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
 
   let block = publish_tx(
     &serai
-      .execute_batch(SignedBatch { batch: batch.clone(), signature: pair.sign(&batch.encode()) })
-      .unwrap(),
+      .execute_batch(SignedBatch { batch: batch.clone(), signature: pair.sign(&batch.encode()) }),
   )
   .await;
 

@@ -429,10 +429,11 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           );
           // TODO: Also check the other KeyGenId fields
 
-          // TODO: Is this safe?
+          // TODO: Publish an unsigned TX with a Musig signature here, instead of on-chain voting
+          // That removes the need for this nonce
           let Ok(nonce) = serai.get_nonce(&substrate_signer.address()).await else {
-            log::error!("couldn't connect to Serai node to get nonce");
-            todo!(); // TODO
+            log::error!("couldn't get nonce from Serai node");
+            todo!()
           };
 
           let tx = serai
@@ -459,7 +460,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
               log::info!("voted on key pair for {:?} in TX {}", id.set, hex::encode(hash))
             }
             Err(e) => {
-              log::error!("couldn't connect to Serai node to publish TX: {:?}", e);
+              log::error!("couldn't connect to Serai node to publish vote TX: {:?}", e);
               todo!(); // TODO
             }
           }
@@ -537,9 +538,33 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           }))
         }
       },
-      ProcessorMessage::Substrate(msg) => match msg {
-        // TODO
-        processor_messages::substrate::ProcessorMessage::Update { .. } => todo!(),
+      ProcessorMessage::Substrate(inner_msg) => match inner_msg {
+        processor_messages::substrate::ProcessorMessage::Update { key: _, batch } => {
+          assert_eq!(
+            batch.batch.network, msg.network,
+            "processor sent us a batch for a different network than it was for",
+          );
+          // TODO: Check this key's key pair's substrate key is authorized to publish batches
+          // TODO: Check the batch ID is an atomic increment
+
+          match serai.publish(&serai.execute_batch(batch.clone())).await {
+            Ok(hash) => {
+              log::info!(
+                "executed batch {:?} {} (block {}) in TX {}",
+                batch.batch.network,
+                batch.batch.id,
+                hex::encode(batch.batch.block),
+                hex::encode(hash),
+              )
+            }
+            Err(e) => {
+              log::error!("couldn't connect to Serai node to publish batch TX: {:?}", e);
+              todo!(); // TODO
+            }
+          }
+
+          None
+        }
       },
     };
 

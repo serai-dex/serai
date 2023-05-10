@@ -33,7 +33,7 @@ impl Serai {
       .await
   }
 
-  pub fn execute_batch(&self, batch: SignedBatch) -> Result<Encoded, SeraiError> {
+  pub fn execute_batch(&self, batch: SignedBatch) -> Encoded {
     self.unsigned::<InInstructions, _>(&in_instructions::Call::<Runtime>::execute_batch { batch })
   }
 }
