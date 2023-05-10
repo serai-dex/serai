@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
-pub use dkg::tests::{key_gen, recover_key};
+pub use dkg::tests::{key_gen, musig_key_gen, recover_key};
 
 use crate::{
   Curve, Participant, ThresholdKeys, FrostError,
@@ -24,7 +24,7 @@ mod literal;
 /// Constant amount of participants to use when testing.
 pub const PARTICIPANTS: u16 = 5;
 /// Constant threshold of participants to use when signing.
-pub const THRESHOLD: u16 = ((PARTICIPANTS / 3) * 2) + 1;
+pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 
 /// Clone a map without a specific value.
 pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
@@ -192,15 +192,29 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
   )
 }
 
-/// Test a basic Schnorr signature.
-pub fn test_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
+/// Test a basic Schnorr signature with the provided keys.
+pub fn test_schnorr_with_keys<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
+  rng: &mut R,
+  keys: HashMap<Participant, ThresholdKeys<C>>,
+) {
   const MSG: &[u8] = b"Hello, World!";
 
-  let keys = key_gen(&mut *rng);
   let machines = algorithm_machines(&mut *rng, IetfSchnorr::<C, H>::ietf(), &keys);
   let sig = sign(&mut *rng, IetfSchnorr::<C, H>::ietf(), keys.clone(), machines, MSG);
   let group_key = keys[&Participant::new(1).unwrap()].group_key();
   assert!(sig.verify(group_key, H::hram(&sig.R, &group_key, MSG)));
+}
+
+/// Test a basic Schnorr signature.
+pub fn test_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
+  let keys = key_gen(&mut *rng);
+  test_schnorr_with_keys::<_, _, H>(&mut *rng, keys)
+}
+
+/// Test a basic Schnorr signature, yet with MuSig.
+pub fn test_musig_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
+  let keys = musig_key_gen(&mut *rng);
+  test_schnorr_with_keys::<_, _, H>(&mut *rng, keys)
 }
 
 /// Test an offset Schnorr signature.
@@ -248,6 +262,7 @@ pub fn test_schnorr_blame<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mu
 /// Run a variety of tests against a ciphersuite.
 pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   test_schnorr::<R, C, H>(rng);
+  test_musig_schnorr::<R, C, H>(rng);
   test_offset_schnorr::<R, C, H>(rng);
   test_schnorr_blame::<R, C, H>(rng);
 

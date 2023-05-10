@@ -22,6 +22,9 @@ use ciphersuite::{
 /// Encryption types and utilities used to secure DKG messages.
 pub mod encryption;
 
+mod musig;
+pub use musig::musig;
+
 /// The distributed key generation protocol described in the
 /// [FROST paper](https://eprint.iacr.org/2020/852).
 pub mod frost;

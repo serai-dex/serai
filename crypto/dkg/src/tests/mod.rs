@@ -1,11 +1,15 @@
 use core::ops::Deref;
 use std::collections::HashMap;
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{group::ff::Field, Ciphersuite};
 
-use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange};
+use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange, musig as musig_fn};
+
+mod musig;
+pub use musig::test_musig;
 
 /// FROST key generation testing utility.
 pub mod frost;
@@ -59,6 +63,28 @@ pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
       (i, ThresholdKeys::new(core))
     })
     .collect();
+  assert_eq!(C::generator() * recover_key(&res), res[&Participant(1)].group_key());
+  res
+}
+
+/// Generate MuSig keys for tests.
+pub fn musig_key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
+  rng: &mut R,
+) -> HashMap<Participant, ThresholdKeys<C>> {
+  let mut keys = vec![];
+  let mut pub_keys = vec![];
+  for _ in 0 .. PARTICIPANTS {
+    let key = Zeroizing::new(C::F::random(&mut *rng));
+    pub_keys.push(C::generator() * *key);
+    keys.push(key);
+  }
+
+  let mut res = HashMap::new();
+  for key in keys {
+    let these_keys = musig_fn::<C>(&key, &pub_keys).unwrap();
+    res.insert(these_keys.params().i(), ThresholdKeys::new(these_keys));
+  }
+
   assert_eq!(C::generator() * recover_key(&res), res[&Participant(1)].group_key());
   res
 }
