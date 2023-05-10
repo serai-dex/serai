@@ -19,7 +19,7 @@ use processor_messages::{
 use tributary::{Transaction as TransactionTrait, Tributary};
 
 use crate::{
-  processor::MemProcessor,
+  processors::MemProcessors,
   LocalP2p,
   tributary::{TributaryDb, Transaction, TributarySpec, scanner::handle_new_blocks},
   tests::tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
@@ -74,29 +74,29 @@ async fn dkg_test() {
       .collect(),
   });
 
-  async fn new_processor(
+  async fn new_processors(
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     spec: &TributarySpec,
     tributary: &Tributary<MemDb, Transaction, LocalP2p>,
-  ) -> (TributaryDb<MemDb>, MemProcessor) {
+  ) -> (TributaryDb<MemDb>, MemProcessors) {
     let mut scanner_db = TributaryDb(MemDb::new());
-    let processor = MemProcessor::new();
+    let processors = MemProcessors::new();
     // Uses a brand new channel since this channel won't be used within this test
     handle_new_blocks(
       &mut scanner_db,
       key,
       &mpsc::unbounded_channel().0,
-      &processor,
+      &processors,
       spec,
       &tributary.reader(),
     )
     .await;
-    (scanner_db, processor)
+    (scanner_db, processors)
   }
 
   // Instantiate a scanner and verify it has nothing to report
-  let (mut scanner_db, processor) = new_processor(&keys[0], &spec, &tributaries[0].1).await;
-  assert!(processor.0.read().await.is_empty());
+  let (mut scanner_db, processors) = new_processors(&keys[0], &spec, &tributaries[0].1).await;
+  assert!(processors.0.read().await.is_empty());
 
   // Publish the last commitment
   let block_before_tx = tributaries[0].1.tip().await;
@@ -109,21 +109,25 @@ async fn dkg_test() {
     &mut scanner_db,
     &keys[0],
     &mpsc::unbounded_channel().0,
-    &processor,
+    &processors,
     &spec,
     &tributaries[0].1.reader(),
   )
   .await;
   {
-    let mut msgs = processor.0.write().await;
+    let mut msgs = processors.0.write().await;
+    assert_eq!(msgs.len(), 1);
+    let msgs = msgs.get_mut(&spec.set().network).unwrap();
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert!(msgs.is_empty());
   }
 
   // Verify all keys exhibit this scanner behavior
   for (i, key) in keys.iter().enumerate() {
-    let (_, processor) = new_processor(key, &spec, &tributaries[i].1).await;
-    let mut msgs = processor.0.write().await;
+    let (_, processors) = new_processors(key, &spec, &tributaries[i].1).await;
+    let mut msgs = processors.0.write().await;
+    assert_eq!(msgs.len(), 1);
+    let msgs = msgs.get_mut(&spec.set().network).unwrap();
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert!(msgs.is_empty());
   }
@@ -158,12 +162,13 @@ async fn dkg_test() {
     &mut scanner_db,
     &keys[0],
     &mpsc::unbounded_channel().0,
-    &processor,
+    &processors,
     &spec,
     &tributaries[0].1.reader(),
   )
   .await;
-  assert!(processor.0.write().await.is_empty());
+  assert_eq!(processors.0.read().await.len(), 1);
+  assert!(processors.0.read().await[&spec.set().network].is_empty());
 
   // Publish the final set of shares
   let block_before_tx = tributaries[0].1.tip().await;
@@ -197,21 +202,25 @@ async fn dkg_test() {
     &mut scanner_db,
     &keys[0],
     &mpsc::unbounded_channel().0,
-    &processor,
+    &processors,
     &spec,
     &tributaries[0].1.reader(),
   )
   .await;
   {
-    let mut msgs = processor.0.write().await;
+    let mut msgs = processors.0.write().await;
+    assert_eq!(msgs.len(), 1);
+    let msgs = msgs.get_mut(&spec.set().network).unwrap();
     assert_eq!(msgs.pop_front().unwrap(), shares_for(0));
     assert!(msgs.is_empty());
   }
 
   // Yet new scanners should emit all events
   for (i, key) in keys.iter().enumerate() {
-    let (_, processor) = new_processor(key, &spec, &tributaries[i].1).await;
-    let mut msgs = processor.0.write().await;
+    let (_, processors) = new_processors(key, &spec, &tributaries[i].1).await;
+    let mut msgs = processors.0.write().await;
+    assert_eq!(msgs.len(), 1);
+    let msgs = msgs.get_mut(&spec.set().network).unwrap();
     assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
     assert_eq!(msgs.pop_front().unwrap(), shares_for(i));
     assert!(msgs.is_empty());

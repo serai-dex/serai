@@ -42,8 +42,8 @@ pub use p2p::*;
 
 use processor_messages::{key_gen, sign, coordinator, ProcessorMessage};
 
-pub mod processor;
-use processor::Processor;
+pub mod processors;
+use processors::Processors;
 
 mod substrate;
 
@@ -90,10 +90,10 @@ async fn add_tributary<D: Db, P: P2p>(
   reader
 }
 
-pub async fn scan_substrate<D: Db, Pro: Processor>(
+pub async fn scan_substrate<D: Db, Pro: Processors>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  processor: Pro,
+  processors: Pro,
   serai: Serai,
 ) {
   let mut db = substrate::SubstrateDb::new(db);
@@ -114,7 +114,7 @@ pub async fn scan_substrate<D: Db, Pro: Processor>(
           NEW_TRIBUTARIES.write().await.push_back(spec);
         }
       },
-      &processor,
+      &processors,
       &serai,
       &mut last_substrate_block,
     )
@@ -132,12 +132,12 @@ pub async fn scan_substrate<D: Db, Pro: Processor>(
 }
 
 #[allow(clippy::type_complexity)]
-pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
+pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   recognized_id_send: UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
   p2p: P,
-  processor: Pro,
+  processors: Pro,
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
 ) {
   let mut tributary_readers = vec![];
@@ -174,7 +174,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processor, P: P2p>(
         &mut tributary_db,
         &key,
         &recognized_id_send,
-        &processor,
+        &processors,
         spec,
         reader,
       )
@@ -359,18 +359,18 @@ pub async fn publish_transaction<D: Db, P: P2p>(
 }
 
 #[allow(clippy::type_complexity)]
-pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
+pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   mut db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  mut processor: Pro,
+  mut processors: Pro,
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
 ) {
   let pub_key = Ristretto::generator() * key.deref();
 
   loop {
-    let msg = processor.recv().await;
+    let msg = processors.recv().await;
 
-    // TODO: We need (ValidatorSet or key) to genesis hash
+    // TODO: Get genesis hash by msg.network
     let genesis = [0; 32];
 
     let tx = match msg.msg {
@@ -410,9 +410,12 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
         // TODO
         sign::ProcessorMessage::Completed { .. } => todo!(),
       },
-      ProcessorMessage::Coordinator(msg) => match msg {
-        coordinator::ProcessorMessage::SubstrateBlockAck { network: _, block, plans } => {
-          // TODO2: Check this network aligns with this processor
+      ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
+        coordinator::ProcessorMessage::SubstrateBlockAck { network, block, plans } => {
+          assert_eq!(
+            msg.network, network,
+            "processor claimed to be a different network than it was",
+          );
 
           // Safe to use its own txn since this is static and just needs to be written before we
           // provide SubstrateBlock
@@ -494,15 +497,15 @@ pub async fn handle_processors<D: Db, Pro: Processor, P: P2p>(
   }
 }
 
-pub async fn run<D: Db, Pro: Processor, P: P2p>(
+pub async fn run<D: Db, Pro: Processors, P: P2p>(
   mut raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: P,
-  processor: Pro,
+  processors: Pro,
   serai: Serai,
 ) {
   // Handle new Substrate blocks
-  tokio::spawn(scan_substrate(raw_db.clone(), key.clone(), processor.clone(), serai.clone()));
+  tokio::spawn(scan_substrate(raw_db.clone(), key.clone(), processors.clone(), serai.clone()));
 
   // Handle the Tributaries
 
@@ -531,7 +534,7 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
       key.clone(),
       recognized_id_send,
       p2p.clone(),
-      processor.clone(),
+      processors.clone(),
       tributaries.clone(),
     ));
   }
@@ -587,7 +590,7 @@ pub async fn run<D: Db, Pro: Processor, P: P2p>(
   tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, tributaries.clone()));
 
   // Handle all messages from processors
-  handle_processors(raw_db, key, processor, tributaries).await;
+  handle_processors(raw_db, key, processors, tributaries).await;
 }
 
 #[tokio::main]
@@ -597,7 +600,7 @@ async fn main() {
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
   let p2p = LocalP2p::new(1).swap_remove(0); // TODO
 
-  let processor = processor::MemProcessor::new(); // TODO
+  let processors = processors::MemProcessors::new(); // TODO
 
   let serai = || async {
     loop {
@@ -609,5 +612,5 @@ async fn main() {
       return serai;
     }
   };
-  run(db, key, p2p, processor, serai().await).await
+  run(db, key, p2p, processors, serai().await).await
 }

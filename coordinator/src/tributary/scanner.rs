@@ -19,7 +19,7 @@ use serai_db::DbTxn;
 
 use crate::{
   Db,
-  processor::Processor,
+  processors::Processors,
   tributary::{TributaryDb, TributarySpec, Transaction},
 };
 
@@ -30,11 +30,11 @@ pub enum RecognizedIdType {
 }
 
 // Handle a specific Tributary block
-async fn handle_block<D: Db, Pro: Processor>(
+async fn handle_block<D: Db, Pro: Processors>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   recognized_id: &UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
-  processor: &Pro,
+  processors: &Pro,
   spec: &TributarySpec,
   block: Block<Transaction>,
 ) {
@@ -144,11 +144,14 @@ async fn handle_block<D: Db, Pro: Processor>(
           if let Some(commitments) =
             handle(Zone::Dkg, b"dkg_commitments", spec.n(), [0; 32], attempt, bytes, signed)
           {
-            processor
-              .send(CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-                id: KeyGenId { set: spec.set(), attempt },
-                commitments,
-              }))
+            processors
+              .send(
+                spec.set().network,
+                CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+                  id: KeyGenId { set: spec.set(), attempt },
+                  commitments,
+                }),
+              )
               .await;
           }
         }
@@ -170,11 +173,14 @@ async fn handle_block<D: Db, Pro: Processor>(
           if let Some(shares) =
             handle(Zone::Dkg, b"dkg_shares", spec.n(), [0; 32], attempt, bytes, signed)
           {
-            processor
-              .send(CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
-                id: KeyGenId { set: spec.set(), attempt },
-                shares,
-              }))
+            processors
+              .send(
+                spec.set().network,
+                CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
+                  id: KeyGenId { set: spec.set(), attempt },
+                  shares,
+                }),
+              )
               .await;
           }
         }
@@ -211,13 +217,16 @@ async fn handle_block<D: Db, Pro: Processor>(
             data.data,
             data.signed,
           ) {
-            processor
-              .send(CoordinatorMessage::Coordinator(
-                coordinator::CoordinatorMessage::BatchPreprocesses {
-                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-                  preprocesses,
-                },
-              ))
+            processors
+              .send(
+                spec.set().network,
+                CoordinatorMessage::Coordinator(
+                  coordinator::CoordinatorMessage::BatchPreprocesses {
+                    id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                    preprocesses,
+                  },
+                ),
+              )
               .await;
           }
         }
@@ -231,14 +240,17 @@ async fn handle_block<D: Db, Pro: Processor>(
             data.data,
             data.signed,
           ) {
-            processor
-              .send(CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
-                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-                shares: shares
-                  .drain()
-                  .map(|(validator, share)| (validator, share.try_into().unwrap()))
-                  .collect(),
-              }))
+            processors
+              .send(
+                spec.set().network,
+                CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
+                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                  shares: shares
+                    .drain()
+                    .map(|(validator, share)| (validator, share.try_into().unwrap()))
+                    .collect(),
+                }),
+              )
               .await;
           }
         }
@@ -253,11 +265,14 @@ async fn handle_block<D: Db, Pro: Processor>(
             data.data,
             data.signed,
           ) {
-            processor
-              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
-                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-                preprocesses,
-              }))
+            processors
+              .send(
+                spec.set().network,
+                CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
+                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                  preprocesses,
+                }),
+              )
               .await;
           }
         }
@@ -271,11 +286,14 @@ async fn handle_block<D: Db, Pro: Processor>(
             data.data,
             data.signed,
           ) {
-            processor
-              .send(CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
-                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-                shares,
-              }))
+            processors
+              .send(
+                spec.set().network,
+                CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
+                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                  shares,
+                }),
+              )
               .await;
           }
         }
@@ -290,11 +308,11 @@ async fn handle_block<D: Db, Pro: Processor>(
   // TODO: Trigger any necessary re-attempts
 }
 
-pub async fn handle_new_blocks<D: Db, Pro: Processor>(
+pub async fn handle_new_blocks<D: Db, Pro: Processors>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   recognized_id: &UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
-  processor: &Pro,
+  processors: &Pro,
   spec: &TributarySpec,
   tributary: &TributaryReader<D, Transaction>,
 ) {
@@ -302,7 +320,7 @@ pub async fn handle_new_blocks<D: Db, Pro: Processor>(
   let mut last_block = db.last_block(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
-    handle_block(db, key, recognized_id, processor, spec, block).await;
+    handle_block(db, key, recognized_id, processors, spec, block).await;
     last_block = next;
     db.set_last_block(genesis, next);
   }
