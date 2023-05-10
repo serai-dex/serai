@@ -72,12 +72,14 @@ pub struct ActiveTributary<D: Db, P: P2p> {
   pub tributary: Arc<RwLock<Tributary<D, Transaction, P>>>,
 }
 
+type Tributaries<D, P> = HashMap<[u8; 32], ActiveTributary<D, P>>;
+
 // Adds a tributary into the specified HahMap
 async fn add_tributary<D: Db, P: P2p>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: P,
-  tributaries: &mut HashMap<[u8; 32], ActiveTributary<D, P>>,
+  tributaries: &mut Tributaries<D, P>,
   spec: TributarySpec,
 ) -> TributaryReader<D, Transaction> {
   let tributary = Tributary::<_, Transaction, _>::new(
@@ -150,7 +152,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
   recognized_id_send: UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
   p2p: P,
   processors: Pro,
-  tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
+  tributaries: Arc<RwLock<Tributaries<D, P>>>,
 ) {
   let mut tributary_readers = vec![];
   for ActiveTributary { spec, tributary } in tributaries.read().await.values() {
@@ -202,7 +204,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
 #[allow(clippy::type_complexity)]
 pub async fn heartbeat_tributaries<D: Db, P: P2p>(
   p2p: P,
-  tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
+  tributaries: Arc<RwLock<Tributaries<D, P>>>,
 ) {
   let ten_blocks_of_time =
     Duration::from_secs((10 * Tributary::<D, Transaction, P>::block_time()).into());
@@ -230,7 +232,7 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
 pub async fn handle_p2p<D: Db, P: P2p>(
   our_key: <Ristretto as Ciphersuite>::G,
   p2p: P,
-  tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
+  tributaries: Arc<RwLock<Tributaries<D, P>>>,
 ) {
   loop {
     let mut msg = p2p.receive().await;
@@ -379,7 +381,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: Serai,
   mut processors: Pro,
-  tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
+  tributaries: Arc<RwLock<Tributaries<D, P>>>,
 ) {
   let pub_key = Ristretto::generator() * key.deref();
 
@@ -550,7 +552,6 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         // There's no guarantee the Tributary will have been created though
         panic!("processor is operating on tributary we don't have");
       };
-
       let tributary = tributary.tributary.read().await;
 
       match tx.kind() {
@@ -647,7 +648,6 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           let nonce = 0; // TODO
           tx.sign(&mut OsRng, genesis, &key, nonce);
 
-          // TODO: Consolidate this code with the above instance
           let tributaries = tributaries.read().await;
           let Some(tributary) = tributaries.get(&genesis) else {
             panic!("tributary we don't have came to consensus on an ExternalBlock");
