@@ -88,7 +88,7 @@ impl TributarySpec {
   }
 
   pub fn t(&self) -> u16 {
-    (2 * (self.n() / 3)) + 1
+    ((2 * self.n()) / 3) + 1
   }
 
   pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Participant> {

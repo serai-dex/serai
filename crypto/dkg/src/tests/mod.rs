@@ -22,7 +22,7 @@ use promote::test_generator_promotion;
 /// Constant amount of participants to use when testing.
 pub const PARTICIPANTS: u16 = 5;
 /// Constant threshold of participants to use when testing.
-pub const THRESHOLD: u16 = ((PARTICIPANTS / 3) * 2) + 1;
+pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 
 /// Clone a map without a specific value.
 pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
