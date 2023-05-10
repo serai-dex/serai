@@ -29,6 +29,7 @@ frost = { package = "modular-frost", path = "../crypto/frost" }
 
 scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
 
+schnorrkel = "0.10"
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 serai-db = { path = "../common/db" }
@@ -38,6 +39,7 @@ tributary = { package = "tributary-chain", path = "./tributary" }
 
 serai-client = { path = "../substrate/client", features = ["serai"] }
 
+hex = "0.4"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 

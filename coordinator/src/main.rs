@@ -12,10 +12,22 @@ use std::{
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use blake2::Digest;
+
+use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    GroupEncoding,
+  },
+  Ciphersuite, Ristretto,
+};
 
 use serai_db::{DbTxn, Db, MemDb};
-use serai_client::Serai;
+
+use serai_client::{
+  subxt::{config::extrinsic_params::BaseExtrinsicParamsBuilder, tx::Signer},
+  Public, PairSigner, Serai,
+};
 
 use tokio::{
   sync::{
@@ -316,8 +328,11 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         //    missing
         // sync_block waiting is preferable since we know the block is valid by its commit, meaning
         // we are the node behind
-        // A for 1/2, 1 may be preferable since this message may frequently occur
-        // We at least need to check if we take value from this message before running spawn
+        // As for 1/2, 1 may be preferable since this message may frequently occur
+        // This is suitably performant, as tokio HTTP servers will even spawn a new task per
+        // connection
+        // In order to reduce congestion though, we should at least check if we take value from
+        // this message before running spawn
         // TODO
         tokio::spawn({
           let tributaries = tributaries.clone();
@@ -362,10 +377,24 @@ pub async fn publish_transaction<D: Db, P: P2p>(
 pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   mut db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai: Serai,
   mut processors: Pro,
   tributaries: Arc<RwLock<HashMap<[u8; 32], ActiveTributary<D, P>>>>,
 ) {
   let pub_key = Ristretto::generator() * key.deref();
+
+  // TODO: This is cursed. serai_client has to handle this for us
+  let substrate_signer = {
+    let mut bytes = Zeroizing::new([0; 96]);
+    // Private key
+    bytes[.. 32].copy_from_slice(&key.to_repr());
+    // Nonce
+    let nonce = Zeroizing::new(blake2::Blake2s256::digest(&bytes));
+    bytes[32 .. 64].copy_from_slice(nonce.as_ref());
+    // Public key
+    bytes[64 ..].copy_from_slice(&pub_key.to_bytes());
+    PairSigner::new(schnorrkel::keys::Keypair::from_bytes(bytes.as_ref()).unwrap().into())
+  };
 
   loop {
     let msg = processors.recv().await;
@@ -384,15 +413,57 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
     };
 
     let tx = match msg.msg {
-      ProcessorMessage::KeyGen(msg) => match msg {
+      ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
           Some(Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed()))
         }
         key_gen::ProcessorMessage::Shares { id, shares } => {
           Some(Transaction::DkgShares(id.attempt, shares, Transaction::empty_signed()))
         }
-        // TODO
-        key_gen::ProcessorMessage::GeneratedKeyPair { .. } => todo!(),
+        key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, coin_key } => {
+          assert_eq!(
+            id.set.network, msg.network,
+            "processor claimed to be a different network than it was for SubstrateBlockAck",
+          );
+          // TODO: Also check the other KeyGenId fields
+
+          // TODO: Is this safe?
+          let Ok(nonce) = serai.get_nonce(&substrate_signer.address()).await else {
+            log::error!("couldn't connect to Serai node to get nonce");
+            todo!(); // TODO
+          };
+
+          let tx = serai
+            .sign(
+              &substrate_signer,
+              &Serai::vote(
+                msg.network,
+                (
+                  Public(substrate_key),
+                  coin_key
+                    .try_into()
+                    .expect("external key from processor exceeded max external key length"),
+                ),
+              ),
+              nonce,
+              BaseExtrinsicParamsBuilder::new(),
+            )
+            .expect(
+              "tried to sign an invalid payload despite creating the payload via serai_client",
+            );
+
+          match serai.publish(&tx).await {
+            Ok(hash) => {
+              log::info!("voted on key pair for {:?} in TX {}", id.set, hex::encode(hash))
+            }
+            Err(e) => {
+              log::error!("couldn't connect to Serai node to publish TX: {:?}", e);
+              todo!(); // TODO
+            }
+          }
+
+          None
+        }
       },
       ProcessorMessage::Sign(msg) => match msg {
         sign::ProcessorMessage::Preprocess { id, preprocess } => {
@@ -423,8 +494,8 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
       ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
         coordinator::ProcessorMessage::SubstrateBlockAck { network, block, plans } => {
           assert_eq!(
-            msg.network, network,
-            "processor claimed to be a different network than it was",
+            network, msg.network,
+            "processor claimed to be a different network than it was for SubstrateBlockAck",
           );
 
           // Safe to use its own txn since this is static and just needs to be written before we
@@ -600,7 +671,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, tributaries.clone()));
 
   // Handle all messages from processors
-  handle_processors(raw_db, key, processors, tributaries).await;
+  handle_processors(raw_db, key, serai, processors, tributaries).await;
 }
 
 #[tokio::main]

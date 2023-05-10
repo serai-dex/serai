@@ -4,7 +4,10 @@ use scale::{Encode, Decode, Compact};
 mod scale_value;
 pub(crate) use scale_value::{Value, Composite, scale_value, scale_composite};
 
-use sp_core::{Pair as PairTrait, sr25519::Pair};
+pub use sp_core::{
+  Pair as PairTrait,
+  sr25519::{Public, Pair},
+};
 
 pub use subxt;
 use subxt::{
@@ -294,6 +297,7 @@ impl Serai {
     TxClient::new(self.0.offline())
       .create_signed_with_nonce(payload, signer, nonce, params)
       .map(|tx| Encoded(tx.into_encoded()))
+      // TODO: Don't have this potentially return an error (requires modifying the Payload type)
       .map_err(|_| SeraiError::InvalidRuntime)
   }
 
