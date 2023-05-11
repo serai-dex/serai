@@ -6,19 +6,13 @@ use zeroize::Zeroizing;
 use transcript::{Transcript, RecommendedTranscript};
 
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{ff::Field, Group, GroupEncoding},
   Ciphersuite,
 };
 
 use crate::{Participant, DkgError, ThresholdParams, ThresholdCore, lagrange};
 
-/// A n-of-n non-interactive DKG which does not guarantee the usability of the resulting key.
-///
-/// Creating a key with duplicated public keys returns an error.
-pub fn musig<C: Ciphersuite>(
-  private_key: &Zeroizing<C::F>,
-  keys: &[C::G],
-) -> Result<ThresholdCore<C>, DkgError<()>> {
+fn check_keys<C: Ciphersuite>(keys: &[C::G]) -> Result<u16, DkgError<()>> {
   if keys.is_empty() {
     Err(DkgError::InvalidSigningSet)?;
   }
@@ -31,6 +25,45 @@ pub fn musig<C: Ciphersuite>(
   {
     Err(DkgError::InvalidSigningSet)?;
   }
+
+  Ok(keys_len)
+}
+
+fn binding_factor_transcript<C: Ciphersuite>(keys: &[C::G]) -> RecommendedTranscript {
+  let mut transcript = RecommendedTranscript::new(b"DKG MuSig v0.5");
+  transcript.domain_separate(b"musig_binding_factors");
+  for key in keys {
+    transcript.append_message(b"key", key.to_bytes());
+  }
+  transcript
+}
+
+fn binding_factor<C: Ciphersuite>(mut transcript: RecommendedTranscript, i: u16) -> C::F {
+  transcript.append_message(b"participant", i.to_le_bytes());
+  C::hash_to_F(b"DKG-MuSig-binding_factor", &transcript.challenge(b"binding_factor"))
+}
+
+/// The group key resulting from using this library's MuSig key gen.
+///
+/// Creating an aggregate key with a list containing duplicated public keys returns an error.
+pub fn musig_key<C: Ciphersuite>(keys: &[C::G]) -> Result<C::G, DkgError<()>> {
+  let keys_len = check_keys::<C>(keys)?;
+  let transcript = binding_factor_transcript::<C>(keys);
+  let mut res = C::G::identity();
+  for i in 1 ..= keys_len {
+    res += keys[usize::from(i - 1)] * binding_factor::<C>(transcript.clone(), i);
+  }
+  Ok(res)
+}
+
+/// A n-of-n non-interactive DKG which does not guarantee the usability of the resulting key.
+///
+/// Creating an aggregate key with a list containing duplicated public keys returns an error.
+pub fn musig<C: Ciphersuite>(
+  private_key: &Zeroizing<C::F>,
+  keys: &[C::G],
+) -> Result<ThresholdCore<C>, DkgError<()>> {
+  let keys_len = check_keys::<C>(keys)?;
 
   let our_pub_key = C::generator() * private_key.deref();
   let Some(pos) = keys.iter().position(|key| *key == our_pub_key) else {
@@ -47,18 +80,10 @@ pub fn musig<C: Ciphersuite>(
   )?;
 
   // Calculate the binding factor per-key
-  let mut transcript = RecommendedTranscript::new(b"DKG MuSig v0.5");
-  transcript.domain_separate(b"musig_binding_factors");
-  for key in keys {
-    transcript.append_message(b"key", key.to_bytes());
-  }
-
+  let transcript = binding_factor_transcript::<C>(keys);
   let mut binding = Vec::with_capacity(keys.len());
   for i in 1 ..= keys_len {
-    let mut transcript = transcript.clone();
-    transcript.append_message(b"participant", i.to_le_bytes());
-    binding
-      .push(C::hash_to_F(b"DKG-MuSig-binding_factor", &transcript.challenge(b"binding_factor")));
+    binding.push(binding_factor::<C>(transcript.clone(), i));
   }
 
   // Multiply our private key by our binding factor
@@ -67,26 +92,32 @@ pub fn musig<C: Ciphersuite>(
 
   // Calculate verification shares
   let mut verification_shares = HashMap::new();
-  // When this library generates shares for a specific signing set, it applies the lagrange
-  // coefficient
+  // When this library offers a ThresholdView for a specific signing set, it applies the lagrange
+  // factor
   // Since this is a n-of-n scheme, there's only one possible signing set, and one possible
   // lagrange factor
-  // Define the group key as the sum of all verification shares, post-lagrange
-  // While we could invert our lagrange factor and multiply it by our secret share, so the group
-  // key wasn't post-lagrange, the inversion is ~300 multiplications and we'd have to apply similar
-  // inversions + multiplications to all verification shares
-  // Accordingly, it'd never be more performant, though it would simplify group key calculation
+  // In the name of simplicity, we define the group key as the sum of all bound keys
+  // Accordingly, the secret share must be multiplied by the inverse of the lagrange factor, along
+  // with all verification shares
+  // This is less performant than simply defining the group key as the sum of all post-lagrange
+  // bound keys, yet the simplicity is preferred
   let included = (1 ..= keys_len)
     // This error also shouldn't be possible, for the same reasons as documented above
     .map(|l| Participant::new(l).ok_or(DkgError::InvalidSigningSet))
     .collect::<Result<Vec<_>, _>>()?;
   let mut group_key = C::G::identity();
   for (l, p) in included.iter().enumerate() {
-    let verification_share = keys[l] * binding[l];
-    group_key += verification_share * lagrange::<C::F>(*p, &included);
-    verification_shares.insert(*p, verification_share);
+    let bound = keys[l] * binding[l];
+    group_key += bound;
+
+    let lagrange_inv = lagrange::<C::F>(*p, &included).invert().unwrap();
+    if params.i() == *p {
+      *secret_share *= lagrange_inv;
+    }
+    verification_shares.insert(*p, bound * lagrange_inv);
   }
   debug_assert_eq!(C::generator() * secret_share.deref(), verification_shares[&params.i()]);
+  debug_assert_eq!(musig_key::<C>(keys).unwrap(), group_key);
 
   Ok(ThresholdCore { params, secret_share, group_key, verification_shares })
 }

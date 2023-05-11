@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{group::ff::Field, Ciphersuite};
 
-use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange, musig as musig_fn};
+use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange, musig::musig as musig_fn};
 
 mod musig;
 pub use musig::test_musig;

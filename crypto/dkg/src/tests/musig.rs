@@ -6,7 +6,8 @@ use rand_core::{RngCore, CryptoRng};
 use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use crate::{
-  ThresholdKeys, musig,
+  ThresholdKeys,
+  musig::{musig_key, musig},
   tests::{PARTICIPANTS, recover_key},
 };
 
@@ -29,7 +30,7 @@ pub fn test_musig<R: RngCore + CryptoRng, C: Ciphersuite>(rng: &mut R) {
   {
     let mut created_keys = HashMap::new();
     let mut verification_shares = HashMap::new();
-    let mut group_key = None;
+    let group_key = musig_key::<C>(&pub_keys).unwrap();
     for (i, key) in keys.iter().enumerate() {
       let these_keys = musig::<C>(key, &pub_keys).unwrap();
       assert_eq!(these_keys.params().t(), PARTICIPANTS);
@@ -39,10 +40,7 @@ pub fn test_musig<R: RngCore + CryptoRng, C: Ciphersuite>(rng: &mut R) {
       verification_shares
         .insert(these_keys.params().i(), C::generator() * **these_keys.secret_share());
 
-      if group_key.is_none() {
-        group_key = Some(these_keys.group_key());
-      }
-      assert_eq!(these_keys.group_key(), group_key.unwrap());
+      assert_eq!(these_keys.group_key(), group_key);
 
       created_keys.insert(these_keys.params().i(), ThresholdKeys::new(these_keys));
     }
@@ -51,7 +49,7 @@ pub fn test_musig<R: RngCore + CryptoRng, C: Ciphersuite>(rng: &mut R) {
       assert_eq!(keys.verification_shares(), verification_shares);
     }
 
-    assert_eq!(C::generator() * recover_key(&created_keys), group_key.unwrap());
+    assert_eq!(C::generator() * recover_key(&created_keys), group_key);
   }
 }
 
