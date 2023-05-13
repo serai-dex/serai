@@ -174,7 +174,7 @@ impl Contains<RuntimeCall> for CallFilter {
     }
 
     if let RuntimeCall::ValidatorSets(call) = call {
-      return matches!(call, validator_sets::Call::vote { .. });
+      return matches!(call, validator_sets::Call::set_keys { .. });
     }
 
     false

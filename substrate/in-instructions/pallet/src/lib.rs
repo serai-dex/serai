@@ -114,7 +114,7 @@ pub mod pallet {
       // Match to be exhaustive
       let batch = match call {
         Call::execute_batch { ref batch } => batch,
-        _ => Err(InvalidTransaction::Call)?,
+        Call::__Ignore(_, _) => unreachable!(),
       };
 
       let network = batch.batch.network;

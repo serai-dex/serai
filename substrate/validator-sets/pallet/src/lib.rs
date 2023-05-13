@@ -5,6 +5,9 @@
 pub mod pallet {
   use scale_info::TypeInfo;
 
+  use sp_core::sr25519::{Public, Signature};
+  use sp_application_crypto::RuntimePublic;
+
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
@@ -13,7 +16,7 @@ pub mod pallet {
   use primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = sp_core::sr25519::Public> + TypeInfo {
+  pub trait Config: frame_system::Config<AccountId = Public> + TypeInfo {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
   }
 
@@ -46,59 +49,57 @@ pub mod pallet {
   pub type ValidatorSets<T: Config> =
     StorageMap<_, Twox64Concat, ValidatorSet, ValidatorSetData, OptionQuery>;
 
+  /// The MuSig key for a validator set.
+  #[pallet::storage]
+  #[pallet::getter(fn musig_key)]
+  pub type MuSigKeys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, Public, OptionQuery>;
+
   /// The key pair for a given validator set instance.
   #[pallet::storage]
   #[pallet::getter(fn keys)]
   pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
 
-  /// If an account has voted for a specific key pair or not.
-  // This prevents a validator from voting multiple times.
-  #[pallet::storage]
-  #[pallet::getter(fn voted)]
-  pub type Voted<T: Config> =
-    StorageMap<_, Blake2_128Concat, (T::AccountId, KeyPair), (), OptionQuery>;
-
-  /// How many times a key pair has been voted for. Once consensus is reached, the keys will be
-  /// adopted.
-  #[pallet::storage]
-  #[pallet::getter(fn vote_count)]
-  pub type VoteCount<T: Config> =
-    StorageMap<_, Blake2_128Concat, (ValidatorSet, KeyPair), u16, ValueQuery>;
-
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
-    NewSet {
-      set: ValidatorSet,
-    },
-    Vote {
-      voter: T::AccountId,
-      set: ValidatorSet,
-      key_pair: KeyPair,
-      // Amount of votes the key now has
-      votes: u16,
-    },
-    KeyGen {
-      set: ValidatorSet,
-      key_pair: KeyPair,
-    },
+    NewSet { set: ValidatorSet },
+    KeyGen { set: ValidatorSet, key_pair: KeyPair },
   }
 
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
     fn build(&self) {
+      use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+
+      let hash_set = self.participants.iter().map(|key| key.0).collect::<hashbrown::HashSet<[u8; 32]>>();
+      if hash_set.len() != self.participants.len()
+      {
+        panic!("participants contained duplicates");
+      }
+
       let mut participants = Vec::new();
+      let mut keys = Vec::new();
       for participant in self.participants.clone() {
+        keys.push(
+          <Ristretto as Ciphersuite>::read_G::<&[u8]>(
+            &mut participant.0.as_ref(),
+          )
+          .expect("invalid participant"),
+        );
         participants.push((participant, self.bond));
       }
       let participants = BoundedVec::try_from(participants).unwrap();
 
       for (id, network) in self.networks.clone() {
         let set = ValidatorSet { session: Session(0), network: id };
+        // TODO: Should this be split up? Substrate will read this entire struct into mem on every
+        // read, not just accessed variables
         ValidatorSets::<T>::set(
           set,
           Some(ValidatorSetData { bond: self.bond, network, participants: participants.clone() }),
         );
+
+        MuSigKeys::<T>::set(set, Some(Public(dkg::musig::musig_key::<Ristretto>(&keys).unwrap().to_bytes())));
         Pallet::<T>::deposit_event(Event::NewSet { set })
       }
     }
@@ -108,60 +109,87 @@ pub mod pallet {
   pub enum Error<T> {
     /// Validator Set doesn't exist.
     NonExistentValidatorSet,
-    /// Non-validator is voting.
-    NotValidator,
     /// Validator Set already generated keys.
     AlreadyGeneratedKeys,
-    /// Vvalidator has already voted for these keys.
-    AlreadyVoted,
+    /// An invalid MuSig signature was provided.
+    BadSignature,
+  }
+
+  impl<T: Config> Pallet<T> {
+    fn verify_signature(
+      set: ValidatorSet,
+      key_pair: &KeyPair,
+      signature: &Signature,
+    ) -> Result<(), Error<T>> {
+      if Keys::<T>::get(set).is_some() {
+        Err(Error::AlreadyGeneratedKeys)?
+      }
+
+      let Some(musig_key) = MuSigKeys::<T>::get(set) else {
+        Err(Error::NonExistentValidatorSet)?
+      };
+      if !musig_key.verify(&key_pair.encode(), signature) {
+        Err(Error::BadSignature)?;
+      }
+
+      Ok(())
+    }
   }
 
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
     #[pallet::weight(0)] // TODO
-    pub fn vote(origin: OriginFor<T>, network: NetworkId, key_pair: KeyPair) -> DispatchResult {
-      let signer = ensure_signed(origin)?;
-      // TODO: Do we need to check the key is within the length bounds?
-      // The docs suggest the BoundedVec will create/write, yet not read, which could be an issue
-      // if it can be passed in
+    pub fn set_keys(
+      origin: OriginFor<T>,
+      network: NetworkId,
+      key_pair: KeyPair,
+      signature: Signature,
+    ) -> DispatchResult {
+      ensure_none(origin)?;
 
       // TODO: Get session
       let session: Session = Session(0);
 
       // Confirm a key hasn't been set for this set instance
       let set = ValidatorSet { session, network };
-      if Keys::<T>::get(set).is_some() {
-        Err(Error::<T>::AlreadyGeneratedKeys)?;
-      }
+      Self::verify_signature(set, &key_pair, &signature)?;
 
-      // Confirm the signer is a validator in the set
-      let data = ValidatorSets::<T>::get(set).ok_or(Error::<T>::NonExistentValidatorSet)?;
-      if !data.participants.iter().any(|participant| participant.0 == signer) {
-        Err(Error::<T>::NotValidator)?;
-      }
-
-      // Confirm this signer hasn't already voted for these keys
-      if Voted::<T>::get((&signer, &key_pair)).is_some() {
-        Err(Error::<T>::AlreadyVoted)?;
-      }
-      Voted::<T>::set((&signer, &key_pair), Some(()));
-
-      // Add their vote
-      let votes = VoteCount::<T>::mutate((set, &key_pair), |value| {
-        *value += 1;
-        *value
-      });
-
-      Self::deposit_event(Event::Vote { voter: signer, set, key_pair: key_pair.clone(), votes });
-
-      // If we've reached consensus, set the key
-      if usize::try_from(votes).unwrap() == data.participants.len() {
-        Keys::<T>::set(set, Some(key_pair.clone()));
-        Self::deposit_event(Event::KeyGen { set, key_pair });
-      }
+      Keys::<T>::set(set, Some(key_pair.clone()));
+      Self::deposit_event(Event::KeyGen { set, key_pair });
 
       Ok(())
+    }
+  }
+
+  #[pallet::validate_unsigned]
+  impl<T: Config> ValidateUnsigned for Pallet<T> {
+    type Call = Call<T>;
+
+    fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
+      // Match to be exhaustive
+      let (network, key_pair, signature) = match call {
+        Call::set_keys { network, ref key_pair, ref signature } => (network, key_pair, signature),
+        Call::__Ignore(_, _) => unreachable!(),
+      };
+
+      // TODO: Get the latest session
+      let session = Session(0);
+
+      let set = ValidatorSet { session, network: *network };
+      match Self::verify_signature(set, key_pair, signature) {
+        Err(Error::AlreadyGeneratedKeys) => Err(InvalidTransaction::Stale)?,
+        Err(Error::NonExistentValidatorSet) | Err(Error::BadSignature) => Err(InvalidTransaction::BadProof)?,
+        Err(Error::__Ignore(_, _)) => unreachable!(),
+        Ok(()) => (),
+      }
+
+      ValidTransaction::with_tag_prefix("validator-sets")
+        .and_provides(set)
+        // Set a 10 block longevity, though this should be included in the next block
+        .longevity(10)
+        .propagate(true)
+        .build()
     }
   }
 

@@ -13,6 +13,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+zeroize = "^1.5"
 thiserror = { version = "1", optional = true }
 
 scale = { package = "parity-scale-codec", version = "3" }
@@ -28,6 +29,17 @@ bitcoin = { version = "0.30", optional = true }
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.3", optional = true }
 monero-serai = { path = "../../coins/monero", version = "0.1.4-alpha", optional = true }
 
+[dev-dependencies]
+lazy_static = "1"
+
+rand_core = "0.6"
+
+ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
+schnorrkel = { path = "../../crypto/schnorrkel", package = "frost-schnorrkel" }
+
+tokio = "1"
+
 [features]
 serai = ["thiserror", "scale-info", "subxt"]
 
@@ -38,10 +50,3 @@ monero = ["coins", "ciphersuite/ed25519", "monero-serai"]
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node
 default = ["bitcoin", "monero"]
-
-[dev-dependencies]
-lazy_static = "1"
-
-rand_core = "0.6"
-
-tokio = "1"

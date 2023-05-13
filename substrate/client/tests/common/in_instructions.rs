@@ -9,9 +9,10 @@ use serai_client::{
     primitives::{Batch, SignedBatch},
     InInstructionsEvent,
   },
+  Serai,
 };
 
-use crate::common::{serai, tx::publish_tx, validator_sets::vote_in_keys};
+use crate::common::{serai, tx::publish_tx, validator_sets::set_validator_set_keys};
 
 #[allow(dead_code)]
 pub async fn provide_batch(batch: Batch) -> [u8; 32] {
@@ -24,15 +25,15 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
     keys
   } else {
     let keys = (pair.public(), vec![].try_into().unwrap());
-    vote_in_keys(set, keys.clone()).await;
+    set_validator_set_keys(set, keys.clone()).await;
     keys
   };
   assert_eq!(keys.0, pair.public());
 
-  let block = publish_tx(
-    &serai
-      .execute_batch(SignedBatch { batch: batch.clone(), signature: pair.sign(&batch.encode()) }),
-  )
+  let block = publish_tx(&Serai::execute_batch(SignedBatch {
+    batch: batch.clone(),
+    signature: pair.sign(&batch.encode()),
+  }))
   .await;
 
   let batches = serai.get_batch_events(block).await.unwrap();

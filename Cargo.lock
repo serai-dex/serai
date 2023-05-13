@@ -8754,7 +8754,9 @@ version = "0.1.0"
 dependencies = [
  "bitcoin",
  "ciphersuite",
+ "frost-schnorrkel",
  "lazy_static",
+ "modular-frost",
  "monero-serai",
  "parity-scale-codec",
  "rand_core 0.6.4",
@@ -8764,6 +8766,7 @@ dependencies = [
  "subxt",
  "thiserror",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -10995,11 +10998,15 @@ dependencies = [
 name = "validator-sets-pallet"
 version = "0.1.0"
 dependencies = [
+ "ciphersuite",
+ "dkg",
  "frame-support",
  "frame-system",
+ "hashbrown 0.13.2",
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
+ "sp-application-crypto",
  "sp-core",
  "validator-sets-primitives",
 ]

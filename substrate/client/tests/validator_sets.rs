@@ -2,6 +2,9 @@ use rand_core::{RngCore, OsRng};
 
 use sp_core::{sr25519::Public, Pair};
 
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use frost::dkg::musig::musig_key;
+
 use serai_client::{
   primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
   validator_sets::{
@@ -12,10 +15,10 @@ use serai_client::{
 };
 
 mod common;
-use common::{serai, validator_sets::vote_in_keys};
+use common::{serai, validator_sets::set_validator_set_keys};
 
 serai_test!(
-  async fn vote_keys() {
+  async fn set_validator_set_keys_test() {
     let network = NetworkId::Bitcoin;
     let set = ValidatorSet { session: Session(0), network };
 
@@ -51,14 +54,20 @@ serai_test!(
     assert_eq!(set_data.network, NETWORKS[&NetworkId::Bitcoin]);
     let participants_ref: &[_] = set_data.participants.as_ref();
     assert_eq!(participants_ref, [(public, set_data.bond)].as_ref());
-
-    let block = vote_in_keys(set, key_pair.clone()).await;
-
-    // While the vote_in_keys function should handle this, it's beneficial to independently test it
     assert_eq!(
-      serai.get_vote_events(block).await.unwrap(),
-      vec![ValidatorSetsEvent::Vote { voter: public, set, key_pair: key_pair.clone(), votes: 1 }]
+      serai.get_validator_set_musig_key(set).await.unwrap().unwrap(),
+      musig_key::<Ristretto>(&[<Ristretto as Ciphersuite>::read_G::<&[u8]>(
+        &mut public.0.as_ref()
+      )
+      .unwrap()])
+      .unwrap()
+      .to_bytes()
     );
+
+    let block = set_validator_set_keys(set, key_pair.clone()).await;
+
+    // While the set_validator_set_keys function should handle this, it's beneficial to
+    // independently test it
     assert_eq!(
       serai.get_key_gen_events(block).await.unwrap(),
       vec![ValidatorSetsEvent::KeyGen { set, key_pair: key_pair.clone() }]
