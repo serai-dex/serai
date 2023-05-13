@@ -9,11 +9,11 @@ pub use ciphersuite;
 
 pub use multiexp;
 
-// pub use dleq;
+pub use dleq;
 pub use schnorr_signatures;
 
-/*
 pub use dkg;
+/*
 pub use modular_frost;
 pub use frost_schnorrkel;
 */

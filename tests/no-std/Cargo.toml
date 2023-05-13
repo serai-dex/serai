@@ -23,11 +23,11 @@ ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, fea
 
 multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"] }
 
-# dleq = { path = "../../crypto/dleq" }
+dleq = { path = "../../crypto/dleq", default-features = false }
 schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 
 dkg = { path = "../../crypto/dkg", default-features = false }
-# modular-frost = { path = "../../crypto/frost" }
-# frost-schnorrkel = { path = "../../crypto/schnorrkel" }
+# modular-frost = { path = "../../crypto/frost", default-features = false }
+# frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 
 monero-generators = { path = "../../coins/monero/generators", default-features = false, features = ["alloc"] }
