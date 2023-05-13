@@ -26,7 +26,7 @@ multiexp = { path = "../../crypto/multiexp", default-features = false, features 
 # dleq = { path = "../../crypto/dleq" }
 schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 
-# dkg = { path = "../../crypto/dkg" }
+dkg = { path = "../../crypto/dkg", default-features = false }
 # modular-frost = { path = "../../crypto/frost" }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel" }
 

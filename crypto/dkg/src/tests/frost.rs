@@ -2,8 +2,10 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
+use ciphersuite::Ciphersuite;
+
 use crate::{
-  Ciphersuite, Participant, ThresholdParams, ThresholdCore,
+  Participant, ThresholdParams, ThresholdCore,
   frost::{KeyGenMachine, SecretShare, KeyMachine},
   encryption::{EncryptionKeyMessage, EncryptedMessage},
   tests::{THRESHOLD, PARTICIPANTS, clone_without},

@@ -2032,6 +2032,7 @@ dependencies = [
  "rand_core 0.6.4",
  "schnorr-signatures",
  "serde",
+ "std-shims",
  "thiserror",
  "zeroize",
 ]
@@ -8775,6 +8776,7 @@ version = "0.1.0"
 dependencies = [
  "ciphersuite",
  "dalek-ff-group",
+ "dkg",
  "flexible-transcript",
  "minimal-ed448",
  "monero-generators",

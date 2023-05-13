@@ -1,16 +1,24 @@
+#[cfg(feature = "std")]
 use core::ops::Deref;
-use std::collections::{HashSet, HashMap};
+use std_shims::collections::HashSet;
+#[cfg(feature = "std")]
+use std_shims::collections::HashMap;
 
+#[cfg(feature = "std")]
 use zeroize::Zeroizing;
 
 use transcript::{Transcript, RecommendedTranscript};
 
+#[cfg(feature = "std")]
+use ciphersuite::group::ff::Field;
 use ciphersuite::{
-  group::{ff::Field, Group, GroupEncoding},
+  group::{Group, GroupEncoding},
   Ciphersuite,
 };
 
-use crate::{Participant, DkgError, ThresholdParams, ThresholdCore, lagrange};
+use crate::DkgError;
+#[cfg(feature = "std")]
+use crate::{Participant, ThresholdParams, ThresholdCore, lagrange};
 
 fn check_keys<C: Ciphersuite>(keys: &[C::G]) -> Result<u16, DkgError<()>> {
   if keys.is_empty() {
@@ -59,6 +67,7 @@ pub fn musig_key<C: Ciphersuite>(keys: &[C::G]) -> Result<C::G, DkgError<()>> {
 /// A n-of-n non-interactive DKG which does not guarantee the usability of the resulting key.
 ///
 /// Creating an aggregate key with a list containing duplicated public keys returns an error.
+#[cfg(feature = "std")]
 pub fn musig<C: Ciphersuite>(
   private_key: &Zeroizing<C::F>,
   keys: &[C::G],
