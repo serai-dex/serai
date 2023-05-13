@@ -8780,6 +8780,7 @@ dependencies = [
  "ciphersuite",
  "dalek-ff-group",
  "dkg",
+ "dleq",
  "flexible-transcript",
  "minimal-ed448",
  "monero-generators",
@@ -10998,8 +10999,6 @@ dependencies = [
 name = "validator-sets-pallet"
 version = "0.1.0"
 dependencies = [
- "ciphersuite",
- "dkg",
  "frame-support",
  "frame-system",
  "hashbrown 0.13.2",
@@ -11015,11 +11014,14 @@ dependencies = [
 name = "validator-sets-primitives"
 version = "0.1.0"
 dependencies = [
+ "ciphersuite",
+ "dkg",
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
  "serde",
  "sp-core",
+ "sp-std 5.0.0",
  "zeroize",
 ]
 

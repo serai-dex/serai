@@ -20,7 +20,7 @@ use log::{info, debug, warn};
 
 use serai_client::{
   primitives::BlockHash,
-  in_instructions::primitives::{Batch, SignedBatch},
+  in_instructions::primitives::{Batch, SignedBatch, batch_message},
 };
 
 use messages::{sign::SignId, coordinator::*};
@@ -253,10 +253,11 @@ impl<D: Db> SubstrateSigner<D> {
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
-        let (machine, share) = match machine.sign(preprocesses, &self.signable[&id.id].encode()) {
-          Ok(res) => res,
-          Err(e) => todo!("malicious signer: {:?}", e),
-        };
+        let (machine, share) =
+          match machine.sign(preprocesses, &batch_message(&self.signable[&id.id])) {
+            Ok(res) => res,
+            Err(e) => todo!("malicious signer: {:?}", e),
+          };
         self.signing.insert(id.id, machine);
 
         // Broadcast our share

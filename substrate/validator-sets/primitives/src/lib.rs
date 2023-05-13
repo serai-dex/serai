@@ -3,13 +3,17 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
-
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
-use sp_core::{ConstU32, sr25519, bounded::BoundedVec};
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+
+use scale::{Encode, Decode, MaxEncodedLen};
+use scale_info::TypeInfo;
+
+use sp_core::{ConstU32, sr25519::Public, bounded::BoundedVec};
+#[cfg(not(feature = "std"))]
+use sp_std::vec::Vec;
 
 use serai_primitives::{NetworkId, Network, Amount};
 
@@ -37,13 +41,38 @@ pub struct ValidatorSetData {
 
   // Participant and their amount bonded to this set
   // Limit each set to 100 participants for now
-  pub participants: BoundedVec<(sr25519::Public, Amount), ConstU32<100>>,
+  pub participants: BoundedVec<(Public, Amount), ConstU32<100>>,
 }
 
 type MaxKeyLen = ConstU32<MAX_KEY_LEN>;
 /// The type representing a Key from an external network.
 pub type ExternalKey = BoundedVec<u8, MaxKeyLen>;
 
-/// A Validator Set's Ristretto key, used for signing InInstructions, and their key on the external
-/// network.
-pub type KeyPair = (sr25519::Public, ExternalKey);
+/// The key pair for a validator set.
+///
+/// This is their Ristretto key, used for signing Batches, and their key on the external network.
+pub type KeyPair = (Public, ExternalKey);
+
+/// The MuSig context for a validator set.
+pub fn musig_context(set: ValidatorSet) -> Vec<u8> {
+  [b"ValidatorSets-musig_key".as_ref(), &set.encode()].concat()
+}
+
+/// The MuSig public key for a validator set.
+///
+/// This function panics on invalid input.
+pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
+  let mut keys = Vec::new();
+  for key in set_keys {
+    keys.push(
+      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut key.0.as_ref())
+        .expect("invalid participant"),
+    );
+  }
+  Public(dkg::musig::musig_key::<Ristretto>(&musig_context(set), &keys).unwrap().to_bytes())
+}
+
+/// The message for the set_keys signature.
+pub fn set_keys_message(set: &ValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
+  [b"ValidatorSets-key_pair".as_ref(), &(set, key_pair).encode()].concat()
+}

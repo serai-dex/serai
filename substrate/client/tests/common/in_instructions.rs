@@ -1,12 +1,10 @@
-use scale::Encode;
-
 use sp_core::Pair;
 
 use serai_client::{
   primitives::insecure_pair_from_name,
   validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::{
-    primitives::{Batch, SignedBatch},
+    primitives::{Batch, SignedBatch, batch_message},
     InInstructionsEvent,
   },
   Serai,
@@ -32,7 +30,7 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
 
   let block = publish_tx(&Serai::execute_batch(SignedBatch {
     batch: batch.clone(),
-    signature: pair.sign(&batch.encode()),
+    signature: pair.sign(&batch_message(&batch)),
   }))
   .await;
 

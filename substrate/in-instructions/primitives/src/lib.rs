@@ -79,3 +79,8 @@ impl Zeroize for SignedBatch {
     self.signature.as_mut().zeroize();
   }
 }
+
+/// The message for the batch signature.
+pub fn batch_message(batch: &Batch) -> Vec<u8> {
+  [b"InInstructions-batch".as_ref(), &batch.encode()].concat()
+}

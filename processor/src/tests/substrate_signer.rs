@@ -9,7 +9,6 @@ use frost::{
   dkg::tests::{key_gen, clone_without},
 };
 
-use scale::Encode;
 use sp_application_crypto::{RuntimePublic, sr25519::Public};
 
 use serai_db::{DbTxn, Db, MemDb};
@@ -143,7 +142,7 @@ async fn test_substrate_signer() {
     {
       assert_eq!(signed_batch.batch, batch);
       assert!(Public::from_raw(actual_id.key.clone().try_into().unwrap())
-        .verify(&batch.encode(), &signed_batch.signature));
+        .verify(&batch_message(&batch), &signed_batch.signature));
     } else {
       panic!("didn't get signed batch back");
     }

@@ -69,23 +69,14 @@ pub mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
     fn build(&self) {
-      use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-
-      let hash_set = self.participants.iter().map(|key| key.0).collect::<hashbrown::HashSet<[u8; 32]>>();
-      if hash_set.len() != self.participants.len()
-      {
+      let hash_set =
+        self.participants.iter().map(|key| key.0).collect::<hashbrown::HashSet<[u8; 32]>>();
+      if hash_set.len() != self.participants.len() {
         panic!("participants contained duplicates");
       }
 
       let mut participants = Vec::new();
-      let mut keys = Vec::new();
       for participant in self.participants.clone() {
-        keys.push(
-          <Ristretto as Ciphersuite>::read_G::<&[u8]>(
-            &mut participant.0.as_ref(),
-          )
-          .expect("invalid participant"),
-        );
         participants.push((participant, self.bond));
       }
       let participants = BoundedVec::try_from(participants).unwrap();
@@ -99,7 +90,7 @@ pub mod pallet {
           Some(ValidatorSetData { bond: self.bond, network, participants: participants.clone() }),
         );
 
-        MuSigKeys::<T>::set(set, Some(Public(dkg::musig::musig_key::<Ristretto>(&keys).unwrap().to_bytes())));
+        MuSigKeys::<T>::set(set, Some(musig_key(set, &self.participants)));
         Pallet::<T>::deposit_event(Event::NewSet { set })
       }
     }
@@ -128,7 +119,7 @@ pub mod pallet {
       let Some(musig_key) = MuSigKeys::<T>::get(set) else {
         Err(Error::NonExistentValidatorSet)?
       };
-      if !musig_key.verify(&key_pair.encode(), signature) {
+      if !musig_key.verify(&set_keys_message(&set, key_pair), signature) {
         Err(Error::BadSignature)?;
       }
 
@@ -179,7 +170,9 @@ pub mod pallet {
       let set = ValidatorSet { session, network: *network };
       match Self::verify_signature(set, key_pair, signature) {
         Err(Error::AlreadyGeneratedKeys) => Err(InvalidTransaction::Stale)?,
-        Err(Error::NonExistentValidatorSet) | Err(Error::BadSignature) => Err(InvalidTransaction::BadProof)?,
+        Err(Error::NonExistentValidatorSet) | Err(Error::BadSignature) => {
+          Err(InvalidTransaction::BadProof)?
+        }
         Err(Error::__Ignore(_, _)) => unreachable!(),
         Ok(()) => (),
       }

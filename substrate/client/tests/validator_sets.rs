@@ -2,13 +2,10 @@ use rand_core::{RngCore, OsRng};
 
 use sp_core::{sr25519::Public, Pair};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use frost::dkg::musig::musig_key;
-
 use serai_client::{
   primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
   validator_sets::{
-    primitives::{Session, ValidatorSet},
+    primitives::{Session, ValidatorSet, musig_key},
     ValidatorSetsEvent,
   },
   Serai,
@@ -56,12 +53,7 @@ serai_test!(
     assert_eq!(participants_ref, [(public, set_data.bond)].as_ref());
     assert_eq!(
       serai.get_validator_set_musig_key(set).await.unwrap().unwrap(),
-      musig_key::<Ristretto>(&[<Ristretto as Ciphersuite>::read_G::<&[u8]>(
-        &mut public.0.as_ref()
-      )
-      .unwrap()])
-      .unwrap()
-      .to_bytes()
+      musig_key(set, &[public]).0
     );
 
     let block = set_validator_set_keys(set, key_pair.clone()).await;

@@ -9,7 +9,7 @@ use sp_runtime::RuntimeDebug;
 use serai_primitives::{BlockHash, NetworkId};
 
 pub use in_instructions_primitives as primitives;
-use primitives::{InInstruction, InInstructionWithBalance, SignedBatch};
+use primitives::*;
 
 #[derive(Clone, Copy, Encode, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(scale::Decode, thiserror::Error))]
@@ -141,7 +141,7 @@ pub mod pallet {
         }
       };
 
-      if !key.verify(&batch.batch.encode(), &batch.signature) {
+      if !key.verify(&batch_message(&batch.batch), &batch.signature) {
         Err(InvalidTransaction::BadProof)?;
       }
 

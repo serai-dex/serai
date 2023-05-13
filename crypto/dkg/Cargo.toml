@@ -37,7 +37,20 @@ rand_core = { version = "0.6", default-features = false, features = ["getrandom"
 ciphersuite = { path = "../ciphersuite", version = "0.3", default-features = false, features = ["ristretto"] }
 
 [features]
-std = ["thiserror", "rand_core/std", "std-shims/std", "ciphersuite/std", "multiexp/[batch, std]", "schnorr/std", "dleq/serialize"]
+std = [
+  "thiserror",
+  "rand_core/std",
+
+  "std-shims/std",
+
+  "ciphersuite/std",
+
+  "multiexp/batch",
+  "multiexp/std",
+
+  "schnorr/std",
+  "dleq/serialize"
+]
 serde = ["dep:serde"]
 tests = ["rand_core/getrandom"]
 default = ["std"]
