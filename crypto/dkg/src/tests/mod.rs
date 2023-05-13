@@ -81,7 +81,7 @@ pub fn musig_key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
 
   let mut res = HashMap::new();
   for key in keys {
-    let these_keys = musig_fn::<C>(&key, &pub_keys).unwrap();
+    let these_keys = musig_fn::<C>(b"Test MuSig Key Gen", &key, &pub_keys).unwrap();
     res.insert(these_keys.params().i(), ThresholdKeys::new(these_keys));
   }
 

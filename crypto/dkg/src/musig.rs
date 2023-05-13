@@ -37,9 +37,13 @@ fn check_keys<C: Ciphersuite>(keys: &[C::G]) -> Result<u16, DkgError<()>> {
   Ok(keys_len)
 }
 
-fn binding_factor_transcript<C: Ciphersuite>(keys: &[C::G]) -> RecommendedTranscript {
+fn binding_factor_transcript<C: Ciphersuite>(
+  context: &[u8],
+  keys: &[C::G],
+) -> RecommendedTranscript {
   let mut transcript = RecommendedTranscript::new(b"DKG MuSig v0.5");
-  transcript.domain_separate(b"musig_binding_factors");
+  transcript.append_message(b"context", context);
+  transcript.domain_separate(b"keys");
   for key in keys {
     transcript.append_message(b"key", key.to_bytes());
   }
@@ -47,6 +51,7 @@ fn binding_factor_transcript<C: Ciphersuite>(keys: &[C::G]) -> RecommendedTransc
 }
 
 fn binding_factor<C: Ciphersuite>(mut transcript: RecommendedTranscript, i: u16) -> C::F {
+  transcript.domain_separate(b"participant");
   transcript.append_message(b"participant", i.to_le_bytes());
   C::hash_to_F(b"DKG-MuSig-binding_factor", &transcript.challenge(b"binding_factor"))
 }
@@ -54,9 +59,9 @@ fn binding_factor<C: Ciphersuite>(mut transcript: RecommendedTranscript, i: u16)
 /// The group key resulting from using this library's MuSig key gen.
 ///
 /// Creating an aggregate key with a list containing duplicated public keys returns an error.
-pub fn musig_key<C: Ciphersuite>(keys: &[C::G]) -> Result<C::G, DkgError<()>> {
+pub fn musig_key<C: Ciphersuite>(context: &[u8], keys: &[C::G]) -> Result<C::G, DkgError<()>> {
   let keys_len = check_keys::<C>(keys)?;
-  let transcript = binding_factor_transcript::<C>(keys);
+  let transcript = binding_factor_transcript::<C>(context, keys);
   let mut res = C::G::identity();
   for i in 1 ..= keys_len {
     res += keys[usize::from(i - 1)] * binding_factor::<C>(transcript.clone(), i);
@@ -69,6 +74,7 @@ pub fn musig_key<C: Ciphersuite>(keys: &[C::G]) -> Result<C::G, DkgError<()>> {
 /// Creating an aggregate key with a list containing duplicated public keys returns an error.
 #[cfg(feature = "std")]
 pub fn musig<C: Ciphersuite>(
+  context: &[u8],
   private_key: &Zeroizing<C::F>,
   keys: &[C::G],
 ) -> Result<ThresholdCore<C>, DkgError<()>> {
@@ -89,7 +95,7 @@ pub fn musig<C: Ciphersuite>(
   )?;
 
   // Calculate the binding factor per-key
-  let transcript = binding_factor_transcript::<C>(keys);
+  let transcript = binding_factor_transcript::<C>(context, keys);
   let mut binding = Vec::with_capacity(keys.len());
   for i in 1 ..= keys_len {
     binding.push(binding_factor::<C>(transcript.clone(), i));
@@ -126,7 +132,7 @@ pub fn musig<C: Ciphersuite>(
     verification_shares.insert(*p, bound * lagrange_inv);
   }
   debug_assert_eq!(C::generator() * secret_share.deref(), verification_shares[&params.i()]);
-  debug_assert_eq!(musig_key::<C>(keys).unwrap(), group_key);
+  debug_assert_eq!(musig_key::<C>(context, keys).unwrap(), group_key);
 
   Ok(ThresholdCore { params, secret_share, group_key, verification_shares })
 }

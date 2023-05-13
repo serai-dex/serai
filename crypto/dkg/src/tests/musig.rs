@@ -21,18 +21,20 @@ pub fn test_musig<R: RngCore + CryptoRng, C: Ciphersuite>(rng: &mut R) {
     keys.push(key);
   }
 
+  const CONTEXT: &[u8] = b"MuSig Test";
+
   // Empty signing set
-  assert!(musig::<C>(&Zeroizing::new(C::F::ZERO), &[]).is_err());
+  assert!(musig::<C>(CONTEXT, &Zeroizing::new(C::F::ZERO), &[]).is_err());
   // Signing set we're not part of
-  assert!(musig::<C>(&Zeroizing::new(C::F::ZERO), &[C::generator()]).is_err());
+  assert!(musig::<C>(CONTEXT, &Zeroizing::new(C::F::ZERO), &[C::generator()]).is_err());
 
   // Test with n keys
   {
     let mut created_keys = HashMap::new();
     let mut verification_shares = HashMap::new();
-    let group_key = musig_key::<C>(&pub_keys).unwrap();
+    let group_key = musig_key::<C>(CONTEXT, &pub_keys).unwrap();
     for (i, key) in keys.iter().enumerate() {
-      let these_keys = musig::<C>(key, &pub_keys).unwrap();
+      let these_keys = musig::<C>(CONTEXT, key, &pub_keys).unwrap();
       assert_eq!(these_keys.params().t(), PARTICIPANTS);
       assert_eq!(these_keys.params().n(), PARTICIPANTS);
       assert_eq!(usize::from(these_keys.params().i().0), i + 1);
