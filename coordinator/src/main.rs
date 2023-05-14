@@ -12,22 +12,11 @@ use std::{
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use blake2::Digest;
-
-use ciphersuite::{
-  group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
-  },
-  Ciphersuite, Ristretto,
-};
+use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use serai_db::{DbTxn, Db, MemDb};
 
-use serai_client::{
-  subxt::{config::extrinsic_params::BaseExtrinsicParamsBuilder, tx::Signer},
-  Public, PairSigner, Serai,
-};
+use serai_client::{Public, Signature, Serai};
 
 use tokio::{
   sync::{
@@ -385,19 +374,6 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 ) {
   let pub_key = Ristretto::generator() * key.deref();
 
-  // TODO: This is cursed. serai_client has to handle this for us
-  let substrate_signer = {
-    let mut bytes = Zeroizing::new([0; 96]);
-    // Private key
-    bytes[.. 32].copy_from_slice(&key.to_repr());
-    // Nonce
-    let nonce = Zeroizing::new(blake2::Blake2s256::digest(&bytes));
-    bytes[32 .. 64].copy_from_slice(nonce.as_ref());
-    // Public key
-    bytes[64 ..].copy_from_slice(&pub_key.to_bytes());
-    PairSigner::new(schnorrkel::keys::Keypair::from_bytes(bytes.as_ref()).unwrap().into())
-  };
-
   loop {
     let msg = processors.recv().await;
 
@@ -429,31 +405,18 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           );
           // TODO: Also check the other KeyGenId fields
 
-          // TODO: Publish an unsigned TX with a Musig signature here, instead of on-chain voting
-          // That removes the need for this nonce
-          let Ok(nonce) = serai.get_nonce(&substrate_signer.address()).await else {
-            log::error!("couldn't get nonce from Serai node");
-            todo!()
-          };
+          // TODO: Sign a MuSig signature here
 
-          let tx = serai
-            .sign(
-              &substrate_signer,
-              &Serai::vote(
-                msg.network,
-                (
-                  Public(substrate_key),
-                  coin_key
-                    .try_into()
-                    .expect("external key from processor exceeded max external key length"),
-                ),
-              ),
-              nonce,
-              BaseExtrinsicParamsBuilder::new(),
-            )
-            .expect(
-              "tried to sign an invalid payload despite creating the payload via serai_client",
-            );
+          let tx = Serai::set_validator_set_keys(
+            id.set.network,
+            (
+              Public(substrate_key),
+              coin_key
+                .try_into()
+                .expect("external key from processor exceeded max external key length"),
+            ),
+            Signature([0; 64]), // TODO
+          );
 
           match serai.publish(&tx).await {
             Ok(hash) => {
@@ -547,7 +510,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           // TODO: Check this key's key pair's substrate key is authorized to publish batches
           // TODO: Check the batch ID is an atomic increment
 
-          match serai.publish(&serai.execute_batch(batch.clone())).await {
+          match serai.publish(&Serai::execute_batch(batch.clone())).await {
             Ok(hash) => {
               log::info!(
                 "executed batch {:?} {} (block {}) in TX {}",

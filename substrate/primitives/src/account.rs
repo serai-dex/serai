@@ -7,7 +7,8 @@ use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
-use sp_core::sr25519::{Public, Signature as RistrettoSignature};
+use sp_core::sr25519::Public;
+pub use sp_core::sr25519::Signature;
 #[cfg(feature = "std")]
 use sp_core::{Pair as PairTrait, sr25519::Pair};
 
@@ -75,8 +76,6 @@ impl StaticLookup for AccountLookup {
     source.into()
   }
 }
-
-pub type Signature = RistrettoSignature;
 
 pub const fn pallet_address(pallet: &'static [u8]) -> SeraiAddress {
   let mut address = [0; 32];
