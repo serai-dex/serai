@@ -11,7 +11,7 @@ use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{
-  ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
+  ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender, SlashEvent,
   TendermintMachine, TendermintHandle,
 };
 
@@ -34,8 +34,13 @@ impl Signer for TestSigner {
     sig[2 .. (2 + 30.min(msg.len()))].copy_from_slice(&msg[.. 30.min(msg.len())]);
     sig
   }
+
+  async fn empty_signature(&self) -> Self::Signature {
+    [0; 32]
+  }
 }
 
+#[derive(Clone)]
 struct TestSignatureScheme;
 impl SignatureScheme for TestSignatureScheme {
   type ValidatorId = TestValidatorId;
@@ -83,7 +88,7 @@ impl Weights for TestWeights {
   }
 }
 
-#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 struct TestBlock {
   id: TestBlockId,
   valid: Result<(), BlockError>,
@@ -131,7 +136,7 @@ impl Network for TestNetwork {
     }
   }
 
-  async fn slash(&mut self, _: TestValidatorId) {
+  async fn slash(&mut self, _: TestValidatorId, _: SlashEvent<Self>) {
     dbg!("Slash");
     todo!()
   }

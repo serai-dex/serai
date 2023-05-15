@@ -30,8 +30,8 @@ use tokio::{
 };
 
 use ::tributary::{
-  ReadWrite, ProvidedError, TransactionKind, Transaction as TransactionTrait, Block, Tributary,
-  TributaryReader,
+  TributaryReader, ReadWrite, ProvidedError, Block, Tributary,
+  transaction::{TransactionKind, Transaction as TransactionTrait},
 };
 
 mod tributary;

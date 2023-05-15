@@ -4,13 +4,15 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use serai_db::{DbTxn, Db};
 
+use tendermint::ext::Network;
+
 use crate::{
-  ReadWrite, Signed, TransactionKind, Transaction, ProvidedError, ProvidedTransactions, BlockError,
-  Block, Mempool,
+  ReadWrite, ProvidedError, ProvidedTransactions, BlockError, Block, Mempool, Transaction,
+  transaction::{Signed, TransactionKind, Transaction as TransactionTrait},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Blockchain<D: Db, T: Transaction> {
+pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   db: Option<D>,
   genesis: [u8; 32],
 
@@ -22,7 +24,7 @@ pub(crate) struct Blockchain<D: Db, T: Transaction> {
   mempool: Mempool<D, T>,
 }
 
-impl<D: Db, T: Transaction> Blockchain<D, T> {
+impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   fn tip_key(&self) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"tip", self.genesis)
   }
@@ -110,8 +112,8 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
   }
 
-  pub(crate) fn add_transaction(&mut self, internal: bool, tx: T) -> bool {
-    self.mempool.add(&self.next_nonces, internal, tx)
+  pub(crate) fn add_transaction<N: Network>(&mut self, internal: bool, tx: Transaction<T>, schema: N::SignatureScheme) -> bool {
+    self.mempool.add::<N>(&self.next_nonces, internal, tx, schema)
   }
 
   pub(crate) fn provide_transaction(&mut self, tx: T) -> Result<(), ProvidedError> {
@@ -123,29 +125,30 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
     Some(self.next_nonces.get(&key).cloned()?.max(self.mempool.next_nonce(&key).unwrap_or(0)))
   }
 
-  pub(crate) fn build_block(&mut self) -> Block<T> {
+  pub(crate) fn build_block<N: Network>(&mut self, schema: N::SignatureScheme) -> Block<T> {
     let block = Block::new(
       self.tip,
       self.provided.transactions.values().flatten().cloned().collect(),
       self.mempool.block(&self.next_nonces),
     );
     // build_block should not return invalid blocks
-    self.verify_block(&block).unwrap();
+    self.verify_block::<N>(&block, schema).unwrap();
     block
   }
 
-  pub(crate) fn verify_block(&self, block: &Block<T>) -> Result<(), BlockError> {
-    block.verify(
+  pub(crate) fn verify_block<N: Network>(&self, block: &Block<T>, schema: N::SignatureScheme) -> Result<(), BlockError> {
+    block.verify::<N>(
       self.genesis,
       self.tip,
       self.provided.transactions.clone(),
       self.next_nonces.clone(),
+      schema
     )
   }
 
   /// Add a block.
-  pub(crate) fn add_block(&mut self, block: &Block<T>, commit: Vec<u8>) -> Result<(), BlockError> {
-    self.verify_block(block)?;
+  pub(crate) fn add_block<N: Network>(&mut self, block: &Block<T>, commit: Vec<u8>, schema: N::SignatureScheme) -> Result<(), BlockError> {
+    self.verify_block::<N>(block, schema)?;
 
     log::info!(
       "adding block {} to tributary {} with {} TXs",

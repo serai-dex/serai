@@ -10,3 +10,5 @@ mod block;
 mod blockchain;
 #[cfg(test)]
 mod mempool;
+#[cfg(test)]
+mod p2p;

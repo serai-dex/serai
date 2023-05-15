@@ -6,7 +6,9 @@ use tokio::time::sleep;
 
 use serai_db::MemDb;
 
-use tributary::{Transaction as TransactionTrait, Tributary};
+use tributary::{
+  transaction::Transaction as TransactionTrait, Transaction as TributaryTransaction, Tributary,
+};
 
 use crate::{
   tributary::Transaction,
@@ -49,6 +51,6 @@ async fn tx_test() {
   // All tributaries should have acknowledged this transaction in a block
   for (_, tributary) in tributaries {
     let block = tributary.reader().block(&included_in).unwrap();
-    assert_eq!(block.transactions, vec![tx.clone()]);
+    assert_eq!(block.transactions, vec![TributaryTransaction::Application(tx.clone())]);
   }
 }

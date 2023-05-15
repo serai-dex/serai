@@ -12,7 +12,10 @@ use ciphersuite::{
 };
 use schnorr::SchnorrSignature;
 
-use crate::{ReadWrite, Signed, TransactionError, TransactionKind, Transaction, verify_transaction};
+use crate::{
+  transaction::{Signed, TransactionError, TransactionKind, Transaction, verify_transaction},
+  ReadWrite
+};
 
 #[cfg(test)]
 mod signed;

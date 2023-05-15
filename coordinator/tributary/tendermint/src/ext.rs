@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use parity_scale_codec::{Encode, Decode};
 
-use crate::{SignedMessageFor, commit_msg};
+use crate::{SignedMessageFor, SlashEvent, commit_msg};
 
 /// An alias for a series of traits required for a type to be usable as a validator ID,
 /// automatically implemented for all types satisfying those traits.
@@ -21,8 +21,8 @@ impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + Encode + De
 
 /// An alias for a series of traits required for a type to be usable as a signature,
 /// automatically implemented for all types satisfying those traits.
-pub trait Signature: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {}
-impl<S: Send + Sync + Clone + PartialEq + Debug + Encode + Decode> Signature for S {}
+pub trait Signature: Send + Sync + Clone + PartialEq + Eq + Debug + Encode + Decode {}
+impl<S: Send + Sync + Clone + PartialEq + Eq + Debug + Encode + Decode> Signature for S {}
 
 // Type aliases which are distinct according to the type system
 
@@ -45,6 +45,8 @@ pub trait Signer: Send + Sync {
   async fn validator_id(&self) -> Option<Self::ValidatorId>;
   /// Sign a signature with the current validator's private key.
   async fn sign(&self, msg: &[u8]) -> Self::Signature;
+  /// Return an empty signature.
+  async fn empty_signature(&self) -> Self::Signature;
 }
 
 #[async_trait]
@@ -59,10 +61,14 @@ impl<S: Signer> Signer for Arc<S> {
   async fn sign(&self, msg: &[u8]) -> Self::Signature {
     self.as_ref().sign(msg).await
   }
+  
+  async fn empty_signature(&self) -> Self::Signature {
+    self.as_ref().empty_signature().await
+  }
 }
 
 /// A signature scheme used by validators.
-pub trait SignatureScheme: Send + Sync {
+pub trait SignatureScheme: Send + Sync + Clone {
   // Type used to identify validators.
   type ValidatorId: ValidatorId;
   /// Signature type.
@@ -153,7 +159,7 @@ pub trait Weights: Send + Sync {
     ((self.total_weight() * 2) / 3) + 1
   }
   /// Threshold preventing BFT consensus.
-  fn fault_thresold(&self) -> u64 {
+  fn fault_threshold(&self) -> u64 {
     (self.total_weight() - self.threshold()) + 1
   }
 
@@ -190,9 +196,9 @@ pub enum BlockError {
 }
 
 /// Trait representing a Block.
-pub trait Block: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {
+pub trait Block: Send + Sync + Clone + PartialEq + Eq + Debug + Encode + Decode {
   // Type used to identify blocks. Presumably a cryptographic hash of the block.
-  type Id: Send + Sync + Copy + Clone + PartialEq + AsRef<[u8]> + Debug + Encode + Decode;
+  type Id: Send + Sync + Copy + Clone + PartialEq + Eq + AsRef<[u8]> + Debug + Encode + Decode;
 
   /// Return the deterministic, unique ID for this block.
   fn id(&self) -> Self::Id;
@@ -200,7 +206,7 @@ pub trait Block: Send + Sync + Clone + PartialEq + Debug + Encode + Decode {
 
 /// Trait representing the distributed system Tendermint is providing consensus over.
 #[async_trait]
-pub trait Network: Send + Sync {
+pub trait Network: Sized + Send + Sync {
   // Type used to identify validators.
   type ValidatorId: ValidatorId;
   /// Signature scheme used by validators.
@@ -265,7 +271,7 @@ pub trait Network: Send + Sync {
   ///
   /// The exact process of triggering a slash is undefined and left to the network as a whole.
   // TODO: We need to provide some evidence for this.
-  async fn slash(&mut self, validator: Self::ValidatorId);
+  async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent<Self>);
 
   /// Validate a block.
   async fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;

@@ -1,14 +1,22 @@
-use std::{io, collections::HashMap};
+use std::{io, collections::HashMap, sync::Arc, fmt::Debug};
 
-use blake2::{Digest, Blake2s256};
-
+use blake2::{Blake2s256, Digest};
 use ciphersuite::{
   group::{ff::Field, Group},
   Ciphersuite, Ristretto,
 };
 use schnorr::SchnorrSignature;
 
-use crate::{ReadWrite, TransactionError, Signed, TransactionKind, Transaction, BlockError, Block};
+use serai_db::MemDb;
+
+use crate::{
+  ReadWrite, BlockError, Block, Transaction,
+  tests::p2p::LocalP2p,
+  transaction::{TransactionError, Signed, TransactionKind, Transaction as TransactionTrait},
+  tendermint::{TendermintNetwork, Validators}
+};
+
+type N = TendermintNetwork<MemDb, NonceTransaction, LocalP2p>;
 
 // A transaction solely defined by its nonce and a distinguisher (to allow creating distinct TXs
 // sharing a nonce).
@@ -50,7 +58,7 @@ impl ReadWrite for NonceTransaction {
   }
 }
 
-impl Transaction for NonceTransaction {
+impl TransactionTrait for NonceTransaction {
   fn kind(&self) -> TransactionKind<'_> {
     TransactionKind::Signed(&self.2)
   }
@@ -68,9 +76,11 @@ impl Transaction for NonceTransaction {
 fn empty_block() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
+  let validators = Arc::new(Validators::new(GENESIS, vec![]).unwrap());
   Block::<NonceTransaction>::new(LAST, vec![], vec![])
-    .verify(GENESIS, LAST, HashMap::new(), HashMap::new())
-    .unwrap();
+    .verify::<N>(
+      GENESIS, LAST, HashMap::new(), HashMap::new(), validators
+    ).unwrap();
 }
 
 #[test]
@@ -78,19 +88,22 @@ fn duplicate_nonces() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
 
+  let validators = Arc::new(Validators::new(GENESIS, vec![]).unwrap());
+
   // Run once without duplicating a nonce, and once with, so that's confirmed to be the faulty
   // component
   for i in [1, 0] {
     let mut mempool = vec![];
-    let mut insert = |tx: NonceTransaction| mempool.push(tx);
+    let mut insert = |tx: NonceTransaction| mempool.push(Transaction::Application(tx));
     insert(NonceTransaction::new(0, 0));
     insert(NonceTransaction::new(i, 1));
 
-    let res = Block::new(LAST, vec![], mempool).verify(
+    let res = Block::new(LAST, vec![], mempool).verify::<N>(
       GENESIS,
       LAST,
       HashMap::new(),
       HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]),
+      validators.clone()
     );
     if i == 1 {
       res.unwrap();

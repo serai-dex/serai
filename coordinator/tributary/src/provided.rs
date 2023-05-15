@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use serai_db::{Get, DbTxn, Db};
 
-use crate::{TransactionKind, TransactionError, Transaction, verify_transaction};
+use crate::transaction::{TransactionKind, TransactionError, Transaction, verify_transaction};
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum ProvidedError {

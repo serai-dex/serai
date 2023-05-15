@@ -3,6 +3,7 @@ use std::{
   collections::{VecDeque, HashMap},
 };
 
+use tendermint::ext::Network;
 use thiserror::Error;
 
 use blake2::{Digest, Blake2s256};
@@ -35,8 +36,9 @@ pub enum BlockError {
 }
 
 use crate::{
-  BLOCK_SIZE_LIMIT, ReadWrite, TransactionError, Signed, TransactionKind, Transaction, merkle,
-  verify_transaction,
+  transaction::{TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction},
+  BLOCK_SIZE_LIMIT, ReadWrite, merkle, Transaction,
+  tendermint::tx::verify_tendermint_tx
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -66,12 +68,12 @@ impl BlockHeader {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Block<T: Transaction> {
+pub struct Block<T: TransactionTrait> {
   pub header: BlockHeader,
-  pub transactions: Vec<T>,
+  pub transactions: Vec<Transaction<T>>,
 }
 
-impl<T: Transaction> ReadWrite for Block<T> {
+impl<T: TransactionTrait> ReadWrite for Block<T> {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     let header = BlockHeader::read(reader)?;
 
@@ -81,7 +83,7 @@ impl<T: Transaction> ReadWrite for Block<T> {
 
     let mut transactions = Vec::with_capacity(usize::try_from(txs).unwrap());
     for _ in 0 .. txs {
-      transactions.push(T::read(reader)?);
+      transactions.push(Transaction::read(reader)?);
     }
 
     Ok(Block { header, transactions })
@@ -97,12 +99,16 @@ impl<T: Transaction> ReadWrite for Block<T> {
   }
 }
 
-impl<T: Transaction> Block<T> {
+impl<T: TransactionTrait> Block<T> {
   /// Create a new block.
   ///
   /// mempool is expected to only have valid, non-conflicting transactions.
-  pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<T>) -> Self {
-    let mut txs = provided;
+  pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<Transaction<T>>) -> Self {
+    let mut txs = vec![];
+    for tx in provided {
+      txs.push(Transaction::Application(tx))
+    }
+
     for tx in mempool {
       assert!(
         !matches!(tx.kind(), TransactionKind::Provided(_)),
@@ -112,7 +118,7 @@ impl<T: Transaction> Block<T> {
     }
 
     // Check TXs are sorted by nonce.
-    let nonce = |tx: &T| {
+    let nonce = |tx: &Transaction<T>| {
       if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
         *nonce
       } else {
@@ -146,12 +152,13 @@ impl<T: Transaction> Block<T> {
     self.header.hash()
   }
 
-  pub(crate) fn verify(
+  pub(crate) fn verify<N: Network>(
     &self,
     genesis: [u8; 32],
     last_block: [u8; 32],
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    schema: N::SignatureScheme
   ) -> Result<(), BlockError> {
     if self.serialize().len() > BLOCK_SIZE_LIMIT {
       Err(BlockError::TooLargeBlock)?;
@@ -175,6 +182,8 @@ impl<T: Transaction> Block<T> {
         else {
           Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
         };
+        // Since this was a provided TX, it must be an application TX
+        let Transaction::Application(tx) = tx else { Err(BlockError::NonLocalProvided(txs.pop().unwrap()))? };
         if tx != &local {
           Err(BlockError::DistinctProvided)?;
         }
@@ -185,9 +194,21 @@ impl<T: Transaction> Block<T> {
       }
 
       found_non_provided = true;
-      match verify_transaction(tx, genesis, &mut next_nonces) {
-        Ok(()) => {}
-        Err(e) => Err(BlockError::TransactionError(e))?,
+      // TODO: should we modify the verify_transaction to take `Transaction<T>` or
+      // use this pattern of verifying tendermint Txs and app txs differently?
+      match tx {
+        Transaction::Tendermint(tx) => {
+          match verify_tendermint_tx::<N>(tx, genesis, schema.clone()) {
+            Ok(()) => {}
+            Err(e) => Err(BlockError::TransactionError(e))?,
+          }
+        },
+        Transaction::Application(tx) => {
+          match verify_transaction(tx, genesis, &mut next_nonces) {
+            Ok(()) => {}
+            Err(e) => Err(BlockError::TransactionError(e))?,
+          }
+        }
       }
     }
 

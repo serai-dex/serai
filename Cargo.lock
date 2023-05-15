@@ -9694,6 +9694,7 @@ dependencies = [
  "hex",
  "log",
  "parity-scale-codec",
+ "sha3",
  "thiserror",
  "tokio",
 ]
