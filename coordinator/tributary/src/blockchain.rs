@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, vec};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn, Db, Get};
 
 use tendermint::ext::Network;
 
@@ -19,6 +19,7 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   block_number: u32,
   tip: [u8; 32],
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+  unsigned_included: Vec<[u8; 32]>,
 
   provided: ProvidedTransactions<D, T>,
   mempool: Mempool<D, T>,
@@ -39,6 +40,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
   fn block_after_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block_after", [genesis, hash].concat())
+  }
+  fn unsigned_included_key(genesis: &[u8]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"unsigned_included", genesis)
   }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
     D::key(
@@ -65,17 +69,33 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       block_number: 0,
       tip: genesis,
       next_nonces,
+      unsigned_included: vec![],
 
       provided: ProvidedTransactions::new(db.clone(), genesis),
       mempool: Mempool::new(db, genesis),
     };
 
-    if let Some((block_number, tip)) = {
+    if let Some((block_number, tip, unsigned_included)) = {
       let db = res.db.as_ref().unwrap();
-      db.get(res.block_number_key()).map(|number| (number, db.get(res.tip_key()).unwrap()))
+      db.get(res.block_number_key()).map(|number| {
+
+        // get unsigned included txs in the chain
+        let current_included = db.get(Self::unsigned_included_key(&genesis)).unwrap_or(vec![]);
+        let mut unsigned_included = vec![];
+        let mut hash = [0; 32];
+        let mut i = 0;
+        while i < current_included.len() {
+          hash.copy_from_slice(&current_included[i .. (i + 32)]);
+          unsigned_included.push(hash);
+          i += 32;
+        }
+
+        (number, db.get(res.tip_key()).unwrap(), unsigned_included)
+      })
     } {
       res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
       res.tip.copy_from_slice(&tip);
+      res.unsigned_included = unsigned_included;
     }
 
     for participant in participants {
@@ -113,7 +133,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn add_transaction<N: Network>(&mut self, internal: bool, tx: Transaction<T>, schema: N::SignatureScheme) -> bool {
-    self.mempool.add::<N>(&self.next_nonces, internal, tx, schema)
+    self.mempool.add::<N>(&self.next_nonces, &self.unsigned_included, internal, tx, schema)
   }
 
   pub(crate) fn provide_transaction(&mut self, tx: T) -> Result<(), ProvidedError> {
@@ -180,7 +200,21 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
         TransactionKind::Provided(order) => {
           self.provided.complete(&mut txn, order, tx.hash());
         }
-        TransactionKind::Unsigned => {}
+        TransactionKind::Unsigned => {
+          let hash = tx.hash();
+          let key = Self::unsigned_included_key(&self.genesis);
+
+          // add to the included unsigned 
+          let mut existing = txn.get(&key).unwrap_or(vec![]);
+          existing.extend(hash);
+          txn.put(key, existing);
+
+          // add to memory
+          self.unsigned_included.push(hash);
+
+          // remove from the mempool
+          self.mempool.remove(&hash);
+        }
         TransactionKind::Signed(Signed { signer, nonce, .. }) => {
           let next_nonce = nonce + 1;
           let prev = self

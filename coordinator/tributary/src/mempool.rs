@@ -30,6 +30,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     D::key(b"tributary_mempool", b"current", self.genesis)
   }
 
+  /// save given tx to the mempool db
   fn save_tx(&mut self, tx: Transaction<T>) {
     let tx_hash = tx.hash();
     let transaction_key = self.transaction_key(&tx_hash);
@@ -43,6 +44,18 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     txn.commit();
 
     self.txs.insert(tx_hash, tx);
+  }
+
+  fn unsigned_already_exist(&self, unsigned_included: &[[u8; 32]], hash: [u8; 32]) -> bool {
+    // check we have the tx in the pool/chain
+    let res = unsigned_included.iter().find(|&&tx_hash| {
+      tx_hash == hash
+    });
+    if res.is_some() || self.txs.contains_key(&hash){
+      return true;
+    }
+
+    false
   }
 
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
@@ -59,7 +72,6 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
       debug_assert_eq!(tx.hash(), hash);
       match tx {
         Transaction::Tendermint(tx) => {
-          // TODO: verify that we have only one evidence tx?
           res.txs.insert(hash, Transaction::Tendermint(tx));
         },
         Transaction::Application(tx) => {
@@ -86,24 +98,32 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn add<N: Network>(
     &mut self,
     blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    unsigned_included: &[[u8; 32]],
     internal: bool,
     tx: Transaction<T>,
     schema: N::SignatureScheme
   ) -> bool {
-    match tx {
-      Transaction::Tendermint(tx) => {
-        // verify the tx
-        if verify_tendermint_tx::<N>(&tx, self.genesis, schema).is_err() {
+    match &tx {
+      Transaction::Tendermint(tendermint_tx) => {
+        assert_eq!(TransactionKind::Unsigned, tendermint_tx.kind());
+
+        // check we have the tx in the pool/chain
+        if self.unsigned_already_exist(unsigned_included, tx.hash()) {
+          // TODO: should this return true? function comment says return false
+          // if not a new tx.
           return false;
         }
 
-        // save the tx.
-        self.save_tx(Transaction::Tendermint(tx));
+        // verify the tx
+        if verify_tendermint_tx::<N>(tendermint_tx, self.genesis, schema).is_err() {
+          return false;
+        }
 
+        self.save_tx(tx);
         true
       },
-      Transaction::Application(tx) => {
-        match tx.kind() {
+      Transaction::Application(app_tx) => {
+        match app_tx.kind() {
           TransactionKind::Signed(Signed { signer, nonce, .. }) => {
             // Get the nonce from the blockchain
             let Some(blockchain_next_nonce) = blockchain_next_nonces.get(signer).cloned() else {
@@ -128,16 +148,16 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
               return false;
             }
 
-            if verify_transaction(&tx, self.genesis, &mut self.next_nonces).is_err() {
+            if verify_transaction(app_tx, self.genesis, &mut self.next_nonces).is_err() {
               return false;
             }
             assert_eq!(self.next_nonces[signer], nonce + 1);
 
-            // save the tx.
-            self.save_tx(Transaction::Application(tx));
+            // save tx to the pool
+            self.save_tx(tx);
 
             true
-          }
+          },
           _ => false,
         }
       }

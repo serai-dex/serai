@@ -35,20 +35,21 @@ fn mempool_addition() {
 
   // Add TX 0
   let mut blockchain_next_nonces = HashMap::from([(signer, 0)]);
-  assert!(mempool.add::<N>(&blockchain_next_nonces, true, Transaction::Application(first_tx.clone()), validators.clone()));
+  let unsigned_included: Vec<[u8; 32]> = vec![];
+  assert!(mempool.add::<N>(&blockchain_next_nonces, &unsigned_included, true, Transaction::Application(first_tx.clone()), validators.clone()));
   assert_eq!(mempool.next_nonce(&signer), Some(1));
 
   // Test reloading works
   assert_eq!(mempool, Mempool::new(db, genesis));
 
   // Adding it again should fail
-  assert!(!mempool.add::<N>(&blockchain_next_nonces, true, Transaction::Application(first_tx.clone()), validators.clone()));
+  assert!(!mempool.add::<N>(&blockchain_next_nonces, &unsigned_included, true, Transaction::Application(first_tx.clone()), validators.clone()));
 
   // Do the same with the next nonce
   let second_tx = signed_transaction(&mut OsRng, genesis, &key, 1);
-  assert!(mempool.add::<N>(&blockchain_next_nonces, true, Transaction::Application(second_tx.clone()), validators.clone()));
+  assert!(mempool.add::<N>(&blockchain_next_nonces, &unsigned_included, true, Transaction::Application(second_tx.clone()), validators.clone()));
   assert_eq!(mempool.next_nonce(&signer), Some(2));
-  assert!(!mempool.add::<N>(&blockchain_next_nonces, true, Transaction::Application(second_tx.clone()), validators.clone()));
+  assert!(!mempool.add::<N>(&blockchain_next_nonces, &unsigned_included, true, Transaction::Application(second_tx.clone()), validators.clone()));
 
   // If the mempool doesn't have a nonce for an account, it should successfully use the
   // blockchain's
@@ -57,7 +58,7 @@ fn mempool_addition() {
   let second_signer = tx.1.signer;
   assert_eq!(mempool.next_nonce(&second_signer), None);
   blockchain_next_nonces.insert(second_signer, 2);
-  assert!(mempool.add::<N>(&blockchain_next_nonces, true, Transaction::Application(tx.clone()), validators.clone()));
+  assert!(mempool.add::<N>(&blockchain_next_nonces, &unsigned_included, true, Transaction::Application(tx.clone()), validators.clone()));
   assert_eq!(mempool.next_nonce(&second_signer), Some(3));
 
   // Getting a block should work
@@ -81,11 +82,13 @@ fn too_many_mempool() {
   let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
   let signer = signed_transaction(&mut OsRng, genesis, &key, 0).1.signer;
+  let unsigned_included: Vec<[u8; 32]> = vec![];
 
   // We should be able to add transactions up to the limit
   for i in 0 .. ACCOUNT_MEMPOOL_LIMIT {
     assert!(mempool.add::<N>(
       &HashMap::from([(signer, 0)]),
+      &unsigned_included,
       false,
       Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
       validators.clone()
@@ -94,6 +97,7 @@ fn too_many_mempool() {
   // Yet adding more should fail
   assert!(!mempool.add::<N>(
     &HashMap::from([(signer, 0)]),
+    &unsigned_included,
     false,
     Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, ACCOUNT_MEMPOOL_LIMIT)),
     validators.clone()
