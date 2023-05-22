@@ -20,7 +20,7 @@ use tokio::time::sleep;
 
 use serai_db::MemDb;
 
-use tributary::{Transaction as TransactionTrait, Tributary};
+use tributary::Tributary;
 
 use crate::{
   P2pMessageKind, P2p,

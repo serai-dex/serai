@@ -58,6 +58,7 @@ impl Default for VoteSignature {
   }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TendermintTx {
   SlashEvidence(Vec<u8>),

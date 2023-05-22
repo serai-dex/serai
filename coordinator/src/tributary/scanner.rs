@@ -462,13 +462,50 @@ async fn handle_block<
               }
             }
 
-            Transaction::ExternalBlock(block) => {
-              // Because this external block has been finalized, its batch ID should be authorized
-              TributaryDb::<D>::recognize_id(&mut txn, Zone::Batch.label(), genesis, block);
+            let bytes = shares
+              .remove(
+                &spec
+                  .i(Ristretto::generator() * key.deref())
+                  .expect("in a tributary we're not a validator for"),
+              )
+              .unwrap();
+
+            if let Some(shares) =
+              handle(Zone::Dkg, b"dkg_shares", spec.n(), [0; 32], attempt, bytes, signed)
+            {
+              processors
+                .send(
+                  spec.set().network,
+                  CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
+                    id: KeyGenId { set: spec.set(), attempt },
+                    shares,
+                  }),
+                )
+                .await;
+            }
+          }
+
+          Transaction::ExternalBlock(block) => {
+            // Because this external block has been finalized, its batch ID should be authorized
+            TributaryDb::<D>::recognize_id(&mut txn, Zone::Batch.label(), genesis, block);
+            recognized_id
+              .send((genesis, RecognizedIdType::Block, block))
+              .expect("recognized_id_recv was dropped. are we shutting down?");
+          }
+
+          Transaction::SubstrateBlock(block) => {
+            let plan_ids = TributaryDb::<D>::plan_ids(&txn, genesis, block).expect(
+              "synced a tributary block finalizing a substrate block in a provided transaction \
+              despite us not providing that transaction",
+            );
+
+            for id in plan_ids {
+              TributaryDb::<D>::recognize_id(&mut txn, Zone::Sign.label(), genesis, id);
               recognized_id
-                .send((genesis, RecognizedIdType::Block, block))
+                .send((genesis, RecognizedIdType::Plan, id))
                 .expect("recognized_id_recv was dropped. are we shutting down?");
             }
+          }
 
             Transaction::SubstrateBlock(block) => {
               let plan_ids = TributaryDb::<D>::plan_ids(&txn, genesis, block).expect(
@@ -551,10 +588,10 @@ async fn handle_block<
                     CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
                       id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
                       preprocesses,
-                    }),
-                  )
-                  .await;
-              }
+                    },
+                  ),
+                )
+                .await;
             }
             Transaction::SignShare(data) => {
               if let Some(shares) = handle(

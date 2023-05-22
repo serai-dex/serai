@@ -60,6 +60,7 @@ pub(crate) const BLOCK_MESSAGE: u8 = 1;
 pub(crate) const TRANSACTION_MESSAGE: u8 = 2;
 
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Transaction<T: TransactionTrait> {
   Tendermint(TendermintTx),
