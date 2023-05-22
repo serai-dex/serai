@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use ciphersuite::{Ciphersuite, Ristretto};
 
 use serai_db::{DbTxn, Db};
-use tendermint::ext::Network;
+
+use tendermint::ext::{Network, Commit};
 
 use crate::{
   Transaction,
@@ -101,7 +102,8 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     unsigned_included: &[[u8; 32]],
     internal: bool,
     tx: Transaction<T>,
-    schema: N::SignatureScheme
+    schema: N::SignatureScheme,
+    commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>
   ) -> bool {
     match &tx {
       Transaction::Tendermint(tendermint_tx) => {
@@ -115,7 +117,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         }
 
         // verify the tx
-        if verify_tendermint_tx::<N>(tendermint_tx, self.genesis, schema).is_err() {
+        if verify_tendermint_tx::<N>(tendermint_tx, self.genesis, schema, commit).is_err() {
           return false;
         }
 

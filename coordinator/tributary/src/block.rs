@@ -3,7 +3,7 @@ use std::{
   collections::{VecDeque, HashMap},
 };
 
-use tendermint::ext::Network;
+use tendermint::ext::{Network, Commit};
 use thiserror::Error;
 
 use blake2::{Digest, Blake2s256};
@@ -158,7 +158,8 @@ impl<T: TransactionTrait> Block<T> {
     last_block: [u8; 32],
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
-    schema: N::SignatureScheme
+    schema: N::SignatureScheme,
+    commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>
   ) -> Result<(), BlockError> {
     if self.serialize().len() > BLOCK_SIZE_LIMIT {
       Err(BlockError::TooLargeBlock)?;
@@ -198,7 +199,7 @@ impl<T: TransactionTrait> Block<T> {
       // use this pattern of verifying tendermint Txs and app txs differently?
       match tx {
         Transaction::Tendermint(tx) => {
-          match verify_tendermint_tx::<N>(tx, genesis, schema.clone()) {
+          match verify_tendermint_tx::<N>(tx, genesis, schema.clone(), &commit) {
             Ok(()) => {}
             Err(e) => Err(BlockError::TransactionError(e))?,
           }

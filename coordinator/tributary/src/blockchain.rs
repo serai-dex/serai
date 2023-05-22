@@ -4,7 +4,9 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use serai_db::{DbTxn, Db, Get};
 
-use tendermint::ext::Network;
+use scale::Decode;
+
+use tendermint::ext::{Network, Commit};
 
 use crate::{
   ReadWrite, ProvidedError, ProvidedTransactions, BlockError, Block, Mempool, Transaction,
@@ -34,6 +36,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
   fn block_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block", [genesis, hash].concat())
+  }
+  fn block_hash_key(genesis: &[u8], block_number: u32) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"block_hash", [genesis, &block_number.to_le_bytes()].concat())
   }
   fn commit_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"commit", [genesis, hash].concat())
@@ -124,8 +129,22 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::commit_key(&genesis, block))
   }
 
+  pub(crate) fn block_hash_from_db(db: &D, genesis: [u8; 32], block: u32) -> Option<Vec<u8>> {
+    db.get(Self::block_hash_key(&genesis, block))
+  }
+
   pub(crate) fn commit(&self, block: &[u8; 32]) -> Option<Vec<u8>> {
     Self::commit_from_db(self.db.as_ref().unwrap(), self.genesis, block)
+  }
+
+  pub(crate) fn block_hash(&self, block: u32) -> Option<Vec<u8>> {
+    Self::block_hash_from_db(self.db.as_ref().unwrap(), self.genesis, block)
+  }
+
+  pub(crate) fn commit_by_block_number(&self, block: u32) -> Option<Vec<u8>> {
+    let hash = self.block_hash(block);
+    hash.as_ref()?;
+    self.commit(hash.unwrap().as_slice().try_into().unwrap())
   }
 
   pub(crate) fn block_after(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<[u8; 32]> {
@@ -133,7 +152,19 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn add_transaction<N: Network>(&mut self, internal: bool, tx: Transaction<T>, schema: N::SignatureScheme) -> bool {
-    self.mempool.add::<N>(&self.next_nonces, &self.unsigned_included, internal, tx, schema)
+
+    let db = self.db.as_ref().unwrap();
+    let genesis = self.genesis;
+    let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
+      let hash = Self::block_hash_from_db(db, genesis, block);
+      hash.as_ref()?;
+      // we must have a commit per valid hash
+      let commit = Self::commit_from_db(db, genesis, hash.unwrap().as_slice().try_into().unwrap()).unwrap();
+
+      // commit has to be valid if it is coming from our db
+      Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
+    };
+    self.mempool.add::<N>(&self.next_nonces, &self.unsigned_included, internal, tx, schema, &commit)
   }
 
   pub(crate) fn provide_transaction(&mut self, tx: T) -> Result<(), ProvidedError> {
@@ -157,12 +188,19 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn verify_block<N: Network>(&self, block: &Block<T>, schema: N::SignatureScheme) -> Result<(), BlockError> {
+    let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
+      let commit = self.commit_by_block_number(block);
+      commit.as_ref()?;
+      // commit has to be valid if it is coming from our db
+      Some(Commit::<N::SignatureScheme>::decode(&mut commit.unwrap().as_ref()).unwrap())
+    };
     block.verify::<N>(
       self.genesis,
       self.tip,
       self.provided.transactions.clone(),
       self.next_nonces.clone(),
-      schema
+      schema,
+      &commit
     )
   }
 
@@ -186,9 +224,11 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
     self.tip = block.hash();
     txn.put(self.tip_key(), self.tip);
-
+    
     self.block_number += 1;
     txn.put(self.block_number_key(), self.block_number.to_le_bytes());
+
+    txn.put(Self::block_hash_key(&self.genesis, self.block_number), self.tip);
 
     txn.put(Self::block_key(&self.genesis, &self.tip), block.serialize());
     txn.put(Self::commit_key(&self.genesis, &self.tip), commit);

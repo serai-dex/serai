@@ -13,16 +13,16 @@ use crate::{
   ext::{RoundNumber, Network},
 };
 
-pub(crate) struct RoundData<N: Network> {
+pub struct RoundData<N: Network> {
   _network: PhantomData<N>,
-  pub(crate) number: RoundNumber,
-  pub(crate) start_time: CanonicalInstant,
-  pub(crate) step: Step,
-  pub(crate) timeouts: HashMap<Step, Instant>,
+  pub number: RoundNumber,
+  pub start_time: CanonicalInstant,
+  pub step: Step,
+  pub timeouts: HashMap<Step, Instant>,
 }
 
 impl<N: Network> RoundData<N> {
-  pub(crate) fn new(number: RoundNumber, start_time: CanonicalInstant) -> Self {
+  pub fn new(number: RoundNumber, start_time: CanonicalInstant) -> Self {
     RoundData {
       _network: PhantomData,
       number,
@@ -46,7 +46,7 @@ impl<N: Network> RoundData<N> {
     self.start_time + offset
   }
 
-  pub(crate) fn end_time(&self) -> CanonicalInstant {
+  pub fn end_time(&self) -> CanonicalInstant {
     self.timeout(Step::Precommit)
   }
 

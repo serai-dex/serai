@@ -2,7 +2,7 @@ use core::ops::Add;
 use std::time::{UNIX_EPOCH, SystemTime, Instant, Duration};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct CanonicalInstant {
+pub struct CanonicalInstant {
   /// Time since the epoch.
   time: u64,
   /// An Instant synchronized with the above time.
@@ -14,7 +14,7 @@ pub(crate) fn sys_time(time: u64) -> SystemTime {
 }
 
 impl CanonicalInstant {
-  pub(crate) fn new(time: u64) -> CanonicalInstant {
+  pub fn new(time: u64) -> CanonicalInstant {
     // This is imprecise yet should be precise enough, as it'll resolve within a few ms
     let instant_now = Instant::now();
     let sys_now = SystemTime::now();
@@ -27,11 +27,11 @@ impl CanonicalInstant {
     CanonicalInstant { time, instant: synced_instant }
   }
 
-  pub(crate) fn canonical(&self) -> u64 {
+  pub fn canonical(&self) -> u64 {
     self.time
   }
 
-  pub(crate) fn instant(&self) -> Instant {
+  pub fn instant(&self) -> Instant {
     self.instant
   }
 }

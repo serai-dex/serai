@@ -17,10 +17,10 @@ use futures::{
 };
 use tokio::time::sleep;
 
-mod time;
+pub mod time;
 use time::{sys_time, CanonicalInstant};
 
-mod round;
+pub mod round;
 
 mod block;
 use block::BlockData;
@@ -31,19 +31,19 @@ pub(crate) mod message_log;
 pub mod ext;
 use ext::*;
 
-pub(crate) fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
+pub fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
   [&end_time.to_le_bytes(), id].concat().to_vec()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
-enum Step {
+pub enum Step {
   Propose,
   Prevote,
   Precommit,
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq)]
-enum Data<B: Block, S: Signature> {
+pub enum Data<B: Block, S: Signature> {
   Proposal(Option<RoundNumber>, B),
   Prevote(Option<B::Id>),
   Precommit(Option<(B::Id, S)>),
@@ -64,7 +64,7 @@ impl<B: Block, S: Signature> PartialEq for Data<B, S> {
 }
 
 impl<B: Block, S: Signature> Data<B, S> {
-  fn step(&self) -> Step {
+  pub fn step(&self) -> Step {
     match self {
       Data::Proposal(..) => Step::Propose,
       Data::Prevote(..) => Step::Prevote,
@@ -74,20 +74,19 @@ impl<B: Block, S: Signature> Data<B, S> {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-struct Message<V: ValidatorId, B: Block, S: Signature> {
-  sender: V,
+pub struct Message<V: ValidatorId, B: Block, S: Signature> {
+  pub sender: V,
+  pub block: BlockNumber,
+  pub round: RoundNumber,
 
-  block: BlockNumber,
-  round: RoundNumber,
-
-  data: Data<B, S>,
+  pub data: Data<B, S>,
 }
 
 /// A signed Tendermint consensus message to be broadcast to the other validators.
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
-  msg: Message<V, B, S>,
-  sig: S,
+  pub msg: Message<V, B, S>,
+  pub sig: S,
 }
 
 impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {

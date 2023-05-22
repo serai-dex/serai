@@ -8,6 +8,7 @@ use ciphersuite::{
 use schnorr::SchnorrSignature;
 
 use serai_db::MemDb;
+use tendermint::ext::Commit;
 
 use crate::{
   ReadWrite, BlockError, Block, Transaction,
@@ -77,9 +78,12 @@ fn empty_block() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
   let validators = Arc::new(Validators::new(GENESIS, vec![]).unwrap());
+  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+    Some(Commit::<Arc<Validators>> {end_time: 0, validators: vec![], signature: vec![] })
+  };
   Block::<NonceTransaction>::new(LAST, vec![], vec![])
     .verify::<N>(
-      GENESIS, LAST, HashMap::new(), HashMap::new(), validators
+      GENESIS, LAST, HashMap::new(), HashMap::new(), validators, commit
     ).unwrap();
 }
 
@@ -98,12 +102,17 @@ fn duplicate_nonces() {
     insert(NonceTransaction::new(0, 0));
     insert(NonceTransaction::new(i, 1));
 
+    let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+      Some(Commit::<Arc<Validators>> {end_time: 0, validators: vec![], signature: vec![] })
+    };
+
     let res = Block::new(LAST, vec![], mempool).verify::<N>(
       GENESIS,
       LAST,
       HashMap::new(),
       HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]),
-      validators.clone()
+      validators.clone(),
+      commit
     );
     if i == 1 {
       res.unwrap();
