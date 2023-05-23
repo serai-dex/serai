@@ -33,6 +33,8 @@ use tributary::{
 mod db;
 pub use db::*;
 
+mod handle;
+
 pub mod scanner;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
