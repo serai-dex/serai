@@ -31,6 +31,25 @@ impl<D: Db> TributaryDb<D> {
     self.0.get(Self::block_key(genesis)).map(|last| last.try_into().unwrap()).unwrap_or(genesis)
   }
 
+  fn fatal_slash_key(genesis: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"fatal_slash", genesis)
+  }
+
+  pub fn slash_point_key(genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"slash_point", [genesis, id].concat())
+  }
+
+  pub fn slash_vote_key(genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"slash_vote", [genesis, id].concat())
+  }
+
+  pub fn set_fatally_slashed(txn: &mut D::Transaction<'_>, genesis: [u8; 32], id: [u8; 32]) {
+    let key = Self::fatal_slash_key(genesis);
+    let mut existing = txn.get(&key).unwrap_or(vec![]);
+    existing.extend(id);
+    txn.put(key, existing);
+  }
+
   fn plan_ids_key(genesis: &[u8], block: u64) -> Vec<u8> {
     Self::tributary_key(b"plan_ids", [genesis, block.to_le_bytes().as_ref()].concat())
   }

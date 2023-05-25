@@ -227,7 +227,7 @@ impl Weights for Validators {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub(crate) struct TendermintBlock(pub Vec<u8>);
+pub struct TendermintBlock(pub Vec<u8>);
 impl BlockTrait for TendermintBlock {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
@@ -236,7 +236,7 @@ impl BlockTrait for TendermintBlock {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
+pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
   pub(crate) genesis: [u8; 32],
 
   pub(crate) signer: Arc<Signer>,

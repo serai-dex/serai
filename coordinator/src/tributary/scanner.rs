@@ -21,7 +21,13 @@ use serai_client::{
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use tributary::{Transaction as TributaryTransaction, Block, TributaryReader};
+use tributary::{
+  Transaction as TributaryTransaction, Block, TributaryReader,
+  tendermint::{
+    tx::{TendermintTx, decode_evidence},
+    TendermintNetwork,
+  },
+};
 
 use serai_db::{Get, DbTxn};
 
@@ -30,6 +36,7 @@ use crate::{
   tributary::handle::handle_application_tx,
   processors::Processors,
   tributary::{TributaryDb, TributarySpec, Transaction},
+  P2p,
 };
 
 const DKG_CONFIRMATION_NONCES: &[u8] = b"dkg_confirmation_nonces";
@@ -227,6 +234,7 @@ async fn handle_block<
   Pro: Processors,
   F: Future<Output = ()>,
   PST: Fn(ValidatorSet, Encoded) -> F,
+  P: P2p,
 >(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -252,8 +260,32 @@ async fn handle_block<
     let mut txn = db.0.txn();
 
     match tx {
-      TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(_)) => todo!(),
-      TributaryTransaction::Tendermint(TendermintTx::SlashVote(_, _)) => todo!(),
+      TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
+        // since the evidence is on the chain, it already
+        // should be valid. So we can just punish the signer.
+        let msgs = decode_evidence::<TendermintNetwork<D, Transaction, P>>(&ev).unwrap();
+
+        // mark the node as fatally slashed
+        let id = msgs[0].msg.sender;
+        TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, id);
+
+        // TODO: disconnect the node from network
+      },
+      TributaryTransaction::Tendermint(TendermintTx::SlashVote(_, _)) => {
+        // TODO: make sure same signer doesn't vote twice
+
+        // increment the counter for this vote
+        let vote_key = TributaryDb::<D>::slash_vote_key(genesis, id);
+        let mut count =
+          txn.get(&vote_key).map_or(0, |c| u32::from_le_bytes(c.try_into().unwrap()));
+        count += 1;
+        txn.put(vote_key, count.to_le_bytes());
+
+        // TODO: check whether 2/3 of all validators voted.
+        // and increment the slash points if yes.
+        // if a node has a certain number more than the median slash points,
+        // the node should be removed.
+      }
       TributaryTransaction::Application(tx) => {
         handle_application_tx::<D, Pro>(
           tx,
@@ -282,6 +314,7 @@ pub async fn handle_new_blocks<
   Pro: Processors,
   F: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> F,
+  P: P2p,
 >(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -295,7 +328,7 @@ pub async fn handle_new_blocks<
   let mut last_block = db.last_block(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
-    handle_block(db, key, recognized_id, processors, publish_serai_tx.clone(), spec, block).await;
+    handle_block<_, _, _, _, P>(db, key, recognized_id, processors, publish_serai_tx.clone(), spec, block).await;
     last_block = next;
     db.set_last_block(genesis, next);
   }

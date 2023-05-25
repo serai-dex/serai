@@ -168,7 +168,7 @@ impl TendermintTx {
 }
 
 
-fn decode_evidence<N: Network>(ev: &[u8]) -> Result<Vec<SignedMessageFor<N>>, TransactionError> {
+pub fn decode_evidence<N: Network>(ev: &[u8]) -> Result<Vec<SignedMessageFor<N>>, TransactionError> {
   let mut res = vec![];
   let msg_size = size_of::<SignedMessageFor<N>>();
   

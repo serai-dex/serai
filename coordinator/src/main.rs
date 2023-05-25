@@ -185,7 +185,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
     }
 
     for (spec, reader) in &tributary_readers {
-      tributary::scanner::handle_new_blocks(
+      tributary::scanner::handle_new_blocks::<_, _, _, _, P>(
         &mut tributary_db,
         &key,
         &recognized_id_send,
