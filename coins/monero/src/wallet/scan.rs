@@ -283,7 +283,7 @@ impl Scanner {
   /// Scan a transaction to discover the received outputs.
   pub fn scan_transaction(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
     // Only scan RCT TXs since we can only spend RCT outputs
-    if tx.version != 2 {
+    if tx.prefix.version != 2 {
       return Timelocked(tx.prefix.timelock, vec![]);
     }
 
