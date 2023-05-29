@@ -40,7 +40,7 @@ use tokio::{
 use crate::{
   transaction::Transaction as TransactionTrait, 
   TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite, BlockHeader, Block, BlockError,
-  Blockchain, P2p, Transaction
+  Blockchain, P2p, Transaction, tendermint::tx::SlashVote
 };
 
 pub mod tx;
@@ -289,7 +289,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       },
       SlashEvent::Id(id) => {
         // create a signed vote tx
-        TendermintTx::SlashVote(id, VoteSignature::default())
+        let target = validator.encode().try_into().unwrap();
+        TendermintTx::SlashVote(SlashVote{id, target, sig: VoteSignature::default()})
       }
     };
 

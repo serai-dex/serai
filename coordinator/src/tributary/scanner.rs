@@ -266,8 +266,7 @@ async fn handle_block<
         let msgs = decode_evidence::<TendermintNetwork<D, Transaction, P>>(&ev).unwrap();
 
         // mark the node as fatally slashed
-        let id = msgs[0].msg.sender;
-        TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, id);
+        TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs[0].msg.sender);
 
         // TODO: disconnect the node from network
       },
@@ -275,7 +274,7 @@ async fn handle_block<
         // TODO: make sure same signer doesn't vote twice
 
         // increment the counter for this vote
-        let vote_key = TributaryDb::<D>::slash_vote_key(genesis, id);
+        let vote_key = TributaryDb::<D>::slash_vote_key(genesis, vote.id, vote.target);
         let mut count =
           txn.get(&vote_key).map_or(0, |c| u32::from_le_bytes(c.try_into().unwrap()));
         count += 1;

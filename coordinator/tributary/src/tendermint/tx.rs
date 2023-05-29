@@ -58,11 +58,37 @@ impl Default for VoteSignature {
   }
 }
 
+/// Data for a signed transaction.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SlashVote {
+  pub id: [u8; 32],         // vote id(slash event id)
+  pub target: [u8; 32],     // who to slash 
+  pub sig: VoteSignature    // signature
+}
+
+impl ReadWrite for SlashVote {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut id = [0; 32];
+    let mut target = [0; 32];
+    reader.read_exact(&mut id)?;
+    reader.read_exact(&mut target)?;
+    let sig = VoteSignature::read(reader)?;
+
+    Ok(SlashVote { id, target, sig })
+  }
+
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&self.id)?;
+    writer.write_all(&self.target)?;
+    self.sig.write(writer)
+  }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TendermintTx {
   SlashEvidence(Vec<u8>),
-  SlashVote([u8; 32], VoteSignature)
+  SlashVote(SlashVote)
 }
 
 impl ReadWrite for TendermintTx {
@@ -78,10 +104,8 @@ impl ReadWrite for TendermintTx {
         Ok(TendermintTx::SlashEvidence(data))
       }
       1 => {
-        let mut id = [0; 32];
-        reader.read_exact(&mut id)?;
-        let sig = VoteSignature::read(reader)?;
-        Ok(TendermintTx::SlashVote(id, sig))
+        let vote = SlashVote::read(reader)?;
+        Ok(TendermintTx::SlashVote(vote))
       },
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
     }
@@ -94,10 +118,9 @@ impl ReadWrite for TendermintTx {
         writer.write_all(&u32::try_from(ev.len()).unwrap().to_le_bytes())?;
         writer.write_all(ev)
       },
-      TendermintTx::SlashVote(vote, sig) => {
+      TendermintTx::SlashVote(vote) => {
         writer.write_all(&[1])?;
-        writer.write_all(vote)?;
-        sig.write(writer)
+        vote.write(writer)
       }
     }
   }
@@ -148,8 +171,8 @@ impl TendermintTx {
   ) {
     fn signature(tx: &mut TendermintTx) -> Option<&mut VoteSignature> {
       match tx {
-        TendermintTx::SlashVote(_, sig) => {
-          Some(sig)
+        TendermintTx::SlashVote(vote) => {
+          Some(&mut vote.sig)
         },
         _ => None
       }
@@ -286,7 +309,13 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
         }
       }
     },
-    TendermintTx::SlashVote(_, sig) => {
+    TendermintTx::SlashVote(vote) => {
+      
+      // TODO: verify the target is actually one of our validators?
+      // this shouldn't be a problem because if the target isn't valid, no one else
+      // gonna vote on it. But we still have to think about spam votes.
+
+      let sig = &vote.sig;
       // verify the tx signature
       // TODO: Use Schnorr half-aggregation and a batch verification here 
       if !sig.signature.verify(sig.signer, tx.sig_hash(genesis)) {
