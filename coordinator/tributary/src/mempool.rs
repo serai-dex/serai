@@ -47,18 +47,6 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     self.txs.insert(tx_hash, tx);
   }
 
-  fn unsigned_already_exist(&self, unsigned_included: &[[u8; 32]], hash: [u8; 32]) -> bool {
-    // check we have the tx in the pool/chain
-    let res = unsigned_included.iter().find(|&&tx_hash| {
-      tx_hash == hash
-    });
-    if res.is_some() || self.txs.contains_key(&hash){
-      return true;
-    }
-
-    false
-  }
-
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
     let mut res = Mempool { db, genesis, txs: HashMap::<[u8; 32], Transaction<T>>::new(), next_nonces: HashMap::new() };
 
@@ -99,20 +87,19 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn add<N: Network>(
     &mut self,
     blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
-    unsigned_included: &[[u8; 32]],
     internal: bool,
     tx: Transaction<T>,
     schema: N::SignatureScheme,
+    unsigned_in_chain: impl Fn ([u8; 32]) -> bool,
     commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>
   ) -> bool {
     match &tx {
       Transaction::Tendermint(tendermint_tx) => {
         assert_eq!(TransactionKind::Unsigned, tendermint_tx.kind());
-
+        
         // check we have the tx in the pool/chain
-        if self.unsigned_already_exist(unsigned_included, tx.hash()) {
-          // TODO: should this return true? function comment says return false
-          // if not a new tx.
+        let hash = tx.hash();
+        if unsigned_in_chain(hash) || self.txs.contains_key(&hash) {
           return false;
         }
 
@@ -181,7 +168,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
       let tx = &self.txs[&hash];
 
       // Verify this hasn't gone stale
-      if let Transaction::Application(tx) =  tx {
+      if let Transaction::Application(tx) = tx {
         match tx.kind() {
           TransactionKind::Signed(Signed { signer, nonce, .. }) => {
             if blockchain_next_nonces[signer] > *nonce {

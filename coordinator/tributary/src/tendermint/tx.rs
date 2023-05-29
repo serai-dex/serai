@@ -217,35 +217,36 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           // 2- vr number that was greater than the current round
           let msg = &msgs[0].msg;
 
-          // check the vr
-          if let Data::Proposal(vr, _) = &msg.data {
-            if vr.is_none() || vr.unwrap().0 < msg.round.0 {
-              Err(TransactionError::InvalidContent)?
-            }
-          }
-
-          // check whether the commit was actually invalid
-          if let Data::Precommit(Some((id, sig))) = &msg.data {
-            let bl_no = u32::try_from(msg.block.0 - 1);
-            if bl_no.is_err() {
-              Err(TransactionError::InvalidContent)? 
-            }
-
-            let prior_commit = commit(bl_no.unwrap());
-            if prior_commit.is_none() {
-              Err(TransactionError::InvalidContent)? 
-            }
-
-            // calculate the end time till the msg round
-            let mut last_end_time = CanonicalInstant::new(prior_commit.unwrap().end_time);
-            for r in 0 ..= msg.round.0 {
-              last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
-            }
-
-            // verify that the commit was actually invalid
-            if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
-              Err(TransactionError::InvalidContent)?
-            }
+          match &msg.data {
+            Data::Proposal(vr, _) => {
+              // check the vr
+              if vr.is_none() || vr.unwrap().0 < msg.round.0 {
+                Err(TransactionError::InvalidContent)?
+              }
+            },
+            Data::Precommit(Some((id, sig))) => {
+              // get the last commit
+              let bl_no = u32::try_from(msg.block.0 - 1);
+              if bl_no.is_err() {
+                Err(TransactionError::InvalidContent)? 
+              }
+              let prior_commit = commit(bl_no.unwrap());
+              if prior_commit.is_none() {
+                Err(TransactionError::InvalidContent)? 
+              }
+  
+              // calculate the end time till the msg round
+              let mut last_end_time = CanonicalInstant::new(prior_commit.unwrap().end_time);
+              for r in 0 ..= msg.round.0 {
+                last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
+              }
+  
+              // verify that the commit was actually invalid
+              if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
+                Err(TransactionError::InvalidContent)?
+              }
+            },
+            _ => Err(TransactionError::InvalidContent)?
           }
 
         },

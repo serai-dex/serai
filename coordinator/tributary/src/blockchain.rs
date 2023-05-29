@@ -21,7 +21,6 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   block_number: u32,
   tip: [u8; 32],
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
-  unsigned_included: Vec<[u8; 32]>,
 
   provided: ProvidedTransactions<D, T>,
   mempool: Mempool<D, T>,
@@ -74,33 +73,17 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       block_number: 0,
       tip: genesis,
       next_nonces,
-      unsigned_included: vec![],
 
       provided: ProvidedTransactions::new(db.clone(), genesis),
       mempool: Mempool::new(db, genesis),
     };
 
-    if let Some((block_number, tip, unsigned_included)) = {
+    if let Some((block_number, tip)) = {
       let db = res.db.as_ref().unwrap();
-      db.get(res.block_number_key()).map(|number| {
-
-        // get unsigned included txs in the chain
-        let current_included = db.get(Self::unsigned_included_key(&genesis)).unwrap_or(vec![]);
-        let mut unsigned_included = vec![];
-        let mut hash = [0; 32];
-        let mut i = 0;
-        while i < current_included.len() {
-          hash.copy_from_slice(&current_included[i .. (i + 32)]);
-          unsigned_included.push(hash);
-          i += 32;
-        }
-
-        (number, db.get(res.tip_key()).unwrap(), unsigned_included)
-      })
+      db.get(res.block_number_key()).map(|number| (number, db.get(res.tip_key()).unwrap()))
     } {
       res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
       res.tip.copy_from_slice(&tip);
-      res.unsigned_included = unsigned_included;
     }
 
     for participant in participants {
@@ -129,22 +112,20 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::commit_key(&genesis, block))
   }
 
-  pub(crate) fn block_hash_from_db(db: &D, genesis: [u8; 32], block: u32) -> Option<Vec<u8>> {
-    db.get(Self::block_hash_key(&genesis, block))
+  pub(crate) fn block_hash_from_db(db: &D, genesis: [u8; 32], block: u32) -> Option<[u8; 32]> {
+    db.get(Self::block_hash_key(&genesis, block)).map(|h| h.try_into().unwrap())
   }
 
   pub(crate) fn commit(&self, block: &[u8; 32]) -> Option<Vec<u8>> {
     Self::commit_from_db(self.db.as_ref().unwrap(), self.genesis, block)
   }
 
-  pub(crate) fn block_hash(&self, block: u32) -> Option<Vec<u8>> {
-    Self::block_hash_from_db(self.db.as_ref().unwrap(), self.genesis, block)
+  pub(crate) fn block_hash(&self, block: u32) -> Option<[u8; 32]> {
+    Self::block_hash_from_db(self.db.as_ref().unwrap(), self.genesis, block).map(|h| h.try_into().unwrap())
   }
 
   pub(crate) fn commit_by_block_number(&self, block: u32) -> Option<Vec<u8>> {
-    let hash = self.block_hash(block);
-    hash.as_ref()?;
-    self.commit(hash.unwrap().as_slice().try_into().unwrap())
+    self.commit(&self.block_hash(block)?)
   }
 
   pub(crate) fn block_after(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<[u8; 32]> {
@@ -152,19 +133,22 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn add_transaction<N: Network>(&mut self, internal: bool, tx: Transaction<T>, schema: N::SignatureScheme) -> bool {
-
     let db = self.db.as_ref().unwrap();
     let genesis = self.genesis;
-    let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
-      let hash = Self::block_hash_from_db(db, genesis, block);
-      hash.as_ref()?;
-      // we must have a commit per valid hash
-      let commit = Self::commit_from_db(db, genesis, hash.unwrap().as_slice().try_into().unwrap()).unwrap();
 
+    let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
+      let hash = Self::block_hash_from_db(db, genesis, block)?;
+      // we must have a commit per valid hash
+      let commit = Self::commit_from_db(db, genesis, &hash).unwrap();
       // commit has to be valid if it is coming from our db
       Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
     };
-    self.mempool.add::<N>(&self.next_nonces, &self.unsigned_included, internal, tx, schema, &commit)
+
+    let unsigned_in_chain = |hash: [u8; 32]| {
+      let existing = db.get(Self::unsigned_included_key(&self.genesis)).unwrap_or(vec![]);
+      !existing.is_empty() && existing.chunks(32).any(|ex_hash| ex_hash == hash)
+    };
+    self.mempool.add::<N>(&self.next_nonces, internal, tx, schema, unsigned_in_chain, commit)
   }
 
   pub(crate) fn provide_transaction(&mut self, tx: T) -> Result<(), ProvidedError> {
@@ -190,9 +174,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   pub(crate) fn verify_block<N: Network>(&self, block: &Block<T>, schema: N::SignatureScheme) -> Result<(), BlockError> {
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block);
-      commit.as_ref()?;
       // commit has to be valid if it is coming from our db
-      Some(Commit::<N::SignatureScheme>::decode(&mut commit.unwrap().as_ref()).unwrap())
+      Some(Commit::<N::SignatureScheme>::decode(&mut commit?.as_ref()).unwrap())
     };
     block.verify::<N>(
       self.genesis,
@@ -224,7 +207,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
     self.tip = block.hash();
     txn.put(self.tip_key(), self.tip);
-    
+
     self.block_number += 1;
     txn.put(self.block_number_key(), self.block_number.to_le_bytes());
 
@@ -248,9 +231,6 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           let mut existing = txn.get(&key).unwrap_or(vec![]);
           existing.extend(hash);
           txn.put(key, existing);
-
-          // add to memory
-          self.unsigned_included.push(hash);
 
           // remove from the mempool
           self.mempool.remove(&hash);

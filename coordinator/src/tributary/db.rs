@@ -46,6 +46,12 @@ impl<D: Db> TributaryDb<D> {
   pub fn set_fatally_slashed(txn: &mut D::Transaction<'_>, genesis: [u8; 32], id: [u8; 32]) {
     let key = Self::fatal_slash_key(genesis);
     let mut existing = txn.get(&key).unwrap_or(vec![]);
+    
+    // don't append if we already have it.
+    if !existing.is_empty() && existing.chunks(32).any(|ex_id| ex_id == id) {
+      return;
+    }
+
     existing.extend(id);
     txn.put(key, existing);
   }
