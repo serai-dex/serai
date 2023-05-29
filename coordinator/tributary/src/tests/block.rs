@@ -81,9 +81,10 @@ fn empty_block() {
   let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> {end_time: 0, validators: vec![], signature: vec![] })
   };
+  let unsigned_in_chain = |_: [u8; 32]| {false};
   Block::<NonceTransaction>::new(LAST, vec![], vec![])
     .verify::<N>(
-      GENESIS, LAST, HashMap::new(), HashMap::new(), validators, commit
+      GENESIS, LAST, HashMap::new(), HashMap::new(), validators, commit, unsigned_in_chain
     ).unwrap();
 }
 
@@ -105,6 +106,7 @@ fn duplicate_nonces() {
     let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
       Some(Commit::<Arc<Validators>> {end_time: 0, validators: vec![], signature: vec![] })
     };
+    let unsigned_in_chain = |_: [u8; 32]| {false};
 
     let res = Block::new(LAST, vec![], mempool).verify::<N>(
       GENESIS,
@@ -112,7 +114,8 @@ fn duplicate_nonces() {
       HashMap::new(),
       HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]),
       validators.clone(),
-      commit
+      commit,
+      unsigned_in_chain
     );
     if i == 1 {
       res.unwrap();

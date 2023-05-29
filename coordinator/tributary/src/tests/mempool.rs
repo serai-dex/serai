@@ -66,11 +66,11 @@ fn mempool_addition() {
   assert_eq!(mempool.next_nonce(&second_signer), Some(3));
 
   // Getting a block should work
-  assert_eq!(mempool.block(&blockchain_next_nonces).len(), 3);
+  assert_eq!(mempool.block(&blockchain_next_nonces, unsigned_in_chain.clone()).len(), 3);
 
   // If the blockchain says an account had its nonce updated, it should cause a prune
   blockchain_next_nonces.insert(signer, 1);
-  let mut block = mempool.block(&blockchain_next_nonces);
+  let mut block = mempool.block(&blockchain_next_nonces, unsigned_in_chain.clone());
   assert_eq!(block.len(), 2);
   assert!(!block.iter().any(|tx| tx.hash() == first_tx.hash()));
   assert_eq!(mempool.txs(), &block.drain(..).map(|tx| (tx.hash(), tx)).collect::<HashMap<_, _>>());

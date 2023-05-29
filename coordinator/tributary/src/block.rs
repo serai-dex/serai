@@ -152,6 +152,7 @@ impl<T: TransactionTrait> Block<T> {
     self.header.hash()
   }
 
+  #[allow(clippy::too_many_arguments)]
   pub(crate) fn verify<N: Network>(
     &self,
     genesis: [u8; 32],
@@ -159,7 +160,8 @@ impl<T: TransactionTrait> Block<T> {
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
     schema: N::SignatureScheme,
-    commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>
+    commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>,
+    unsigned_in_chain: impl Fn ([u8; 32]) -> bool
   ) -> Result<(), BlockError> {
     if self.serialize().len() > BLOCK_SIZE_LIMIT {
       Err(BlockError::TooLargeBlock)?;
@@ -172,26 +174,42 @@ impl<T: TransactionTrait> Block<T> {
     let mut found_non_provided = false;
     let mut txs = Vec::with_capacity(self.transactions.len());
     for tx in self.transactions.iter() {
-      txs.push(tx.hash());
+      // check the block doesn't have the same tx twice
+      // probably not needed for signed or provided, but needed for unsigneds.
+      let tx_hash = tx.hash();
+      if !txs.is_empty() && txs.contains(&tx_hash) {
+        Err(BlockError::InvalidTransactions)?;
+      }
+      txs.push(tx_hash);
 
-      if let TransactionKind::Provided(order) = tx.kind() {
-        if found_non_provided {
-          Err(BlockError::ProvidedAfterNonProvided)?;
-        }
+      match tx.kind() {
+        TransactionKind::Provided(order) => {
+          if found_non_provided {
+            Err(BlockError::ProvidedAfterNonProvided)?;
+          }
 
-        let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front())
-        else {
-          Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
-        };
-        // Since this was a provided TX, it must be an application TX
-        let Transaction::Application(tx) = tx else { Err(BlockError::NonLocalProvided(txs.pop().unwrap()))? };
-        if tx != &local {
-          Err(BlockError::DistinctProvided)?;
-        }
+          let Some(local) =
+            locally_provided.get_mut(order).and_then(|deque| deque.pop_front()) else {
+              Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+            };
+          // Since this was a provided TX, it must be an application TX
+          let Transaction::Application(tx) = tx else { Err(BlockError::NonLocalProvided(txs.pop().unwrap()))? };
+          if tx != &local {
+            Err(BlockError::DistinctProvided)?;
+          }
 
-        // We don't need to call verify_transaction since we did when we locally provided this
-        // transaction. Since it's identical, it must be valid
-        continue;
+          // We don't need to call verify_transaction since we did when we locally provided this
+          // transaction. Since it's identical, it must be valid
+          continue;
+        },
+        TransactionKind::Unsigned => {
+          // check we don't already have the tx in the chain
+          if unsigned_in_chain(tx_hash) {
+            // TODO: Use a more apt error here
+            Err(BlockError::InvalidTransactions)?;
+          }
+        },
+        _ => {}
       }
 
       found_non_provided = true;

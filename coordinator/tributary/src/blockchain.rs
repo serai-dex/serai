@@ -121,7 +121,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn block_hash(&self, block: u32) -> Option<[u8; 32]> {
-    Self::block_hash_from_db(self.db.as_ref().unwrap(), self.genesis, block).map(|h| h.try_into().unwrap())
+    Self::block_hash_from_db(self.db.as_ref().unwrap(), self.genesis, block)
   }
 
   pub(crate) fn commit_by_block_number(&self, block: u32) -> Option<Vec<u8>> {
@@ -161,10 +161,16 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn build_block<N: Network>(&mut self, schema: N::SignatureScheme) -> Block<T> {
+    let db = self.db.as_ref().unwrap();
+    let unsigned_in_chain = |hash: [u8; 32]| {
+      let existing = db.get(Self::unsigned_included_key(&self.genesis)).unwrap_or(vec![]);
+      !existing.is_empty() && existing.chunks(32).any(|ex_hash| ex_hash == hash)
+    };
+
     let block = Block::new(
       self.tip,
       self.provided.transactions.values().flatten().cloned().collect(),
-      self.mempool.block(&self.next_nonces),
+      self.mempool.block(&self.next_nonces, unsigned_in_chain),
     );
     // build_block should not return invalid blocks
     self.verify_block::<N>(&block, schema).unwrap();
@@ -172,6 +178,11 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn verify_block<N: Network>(&self, block: &Block<T>, schema: N::SignatureScheme) -> Result<(), BlockError> {
+    let db = self.db.as_ref().unwrap();
+    let unsigned_in_chain = |hash: [u8; 32]| {
+      let existing = db.get(Self::unsigned_included_key(&self.genesis)).unwrap_or(vec![]);
+      !existing.is_empty() && existing.chunks(32).any(|ex_hash| ex_hash == hash)
+    };
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block);
       // commit has to be valid if it is coming from our db
@@ -183,7 +194,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       self.provided.transactions.clone(),
       self.next_nonces.clone(),
       schema,
-      &commit
+      &commit,
+      unsigned_in_chain
     )
   }
 
