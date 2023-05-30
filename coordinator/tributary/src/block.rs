@@ -21,9 +21,15 @@ pub enum BlockError {
   /// Header specified an invalid transactions merkle tree hash.
   #[error("header transactions hash is incorrect")]
   InvalidTransactions,
-  /// A provided transaction was placed after a non-provided transaction.
-  #[error("a provided transaction was included after a non-provided transaction")]
-  ProvidedAfterNonProvided,
+  /// a transaction that is already in the chain was in the block.
+  #[error("a transaction that is already in the chain was in the block")]
+  UnsignedAlreadyExist,
+  /// same transaction was added more than once into same block
+  #[error("same transaction was added more than once into same block")]
+  DoubledTx,
+  /// tx order in a block(Provided => Unsigned => Signed) was not complied
+  #[error("tx order in a block(Provided => Unsigned => Signed) was not complied")]
+  WrongTxOrder,
   /// The block had a provided transaction this validator has yet to be provided.
   #[error("block had a provided transaction not yet locally provided: {0:?}")]
   NonLocalProvided([u8; 32]),
@@ -163,6 +169,14 @@ impl<T: TransactionTrait> Block<T> {
     commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>,
     unsigned_in_chain: impl Fn ([u8; 32]) -> bool
   ) -> Result<(), BlockError> {
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    enum Order {
+      Provided = 0,
+      Unsigned = 1,
+      Signed = 2,
+    }
+
     if self.serialize().len() > BLOCK_SIZE_LIMIT {
       Err(BlockError::TooLargeBlock)?;
     }
@@ -171,23 +185,19 @@ impl<T: TransactionTrait> Block<T> {
       Err(BlockError::InvalidParent)?;
     }
 
-    let mut found_non_provided = false;
+    let mut last_tx_order = Order::Provided;
     let mut txs = Vec::with_capacity(self.transactions.len());
     for tx in self.transactions.iter() {
       // check the block doesn't have the same tx twice
       // probably not needed for signed or provided, but needed for unsigneds.
       let tx_hash = tx.hash();
       if !txs.is_empty() && txs.contains(&tx_hash) {
-        Err(BlockError::InvalidTransactions)?;
+        Err(BlockError::DoubledTx)?;
       }
       txs.push(tx_hash);
 
-      match tx.kind() {
+      let current_tx_order = match tx.kind() {
         TransactionKind::Provided(order) => {
-          if found_non_provided {
-            Err(BlockError::ProvidedAfterNonProvided)?;
-          }
-
           let Some(local) =
             locally_provided.get_mut(order).and_then(|deque| deque.pop_front()) else {
               Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
@@ -198,21 +208,32 @@ impl<T: TransactionTrait> Block<T> {
             Err(BlockError::DistinctProvided)?;
           }
 
-          // We don't need to call verify_transaction since we did when we locally provided this
-          // transaction. Since it's identical, it must be valid
-          continue;
+          Order::Provided
         },
         TransactionKind::Unsigned => {
           // check we don't already have the tx in the chain
           if unsigned_in_chain(tx_hash) {
-            // TODO: Use a more apt error here
-            Err(BlockError::InvalidTransactions)?;
+            Err(BlockError::UnsignedAlreadyExist)?;
           }
+
+          Order::Unsigned
         },
-        _ => {}
+        TransactionKind::Signed(..) => Order::Signed
+      };
+
+      // enforce Provided => Unsigned => Signed order
+      if u8::from(current_tx_order) < u8::from(last_tx_order) {
+        Err(BlockError::WrongTxOrder)?;
+      }
+      last_tx_order = current_tx_order;
+
+
+      if current_tx_order == Order::Provided {
+        // We don't need to call verify_transaction since we did when we locally provided this
+        // transaction. Since it's identical, it must be valid
+        continue;
       }
 
-      found_non_provided = true;
       // TODO: should we modify the verify_transaction to take `Transaction<T>` or
       // use this pattern of verifying tendermint Txs and app txs differently?
       match tx {
