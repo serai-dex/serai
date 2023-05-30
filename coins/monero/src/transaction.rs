@@ -252,9 +252,12 @@ impl Transaction {
     };
 
     if prefix.version == 1 {
-      for _ in 0 .. prefix.inputs.len() {
-        signatures.push((read_scalar(r)?, read_scalar(r)?));
+      if !matches!(prefix.inputs[0], Input::Gen(_)) {
+        for _ in 0 .. prefix.inputs.len() {
+          signatures.push((read_scalar(r)?, read_scalar(r)?));
+        }
       }
+
       rct_signatures.base.fee = prefix
         .inputs
         .iter()
