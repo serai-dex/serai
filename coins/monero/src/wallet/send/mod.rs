@@ -701,6 +701,9 @@ impl SignableTransaction {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
         pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1).collect::<Vec<_>>());
       }
+      RctPrunable::BulletProof { .. } => {
+        todo!()
+      }
     }
     Ok(tx)
   }

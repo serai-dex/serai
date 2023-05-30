@@ -172,7 +172,7 @@ impl RctPrunable {
   pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
-      RctPrunable::BulletProof {..} => todo!(),
+      RctPrunable::BulletProof { .. } => todo!(),
       RctPrunable::Clsag { bulletproofs, .. } => {
         bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
       }
