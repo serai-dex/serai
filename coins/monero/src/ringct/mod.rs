@@ -10,13 +10,15 @@ pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 
 /// CLSAG struct, along with signing and verifying functionality.
 pub mod clsag;
+/// MLSAG struct, along with verifying functionality.
+pub mod mlsag;
 /// Bulletproofs(+) structs, along with proving and verifying functionality.
 pub mod bulletproofs;
 
 use crate::{
   Protocol,
   serialize::*,
-  ringct::{clsag::Clsag, bulletproofs::Bulletproofs},
+  ringct::{clsag::Clsag, mlsag::Mlsag, bulletproofs::Bulletproofs},
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
@@ -71,7 +73,17 @@ impl RctBase {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RctPrunable {
   Null,
-  Clsag { bulletproofs: Vec<Bulletproofs>, clsags: Vec<Clsag>, pseudo_outs: Vec<EdwardsPoint> },
+  BulletProof {
+    bulletproofs: Vec<Bulletproofs>,
+    mlsags: Vec<Mlsag>,
+    pseudo_outs: Vec<EdwardsPoint>,
+    v2: bool,
+  },
+  Clsag {
+    bulletproofs: Vec<Bulletproofs>,
+    clsags: Vec<Clsag>,
+    pseudo_outs: Vec<EdwardsPoint>,
+  },
 }
 
 impl RctPrunable {
@@ -79,6 +91,13 @@ impl RctPrunable {
   pub fn rct_type(&self) -> u8 {
     match self {
       RctPrunable::Null => 0,
+      RctPrunable::BulletProof { v2, .. } => {
+        if !v2 {
+          3
+        } else {
+          4
+        }
+      }
       RctPrunable::Clsag { bulletproofs, .. } => {
         if matches!(bulletproofs[0], Bulletproofs::Original { .. }) {
           5
@@ -97,7 +116,17 @@ impl RctPrunable {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       RctPrunable::Null => Ok(()),
-      RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs, .. } => {
+      RctPrunable::BulletProof { bulletproofs, mlsags, pseudo_outs, v2 } => {
+        if !v2 {
+          w.write_all(&u32::try_from(bulletproofs.len()).unwrap().to_le_bytes())?;
+        } else {
+          write_varint(&bulletproofs.len().try_into().unwrap(), w)?;
+        }
+        write_raw_vec(Bulletproofs::write, bulletproofs, w)?;
+        write_raw_vec(Mlsag::write, mlsags, w)?;
+        write_raw_vec(write_point, pseudo_outs, w)
+      }
+      RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
         write_vec(Bulletproofs::write, bulletproofs, w)?;
         write_raw_vec(Clsag::write, clsags, w)?;
         write_raw_vec(write_point, pseudo_outs, w)
@@ -114,6 +143,20 @@ impl RctPrunable {
   pub fn read<R: Read>(rct_type: u8, decoys: &[usize], r: &mut R) -> io::Result<RctPrunable> {
     Ok(match rct_type {
       0 => RctPrunable::Null,
+      3 | 4 => RctPrunable::BulletProof {
+        bulletproofs: read_raw_vec(
+          Bulletproofs::read,
+          if rct_type == 3 {
+            read_u32(r)?.try_into().unwrap()
+          } else {
+            read_varint(r)?.try_into().unwrap()
+          },
+          r,
+        )?,
+        mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
+        pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
+        v2: rct_type == 4,
+      },
       5 | 6 => RctPrunable::Clsag {
         bulletproofs: read_vec(
           if rct_type == 5 { Bulletproofs::read } else { Bulletproofs::read_plus },
@@ -129,6 +172,7 @@ impl RctPrunable {
   pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
+      RctPrunable::BulletProof {..} => todo!(),
       RctPrunable::Clsag { bulletproofs, .. } => {
         bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
       }
