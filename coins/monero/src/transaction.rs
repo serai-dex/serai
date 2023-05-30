@@ -207,7 +207,7 @@ impl TransactionPrefix {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
-  pub signatures: Vec<(Scalar, Scalar)>,
+  pub signatures: Vec<Vec<(Scalar, Scalar)>>,
   pub rct_signatures: RctSignatures,
 }
 
@@ -225,9 +225,11 @@ impl Transaction {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.prefix.write(w)?;
     if self.prefix.version == 1 {
-      for sig in &self.signatures {
-        write_scalar(&sig.0, w)?;
-        write_scalar(&sig.1, w)?;
+      for sigs in &self.signatures {
+        for sig in sigs {
+          write_scalar(&sig.0, w)?;
+          write_scalar(&sig.1, w)?;
+        }
       }
       Ok(())
     } else if self.prefix.version == 2 {
@@ -252,11 +254,18 @@ impl Transaction {
     };
 
     if prefix.version == 1 {
-      if !matches!(prefix.inputs[0], Input::Gen(_)) {
-        for _ in 0 .. prefix.inputs.len() {
-          signatures.push((read_scalar(r)?, read_scalar(r)?));
-        }
-      }
+      let read_sig =
+        |r: &mut R| -> io::Result<(Scalar, Scalar)> { Ok((read_scalar(r)?, read_scalar(r)?)) };
+      signatures = prefix
+        .inputs
+        .iter()
+        .filter_map(|input| match input {
+          Input::ToKey { key_offsets, .. } => {
+            Some(key_offsets.iter().map(|_| (read_sig(r))).collect::<Result<Vec<(_, _)>, _>>())
+          }
+          _ => None,
+        })
+        .collect::<Result<Vec<Vec<(Scalar, Scalar)>>, _>>()?;
 
       rct_signatures.base.fee = prefix
         .inputs
