@@ -1,9 +1,12 @@
 use std::io::{self, Read, Write};
 
 use crate::{
+  hash,
   serialize::*,
   transaction::{Input, Transaction},
 };
+
+mod merkle_root;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
@@ -63,6 +66,29 @@ impl Block {
       w.write_all(tx)?;
     }
     Ok(())
+  }
+
+  pub fn tx_merkle_root(&self) -> [u8; 32] {
+    merkle_root::tree_hash(self.miner_tx.hash(), &self.txs)
+  }
+
+  pub fn serialize_hashable(&self) -> Vec<u8> {
+    let mut blob = self.header.serialize();
+
+    blob.extend_from_slice(&self.tx_merkle_root());
+
+    write_varint(&(1 + self.txs.len() as u64), &mut blob).unwrap();
+
+    let mut out = vec![];
+    write_varint(&(blob.len() as u64), &mut out).unwrap();
+    out.append(&mut blob);
+
+    out
+  }
+
+  pub fn id(&self) -> [u8; 32] {
+    // TODO: block 202612?
+    hash(&self.serialize_hashable())
   }
 
   pub fn serialize(&self) -> Vec<u8> {
