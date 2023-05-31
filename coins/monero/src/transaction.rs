@@ -249,7 +249,7 @@ impl Transaction {
     let prefix = TransactionPrefix::read(r)?;
     let mut signatures = vec![];
     let mut rct_signatures = RctSignatures {
-      base: RctBase { fee: 0, ecdh_info: vec![], commitments: vec![] },
+      base: RctBase { fee: 0, ecdh_info: vec![], pseudo_outs: vec![], commitments: vec![] },
       prunable: RctPrunable::Null,
     };
 

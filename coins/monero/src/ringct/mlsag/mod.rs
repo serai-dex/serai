@@ -13,7 +13,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Mlsag {
   pub ss: Vec<Vec<Scalar>>,
-  pub cc: EdwardsPoint,
+  pub cc: Scalar,
 }
 
 impl Mlsag {
@@ -21,15 +21,15 @@ impl Mlsag {
     for ss in self.ss.iter() {
       write_raw_vec(write_scalar, ss, w)?;
     }
-    write_point(&self.cc, w)
+    write_scalar(&self.cc, w)
   }
 
-  pub fn read<R: Read>(decoys: usize, elements: usize, r: &mut R) -> io::Result<Mlsag> {
+  pub fn read<R: Read>(mixins: usize, ss2_elements: usize, r: &mut R) -> io::Result<Mlsag> {
     Ok(Mlsag {
-      ss: (0 .. decoys)
-        .map(|_| read_raw_vec(read_scalar, elements, r))
+      ss: (0 .. mixins)
+        .map(|_| read_raw_vec(read_scalar, ss2_elements, r))
         .collect::<Result<_, _>>()?,
-      cc: read_point(r)?,
+      cc: read_scalar(r)?,
     })
   }
 }

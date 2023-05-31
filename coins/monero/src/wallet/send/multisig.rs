@@ -429,7 +429,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
           pseudo_outs.push(pseudo_out);
         }
       }
-      RctPrunable::BulletProof { .. } => todo!(""),
+      _ => todo!(""),
     }
     Ok(tx)
   }

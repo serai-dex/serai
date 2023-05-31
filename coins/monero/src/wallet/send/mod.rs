@@ -49,6 +49,7 @@ pub use builder::SignableTransactionBuilder;
 mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::TransactionMachine;
+use crate::ringct::EcdhInfo;
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -632,7 +633,7 @@ impl SignableTransaction {
         key: output.dest.compress(),
         view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
-      ecdh_info.push(output.amount);
+      ecdh_info.push(EcdhInfo::Bulletproof { amount: output.amount });
     }
 
     (
@@ -649,6 +650,7 @@ impl SignableTransaction {
           base: RctBase {
             fee,
             ecdh_info,
+            pseudo_outs: vec![],
             commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
           },
           prunable: RctPrunable::Clsag {
@@ -701,7 +703,7 @@ impl SignableTransaction {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
         pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1).collect::<Vec<_>>());
       }
-      RctPrunable::BulletProof { .. } => {
+      _ => {
         todo!()
       }
     }
@@ -753,7 +755,8 @@ impl Eventuality {
         view_tag: Some(expected.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       } != actual) ||
         (Some(&expected.commitment.calculate()) != tx.rct_signatures.base.commitments.get(o)) ||
-        (Some(&expected.amount) != tx.rct_signatures.base.ecdh_info.get(o))
+        (Some(&EcdhInfo::Bulletproof { amount: expected.amount }) !=
+          tx.rct_signatures.base.ecdh_info.get(o))
       {
         return false;
       }

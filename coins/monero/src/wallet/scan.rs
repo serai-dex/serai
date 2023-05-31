@@ -372,7 +372,7 @@ impl Scanner {
         // Regular transaction
         } else {
           let amount = match tx.rct_signatures.base.ecdh_info.get(o) {
-            Some(amount) => amount_decryption(*amount, shared_key),
+            Some(amount) => amount_decryption(amount, shared_key),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
             None => break,

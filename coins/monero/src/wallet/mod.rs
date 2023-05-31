@@ -35,6 +35,7 @@ pub use send::{
 pub(crate) use send::InternalPayment;
 #[cfg(feature = "multisig")]
 pub use send::TransactionMachine;
+use crate::ringct::EcdhInfo;
 
 fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> std::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
@@ -92,8 +93,24 @@ pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
   (amount ^ u64::from_le_bytes(hash(&amount_mask)[.. 8].try_into().unwrap())).to_le_bytes()
 }
 
-fn amount_decryption(amount: [u8; 8], key: Scalar) -> u64 {
-  u64::from_le_bytes(amount_encryption(u64::from_le_bytes(amount), key))
+fn amount_decryption(amount: &EcdhInfo, key: Scalar) -> u64 {
+  match amount {
+    EcdhInfo::Standard { mask, amount } => {
+      let shared_sec1 = hash(key.as_bytes());
+      let shared_sec2 = hash(&shared_sec1);
+      let mask_scalar = mask - Scalar::from_bytes_mod_order(shared_sec1);
+
+      let amount_scalar = amount - Scalar::from_bytes_mod_order(shared_sec2);
+      // get first 64 bits (d2b in rctTypes.cpp)
+      let amount_significant_bytes =
+        amount_scalar.to_bytes()[0 .. 8].try_into().expect("Can't fail");
+      let amount = u64::from_le_bytes(amount_significant_bytes);
+      amount
+    }
+    EcdhInfo::Bulletproof { amount } => {
+      u64::from_le_bytes(amount_encryption(u64::from_le_bytes(*amount), key))
+    }
+  }
 }
 
 pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
