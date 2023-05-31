@@ -29,7 +29,7 @@ fn tree_hash_cnt(count: usize) -> usize {
 }
 
 fn hash_concat(a: [u8; 32], b: [u8; 32]) -> [u8; 32] {
-  let mut v = [a, b].concat();
+  let v = [a, b].concat();
   hash(&v)
 }
 

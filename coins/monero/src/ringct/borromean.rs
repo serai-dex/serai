@@ -17,23 +17,27 @@ fn read_64_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>>(
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BorroSig {
-  pub s0: [Scalar; 64],
-  pub s1: [Scalar; 64],
-  pub ee: Scalar,
+  pub s0: [[u8; 32]; 64],
+  pub s1: [[u8; 32]; 64],
+  pub ee: [u8; 32],
 }
 
 impl BorroSig {
   pub fn read<R: Read>(r: &mut R) -> io::Result<BorroSig> {
     Ok(BorroSig {
-      s0: read_64_array(read_scalar, r)?,
-      s1: read_64_array(read_scalar, r)?,
-      ee: read_scalar(r)?,
+      s0: read_64_array(read_bytes, r)?,
+      s1: read_64_array(read_bytes, r)?,
+      ee: read_bytes(r)?,
     })
   }
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    write_raw_vec(write_scalar, &self.s0, w)?;
-    write_raw_vec(write_scalar, &self.s1, w)?;
-    write_scalar(&self.ee, w)
+    for s0 in self.s0.iter() {
+      w.write_all(s0)?;
+    }
+    for s1 in self.s1.iter() {
+      w.write_all(s1)?;
+    }
+    w.write_all(&self.ee)
   }
 }
 

@@ -35,7 +35,7 @@ pub enum EcdhInfo {
 }
 
 impl EcdhInfo {
-  pub fn read<R: Read>(rct_type: u8, r: &mut R) -> io::Result<(EcdhInfo)> {
+  pub fn read<R: Read>(rct_type: u8, r: &mut R) -> io::Result<EcdhInfo> {
     Ok(match rct_type {
       0 ..= 3 => EcdhInfo::Standard { mask: read_scalar(r)?, amount: read_scalar(r)? },
       _ => EcdhInfo::Bulletproof { amount: read_bytes(r)? },
@@ -80,7 +80,6 @@ impl RctBase {
         }
         write_raw_vec(write_point, &self.commitments, w)
       }
-      _ => panic!("Serializing unknown RctType's Base"),
     }
   }
 

@@ -1,11 +1,10 @@
 use std::io;
 use std::io::{Read, Write};
 
-use curve25519_dalek::edwards::EdwardsPoint;
+
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{
-  Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys, ringct::hash_to_point,
   serialize::*,
 };
 
