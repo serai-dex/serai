@@ -11,8 +11,18 @@ use curve25519_dalek::{
 
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
-pub(crate) fn varint_len(varint: usize) -> usize {
-  ((usize::try_from(usize::BITS - varint.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1
+mod sealed {
+  pub trait VarInt: TryInto<u64> {}
+  impl VarInt for u8 {}
+  impl VarInt for u32 {}
+  impl VarInt for u64 {}
+  impl VarInt for usize {}
+}
+
+/// This will panic if the varint exceeds u64::MAX
+pub(crate) fn varint_len<U: sealed::VarInt>(varint: U) -> usize {
+  let varint_u64: u64 = varint.try_into().map_err(|_| "varint exceeded u64").unwrap();
+  ((usize::try_from(u64::BITS - varint_u64.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1
 }
 
 pub(crate) fn write_byte<W: Write>(byte: &u8, w: &mut W) -> io::Result<()> {

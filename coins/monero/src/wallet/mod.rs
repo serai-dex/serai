@@ -26,11 +26,11 @@ use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, M
 mod scan;
 pub use scan::{ReceivedOutput, SpendableOutput, Timelocked};
 
-pub(crate) mod decoys;
-pub(crate) use decoys::Decoys;
+pub mod decoys;
+pub use decoys::Decoys;
 
 mod send;
-pub use send::{Fee, TransactionError, Change, SignableTransaction, Eventuality};
+pub use send::{Fee, TransactionError, Change, SignableTransaction, Eventuality, FeePriority};
 #[cfg(feature = "std")]
 pub use send::SignableTransactionBuilder;
 #[cfg(feature = "multisig")]

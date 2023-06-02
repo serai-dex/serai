@@ -14,8 +14,9 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
-    SpendableOutput,
+    SpendableOutput, Fee,
   },
+  transaction::Transaction,
 };
 
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
@@ -70,6 +71,18 @@ pub async fn get_miner_tx_output(rpc: &Rpc<HttpRpc>, view: &ViewPair) -> Spendab
 
   let block = rpc.get_block_by_number(start).await.unwrap();
   scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
+}
+
+/// Makes sure the weight and fee match the expected calculation
+pub fn check_weight_and_fee(tx: &Transaction, fee_rate: Fee) {
+  let fee = tx.rct_signatures.base.fee;
+
+  let weight = tx.weight();
+  let expected_weight = fee_rate.calculate_weight_from_fee(fee);
+  assert_eq!(weight, expected_weight);
+
+  let expected_fee = fee_rate.calculate_fee_from_weight(weight);
+  assert_eq!(fee, expected_fee);
 }
 
 pub async fn rpc() -> Rpc<HttpRpc> {
@@ -155,11 +168,14 @@ macro_rules! test {
           random_scalar,
           wallet::{
             address::{Network, AddressSpec}, ViewPair, Scanner, Change, SignableTransaction,
-            SignableTransactionBuilder,
+            SignableTransactionBuilder, Decoys, FeePriority,
           },
         };
 
-        use runner::{random_address, rpc, mine_until_unlocked, get_miner_tx_output};
+        use runner::{
+          random_address, rpc, mine_until_unlocked, get_miner_tx_output,
+          check_weight_and_fee,
+        };
 
         type Builder = SignableTransactionBuilder;
 
@@ -192,9 +208,11 @@ macro_rules! test {
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
 
+          let protocol = rpc.get_protocol().await.unwrap();
+
           let builder = SignableTransactionBuilder::new(
-            rpc.get_protocol().await.unwrap(),
-            rpc.get_fee().await.unwrap(),
+            protocol,
+            rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
             Some(Change::new(
               &ViewPair::new(
                 &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
@@ -205,13 +223,12 @@ macro_rules! test {
           );
 
           let sign = |tx: SignableTransaction| {
-            let rpc = rpc.clone();
             let spend = spend.clone();
             #[cfg(feature = "multisig")]
             let keys = keys.clone();
             async move {
               if !multisig {
-                tx.sign(&mut OsRng, &rpc, &spend).await.unwrap()
+                tx.sign(&mut OsRng, &spend).await.unwrap()
               } else {
                 #[cfg(not(feature = "multisig"))]
                 panic!("Multisig branch called without the multisig feature");
@@ -224,12 +241,9 @@ macro_rules! test {
                       tx
                         .clone()
                         .multisig(
-                          &rpc,
                           keys[&i].clone(),
                           RecommendedTranscript::new(b"Monero Serai Test Transaction"),
-                          rpc.get_height().await.unwrap() - 10,
                         )
-                        .await
                         .unwrap(),
                     );
                   }
@@ -245,13 +259,25 @@ macro_rules! test {
 
           let temp = Box::new({
             let mut builder = builder.clone();
-            builder.add_input(miner_tx);
-            let (tx, state) = ($first_tx)(rpc.clone(), builder, next_addr).await;
 
+            let decoys = Decoys::select(
+              &mut OsRng,
+              &rpc,
+              protocol.ring_len(),
+              rpc.get_height().await.unwrap() - 1,
+              &[miner_tx.clone()]
+            )
+            .await
+            .unwrap();
+            builder.add_input((miner_tx, decoys.first().unwrap().clone()));
+
+            let (tx, state) = ($first_tx)(rpc.clone(), builder, next_addr).await;
+            let fee_rate = tx.fee_rate().clone();
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
             mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
+            check_weight_and_fee(&tx, fee_rate);
             let scanner =
               Scanner::from_view(view.clone(), Some(HashSet::new()));
             ($first_checks)(rpc.clone(), tx, scanner, state).await
@@ -261,16 +287,18 @@ macro_rules! test {
 
           $(
             let (tx, state) = ($tx)(
+              protocol,
               rpc.clone(),
               builder.clone(),
               next_addr,
               *carried_state.downcast().unwrap()
             ).await;
-
+            let fee_rate = tx.fee_rate().clone();
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
             mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
+            check_weight_and_fee(&tx, fee_rate);
             #[allow(unused_assignments)]
             {
               let scanner =

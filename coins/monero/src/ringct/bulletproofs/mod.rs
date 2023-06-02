@@ -38,23 +38,40 @@ pub enum Bulletproofs {
 
 impl Bulletproofs {
   pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
-    let fields = if plus { 6 } else { 9 };
-
-    // TODO: Shouldn't this use u32/u64?
     #[allow(non_snake_case)]
-    let mut LR_len = usize::try_from(usize::BITS - (outputs - 1).leading_zeros()).unwrap();
-    let padded_outputs = 1 << LR_len;
+    let (bp_clawback, LR_len) = Bulletproofs::calculate_bp_clawback(plus, outputs);
+    32 * (Bulletproofs::bp_fields(plus) + (2 * LR_len)) + 2 + bp_clawback
+  }
+
+  // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+  // src/cryptonote_basic/cryptonote_format_utils.cpp#L106-L124
+  pub(crate) fn calculate_bp_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
+    #[allow(non_snake_case)]
+    let mut LR_len = 0;
+    let mut n_padded_outputs = 1;
+    while n_padded_outputs < n_outputs {
+      LR_len += 1;
+      n_padded_outputs = 1 << LR_len;
+    }
     LR_len += LOG_N;
 
-    let len = (fields + (2 * LR_len)) * 32;
-    len +
-      if padded_outputs <= 2 {
-        0
-      } else {
-        let base = ((fields + (2 * (LOG_N + 1))) * 32) / 2;
-        let size = (fields + (2 * LR_len)) * 32;
-        ((base * padded_outputs) - size) * 4 / 5
-      }
+    let mut bp_clawback = 0;
+    if n_padded_outputs > 2 {
+      let fields = Bulletproofs::bp_fields(plus);
+      let base = ((fields + (2 * (LOG_N + 1))) * 32) / 2;
+      let size = (fields + (2 * LR_len)) * 32;
+      bp_clawback = ((base * n_padded_outputs) - size) * 4 / 5;
+    }
+
+    (bp_clawback, LR_len)
+  }
+
+  fn bp_fields(plus: bool) -> usize {
+    if plus {
+      6
+    } else {
+      9
+    }
   }
 
   /// Prove the list of commitments are within [0 .. 2^64).

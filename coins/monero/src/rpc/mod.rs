@@ -19,13 +19,18 @@ use crate::{
   serialize::*,
   transaction::{Input, Timelock, Transaction},
   block::Block,
-  wallet::Fee,
+  wallet::{Fee, FeePriority},
 };
 
 #[cfg(feature = "http_rpc")]
 mod http;
 #[cfg(feature = "http_rpc")]
 pub use http::*;
+
+// Number of blocks the fee estimate will be valid for
+// https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+// src/wallet/wallet2.cpp#L121
+const GRACE_BLOCKS_FOR_FEE_ESTIMATE: u64 = 10;
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -66,6 +71,10 @@ pub enum RpcError {
   PrunedTransaction,
   #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
   InvalidTransaction([u8; 32]),
+  #[cfg_attr(feature = "std", error("unexpected fee response"))]
+  InvalidFee,
+  #[cfg_attr(feature = "std", error("invalid priority"))]
+  InvalidPriority,
 }
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
@@ -560,16 +569,81 @@ impl<R: RpcConnection> Rpc<R> {
   /// Get the currently estimated fee from the node. This may be manipulated to unsafe levels and
   /// MUST be sanity checked.
   // TODO: Take a sanity check argument
-  pub async fn get_fee(&self) -> Result<Fee, RpcError> {
+  pub async fn get_fee(&self, protocol: Protocol, priority: FeePriority) -> Result<Fee, RpcError> {
+    // TODO: implement wallet2's adjust_priority which by default automatically
+    // uses a lower priority than provided depending on the backlog in the pool
+    if protocol.v16_fee() {
+      #[allow(dead_code)]
+      #[derive(Deserialize, Debug)]
+      struct FeeResponse {
+        status: String,
+        fees: Vec<u64>,
+        quantization_mask: u64,
+      }
+
+      let res: FeeResponse = self
+        .json_rpc_call(
+          "get_fee_estimate",
+          Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
+        )
+        .await?;
+
+      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+      // src/wallet/wallet2.cpp#L7615-L7620
+      let priority_idx = usize::try_from(if priority.fee_priority() >= 4 {
+        3
+      } else {
+        priority.fee_priority().saturating_sub(1)
+      })
+      .map_err(|_| RpcError::InvalidPriority)?;
+
+      if res.status != "OK" {
+        Err(RpcError::InvalidFee)
+      } else if priority_idx >= res.fees.len() {
+        Err(RpcError::InvalidPriority)
+      } else {
+        Ok(Fee { per_weight: res.fees[priority_idx], mask: res.quantization_mask })
+      }
+    } else {
+      self.get_fee_v14(priority).await
+    }
+  }
+
+  pub async fn get_fee_v14(&self, priority: FeePriority) -> Result<Fee, RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
-    struct FeeResponse {
+    struct FeeResponseV14 {
+      status: String,
       fee: u64,
       quantization_mask: u64,
     }
 
-    let res: FeeResponse = self.json_rpc_call("get_fee_estimate", None).await?;
-    Ok(Fee { per_weight: res.fee, mask: res.quantization_mask })
+    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+    // src/wallet/wallet2.cpp#L7569-L7584
+    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+    // src/wallet/wallet2.cpp#L7660-L7661
+    let priority_idx =
+      usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
+        .map_err(|_| RpcError::InvalidPriority)?;
+    let multipliers: Vec<u64> = vec![1, 5, 25, 1000];
+    if priority_idx >= multipliers.len() {
+      // though not an RPC error, it seems sensible to treat as such
+      Err(RpcError::InvalidPriority)?;
+    }
+    let fee_multiplier = multipliers[priority_idx];
+
+    let res: FeeResponseV14 = self
+      .json_rpc_call(
+        "get_fee_estimate",
+        Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
+      )
+      .await?;
+
+    if res.status != "OK" {
+      Err(RpcError::InvalidFee)?;
+    }
+
+    Ok(Fee { per_weight: res.fee * fee_multiplier, mask: res.quantization_mask })
   }
 
   pub async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
