@@ -1,3 +1,4 @@
+use core::ops::Deref;
 use std::{io, collections::HashMap};
 
 use zeroize::Zeroizing;
@@ -114,11 +115,9 @@ pub fn signed_transaction<R: RngCore + CryptoRng>(
   let mut tx =
     SignedTransaction(data, Signed { signer, nonce, signature: random_signed(rng).signature });
 
-  tx.1.signature = SchnorrSignature::sign(
-    key,
-    Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng)),
-    tx.sig_hash(genesis),
-  );
+  let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
+  tx.1.signature.R = Ristretto::generator() * sig_nonce.deref();
+  tx.1.signature = SchnorrSignature::sign(key, sig_nonce, tx.sig_hash(genesis));
 
   let mut nonces = HashMap::from([(signer, nonce)]);
   verify_transaction(&tx, genesis, &mut nonces).unwrap();

@@ -98,10 +98,20 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   /// Obtain the challenge for this transaction's signature.
   ///
   /// Do not override this unless you know what you're doing.
+  ///
+  /// Panics if called on non-signed transactions.
   fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
-    <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
-      &Blake2b512::digest([genesis, self.hash()].concat()).into(),
-    )
+    match self.kind() {
+      TransactionKind::Signed(Signed { signature, .. }) => {
+        <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
+          &Blake2b512::digest(
+            [genesis.as_ref(), &self.hash(), signature.R.to_bytes().as_ref()].concat(),
+          )
+          .into(),
+        )
+      }
+      _ => panic!("sig_hash called on non-signed transaction"),
+    }
   }
 }
 
