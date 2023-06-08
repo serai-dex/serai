@@ -14,11 +14,14 @@ use schnorr::SchnorrSignature;
 
 use crate::{
   transaction::{Signed, TransactionError, TransactionKind, Transaction, verify_transaction},
-  ReadWrite
+  ReadWrite, tendermint::tx::{TendermintTx, VoteSignature, SlashVote}
 };
 
 #[cfg(test)]
 mod signed;
+
+#[cfg(test)]
+mod tendermint;
 
 pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed {
@@ -140,4 +143,33 @@ pub fn random_signed_transaction<R: RngCore + CryptoRng>(
   let nonce = u32::try_from(rng.next_u64() >> 32 >> 1).unwrap();
 
   (genesis, signed_transaction(rng, genesis, &key, nonce))
+}
+
+pub fn random_evidence_tx<R: RngCore + CryptoRng>(
+  rng: &mut R,
+) -> TendermintTx {
+  let mut evidence = [0u8; 32];
+  rng.fill_bytes(&mut evidence);
+
+  TendermintTx::SlashEvidence(evidence.try_into().unwrap())
+}
+
+pub fn random_vote_tx<R: RngCore + CryptoRng>(
+  rng: &mut R,
+) -> ([u8; 32], TendermintTx) {
+  // genesis and private key
+  let mut genesis = [0; 32];
+  rng.fill_bytes(&mut genesis);
+  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut *rng));
+
+  // vote data
+  let mut id = [0u8; 32];
+  let mut target = [0u8; 32];
+  rng.fill_bytes(&mut id);
+  rng.fill_bytes(&mut target);
+
+  let mut tx = TendermintTx::SlashVote( SlashVote{ id, target, sig: VoteSignature::default() } );
+  tx.sign(rng, genesis, &key);
+
+  (genesis, tx)
 }

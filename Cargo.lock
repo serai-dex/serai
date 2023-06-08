@@ -10121,6 +10121,7 @@ dependencies = [
  "flexible-transcript",
  "futures",
  "hex",
+ "lazy_static",
  "log",
  "parity-scale-codec",
  "rand",

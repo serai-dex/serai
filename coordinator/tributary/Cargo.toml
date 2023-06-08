@@ -9,6 +9,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1"
+lazy_static = "1"
 thiserror = "1"
 
 subtle = "^2"

@@ -112,7 +112,7 @@ enum TendermintError<N: Network> {
 }
 
 // Type aliases to abstract over generic hell
-pub(crate) type DataFor<N> =
+pub type DataFor<N> =
   Data<<N as Network>::Block, <<N as Network>::SignatureScheme as SignatureScheme>::Signature>;
 pub(crate) type MessageFor<N> = Message<
   <N as Network>::ValidatorId,
