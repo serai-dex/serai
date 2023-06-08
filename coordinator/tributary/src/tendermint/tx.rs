@@ -1,11 +1,11 @@
 use core::ops::Deref;
-use std::{io, vec, default::Default, mem::size_of};
+use std::{io, vec, default::Default};
 
 use scale::Decode;
 
 use zeroize::Zeroizing;
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest, Blake2s256, Blake2b512};
 
 use rand::{RngCore, CryptoRng};
 
@@ -88,6 +88,8 @@ impl ReadWrite for SlashVote {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TendermintTx {
   SlashEvidence(Vec<u8>),
+  // TODO: should the SlashVote.sig be directly in the enum
+  // like as in (SlashVote, sig) since the sig is sig of the tx.
   SlashVote(SlashVote)
 }
 
@@ -135,8 +137,32 @@ impl Transaction for TendermintTx {
   }
 
   fn hash(&self) -> [u8; 32] {
-    let tx = self.serialize();
+    let mut tx = self.serialize();
+    if let TendermintTx::SlashVote(vote) = self {
+      // Make sure the part we're cutting off is the signature
+      assert_eq!(tx.drain((tx.len() - 64) ..).collect::<Vec<_>>(), vote.sig.signature.serialize());
+    }
     Blake2s256::digest(tx).into()
+  }
+
+  /// Obtain the challenge for this transaction's signature.
+  ///
+  /// Do not override this unless you know what you're doing.
+  ///
+  /// Panics if called on non-signed transactions.
+  fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
+    match self {
+      TendermintTx::SlashVote(vote) => {
+        let signature = &vote.sig.signature;
+        <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
+          &Blake2b512::digest(
+            [genesis.as_ref(), &self.hash(), signature.R.to_bytes().as_ref()].concat(),
+          )
+          .into(),
+        )
+      },
+      _ => panic!("sig_hash called on non-signed evidence transaction"),
+    }
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
@@ -169,6 +195,14 @@ impl TendermintTx {
     genesis: [u8; 32],
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   ) {
+
+    // return from here for non-signed txs so that
+    // rest of the function is cleaner.
+    match self {
+      TendermintTx::SlashEvidence(_) => return,
+      TendermintTx::SlashVote(_)=> {}
+    }
+
     fn signature(tx: &mut TendermintTx) -> Option<&mut VoteSignature> {
       match tx {
         TendermintTx::SlashVote(vote) => {
@@ -178,35 +212,37 @@ impl TendermintTx {
       }
     }
 
+    signature(self).unwrap().signer = Ristretto::generator() * key.deref();
+    
+    let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
+    signature(self).unwrap().signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
+
     let sig_hash = self.sig_hash(genesis);
-    if let Some(sig) = signature(self) {
-      sig.signer = Ristretto::generator() * key.deref();
-      sig.signature = SchnorrSignature::<Ristretto>::sign(
-        key,
-        Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng)),
-        sig_hash,
-      );
-    }
+
+    signature(self).unwrap().signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
   }
 }
 
 
 pub fn decode_evidence<N: Network>(ev: &[u8]) -> Result<Vec<SignedMessageFor<N>>, TransactionError> {
   let mut res = vec![];
-  let msg_size = size_of::<SignedMessageFor<N>>();
-  
+
   // first byte is the length of the message vector
   let len = u8::from_le_bytes([ev[0]]);
-  let mut start: usize = 1;
-  let mut stop = 1 + msg_size;
+  let mut pos: usize = 1;
   for _ in 0..len {
+    let size = match usize::try_from(u32::from_le_bytes(ev[pos..pos+4].try_into().unwrap()))  {
+      Ok(s) => s,
+      Err(_) => Err(TransactionError::InvalidContent)?
+    };
+    pos += 4;
+
     let Ok(msg) = SignedMessageFor::<N>::decode::<&[u8]>(
-      &mut &ev[start..stop]
+      &mut &ev[pos..pos+size]
     ) else {
       Err(TransactionError::InvalidContent)?
     };
-    start = stop;
-    stop = start + msg_size;
+    pos += size;
     res.push(msg);
   }
   Ok(res)
@@ -248,22 +284,31 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
               }
             },
             Data::Precommit(Some((id, sig))) => {
+
+              // make sure block no isn't overflowing
+              // TODO: is rejecting the evidence right thing to do here?
+              // if this is the first block, there is no prior_commit, hence
+              // no prior end_time. Is the end_tine is just 0 in that case?
+              // on the other hand, are we even able to get precommit slash evidence in the first block?
+              if msg.block.0 == 0 {
+                Err(TransactionError::InvalidContent)?
+              }
+
               // get the last commit
-              let bl_no = u32::try_from(msg.block.0 - 1);
-              if bl_no.is_err() {
-                Err(TransactionError::InvalidContent)? 
-              }
-              let prior_commit = commit(bl_no.unwrap());
-              if prior_commit.is_none() {
-                Err(TransactionError::InvalidContent)? 
-              }
-  
+              let prior_commit = match u32::try_from(msg.block.0 - 1) {
+                Ok(n) =>  match commit(n) {
+                  Some(c) => c,
+                  _ => Err(TransactionError::InvalidContent)? 
+                } ,
+                _ => Err(TransactionError::InvalidContent)?
+              };
+
               // calculate the end time till the msg round
-              let mut last_end_time = CanonicalInstant::new(prior_commit.unwrap().end_time);
+              let mut last_end_time = CanonicalInstant::new(prior_commit.end_time);
               for r in 0 ..= msg.round.0 {
                 last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
               }
-  
+
               // verify that the commit was actually invalid
               if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
                 Err(TransactionError::InvalidContent)?
@@ -290,11 +335,16 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
             Err(TransactionError::InvalidContent)?
           }
 
-          // check whether messages are precommits to different blocks
+          // check whether messages are precommits to different blocks.
+          // signatures aren't important here because they must be valid anyways.
+          // if they weren't, we should have gotten an invalid precommit sig evidence
+          // in the first place instead of this.
           if let Data::Precommit(Some((h1, _))) = first.data {
             if let Data::Precommit(Some((h2, _))) = second.data {
               if h1 == h2 {
                 Err(TransactionError::InvalidContent)?
+              } else {
+                return Ok(());
               }
             }
           }

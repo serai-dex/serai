@@ -283,7 +283,9 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
         // size is 2 at most for now.
         data.extend(u8::to_le_bytes(u8::try_from(ev.len()).unwrap()));
         for msg in ev {
-          data.extend(msg.encode());
+          let encoded = msg.encode();
+          data.extend(u32::to_le_bytes(u32::try_from(encoded.len()).unwrap()));
+          data.extend(encoded);
         }
         TendermintTx::SlashEvidence(data)
       },

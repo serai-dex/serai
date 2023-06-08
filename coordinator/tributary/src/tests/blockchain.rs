@@ -15,7 +15,7 @@ use crate::{
   tests::{ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::LocalP2p}, tendermint::{TendermintNetwork, Validators},
 };
 
-type N = TendermintNetwork<MemDb, ProvidedTransaction, LocalP2p>;
+type N = TendermintNetwork<MemDb, SignedTransaction, LocalP2p>;
 
 fn new_genesis() -> [u8; 32] {
   let mut genesis = [0; 32];
