@@ -1,112 +1,38 @@
 use std::sync::Arc;
 
 use crate::{
-  tendermint::{tx::{TendermintTx, verify_tendermint_tx}, Validators, TendermintNetwork, TendermintBlock, Signer}, ReadWrite,
-  tests::{random_evidence_tx, random_vote_tx, SignedTransaction, p2p::LocalP2p}
+  tendermint::{
+    tx::{TendermintTx, verify_tendermint_tx},
+    Validators, TendermintNetwork, TendermintBlock, Signer
+  },
+  ReadWrite,
+  tests::{
+    random_evidence_tx, random_vote_tx, SignedTransaction, p2p::LocalP2p,
+    new_genesis, signer, tx_from_evidence, signed_from_data
+  },
+  async_sequential
 };
 
 use ciphersuite::{Ristretto, Ciphersuite, group::ff::Field};
+use schnorr::SchnorrSignature;
+
 use blake2::{Blake2s256, Digest};
 use rand::{RngCore, rngs::OsRng};
-use scale::Encode;
 
-use schnorr::SchnorrSignature;
 use zeroize::Zeroizing;
 
 use serai_db::MemDb;
 
-use tendermint::{
-  SignedMessage, Message, Data, DataFor,
-  ext::{RoundNumber, BlockNumber, Signer as SignerTrait, Commit, Network, SignatureScheme},
-  SignedMessageFor, commit_msg, round::RoundData, time::CanonicalInstant
+use tendermint::{Data, ext::{RoundNumber, Commit, Signer as SignerTrait},
+  commit_msg, round::RoundData, time::CanonicalInstant
 };
-
-use lazy_static::lazy_static;
-
-use tokio::sync::Mutex;
 
 type N = TendermintNetwork<MemDb, SignedTransaction, LocalP2p>;
 
-lazy_static! {
-  pub static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
-}
-
-macro_rules! async_sequential {
-  ($(async fn $name: ident() $body: block)*) => {
-    $(
-      #[tokio::test]
-      async fn $name() {
-        let guard = SEQUENTIAL.lock().await;
-        let local = tokio::task::LocalSet::new();
-        local.run_until(async move {
-          if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
-            drop(guard);
-            Err(err).unwrap()
-          }
-        }).await;
-      }
-    )*
-  }
-}
-
-async fn signer() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) {
-  // signer
-  let mut genesis = [0; 32];
-  OsRng.fill_bytes(&mut genesis);
-  let signer = Signer::new(genesis, Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)));
-  let validator_id = signer.validator_id().await.unwrap();
-
-  // schema
-  let signer_g = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut validator_id.as_slice()).unwrap();
-  let validators = Arc::new(Validators::new(genesis, vec![(signer_g, 1)]).unwrap());
-
-  (genesis, signer, validator_id, validators)
-}
-
-fn encode_evidence<N: Network>(ev: Vec<SignedMessageFor<N>>) -> Vec<u8> {
-  let mut data = vec![];
-  data.extend(u8::to_le_bytes(u8::try_from(ev.len()).unwrap()));
-  for msg in ev {
-    let encoded = msg.encode();
-    data.extend(u32::to_le_bytes(u32::try_from(encoded.len()).unwrap()));
-    data.extend(encoded);
-  }
-  data
-}
-
-fn tx_from_evidence<N: Network>(ev: Vec<SignedMessageFor<N>>) -> TendermintTx {
-  let evidence = encode_evidence::<N>(ev);
-  TendermintTx::SlashEvidence(evidence)
-}
-
-async fn signed_from_data<N: Network>(
-  signer: <N::SignatureScheme as SignatureScheme>::Signer,
-  signer_id: N::ValidatorId,
-  block_number: u64,
-  round_number: u32,
-  data: DataFor<N>
-) -> SignedMessageFor<N> {
-  let msg = Message{ sender: signer_id, block: BlockNumber(block_number), round: RoundNumber(round_number), data };
-  let sig = signer.sign(&msg.encode()).await;
-  SignedMessage{ msg, sig }
-}
-
-#[test]
-fn serialize_tendermint() {
-  // make a tendermint tx with random evidence
-  let tx = random_evidence_tx(&mut OsRng);
-  let res = TendermintTx::read::<&[u8]>(&mut  tx.serialize().as_ref()).unwrap();
-  assert_eq!(res, tx);
-
-  // with vote tx
-  let (_, vote_tx) = random_vote_tx(&mut OsRng);
-  let vote_res = TendermintTx::read::<&[u8]>(&mut  vote_tx.serialize().as_ref()).unwrap();
-  assert_eq!(vote_res, vote_tx);
-}
-
 #[test]
 fn vote_tx() {
-  let (genesis, mut tx) = random_vote_tx(&mut OsRng);
+  let genesis = new_genesis();
+  let mut tx = random_vote_tx(&mut OsRng, genesis);
 
   let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> {end_time: 0, validators: vec![], signature: vec![] })
@@ -115,16 +41,31 @@ fn vote_tx() {
 
   // should pass
   assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
-  
+
   if let TendermintTx::SlashVote(vote) = &mut tx {
     vote.sig.signature = SchnorrSignature::default();
+  } else {
+    assert!(false)
   }
-  
+
   // should fail
   assert!(verify_tendermint_tx::<N>(&tx, genesis, validators, commit).is_err());
 }
 
 async_sequential!(
+
+  async fn serialize_tendermint() {
+    // make a tendermint tx with random evidence
+    let (genesis, signer, _, _) = signer().await;
+    let tx = random_evidence_tx::<N>(signer.into(), TendermintBlock(vec![])).await;
+    let res = TendermintTx::read::<&[u8]>(&mut  tx.serialize().as_ref()).unwrap();
+    assert_eq!(res, tx);
+
+    // with vote tx
+    let vote_tx = random_vote_tx(&mut OsRng, genesis);
+    let vote_res = TendermintTx::read::<&[u8]>(&mut  vote_tx.serialize().as_ref()).unwrap();
+    assert_eq!(vote_res, vote_tx);
+  }
 
   async fn msg_signature() {
     // signer

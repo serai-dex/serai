@@ -1,8 +1,10 @@
 use core::ops::Deref;
-use std::{io, collections::HashMap};
+use std::{io, collections::HashMap, sync::Arc};
 
+use scale::Encode;
+use ::tendermint::{ext::{Network, Signer as SignerTrait, SignatureScheme, BlockNumber, RoundNumber}, SignedMessageFor, DataFor, Message, SignedMessage, Data};
 use zeroize::Zeroizing;
-use rand::{RngCore, CryptoRng};
+use rand::{RngCore, CryptoRng, rngs::OsRng};
 
 use blake2::{Digest, Blake2s256};
 
@@ -14,14 +16,41 @@ use schnorr::SchnorrSignature;
 
 use crate::{
   transaction::{Signed, TransactionError, TransactionKind, Transaction, verify_transaction},
-  ReadWrite, tendermint::tx::{TendermintTx, VoteSignature, SlashVote}
+  ReadWrite, tendermint::{tx::{TendermintTx, VoteSignature, SlashVote}, Validators, Signer}
 };
+
+use lazy_static::lazy_static;
+
+use tokio::sync::Mutex;
 
 #[cfg(test)]
 mod signed;
 
 #[cfg(test)]
 mod tendermint;
+
+lazy_static! {
+  pub static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
+}
+
+#[macro_export]
+macro_rules! async_sequential {
+  ($(async fn $name: ident() $body: block)*) => {
+    $(
+      #[tokio::test]
+      async fn $name() {
+        let guard = $crate::tests::transaction::SEQUENTIAL.lock().await;
+        let local = tokio::task::LocalSet::new();
+        local.run_until(async move {
+          if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
+            drop(guard);
+            Err(err).unwrap()
+          }
+        }).await;
+      }
+    )*
+  }
+}
 
 pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed {
@@ -145,21 +174,69 @@ pub fn random_signed_transaction<R: RngCore + CryptoRng>(
   (genesis, signed_transaction(rng, genesis, &key, nonce))
 }
 
-pub fn random_evidence_tx<R: RngCore + CryptoRng>(
-  rng: &mut R,
-) -> TendermintTx {
-  let mut evidence = [0u8; 32];
-  rng.fill_bytes(&mut evidence);
 
-  TendermintTx::SlashEvidence(evidence.try_into().unwrap())
+pub fn new_genesis() -> [u8; 32] {
+  let mut genesis = [0; 32];
+  OsRng.fill_bytes(&mut genesis);
+  genesis
+}
+
+pub async fn signer() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) {
+  // signer
+  let genesis = new_genesis();
+  let signer = Signer::new(genesis, Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)));
+  let validator_id = signer.validator_id().await.unwrap();
+
+  // schema
+  let signer_g = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut validator_id.as_slice()).unwrap();
+  let validators = Arc::new(Validators::new(genesis, vec![(signer_g, 1)]).unwrap());
+
+  (genesis, signer, validator_id, validators)
+}
+
+pub fn encode_evidence<N: Network>(ev: Vec<SignedMessageFor<N>>) -> Vec<u8> {
+  let mut data = vec![];
+  data.extend(u8::to_le_bytes(u8::try_from(ev.len()).unwrap()));
+  for msg in ev {
+    let encoded = msg.encode();
+    data.extend(u32::to_le_bytes(u32::try_from(encoded.len()).unwrap()));
+    data.extend(encoded);
+  }
+  data
+}
+
+pub fn tx_from_evidence<N: Network>(ev: Vec<SignedMessageFor<N>>) -> TendermintTx {
+  let evidence = encode_evidence::<N>(ev);
+  TendermintTx::SlashEvidence(evidence)
+}
+
+pub async fn signed_from_data<N: Network>(
+  signer: <N::SignatureScheme as SignatureScheme>::Signer,
+  signer_id: N::ValidatorId,
+  block_number: u64,
+  round_number: u32,
+  data: DataFor<N>
+) -> SignedMessageFor<N> {
+  let msg = Message{ sender: signer_id, block: BlockNumber(block_number), round: RoundNumber(round_number), data };
+  let sig = signer.sign(&msg.encode()).await;
+  SignedMessage{ msg, sig }
+}
+
+pub async fn random_evidence_tx<N: Network>(
+  signer: <N::SignatureScheme as SignatureScheme>::Signer,
+  b: N::Block
+) -> TendermintTx {
+  let data = Data::Proposal(Some(RoundNumber(0)), b);
+  let signer_id = signer.validator_id().await.unwrap();
+  let signed = signed_from_data::<N>(signer, signer_id, 0, 0, data).await;
+  tx_from_evidence::<N>(vec![signed])
 }
 
 pub fn random_vote_tx<R: RngCore + CryptoRng>(
   rng: &mut R,
-) -> ([u8; 32], TendermintTx) {
-  // genesis and private key
-  let mut genesis = [0; 32];
-  rng.fill_bytes(&mut genesis);
+  genesis: [u8; 32]
+) -> TendermintTx {
+  // private key
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut *rng));
 
   // vote data
@@ -171,5 +248,5 @@ pub fn random_vote_tx<R: RngCore + CryptoRng>(
   let mut tx = TendermintTx::SlashVote( SlashVote{ id, target, sig: VoteSignature::default() } );
   tx.sign(rng, genesis, &key);
 
-  (genesis, tx)
+  tx
 }
