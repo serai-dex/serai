@@ -231,14 +231,22 @@ pub fn decode_evidence<N: Network>(ev: &[u8]) -> Result<Vec<SignedMessageFor<N>>
   let len = u8::from_le_bytes([ev[0]]);
   let mut pos: usize = 1;
   for _ in 0..len {
-    let size = match usize::try_from(u32::from_le_bytes(ev[pos..pos+4].try_into().unwrap()))  {
-      Ok(s) => s,
-      Err(_) => Err(TransactionError::InvalidContent)?
+    // get the msg size
+    // make sure we aren't out of range
+    let Some(size_bytes) =  ev.get(pos..pos+4) else {
+      Err(TransactionError::InvalidContent)?
+    };
+    let Ok(size) = usize::try_from(u32::from_le_bytes(size_bytes.try_into().unwrap())) else {
+      Err(TransactionError::InvalidContent)?
     };
     pos += 4;
 
+    // size might be intentionally bigger then whole slice
+    let Some(mut msg_bytes) =  ev.get(pos..pos+size) else {
+      Err(TransactionError::InvalidContent)?
+    };
     let Ok(msg) = SignedMessageFor::<N>::decode::<&[u8]>(
-      &mut &ev[pos..pos+size]
+      &mut msg_bytes
     ) else {
       Err(TransactionError::InvalidContent)?
     };

@@ -115,13 +115,20 @@ impl<T: TransactionTrait> Block<T> {
       txs.push(Transaction::Application(tx))
     }
 
+    let mut signed = vec![];
+    let mut unsigned = vec![];
     for tx in mempool {
-      assert!(
-        !matches!(tx.kind(), TransactionKind::Provided(_)),
-        "provided transaction entered mempool"
-      );
-      txs.push(tx);
+      match tx.kind() {
+        TransactionKind::Signed(_) => signed.push(tx),
+        TransactionKind::Unsigned => unsigned.push(tx),
+        TransactionKind::Provided(_) => panic!("provided transaction entered mempool")
+      }
     }
+
+    // unsigned first
+    txs.extend(unsigned);
+    // then signed
+    txs.extend(signed);
 
     // Check TXs are sorted by nonce.
     let nonce = |tx: &Transaction<T>| {
