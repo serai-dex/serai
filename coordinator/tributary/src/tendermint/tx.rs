@@ -368,10 +368,12 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
       }
     },
     TendermintTx::SlashVote(vote) => {
-      
+
       // TODO: verify the target is actually one of our validators?
       // this shouldn't be a problem because if the target isn't valid, no one else
       // gonna vote on it. But we still have to think about spam votes.
+
+      // TODO: we should check signer is a participant?
 
       let sig = &vote.sig;
       // verify the tx signature

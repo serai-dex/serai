@@ -1,4 +1,4 @@
-use std::{collections::{VecDeque, HashMap}, sync::Arc};
+use std::{collections::{VecDeque, HashMap}, sync::Arc, io};
 
 use lazy_static::__Deref;
 use zeroize::Zeroizing;
@@ -18,7 +18,7 @@ use crate::{
     new_genesis, random_vote_tx, random_evidence_tx
   },
   tendermint::{TendermintNetwork, Validators, tx::TendermintTx, Signer, TendermintBlock},
-  async_sequential,
+  async_sequential, ReadWrite, Signed, TransactionKind, TransactionError, BlockError,
 };
 
 type N = TendermintNetwork<MemDb, SignedTransaction, LocalP2p>;
@@ -373,4 +373,143 @@ async_sequential!(
   }
 );
 
-// TODO: add tests for block tx ordering?
+#[test]
+fn block_tx_ordering() {
+
+  #[derive(Debug, PartialEq, Eq, Clone)]
+  enum SignedTx {
+    Signed(SignedTransaction),
+    Provided(ProvidedTransaction)
+  }
+  impl ReadWrite for SignedTx {
+    fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+      let mut kind = [0];
+      reader.read_exact(&mut kind)?;
+      match kind[0] {
+        0 => {
+          let mut len = [0; 4];
+          reader.read_exact(&mut len)?;
+          let mut data = vec![0; usize::try_from(u32::from_le_bytes(len)).unwrap()];
+          reader.read_exact(&mut data)?;
+    
+          Ok(SignedTx::Signed(SignedTransaction(data, Signed::read(reader)?)))
+        },
+        1 => {
+          let mut len = [0; 4];
+          reader.read_exact(&mut len)?;
+          let mut data = vec![0; usize::try_from(u32::from_le_bytes(len)).unwrap()];
+          reader.read_exact(&mut data)?;
+          Ok(SignedTx::Provided(ProvidedTransaction(data)))
+        },
+        _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type"))
+      }
+    }
+
+    fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+      match self {
+        SignedTx::Signed(signed) => {
+          writer.write_all(&[0])?;
+          signed.write(writer)
+        },
+        SignedTx::Provided(pro) => {
+          writer.write_all(&[1])?;
+          pro.write(writer)
+        }
+      }
+    }
+  }
+
+  impl TransactionTrait for SignedTx {
+    fn kind(&self) -> TransactionKind<'_> {
+      match self {
+        SignedTx::Signed(signed) => signed.kind(),
+        SignedTx::Provided(pro) => pro.kind()
+      }
+    }
+
+    fn hash(&self) -> [u8; 32] {
+      match self {
+        SignedTx::Signed(signed) => signed.hash(),
+        SignedTx::Provided(pro) => pro.hash()
+      }
+    }
+
+    fn verify(&self) -> Result<(), TransactionError> {
+      Ok(())
+    }
+  }
+
+
+  let genesis = new_genesis();
+  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
+
+  // txs
+  let signed_raw = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0);
+  let signer = signed_raw.1.signer;
+  let signed_tx = SignedTx::Signed(signed_raw);
+  let provided_tx = SignedTx::Provided(random_provided_transaction(&mut OsRng));
+  let unsigned_tx = random_vote_tx(&mut OsRng, genesis);
+
+  let (_, mut blockchain) = new_blockchain::<SignedTx>(genesis, &[signer]);
+  let mempool = vec![
+    Transaction::Application(signed_tx.clone()),
+    Transaction::Tendermint(unsigned_tx.clone())
+  ];
+
+  // add txs
+  let tip = blockchain.tip();
+  assert!(blockchain.add_transaction::<N>(true, Transaction::Application(signed_tx), validators.clone()));
+  assert!(blockchain.add_transaction::<N>(true, Transaction::Tendermint(unsigned_tx), validators.clone()));
+
+  blockchain.provide_transaction(provided_tx.clone()).unwrap();
+  let mut block = blockchain.build_block::<N>(validators.clone());
+
+  assert_eq!(block, Block::new(blockchain.tip(), vec![provided_tx.clone()], mempool.clone()));
+  assert_eq!(blockchain.tip(), tip);
+  assert_eq!(block.header.parent, tip);
+
+  // Make sure all transactions were included
+  assert_eq!(block.transactions.len(), 3);
+
+  // check the tx order
+  let txs = &block.transactions;
+  assert!(matches!(txs[0].kind(), TransactionKind::Provided(..)));
+  assert!(matches!(txs[1].kind(), TransactionKind::Unsigned));
+  assert!(matches!(txs[2].kind(), TransactionKind::Signed(..)));
+
+  // should be a valid block
+  blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+
+  let txs_orig = block.transactions.clone();
+
+  // modify tx order
+  block.transactions.swap(0, 1);
+
+  // should fail
+  assert_eq!(blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(), BlockError::WrongTxOrder);
+
+  // reset
+  block.transactions = txs_orig.clone();
+
+  // modify tx order
+  block.transactions.swap(0, 2);
+
+  // should fail
+  assert_eq!(blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(), BlockError::WrongTxOrder);
+
+  // reset
+  block.transactions = txs_orig.clone();
+
+  // modify tx order
+  block.transactions.swap(1, 2);
+
+  // should fail
+  assert_eq!(blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(), BlockError::WrongTxOrder);
+
+  // reset
+  block.transactions = txs_orig;
+
+  // should be valid block again
+  blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+}
