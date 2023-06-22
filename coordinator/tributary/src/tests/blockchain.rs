@@ -18,7 +18,7 @@ use crate::{
     new_genesis, random_vote_tx, random_evidence_tx
   },
   tendermint::{TendermintNetwork, Validators, tx::TendermintTx, Signer, TendermintBlock},
-  async_sequential, ReadWrite, Signed, TransactionKind, TransactionError, BlockError,
+  async_sequential, ReadWrite, TransactionKind, TransactionError, BlockError,
 };
 
 type N = TendermintNetwork<MemDb, SignedTransaction, LocalP2p>;
@@ -387,19 +387,10 @@ fn block_tx_ordering() {
       reader.read_exact(&mut kind)?;
       match kind[0] {
         0 => {
-          let mut len = [0; 4];
-          reader.read_exact(&mut len)?;
-          let mut data = vec![0; usize::try_from(u32::from_le_bytes(len)).unwrap()];
-          reader.read_exact(&mut data)?;
-    
-          Ok(SignedTx::Signed(SignedTransaction(data, Signed::read(reader)?)))
+          Ok(SignedTx::Signed(SignedTransaction::read(reader)?))
         },
         1 => {
-          let mut len = [0; 4];
-          reader.read_exact(&mut len)?;
-          let mut data = vec![0; usize::try_from(u32::from_le_bytes(len)).unwrap()];
-          reader.read_exact(&mut data)?;
-          Ok(SignedTx::Provided(ProvidedTransaction(data)))
+          Ok(SignedTx::Provided(ProvidedTransaction::read(reader)?))
         },
         _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type"))
       }
@@ -439,14 +430,15 @@ fn block_tx_ordering() {
     }
   }
 
-
   let genesis = new_genesis();
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
   let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
 
-  // txs
+  // signer
   let signed_raw = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0);
   let signer = signed_raw.1.signer;
+
+  // txs
   let signed_tx = SignedTx::Signed(signed_raw);
   let provided_tx = SignedTx::Provided(random_provided_transaction(&mut OsRng));
   let unsigned_tx = random_vote_tx(&mut OsRng, genesis);
