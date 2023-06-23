@@ -258,14 +258,16 @@ impl Transaction {
     };
 
     if prefix.version == 1 {
-
       signatures = prefix
         .inputs
         .iter()
         .filter_map(|input| match input {
-          Input::ToKey { key_offsets, .. } => {
-            Some(key_offsets.iter().map(|_| Ok((read_scalar(r)?, read_scalar(r)?))).collect::<Result<_, io::Error>>())
-          }
+          Input::ToKey { key_offsets, .. } => Some(
+            key_offsets
+              .iter()
+              .map(|_| Ok((read_scalar(r)?, read_scalar(r)?)))
+              .collect::<Result<_, io::Error>>(),
+          ),
           _ => None,
         })
         .collect::<Result<_, _>>()?;

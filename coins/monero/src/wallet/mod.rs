@@ -104,7 +104,7 @@ fn amount_decryption(amount: &EcdhInfo, key: Scalar) -> u64 {
       // get first 64 bits (d2b in rctTypes.cpp)
       let amount_significant_bytes =
         amount_scalar.to_bytes()[0 .. 8].try_into().expect("Can't fail");
-      
+
       u64::from_le_bytes(amount_significant_bytes)
     }
     EcdhInfo::Bulletproof { amount } => {

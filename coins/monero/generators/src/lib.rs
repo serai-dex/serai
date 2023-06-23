@@ -34,14 +34,15 @@ lazy_static! {
 
   /// Monero's `H` generator multiplied 2^i for each index, i.e. H, 2H, 4H, 8H, ...
   /// used in old range proofs.
-  /// https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/src/ringct/rctTypes.h#L628
+  /// https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/src/
+  /// ringct/rctTypes.h#L628
   pub static ref H2: [DalekPoint; 64] = generate_H2();
 }
 
 #[allow(non_snake_case)]
 fn generate_H2() -> [DalekPoint; 64] {
   let mut temp = Vec::with_capacity(64);
-  for i in 0..64 {
+  for i in 0 .. 64 {
     temp.push(Scalar::from(2_u128.pow(i)) * *H)
   }
   temp.try_into().unwrap()

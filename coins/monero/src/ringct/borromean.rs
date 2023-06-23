@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
 
-use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
+use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
 
@@ -70,7 +70,7 @@ impl RangeSig {
 
     let mut C_temp = EdwardsPoint::identity();
 
-    for i in 0..64 {
+    for i in 0 .. 64 {
       bbs0.push(Scalar::from_bytes_mod_order(self.asig.s0[i]));
       bbs1.push(Scalar::from_bytes_mod_order(self.asig.s1[i]));
 
@@ -85,13 +85,18 @@ impl RangeSig {
     } else {
       verify_borromean(P1, P2, bbee, bbs0, bbs1)
     }
-
   }
 }
 
-fn verify_borromean(P1: Vec<EdwardsPoint>, P2: Vec<EdwardsPoint>, bbee: Scalar, bbs0: Vec<Scalar>, bbs1: Vec<Scalar>) -> bool {
+fn verify_borromean(
+  P1: Vec<EdwardsPoint>,
+  P2: Vec<EdwardsPoint>,
+  bbee: Scalar,
+  bbs0: Vec<Scalar>,
+  bbs1: Vec<Scalar>,
+) -> bool {
   let mut LV: Vec<u8> = Vec::with_capacity(2048);
-  for i in 0..64 {
+  for i in 0 .. 64 {
     let LL = EdwardsPoint::vartime_double_scalar_mul_basepoint(&bbee, &P1[i], &bbs0[i]);
     let chash = hash_to_scalar(LL.compress().as_bytes());
     let LV_temp = EdwardsPoint::vartime_double_scalar_mul_basepoint(&chash, &P2[i], &bbs1[i]);
@@ -99,10 +104,5 @@ fn verify_borromean(P1: Vec<EdwardsPoint>, P2: Vec<EdwardsPoint>, bbee: Scalar, 
   }
   let eecomp = hash_to_scalar(&LV);
 
-  if !(eecomp == bbee) {
-    false
-  }
-  else {
-    true
-  }
+  eecomp == bbee
 }
