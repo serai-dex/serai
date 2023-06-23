@@ -201,6 +201,10 @@ impl TransactionPrefix {
     prefix.extra = read_vec(read_byte, r)?;
     Ok(prefix)
   }
+
+  pub fn hash(&self) -> [u8; 32] {
+    hash(&self.serialize())
+  }
 }
 
 /// Monero transaction. For version 1, rct_signatures still contains an accurate fee value.
@@ -254,18 +258,17 @@ impl Transaction {
     };
 
     if prefix.version == 1 {
-      let read_sig =
-        |r: &mut R| -> io::Result<(Scalar, Scalar)> { Ok((read_scalar(r)?, read_scalar(r)?)) };
+
       signatures = prefix
         .inputs
         .iter()
         .filter_map(|input| match input {
           Input::ToKey { key_offsets, .. } => {
-            Some(key_offsets.iter().map(|_| (read_sig(r))).collect::<Result<Vec<(_, _)>, _>>())
+            Some(key_offsets.iter().map(|_| Ok((read_scalar(r)?, read_scalar(r)?))).collect::<Result<_, io::Error>>())
           }
           _ => None,
         })
-        .collect::<Result<Vec<Vec<(Scalar, Scalar)>>, _>>()?;
+        .collect::<Result<_, _>>()?;
 
       rct_signatures.base.fee = prefix
         .inputs
@@ -304,9 +307,7 @@ impl Transaction {
     } else {
       let mut hashes = Vec::with_capacity(96);
 
-      self.prefix.write(&mut buf).unwrap();
-      hashes.extend(hash(&buf));
-      buf.clear();
+      hashes.extend(self.prefix.hash());
 
       self.rct_signatures.base.write(&mut buf, self.rct_signatures.prunable.rct_type()).unwrap();
       hashes.extend(hash(&buf));
@@ -330,9 +331,7 @@ impl Transaction {
     let mut buf = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);
 
-    self.prefix.write(&mut buf).unwrap();
-    sig_hash.extend(hash(&buf));
-    buf.clear();
+    sig_hash.extend(self.prefix.hash());
 
     self.rct_signatures.base.write(&mut buf, self.rct_signatures.prunable.rct_type()).unwrap();
     sig_hash.extend(hash(&buf));

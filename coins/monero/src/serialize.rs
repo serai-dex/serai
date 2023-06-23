@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::io::{self, Read, Write};
 
 use curve25519_dalek::{
@@ -142,4 +143,11 @@ pub(crate) fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
   r: &mut R,
 ) -> io::Result<Vec<T>> {
   read_raw_vec(f, read_varint(r)?.try_into().unwrap(), r)
+}
+
+pub(crate) fn read_64_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>>(
+  f: F,
+  r: &mut R,
+) -> io::Result<[T; 64]> {
+  (0 .. 64).map(|_| f(r)).collect::<io::Result<Vec<T>>>().map(|vec| vec.try_into().unwrap())
 }

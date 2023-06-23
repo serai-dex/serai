@@ -9,6 +9,7 @@ use lazy_static::lazy_static;
 use sha3::{Digest, Keccak256};
 
 use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint, CompressedEdwardsY};
+use curve25519_dalek::scalar::Scalar;
 
 use group::{Group, GroupEncoding};
 use dalek_ff_group::EdwardsPoint;
@@ -30,6 +31,20 @@ lazy_static! {
       .decompress()
       .unwrap()
       .mul_by_cofactor();
+
+  /// Monero's `H` generator multiplied 2^i for each index, i.e. H, 2H, 4H, 8H, ...
+  /// used in old range proofs.
+  /// https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/src/ringct/rctTypes.h#L628
+  pub static ref H2: [DalekPoint; 64] = generate_H2();
+}
+
+#[allow(non_snake_case)]
+fn generate_H2() -> [DalekPoint; 64] {
+  let mut temp = Vec::with_capacity(64);
+  for i in 0..64 {
+    temp.push(Scalar::from(2_u128.pow(i)) * *H)
+  }
+  temp.try_into().unwrap()
 }
 
 const MAX_M: usize = 16;
