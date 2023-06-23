@@ -20,7 +20,7 @@ pub mod bulletproofs;
 use crate::{
   Protocol,
   serialize::*,
-  ringct::{clsag::Clsag, mlsag::Mlsag, bulletproofs::Bulletproofs, borromean::RangeSig},
+  ringct::{clsag::Clsag, mlsag::MgSig, bulletproofs::Bulletproofs, borromean::RangeSig},
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
@@ -197,17 +197,10 @@ impl RctPrunable {
   ) -> io::Result<RctPrunable> {
     Ok(match rct_type {
       0 => RctPrunable::Null,
-      1 => RctPrunable::Borromean {
+      1 | 2 => RctPrunable::Borromean {
         range_sigs: read_raw_vec(RangeSig::read, outputs, r)?,
-        mlsags: vec![Mlsag::read(decoys[0], 1 + decoys.len(), r)?],
-        simple: false,
-      },
-      2 => RctPrunable::Borromean {
-        range_sigs: read_raw_vec(RangeSig::read, outputs, r)?,
-        mlsags: (0 .. decoys.len())
-          .map(|o| Mlsag::read(decoys[o], 2, r))
-          .collect::<Result<_, _>>()?,
-        simple: true,
+        mlsags: decoys.iter().map(|d| MgSig::read(*d, r)).collect::<Result<_, _>>()?,
+        simple: rct_type == 2,
       },
       3 | 4 => RctPrunable::BulletProof {
         bulletproofs: read_raw_vec(
@@ -219,7 +212,7 @@ impl RctPrunable {
           },
           r,
         )?,
-        mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
+        mlsags: decoys.iter().map(|d| MgSig::read(*d, r)).collect::<Result<_, _>>()?,
         pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
         v2: rct_type == 4,
       },

@@ -29,8 +29,8 @@ pub struct BorroSig {
 impl BorroSig {
   pub fn read<R: Read>(r: &mut R) -> io::Result<BorroSig> {
     Ok(BorroSig {
-      s0: read_64_array(read_bytes, r)?,
-      s1: read_64_array(read_bytes, r)?,
+      s0: read_array(read_bytes, r)?,
+      s1: read_array(read_bytes, r)?,
       ee: read_bytes(r)?,
     })
   }
@@ -53,7 +53,7 @@ pub struct RangeSig {
 
 impl RangeSig {
   pub fn read<R: Read>(r: &mut R) -> io::Result<RangeSig> {
-    Ok(RangeSig { asig: BorroSig::read(r)?, Ci: read_64_array(read_point, r)? })
+    Ok(RangeSig { asig: BorroSig::read(r)?, Ci: read_array(read_point, r)? })
   }
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.asig.write(w)?;

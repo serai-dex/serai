@@ -11,6 +11,7 @@ use sha3::{Digest, Keccak256};
 use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint, CompressedEdwardsY};
 use curve25519_dalek::scalar::Scalar;
 
+use std_shims::vec::Vec;
 use group::{Group, GroupEncoding};
 use dalek_ff_group::EdwardsPoint;
 

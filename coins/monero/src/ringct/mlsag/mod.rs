@@ -9,14 +9,14 @@ use curve25519_dalek::edwards::EdwardsPoint;
 use crate::{hash_to_scalar, serialize::*};
 use crate::ringct::hash_to_point;
 
-/// MLSAG signature, as used in Monero.
+/// MgSig part of MLSAG, as used in Monero.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Mlsag {
-  pub ss: Vec<Vec<Scalar>>,
+pub struct MgSig {
+  pub ss: Vec<[Scalar; 2]>,
   pub cc: Scalar,
 }
 
-impl Mlsag {
+impl MgSig {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for ss in self.ss.iter() {
       write_raw_vec(write_scalar, ss, w)?;
@@ -24,11 +24,9 @@ impl Mlsag {
     write_scalar(&self.cc, w)
   }
 
-  pub fn read<R: Read>(mixins: usize, ss2_elements: usize, r: &mut R) -> io::Result<Mlsag> {
-    Ok(Mlsag {
-      ss: (0 .. mixins)
-        .map(|_| read_raw_vec(read_scalar, ss2_elements, r))
-        .collect::<Result<_, _>>()?,
+  pub fn read<R: Read>(mixins: usize, r: &mut R) -> io::Result<MgSig> {
+    Ok(MgSig {
+      ss: (0 .. mixins).map(|_| read_array(read_scalar, r)).collect::<Result<_, _>>()?,
       cc: read_scalar(r)?,
     })
   }
