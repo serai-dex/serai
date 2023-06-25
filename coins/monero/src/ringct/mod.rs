@@ -108,12 +108,12 @@ pub enum RctPrunable {
   Null,
   Borromean {
     range_sigs: Vec<RangeSig>,
-    mlsags: Vec<Mlsag>,
+    mlsags: Vec<MgSig>,
     simple: bool,
   },
   BulletProof {
     bulletproofs: Vec<Bulletproofs>,
-    mlsags: Vec<Mlsag>,
+    mlsags: Vec<MgSig>,
     pseudo_outs: Vec<EdwardsPoint>,
     v2: bool,
   },
@@ -163,7 +163,7 @@ impl RctPrunable {
       RctPrunable::Null => Ok(()),
       RctPrunable::Borromean { range_sigs, mlsags, simple: _ } => {
         write_raw_vec(RangeSig::write, range_sigs, w)?;
-        write_raw_vec(Mlsag::write, mlsags, w)
+        write_raw_vec(MgSig::write, mlsags, w)
       }
       RctPrunable::BulletProof { bulletproofs, mlsags, pseudo_outs, v2 } => {
         if !v2 {
@@ -172,7 +172,7 @@ impl RctPrunable {
           write_varint(&bulletproofs.len().try_into().unwrap(), w)?;
         }
         write_raw_vec(Bulletproofs::write, bulletproofs, w)?;
-        write_raw_vec(Mlsag::write, mlsags, w)?;
+        write_raw_vec(MgSig::write, mlsags, w)?;
         write_raw_vec(write_point, pseudo_outs, w)
       }
       RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
@@ -234,7 +234,10 @@ impl RctPrunable {
       RctPrunable::Clsag { bulletproofs, .. } => {
         bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
       }
-      _ => todo!(),
+      RctPrunable::BulletProof { bulletproofs, .. } => {
+        bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
+      }
+      RctPrunable::Borromean { range_sigs, .. } => range_sigs.iter().try_for_each(|rs| rs.write(w)),
     }
   }
 }

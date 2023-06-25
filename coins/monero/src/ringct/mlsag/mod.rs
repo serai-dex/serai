@@ -5,6 +5,7 @@ use std::io::{Read, Write};
 
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::traits::Identity;
 
 use crate::{hash_to_scalar, serialize::*};
 use crate::ringct::hash_to_point;
@@ -31,7 +32,56 @@ impl MgSig {
     })
   }
 
-  pub fn verify(&self, msg: &[u8; 32], ring: &[[EdwardsPoint; 2]], I: &EdwardsPoint) -> bool {
+  pub fn verify_rct_full(
+    &self,
+    msg: &[u8; 32],
+    pubs: &[[EdwardsPoint; 2]],
+    out_pks: &[EdwardsPoint],
+    fee: &EdwardsPoint,
+    I: &EdwardsPoint,
+  ) -> bool {
+    if pubs.is_empty() {
+      return false;
+    }
+
+    let sum_out_pk = {
+      let mut sum = EdwardsPoint::identity();
+      for out_pk in out_pks {
+        sum += out_pk;
+      }
+      sum
+    };
+
+    let mut ring_matrix = Vec::with_capacity(pubs.len());
+
+    for member in pubs.iter() {
+      ring_matrix.push([member[0], member[1] - sum_out_pk - fee])
+    }
+
+    self.verify_mlsag(msg, &ring_matrix, I)
+  }
+
+  pub fn verify_rct_simple(
+    &self,
+    msg: &[u8; 32],
+    pubs: &[[EdwardsPoint; 2]],
+    pseudo_out: &EdwardsPoint,
+    I: &EdwardsPoint,
+  ) -> bool {
+    if pubs.is_empty() {
+      return false;
+    }
+
+    let mut ring_matrix = Vec::with_capacity(pubs.len());
+
+    for member in pubs.iter() {
+      ring_matrix.push([member[0], member[1] - pseudo_out])
+    }
+
+    self.verify_mlsag(msg, &ring_matrix, I)
+  }
+
+  fn verify_mlsag(&self, msg: &[u8; 32], ring: &[[EdwardsPoint; 2]], I: &EdwardsPoint) -> bool {
     let mut buf = Vec::with_capacity(32 * 6);
 
     let mut ci = self.cc;
