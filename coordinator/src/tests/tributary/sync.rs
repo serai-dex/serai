@@ -117,9 +117,9 @@ async fn sync_test() {
   // Because only `t` validators are used in a commit, take n - t nodes offline
   // leaving only `t` nodes. Which should force it to participate in the consensus
   // of next blocks.
-  let n = (spec.n() - spec.t()) as usize;
-  for t in p2p_threads.iter().take(n) {
-    t.abort();
+  let spares = usize::from(spec.n() - spec.t());
+  for thread in p2p_threads.iter().take(spares) {
+    thread.abort();
   }
 
   // wait for a block
