@@ -21,7 +21,7 @@ runs:
   using: "composite"
   steps:
     - name: Install Protobuf
-      uses: arduino/setup-protoc@master
+      uses: arduino/setup-protoc@v2.0.0
       with:
         repo-token: ${{ inputs.github-token }}
 
