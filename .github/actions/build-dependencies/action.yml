@@ -37,7 +37,7 @@ runs:
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
-        targets: wasm32-unknown-unknown
+        targets: wasm32-unknown-unknown, riscv32imac-unknown-none-elf
 
     - name: Cache Rust
       uses: Swatinem/rust-cache@v2
