@@ -35,10 +35,11 @@ async fn sync_test() {
 
   // Have the rest form a P2P net
   let mut tributary_arcs = vec![];
+  let mut p2p_threads = vec![];
   for (i, (p2p, tributary)) in tributaries.drain(..).enumerate() {
     let tributary = Arc::new(RwLock::new(tributary));
     tributary_arcs.push(tributary.clone());
-    tokio::spawn(handle_p2p(
+    let thread = tokio::spawn(handle_p2p(
       Ristretto::generator() * *keys[i],
       p2p,
       Arc::new(RwLock::new(HashMap::from([(
@@ -46,6 +47,7 @@ async fn sync_test() {
         ActiveTributary { spec: spec.clone(), tributary },
       )]))),
     ));
+    p2p_threads.push(thread);
   }
   let tributaries = tributary_arcs;
 
@@ -112,21 +114,28 @@ async fn sync_test() {
   assert!(syncer_tributary.read().await.tip().await != syncer_tip);
 
   // Verify it's now participating in consensus
-  // Because only `t` validators are used in a commit, check several commits
-  // This should be biased in favor of the syncer since we're using the syncer's view of the commit
-  for _ in 0 .. 10 {
-    let syncer_tributary = syncer_tributary.read().await;
-    if syncer_tributary
-      .reader()
-      .parsed_commit(&syncer_tributary.tip().await)
-      .unwrap()
-      .validators
-      .iter()
-      .any(|signer| signer == &syncer_key.to_bytes())
-    {
-      return;
-    }
-    sleep(Duration::from_secs(block_time)).await;
+  // Because only `t` validators are used in a commit, take n - t nodes offline
+  // leaving only `t` nodes. Which should force it to participate in the consensus
+  // of next blocks.
+  let n = (spec.n() - spec.t()) as usize;
+  for t in p2p_threads.iter().take(n) {
+    t.abort();
   }
+
+  // wait for a block
+  sleep(Duration::from_secs(block_time)).await;
+
+  let syncer_tributary = syncer_tributary.read().await;
+  if syncer_tributary
+    .reader()
+    .parsed_commit(&syncer_tributary.tip().await)
+    .unwrap()
+    .validators
+    .iter()
+    .any(|signer| signer == &syncer_key.to_bytes())
+  {
+    return;
+  }
+
   panic!("synced tributary didn't start participating in consensus");
 }
