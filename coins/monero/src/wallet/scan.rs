@@ -375,8 +375,8 @@ impl Scanner {
         let mut commitment = Commitment::zero();
 
         // Miner transaction
-        if output.amount != 0 {
-          commitment.amount = output.amount;
+        if let Some(amount) = output.amount {
+          commitment.amount = amount;
         // Regular transaction
         } else {
           let amount = match tx.rct_signatures.base.ecdh_info.get(o) {
@@ -458,10 +458,10 @@ impl Scanner {
         tx.prefix
           .outputs
           .iter()
-          // Filter to miner TX outputs/0-amount outputs since we're tacking the 0-amount index
-          // This will fail to scan blocks containing pre-RingCT miner TXs
+          // Filter to v2 miner TX outputs/RCT outputs since we're tracking the RCT output index
           .filter(|output| {
-            matches!(tx.prefix.inputs.get(0), Some(Input::Gen(..))) || (output.amount == 0)
+            ((tx.prefix.version == 2) && matches!(tx.prefix.inputs.get(0), Some(Input::Gen(..)))) ||
+              output.amount.is_none()
           })
           .count(),
       )

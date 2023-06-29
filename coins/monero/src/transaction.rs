@@ -20,7 +20,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Input {
   Gen(u64),
-  ToKey { amount: u64, key_offsets: Vec<u64>, key_image: EdwardsPoint },
+  ToKey { amount: Option<u64>, key_offsets: Vec<u64>, key_image: EdwardsPoint },
 }
 
 impl Input {
@@ -40,7 +40,7 @@ impl Input {
 
       Input::ToKey { amount, key_offsets, key_image } => {
         w.write_all(&[2])?;
-        write_varint(amount, w)?;
+        write_varint(&amount.unwrap_or(0), w)?;
         write_vec(write_varint, key_offsets, w)?;
         write_point(key_image, w)
       }
@@ -53,14 +53,18 @@ impl Input {
     res
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Input> {
+  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Input> {
     Ok(match read_byte(r)? {
       255 => Input::Gen(read_varint(r)?),
-      2 => Input::ToKey {
-        amount: read_varint(r)?,
-        key_offsets: read_vec(read_varint, r)?,
-        key_image: read_torsion_free_point(r)?,
-      },
+      2 => {
+        let amount = read_varint(r)?;
+        let amount = if (amount == 0) && interpret_as_rct { None } else { Some(amount) };
+        Input::ToKey {
+          amount,
+          key_offsets: read_vec(read_varint, r)?,
+          key_image: read_torsion_free_point(r)?,
+        }
+      }
       _ => {
         Err(io::Error::new(io::ErrorKind::Other, "Tried to deserialize unknown/unused input type"))?
       }
@@ -71,7 +75,7 @@ impl Input {
 // Doesn't bother moving to an enum for the unused Script classes
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
-  pub amount: u64,
+  pub amount: Option<u64>,
   pub key: CompressedEdwardsY,
   pub view_tag: Option<u8>,
 }
@@ -82,7 +86,7 @@ impl Output {
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    write_varint(&self.amount, w)?;
+    write_varint(&self.amount.unwrap_or(0), w)?;
     w.write_all(&[2 + u8::from(self.view_tag.is_some())])?;
     w.write_all(&self.key.to_bytes())?;
     if let Some(view_tag) = self.view_tag {
@@ -97,8 +101,17 @@ impl Output {
     res
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Output> {
+  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Output> {
     let amount = read_varint(r)?;
+    let amount = if interpret_as_rct {
+      if amount != 0 {
+        Err(io::Error::new(io::ErrorKind::Other, "RCT TX output wasn't 0"))?;
+      }
+      None
+    } else {
+      Some(amount)
+    };
+
     let view_tag = match read_byte(r)? {
       2 => false,
       3 => true,
@@ -194,11 +207,25 @@ impl TransactionPrefix {
   }
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<TransactionPrefix> {
+    let version = read_varint(r)?;
+    // TODO: Create an enum out of version
+    if (version == 0) || (version > 2) {
+      Err(io::Error::new(io::ErrorKind::Other, "unrecognized transaction version"))?;
+    }
+
+    let timelock = Timelock::from_raw(read_varint(r)?);
+
+    let inputs = read_vec(|r| Input::read(version == 2, r), r)?;
+    if inputs.is_empty() {
+      Err(io::Error::new(io::ErrorKind::Other, "transaction had no inputs"))?;
+    }
+    let is_miner_tx = matches!(inputs[0], Input::Gen { .. });
+
     let mut prefix = TransactionPrefix {
-      version: read_varint(r)?,
-      timelock: Timelock::from_raw(read_varint(r)?),
-      inputs: read_vec(Input::read, r)?,
-      outputs: read_vec(Output::read, r)?,
+      version,
+      timelock,
+      inputs,
+      outputs: read_vec(|r| Output::read((!is_miner_tx) && (version == 2), r), r)?,
       extra: vec![],
     };
     prefix.extra = read_vec(read_byte, r)?;
@@ -263,10 +290,10 @@ impl Transaction {
         .iter()
         .map(|input| match input {
           Input::Gen(..) => 0,
-          Input::ToKey { amount, .. } => *amount,
+          Input::ToKey { amount, .. } => amount.unwrap(),
         })
         .sum::<u64>()
-        .saturating_sub(prefix.outputs.iter().map(|output| output.amount).sum());
+        .saturating_sub(prefix.outputs.iter().map(|output| output.amount.unwrap()).sum());
     } else if prefix.version == 2 {
       rct_signatures = RctSignatures::read(
         prefix

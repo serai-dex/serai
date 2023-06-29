@@ -184,7 +184,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng, RPC: RpcConnection>(
     ));
 
     tx.prefix.inputs.push(Input::ToKey {
-      amount: 0,
+      amount: None,
       key_offsets: decoys[i].offsets.clone(),
       key_image: signable[i].1,
     });
@@ -633,7 +633,7 @@ impl SignableTransaction {
     for output in &outputs {
       fee -= output.commitment.amount;
       tx_outputs.push(Output {
-        amount: 0,
+        amount: None,
         key: output.dest.compress(),
         view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
@@ -691,7 +691,7 @@ impl SignableTransaction {
       uniqueness(
         &images
           .iter()
-          .map(|image| Input::ToKey { amount: 0, key_offsets: vec![], key_image: *image })
+          .map(|image| Input::ToKey { amount: None, key_offsets: vec![], key_image: *image })
           .collect::<Vec<_>>(),
       ),
     );
@@ -750,7 +750,7 @@ impl Eventuality {
     for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
       // Verify the output, commitment, and encrypted amount.
       if (&Output {
-        amount: 0,
+        amount: None,
         key: expected.dest.compress(),
         view_tag: Some(expected.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       } != actual) ||
