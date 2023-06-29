@@ -28,28 +28,31 @@ pub use mutex_shim::{ShimMutex as Mutex, MutexGuard};
 pub use std::sync::OnceLock;
 #[cfg(not(feature = "std"))]
 mod oncelock_shim {
-  pub struct OnceLock<T>(super::Mutex<()>, Option<T>);
+  use core::cell::UnsafeCell;
+  use super::Mutex;
+
+  pub struct OnceLock<T>(Mutex<()>, UnsafeCell<Option<T>>);
   impl<T> OnceLock<T> {
     pub const fn new() -> OnceLock<T> {
-      OnceLock(Mutex::new(), None)
+      OnceLock(Mutex::new(()), UnsafeCell::new(None))
     }
 
     pub fn get(&self) -> Option<&T> {
-      self.1.as_ref()
+      unsafe { (&*self.1.get()).as_ref() }
     }
 
     pub fn get_mut(&mut self) -> Option<&mut T> {
-      self.1.as_mut()
+      unsafe { (&mut *self.1.get()).as_mut() }
     }
 
     pub fn get_or_init<F: FnOnce() -> T>(&self, f: F) -> &T {
       let lock = self.0.lock();
-      if self.1.is_none() {
-        self.1 = Some(f());
+      if self.get().is_none() {
+        unsafe { *self.1.get() = Some(f()); }
       }
       drop(lock);
 
-      self.1.as_ref().unwrap()
+      self.get().unwrap()
     }
   }
 }
