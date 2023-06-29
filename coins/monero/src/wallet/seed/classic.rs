@@ -1,7 +1,5 @@
 use core::ops::Deref;
-use std::collections::HashMap;
-
-use lazy_static::lazy_static;
+use std_shims::{sync::OnceLock, collections::HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
@@ -47,28 +45,32 @@ impl WordList {
   }
 }
 
-lazy_static! {
-  static ref LANGUAGES: HashMap<Language, WordList> = HashMap::from([
-    (Language::Chinese, WordList::new(include!("./classic/zh.rs"), 1)),
-    (Language::English, WordList::new(include!("./classic/en.rs"), 3)),
-    (Language::Dutch, WordList::new(include!("./classic/nl.rs"), 4)),
-    (Language::French, WordList::new(include!("./classic/fr.rs"), 4)),
-    (Language::Spanish, WordList::new(include!("./classic/es.rs"), 4)),
-    (Language::German, WordList::new(include!("./classic/de.rs"), 4)),
-    (Language::Italian, WordList::new(include!("./classic/it.rs"), 4)),
-    (Language::Portuguese, WordList::new(include!("./classic/pt.rs"), 4)),
-    (Language::Japanese, WordList::new(include!("./classic/ja.rs"), 3)),
-    (Language::Russian, WordList::new(include!("./classic/ru.rs"), 4)),
-    (Language::Esperanto, WordList::new(include!("./classic/eo.rs"), 4)),
-    (Language::Lojban, WordList::new(include!("./classic/jbo.rs"), 4)),
-    (Language::EnglishOld, WordList::new(include!("./classic/ang.rs"), 4)),
-  ]);
+static LANGUAGES_CELL: OnceLock<HashMap<Language, WordList>> = OnceLock::new();
+#[allow(non_snake_case)]
+fn LANGUAGES() -> &'static HashMap<Language, WordList> {
+  LANGUAGES_CELL.get_or_init(|| {
+    HashMap::from([
+      (Language::Chinese, WordList::new(include!("./classic/zh.rs"), 1)),
+      (Language::English, WordList::new(include!("./classic/en.rs"), 3)),
+      (Language::Dutch, WordList::new(include!("./classic/nl.rs"), 4)),
+      (Language::French, WordList::new(include!("./classic/fr.rs"), 4)),
+      (Language::Spanish, WordList::new(include!("./classic/es.rs"), 4)),
+      (Language::German, WordList::new(include!("./classic/de.rs"), 4)),
+      (Language::Italian, WordList::new(include!("./classic/it.rs"), 4)),
+      (Language::Portuguese, WordList::new(include!("./classic/pt.rs"), 4)),
+      (Language::Japanese, WordList::new(include!("./classic/ja.rs"), 3)),
+      (Language::Russian, WordList::new(include!("./classic/ru.rs"), 4)),
+      (Language::Esperanto, WordList::new(include!("./classic/eo.rs"), 4)),
+      (Language::Lojban, WordList::new(include!("./classic/jbo.rs"), 4)),
+      (Language::EnglishOld, WordList::new(include!("./classic/ang.rs"), 4)),
+    ])
+  })
 }
 
 #[cfg(test)]
 pub(crate) fn trim_by_lang(word: &str, lang: Language) -> String {
   if lang != Language::EnglishOld {
-    word.chars().take(LANGUAGES[&lang].unique_prefix_length).collect()
+    word.chars().take(LANGUAGES()[&lang].unique_prefix_length).collect()
   } else {
     word.to_string()
   }
@@ -92,7 +94,7 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
   let bytes = Zeroizing::new(key.to_bytes());
 
   // get the language words
-  let words = &LANGUAGES[&lang].word_list;
+  let words = &LANGUAGES()[&lang].word_list;
   let list_len = u64::try_from(words.len()).unwrap();
 
   // To store the found words & add the checksum word later.
@@ -126,7 +128,7 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
 
   // create a checksum word for all languages except old english
   if lang != Language::EnglishOld {
-    let checksum = seed[checksum_index(&seed, &LANGUAGES[&lang])].clone();
+    let checksum = seed[checksum_index(&seed, &LANGUAGES()[&lang])].clone();
     seed.push(checksum);
   }
 
@@ -154,7 +156,7 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
     let mut matched_indices = Zeroizing::new(vec![]);
 
     // Iterate through all the languages
-    'language: for (lang_name, lang) in LANGUAGES.iter() {
+    'language: for (lang_name, lang) in LANGUAGES().iter() {
       matched_indices.zeroize();
       matched_indices.clear();
 

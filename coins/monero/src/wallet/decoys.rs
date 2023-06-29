@@ -1,8 +1,6 @@
-use std::collections::HashSet;
+use std_shims::{sync::OnceLock, collections::HashSet};
 
-use futures::lock::{Mutex, MutexGuard};
-
-use lazy_static::lazy_static;
+use futures::lock::Mutex;
 
 use rand_core::{RngCore, CryptoRng};
 use rand_distr::{Distribution, Gamma};
@@ -23,18 +21,19 @@ const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
-lazy_static! {
-  static ref GAMMA: Gamma<f64> = Gamma::new(19.28, 1.0 / 1.61).unwrap();
-  // TODO: Expose an API to reset this in case a reorg occurs/the RPC fails/returns garbage
-  // TODO: Update this when scanning a block, as possible
-  static ref DISTRIBUTION: Mutex<Vec<u64>> = Mutex::new(Vec::with_capacity(3000000));
+// TODO: Expose an API to reset this in case a reorg occurs/the RPC fails/returns garbage
+// TODO: Update this when scanning a block, as possible
+static DISTRIBUTION_CELL: OnceLock<Mutex<Vec<u64>>> = OnceLock::new();
+#[allow(non_snake_case)]
+fn DISTRIBUTION() -> &'static Mutex<Vec<u64>> {
+  DISTRIBUTION_CELL.get_or_init(|| Mutex::new(Vec::with_capacity(3000000)))
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
   rng: &mut R,
   rpc: &Rpc<RPC>,
-  distribution: &MutexGuard<'a, Vec<u64>>,
+  distribution: &[u64],
   height: usize,
   high: u64,
   per_second: f64,
@@ -60,7 +59,7 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
       }
 
       // Use a gamma distribution
-      let mut age = GAMMA.sample(rng).exp();
+      let mut age = Gamma::<f64>::new(19.28, 1.0 / 1.61).unwrap().sample(rng).exp();
       if age > TIP_APPLICATION {
         age -= TIP_APPLICATION;
       } else {
@@ -144,7 +143,7 @@ impl Decoys {
     height: usize,
     inputs: &[SpendableOutput],
   ) -> Result<Vec<Decoys>, RpcError> {
-    let mut distribution = DISTRIBUTION.lock().await;
+    let mut distribution = DISTRIBUTION().lock().await;
 
     let decoy_count = ring_len - 1;
 

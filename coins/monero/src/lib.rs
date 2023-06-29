@@ -1,20 +1,15 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-use std::io;
+use std_shims::{sync::OnceLock, io};
 
-use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use sha3::{Digest, Keccak256};
 
-use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
-  scalar::Scalar,
-  edwards::{EdwardsPoint, EdwardsBasepointTable},
-};
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
 pub use monero_generators::H;
 
@@ -36,6 +31,12 @@ pub mod wallet;
 
 #[cfg(test)]
 mod tests;
+
+static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
+#[allow(non_snake_case)]
+pub(crate) fn INV_EIGHT() -> Scalar {
+  *INV_EIGHT_CELL.get_or_init(|| Scalar::from(8u8).invert())
+}
 
 /// Monero protocol version. v15 is omitted as v15 was simply v14 and v16 being active at the same
 /// time, with regards to the transactions supported. Accordingly, v16 should be used during v15.
@@ -107,10 +108,6 @@ impl Protocol {
   }
 }
 
-lazy_static! {
-  static ref H_TABLE: EdwardsBasepointTable = EdwardsBasepointTable::create(&H);
-}
-
 /// Transparent structure representing a Pedersen commitment's contents.
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -131,7 +128,7 @@ impl Commitment {
 
   /// Calculate a Pedersen commitment, as a point, from the transparent structure.
   pub fn calculate(&self) -> EdwardsPoint {
-    (&self.mask * &ED25519_BASEPOINT_TABLE) + (&Scalar::from(self.amount) * &*H_TABLE)
+    (&self.mask * &ED25519_BASEPOINT_TABLE) + (Scalar::from(self.amount) * H())
   }
 }
 

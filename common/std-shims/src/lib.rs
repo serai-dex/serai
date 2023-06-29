@@ -6,6 +6,7 @@
 #[macro_use]
 pub extern crate alloc;
 
+pub mod sync;
 pub mod collections;
 pub mod io;
 

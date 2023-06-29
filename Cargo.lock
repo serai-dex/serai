@@ -180,6 +180,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "allocator-api2"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56fc6cf8dc8c4158eed8649f9b8b0ea1518eb62b544fe9490d66fa0b349eafe9"
+
+[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3400,6 +3406,10 @@ name = "hashbrown"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
+dependencies = [
+ "ahash 0.8.3",
+ "allocator-api2",
+]
 
 [[package]]
 name = "hashers"
@@ -4193,7 +4203,7 @@ version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 dependencies = [
- "spin",
+ "spin 0.5.2",
 ]
 
 [[package]]
@@ -5105,7 +5115,6 @@ dependencies = [
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
  "group 0.13.0",
- "lazy_static",
  "sha3",
  "std-shims",
  "subtle",
@@ -5147,7 +5156,6 @@ dependencies = [
  "group 0.13.0",
  "hex",
  "hex-literal 0.4.1",
- "lazy_static",
  "modular-frost",
  "monero-epee-bin-serde",
  "monero-generators",
@@ -5161,6 +5169,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
+ "std-shims",
  "subtle",
  "thiserror",
  "tokio",
@@ -7010,7 +7019,7 @@ dependencies = [
  "cc",
  "libc",
  "once_cell",
- "spin",
+ "spin 0.5.2",
  "untrusted",
  "web-sys",
  "winapi",
@@ -9721,6 +9730,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
+name = "spin"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
+
+[[package]]
 name = "spki"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9799,7 +9817,8 @@ dependencies = [
 name = "std-shims"
 version = "0.1.0"
 dependencies = [
- "hashbrown 0.13.2",
+ "hashbrown 0.14.0",
+ "spin 0.9.8",
 ]
 
 [[package]]

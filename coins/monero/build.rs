@@ -41,15 +41,16 @@ fn generators(prefix: &'static str, path: &str) {
     .write_all(
       format!(
         "
-          lazy_static! {{
-            pub static ref GENERATORS: Generators = Generators {{
+          pub static GENERATORS_CELL: OnceLock<Generators> = OnceLock::new();
+          pub fn GENERATORS() -> &'static Generators {{
+            GENERATORS_CELL.get_or_init(|| Generators {{
               G: [
                 {G_str}
               ],
               H: [
                 {H_str}
               ],
-            }};
+            }})
           }}
         ",
       )

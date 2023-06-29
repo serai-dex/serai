@@ -1,10 +1,12 @@
 //! Generators used by Monero in both its Pedersen commitments and Bulletproofs(+).
+//!
 //! An implementation of Monero's `ge_fromfe_frombytes_vartime`, simply called
 //! `hash_to_point` here, is included, as needed to generate generators.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use lazy_static::lazy_static;
+use core::cell::OnceCell;
+use std_shims::sync::Mutex;
 
 use sha3::{Digest, Keccak256};
 
@@ -23,13 +25,16 @@ fn hash(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
 }
 
-lazy_static! {
-  /// Monero alternate generator `H`, used for amounts in Pedersen commitments.
-  pub static ref H: DalekPoint =
+/// Monero alternate generator `H`, used for amounts in Pedersen commitments.
+static H_CELL: Mutex<OnceCell<DalekPoint>> = Mutex::new(OnceCell::new());
+#[allow(non_snake_case)]
+pub fn H() -> DalekPoint {
+  *H_CELL.lock().get_or_init(|| {
     CompressedEdwardsY(hash(&EdwardsPoint::generator().to_bytes()))
       .decompress()
       .unwrap()
-      .mul_by_cofactor();
+      .mul_by_cofactor()
+  })
 }
 
 const MAX_M: usize = 16;
@@ -50,7 +55,7 @@ pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
   for i in 0 .. MAX_MN {
     let i = 2 * i;
 
-    let mut even = H.compress().to_bytes().to_vec();
+    let mut even = H().compress().to_bytes().to_vec();
     even.extend(dst);
     let mut odd = even.clone();
 

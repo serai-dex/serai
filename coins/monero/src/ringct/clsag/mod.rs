@@ -3,7 +3,6 @@
 use core::ops::Deref;
 use std::io::{self, Read, Write};
 
-use lazy_static::lazy_static;
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
@@ -18,8 +17,8 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys, ringct::hash_to_point,
-  serialize::*,
+  INV_EIGHT, Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
+  ringct::hash_to_point, serialize::*,
 };
 
 #[cfg(feature = "multisig")]
@@ -28,10 +27,6 @@ mod multisig;
 pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 #[cfg(feature = "multisig")]
 pub(crate) use multisig::add_key_image_share;
-
-lazy_static! {
-  static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();
-}
 
 /// Errors returned when CLSAG signing fails.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
@@ -103,7 +98,7 @@ fn core(
   let n = ring.len();
 
   let images_precomp = VartimeEdwardsPrecomputation::new([I, D]);
-  let D = D * *INV_EIGHT;
+  let D = D * INV_EIGHT();
 
   // Generate the transcript
   // Instead of generating multiple, a single transcript is created and then edited as needed

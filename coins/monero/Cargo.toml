@@ -12,9 +12,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+std-shims = { path = "../../common/std-shims", version = "0.1", default-features = false }
+
 futures = "0.3"
 
-lazy_static = "1"
 async-trait = "0.1"
 thiserror = "1"
 
