@@ -1,4 +1,4 @@
-use std_shims::sync::OnceLock;
+use std_shims::{vec::Vec, sync::OnceLock};
 
 use rand_core::{RngCore, CryptoRng};
 

@@ -1,8 +1,6 @@
 use core::{ops::Deref, fmt::Debug};
-use std::{
-  io::{self, Read, Write},
-  sync::{Arc, RwLock},
-};
+use std_shims::io::{self, Read, Write};
+use std::sync::{Arc, RwLock};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;

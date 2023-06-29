@@ -1,22 +1,31 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+use std_shims::{
+  vec::Vec,
+  io,
+  string::{String, ToString},
+};
 
 use async_trait::async_trait;
-use thiserror::Error;
 
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
-use digest_auth::AuthContext;
-use reqwest::Client;
-
 use crate::{
   Protocol,
+  serialize::*,
   transaction::{Input, Timelock, Transaction},
   block::Block,
   wallet::Fee,
 };
+
+#[cfg(feature = "http_rpc")]
+mod http;
+#[cfg(feature = "http_rpc")]
+pub use http::*;
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -38,23 +47,24 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum RpcError {
-  #[error("internal error ({0})")]
+  #[cfg_attr(feature = "std", error("internal error ({0})"))]
   InternalError(&'static str),
-  #[error("connection error")]
+  #[cfg_attr(feature = "std", error("connection error"))]
   ConnectionError,
-  #[error("invalid node")]
+  #[cfg_attr(feature = "std", error("invalid node"))]
   InvalidNode,
-  #[error("unsupported protocol version ({0})")]
+  #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
   UnsupportedProtocol(usize),
-  #[error("transactions not found")]
+  #[cfg_attr(feature = "std", error("transactions not found"))]
   TransactionsNotFound(Vec<[u8; 32]>),
-  #[error("invalid point ({0})")]
+  #[cfg_attr(feature = "std", error("invalid point ({0})"))]
   InvalidPoint(String),
-  #[error("pruned transaction")]
+  #[cfg_attr(feature = "std", error("pruned transaction"))]
   PrunedTransaction,
-  #[error("invalid transaction ({0:?})")]
+  #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
   InvalidTransaction([u8; 32]),
 }
 
@@ -74,6 +84,23 @@ fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
   .ok_or_else(|| RpcError::InvalidPoint(point.to_string()))
 }
 
+// Read an EPEE VarInt, distinct from the VarInts used throughout the rest of the protocol
+fn read_epee_vi<R: io::Read>(reader: &mut R) -> io::Result<u64> {
+  let vi_start = read_byte(reader)?;
+  let len = match vi_start & 0b11 {
+    0 => 1,
+    1 => 2,
+    2 => 4,
+    3 => 8,
+    _ => unreachable!(),
+  };
+  let mut vi = u64::from(vi_start >> 2);
+  for i in 1 .. len {
+    vi |= u64::from(read_byte(reader)?) << (((i - 1) * 8) + 6);
+  }
+  Ok(vi)
+}
+
 #[async_trait]
 pub trait RpcConnection: Clone + Debug {
   /// Perform a POST request to the specified route with the specified body.
@@ -82,91 +109,7 @@ pub trait RpcConnection: Clone + Debug {
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError>;
 }
 
-#[derive(Clone, Debug)]
-pub struct HttpRpc {
-  client: Client,
-  userpass: Option<(String, String)>,
-  url: String,
-}
-
-impl HttpRpc {
-  /// Create a new HTTP(S) RPC connection.
-  ///
-  /// A daemon requiring authentication can be used via including the username and password in the
-  /// URL.
-  pub fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
-    // Parse out the username and password
-    let userpass = if url.contains('@') {
-      let url_clone = url;
-      let split_url = url_clone.split('@').collect::<Vec<_>>();
-      if split_url.len() != 2 {
-        Err(RpcError::InvalidNode)?;
-      }
-      let mut userpass = split_url[0];
-      url = split_url[1].to_string();
-
-      // If there was additionally a protocol string, restore that to the daemon URL
-      if userpass.contains("://") {
-        let split_userpass = userpass.split("://").collect::<Vec<_>>();
-        if split_userpass.len() != 2 {
-          Err(RpcError::InvalidNode)?;
-        }
-        url = split_userpass[0].to_string() + "://" + &url;
-        userpass = split_userpass[1];
-      }
-
-      let split_userpass = userpass.split(':').collect::<Vec<_>>();
-      if split_userpass.len() != 2 {
-        Err(RpcError::InvalidNode)?;
-      }
-      Some((split_userpass[0].to_string(), split_userpass[1].to_string()))
-    } else {
-      None
-    };
-
-    Ok(Rpc(HttpRpc { client: Client::new(), userpass, url }))
-  }
-}
-
-#[async_trait]
-impl RpcConnection for HttpRpc {
-  async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    let mut builder = self.client.post(self.url.clone() + "/" + route).body(body);
-
-    if let Some((user, pass)) = &self.userpass {
-      let req = self.client.post(&self.url).send().await.map_err(|_| RpcError::InvalidNode)?;
-      // Only provide authentication if this daemon actually expects it
-      if let Some(header) = req.headers().get("www-authenticate") {
-        builder = builder.header(
-          "Authorization",
-          digest_auth::parse(header.to_str().map_err(|_| RpcError::InvalidNode)?)
-            .map_err(|_| RpcError::InvalidNode)?
-            .respond(&AuthContext::new_post::<_, _, _, &[u8]>(
-              user,
-              pass,
-              "/".to_string() + route,
-              None,
-            ))
-            .map_err(|_| RpcError::InvalidNode)?
-            .to_header_string(),
-        );
-      }
-    }
-
-    Ok(
-      builder
-        .send()
-        .await
-        .map_err(|_| RpcError::ConnectionError)?
-        .bytes()
-        .await
-        .map_err(|_| RpcError::ConnectionError)?
-        .slice(..)
-        .to_vec(),
-    )
-  }
-}
-
+// TODO: Make this provided methods for RpcConnection?
 #[derive(Clone, Debug)]
 pub struct Rpc<R: RpcConnection>(R);
 impl<R: RpcConnection> Rpc<R> {
@@ -179,10 +122,9 @@ impl<R: RpcConnection> Rpc<R> {
     route: &str,
     params: Option<Params>,
   ) -> Result<Response, RpcError> {
-    self
-      .call_tail(
-        route,
-        self
+    serde_json::from_str(
+      std_shims::str::from_utf8(
+        &self
           .0
           .post(
             route,
@@ -194,7 +136,9 @@ impl<R: RpcConnection> Rpc<R> {
           )
           .await?,
       )
-      .await
+      .map_err(|_| RpcError::InvalidNode)?,
+    )
+    .map_err(|_| RpcError::InternalError("Failed to parse JSON response"))
   }
 
   /// Perform a JSON-RPC call with the specified method with the provided parameters
@@ -211,26 +155,8 @@ impl<R: RpcConnection> Rpc<R> {
   }
 
   /// Perform a binary call to the specified route with the provided parameters.
-  pub async fn bin_call<Response: DeserializeOwned + Debug>(
-    &self,
-    route: &str,
-    params: Vec<u8>,
-  ) -> Result<Response, RpcError> {
-    self.call_tail(route, self.0.post(route, params).await?).await
-  }
-
-  async fn call_tail<Response: DeserializeOwned + Debug>(
-    &self,
-    route: &str,
-    res: Vec<u8>,
-  ) -> Result<Response, RpcError> {
-    Ok(if !route.ends_with(".bin") {
-      serde_json::from_str(std::str::from_utf8(&res).map_err(|_| RpcError::InvalidNode)?)
-        .map_err(|_| RpcError::InternalError("Failed to parse JSON response"))?
-    } else {
-      monero_epee_bin_serde::from_bytes(&res)
-        .map_err(|_| RpcError::InternalError("Failed to parse binary response"))?
-    })
+  pub async fn bin_call(&self, route: &str, params: Vec<u8>) -> Result<Vec<u8>, RpcError> {
+    self.0.post(route, params).await
   }
 
   /// Get the active blockchain protocol version.
@@ -391,6 +317,9 @@ impl<R: RpcConnection> Rpc<R> {
 
   /// Get the output indexes of the specified transaction.
   pub async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
+    /*
+    TODO: Use these when a suitable epee serde lib exists
+
     #[derive(Serialize, Debug)]
     struct Request {
       txid: [u8; 32],
@@ -400,20 +329,125 @@ impl<R: RpcConnection> Rpc<R> {
     #[derive(Deserialize, Debug)]
     struct OIndexes {
       o_indexes: Vec<u64>,
-      status: String,
-      untrusted: bool,
-      credits: usize,
-      top_hash: String,
     }
+    */
 
-    let indexes: OIndexes = self
-      .bin_call(
-        "get_o_indexes.bin",
-        monero_epee_bin_serde::to_bytes(&Request { txid: hash }).unwrap(),
-      )
-      .await?;
+    // Given the immaturity of Rust epee libraries, this is a homegrown one which is only validated
+    // to work against this specific function
 
-    Ok(indexes.o_indexes)
+    // Header for EPEE, an 8-byte magic and a version
+    const EPEE_HEADER: &[u8] = b"\x01\x11\x01\x01\x01\x01\x02\x01\x01";
+
+    let mut request = EPEE_HEADER.to_vec();
+    // Number of fields (shifted over 2 bits as the 2 LSBs are reserved for metadata)
+    request.push(1 << 2);
+    // Length of field name
+    request.push(4);
+    // Field name
+    request.extend(b"txid");
+    // Type of field
+    request.push(10);
+    // Length of string, since this byte array is technically a string
+    request.push(32 << 2);
+    // The "string"
+    request.extend(hash);
+
+    let indexes_buf = self.bin_call("get_o_indexes.bin", request).await?;
+    let mut indexes: &[u8] = indexes_buf.as_ref();
+
+    (|| {
+      if read_bytes::<_, { EPEE_HEADER.len() }>(&mut indexes)? != EPEE_HEADER {
+        Err(io::Error::new(io::ErrorKind::Other, "invalid header"))?;
+      }
+
+      let read_object = |reader: &mut &[u8]| {
+        let fields = read_byte(reader)? >> 2;
+
+        for _ in 0 .. fields {
+          let name_len = read_byte(reader)?;
+          let name = read_raw_vec(read_byte, name_len.into(), reader)?;
+
+          let type_with_array_flag = read_byte(reader)?;
+          let kind = type_with_array_flag & (!0x80);
+
+          let iters = if type_with_array_flag != kind { read_epee_vi(reader)? } else { 1 };
+
+          if (&name == b"o_indexes") && (kind != 5) {
+            Err(io::Error::new(io::ErrorKind::Other, "o_indexes weren't u64s"))?;
+          }
+
+          let f = match kind {
+            // i64
+            1 => |reader: &mut &[u8]| read_raw_vec(read_byte, 8, reader),
+            // i32
+            2 => |reader: &mut &[u8]| read_raw_vec(read_byte, 4, reader),
+            // i16
+            3 => |reader: &mut &[u8]| read_raw_vec(read_byte, 2, reader),
+            // i8
+            4 => |reader: &mut &[u8]| read_raw_vec(read_byte, 1, reader),
+            // u64
+            5 => |reader: &mut &[u8]| read_raw_vec(read_byte, 8, reader),
+            // u32
+            6 => |reader: &mut &[u8]| read_raw_vec(read_byte, 4, reader),
+            // u16
+            7 => |reader: &mut &[u8]| read_raw_vec(read_byte, 2, reader),
+            // u8
+            8 => |reader: &mut &[u8]| read_raw_vec(read_byte, 1, reader),
+            // double
+            9 => |reader: &mut &[u8]| read_raw_vec(read_byte, 8, reader),
+            // string, or any collection of bytes
+            10 => |reader: &mut &[u8]| {
+              let len = read_epee_vi(reader)?;
+              read_raw_vec(
+                read_byte,
+                len
+                  .try_into()
+                  .map_err(|_| io::Error::new(io::ErrorKind::Other, "u64 length exceeded usize"))?,
+                reader,
+              )
+            },
+            // bool
+            11 => |reader: &mut &[u8]| read_raw_vec(read_byte, 1, reader),
+            // object, errors here as it shouldn't be used on this call
+            12 => |_: &mut &[u8]| {
+              Err(io::Error::new(
+                io::ErrorKind::Other,
+                "node used object in reply to get_o_indexes",
+              ))
+            },
+            // array, so far unused
+            13 => |_: &mut &[u8]| {
+              Err(io::Error::new(io::ErrorKind::Other, "node used the unused array type"))
+            },
+            _ => {
+              |_: &mut &[u8]| Err(io::Error::new(io::ErrorKind::Other, "node used an invalid type"))
+            }
+          };
+
+          let mut res = vec![];
+          for _ in 0 .. iters {
+            res.push(f(reader)?);
+          }
+
+          let mut actual_res = Vec::with_capacity(res.len());
+          if &name == b"o_indexes" {
+            for o_index in res {
+              actual_res.push(u64::from_le_bytes(o_index.try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "node didn't provide 8 bytes for a u64")
+              })?));
+            }
+            return Ok(actual_res);
+          }
+        }
+
+        // Didn't return a response with o_indexes
+        // TODO: Check if this didn't have o_indexes because it's an error response
+        Err(io::Error::new(io::ErrorKind::Other, "response didn't contain o_indexes"))
+      };
+
+      read_object(&mut indexes)
+    })()
+    .map_err(|_| RpcError::InvalidNode)
   }
 
   /// Get the output distribution, from the specified height to the specified height (both

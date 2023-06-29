@@ -1,4 +1,7 @@
-use std::io::{self, Read, Write};
+use std_shims::{
+  vec::Vec,
+  io::{self, Read, Write},
+};
 
 use crate::{
   serialize::*,

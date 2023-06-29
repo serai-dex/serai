@@ -1,7 +1,5 @@
 use core::{marker::PhantomData, fmt::Debug};
-use std::string::ToString;
-
-use thiserror::Error;
+use std_shims::string::{String, ToString};
 
 use zeroize::Zeroize;
 
@@ -114,19 +112,20 @@ impl<B: AddressBytes> Zeroize for AddressMeta<B> {
 }
 
 /// Error when decoding an address.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum AddressError {
-  #[error("invalid address byte")]
+  #[cfg_attr(feature = "std", error("invalid address byte"))]
   InvalidByte,
-  #[error("invalid address encoding")]
+  #[cfg_attr(feature = "std", error("invalid address encoding"))]
   InvalidEncoding,
-  #[error("invalid length")]
+  #[cfg_attr(feature = "std", error("invalid length"))]
   InvalidLength,
-  #[error("invalid key")]
+  #[cfg_attr(feature = "std", error("invalid key"))]
   InvalidKey,
-  #[error("unknown features")]
+  #[cfg_attr(feature = "std", error("unknown features"))]
   UnknownFeatures,
-  #[error("different network than expected")]
+  #[cfg_attr(feature = "std", error("different network than expected"))]
   DifferentNetwork,
 }
 

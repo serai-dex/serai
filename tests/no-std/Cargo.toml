@@ -31,3 +31,4 @@ dkg = { path = "../../crypto/dkg", default-features = false }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 
 monero-generators = { path = "../../coins/monero/generators", default-features = false }
+monero-serai = { path = "../../coins/monero", default-features = false }
