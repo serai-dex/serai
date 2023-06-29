@@ -14,41 +14,46 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 std-shims = { path = "../../common/std-shims", version = "0.1", default-features = false }
 
-futures = "0.3"
-
 async-trait = "0.1"
 thiserror = "1"
 
-rand_core = "0.6"
-rand_chacha = "0.3"
-rand = "0.8"
-rand_distr = "0.4"
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+subtle = { version = "^2.4", default-features = false }
 
-zeroize = { version = "^1.5", features = ["zeroize_derive"] }
-subtle = "^2.4"
+rand_core = { version = "0.6", default-features = false }
+# Used to send transactions
+rand = { version = "0.8", default-features = false }
+rand_chacha = { version = "0.3", default-features = false }
+# Used to select decoys
+rand_distr = { version = "0.4", default-features = false }
 
-crc = "3"
-sha3 = "0.10"
+crc = { version = "3", default-features = false }
+sha3 = { version = "0.10", default-features = false }
 
-curve25519-dalek = { version = "^3.2", features = ["std"] }
+curve25519-dalek = { version = "^3.2", default-features = false }
 
-group = "0.13"
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3" }
-multiexp = { path = "../../crypto/multiexp", version = "0.3", features = ["batch"] }
+# Used for the hash to curve, along with the more complicated proofs
+group = { version = "0.13", default-features = false }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3", default-features = false }
+multiexp = { path = "../../crypto/multiexp", version = "0.3", default-features = false, features = ["batch"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", features = ["recommended"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["ed25519"], optional = true }
+# Needed for multisig
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
 dleq = { path = "../../crypto/dleq", version = "0.3", features = ["serialize"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["ed25519"], optional = true }
 
-monero-generators = { path = "generators", version = "0.3" }
+monero-generators = { path = "generators", version = "0.3", default-features = false }
 
-hex = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+futures = "0.3"
+
+hex = { version = "0.4", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_json = { version = "1", default-features = false }
 
 base58-monero = "1"
-monero-epee-bin-serde = "1"
+monero-epee-bin-serde = { version = "1", default-features = false }
 
+# Used for the provided RPC
 digest_auth = "0.3"
 reqwest = { version = "0.11", features = ["json"] }
 
@@ -65,4 +70,27 @@ monero-rpc = "0.3"
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["tests"] }
 
 [features]
+std = [
+  "std-shims/std",
+
+  "rand_core/std",
+  "rand_chacha/std",
+  "rand/std",
+  "rand_distr/std",
+
+  "zeroize/std",
+  "subtle/std",
+
+  "sha3/std",
+
+  "curve25519-dalek/std",
+
+  "multiexp/std",
+
+  "monero-generators/std",
+
+  "hex/std",
+  "serde/std",
+  "serde_json/std",
+]
 multisig = ["transcript", "frost", "dleq"]

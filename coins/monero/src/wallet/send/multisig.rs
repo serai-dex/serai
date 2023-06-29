@@ -1,8 +1,8 @@
-use std::{
+use std_shims::{
   io::{self, Read},
-  sync::{Arc, RwLock},
   collections::HashMap,
 };
+use std::sync::{Arc, RwLock};
 
 use zeroize::Zeroizing;
 

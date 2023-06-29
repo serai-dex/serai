@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use core::ops::Deref;
-use std::io::{self, Read, Write};
+use std_shims::io::{self, Read, Write};
 
 use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};

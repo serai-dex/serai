@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -225,7 +225,7 @@ impl<R: RpcConnection> Rpc<R> {
     res: Vec<u8>,
   ) -> Result<Response, RpcError> {
     Ok(if !route.ends_with(".bin") {
-      serde_json::from_str(std::str::from_utf8(&res).map_err(|_| RpcError::InvalidNode)?)
+      serde_json::from_str(std_shims::str::from_utf8(&res).map_err(|_| RpcError::InvalidNode)?)
         .map_err(|_| RpcError::InternalError("Failed to parse JSON response"))?
     } else {
       monero_epee_bin_serde::from_bytes(&res)

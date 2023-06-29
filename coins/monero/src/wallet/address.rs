@@ -1,5 +1,5 @@
 use core::{marker::PhantomData, fmt::Debug};
-use std::string::ToString;
+use std_shims::string::ToString;
 
 use thiserror::Error;
 

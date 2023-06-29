@@ -1,5 +1,5 @@
 use core::ops::Deref;
-use std::io::{self, Read, Write};
+use std_shims::io::{self, Read, Write};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

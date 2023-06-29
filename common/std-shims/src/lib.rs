@@ -10,6 +10,13 @@ pub mod sync;
 pub mod collections;
 pub mod io;
 
+pub mod vec {
+  #[cfg(not(feature = "std"))]
+  pub use alloc::vec::*;
+  #[cfg(feature = "std")]
+  pub use std::vec::*;
+}
+
 pub mod str {
   #[cfg(not(feature = "std"))]
   pub use alloc::str::*;
@@ -17,9 +24,9 @@ pub mod str {
   pub use std::str::*;
 }
 
-pub mod vec {
+pub mod string {
   #[cfg(not(feature = "std"))]
-  pub use alloc::vec::*;
+  pub use alloc::string::*;
   #[cfg(feature = "std")]
-  pub use std::vec::*;
+  pub use std::string::*;
 }

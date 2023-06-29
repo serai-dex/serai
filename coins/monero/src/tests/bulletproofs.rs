@@ -1,5 +1,5 @@
 use hex_literal::hex;
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 
 use curve25519_dalek::{scalar::Scalar, edwards::CompressedEdwardsY};
 use multiexp::BatchVerifier;
