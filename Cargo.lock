@@ -8668,6 +8668,7 @@ dependencies = [
  "flexible-transcript",
  "minimal-ed448",
  "monero-generators",
+ "monero-serai",
  "multiexp",
  "schnorr-signatures",
 ]

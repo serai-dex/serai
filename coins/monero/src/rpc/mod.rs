@@ -1,15 +1,11 @@
 use core::fmt::Debug;
 
 use async_trait::async_trait;
-use thiserror::Error;
 
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
-
-use digest_auth::AuthContext;
-use reqwest::Client;
 
 use crate::{
   Protocol,
@@ -17,6 +13,11 @@ use crate::{
   block::Block,
   wallet::Fee,
 };
+
+#[cfg(feature = "http_rpc")]
+mod http;
+#[cfg(feature = "http_rpc")]
+pub use http::*;
 
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
@@ -38,23 +39,24 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum RpcError {
-  #[error("internal error ({0})")]
+  #[cfg_attr(feature = "std", error("internal error ({0})"))]
   InternalError(&'static str),
-  #[error("connection error")]
+  #[cfg_attr(feature = "std", error("connection error"))]
   ConnectionError,
-  #[error("invalid node")]
+  #[cfg_attr(feature = "std", error("invalid node"))]
   InvalidNode,
-  #[error("unsupported protocol version ({0})")]
+  #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
   UnsupportedProtocol(usize),
-  #[error("transactions not found")]
+  #[cfg_attr(feature = "std", error("transactions not found"))]
   TransactionsNotFound(Vec<[u8; 32]>),
-  #[error("invalid point ({0})")]
+  #[cfg_attr(feature = "std", error("invalid point ({0})"))]
   InvalidPoint(String),
-  #[error("pruned transaction")]
+  #[cfg_attr(feature = "std", error("pruned transaction"))]
   PrunedTransaction,
-  #[error("invalid transaction ({0:?})")]
+  #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
   InvalidTransaction([u8; 32]),
 }
 
@@ -82,91 +84,7 @@ pub trait RpcConnection: Clone + Debug {
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError>;
 }
 
-#[derive(Clone, Debug)]
-pub struct HttpRpc {
-  client: Client,
-  userpass: Option<(String, String)>,
-  url: String,
-}
-
-impl HttpRpc {
-  /// Create a new HTTP(S) RPC connection.
-  ///
-  /// A daemon requiring authentication can be used via including the username and password in the
-  /// URL.
-  pub fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
-    // Parse out the username and password
-    let userpass = if url.contains('@') {
-      let url_clone = url;
-      let split_url = url_clone.split('@').collect::<Vec<_>>();
-      if split_url.len() != 2 {
-        Err(RpcError::InvalidNode)?;
-      }
-      let mut userpass = split_url[0];
-      url = split_url[1].to_string();
-
-      // If there was additionally a protocol string, restore that to the daemon URL
-      if userpass.contains("://") {
-        let split_userpass = userpass.split("://").collect::<Vec<_>>();
-        if split_userpass.len() != 2 {
-          Err(RpcError::InvalidNode)?;
-        }
-        url = split_userpass[0].to_string() + "://" + &url;
-        userpass = split_userpass[1];
-      }
-
-      let split_userpass = userpass.split(':').collect::<Vec<_>>();
-      if split_userpass.len() != 2 {
-        Err(RpcError::InvalidNode)?;
-      }
-      Some((split_userpass[0].to_string(), split_userpass[1].to_string()))
-    } else {
-      None
-    };
-
-    Ok(Rpc(HttpRpc { client: Client::new(), userpass, url }))
-  }
-}
-
-#[async_trait]
-impl RpcConnection for HttpRpc {
-  async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    let mut builder = self.client.post(self.url.clone() + "/" + route).body(body);
-
-    if let Some((user, pass)) = &self.userpass {
-      let req = self.client.post(&self.url).send().await.map_err(|_| RpcError::InvalidNode)?;
-      // Only provide authentication if this daemon actually expects it
-      if let Some(header) = req.headers().get("www-authenticate") {
-        builder = builder.header(
-          "Authorization",
-          digest_auth::parse(header.to_str().map_err(|_| RpcError::InvalidNode)?)
-            .map_err(|_| RpcError::InvalidNode)?
-            .respond(&AuthContext::new_post::<_, _, _, &[u8]>(
-              user,
-              pass,
-              "/".to_string() + route,
-              None,
-            ))
-            .map_err(|_| RpcError::InvalidNode)?
-            .to_header_string(),
-        );
-      }
-    }
-
-    Ok(
-      builder
-        .send()
-        .await
-        .map_err(|_| RpcError::ConnectionError)?
-        .bytes()
-        .await
-        .map_err(|_| RpcError::ConnectionError)?
-        .slice(..)
-        .to_vec(),
-    )
-  }
-}
-
+// TODO: Make this provided methods for RpcConnection?
 #[derive(Clone, Debug)]
 pub struct Rpc<R: RpcConnection>(R);
 impl<R: RpcConnection> Rpc<R> {

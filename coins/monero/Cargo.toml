@@ -14,8 +14,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 std-shims = { path = "../../common/std-shims", version = "0.1", default-features = false }
 
-async-trait = "0.1"
-thiserror = "1"
+async-trait = { version = "0.1", default-features = false }
+thiserror = { version = "1", optional = true }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 subtle = { version = "^2.4", default-features = false }
@@ -44,18 +44,18 @@ frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7
 
 monero-generators = { path = "generators", version = "0.3", default-features = false }
 
-futures = "0.3"
+futures = { version = "0.3", default-features = false }
 
 hex = { version = "0.4", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"] }
 serde_json = { version = "1", default-features = false }
 
-base58-monero = "1"
+base58-monero = { version = "1", default-features = false, features = ["check"] }
 monero-epee-bin-serde = { version = "1", default-features = false }
 
 # Used for the provided RPC
-digest_auth = "0.3"
-reqwest = { version = "0.11", features = ["json"] }
+digest_auth = { version = "0.3", optional = true }
+reqwest = { version = "0.11", features = ["json"], optional = true }
 
 [build-dependencies]
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3" }
@@ -73,13 +73,15 @@ frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7
 std = [
   "std-shims/std",
 
+  "thiserror",
+
+  "zeroize/std",
+  "subtle/std",
+
   "rand_core/std",
   "rand_chacha/std",
   "rand/std",
   "rand_distr/std",
-
-  "zeroize/std",
-  "subtle/std",
 
   "sha3/std",
 
@@ -89,8 +91,12 @@ std = [
 
   "monero-generators/std",
 
+  "futures/std",
+
   "hex/std",
   "serde/std",
   "serde_json/std",
 ]
-multisig = ["transcript", "frost", "dleq"]
+http_rpc = ["digest_auth", "reqwest"]
+multisig = ["transcript", "frost", "dleq", "std"]
+default = ["std", "http_rpc"]

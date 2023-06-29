@@ -3,7 +3,6 @@
 use core::ops::Deref;
 use std_shims::io::{self, Read, Write};
 
-use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
@@ -29,23 +28,24 @@ pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 pub(crate) use multisig::add_key_image_share;
 
 /// Errors returned when CLSAG signing fails.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum ClsagError {
-  #[error("internal error ({0})")]
+  #[cfg_attr(feature = "std", error("internal error ({0})"))]
   InternalError(&'static str),
-  #[error("invalid ring")]
+  #[cfg_attr(feature = "std", error("invalid ring"))]
   InvalidRing,
-  #[error("invalid ring member (member {0}, ring size {1})")]
+  #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
   InvalidRingMember(u8, u8),
-  #[error("invalid commitment")]
+  #[cfg_attr(feature = "std", error("invalid commitment"))]
   InvalidCommitment,
-  #[error("invalid key image")]
+  #[cfg_attr(feature = "std", error("invalid key image"))]
   InvalidImage,
-  #[error("invalid D")]
+  #[cfg_attr(feature = "std", error("invalid D"))]
   InvalidD,
-  #[error("invalid s")]
+  #[cfg_attr(feature = "std", error("invalid s"))]
   InvalidS,
-  #[error("invalid c1")]
+  #[cfg_attr(feature = "std", error("invalid c1"))]
   InvalidC1,
 }
 
