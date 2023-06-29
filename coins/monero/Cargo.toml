@@ -51,15 +51,14 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 serde_json = { version = "1", default-features = false }
 
 base58-monero = { version = "1", default-features = false, features = ["check"] }
-monero-epee-bin-serde = { version = "1", default-features = false }
 
 # Used for the provided RPC
 digest_auth = { version = "0.3", optional = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
 
 [build-dependencies]
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3" }
-monero-generators = { path = "generators", version = "0.3" }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3", default-features = false }
+monero-generators = { path = "generators", version = "0.3", default-features = false }
 
 [dev-dependencies]
 hex-literal = "0.4"
