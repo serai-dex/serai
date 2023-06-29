@@ -1,11 +1,16 @@
-use std_shims::{sync::OnceLock, collections::HashSet};
+use std_shims::{sync::OnceLock, vec::Vec, collections::HashSet};
 
+#[cfg(not(feature = "std"))]
+use std_shims::sync::Mutex;
+#[cfg(feature = "std")]
 use futures::lock::Mutex;
+
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use rand_core::{RngCore, CryptoRng};
 use rand_distr::{Distribution, Gamma};
-
-use zeroize::{Zeroize, ZeroizeOnDrop};
+#[cfg(not(feature = "std"))]
+use rand_distr::num_traits::Float;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
@@ -143,6 +148,9 @@ impl Decoys {
     height: usize,
     inputs: &[SpendableOutput],
   ) -> Result<Vec<Decoys>, RpcError> {
+    #[cfg(not(feature = "std"))]
+    let mut distribution = DISTRIBUTION().lock();
+    #[cfg(feature = "std")]
     let mut distribution = DISTRIBUTION().lock().await;
 
     let decoy_count = ring_len - 1;

@@ -1,5 +1,8 @@
 use core::cmp::Ordering;
-use std_shims::io::{self, Read, Write};
+use std_shims::{
+  vec::Vec,
+  io::{self, Read, Write},
+};
 
 use zeroize::Zeroize;
 

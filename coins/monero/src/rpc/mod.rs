@@ -1,5 +1,11 @@
 use core::fmt::Debug;
-use std_shims::io;
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+use std_shims::{
+  vec::Vec,
+  io,
+  string::{String, ToString},
+};
 
 use async_trait::async_trait;
 

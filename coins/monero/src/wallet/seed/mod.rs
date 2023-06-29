@@ -1,4 +1,5 @@
 use core::fmt;
+use std_shims::string::String;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rand_core::{RngCore, CryptoRng};

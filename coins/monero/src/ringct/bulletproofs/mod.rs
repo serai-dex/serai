@@ -1,6 +1,9 @@
 #![allow(non_snake_case)]
 
-use std_shims::io::{self, Read, Write};
+use std_shims::{
+  vec::Vec,
+  io::{self, Read, Write},
+};
 
 use rand_core::{RngCore, CryptoRng};
 

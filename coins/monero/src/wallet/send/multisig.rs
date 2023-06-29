@@ -1,4 +1,5 @@
 use std_shims::{
+  vec::Vec,
   io::{self, Read},
   collections::HashMap,
 };

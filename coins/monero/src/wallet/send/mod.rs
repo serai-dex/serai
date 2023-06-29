@@ -1,5 +1,9 @@
 use core::{ops::Deref, fmt};
-use std_shims::io;
+use std_shims::{
+  vec::Vec,
+  io,
+  string::{String, ToString},
+};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;

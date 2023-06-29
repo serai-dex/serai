@@ -1,5 +1,10 @@
 use core::ops::Deref;
-use std_shims::{sync::OnceLock, collections::HashMap};
+use std_shims::{
+  sync::OnceLock,
+  vec::Vec,
+  string::{String, ToString},
+  collections::HashMap,
+};
 
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
