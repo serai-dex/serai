@@ -39,16 +39,26 @@ mod oncelock_shim {
     // These return a distinct Option in case of None so another caller using get_or_init doesn't
     // transform it from None to Some
     pub fn get(&self) -> Option<&T> {
-      if !*self.0.lock() { None } else { self.1.as_ref() }
+      if !*self.0.lock() {
+        None
+      } else {
+        self.1.as_ref()
+      }
     }
     pub fn get_mut(&mut self) -> Option<&mut T> {
-      if !*self.0.lock() { None } else { self.1.as_mut() }
+      if !*self.0.lock() {
+        None
+      } else {
+        self.1.as_mut()
+      }
     }
 
     pub fn get_or_init<F: FnOnce() -> T>(&self, f: F) -> &T {
       let mut lock = self.0.lock();
       if !*lock {
-        unsafe { (core::ptr::addr_of!(self.1) as *mut Option<_>).write_unaligned(Some(f())); }
+        unsafe {
+          (core::ptr::addr_of!(self.1) as *mut Option<_>).write_unaligned(Some(f()));
+        }
       }
       *lock = true;
       drop(lock);
