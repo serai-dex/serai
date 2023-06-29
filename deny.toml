@@ -83,4 +83,5 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
   "https://github.com/serai-dex/substrate-bip39",
   "https://github.com/serai-dex/substrate",
+  "https://github.com/monero-rs/base58-monero",
 ]
