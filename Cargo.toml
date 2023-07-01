@@ -23,6 +23,8 @@ members = [
   "coins/monero/generators",
   "coins/monero",
 
+  "message-queue",
+
   "processor/messages",
   "processor",
 

@@ -8654,6 +8654,24 @@ name = "serai-db"
 version = "0.1.0"
 
 [[package]]
+name = "serai-message-queue"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "flexible-transcript",
+ "hex",
+ "jsonrpsee",
+ "lazy_static",
+ "log",
+ "schnorr-signatures",
+ "serai-db",
+ "serai-primitives",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "serai-no-std"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,38 @@
+[package]
+name = "serai-message-queue"
+version = "0.1.0"
+description = "A message queue focused on safety"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/message-log"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# Macros
+lazy_static = "1"
+serde = { version = "1", features = ["derive"] }
+
+# Encoders
+hex = "0.4"
+serde_json = "1"
+
+# Cryptography
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
+ciphersuite = { path = "../crypto/ciphersuite", features = ["ristretto"] }
+schnorr-signatures = { path = "../crypto/schnorr" }
+
+# Application
+log = "0.4"
+tokio = { version = "1", features = ["full"] }
+
+serai-db = { path = "../common/db" }
+
+serai-primitives = { path = "../substrate/primitives" }
+
+jsonrpsee = { version = "0.16", features = ["server"] }
