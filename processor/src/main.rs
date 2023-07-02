@@ -12,7 +12,7 @@ use frost::{curve::Ciphersuite, ThresholdKeys};
 use log::{info, warn, error};
 use tokio::time::sleep;
 
-use scale::Decode;
+use scale::{Encode, Decode};
 
 use serai_client::{
   primitives::{MAX_DATA_LEN, BlockHash, NetworkId},
@@ -64,6 +64,8 @@ use scheduler::Scheduler;
 
 #[cfg(test)]
 mod tests;
+
+const MAX_BATCH_SIZE: usize = 25_000_000; // ~25kb
 
 async fn get_latest_block_number<N: Network>(network: &N) -> usize {
   loop {
@@ -669,47 +671,68 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
 
-            let batch = Batch {
-              network: N::NETWORK,
-              id: batch,
-              block: BlockHash(block_hash),
-              instructions: outputs.iter().filter_map(|output| {
-                // If these aren't externally received funds, don't handle it as an instruction
-                if output.kind() != OutputType::External {
-                  return None;
-                }
+            let mut batches = vec![];
+            let mut ins = vec![];
+            let mut batch_size: usize = 0;
+            for output in outputs {
+              // If these aren't externally received funds, don't handle it as an instruction
+              if output.kind() != OutputType::External {
+                continue;
+              }
 
-                let mut data = output.data();
-                let max_data_len = MAX_DATA_LEN.try_into().unwrap();
-                if data.len() > max_data_len {
-                  error!(
-                    "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}",
-                    hex::encode(output.id()),
-                    data.len(),
-                  );
-                  data = &data[.. max_data_len];
-                }
+              let mut data = output.data();
+              let max_data_len = MAX_DATA_LEN.try_into().unwrap();
+              if data.len() > max_data_len {
+                error!(
+                  "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}",
+                  hex::encode(output.id()),
+                  data.len(),
+                );
+                data = &data[.. max_data_len];
+              }
 
-                let shorthand = Shorthand::decode(&mut data).ok()?;
-                let instruction = RefundableInInstruction::try_from(shorthand).ok()?;
-                // TODO2: Set instruction.origin if not set (and handle refunds in general)
-                Some(InInstructionWithBalance {
-                  instruction: instruction.instruction,
-                  balance: output.balance(),
-                })
-              }).collect()
-            };
+              let Ok(shorthand) = Shorthand::decode(&mut data) else { continue };
+              let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { continue };
+
+              // TODO2: Set instruction.origin if not set (and handle refunds in general)
+              let in_ins = InInstructionWithBalance {
+                instruction: instruction.instruction,
+                balance: output.balance(),
+              };
+              let ins_size = in_ins.encode().len();
+
+              if batch_size + ins_size >= MAX_BATCH_SIZE {
+                // TODO: should we check other ins in the vec that would potentially fit or
+                // that would be too slow and not worth it?
+                // batch is full
+                batches.push(Batch {
+                  network: N::NETWORK,
+                  id: batch,
+                  block: BlockHash(block_hash),
+                  instructions: ins.clone()
+                });
+
+                ins.clear();
+                batch_size = 0;
+                continue;
+              }
+
+              ins.push(in_ins);
+              batch_size += ins_size;
+            }
 
             info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
             // Start signing this batch
-            // TODO: Don't reload both sets of keys in full just to get the Substrate public key
-            tributary_mutable
-              .substrate_signers
-              .get_mut(tributary_mutable.key_gen.keys(&key).0.group_key().to_bytes().as_slice())
-              .unwrap()
-              .sign(&mut txn, batch)
-              .await;
+            for batch in batches {
+              // TODO: Don't reload both sets of keys in full just to get the Substrate public key
+              tributary_mutable
+                .substrate_signers
+                .get_mut(tributary_mutable.key_gen.keys(&key).0.group_key().to_bytes().as_slice())
+                .unwrap()
+                .sign(&mut txn, batch)
+                .await;
+            }
           },
 
           ScannerEvent::Completed(id, tx) => {
