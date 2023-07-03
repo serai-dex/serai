@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use core::fmt::Debug;
 use std_shims::io::{self, Read, Write};
 
@@ -52,11 +50,13 @@ impl BorromeanSignatures {
     for i in 0 .. 64 {
       // TODO: These aren't the correct reduction
       // TODO: Can either of these be tightened?
+      #[allow(non_snake_case)]
       let LL = EdwardsPoint::vartime_double_scalar_mul_basepoint(
         &Scalar::from_bytes_mod_order(self.ee),
         &keys_a[i],
         &Scalar::from_bytes_mod_order(self.s0[i]),
       );
+      #[allow(non_snake_case)]
       let LV = EdwardsPoint::vartime_double_scalar_mul_basepoint(
         &hash_to_scalar(LL.compress().as_bytes()),
         &keys_b[i],
@@ -74,19 +74,19 @@ impl BorromeanSignatures {
 /// A range proof premised on Borromean ring signatures.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BorromeanRange {
-  pub sig: BorromeanSignatures,
+  pub sigs: BorromeanSignatures,
   pub bit_commitments: [EdwardsPoint; 64],
 }
 
 impl BorromeanRange {
   pub fn read<R: Read>(r: &mut R) -> io::Result<BorromeanRange> {
     Ok(BorromeanRange {
-      sig: BorromeanSignatures::read(r)?,
+      sigs: BorromeanSignatures::read(r)?,
       bit_commitments: read_array(read_point, r)?,
     })
   }
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    self.sig.write(w)?;
+    self.sigs.write(w)?;
     write_raw_vec(write_point, &self.bit_commitments, w)
   }
 
@@ -96,12 +96,13 @@ impl BorromeanRange {
       return false;
     }
 
+    #[allow(non_snake_case)]
     let H_pow_2 = H_pow_2();
     let mut commitments_sub_one = [EdwardsPoint::identity(); 64];
     for i in 0 .. 64 {
       commitments_sub_one[i] = self.bit_commitments[i] - H_pow_2[i];
     }
 
-    self.sig.verify(&self.bit_commitments, &commitments_sub_one)
+    self.sigs.verify(&self.bit_commitments, &commitments_sub_one)
   }
 }
