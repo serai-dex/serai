@@ -141,16 +141,16 @@ pub(crate) fn read_raw_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
   Ok(res)
 }
 
+pub(crate) fn read_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>, const N: usize>(
+  f: F,
+  r: &mut R,
+) -> io::Result<[T; N]> {
+  read_raw_vec(f, N, r).map(|vec| vec.try_into().unwrap())
+}
+
 pub(crate) fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
   f: F,
   r: &mut R,
 ) -> io::Result<Vec<T>> {
   read_raw_vec(f, read_varint(r)?.try_into().unwrap(), r)
-}
-
-pub(crate) fn read_array<const N: usize, R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>>(
-  f: F,
-  r: &mut R,
-) -> io::Result<[T; N]> {
-  (0 .. N).map(|_| f(r)).collect::<io::Result<Vec<T>>>().map(|vec| vec.try_into().unwrap())
 }
