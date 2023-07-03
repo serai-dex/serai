@@ -18,6 +18,8 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 
 pub use monero_generators::H;
 
+mod merkle;
+
 mod serialize;
 use serialize::{read_byte, read_u16};
 
