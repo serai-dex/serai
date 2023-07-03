@@ -14,8 +14,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 std-shims = { path = "../../../common/std-shims", version = "0.1", default-features = false }
 
-lazy_static = "1"
-
 subtle = { version = "^2.4", default-features = false }
 
 sha3 = { version = "0.10", default-features = false }
@@ -26,6 +24,5 @@ group = { version = "0.13", default-features = false }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.3" }
 
 [features]
-alloc = ["lazy_static/spin_no_std"]
 std = ["std-shims/std"]
 default = ["std"]

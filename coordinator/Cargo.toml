@@ -1,5 +1,5 @@
 [package]
-name = "coordinator"
+name = "serai-coordinator"
 version = "0.1.0"
 description = "Serai coordinator to prepare batches and sign transactions"
 license = "AGPL-3.0-only"
@@ -34,7 +34,7 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 
 serai-db = { path = "../common/db" }
 
-processor-messages = { package = "processor-messages", path = "../processor/messages" }
+processor-messages = { package = "serai-processor-messages", path = "../processor/messages" }
 tributary = { package = "tributary-chain", path = "./tributary" }
 
 serai-client = { path = "../substrate/client", features = ["serai"] }

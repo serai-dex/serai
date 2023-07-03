@@ -13,7 +13,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-hashbrown = "0.13"
+spin = "0.9"
+hashbrown = "0.14"
 
 [features]
 std = []

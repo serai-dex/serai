@@ -1,3 +1,4 @@
+use sp_core::sr25519::Public;
 use serai_runtime::{
   primitives::{SeraiAddress, SubstrateAmount, Amount, Coin, Balance},
   assets::{AssetDetails, AssetAccount},
@@ -42,14 +43,14 @@ impl Serai {
   ) -> Result<Amount, SeraiError> {
     Ok(Amount(
       self
-        .storage::<AssetAccount<SubstrateAmount, SubstrateAmount, ()>>(
+        .storage::<AssetAccount<SubstrateAmount, SubstrateAmount, (), Public>>(
           "Assets",
           "Account",
           Some(vec![scale_value(coin), scale_value(address)]),
           block,
         )
         .await?
-        .map(|account| account.balance)
+        .map(|account| account.balance())
         .unwrap_or(0),
     ))
   }

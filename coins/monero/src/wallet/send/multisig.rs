@@ -1,8 +1,9 @@
-use std::{
+use std_shims::{
+  vec::Vec,
   io::{self, Read},
-  sync::{Arc, RwLock},
   collections::HashMap,
 };
+use std::sync::{Arc, RwLock};
 
 use zeroize::Zeroizing;
 
@@ -339,7 +340,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
         uniqueness(
           &sorted_images
             .iter()
-            .map(|image| Input::ToKey { amount: 0, key_offsets: vec![], key_image: *image })
+            .map(|image| Input::ToKey { amount: None, key_offsets: vec![], key_image: *image })
             .collect::<Vec<_>>(),
         ),
       )
@@ -372,7 +373,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       }
 
       tx.prefix.inputs.push(Input::ToKey {
-        amount: 0,
+        amount: None,
         key_offsets: value.2.offsets.clone(),
         key_image: value.0,
       });

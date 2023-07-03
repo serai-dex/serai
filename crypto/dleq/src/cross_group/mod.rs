@@ -55,10 +55,13 @@ pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G
   let mut repr = G::Repr::default();
   r.read_exact(repr.as_mut())?;
   let point = G::from_bytes(&repr);
-  if point.is_none().into() {
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid point"))?;
+  let Some(point) = Option::<G>::from(point) else {
+    Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid point"))?
+  };
+  if point.to_bytes().as_ref() != repr.as_ref() {
+    Err(std::io::Error::new(std::io::ErrorKind::Other, "non-canonical point"))?;
   }
-  Ok(point.unwrap())
+  Ok(point)
 }
 
 /// A pair of generators, one committing to values (primary), one blinding (alt), for an elliptic

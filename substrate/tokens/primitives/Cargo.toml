@@ -1,5 +1,5 @@
 [package]
-name = "tokens-primitives"
+name = "serai-tokens-primitives"
 version = "0.1.0"
 description = "Serai tokens primitives"
 license = "MIT"

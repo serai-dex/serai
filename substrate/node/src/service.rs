@@ -144,7 +144,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   })
 }
 
-pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
+pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
   let sc_service::PartialComponents {
     client,
     backend,
@@ -156,11 +156,15 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
   } = new_partial(&config)?;
 
-  let publish_non_global_ips = config.network.allow_non_globals_in_dht;
+  let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
     grandpa::protocol_standard_name(&client.block_hash(0).unwrap().unwrap(), &config.chain_spec);
+  net_config.add_notification_protocol(sc_consensus_grandpa::grandpa_peers_set_config(
+    grandpa_protocol_name.clone(),
+  ));
 
-  config.network.extra_sets.push(grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone()));
+  let publish_non_global_ips = config.network.allow_non_globals_in_dht;
+
   let warp_sync = Arc::new(grandpa::warp_proof::NetworkProvider::new(
     backend.clone(),
     grandpa_link.shared_authority_set().clone(),
@@ -170,6 +174,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
     sc_service::build_network(sc_service::BuildNetworkParams {
       config: &config,
+      net_config,
       client: client.clone(),
       transaction_pool: transaction_pool.clone(),
       spawn_handle: task_manager.spawn_handle(),

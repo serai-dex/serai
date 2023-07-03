@@ -458,11 +458,9 @@ impl Transaction {
     signed_ref.signer = Ristretto::generator() * key.deref();
     signed_ref.nonce = nonce;
 
+    let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
+    signed(self).signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
     let sig_hash = self.sig_hash(genesis);
-    signed(self).signature = SchnorrSignature::<Ristretto>::sign(
-      key,
-      Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng)),
-      sig_hash,
-    );
+    signed(self).signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
   }
 }

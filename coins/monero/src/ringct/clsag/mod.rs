@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
 
 use core::ops::Deref;
-use std::io::{self, Read, Write};
+use std_shims::{
+  vec::Vec,
+  io::{self, Read, Write},
+};
 
-use lazy_static::lazy_static;
-use thiserror::Error;
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
@@ -18,8 +19,8 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys, ringct::hash_to_point,
-  serialize::*,
+  INV_EIGHT, Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
+  ringct::hash_to_point, serialize::*,
 };
 
 #[cfg(feature = "multisig")]
@@ -29,28 +30,25 @@ pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 #[cfg(feature = "multisig")]
 pub(crate) use multisig::add_key_image_share;
 
-lazy_static! {
-  static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert();
-}
-
 /// Errors returned when CLSAG signing fails.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum ClsagError {
-  #[error("internal error ({0})")]
+  #[cfg_attr(feature = "std", error("internal error ({0})"))]
   InternalError(&'static str),
-  #[error("invalid ring")]
+  #[cfg_attr(feature = "std", error("invalid ring"))]
   InvalidRing,
-  #[error("invalid ring member (member {0}, ring size {1})")]
+  #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
   InvalidRingMember(u8, u8),
-  #[error("invalid commitment")]
+  #[cfg_attr(feature = "std", error("invalid commitment"))]
   InvalidCommitment,
-  #[error("invalid key image")]
+  #[cfg_attr(feature = "std", error("invalid key image"))]
   InvalidImage,
-  #[error("invalid D")]
+  #[cfg_attr(feature = "std", error("invalid D"))]
   InvalidD,
-  #[error("invalid s")]
+  #[cfg_attr(feature = "std", error("invalid s"))]
   InvalidS,
-  #[error("invalid c1")]
+  #[cfg_attr(feature = "std", error("invalid c1"))]
   InvalidC1,
 }
 
@@ -103,7 +101,7 @@ fn core(
   let n = ring.len();
 
   let images_precomp = VartimeEdwardsPrecomputation::new([I, D]);
-  let D = D * *INV_EIGHT;
+  let D = D * INV_EIGHT();
 
   // Generate the transcript
   // Instead of generating multiple, a single transcript is created and then edited as needed

@@ -1,5 +1,8 @@
-use std::fmt::Debug;
-use std::io::{self, Read, Write};
+use core::fmt::Debug;
+use std_shims::{
+  vec::Vec,
+  io::{self, Read, Write},
+};
 
 use curve25519_dalek::{
   scalar::Scalar,

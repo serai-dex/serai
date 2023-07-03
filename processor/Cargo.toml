@@ -1,5 +1,5 @@
 [package]
-name = "processor"
+name = "serai-processor"
 version = "0.1.0"
 description = "Multichain processor premised on canonicity to reach distributed consensus automatically"
 license = "AGPL-3.0-only"
@@ -57,7 +57,10 @@ tokio = { version = "1", features = ["full"] }
 serai-db = { path = "../common/db", default-features = false }
 serai-client = { path = "../substrate/client", default-features = false }
 
-messages = { package = "processor-messages", path = "./messages" }
+messages = { package = "serai-processor-messages", path = "./messages" }
+
+jsonrpsee = { version = "0.16", features = ["client"] }
+message-queue = { package = "serai-message-queue", path = "../message-queue" }
 
 [dev-dependencies]
 futures = "0.3"

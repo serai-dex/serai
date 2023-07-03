@@ -1,25 +1,25 @@
 use core::fmt;
+use std_shims::string::String;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
-
-use thiserror::Error;
 
 pub(crate) mod classic;
 use classic::{CLASSIC_SEED_LENGTH, CLASSIC_SEED_LENGTH_WITH_CHECKSUM, ClassicSeed};
 
 /// Error when decoding a seed.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum SeedError {
-  #[error("invalid number of words in seed")]
+  #[cfg_attr(feature = "std", error("invalid number of words in seed"))]
   InvalidSeedLength,
-  #[error("unknown language")]
+  #[cfg_attr(feature = "std", error("unknown language"))]
   UnknownLanguage,
-  #[error("invalid checksum")]
+  #[cfg_attr(feature = "std", error("invalid checksum"))]
   InvalidChecksum,
-  #[error("english old seeds don't support checksums")]
+  #[cfg_attr(feature = "std", error("english old seeds don't support checksums"))]
   EnglishOldWithChecksum,
-  #[error("invalid seed")]
+  #[cfg_attr(feature = "std", error("invalid seed"))]
   InvalidSeed,
 }
 

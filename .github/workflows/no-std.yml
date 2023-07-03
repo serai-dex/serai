@@ -18,4 +18,4 @@ jobs:
           github-token: ${{ inputs.github-token }}
 
       - name: Verify no-std builds
-        run: cd tests/no-std && cargo build --target wasm32-unknown-unknown
+        run: cd tests/no-std && cargo build --target riscv32imac-unknown-none-elf

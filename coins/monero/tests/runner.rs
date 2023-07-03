@@ -1,7 +1,5 @@
 use core::ops::Deref;
-use std::collections::HashSet;
-
-use lazy_static::lazy_static;
+use std_shims::{sync::OnceLock, collections::HashSet};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
@@ -98,9 +96,7 @@ pub async fn rpc() -> Rpc<HttpRpc> {
   rpc
 }
 
-lazy_static! {
-  pub static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
-}
+pub static SEQUENTIAL: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[macro_export]
 macro_rules! async_sequential {
@@ -108,7 +104,7 @@ macro_rules! async_sequential {
     $(
       #[tokio::test]
       async fn $name() {
-        let guard = runner::SEQUENTIAL.lock().await;
+        let guard = runner::SEQUENTIAL.get_or_init(|| tokio::sync::Mutex::new(())).lock().await;
         let local = tokio::task::LocalSet::new();
         local.run_until(async move {
           if let Err(err) = tokio::task::spawn_local(async move { $body }).await {

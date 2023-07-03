@@ -1,7 +1,5 @@
-// Required to be for this entire file, which isn't an issue, as it wouldn't bind to the static
-#![allow(non_upper_case_globals)]
+use std_shims::{vec::Vec, sync::OnceLock};
 
-use lazy_static::lazy_static;
 use rand_core::{RngCore, CryptoRng};
 
 use subtle::{Choice, ConditionallySelectable};
@@ -15,13 +13,17 @@ use multiexp::multiexp as multiexp_const;
 
 pub(crate) use monero_generators::Generators;
 
-use crate::{H as DALEK_H, Commitment, hash_to_scalar as dalek_hash};
+use crate::{INV_EIGHT as DALEK_INV_EIGHT, H as DALEK_H, Commitment, hash_to_scalar as dalek_hash};
 pub(crate) use crate::ringct::bulletproofs::scalar_vector::*;
 
-// Bring things into ff/group
-lazy_static! {
-  pub(crate) static ref INV_EIGHT: Scalar = Scalar::from(8u8).invert().unwrap();
-  pub(crate) static ref H: EdwardsPoint = EdwardsPoint(*DALEK_H);
+#[inline]
+pub(crate) fn INV_EIGHT() -> Scalar {
+  Scalar(DALEK_INV_EIGHT())
+}
+
+#[inline]
+pub(crate) fn H() -> EdwardsPoint {
+  EdwardsPoint(DALEK_H())
 }
 
 pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {
@@ -34,7 +36,7 @@ pub(crate) const LOG_N: usize = 6; // 2 << 6 == N
 pub(crate) const N: usize = 64;
 
 pub(crate) fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
-  multiexp_const(pairs) * *INV_EIGHT
+  multiexp_const(pairs) * INV_EIGHT()
 }
 
 pub(crate) fn vector_exponent(
@@ -91,7 +93,7 @@ pub(crate) fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, Scalar
 pub(crate) fn hash_commitments<C: IntoIterator<Item = DalekPoint>>(
   commitments: C,
 ) -> (Scalar, Vec<EdwardsPoint>) {
-  let V = commitments.into_iter().map(|c| EdwardsPoint(c) * *INV_EIGHT).collect::<Vec<_>>();
+  let V = commitments.into_iter().map(|c| EdwardsPoint(c) * INV_EIGHT()).collect::<Vec<_>>();
   (hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>()), V)
 }
 
@@ -102,7 +104,7 @@ pub(crate) fn alpha_rho<R: RngCore + CryptoRng>(
   aR: &ScalarVector,
 ) -> (Scalar, EdwardsPoint) {
   let ar = Scalar::random(rng);
-  (ar, (vector_exponent(generators, aL, aR) + (EdwardsPoint::generator() * ar)) * *INV_EIGHT)
+  (ar, (vector_exponent(generators, aL, aR) + (EdwardsPoint::generator() * ar)) * INV_EIGHT())
 }
 
 pub(crate) fn LR_statements(
@@ -124,8 +126,9 @@ pub(crate) fn LR_statements(
   res
 }
 
-lazy_static! {
-  pub(crate) static ref TWO_N: ScalarVector = ScalarVector::powers(Scalar::from(2u8), N);
+static TWO_N_CELL: OnceLock<ScalarVector> = OnceLock::new();
+pub(crate) fn TWO_N() -> &'static ScalarVector {
+  TWO_N_CELL.get_or_init(|| ScalarVector::powers(Scalar::from(2u8), N))
 }
 
 pub(crate) fn challenge_products(w: &[Scalar], winv: &[Scalar]) -> Vec<Scalar> {

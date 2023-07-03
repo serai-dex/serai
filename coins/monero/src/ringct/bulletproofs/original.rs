@@ -1,4 +1,5 @@
-use lazy_static::lazy_static;
+use std_shims::{vec::Vec, sync::OnceLock};
+
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroize;
@@ -14,9 +15,9 @@ use crate::{Commitment, ringct::bulletproofs::core::*};
 
 include!(concat!(env!("OUT_DIR"), "/generators.rs"));
 
-lazy_static! {
-  static ref ONE_N: ScalarVector = ScalarVector(vec![Scalar::ONE; N]);
-  static ref IP12: Scalar = inner_product(&ONE_N, &TWO_N);
+static IP12_CELL: OnceLock<Scalar> = OnceLock::new();
+pub(crate) fn IP12() -> Scalar {
+  *IP12_CELL.get_or_init(|| inner_product(&ScalarVector(vec![Scalar::ONE; N]), TWO_N()))
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -48,8 +49,9 @@ impl OriginalStruct {
     let (sL, sR) =
       ScalarVector((0 .. (MN * 2)).map(|_| Scalar::random(&mut *rng)).collect::<Vec<_>>()).split();
 
-    let (mut alpha, A) = alpha_rho(&mut *rng, &GENERATORS, &aL, &aR);
-    let (mut rho, S) = alpha_rho(&mut *rng, &GENERATORS, &sL, &sR);
+    let generators = GENERATORS();
+    let (mut alpha, A) = alpha_rho(&mut *rng, generators, &aL, &aR);
+    let (mut rho, S) = alpha_rho(&mut *rng, generators, &sL, &sR);
 
     let y = hash_cache(&mut cache, &[A.compress().to_bytes(), S.compress().to_bytes()]);
     let mut cache = hash_to_scalar(&y.to_bytes());
@@ -62,7 +64,7 @@ impl OriginalStruct {
     let zpow = ScalarVector::powers(z, M + 2);
     for j in 0 .. M {
       for i in 0 .. N {
-        zero_twos.push(zpow[j + 2] * TWO_N[i]);
+        zero_twos.push(zpow[j + 2] * TWO_N()[i]);
       }
     }
 
@@ -77,8 +79,8 @@ impl OriginalStruct {
       let mut tau1 = Scalar::random(&mut *rng);
       let mut tau2 = Scalar::random(&mut *rng);
 
-      let T1 = prove_multiexp(&[(t1, *H), (tau1, EdwardsPoint::generator())]);
-      let T2 = prove_multiexp(&[(t2, *H), (tau2, EdwardsPoint::generator())]);
+      let T1 = prove_multiexp(&[(t1, H()), (tau1, EdwardsPoint::generator())]);
+      let T2 = prove_multiexp(&[(t2, H()), (tau2, EdwardsPoint::generator())]);
 
       let x =
         hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
@@ -112,10 +114,10 @@ impl OriginalStruct {
     let yinv = y.invert().unwrap();
     let yinvpow = ScalarVector::powers(yinv, MN);
 
-    let mut G_proof = GENERATORS.G[.. a.len()].to_vec();
-    let mut H_proof = GENERATORS.H[.. a.len()].to_vec();
+    let mut G_proof = generators.G[.. a.len()].to_vec();
+    let mut H_proof = generators.H[.. a.len()].to_vec();
     H_proof.iter_mut().zip(yinvpow.0.iter()).for_each(|(this_H, yinvpow)| *this_H *= yinvpow);
-    let U = *H * x_ip;
+    let U = H() * x_ip;
 
     let mut L = Vec::with_capacity(logMN);
     let mut R = Vec::with_capacity(logMN);
@@ -230,10 +232,10 @@ impl OriginalStruct {
     let ip1y = ScalarVector::powers(y, M * N).sum();
     let mut k = -(zpow[2] * ip1y);
     for j in 1 ..= M {
-      k -= zpow[j + 2] * *IP12;
+      k -= zpow[j + 2] * IP12();
     }
     let y1 = Scalar(self.t) - ((z * ip1y) + k);
-    proof.push((-y1, *H));
+    proof.push((-y1, H()));
 
     proof.push((-Scalar(self.taux), G));
 
@@ -247,7 +249,7 @@ impl OriginalStruct {
 
     proof = Vec::with_capacity(4 + (2 * (MN + logMN)));
     let z3 = (Scalar(self.t) - (Scalar(self.a) * Scalar(self.b))) * x_ip;
-    proof.push((z3, *H));
+    proof.push((z3, H()));
     proof.push((-Scalar(self.mu), G));
 
     proof.push((Scalar::ONE, A));
@@ -260,13 +262,14 @@ impl OriginalStruct {
 
       let w_cache = challenge_products(&w, &winv);
 
+      let generators = GENERATORS();
       for i in 0 .. MN {
         let g = (Scalar(self.a) * w_cache[i]) + z;
-        proof.push((-g, GENERATORS.G[i]));
+        proof.push((-g, generators.G[i]));
 
         let mut h = Scalar(self.b) * yinvpow[i] * w_cache[(!i) & (MN - 1)];
-        h -= ((zpow[(i / N) + 2] * TWO_N[i % N]) + (z * ypow[i])) * yinvpow[i];
-        proof.push((-h, GENERATORS.H[i]));
+        h -= ((zpow[(i / N) + 2] * TWO_N()[i % N]) + (z * ypow[i])) * yinvpow[i];
+        proof.push((-h, generators.H[i]));
       }
     }
 

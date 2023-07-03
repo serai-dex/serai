@@ -45,7 +45,7 @@ ff-group-tests = { version = "0.13", path = "../ff-group-tests" }
 
 [features]
 alloc = ["std-shims"]
-std = ["std-shims/std"]
+std = ["zeroize/std", "std-shims/std"]
 
 dalek = ["sha2", "dalek-ff-group"]
 ed25519 = ["dalek"]

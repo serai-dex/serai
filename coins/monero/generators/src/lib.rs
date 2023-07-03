@@ -1,10 +1,12 @@
 //! Generators used by Monero in both its Pedersen commitments and Bulletproofs(+).
+//!
 //! An implementation of Monero's `ge_fromfe_frombytes_vartime`, simply called
 //! `hash_to_point` here, is included, as needed to generate generators.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use lazy_static::lazy_static;
+use core::cell::OnceCell;
+use std_shims::sync::Mutex;
 
 use sha3::{Digest, Keccak256};
 
@@ -25,29 +27,33 @@ fn hash(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
 }
 
-lazy_static! {
-  /// Monero alternate generator `H`, used for amounts in Pedersen commitments.
-  pub static ref H: DalekPoint =
+static H_CELL: OnceLock<DalekPoint> = OnceLock::new();
+/// Monero's alternate generator `H`, used for amounts in Pedersen commitments.
+#[allow(non_snake_case)]
+pub fn H() -> DalekPoint {
+  *H_CELL.get_or_init(|| {
     CompressedEdwardsY(hash(&EdwardsPoint::generator().to_bytes()))
       .decompress()
       .unwrap()
-      .mul_by_cofactor();
+      .mul_by_cofactor()
+  })
+}
 
-  /// Monero's `H` generator multiplied 2^i for each index, i.e. H, 2H, 4H, 8H, ...
-  /// used in old range proofs.
-  /// https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/src/
-  /// ringct/rctTypes.h#L628
-  pub static ref H2: [DalekPoint; 64] = generate_H2();
+static H_POW_2_CELL: OnceLock<[DalekPoint; 64]> = OnceLock::new();
+/// Monero's alternate generator `H`, multiplied by 2**i for i in 1 ..= 64.
+#[allow(non_snake_case)]
+pub fn H_pow_2() -> &[DalekPoint; 64] {
+  H_POW_2_CELL.get_or_init(|| {
+    let mut res = [H(); 64];
+    for i in 1 .. 64 {
+      res[i] = res[i - 1].double();
+    }
+    res
+  })
 }
 
 #[allow(non_snake_case)]
 fn generate_H2() -> [DalekPoint; 64] {
-  let mut temp = Vec::with_capacity(64);
-  for i in 0 .. 64 {
-    temp.push(Scalar::from(2_u128.pow(i)) * *H)
-  }
-  temp.try_into().unwrap()
-}
 
 const MAX_M: usize = 16;
 const N: usize = 64;
@@ -67,7 +73,7 @@ pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
   for i in 0 .. MAX_MN {
     let i = 2 * i;
 
-    let mut even = H.compress().to_bytes().to_vec();
+    let mut even = H().compress().to_bytes().to_vec();
     even.extend(dst);
     let mut odd = even.clone();
 

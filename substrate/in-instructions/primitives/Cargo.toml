@@ -1,5 +1,5 @@
 [package]
-name = "in-instructions-primitives"
+name = "serai-in-instructions-primitives"
 version = "0.1.0"
 description = "Serai instructions library, enabling encoding and decoding"
 license = "MIT"
@@ -23,7 +23,7 @@ sp-std = { git = "https://github.com/serai-dex/substrate", default-features = fa
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
-tokens-primitives = { path = "../../tokens/primitives", default-features = false }
+tokens-primitives = { package = "serai-tokens-primitives", path = "../../tokens/primitives", default-features = false }
 
 [features]
 std = [

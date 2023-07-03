@@ -1,7 +1,9 @@
 use core::{ops::Deref, fmt};
-use std::io;
-
-use thiserror::Error;
+use std_shims::{
+  vec::Vec,
+  io,
+  string::{String, ToString},
+};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -42,7 +44,9 @@ use crate::{
   },
 };
 
+#[cfg(feature = "std")]
 mod builder;
+#[cfg(feature = "std")]
 pub use builder::SignableTransactionBuilder;
 
 #[cfg(feature = "multisig")]
@@ -117,34 +121,35 @@ impl SendOutput {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum TransactionError {
-  #[error("multiple addresses with payment IDs")]
+  #[cfg_attr(feature = "std", error("multiple addresses with payment IDs"))]
   MultiplePaymentIds,
-  #[error("no inputs")]
+  #[cfg_attr(feature = "std", error("no inputs"))]
   NoInputs,
-  #[error("no outputs")]
+  #[cfg_attr(feature = "std", error("no outputs"))]
   NoOutputs,
-  #[error("only one output and no change address")]
+  #[cfg_attr(feature = "std", error("only one output and no change address"))]
   NoChange,
-  #[error("too many outputs")]
+  #[cfg_attr(feature = "std", error("too many outputs"))]
   TooManyOutputs,
-  #[error("too much data")]
+  #[cfg_attr(feature = "std", error("too much data"))]
   TooMuchData,
-  #[error("too many inputs/too much arbitrary data")]
+  #[cfg_attr(feature = "std", error("too many inputs/too much arbitrary data"))]
   TooLargeTransaction,
-  #[error("not enough funds (in {0}, out {1})")]
+  #[cfg_attr(feature = "std", error("not enough funds (in {0}, out {1})"))]
   NotEnoughFunds(u64, u64),
-  #[error("wrong spend private key")]
+  #[cfg_attr(feature = "std", error("wrong spend private key"))]
   WrongPrivateKey,
-  #[error("rpc error ({0})")]
+  #[cfg_attr(feature = "std", error("rpc error ({0})"))]
   RpcError(RpcError),
-  #[error("clsag error ({0})")]
+  #[cfg_attr(feature = "std", error("clsag error ({0})"))]
   ClsagError(ClsagError),
-  #[error("invalid transaction ({0})")]
+  #[cfg_attr(feature = "std", error("invalid transaction ({0})"))]
   InvalidTransaction(RpcError),
   #[cfg(feature = "multisig")]
-  #[error("frost error {0}")]
+  #[cfg_attr(feature = "std", error("frost error {0}"))]
   FrostError(FrostError),
 }
 
@@ -180,7 +185,7 @@ async fn prepare_inputs<R: RngCore + CryptoRng, RPC: RpcConnection>(
     ));
 
     tx.prefix.inputs.push(Input::ToKey {
-      amount: 0,
+      amount: None,
       key_offsets: decoys[i].offsets.clone(),
       key_image: signable[i].1,
     });
@@ -629,7 +634,7 @@ impl SignableTransaction {
     for output in &outputs {
       fee -= output.commitment.amount;
       tx_outputs.push(Output {
-        amount: 0,
+        amount: None,
         key: output.dest.compress(),
         view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
@@ -688,7 +693,7 @@ impl SignableTransaction {
       uniqueness(
         &images
           .iter()
-          .map(|image| Input::ToKey { amount: 0, key_offsets: vec![], key_image: *image })
+          .map(|image| Input::ToKey { amount: None, key_offsets: vec![], key_image: *image })
           .collect::<Vec<_>>(),
       ),
     );
@@ -750,7 +755,7 @@ impl Eventuality {
     for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
       // Verify the output, commitment, and encrypted amount.
       if (&Output {
-        amount: 0,
+        amount: None,
         key: expected.dest.compress(),
         view_tag: Some(expected.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       } != actual) ||

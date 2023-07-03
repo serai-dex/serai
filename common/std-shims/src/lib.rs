@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "std"))]
@@ -6,8 +8,16 @@
 #[macro_use]
 pub extern crate alloc;
 
+pub mod sync;
 pub mod collections;
 pub mod io;
+
+pub mod vec {
+  #[cfg(not(feature = "std"))]
+  pub use alloc::vec::*;
+  #[cfg(feature = "std")]
+  pub use std::vec::*;
+}
 
 pub mod str {
   #[cfg(not(feature = "std"))]
@@ -16,9 +26,9 @@ pub mod str {
   pub use std::str::*;
 }
 
-pub mod vec {
+pub mod string {
   #[cfg(not(feature = "std"))]
-  pub use alloc::vec::*;
+  pub use alloc::string::*;
   #[cfg(feature = "std")]
-  pub use std::vec::*;
+  pub use std::string::*;
 }
