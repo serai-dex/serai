@@ -143,6 +143,12 @@ pub mod pallet {
         Err(InvalidTransaction::BadProof)?;
       }
 
+      // verify the batch size
+      if batch.batch.encode().len() > MAX_BATCH_SIZE {
+        // TODO: or InvalidTransaction::ExhaustsResources?
+        Err(InvalidTransaction::Custom(1))?;
+      }
+
       // Verify the batch is sequential
       // Batches has the last ID set. The next ID should be it + 1
       // If there's no ID, the next ID should be 0

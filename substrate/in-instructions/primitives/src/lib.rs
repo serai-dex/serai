@@ -21,6 +21,8 @@ use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddr
 mod shorthand;
 pub use shorthand::*;
 
+pub const MAX_BATCH_SIZE: usize = 25_000_000; // ~25kb
+
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]

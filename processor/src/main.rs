@@ -18,7 +18,7 @@ use serai_client::{
   primitives::{MAX_DATA_LEN, BlockHash, NetworkId},
   tokens::primitives::{OutInstruction, OutInstructionWithBalance},
   in_instructions::primitives::{
-    Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch,
+    Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch, MAX_BATCH_SIZE,
   },
 };
 
@@ -64,8 +64,6 @@ use scheduler::Scheduler;
 
 #[cfg(test)]
 mod tests;
-
-const MAX_BATCH_SIZE: usize = 25_000_000; // ~25kb
 
 async fn get_latest_block_number<N: Network>(network: &N) -> usize {
   loop {
@@ -701,7 +699,9 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               };
               let ins_size = in_ins.encode().len();
 
-              if batch_size + ins_size >= MAX_BATCH_SIZE {
+              // batch has 38 bytes of other data
+              // TODO: should we make another const for this 38?
+              if batch_size + ins_size > MAX_BATCH_SIZE - 38 {
                 // TODO: should we check other ins in the vec that would potentially fit or
                 // that would be too slow and not worth it?
                 // batch is full
