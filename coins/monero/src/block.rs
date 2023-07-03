@@ -72,9 +72,6 @@ impl Block {
   }
 
   pub fn tx_merkle_root(&self) -> [u8; 32] {
-    // TODO: Handle block 202612
-    // https://monero.stackexchange.com/questions/421/what-happened-at-block-202612
-    // If this block's header is fully-equivalent to 202612, return the bad TX merkle hash instead
     merkle_root::tree_hash(self.miner_tx.hash(), &self.txs)
   }
 
@@ -91,6 +88,9 @@ impl Block {
   }
 
   pub fn id(&self) -> [u8; 32] {
+    // TODO: Handle block 202612
+    // https://monero.stackexchange.com/questions/421/what-happened-at-block-202612
+    // If this block's header is fully-equivalent to 202612, return the malformed hash instead
     hash(&self.serialize_hashable())
   }
 

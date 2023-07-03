@@ -8,7 +8,7 @@ use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::EdwardsPoint};
 use monero_generators::H_pow_2;
 use crate::{hash_to_scalar, serialize::*};
 
-/// 64 Borromean ring signatures, modified to be aggregated with a shared challenge.
+/// 64 Borromean ring signatures.
 ///
 /// This type keeps the data as raw bytes as Monero has some transactions with unreduced scalars in
 /// this field. While we could use `from_bytes_mod_order`, we'd then not be able  to encode this
