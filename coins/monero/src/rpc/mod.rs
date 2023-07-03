@@ -278,7 +278,6 @@ impl<R: RpcConnection> Rpc<R> {
     let res: BlockResponse =
       self.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await?;
 
-    // TODO: Verify the TXs included are actually committed to by the header
     let block =
       Block::read::<&[u8]>(&mut rpc_hex(&res.blob)?.as_ref()).map_err(|_| RpcError::InvalidNode)?;
     if block.hash() != hash {

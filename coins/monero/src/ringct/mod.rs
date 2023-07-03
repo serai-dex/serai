@@ -11,10 +11,10 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 pub(crate) mod hash_to_point;
 pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 
-/// CLSAG struct, along with signing and verifying functionality.
-pub mod clsag;
 /// MLSAG struct, along with verifying functionality.
 pub mod mlsag;
+/// CLSAG struct, along with signing and verifying functionality.
+pub mod clsag;
 /// BorromeanRange struct, along with verifying functionality.
 pub mod borromean;
 /// Bulletproofs(+) structs, along with proving and verifying functionality.
@@ -23,7 +23,7 @@ pub mod bulletproofs;
 use crate::{
   Protocol,
   serialize::*,
-  ringct::{clsag::Clsag, mlsag::Mlsag, bulletproofs::Bulletproofs, borromean::BorromeanRange},
+  ringct::{mlsag::Mlsag, clsag::Clsag, borromean::BorromeanRange, bulletproofs::Bulletproofs},
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
@@ -60,8 +60,8 @@ impl EncryptedAmount {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RctBase {
   pub fee: u64,
-  pub encrypted_amounts: Vec<EncryptedAmount>,
   pub pseudo_outs: Vec<EdwardsPoint>,
+  pub encrypted_amounts: Vec<EncryptedAmount>,
   pub commitments: Vec<EdwardsPoint>,
 }
 
@@ -91,7 +91,7 @@ impl RctBase {
     let rct_type = read_byte(r)?;
     Ok((
       if rct_type == 0 {
-        RctBase { fee: 0, encrypted_amounts: vec![], pseudo_outs: vec![], commitments: vec![] }
+        RctBase { fee: 0, pseudo_outs: vec![], encrypted_amounts: vec![], commitments: vec![] }
       } else {
         RctBase {
           fee: read_varint(r)?,

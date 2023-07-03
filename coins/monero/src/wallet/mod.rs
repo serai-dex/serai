@@ -9,7 +9,7 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, CompressedEdwardsY},
 };
 
-use crate::{hash, hash_to_scalar, serialize::write_varint, transaction::Input};
+use crate::{hash, hash_to_scalar, serialize::write_varint, ringct::EncryptedAmount, transaction::Input};
 
 pub mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
@@ -35,7 +35,6 @@ pub use send::SignableTransactionBuilder;
 pub(crate) use send::InternalPayment;
 #[cfg(feature = "multisig")]
 pub use send::TransactionMachine;
-use crate::ringct::EncryptedAmount;
 
 fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> core::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
@@ -87,6 +86,12 @@ pub(crate) fn shared_key(
   (view_tag, hash_to_scalar(&shared_key), payment_id_xor)
 }
 
+pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
+  let mut mask = b"commitment_mask".to_vec();
+  mask.extend(shared_key.to_bytes());
+  hash_to_scalar(&mask)
+}
+
 pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
   let mut amount_mask = b"amount".to_vec();
   amount_mask.extend(key.to_bytes());
@@ -124,12 +129,6 @@ fn amount_decryption(amount: &EncryptedAmount, key: Scalar) -> (Scalar, u64) {
       u64::from_le_bytes(amount_encryption(u64::from_le_bytes(*amount), key)),
     ),
   }
-}
-
-pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
-  let mut mask = b"commitment_mask".to_vec();
-  mask.extend(shared_key.to_bytes());
-  hash_to_scalar(&mask)
 }
 
 /// The private view key and public spend key, enabling scanning transactions.
