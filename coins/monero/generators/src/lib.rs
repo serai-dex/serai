@@ -5,15 +5,12 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::cell::OnceCell;
-use std_shims::sync::Mutex;
+use std_shims::sync::OnceLock;
 
 use sha3::{Digest, Keccak256};
 
 use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint, CompressedEdwardsY};
-use curve25519_dalek::scalar::Scalar;
 
-use std_shims::vec::Vec;
 use group::{Group, GroupEncoding};
 use dalek_ff_group::EdwardsPoint;
 
@@ -42,18 +39,15 @@ pub fn H() -> DalekPoint {
 static H_POW_2_CELL: OnceLock<[DalekPoint; 64]> = OnceLock::new();
 /// Monero's alternate generator `H`, multiplied by 2**i for i in 1 ..= 64.
 #[allow(non_snake_case)]
-pub fn H_pow_2() -> &[DalekPoint; 64] {
+pub fn H_pow_2() -> &'static [DalekPoint; 64] {
   H_POW_2_CELL.get_or_init(|| {
     let mut res = [H(); 64];
     for i in 1 .. 64 {
-      res[i] = res[i - 1].double();
+      res[i] = res[i - 1] + res[i - 1];
     }
     res
   })
 }
-
-#[allow(non_snake_case)]
-fn generate_H2() -> [DalekPoint; 64] {
 
 const MAX_M: usize = 16;
 const N: usize = 64;

@@ -96,6 +96,9 @@ std = [
   "serde/std",
   "serde_json/std",
 ]
+
 http_rpc = ["digest_auth", "reqwest"]
 multisig = ["transcript", "frost", "dleq", "std"]
+experimental = []
+
 default = ["std", "http_rpc"]

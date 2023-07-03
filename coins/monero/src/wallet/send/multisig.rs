@@ -430,7 +430,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
           pseudo_outs.push(pseudo_out);
         }
       }
-      _ => todo!(""),
+      _ => unreachable!("attempted to sign a multisig TX which wasn't CLSAG"),
     }
     Ok(tx)
   }

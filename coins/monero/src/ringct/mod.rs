@@ -15,7 +15,7 @@ pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 pub mod clsag;
 /// MLSAG struct, along with verifying functionality.
 pub mod mlsag;
-/// RangeSig struct, along with verifying functionality.
+/// BorromeanRange struct, along with verifying functionality.
 pub mod borromean;
 /// Bulletproofs(+) structs, along with proving and verifying functionality.
 pub mod bulletproofs;
@@ -23,7 +23,7 @@ pub mod bulletproofs;
 use crate::{
   Protocol,
   serialize::*,
-  ringct::{clsag::Clsag, mlsag::MgSig, bulletproofs::Bulletproofs, borromean::RangeSig},
+  ringct::{clsag::Clsag, mlsag::MgSig, bulletproofs::Bulletproofs, borromean::BorromeanRange},
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
@@ -110,7 +110,7 @@ impl RctBase {
 pub enum RctPrunable {
   Null,
   Borromean {
-    range_sigs: Vec<RangeSig>,
+    range_sigs: Vec<BorromeanRange>,
     mlsags: Vec<MgSig>,
     simple: bool,
   },
@@ -165,7 +165,7 @@ impl RctPrunable {
     match self {
       RctPrunable::Null => Ok(()),
       RctPrunable::Borromean { range_sigs, mlsags, simple: _ } => {
-        write_raw_vec(RangeSig::write, range_sigs, w)?;
+        write_raw_vec(BorromeanRange::write, range_sigs, w)?;
         write_raw_vec(MgSig::write, mlsags, w)
       }
       RctPrunable::BulletProof { bulletproofs, mlsags, pseudo_outs, v2 } => {
@@ -201,7 +201,7 @@ impl RctPrunable {
     Ok(match rct_type {
       0 => RctPrunable::Null,
       1 | 2 => RctPrunable::Borromean {
-        range_sigs: read_raw_vec(RangeSig::read, outputs, r)?,
+        range_sigs: read_raw_vec(BorromeanRange::read, outputs, r)?,
         mlsags: decoys.iter().map(|d| MgSig::read(*d, r)).collect::<Result<_, _>>()?,
         simple: rct_type == 2,
       },

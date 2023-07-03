@@ -708,9 +708,7 @@ impl SignableTransaction {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
         pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1).collect::<Vec<_>>());
       }
-      _ => {
-        todo!()
-      }
+      _ => unreachable!("attempted to sign a TX which wasn't CLSAG"),
     }
     Ok(tx)
   }
