@@ -45,19 +45,19 @@ default = "deny"
 exceptions = [
   { allow = ["AGPL-3.0"], name = "ethereum-serai" },
 
-  { allow = ["AGPL-3.0"], name = "message-queue" },
+  { allow = ["AGPL-3.0"], name = "serai-message-queue" },
 
-  { allow = ["AGPL-3.0"], name = "processor-messages" },
-  { allow = ["AGPL-3.0"], name = "processor" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-messages" },
+  { allow = ["AGPL-3.0"], name = "serai-processor" },
 
   { allow = ["AGPL-3.0"], name = "tributary-chain" },
-  { allow = ["AGPL-3.0"], name = "coordinator" },
+  { allow = ["AGPL-3.0"], name = "serai-coordinator" },
 
-  { allow = ["AGPL-3.0"], name = "tokens-pallet" },
+  { allow = ["AGPL-3.0"], name = "serai-tokens-pallet" },
 
-  { allow = ["AGPL-3.0"], name = "in-instructions-pallet" },
+  { allow = ["AGPL-3.0"], name = "serai-in-instructions-pallet" },
 
-  { allow = ["AGPL-3.0"], name = "validator-sets-pallet" },
+  { allow = ["AGPL-3.0"], name = "serai-validator-sets-pallet" },
 
   { allow = ["AGPL-3.0"], name = "serai-runtime" },
   { allow = ["AGPL-3.0"], name = "serai-node" },

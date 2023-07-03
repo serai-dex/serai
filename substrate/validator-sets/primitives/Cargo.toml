@@ -1,5 +1,5 @@
 [package]
-name = "validator-sets-primitives"
+name = "serai-validator-sets-primitives"
 version = "0.1.0"
 description = "Primitives for validator sets"
 license = "MIT"

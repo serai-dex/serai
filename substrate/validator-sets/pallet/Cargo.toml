@@ -1,5 +1,5 @@
 [package]
-name = "validator-sets-pallet"
+name = "serai-validator-sets-pallet"
 version = "0.1.0"
 description = "Validator sets pallet"
 license = "AGPL-3.0-only"
@@ -25,7 +25,7 @@ frame-system = { git = "https://github.com/serai-dex/substrate", default-feature
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
-validator-sets-primitives = { path = "../primitives", default-features = false }
+validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../primitives", default-features = false }
 
 [features]
 std = [
