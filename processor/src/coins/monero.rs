@@ -254,13 +254,13 @@ impl Coin for Monero {
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
-    Ok(Block(
+    Ok(
       self
         .rpc
         .get_block(self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?)
         .await
         .map_err(|_| CoinError::ConnectionError)?,
-    ))
+    )
   }
 
   async fn get_outputs(
@@ -269,7 +269,7 @@ impl Coin for Monero {
     key: EdwardsPoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let mut txs = Self::scanner(key)
-      .scan(&self.rpc, &block.1)
+      .scan(&self.rpc, block)
       .await
       .map_err(|_| CoinError::ConnectionError)?
       .iter()
@@ -309,8 +309,6 @@ impl Coin for Monero {
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Block,
   ) -> HashMap<[u8; 32], [u8; 32]> {
-    let block = &block.1;
-
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -359,7 +357,7 @@ impl Coin for Monero {
         block.unwrap()
       };
 
-      check_block(self, eventualities, &block.1, &mut res).await;
+      check_block(self, eventualities, &block, &mut res).await;
     }
 
     // Also check the current block
