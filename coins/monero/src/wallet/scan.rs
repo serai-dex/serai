@@ -16,7 +16,6 @@ use crate::{
   rpc::{RpcError, RpcConnection, Rpc},
   wallet::{
     PaymentId, Extra, address::SubaddressIndex, Scanner, uniqueness, shared_key, amount_decryption,
-    commitment_mask,
   },
 };
 
@@ -379,7 +378,7 @@ impl Scanner {
           commitment.amount = amount;
         // Regular transaction
         } else {
-          let amount = match tx.rct_signatures.base.encrypted_amounts.get(o) {
+          let (mask, amount) = match tx.rct_signatures.base.encrypted_amounts.get(o) {
             Some(amount) => amount_decryption(amount, shared_key),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
@@ -387,7 +386,7 @@ impl Scanner {
           };
 
           // Rebuild the commitment to verify it
-          commitment = Commitment::new(commitment_mask(shared_key), amount);
+          commitment = Commitment::new(mask, amount);
           // If this is a malicious commitment, move to the next output
           // Any other R value will calculate to a different spend key and are therefore ignorable
           if Some(&commitment.calculate()) != tx.rct_signatures.base.commitments.get(o) {
