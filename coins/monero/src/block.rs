@@ -72,25 +72,25 @@ impl Block {
   }
 
   pub fn tx_merkle_root(&self) -> [u8; 32] {
+    // TODO: Handle block 202612
+    // https://monero.stackexchange.com/questions/421/what-happened-at-block-202612
+    // If this block's header is fully-equivalent to 202612, return the bad TX merkle hash instead
     merkle_root::tree_hash(self.miner_tx.hash(), &self.txs)
   }
 
   pub fn serialize_hashable(&self) -> Vec<u8> {
     let mut blob = self.header.serialize();
-
     blob.extend_from_slice(&self.tx_merkle_root());
+    write_varint(&(1 + u64::try_from(self.txs.len()).unwrap()), &mut blob).unwrap();
 
-    write_varint(&(1 + self.txs.len() as u64), &mut blob).unwrap();
-
-    let mut out = vec![];
-    write_varint(&(blob.len() as u64), &mut out).unwrap();
+    let mut out = Vec::with_capacity(8 + blob.len());
+    write_varint(&u64::try_from(blob.len()).unwrap(), &mut out).unwrap();
     out.append(&mut blob);
 
     out
   }
 
   pub fn id(&self) -> [u8; 32] {
-    // TODO: block 202612?
     hash(&self.serialize_hashable())
   }
 
