@@ -1,3 +1,5 @@
+use std_shims::vec::Vec;
+
 use crate::hash;
 
 pub fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
@@ -16,16 +18,24 @@ pub fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
       }
       let low_pow_2 = high_pow_2 / 2;
 
-      // Merge hashes until we're at the low_pow_2
-      let mut i = high_pow_2 - hashes.len();
-      while hashes.len() != low_pow_2 {
-        let l = hashes.remove(i);
-        let r = hashes.remove(i);
-        hashes.insert(i, hash(&[l.as_ref(), &r].concat()));
-        i += 1;
+      // Merge right-most hashes until we're at the low_pow_2
+      {
+        let overage = hashes.len() - low_pow_2;
+        let mut rightmost = hashes.drain((low_pow_2 - overage) ..);
+        // This is true since we took overage from beneath and above low_pow_2, taking twice as
+        // many elements as overage
+        debug_assert_eq!(rightmost.len() % 2, 0);
+
+        let mut paired_hashes = Vec::with_capacity(overage);
+        while let Some(left) = rightmost.next() {
+          let right = rightmost.next().unwrap();
+          paired_hashes.push(hash(&[left.as_ref(), &right].concat()));
+        }
+        drop(rightmost);
+
+        hashes.extend(paired_hashes);
+        assert_eq!(hashes.len(), low_pow_2);
       }
-      assert_eq!(hashes.len(), i);
-      assert_eq!(hashes.len(), low_pow_2);
 
       // Do a traditional pairing off
       let mut new_hashes = Vec::with_capacity(hashes.len() / 2);
