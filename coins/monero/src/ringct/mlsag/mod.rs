@@ -32,39 +32,6 @@ impl Mlsag {
     })
   }
 
-  pub fn verify_rct_full(
-    &self,
-    msg: &[u8; 32],
-    pubs: &[[EdwardsPoint; 2]],
-    out_pks: &[EdwardsPoint],
-    fee: &EdwardsPoint,
-    key_image: &EdwardsPoint,
-  ) -> bool {
-    let sum_out_pk = out_pks.iter().sum::<EdwardsPoint>();
-
-    let mut ring_matrix = Vec::with_capacity(pubs.len());
-    for member in pubs.iter() {
-      ring_matrix.push([member[0], member[1] - sum_out_pk - fee])
-    }
-
-    self.verify(msg, &ring_matrix, key_image)
-  }
-
-  pub fn verify_rct_simple(
-    &self,
-    msg: &[u8; 32],
-    pubs: &[[EdwardsPoint; 2]],
-    pseudo_out: &EdwardsPoint,
-    key_image: &EdwardsPoint,
-  ) -> bool {
-    let mut ring_matrix = Vec::with_capacity(pubs.len());
-    for member in pubs.iter() {
-      ring_matrix.push([member[0], member[1] - pseudo_out])
-    }
-
-    self.verify(msg, &ring_matrix, key_image)
-  }
-
   #[cfg(feature = "experimental")]
   pub fn verify(
     &self,
