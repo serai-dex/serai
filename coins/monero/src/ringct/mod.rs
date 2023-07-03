@@ -32,26 +32,27 @@ pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum EcdhInfo {
-  Standard { mask: Scalar, amount: Scalar },
-  Bulletproof { amount: [u8; 8] },
+pub enum EncryptedAmount {
+  Original { mask: [u8; 32], amount: [u8; 32] },
+  Compact { amount: [u8; 8] },
 }
 
-impl EcdhInfo {
-  pub fn read<R: Read>(rct_type: u8, r: &mut R) -> io::Result<EcdhInfo> {
-    Ok(match rct_type {
-      0 ..= 3 => EcdhInfo::Standard { mask: read_scalar(r)?, amount: read_scalar(r)? },
-      _ => EcdhInfo::Bulletproof { amount: read_bytes(r)? },
+impl EncryptedAmount {
+  pub fn read<R: Read>(compact: bool, r: &mut R) -> io::Result<EncryptedAmount> {
+    Ok(if !compact {
+      EncryptedAmount::Original { mask: read_bytes(r)?, amount: read_bytes(r)? }
+    } else {
+      EncryptedAmount::Compact { amount: read_bytes(r)? }
     })
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      EcdhInfo::Standard { mask, amount } => {
-        write_scalar(mask, w)?;
-        write_scalar(amount, w)
+      EncryptedAmount::Original { mask, amount } => {
+        w.write_all(mask)?;
+        w.write_all(amount)
       }
-      EcdhInfo::Bulletproof { amount } => w.write_all(amount),
+      EncryptedAmount::Compact { amount } => w.write_all(amount),
     }
   }
 }
@@ -59,7 +60,7 @@ impl EcdhInfo {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RctBase {
   pub fee: u64,
-  pub ecdh_info: Vec<EcdhInfo>,
+  pub encrypted_amounts: Vec<EncryptedAmount>,
   pub pseudo_outs: Vec<EdwardsPoint>,
   pub commitments: Vec<EdwardsPoint>,
 }
@@ -78,8 +79,8 @@ impl RctBase {
         if rct_type == 2 {
           write_raw_vec(write_point, &self.pseudo_outs, w)?;
         }
-        for ecdh in &self.ecdh_info {
-          ecdh.write(w)?;
+        for encrypted_amount in &self.encrypted_amounts {
+          encrypted_amount.write(w)?;
         }
         write_raw_vec(write_point, &self.commitments, w)
       }
@@ -90,13 +91,13 @@ impl RctBase {
     let rct_type = read_byte(r)?;
     Ok((
       if rct_type == 0 {
-        RctBase { fee: 0, ecdh_info: vec![], pseudo_outs: vec![], commitments: vec![] }
+        RctBase { fee: 0, encrypted_amounts: vec![], pseudo_outs: vec![], commitments: vec![] }
       } else {
         RctBase {
           fee: read_varint(r)?,
           pseudo_outs: if rct_type == 2 { read_raw_vec(read_point, inputs, r)? } else { vec![] },
-          ecdh_info: (0 .. outputs)
-            .map(|_| EcdhInfo::read(rct_type, r))
+          encrypted_amounts: (0 .. outputs)
+            .map(|_| EncryptedAmount::read(rct_type >= 4, r))
             .collect::<Result<_, _>>()?,
           commitments: read_raw_vec(read_point, outputs, r)?,
         }
@@ -114,7 +115,7 @@ pub enum RctPrunable {
     mlsags: Vec<Mlsag>,
     simple: bool,
   },
-  BulletProof {
+  Bulletproofs {
     bulletproofs: Vec<Bulletproofs>,
     mlsags: Vec<Mlsag>,
     pseudo_outs: Vec<EdwardsPoint>,
@@ -139,7 +140,7 @@ impl RctPrunable {
           2
         }
       }
-      RctPrunable::BulletProof { v2, .. } => {
+      RctPrunable::Bulletproofs { v2, .. } => {
         if !v2 {
           3
         } else {
@@ -168,7 +169,7 @@ impl RctPrunable {
         write_raw_vec(BorromeanRange::write, range_sigs, w)?;
         write_raw_vec(Mlsag::write, mlsags, w)
       }
-      RctPrunable::BulletProof { bulletproofs, mlsags, pseudo_outs, v2 } => {
+      RctPrunable::Bulletproofs { bulletproofs, mlsags, pseudo_outs, v2 } => {
         if !v2 {
           w.write_all(&u32::try_from(bulletproofs.len()).unwrap().to_le_bytes())?;
         } else {
@@ -205,7 +206,7 @@ impl RctPrunable {
         mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
         simple: rct_type == 2,
       },
-      3 | 4 => RctPrunable::BulletProof {
+      3 | 4 => RctPrunable::Bulletproofs {
         bulletproofs: read_raw_vec(
           Bulletproofs::read,
           if rct_type == 3 {
@@ -237,7 +238,7 @@ impl RctPrunable {
       RctPrunable::Clsag { bulletproofs, .. } => {
         bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
       }
-      RctPrunable::BulletProof { bulletproofs, .. } => {
+      RctPrunable::Bulletproofs { bulletproofs, .. } => {
         bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
       }
       RctPrunable::Borromean { range_sigs, .. } => range_sigs.iter().try_for_each(|rs| rs.write(w)),

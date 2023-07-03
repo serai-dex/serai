@@ -53,7 +53,7 @@ pub use builder::SignableTransactionBuilder;
 mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::TransactionMachine;
-use crate::ringct::EcdhInfo;
+use crate::ringct::EncryptedAmount;
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -630,7 +630,7 @@ impl SignableTransaction {
 
     let mut fee = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
     let mut tx_outputs = Vec::with_capacity(outputs.len());
-    let mut ecdh_info = Vec::with_capacity(outputs.len());
+    let mut encrypted_amounts = Vec::with_capacity(outputs.len());
     for output in &outputs {
       fee -= output.commitment.amount;
       tx_outputs.push(Output {
@@ -638,7 +638,7 @@ impl SignableTransaction {
         key: output.dest.compress(),
         view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
-      ecdh_info.push(EcdhInfo::Bulletproof { amount: output.amount });
+      encrypted_amounts.push(EncryptedAmount::Compact { amount: output.amount });
     }
 
     (
@@ -654,7 +654,7 @@ impl SignableTransaction {
         rct_signatures: RctSignatures {
           base: RctBase {
             fee,
-            ecdh_info,
+            encrypted_amounts,
             pseudo_outs: vec![],
             commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
           },
@@ -758,8 +758,8 @@ impl Eventuality {
         view_tag: Some(expected.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       } != actual) ||
         (Some(&expected.commitment.calculate()) != tx.rct_signatures.base.commitments.get(o)) ||
-        (Some(&EcdhInfo::Bulletproof { amount: expected.amount }) !=
-          tx.rct_signatures.base.ecdh_info.get(o))
+        (Some(&EncryptedAmount::Compact { amount: expected.amount }) !=
+          tx.rct_signatures.base.encrypted_amounts.get(o))
       {
         return false;
       }

@@ -35,7 +35,7 @@ pub use send::SignableTransactionBuilder;
 pub(crate) use send::InternalPayment;
 #[cfg(feature = "multisig")]
 pub use send::TransactionMachine;
-use crate::ringct::EcdhInfo;
+use crate::ringct::EncryptedAmount;
 
 fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> core::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
@@ -93,13 +93,14 @@ pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
   (amount ^ u64::from_le_bytes(hash(&amount_mask)[.. 8].try_into().unwrap())).to_le_bytes()
 }
 
-fn amount_decryption(amount: &EcdhInfo, key: Scalar) -> u64 {
+fn amount_decryption(amount: &EncryptedAmount, key: Scalar) -> u64 {
   match amount {
-    EcdhInfo::Standard { mask: _, amount } => {
+    EncryptedAmount::Original { mask: _, amount } => {
       #[cfg(feature = "experimental")]
       {
         let shared_sec = hash(&hash(key.as_bytes()));
-        let amount_scalar = amount - Scalar::from_bytes_mod_order(shared_sec);
+        let amount_scalar =
+          Scalar::from_bytes_mod_order(*amount) - Scalar::from_bytes_mod_order(shared_sec);
         // d2b from rctTypes.cpp
         let amount_significant_bytes = amount_scalar.to_bytes()[0 .. 8].try_into().unwrap();
         u64::from_le_bytes(amount_significant_bytes)
@@ -111,7 +112,7 @@ fn amount_decryption(amount: &EcdhInfo, key: Scalar) -> u64 {
         todo!("decrypting a legacy monero transaction's amount")
       }
     }
-    EcdhInfo::Bulletproof { amount } => {
+    EncryptedAmount::Compact { amount } => {
       u64::from_le_bytes(amount_encryption(u64::from_le_bytes(*amount), key))
     }
   }
