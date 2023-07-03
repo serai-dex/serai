@@ -3,10 +3,15 @@
 use core::fmt::Debug;
 use std_shims::io::{self, Read, Write};
 
-use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::EdwardsPoint};
+use curve25519_dalek::edwards::EdwardsPoint;
+#[cfg(feature = "experimental")]
+use curve25519_dalek::{traits::Identity, scalar::Scalar};
 
+#[cfg(feature = "experimental")]
 use monero_generators::H_pow_2;
-use crate::{hash_to_scalar, serialize::*};
+#[cfg(feature = "experimental")]
+use crate::hash_to_scalar;
+use crate::serialize::*;
 
 /// 64 Borromean ring signatures.
 ///
