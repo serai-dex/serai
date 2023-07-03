@@ -22,6 +22,6 @@ bincode = "1"
 dkg = { path = "../../crypto/dkg", features = ["serde"] }
 
 serai-primitives = { path = "../../substrate/primitives" }
-serai-in-instructions-primitives = { path = "../../substrate/in-instructions/primitives" }
-serai-tokens-primitives = { path = "../../substrate/tokens/primitives" }
-serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives" }
+in-instructions-primitives = { package = "serai-in-instructions-primitives", path = "../../substrate/in-instructions/primitives" }
+tokens-primitives = { package = "serai-tokens-primitives", path = "../../substrate/tokens/primitives" }
+validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../substrate/validator-sets/primitives" }
