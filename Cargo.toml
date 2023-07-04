@@ -33,7 +33,6 @@ members = [
   "coordinator",
 
   "substrate/primitives",
-  "substrate/client",
 
   "substrate/tokens/primitives",
   "substrate/tokens/pallet",
@@ -46,6 +45,8 @@ members = [
 
   "substrate/runtime",
   "substrate/node",
+
+  "substrate/client",
 
   "tests/no-std",
 ]
