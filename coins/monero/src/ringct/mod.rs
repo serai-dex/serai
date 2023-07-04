@@ -257,13 +257,9 @@ impl RctPrunable {
   ) -> io::Result<RctPrunable> {
     Ok(match rct_type {
       RctType::Null => RctPrunable::Null,
-      RctType::MlsagAggregate => RctPrunable::MlsagBorromean {
+      RctType::MlsagAggregate | RctType::MlsagIndividual => RctPrunable::MlsagBorromean {
         borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
-        mlsags: vec![Mlsag::read(decoys[0], decoys.len() + 1, r)?],
-      },
-      RctType::MlsagIndividual => RctPrunable::MlsagBorromean {
-        borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
-        mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
+        mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
       },
       RctType::Bulletproofs | RctType::BulletproofsCompactAmount => {
         RctPrunable::MlsagBulletproofs {
@@ -278,7 +274,7 @@ impl RctPrunable {
             }
             Bulletproofs::read(r)?
           },
-          mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
+          mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
           pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
         }
       }
