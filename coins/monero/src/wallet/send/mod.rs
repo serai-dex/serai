@@ -658,11 +658,7 @@ impl SignableTransaction {
             pseudo_outs: vec![],
             commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
           },
-          prunable: RctPrunable::Clsag {
-            bulletproofs: vec![bp],
-            clsags: vec![],
-            pseudo_outs: vec![],
-          },
+          prunable: RctPrunable::Clsag { bulletproofs: bp, clsags: vec![], pseudo_outs: vec![] },
         },
       },
       sum,

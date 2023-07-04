@@ -198,12 +198,12 @@ pub enum RctPrunable {
     mlsags: Vec<Mlsag>,
   },
   MlsagBulletproofs {
-    bulletproofs: Vec<Bulletproofs>,
+    bulletproofs: Bulletproofs,
     mlsags: Vec<Mlsag>,
     pseudo_outs: Vec<EdwardsPoint>,
   },
   Clsag {
-    bulletproofs: Vec<Bulletproofs>,
+    bulletproofs: Bulletproofs,
     clsags: Vec<Clsag>,
     pseudo_outs: Vec<EdwardsPoint>,
   },
@@ -224,16 +224,19 @@ impl RctPrunable {
       }
       RctPrunable::MlsagBulletproofs { bulletproofs, mlsags, pseudo_outs } => {
         if rct_type == RctType::Bulletproofs {
-          w.write_all(&u32::try_from(bulletproofs.len()).unwrap().to_le_bytes())?;
+          w.write_all(&1u32.to_le_bytes())?;
         } else {
-          write_varint(&bulletproofs.len().try_into().unwrap(), w)?;
+          w.write_all(&[1])?;
         }
-        write_raw_vec(Bulletproofs::write, bulletproofs, w)?;
+        bulletproofs.write(w)?;
+
         write_raw_vec(Mlsag::write, mlsags, w)?;
         write_raw_vec(write_point, pseudo_outs, w)
       }
       RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
-        write_vec(Bulletproofs::write, bulletproofs, w)?;
+        w.write_all(&[1])?;
+        bulletproofs.write(w)?;
+
         write_raw_vec(Clsag::write, clsags, w)?;
         write_raw_vec(write_point, pseudo_outs, w)
       }
@@ -260,24 +263,30 @@ impl RctPrunable {
       },
       RctType::Bulletproofs | RctType::BulletproofsCompactAmount => {
         RctPrunable::MlsagBulletproofs {
-          bulletproofs: read_raw_vec(
-            Bulletproofs::read,
-            if rct_type == RctType::Bulletproofs {
-              read_u32(r)?.try_into().unwrap()
+          bulletproofs: {
+            if (if rct_type == RctType::Bulletproofs {
+              u64::from(read_u32(r)?)
             } else {
-              read_varint(r)?.try_into().unwrap()
-            },
-            r,
-          )?,
+              read_varint(r)?
+            }) != 1
+            {
+              Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
+            }
+            Bulletproofs::read(r)?
+          },
           mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
           pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
         }
       }
       RctType::Clsag | RctType::BulletproofsPlus => RctPrunable::Clsag {
-        bulletproofs: read_vec(
-          if rct_type == RctType::Clsag { Bulletproofs::read } else { Bulletproofs::read_plus },
-          r,
-        )?,
+        bulletproofs: {
+          if read_varint(r)? != 1 {
+            Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
+          }
+          (if rct_type == RctType::Clsag { Bulletproofs::read } else { Bulletproofs::read_plus })(
+            r,
+          )?
+        },
         clsags: (0 .. decoys.len()).map(|o| Clsag::read(decoys[o], r)).collect::<Result<_, _>>()?,
         pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
       },
@@ -290,12 +299,8 @@ impl RctPrunable {
       RctPrunable::MlsagBorromean { borromean, .. } => {
         borromean.iter().try_for_each(|rs| rs.write(w))
       }
-      RctPrunable::MlsagBulletproofs { bulletproofs, .. } => {
-        bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
-      }
-      RctPrunable::Clsag { bulletproofs, .. } => {
-        bulletproofs.iter().try_for_each(|bp| bp.signature_write(w))
-      }
+      RctPrunable::MlsagBulletproofs { bulletproofs, .. } => bulletproofs.signature_write(w),
+      RctPrunable::Clsag { bulletproofs, .. } => bulletproofs.signature_write(w),
     }
   }
 }
@@ -352,10 +357,7 @@ impl RctSignatures {
         }
       }
       RctPrunable::Clsag { bulletproofs, .. } => {
-        if matches!(
-          bulletproofs.get(0).expect("CLSAG TXs have a 2-output minimum"),
-          Bulletproofs::Original { .. }
-        ) {
+        if matches!(bulletproofs, Bulletproofs::Original { .. }) {
           RctType::Clsag
         } else {
           RctType::BulletproofsPlus
