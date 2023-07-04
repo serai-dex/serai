@@ -5,8 +5,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::cell::OnceCell;
-use std_shims::sync::Mutex;
+use std_shims::sync::OnceLock;
 
 use sha3::{Digest, Keccak256};
 
@@ -25,15 +24,28 @@ fn hash(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
 }
 
-/// Monero alternate generator `H`, used for amounts in Pedersen commitments.
-static H_CELL: Mutex<OnceCell<DalekPoint>> = Mutex::new(OnceCell::new());
+static H_CELL: OnceLock<DalekPoint> = OnceLock::new();
+/// Monero's alternate generator `H`, used for amounts in Pedersen commitments.
 #[allow(non_snake_case)]
 pub fn H() -> DalekPoint {
-  *H_CELL.lock().get_or_init(|| {
+  *H_CELL.get_or_init(|| {
     CompressedEdwardsY(hash(&EdwardsPoint::generator().to_bytes()))
       .decompress()
       .unwrap()
       .mul_by_cofactor()
+  })
+}
+
+static H_POW_2_CELL: OnceLock<[DalekPoint; 64]> = OnceLock::new();
+/// Monero's alternate generator `H`, multiplied by 2**i for i in 1 ..= 64.
+#[allow(non_snake_case)]
+pub fn H_pow_2() -> &'static [DalekPoint; 64] {
+  H_POW_2_CELL.get_or_init(|| {
+    let mut res = [H(); 64];
+    for i in 1 .. 64 {
+      res[i] = res[i - 1] + res[i - 1];
+    }
+    res
   })
 }
 

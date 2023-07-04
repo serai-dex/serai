@@ -53,6 +53,7 @@ pub use builder::SignableTransactionBuilder;
 mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::TransactionMachine;
+use crate::ringct::EncryptedAmount;
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -629,7 +630,7 @@ impl SignableTransaction {
 
     let mut fee = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
     let mut tx_outputs = Vec::with_capacity(outputs.len());
-    let mut ecdh_info = Vec::with_capacity(outputs.len());
+    let mut encrypted_amounts = Vec::with_capacity(outputs.len());
     for output in &outputs {
       fee -= output.commitment.amount;
       tx_outputs.push(Output {
@@ -637,7 +638,7 @@ impl SignableTransaction {
         key: output.dest.compress(),
         view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       });
-      ecdh_info.push(output.amount);
+      encrypted_amounts.push(EncryptedAmount::Compact { amount: output.amount });
     }
 
     (
@@ -653,14 +654,11 @@ impl SignableTransaction {
         rct_signatures: RctSignatures {
           base: RctBase {
             fee,
-            ecdh_info,
+            encrypted_amounts,
+            pseudo_outs: vec![],
             commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
           },
-          prunable: RctPrunable::Clsag {
-            bulletproofs: vec![bp],
-            clsags: vec![],
-            pseudo_outs: vec![],
-          },
+          prunable: RctPrunable::Clsag { bulletproofs: bp, clsags: vec![], pseudo_outs: vec![] },
         },
       },
       sum,
@@ -706,6 +704,7 @@ impl SignableTransaction {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
         pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1).collect::<Vec<_>>());
       }
+      _ => unreachable!("attempted to sign a TX which wasn't CLSAG"),
     }
     Ok(tx)
   }
@@ -747,6 +746,16 @@ impl Eventuality {
       uniqueness(&tx.prefix.inputs),
     );
 
+    let rct_type = tx.rct_signatures.rct_type();
+    if rct_type != self.protocol.optimal_rct_type() {
+      return false;
+    }
+
+    // TODO: Remove this when the following for loop is updated
+    if !rct_type.compact_encrypted_amounts() {
+      panic!("created an Eventuality for a very old RctType we don't support proving for");
+    }
+
     for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
       // Verify the output, commitment, and encrypted amount.
       if (&Output {
@@ -755,7 +764,8 @@ impl Eventuality {
         view_tag: Some(expected.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
       } != actual) ||
         (Some(&expected.commitment.calculate()) != tx.rct_signatures.base.commitments.get(o)) ||
-        (Some(&expected.amount) != tx.rct_signatures.base.ecdh_info.get(o))
+        (Some(&EncryptedAmount::Compact { amount: expected.amount }) !=
+          tx.rct_signatures.base.encrypted_amounts.get(o))
       {
         return false;
       }

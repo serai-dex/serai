@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use std_shims::{
   vec::Vec,
   io::{self, Read, Write},
@@ -138,6 +139,13 @@ pub(crate) fn read_raw_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
     res.push(f(r)?);
   }
   Ok(res)
+}
+
+pub(crate) fn read_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>, const N: usize>(
+  f: F,
+  r: &mut R,
+) -> io::Result<[T; N]> {
+  read_raw_vec(f, N, r).map(|vec| vec.try_into().unwrap())
 }
 
 pub(crate) fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(

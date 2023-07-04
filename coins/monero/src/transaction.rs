@@ -231,13 +231,17 @@ impl TransactionPrefix {
     prefix.extra = read_vec(read_byte, r)?;
     Ok(prefix)
   }
+
+  pub fn hash(&self) -> [u8; 32] {
+    hash(&self.serialize())
+  }
 }
 
 /// Monero transaction. For version 1, rct_signatures still contains an accurate fee value.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
-  pub signatures: Vec<(Scalar, Scalar)>,
+  pub signatures: Vec<Vec<(Scalar, Scalar)>>,
   pub rct_signatures: RctSignatures,
 }
 
@@ -255,9 +259,11 @@ impl Transaction {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.prefix.write(w)?;
     if self.prefix.version == 1 {
-      for sig in &self.signatures {
-        write_scalar(&sig.0, w)?;
-        write_scalar(&sig.1, w)?;
+      for sigs in &self.signatures {
+        for sig in sigs {
+          write_scalar(&sig.0, w)?;
+          write_scalar(&sig.1, w)?;
+        }
       }
       Ok(())
     } else if self.prefix.version == 2 {
@@ -277,14 +283,25 @@ impl Transaction {
     let prefix = TransactionPrefix::read(r)?;
     let mut signatures = vec![];
     let mut rct_signatures = RctSignatures {
-      base: RctBase { fee: 0, ecdh_info: vec![], commitments: vec![] },
+      base: RctBase { fee: 0, encrypted_amounts: vec![], pseudo_outs: vec![], commitments: vec![] },
       prunable: RctPrunable::Null,
     };
 
     if prefix.version == 1 {
-      for _ in 0 .. prefix.inputs.len() {
-        signatures.push((read_scalar(r)?, read_scalar(r)?));
-      }
+      signatures = prefix
+        .inputs
+        .iter()
+        .filter_map(|input| match input {
+          Input::ToKey { key_offsets, .. } => Some(
+            key_offsets
+              .iter()
+              .map(|_| Ok((read_scalar(r)?, read_scalar(r)?)))
+              .collect::<Result<_, io::Error>>(),
+          ),
+          _ => None,
+        })
+        .collect::<Result<_, _>>()?;
+
       rct_signatures.base.fee = prefix
         .inputs
         .iter()
@@ -322,18 +339,16 @@ impl Transaction {
     } else {
       let mut hashes = Vec::with_capacity(96);
 
-      self.prefix.write(&mut buf).unwrap();
-      hashes.extend(hash(&buf));
-      buf.clear();
+      hashes.extend(self.prefix.hash());
 
-      self.rct_signatures.base.write(&mut buf, self.rct_signatures.prunable.rct_type()).unwrap();
+      self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
       hashes.extend(hash(&buf));
       buf.clear();
 
       match self.rct_signatures.prunable {
         RctPrunable::Null => buf.resize(32, 0),
         _ => {
-          self.rct_signatures.prunable.write(&mut buf).unwrap();
+          self.rct_signatures.prunable.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
           buf = hash(&buf).to_vec();
         }
       }
@@ -348,11 +363,9 @@ impl Transaction {
     let mut buf = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);
 
-    self.prefix.write(&mut buf).unwrap();
-    sig_hash.extend(hash(&buf));
-    buf.clear();
+    sig_hash.extend(self.prefix.hash());
 
-    self.rct_signatures.base.write(&mut buf, self.rct_signatures.prunable.rct_type()).unwrap();
+    self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
     sig_hash.extend(hash(&buf));
     buf.clear();
 

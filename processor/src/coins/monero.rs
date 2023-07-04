@@ -13,7 +13,7 @@ use frost::{curve::Ed25519, ThresholdKeys};
 use monero_serai::{
   Protocol,
   transaction::Transaction,
-  block::Block as MBlock,
+  block::Block,
   rpc::{RpcError, HttpRpc, Rpc},
   wallet::{
     ViewPair, Scanner,
@@ -134,20 +134,18 @@ pub struct SignableTransaction {
   actual: MSignableTransaction,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Block([u8; 32], MBlock);
 impl BlockTrait<Monero> for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    self.0
+    self.hash()
   }
 
   fn parent(&self) -> Self::Id {
-    self.1.header.previous
+    self.header.previous
   }
 
   fn time(&self) -> u64 {
-    self.1.header.timestamp
+    self.header.timestamp
   }
 
   fn median_fee(&self) -> Fee {
@@ -256,18 +254,22 @@ impl Coin for Monero {
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
-    let hash = self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?;
-    let block = self.rpc.get_block(hash).await.map_err(|_| CoinError::ConnectionError)?;
-    Ok(Block(hash, block))
+    Ok(
+      self
+        .rpc
+        .get_block(self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?)
+        .await
+        .map_err(|_| CoinError::ConnectionError)?,
+    )
   }
 
   async fn get_outputs(
     &self,
-    block: &Self::Block,
+    block: &Block,
     key: EdwardsPoint,
   ) -> Result<Vec<Self::Output>, CoinError> {
     let mut txs = Self::scanner(key)
-      .scan(&self.rpc, &block.1)
+      .scan(&self.rpc, block)
       .await
       .map_err(|_| CoinError::ConnectionError)?
       .iter()
@@ -305,10 +307,8 @@ impl Coin for Monero {
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
-    block: &Self::Block,
+    block: &Block,
   ) -> HashMap<[u8; 32], [u8; 32]> {
-    let block = &block.1;
-
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -317,7 +317,7 @@ impl Coin for Monero {
     async fn check_block(
       coin: &Monero,
       eventualities: &mut EventualitiesTracker<Eventuality>,
-      block: &MBlock,
+      block: &Block,
       res: &mut HashMap<[u8; 32], [u8; 32]>,
     ) {
       for hash in &block.txs {
@@ -357,7 +357,7 @@ impl Coin for Monero {
         block.unwrap()
       };
 
-      check_block(self, eventualities, &block.1, &mut res).await;
+      check_block(self, eventualities, &block, &mut res).await;
     }
 
     // Also check the current block
