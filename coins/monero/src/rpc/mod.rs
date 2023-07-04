@@ -138,7 +138,7 @@ impl<R: RpcConnection> Rpc<R> {
       )
       .map_err(|_| RpcError::InvalidNode)?,
     )
-    .map_err(|_| RpcError::InternalError("Failed to parse JSON response"))
+    .map_err(|_| RpcError::InvalidNode)
   }
 
   /// Perform a JSON-RPC call with the specified method with the provided parameters
@@ -538,12 +538,10 @@ impl<R: RpcConnection> Rpc<R> {
       .iter()
       .enumerate()
       .map(|(i, out)| {
-        Ok(Some([rpc_point(&out.key)?, rpc_point(&out.mask)?]).filter(|_| {
-          match txs[i].prefix.timelock {
-            Timelock::Block(t_height) => t_height <= height,
-            _ => false,
-          }
-        }))
+        Ok(
+          Some([rpc_point(&out.key)?, rpc_point(&out.mask)?])
+            .filter(|_| Timelock::Block(height) >= txs[i].prefix.timelock),
+        )
       })
       .collect()
   }

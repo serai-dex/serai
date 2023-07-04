@@ -47,9 +47,11 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
   count: usize,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   if height >= rpc.get_height().await? {
+    // TODO: Don't use InternalError for the caller's failure
     Err(RpcError::InternalError("decoys being requested from too young blocks"))?;
   }
 
+  #[cfg(test)]
   let mut iters = 0;
   let mut confirmed = Vec::with_capacity(count);
   // Retries on failure. Retries are obvious as decoys, yet should be minimal
@@ -57,10 +59,13 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
     let remaining = count - confirmed.len();
     let mut candidates = Vec::with_capacity(remaining);
     while candidates.len() != remaining {
-      iters += 1;
-      // This is cheap and on fresh chains, thousands of rounds may be needed
-      if iters == 10000 {
-        Err(RpcError::InternalError("not enough decoy candidates"))?;
+      #[cfg(test)]
+      {
+        iters += 1;
+        // This is cheap and on fresh chains, a lot of rounds may be needed
+        if iters == 100 {
+          Err(RpcError::InternalError("hit decoy selection round limit"))?;
+        }
       }
 
       // Use a gamma distribution
@@ -183,7 +188,7 @@ impl Decoys {
       used.insert(o.0);
     }
 
-    // TODO: Simply create a TX with less than the target amount
+    // TODO: Create a TX with less than the target amount, as allowed by the protocol
     if (high - MATURITY) < u64::try_from(inputs.len() * ring_len).unwrap() {
       Err(RpcError::InternalError("not enough decoy candidates"))?;
     }

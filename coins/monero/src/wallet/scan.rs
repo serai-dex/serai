@@ -273,7 +273,11 @@ impl<O: Clone + Zeroize> Timelocked<O> {
   /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked.
   pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<O>> {
     // If the Timelocks are comparable, return the outputs if they're now unlocked
-    self.0.partial_cmp(&timelock).filter(|_| self.0 <= timelock).map(|_| self.1.clone())
+    if self.0 <= timelock {
+      Some(self.1.clone())
+    } else {
+      None
+    }
   }
 
   pub fn ignore_timelock(&self) -> Vec<O> {
