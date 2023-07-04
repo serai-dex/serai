@@ -25,6 +25,7 @@ use serialize::{read_byte, read_u16};
 
 /// RingCT structs and functionality.
 pub mod ringct;
+use ringct::RctType;
 
 /// Transaction structs.
 pub mod transaction;
@@ -45,14 +46,16 @@ pub(crate) fn INV_EIGHT() -> Scalar {
   *INV_EIGHT_CELL.get_or_init(|| Scalar::from(8u8).invert())
 }
 
-/// Monero protocol version. v15 is omitted as v15 was simply v14 and v16 being active at the same
-/// time, with regards to the transactions supported. Accordingly, v16 should be used during v15.
+/// Monero protocol version.
+///
+/// v15 is omitted as v15 was simply v14 and v16 being active at the same time, with regards to the
+/// transactions supported. Accordingly, v16 should be used during v15.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 #[allow(non_camel_case_types)]
 pub enum Protocol {
   v14,
   v16,
-  Custom { ring_len: usize, bp_plus: bool },
+  Custom { ring_len: usize, bp_plus: bool, optimal_rct_type: RctType },
 }
 
 impl Protocol {
@@ -66,6 +69,7 @@ impl Protocol {
   }
 
   /// Whether or not the specified version uses Bulletproofs or Bulletproofs+.
+  ///
   /// This method will likely be reworked when versions not using Bulletproofs at all are added.
   pub fn bp_plus(&self) -> bool {
     match self {
@@ -75,15 +79,25 @@ impl Protocol {
     }
   }
 
+  // TODO: Make this an Option when we support pre-RCT protocols
+  pub fn optimal_rct_type(&self) -> RctType {
+    match self {
+      Protocol::v14 => RctType::Clsag,
+      Protocol::v16 => RctType::BulletproofsPlus,
+      Protocol::Custom { optimal_rct_type, .. } => *optimal_rct_type,
+    }
+  }
+
   pub(crate) fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       Protocol::v14 => w.write_all(&[0, 14]),
       Protocol::v16 => w.write_all(&[0, 16]),
-      Protocol::Custom { ring_len, bp_plus } => {
+      Protocol::Custom { ring_len, bp_plus, optimal_rct_type } => {
         // Custom, version 0
         w.write_all(&[1, 0])?;
         w.write_all(&u16::try_from(*ring_len).unwrap().to_le_bytes())?;
-        w.write_all(&[u8::from(*bp_plus)])
+        w.write_all(&[u8::from(*bp_plus)])?;
+        w.write_all(&[optimal_rct_type.to_byte()])
       }
     }
   }
@@ -105,6 +119,8 @@ impl Protocol {
             1 => true,
             _ => Err(io::Error::new(io::ErrorKind::Other, "invalid bool serialization"))?,
           },
+          optimal_rct_type: RctType::from_byte(read_byte(r)?)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid RctType serialization"))?,
         },
         _ => {
           Err(io::Error::new(io::ErrorKind::Other, "unrecognized custom protocol serialization"))?

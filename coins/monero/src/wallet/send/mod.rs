@@ -746,6 +746,16 @@ impl Eventuality {
       uniqueness(&tx.prefix.inputs),
     );
 
+    let rct_type = tx.rct_signatures.rct_type();
+    if rct_type != self.protocol.optimal_rct_type() {
+      return false;
+    }
+
+    // TODO: Remove this when the following for loop is updated
+    if !rct_type.compact_encrypted_amounts() {
+      panic!("created an Eventuality for a very old RctType we don't support proving for");
+    }
+
     for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
       // Verify the output, commitment, and encrypted amount.
       if (&Output {

@@ -4,7 +4,7 @@ use std_shims::{
   io::{self, Read, Write},
 };
 
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
@@ -57,7 +57,7 @@ impl EncryptedAmount {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum RctType {
   /// No RCT proofs.
   Null,
@@ -77,7 +77,7 @@ pub enum RctType {
 }
 
 impl RctType {
-  fn to_byte(self) -> u8 {
+  pub fn to_byte(self) -> u8 {
     match self {
       RctType::Null => 0,
       RctType::MlsagAggregate => 1,
@@ -89,7 +89,7 @@ impl RctType {
     }
   }
 
-  fn from_byte(byte: u8) -> Option<Self> {
+  pub fn from_byte(byte: u8) -> Option<Self> {
     Some(match byte {
       0 => RctType::Null,
       1 => RctType::MlsagAggregate,
@@ -102,7 +102,7 @@ impl RctType {
     })
   }
 
-  fn compact_encrypted_amounts(&self) -> bool {
+  pub fn compact_encrypted_amounts(&self) -> bool {
     match self {
       RctType::Null => false,
       RctType::MlsagAggregate => false,
