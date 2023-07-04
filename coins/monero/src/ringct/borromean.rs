@@ -14,7 +14,7 @@ use crate::serialize::*;
 /// 64 Borromean ring signatures.
 ///
 /// This type keeps the data as raw bytes as Monero has some transactions with unreduced scalars in
-/// this field. While we could use `from_bytes_mod_order`, we'd then not be able  to encode this
+/// this field. While we could use `from_bytes_mod_order`, we'd then not be able to encode this
 /// back into it's original form.
 ///
 /// Those scalars also have a custom reduction algorithm...

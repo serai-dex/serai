@@ -9,7 +9,9 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, CompressedEdwardsY},
 };
 
-use crate::{hash, hash_to_scalar, serialize::write_varint, ringct::EncryptedAmount, transaction::Input};
+use crate::{
+  hash, hash_to_scalar, serialize::write_varint, ringct::EncryptedAmount, transaction::Input,
+};
 
 pub mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};

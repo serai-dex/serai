@@ -341,14 +341,14 @@ impl Transaction {
 
       hashes.extend(self.prefix.hash());
 
-      self.rct_signatures.base.write(&mut buf, self.rct_signatures.prunable.rct_type()).unwrap();
+      self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
       hashes.extend(hash(&buf));
       buf.clear();
 
       match self.rct_signatures.prunable {
         RctPrunable::Null => buf.resize(32, 0),
         _ => {
-          self.rct_signatures.prunable.write(&mut buf).unwrap();
+          self.rct_signatures.prunable.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
           buf = hash(&buf).to_vec();
         }
       }
@@ -365,7 +365,7 @@ impl Transaction {
 
     sig_hash.extend(self.prefix.hash());
 
-    self.rct_signatures.base.write(&mut buf, self.rct_signatures.prunable.rct_type()).unwrap();
+    self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
     sig_hash.extend(hash(&buf));
     buf.clear();
 
