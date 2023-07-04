@@ -13,7 +13,7 @@ use crate::{hash_to_scalar, ringct::hash_to_point};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Mlsag {
-  pub ss: Vec<[Scalar; 2]>,
+  pub ss: Vec<Vec<Scalar>>,
   pub cc: Scalar,
 }
 
@@ -25,9 +25,11 @@ impl Mlsag {
     write_scalar(&self.cc, w)
   }
 
-  pub fn read<R: Read>(mixins: usize, r: &mut R) -> io::Result<Mlsag> {
+  pub fn read<R: Read>(mixins: usize, ss_2_elements: usize, r: &mut R) -> io::Result<Mlsag> {
     Ok(Mlsag {
-      ss: (0 .. mixins).map(|_| read_array(read_scalar, r)).collect::<Result<_, _>>()?,
+      ss: (0 .. mixins)
+        .map(|_| read_raw_vec(read_scalar, ss_2_elements, r))
+        .collect::<Result<_, _>>()?,
       cc: read_scalar(r)?,
     })
   }
