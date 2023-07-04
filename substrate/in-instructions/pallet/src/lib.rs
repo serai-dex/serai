@@ -55,6 +55,14 @@ pub mod pallet {
   #[pallet::getter(fn batches)]
   pub(crate) type Batches<T: Config> = StorageMap<_, Blake2_256, NetworkId, u32, OptionQuery>;
 
+  // The last serai block that this validator set included a batch
+  #[pallet::storage]
+  #[pallet::getter(fn last_batch_block)]
+  pub(crate) type LastBatchBlock<T: Config> =
+    StorageMap<_, Blake2_256, ValidatorSet, u64, OptionQuery>;
+
+  // TODO: make this name explicit that this is an external network block
+  // LatestNetworkBlock maybe?
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
   #[pallet::getter(fn last_block)]
@@ -80,6 +88,15 @@ pub mod pallet {
 
       let mut batch = batch.batch;
 
+      // check that this validator set already included a batch for this block
+      let validator_set = ValidatorSet { session: Session(0), network: batch.network };
+      let current_block = <frame_system::Pallet<T>>::block_number();
+      let last_block = LastBatchBlock::<T>::get(validator_set).unwrap_or(0);
+      if last_block >= current_block {
+        Err(DispatchError::Other("only 1 batch per set allowed per serai block"))?;
+      }
+
+      LastBatchBlock::<T>::insert(validator_set, current_block);
       Batches::<T>::insert(batch.network, batch.id);
       LatestBlock::<T>::insert(batch.network, batch.block);
       Self::deposit_event(Event::Batch {
