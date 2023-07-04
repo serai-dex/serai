@@ -39,7 +39,7 @@ pub fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
 
       // Do a traditional pairing off
       let mut new_hashes = Vec::with_capacity(hashes.len() / 2);
-      while hashes.len() > 2 {
+      while hashes.len() > 1 {
         let mut i = 0;
         while i < hashes.len() {
           new_hashes.push(hash(&[hashes[i], hashes[i + 1]].concat()));

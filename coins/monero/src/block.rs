@@ -10,6 +10,11 @@ use crate::{
   transaction::{Input, Transaction},
 };
 
+const CORRECT_BLOCK_HASH_202612: [u8; 32] =
+  hex_literal::hex!("426d16cff04c71f8b16340b722dc4010a2dd3831c22041431f772547ba6e331a");
+const EXISTING_BLOCK_HASH_202612: [u8; 32] =
+  hex_literal::hex!("bbd604d2ba11ba27935e006ed39c9bfdd99b76bf4a50654bc1e1e61217962698");
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
   pub major_version: u64,
@@ -87,10 +92,12 @@ impl Block {
   }
 
   pub fn hash(&self) -> [u8; 32] {
-    // TODO: Handle block 202612
-    // https://monero.stackexchange.com/questions/421/what-happened-at-block-202612
-    // If this block's header is fully-equivalent to 202612, return the malformed hash instead
-    hash(&self.serialize_hashable())
+    let hash = hash(&self.serialize_hashable());
+    if hash == CORRECT_BLOCK_HASH_202612 {
+      return EXISTING_BLOCK_HASH_202612;
+    };
+
+    hash
   }
 
   pub fn serialize(&self) -> Vec<u8> {
