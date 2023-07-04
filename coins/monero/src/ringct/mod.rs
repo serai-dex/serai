@@ -61,7 +61,7 @@ impl EncryptedAmount {
 pub enum RctType {
   /// No RCT proofs.
   Null,
-  /// One MLSAG for all inputs and a Borromean range proof (RCTTypeFull).
+  /// One MLSAG for a single input and a Borromean range proof (RCTTypeFull).
   MlsagAggregate,
   // One MLSAG for each input and a Borromean range proof (RCTTypeSimple).
   MlsagIndividual,
