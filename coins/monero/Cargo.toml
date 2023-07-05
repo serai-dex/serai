@@ -57,6 +57,9 @@ base58-monero = { version = "1", git = "https://github.com/monero-rs/base58-mone
 digest_auth = { version = "0.3", optional = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
 
+# Used for the binaries
+tokio = { version = "1", features = ["full"], optional = true }
+
 [build-dependencies]
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3", default-features = false }
 monero-generators = { path = "generators", version = "0.3", default-features = false }
@@ -98,6 +101,7 @@ std = [
 
 http_rpc = ["digest_auth", "reqwest"]
 multisig = ["transcript", "frost", "dleq", "std"]
+binaries = ["tokio"]
 experimental = []
 
 default = ["std", "http_rpc"]
