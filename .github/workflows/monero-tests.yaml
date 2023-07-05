@@ -47,8 +47,9 @@ jobs:
           monero-version: ${{ matrix.version }}
 
       - name: Run Integration Tests Without Features
+        # Runs with the binaries feature so the binaries build
         # https://github.com/rust-lang/cargo/issues/8396
-        run: cargo test --package monero-serai --test '*'
+        run: cargo test --package monero-serai --features binaries --test '*'
 
       - name: Run Integration Tests
         # Don't run if the the tests workflow also will
