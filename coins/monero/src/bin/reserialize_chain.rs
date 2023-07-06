@@ -118,24 +118,33 @@ async fn main() {
 
   let mut rpc_i = 0;
   let mut handles: Vec<JoinHandle<()>> = vec![];
-  while block_i < main_rpc.get_height().await.expect("couldn't call get_height") {
-    if handles.len() >= async_parallelism {
-      // Guarantee one handle is complete
-      handles.swap_remove(0).await.unwrap();
-
-      // Remove all of the finished handles
-      let mut i = 0;
-      while i < handles.len() {
-        if handles[i].is_finished() {
-          handles.swap_remove(i).await.unwrap();
-          continue;
-        }
-        i += 1;
-      }
+  let mut height = 0;
+  loop {
+    let new_height = main_rpc.get_height().await.expect("couldn't call get_height");
+    if new_height == height {
+      break;
     }
+    height = new_height;
 
-    handles.push(tokio::spawn(check_block(rpcs[rpc_i].clone(), block_i)));
-    rpc_i = (rpc_i + 1) % rpcs.len();
-    block_i += 1;
+    while block_i < height {
+      if handles.len() >= async_parallelism {
+        // Guarantee one handle is complete
+        handles.swap_remove(0).await.unwrap();
+
+        // Remove all of the finished handles
+        let mut i = 0;
+        while i < handles.len() {
+          if handles[i].is_finished() {
+            handles.swap_remove(i).await.unwrap();
+            continue;
+          }
+          i += 1;
+        }
+      }
+
+      handles.push(tokio::spawn(check_block(rpcs[rpc_i].clone(), block_i)));
+      rpc_i = (rpc_i + 1) % rpcs.len();
+      block_i += 1;
+    }
   }
 }
