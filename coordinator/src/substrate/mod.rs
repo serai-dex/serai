@@ -8,7 +8,7 @@ use frost::ThresholdParams;
 
 use serai_client::{
   SeraiError, Block, Serai,
-  primitives::BlockHash,
+  primitives::{BlockHash, NetworkId},
   validator_sets::{
     primitives::{Session, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
@@ -134,6 +134,7 @@ async fn handle_key_gen<Pro: Processors>(
                 // The processor treats this as a magic value which will cause it to find a network
                 // block which has a time greater than or equal to the Serai time
                 .unwrap_or(BlockHash([0; 32])),
+              batches: vec![],
             },
             set,
             key_pair,
@@ -167,10 +168,11 @@ async fn handle_batch_and_burns<Pro: Processors>(
   };
 
   let mut batch_block = HashMap::new();
+  let mut batches = HashMap::<NetworkId, Vec<u32>>::new();
   let mut burns = HashMap::new();
 
   for batch in serai.get_batch_events(hash).await? {
-    if let InInstructionsEvent::Batch { network, id: _, block: network_block } = batch {
+    if let InInstructionsEvent::Batch { network, id, block: network_block } = batch {
       network_had_event(&mut burns, network);
 
       // Track what Serai acknowledges as the latest block for this network
@@ -180,6 +182,13 @@ async fn handle_batch_and_burns<Pro: Processors>(
       // the last batch will be the latest batch, so its block will be the latest block
       // This is just a mild optimization to prevent needing an additional RPC call to grab this
       batch_block.insert(network, network_block);
+
+      // set the batches we acknowledged with this block.
+      if let Some(batch_ids) = batches.get_mut(&network) {
+        batch_ids.push(id);
+      } else {
+        batches.insert(network, vec![id]);
+      }
     } else {
       panic!("Batch event wasn't Batch: {batch:?}");
     }
@@ -221,6 +230,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
             context: SubstrateContext {
               serai_time: block.time().unwrap() / 1000,
               network_latest_finalized_block,
+              batches: batches.remove(&network).unwrap_or(vec![]),
             },
             network,
             block: block.number(),

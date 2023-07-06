@@ -20,7 +20,6 @@ async fn spend<N: Network, D: Db>(
   network: &N,
   keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
   scanner: &mut ScannerHandle<N, D>,
-  batch: u32,
   outputs: Vec<N::Output>,
 ) -> Vec<N::Output> {
   let key = keys[&Participant::new(1).unwrap()].group_key();
@@ -52,9 +51,8 @@ async fn spend<N: Network, D: Db>(
     network.mine_block().await;
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { key: this_key, block: _, batch: this_batch, outputs } => {
+    ScannerEvent::Block { key: this_key, block: _, outputs } => {
       assert_eq!(this_key, key);
-      assert_eq!(this_batch, batch);
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
       assert_eq!(outputs[0].kind(), OutputType::Change);
@@ -91,10 +89,9 @@ pub async fn test_addresses<N: Network>(network: N) {
   // Verify the Scanner picked them up
   let outputs =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block { key: this_key, block, batch, outputs } => {
+      ScannerEvent::Block { key: this_key, block, outputs } => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
-        assert_eq!(batch, 0);
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::Branch);
         outputs
@@ -105,7 +102,7 @@ pub async fn test_addresses<N: Network>(network: N) {
     };
 
   // Spend the branch output, creating a change output and ensuring we actually get change
-  let outputs = spend(&network, &keys, &mut scanner, 1, outputs).await;
+  let outputs = spend(&network, &keys, &mut scanner, outputs).await;
   // Also test spending the change output
-  spend(&network, &keys, &mut scanner, 2, outputs).await;
+  spend(&network, &keys, &mut scanner, outputs).await;
 }

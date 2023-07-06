@@ -27,7 +27,6 @@ pub enum ScannerEvent<N: Network> {
   Block {
     key: <N::Curve as Ciphersuite>::G,
     block: <N::Block as Block<N>>::Id,
-    batch: u32,
     outputs: Vec<N::Output>,
   },
   // Eventuality completion found on-chain
@@ -112,10 +111,13 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     getter.get(Self::seen_key(id)).is_some()
   }
 
-  fn next_batch_key() -> Vec<u8> {
-    Self::scanner_key(b"next_batch", [])
+  fn batch_key() -> Vec<u8> {
+    Self::scanner_key(b"batch", [])
   }
-  fn batch_key(key: &<N::Curve as Ciphersuite>::G, block: &<N::Block as Block<N>>::Id) -> Vec<u8> {
+  fn block_batch_key(
+    key: &<N::Curve as Ciphersuite>::G,
+    block: &<N::Block as Block<N>>::Id,
+  ) -> Vec<u8> {
     Self::scanner_key(b"batch", [key.to_bytes().as_ref(), block.as_ref()].concat())
   }
   fn outputs_key(
@@ -129,10 +131,10 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     key: &<N::Curve as Ciphersuite>::G,
     block: &<N::Block as Block<N>>::Id,
     outputs: &[N::Output],
-  ) -> u32 {
-    let batch_key = Self::batch_key(key, block);
-    if let Some(batch) = txn.get(batch_key) {
-      return u32::from_le_bytes(batch.try_into().unwrap());
+  ) {
+    let output_key = Self::outputs_key(key, block);
+    if let Some(outs) = txn.get(output_key) {
+      return;
     }
 
     let mut bytes = Vec::with_capacity(outputs.len() * 64);
@@ -150,13 +152,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     // 0a, 1a, 2a, 3a, 4a, 5a, 4b, 5b
     // when it should be
     // 0a, 1a, 2a, 3a, 4a, 4b, 5a, 5b
-
-    // Because it's a new set of outputs, allocate a batch ID for it
-    let next_bytes = txn.get(Self::next_batch_key()).unwrap_or(vec![0; 4]).try_into().unwrap();
-    let next = u32::from_le_bytes(next_bytes);
-    txn.put(Self::next_batch_key(), (next + 1).to_le_bytes());
-    txn.put(Self::batch_key(key, block), next_bytes);
-    next
   }
   fn outputs(
     txn: &D::Transaction<'_>,
@@ -293,6 +288,18 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
   // Since the value is static, if it's set, it's correctly set
   pub async fn block_number(&self, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
     ScannerDb::<N, D>::block_number(&self.scanner.read().await.db, id)
+  }
+
+  // Save the last batch id used
+  pub fn save_batch_id(&self, txn: &mut D::Transaction<'_>, batch: u32) {
+    let batch_key = ScannerDb::<N, D>::batch_key();
+    txn.put(batch_key, batch.to_le_bytes());
+  }
+
+  // Return the last used batch id
+  pub fn last_batch_id(&self, txn: &D::Transaction<'_>) -> u32 {
+    let batch_key = ScannerDb::<N, D>::batch_key();
+    u32::from_le_bytes(txn.get(batch_key).unwrap_or(vec![0; 4]).try_into().unwrap())
   }
 
   /// Acknowledge having handled a block for a key.
@@ -514,11 +521,11 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
             // Save the outputs to disk
             let mut txn = scanner.db.txn();
-            let batch = ScannerDb::<N, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
+            ScannerDb::<N, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
             txn.commit();
 
             // Send all outputs
-            if !scanner.emit(ScannerEvent::Block { key, block: block_id, batch, outputs }) {
+            if !scanner.emit(ScannerEvent::Block { key, block: block_id, outputs }) {
               return;
             }
             // Write this number as scanned so we won't re-fire these outputs

@@ -401,16 +401,19 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
           let mut block_id = <N::Block as Block<N>>::Id::default();
           block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
+          let batches = &context.batches;
+
+          let mut block_id = <N::Block as Block<N>>::Id::default();
+          block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
 
           let key = <N::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
 
           // We now have to acknowledge every block for this key up to the acknowledged block
-          let (blocks, outputs) =
-            substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
+          let (_, outputs) = substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
           // Since this block was acknowledged, we no longer have to sign the batch for it
-          for block in blocks {
+          for batch_id in batches {
             for (_, signer) in tributary_mutable.substrate_signers.iter_mut() {
-              signer.batch_signed(txn, block);
+              signer.batch_signed(txn, *batch_id);
             }
           }
 
@@ -665,9 +668,14 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         let mut txn = raw_db.txn();
 
         match msg.unwrap() {
-          ScannerEvent::Block { key, block, batch, outputs } => {
+          ScannerEvent::Block { key, block, outputs } => {
+            let key = key.to_bytes().as_ref().to_vec();
+
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
+
+            let batch_id = substrate_mutable.scanner.last_batch_id(&txn);
+            let mut current_batch = batch_id + 1;
 
             let mut batches = vec![];
             let mut ins = vec![];
@@ -707,13 +715,14 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
                 // batch is full
                 batches.push(Batch {
                   network: N::NETWORK,
-                  id: batch,
+                  id: current_batch,
                   block: BlockHash(block_hash),
                   instructions: ins.clone()
                 });
 
                 ins.clear();
                 batch_size = 0;
+                current_batch += 1;
                 continue;
               }
 
@@ -721,10 +730,14 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               batch_size += ins_size;
             }
 
-            info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
+            // save the last used batch id
+            // TODO: is this right place to save it?
+            substrate_mutable.scanner.save_batch_id(&mut txn, current_batch - 1);
 
             // Start signing this batch
             for batch in batches {
+              info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
+
               // TODO: Don't reload both sets of keys in full just to get the Substrate public key
               tributary_mutable
                 .substrate_signers

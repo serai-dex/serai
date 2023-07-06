@@ -28,6 +28,7 @@ pub async fn sign<N: Network>(
   let actual_id = SignId {
     key: keys_txs[&Participant::new(1).unwrap()].0.group_key().to_bytes().as_ref().to_vec(),
     id: [0xaa; 32],
+    block: None,
     attempt: 0,
   };
 

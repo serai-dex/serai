@@ -129,7 +129,13 @@ impl<D: Db> SubstrateSigner<D> {
     Ok(())
   }
 
-  async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], attempt: u32) {
+  async fn attempt(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    id: [u8; 32],
+    block: BlockHash,
+    attempt: u32,
+  ) {
     // See above commentary for why this doesn't emit SignedBatch
     if SubstrateSignerDb::<D>::completed(txn, id) {
       return;
@@ -161,8 +167,9 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = SignId { key: self.keys.group_key().to_bytes().to_vec(), id, attempt };
-    info!("signing batch {}, attempt #{}", hex::encode(id.id), id.attempt);
+    let id =
+      SignId { key: self.keys.group_key().to_bytes().to_vec(), id, block: Some(block), attempt };
+    info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
     // attempts/new signing protocols
@@ -204,16 +211,19 @@ impl<D: Db> SubstrateSigner<D> {
   }
 
   pub async fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) {
-    if SubstrateSignerDb::<D>::completed(txn, batch.block.0) {
+    // Use the batch id as the ID
+    let mut id = [0u8; 32];
+    id.copy_from_slice(&batch.id.to_le_bytes());
+
+    if SubstrateSignerDb::<D>::completed(txn, id) {
       debug!("Sign batch order for ID we've already completed signing");
       // See batch_signed for commentary on why this simply returns
       return;
     }
 
-    // Use the block hash as the ID
-    let id = batch.block.0;
+    let block = batch.block;
     self.signable.insert(id, batch);
-    self.attempt(txn, id, 0).await;
+    self.attempt(txn, id, block, 0).await;
   }
 
   pub async fn handle(&mut self, txn: &mut D::Transaction<'_>, msg: CoordinatorMessage) {
@@ -330,19 +340,24 @@ impl<D: Db> SubstrateSigner<D> {
       }
 
       CoordinatorMessage::BatchReattempt { id } => {
-        self.attempt(txn, id.id, id.attempt).await;
+        // TODO: this unwrap should be safe?
+        self.attempt(txn, id.id, id.block.unwrap(), id.attempt).await;
       }
     }
   }
 
-  pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, block: BlockHash) {
-    // Stop trying to sign for this batch
-    SubstrateSignerDb::<D>::complete(txn, block.0);
+  pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, batch_id: u32) {
+    // convert into slice
+    let mut id = [0u8; 32];
+    id.copy_from_slice(&batch_id.to_le_bytes());
 
-    self.signable.remove(&block.0);
-    self.attempt.remove(&block.0);
-    self.preprocessing.remove(&block.0);
-    self.signing.remove(&block.0);
+    // Stop trying to sign for this batch
+    SubstrateSignerDb::<D>::complete(txn, id);
+
+    self.signable.remove(&id);
+    self.attempt.remove(&id);
+    self.preprocessing.remove(&id);
+    self.signing.remove(&id);
 
     // This doesn't emit SignedBatch because it doesn't have access to the SignedBatch
     // This function is expected to only be called once Substrate acknowledges this block,

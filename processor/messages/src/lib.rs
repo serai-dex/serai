@@ -11,10 +11,11 @@ use in_instructions_primitives::SignedBatch;
 use tokens_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::{ValidatorSet, KeyPair};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
   pub serai_time: u64,
   pub network_latest_finalized_block: BlockHash,
+  pub batches: Vec<u32>,
 }
 
 pub mod key_gen {
@@ -61,6 +62,7 @@ pub mod sign {
   pub struct SignId {
     pub key: Vec<u8>,
     pub id: [u8; 32],
+    pub block: Option<BlockHash>,
     pub attempt: u32,
   }
 
@@ -116,11 +118,11 @@ pub mod coordinator {
 
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
-      Some(match self {
-        CoordinatorMessage::BatchPreprocesses { id, .. } => BlockHash(id.id),
-        CoordinatorMessage::BatchShares { id, .. } => BlockHash(id.id),
-        CoordinatorMessage::BatchReattempt { id } => BlockHash(id.id),
-      })
+      match self {
+        CoordinatorMessage::BatchPreprocesses { id, .. } => id.block,
+        CoordinatorMessage::BatchShares { id, .. } => id.block,
+        CoordinatorMessage::BatchReattempt { id } => id.block,
+      }
     }
 
     pub fn key(&self) -> &[u8] {
