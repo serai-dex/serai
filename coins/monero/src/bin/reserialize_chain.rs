@@ -44,18 +44,23 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
       txs: Vec<TransactionResponse>,
     }
 
-    let txs: TransactionsResponse = rpc
-      .rpc_call(
-        "get_transactions",
-        Some(json!({
-          "txs_hashes": block.txs.iter().map(hex::encode).collect::<Vec<_>>()
-        })),
-      )
-      .await
-      .expect("couldn't call get_transactions");
-    assert!(txs.missed_tx.is_empty());
+    let mut hashes_hex = block.txs.iter().map(hex::encode).collect::<Vec<_>>();
+    let mut all_txs = vec![];
+    while !hashes_hex.is_empty() {
+      let txs: TransactionsResponse = rpc
+        .rpc_call(
+          "get_transactions",
+          Some(json!({
+            "txs_hashes": hashes_hex.drain(.. hashes_hex.len().min(100)).collect::<Vec<_>>(),
+          })),
+        )
+        .await
+        .expect("couldn't call get_transactions");
+      assert!(txs.missed_tx.is_empty());
+      all_txs.extend(txs.txs);
+    }
 
-    for (tx_hash, tx_res) in block.txs.into_iter().zip(txs.txs.into_iter()) {
+    for (tx_hash, tx_res) in block.txs.into_iter().zip(all_txs.into_iter()) {
       assert_eq!(
         tx_res.tx_hash,
         hex::encode(tx_hash),

@@ -198,23 +198,32 @@ impl<R: RpcConnection> Rpc<R> {
       return Ok(vec![]);
     }
 
-    let txs: TransactionsResponse = self
-      .rpc_call(
-        "get_transactions",
-        Some(json!({
-          "txs_hashes": hashes.iter().map(hex::encode).collect::<Vec<_>>()
-        })),
-      )
-      .await?;
+    let mut hashes_hex = hashes.iter().map(hex::encode).collect::<Vec<_>>();
+    let mut all_txs = Vec::with_capacity(hashes.len());
+    while !hashes_hex.is_empty() {
+      // Monero errors if more than 100 is requested unless using a non-restricted RPC
+      const TXS_PER_REQUEST: usize = 100;
+      let this_count = TXS_PER_REQUEST.min(hashes_hex.len());
 
-    if !txs.missed_tx.is_empty() {
-      Err(RpcError::TransactionsNotFound(
-        txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
-      ))?;
+      let txs: TransactionsResponse = self
+        .rpc_call(
+          "get_transactions",
+          Some(json!({
+            "txs_hashes": hashes_hex.drain(.. this_count).collect::<Vec<_>>(),
+          })),
+        )
+        .await?;
+
+      if !txs.missed_tx.is_empty() {
+        Err(RpcError::TransactionsNotFound(
+          txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
+        ))?;
+      }
+
+      all_txs.extend(txs.txs);
     }
 
-    txs
-      .txs
+    all_txs
       .iter()
       .enumerate()
       .map(|(i, res)| {
