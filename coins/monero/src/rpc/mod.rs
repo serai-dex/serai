@@ -28,7 +28,7 @@ mod http;
 pub use http::*;
 
 #[derive(Deserialize, Debug)]
-pub struct EmptyResponse {}
+pub struct EmptyResponse;
 #[derive(Deserialize, Debug)]
 pub struct JsonRpcResponse<T> {
   result: T,
@@ -47,26 +47,31 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-pub enum RpcError {
-  #[cfg_attr(feature = "std", error("internal error ({0})"))]
-  InternalError(&'static str),
-  #[cfg_attr(feature = "std", error("connection error"))]
-  ConnectionError,
-  #[cfg_attr(feature = "std", error("invalid node"))]
-  InvalidNode,
-  #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
-  UnsupportedProtocol(usize),
-  #[cfg_attr(feature = "std", error("transactions not found"))]
-  TransactionsNotFound(Vec<[u8; 32]>),
-  #[cfg_attr(feature = "std", error("invalid point ({0})"))]
-  InvalidPoint(String),
-  #[cfg_attr(feature = "std", error("pruned transaction"))]
-  PrunedTransaction,
-  #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
-  InvalidTransaction([u8; 32]),
+#[allow(clippy::std_instead_of_core)]
+mod rpc_error {
+  use std_shims::{vec::Vec, string::String};
+  #[derive(Clone, PartialEq, Eq, Debug)]
+  #[cfg_attr(feature = "std", derive(thiserror::Error))]
+  pub enum RpcError {
+    #[cfg_attr(feature = "std", error("internal error ({0})"))]
+    InternalError(&'static str),
+    #[cfg_attr(feature = "std", error("connection error"))]
+    ConnectionError,
+    #[cfg_attr(feature = "std", error("invalid node"))]
+    InvalidNode,
+    #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
+    UnsupportedProtocol(usize),
+    #[cfg_attr(feature = "std", error("transactions not found"))]
+    TransactionsNotFound(Vec<[u8; 32]>),
+    #[cfg_attr(feature = "std", error("invalid point ({0})"))]
+    InvalidPoint(String),
+    #[cfg_attr(feature = "std", error("pruned transaction"))]
+    PrunedTransaction,
+    #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
+    InvalidTransaction([u8; 32]),
+  }
 }
+pub use rpc_error::RpcError;
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
   hex::decode(value).map_err(|_| RpcError::InvalidNode)
@@ -299,15 +304,15 @@ impl<R: RpcConnection> Rpc<R> {
     match self.get_block(self.get_block_hash(number).await?).await {
       Ok(block) => {
         // Make sure this is actually the block for this number
-        match block.miner_tx.prefix.inputs[0] {
-          Input::Gen(actual) => {
-            if usize::try_from(actual).unwrap() == number {
+        match block.miner_tx.prefix.inputs.get(0) {
+          Some(Input::Gen(actual)) => {
+            if usize::try_from(*actual).unwrap() == number {
               Ok(block)
             } else {
               Err(RpcError::InvalidNode)
             }
           }
-          _ => Err(RpcError::InvalidNode),
+          Some(Input::ToKey { .. }) | None => Err(RpcError::InvalidNode),
         }
       }
       e => e,

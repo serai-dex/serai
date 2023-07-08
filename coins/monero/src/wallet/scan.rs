@@ -32,14 +32,15 @@ impl AbsoluteId {
     w.write_all(&[self.o])
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(32 + 1);
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<AbsoluteId> {
-    Ok(AbsoluteId { tx: read_bytes(r)?, o: read_byte(r)? })
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self { tx: read_bytes(r)?, o: read_byte(r)? })
   }
 }
 
@@ -60,14 +61,15 @@ impl OutputData {
     w.write_all(&self.commitment.amount.to_le_bytes())
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(32 + 32 + 32 + 8);
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<OutputData> {
-    Ok(OutputData {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self {
       key: read_point(r)?,
       key_offset: read_scalar(r)?,
       commitment: Commitment::new(read_scalar(r)?, read_u64(r)?),
@@ -108,13 +110,14 @@ impl Metadata {
     Ok(())
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(1 + 8 + 1);
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Metadata> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     let subaddress = if read_byte(r)? == 1 {
       Some(
         SubaddressIndex::new(read_u32(r)?, read_u32(r)?)
@@ -124,7 +127,7 @@ impl Metadata {
       None
     };
 
-    Ok(Metadata {
+    Ok(Self {
       subaddress,
       payment_id: read_bytes(r)?,
       arbitrary_data: {
@@ -148,18 +151,22 @@ pub struct ReceivedOutput {
 }
 
 impl ReceivedOutput {
-  pub fn key(&self) -> EdwardsPoint {
+  #[must_use]
+  pub const fn key(&self) -> EdwardsPoint {
     self.data.key
   }
 
-  pub fn key_offset(&self) -> Scalar {
+  #[must_use]
+  pub const fn key_offset(&self) -> Scalar {
     self.data.key_offset
   }
 
+  #[must_use]
   pub fn commitment(&self) -> Commitment {
     self.data.commitment.clone()
   }
 
+  #[must_use]
   pub fn arbitrary_data(&self) -> &[Vec<u8>] {
     &self.metadata.arbitrary_data
   }
@@ -170,14 +177,15 @@ impl ReceivedOutput {
     self.metadata.write(w)
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<ReceivedOutput> {
-    Ok(ReceivedOutput {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self {
       absolute: AbsoluteId::read(r)?,
       data: OutputData::read(r)?,
       metadata: Metadata::read(r)?,
@@ -209,24 +217,28 @@ impl SpendableOutput {
   pub async fn from<RPC: RpcConnection>(
     rpc: &Rpc<RPC>,
     output: ReceivedOutput,
-  ) -> Result<SpendableOutput, RpcError> {
-    let mut output = SpendableOutput { output, global_index: 0 };
+  ) -> Result<Self, RpcError> {
+    let mut output = Self { output, global_index: 0 };
     output.refresh_global_index(rpc).await?;
     Ok(output)
   }
 
-  pub fn key(&self) -> EdwardsPoint {
+  #[must_use]
+  pub const fn key(&self) -> EdwardsPoint {
     self.output.key()
   }
 
-  pub fn key_offset(&self) -> Scalar {
+  #[must_use]
+  pub const fn key_offset(&self) -> Scalar {
     self.output.key_offset()
   }
 
+  #[must_use]
   pub fn commitment(&self) -> Commitment {
     self.output.commitment()
   }
 
+  #[must_use]
   pub fn arbitrary_data(&self) -> &[Vec<u8>] {
     self.output.arbitrary_data()
   }
@@ -242,8 +254,8 @@ impl SpendableOutput {
     serialized
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<SpendableOutput> {
-    Ok(SpendableOutput { output: ReceivedOutput::read(r)?, global_index: read_u64(r)? })
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self { output: ReceivedOutput::read(r)?, global_index: read_u64(r)? })
   }
 }
 
@@ -258,11 +270,13 @@ impl<O: Clone + Zeroize> Drop for Timelocked<O> {
 impl<O: Clone + Zeroize> ZeroizeOnDrop for Timelocked<O> {}
 
 impl<O: Clone + Zeroize> Timelocked<O> {
-  pub fn timelock(&self) -> Timelock {
+  #[must_use]
+  pub const fn timelock(&self) -> Timelock {
     self.0
   }
 
   /// Return the outputs if they're not timelocked, or an empty vector if they are.
+  #[must_use]
   pub fn not_locked(&self) -> Vec<O> {
     if self.0 == Timelock::None {
       return self.1.clone();
@@ -271,6 +285,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
   }
 
   /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked.
+  #[must_use]
   pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<O>> {
     // If the Timelocks are comparable, return the outputs if they're now unlocked
     if self.0 <= timelock {
@@ -280,6 +295,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
     }
   }
 
+  #[must_use]
   pub fn ignore_timelock(&self) -> Vec<O> {
     self.1.clone()
   }
@@ -293,16 +309,11 @@ impl Scanner {
       return Timelocked(tx.prefix.timelock, vec![]);
     }
 
-    let extra = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref());
-    let extra = if let Ok(extra) = extra {
-      extra
-    } else {
+    let Ok(extra) = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref()) else {
       return Timelocked(tx.prefix.timelock, vec![]);
     };
 
-    let (tx_key, additional) = if let Some((tx_key, additional)) = extra.keys() {
-      (tx_key, additional)
-    } else {
+    let Some((tx_key, additional)) = extra.keys() else {
       return Timelocked(tx.prefix.timelock, vec![]);
     };
 
@@ -324,17 +335,17 @@ impl Scanner {
       let output_key = output_key.unwrap();
 
       for key in [Some(Some(&tx_key)), additional.as_ref().map(|additional| additional.get(o))] {
-        let key = if let Some(Some(key)) = key {
-          key
-        } else if let Some(None) = key {
-          // This is non-standard. There were additional keys, yet not one for this output
-          // https://github.com/monero-project/monero/
-          //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
-          //   src/cryptonote_basic/cryptonote_format_utils.cpp#L1062
-          // TODO: Should this return? Where does Monero set the trap handler for this exception?
-          continue;
-        } else {
-          break;
+        let Some(Some(key)) = key else {
+          if let Some(None) = key {
+            // This is non-standard. There were additional keys, yet not one for this output
+            // https://github.com/monero-project/monero/
+            //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
+            //   src/cryptonote_basic/cryptonote_format_utils.cpp#L1062
+            // TODO: Should this return? Where does Monero set the trap handler for this exception?
+            continue;
+          } else {
+            break;
+          }
         };
         let (view_tag, shared_key, payment_id_xor) = shared_key(
           if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix.inputs)) } else { None },

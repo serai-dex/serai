@@ -17,7 +17,7 @@ impl HttpRpc {
   ///
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
-  pub fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
+  pub fn new(mut url: String) -> Result<Rpc<Self>, RpcError> {
     // Parse out the username and password
     let userpass = if url.contains('@') {
       let url_clone = url;
@@ -47,7 +47,7 @@ impl HttpRpc {
       None
     };
 
-    Ok(Rpc(HttpRpc { client: Client::new(), userpass, url }))
+    Ok(Rpc(Self { client: Client::new(), userpass, url }))
   }
 }
 

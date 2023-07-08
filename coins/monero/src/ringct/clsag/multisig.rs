@@ -1,6 +1,9 @@
 use core::{ops::Deref, fmt::Debug};
-use std_shims::io::{self, Read, Write};
-use std::sync::{Arc, RwLock};
+use std_shims::{
+  sync::Arc,
+  io::{self, Read, Write},
+};
+use std::sync::RwLock;
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -48,7 +51,7 @@ impl ClsagInput {
       // if in use
       transcript.append_message(b"member", [u8::try_from(i).expect("ring size exceeded 255")]);
       transcript.append_message(b"key", pair[0].compress().to_bytes());
-      transcript.append_message(b"commitment", pair[1].compress().to_bytes())
+      transcript.append_message(b"commitment", pair[1].compress().to_bytes());
     }
 
     // Doesn't include the commitment's parts as the above ring + index includes the commitment
@@ -65,8 +68,9 @@ pub struct ClsagDetails {
 }
 
 impl ClsagDetails {
-  pub fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
-    ClsagDetails { input, mask }
+  #[must_use]
+  pub fn new(input: ClsagInput, mask: Scalar) -> Self {
+    Self { input, mask }
   }
 }
 
@@ -112,12 +116,13 @@ pub struct ClsagMultisig {
 }
 
 impl ClsagMultisig {
+  #[must_use]
   pub fn new(
     transcript: RecommendedTranscript,
     output_key: EdwardsPoint,
     details: Arc<RwLock<Option<ClsagDetails>>>,
-  ) -> ClsagMultisig {
-    ClsagMultisig {
+  ) -> Self {
+    Self {
       transcript,
 
       H: hash_to_point(output_key),

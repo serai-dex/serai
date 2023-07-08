@@ -25,7 +25,7 @@ pub enum Input {
 
 impl Input {
   // Worst-case predictive len
-  pub(crate) fn fee_weight(ring_len: usize) -> usize {
+  pub(crate) const fn fee_weight(ring_len: usize) -> usize {
     // Uses 1 byte for the VarInt amount due to amount being 0
     // Uses 1 byte for the VarInt encoding of the length of the ring as well
     1 + 1 + 1 + (8 * ring_len) + 32
@@ -33,12 +33,12 @@ impl Input {
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      Input::Gen(height) => {
+      Self::Gen(height) => {
         w.write_all(&[255])?;
         write_varint(height, w)
       }
 
-      Input::ToKey { amount, key_offsets, key_image } => {
+      Self::ToKey { amount, key_offsets, key_image } => {
         w.write_all(&[2])?;
         write_varint(&amount.unwrap_or(0), w)?;
         write_vec(write_varint, key_offsets, w)?;
@@ -47,19 +47,20 @@ impl Input {
     }
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
     self.write(&mut res).unwrap();
     res
   }
 
-  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Input> {
+  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Self> {
     Ok(match read_byte(r)? {
-      255 => Input::Gen(read_varint(r)?),
+      255 => Self::Gen(read_varint(r)?),
       2 => {
         let amount = read_varint(r)?;
         let amount = if (amount == 0) && interpret_as_rct { None } else { Some(amount) };
-        Input::ToKey {
+        Self::ToKey {
           amount,
           key_offsets: read_vec(read_varint, r)?,
           key_image: read_torsion_free_point(r)?,
@@ -81,7 +82,7 @@ pub struct Output {
 }
 
 impl Output {
-  pub(crate) fn fee_weight() -> usize {
+  pub(crate) const fn fee_weight() -> usize {
     1 + 1 + 32 + 1
   }
 
@@ -95,13 +96,14 @@ impl Output {
     Ok(())
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(8 + 1 + 32);
     self.write(&mut res).unwrap();
     res
   }
 
-  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Output> {
+  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Self> {
     let amount = read_varint(r)?;
     let amount = if interpret_as_rct {
       if amount != 0 {
@@ -121,7 +123,7 @@ impl Output {
       ))?,
     };
 
-    Ok(Output {
+    Ok(Self {
       amount,
       key: CompressedEdwardsY(read_bytes(r)?),
       view_tag: if view_tag { Some(read_byte(r)?) } else { None },
@@ -137,22 +139,22 @@ pub enum Timelock {
 }
 
 impl Timelock {
-  fn from_raw(raw: u64) -> Timelock {
+  fn from_raw(raw: u64) -> Self {
     if raw == 0 {
-      Timelock::None
+      Self::None
     } else if raw < 500_000_000 {
-      Timelock::Block(usize::try_from(raw).unwrap())
+      Self::Block(usize::try_from(raw).unwrap())
     } else {
-      Timelock::Time(raw)
+      Self::Time(raw)
     }
   }
 
   fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_varint(
       &match self {
-        Timelock::None => 0,
-        Timelock::Block(block) => (*block).try_into().unwrap(),
-        Timelock::Time(time) => *time,
+        Self::None => 0,
+        Self::Block(block) => (*block).try_into().unwrap(),
+        Self::Time(time) => *time,
       },
       w,
     )
@@ -162,9 +164,9 @@ impl Timelock {
 impl PartialOrd for Timelock {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     match (self, other) {
-      (Timelock::None, _) => Some(Ordering::Less),
-      (Timelock::Block(a), Timelock::Block(b)) => a.partial_cmp(b),
-      (Timelock::Time(a), Timelock::Time(b)) => a.partial_cmp(b),
+      (Self::None, _) => Some(Ordering::Less),
+      (Self::Block(a), Self::Block(b)) => a.partial_cmp(b),
+      (Self::Time(a), Self::Time(b)) => a.partial_cmp(b),
       _ => None,
     }
   }
@@ -200,13 +202,14 @@ impl TransactionPrefix {
     w.write_all(&self.extra)
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
     self.write(&mut res).unwrap();
     res
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<TransactionPrefix> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     let version = read_varint(r)?;
     // TODO: Create an enum out of version
     if (version == 0) || (version > 2) {
@@ -221,7 +224,7 @@ impl TransactionPrefix {
     }
     let is_miner_tx = matches!(inputs[0], Input::Gen { .. });
 
-    let mut prefix = TransactionPrefix {
+    let mut prefix = Self {
       version,
       timelock,
       inputs,
@@ -232,6 +235,7 @@ impl TransactionPrefix {
     Ok(prefix)
   }
 
+  #[must_use]
   pub fn hash(&self) -> [u8; 32] {
     hash(&self.serialize())
   }
@@ -273,13 +277,14 @@ impl Transaction {
     }
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(2048);
     self.write(&mut res).unwrap();
     res
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Transaction> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     let prefix = TransactionPrefix::read(r)?;
     let mut signatures = vec![];
     let mut rct_signatures = RctSignatures {
@@ -328,9 +333,10 @@ impl Transaction {
       Err(io::Error::new(io::ErrorKind::Other, "Tried to deserialize unknown version"))?;
     }
 
-    Ok(Transaction { prefix, signatures, rct_signatures })
+    Ok(Self { prefix, signatures, rct_signatures })
   }
 
+  #[must_use]
   pub fn hash(&self) -> [u8; 32] {
     let mut buf = Vec::with_capacity(2048);
     if self.prefix.version == 1 {
@@ -359,6 +365,7 @@ impl Transaction {
   }
 
   /// Calculate the hash of this transaction as needed for signing it.
+  #[must_use]
   pub fn signature_hash(&self) -> [u8; 32] {
     let mut buf = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);

@@ -1,9 +1,10 @@
 use std_shims::{
+  sync::Arc,
   vec::Vec,
   io::{self, Read},
   collections::HashMap,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 use zeroize::Zeroizing;
 
@@ -267,14 +268,15 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     mut commitments: HashMap<Participant, Self::Preprocess>,
     msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
-    if !msg.is_empty() {
-      panic!("message was passed to the TransactionMachine when it generates its own");
-    }
+    assert!(
+      msg.is_empty(),
+      "message was passed to the TransactionMachine when it generates its own"
+    );
 
     // Find out who's included
     // This may not be a valid set of signers yet the algorithm machine will error if it's not
     commitments.remove(&self.i); // Remove, if it was included for some reason
-    let mut included = commitments.keys().cloned().collect::<Vec<_>>();
+    let mut included = commitments.keys().copied().collect::<Vec<_>>();
     included.push(self.i);
     included.sort_unstable();
 
@@ -325,7 +327,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     // Remove our preprocess which shouldn't be here. It was just the easiest way to implement the
     // above
-    for map in commitments.iter_mut() {
+    for map in &mut commitments {
       map.remove(&self.i);
     }
 

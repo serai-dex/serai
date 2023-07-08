@@ -56,10 +56,8 @@ pub struct PlusStruct {
 }
 
 impl PlusStruct {
-  pub(crate) fn prove<R: RngCore + CryptoRng>(
-    rng: &mut R,
-    commitments: &[Commitment],
-  ) -> PlusStruct {
+  #[allow(clippy::many_single_char_names)]
+  pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitment]) -> Self {
     let generators = GENERATORS();
 
     let (logMN, M, MN) = MN(commitments.len());
@@ -113,12 +111,12 @@ impl PlusStruct {
       let mut L_i = LR_statements(&(&aL * yinvpow[aL.len()]), G_R, &bR, H_L, cL, H());
       L_i.push((dL, G));
       let L_i = prove_multiexp(&L_i);
-      L.push(L_i);
+      L.push(*L_i);
 
       let mut R_i = LR_statements(&(&aR * ypow[aR.len()]), G_L, &bL, H_R, cR, H());
       R_i.push((dR, G));
       let R_i = prove_multiexp(&R_i);
-      R.push(R_i);
+      R.push(*R_i);
 
       let w = hash_cache(&mut cache, &[L_i.compress().to_bytes(), R_i.compress().to_bytes()]);
       let winv = w.invert().unwrap();
@@ -158,20 +156,12 @@ impl PlusStruct {
     eta.zeroize();
     alpha1.zeroize();
 
-    let res = PlusStruct {
-      A: *A,
-      A1: *A1,
-      B: *B,
-      r1: *r1,
-      s1: *s1,
-      d1: *d1,
-      L: L.drain(..).map(|L| *L).collect(),
-      R: R.drain(..).map(|R| *R).collect(),
-    };
+    let res = Self { A: *A, A1: *A1, B: *B, r1: *r1, s1: *s1, d1: *d1, L, R };
     debug_assert!(res.verify(rng, &commitments_points));
     res
   }
 
+  #[allow(clippy::many_single_char_names)]
   #[must_use]
   fn verify_core<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
@@ -196,7 +186,7 @@ impl PlusStruct {
     }
 
     // Rebuild all challenges
-    let (mut cache, commitments) = hash_plus(commitments.iter().cloned());
+    let (mut cache, commitments) = hash_plus(commitments.iter().copied());
     let y = hash_cache(&mut cache, &[self.A.compress().to_bytes()]);
     let yinv = y.invert().unwrap();
     let z = hash_to_scalar(&y.to_bytes());
@@ -220,8 +210,6 @@ impl PlusStruct {
     let A1 = normalize(&self.A1);
     let B = normalize(&self.B);
 
-    let mut commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
-
     // Verify it
     let mut proof = Vec::with_capacity(logMN + 5 + (2 * (MN + logMN)));
 
@@ -237,7 +225,7 @@ impl PlusStruct {
     let esq = e * e;
     let minus_esq = -esq;
     let commitment_weight = minus_esq * yMNy;
-    for (i, commitment) in commitments.drain(..).enumerate() {
+    for (i, commitment) in commitments.iter().map(EdwardsPoint::mul_by_cofactor).enumerate() {
       proof.push((commitment_weight * zpow[i], commitment));
     }
 

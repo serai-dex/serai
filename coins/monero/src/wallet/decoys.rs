@@ -31,7 +31,7 @@ const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 static DISTRIBUTION_CELL: OnceLock<Mutex<Vec<u64>>> = OnceLock::new();
 #[allow(non_snake_case)]
 fn DISTRIBUTION() -> &'static Mutex<Vec<u64>> {
-  DISTRIBUTION_CELL.get_or_init(|| Mutex::new(Vec::with_capacity(3000000)))
+  DISTRIBUTION_CELL.get_or_init(|| Mutex::new(Vec::with_capacity(3_000_000)))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -141,6 +141,7 @@ pub struct Decoys {
 }
 
 impl Decoys {
+  #[must_use]
   pub fn len(&self) -> usize {
     self.offsets.len()
   }
@@ -152,7 +153,7 @@ impl Decoys {
     ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],
-  ) -> Result<Vec<Decoys>, RpcError> {
+  ) -> Result<Vec<Self>, RpcError> {
     #[cfg(not(feature = "std"))]
     let mut distribution = DISTRIBUTION().lock();
     #[cfg(feature = "std")]
@@ -265,7 +266,7 @@ impl Decoys {
         // members
       }
 
-      res.push(Decoys {
+      res.push(Self {
         // Binary searches for the real spend since we don't know where it sorted to
         i: u8::try_from(ring.partition_point(|x| x.0 < o.0)).unwrap(),
         offsets: offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),

@@ -30,27 +30,31 @@ pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 #[cfg(feature = "multisig")]
 pub(crate) use multisig::add_key_image_share;
 
-/// Errors returned when CLSAG signing fails.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-pub enum ClsagError {
-  #[cfg_attr(feature = "std", error("internal error ({0})"))]
-  InternalError(&'static str),
-  #[cfg_attr(feature = "std", error("invalid ring"))]
-  InvalidRing,
-  #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
-  InvalidRingMember(u8, u8),
-  #[cfg_attr(feature = "std", error("invalid commitment"))]
-  InvalidCommitment,
-  #[cfg_attr(feature = "std", error("invalid key image"))]
-  InvalidImage,
-  #[cfg_attr(feature = "std", error("invalid D"))]
-  InvalidD,
-  #[cfg_attr(feature = "std", error("invalid s"))]
-  InvalidS,
-  #[cfg_attr(feature = "std", error("invalid c1"))]
-  InvalidC1,
+#[allow(clippy::std_instead_of_core)]
+mod clsag_error {
+  /// Errors returned when CLSAG signing fails.
+  #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+  #[cfg_attr(feature = "std", derive(thiserror::Error))]
+  pub enum ClsagError {
+    #[cfg_attr(feature = "std", error("internal error ({0})"))]
+    InternalError(&'static str),
+    #[cfg_attr(feature = "std", error("invalid ring"))]
+    InvalidRing,
+    #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
+    InvalidRingMember(u8, u8),
+    #[cfg_attr(feature = "std", error("invalid commitment"))]
+    InvalidCommitment,
+    #[cfg_attr(feature = "std", error("invalid key image"))]
+    InvalidImage,
+    #[cfg_attr(feature = "std", error("invalid D"))]
+    InvalidD,
+    #[cfg_attr(feature = "std", error("invalid s"))]
+    InvalidS,
+    #[cfg_attr(feature = "std", error("invalid c1"))]
+    InvalidC1,
+  }
 }
+pub use clsag_error::ClsagError;
 
 /// Input being signed for.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -62,7 +66,7 @@ pub struct ClsagInput {
 }
 
 impl ClsagInput {
-  pub fn new(commitment: Commitment, decoys: Decoys) -> Result<ClsagInput, ClsagError> {
+  pub fn new(commitment: Commitment, decoys: Decoys) -> Result<Self, ClsagError> {
     let n = decoys.len();
     if n > u8::MAX.into() {
       Err(ClsagError::InternalError("max ring size in this library is u8 max"))?;
@@ -77,7 +81,7 @@ impl ClsagInput {
       Err(ClsagError::InvalidCommitment)?;
     }
 
-    Ok(ClsagInput { commitment, decoys })
+    Ok(Self { commitment, decoys })
   }
 }
 
@@ -205,6 +209,7 @@ pub struct Clsag {
 impl Clsag {
   // Sign core is the extension of core as needed for signing, yet is shared between single signer
   // and multisig, hence why it's still core
+  #[allow(clippy::many_single_char_names)]
   pub(crate) fn sign_core<R: RngCore + CryptoRng>(
     rng: &mut R,
     I: &EdwardsPoint,
@@ -213,7 +218,7 @@ impl Clsag {
     msg: &[u8; 32],
     A: EdwardsPoint,
     AH: EdwardsPoint,
-  ) -> (Clsag, EdwardsPoint, Scalar, Scalar) {
+  ) -> (Self, EdwardsPoint, Scalar, Scalar) {
     let r: usize = input.decoys.i.into();
 
     let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
@@ -228,18 +233,19 @@ impl Clsag {
     let ((D, p, c), c1) =
       core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, Mode::Sign(r, A, AH));
 
-    (Clsag { D, s, c1 }, pseudo_out, p, c * z)
+    (Self { D, s, c1 }, pseudo_out, p, c * z)
   }
 
   /// Generate CLSAG signatures for the given inputs.
   /// inputs is of the form (private key, key image, input).
   /// sum_outputs is for the sum of the outputs' commitment masks.
+  #[must_use]
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
     mut inputs: Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>,
     sum_outputs: Scalar,
     msg: [u8; 32],
-  ) -> Vec<(Clsag, EdwardsPoint)> {
+  ) -> Vec<(Self, EdwardsPoint)> {
     let mut res = Vec::with_capacity(inputs.len());
     let mut sum_pseudo_outs = Scalar::zero();
     for i in 0 .. inputs.len() {
@@ -251,7 +257,7 @@ impl Clsag {
       }
 
       let mut nonce = Zeroizing::new(random_scalar(rng));
-      let (mut clsag, pseudo_out, p, c) = Clsag::sign_core(
+      let (mut clsag, pseudo_out, p, c) = Self::sign_core(
         rng,
         &inputs[i].1,
         &inputs[i].2,
@@ -308,7 +314,7 @@ impl Clsag {
     Ok(())
   }
 
-  pub(crate) fn fee_weight(ring_len: usize) -> usize {
+  pub(crate) const fn fee_weight(ring_len: usize) -> usize {
     (ring_len * 32) + 32 + 32
   }
 
@@ -318,7 +324,7 @@ impl Clsag {
     write_point(&self.D, w)
   }
 
-  pub fn read<R: Read>(decoys: usize, r: &mut R) -> io::Result<Clsag> {
-    Ok(Clsag { s: read_raw_vec(read_scalar, decoys, r)?, c1: read_scalar(r)?, D: read_point(r)? })
+  pub fn read<R: Read>(decoys: usize, r: &mut R) -> io::Result<Self> {
+    Ok(Self { s: read_raw_vec(read_scalar, decoys, r)?, c1: read_scalar(r)?, D: read_point(r)? })
   }
 }

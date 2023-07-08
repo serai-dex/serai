@@ -32,18 +32,21 @@ pub struct SubaddressIndex {
 }
 
 impl SubaddressIndex {
-  pub const fn new(account: u32, address: u32) -> Option<SubaddressIndex> {
+  #[must_use]
+  pub const fn new(account: u32, address: u32) -> Option<Self> {
     if (account == 0) && (address == 0) {
       return None;
     }
-    Some(SubaddressIndex { account, address })
+    Some(Self { account, address })
   }
 
-  pub fn account(&self) -> u32 {
+  #[must_use]
+  pub const fn account(&self) -> u32 {
     self.account
   }
 
-  pub fn address(&self) -> u32 {
+  #[must_use]
+  pub const fn address(&self) -> u32 {
     self.address
   }
 }
@@ -58,23 +61,25 @@ pub enum AddressSpec {
 }
 
 impl AddressType {
-  pub fn is_subaddress(&self) -> bool {
-    matches!(self, AddressType::Subaddress) ||
-      matches!(self, AddressType::Featured { subaddress: true, .. })
+  #[must_use]
+  pub const fn is_subaddress(&self) -> bool {
+    matches!(self, Self::Subaddress) || matches!(self, Self::Featured { subaddress: true, .. })
   }
 
-  pub fn payment_id(&self) -> Option<[u8; 8]> {
-    if let AddressType::Integrated(id) = self {
+  #[must_use]
+  pub const fn payment_id(&self) -> Option<[u8; 8]> {
+    if let Self::Integrated(id) = self {
       Some(*id)
-    } else if let AddressType::Featured { payment_id, .. } = self {
+    } else if let Self::Featured { payment_id, .. } = self {
       *payment_id
     } else {
       None
     }
   }
 
-  pub fn is_guaranteed(&self) -> bool {
-    matches!(self, AddressType::Featured { guaranteed: true, .. })
+  #[must_use]
+  pub const fn is_guaranteed(&self) -> bool {
+    matches!(self, Self::Featured { guaranteed: true, .. })
   }
 }
 
@@ -142,8 +147,9 @@ impl<B: AddressBytes> AddressMeta<B> {
   }
 
   /// Create an address's metadata.
-  pub fn new(network: Network, kind: AddressType) -> Self {
-    AddressMeta { _bytes: PhantomData, network, kind }
+  #[must_use]
+  pub const fn new(network: Network, kind: AddressType) -> Self {
+    Self { _bytes: PhantomData, network, kind }
   }
 
   // Returns an incomplete instantiation in the case of Integrated/Featured addresses
@@ -160,7 +166,7 @@ impl<B: AddressBytes> AddressMeta<B> {
         }
         _ => None,
       } {
-        meta = Some(AddressMeta::new(network, kind));
+        meta = Some(Self::new(network, kind));
         break;
       }
     }
@@ -168,15 +174,18 @@ impl<B: AddressBytes> AddressMeta<B> {
     meta.ok_or(AddressError::InvalidByte)
   }
 
-  pub fn is_subaddress(&self) -> bool {
+  #[must_use]
+  pub const fn is_subaddress(&self) -> bool {
     self.kind.is_subaddress()
   }
 
-  pub fn payment_id(&self) -> Option<[u8; 8]> {
+  #[must_use]
+  pub const fn payment_id(&self) -> Option<[u8; 8]> {
     self.kind.payment_id()
   }
 
-  pub fn is_guaranteed(&self) -> bool {
+  #[must_use]
+  pub const fn is_guaranteed(&self) -> bool {
     self.kind.is_guaranteed()
   }
 }
@@ -216,8 +225,9 @@ impl<B: AddressBytes> ToString for Address<B> {
 }
 
 impl<B: AddressBytes> Address<B> {
-  pub fn new(meta: AddressMeta<B>, spend: EdwardsPoint, view: EdwardsPoint) -> Self {
-    Address { meta, spend, view }
+  #[must_use]
+  pub const fn new(meta: AddressMeta<B>, spend: EdwardsPoint, view: EdwardsPoint) -> Self {
+    Self { meta, spend, view }
   }
 
   pub fn from_str_raw(s: &str) -> Result<Self, AddressError> {
@@ -267,7 +277,7 @@ impl<B: AddressBytes> Address<B> {
       id.copy_from_slice(&raw[(read - 8) .. read]);
     }
 
-    Ok(Address { meta, spend, view })
+    Ok(Self { meta, spend, view })
   }
 
   pub fn from_str(network: Network, s: &str) -> Result<Self, AddressError> {
@@ -280,30 +290,35 @@ impl<B: AddressBytes> Address<B> {
     })
   }
 
-  pub fn network(&self) -> Network {
+  #[must_use]
+  pub const fn network(&self) -> Network {
     self.meta.network
   }
 
-  pub fn is_subaddress(&self) -> bool {
+  #[must_use]
+  pub const fn is_subaddress(&self) -> bool {
     self.meta.is_subaddress()
   }
 
-  pub fn payment_id(&self) -> Option<[u8; 8]> {
+  #[must_use]
+  pub const fn payment_id(&self) -> Option<[u8; 8]> {
     self.meta.payment_id()
   }
 
-  pub fn is_guaranteed(&self) -> bool {
+  #[must_use]
+  pub const fn is_guaranteed(&self) -> bool {
     self.meta.is_guaranteed()
   }
 }
 
 /// Instantiation of the Address type with Monero's network bytes.
 pub type MoneroAddress = Address<MoneroAddressBytes>;
-// Allow re-interpreting of an arbitrary address as a monero address so it can be used with the
+// Allow re-interpreting of an arbitrary address as a Monero address so it can be used with the
 // rest of this library. Doesn't use From as it was conflicting with From<T> for T.
 impl MoneroAddress {
-  pub fn from<B: AddressBytes>(address: Address<B>) -> MoneroAddress {
-    MoneroAddress::new(
+  #[must_use]
+  pub const fn from<B: AddressBytes>(address: Address<B>) -> Self {
+    Self::new(
       AddressMeta::new(address.meta.network, address.meta.kind),
       address.spend,
       address.view,

@@ -80,7 +80,7 @@ pub(crate) fn shared_key(
 
   // uniqueness ||
   let shared_key = if let Some(uniqueness) = uniqueness {
-    [uniqueness.as_ref(), &output_derivation].concat().to_vec()
+    [uniqueness.as_ref(), &output_derivation].concat()
   } else {
     output_derivation
   };
@@ -141,14 +141,17 @@ pub struct ViewPair {
 }
 
 impl ViewPair {
-  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> ViewPair {
-    ViewPair { spend, view }
+  #[must_use]
+  pub const fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Self {
+    Self { spend, view }
   }
 
-  pub fn spend(&self) -> EdwardsPoint {
+  #[must_use]
+  pub const fn spend(&self) -> EdwardsPoint {
     self.spend
   }
 
+  #[must_use]
   pub fn view(&self) -> EdwardsPoint {
     self.view.deref() * &ED25519_BASEPOINT_TABLE
   }
@@ -173,6 +176,7 @@ impl ViewPair {
   }
 
   /// Returns an address with the provided specification.
+  #[must_use]
   pub fn address(&self, network: Network, spec: AddressSpec) -> MoneroAddress {
     let mut spend = self.spend;
     let mut view: EdwardsPoint = self.view.deref() * &ED25519_BASEPOINT_TABLE;
@@ -241,15 +245,20 @@ impl ZeroizeOnDrop for Scanner {}
 
 impl Scanner {
   /// Create a Scanner from a ViewPair.
+  ///
   /// burning_bug is a HashSet of used keys, intended to prevent key reuse which would burn funds.
+  ///
   /// When an output is successfully scanned, the output key MUST be saved to disk.
+  ///
   /// When a new scanner is created, ALL saved output keys must be passed in to be secure.
+  ///
   /// If None is passed, a modified shared key derivation is used which is immune to the burning
   /// bug (specifically the Guaranteed feature from Featured Addresses).
-  pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Scanner {
+  #[must_use]
+  pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Self {
     let mut subaddresses = HashMap::new();
     subaddresses.insert(pair.spend.compress(), None);
-    Scanner { pair, subaddresses, burning_bug }
+    Self { pair, subaddresses, burning_bug }
   }
 
   /// Register a subaddress.

@@ -25,7 +25,7 @@ struct SignableTransactionBuilderInternal {
 impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
-  fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
+  const fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self {
       protocol,
       fee,
@@ -81,15 +81,17 @@ impl Eq for SignableTransactionBuilder {}
 
 impl Zeroize for SignableTransactionBuilder {
   fn zeroize(&mut self) {
-    self.0.write().unwrap().zeroize()
+    self.0.write().unwrap().zeroize();
   }
 }
 
+#[allow(clippy::return_self_not_must_use)]
 impl SignableTransactionBuilder {
   fn shallow_copy(&self) -> Self {
     Self(self.0.clone())
   }
 
+  #[must_use]
   pub fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self(Arc::new(RwLock::new(SignableTransactionBuilderInternal::new(
       protocol,

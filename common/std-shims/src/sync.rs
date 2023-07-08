@@ -1,4 +1,5 @@
 pub use core::sync::*;
+pub use alloc::sync::*;
 
 mod mutex_shim {
   #[cfg(feature = "std")]

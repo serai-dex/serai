@@ -26,19 +26,15 @@ pub struct BorromeanSignatures {
 }
 
 impl BorromeanSignatures {
-  pub fn read<R: Read>(r: &mut R) -> io::Result<BorromeanSignatures> {
-    Ok(BorromeanSignatures {
-      s0: read_array(read_bytes, r)?,
-      s1: read_array(read_bytes, r)?,
-      ee: read_bytes(r)?,
-    })
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self { s0: read_array(read_bytes, r)?, s1: read_array(read_bytes, r)?, ee: read_bytes(r)? })
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    for s0 in self.s0.iter() {
+    for s0 in &self.s0 {
       w.write_all(s0)?;
     }
-    for s1 in self.s1.iter() {
+    for s1 in &self.s1 {
       w.write_all(s1)?;
     }
     w.write_all(&self.ee)
@@ -79,11 +75,8 @@ pub struct BorromeanRange {
 }
 
 impl BorromeanRange {
-  pub fn read<R: Read>(r: &mut R) -> io::Result<BorromeanRange> {
-    Ok(BorromeanRange {
-      sigs: BorromeanSignatures::read(r)?,
-      bit_commitments: read_array(read_point, r)?,
-    })
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self { sigs: BorromeanSignatures::read(r)?, bit_commitments: read_array(read_point, r)? })
   }
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.sigs.write(w)?;
@@ -91,6 +84,7 @@ impl BorromeanRange {
   }
 
   #[cfg(feature = "experimental")]
+  #[must_use]
   pub fn verify(&self, commitment: &EdwardsPoint) -> bool {
     if &self.bit_commitments.iter().sum::<EdwardsPoint>() != commitment {
       return false;

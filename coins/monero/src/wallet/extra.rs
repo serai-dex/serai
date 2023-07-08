@@ -30,14 +30,14 @@ pub enum PaymentId {
 }
 
 impl BitXor<[u8; 8]> for PaymentId {
-  type Output = PaymentId;
+  type Output = Self;
 
-  fn bitxor(self, bytes: [u8; 8]) -> PaymentId {
+  fn bitxor(self, bytes: [u8; 8]) -> Self {
     match self {
       // Don't perform the xor since this isn't intended to be encrypted with xor
-      PaymentId::Unencrypted(_) => self,
-      PaymentId::Encrypted(id) => {
-        PaymentId::Encrypted((u64::from_le_bytes(id) ^ u64::from_le_bytes(bytes)).to_le_bytes())
+      Self::Unencrypted(_) => self,
+      Self::Encrypted(id) => {
+        Self::Encrypted((u64::from_le_bytes(id) ^ u64::from_le_bytes(bytes)).to_le_bytes())
       }
     }
   }
@@ -46,11 +46,11 @@ impl BitXor<[u8; 8]> for PaymentId {
 impl PaymentId {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      PaymentId::Unencrypted(id) => {
+      Self::Unencrypted(id) => {
         w.write_all(&[PAYMENT_ID_MARKER])?;
         w.write_all(id)?;
       }
-      PaymentId::Encrypted(id) => {
+      Self::Encrypted(id) => {
         w.write_all(&[ENCRYPTED_PAYMENT_ID_MARKER])?;
         w.write_all(id)?;
       }
@@ -58,10 +58,10 @@ impl PaymentId {
     Ok(())
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<PaymentId> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     Ok(match read_byte(r)? {
-      0 => PaymentId::Unencrypted(read_bytes(r)?),
-      1 => PaymentId::Encrypted(read_bytes(r)?),
+      0 => Self::Unencrypted(read_bytes(r)?),
+      1 => Self::Encrypted(read_bytes(r)?),
       _ => Err(io::Error::new(io::ErrorKind::Other, "unknown payment ID type"))?,
     })
   }
@@ -79,20 +79,20 @@ pub enum ExtraField {
 impl ExtraField {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      ExtraField::PublicKey(key) => {
+      Self::PublicKey(key) => {
         w.write_all(&[1])?;
         w.write_all(&key.compress().to_bytes())?;
       }
-      ExtraField::Nonce(data) => {
+      Self::Nonce(data) => {
         w.write_all(&[2])?;
         write_vec(write_byte, data, w)?;
       }
-      ExtraField::MergeMining(height, merkle) => {
+      Self::MergeMining(height, merkle) => {
         w.write_all(&[3])?;
         write_varint(&u64::try_from(*height).unwrap(), w)?;
         w.write_all(merkle)?;
       }
-      ExtraField::PublicKeys(keys) => {
+      Self::PublicKeys(keys) => {
         w.write_all(&[4])?;
         write_vec(write_point, keys, w)?;
       }
@@ -100,22 +100,22 @@ impl ExtraField {
     Ok(())
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<ExtraField> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     Ok(match read_byte(r)? {
-      1 => ExtraField::PublicKey(read_point(r)?),
-      2 => ExtraField::Nonce({
+      1 => Self::PublicKey(read_point(r)?),
+      2 => Self::Nonce({
         let nonce = read_vec(read_byte, r)?;
         if nonce.len() > MAX_TX_EXTRA_NONCE_SIZE {
           Err(io::Error::new(io::ErrorKind::Other, "too long nonce"))?;
         }
         nonce
       }),
-      3 => ExtraField::MergeMining(
+      3 => Self::MergeMining(
         usize::try_from(read_varint(r)?)
           .map_err(|_| io::Error::new(io::ErrorKind::Other, "varint for height exceeds usize"))?,
         read_bytes(r)?,
       ),
-      4 => ExtraField::PublicKeys(read_vec(read_point, r)?),
+      4 => Self::PublicKeys(read_vec(read_point, r)?),
       _ => Err(io::Error::new(io::ErrorKind::Other, "unknown extra field"))?,
     })
   }
@@ -124,6 +124,7 @@ impl ExtraField {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Extra(Vec<ExtraField>);
 impl Extra {
+  #[must_use]
   pub fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
     let mut key = None;
     let mut additional = None;
@@ -131,7 +132,7 @@ impl Extra {
       match field.clone() {
         ExtraField::PublicKey(this_key) => key = key.or(Some(this_key)),
         ExtraField::PublicKeys(these_additional) => {
-          additional = additional.or(Some(these_additional))
+          additional = additional.or(Some(these_additional));
         }
         _ => (),
       }
@@ -140,6 +141,7 @@ impl Extra {
     key.map(|key| (key, additional))
   }
 
+  #[must_use]
   pub fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
@@ -149,6 +151,7 @@ impl Extra {
     None
   }
 
+  #[must_use]
   pub fn data(&self) -> Vec<Vec<u8>> {
     let mut res = vec![];
     for field in &self.0 {
@@ -161,8 +164,8 @@ impl Extra {
     res
   }
 
-  pub(crate) fn new(key: EdwardsPoint, additional: Vec<EdwardsPoint>) -> Extra {
-    let mut res = Extra(Vec::with_capacity(3));
+  pub(crate) fn new(key: EdwardsPoint, additional: Vec<EdwardsPoint>) -> Self {
+    let mut res = Self(Vec::with_capacity(3));
     res.push(ExtraField::PublicKey(key));
     if !additional.is_empty() {
       res.push(ExtraField::PublicKeys(additional));
@@ -198,14 +201,15 @@ impl Extra {
     Ok(())
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = vec![];
     self.write(&mut buf).unwrap();
     buf
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Extra> {
-    let mut res = Extra(vec![]);
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    let mut res = Self(vec![]);
     let mut field;
     while {
       field = ExtraField::read(r);

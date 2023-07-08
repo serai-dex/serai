@@ -15,7 +15,11 @@
 -A clippy::redundant_pub_crate
 -A clippy::similar_names
 
+# Flags on any debug_assert using an RNG
+-A clippy::debug_assert_with_mut_call
+
 # Frequently used
+-A clippy::large_types_passed_by_value
 -A clippy::wildcard_imports
 -A clippy::too_many_lines
 

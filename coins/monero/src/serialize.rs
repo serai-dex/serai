@@ -125,7 +125,7 @@ pub(crate) fn read_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {
 pub(crate) fn read_torsion_free_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {
   read_point(r)
     .ok()
-    .filter(|point| point.is_torsion_free())
+    .filter(EdwardsPoint::is_torsion_free)
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))
 }
 

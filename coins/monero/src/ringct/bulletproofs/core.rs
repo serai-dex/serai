@@ -50,13 +50,13 @@ pub(crate) fn vector_exponent(
 
 pub(crate) fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
   let slice =
-    &[cache.to_bytes().as_ref(), mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()]
+    &[cache.to_bytes().as_ref(), mash.iter().copied().flatten().collect::<Vec<_>>().as_ref()]
       .concat();
   *cache = hash_to_scalar(slice);
   *cache
 }
 
-pub(crate) fn MN(outputs: usize) -> (usize, usize, usize) {
+pub(crate) const fn MN(outputs: usize) -> (usize, usize, usize) {
   let mut logM = 0;
   let mut M;
   while {
@@ -78,10 +78,8 @@ pub(crate) fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, Scalar
 
   for j in 0 .. M {
     for i in (0 .. N).rev() {
-      let mut bit = Choice::from(0);
-      if j < sv.len() {
-        bit = Choice::from((sv[j][i / 8] >> (i % 8)) & 1);
-      }
+      let bit =
+        if j < sv.len() { Choice::from((sv[j][i / 8] >> (i % 8)) & 1) } else { Choice::from(0) };
       aL.0[(j * N) + i] = Scalar::conditional_select(&Scalar::ZERO, &Scalar::ONE, bit);
       aR.0[(j * N) + i] = Scalar::conditional_select(&-Scalar::ONE, &Scalar::ZERO, bit);
     }
@@ -118,9 +116,9 @@ pub(crate) fn LR_statements(
   let mut res = a
     .0
     .iter()
-    .cloned()
-    .zip(G_i.iter().cloned())
-    .chain(b.0.iter().cloned().zip(H_i.iter().cloned()))
+    .copied()
+    .zip(G_i.iter().copied())
+    .chain(b.0.iter().copied().zip(H_i.iter().copied()))
     .collect::<Vec<_>>();
   res.push((cL, U));
   res

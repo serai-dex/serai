@@ -27,6 +27,7 @@ use crate::{
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
+#[must_use]
 pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
   hash_to_point(&ED25519_BASEPOINT_TABLE * secret.deref()) * secret.deref()
 }
@@ -38,21 +39,21 @@ pub enum EncryptedAmount {
 }
 
 impl EncryptedAmount {
-  pub fn read<R: Read>(compact: bool, r: &mut R) -> io::Result<EncryptedAmount> {
-    Ok(if !compact {
-      EncryptedAmount::Original { mask: read_bytes(r)?, amount: read_bytes(r)? }
+  pub fn read<R: Read>(compact: bool, r: &mut R) -> io::Result<Self> {
+    Ok(if compact {
+      Self::Compact { amount: read_bytes(r)? }
     } else {
-      EncryptedAmount::Compact { amount: read_bytes(r)? }
+      Self::Original { mask: read_bytes(r)?, amount: read_bytes(r)? }
     })
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      EncryptedAmount::Original { mask, amount } => {
+      Self::Original { mask, amount } => {
         w.write_all(mask)?;
         w.write_all(amount)
       }
-      EncryptedAmount::Compact { amount } => w.write_all(amount),
+      Self::Compact { amount } => w.write_all(amount),
     }
   }
 }
@@ -77,40 +78,38 @@ pub enum RctType {
 }
 
 impl RctType {
-  pub fn to_byte(self) -> u8 {
+  #[must_use]
+  pub const fn to_byte(self) -> u8 {
     match self {
-      RctType::Null => 0,
-      RctType::MlsagAggregate => 1,
-      RctType::MlsagIndividual => 2,
-      RctType::Bulletproofs => 3,
-      RctType::BulletproofsCompactAmount => 4,
-      RctType::Clsag => 5,
-      RctType::BulletproofsPlus => 6,
+      Self::Null => 0,
+      Self::MlsagAggregate => 1,
+      Self::MlsagIndividual => 2,
+      Self::Bulletproofs => 3,
+      Self::BulletproofsCompactAmount => 4,
+      Self::Clsag => 5,
+      Self::BulletproofsPlus => 6,
     }
   }
 
+  #[must_use]
   pub fn from_byte(byte: u8) -> Option<Self> {
     Some(match byte {
-      0 => RctType::Null,
-      1 => RctType::MlsagAggregate,
-      2 => RctType::MlsagIndividual,
-      3 => RctType::Bulletproofs,
-      4 => RctType::BulletproofsCompactAmount,
-      5 => RctType::Clsag,
-      6 => RctType::BulletproofsPlus,
+      0 => Self::Null,
+      1 => Self::MlsagAggregate,
+      2 => Self::MlsagIndividual,
+      3 => Self::Bulletproofs,
+      4 => Self::BulletproofsCompactAmount,
+      5 => Self::Clsag,
+      6 => Self::BulletproofsPlus,
       _ => None?,
     })
   }
 
-  pub fn compact_encrypted_amounts(&self) -> bool {
+  #[must_use]
+  pub const fn compact_encrypted_amounts(&self) -> bool {
     match self {
-      RctType::Null => false,
-      RctType::MlsagAggregate => false,
-      RctType::MlsagIndividual => false,
-      RctType::Bulletproofs => false,
-      RctType::BulletproofsCompactAmount => true,
-      RctType::Clsag => true,
-      RctType::BulletproofsPlus => true,
+      Self::Null | Self::MlsagAggregate | Self::MlsagIndividual | Self::Bulletproofs => false,
+      Self::BulletproofsCompactAmount | Self::Clsag | Self::BulletproofsPlus => true,
     }
   }
 }
@@ -124,7 +123,7 @@ pub struct RctBase {
 }
 
 impl RctBase {
-  pub(crate) fn fee_weight(outputs: usize) -> usize {
+  pub(crate) const fn fee_weight(outputs: usize) -> usize {
     1 + 8 + (outputs * (8 + 32))
   }
 
@@ -132,7 +131,12 @@ impl RctBase {
     w.write_all(&[rct_type.to_byte()])?;
     match rct_type {
       RctType::Null => Ok(()),
-      _ => {
+      RctType::MlsagAggregate |
+      RctType::MlsagIndividual |
+      RctType::Bulletproofs |
+      RctType::BulletproofsCompactAmount |
+      RctType::Clsag |
+      RctType::BulletproofsPlus => {
         write_varint(&self.fee, w)?;
         if rct_type == RctType::MlsagIndividual {
           write_raw_vec(write_point, &self.pseudo_outs, w)?;
@@ -145,14 +149,12 @@ impl RctBase {
     }
   }
 
-  pub fn read<R: Read>(inputs: usize, outputs: usize, r: &mut R) -> io::Result<(RctBase, RctType)> {
+  pub fn read<R: Read>(inputs: usize, outputs: usize, r: &mut R) -> io::Result<(Self, RctType)> {
     let rct_type = RctType::from_byte(read_byte(r)?)
       .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid RCT type"))?;
 
     match rct_type {
-      RctType::Null => {}
-      RctType::MlsagAggregate => {}
-      RctType::MlsagIndividual => {}
+      RctType::Null | RctType::MlsagAggregate | RctType::MlsagIndividual => {}
       RctType::Bulletproofs |
       RctType::BulletproofsCompactAmount |
       RctType::Clsag |
@@ -170,9 +172,9 @@ impl RctBase {
 
     Ok((
       if rct_type == RctType::Null {
-        RctBase { fee: 0, pseudo_outs: vec![], encrypted_amounts: vec![], commitments: vec![] }
+        Self { fee: 0, pseudo_outs: vec![], encrypted_amounts: vec![], commitments: vec![] }
       } else {
-        RctBase {
+        Self {
           fee: read_varint(r)?,
           pseudo_outs: if rct_type == RctType::MlsagIndividual {
             read_raw_vec(read_point, inputs, r)?
@@ -217,12 +219,12 @@ impl RctPrunable {
 
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
     match self {
-      RctPrunable::Null => Ok(()),
-      RctPrunable::MlsagBorromean { borromean, mlsags } => {
+      Self::Null => Ok(()),
+      Self::MlsagBorromean { borromean, mlsags } => {
         write_raw_vec(BorromeanRange::write, borromean, w)?;
         write_raw_vec(Mlsag::write, mlsags, w)
       }
-      RctPrunable::MlsagBulletproofs { bulletproofs, mlsags, pseudo_outs } => {
+      Self::MlsagBulletproofs { bulletproofs, mlsags, pseudo_outs } => {
         if rct_type == RctType::Bulletproofs {
           w.write_all(&1u32.to_le_bytes())?;
         } else {
@@ -233,7 +235,7 @@ impl RctPrunable {
         write_raw_vec(Mlsag::write, mlsags, w)?;
         write_raw_vec(write_point, pseudo_outs, w)
       }
-      RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
+      Self::Clsag { bulletproofs, clsags, pseudo_outs } => {
         w.write_all(&[1])?;
         bulletproofs.write(w)?;
 
@@ -243,6 +245,7 @@ impl RctPrunable {
     }
   }
 
+  #[must_use]
   pub fn serialize(&self, rct_type: RctType) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized, rct_type).unwrap();
@@ -254,31 +257,29 @@ impl RctPrunable {
     decoys: &[usize],
     outputs: usize,
     r: &mut R,
-  ) -> io::Result<RctPrunable> {
+  ) -> io::Result<Self> {
     Ok(match rct_type {
-      RctType::Null => RctPrunable::Null,
-      RctType::MlsagAggregate | RctType::MlsagIndividual => RctPrunable::MlsagBorromean {
+      RctType::Null => Self::Null,
+      RctType::MlsagAggregate | RctType::MlsagIndividual => Self::MlsagBorromean {
         borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
         mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
       },
-      RctType::Bulletproofs | RctType::BulletproofsCompactAmount => {
-        RctPrunable::MlsagBulletproofs {
-          bulletproofs: {
-            if (if rct_type == RctType::Bulletproofs {
-              u64::from(read_u32(r)?)
-            } else {
-              read_varint(r)?
-            }) != 1
-            {
-              Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
-            }
-            Bulletproofs::read(r)?
-          },
-          mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
-          pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
-        }
-      }
-      RctType::Clsag | RctType::BulletproofsPlus => RctPrunable::Clsag {
+      RctType::Bulletproofs | RctType::BulletproofsCompactAmount => Self::MlsagBulletproofs {
+        bulletproofs: {
+          if (if rct_type == RctType::Bulletproofs {
+            u64::from(read_u32(r)?)
+          } else {
+            read_varint(r)?
+          }) != 1
+          {
+            Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
+          }
+          Bulletproofs::read(r)?
+        },
+        mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
+        pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
+      },
+      RctType::Clsag | RctType::BulletproofsPlus => Self::Clsag {
         bulletproofs: {
           if read_varint(r)? != 1 {
             Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
@@ -295,12 +296,10 @@ impl RctPrunable {
 
   pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
-      RctPrunable::MlsagBorromean { borromean, .. } => {
-        borromean.iter().try_for_each(|rs| rs.write(w))
-      }
-      RctPrunable::MlsagBulletproofs { bulletproofs, .. } => bulletproofs.signature_write(w),
-      RctPrunable::Clsag { bulletproofs, .. } => bulletproofs.signature_write(w),
+      Self::Null => panic!("Serializing RctPrunable::Null for a signature"),
+      Self::MlsagBorromean { borromean, .. } => borromean.iter().try_for_each(|rs| rs.write(w)),
+      Self::MlsagBulletproofs { bulletproofs, .. } => bulletproofs.signature_write(w),
+      Self::Clsag { bulletproofs, .. } => bulletproofs.signature_write(w),
     }
   }
 }
@@ -313,6 +312,7 @@ pub struct RctSignatures {
 
 impl RctSignatures {
   /// RctType for a given RctSignatures struct.
+  #[must_use]
   pub fn rct_type(&self) -> RctType {
     match &self.prunable {
       RctPrunable::Null => RctType::Null,
@@ -376,14 +376,15 @@ impl RctSignatures {
     self.prunable.write(w, rct_type)
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn read<R: Read>(decoys: Vec<usize>, outputs: usize, r: &mut R) -> io::Result<RctSignatures> {
+  pub fn read<R: Read>(decoys: Vec<usize>, outputs: usize, r: &mut R) -> io::Result<Self> {
     let base = RctBase::read(decoys.len(), outputs, r)?;
-    Ok(RctSignatures { base: base.0, prunable: RctPrunable::read(base.1, &decoys, outputs, r)? })
+    Ok(Self { base: base.0, prunable: RctPrunable::read(base.1, &decoys, outputs, r)? })
   }
 }

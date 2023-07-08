@@ -60,39 +60,42 @@ pub enum Protocol {
 
 impl Protocol {
   /// Amount of ring members under this protocol version.
-  pub fn ring_len(&self) -> usize {
+  #[must_use]
+  pub const fn ring_len(&self) -> usize {
     match self {
-      Protocol::v14 => 11,
-      Protocol::v16 => 16,
-      Protocol::Custom { ring_len, .. } => *ring_len,
+      Self::v14 => 11,
+      Self::v16 => 16,
+      Self::Custom { ring_len, .. } => *ring_len,
     }
   }
 
   /// Whether or not the specified version uses Bulletproofs or Bulletproofs+.
   ///
   /// This method will likely be reworked when versions not using Bulletproofs at all are added.
-  pub fn bp_plus(&self) -> bool {
+  #[must_use]
+  pub const fn bp_plus(&self) -> bool {
     match self {
-      Protocol::v14 => false,
-      Protocol::v16 => true,
-      Protocol::Custom { bp_plus, .. } => *bp_plus,
+      Self::v14 => false,
+      Self::v16 => true,
+      Self::Custom { bp_plus, .. } => *bp_plus,
     }
   }
 
   // TODO: Make this an Option when we support pre-RCT protocols
-  pub fn optimal_rct_type(&self) -> RctType {
+  #[must_use]
+  pub const fn optimal_rct_type(&self) -> RctType {
     match self {
-      Protocol::v14 => RctType::Clsag,
-      Protocol::v16 => RctType::BulletproofsPlus,
-      Protocol::Custom { optimal_rct_type, .. } => *optimal_rct_type,
+      Self::v14 => RctType::Clsag,
+      Self::v16 => RctType::BulletproofsPlus,
+      Self::Custom { optimal_rct_type, .. } => *optimal_rct_type,
     }
   }
 
   pub(crate) fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
-      Protocol::v14 => w.write_all(&[0, 14]),
-      Protocol::v16 => w.write_all(&[0, 16]),
-      Protocol::Custom { ring_len, bp_plus, optimal_rct_type } => {
+      Self::v14 => w.write_all(&[0, 14]),
+      Self::v16 => w.write_all(&[0, 16]),
+      Self::Custom { ring_len, bp_plus, optimal_rct_type } => {
         // Custom, version 0
         w.write_all(&[1, 0])?;
         w.write_all(&u16::try_from(*ring_len).unwrap().to_le_bytes())?;
@@ -102,17 +105,17 @@ impl Protocol {
     }
   }
 
-  pub(crate) fn read<R: io::Read>(r: &mut R) -> io::Result<Protocol> {
+  pub(crate) fn read<R: io::Read>(r: &mut R) -> io::Result<Self> {
     Ok(match read_byte(r)? {
       // Monero protocol
       0 => match read_byte(r)? {
-        14 => Protocol::v14,
-        16 => Protocol::v16,
+        14 => Self::v14,
+        16 => Self::v16,
         _ => Err(io::Error::new(io::ErrorKind::Other, "unrecognized monero protocol"))?,
       },
       // Custom
       1 => match read_byte(r)? {
-        0 => Protocol::Custom {
+        0 => Self::Custom {
           ring_len: read_u16(r)?.into(),
           bp_plus: match read_byte(r)? {
             0 => false,
@@ -140,22 +143,26 @@ pub struct Commitment {
 }
 
 impl Commitment {
-  /// The zero commitment, defined as a mask of 1 (as to not be the identity) and a 0 amount.
-  pub fn zero() -> Commitment {
-    Commitment { mask: Scalar::one(), amount: 0 }
+  /// A commitment to zero, defined with a mask of 1 (as to not be the identity).
+  #[must_use]
+  pub fn zero() -> Self {
+    Self { mask: Scalar::one(), amount: 0 }
   }
 
-  pub fn new(mask: Scalar, amount: u64) -> Commitment {
-    Commitment { mask, amount }
+  #[must_use]
+  pub const fn new(mask: Scalar, amount: u64) -> Self {
+    Self { mask, amount }
   }
 
   /// Calculate a Pedersen commitment, as a point, from the transparent structure.
+  #[must_use]
   pub fn calculate(&self) -> EdwardsPoint {
     (&self.mask * &ED25519_BASEPOINT_TABLE) + (Scalar::from(self.amount) * H())
   }
 }
 
 /// Support generating a random scalar using a modern rand, as dalek's is notoriously dated.
+#[must_use]
 pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
   let mut r = [0; 64];
   rng.fill_bytes(&mut r);
@@ -167,6 +174,7 @@ pub(crate) fn hash(data: &[u8]) -> [u8; 32] {
 }
 
 /// Hash the provided data to a scalar via keccak256(data) % l.
+#[must_use]
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {
   let scalar = Scalar::from_bytes_mod_order(hash(data));
   // Monero will explicitly error in this case

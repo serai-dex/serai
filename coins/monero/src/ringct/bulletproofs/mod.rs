@@ -62,14 +62,14 @@ impl Bulletproofs {
     rng: &mut R,
     outputs: &[Commitment],
     plus: bool,
-  ) -> Result<Bulletproofs, TransactionError> {
+  ) -> Result<Self, TransactionError> {
     if outputs.len() > MAX_OUTPUTS {
       return Err(TransactionError::TooManyOutputs)?;
     }
     Ok(if !plus {
-      Bulletproofs::Original(OriginalStruct::prove(rng, outputs))
+      Self::Plus(PlusStruct::prove(rng, outputs))
     } else {
-      Bulletproofs::Plus(PlusStruct::prove(rng, outputs))
+      Self::Original(OriginalStruct::prove(rng, outputs))
     })
   }
 
@@ -77,8 +77,8 @@ impl Bulletproofs {
   #[must_use]
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     match self {
-      Bulletproofs::Original(bp) => bp.verify(rng, commitments),
-      Bulletproofs::Plus(bp) => bp.verify(rng, commitments),
+      Self::Original(bp) => bp.verify(rng, commitments),
+      Self::Plus(bp) => bp.verify(rng, commitments),
     }
   }
 
@@ -94,8 +94,8 @@ impl Bulletproofs {
     commitments: &[EdwardsPoint],
   ) -> bool {
     match self {
-      Bulletproofs::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
-      Bulletproofs::Plus(bp) => bp.batch_verify(rng, verifier, id, commitments),
+      Self::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
+      Self::Plus(bp) => bp.batch_verify(rng, verifier, id, commitments),
     }
   }
 
@@ -105,7 +105,7 @@ impl Bulletproofs {
     specific_write_vec: F,
   ) -> io::Result<()> {
     match self {
-      Bulletproofs::Original(bp) => {
+      Self::Original(bp) => {
         write_point(&bp.A, w)?;
         write_point(&bp.S, w)?;
         write_point(&bp.T1, w)?;
@@ -119,7 +119,7 @@ impl Bulletproofs {
         write_scalar(&bp.t, w)
       }
 
-      Bulletproofs::Plus(bp) => {
+      Self::Plus(bp) => {
         write_point(&bp.A, w)?;
         write_point(&bp.A1, w)?;
         write_point(&bp.B, w)?;
@@ -140,6 +140,7 @@ impl Bulletproofs {
     self.write_core(w, |points, w| write_vec(write_point, points, w))
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
@@ -147,8 +148,8 @@ impl Bulletproofs {
   }
 
   /// Read Bulletproofs.
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Bulletproofs> {
-    Ok(Bulletproofs::Original(OriginalStruct {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self::Original(OriginalStruct {
       A: read_point(r)?,
       S: read_point(r)?,
       T1: read_point(r)?,
@@ -164,8 +165,8 @@ impl Bulletproofs {
   }
 
   /// Read Bulletproofs+.
-  pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Bulletproofs> {
-    Ok(Bulletproofs::Plus(PlusStruct {
+  pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self::Plus(PlusStruct {
       A: read_point(r)?,
       A1: read_point(r)?,
       B: read_point(r)?,

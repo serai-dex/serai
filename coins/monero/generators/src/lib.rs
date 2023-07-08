@@ -61,6 +61,7 @@ pub struct Generators {
 }
 
 /// Generate generators as needed for Bulletproofs(+), as Monero does.
+#[must_use]
 pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
   let mut res =
     Generators { G: [EdwardsPoint::identity(); MAX_MN], H: [EdwardsPoint::identity(); MAX_MN] };

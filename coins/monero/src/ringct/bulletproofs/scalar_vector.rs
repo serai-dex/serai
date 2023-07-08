@@ -13,9 +13,9 @@ pub(crate) struct ScalarVector(pub(crate) Vec<Scalar>);
 macro_rules! math_op {
   ($Op: ident, $op: ident, $f: expr) => {
     impl $Op<Scalar> for ScalarVector {
-      type Output = ScalarVector;
-      fn $op(self, b: Scalar) -> ScalarVector {
-        ScalarVector(self.0.iter().map(|a| $f((a, &b))).collect())
+      type Output = Self;
+      fn $op(self, b: Scalar) -> Self {
+        Self(self.0.iter().map(|a| $f((a, &b))).collect())
       }
     }
 
@@ -27,16 +27,16 @@ macro_rules! math_op {
     }
 
     impl $Op<ScalarVector> for ScalarVector {
-      type Output = ScalarVector;
-      fn $op(self, b: ScalarVector) -> ScalarVector {
+      type Output = Self;
+      fn $op(self, b: Self) -> Self {
         debug_assert_eq!(self.len(), b.len());
-        ScalarVector(self.0.iter().zip(b.0.iter()).map($f).collect())
+        Self(self.0.iter().zip(b.0.iter()).map($f).collect())
       }
     }
 
-    impl $Op<&ScalarVector> for &ScalarVector {
+    impl $Op<Self> for &ScalarVector {
       type Output = ScalarVector;
-      fn $op(self, b: &ScalarVector) -> ScalarVector {
+      fn $op(self, b: Self) -> ScalarVector {
         debug_assert_eq!(self.len(), b.len());
         ScalarVector(self.0.iter().zip(b.0.iter()).map($f).collect())
       }
@@ -48,11 +48,11 @@ math_op!(Sub, sub, |(a, b): (&Scalar, &Scalar)| *a - *b);
 math_op!(Mul, mul, |(a, b): (&Scalar, &Scalar)| *a * *b);
 
 impl ScalarVector {
-  pub(crate) fn new(len: usize) -> ScalarVector {
-    ScalarVector(vec![Scalar::ZERO; len])
+  pub(crate) fn new(len: usize) -> Self {
+    Self(vec![Scalar::ZERO; len])
   }
 
-  pub(crate) fn powers(x: Scalar, len: usize) -> ScalarVector {
+  pub(crate) fn powers(x: Scalar, len: usize) -> Self {
     debug_assert!(len != 0);
 
     let mut res = Vec::with_capacity(len);
@@ -60,16 +60,16 @@ impl ScalarVector {
     for i in 1 .. len {
       res.push(res[i - 1] * x);
     }
-    ScalarVector(res)
+    Self(res)
   }
 
-  pub(crate) fn even_powers(x: Scalar, pow: usize) -> ScalarVector {
+  pub(crate) fn even_powers(x: Scalar, pow: usize) -> Self {
     debug_assert!(pow != 0);
     // Verify pow is a power of two
     debug_assert_eq!(((pow - 1) & pow), 0);
 
     let xsq = x * x;
-    let mut res = ScalarVector(Vec::with_capacity(pow / 2));
+    let mut res = Self(Vec::with_capacity(pow / 2));
     res.0.push(xsq);
 
     let mut prev = 2;
@@ -89,9 +89,9 @@ impl ScalarVector {
     self.0.len()
   }
 
-  pub(crate) fn split(self) -> (ScalarVector, ScalarVector) {
+  pub(crate) fn split(self) -> (Self, Self) {
     let (l, r) = self.0.split_at(self.0.len() / 2);
-    (ScalarVector(l.to_vec()), ScalarVector(r.to_vec()))
+    (Self(l.to_vec()), Self(r.to_vec()))
   }
 }
 
@@ -119,7 +119,7 @@ impl Mul<&[EdwardsPoint]> for &ScalarVector {
   type Output = EdwardsPoint;
   fn mul(self, b: &[EdwardsPoint]) -> EdwardsPoint {
     debug_assert_eq!(self.len(), b.len());
-    multiexp(&self.0.iter().cloned().zip(b.iter().cloned()).collect::<Vec<_>>())
+    multiexp(&self.0.iter().copied().zip(b.iter().copied()).collect::<Vec<_>>())
   }
 }
 

@@ -72,7 +72,7 @@ impl SendOutput {
     output: (usize, (MoneroAddress, u64)),
     ecdh: EdwardsPoint,
     R: EdwardsPoint,
-  ) -> (SendOutput, Option<[u8; 8]>) {
+  ) -> (Self, Option<[u8; 8]>) {
     let o = output.0;
     let output = output.1;
 
@@ -80,7 +80,7 @@ impl SendOutput {
       shared_key(Some(unique).filter(|_| output.0.is_guaranteed()), ecdh, o);
 
     (
-      SendOutput {
+      Self {
         R,
         view_tag,
         dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
@@ -98,16 +98,16 @@ impl SendOutput {
     r: &Zeroizing<Scalar>,
     unique: [u8; 32],
     output: (usize, (MoneroAddress, u64)),
-  ) -> (SendOutput, Option<[u8; 8]>) {
+  ) -> (Self, Option<[u8; 8]>) {
     let address = output.1 .0;
-    SendOutput::internal(
+    Self::internal(
       unique,
       output,
       r.deref() * address.view,
-      if !address.is_subaddress() {
-        r.deref() * &ED25519_BASEPOINT_TABLE
-      } else {
+      if address.is_subaddress() {
         r.deref() * address.spend
+      } else {
+        r.deref() * &ED25519_BASEPOINT_TABLE
       },
     )
   }
@@ -116,8 +116,8 @@ impl SendOutput {
     ecdh: EdwardsPoint,
     unique: [u8; 32],
     output: (usize, (MoneroAddress, u64)),
-  ) -> (SendOutput, Option<[u8; 8]>) {
-    SendOutput::internal(unique, output, ecdh, ED25519_BASEPOINT_POINT)
+  ) -> (Self, Option<[u8; 8]>) {
+    Self::internal(unique, output, ecdh, ED25519_BASEPOINT_POINT)
   }
 }
 
@@ -211,6 +211,7 @@ pub struct Fee {
 }
 
 impl Fee {
+  #[must_use]
   pub fn calculate(&self, weight: usize) -> u64 {
     ((((self.per_weight * u64::try_from(weight).unwrap()) - 1) / self.mask) + 1) * self.mask
   }
@@ -261,8 +262,9 @@ impl fmt::Debug for Change {
 
 impl Change {
   /// Create a change output specification from a ViewPair, as needed to maintain privacy.
-  pub fn new(view: &ViewPair, guaranteed: bool) -> Change {
-    Change {
+  #[must_use]
+  pub fn new(view: &ViewPair, guaranteed: bool) -> Self {
+    Self {
       address: view.address(
         Network::Mainnet,
         if !guaranteed {
@@ -275,10 +277,12 @@ impl Change {
     }
   }
 
-  /// Create a fingerprintable change output specification which will harm privacy. Only use this
-  /// if you know what you're doing.
-  pub fn fingerprintable(address: MoneroAddress) -> Change {
-    Change { address, view: None }
+  /// Create a fingerprintable change output specification which will harm privacy.
+  ///
+  /// Only use this if you know what you're doing.
+  #[must_use]
+  pub const fn fingerprintable(address: MoneroAddress) -> Self {
+    Self { address, view: None }
   }
 }
 
@@ -296,17 +300,17 @@ impl SignableTransaction {
     protocol: Protocol,
     r_seed: Option<Zeroizing<[u8; 32]>>,
     inputs: Vec<SpendableOutput>,
-    mut payments: Vec<(MoneroAddress, u64)>,
+    payments: Vec<(MoneroAddress, u64)>,
     change_address: Option<Change>,
     data: Vec<Vec<u8>>,
     fee_rate: Fee,
-  ) -> Result<SignableTransaction, TransactionError> {
+  ) -> Result<Self, TransactionError> {
     // Make sure there's only one payment ID
     let mut has_payment_id = {
       let mut payment_ids = 0;
       let mut count = |addr: MoneroAddress| {
         if addr.payment_id().is_some() {
-          payment_ids += 1
+          payment_ids += 1;
         }
       };
       for payment in &payments {
@@ -382,15 +386,16 @@ impl SignableTransaction {
       Err(TransactionError::TooManyOutputs)?;
     }
 
-    let mut payments = payments.drain(..).map(InternalPayment::Payment).collect::<Vec<_>>();
+    let mut payments = payments.into_iter().map(InternalPayment::Payment).collect::<Vec<_>>();
     if let Some(change) = change_address {
       payments.push(InternalPayment::Change(change, in_amount - out_amount));
     }
 
-    Ok(SignableTransaction { protocol, r_seed, inputs, payments, data, fee })
+    Ok(Self { protocol, r_seed, inputs, payments, data, fee })
   }
 
-  pub fn fee(&self) -> u64 {
+  #[must_use]
+  pub const fn fee(&self) -> u64 {
     self.fee
   }
 
@@ -444,11 +449,8 @@ impl SignableTransaction {
       0;
 
     // We need additional keys if we have any subaddresses
-    let mut additional = subaddresses;
-    // Unless the above change view key path is taken
-    if (payments.len() == 2) && has_change_view {
-      additional = false;
-    }
+    // UNLESS there's only two payments and we have the view-key for the change output
+    let additional = if (payments.len() == 2) && has_change_view { false } else { subaddresses };
     let modified_change_ecdh = subaddresses && (!additional);
 
     // If we're using the aR rewrite, update tx_public_key from rG to rB
@@ -562,11 +564,13 @@ impl SignableTransaction {
   }
 
   /// Returns the eventuality of this transaction.
+  ///
   /// The eventuality is defined as the TX extra/outputs this transaction will create, if signed
   /// with the specified seed. This eventuality can be compared to on-chain transactions to see
   /// if the transaction has already been signed and published.
+  #[must_use]
   pub fn eventuality(&self) -> Option<Eventuality> {
-    let inputs = self.inputs.iter().map(|input| input.key()).collect::<Vec<_>>();
+    let inputs = self.inputs.iter().map(SpendableOutput::key).collect::<Vec<_>>();
     let (tx_key, additional, outputs, id) = Self::prepare_payments(
       self.r_seed.as_ref()?,
       &inputs,
@@ -606,7 +610,7 @@ impl SignableTransaction {
 
     let (tx_key, additional, outputs, id) = Self::prepare_payments(
       &r_seed,
-      &self.inputs.iter().map(|input| input.key()).collect::<Vec<_>>(),
+      &self.inputs.iter().map(SpendableOutput::key).collect::<Vec<_>>(),
       &mut self.payments,
       uniqueness,
     );
@@ -656,7 +660,7 @@ impl SignableTransaction {
             fee,
             encrypted_amounts,
             pseudo_outs: vec![],
-            commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
+            commitments: commitments.iter().map(Commitment::calculate).collect(),
           },
           prunable: RctPrunable::Clsag { bulletproofs: bp, clsags: vec![], pseudo_outs: vec![] },
         },
@@ -704,7 +708,9 @@ impl SignableTransaction {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
         pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1).collect::<Vec<_>>());
       }
-      _ => unreachable!("attempted to sign a TX which wasn't CLSAG"),
+      RctPrunable::MlsagBorromean { .. } | RctPrunable::MlsagBulletproofs { .. } => {
+        unreachable!("attempted to sign a TX which wasn't CLSAG")
+      }
     }
     Ok(tx)
   }
@@ -713,13 +719,19 @@ impl SignableTransaction {
 impl Eventuality {
   /// Enables building a HashMap of Extra -> Eventuality for efficiently checking if an on-chain
   /// transaction may match this eventuality.
+  ///
   /// This extra is cryptographically bound to:
   /// 1) A specific set of inputs (via their output key)
   /// 2) A specific seed for the ephemeral keys
+  ///
+  /// This extra may be used with a transaction with a distinct set of inputs, yet no honest
+  /// transaction which doesn't satisfy this Eventuality will contain it.
+  #[must_use]
   pub fn extra(&self) -> &[u8] {
     &self.extra
   }
 
+  #[must_use]
   pub fn matches(&self, tx: &Transaction) -> bool {
     if self.payments.len() != tx.prefix.outputs.len() {
       return false;
@@ -752,9 +764,10 @@ impl Eventuality {
     }
 
     // TODO: Remove this when the following for loop is updated
-    if !rct_type.compact_encrypted_amounts() {
-      panic!("created an Eventuality for a very old RctType we don't support proving for");
-    }
+    assert!(
+      rct_type.compact_encrypted_amounts(),
+      "created an Eventuality for a very old RctType we don't support proving for"
+    );
 
     for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
       // Verify the output, commitment, and encrypted amount.
@@ -804,18 +817,19 @@ impl Eventuality {
     write_vec(write_byte, &self.extra, w)
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = Vec::with_capacity(128);
     self.write(&mut buf).unwrap();
     buf
   }
 
-  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Eventuality> {
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Self> {
     fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {
       String::from_utf8(read_vec(read_byte, r)?)
         .ok()
         .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
-        .ok_or(io::Error::new(io::ErrorKind::Other, "invalid address"))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid address"))
     }
 
     fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {
@@ -836,7 +850,7 @@ impl Eventuality {
       })
     }
 
-    Ok(Eventuality {
+    Ok(Self {
       protocol: Protocol::read(r)?,
       r_seed: Zeroizing::new(read_bytes::<_, 32>(r)?),
       inputs: read_vec(read_point, r)?,

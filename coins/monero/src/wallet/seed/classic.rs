@@ -33,8 +33,8 @@ struct WordList {
 }
 
 impl WordList {
-  fn new(word_list: Vec<&'static str>, prefix_length: usize) -> WordList {
-    let mut lang = WordList {
+  fn new(word_list: Vec<&'static str>, prefix_length: usize) -> Self {
+    let mut lang = Self {
       word_list,
       word_map: HashMap::new(),
       trimmed_word_map: HashMap::new(),
@@ -74,10 +74,10 @@ fn LANGUAGES() -> &'static HashMap<Language, WordList> {
 
 #[cfg(test)]
 pub(crate) fn trim_by_lang(word: &str, lang: Language) -> String {
-  if lang != Language::EnglishOld {
-    word.chars().take(LANGUAGES()[&lang].unique_prefix_length).collect()
-  } else {
+  if lang == Language::EnglishOld {
     word.to_string()
+  } else {
+    word.chars().take(LANGUAGES()[&lang].unique_prefix_length).collect()
   }
 }
 
@@ -239,11 +239,11 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct ClassicSeed(Zeroizing<String>);
 impl ClassicSeed {
-  pub(crate) fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> ClassicSeed {
+  pub(crate) fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> Self {
     key_to_seed(lang, Zeroizing::new(random_scalar(rng)))
   }
 
-  pub fn from_string(words: Zeroizing<String>) -> Result<ClassicSeed, SeedError> {
+  pub fn from_string(words: Zeroizing<String>) -> Result<Self, SeedError> {
     let (lang, entropy) = seed_to_bytes(&words)?;
 
     // Make sure this is a valid scalar
@@ -257,7 +257,7 @@ impl ClassicSeed {
     Ok(Self::from_entropy(lang, entropy).unwrap())
   }
 
-  pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<ClassicSeed> {
+  pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<Self> {
     Scalar::from_canonical_bytes(*entropy).map(|scalar| key_to_seed(lang, Zeroizing::new(scalar)))
   }
 

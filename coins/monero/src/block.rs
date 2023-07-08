@@ -33,14 +33,15 @@ impl BlockHeader {
     w.write_all(&self.nonce.to_le_bytes())
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<BlockHeader> {
-    Ok(BlockHeader {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self {
       major_version: read_varint(r)?,
       minor_version: read_varint(r)?,
       timestamp: read_varint(r)?,
@@ -58,6 +59,7 @@ pub struct Block {
 }
 
 impl Block {
+  #[must_use]
   pub fn number(&self) -> usize {
     match self.miner_tx.prefix.inputs.get(0) {
       Some(Input::Gen(number)) => (*number).try_into().unwrap(),
@@ -91,6 +93,7 @@ impl Block {
     out
   }
 
+  #[must_use]
   pub fn hash(&self) -> [u8; 32] {
     let hash = hash(&self.serialize_hashable());
     if hash == CORRECT_BLOCK_HASH_202612 {
@@ -100,14 +103,15 @@ impl Block {
     hash
   }
 
+  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Block> {
-    Ok(Block {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self {
       header: BlockHeader::read(r)?,
       miner_tx: Transaction::read(r)?,
       txs: (0 .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,

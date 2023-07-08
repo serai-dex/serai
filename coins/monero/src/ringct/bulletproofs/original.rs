@@ -36,10 +36,8 @@ pub struct OriginalStruct {
 }
 
 impl OriginalStruct {
-  pub(crate) fn prove<R: RngCore + CryptoRng>(
-    rng: &mut R,
-    commitments: &[Commitment],
-  ) -> OriginalStruct {
+  #[allow(clippy::many_single_char_names)]
+  pub(crate) fn prove<R: RngCore + CryptoRng>(rng: &mut R, commitments: &[Commitment]) -> Self {
     let (logMN, M, MN) = MN(commitments.len());
 
     let (aL, aR) = bit_decompose(commitments);
@@ -134,8 +132,8 @@ impl OriginalStruct {
 
       let L_i = prove_multiexp(&LR_statements(&aL, G_R, &bR, H_L, cL, U));
       let R_i = prove_multiexp(&LR_statements(&aR, G_L, &bL, H_R, cR, U));
-      L.push(L_i);
-      R.push(R_i);
+      L.push(*L_i);
+      R.push(*R_i);
 
       let w = hash_cache(&mut cache, &[L_i.compress().to_bytes(), R_i.compress().to_bytes()]);
       let winv = w.invert().unwrap();
@@ -149,15 +147,15 @@ impl OriginalStruct {
       }
     }
 
-    let res = OriginalStruct {
+    let res = Self {
       A: *A,
       S: *S,
       T1: *T1,
       T2: *T2,
       taux: *taux,
       mu: *mu,
-      L: L.drain(..).map(|L| *L).collect(),
-      R: R.drain(..).map(|R| *R).collect(),
+      L,
+      R,
       a: *a[0],
       b: *b[0],
       t: *t,
@@ -166,6 +164,7 @@ impl OriginalStruct {
     res
   }
 
+  #[allow(clippy::many_single_char_names)]
   #[must_use]
   fn verify_core<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
@@ -190,7 +189,7 @@ impl OriginalStruct {
     }
 
     // Rebuild all challenges
-    let (mut cache, commitments) = hash_commitments(commitments.iter().cloned());
+    let (mut cache, commitments) = hash_commitments(commitments.iter().copied());
     let y = hash_cache(&mut cache, &[self.A.compress().to_bytes(), self.S.compress().to_bytes()]);
 
     let z = hash_to_scalar(&y.to_bytes());
@@ -223,7 +222,7 @@ impl OriginalStruct {
     let A = normalize(&self.A);
     let S = normalize(&self.S);
 
-    let commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
+    let commitments = commitments.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
     // Verify it
     let mut proof = Vec::with_capacity(4 + commitments.len());

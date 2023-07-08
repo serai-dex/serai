@@ -28,10 +28,10 @@ fn serialize(generators_string: &mut String, points: &[EdwardsPoint]) {
 fn generators(prefix: &'static str, path: &str) {
   let generators = bulletproofs_generators(prefix.as_bytes());
   #[allow(non_snake_case)]
-  let mut G_str = "".to_string();
+  let mut G_str = String::new();
   serialize(&mut G_str, &generators.G);
   #[allow(non_snake_case)]
-  let mut H_str = "".to_string();
+  let mut H_str = String::new();
   serialize(&mut H_str, &generators.H);
 
   let path = Path::new(&env::var("OUT_DIR").unwrap()).join(path);

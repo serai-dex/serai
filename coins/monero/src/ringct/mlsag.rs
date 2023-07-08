@@ -19,20 +19,21 @@ pub struct Mlsag {
 
 impl Mlsag {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    for ss in self.ss.iter() {
+    for ss in &self.ss {
       write_raw_vec(write_scalar, ss, w)?;
     }
     write_scalar(&self.cc, w)
   }
 
-  pub fn read<R: Read>(mixins: usize, r: &mut R) -> io::Result<Mlsag> {
-    Ok(Mlsag {
+  pub fn read<R: Read>(mixins: usize, r: &mut R) -> io::Result<Self> {
+    Ok(Self {
       ss: (0 .. mixins).map(|_| read_array(read_scalar, r)).collect::<Result<_, _>>()?,
       cc: read_scalar(r)?,
     })
   }
 
   #[cfg(feature = "experimental")]
+  #[must_use]
   pub fn verify(
     &self,
     msg: &[u8; 32],

@@ -1,6 +1,8 @@
 use core::ops::Deref;
 #[cfg(feature = "multisig")]
-use std::sync::{Arc, RwLock};
+use std_shims::sync::Arc;
+#[cfg(feature = "multisig")]
+use std::sync::RwLock;
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
@@ -45,13 +47,12 @@ fn clsag() {
     for i in 0 .. RING_LEN {
       let dest = Zeroizing::new(random_scalar(&mut OsRng));
       let mask = random_scalar(&mut OsRng);
-      let amount;
-      if i == real {
+      let amount = if i == real {
         secrets = (dest.clone(), mask);
-        amount = AMOUNT;
+        AMOUNT
       } else {
-        amount = OsRng.next_u64();
-      }
+        OsRng.next_u64()
+      };
       ring
         .push([dest.deref() * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
@@ -90,16 +91,15 @@ fn clsag_multisig() {
   for i in 0 .. RING_LEN {
     let dest;
     let mask;
-    let amount;
-    if i != u64::from(RING_INDEX) {
-      dest = &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE;
-      mask = random_scalar(&mut OsRng);
-      amount = OsRng.next_u64();
-    } else {
+    let amount = if i == u64::from(RING_INDEX) {
       dest = keys[&Participant::new(1).unwrap()].group_key().0;
       mask = randomness;
-      amount = AMOUNT;
-    }
+      AMOUNT
+    } else {
+      dest = &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE;
+      mask = random_scalar(&mut OsRng);
+      OsRng.next_u64()
+    };
     ring.push([dest, Commitment::new(mask, amount).calculate()]);
   }
 
