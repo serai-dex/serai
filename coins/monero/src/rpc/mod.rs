@@ -299,9 +299,9 @@ impl<R: RpcConnection> Rpc<R> {
     match self.get_block(self.get_block_hash(number).await?).await {
       Ok(block) => {
         // Make sure this is actually the block for this number
-        match block.miner_tx.prefix.inputs[0] {
-          Input::Gen(actual) => {
-            if usize::try_from(actual).unwrap() == number {
+        match block.miner_tx.prefix.inputs.get(0) {
+          Some(Input::Gen(actual)) => {
+            if usize::try_from(*actual).unwrap() == number {
               Ok(block)
             } else {
               Err(RpcError::InvalidNode)

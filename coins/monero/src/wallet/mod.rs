@@ -241,9 +241,13 @@ impl ZeroizeOnDrop for Scanner {}
 
 impl Scanner {
   /// Create a Scanner from a ViewPair.
+  ///
   /// burning_bug is a HashSet of used keys, intended to prevent key reuse which would burn funds.
+  ///
   /// When an output is successfully scanned, the output key MUST be saved to disk.
+  ///
   /// When a new scanner is created, ALL saved output keys must be passed in to be secure.
+  ///
   /// If None is passed, a modified shared key derivation is used which is immune to the burning
   /// bug (specifically the Guaranteed feature from Featured Addresses).
   pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Scanner {

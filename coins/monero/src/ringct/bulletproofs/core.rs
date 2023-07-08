@@ -50,7 +50,7 @@ pub(crate) fn vector_exponent(
 
 pub(crate) fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
   let slice =
-    &[cache.to_bytes().as_ref(), mash.iter().cloned().flatten().collect::<Vec<_>>().as_ref()]
+    &[cache.to_bytes().as_ref(), mash.iter().copied().flatten().collect::<Vec<_>>().as_ref()]
       .concat();
   *cache = hash_to_scalar(slice);
   *cache
@@ -118,9 +118,9 @@ pub(crate) fn LR_statements(
   let mut res = a
     .0
     .iter()
-    .cloned()
-    .zip(G_i.iter().cloned())
-    .chain(b.0.iter().cloned().zip(H_i.iter().cloned()))
+    .copied()
+    .zip(G_i.iter().copied())
+    .chain(b.0.iter().copied().zip(H_i.iter().copied()))
     .collect::<Vec<_>>();
   res.push((cL, U));
   res

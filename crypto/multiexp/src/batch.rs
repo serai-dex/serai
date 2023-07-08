@@ -18,7 +18,7 @@ fn flat<Id: Copy + Zeroize, G: Group + Zeroize>(
 where
   <G as Group>::Scalar: PrimeFieldBits + Zeroize,
 {
-  Zeroizing::new(slice.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
+  Zeroizing::new(slice.iter().flat_map(|pairs| pairs.1.iter()).copied().collect::<Vec<_>>())
 }
 
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
@@ -35,7 +35,8 @@ where
   <G as Group>::Scalar: PrimeFieldBits + Zeroize,
 {
   /// Create a new batch verifier, expected to verify the following amount of statements.
-  /// This is a size hint and is not required to be accurate.
+  ///
+  /// `capacity` is a size hint and is not required to be accurate.
   pub fn new(capacity: usize) -> BatchVerifier<Id, G> {
     BatchVerifier(Zeroizing::new(Vec::with_capacity(capacity)))
   }

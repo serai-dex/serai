@@ -190,7 +190,7 @@ impl OriginalStruct {
     }
 
     // Rebuild all challenges
-    let (mut cache, commitments) = hash_commitments(commitments.iter().cloned());
+    let (mut cache, commitments) = hash_commitments(commitments.iter().copied());
     let y = hash_cache(&mut cache, &[self.A.compress().to_bytes(), self.S.compress().to_bytes()]);
 
     let z = hash_to_scalar(&y.to_bytes());

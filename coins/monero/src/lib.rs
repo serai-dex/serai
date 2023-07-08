@@ -140,7 +140,7 @@ pub struct Commitment {
 }
 
 impl Commitment {
-  /// The zero commitment, defined as a mask of 1 (as to not be the identity) and a 0 amount.
+  /// A commitment to zero, defined with a mask of 1 (as to not be the identity).
   pub fn zero() -> Commitment {
     Commitment { mask: Scalar::one(), amount: 0 }
   }

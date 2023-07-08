@@ -23,7 +23,7 @@ pub trait Db: 'static + Send + Sync + Clone + Debug + Get {
   fn key(db_dst: &'static [u8], item_dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     let db_len = u8::try_from(db_dst.len()).unwrap();
     let dst_len = u8::try_from(item_dst.len()).unwrap();
-    [[db_len].as_ref(), db_dst, [dst_len].as_ref(), item_dst, key.as_ref()].concat().to_vec()
+    [[db_len].as_ref(), db_dst, [dst_len].as_ref(), item_dst, key.as_ref()].concat()
   }
   fn txn(&mut self) -> Self::Transaction<'_>;
 }
@@ -38,7 +38,11 @@ impl<'a> Get for MemDbTxn<'a> {
     if self.2.contains(key.as_ref()) {
       return None;
     }
-    self.1.get(key.as_ref()).cloned().or(self.0 .0.read().unwrap().get(key.as_ref()).cloned())
+    self
+      .1
+      .get(key.as_ref())
+      .cloned()
+      .or_else(|| self.0 .0.read().unwrap().get(key.as_ref()).cloned())
   }
 }
 impl<'a> DbTxn for MemDbTxn<'a> {

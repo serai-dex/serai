@@ -1,5 +1,5 @@
 use core::{
-  ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
+  ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
   iter::Sum,
 };
 
@@ -232,7 +232,7 @@ impl Mul<Scalar> for Point {
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       bits |= bit;
       bit.zeroize();
 

@@ -27,7 +27,7 @@ pub const PARTICIPANTS: u16 = 5;
 pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 
 /// Clone a map without a specific value.
-pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
+pub fn clone_without<K: Clone + core::cmp::Eq + core::hash::Hash, V: Clone>(
   map: &HashMap<K, V>,
   without: &K,
 ) -> HashMap<K, V> {
@@ -177,8 +177,8 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
     machines,
     |rng, machines| {
       // Cache and rebuild half of the machines
-      let mut included = machines.keys().cloned().collect::<Vec<_>>();
-      for i in included.drain(..) {
+      let included = machines.keys().cloned().collect::<Vec<_>>();
+      for i in included {
         if (rng.next_u64() % 2) == 0 {
           let cache = machines.remove(&i).unwrap().cache();
           machines.insert(
@@ -226,7 +226,7 @@ pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &m
 
   let offset = C::F::from(5);
   let offset_key = group_key + (C::generator() * offset);
-  for (_, keys) in keys.iter_mut() {
+  for keys in keys.values_mut() {
     *keys = keys.offset(offset);
     assert_eq!(keys.group_key(), offset_key);
   }

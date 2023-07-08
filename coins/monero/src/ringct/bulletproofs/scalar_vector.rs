@@ -119,7 +119,7 @@ impl Mul<&[EdwardsPoint]> for &ScalarVector {
   type Output = EdwardsPoint;
   fn mul(self, b: &[EdwardsPoint]) -> EdwardsPoint {
     debug_assert_eq!(self.len(), b.len());
-    multiexp(&self.0.iter().cloned().zip(b.iter().cloned()).collect::<Vec<_>>())
+    multiexp(&self.0.iter().copied().zip(b.iter().copied()).collect::<Vec<_>>())
   }
 }
 

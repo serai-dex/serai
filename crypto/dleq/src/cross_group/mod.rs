@@ -1,6 +1,6 @@
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "serialize")]
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 
 use thiserror::Error;
 
@@ -51,15 +51,15 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
 }
 
 #[cfg(feature = "serialize")]
-pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G> {
+pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> io::Result<G> {
   let mut repr = G::Repr::default();
   r.read_exact(repr.as_mut())?;
   let point = G::from_bytes(&repr);
   let Some(point) = Option::<G>::from(point) else {
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid point"))?
+    Err(io::Error::new(io::ErrorKind::Other, "invalid point"))?
   };
   if point.to_bytes().as_ref() != repr.as_ref() {
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "non-canonical point"))?;
+    Err(io::Error::new(io::ErrorKind::Other, "non-canonical point"))?;
   }
   Ok(point)
 }
@@ -439,7 +439,7 @@ where
 
   /// Write a Cross-Group Discrete Log Equality proof to a type satisfying std::io::Write.
   #[cfg(feature = "serialize")]
-  pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for bit in &self.bits {
       bit.write(w)?;
     }
@@ -452,7 +452,7 @@ where
 
   /// Read a Cross-Group Discrete Log Equality proof from a type satisfying std::io::Read.
   #[cfg(feature = "serialize")]
-  pub fn read<R: Read>(r: &mut R) -> std::io::Result<Self> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
     let bits_per_group = BitSignature::from(SIGNATURE).bits();
 

@@ -196,7 +196,7 @@ impl PlusStruct {
     }
 
     // Rebuild all challenges
-    let (mut cache, commitments) = hash_plus(commitments.iter().cloned());
+    let (mut cache, commitments) = hash_plus(commitments.iter().copied());
     let y = hash_cache(&mut cache, &[self.A.compress().to_bytes()]);
     let yinv = y.invert().unwrap();
     let z = hash_to_scalar(&y.to_bytes());
@@ -220,8 +220,6 @@ impl PlusStruct {
     let A1 = normalize(&self.A1);
     let B = normalize(&self.B);
 
-    let mut commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
-
     // Verify it
     let mut proof = Vec::with_capacity(logMN + 5 + (2 * (MN + logMN)));
 
@@ -237,7 +235,7 @@ impl PlusStruct {
     let esq = e * e;
     let minus_esq = -esq;
     let commitment_weight = minus_esq * yMNy;
-    for (i, commitment) in commitments.drain(..).enumerate() {
+    for (i, commitment) in commitments.iter().map(EdwardsPoint::mul_by_cofactor).enumerate() {
       proof.push((commitment_weight * zpow[i], commitment));
     }
 

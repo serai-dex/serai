@@ -12,8 +12,7 @@ test!(
       let arbitrary_data = vec![b'\0'; MAX_ARBITRARY_DATA_SIZE - 1];
 
       // make sure we can add to tx
-      let result = builder.add_data(arbitrary_data.clone());
-      assert!(result.is_ok());
+      builder.add_data(arbitrary_data.clone()).unwrap();
 
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), (arbitrary_data,))
@@ -37,8 +36,7 @@ test!(
 
       // Add data multiple times
       for data in &data {
-        let result = builder.add_data(data.clone());
-        assert!(result.is_ok());
+        builder.add_data(data.clone()).unwrap();
       }
 
       builder.add_payment(addr, 5);
@@ -65,7 +63,7 @@ test!(
       // Reduce data size and retry. The data will now be 255 bytes long (including the added
       // marker), exactly
       data.pop();
-      assert!(builder.add_data(data.clone()).is_ok());
+      builder.add_data(data.clone()).unwrap();
 
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), data)

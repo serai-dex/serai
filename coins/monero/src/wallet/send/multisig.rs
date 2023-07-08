@@ -274,7 +274,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // Find out who's included
     // This may not be a valid set of signers yet the algorithm machine will error if it's not
     commitments.remove(&self.i); // Remove, if it was included for some reason
-    let mut included = commitments.keys().cloned().collect::<Vec<_>>();
+    let mut included = commitments.keys().copied().collect::<Vec<_>>();
     included.push(self.i);
     included.sort_unstable();
 
@@ -325,7 +325,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
     // Remove our preprocess which shouldn't be here. It was just the easiest way to implement the
     // above
-    for map in commitments.iter_mut() {
+    for map in &mut commitments {
       map.remove(&self.i);
     }
 
@@ -430,7 +430,9 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
           pseudo_outs.push(pseudo_out);
         }
       }
-      _ => unreachable!("attempted to sign a multisig TX which wasn't CLSAG"),
+      RctPrunable::MlsagBorromean { .. } | RctPrunable::MlsagBulletproofs { .. } => {
+        unreachable!("attempted to sign a multisig TX which wasn't CLSAG")
+      }
     }
     Ok(tx)
   }

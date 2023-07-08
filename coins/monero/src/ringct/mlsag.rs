@@ -19,7 +19,7 @@ pub struct Mlsag {
 
 impl Mlsag {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    for ss in self.ss.iter() {
+    for ss in &self.ss {
       write_raw_vec(write_scalar, ss, w)?;
     }
     write_scalar(&self.cc, w)

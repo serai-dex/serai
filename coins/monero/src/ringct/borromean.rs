@@ -35,10 +35,10 @@ impl BorromeanSignatures {
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    for s0 in self.s0.iter() {
+    for s0 in &self.s0 {
       w.write_all(s0)?;
     }
-    for s1 in self.s1.iter() {
+    for s1 in &self.s1 {
       w.write_all(s1)?;
     }
     w.write_all(&self.ee)

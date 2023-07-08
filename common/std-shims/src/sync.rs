@@ -1,4 +1,5 @@
 pub use core::sync::*;
+pub use alloc::sync::*;
 
 mod mutex_shim {
   #[cfg(feature = "std")]
@@ -57,7 +58,7 @@ mod oncelock_shim {
       let mut lock = self.0.lock();
       if !*lock {
         unsafe {
-          (core::ptr::addr_of!(self.1) as *mut Option<_>).write_unaligned(Some(f()));
+          core::ptr::addr_of!(self.1).cast_mut().write_unaligned(Some(f()));
         }
       }
       *lock = true;

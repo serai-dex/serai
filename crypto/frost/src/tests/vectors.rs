@@ -166,8 +166,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     }
 
     let mut commitments = HashMap::new();
-    let mut machines = machines
-      .drain(..)
+    let machines = machines
+      .into_iter()
       .enumerate()
       .map(|(c, (i, machine))| {
         let nonce = |i| {
@@ -224,8 +224,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       .collect::<Vec<_>>();
 
     let mut shares = HashMap::new();
-    let mut machines = machines
-      .drain(..)
+    let machines = machines
+      .into_iter()
       .enumerate()
       .map(|(c, (i, machine))| {
         let (machine, share) = machine
@@ -242,9 +242,9 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
         shares.insert(*i, machine.read_share::<&[u8]>(&mut share.as_ref()).unwrap());
         (i, machine)
       })
-      .collect::<HashMap<_, _>>();
+      .collect::<Vec<_>>();
 
-    for (i, machine) in machines.drain() {
+    for (i, machine) in machines {
       let sig = machine.complete(clone_without(&shares, i)).unwrap();
       let mut serialized = sig.R.to_bytes().as_ref().to_vec();
       serialized.extend(sig.s.to_repr().as_ref());
@@ -347,7 +347,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       machines.push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone())));
     }
 
-    for (i, machine) in machines.drain(..) {
+    for (i, machine) in machines {
       let (_, preprocess) = machine.preprocess(&mut frosts.clone());
 
       // Calculate the expected nonces

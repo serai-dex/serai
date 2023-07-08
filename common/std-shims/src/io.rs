@@ -53,10 +53,7 @@ mod shims {
 
   impl Read for &[u8] {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-      let mut read = buf.len();
-      if self.len() < buf.len() {
-        read = self.len();
-      }
+      let read = buf.len().min(self.len());
       buf[.. read].copy_from_slice(&self[.. read]);
       *self = &self[read ..];
       Ok(read)

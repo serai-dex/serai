@@ -4,7 +4,7 @@
 
 use core::{
   borrow::Borrow,
-  ops::{Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
+  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Iterator, Sum, Product},
   hash::{Hash, Hasher},
 };
@@ -201,7 +201,7 @@ impl Scalar {
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       bits |= bit;
       bit.zeroize();
 
@@ -337,7 +337,7 @@ impl PrimeField for Scalar {
     // methods does not
     // We do not use one of its methods to ensure we write via zeroize
     for mut bit in bits.iter_mut() {
-      bit.deref_mut().zeroize();
+      bit.zeroize();
     }
     res
   }

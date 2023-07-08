@@ -1,5 +1,5 @@
 use core::{
-  ops::{DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
+  ops::{Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Sum, Product},
 };
 
@@ -234,7 +234,7 @@ impl FieldElement {
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       bits |= bit;
       bit.zeroize();
 
@@ -300,7 +300,7 @@ impl Sum<FieldElement> for FieldElement {
 
 impl<'a> Sum<&'a FieldElement> for FieldElement {
   fn sum<I: Iterator<Item = &'a FieldElement>>(iter: I) -> FieldElement {
-    iter.cloned().sum()
+    iter.copied().sum()
   }
 }
 
@@ -316,7 +316,7 @@ impl Product<FieldElement> for FieldElement {
 
 impl<'a> Product<&'a FieldElement> for FieldElement {
   fn product<I: Iterator<Item = &'a FieldElement>>(iter: I) -> FieldElement {
-    iter.cloned().product()
+    iter.copied().product()
   }
 }
 

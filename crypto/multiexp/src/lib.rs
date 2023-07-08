@@ -2,7 +2,6 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::ops::DerefMut;
 #[cfg(not(feature = "std"))]
 #[macro_use]
 extern crate alloc;
@@ -62,7 +61,7 @@ where
     groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
 
     for (i, mut bit) in bits.iter_mut().enumerate() {
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       groupings[p][i / w_usize] |= bit << (i % w_usize);
       bit.zeroize();
     }

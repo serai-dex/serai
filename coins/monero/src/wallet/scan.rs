@@ -263,6 +263,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
   }
 
   /// Return the outputs if they're not timelocked, or an empty vector if they are.
+  #[must_use]
   pub fn not_locked(&self) -> Vec<O> {
     if self.0 == Timelock::None {
       return self.1.clone();
@@ -271,6 +272,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
   }
 
   /// Returns None if the Timelocks aren't comparable. Returns Some(vec![]) if none are unlocked.
+  #[must_use]
   pub fn unlocked(&self, timelock: Timelock) -> Option<Vec<O>> {
     // If the Timelocks are comparable, return the outputs if they're now unlocked
     if self.0 <= timelock {
@@ -280,6 +282,7 @@ impl<O: Clone + Zeroize> Timelocked<O> {
     }
   }
 
+  #[must_use]
   pub fn ignore_timelock(&self) -> Vec<O> {
     self.1.clone()
   }
@@ -293,16 +296,11 @@ impl Scanner {
       return Timelocked(tx.prefix.timelock, vec![]);
     }
 
-    let extra = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref());
-    let extra = if let Ok(extra) = extra {
-      extra
-    } else {
+    let Ok(extra) = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref()) else {
       return Timelocked(tx.prefix.timelock, vec![]);
     };
 
-    let (tx_key, additional) = if let Some((tx_key, additional)) = extra.keys() {
-      (tx_key, additional)
-    } else {
+    let Some((tx_key, additional)) = extra.keys() else {
       return Timelocked(tx.prefix.timelock, vec![]);
     };
 
@@ -453,7 +451,7 @@ impl Scanner {
     };
 
     let mut res = vec![];
-    for tx in txs.drain(..) {
+    for tx in txs {
       if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }

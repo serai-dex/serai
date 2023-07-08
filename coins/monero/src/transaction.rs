@@ -345,14 +345,13 @@ impl Transaction {
       hashes.extend(hash(&buf));
       buf.clear();
 
-      match self.rct_signatures.prunable {
-        RctPrunable::Null => buf.resize(32, 0),
+      hashes.extend(&match self.rct_signatures.prunable {
+        RctPrunable::Null => [0; 32],
         _ => {
           self.rct_signatures.prunable.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
-          buf = hash(&buf).to_vec();
+          hash(&buf)
         }
-      }
-      hashes.extend(&buf);
+      });
 
       hash(&hashes)
     }

@@ -92,7 +92,8 @@ pub struct KeyGenMachine<C: Ciphersuite> {
 
 impl<C: Ciphersuite> KeyGenMachine<C> {
   /// Create a new machine to generate a key.
-  // The context string should be unique among multisigs.
+  ///
+  /// The context string should be unique among multisigs.
   pub fn new(params: ThresholdParams, context: String) -> KeyGenMachine<C> {
     KeyGenMachine { params, context, _curve: PhantomData }
   }
@@ -171,7 +172,6 @@ fn polynomial<F: PrimeField + Zeroize>(
 /// channel.
 ///
 /// If any participant sends multiple secret shares to another participant, they are faulty.
-
 // This should presumably be written as SecretShare(Zeroizing<F::Repr>).
 // It's unfortunately not possible as F::Repr doesn't have Zeroize as a bound.
 // The encryption system also explicitly uses Zeroizing<M> so it can ensure anything being
@@ -353,7 +353,7 @@ impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
   fn zeroize(&mut self) {
     self.params.zeroize();
     self.secret.zeroize();
-    for (_, commitments) in self.commitments.iter_mut() {
+    for commitments in self.commitments.values_mut() {
       commitments.zeroize();
     }
     self.encryption.zeroize();
@@ -499,7 +499,7 @@ impl<C: Ciphersuite> fmt::Debug for BlameMachine<C> {
 
 impl<C: Ciphersuite> Zeroize for BlameMachine<C> {
   fn zeroize(&mut self) {
-    for (_, commitments) in self.commitments.iter_mut() {
+    for commitments in self.commitments.values_mut() {
       commitments.zeroize();
     }
     self.encryption.zeroize();
@@ -536,10 +536,9 @@ impl<C: Ciphersuite> BlameMachine<C> {
       Err(DecryptionError::InvalidProof) => return recipient,
     };
 
-    let share = match Option::<C::F>::from(C::F::from_repr(share_bytes.0)) {
-      Some(share) => share,
+    let Some(share) = Option::<C::F>::from(C::F::from_repr(share_bytes.0)) else {
       // If this isn't a valid scalar, the sender is faulty
-      None => return sender,
+      return sender;
     };
 
     // If this isn't a valid share, the sender is faulty

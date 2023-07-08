@@ -77,7 +77,7 @@ fn test_dleq() {
       assert!(proof
         .verify(
           &mut transcript(),
-          generators[.. i].iter().cloned().rev().collect::<Vec<_>>().as_ref(),
+          generators[.. i].iter().copied().rev().collect::<Vec<_>>().as_ref(),
           &keys[.. i]
         )
         .is_err());
@@ -86,7 +86,7 @@ fn test_dleq() {
         .verify(
           &mut transcript(),
           &generators[.. i],
-          keys[.. i].iter().cloned().rev().collect::<Vec<_>>().as_ref()
+          keys[.. i].iter().copied().rev().collect::<Vec<_>>().as_ref()
         )
         .is_err());
     }

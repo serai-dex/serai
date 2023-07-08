@@ -296,7 +296,7 @@ impl SignableTransaction {
     protocol: Protocol,
     r_seed: Option<Zeroizing<[u8; 32]>>,
     inputs: Vec<SpendableOutput>,
-    mut payments: Vec<(MoneroAddress, u64)>,
+    payments: Vec<(MoneroAddress, u64)>,
     change_address: Option<Change>,
     data: Vec<Vec<u8>>,
     fee_rate: Fee,
@@ -382,7 +382,7 @@ impl SignableTransaction {
       Err(TransactionError::TooManyOutputs)?;
     }
 
-    let mut payments = payments.drain(..).map(InternalPayment::Payment).collect::<Vec<_>>();
+    let mut payments = payments.into_iter().map(InternalPayment::Payment).collect::<Vec<_>>();
     if let Some(change) = change_address {
       payments.push(InternalPayment::Change(change, in_amount - out_amount));
     }
@@ -562,11 +562,12 @@ impl SignableTransaction {
   }
 
   /// Returns the eventuality of this transaction.
+  ///
   /// The eventuality is defined as the TX extra/outputs this transaction will create, if signed
   /// with the specified seed. This eventuality can be compared to on-chain transactions to see
   /// if the transaction has already been signed and published.
   pub fn eventuality(&self) -> Option<Eventuality> {
-    let inputs = self.inputs.iter().map(|input| input.key()).collect::<Vec<_>>();
+    let inputs = self.inputs.iter().map(SpendableOutput::key).collect::<Vec<_>>();
     let (tx_key, additional, outputs, id) = Self::prepare_payments(
       self.r_seed.as_ref()?,
       &inputs,
@@ -606,7 +607,7 @@ impl SignableTransaction {
 
     let (tx_key, additional, outputs, id) = Self::prepare_payments(
       &r_seed,
-      &self.inputs.iter().map(|input| input.key()).collect::<Vec<_>>(),
+      &self.inputs.iter().map(SpendableOutput::key).collect::<Vec<_>>(),
       &mut self.payments,
       uniqueness,
     );
@@ -656,7 +657,7 @@ impl SignableTransaction {
             fee,
             encrypted_amounts,
             pseudo_outs: vec![],
-            commitments: commitments.iter().map(|commitment| commitment.calculate()).collect(),
+            commitments: commitments.iter().map(Commitment::calculate).collect(),
           },
           prunable: RctPrunable::Clsag { bulletproofs: bp, clsags: vec![], pseudo_outs: vec![] },
         },
@@ -713,13 +714,18 @@ impl SignableTransaction {
 impl Eventuality {
   /// Enables building a HashMap of Extra -> Eventuality for efficiently checking if an on-chain
   /// transaction may match this eventuality.
+  ///
   /// This extra is cryptographically bound to:
   /// 1) A specific set of inputs (via their output key)
   /// 2) A specific seed for the ephemeral keys
+  ///
+  /// This extra may be used in a transaction with a distinct set of inputs, yet no honest
+  /// transaction which doesn't satisfy this Eventuality will contain it.
   pub fn extra(&self) -> &[u8] {
     &self.extra
   }
 
+  #[must_use]
   pub fn matches(&self, tx: &Transaction) -> bool {
     if self.payments.len() != tx.prefix.outputs.len() {
       return false;
@@ -752,9 +758,10 @@ impl Eventuality {
     }
 
     // TODO: Remove this when the following for loop is updated
-    if !rct_type.compact_encrypted_amounts() {
-      panic!("created an Eventuality for a very old RctType we don't support proving for");
-    }
+    assert!(
+      rct_type.compact_encrypted_amounts(),
+      "created an Eventuality for a very old RctType we don't support proving for"
+    );
 
     for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
       // Verify the output, commitment, and encrypted amount.
@@ -815,7 +822,7 @@ impl Eventuality {
       String::from_utf8(read_vec(read_byte, r)?)
         .ok()
         .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
-        .ok_or(io::Error::new(io::ErrorKind::Other, "invalid address"))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid address"))
     }
 
     fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {

@@ -24,9 +24,9 @@ pub fn test_musig<R: RngCore + CryptoRng, C: Ciphersuite>(rng: &mut R) {
   const CONTEXT: &[u8] = b"MuSig Test";
 
   // Empty signing set
-  assert!(musig::<C>(CONTEXT, &Zeroizing::new(C::F::ZERO), &[]).is_err());
+  musig::<C>(CONTEXT, &Zeroizing::new(C::F::ZERO), &[]).unwrap_err();
   // Signing set we're not part of
-  assert!(musig::<C>(CONTEXT, &Zeroizing::new(C::F::ZERO), &[C::generator()]).is_err());
+  musig::<C>(CONTEXT, &Zeroizing::new(C::F::ZERO), &[C::generator()]).unwrap_err();
 
   // Test with n keys
   {

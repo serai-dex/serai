@@ -2,7 +2,7 @@ use std_shims::vec::Vec;
 
 use crate::hash;
 
-pub fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
+pub(crate) fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
   match leafs.len() {
     0 => root,
     1 => hash(&[root, leafs[0]].concat()),

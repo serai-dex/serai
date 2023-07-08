@@ -25,7 +25,7 @@ pub const PARTICIPANTS: u16 = 5;
 pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 
 /// Clone a map without a specific value.
-pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
+pub fn clone_without<K: Clone + core::cmp::Eq + core::hash::Hash, V: Clone>(
   map: &HashMap<K, V>,
   without: &K,
 ) -> HashMap<K, V> {
@@ -40,7 +40,7 @@ pub fn clone_without<K: Clone + std::cmp::Eq + std::hash::Hash, V: Clone>(
 pub fn recover_key<C: Ciphersuite>(keys: &HashMap<Participant, ThresholdKeys<C>>) -> C::F {
   let first = keys.values().next().expect("no keys provided");
   assert!(keys.len() >= first.params().t().into(), "not enough keys provided");
-  let included = keys.keys().cloned().collect::<Vec<_>>();
+  let included = keys.keys().copied().collect::<Vec<_>>();
 
   let group_private = keys.iter().fold(C::F::ZERO, |accum, (i, keys)| {
     accum + (lagrange::<C::F>(*i, &included) * keys.secret_share().deref())

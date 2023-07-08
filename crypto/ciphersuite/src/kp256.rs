@@ -134,7 +134,7 @@ fn test_secp256k1() {
     )
     .to_repr()
     .iter()
-    .cloned()
+    .copied()
     .collect::<Vec<_>>(),
     hex::decode("acc83278035223c1ba464e2d11bfacfc872b2b23e1041cf5f6130da21e4d8068").unwrap()
   );
@@ -167,7 +167,7 @@ f4e8cf80aec3f888d997900ac7e3e349944b5a6b47649fc32186d2f1238103c6\
     )
     .to_repr()
     .iter()
-    .cloned()
+    .copied()
     .collect::<Vec<_>>(),
     hex::decode("f871dfcf6bcd199342651adc361b92c941cb6a0d8c8c1a3b91d79e2c1bf3722d").unwrap()
   );

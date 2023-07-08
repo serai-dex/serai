@@ -390,9 +390,10 @@ impl<C: Ciphersuite> Encryption<C> {
     participant: Participant,
     msg: EncryptionKeyMessage<C, M>,
   ) -> M {
-    if self.enc_keys.contains_key(&participant) {
-      panic!("Re-registering encryption key for a participant");
-    }
+    assert!(
+      !self.enc_keys.contains_key(&participant),
+      "Re-registering encryption key for a participant"
+    );
     self.enc_keys.insert(participant, msg.enc_key);
     msg.msg
   }
