@@ -367,12 +367,13 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     while !sorted.is_empty() {
       let value = sorted.remove(0);
 
-      let mut mask = random_scalar(&mut rng);
-      if sorted.is_empty() {
-        mask = output_masks - sum_pseudo_outs;
+      let mask = if sorted.is_empty() {
+        output_masks - sum_pseudo_outs
       } else {
+        let mask = random_scalar(&mut rng);
         sum_pseudo_outs += mask;
-      }
+        mask
+      };
 
       tx.prefix.inputs.push(Input::ToKey {
         amount: None,
@@ -432,7 +433,9 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
           pseudo_outs.push(pseudo_out);
         }
       }
-      _ => unreachable!("attempted to sign a multisig TX which wasn't CLSAG"),
+      RctPrunable::MlsagBorromean { .. } | RctPrunable::MlsagBulletproofs { .. } => {
+        unreachable!("attempted to sign a multisig TX which wasn't CLSAG")
+      }
     }
     Ok(tx)
   }

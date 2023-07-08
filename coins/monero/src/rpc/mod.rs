@@ -102,7 +102,7 @@ fn read_epee_vi<R: io::Read>(reader: &mut R) -> io::Result<u64> {
 }
 
 #[async_trait]
-pub trait RpcConnection: Clone + Debug {
+pub trait RpcConnection: Send + Sync + Clone + Debug {
   /// Perform a POST request to the specified route with the specified body.
   ///
   /// The implementor is left to handle anything such as authentication.
@@ -117,7 +117,7 @@ impl<R: RpcConnection> Rpc<R> {
   ///
   /// This is NOT a JSON-RPC call. They use a route of "json_rpc" and are available via
   /// `json_rpc_call`.
-  pub async fn rpc_call<Params: Serialize + Debug, Response: DeserializeOwned + Debug>(
+  pub async fn rpc_call<Params: Send + Serialize + Debug, Response: DeserializeOwned + Debug>(
     &self,
     route: &str,
     params: Option<Params>,

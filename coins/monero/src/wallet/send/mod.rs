@@ -153,7 +153,7 @@ pub enum TransactionError {
   FrostError(FrostError),
 }
 
-async fn prepare_inputs<R: RngCore + CryptoRng, RPC: RpcConnection>(
+async fn prepare_inputs<R: Send + RngCore + CryptoRng, RPC: RpcConnection>(
   rng: &mut R,
   rpc: &Rpc<RPC>,
   ring_len: usize,
@@ -665,7 +665,7 @@ impl SignableTransaction {
   }
 
   /// Sign this transaction.
-  pub async fn sign<R: RngCore + CryptoRng, RPC: RpcConnection>(
+  pub async fn sign<R: Send + RngCore + CryptoRng, RPC: RpcConnection>(
     mut self,
     rng: &mut R,
     rpc: &Rpc<RPC>,

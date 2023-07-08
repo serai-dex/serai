@@ -70,7 +70,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
 
   // make an addr
   let (_, view_pair, _) = runner::random_address();
-  let addr = Address::from_str(&view_pair.address(Network::Mainnet, spec).to_string()[..]).unwrap();
+  let addr = Address::from_str(&view_pair.address(Network::Mainnet, spec).to_string()).unwrap();
 
   // refresh & make a tx
   wallet_rpc.refresh(None).await.unwrap();
@@ -103,7 +103,9 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
       assert_eq!(output.metadata.payment_id, payment_id);
       assert_eq!(output.metadata.subaddress, None);
     }
-    _ => assert_eq!(output.metadata.subaddress, None),
+    AddressSpec::Standard | AddressSpec::Featured { .. } => {
+      assert_eq!(output.metadata.subaddress, None)
+    }
   }
   assert_eq!(output.commitment().amount, 1000000000000);
 }
@@ -228,7 +230,7 @@ test!(
       for _ in 0 .. 2 {
         // Subtract 1 since we prefix data with 127
         let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE - 1];
-        assert!(builder.add_data(data).is_ok());
+        builder.add_data(data).unwrap();
       }
 
       (builder.build().unwrap(), (wallet_rpc,))

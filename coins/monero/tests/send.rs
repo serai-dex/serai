@@ -37,8 +37,8 @@ test!(
     },
   ),
   (
-    |rpc, mut builder: Builder, addr, mut outputs: Vec<ReceivedOutput>| async move {
-      for output in outputs.drain(..) {
+    |rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+      for output in outputs {
         builder.add_input(SpendableOutput::from(&rpc, output).await.unwrap());
       }
       builder.add_payment(addr, 6);

@@ -249,7 +249,7 @@ impl Clsag {
         let mask = random_scalar(rng);
         sum_pseudo_outs += mask;
         mask
-      }
+      };
 
       let mut nonce = Zeroizing::new(random_scalar(rng));
       let (mut clsag, pseudo_out, p, c) = Self::sign_core(

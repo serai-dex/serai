@@ -102,6 +102,7 @@ pub static SEQUENTIAL: OnceLock<Mutex<()>> = OnceLock::new();
 macro_rules! async_sequential {
   ($(async fn $name: ident() $body: block)*) => {
     $(
+      #[allow(clippy::tests_outside_test_module)]
       #[tokio::test]
       async fn $name() {
         let guard = runner::SEQUENTIAL.get_or_init(|| tokio::sync::Mutex::new(())).lock().await;

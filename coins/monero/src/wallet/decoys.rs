@@ -35,8 +35,8 @@ fn DISTRIBUTION() -> &'static Mutex<Vec<u64>> {
   DISTRIBUTION_CELL.get_or_init(|| Mutex::new(Vec::with_capacity(3_000_000)))
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
+#[allow(clippy::too_many_arguments, clippy::as_conversions)]
+async fn select_n<'a, R: Send + RngCore + CryptoRng, RPC: RpcConnection>(
   rng: &mut R,
   rpc: &Rpc<RPC>,
   distribution: &[u64],
@@ -75,11 +75,9 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
         age -= TIP_APPLICATION;
       } else {
         // f64 does not have try_from available, which is why these are written with `as`
-        #[allow(clippy::as_conversions)]
         age = (rng.next_u64() % u64::try_from(RECENT_WINDOW * BLOCK_TIME).unwrap()) as f64;
       }
 
-      #[allow(clippy::as_conversions)]
       let o = (age * per_second) as u64;
       if o < high {
         let i = distribution.partition_point(|s| *s < (high - 1 - o));
@@ -149,7 +147,8 @@ impl Decoys {
   }
 
   /// Select decoys using the same distribution as Monero.
-  pub async fn select<R: RngCore + CryptoRng, RPC: RpcConnection>(
+  #[allow(clippy::as_conversions)]
+  pub async fn select<R: Send + RngCore + CryptoRng, RPC: RpcConnection>(
     rng: &mut R,
     rpc: &Rpc<RPC>,
     ring_len: usize,
@@ -183,7 +182,6 @@ impl Decoys {
     let per_second = {
       let blocks = distribution.len().min(BLOCKS_PER_YEAR);
       let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
-      #[allow(clippy::as_conversions)]
       (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
     };
 
@@ -234,6 +232,7 @@ impl Decoys {
         let target_median = high * 3 / 5;
         while ring[ring_len / 2].0 < target_median {
           // If it's not, update the bottom half with new values to ensure the median only moves up
+          #[allow(clippy::needless_collect)] // Needed for ownership reasons
           for removed in ring.drain(0 .. (ring_len / 2)).collect::<Vec<_>>() {
             // If we removed the real spend, add it back
             if removed.0 == o.0 {

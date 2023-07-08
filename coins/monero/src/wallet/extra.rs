@@ -133,7 +133,7 @@ impl Extra {
         ExtraField::PublicKeys(these_additional) => {
           additional = additional.or(Some(these_additional));
         }
-        _ => (),
+        ExtraField::Nonce(_) | ExtraField::MergeMining(..) => (),
       }
     }
     // Don't return any keys if this was non-standard and didn't include the primary key

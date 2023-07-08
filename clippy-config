@@ -29,7 +29,6 @@
 -D clippy::deref_by_slicing
 -D clippy::empty_structs_with_brackets
 -D clippy::get_unwrap
--D clippy::if_then_some_else_none
 -D clippy::rest_pat_in_fully_bound_structs
 -D clippy::semicolon_inside_block
 -D clippy::tests_outside_test_module

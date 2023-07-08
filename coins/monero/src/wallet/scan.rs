@@ -115,6 +115,7 @@ impl Metadata {
   }
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    #[allow(clippy::if_then_some_else_none)] // The Result usage makes this invalid
     let subaddress = if read_byte(r)? == 1 {
       Some(
         SubaddressIndex::new(read_u32(r)?, read_u32(r)?)
@@ -323,7 +324,7 @@ impl Scanner {
 
       for key in [Some(Some(&tx_key)), additional.as_ref().map(|additional| additional.get(o))] {
         let Some(Some(key)) = key else {
-          if let Some(None) = key {
+          if key == Some(None) {
             // This is non-standard. There were additional keys, yet not one for this output
             // https://github.com/monero-project/monero/
             //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
@@ -451,7 +452,7 @@ impl Scanner {
     };
 
     let mut res = vec![];
-    for tx in txs.drain(..) {
+    for tx in txs {
       if let Some(timelock) = map(self.scan_transaction(&tx), index) {
         res.push(timelock);
       }
