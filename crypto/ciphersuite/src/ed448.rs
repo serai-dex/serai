@@ -1,8 +1,8 @@
 use zeroize::Zeroize;
 
 use digest::{
-  typenum::U114, core_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
-  ExtendableOutput, XofReader, HashMarker, Digest,
+  typenum::U114, generic_array::GenericArray, core_api::BlockSizeUser, Update, Output,
+  OutputSizeUser, FixedOutput, ExtendableOutput, XofReader, HashMarker, Digest,
 };
 use sha3::Shake256;
 
@@ -37,7 +37,7 @@ impl Update for Shake256_114 {
 }
 impl FixedOutput for Shake256_114 {
   fn finalize_fixed(self) -> Output<Self> {
-    let mut res = Default::default();
+    let mut res = GenericArray::default();
     FixedOutput::finalize_into(self, &mut res);
     res
   }

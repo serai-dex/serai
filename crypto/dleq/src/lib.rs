@@ -131,7 +131,7 @@ where
     transcript: &mut T,
     generators: &[G],
     scalar: &Zeroizing<G::Scalar>,
-  ) -> DLEqProof<G> {
+  ) -> Self {
     let r = Zeroizing::new(G::Scalar::random(rng));
 
     transcript.domain_separate(b"dleq");
@@ -144,7 +144,7 @@ where
     // r + ca
     let s = (c * scalar.deref()) + r.deref();
 
-    DLEqProof { c, s }
+    Self { c, s }
   }
 
   // Transcript a specific generator/nonce/point (G/R/A), as used when verifying a proof.
@@ -194,8 +194,8 @@ where
 
   /// Read a DLEq proof from something implementing Read.
   #[cfg(feature = "serialize")]
-  pub fn read<R: Read>(r: &mut R) -> io::Result<DLEqProof<G>> {
-    Ok(DLEqProof { c: read_scalar(r)?, s: read_scalar(r)? })
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self { c: read_scalar(r)?, s: read_scalar(r)? })
   }
 
   /// Serialize a DLEq proof to a `Vec<u8>`.
@@ -235,7 +235,7 @@ where
     transcript: &mut T,
     generators: &[Vec<G>],
     scalars: &[Zeroizing<G::Scalar>],
-  ) -> MultiDLEqProof<G> {
+  ) -> Self {
     assert_eq!(
       generators.len(),
       scalars.len(),
@@ -268,7 +268,7 @@ where
       s.push((c * scalar.deref()) + nonce.deref());
     }
 
-    MultiDLEqProof { c, s }
+    Self { c, s }
   }
 
   /// Verify each series of points share a discrete logarithm against their matching series of
@@ -317,13 +317,13 @@ where
 
   /// Read a multi-DLEq proof from something implementing Read.
   #[cfg(feature = "serialize")]
-  pub fn read<R: Read>(r: &mut R, discrete_logs: usize) -> io::Result<MultiDLEqProof<G>> {
+  pub fn read<R: Read>(r: &mut R, discrete_logs: usize) -> io::Result<Self> {
     let c = read_scalar(r)?;
     let mut s = vec![];
     for _ in 0 .. discrete_logs {
       s.push(read_scalar(r)?);
     }
-    Ok(MultiDLEqProof { c, s })
+    Ok(Self { c, s })
   }
 
   /// Serialize a multi-DLEq proof to a `Vec<u8>`.

@@ -25,7 +25,8 @@ jobs:
           rust-components: clippy
 
       - name: Run Clippy
-        run: cargo clippy --all-features --all-targets -- -D warnings -A clippy::items_after_test_module
+        # Allow dbg_macro when run locally, yet not when pushed
+        run: cargo clippy --all-features --all-targets -- -D clippy::dbg_macro $(grep "\S" ../../clippy-config | grep -v "#")
 
   deny:
     runs-on: ubuntu-latest

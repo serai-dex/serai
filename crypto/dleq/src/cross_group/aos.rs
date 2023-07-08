@@ -37,12 +37,12 @@ pub(crate) enum Re<G0: PrimeGroup, G1: PrimeGroup> {
 
 impl<G0: PrimeGroup, G1: PrimeGroup> Re<G0, G1> {
   #[allow(non_snake_case)]
-  pub(crate) fn R_default() -> Re<G0, G1> {
-    Re::R(G0::identity(), G1::identity())
+  pub(crate) fn R_default() -> Self {
+    Self::R(G0::identity(), G1::identity())
   }
 
-  pub(crate) fn e_default() -> Re<G0, G1> {
-    Re::e(G0::Scalar::ZERO)
+  pub(crate) const fn e_default() -> Self {
+    Self::e(G0::Scalar::ZERO)
   }
 }
 
@@ -122,13 +122,13 @@ where
     #[allow(non_snake_case)]
     let mut R = original_R;
 
-    for i in ((actual + 1) .. (actual + RING_LEN + 1)).map(|i| i % RING_LEN) {
+    for i in ((actual + 1) ..= (actual + RING_LEN)).map(|i| i % RING_LEN) {
       let e = Self::nonces(transcript.clone(), R);
       if i == 0 {
         match Re_0 {
           Re::R(ref mut R0_0, ref mut R1_0) => {
             *R0_0 = R.0;
-            *R1_0 = R.1
+            *R1_0 = R.1;
           }
           Re::e(ref mut e_0) => *e_0 = e.0,
         }
@@ -144,15 +144,15 @@ where
         r.0.zeroize();
         r.1.zeroize();
         break;
-      // Generate a decoy response
-      } else {
-        s[i] = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
       }
+
+      // Generate a decoy response
+      s[i] = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
 
       R = Self::R(generators, s[i], ring[i], e);
     }
 
-    Aos { Re_0, s }
+    Self { Re_0, s }
   }
 
   // Assumes the ring has already been transcripted in some form. Critically insecure if it hasn't
@@ -234,7 +234,7 @@ where
     match Re_0 {
       Re::R(ref mut R0, ref mut R1) => {
         *R0 = read_point(r)?;
-        *R1 = read_point(r)?
+        *R1 = read_point(r)?;
       }
       Re::e(ref mut e) => *e = read_scalar(r)?,
     }
@@ -244,6 +244,6 @@ where
       *s = (read_scalar(r)?, read_scalar(r)?);
     }
 
-    Ok(Aos { Re_0, s })
+    Ok(Self { Re_0, s })
   }
 }

@@ -61,15 +61,15 @@ enum DigestTranscriptMember {
 }
 
 impl DigestTranscriptMember {
-  fn as_u8(&self) -> u8 {
+  const fn as_u8(&self) -> u8 {
     match self {
-      DigestTranscriptMember::Name => 0,
-      DigestTranscriptMember::Domain => 1,
-      DigestTranscriptMember::Label => 2,
-      DigestTranscriptMember::Value => 3,
-      DigestTranscriptMember::Challenge => 4,
-      DigestTranscriptMember::Continued => 5,
-      DigestTranscriptMember::Challenged => 6,
+      Self::Name => 0,
+      Self::Domain => 1,
+      Self::Label => 2,
+      Self::Value => 3,
+      Self::Challenge => 4,
+      Self::Continued => 5,
+      Self::Challenged => 6,
     }
   }
 }
@@ -103,8 +103,9 @@ impl<D: Send + Clone + SecureDigest> DigestTranscript<D> {
 impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
 
+  #[must_use]
   fn new(name: &'static [u8]) -> Self {
-    let mut res = DigestTranscript(D::new());
+    let mut res = Self(D::new());
     res.append(DigestTranscriptMember::Name, name);
     res
   }
@@ -139,10 +140,7 @@ impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
 // Digest doesn't implement Zeroize
 // Implement Zeroize for DigestTranscript by writing twice the block size to the digest in an
 // attempt to overwrite the internal hash state/any leftover bytes
-impl<D: Send + Clone + SecureDigest> Zeroize for DigestTranscript<D>
-where
-  D: BlockSizeUser,
-{
+impl<D: Send + Clone + SecureDigest + BlockSizeUser> Zeroize for DigestTranscript<D> {
   fn zeroize(&mut self) {
     // Update in 4-byte chunks to reduce call quantity and enable word-level update optimizations
     const WORD_SIZE: usize = 4;
@@ -187,7 +185,7 @@ where
       choice.zeroize();
     }
 
-    mark_read(self)
+    mark_read(self);
   }
 }
 

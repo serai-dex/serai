@@ -29,7 +29,7 @@ impl Transcript for MerlinTranscript {
   type Challenge = [u8; 64];
 
   fn new(name: &'static [u8]) -> Self {
-    MerlinTranscript(merlin::Transcript::new(name))
+    Self(merlin::Transcript::new(name))
   }
 
   fn domain_separate(&mut self, label: &'static [u8]) {
@@ -37,10 +37,7 @@ impl Transcript for MerlinTranscript {
   }
 
   fn append_message<M: AsRef<[u8]>>(&mut self, label: &'static [u8], message: M) {
-    assert!(
-      label != "dom-sep".as_bytes(),
-      "\"dom-sep\" is reserved for the domain_separate function",
-    );
+    assert!(label != b"dom-sep", "\"dom-sep\" is reserved for the domain_separate function",);
     self.0.append_message(label, message.as_ref());
   }
 

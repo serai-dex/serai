@@ -12,6 +12,7 @@ pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
 
   let mut bit = black_box(*bit_ref);
+  #[allow(clippy::as_conversions, clippy::cast_lossless)]
   let res = black_box(bit as u8);
   bit.zeroize();
   debug_assert!((res | 1) == 1);
@@ -80,7 +81,7 @@ macro_rules! field {
     $DELTA: expr,
   ) => {
     use core::{
-      ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
+      ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
       iter::{Sum, Product},
     };
 
@@ -139,6 +140,7 @@ macro_rules! field {
 
     impl $FieldName {
       /// Perform an exponentation.
+      #[must_use]
       pub fn pow(&self, other: $FieldName) -> $FieldName {
         let mut table = [Self(Residue::ONE); 16];
         table[1] = *self;
@@ -150,7 +152,7 @@ macro_rules! field {
         let mut bits = 0;
         for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
           bits <<= 1;
-          let mut bit = u8_from_bool(bit.deref_mut());
+          let mut bit = u8_from_bool(&mut bit);
           bits |= bit;
           bit.zeroize();
 

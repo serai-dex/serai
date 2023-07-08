@@ -28,42 +28,39 @@ pub(crate) enum BitSignature {
 impl BitSignature {
   pub(crate) const fn to_u8(&self) -> u8 {
     match self {
-      BitSignature::ClassicLinear => 0,
-      BitSignature::ConciseLinear => 1,
-      BitSignature::EfficientLinear => 2,
-      BitSignature::CompromiseLinear => 3,
+      Self::ClassicLinear => 0,
+      Self::ConciseLinear => 1,
+      Self::EfficientLinear => 2,
+      Self::CompromiseLinear => 3,
     }
   }
 
-  pub(crate) const fn from(algorithm: u8) -> BitSignature {
+  pub(crate) const fn from(algorithm: u8) -> Self {
     match algorithm {
-      0 => BitSignature::ClassicLinear,
-      1 => BitSignature::ConciseLinear,
-      2 => BitSignature::EfficientLinear,
-      3 => BitSignature::CompromiseLinear,
+      0 => Self::ClassicLinear,
+      1 => Self::ConciseLinear,
+      2 => Self::EfficientLinear,
+      3 => Self::CompromiseLinear,
       _ => panic!("Unknown algorithm"),
     }
   }
 
   pub(crate) const fn bits(&self) -> usize {
     match self {
-      BitSignature::ClassicLinear => 1,
-      BitSignature::ConciseLinear => 2,
-      BitSignature::EfficientLinear => 1,
-      BitSignature::CompromiseLinear => 2,
+      Self::ClassicLinear | Self::EfficientLinear => 1,
+      Self::ConciseLinear | Self::CompromiseLinear => 2,
     }
   }
 
   pub(crate) const fn ring_len(&self) -> usize {
+    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)] // Needed for const
     2_usize.pow(self.bits() as u32)
   }
 
   fn aos_form<G0: PrimeGroup, G1: PrimeGroup>(&self) -> Re<G0, G1> {
     match self {
-      BitSignature::ClassicLinear => Re::e_default(),
-      BitSignature::ConciseLinear => Re::e_default(),
-      BitSignature::EfficientLinear => Re::R_default(),
-      BitSignature::CompromiseLinear => Re::R_default(),
+      Self::ClassicLinear | Self::ConciseLinear => Re::e_default(),
+      Self::EfficientLinear | Self::CompromiseLinear => Re::R_default(),
     }
   }
 }
@@ -139,7 +136,7 @@ where
     bits.zeroize();
 
     Self::shift(pow_2);
-    Bits { commitments, signature }
+    Self { commitments, signature }
   }
 
   pub(crate) fn verify<R: RngCore + CryptoRng, T: Clone + Transcript>(
@@ -174,7 +171,7 @@ where
 
   #[cfg(feature = "serialize")]
   pub(crate) fn read<R: Read>(r: &mut R) -> std::io::Result<Self> {
-    Ok(Bits {
+    Ok(Self {
       commitments: (read_point(r)?, read_point(r)?),
       signature: Aos::read(r, BitSignature::from(SIGNATURE).aos_form())?,
     })

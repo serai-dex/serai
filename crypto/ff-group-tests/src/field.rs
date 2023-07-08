@@ -39,9 +39,10 @@ pub fn test_add<F: Field>() {
 
 /// Perform basic tests on sum.
 pub fn test_sum<F: Field>() {
-  assert_eq!((&[] as &[F]).iter().sum::<F>(), F::ZERO, "[].sum() != 0");
-  assert_eq!([F::ZERO].iter().sum::<F>(), F::ZERO, "[0].sum() != 0");
-  assert_eq!([F::ONE].iter().sum::<F>(), F::ONE, "[1].sum() != 1");
+  let empty_slice: &[F] = &[];
+  assert_eq!(empty_slice.iter().sum::<F>(), F::ZERO, "[].sum() != 0");
+  assert_eq!(core::iter::once(F::ZERO).sum::<F>(), F::ZERO, "[0].sum() != 0");
+  assert_eq!(core::iter::once(F::ONE).sum::<F>(), F::ONE, "[1].sum() != 1");
 
   let two = F::ONE + F::ONE;
   assert_eq!([F::ONE, F::ONE].iter().sum::<F>(), two, "[1, 1].sum() != 2");
@@ -79,9 +80,10 @@ pub fn test_mul<F: Field>() {
 
 /// Perform basic tests on product.
 pub fn test_product<F: Field>() {
-  assert_eq!((&[] as &[F]).iter().product::<F>(), F::ONE, "[].product() != 1");
-  assert_eq!([F::ZERO].iter().product::<F>(), F::ZERO, "[0].product() != 0");
-  assert_eq!([F::ONE].iter().product::<F>(), F::ONE, "[1].product() != 1");
+  let empty_slice: &[F] = &[];
+  assert_eq!(empty_slice.iter().product::<F>(), F::ONE, "[].product() != 1");
+  assert_eq!(core::iter::once(F::ZERO).product::<F>(), F::ZERO, "[0].product() != 0");
+  assert_eq!(core::iter::once(F::ONE).product::<F>(), F::ONE, "[1].product() != 1");
 
   assert_eq!([F::ONE, F::ONE].iter().product::<F>(), F::ONE, "[1, 1].product() != 2");
   let two = F::ONE + F::ONE;

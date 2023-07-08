@@ -18,7 +18,7 @@ fn flat<Id: Copy + Zeroize, G: Group + Zeroize>(
 where
   <G as Group>::Scalar: PrimeFieldBits + Zeroize,
 {
-  Zeroizing::new(slice.iter().flat_map(|pairs| pairs.1.iter()).cloned().collect::<Vec<_>>())
+  Zeroizing::new(slice.iter().flat_map(|pairs| pairs.1.iter()).copied().collect::<Vec<_>>())
 }
 
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
@@ -35,9 +35,11 @@ where
   <G as Group>::Scalar: PrimeFieldBits + Zeroize,
 {
   /// Create a new batch verifier, expected to verify the following amount of statements.
-  /// This is a size hint and is not required to be accurate.
-  pub fn new(capacity: usize) -> BatchVerifier<Id, G> {
-    BatchVerifier(Zeroizing::new(Vec::with_capacity(capacity)))
+  ///
+  /// `capacity` is a size hint and is not required to be accurate.
+  #[must_use]
+  pub fn new(capacity: usize) -> Self {
+    Self(Zeroizing::new(Vec::with_capacity(capacity)))
   }
 
   /// Queue a statement for batch verification.
@@ -110,6 +112,7 @@ where
   ///
   /// This function will only return the ID of one invalid statement, even if multiple are invalid.
   // A constant time variant may be beneficial for robust protocols
+  #[must_use]
   pub fn blame_vartime(&self) -> Option<Id> {
     let mut slice = self.0.as_slice();
     while slice.len() > 1 {

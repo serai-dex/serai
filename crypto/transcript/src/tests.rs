@@ -84,20 +84,26 @@ where
   assert!(t().rng_seed(b"a") != t().rng_seed(b"b"));
 }
 
-#[test]
-fn test_digest() {
-  test_transcript::<crate::DigestTranscript<sha2::Sha256>>();
-  test_transcript::<crate::DigestTranscript<blake2::Blake2b512>>();
-}
+#[allow(clippy::module_inception)]
+#[cfg(test)]
+mod tests {
+  use super::*;
 
-#[cfg(feature = "recommended")]
-#[test]
-fn test_recommended() {
-  test_transcript::<crate::RecommendedTranscript>();
-}
+  #[test]
+  fn test_digest() {
+    test_transcript::<crate::DigestTranscript<sha2::Sha256>>();
+    test_transcript::<crate::DigestTranscript<blake2::Blake2b512>>();
+  }
 
-#[cfg(feature = "merlin")]
-#[test]
-fn test_merlin() {
-  test_transcript::<crate::MerlinTranscript>();
+  #[cfg(feature = "recommended")]
+  #[test]
+  fn test_recommended() {
+    test_transcript::<crate::RecommendedTranscript>();
+  }
+
+  #[cfg(feature = "merlin")]
+  #[test]
+  fn test_merlin() {
+    test_transcript::<crate::MerlinTranscript>();
+  }
 }

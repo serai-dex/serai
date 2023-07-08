@@ -20,7 +20,7 @@ pub struct FieldElement(pub(crate) ResidueType);
 impl DefaultIsZeroes for FieldElement {}
 
 // 2**448 - 2**224 - 1
-pub(crate) const MODULUS: U448 = U448::from_be_hex(MODULUS_STR);
+const MODULUS: U448 = U448::from_be_hex(MODULUS_STR);
 
 const WIDE_MODULUS: U896 = U896::from_be_hex(concat!(
   "00000000000000000000000000000000000000000000000000000000",

@@ -32,24 +32,24 @@ mod oncelock_shim {
 
   pub struct OnceLock<T>(Mutex<bool>, Option<T>);
   impl<T> OnceLock<T> {
-    pub const fn new() -> OnceLock<T> {
-      OnceLock(Mutex::new(false), None)
+    pub const fn new() ->  Self {
+      Self(Mutex::new(false), None)
     }
 
     // These return a distinct Option in case of None so another caller using get_or_init doesn't
     // transform it from None to Some
     pub fn get(&self) -> Option<&T> {
-      if !*self.0.lock() {
-        None
-      } else {
+      if *self.0.lock() {
         self.1.as_ref()
+      } else {
+        None
       }
     }
     pub fn get_mut(&mut self) -> Option<&mut T> {
-      if !*self.0.lock() {
-        None
-      } else {
+      if *self.0.lock() {
         self.1.as_mut()
+      } else {
+        None
       }
     }
 
@@ -57,7 +57,7 @@ mod oncelock_shim {
       let mut lock = self.0.lock();
       if !*lock {
         unsafe {
-          (core::ptr::addr_of!(self.1) as *mut Option<_>).write_unaligned(Some(f()));
+          core::ptr::addr_of!(self.1).cast_mut().write_unaligned(Some(f()));
         }
       }
       *lock = true;

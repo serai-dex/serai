@@ -7,6 +7,7 @@ use zeroize::Zeroize;
 use crate::cross_group::u8_from_bool;
 
 /// Convert a uniform scalar into one usable on both fields, clearing the top bits as needed.
+#[must_use]
 pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   mut scalar: F0,
 ) -> (F0, F1) {
@@ -49,6 +50,7 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
 }
 
 /// Helper to convert a scalar between fields. Returns None if the scalar isn't mutually valid.
+#[must_use]
 pub fn scalar_convert<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   mut scalar: F0,
 ) -> Option<F1> {
@@ -60,6 +62,7 @@ pub fn scalar_convert<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
 }
 
 /// Create a mutually valid scalar from bytes via bit truncation to not introduce bias.
+#[must_use]
 pub fn mutual_scalar_from_bytes<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   bytes: &[u8],
 ) -> (F0, F1) {

@@ -1,5 +1,5 @@
 use core::{
-  ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
+  ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
   iter::Sum,
 };
 
@@ -72,7 +72,7 @@ impl ConstantTimeEq for Point {
 }
 
 impl PartialEq for Point {
-  fn eq(&self, other: &Point) -> bool {
+  fn eq(&self, other: &Self) -> bool {
     self.ct_eq(other).into()
   }
 }
@@ -81,7 +81,7 @@ impl Eq for Point {}
 
 impl ConditionallySelectable for Point {
   fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-    Point {
+    Self {
       x: FieldElement::conditional_select(&a.x, &b.x, choice),
       y: FieldElement::conditional_select(&a.y, &b.y, choice),
       z: FieldElement::conditional_select(&a.z, &b.z, choice),
@@ -90,8 +90,9 @@ impl ConditionallySelectable for Point {
 }
 
 impl Add for Point {
-  type Output = Point;
+  type Output = Self;
   fn add(self, other: Self) -> Self {
+    // add-2008-bbjlp
     // 12 muls, 7 additions, 4 negations
     let xcp = self.x * other.x;
     let ycp = self.y * other.y;
@@ -105,7 +106,7 @@ impl Add for Point {
     #[allow(non_snake_case)]
     let G_ = B + E;
 
-    Point {
+    Self {
       x: zcp * F * ((self.x + self.y) * (other.x + other.y) - xcp - ycp),
       y: zcp * G_ * (ycp - xcp),
       z: F * G_,
@@ -114,33 +115,33 @@ impl Add for Point {
 }
 
 impl AddAssign for Point {
-  fn add_assign(&mut self, other: Point) {
+  fn add_assign(&mut self, other: Self) {
     *self = *self + other;
   }
 }
 
-impl Add<&Point> for Point {
-  type Output = Point;
-  fn add(self, other: &Point) -> Point {
+impl Add<&Self> for Point {
+  type Output = Self;
+  fn add(self, other: &Self) -> Self {
     self + *other
   }
 }
 
-impl AddAssign<&Point> for Point {
-  fn add_assign(&mut self, other: &Point) {
+impl AddAssign<&Self> for Point {
+  fn add_assign(&mut self, other: &Self) {
     *self += *other;
   }
 }
 
 impl Neg for Point {
-  type Output = Point;
+  type Output = Self;
   fn neg(self) -> Self {
-    Point { x: -self.x, y: self.y, z: self.z }
+    Self { x: -self.x, y: self.y, z: self.z }
   }
 }
 
 impl Sub for Point {
-  type Output = Point;
+  type Output = Self;
   #[allow(clippy::suspicious_arithmetic_impl)]
   fn sub(self, other: Self) -> Self {
     self + other.neg()
@@ -148,20 +149,20 @@ impl Sub for Point {
 }
 
 impl SubAssign for Point {
-  fn sub_assign(&mut self, other: Point) {
+  fn sub_assign(&mut self, other: Self) {
     *self = *self - other;
   }
 }
 
-impl Sub<&Point> for Point {
-  type Output = Point;
-  fn sub(self, other: &Point) -> Point {
+impl Sub<&Self> for Point {
+  type Output = Self;
+  fn sub(self, other: &Self) -> Self {
     self - *other
   }
 }
 
-impl SubAssign<&Point> for Point {
-  fn sub_assign(&mut self, other: &Point) {
+impl SubAssign<&Self> for Point {
+  fn sub_assign(&mut self, other: &Self) {
     *self -= *other;
   }
 }
@@ -180,7 +181,7 @@ impl Group for Point {
     }
   }
   fn identity() -> Self {
-    Point { x: FieldElement::ZERO, y: FieldElement::ONE, z: FieldElement::ONE }
+    Self { x: FieldElement::ZERO, y: FieldElement::ONE, z: FieldElement::ONE }
   }
   fn generator() -> Self {
     G
@@ -198,12 +199,12 @@ impl Group for Point {
     let F = xsq + ysq;
     #[allow(non_snake_case)]
     let J = F - zsq.double();
-    Point { x: J * (xy.square() - xsq - ysq), y: F * (xsq - ysq), z: F * J }
+    Self { x: J * (xy.square() - xsq - ysq), y: F * (xsq - ysq), z: F * J }
   }
 }
 
-impl Sum<Point> for Point {
-  fn sum<I: Iterator<Item = Point>>(iter: I) -> Point {
+impl Sum<Self> for Point {
+  fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
     let mut res = Self::identity();
     for i in iter {
       res += i;
@@ -212,17 +213,17 @@ impl Sum<Point> for Point {
   }
 }
 
-impl<'a> Sum<&'a Point> for Point {
-  fn sum<I: Iterator<Item = &'a Point>>(iter: I) -> Point {
-    Point::sum(iter.cloned())
+impl<'a> Sum<&'a Self> for Point {
+  fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+    Self::sum(iter.copied())
   }
 }
 
 impl Mul<Scalar> for Point {
-  type Output = Point;
-  fn mul(self, mut other: Scalar) -> Point {
+  type Output = Self;
+  fn mul(self, mut other: Scalar) -> Self {
     // Precompute the optimal amount that's a multiple of 2
-    let mut table = [Point::identity(); 16];
+    let mut table = [Self::identity(); 16];
     table[1] = self;
     for i in 2 .. 16 {
       table[i] = table[i - 1] + self;
@@ -232,7 +233,7 @@ impl Mul<Scalar> for Point {
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       bits |= bit;
       bit.zeroize();
 
@@ -258,8 +259,8 @@ impl MulAssign<Scalar> for Point {
 }
 
 impl Mul<&Scalar> for Point {
-  type Output = Point;
-  fn mul(self, other: &Scalar) -> Point {
+  type Output = Self;
+  fn mul(self, other: &Scalar) -> Self {
     self * *other
   }
 }
@@ -291,14 +292,14 @@ impl GroupEncoding for Point {
       recover_x(y).and_then(|mut x| {
         x.conditional_negate(x.is_odd().ct_eq(&!sign));
         let not_negative_zero = !(x.is_zero() & sign);
-        let point = Point { x, y, z: FieldElement::ONE };
+        let point = Self { x, y, z: FieldElement::ONE };
         CtOption::new(point, not_negative_zero & point.is_torsion_free())
       })
     })
   }
 
   fn from_bytes_unchecked(bytes: &Self::Repr) -> CtOption<Self> {
-    Point::from_bytes(bytes)
+    Self::from_bytes(bytes)
   }
 
   fn to_bytes(&self) -> Self::Repr {

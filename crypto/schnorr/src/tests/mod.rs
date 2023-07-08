@@ -106,7 +106,7 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
     keys
       .iter()
       .map(|key| C::generator() * key.deref())
-      .zip(challenges.iter().cloned())
+      .zip(challenges.iter().copied())
       .collect::<Vec<_>>()
       .as_ref(),
   ));

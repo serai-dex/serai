@@ -1,10 +1,12 @@
+#![allow(clippy::tests_outside_test_module)]
+
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![no_std] // Prevents writing new code, in what should be a simple wrapper, which requires std
 #![doc = include_str!("../README.md")]
 
 use core::{
   borrow::Borrow,
-  ops::{Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
+  ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Iterator, Sum, Product},
   hash::{Hash, Hasher},
 };
@@ -50,6 +52,7 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
 
   let mut bit = black_box(*bit_ref);
+  #[allow(clippy::as_conversions, clippy::cast_lossless)]
   let res = black_box(bit as u8);
   bit.zeroize();
   debug_assert!((res | 1) == 1);
@@ -172,8 +175,8 @@ math_neg!(Scalar, Scalar, DScalar::add, DScalar::sub, DScalar::mul);
 macro_rules! from_wrapper {
   ($uint: ident) => {
     impl From<$uint> for Scalar {
-      fn from(a: $uint) -> Scalar {
-        Scalar(DScalar::from(a))
+      fn from(a: $uint) -> Self {
+        Self(DScalar::from(a))
       }
     }
   };
@@ -190,18 +193,19 @@ const MODULUS: U256 =
   U256::from_be_hex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed");
 
 impl Scalar {
-  pub fn pow(&self, other: Scalar) -> Scalar {
-    let mut table = [Scalar::ONE; 16];
+  #[must_use]
+  pub fn pow(&self, other: Self) -> Self {
+    let mut table = [Self::ONE; 16];
     table[1] = *self;
     for i in 2 .. 16 {
       table[i] = table[i - 1] * self;
     }
 
-    let mut res = Scalar::ONE;
+    let mut res = Self::ONE;
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       bits |= bit;
       bit.zeroize();
 
@@ -219,23 +223,25 @@ impl Scalar {
   }
 
   /// Perform wide reduction on a 64-byte array to create a Scalar without bias.
-  pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Scalar {
+  #[must_use]
+  pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Self {
     Self(DScalar::from_bytes_mod_order_wide(bytes))
   }
 
   /// Derive a Scalar without bias from a digest via wide reduction.
-  pub fn from_hash<D: Digest<OutputSize = U64> + HashMarker>(hash: D) -> Scalar {
+  #[must_use]
+  pub fn from_hash<D: Digest<OutputSize = U64> + HashMarker>(hash: D) -> Self {
     let mut output = [0u8; 64];
     output.copy_from_slice(&hash.finalize());
-    let res = Scalar(DScalar::from_bytes_mod_order_wide(&output));
+    let res = Self(DScalar::from_bytes_mod_order_wide(&output));
     output.zeroize();
     res
   }
 }
 
 impl Field for Scalar {
-  const ZERO: Scalar = Scalar(DScalar::from_bits([0; 32]));
-  const ONE: Scalar = Scalar(DScalar::from_bits({
+  const ZERO: Self = Self(DScalar::from_bits([0; 32]));
+  const ONE: Self = Self(DScalar::from_bits({
     let mut bytes = [0; 32];
     bytes[0] = 1;
     bytes
@@ -259,10 +265,10 @@ impl Field for Scalar {
 
   fn sqrt(&self) -> CtOption<Self> {
     let mod_3_8 = MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8));
-    let mod_3_8 = Scalar::from_repr(mod_3_8.to_le_bytes()).unwrap();
+    let mod_3_8 = Self::from_repr(mod_3_8.to_le_bytes()).unwrap();
 
     let sqrt_m1 = MODULUS.saturating_sub(&U256::from_u8(1)).wrapping_div(&U256::from_u8(4));
-    let sqrt_m1 = Scalar::from(2u8).pow(Scalar::from_repr(sqrt_m1.to_le_bytes()).unwrap());
+    let sqrt_m1 = Self::from(2u8).pow(Self::from_repr(sqrt_m1.to_le_bytes()).unwrap());
 
     let tv1 = self.pow(mod_3_8);
     let tv2 = tv1 * sqrt_m1;
@@ -284,14 +290,14 @@ impl PrimeField for Scalar {
   const CAPACITY: u32 = 252;
 
   // 2.invert()
-  const TWO_INV: Scalar = Scalar(DScalar::from_bits([
+  const TWO_INV: Self = Self(DScalar::from_bits([
     247, 233, 122, 46, 141, 49, 9, 44, 107, 206, 123, 81, 239, 124, 111, 10, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 8,
   ]));
 
   // This was calculated with the method from the ff crate docs
   // SageMath GF(modulus).primitive_element()
-  const MULTIPLICATIVE_GENERATOR: Scalar = Scalar(DScalar::from_bits({
+  const MULTIPLICATIVE_GENERATOR: Self = Self(DScalar::from_bits({
     let mut bytes = [0; 32];
     bytes[0] = 2;
     bytes
@@ -302,26 +308,26 @@ impl PrimeField for Scalar {
 
   // This was calculated via the formula from the ff crate docs
   // Self::MULTIPLICATIVE_GENERATOR ** ((modulus - 1) >> Self::S)
-  const ROOT_OF_UNITY: Scalar = Scalar(DScalar::from_bits([
+  const ROOT_OF_UNITY: Self = Self(DScalar::from_bits([
     212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
     96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
   ]));
   // Self::ROOT_OF_UNITY.invert()
-  const ROOT_OF_UNITY_INV: Scalar = Scalar(DScalar::from_bits([
+  const ROOT_OF_UNITY_INV: Self = Self(DScalar::from_bits([
     25, 204, 55, 113, 58, 237, 138, 153, 215, 24, 41, 96, 139, 163, 238, 5, 134, 61, 62, 84, 159,
     146, 194, 130, 24, 126, 134, 31, 239, 140, 181, 6,
   ]));
 
   // This was calculated via the formula from the ff crate docs
   // Self::MULTIPLICATIVE_GENERATOR ** (2 ** Self::S)
-  const DELTA: Scalar = Scalar(DScalar::from_bits([
+  const DELTA: Self = Self(DScalar::from_bits([
     16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   ]));
 
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
     // TODO: This unwrap_or_else isn't constant time, yet we don't exactly have an alternative...
-    CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(black_box(scalar).is_some()))
+    CtOption::new(Self(scalar.unwrap_or_else(DScalar::zero)), choice(black_box(scalar).is_some()))
   }
   fn to_repr(&self) -> [u8; 32] {
     self.0.to_bytes()
@@ -337,7 +343,7 @@ impl PrimeField for Scalar {
     // methods does not
     // We do not use one of its methods to ensure we write via zeroize
     for mut bit in bits.iter_mut() {
-      bit.deref_mut().zeroize();
+      bit.zeroize();
     }
     res
   }
@@ -355,33 +361,33 @@ impl PrimeFieldBits for Scalar {
   }
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
-    let mut bytes = (Scalar::ZERO - Scalar::ONE).to_repr();
+    let mut bytes = (Self::ZERO - Self::ONE).to_repr();
     bytes[0] += 1;
     debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::zero());
     bytes.into()
   }
 }
 
-impl Sum<Scalar> for Scalar {
-  fn sum<I: Iterator<Item = Scalar>>(iter: I) -> Scalar {
+impl Sum<Self> for Scalar {
+  fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
     Self(DScalar::sum(iter))
   }
 }
 
-impl<'a> Sum<&'a Scalar> for Scalar {
-  fn sum<I: Iterator<Item = &'a Scalar>>(iter: I) -> Scalar {
+impl<'a> Sum<&'a Self> for Scalar {
+  fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
     Self(DScalar::sum(iter))
   }
 }
 
-impl Product<Scalar> for Scalar {
-  fn product<I: Iterator<Item = Scalar>>(iter: I) -> Scalar {
+impl Product<Self> for Scalar {
+  fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
     Self(DScalar::product(iter))
   }
 }
 
-impl<'a> Product<&'a Scalar> for Scalar {
-  fn product<I: Iterator<Item = &'a Scalar>>(iter: I) -> Scalar {
+impl<'a> Product<&'a Self> for Scalar {
+  fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
     Self(DScalar::product(iter))
   }
 }
@@ -502,8 +508,9 @@ dalek_group!(
 );
 
 impl EdwardsPoint {
-  pub fn mul_by_cofactor(&self) -> EdwardsPoint {
-    EdwardsPoint(self.0.mul_by_cofactor())
+  #[must_use]
+  pub fn mul_by_cofactor(&self) -> Self {
+    Self(self.0.mul_by_cofactor())
   }
 }
 

@@ -48,7 +48,7 @@ pub struct SchnorrSignature<C: Ciphersuite> {
 impl<C: Ciphersuite> SchnorrSignature<C> {
   /// Read a SchnorrSignature from something implementing Read.
   pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
-    Ok(SchnorrSignature { R: C::read_G(reader)?, s: C::read_F(reader)? })
+    Ok(Self { R: C::read_G(reader)?, s: C::read_F(reader)? })
   }
 
   /// Write a SchnorrSignature to something implementing Read.
@@ -69,12 +69,8 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
   /// This challenge must be properly crafted, which means being binding to the public key, nonce,
   /// and any message. Failure to do so will let a malicious adversary to forge signatures for
   /// different keys/messages.
-  pub fn sign(
-    private_key: &Zeroizing<C::F>,
-    nonce: Zeroizing<C::F>,
-    challenge: C::F,
-  ) -> SchnorrSignature<C> {
-    SchnorrSignature {
+  pub fn sign(private_key: &Zeroizing<C::F>, nonce: Zeroizing<C::F>, challenge: C::F) -> Self {
+    Self {
       // Uses deref instead of * as * returns C::F yet deref returns &C::F, preventing a copy
       R: C::generator() * nonce.deref(),
       s: (challenge * private_key.deref()) + nonce.deref(),

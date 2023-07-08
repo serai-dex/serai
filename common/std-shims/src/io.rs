@@ -24,14 +24,17 @@ mod shims {
   }
 
   impl Error {
-    pub fn new<E: 'static + Send + Sync>(kind: ErrorKind, error: E) -> Error {
-      Error { kind, error: Box::new(error) }
+    #[must_use]
+    pub fn new<E: 'static + Send + Sync>(kind: ErrorKind, error: E) -> Self {
+      Self { kind, error: Box::new(error) }
     }
 
-    pub fn kind(&self) -> ErrorKind {
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
       self.kind
     }
 
+    #[must_use]
     pub fn into_inner(self) -> Option<Box<dyn Send + Sync>> {
       Some(self.error)
     }
@@ -53,10 +56,7 @@ mod shims {
 
   impl Read for &[u8] {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-      let mut read = buf.len();
-      if self.len() < buf.len() {
-        read = self.len();
-      }
+      let read = self.len().min(buf.len());
       buf[.. read].copy_from_slice(&self[.. read]);
       *self = &self[read ..];
       Ok(read)

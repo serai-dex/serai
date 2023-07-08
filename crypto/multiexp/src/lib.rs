@@ -2,7 +2,6 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::ops::DerefMut;
 #[cfg(not(feature = "std"))]
 #[macro_use]
 extern crate alloc;
@@ -39,6 +38,7 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
 
   let mut bit = black_box(*bit_ref);
+  #[allow(clippy::as_conversions, clippy::cast_lossless)]
   let res = black_box(bit as u8);
   bit.zeroize();
   debug_assert!((res | 1) == 1);
@@ -62,7 +62,7 @@ where
     groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
 
     for (i, mut bit) in bits.iter_mut().enumerate() {
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       groupings[p][i / w_usize] |= bit << (i % w_usize);
       bit.zeroize();
     }
@@ -124,7 +124,7 @@ Pippenger 6 is more efficient at 250 with 655µs per
 Pippenger 7 is more efficient at 475 with 500µs per
 Pippenger 8 is more efficient at 875 with 499µs per
 */
-fn algorithm(len: usize) -> Algorithm {
+const fn algorithm(len: usize) -> Algorithm {
   #[cfg(not(debug_assertions))]
   if len == 0 {
     Algorithm::Null

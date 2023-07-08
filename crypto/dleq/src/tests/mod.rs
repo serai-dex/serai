@@ -77,7 +77,7 @@ fn test_dleq() {
       assert!(proof
         .verify(
           &mut transcript(),
-          generators[.. i].iter().cloned().rev().collect::<Vec<_>>().as_ref(),
+          generators[.. i].iter().copied().rev().collect::<Vec<_>>().as_ref(),
           &keys[.. i]
         )
         .is_err());
@@ -86,7 +86,7 @@ fn test_dleq() {
         .verify(
           &mut transcript(),
           &generators[.. i],
-          keys[.. i].iter().cloned().rev().collect::<Vec<_>>().as_ref()
+          keys[.. i].iter().copied().rev().collect::<Vec<_>>().as_ref()
         )
         .is_err());
     }
@@ -117,7 +117,7 @@ fn test_multi_dleq() {
       // 0: 0
       // 1: 1, 2
       // 2: 2, 3, 4
-      let key_generators = generators[i .. (i + i + 1)].to_vec();
+      let key_generators = generators[i ..= i + i].to_vec();
       let mut these_pub_keys = vec![];
       for generator in &key_generators {
         these_pub_keys.push(generator * key.deref());

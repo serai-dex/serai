@@ -47,13 +47,13 @@ where
     transcript: &mut T,
     generator: G,
     private_key: &Zeroizing<G::Scalar>,
-  ) -> SchnorrPoK<G> {
+  ) -> Self {
     let nonce = Zeroizing::new(G::Scalar::random(rng));
     #[allow(non_snake_case)]
     let R = generator * nonce.deref();
-    SchnorrPoK {
+    Self {
       R,
-      s: (SchnorrPoK::hra(transcript, generator, R, generator * private_key.deref()) *
+      s: (Self::hra(transcript, generator, R, generator * private_key.deref()) *
         private_key.deref()) +
         nonce.deref(),
     }
@@ -85,7 +85,7 @@ where
   }
 
   #[cfg(feature = "serialize")]
-  pub fn read<R: Read>(r: &mut R) -> std::io::Result<SchnorrPoK<G>> {
-    Ok(SchnorrPoK { R: read_point(r)?, s: read_scalar(r)? })
+  pub fn read<R: Read>(r: &mut R) -> std::io::Result<Self> {
+    Ok(Self { R: read_point(r)?, s: read_scalar(r)? })
   }
 }

@@ -15,12 +15,12 @@ type ResidueType = Residue<ScalarModulus, { ScalarModulus::LIMBS }>;
 
 /// Ed448 Scalar field element.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
-pub struct Scalar(pub(crate) ResidueType);
+pub struct Scalar(ResidueType);
 
 impl DefaultIsZeroes for Scalar {}
 
 // 2**446 - 13818066809895115352007386748515426880336692474882178609894547503885
-pub(crate) const MODULUS: U448 = U448::from_be_hex(MODULUS_STR);
+const MODULUS: U448 = U448::from_be_hex(MODULUS_STR);
 
 const WIDE_MODULUS: U896 = U896::from_be_hex(concat!(
   "00000000000000000000000000000000000000000000000000000000",
@@ -53,9 +53,10 @@ field!(
 
 impl Scalar {
   /// Perform a wide reduction to obtain a non-biased Scalar.
-  pub fn wide_reduce(bytes: [u8; 114]) -> Scalar {
+  #[must_use]
+  pub fn wide_reduce(bytes: [u8; 114]) -> Self {
     let wide = U1024::from_le_slice(&[bytes.as_ref(), &[0; 14]].concat());
-    Scalar(Residue::new(&U448::from_le_slice(
+    Self(Residue::new(&U448::from_le_slice(
       &wide.rem(&WIDE_REDUCTION_MODULUS).to_le_bytes()[.. 56],
     )))
   }

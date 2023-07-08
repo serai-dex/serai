@@ -1,8 +1,6 @@
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "serialize")]
-use std::io::{Read, Write};
-
-use thiserror::Error;
+use std::io::{self, Read, Write};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -42,6 +40,7 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
 
   let mut bit = black_box(*bit_ref);
+  #[allow(clippy::as_conversions, clippy::cast_lossless)]
   let res = black_box(bit as u8);
   bit.zeroize();
   debug_assert!((res | 1) == 1);
@@ -51,15 +50,15 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
 }
 
 #[cfg(feature = "serialize")]
-pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> std::io::Result<G> {
+pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> io::Result<G> {
   let mut repr = G::Repr::default();
   r.read_exact(repr.as_mut())?;
   let point = G::from_bytes(&repr);
   let Some(point) = Option::<G>::from(point) else {
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid point"))?
+    Err(io::Error::new(io::ErrorKind::Other, "invalid point"))?
   };
   if point.to_bytes().as_ref() != repr.as_ref() {
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "non-canonical point"))?;
+    Err(io::Error::new(io::ErrorKind::Other, "non-canonical point"))?;
   }
   Ok(point)
 }
@@ -78,11 +77,11 @@ pub struct Generators<G: PrimeGroup> {
 
 impl<G: PrimeGroup> Generators<G> {
   /// Create a new set of generators.
-  pub fn new(primary: G, alt: G) -> Option<Generators<G>> {
+  pub fn new(primary: G, alt: G) -> Option<Self> {
     if primary == alt {
       None?;
     }
-    Some(Generators { primary, alt })
+    Some(Self { primary, alt })
   }
 
   fn transcript<T: Transcript>(&self, transcript: &mut T) {
@@ -93,21 +92,27 @@ impl<G: PrimeGroup> Generators<G> {
 }
 
 /// Error for cross-group DLEq proofs.
-#[derive(Error, PartialEq, Eq, Debug)]
-pub enum DLEqError {
-  /// Invalid proof of knowledge.
-  #[error("invalid proof of knowledge")]
-  InvalidProofOfKnowledge,
-  /// Invalid proof length.
-  #[error("invalid proof length")]
-  InvalidProofLength,
-  /// Invalid challenge.
-  #[error("invalid challenge")]
-  InvalidChallenge,
-  /// Invalid proof.
-  #[error("invalid proof")]
-  InvalidProof,
+#[allow(clippy::std_instead_of_core)]
+mod dleq_error {
+  use thiserror::Error;
+
+  #[derive(Error, PartialEq, Eq, Debug)]
+  pub enum DLEqError {
+    /// Invalid proof of knowledge.
+    #[error("invalid proof of knowledge")]
+    InvalidProofOfKnowledge,
+    /// Invalid proof length.
+    #[error("invalid proof length")]
+    InvalidProofLength,
+    /// Invalid challenge.
+    #[error("invalid challenge")]
+    InvalidChallenge,
+    /// Invalid proof.
+    #[error("invalid proof")]
+    InvalidProof,
+  }
 }
+pub use dleq_error::DLEqError;
 
 // This should never be directly instantiated and uses a u8 to represent internal values
 // Any external usage is likely invalid
@@ -335,7 +340,7 @@ where
 
     these_bits.zeroize();
 
-    let proof = __DLEqProof { bits, remainder, poks };
+    let proof = Self { bits, remainder, poks };
     debug_assert_eq!(
       proof.reconstruct_keys(),
       (generators.0.primary * f.0.deref(), generators.1.primary * f.1.deref())
@@ -412,10 +417,8 @@ where
     Self::transcript(transcript, generators, keys);
 
     let batch_capacity = match BitSignature::from(SIGNATURE) {
-      BitSignature::ClassicLinear => 3,
-      BitSignature::ConciseLinear => 3,
-      BitSignature::EfficientLinear => (self.bits.len() + 1) * 3,
-      BitSignature::CompromiseLinear => (self.bits.len() + 1) * 3,
+      BitSignature::ClassicLinear | BitSignature::ConciseLinear => 3,
+      BitSignature::EfficientLinear | BitSignature::CompromiseLinear => (self.bits.len() + 1) * 3,
     };
     let mut batch = (BatchVerifier::new(batch_capacity), BatchVerifier::new(batch_capacity));
 
@@ -439,7 +442,7 @@ where
 
   /// Write a Cross-Group Discrete Log Equality proof to a type satisfying std::io::Write.
   #[cfg(feature = "serialize")]
-  pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for bit in &self.bits {
       bit.write(w)?;
     }
@@ -452,7 +455,7 @@ where
 
   /// Read a Cross-Group Discrete Log Equality proof from a type satisfying std::io::Read.
   #[cfg(feature = "serialize")]
-  pub fn read<R: Read>(r: &mut R) -> std::io::Result<Self> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
     let bits_per_group = BitSignature::from(SIGNATURE).bits();
 
@@ -466,6 +469,6 @@ where
       remainder = Some(Bits::read(r)?);
     }
 
-    Ok(__DLEqProof { bits, remainder, poks: (SchnorrPoK::read(r)?, SchnorrPoK::read(r)?) })
+    Ok(Self { bits, remainder, poks: (SchnorrPoK::read(r)?, SchnorrPoK::read(r)?) })
   }
 }

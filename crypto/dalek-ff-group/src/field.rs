@@ -1,5 +1,5 @@
 use core::{
-  ops::{DerefMut, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
+  ops::{Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Sum, Product},
 };
 
@@ -72,7 +72,7 @@ math!(
 macro_rules! from_wrapper {
   ($uint: ident) => {
     impl From<$uint> for FieldElement {
-      fn from(a: $uint) -> FieldElement {
+      fn from(a: $uint) -> Self {
         Self(ResidueType::new(&U256::from(a)))
       }
     }
@@ -106,19 +106,19 @@ impl Field for FieldElement {
   fn random(mut rng: impl RngCore) -> Self {
     let mut bytes = [0; 64];
     rng.fill_bytes(&mut bytes);
-    FieldElement(reduce(U512::from_le_bytes(bytes)))
+    Self(reduce(U512::from_le_bytes(bytes)))
   }
 
   fn square(&self) -> Self {
-    FieldElement(self.0.square())
+    Self(self.0.square())
   }
   fn double(&self) -> Self {
-    FieldElement(self.0.add(&self.0))
+    Self(self.0.add(&self.0))
   }
 
   fn invert(&self) -> CtOption<Self> {
-    const NEG_2: FieldElement =
-      FieldElement(ResidueType::new(&MODULUS.saturating_sub(&U256::from_u8(2))));
+    #[allow(clippy::use_self)]
+    const NEG_2: FieldElement = Self(ResidueType::new(&MODULUS.saturating_sub(&U256::from_u8(2))));
     CtOption::new(self.pow(NEG_2), !self.is_zero())
   }
 
@@ -130,7 +130,7 @@ impl Field for FieldElement {
     CtOption::new(candidate, candidate.square().ct_eq(self))
   }
 
-  fn sqrt_ratio(u: &FieldElement, v: &FieldElement) -> (Choice, FieldElement) {
+  fn sqrt_ratio(u: &Self, v: &Self) -> (Choice, Self) {
     let i = SQRT_M1;
 
     let u = *u;
@@ -163,7 +163,7 @@ impl PrimeField for FieldElement {
   const NUM_BITS: u32 = 255;
   const CAPACITY: u32 = 254;
 
-  const TWO_INV: Self = FieldElement(ResidueType::new(&U256::from_u8(2)).invert().0);
+  const TWO_INV: Self = Self(ResidueType::new(&U256::from_u8(2)).invert().0);
 
   // This was calculated with the method from the ff crate docs
   // SageMath GF(modulus).primitive_element()
@@ -174,15 +174,15 @@ impl PrimeField for FieldElement {
 
   // This was calculated via the formula from the ff crate docs
   // Self::MULTIPLICATIVE_GENERATOR ** ((modulus - 1) >> Self::S)
-  const ROOT_OF_UNITY: Self = FieldElement(ResidueType::new(&U256::from_be_hex(
+  const ROOT_OF_UNITY: Self = Self(ResidueType::new(&U256::from_be_hex(
     "2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0",
   )));
   // Self::ROOT_OF_UNITY.invert()
-  const ROOT_OF_UNITY_INV: Self = FieldElement(Self::ROOT_OF_UNITY.0.invert().0);
+  const ROOT_OF_UNITY_INV: Self = Self(Self::ROOT_OF_UNITY.0.invert().0);
 
   // This was calculated via the formula from the ff crate docs
   // Self::MULTIPLICATIVE_GENERATOR ** (2 ** Self::S)
-  const DELTA: Self = FieldElement(ResidueType::new(&U256::from_be_hex(
+  const DELTA: Self = Self(ResidueType::new(&U256::from_be_hex(
     "0000000000000000000000000000000000000000000000000000000000000010",
   )));
 
@@ -217,24 +217,26 @@ impl PrimeFieldBits for FieldElement {
 
 impl FieldElement {
   /// Interpret the value as a little-endian integer, square it, and reduce it into a FieldElement.
-  pub fn from_square(value: [u8; 32]) -> FieldElement {
+  #[must_use]
+  pub fn from_square(value: [u8; 32]) -> Self {
     let value = U256::from_le_bytes(value);
-    FieldElement(reduce(U512::from(value.mul_wide(&value))))
+    Self(reduce(U512::from(value.mul_wide(&value))))
   }
 
   /// Perform an exponentation.
-  pub fn pow(&self, other: FieldElement) -> FieldElement {
-    let mut table = [FieldElement::ONE; 16];
+  #[must_use]
+  pub fn pow(&self, other: Self) -> Self {
+    let mut table = [Self::ONE; 16];
     table[1] = *self;
     for i in 2 .. 16 {
       table[i] = table[i - 1] * self;
     }
 
-    let mut res = FieldElement::ONE;
+    let mut res = Self::ONE;
     let mut bits = 0;
     for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
       bits <<= 1;
-      let mut bit = u8_from_bool(bit.deref_mut());
+      let mut bit = u8_from_bool(&mut bit);
       bits |= bit;
       bit.zeroize();
 
@@ -257,7 +259,8 @@ impl FieldElement {
   /// The result is only a valid square root if the Choice is true.
   /// RFC 8032 simply fails if there isn't a square root, leaving any return value undefined.
   /// Ristretto explicitly returns 0 or sqrt((SQRT_M1 * u) / v).
-  pub fn sqrt_ratio_i(u: FieldElement, v: FieldElement) -> (Choice, FieldElement) {
+  #[must_use]
+  pub fn sqrt_ratio_i(u: Self, v: Self) -> (Choice, Self) {
     let i = SQRT_M1;
 
     let v3 = v.square() * v;
@@ -288,9 +291,9 @@ impl FieldElement {
   }
 }
 
-impl Sum<FieldElement> for FieldElement {
-  fn sum<I: Iterator<Item = FieldElement>>(iter: I) -> FieldElement {
-    let mut res = FieldElement::ZERO;
+impl Sum<Self> for FieldElement {
+  fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+    let mut res = Self::ZERO;
     for item in iter {
       res += item;
     }
@@ -298,15 +301,15 @@ impl Sum<FieldElement> for FieldElement {
   }
 }
 
-impl<'a> Sum<&'a FieldElement> for FieldElement {
-  fn sum<I: Iterator<Item = &'a FieldElement>>(iter: I) -> FieldElement {
-    iter.cloned().sum()
+impl<'a> Sum<&'a Self> for FieldElement {
+  fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+    iter.copied().sum()
   }
 }
 
-impl Product<FieldElement> for FieldElement {
-  fn product<I: Iterator<Item = FieldElement>>(iter: I) -> FieldElement {
-    let mut res = FieldElement::ONE;
+impl Product<Self> for FieldElement {
+  fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+    let mut res = Self::ONE;
     for item in iter {
       res *= item;
     }
@@ -314,9 +317,9 @@ impl Product<FieldElement> for FieldElement {
   }
 }
 
-impl<'a> Product<&'a FieldElement> for FieldElement {
-  fn product<I: Iterator<Item = &'a FieldElement>>(iter: I) -> FieldElement {
-    iter.cloned().product()
+impl<'a> Product<&'a Self> for FieldElement {
+  fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+    iter.copied().product()
   }
 }
 
