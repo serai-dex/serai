@@ -155,7 +155,6 @@ impl<C: Ciphersuite> SchnorrAggregator<C> {
   ///
   /// The DST used here must prevent a collision with whatever hash function produced the
   /// challenges.
-  #[must_use]
   pub fn new(dst: &'static [u8]) -> Self {
     let mut res = Self { digest: DigestTranscript::<C::H>::new(dst), sigs: vec![] };
     res.digest.domain_separate(b"signatures");

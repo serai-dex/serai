@@ -94,7 +94,6 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
   /// Create a new machine to generate a key.
   ///
   /// The context string should be unique among multisigs.
-  #[must_use]
   pub const fn new(params: ThresholdParams, context: String) -> Self {
     Self { params, context, curve: PhantomData }
   }

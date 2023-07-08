@@ -147,7 +147,6 @@ pub type IetfSchnorr<C, H> = Schnorr<C, IetfTranscript, H>;
 
 impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
   /// Construct a Schnorr algorithm continuing the specified transcript.
-  #[must_use]
   pub const fn new(transcript: T) -> Self {
     Self { transcript, c: None, _hram: PhantomData }
   }
@@ -157,7 +156,6 @@ impl<C: Curve, H: Hram<C>> IetfSchnorr<C, H> {
   /// Construct a IETF-compatible Schnorr algorithm.
   ///
   /// Please see the `IetfSchnorr` documentation for the full details of this.
-  #[must_use]
   pub const fn ietf() -> Self {
     Self::new(IetfTranscript(vec![]))
   }

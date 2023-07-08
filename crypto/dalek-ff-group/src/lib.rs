@@ -223,13 +223,11 @@ impl Scalar {
   }
 
   /// Perform wide reduction on a 64-byte array to create a Scalar without bias.
-  #[must_use]
   pub fn from_bytes_mod_order_wide(bytes: &[u8; 64]) -> Self {
     Self(DScalar::from_bytes_mod_order_wide(bytes))
   }
 
   /// Derive a Scalar without bias from a digest via wide reduction.
-  #[must_use]
   pub fn from_hash<D: Digest<OutputSize = U64> + HashMarker>(hash: D) -> Self {
     let mut output = [0u8; 64];
     output.copy_from_slice(&hash.finalize());

@@ -103,7 +103,6 @@ impl<D: Send + Clone + SecureDigest> DigestTranscript<D> {
 impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
 
-  #[must_use]
   fn new(name: &'static [u8]) -> Self {
     let mut res = Self(D::new());
     res.append(DigestTranscriptMember::Name, name);

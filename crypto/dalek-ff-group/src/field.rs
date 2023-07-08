@@ -217,7 +217,6 @@ impl PrimeFieldBits for FieldElement {
 
 impl FieldElement {
   /// Interpret the value as a little-endian integer, square it, and reduce it into a FieldElement.
-  #[must_use]
   pub fn from_square(value: [u8; 32]) -> Self {
     let value = U256::from_le_bytes(value);
     Self(reduce(U512::from(value.mul_wide(&value))))
@@ -259,7 +258,6 @@ impl FieldElement {
   /// The result is only a valid square root if the Choice is true.
   /// RFC 8032 simply fails if there isn't a square root, leaving any return value undefined.
   /// Ristretto explicitly returns 0 or sqrt((SQRT_M1 * u) / v).
-  #[must_use]
   pub fn sqrt_ratio_i(u: Self, v: Self) -> (Choice, Self) {
     let i = SQRT_M1;
 

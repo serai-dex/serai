@@ -62,7 +62,6 @@ impl Schnorrkel {
   /// Create a new algorithm with the specified context.
   ///
   /// If the context is greater than or equal to 4 GB in size, this will panic.
-  #[must_use]
   pub fn new(context: &'static [u8]) -> Self {
     Self { context, schnorr: Schnorr::new(MerlinTranscript::new(b"FROST Schnorrkel")), msg: None }
   }

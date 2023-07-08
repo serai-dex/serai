@@ -33,7 +33,6 @@ pub mod tests;
 pub struct Participant(pub(crate) u16);
 impl Participant {
   /// Create a new Participant identifier from a u16.
-  #[must_use]
   pub const fn new(i: u16) -> Option<Self> {
     if i == 0 {
       None
@@ -44,7 +43,6 @@ impl Participant {
 
   /// Convert a Participant identifier to bytes.
   #[allow(clippy::wrong_self_convention)]
-  #[must_use]
   pub const fn to_bytes(&self) -> [u8; 2] {
     self.0.to_le_bytes()
   }
@@ -183,24 +181,20 @@ mod lib {
     }
 
     /// Return the threshold for a multisig with these parameters.
-    #[must_use]
     pub const fn t(&self) -> u16 {
       self.t
     }
     /// Return the amount of participants for a multisig with these parameters.
-    #[must_use]
     pub const fn n(&self) -> u16 {
       self.n
     }
     /// Return the participant index of the share with these parameters.
-    #[must_use]
     pub const fn i(&self) -> Participant {
       self.i
     }
   }
 
   /// Calculate the lagrange coefficient for a signing set.
-  #[must_use]
   pub fn lagrange<F: PrimeField>(i: Participant, included: &[Participant]) -> F {
     let i_f = F::from(u64::from(u16::from(i)));
 
@@ -259,7 +253,6 @@ mod lib {
   }
 
   impl<C: Ciphersuite> ThresholdCore<C> {
-    #[must_use]
     pub(crate) fn new(
       params: ThresholdParams,
       secret_share: Zeroizing<C::F>,
@@ -420,7 +413,6 @@ mod lib {
 
   impl<C: Ciphersuite> ThresholdKeys<C> {
     /// Create a new set of ThresholdKeys from a ThresholdCore.
-    #[must_use]
     pub fn new(core: ThresholdCore<C>) -> Self {
       Self { core: Arc::new(core), offset: None }
     }

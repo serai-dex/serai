@@ -53,7 +53,6 @@ field!(
 
 impl Scalar {
   /// Perform a wide reduction to obtain a non-biased Scalar.
-  #[must_use]
   pub fn wide_reduce(bytes: [u8; 114]) -> Self {
     let wide = U1024::from_le_slice(&[bytes.as_ref(), &[0; 14]].concat());
     Self(Residue::new(&U448::from_le_slice(
