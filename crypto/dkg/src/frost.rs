@@ -73,7 +73,7 @@ impl<C: Ciphersuite> ReadWrite for Commitments<C> {
       commitments.push(read_G()?);
     }
 
-    Ok(Commitments { commitments, cached_msg, sig: SchnorrSignature::read(reader)? })
+    Ok(Self { commitments, cached_msg, sig: SchnorrSignature::read(reader)? })
   }
 
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -87,14 +87,16 @@ impl<C: Ciphersuite> ReadWrite for Commitments<C> {
 pub struct KeyGenMachine<C: Ciphersuite> {
   params: ThresholdParams,
   context: String,
-  _curve: PhantomData<C>,
+  curve: PhantomData<C>,
 }
 
 impl<C: Ciphersuite> KeyGenMachine<C> {
   /// Create a new machine to generate a key.
-  // The context string should be unique among multisigs.
-  pub fn new(params: ThresholdParams, context: String) -> KeyGenMachine<C> {
-    KeyGenMachine { params, context, _curve: PhantomData }
+  ///
+  /// The context string should be unique among multisigs.
+  #[must_use]
+  pub const fn new(params: ThresholdParams, context: String) -> Self {
+    Self { params, context, curve: PhantomData }
   }
 
   /// Start generating a key according to the FROST DKG spec.
@@ -171,7 +173,6 @@ fn polynomial<F: PrimeField + Zeroize>(
 /// channel.
 ///
 /// If any participant sends multiple secret shares to another participant, they are faulty.
-
 // This should presumably be written as SecretShare(Zeroizing<F::Repr>).
 // It's unfortunately not possible as F::Repr doesn't have Zeroize as a bound.
 // The encryption system also explicitly uses Zeroizing<M> so it can ensure anything being
@@ -195,7 +196,7 @@ impl<F: PrimeField> fmt::Debug for SecretShare<F> {
 }
 impl<F: PrimeField> Zeroize for SecretShare<F> {
   fn zeroize(&mut self) {
-    self.0.as_mut().zeroize()
+    self.0.as_mut().zeroize();
   }
 }
 // Still manually implement ZeroizeOnDrop to ensure these don't stick around.
@@ -213,7 +214,7 @@ impl<F: PrimeField> ReadWrite for SecretShare<F> {
   fn read<R: Read>(reader: &mut R, _: ThresholdParams) -> io::Result<Self> {
     let mut repr = F::Repr::default();
     reader.read_exact(repr.as_mut())?;
-    Ok(SecretShare(repr))
+    Ok(Self(repr))
   }
 
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -353,7 +354,7 @@ impl<C: Ciphersuite> Zeroize for KeyMachine<C> {
   fn zeroize(&mut self) {
     self.params.zeroize();
     self.secret.zeroize();
-    for (_, commitments) in self.commitments.iter_mut() {
+    for commitments in self.commitments.values_mut() {
       commitments.zeroize();
     }
     self.encryption.zeroize();
@@ -466,7 +467,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
       );
     }
 
-    let KeyMachine { commitments, encryption, params, secret } = self;
+    let Self { commitments, encryption, params, secret } = self;
     Ok(BlameMachine {
       commitments,
       encryption,
@@ -499,7 +500,7 @@ impl<C: Ciphersuite> fmt::Debug for BlameMachine<C> {
 
 impl<C: Ciphersuite> Zeroize for BlameMachine<C> {
   fn zeroize(&mut self) {
-    for (_, commitments) in self.commitments.iter_mut() {
+    for commitments in self.commitments.values_mut() {
       commitments.zeroize();
     }
     self.encryption.zeroize();
@@ -517,6 +518,7 @@ impl<C: Ciphersuite> BlameMachine<C> {
   /// territory of consensus protocols. This library does not handle that nor does it provide any
   /// tooling to do so. This function is solely intended to force users to acknowledge they're
   /// completing the protocol, not processing any blame.
+  #[allow(clippy::missing_const_for_fn)] // False positive
   pub fn complete(self) -> ThresholdCore<C> {
     self.result
   }
@@ -536,10 +538,9 @@ impl<C: Ciphersuite> BlameMachine<C> {
       Err(DecryptionError::InvalidProof) => return recipient,
     };
 
-    let share = match Option::<C::F>::from(C::F::from_repr(share_bytes.0)) {
-      Some(share) => share,
+    let Some(share) = Option::<C::F>::from(C::F::from_repr(share_bytes.0)) else {
       // If this isn't a valid scalar, the sender is faulty
-      None => return sender,
+      return sender;
     };
 
     // If this isn't a valid share, the sender is faulty

@@ -46,6 +46,7 @@ pub trait Curve: Ciphersuite {
   const CONTEXT: &'static [u8];
 
   /// Hash the given dst and data to a byte vector. Used to instantiate H4 and H5.
+  #[must_use]
   fn hash(dst: &[u8], data: &[u8]) -> Output<Self::H> {
     Self::H::digest([Self::CONTEXT, dst, data].concat())
   }
@@ -53,26 +54,31 @@ pub trait Curve: Ciphersuite {
   /// Field element from hash. Used during key gen and by other crates under Serai as a general
   /// utility. Used to instantiate H1 and H3.
   #[allow(non_snake_case)]
+  #[must_use]
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
     <Self as Ciphersuite>::hash_to_F(&[Self::CONTEXT, dst].concat(), msg)
   }
 
   /// Hash the message for the binding factor. H4 from the IETF draft.
+  #[must_use]
   fn hash_msg(msg: &[u8]) -> Output<Self::H> {
     Self::hash(b"msg", msg)
   }
 
   /// Hash the commitments for the binding factor. H5 from the IETF draft.
+  #[must_use]
   fn hash_commitments(commitments: &[u8]) -> Output<Self::H> {
     Self::hash(b"com", commitments)
   }
 
   /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft.
+  #[must_use]
   fn hash_binding_factor(binding: &[u8]) -> Self::F {
     <Self as Curve>::hash_to_F(b"rho", binding)
   }
 
   /// Securely generate a random nonce. H3 from the IETF draft.
+  #[must_use]
   fn random_nonce<R: RngCore + CryptoRng>(
     secret: &Zeroizing<Self::F>,
     rng: &mut R,

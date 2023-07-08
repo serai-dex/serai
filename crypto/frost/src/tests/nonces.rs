@@ -26,8 +26,8 @@ struct MultiNonce<C: Curve> {
 }
 
 impl<C: Curve> MultiNonce<C> {
-  fn new() -> MultiNonce<C> {
-    MultiNonce {
+  fn new() -> Self {
+    Self {
       transcript: RecommendedTranscript::new(b"FROST MultiNonce Algorithm Test"),
       nonces: None,
     }
@@ -173,16 +173,10 @@ pub fn test_invalid_commitment<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let mut preprocess = preprocesses.remove(&faulty).unwrap();
 
   // Mutate one of the commitments
-  let nonce =
-    preprocess.commitments.nonces.get_mut(usize::try_from(rng.next_u64()).unwrap() % 2).unwrap();
+  let nonce = &mut preprocess.commitments.nonces[usize::try_from(rng.next_u64()).unwrap() % 2];
   let generators_len = nonce.generators.len();
-  *nonce
-    .generators
-    .get_mut(usize::try_from(rng.next_u64()).unwrap() % generators_len)
-    .unwrap()
-    .0
-    .get_mut(usize::try_from(rng.next_u64()).unwrap() % 2)
-    .unwrap() = C::G::random(&mut *rng);
+  nonce.generators[usize::try_from(rng.next_u64()).unwrap() % generators_len].0
+    [usize::try_from(rng.next_u64()).unwrap() % 2] = C::G::random(&mut *rng);
 
   // The commitments are validated at time of deserialization (read_preprocess)
   // Accordingly, serialize it and read it again to make sure that errors

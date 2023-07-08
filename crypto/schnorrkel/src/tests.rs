@@ -21,5 +21,5 @@ fn test() {
   let signature = sign(&mut OsRng, Schnorrkel::new(CONTEXT), keys, machines, MSG);
 
   let key = PublicKey::from_bytes(key.to_bytes().as_ref()).unwrap();
-  key.verify(&mut SigningContext::new(CONTEXT).bytes(MSG), &signature).unwrap()
+  key.verify(&mut SigningContext::new(CONTEXT).bytes(MSG), &signature).unwrap();
 }

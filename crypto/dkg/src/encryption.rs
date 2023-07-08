@@ -1,8 +1,6 @@
 use core::{ops::Deref, fmt};
 use std::{io, collections::HashMap};
 
-use thiserror::Error;
-
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
@@ -70,7 +68,7 @@ impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
   }
 
   #[cfg(any(test, feature = "tests"))]
-  pub(crate) fn enc_key(&self) -> C::G {
+  pub(crate) const fn enc_key(&self) -> C::G {
     self.enc_key
   }
 }
@@ -110,6 +108,7 @@ fn cipher<C: Ciphersuite>(context: &str, ecdh: &Zeroizing<C::G>) -> ChaCha20 {
   transcript.append_message(b"shared_key", ecdh.as_ref());
   ecdh.as_mut().zeroize();
 
+  #[allow(clippy::redundant_closure_for_method_calls)] // Not redundant due to typing
   let zeroize = |buf: &mut [u8]| buf.zeroize();
 
   let mut key = Cc20Key::default();
@@ -329,13 +328,19 @@ fn encryption_key_transcript(context: &str) -> RecommendedTranscript {
   transcript
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
-pub(crate) enum DecryptionError {
-  #[error("accused provided an invalid signature")]
-  InvalidSignature,
-  #[error("accuser provided an invalid decryption key")]
-  InvalidProof,
+#[allow(clippy::std_instead_of_core)]
+mod decryption_error {
+  use thiserror::Error;
+
+  #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+  pub(crate) enum DecryptionError {
+    #[error("accused provided an invalid signature")]
+    InvalidSignature,
+    #[error("accuser provided an invalid decryption key")]
+    InvalidProof,
+  }
 }
+pub(crate) use decryption_error::DecryptionError;
 
 // A simple box for managing encryption.
 #[derive(Clone)]
@@ -381,7 +386,7 @@ impl<C: Ciphersuite> Encryption<C> {
     }
   }
 
-  pub(crate) fn registration<M: Message>(&self, msg: M) -> EncryptionKeyMessage<C, M> {
+  pub(crate) const fn registration<M: Message>(&self, msg: M) -> EncryptionKeyMessage<C, M> {
     EncryptionKeyMessage { msg, enc_key: self.enc_pub_key }
   }
 
@@ -390,9 +395,10 @@ impl<C: Ciphersuite> Encryption<C> {
     participant: Participant,
     msg: EncryptionKeyMessage<C, M>,
   ) -> M {
-    if self.enc_keys.contains_key(&participant) {
-      panic!("Re-registering encryption key for a participant");
-    }
+    assert!(
+      !self.enc_keys.contains_key(&participant),
+      "Re-registering encryption key for a participant"
+    );
     self.enc_keys.insert(participant, msg.enc_key);
     msg.msg
   }

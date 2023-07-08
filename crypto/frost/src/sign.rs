@@ -53,8 +53,8 @@ struct Params<C: Curve, A: Algorithm<C>> {
 }
 
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
-  fn new(algorithm: A, keys: ThresholdKeys<C>) -> Params<C, A> {
-    Params { algorithm, keys }
+  const fn new(algorithm: A, keys: ThresholdKeys<C>) -> Self {
+    Self { algorithm, keys }
   }
 
   fn multisig_params(&self) -> ThresholdParams {
@@ -111,8 +111,8 @@ pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
 
 impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a signature with the specified keys.
-  pub fn new(algorithm: A, keys: ThresholdKeys<C>) -> AlgorithmMachine<C, A> {
-    AlgorithmMachine { params: Params::new(algorithm, keys) }
+  pub const fn new(algorithm: A, keys: ThresholdKeys<C>) -> Self {
+    Self { params: Params::new(algorithm, keys) }
   }
 
   fn seeded_preprocess(

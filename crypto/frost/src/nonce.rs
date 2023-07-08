@@ -59,8 +59,8 @@ pub(crate) struct Nonce<C: Curve>(pub(crate) [Zeroizing<C::F>; 2]);
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub(crate) struct GeneratorCommitments<C: Curve>(pub(crate) [C::G; 2]);
 impl<C: Curve> GeneratorCommitments<C> {
-  fn read<R: Read>(reader: &mut R) -> io::Result<GeneratorCommitments<C>> {
-    Ok(GeneratorCommitments([<C as Curve>::read_G(reader)?, <C as Curve>::read_G(reader)?]))
+  fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+    Ok(Self([<C as Curve>::read_G(reader)?, <C as Curve>::read_G(reader)?]))
   }
 
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -82,7 +82,7 @@ impl<C: Curve> NonceCommitments<C> {
     rng: &mut R,
     secret_share: &Zeroizing<C::F>,
     generators: &[C::G],
-  ) -> (Nonce<C>, NonceCommitments<C>) {
+  ) -> (Nonce<C>, Self) {
     let nonce = Nonce::<C>([
       C::random_nonce(secret_share, &mut *rng),
       C::random_nonce(secret_share, &mut *rng),
@@ -96,11 +96,11 @@ impl<C: Curve> NonceCommitments<C> {
       ]));
     }
 
-    (nonce, NonceCommitments { generators: commitments })
+    (nonce, Self { generators: commitments })
   }
 
-  fn read<R: Read>(reader: &mut R, generators: &[C::G]) -> io::Result<NonceCommitments<C>> {
-    Ok(NonceCommitments {
+  fn read<R: Read>(reader: &mut R, generators: &[C::G]) -> io::Result<Self> {
+    Ok(Self {
       generators: (0 .. generators.len())
         .map(|_| GeneratorCommitments::read(reader))
         .collect::<Result<_, _>>()?,
@@ -146,7 +146,7 @@ impl<C: Curve> Commitments<C> {
     secret_share: &Zeroizing<C::F>,
     planned_nonces: &[Vec<C::G>],
     context: &[u8],
-  ) -> (Vec<Nonce<C>>, Commitments<C>) {
+  ) -> (Vec<Nonce<C>>, Self) {
     let mut nonces = vec![];
     let mut commitments = vec![];
 
@@ -168,18 +168,18 @@ impl<C: Curve> Commitments<C> {
       commitments.push(these_commitments);
     }
 
-    let dleq = if !dleq_generators.is_empty() {
+    let dleq = if dleq_generators.is_empty() {
+      None
+    } else {
       Some(MultiDLEqProof::prove(
         rng,
         &mut dleq_transcript::<T>(context),
         &dleq_generators,
         &dleq_nonces,
       ))
-    } else {
-      None
     };
 
-    (nonces, Commitments { nonces: commitments, dleq })
+    (nonces, Self { nonces: commitments, dleq })
   }
 
   pub(crate) fn transcript<T: Transcript>(&self, t: &mut T) {
@@ -219,17 +219,17 @@ impl<C: Curve> Commitments<C> {
       }
     }
 
-    let dleq = if !dleq_generators.is_empty() {
+    let dleq = if dleq_generators.is_empty() {
+      None
+    } else {
       let dleq = MultiDLEqProof::read(reader, dleq_generators.len())?;
       dleq
         .verify(&mut dleq_transcript::<T>(context), &dleq_generators, &dleq_nonces)
         .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid DLEq proof"))?;
       Some(dleq)
-    } else {
-      None
     };
 
-    Ok(Commitments { nonces, dleq })
+    Ok(Self { nonces, dleq })
   }
 
   pub(crate) fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -256,7 +256,7 @@ impl<C: Curve> BindingFactor<C> {
   }
 
   pub(crate) fn calculate_binding_factors<T: Clone + Transcript>(&mut self, transcript: &mut T) {
-    for (l, binding) in self.0.iter_mut() {
+    for (l, binding) in &mut self.0 {
       let mut transcript = transcript.clone();
       transcript.append_message(b"participant", C::F::from(u64::from(u16::from(*l))).to_repr());
       // It *should* be perfectly fine to reuse a binding factor for multiple nonces

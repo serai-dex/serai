@@ -1,7 +1,7 @@
 use core::{marker::PhantomData, ops::Deref};
+use alloc::sync::Arc;
 use std::{
   io::{self, Read, Write},
-  sync::Arc,
   collections::HashMap,
 };
 
@@ -45,11 +45,8 @@ impl<C: Ciphersuite> GeneratorProof<C> {
     self.proof.write(writer)
   }
 
-  pub fn read<R: Read>(reader: &mut R) -> io::Result<GeneratorProof<C>> {
-    Ok(GeneratorProof {
-      share: <C as Ciphersuite>::read_G(reader)?,
-      proof: DLEqProof::read(reader)?,
-    })
+  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+    Ok(Self { share: <C as Ciphersuite>::read_G(reader)?, proof: DLEqProof::read(reader)? })
   }
 
   pub fn serialize(&self) -> Vec<u8> {
@@ -70,16 +67,13 @@ pub struct GeneratorPromotion<C1: Ciphersuite, C2: Ciphersuite> {
   _c2: PhantomData<C2>,
 }
 
-impl<C1: Ciphersuite, C2: Ciphersuite> GeneratorPromotion<C1, C2>
-where
-  C2: Ciphersuite<F = C1::F, G = C1::G>,
-{
+impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<C1, C2> {
   /// Begin promoting keys from one generator to another. Returns a proof this share was properly
   /// promoted.
   pub fn promote<R: RngCore + CryptoRng>(
     rng: &mut R,
     base: ThresholdKeys<C1>,
-  ) -> (GeneratorPromotion<C1, C2>, GeneratorProof<C1>) {
+  ) -> (Self, GeneratorProof<C1>) {
     // Do a DLEqProof for the new generator
     let proof = GeneratorProof {
       share: C2::generator() * base.secret_share().deref(),
@@ -91,7 +85,7 @@ where
       ),
     };
 
-    (GeneratorPromotion { base, proof, _c2: PhantomData::<C2> }, proof)
+    (Self { base, proof, _c2: PhantomData::<C2> }, proof)
   }
 
   /// Complete promotion by taking in the proofs from all other participants.

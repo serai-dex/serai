@@ -14,7 +14,7 @@ use crate::{
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 struct AltGenerator<C: Ciphersuite> {
-  _curve: PhantomData<C>,
+  curve: PhantomData<C>,
 }
 
 impl<C: Ciphersuite> Ciphersuite for AltGenerator<C> {

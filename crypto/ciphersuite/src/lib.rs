@@ -1,4 +1,3 @@
-#![allow(clippy::self_named_module_files)] // False positive?
 #![allow(clippy::tests_outside_test_module)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("lib.md")]

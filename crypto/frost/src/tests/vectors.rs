@@ -1,8 +1,8 @@
 use core::ops::Deref;
 
-use std::collections::HashMap;
 #[cfg(test)]
-use std::str::FromStr;
+use core::str::FromStr;
+use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
@@ -45,11 +45,12 @@ pub struct Vectors {
 // Vectors are expected to be formatted per the IETF proof of concept
 // The included vectors are direcly from
 // https://github.com/cfrg/draft-irtf-cfrg-frost/tree/draft-irtf-cfrg-frost-11/poc
+#[allow(clippy::fallible_impl_from)]
 #[cfg(test)]
 impl From<serde_json::Value> for Vectors {
-  fn from(value: serde_json::Value) -> Vectors {
+  fn from(value: serde_json::Value) -> Self {
     let to_str = |value: &serde_json::Value| value.as_str().unwrap().to_string();
-    Vectors {
+    Self {
       threshold: u16::from_str(value["config"]["NUM_PARTICIPANTS"].as_str().unwrap()).unwrap(),
 
       group_secret: to_str(&value["inputs"]["group_secret_key"]),
@@ -166,8 +167,9 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     }
 
     let mut commitments = HashMap::new();
-    let mut machines = machines
-      .drain(..)
+    #[allow(clippy::needless_collect)] // Fails to compile without it due to borrow checking
+    let machines = machines
+      .into_iter()
       .enumerate()
       .map(|(c, (i, machine))| {
         let nonce = |i| {
@@ -224,8 +226,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       .collect::<Vec<_>>();
 
     let mut shares = HashMap::new();
-    let mut machines = machines
-      .drain(..)
+    let machines = machines
+      .into_iter()
       .enumerate()
       .map(|(c, (i, machine))| {
         let (machine, share) = machine
@@ -244,7 +246,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       })
       .collect::<HashMap<_, _>>();
 
-    for (i, machine) in machines.drain() {
+    for (i, machine) in machines {
       let sig = machine.complete(clone_without(&shares, i)).unwrap();
       let mut serialized = sig.R.to_bytes().as_ref().to_vec();
       serialized.extend(sig.s.to_repr().as_ref());
@@ -265,7 +267,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       unimplemented!()
     }
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-      dest.copy_from_slice(&self.0.remove(0))
+      dest.copy_from_slice(&self.0.remove(0));
     }
     fn try_fill_bytes(&mut self, _: &mut [u8]) -> Result<(), rand_core::Error> {
       unimplemented!()
@@ -347,7 +349,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       machines.push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone())));
     }
 
-    for (i, machine) in machines.drain(..) {
+    for (i, machine) in machines {
       let (_, preprocess) = machine.preprocess(&mut frosts.clone());
 
       // Calculate the expected nonces

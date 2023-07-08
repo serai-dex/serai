@@ -5,18 +5,22 @@
 -D clippy::nursery
 -D clippy::pedantic
 
+# Not worth the effort
+-A clippy::implicit_hasher
+
 # Stylistic preferrence
--A clippy::option-if-let-else
+-A clippy::option_if_let_else
 
 # Too many false/irrelevant positives
--A clippy::redundant-pub-crate
+-A clippy::redundant_pub_crate
 -A clippy::similar_names
 
 # Frequently used
--A clippy::wildcard-imports
+-A clippy::wildcard_imports
+-A clippy::too_many_lines
 
 # Used to avoid doing &* on copy-able items, with the * being the concern
--A clippy::explicit-deref-methods
+-A clippy::explicit_deref_methods
 
 # Lints from clippy::restrictions
 
@@ -39,7 +43,6 @@
 -D clippy::get_unwrap
 -D clippy::if_then_some_else_none
 -D clippy::rest_pat_in_fully_bound_structs
--D clippy::self_named_module_files
 -D clippy::semicolon_inside_block
 -D clippy::tests_outside_test_module
 
@@ -48,18 +51,18 @@
 -D clippy::string_to_string
 
 # Flagged on tests being named test_
--A clippy::module-name-repetitions
+-A clippy::module_name_repetitions
 
 # Flagged on items passed by value which implemented Copy
--A clippy::needless-pass-by-value
+-A clippy::needless_pass_by_value
 
 # Flagged on embedded functions defined when needed/relevant
 -A clippy::items_after_statements
 
 # These potentially should be enabled in the future
--A clippy::missing-errors-doc
--A clippy::missing-panics-doc
--A clippy::doc-markdown
+-A clippy::missing_errors_doc
+-A clippy::missing_panics_doc
+-A clippy::doc_markdown
 
 # TODO: Enable this
 # -D clippy::cargo
