@@ -6,10 +6,9 @@ use std_shims::{
   io::{self, Read, Write},
 };
 
-use rand_core::{RngCore, CryptoRng};
-
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use subtle::{ConstantTimeEq, Choice, CtOption};
+use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -30,31 +29,27 @@ pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 #[cfg(feature = "multisig")]
 pub(crate) use multisig::add_key_image_share;
 
-#[allow(clippy::std_instead_of_core)]
-mod clsag_error {
-  /// Errors returned when CLSAG signing fails.
-  #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-  #[cfg_attr(feature = "std", derive(thiserror::Error))]
-  pub enum ClsagError {
-    #[cfg_attr(feature = "std", error("internal error ({0})"))]
-    InternalError(&'static str),
-    #[cfg_attr(feature = "std", error("invalid ring"))]
-    InvalidRing,
-    #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
-    InvalidRingMember(u8, u8),
-    #[cfg_attr(feature = "std", error("invalid commitment"))]
-    InvalidCommitment,
-    #[cfg_attr(feature = "std", error("invalid key image"))]
-    InvalidImage,
-    #[cfg_attr(feature = "std", error("invalid D"))]
-    InvalidD,
-    #[cfg_attr(feature = "std", error("invalid s"))]
-    InvalidS,
-    #[cfg_attr(feature = "std", error("invalid c1"))]
-    InvalidC1,
-  }
+/// Errors returned when CLSAG signing fails.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum ClsagError {
+  #[cfg_attr(feature = "std", error("internal error ({0})"))]
+  InternalError(&'static str),
+  #[cfg_attr(feature = "std", error("invalid ring"))]
+  InvalidRing,
+  #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
+  InvalidRingMember(u8, u8),
+  #[cfg_attr(feature = "std", error("invalid commitment"))]
+  InvalidCommitment,
+  #[cfg_attr(feature = "std", error("invalid key image"))]
+  InvalidImage,
+  #[cfg_attr(feature = "std", error("invalid D"))]
+  InvalidD,
+  #[cfg_attr(feature = "std", error("invalid s"))]
+  InvalidS,
+  #[cfg_attr(feature = "std", error("invalid c1"))]
+  InvalidC1,
 }
-pub use clsag_error::ClsagError;
 
 /// Input being signed for.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -239,7 +234,6 @@ impl Clsag {
   /// Generate CLSAG signatures for the given inputs.
   /// inputs is of the form (private key, key image, input).
   /// sum_outputs is for the sum of the outputs' commitment masks.
-  #[must_use]
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
     mut inputs: Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>,
@@ -249,11 +243,12 @@ impl Clsag {
     let mut res = Vec::with_capacity(inputs.len());
     let mut sum_pseudo_outs = Scalar::zero();
     for i in 0 .. inputs.len() {
-      let mut mask = random_scalar(rng);
-      if i == (inputs.len() - 1) {
-        mask = sum_outputs - sum_pseudo_outs;
+      let mask = if i == (inputs.len() - 1) {
+        sum_outputs - sum_pseudo_outs
       } else {
+        let mask = random_scalar(rng);
         sum_pseudo_outs += mask;
+        mask
       }
 
       let mut nonce = Zeroizing::new(random_scalar(rng));
@@ -314,7 +309,7 @@ impl Clsag {
     Ok(())
   }
 
-  pub(crate) const fn fee_weight(ring_len: usize) -> usize {
+  pub(crate) fn fee_weight(ring_len: usize) -> usize {
     (ring_len * 32) + 32 + 32
   }
 

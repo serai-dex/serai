@@ -25,7 +25,7 @@ pub enum Input {
 
 impl Input {
   // Worst-case predictive len
-  pub(crate) const fn fee_weight(ring_len: usize) -> usize {
+  pub(crate) fn fee_weight(ring_len: usize) -> usize {
     // Uses 1 byte for the VarInt amount due to amount being 0
     // Uses 1 byte for the VarInt encoding of the length of the ring as well
     1 + 1 + 1 + (8 * ring_len) + 32
@@ -47,7 +47,6 @@ impl Input {
     }
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
     self.write(&mut res).unwrap();
@@ -82,7 +81,7 @@ pub struct Output {
 }
 
 impl Output {
-  pub(crate) const fn fee_weight() -> usize {
+  pub(crate) fn fee_weight() -> usize {
     1 + 1 + 32 + 1
   }
 
@@ -96,7 +95,6 @@ impl Output {
     Ok(())
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(8 + 1 + 32);
     self.write(&mut res).unwrap();
@@ -202,7 +200,6 @@ impl TransactionPrefix {
     w.write_all(&self.extra)
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
     self.write(&mut res).unwrap();
@@ -235,7 +232,6 @@ impl TransactionPrefix {
     Ok(prefix)
   }
 
-  #[must_use]
   pub fn hash(&self) -> [u8; 32] {
     hash(&self.serialize())
   }
@@ -277,7 +273,6 @@ impl Transaction {
     }
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(2048);
     self.write(&mut res).unwrap();
@@ -336,7 +331,6 @@ impl Transaction {
     Ok(Self { prefix, signatures, rct_signatures })
   }
 
-  #[must_use]
   pub fn hash(&self) -> [u8; 32] {
     let mut buf = Vec::with_capacity(2048);
     if self.prefix.version == 1 {
@@ -365,7 +359,6 @@ impl Transaction {
   }
 
   /// Calculate the hash of this transaction as needed for signing it.
-  #[must_use]
   pub fn signature_hash(&self) -> [u8; 32] {
     let mut buf = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);

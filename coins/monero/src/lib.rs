@@ -60,7 +60,6 @@ pub enum Protocol {
 
 impl Protocol {
   /// Amount of ring members under this protocol version.
-  #[must_use]
   pub const fn ring_len(&self) -> usize {
     match self {
       Self::v14 => 11,
@@ -72,7 +71,6 @@ impl Protocol {
   /// Whether or not the specified version uses Bulletproofs or Bulletproofs+.
   ///
   /// This method will likely be reworked when versions not using Bulletproofs at all are added.
-  #[must_use]
   pub const fn bp_plus(&self) -> bool {
     match self {
       Self::v14 => false,
@@ -82,7 +80,6 @@ impl Protocol {
   }
 
   // TODO: Make this an Option when we support pre-RCT protocols
-  #[must_use]
   pub const fn optimal_rct_type(&self) -> RctType {
     match self {
       Self::v14 => RctType::Clsag,
@@ -144,25 +141,21 @@ pub struct Commitment {
 
 impl Commitment {
   /// A commitment to zero, defined with a mask of 1 (as to not be the identity).
-  #[must_use]
   pub fn zero() -> Self {
     Self { mask: Scalar::one(), amount: 0 }
   }
 
-  #[must_use]
-  pub const fn new(mask: Scalar, amount: u64) -> Self {
+  pub fn new(mask: Scalar, amount: u64) -> Self {
     Self { mask, amount }
   }
 
   /// Calculate a Pedersen commitment, as a point, from the transparent structure.
-  #[must_use]
   pub fn calculate(&self) -> EdwardsPoint {
     (&self.mask * &ED25519_BASEPOINT_TABLE) + (Scalar::from(self.amount) * H())
   }
 }
 
 /// Support generating a random scalar using a modern rand, as dalek's is notoriously dated.
-#[must_use]
 pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
   let mut r = [0; 64];
   rng.fill_bytes(&mut r);
@@ -174,7 +167,6 @@ pub(crate) fn hash(data: &[u8]) -> [u8; 32] {
 }
 
 /// Hash the provided data to a scalar via keccak256(data) % l.
-#[must_use]
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {
   let scalar = Scalar::from_bytes_mod_order(hash(data));
   // Monero will explicitly error in this case

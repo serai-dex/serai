@@ -41,7 +41,7 @@ impl<G0: PrimeGroup, G1: PrimeGroup> Re<G0, G1> {
     Self::R(G0::identity(), G1::identity())
   }
 
-  pub(crate) const fn e_default() -> Self {
+  pub(crate) fn e_default() -> Self {
     Self::e(G0::Scalar::ZERO)
   }
 }

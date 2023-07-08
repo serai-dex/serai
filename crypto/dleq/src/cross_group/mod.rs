@@ -2,9 +2,10 @@ use core::ops::{Deref, DerefMut};
 #[cfg(feature = "serialize")]
 use std::io::{self, Read, Write};
 
-use rand_core::{RngCore, CryptoRng};
+use thiserror::Error;
 
 use zeroize::{Zeroize, Zeroizing};
+use rand_core::{RngCore, CryptoRng};
 
 use digest::{Digest, HashMarker};
 
@@ -92,27 +93,21 @@ impl<G: PrimeGroup> Generators<G> {
 }
 
 /// Error for cross-group DLEq proofs.
-#[allow(clippy::std_instead_of_core)]
-mod dleq_error {
-  use thiserror::Error;
-
-  #[derive(Error, PartialEq, Eq, Debug)]
-  pub enum DLEqError {
-    /// Invalid proof of knowledge.
-    #[error("invalid proof of knowledge")]
-    InvalidProofOfKnowledge,
-    /// Invalid proof length.
-    #[error("invalid proof length")]
-    InvalidProofLength,
-    /// Invalid challenge.
-    #[error("invalid challenge")]
-    InvalidChallenge,
-    /// Invalid proof.
-    #[error("invalid proof")]
-    InvalidProof,
-  }
+#[derive(Error, PartialEq, Eq, Debug)]
+pub enum DLEqError {
+/// Invalid proof of knowledge.
+#[error("invalid proof of knowledge")]
+InvalidProofOfKnowledge,
+/// Invalid proof length.
+#[error("invalid proof length")]
+InvalidProofLength,
+/// Invalid challenge.
+#[error("invalid challenge")]
+InvalidChallenge,
+/// Invalid proof.
+#[error("invalid proof")]
+InvalidProof,
 }
-pub use dleq_error::DLEqError;
 
 // This should never be directly instantiated and uses a u8 to represent internal values
 // Any external usage is likely invalid

@@ -24,17 +24,14 @@ mod shims {
   }
 
   impl Error {
-    #[must_use]
     pub fn new<E: 'static + Send + Sync>(kind: ErrorKind, error: E) -> Self {
       Self { kind, error: Box::new(error) }
     }
 
-    #[must_use]
     pub const fn kind(&self) -> ErrorKind {
       self.kind
     }
 
-    #[must_use]
     pub fn into_inner(self) -> Option<Box<dyn Send + Sync>> {
       Some(self.error)
     }

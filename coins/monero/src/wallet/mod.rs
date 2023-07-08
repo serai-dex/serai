@@ -141,17 +141,14 @@ pub struct ViewPair {
 }
 
 impl ViewPair {
-  #[must_use]
   pub const fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Self {
     Self { spend, view }
   }
 
-  #[must_use]
   pub const fn spend(&self) -> EdwardsPoint {
     self.spend
   }
 
-  #[must_use]
   pub fn view(&self) -> EdwardsPoint {
     self.view.deref() * &ED25519_BASEPOINT_TABLE
   }
@@ -176,7 +173,6 @@ impl ViewPair {
   }
 
   /// Returns an address with the provided specification.
-  #[must_use]
   pub fn address(&self, network: Network, spec: AddressSpec) -> MoneroAddress {
     let mut spend = self.spend;
     let mut view: EdwardsPoint = self.view.deref() * &ED25519_BASEPOINT_TABLE;
@@ -254,7 +250,6 @@ impl Scanner {
   ///
   /// If None is passed, a modified shared key derivation is used which is immune to the burning
   /// bug (specifically the Guaranteed feature from Featured Addresses).
-  #[must_use]
   pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Self {
     let mut subaddresses = HashMap::new();
     subaddresses.insert(pair.spend.compress(), None);

@@ -3,7 +3,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::{self, Debug};
-extern crate alloc;
+
+use thiserror::Error;
 
 use zeroize::Zeroize;
 
@@ -61,58 +62,49 @@ impl fmt::Display for Participant {
 }
 
 /// Various errors possible during key generation.
-#[allow(clippy::std_instead_of_core)]
-mod dkg_error {
-  use core::fmt::Debug;
-  use thiserror::Error;
-  use super::Participant;
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(Error))]
+pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
+/// A parameter was zero.
+#[cfg_attr(feature = "std", error("a parameter was 0 (threshold {0}, participants {1})"))]
+ZeroParameter(u16, u16),
+/// The threshold exceeded the amount of participants.
+#[cfg_attr(feature = "std", error("invalid threshold (max {1}, got {0})"))]
+InvalidThreshold(u16, u16),
+/// Invalid participant identifier.
+#[cfg_attr(
+  feature = "std",
+  error("invalid participant (0 < participant <= {0}, yet participant is {1})")
+)]
+InvalidParticipant(u16, Participant),
 
-  #[derive(Clone, PartialEq, Eq, Debug)]
-  #[cfg_attr(feature = "std", derive(Error))]
-  pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
-    /// A parameter was zero.
-    #[cfg_attr(feature = "std", error("a parameter was 0 (threshold {0}, participants {1})"))]
-    ZeroParameter(u16, u16),
-    /// The threshold exceeded the amount of participants.
-    #[cfg_attr(feature = "std", error("invalid threshold (max {1}, got {0})"))]
-    InvalidThreshold(u16, u16),
-    /// Invalid participant identifier.
-    #[cfg_attr(
-      feature = "std",
-      error("invalid participant (0 < participant <= {0}, yet participant is {1})")
-    )]
-    InvalidParticipant(u16, Participant),
+/// Invalid signing set.
+#[cfg_attr(feature = "std", error("invalid signing set"))]
+InvalidSigningSet,
+/// Invalid amount of participants.
+#[cfg_attr(feature = "std", error("invalid participant quantity (expected {0}, got {1})"))]
+InvalidParticipantQuantity(usize, usize),
+/// A participant was duplicated.
+#[cfg_attr(feature = "std", error("duplicated participant ({0})"))]
+DuplicatedParticipant(Participant),
+/// A participant was missing.
+#[cfg_attr(feature = "std", error("missing participant {0}"))]
+MissingParticipant(Participant),
 
-    /// Invalid signing set.
-    #[cfg_attr(feature = "std", error("invalid signing set"))]
-    InvalidSigningSet,
-    /// Invalid amount of participants.
-    #[cfg_attr(feature = "std", error("invalid participant quantity (expected {0}, got {1})"))]
-    InvalidParticipantQuantity(usize, usize),
-    /// A participant was duplicated.
-    #[cfg_attr(feature = "std", error("duplicated participant ({0})"))]
-    DuplicatedParticipant(Participant),
-    /// A participant was missing.
-    #[cfg_attr(feature = "std", error("missing participant {0}"))]
-    MissingParticipant(Participant),
-
-    /// An invalid proof of knowledge was provided.
-    #[cfg_attr(feature = "std", error("invalid proof of knowledge (participant {0})"))]
-    InvalidProofOfKnowledge(Participant),
-    /// An invalid DKG share was provided.
-    #[cfg_attr(feature = "std", error("invalid share (participant {participant}, blame {blame})"))]
-    InvalidShare { participant: Participant, blame: Option<B> },
-  }
+/// An invalid proof of knowledge was provided.
+#[cfg_attr(feature = "std", error("invalid proof of knowledge (participant {0})"))]
+InvalidProofOfKnowledge(Participant),
+/// An invalid DKG share was provided.
+#[cfg_attr(feature = "std", error("invalid share (participant {participant}, blame {blame})"))]
+InvalidShare { participant: Participant, blame: Option<B> },
 }
-pub use dkg_error::DkgError;
 
 #[cfg(feature = "std")]
 mod lib {
   pub use super::*;
 
   use core::ops::Deref;
-  use alloc::sync::Arc;
-  use std::{io, collections::HashMap};
+  use std::{sync::Arc, io, collections::HashMap};
 
   use zeroize::Zeroizing;
 
@@ -268,17 +260,17 @@ mod lib {
     }
 
     /// Parameters for these keys.
-    pub const fn params(&self) -> ThresholdParams {
+    pub fn params(&self) -> ThresholdParams {
       self.params
     }
 
     /// Secret share for these keys.
-    pub const fn secret_share(&self) -> &Zeroizing<C::F> {
+    pub fn secret_share(&self) -> &Zeroizing<C::F> {
       &self.secret_share
     }
 
     /// Group key for these keys.
-    pub const fn group_key(&self) -> C::G {
+    pub fn group_key(&self) -> C::G {
       self.group_key
     }
 
@@ -432,7 +424,7 @@ mod lib {
     }
 
     /// Return the current offset in-use for these keys.
-    pub const fn current_offset(&self) -> Option<C::F> {
+    pub fn current_offset(&self) -> Option<C::F> {
       self.offset
     }
 
@@ -506,12 +498,12 @@ mod lib {
 
   impl<C: Ciphersuite> ThresholdView<C> {
     /// Return the offset for this view.
-    pub const fn offset(&self) -> C::F {
+    pub fn offset(&self) -> C::F {
       self.offset
     }
 
     /// Return the group key.
-    pub const fn group_key(&self) -> C::G {
+    pub fn group_key(&self) -> C::G {
       self.group_key
     }
 
@@ -521,7 +513,7 @@ mod lib {
     }
 
     /// Return the interpolated, offset secret share.
-    pub const fn secret_share(&self) -> &Zeroizing<C::F> {
+    pub fn secret_share(&self) -> &Zeroizing<C::F> {
       &self.secret_share
     }
 

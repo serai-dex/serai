@@ -27,7 +27,6 @@ use crate::{
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
-#[must_use]
 pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
   hash_to_point(&ED25519_BASEPOINT_TABLE * secret.deref()) * secret.deref()
 }
@@ -78,8 +77,7 @@ pub enum RctType {
 }
 
 impl RctType {
-  #[must_use]
-  pub const fn to_byte(self) -> u8 {
+  pub fn to_byte(self) -> u8 {
     match self {
       Self::Null => 0,
       Self::MlsagAggregate => 1,
@@ -91,7 +89,6 @@ impl RctType {
     }
   }
 
-  #[must_use]
   pub fn from_byte(byte: u8) -> Option<Self> {
     Some(match byte {
       0 => Self::Null,
@@ -105,8 +102,7 @@ impl RctType {
     })
   }
 
-  #[must_use]
-  pub const fn compact_encrypted_amounts(&self) -> bool {
+  pub fn compact_encrypted_amounts(&self) -> bool {
     match self {
       Self::Null | Self::MlsagAggregate | Self::MlsagIndividual | Self::Bulletproofs => false,
       Self::BulletproofsCompactAmount | Self::Clsag | Self::BulletproofsPlus => true,
@@ -123,7 +119,7 @@ pub struct RctBase {
 }
 
 impl RctBase {
-  pub(crate) const fn fee_weight(outputs: usize) -> usize {
+  pub(crate) fn fee_weight(outputs: usize) -> usize {
     1 + 8 + (outputs * (8 + 32))
   }
 
@@ -245,7 +241,6 @@ impl RctPrunable {
     }
   }
 
-  #[must_use]
   pub fn serialize(&self, rct_type: RctType) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized, rct_type).unwrap();
@@ -312,7 +307,6 @@ pub struct RctSignatures {
 
 impl RctSignatures {
   /// RctType for a given RctSignatures struct.
-  #[must_use]
   pub fn rct_type(&self) -> RctType {
     match &self.prunable {
       RctPrunable::Null => RctType::Null,
@@ -376,7 +370,6 @@ impl RctSignatures {
     self.prunable.write(w, rct_type)
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();

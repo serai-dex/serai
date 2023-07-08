@@ -47,31 +47,26 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
-#[allow(clippy::std_instead_of_core)]
-mod rpc_error {
-  use std_shims::{vec::Vec, string::String};
-  #[derive(Clone, PartialEq, Eq, Debug)]
-  #[cfg_attr(feature = "std", derive(thiserror::Error))]
-  pub enum RpcError {
-    #[cfg_attr(feature = "std", error("internal error ({0})"))]
-    InternalError(&'static str),
-    #[cfg_attr(feature = "std", error("connection error"))]
-    ConnectionError,
-    #[cfg_attr(feature = "std", error("invalid node"))]
-    InvalidNode,
-    #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
-    UnsupportedProtocol(usize),
-    #[cfg_attr(feature = "std", error("transactions not found"))]
-    TransactionsNotFound(Vec<[u8; 32]>),
-    #[cfg_attr(feature = "std", error("invalid point ({0})"))]
-    InvalidPoint(String),
-    #[cfg_attr(feature = "std", error("pruned transaction"))]
-    PrunedTransaction,
-    #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
-    InvalidTransaction([u8; 32]),
-  }
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum RpcError {
+  #[cfg_attr(feature = "std", error("internal error ({0})"))]
+  InternalError(&'static str),
+  #[cfg_attr(feature = "std", error("connection error"))]
+  ConnectionError,
+  #[cfg_attr(feature = "std", error("invalid node"))]
+  InvalidNode,
+  #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
+  UnsupportedProtocol(usize),
+  #[cfg_attr(feature = "std", error("transactions not found"))]
+  TransactionsNotFound(Vec<[u8; 32]>),
+  #[cfg_attr(feature = "std", error("invalid point ({0})"))]
+  InvalidPoint(String),
+  #[cfg_attr(feature = "std", error("pruned transaction"))]
+  PrunedTransaction,
+  #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
+  InvalidTransaction([u8; 32]),
 }
-pub use rpc_error::RpcError;
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
   hex::decode(value).map_err(|_| RpcError::InvalidNode)

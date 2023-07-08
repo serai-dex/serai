@@ -9,7 +9,6 @@ use crate::hash;
 
 /// Monero's hash to point function, as named `ge_fromfe_frombytes_vartime`.
 #[allow(clippy::many_single_char_names)]
-#[must_use]
 pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   #[allow(non_snake_case, clippy::unreadable_literal)]
   let A = FieldElement::from(486662u64);

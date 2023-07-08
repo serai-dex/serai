@@ -68,7 +68,6 @@ pub struct ClsagDetails {
 }
 
 impl ClsagDetails {
-  #[must_use]
   pub fn new(input: ClsagInput, mask: Scalar) -> Self {
     Self { input, mask }
   }
@@ -116,7 +115,6 @@ pub struct ClsagMultisig {
 }
 
 impl ClsagMultisig {
-  #[must_use]
   pub fn new(
     transcript: RecommendedTranscript,
     output_key: EdwardsPoint,

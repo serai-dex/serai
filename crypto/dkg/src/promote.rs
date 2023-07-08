@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, ops::Deref};
-use alloc::sync::Arc;
 use std::{
+  sync::Arc,
   io::{self, Read, Write},
   collections::HashMap,
 };

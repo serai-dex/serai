@@ -124,7 +124,7 @@ Pippenger 6 is more efficient at 250 with 655µs per
 Pippenger 7 is more efficient at 475 with 500µs per
 Pippenger 8 is more efficient at 875 with 499µs per
 */
-const fn algorithm(len: usize) -> Algorithm {
+fn algorithm(len: usize) -> Algorithm {
   #[cfg(not(debug_assertions))]
   if len == 0 {
     Algorithm::Null

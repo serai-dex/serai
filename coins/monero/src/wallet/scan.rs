@@ -32,7 +32,6 @@ impl AbsoluteId {
     w.write_all(&[self.o])
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(32 + 1);
     self.write(&mut serialized).unwrap();
@@ -61,7 +60,6 @@ impl OutputData {
     w.write_all(&self.commitment.amount.to_le_bytes())
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(32 + 32 + 32 + 8);
     self.write(&mut serialized).unwrap();
@@ -110,7 +108,6 @@ impl Metadata {
     Ok(())
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(1 + 8 + 1);
     self.write(&mut serialized).unwrap();
@@ -151,22 +148,18 @@ pub struct ReceivedOutput {
 }
 
 impl ReceivedOutput {
-  #[must_use]
-  pub const fn key(&self) -> EdwardsPoint {
+  pub fn key(&self) -> EdwardsPoint {
     self.data.key
   }
 
-  #[must_use]
-  pub const fn key_offset(&self) -> Scalar {
+  pub fn key_offset(&self) -> Scalar {
     self.data.key_offset
   }
 
-  #[must_use]
   pub fn commitment(&self) -> Commitment {
     self.data.commitment.clone()
   }
 
-  #[must_use]
   pub fn arbitrary_data(&self) -> &[Vec<u8>] {
     &self.metadata.arbitrary_data
   }
@@ -177,7 +170,6 @@ impl ReceivedOutput {
     self.metadata.write(w)
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
@@ -223,22 +215,18 @@ impl SpendableOutput {
     Ok(output)
   }
 
-  #[must_use]
-  pub const fn key(&self) -> EdwardsPoint {
+  pub fn key(&self) -> EdwardsPoint {
     self.output.key()
   }
 
-  #[must_use]
-  pub const fn key_offset(&self) -> Scalar {
+  pub fn key_offset(&self) -> Scalar {
     self.output.key_offset()
   }
 
-  #[must_use]
   pub fn commitment(&self) -> Commitment {
     self.output.commitment()
   }
 
-  #[must_use]
   pub fn arbitrary_data(&self) -> &[Vec<u8>] {
     self.output.arbitrary_data()
   }
@@ -270,8 +258,7 @@ impl<O: Clone + Zeroize> Drop for Timelocked<O> {
 impl<O: Clone + Zeroize> ZeroizeOnDrop for Timelocked<O> {}
 
 impl<O: Clone + Zeroize> Timelocked<O> {
-  #[must_use]
-  pub const fn timelock(&self) -> Timelock {
+  pub fn timelock(&self) -> Timelock {
     self.0
   }
 

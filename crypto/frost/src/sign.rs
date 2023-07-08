@@ -53,7 +53,7 @@ struct Params<C: Curve, A: Algorithm<C>> {
 }
 
 impl<C: Curve, A: Algorithm<C>> Params<C, A> {
-  const fn new(algorithm: A, keys: ThresholdKeys<C>) -> Self {
+  fn new(algorithm: A, keys: ThresholdKeys<C>) -> Self {
     Self { algorithm, keys }
   }
 
@@ -111,7 +111,7 @@ pub struct AlgorithmMachine<C: Curve, A: Algorithm<C>> {
 
 impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
   /// Creates a new machine to generate a signature with the specified keys.
-  pub const fn new(algorithm: A, keys: ThresholdKeys<C>) -> Self {
+  pub fn new(algorithm: A, keys: ThresholdKeys<C>) -> Self {
     Self { params: Params::new(algorithm, keys) }
   }
 

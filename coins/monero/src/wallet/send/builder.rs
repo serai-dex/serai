@@ -25,7 +25,7 @@ struct SignableTransactionBuilderInternal {
 impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
-  const fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
+  fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self {
       protocol,
       fee,
@@ -91,7 +91,6 @@ impl SignableTransactionBuilder {
     Self(self.0.clone())
   }
 
-  #[must_use]
   pub fn new(protocol: Protocol, fee: Fee, change_address: Option<Change>) -> Self {
     Self(Arc::new(RwLock::new(SignableTransactionBuilderInternal::new(
       protocol,

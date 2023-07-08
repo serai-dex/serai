@@ -211,7 +211,6 @@ pub struct Fee {
 }
 
 impl Fee {
-  #[must_use]
   pub fn calculate(&self, weight: usize) -> u64 {
     ((((self.per_weight * u64::try_from(weight).unwrap()) - 1) / self.mask) + 1) * self.mask
   }
@@ -262,7 +261,6 @@ impl fmt::Debug for Change {
 
 impl Change {
   /// Create a change output specification from a ViewPair, as needed to maintain privacy.
-  #[must_use]
   pub fn new(view: &ViewPair, guaranteed: bool) -> Self {
     Self {
       address: view.address(
@@ -280,7 +278,6 @@ impl Change {
   /// Create a fingerprintable change output specification which will harm privacy.
   ///
   /// Only use this if you know what you're doing.
-  #[must_use]
   pub const fn fingerprintable(address: MoneroAddress) -> Self {
     Self { address, view: None }
   }
@@ -394,8 +391,7 @@ impl SignableTransaction {
     Ok(Self { protocol, r_seed, inputs, payments, data, fee })
   }
 
-  #[must_use]
-  pub const fn fee(&self) -> u64 {
+  pub fn fee(&self) -> u64 {
     self.fee
   }
 
@@ -568,7 +564,6 @@ impl SignableTransaction {
   /// The eventuality is defined as the TX extra/outputs this transaction will create, if signed
   /// with the specified seed. This eventuality can be compared to on-chain transactions to see
   /// if the transaction has already been signed and published.
-  #[must_use]
   pub fn eventuality(&self) -> Option<Eventuality> {
     let inputs = self.inputs.iter().map(SpendableOutput::key).collect::<Vec<_>>();
     let (tx_key, additional, outputs, id) = Self::prepare_payments(
@@ -726,7 +721,6 @@ impl Eventuality {
   ///
   /// This extra may be used with a transaction with a distinct set of inputs, yet no honest
   /// transaction which doesn't satisfy this Eventuality will contain it.
-  #[must_use]
   pub fn extra(&self) -> &[u8] {
     &self.extra
   }
@@ -817,7 +811,6 @@ impl Eventuality {
     write_vec(write_byte, &self.extra, w)
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = Vec::with_capacity(128);
     self.write(&mut buf).unwrap();

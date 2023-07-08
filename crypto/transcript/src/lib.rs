@@ -61,7 +61,7 @@ enum DigestTranscriptMember {
 }
 
 impl DigestTranscriptMember {
-  const fn as_u8(&self) -> u8 {
+  fn as_u8(&self) -> u8 {
     match self {
       Self::Name => 0,
       Self::Domain => 1,

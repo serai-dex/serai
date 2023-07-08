@@ -7,25 +7,21 @@ use rand_core::{RngCore, CryptoRng};
 pub(crate) mod classic;
 use classic::{CLASSIC_SEED_LENGTH, CLASSIC_SEED_LENGTH_WITH_CHECKSUM, ClassicSeed};
 
-#[allow(clippy::std_instead_of_core)]
-mod seed_error {
-  /// Error when decoding a seed.
-  #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-  #[cfg_attr(feature = "std", derive(thiserror::Error))]
-  pub enum SeedError {
-    #[cfg_attr(feature = "std", error("invalid number of words in seed"))]
-    InvalidSeedLength,
-    #[cfg_attr(feature = "std", error("unknown language"))]
-    UnknownLanguage,
-    #[cfg_attr(feature = "std", error("invalid checksum"))]
-    InvalidChecksum,
-    #[cfg_attr(feature = "std", error("english old seeds don't support checksums"))]
-    EnglishOldWithChecksum,
-    #[cfg_attr(feature = "std", error("invalid seed"))]
-    InvalidSeed,
-  }
+/// Error when decoding a seed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum SeedError {
+  #[cfg_attr(feature = "std", error("invalid number of words in seed"))]
+  InvalidSeedLength,
+  #[cfg_attr(feature = "std", error("unknown language"))]
+  UnknownLanguage,
+  #[cfg_attr(feature = "std", error("invalid checksum"))]
+  InvalidChecksum,
+  #[cfg_attr(feature = "std", error("english old seeds don't support checksums"))]
+  EnglishOldWithChecksum,
+  #[cfg_attr(feature = "std", error("invalid seed"))]
+  InvalidSeed,
 }
-pub use seed_error::SeedError;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Language {
@@ -61,7 +57,6 @@ impl fmt::Debug for Seed {
 
 impl Seed {
   /// Create a new seed.
-  #[must_use]
   pub fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> Self {
     Self::Classic(ClassicSeed::new(rng, lang))
   }
@@ -77,7 +72,6 @@ impl Seed {
   }
 
   /// Create a Seed from entropy.
-  #[must_use]
   pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<Self> {
     ClassicSeed::from_entropy(lang, entropy).map(Self::Classic)
   }
@@ -90,7 +84,6 @@ impl Seed {
   }
 
   /// Return the entropy for this seed.
-  #[must_use]
   pub fn entropy(&self) -> Zeroizing<[u8; 32]> {
     match self {
       Self::Classic(seed) => seed.entropy(),

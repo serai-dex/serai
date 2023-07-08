@@ -124,7 +124,6 @@ impl ExtraField {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Extra(Vec<ExtraField>);
 impl Extra {
-  #[must_use]
   pub fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
     let mut key = None;
     let mut additional = None;
@@ -141,7 +140,6 @@ impl Extra {
     key.map(|key| (key, additional))
   }
 
-  #[must_use]
   pub fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
@@ -151,7 +149,6 @@ impl Extra {
     None
   }
 
-  #[must_use]
   pub fn data(&self) -> Vec<Vec<u8>> {
     let mut res = vec![];
     for field in &self.0 {
@@ -201,7 +198,6 @@ impl Extra {
     Ok(())
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = vec![];
     self.write(&mut buf).unwrap();

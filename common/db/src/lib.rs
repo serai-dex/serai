@@ -82,7 +82,6 @@ impl Default for MemDb {
 
 impl MemDb {
   /// Create a new in-memory database.
-  #[must_use]
   pub fn new() -> Self {
     Self::default()
   }

@@ -24,6 +24,7 @@ const MATURITY: u64 = 60;
 const RECENT_WINDOW: usize = 15;
 const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
+#[allow(clippy::as_conversions)]
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
 // TODO: Expose an API to reset this in case a reorg occurs/the RPC fails/returns garbage
@@ -74,9 +75,11 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
         age -= TIP_APPLICATION;
       } else {
         // f64 does not have try_from available, which is why these are written with `as`
+        #[allow(clippy::as_conversions)]
         age = (rng.next_u64() % u64::try_from(RECENT_WINDOW * BLOCK_TIME).unwrap()) as f64;
       }
 
+      #[allow(clippy::as_conversions)]
       let o = (age * per_second) as u64;
       if o < high {
         let i = distribution.partition_point(|s| *s < (high - 1 - o));
@@ -141,7 +144,6 @@ pub struct Decoys {
 }
 
 impl Decoys {
-  #[must_use]
   pub fn len(&self) -> usize {
     self.offsets.len()
   }
@@ -181,6 +183,7 @@ impl Decoys {
     let per_second = {
       let blocks = distribution.len().min(BLOCKS_PER_YEAR);
       let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
+      #[allow(clippy::as_conversions)]
       (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
     };
 

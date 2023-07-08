@@ -56,7 +56,7 @@ pub(crate) fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
   *cache
 }
 
-pub(crate) const fn MN(outputs: usize) -> (usize, usize, usize) {
+pub(crate) fn MN(outputs: usize) -> (usize, usize, usize) {
   let mut logM = 0;
   let mut M;
   while {

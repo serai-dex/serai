@@ -140,7 +140,6 @@ impl Bulletproofs {
     self.write_core(w, |points, w| write_vec(write_point, points, w))
   }
 
-  #[must_use]
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();

@@ -1,6 +1,8 @@
 use core::{ops::Deref, fmt};
 use std::{io, collections::HashMap};
 
+use thiserror::Error;
+
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
@@ -68,7 +70,7 @@ impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
   }
 
   #[cfg(any(test, feature = "tests"))]
-  pub(crate) const fn enc_key(&self) -> C::G {
+  pub(crate) fn enc_key(&self) -> C::G {
     self.enc_key
   }
 }
@@ -328,19 +330,13 @@ fn encryption_key_transcript(context: &str) -> RecommendedTranscript {
   transcript
 }
 
-#[allow(clippy::std_instead_of_core)]
-mod decryption_error {
-  use thiserror::Error;
-
-  #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
-  pub(crate) enum DecryptionError {
-    #[error("accused provided an invalid signature")]
-    InvalidSignature,
-    #[error("accuser provided an invalid decryption key")]
-    InvalidProof,
-  }
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+pub(crate) enum DecryptionError {
+#[error("accused provided an invalid signature")]
+InvalidSignature,
+#[error("accuser provided an invalid decryption key")]
+InvalidProof,
 }
-pub(crate) use decryption_error::DecryptionError;
 
 // A simple box for managing encryption.
 #[derive(Clone)]
@@ -386,7 +382,7 @@ impl<C: Ciphersuite> Encryption<C> {
     }
   }
 
-  pub(crate) const fn registration<M: Message>(&self, msg: M) -> EncryptionKeyMessage<C, M> {
+  pub(crate) fn registration<M: Message>(&self, msg: M) -> EncryptionKeyMessage<C, M> {
     EncryptionKeyMessage { msg, enc_key: self.enc_pub_key }
   }
 

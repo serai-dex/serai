@@ -1,42 +1,26 @@
 # No warnings allowed
 -D warnings
 
-# Non-default groups
+# nursery
 -D clippy::nursery
--D clippy::pedantic
-
-# Not worth the effort
--A clippy::implicit_hasher
-
-# Stylistic preferrence
--A clippy::option_if_let_else
-
+# Erratic and unhelpful
+-A clippy::missing_const_for_fn
 # Too many false/irrelevant positives
 -A clippy::redundant_pub_crate
--A clippy::similar_names
-
 # Flags on any debug_assert using an RNG
 -A clippy::debug_assert_with_mut_call
+# Stylistic preference
+-A clippy::option_if_let_else
 
-# Frequently used
--A clippy::large_types_passed_by_value
--A clippy::wildcard_imports
--A clippy::too_many_lines
+# pedantic
+-D clippy::unnecessary_wraps
+-D clippy::unused_async
+-D clippy::unused_self
 
-# Used to avoid doing &* on copy-able items, with the * being the concern
--A clippy::explicit_deref_methods
-
-# Lints from clippy::restrictions
-
-# These are relevant for crates we want to be no-std, eventually, and aren't
-# relevant for the rest
--D clippy::std_instead_of_alloc
--D clippy::std_instead_of_core
--D clippy::alloc_instead_of_core
+# restrictions
 
 # Safety
 -D clippy::as_conversions
--D clippy::float_cmp_const
 -D clippy::disallowed_script_idents
 -D clippy::wildcard_enum_match_arm
 
@@ -54,19 +38,10 @@
 -D clippy::format_push_string
 -D clippy::string_to_string
 
-# Flagged on tests being named test_
--A clippy::module_name_repetitions
-
-# Flagged on items passed by value which implemented Copy
--A clippy::needless_pass_by_value
-
-# Flagged on embedded functions defined when needed/relevant
--A clippy::items_after_statements
-
 # These potentially should be enabled in the future
--A clippy::missing_errors_doc
--A clippy::missing_panics_doc
--A clippy::doc_markdown
+# -D clippy::missing_errors_doc
+# -D clippy::missing_panics_doc
+# -D clippy::doc_markdown
 
 # TODO: Enable this
 # -D clippy::cargo

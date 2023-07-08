@@ -26,7 +26,7 @@ pub(crate) enum BitSignature {
 }
 
 impl BitSignature {
-  pub(crate) const fn to_u8(&self) -> u8 {
+  pub(crate) fn to_u8(&self) -> u8 {
     match self {
       Self::ClassicLinear => 0,
       Self::ConciseLinear => 1,
@@ -35,7 +35,7 @@ impl BitSignature {
     }
   }
 
-  pub(crate) const fn from(algorithm: u8) -> Self {
+  pub(crate) fn from(algorithm: u8) -> Self {
     match algorithm {
       0 => Self::ClassicLinear,
       1 => Self::ConciseLinear,
@@ -45,14 +45,14 @@ impl BitSignature {
     }
   }
 
-  pub(crate) const fn bits(&self) -> usize {
+  pub(crate) fn bits(&self) -> usize {
     match self {
       Self::ClassicLinear | Self::EfficientLinear => 1,
       Self::ConciseLinear | Self::CompromiseLinear => 2,
     }
   }
 
-  pub(crate) const fn ring_len(&self) -> usize {
+  pub(crate) fn ring_len(&self) -> usize {
     #[allow(clippy::as_conversions, clippy::cast_possible_truncation)] // Needed for const
     2_usize.pow(self.bits() as u32)
   }
