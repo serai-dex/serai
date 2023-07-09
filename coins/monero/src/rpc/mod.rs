@@ -499,8 +499,10 @@ impl<R: RpcConnection> Rpc<R> {
   }
 
   /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
-  /// timelock has been satisfied. This is distinct from being free of the 10-block lock applied to
-  /// all Monero transactions.
+  /// timelock has been satisfied.
+  ///
+  /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
+  /// Monero transactions.
   pub async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],

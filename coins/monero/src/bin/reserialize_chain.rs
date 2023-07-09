@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
+use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
+
 use serde::Deserialize;
 use serde_json::json;
 
 use monero_serai::{
-  transaction::Transaction,
+  ringct::RctPrunable,
+  transaction::{Input, Transaction},
   block::Block,
   rpc::{Rpc, HttpRpc},
 };
@@ -78,6 +81,81 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
         "Transaction serialization was different"
       );
       assert_eq!(tx.hash(), tx_hash, "Transaction hash was different");
+
+      let sig_hash = tx.signature_hash();
+      // Verify all proofs we support proving for
+      // This is due to having debug_asserts calling verify within their proving, and CLSAG
+      // multisig explicitly calling verify as part of its signing process
+      // Accordingly, making sure our signature_hash algorithm is correct is great, and further
+      // making sure the verification functions are valid is appreciated
+      match tx.rct_signatures.prunable {
+        RctPrunable::Null | RctPrunable::MlsagBorromean { .. } => {}
+        RctPrunable::MlsagBulletproofs { bulletproofs, .. } => {
+          assert!(bulletproofs.verify(&mut rand_core::OsRng, &tx.rct_signatures.base.commitments));
+        }
+        RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
+          assert!(bulletproofs.verify(&mut rand_core::OsRng, &tx.rct_signatures.base.commitments));
+
+          for (i, clsag) in clsags.into_iter().enumerate() {
+            let (image, key_offsets) = match &tx.prefix.inputs[i] {
+              Input::Gen(_) => panic!("Input::Gen"),
+              Input::ToKey { key_image, key_offsets, .. } => (key_image, key_offsets),
+            };
+
+            let mut running_sum = 0;
+            let mut actual_indexes = vec![];
+            for offset in key_offsets {
+              running_sum += offset;
+              actual_indexes.push(running_sum);
+            }
+
+            async fn get_outs(rpc: &Rpc<HttpRpc>, indexes: &[u64]) -> Vec<[EdwardsPoint; 2]> {
+              #[derive(Deserialize, Debug)]
+              struct Out {
+                key: String,
+                mask: String,
+              }
+
+              #[derive(Deserialize, Debug)]
+              struct Outs {
+                outs: Vec<Out>,
+              }
+
+              let outs: Outs = rpc
+                .rpc_call(
+                  "get_outs",
+                  Some(json!({
+                    "get_txid": true,
+                    "outputs": indexes.iter().map(|o| json!({
+                      "amount": 0,
+                      "index": o
+                    })).collect::<Vec<_>>()
+                  })),
+                )
+                .await
+                .expect("couldn't connect to RPC to get outs");
+
+              let rpc_point = |point: &str| {
+                CompressedEdwardsY(
+                  hex::decode(point)
+                    .expect("invalid hex for ring member")
+                    .try_into()
+                    .expect("invalid point len for ring member"),
+                )
+                .decompress()
+                .expect("invalid point for ring member")
+              };
+
+              outs.outs.iter().map(|out| [rpc_point(&out.key), rpc_point(&out.mask)]).collect()
+            }
+
+            clsag
+              .verify(&get_outs(&rpc, &actual_indexes).await, image, &pseudo_outs[i], &sig_hash)
+              .unwrap();
+          }
+          println!("Verified CLSAGs + BPs");
+        }
+      }
     }
   }
 
