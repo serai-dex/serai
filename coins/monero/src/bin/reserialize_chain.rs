@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
-use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
+use curve25519_dalek::{
+  scalar::Scalar,
+  edwards::{CompressedEdwardsY, EdwardsPoint},
+};
 
 use serde::Deserialize;
 use serde_json::json;
 
 use monero_serai::{
+  Commitment,
   ringct::RctPrunable,
   transaction::{Input, Transaction},
   block::Block,
@@ -82,6 +86,12 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
       );
       assert_eq!(tx.hash(), tx_hash, "Transaction hash was different");
 
+      if matches!(tx.rct_signatures.prunable, RctPrunable::Null) {
+        assert_eq!(tx.prefix.version, 1);
+        assert!(!tx.signatures.is_empty());
+        continue;
+      }
+
       let sig_hash = tx.signature_hash();
       // Verify all proofs we support proving for
       // This is due to having debug_asserts calling verify within their proving, and CLSAG
@@ -97,9 +107,9 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
           assert!(bulletproofs.verify(&mut rand_core::OsRng, &tx.rct_signatures.base.commitments));
 
           for (i, clsag) in clsags.into_iter().enumerate() {
-            let (image, key_offsets) = match &tx.prefix.inputs[i] {
+            let (amount, key_offsets, image) = match &tx.prefix.inputs[i] {
               Input::Gen(_) => panic!("Input::Gen"),
-              Input::ToKey { key_image, key_offsets, .. } => (key_image, key_offsets),
+              Input::ToKey { amount, key_offsets, key_image } => (amount, key_offsets, key_image),
             };
 
             let mut running_sum = 0;
@@ -109,7 +119,11 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
               actual_indexes.push(running_sum);
             }
 
-            async fn get_outs(rpc: &Rpc<HttpRpc>, indexes: &[u64]) -> Vec<[EdwardsPoint; 2]> {
+            async fn get_outs(
+              rpc: &Rpc<HttpRpc>,
+              amount: u64,
+              indexes: &[u64],
+            ) -> Vec<[EdwardsPoint; 2]> {
               #[derive(Deserialize, Debug)]
               struct Out {
                 key: String,
@@ -127,7 +141,7 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
                   Some(json!({
                     "get_txid": true,
                     "outputs": indexes.iter().map(|o| json!({
-                      "amount": 0,
+                      "amount": amount,
                       "index": o
                     })).collect::<Vec<_>>()
                   })),
@@ -146,11 +160,26 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
                 .expect("invalid point for ring member")
               };
 
-              outs.outs.iter().map(|out| [rpc_point(&out.key), rpc_point(&out.mask)]).collect()
+              outs
+                .outs
+                .iter()
+                .map(|out| {
+                  let mask = rpc_point(&out.mask);
+                  if amount != 0 {
+                    assert_eq!(mask, Commitment::new(Scalar::from(1u8), amount).calculate());
+                  }
+                  [rpc_point(&out.key), mask]
+                })
+                .collect()
             }
 
             clsag
-              .verify(&get_outs(&rpc, &actual_indexes).await, image, &pseudo_outs[i], &sig_hash)
+              .verify(
+                &get_outs(&rpc, amount.unwrap_or(0), &actual_indexes).await,
+                image,
+                &pseudo_outs[i],
+                &sig_hash,
+              )
               .unwrap();
           }
         }

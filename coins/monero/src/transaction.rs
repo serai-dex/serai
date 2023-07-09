@@ -53,12 +53,17 @@ impl Input {
     res
   }
 
-  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Input> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Input> {
     Ok(match read_byte(r)? {
       255 => Input::Gen(read_varint(r)?),
       2 => {
         let amount = read_varint(r)?;
-        let amount = if (amount == 0) && interpret_as_rct { None } else { Some(amount) };
+        // https://github.com/monero-project/monero/
+        //   blob/00fd416a99686f0956361d1cd0337fe56e58d4a7/
+        //   src/cryptonote_basic/cryptonote_format_utils.cpp#L860-L863
+        // A non-RCT 0-amount input can't exist because only RCT TXs can have a 0-amount output
+        // That's why collapsing to None if the amount is 0 is safe, even without knowing if RCT
+        let amount = if amount == 0 { None } else { Some(amount) };
         Input::ToKey {
           amount,
           key_offsets: read_vec(read_varint, r)?,
@@ -101,9 +106,9 @@ impl Output {
     res
   }
 
-  pub fn read<R: Read>(interpret_as_rct: bool, r: &mut R) -> io::Result<Output> {
+  pub fn read<R: Read>(rct: bool, r: &mut R) -> io::Result<Output> {
     let amount = read_varint(r)?;
-    let amount = if interpret_as_rct {
+    let amount = if rct {
       if amount != 0 {
         Err(io::Error::new(io::ErrorKind::Other, "RCT TX output wasn't 0"))?;
       }
@@ -215,7 +220,7 @@ impl TransactionPrefix {
 
     let timelock = Timelock::from_raw(read_varint(r)?);
 
-    let inputs = read_vec(|r| Input::read(version == 2, r), r)?;
+    let inputs = read_vec(|r| Input::read(r), r)?;
     if inputs.is_empty() {
       Err(io::Error::new(io::ErrorKind::Other, "transaction had no inputs"))?;
     }
