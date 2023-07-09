@@ -52,7 +52,7 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
 ///
 /// If passed an odd nonce, it will have the generator added until it is even.
 #[derive(Clone, Copy, Debug)]
-pub struct Hram {}
+pub struct Hram;
 
 lazy_static! {
   static ref TAG_HASH: [u8; 32] = Sha256::digest(b"BIP0340/challenge").into();

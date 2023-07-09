@@ -1,4 +1,5 @@
 use core::fmt::Debug;
+use std::collections::HashSet;
 
 use thiserror::Error;
 
@@ -41,13 +42,60 @@ pub enum RpcError {
   RequestError(Error),
   #[error("node sent an invalid response")]
   InvalidResponse,
+  #[error("node was missing expected methods")]
+  MissingMethods(HashSet<&'static str>),
 }
 
 impl Rpc {
+  /// Create a new connection to a Bitcoin RPC.
+  ///
+  /// An RPC call is performed to ensure the node is reachable (and that an invalid URL wasn't
+  /// provided).
+  ///
+  /// Additionally, a set of expected methods is checked to be offered by the Bitcoin RPC. If these
+  /// methods aren't provided, an error with the missing methods is returned. This ensures all RPC
+  /// routes explicitly provided by this library are at least possible.
+  ///
+  /// Each individual RPC route may still fail at time-of-call, regardless of the arguments
+  /// provided to this library, if the RPC has an incompatible argument layout. That is not checked
+  /// at time of RPC creation.
   pub async fn new(url: String) -> Result<Rpc, RpcError> {
     let rpc = Rpc { client: Client::new(), url };
+
     // Make an RPC request to verify the node is reachable and sane
-    rpc.get_latest_block_number().await?;
+    let res: String = rpc.rpc_call("help", json!([])).await?;
+
+    // Verify all methods we expect are present
+    // If we had a more expanded RPC, due to differences in RPC versions, it wouldn't make sense to
+    // error if all methods weren't present
+    // We only provide a very minimal set of methods which have been largely consistent, hence why
+    // this is sane
+    let mut expected_methods = HashSet::from([
+      "help",
+      "getblockcount",
+      "getblockhash",
+      "getblockheader",
+      "getblock",
+      "sendrawtransaction",
+      "getrawtransaction",
+    ]);
+    for line in res.split('\n') {
+      // This doesn't check if the arguments are as expected
+      // This is due to Bitcoin supporting a large amount of optional arguments, which
+      // occassionally change, with their own mechanism of text documentation, making matching off
+      // it a quite involved task
+      // Instead, once we've confirmed the methods are present, we assume our arguments are aligned
+      // Else we'll error at time of call
+      if expected_methods.remove(line.split(' ').next().unwrap_or("")) &&
+        expected_methods.is_empty()
+      {
+        break;
+      }
+    }
+    if !expected_methods.is_empty() {
+      Err(RpcError::MissingMethods(expected_methods))?;
+    };
+
     Ok(rpc)
   }
 
