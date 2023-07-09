@@ -255,6 +255,17 @@ impl RctPrunable {
     outputs: usize,
     r: &mut R,
   ) -> io::Result<RctPrunable> {
+    // While we generally don't bother with misc consensus checks, this affects the safety of
+    // the below defined rct_type function
+    // The exact line preventing zero-input transactions is:
+    // https://github.com/monero-project/monero/blob/00fd416a99686f0956361d1cd0337fe56e58d4a7/
+    //   src/ringct/rctSigs.cpp#L609
+    // And then for RctNull, that's only allowed for miner TXs which require one input of
+    // Input::Gen
+    if decoys.is_empty() {
+      Err(io::Error::new(io::ErrorKind::Other, "transaction had no inputs"))?;
+    }
+
     Ok(match rct_type {
       RctType::Null => RctPrunable::Null,
       RctType::MlsagAggregate | RctType::MlsagIndividual => RctPrunable::MlsagBorromean {
