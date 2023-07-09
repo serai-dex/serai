@@ -5,6 +5,8 @@ use thiserror::Error;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
+use reqwest::Client;
+
 use bitcoin::{
   hashes::{Hash, hex::FromHex},
   consensus::encode,
@@ -26,7 +28,10 @@ enum RpcResponse<T> {
 
 /// A minimal asynchronous Bitcoin RPC client.
 #[derive(Clone, Debug)]
-pub struct Rpc(String);
+pub struct Rpc {
+  client: Client,
+  url: String,
+}
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum RpcError {
@@ -40,7 +45,7 @@ pub enum RpcError {
 
 impl Rpc {
   pub async fn new(url: String) -> Result<Rpc, RpcError> {
-    let rpc = Rpc(url);
+    let rpc = Rpc { client: Client::new(), url };
     // Make an RPC request to verify the node is reachable and sane
     rpc.get_latest_block_number().await?;
     Ok(rpc)
@@ -52,9 +57,9 @@ impl Rpc {
     method: &str,
     params: serde_json::Value,
   ) -> Result<Response, RpcError> {
-    let client = reqwest::Client::new();
-    let res = client
-      .post(&self.0)
+    let res = self
+      .client
+      .post(&self.url)
       .json(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
       .send()
       .await
