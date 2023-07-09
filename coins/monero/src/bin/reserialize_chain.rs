@@ -153,7 +153,6 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
               .verify(&get_outs(&rpc, &actual_indexes).await, image, &pseudo_outs[i], &sig_hash)
               .unwrap();
           }
-          println!("Verified CLSAGs + BPs");
         }
       }
     }
