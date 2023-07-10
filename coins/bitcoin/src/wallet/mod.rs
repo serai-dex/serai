@@ -114,6 +114,9 @@ impl Scanner {
   /// Due to Bitcoin's requirement that points are even, not every offset may be used.
   /// If an offset isn't usable, it will be incremented until it is. If this offset is already
   /// present, None is returned. Else, Some(offset) will be, with the used offset.
+  ///
+  /// This means offsets are surjective, not bijective, and the order offsets are registered in
+  /// may determine the validity of future offsets.
   pub fn register_offset(&mut self, mut offset: Scalar) -> Option<Scalar> {
     // This loop will terminate as soon as an even point is found, with any point having a ~50%
     // chance of being even
