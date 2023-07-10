@@ -339,7 +339,9 @@ impl SignMachine<Transaction> for TransactionSignMachine {
           commitments[i].clone(),
           cache
             .taproot_key_spend_signature_hash(i, &prevouts, TapSighashType::Default)
-            .unwrap()
+            // This should never happen since the inputs align with the TX the cache was
+            // constructed with, and because i is always < prevouts.len()
+            .expect("taproot_key_spend_signature_hash failed to return a hash")
             .as_ref(),
         )?;
         shares.push(share);

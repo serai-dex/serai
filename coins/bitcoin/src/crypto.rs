@@ -32,9 +32,9 @@ pub fn x(key: &ProjectivePoint) -> [u8; 32] {
   (*encoded.x().expect("point at infinity")).into()
 }
 
-/// Convert a non-infinite even point to a XOnlyPublicKey. Panics on invalid input.
+/// Convert a non-infinity even point to a XOnlyPublicKey. Panics on invalid input.
 pub fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
-  XOnlyPublicKey::from_slice(&x(key)).unwrap()
+  XOnlyPublicKey::from_slice(&x(key)).expect("x_only was passed a point which was infinity or odd")
 }
 
 /// Make a point even by adding the generator until it is even. Returns the even point and the
@@ -145,7 +145,8 @@ impl<T: Sync + Clone + Debug + Transcript> Algorithm<Secp256k1> for Schnorr<T> {
       // s = r + cx. Since we added to the r, add to s
       sig.s += Scalar::from(offset);
       // Convert to a secp256k1 signature
-      Signature::from_slice(&sig.serialize()[1 ..]).unwrap()
+      Signature::from_slice(&sig.serialize()[1 ..])
+        .expect("couldn't convert SchnorrSignature to Signature")
     })
   }
 
