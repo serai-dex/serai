@@ -40,8 +40,10 @@ pub enum RpcError {
   ConnectionError,
   #[error("request had an error: {0:?}")]
   RequestError(Error),
-  #[error("node sent an invalid response")]
-  InvalidResponse,
+  #[error("node replied with invalid JSON")]
+  InvalidJson(serde_json::error::Category),
+  #[error("node sent an invalid response ({0})")]
+  InvalidResponse(&'static str),
   #[error("node was missing expected methods")]
   MissingMethods(HashSet<&'static str>),
 }
@@ -117,7 +119,7 @@ impl Rpc {
       .map_err(|_| RpcError::ConnectionError)?;
 
     let res: RpcResponse<Response> =
-      serde_json::from_str(&res).map_err(|_| RpcError::InvalidResponse)?;
+      serde_json::from_str(&res).map_err(|e| RpcError::InvalidJson(e.classify()))?;
     match res {
       RpcResponse::Ok { result } => Ok(result),
       RpcResponse::Err { error } => Err(RpcError::RequestError(error)),
@@ -160,13 +162,15 @@ impl Rpc {
   /// Get a block by its hash.
   pub async fn get_block(&self, hash: &[u8; 32]) -> Result<Block, RpcError> {
     let hex = self.rpc_call::<String>("getblock", json!([hex::encode(hash), 0])).await?;
-    let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
-    let block: Block = encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)?;
+    let bytes: Vec<u8> = FromHex::from_hex(&hex)
+      .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the block"))?;
+    let block: Block = encode::deserialize(&bytes)
+      .map_err(|_| RpcError::InvalidResponse("node sent an improperly serialized block"))?;
 
     let mut block_hash = *block.block_hash().as_raw_hash().as_byte_array();
     block_hash.reverse();
     if hash != &block_hash {
-      Err(RpcError::InvalidResponse)?;
+      Err(RpcError::InvalidResponse("node replied with a different block"))?;
     }
 
     Ok(block)
@@ -176,7 +180,7 @@ impl Rpc {
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<Txid, RpcError> {
     let txid = self.rpc_call("sendrawtransaction", json!([encode::serialize_hex(tx)])).await?;
     if txid != tx.txid() {
-      Err(RpcError::InvalidResponse)?;
+      Err(RpcError::InvalidResponse("returned TX ID inequals calculated TX ID"))?;
     }
     Ok(txid)
   }
@@ -184,13 +188,15 @@ impl Rpc {
   /// Get a transaction by its hash.
   pub async fn get_transaction(&self, hash: &[u8; 32]) -> Result<Transaction, RpcError> {
     let hex = self.rpc_call::<String>("getrawtransaction", json!([hex::encode(hash)])).await?;
-    let bytes: Vec<u8> = FromHex::from_hex(&hex).map_err(|_| RpcError::InvalidResponse)?;
-    let tx: Transaction = encode::deserialize(&bytes).map_err(|_| RpcError::InvalidResponse)?;
+    let bytes: Vec<u8> = FromHex::from_hex(&hex)
+      .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the transaction"))?;
+    let tx: Transaction = encode::deserialize(&bytes)
+      .map_err(|_| RpcError::InvalidResponse("node sent an improperly serialized transaction"))?;
 
     let mut tx_hash = *tx.txid().as_raw_hash().as_byte_array();
     tx_hash.reverse();
     if hash != &tx_hash {
-      Err(RpcError::InvalidResponse)?;
+      Err(RpcError::InvalidResponse("node replied with a different transaction"))?;
     }
 
     Ok(tx)
