@@ -137,11 +137,16 @@ impl Scanner {
   pub fn scan_transaction(&self, tx: &Transaction) -> Vec<ReceivedOutput> {
     let mut res = vec![];
     for (vout, output) in tx.output.iter().enumerate() {
+      // If the vout index exceeds 2**32, stop scanning outputs
+      let Ok(vout) = u32::try_from(vout) else {
+        break
+      };
+
       if let Some(offset) = self.scripts.get(&output.script_pubkey) {
         res.push(ReceivedOutput {
           offset: *offset,
           output: output.clone(),
-          outpoint: OutPoint::new(tx.txid(), u32::try_from(vout).unwrap()),
+          outpoint: OutPoint::new(tx.txid(), vout),
         });
       }
     }

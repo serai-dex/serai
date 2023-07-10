@@ -221,6 +221,8 @@ impl SignableTransaction {
     let mut sigs = vec![];
     for i in 0 .. tx.input.len() {
       let mut transcript = transcript.clone();
+      // This unwrap is safe since any transaction with this many inputs violates the maximum
+      // size allowed under standards, which this lib will error on creation of
       transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
 
       let offset = keys.clone().offset(self.offsets[i]);
