@@ -115,6 +115,9 @@ impl Scanner {
   /// If an offset isn't usable, it will be incremented until it is. If this offset is already
   /// present, None is returned. Else, Some(offset) will be, with the used offset.
   pub fn register_offset(&mut self, mut offset: Scalar) -> Option<Scalar> {
+    // This loop will terminate as soon as an even point is found, with any point having a ~50%
+    // chance of being even
+    // That means this should terminate within a very small amount of iterations
     loop {
       match address(Network::Bitcoin, self.key + (ProjectivePoint::GENERATOR * offset)) {
         Some(address) => {
