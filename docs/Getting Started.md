@@ -59,7 +59,7 @@ cargo install --git https://github.com/foundry-rs/foundry --profile local --lock
 ```
 git clone https://github.com/serai-dex/serai
 cd serai
-cargo build --release
+cargo build --release --all-features
 ```
 
 ### Run Tests
