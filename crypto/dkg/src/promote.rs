@@ -16,12 +16,6 @@ use crate::{Participant, DkgError, ThresholdCore, ThresholdKeys, validate_map};
 
 /// Promote a set of keys to another Ciphersuite definition.
 pub trait CiphersuitePromote<C2: Ciphersuite> {
-  #[doc(hidden)]
-  #[allow(non_snake_case)]
-  fn _bound_C2(_c2: C2) {
-    panic!()
-  }
-
   fn promote(self) -> ThresholdKeys<C2>;
 }
 

@@ -516,6 +516,8 @@ impl<C: Curve, A: Algorithm<C>> SignatureMachine<A::Signature> for AlgorithmSign
     }
 
     // If everyone has a valid share, and there were enough participants, this should've worked
-    panic!("everyone had a valid share yet the signature was still invalid");
+    // The only known way to cause this, for valid parameters/algorithms, is to deserialize a
+    // semantically invalid FrostKeys
+    Err(FrostError::InternalError("everyone had a valid share yet the signature was still invalid"))
   }
 }

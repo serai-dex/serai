@@ -26,6 +26,9 @@ pub mod tests;
 /// Various errors possible during signing.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum FrostError {
+  #[error("internal error: {0}")]
+  InternalError(&'static str),
+
   #[error("invalid participant (0 < participant <= {0}, yet participant is {1})")]
   InvalidParticipant(u16, Participant),
   #[error("invalid signing set ({0})")]
