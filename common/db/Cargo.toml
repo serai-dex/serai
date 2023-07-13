@@ -11,3 +11,9 @@ edition = "2021"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rocksdb = { version = "0.21", optional = true }
+
+[features]
+rocksdb = ["dep:rocksdb"]
