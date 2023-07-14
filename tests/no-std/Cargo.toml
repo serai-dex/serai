@@ -5,7 +5,7 @@ description = "A crate to test no-std builds of Serai crates work"
 license = "MIT"
 repository = "https://github.com/kayabaNerve/serai/tree/develop/tests/no-std"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = ["nostd", "no_std", "alloc", "io"]
+keywords = ["nostd", "no_std", "alloc"]
 edition = "2021"
 publish = false
 

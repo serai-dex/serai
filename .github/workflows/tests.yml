@@ -41,14 +41,14 @@ jobs:
             -p flexible-transcript \
             -p ff-group-tests \
             -p dalek-ff-group \
-            -p ed448 \
+            -p minimal-ed448 \
             -p ciphersuite \
             -p multiexp \
             -p schnorr \
             -p dleq \
             -p dkg \
-            -p frost \
-            -p schnorrkel
+            -p modular-frost \
+            -p frost-schnorrkel
 
   test-coins:
     runs-on: ubuntu-latest
