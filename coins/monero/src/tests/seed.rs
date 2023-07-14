@@ -6,13 +6,13 @@ use curve25519_dalek::scalar::Scalar;
 
 use crate::{
   hash,
-  wallet::seed::{Seed, Language, classic::trim_by_lang},
+  wallet::seed::{Seed, SeedType, classic, polyseed, classic::trim_by_lang},
 };
 
 #[test]
 fn test_classic_seed() {
   struct Vector {
-    language: Language,
+    language: classic::Language,
     seed: String,
     spend: String,
     view: String,
@@ -20,13 +20,13 @@ fn test_classic_seed() {
 
   let vectors = [
     Vector {
-      language: Language::Chinese,
+      language: classic::Language::ChineseSimplified,
       seed: "摇 曲 艺 武 滴 然 效 似 赏 式 祥 歌 买 疑 小 碧 堆 博 键 房 鲜 悲 付 喷 武".into(),
       spend: "a5e4fff1706ef9212993a69f246f5c95ad6d84371692d63e9bb0ea112a58340d".into(),
       view: "1176c43ce541477ea2f3ef0b49b25112b084e26b8a843e1304ac4677b74cdf02".into(),
     },
     Vector {
-      language: Language::English,
+      language: classic::Language::English,
       seed: "washing thirsty occur lectures tuesday fainted toxic adapt \
                abnormal memoir nylon mostly building shrugged online ember northern \
                ruby woes dauntless boil family illness inroads northern"
@@ -35,7 +35,7 @@ fn test_classic_seed() {
       view: "513ba91c538a5a9069e0094de90e927c0cd147fa10428ce3ac1afd49f63e3b01".into(),
     },
     Vector {
-      language: Language::Dutch,
+      language: classic::Language::Dutch,
       seed: "setwinst riphagen vimmetje extase blief tuitelig fuiven meifeest \
                ponywagen zesmaal ripdeal matverf codetaal leut ivoor rotten \
                wisgerhof winzucht typograaf atrium rein zilt traktaat verzaagd setwinst"
@@ -44,7 +44,7 @@ fn test_classic_seed() {
       view: "eac30b69477e3f68093d131c7fd961564458401b07f8c87ff8f6030c1a0c7301".into(),
     },
     Vector {
-      language: Language::French,
+      language: classic::Language::French,
       seed: "poids vaseux tarte bazar poivre effet entier nuance \
                sensuel ennui pacte osselet poudre battre alibi mouton \
                stade paquet pliage gibier type question position projet pliage"
@@ -53,7 +53,7 @@ fn test_classic_seed() {
       view: "6725b32230400a1032f31d622b44c3a227f88258939b14a7c72e00939e7bdf0e".into(),
     },
     Vector {
-      language: Language::Spanish,
+      language: classic::Language::Spanish,
       seed: "minero ocupar mirar evadir octubre cal logro miope \
                opaco disco ancla litio clase cuello nasal clase \
                fiar avance deseo mente grumo negro cordón croqueta clase"
@@ -62,7 +62,7 @@ fn test_classic_seed() {
       view: "18deafb34d55b7a43cae2c1c1c206a3c80c12cc9d1f84640b484b95b7fec3e05".into(),
     },
     Vector {
-      language: Language::German,
+      language: classic::Language::German,
       seed: "Kaliber Gabelung Tapir Liveband Favorit Specht Enklave Nabel \
                Jupiter Foliant Chronik nisten löten Vase Aussage Rekord \
                Yeti Gesetz Eleganz Alraune Künstler Almweide Jahr Kastanie Almweide"
@@ -71,7 +71,7 @@ fn test_classic_seed() {
       view: "99f0ec556643bd9c038a4ed86edcb9c6c16032c4622ed2e000299d527a792701".into(),
     },
     Vector {
-      language: Language::Italian,
+      language: classic::Language::Italian,
       seed: "cavo pancetta auto fulmine alleanza filmato diavolo prato \
                forzare meritare litigare lezione segreto evasione votare buio \
                licenza cliente dorso natale crescere vento tutelare vetta evasione"
@@ -80,7 +80,7 @@ fn test_classic_seed() {
       view: "698a1dce6018aef5516e82ca0cb3e3ec7778d17dfb41a137567bfa2e55e63a03".into(),
     },
     Vector {
-      language: Language::Portuguese,
+      language: classic::Language::Portuguese,
       seed: "agito eventualidade onus itrio holograma sodomizar objetos dobro \
                iugoslavo bcrepuscular odalisca abjeto iuane darwinista eczema acetona \
                cibernetico hoquei gleba driver buffer azoto megera nogueira agito"
@@ -89,7 +89,7 @@ fn test_classic_seed() {
       view: "ad1b4fd35270f5f36c4da7166672b347e75c3f4d41346ec2a06d1d0193632801".into(),
     },
     Vector {
-      language: Language::Japanese,
+      language: classic::Language::Japanese,
       seed: "ぜんぶ どうぐ おたがい せんきょ おうじ そんちょう じゅしん いろえんぴつ \
                かほう つかれる えらぶ にちじょう くのう にちようび ぬまえび さんきゃく \
                おおや ちぬき うすめる いがく せつでん さうな すいえい せつだん おおや"
@@ -98,7 +98,7 @@ fn test_classic_seed() {
       view: "6c3634a313ec2ee979d565c33888fd7c3502d696ce0134a8bc1a2698c7f2c508".into(),
     },
     Vector {
-      language: Language::Russian,
+      language: classic::Language::Russian,
       seed: "шатер икра нация ехать получать инерция доза реальный \
                рыжий таможня лопата душа веселый клетка атлас лекция \
                обгонять паек наивный лыжный дурак стать ежик задача паек"
@@ -107,7 +107,7 @@ fn test_classic_seed() {
       view: "fcd53e41ec0df995ab43927f7c44bc3359c93523d5009fb3f5ba87431d545a03".into(),
     },
     Vector {
-      language: Language::Esperanto,
+      language: classic::Language::Esperanto,
       seed: "ukazo klini peco etikedo fabriko imitado onklino urino \
                pudro incidento kumuluso ikono smirgi hirundo uretro krii \
                sparkado super speciala pupo alpinisto cvana vokegi zombio fabriko"
@@ -116,7 +116,7 @@ fn test_classic_seed() {
       view: "cd4d120e1ea34360af528f6a3e6156063312d9cefc9aa6b5218d366c0ed6a201".into(),
     },
     Vector {
-      language: Language::Lojban,
+      language: classic::Language::Lojban,
       seed: "jetnu vensa julne xrotu xamsi julne cutci dakli \
                mlatu xedja muvgau palpi xindo sfubu ciste cinri \
                blabi darno dembi janli blabi fenki bukpu burcu blabi"
@@ -125,7 +125,7 @@ fn test_classic_seed() {
       view: "c806ce62bafaa7b2d597f1a1e2dbe4a2f96bfd804bf6f8420fc7f4a6bd700c00".into(),
     },
     Vector {
-      language: Language::EnglishOld,
+      language: classic::Language::EnglishOld,
       seed: "glorious especially puff son moment add youth nowhere \
                throw glide grip wrong rhythm consume very swear \
                bitter heavy eventually begin reason flirt type unable"
@@ -163,15 +163,183 @@ fn test_classic_seed() {
         Scalar::from_canonical_bytes(view).unwrap()
       );
 
-      assert_eq!(Seed::from_entropy(vector.language, Zeroizing::new(spend)).unwrap(), seed);
+      assert_eq!(
+        Seed::from_entropy(SeedType::Classic(vector.language), Zeroizing::new(spend)).unwrap(),
+        seed
+      );
     }
 
     // Test against ourself
     {
-      let seed = Seed::new(&mut OsRng, vector.language);
+      let seed = Seed::new(&mut OsRng, SeedType::Classic(vector.language));
       assert_eq!(seed, Seed::from_string(Zeroizing::new(trim_seed(&seed.to_string()))).unwrap());
-      assert_eq!(seed, Seed::from_entropy(vector.language, seed.entropy()).unwrap());
+      assert_eq!(
+        seed,
+        Seed::from_entropy(SeedType::Classic(vector.language), seed.entropy()).unwrap()
+      );
       assert_eq!(seed, Seed::from_string(seed.to_string()).unwrap());
     }
+  }
+}
+
+////// POLYSEED TESTS ///////////////
+#[test]
+fn test_polyseed() {
+  struct Vector {
+    language: polyseed::Language,
+    seed: String,
+    entropy: String,
+    birthday: u64,
+    has_prefix: bool,
+    has_accent: bool,
+  }
+
+  let vectors = [
+    Vector {
+      language: polyseed::Language::English,
+      seed: "raven tail swear infant grief assist regular lamp \
+      duck valid someone little harsh puppy airport language"
+        .into(),
+      entropy: "dd76e7359a0ded37cd0ff0f3c829a5ae01673300000000000000000000000000".into(),
+      birthday: 1638446400,
+      has_prefix: true,
+      has_accent: false,
+    },
+    Vector {
+      language: polyseed::Language::Spanish,
+      seed: "eje fin parte célebre tabú pestaña lienzo puma \
+      prisión hora regalo lengua existir lápiz lote sonoro"
+        .into(),
+      entropy: "5a2b02df7db21fcbe6ec6df137d54c7b20fd2b00000000000000000000000000".into(),
+      birthday: 3118651200,
+      has_prefix: true,
+      has_accent: true,
+    },
+    Vector {
+      language: polyseed::Language::French,
+      seed: "valable arracher décaler jeudi amusant dresser mener épaissir risible \
+      prouesse réserve ampleur ajuster muter caméra enchère"
+        .into(),
+      entropy: "11cfd870324b26657342c37360c424a14a050b00000000000000000000000000".into(),
+      birthday: 1679314966,
+      has_prefix: true,
+      has_accent: true,
+    },
+    Vector {
+      language: polyseed::Language::Italian,
+      seed: "caduco midollo copione meninge isotopo illogico riflesso tartaruga fermento \
+      olandese normale tristezza episodio voragine forbito achille"
+        .into(),
+      entropy: "7ecc57c9b4652d4e31428f62bec91cfd55500600000000000000000000000000".into(),
+      birthday: 1679316358,
+      has_prefix: true,
+      has_accent: false,
+    },
+    Vector {
+      language: polyseed::Language::Portuguese,
+      seed: "caverna custear azedo adeus senador apertada sedoso omitir \
+      sujeito aurora videira molho cartaz gesso dentista tapar"
+        .into(),
+      entropy: "45473063711376cae38f1b3eba18c874124e1d00000000000000000000000000".into(),
+      birthday: 1679316657,
+      has_prefix: true,
+      has_accent: false,
+    },
+    Vector {
+      language: polyseed::Language::Czech,
+      seed: "usmrtit nora dotaz komunita zavalit funkce mzda sotva akce \
+      vesta kabel herna stodola uvolnit ustrnout email"
+        .into(),
+      entropy: "7ac8a4efd62d9c3c4c02e350d32326df37821c00000000000000000000000000".into(),
+      birthday: 1679316898,
+      has_prefix: true,
+      has_accent: false,
+    },
+    Vector {
+      language: polyseed::Language::Korean,
+      seed: "전망 선풍기 국제 무궁화 설사 기름 이론적 해안 절망 예선 \
+        지우개 보관 절망 말기 시각 귀신"
+        .into(),
+      entropy: "684663fda420298f42ed94b2c512ed38ddf12b00000000000000000000000000".into(),
+      birthday: 1679317073,
+      has_prefix: false,
+      has_accent: false,
+    },
+    Vector {
+      language: polyseed::Language::Japanese,
+      seed: "うちあわせ　ちつじょ　つごう　しはい　けんこう　とおる　てみやげ　はんとし　たんとう \
+      といれ　おさない　おさえる　むかう　ぬぐう　なふだ　せまる"
+        .into(),
+      entropy: "94e6665518a6286c6e3ba508a2279eb62b771f00000000000000000000000000".into(),
+      birthday: 1679318722,
+      has_prefix: false,
+      has_accent: false,
+    },
+    Vector {
+      language: polyseed::Language::ChineseTraditional,
+      seed: "亂 挖 斤 柄 代 圈 枝 轄 魯 論 函 開 勘 番 榮 壁".into(),
+      entropy: "b1594f585987ab0fd5a31da1f0d377dae5283f00000000000000000000000000".into(),
+      birthday: 1679426433,
+      has_prefix: false,
+      has_accent: false,
+    },
+    Vector {
+      language: polyseed::Language::ChineseSimplified,
+      seed: "啊 百 族 府 票 划 伪 仓 叶 虾 借 溜 晨 左 等 鬼".into(),
+      entropy: "21cdd366f337b89b8d1bc1df9fe73047c22b0300000000000000000000000000".into(),
+      birthday: 1679426817,
+      has_prefix: false,
+      has_accent: false,
+    },
+  ];
+  let polyseed_time_step = 2630000;
+
+  for v in vectors {
+    let add_whitespace = |mut seed: String| {
+      seed.push(' ');
+      seed
+    };
+
+    let accent_seed = |seed: &str| {
+      seed
+        .split_whitespace()
+        .map(|w| w.chars().filter(|c| c.is_ascii()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+    };
+
+    let trim_seed = |seed: &str| {
+      let seed_to_trim = if v.has_accent { accent_seed(&seed) } else { seed.to_string() };
+      seed_to_trim
+        .split_whitespace()
+        .map(|w| w.chars().take(polyseed::POLYSEED_PREFIX_LEN).collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+    };
+
+    // string -> key
+    let s1 = Seed::from_string(Zeroizing::new(v.seed.clone())).unwrap();
+    let whitespaced_seed =
+      Seed::from_string(Zeroizing::new(add_whitespace(v.seed.clone()))).unwrap();
+    assert_eq!(s1, whitespaced_seed);
+    // check trimmed version
+    if v.has_prefix {
+      let trimmed_seed = Seed::from_string(Zeroizing::new(trim_seed(&v.seed))).unwrap();
+      assert_eq!(s1, trimmed_seed);
+    }
+    // check accent version
+    if v.has_accent {
+      let accent_seed = Seed::from_string(Zeroizing::new(accent_seed(&v.seed))).unwrap();
+      assert_eq!(s1, accent_seed);
+    }
+
+    let entropy = Zeroizing::new(hex::decode(v.entropy).unwrap().try_into().unwrap());
+    assert_eq!(s1.entropy(), entropy);
+    assert!(s1.birthday() <= v.birthday);
+    assert!(s1.birthday() + polyseed_time_step > v.birthday);
+
+    // key -> string
+    let s2 = Seed::from(v.birthday, entropy, v.language).unwrap();
+    assert_eq!(s1.to_string(), s2.to_string());
   }
 }
