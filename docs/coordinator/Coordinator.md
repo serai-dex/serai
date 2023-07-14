@@ -36,5 +36,10 @@ transaction containing the signed batch to the Serai blockchain.
 
 # Sign Completed
 
-On `sign::ProcessorMessage::Completed`, the coordinator broadcasts the
-contained information to all validators.
+On `sign::ProcessorMessage::Completed`, the coordinator makes a tributary
+transaction containing the transaction hash the signing process was supposedly
+completed with.
+
+Due to rushing adversaries, the actual transaction completing the plan may be
+distinct on-chain. These messages solely exist to coordinate the signing
+process, not to determine chain state.

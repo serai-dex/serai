@@ -297,6 +297,7 @@ async fn handle_block<D: Db, Pro: Processors>(
               .await;
           }
         }
+        Transaction::SignCompleted(_, _, _) => todo!(),
       }
 
       TributaryDb::<D>::handle_event(&mut txn, hash, event_id);

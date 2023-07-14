@@ -98,7 +98,6 @@ pub mod sign {
     // Signed share for the specified signing protocol.
     Share { id: SignId, share: Vec<u8> },
     // Completed a signing protocol already.
-    // TODO: Move this to SignId
     Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
 }
@@ -246,9 +245,13 @@ impl CoordinatorMessage {
           sign::CoordinatorMessage::Preprocesses { id, .. } => (0, bincode::serialize(id).unwrap()),
           sign::CoordinatorMessage::Shares { id, .. } => (1, bincode::serialize(id).unwrap()),
           sign::CoordinatorMessage::Reattempt { id } => (2, bincode::serialize(id).unwrap()),
-          // TODO: This doesn't embed the attempt. Accordingly, multiple distinct completions will
-          // be flattened. This isn't acceptable.
-          sign::CoordinatorMessage::Completed { id, .. } => (3, id.to_vec()),
+          // The coordinator should report all reported completions to the processor
+          // Accordingly, the intent is a combination of plan ID and actual TX
+          // While transaction alone may suffice, that doesn't cover cross-chain TX ID conflicts,
+          // which are possible
+          sign::CoordinatorMessage::Completed { id, tx, .. } => {
+            (3, bincode::serialize(&(id, tx)).unwrap())
+          }
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_SIGN_UID, sub];

@@ -1,11 +1,15 @@
 use core::fmt::Debug;
 use std::{io, collections::HashMap};
 
+use zeroize::Zeroize;
 use thiserror::Error;
 
 use blake2::{Digest, Blake2b512};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use ciphersuite::{
+  group::{Group, GroupEncoding},
+  Ciphersuite, Ristretto,
+};
 use schnorr::SchnorrSignature;
 
 use crate::{TRANSACTION_SIZE_LIMIT, ReadWrite};
@@ -48,12 +52,23 @@ impl ReadWrite for Signed {
       Err(io::Error::new(io::ErrorKind::Other, "nonce exceeded limit"))?;
     }
 
-    let signature = SchnorrSignature::<Ristretto>::read(reader)?;
+    let mut signature = SchnorrSignature::<Ristretto>::read(reader)?;
+    if signature.R.is_identity().into() {
+      // Anyone malicious could remove this and try to find zero signatures
+      // We should never produce zero signatures though meaning this should never come up
+      // If it does somehow come up, this is a decent courtesy
+      signature.zeroize();
+      Err(io::Error::new(io::ErrorKind::Other, "signature nonce was identity"))?;
+    }
 
     Ok(Signed { signer, nonce, signature })
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    // This is either an invalid signature or a private key leak
+    if self.signature.R.is_identity().into() {
+      Err(io::Error::new(io::ErrorKind::Other, "signature nonce was identity"))?;
+    }
     writer.write_all(&self.signer.to_bytes())?;
     writer.write_all(&self.nonce.to_le_bytes())?;
     self.signature.write(writer)

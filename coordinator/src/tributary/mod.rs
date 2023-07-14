@@ -232,6 +232,7 @@ pub enum Transaction {
 
   SignPreprocess(SignData),
   SignShare(SignData),
+  SignCompleted([u8; 32], Vec<u8>, Signed),
 }
 
 impl ReadWrite for Transaction {
@@ -303,6 +304,19 @@ impl ReadWrite for Transaction {
 
       6 => SignData::read(reader).map(Transaction::SignPreprocess),
       7 => SignData::read(reader).map(Transaction::SignShare),
+
+      8 => {
+        let mut plan = [0; 32];
+        reader.read_exact(&mut plan)?;
+
+        let mut tx_len = [0];
+        reader.read_exact(&mut tx_len)?;
+        let mut tx = vec![0; usize::from(tx_len[0])];
+        reader.read_exact(&mut tx)?;
+
+        let signed = Signed::read(reader)?;
+        Ok(Transaction::SignCompleted(plan, tx, signed))
+      }
 
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
     }
@@ -376,6 +390,13 @@ impl ReadWrite for Transaction {
         writer.write_all(&[7])?;
         data.write(writer)
       }
+      Transaction::SignCompleted(plan, tx, signed) => {
+        writer.write_all(&[8])?;
+        writer.write_all(plan)?;
+        writer.write_all(&[u8::try_from(tx.len()).expect("tx hash length exceed 255 bytes")])?;
+        writer.write_all(tx)?;
+        signed.write(writer)
+      }
     }
   }
 }
@@ -394,6 +415,7 @@ impl TransactionTrait for Transaction {
 
       Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
       Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
+      Transaction::SignCompleted(_, _, signed) => TransactionKind::Signed(signed),
     }
   }
 
@@ -451,6 +473,7 @@ impl Transaction {
 
         Transaction::SignPreprocess(ref mut data) => &mut data.signed,
         Transaction::SignShare(ref mut data) => &mut data.signed,
+        Transaction::SignCompleted(_, _, ref mut signed) => signed,
       }
     }
 

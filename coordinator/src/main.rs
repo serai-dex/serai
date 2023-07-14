@@ -190,7 +190,6 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
   }
 }
 
-#[allow(clippy::type_complexity)]
 pub async fn heartbeat_tributaries<D: Db, P: P2p>(
   p2p: P,
   tributaries: Arc<RwLock<Tributaries<D, P>>>,
@@ -217,7 +216,6 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
   }
 }
 
-#[allow(clippy::type_complexity)]
 pub async fn handle_p2p<D: Db, P: P2p>(
   our_key: <Ristretto as Ciphersuite>::G,
   p2p: P,
@@ -364,7 +362,6 @@ pub async fn publish_transaction<D: Db, P: P2p>(
   }
 }
 
-#[allow(clippy::type_complexity)]
 pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   mut db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
