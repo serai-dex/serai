@@ -44,7 +44,7 @@ jobs:
             -p minimal-ed448 \
             -p ciphersuite \
             -p multiexp \
-            -p schnorr \
+            -p schnorr-signatures \
             -p dleq \
             -p dkg \
             -p modular-frost \
