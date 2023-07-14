@@ -19,6 +19,7 @@ members = [
   "crypto/frost",
   "crypto/schnorrkel",
 
+  "coins/bitcoin",
   "coins/ethereum",
   "coins/monero/generators",
   "coins/monero",
