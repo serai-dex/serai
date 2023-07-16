@@ -53,10 +53,11 @@ issued at the discretion of the Immunefi program managers.
 
 ### Links
 
-- [Twitter](https://twitter.com/SeraiDEX):         https://twitter.com/SeraiDEX
-- [Mastodon](https://cryptodon.lol/@serai):        https://cryptodon.lol/@serai
-- [Discord](https://discord.gg/mpEUtJR3vz):        https://discord.gg/mpEUtJR3vz
-- [Matrix](https://matrix.to/#/#serai:matrix.org):
-https://matrix.to/#/#serai:matrix.org
-- [Immunefi](https://immunefi.com/bounty/serai/):
-https://immunefi.com/bounty/serai/
+- [Website](https://serai.exchange/): https://serai.exchange/
+- [Immunefi](https://immunefi.com/bounty/serai/): https://immunefi.com/bounty/serai/
+- [Twitter](https://twitter.com/SeraiDEX): https://twitter.com/SeraiDEX
+- [Mastodon](https://cryptodon.lol/@serai): https://cryptodon.lol/@serai
+- [Discord](https://discord.gg/mpEUtJR3vz): https://discord.gg/mpEUtJR3vz
+- [Matrix](https://matrix.to/#/#serai:matrix.org): https://matrix.to/#/#serai:matrix.org
+- [Reddit](https://www.reddit.com/r/SeraiDEX/): https://www.reddit.com/r/SeraiDEX/
+- [Telegram](https://t.me/SeraiDEX): https://t.me/SeraiDEX
