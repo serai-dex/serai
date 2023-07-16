@@ -34,7 +34,7 @@ fn polyseed_features_supported(features: u8) -> bool {
 const DATE_BITS: u8 = 10;
 const DATE_MASK: u16 = (1u16 << DATE_BITS) - 1;
 const POLYSEED_EPOCH: u64 = 1635768000; // 1st November 2021 12:00 UTC
-const TIME_STEP: u64 = 2629746; // 30.436875 days = 1/12 of the Gregorian year
+pub(crate) const TIME_STEP: u64 = 2629746; // 30.436875 days = 1/12 of the Gregorian year
 
 // After ~85 years, this will roll over.
 fn birthday_encode(time: u64) -> u16 {

@@ -174,7 +174,7 @@ fn test_classic_seed() {
       );
     }
 
-    // Test against ourself
+    // Test against ourselves
     {
       let seed = Seed::new(&mut OsRng, SeedType::Classic(vector.language));
       assert_eq!(seed, Seed::from_string(Zeroizing::new(trim_seed(&seed.to_string()))).unwrap());
@@ -296,7 +296,6 @@ fn test_polyseed() {
       has_accent: false,
     },
   ];
-  let polyseed_time_step = 2630000;
 
   for vector in vectors {
     let add_whitespace = |mut seed: String| {
@@ -317,7 +316,21 @@ fn test_polyseed() {
         if vector.has_accent { seed_without_accents(seed) } else { seed.to_string() };
       seed_to_trim
         .split_whitespace()
-        .map(|w| w.chars().take(polyseed::PREFIX_LEN).collect::<String>())
+        .map(|w| {
+          let mut ascii = 0;
+          let mut to_take = w.len();
+          for (i, char) in w.chars().enumerate() {
+            if char.is_ascii() {
+              ascii += 1;
+            }
+            if ascii == polyseed::PREFIX_LEN {
+              // +1 to include this character, which put us at the prefix length
+              to_take = i + 1;
+              break;
+            }
+          }
+          w.chars().take(to_take).collect::<String>()
+        })
         .collect::<Vec<_>>()
         .join(" ")
     };
@@ -343,12 +356,27 @@ fn test_polyseed() {
 
     let entropy = Zeroizing::new(hex::decode(vector.entropy).unwrap().try_into().unwrap());
     assert_eq!(seed.entropy(), entropy);
-    assert!(seed.birthday().abs_diff(vector.birthday) < polyseed_time_step);
+    assert!(seed.birthday().abs_diff(vector.birthday) < polyseed::TIME_STEP);
 
     // Entropy -> Seed
     let from_entropy =
       Seed::from_entropy(SeedType::Polyseed(vector.language), entropy, Some(seed.birthday()))
         .unwrap();
     assert_eq!(seed.to_string(), from_entropy.to_string());
+
+    // Check against ourselves
+    {
+      let seed = Seed::new(&mut OsRng, SeedType::Polyseed(vector.language));
+      assert_eq!(seed, Seed::from_string(seed.to_string()).unwrap());
+      assert_eq!(
+        seed,
+        Seed::from_entropy(
+          SeedType::Polyseed(vector.language),
+          seed.entropy(),
+          Some(seed.birthday())
+        )
+        .unwrap()
+      );
+    }
   }
 }

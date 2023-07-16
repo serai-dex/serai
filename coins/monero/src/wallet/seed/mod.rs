@@ -99,7 +99,7 @@ impl Seed {
     }
   }
 
-  /// Returns the entropy for this `Seed`.
+  /// Returns the entropy for this seed.
   pub fn entropy(&self) -> Zeroizing<[u8; 32]> {
     match self {
       Seed::Classic(seed) => seed.entropy(),
@@ -107,7 +107,7 @@ impl Seed {
     }
   }
 
-  /// Returns the key derived from this `Seed`.
+  /// Returns the key derived from this seed.
   pub fn key(&self) -> Zeroizing<[u8; 32]> {
     match self {
       // Classic does not differentiate between its entropy and its key
@@ -116,7 +116,7 @@ impl Seed {
     }
   }
 
-  /// Returns the birthday of this `Seed`.
+  /// Returns the birthday of this seed.
   pub fn birthday(&self) -> u64 {
     match self {
       Seed::Classic(_) => 0,
