@@ -1,5 +1,5 @@
 use core::fmt;
-use std_shims::{sync::OnceLock, collections::HashMap};
+use std_shims::{sync::OnceLock, string::String, collections::HashMap};
 #[cfg(feature = "std")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
