@@ -13,13 +13,27 @@ use crc::{Crc, CRC_32_ISO_HDLC};
 
 use curve25519_dalek::scalar::Scalar;
 
-use crate::{
-  random_scalar,
-  wallet::seed::{SeedError, Language},
-};
+use crate::{random_scalar, wallet::seed::SeedError};
 
 pub(crate) const CLASSIC_SEED_LENGTH: usize = 24;
 pub(crate) const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum Language {
+  Chinese,
+  English,
+  Dutch,
+  French,
+  Spanish,
+  German,
+  Italian,
+  Portuguese,
+  Japanese,
+  Russian,
+  Esperanto,
+  Lojban,
+  EnglishOld,
+}
 
 fn trim(word: &str, len: usize) -> Zeroizing<String> {
   Zeroizing::new(word.chars().take(len).collect())
