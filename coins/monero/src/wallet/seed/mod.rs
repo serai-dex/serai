@@ -1,6 +1,5 @@
 use core::fmt;
 use std_shims::string::String;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
@@ -22,14 +21,12 @@ pub enum SeedError {
   InvalidChecksum,
   #[cfg_attr(feature = "std", error("english old seeds don't support checksums"))]
   EnglishOldWithChecksum,
+  #[cfg_attr(feature = "std", error("provided entropy is not valid"))]
+  InvalidEntropy,
   #[cfg_attr(feature = "std", error("invalid seed"))]
   InvalidSeed,
-  #[error("invalid poly to decode")]
-  PolyseedInvalidPoly,
-  #[error("provided features are not supported")]
-  PolyseedFeatureNotSupported,
-  #[error("provided entropy is not valid")]
-  PolyseedInvalidEntropy,
+  #[cfg_attr(feature = "std", error("provided features are not supported"))]
+  UnsupportedFeatures,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -74,26 +71,24 @@ impl Seed {
     }
   }
 
-  /// Creates a `Seed` from an entropy. If you want to create a `Polyseed`, the last `13`
-  /// bytes of `entropy` should be `0` as required by the specifications.
-  pub fn from_entropy(seed_type: SeedType, entropy: Zeroizing<[u8; 32]>) -> Option<Seed> {
+  /// Creates a `Seed` from an entropy and an optional birthday (denoted in seconds since the
+  /// epoch).
+  ///
+  /// For `SeedType::Classic`, the birthday is ignored.
+  ///
+  /// For `SeedType::Polyseed`, the last 13 bytes of `entropy` must be `0`.
+  // TODO: Return Result, not Option
+  pub fn from_entropy(
+    seed_type: SeedType,
+    entropy: Zeroizing<[u8; 32]>,
+    birthday: Option<u64>,
+  ) -> Option<Seed> {
     match seed_type {
       SeedType::Classic(lang) => ClassicSeed::from_entropy(lang, entropy).map(Seed::Classic),
       SeedType::Polyseed(lang) => {
-        let birthday = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-        Polyseed::from(0, birthday, entropy, lang).map(Seed::Polyseed)
+        Polyseed::from(lang, 0, birthday.unwrap_or(0), entropy).map(Seed::Polyseed).ok()
       }
     }
-  }
-
-  /// Creates a `Polyseed` type `Seed` from given data.
-  pub fn from(
-    birthday: u64,
-    entropy: Zeroizing<[u8; 32]>,
-    lang: polyseed::Language,
-  ) -> Option<Seed> {
-    // we support no features for now.
-    Polyseed::from(0, birthday, entropy, lang).map(Seed::Polyseed)
   }
 
   /// Returns seed as `String`.
@@ -108,13 +103,14 @@ impl Seed {
   pub fn entropy(&self) -> Zeroizing<[u8; 32]> {
     match self {
       Seed::Classic(seed) => seed.entropy(),
-      Seed::Polyseed(seed) => seed.entropy(),
+      Seed::Polyseed(seed) => seed.entropy().clone(),
     }
   }
 
-  /// Returns the usable key for this `Seed`.
+  /// Returns the key derived from this `Seed`.
   pub fn key(&self) -> Zeroizing<[u8; 32]> {
     match self {
+      // Classic does not differentiate between its entropy and its key
       Seed::Classic(seed) => seed.entropy(),
       Seed::Polyseed(seed) => seed.key(),
     }

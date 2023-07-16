@@ -20,7 +20,7 @@ pub(crate) const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Language {
-  ChineseSimplified,
+  Chinese,
   English,
   Dutch,
   French,
@@ -69,6 +69,7 @@ static LANGUAGES_CELL: OnceLock<HashMap<Language, WordList>> = OnceLock::new();
 fn LANGUAGES() -> &'static HashMap<Language, WordList> {
   LANGUAGES_CELL.get_or_init(|| {
     HashMap::from([
+      (Language::Chinese, WordList::new(include!("./classic/zh.rs"), 1)),
       (Language::English, WordList::new(include!("./classic/en.rs"), 3)),
       (Language::Dutch, WordList::new(include!("./classic/nl.rs"), 4)),
       (Language::French, WordList::new(include!("./classic/fr.rs"), 4)),
@@ -81,7 +82,6 @@ fn LANGUAGES() -> &'static HashMap<Language, WordList> {
       (Language::Esperanto, WordList::new(include!("./classic/eo.rs"), 4)),
       (Language::Lojban, WordList::new(include!("./classic/jbo.rs"), 4)),
       (Language::EnglishOld, WordList::new(include!("./classic/ang.rs"), 4)),
-      (Language::ChineseSimplified, WordList::new(include!("./classic/zh.rs"), 1)),
     ])
   })
 }

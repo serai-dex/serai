@@ -6,7 +6,11 @@ use curve25519_dalek::scalar::Scalar;
 
 use crate::{
   hash,
-  wallet::seed::{Seed, SeedType, classic, polyseed, classic::trim_by_lang},
+  wallet::seed::{
+    Seed, SeedType,
+    classic::{self, trim_by_lang},
+    polyseed,
+  },
 };
 
 #[test]
@@ -20,7 +24,7 @@ fn test_classic_seed() {
 
   let vectors = [
     Vector {
-      language: classic::Language::ChineseSimplified,
+      language: classic::Language::Chinese,
       seed: "摇 曲 艺 武 滴 然 效 似 赏 式 祥 歌 买 疑 小 碧 堆 博 键 房 鲜 悲 付 喷 武".into(),
       spend: "a5e4fff1706ef9212993a69f246f5c95ad6d84371692d63e9bb0ea112a58340d".into(),
       view: "1176c43ce541477ea2f3ef0b49b25112b084e26b8a843e1304ac4677b74cdf02".into(),
@@ -164,7 +168,8 @@ fn test_classic_seed() {
       );
 
       assert_eq!(
-        Seed::from_entropy(SeedType::Classic(vector.language), Zeroizing::new(spend)).unwrap(),
+        Seed::from_entropy(SeedType::Classic(vector.language), Zeroizing::new(spend), None)
+          .unwrap(),
         seed
       );
     }
@@ -175,14 +180,13 @@ fn test_classic_seed() {
       assert_eq!(seed, Seed::from_string(Zeroizing::new(trim_seed(&seed.to_string()))).unwrap());
       assert_eq!(
         seed,
-        Seed::from_entropy(SeedType::Classic(vector.language), seed.entropy()).unwrap()
+        Seed::from_entropy(SeedType::Classic(vector.language), seed.entropy(), None).unwrap()
       );
       assert_eq!(seed, Seed::from_string(seed.to_string()).unwrap());
     }
   }
 }
 
-////// POLYSEED TESTS ///////////////
 #[test]
 fn test_polyseed() {
   struct Vector {
@@ -294,13 +298,13 @@ fn test_polyseed() {
   ];
   let polyseed_time_step = 2630000;
 
-  for v in vectors {
+  for vector in vectors {
     let add_whitespace = |mut seed: String| {
       seed.push(' ');
       seed
     };
 
-    let accent_seed = |seed: &str| {
+    let seed_without_accents = |seed: &str| {
       seed
         .split_whitespace()
         .map(|w| w.chars().filter(|c| c.is_ascii()).collect::<String>())
@@ -309,37 +313,42 @@ fn test_polyseed() {
     };
 
     let trim_seed = |seed: &str| {
-      let seed_to_trim = if v.has_accent { accent_seed(&seed) } else { seed.to_string() };
+      let seed_to_trim =
+        if vector.has_accent { seed_without_accents(seed) } else { seed.to_string() };
       seed_to_trim
         .split_whitespace()
-        .map(|w| w.chars().take(polyseed::POLYSEED_PREFIX_LEN).collect::<String>())
+        .map(|w| w.chars().take(polyseed::PREFIX_LEN).collect::<String>())
         .collect::<Vec<_>>()
         .join(" ")
     };
 
-    // string -> key
-    let s1 = Seed::from_string(Zeroizing::new(v.seed.clone())).unwrap();
+    // String -> Seed
+    let seed = Seed::from_string(Zeroizing::new(vector.seed.clone())).unwrap();
+
+    // Make sure a version with added whitespace still works
     let whitespaced_seed =
-      Seed::from_string(Zeroizing::new(add_whitespace(v.seed.clone()))).unwrap();
-    assert_eq!(s1, whitespaced_seed);
-    // check trimmed version
-    if v.has_prefix {
-      let trimmed_seed = Seed::from_string(Zeroizing::new(trim_seed(&v.seed))).unwrap();
-      assert_eq!(s1, trimmed_seed);
+      Seed::from_string(Zeroizing::new(add_whitespace(vector.seed.clone()))).unwrap();
+    assert_eq!(seed, whitespaced_seed);
+    // Check trimmed versions works
+    if vector.has_prefix {
+      let trimmed_seed = Seed::from_string(Zeroizing::new(trim_seed(&vector.seed))).unwrap();
+      assert_eq!(seed, trimmed_seed);
     }
-    // check accent version
-    if v.has_accent {
-      let accent_seed = Seed::from_string(Zeroizing::new(accent_seed(&v.seed))).unwrap();
-      assert_eq!(s1, accent_seed);
+    // Check versions without accents work
+    if vector.has_accent {
+      let seed_without_accents =
+        Seed::from_string(Zeroizing::new(seed_without_accents(&vector.seed))).unwrap();
+      assert_eq!(seed, seed_without_accents);
     }
 
-    let entropy = Zeroizing::new(hex::decode(v.entropy).unwrap().try_into().unwrap());
-    assert_eq!(s1.entropy(), entropy);
-    assert!(s1.birthday() <= v.birthday);
-    assert!(s1.birthday() + polyseed_time_step > v.birthday);
+    let entropy = Zeroizing::new(hex::decode(vector.entropy).unwrap().try_into().unwrap());
+    assert_eq!(seed.entropy(), entropy);
+    assert!(seed.birthday().abs_diff(vector.birthday) < polyseed_time_step);
 
-    // key -> string
-    let s2 = Seed::from(v.birthday, entropy, v.language).unwrap();
-    assert_eq!(s1.to_string(), s2.to_string());
+    // Entropy -> Seed
+    let from_entropy =
+      Seed::from_entropy(SeedType::Polyseed(vector.language), entropy, Some(seed.birthday()))
+        .unwrap();
+    assert_eq!(seed.to_string(), from_entropy.to_string());
   }
 }
