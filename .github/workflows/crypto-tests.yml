@@ -1,0 +1,37 @@
+name: crypto/ Tests
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "common/**"
+      - "crypto/**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-crypto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Tests
+        run: |
+          GITHUB_CI=true cargo test --all-features \
+            -p flexible-transcript \
+            -p ff-group-tests \
+            -p dalek-ff-group \
+            -p minimal-ed448 \
+            -p ciphersuite \
+            -p multiexp \
+            -p schnorr-signatures \
+            -p dleq \
+            -p dkg \
+            -p modular-frost \
+            -p frost-schnorrkel

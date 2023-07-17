@@ -1,0 +1,29 @@
+name: common/ Tests
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "common/**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-common:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Tests
+        run: |
+          GITHUB_CI=true cargo test --all-features \
+            -p std-shims \
+            -p zalloc \
+            -p serai-db \
+            -p serai-env
