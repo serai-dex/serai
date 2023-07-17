@@ -106,8 +106,12 @@ fn ack_message(service: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
 #[tokio::main]
 async fn main() {
   // Open the DB
-  let db =
-    Arc::new(rocksdb::TransactionDB::open_default(serai_env::var("DB_PATH").unwrap()).unwrap());
+  let db = Arc::new(
+    rocksdb::TransactionDB::open_default(
+      serai_env::var("DB_PATH").expect("path to DB wasn't specified"),
+    )
+    .unwrap(),
+  );
 
   let read_key = |str| {
     let key = serai_env::var(str)?;

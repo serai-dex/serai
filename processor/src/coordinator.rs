@@ -1,8 +1,4 @@
 use core::ops::Deref;
-use std::{
-  sync::{Arc, RwLock},
-  collections::VecDeque,
-};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
@@ -182,27 +178,5 @@ impl Coordinator for MessageQueue {
     );
 
     MessageQueue::ack(self, msg.id, sig.serialize()).await
-  }
-}
-
-// TODO: Move this to tests
-pub struct MemCoordinator(Arc<RwLock<VecDeque<Message>>>);
-impl MemCoordinator {
-  #[allow(clippy::new_without_default)]
-  pub fn new() -> MemCoordinator {
-    MemCoordinator(Arc::new(RwLock::new(VecDeque::new())))
-  }
-}
-
-#[async_trait::async_trait]
-impl Coordinator for MemCoordinator {
-  async fn send(&mut self, _: ProcessorMessage) {
-    todo!()
-  }
-  async fn recv(&mut self) -> Message {
-    todo!()
-  }
-  async fn ack(&mut self, _: Message) {
-    todo!()
   }
 }

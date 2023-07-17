@@ -1,12 +1,16 @@
 use std::{
   time::Duration,
+  sync::Arc,
   collections::{VecDeque, HashMap},
 };
 
 use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
-use ciphersuite::group::GroupEncoding;
+use ciphersuite::{
+  group::{ff::PrimeField, GroupEncoding},
+  Ristretto,
+};
 use frost::{curve::Ciphersuite, ThresholdKeys};
 
 use log::{info, warn, error};
@@ -15,7 +19,7 @@ use tokio::time::sleep;
 use scale::Decode;
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, BlockHash},
+  primitives::{MAX_DATA_LEN, BlockHash, NetworkId},
   tokens::primitives::{OutInstruction, OutInstructionWithBalance},
   in_instructions::primitives::{
     Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch,
@@ -460,8 +464,7 @@ async fn boot<C: Coin, D: Db>(
   coin: &C,
 ) -> (MainDb<C, D>, TributaryMutable<C, D>, SubstrateMutable<C, D>) {
   let mut entropy_transcript = {
-    let entropy =
-      Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't provided as an env var"));
+    let entropy = Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't specified"));
     if entropy.len() != 64 {
       panic!("entropy isn't the right length");
     }
@@ -715,14 +718,48 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
 
 #[tokio::main]
 async fn main() {
-  let db = MemDb::new(); // TODO
-  let coordinator = MemCoordinator::new(); // TODO
-  let url = env::var("COIN_RPC").expect("coin rpc wasn't specified as an env var");
-  match env::var("COIN").expect("coin wasn't specified as an env var").as_str() {
+  let db = Arc::new(
+    rocksdb::TransactionDB::<rocksdb::SingleThreaded>::open_default(
+      env::var("DB_PATH").expect("path to DB wasn't specified"),
+    )
+    .unwrap(),
+  );
+
+  // Network configuration
+  let url = env::var("NETWORK_RPC").expect("network RPC wasn't specified");
+  let network_id = match env::var("NETWORK").expect("network wasn't specified").as_str() {
+    "bitcoin" => NetworkId::Bitcoin,
+    "monero" => NetworkId::Monero,
+    _ => panic!("unrecognized network"),
+  };
+
+  // Coordinator configuration
+  let priv_key = {
+    let key_str =
+      Zeroizing::new(env::var("MESSAGE_QUEUE_KEY").expect("message-queue key wasn't specified"));
+    let key_bytes = Zeroizing::new(
+      hex::decode(&key_str).expect("invalid message-queue key specified (wasn't hex)"),
+    );
+    let mut bytes = <<Ristretto as Ciphersuite>::F as PrimeField>::Repr::default();
+    bytes.copy_from_slice(&key_bytes);
+    let key = Zeroizing::new(
+      Option::from(<<Ristretto as Ciphersuite>::F as PrimeField>::from_repr(bytes))
+        .expect("invalid message-queue key specified"),
+    );
+    bytes.zeroize();
+    key
+  };
+  let coordinator = MessageQueue::new(
+    env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified"),
+    network_id,
+    priv_key,
+  );
+
+  match network_id {
     #[cfg(feature = "bitcoin")]
-    "bitcoin" => run(db, Bitcoin::new(url).await, coordinator).await,
+    NetworkId::Bitcoin => run(db, Bitcoin::new(url).await, coordinator).await,
     #[cfg(feature = "monero")]
-    "monero" => run(db, Monero::new(url), coordinator).await,
-    _ => panic!("unrecognized coin"),
+    NetworkId::Monero => run(db, Monero::new(url), coordinator).await,
+    _ => panic!("spawning a processor for an unsupported network"),
   }
 }
