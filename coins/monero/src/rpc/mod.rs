@@ -369,11 +369,14 @@ impl<R: RpcConnection> Rpc<R> {
     let mut indexes: &[u8] = indexes_buf.as_ref();
 
     (|| {
+      let mut res = None;
+      let mut is_okay = false;
+
       if read_bytes::<_, { EPEE_HEADER.len() }>(&mut indexes)? != EPEE_HEADER {
         Err(io::Error::new(io::ErrorKind::Other, "invalid header"))?;
       }
 
-      let read_object = |reader: &mut &[u8]| {
+      let read_object = |reader: &mut &[u8]| -> io::Result<Vec<u64>> {
         let fields = read_byte(reader)? >> 2;
 
         for _ in 0 .. fields {
@@ -437,25 +440,50 @@ impl<R: RpcConnection> Rpc<R> {
             }
           };
 
-          let mut res = vec![];
+          let mut bytes_res = vec![];
           for _ in 0 .. iters {
-            res.push(f(reader)?);
+            bytes_res.push(f(reader)?);
           }
 
-          let mut actual_res = Vec::with_capacity(res.len());
-          if &name == b"o_indexes" {
-            for o_index in res {
-              actual_res.push(u64::from_le_bytes(o_index.try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "node didn't provide 8 bytes for a u64")
-              })?));
+          let mut actual_res = Vec::with_capacity(bytes_res.len());
+          match name.as_slice() {
+            b"o_indexes" => {
+              for o_index in bytes_res {
+                actual_res.push(u64::from_le_bytes(o_index.try_into().map_err(|_| {
+                  io::Error::new(io::ErrorKind::Other, "node didn't provide 8 bytes for a u64")
+                })?));
+              }
+              res = Some(actual_res);
             }
-            return Ok(actual_res);
+            b"status" => {
+              if bytes_res
+                .get(0)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "status wasn't a string"))?
+                .as_slice() !=
+                b"OK"
+              {
+                // TODO: Better handle non-OK responses
+                Err(io::Error::new(io::ErrorKind::Other, "response wasn't OK"))?;
+              }
+              is_okay = true;
+            }
+            _ => continue,
+          }
+
+          if is_okay && res.is_some() {
+            break;
           }
         }
 
-        // Didn't return a response with o_indexes
-        // TODO: Check if this didn't have o_indexes because it's an error response
-        Err(io::Error::new(io::ErrorKind::Other, "response didn't contain o_indexes"))
+        // Didn't return a response with a status
+        // (if the status wasn't okay, we would've already errored)
+        if !is_okay {
+          Err(io::Error::new(io::ErrorKind::Other, "response didn't contain a status"))?;
+        }
+
+        // If the Vec was empty, it would've been omitted, hence the unwrap_or
+        // TODO: Test against a 0-output TX, such as the ones found in block 202612
+        Ok(res.unwrap_or(vec![]))
       };
 
       read_object(&mut indexes)
