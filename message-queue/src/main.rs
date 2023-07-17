@@ -100,10 +100,10 @@ fn ack_message(service: Service, id: u64, _signature: SchnorrSignature<Ristretto
 async fn main() {
   // Open the DB
   let db =
-    Arc::new(rocksdb::TransactionDB::open_default(std::env::var("DB_PATH").unwrap()).unwrap());
+    Arc::new(rocksdb::TransactionDB::open_default(serai_env::var("DB_PATH").unwrap()).unwrap());
 
   let read_key = |str| {
-    let Ok(key) = std::env::var(str) else { None? };
+    let Ok(key) = serai_env::var(str) else { None? };
 
     let mut repr = <<Ristretto as Ciphersuite>::G as GroupEncoding>::Repr::default();
     repr.as_mut().copy_from_slice(&hex::decode(key).unwrap());

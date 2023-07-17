@@ -23,7 +23,8 @@ jobs:
           GITHUB_CI=true cargo test --all-features \
             -p std-shims \
             -p zalloc \
-            -p serai-db
+            -p serai-db \
+            -p serai-env
 
   test-crypto:
     runs-on: ubuntu-latest

@@ -1,5 +1,4 @@
 use std::{
-  env,
   time::Duration,
   collections::{VecDeque, HashMap},
 };
@@ -24,6 +23,8 @@ use serai_client::{
 };
 
 use messages::{SubstrateContext, CoordinatorMessage, ProcessorMessage};
+
+use serai_env as env;
 
 mod plan;
 pub use plan::*;

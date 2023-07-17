@@ -35,6 +35,8 @@ tokio = { version = "1", features = ["full"] }
 serai-db = { path = "../common/db", features = ["rocksdb"] }
 rocksdb = "0.21"
 
+serai-env = { path = "../common/env" }
+
 serai-primitives = { path = "../substrate/primitives" }
 
 jsonrpsee = { version = "0.16", features = ["server"] }

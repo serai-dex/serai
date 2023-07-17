@@ -3,6 +3,7 @@ members = [
   "common/std-shims",
   "common/zalloc",
   "common/db",
+  "common/env",
 
   "crypto/transcript",
 

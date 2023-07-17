@@ -8654,6 +8654,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-env"
+version = "0.1.0"
+
+[[package]]
 name = "serai-in-instructions-pallet"
 version = "0.1.0"
 dependencies = [
@@ -8699,6 +8703,7 @@ dependencies = [
  "rocksdb",
  "schnorr-signatures",
  "serai-db",
+ "serai-env",
  "serai-primitives",
  "serde",
  "serde_json",
@@ -8800,6 +8805,7 @@ dependencies = [
  "secp256k1",
  "serai-client",
  "serai-db",
+ "serai-env",
  "serai-message-queue",
  "serai-processor-messages",
  "serde",

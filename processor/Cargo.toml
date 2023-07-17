@@ -55,6 +55,7 @@ log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
 serai-db = { path = "../common/db", default-features = false }
+serai-env = { path = "../common/env" }
 serai-client = { path = "../substrate/client", default-features = false }
 
 messages = { package = "serai-processor-messages", path = "./messages" }
