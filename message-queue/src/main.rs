@@ -16,10 +16,12 @@ use messages::*;
 mod queue;
 use queue::Queue;
 
+type Db = Arc<rocksdb::TransactionDB>;
+
 lazy_static::lazy_static! {
   static ref KEYS: Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>> =
     Arc::new(RwLock::new(HashMap::new()));
-  static ref QUEUES: Arc<RwLock<HashMap<Service, RwLock<Queue<serai_db::MemDb>>>>> =
+  static ref QUEUES: Arc<RwLock<HashMap<Service, RwLock<Queue<Db>>>>> =
     Arc::new(RwLock::new(HashMap::new()));
 }
 
@@ -97,8 +99,8 @@ fn ack_message(service: Service, id: u64, _signature: SchnorrSignature<Ristretto
 #[tokio::main]
 async fn main() {
   // Open the DB
-  // TODO
-  let db = serai_db::MemDb::new();
+  let db =
+    Arc::new(rocksdb::TransactionDB::open_default(std::env::var("DB_PATH").unwrap()).unwrap());
 
   let read_key = |str| {
     let Ok(key) = std::env::var(str) else { None? };
@@ -132,7 +134,8 @@ async fn main() {
   // Start server
   let builder = ServerBuilder::new();
   // TODO: Set max request/response size
-  let listen_on: &[std::net::SocketAddr] = &["0.0.0.0".parse().unwrap()];
+  // 5132 ^ ((b'M' << 8) | b'Q')
+  let listen_on: &[std::net::SocketAddr] = &["0.0.0.0:2287".parse().unwrap()];
   let server = builder.build(listen_on).await.unwrap();
 
   let mut module = RpcModule::new(());
@@ -165,5 +168,7 @@ async fn main() {
       Ok(())
     })
     .unwrap();
-  server.start(module).unwrap();
+
+  // Run until stopped, which it never will
+  server.start(module).unwrap().stopped().await;
 }

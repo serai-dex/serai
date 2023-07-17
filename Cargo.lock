@@ -8696,6 +8696,7 @@ dependencies = [
  "jsonrpsee",
  "lazy_static",
  "log",
+ "rocksdb",
  "schnorr-signatures",
  "serai-db",
  "serai-primitives",
