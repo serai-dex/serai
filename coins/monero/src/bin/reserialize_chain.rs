@@ -13,26 +13,36 @@ use monero_serai::{
   ringct::RctPrunable,
   transaction::{Input, Transaction},
   block::Block,
-  rpc::{Rpc, HttpRpc},
+  rpc::{RpcError, Rpc, HttpRpc},
 };
 
 use tokio::task::JoinHandle;
 
 async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
-  let hash = rpc.get_block_hash(block_i).await.expect("couldn't get block {block_i}'s hash");
+  let hash = loop {
+    match rpc.get_block_hash(block_i).await {
+      Ok(hash) => break hash,
+      Err(RpcError::ConnectionError) => continue,
+      Err(e) => panic!("couldn't get block {block_i}'s hash: {e:?}"),
+    }
+  };
 
   // TODO: Grab the JSON to also check it was deserialized correctly
   #[derive(Deserialize, Debug)]
   struct BlockResponse {
     blob: String,
   }
-  let res: BlockResponse = rpc
-    .json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) })))
-    .await
-    .expect("couldn't get block {block} via block.hash()");
+  let res: BlockResponse = loop {
+    match rpc.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await {
+      Ok(res) => break res,
+      Err(RpcError::ConnectionError) => continue,
+      Err(e) => panic!("couldn't get block {block_i} via block.hash(): {e:?}"),
+    }
+  };
 
   let blob = hex::decode(res.blob).expect("node returned non-hex block");
-  let block = Block::read(&mut blob.as_slice()).expect("couldn't deserialize block {block_i}");
+  let block =
+    Block::read(&mut blob.as_slice()).expect(&format!("couldn't deserialize block {block_i}"));
   assert_eq!(block.hash(), hash, "hash differs");
   assert_eq!(block.serialize(), blob, "serialization differs");
 
@@ -54,15 +64,21 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
     let mut hashes_hex = block.txs.iter().map(hex::encode).collect::<Vec<_>>();
     let mut all_txs = vec![];
     while !hashes_hex.is_empty() {
-      let txs: TransactionsResponse = rpc
-        .rpc_call(
-          "get_transactions",
-          Some(json!({
-            "txs_hashes": hashes_hex.drain(.. hashes_hex.len().min(100)).collect::<Vec<_>>(),
-          })),
-        )
-        .await
-        .expect("couldn't call get_transactions");
+      let txs: TransactionsResponse = loop {
+        match rpc
+          .rpc_call(
+            "get_transactions",
+            Some(json!({
+              "txs_hashes": hashes_hex.drain(.. hashes_hex.len().min(100)).collect::<Vec<_>>(),
+            })),
+          )
+          .await
+        {
+          Ok(txs) => break txs,
+          Err(RpcError::ConnectionError) => continue,
+          Err(e) => panic!("couldn't call get_transactions: {e:?}"),
+        }
+      };
       assert!(txs.missed_tx.is_empty());
       all_txs.extend(txs.txs);
     }
@@ -135,19 +151,25 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
                 outs: Vec<Out>,
               }
 
-              let outs: Outs = rpc
-                .rpc_call(
-                  "get_outs",
-                  Some(json!({
-                    "get_txid": true,
-                    "outputs": indexes.iter().map(|o| json!({
-                      "amount": amount,
-                      "index": o
-                    })).collect::<Vec<_>>()
-                  })),
-                )
-                .await
-                .expect("couldn't connect to RPC to get outs");
+              let outs: Outs = loop {
+                match rpc
+                  .rpc_call(
+                    "get_outs",
+                    Some(json!({
+                      "get_txid": true,
+                      "outputs": indexes.iter().map(|o| json!({
+                        "amount": amount,
+                        "index": o
+                      })).collect::<Vec<_>>()
+                    })),
+                  )
+                  .await
+                {
+                  Ok(outs) => break outs,
+                  Err(RpcError::ConnectionError) => continue,
+                  Err(e) => panic!("couldn't connect to RPC to get outs: {e:?}"),
+                }
+              };
 
               let rpc_point = |point: &str| {
                 CompressedEdwardsY(
