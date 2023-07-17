@@ -103,7 +103,7 @@ async fn main() {
     Arc::new(rocksdb::TransactionDB::open_default(serai_env::var("DB_PATH").unwrap()).unwrap());
 
   let read_key = |str| {
-    let Ok(key) = serai_env::var(str) else { None? };
+    let key = serai_env::var(str)?;
 
     let mut repr = <<Ristretto as Ciphersuite>::G as GroupEncoding>::Repr::default();
     repr.as_mut().copy_from_slice(&hex::decode(key).unwrap());
