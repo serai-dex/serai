@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 
 use transcript::RecommendedTranscript;
 
-use group::{ff::Field, Group};
+use ciphersuite::group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
 use frost::{curve::Ed25519, ThresholdKeys};
 

@@ -3,7 +3,7 @@ use std::collections::{VecDeque, HashMap};
 
 use rand_core::OsRng;
 
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::{
   ThresholdKeys,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},

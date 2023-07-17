@@ -7,7 +7,7 @@ use rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::{Ciphersuite, Ristretto},
   dkg::{Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*},

@@ -53,6 +53,8 @@ fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>)
   // Queue it
   (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {
     from: meta.from,
+    // Temporary value which queue_message will override
+    id: u64::MAX,
     msg,
     sig: sig.serialize(),
   });
@@ -133,6 +135,8 @@ async fn main() {
 
   // Start server
   let builder = ServerBuilder::new();
+  // TODO: Add middleware to check some key is present in the header, making this an authed
+  // connection
   // TODO: Set max request/response size
   // 5132 ^ ((b'M' << 8) | b'Q')
   let listen_on: &[std::net::SocketAddr] = &["0.0.0.0:2287".parse().unwrap()];
@@ -152,7 +156,7 @@ async fn main() {
     .unwrap();
   module
     .register_method("next", |args, _| {
-      let args = args.parse::<(Service, u64, Vec<u8>)>().unwrap();
+      let args = args.parse::<(Service, u64)>().unwrap();
       get_next_message(args.0, args.1);
       Ok(())
     })

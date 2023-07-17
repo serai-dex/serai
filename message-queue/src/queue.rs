@@ -33,8 +33,9 @@ impl<D: Db> Queue<D> {
   fn message_key(&self, id: u64) -> Vec<u8> {
     Self::key(b"message", serde_json::to_vec(&(self.1, id)).unwrap())
   }
-  pub(crate) fn queue_message(&mut self, msg: QueuedMessage) {
+  pub(crate) fn queue_message(&mut self, mut msg: QueuedMessage) {
     let id = self.message_count();
+    msg.id = id;
     let msg_key = self.message_key(id);
     let msg_count_key = self.message_count_key();
 
@@ -45,7 +46,11 @@ impl<D: Db> Queue<D> {
   }
 
   pub(crate) fn get_message(&self, id: u64) -> Option<QueuedMessage> {
-    self.0.get(self.message_key(id)).map(|bytes| serde_json::from_slice(&bytes).unwrap())
+    let msg = self.0.get(self.message_key(id)).map(|bytes| serde_json::from_slice(&bytes).unwrap());
+    if let Some(msg) = msg.as_ref() {
+      assert_eq!(msg.id, id, "message stored at {id} has ID {}", msg.id);
+    }
+    msg
   }
 
   pub(crate) fn ack_message(&mut self, id: u64) {

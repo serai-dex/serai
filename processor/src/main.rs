@@ -6,7 +6,7 @@ use std::{
 use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::{curve::Ciphersuite, ThresholdKeys};
 
 use log::{info, warn, error};

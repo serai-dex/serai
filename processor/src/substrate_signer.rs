@@ -5,7 +5,7 @@ use rand_core::OsRng;
 
 use scale::Encode;
 
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::Ristretto,
   ThresholdKeys,

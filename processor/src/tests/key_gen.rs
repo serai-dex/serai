@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 
 use rand_core::{RngCore, OsRng};
 
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::{Participant, ThresholdParams, tests::clone_without};
 
 use serai_db::{DbTxn, Db, MemDb};

@@ -3,7 +3,7 @@ use std::{time::Duration, io, collections::HashMap};
 use async_trait::async_trait;
 
 use transcript::RecommendedTranscript;
-use group::ff::PrimeField;
+use ciphersuite::group::ff::PrimeField;
 use k256::{ProjectivePoint, Scalar};
 use frost::{
   curve::{Curve, Secp256k1},

@@ -1,7 +1,7 @@
 use std::io;
 
 use transcript::{Transcript, RecommendedTranscript};
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
 use crate::coins::{Output, Coin};

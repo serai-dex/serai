@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, OsRng};
 
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::{
   Participant, ThresholdKeys,
   dkg::tests::{key_gen, clone_without},

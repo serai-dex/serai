@@ -14,6 +14,7 @@ pub enum Service {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct QueuedMessage {
   pub from: Service,
+  pub id: u64,
   pub msg: Vec<u8>,
   pub sig: Vec<u8>,
 }

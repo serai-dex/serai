@@ -5,7 +5,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
 use log::{info, debug, warn};
