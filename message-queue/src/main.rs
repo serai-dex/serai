@@ -24,6 +24,19 @@ lazy_static::lazy_static! {
 }
 
 // queue RPC method
+/*
+  Queues a message to be delivered from a processor to a coordinator, or vice versa.
+
+  Messages are authenticated to be coming from the claimed service. Recipient services SHOULD
+  independently verify signatures.
+
+  The metadata specifies an intent. Only one message, for a specified intent, will be delivered.
+  This allows services to safely send messages multiple times without them being delivered multiple
+  times.
+
+  The message will be ordered by this service, with the order having no guarantees other than
+  successful ordering by the time this call returns.
+*/
 fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>) {
   {
     let from = (*KEYS).read().unwrap()[&meta.from];
@@ -33,7 +46,7 @@ fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>)
   // Assert one, and only one of these, is the coordinator
   assert!(matches!(meta.from, Service::Coordinator) ^ matches!(meta.to, Service::Coordinator));
 
-  // TODO: Verify the intent hasn't been prior seen
+  // TODO: Verify (from, intent) hasn't been prior seen
 
   // Queue it
   (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {
@@ -43,7 +56,17 @@ fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>)
   });
 }
 
-// get RPC method
+// next RPC method
+/*
+  Gets the next message in queue for this service.
+
+  This is not authenticated due to the fact every nonce would have to be saved to prevent replays,
+  or a challenge-response protocol implemented. Neither are worth doing when there should be no
+  sensitive data on this server.
+
+  The expected index is used to ensure a service didn't fall out of sync with this service. It
+  should always be either the next message's ID or *TODO*.
+*/
 fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
   // TODO: Verify the expected next message ID matches
 
@@ -54,6 +77,10 @@ fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
 }
 
 // ack RPC method
+/*
+  Acknowledges a message as received and handled, meaning it'll no longer be returned as the next
+  message.
+*/
 fn ack_message(service: Service, id: u64, _signature: SchnorrSignature<Ristretto>) {
   // TODO: Verify the signature
 
