@@ -301,12 +301,11 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
   }
 
   // TODO: Shouldn't we create a txn here and pass it around as needed?
-  // The txn would ack this message ID. If we detect this mesage ID as handled in the DB,
+  // The txn would ack this message ID. If we detect this message ID as handled in the DB,
   // we'd move on here. Only after committing the TX would we report it as acked.
 
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
-      // TODO: This may be fired multiple times. What's our plan for that?
       coordinator
         .send(ProcessorMessage::KeyGen(tributary_mutable.key_gen.handle(txn, msg).await))
         .await;
@@ -393,6 +392,8 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           key: key_vec,
           burns,
         } => {
+          assert_eq!(network, C::NETWORK);
+
           let mut block_id = <C::Block as Block<C>>::Id::default();
           block_id.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
 
@@ -414,8 +415,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
               instruction: OutInstruction { address, data },
               balance,
             } = out;
-            // TODO: Check network is this coin's network
-            assert_eq!(balance.coin.network(), network);
+            assert_eq!(balance.coin.network(), C::NETWORK);
 
             if let Ok(address) = C::Address::try_from(address.consume()) {
               // TODO: Add coin to payment
