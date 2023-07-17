@@ -27,13 +27,13 @@ lazy_static::lazy_static! {
 fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>) {
   {
     let from = (*KEYS).read().unwrap()[&meta.from];
-    assert!(sig.verify(from, message_challenge(from, &msg, sig.R)));
+    assert!(sig.verify(from, message_challenge(from, meta.to, &meta.intent, &msg, sig.R)));
   }
 
   // Assert one, and only one of these, is the coordinator
   assert!(matches!(meta.from, Service::Coordinator) ^ matches!(meta.to, Service::Coordinator));
 
-  // TODO: Verify the from_id hasn't been prior seen
+  // TODO: Verify the intent hasn't been prior seen
 
   // Queue it
   (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {

@@ -18,21 +18,26 @@ pub struct QueuedMessage {
   pub sig: Vec<u8>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Metadata {
   pub from: Service,
   pub to: Service,
-  pub from_id: u64,
+  pub intent: Vec<u8>,
 }
 
 pub fn message_challenge(
   from: <Ristretto as Ciphersuite>::G,
+  to: Service,
+  intent: &[u8],
   msg: &[u8],
   nonce: <Ristretto as Ciphersuite>::G,
 ) -> <Ristretto as Ciphersuite>::F {
   let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1");
-  transcript.domain_separate(b"message");
+  transcript.domain_separate(b"metadata");
   transcript.append_message(b"from", from.to_bytes());
+  transcript.append_message(b"to", bincode::serialize(&to).unwrap());
+  transcript.append_message(b"intent", intent);
+  transcript.domain_separate(b"message");
   transcript.append_message(b"msg", msg);
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", nonce.to_bytes());

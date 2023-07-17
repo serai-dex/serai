@@ -8689,6 +8689,7 @@ dependencies = [
 name = "serai-message-queue"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "ciphersuite",
  "flexible-transcript",
  "hex",
