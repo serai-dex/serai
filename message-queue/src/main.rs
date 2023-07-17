@@ -44,13 +44,7 @@ fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>)
 }
 
 // get RPC method
-fn get_next_message(
-  service: Service,
-  _expected: u64,
-  _signature: SchnorrSignature<Ristretto>,
-) -> Option<QueuedMessage> {
-  // TODO: Verify the signature
-
+fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
   // TODO: Verify the expected next message ID matches
 
   let queue_outer = (*QUEUES).read().unwrap();
@@ -129,11 +123,7 @@ async fn main() {
   module
     .register_method("next", |args, _| {
       let args = args.parse::<(Service, u64, Vec<u8>)>().unwrap();
-      get_next_message(
-        args.0,
-        args.1,
-        SchnorrSignature::<Ristretto>::read(&mut args.2.as_slice()).unwrap(),
-      );
+      get_next_message(args.0, args.1);
       Ok(())
     })
     .unwrap();
