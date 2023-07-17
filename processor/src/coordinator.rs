@@ -15,7 +15,7 @@ use serde::{Serialize, Deserialize};
 use messages::{ProcessorMessage, CoordinatorMessage};
 
 use serai_client::primitives::NetworkId;
-use message_queue::{Service, Metadata, QueuedMessage, message_challenge};
+use message_queue::{Service, Metadata, QueuedMessage, message_challenge, ack_challenge};
 use reqwest::Client;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -125,10 +125,8 @@ impl MessageQueue {
       let id = msg.id;
 
       // Deserialize it into a CoordinatorMessage
-      let msg: CoordinatorMessage = serde_json::from_str(
-        &String::from_utf8(msg.msg).expect("msg wasn't valid UTF-8 (not JSON?)"),
-      )
-      .expect("message wasn't a JSON-encoded CoordinatorMessage");
+      let msg: CoordinatorMessage =
+        serde_json::from_slice(&msg.msg).expect("message wasn't a JSON-encoded CoordinatorMessage");
       return Message { id, msg };
     }
   }
@@ -157,7 +155,14 @@ impl Coordinator for MessageQueue {
     let sig = SchnorrSignature::<Ristretto>::sign(
       &self.priv_key,
       nonce,
-      message_challenge(self.pub_key, metadata.to, &metadata.intent, msg.as_bytes(), nonce_pub),
+      message_challenge(
+        metadata.from,
+        self.pub_key,
+        metadata.to,
+        &metadata.intent,
+        msg.as_bytes(),
+        nonce_pub,
+      ),
     );
     self.queue(metadata, msg.into_bytes(), sig.serialize()).await;
   }
@@ -167,8 +172,16 @@ impl Coordinator for MessageQueue {
   }
 
   async fn ack(&mut self, msg: Message) {
-    // TODO: Use a proper signature once message-queue checks ack signatures
-    MessageQueue::ack(self, msg.id, vec![0; 64]).await
+    // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
+    let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+    let nonce_pub = Ristretto::generator() * nonce.deref();
+    let sig = SchnorrSignature::<Ristretto>::sign(
+      &self.priv_key,
+      nonce,
+      ack_challenge(Service::Processor(self.network), self.pub_key, msg.id, nonce_pub),
+    );
+
+    MessageQueue::ack(self, msg.id, sig.serialize()).await
   }
 }
 

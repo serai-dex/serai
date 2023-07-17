@@ -42,7 +42,9 @@ lazy_static::lazy_static! {
 fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>) {
   {
     let from = (*KEYS).read().unwrap()[&meta.from];
-    assert!(sig.verify(from, message_challenge(from, meta.to, &meta.intent, &msg, sig.R)));
+    assert!(
+      sig.verify(from, message_challenge(meta.from, from, meta.to, &meta.intent, &msg, sig.R))
+    );
   }
 
   // Assert one, and only one of these, is the coordinator
@@ -85,8 +87,11 @@ fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
   Acknowledges a message as received and handled, meaning it'll no longer be returned as the next
   message.
 */
-fn ack_message(service: Service, id: u64, _signature: SchnorrSignature<Ristretto>) {
-  // TODO: Verify the signature
+fn ack_message(service: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
+  {
+    let from = (*KEYS).read().unwrap()[&service];
+    assert!(sig.verify(from, ack_challenge(service, from, id, sig.R)));
+  }
 
   // Is it:
   // The acknowledged message should be > last acknowledged OR

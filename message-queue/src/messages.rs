@@ -27,20 +27,39 @@ pub struct Metadata {
 }
 
 pub fn message_challenge(
-  from: <Ristretto as Ciphersuite>::G,
+  from: Service,
+  from_key: <Ristretto as Ciphersuite>::G,
   to: Service,
   intent: &[u8],
   msg: &[u8],
   nonce: <Ristretto as Ciphersuite>::G,
 ) -> <Ristretto as Ciphersuite>::F {
-  let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1");
+  let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Message");
   transcript.domain_separate(b"metadata");
-  transcript.append_message(b"from", from.to_bytes());
+  transcript.append_message(b"from", bincode::serialize(&from).unwrap());
+  transcript.append_message(b"from_key", from_key.to_bytes());
   transcript.append_message(b"to", bincode::serialize(&to).unwrap());
   transcript.append_message(b"intent", intent);
   transcript.domain_separate(b"message");
   transcript.append_message(b"msg", msg);
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", nonce.to_bytes());
-  <Ristretto as Ciphersuite>::hash_to_F(b"challenge", &transcript.challenge(b"challenge"))
+  <Ristretto as Ciphersuite>::hash_to_F(b"message_challenge", &transcript.challenge(b"challenge"))
+}
+
+pub fn ack_challenge(
+  from: Service,
+  from_key: <Ristretto as Ciphersuite>::G,
+  id: u64,
+  nonce: <Ristretto as Ciphersuite>::G,
+) -> <Ristretto as Ciphersuite>::F {
+  let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Ackowledgement");
+  transcript.domain_separate(b"metadata");
+  transcript.append_message(b"from", bincode::serialize(&from).unwrap());
+  transcript.append_message(b"from_key", from_key.to_bytes());
+  transcript.domain_separate(b"message");
+  transcript.append_message(b"id", id.to_le_bytes());
+  transcript.domain_separate(b"signature");
+  transcript.append_message(b"nonce", nonce.to_bytes());
+  <Ristretto as Ciphersuite>::hash_to_F(b"ack_challenge", &transcript.challenge(b"challenge"))
 }

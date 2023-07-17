@@ -46,7 +46,8 @@ impl<D: Db> Queue<D> {
   }
 
   pub(crate) fn get_message(&self, id: u64) -> Option<QueuedMessage> {
-    let msg = self.0.get(self.message_key(id)).map(|bytes| serde_json::from_slice(&bytes).unwrap());
+    let msg: Option<QueuedMessage> =
+      self.0.get(self.message_key(id)).map(|bytes| serde_json::from_slice(&bytes).unwrap());
     if let Some(msg) = msg.as_ref() {
       assert_eq!(msg.id, id, "message stored at {id} has ID {}", msg.id);
     }
