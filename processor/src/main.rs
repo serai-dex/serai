@@ -7,10 +7,7 @@ use std::{
 use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
-use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
-  Ristretto,
-};
+use ciphersuite::group::GroupEncoding;
 use frost::{curve::Ciphersuite, ThresholdKeys};
 
 use log::{info, warn, error};
@@ -29,6 +26,8 @@ use serai_client::{
 use messages::{SubstrateContext, CoordinatorMessage, ProcessorMessage};
 
 use serai_env as env;
+
+use message_queue::{Service, client::MessageQueue};
 
 mod plan;
 pub use plan::*;
@@ -733,27 +732,7 @@ async fn main() {
     _ => panic!("unrecognized network"),
   };
 
-  // Coordinator configuration
-  let priv_key = {
-    let key_str =
-      Zeroizing::new(env::var("MESSAGE_QUEUE_KEY").expect("message-queue key wasn't specified"));
-    let key_bytes = Zeroizing::new(
-      hex::decode(&key_str).expect("invalid message-queue key specified (wasn't hex)"),
-    );
-    let mut bytes = <<Ristretto as Ciphersuite>::F as PrimeField>::Repr::default();
-    bytes.copy_from_slice(&key_bytes);
-    let key = Zeroizing::new(
-      Option::from(<<Ristretto as Ciphersuite>::F as PrimeField>::from_repr(bytes))
-        .expect("invalid message-queue key specified"),
-    );
-    bytes.zeroize();
-    key
-  };
-  let coordinator = MessageQueue::new(
-    env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified"),
-    network_id,
-    priv_key,
-  );
+  let coordinator = MessageQueue::new(Service::Processor(network_id));
 
   match network_id {
     #[cfg(feature = "bitcoin")]

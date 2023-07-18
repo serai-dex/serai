@@ -1,13 +1,9 @@
-use std::{
-  sync::Arc,
-  collections::{VecDeque, HashMap},
-};
-
-use tokio::sync::RwLock;
+use std::sync::Arc;
 
 use serai_client::primitives::NetworkId;
-
 use processor_messages::{ProcessorMessage, CoordinatorMessage};
+
+use message_queue::{Service, Metadata, client::MessageQueue};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Message {
@@ -23,27 +19,31 @@ pub trait Processors: 'static + Send + Sync + Clone {
   async fn ack(&mut self, msg: Message);
 }
 
-// TODO: Move this to tests
-#[derive(Clone)]
-pub struct MemProcessors(pub Arc<RwLock<HashMap<NetworkId, VecDeque<CoordinatorMessage>>>>);
-impl MemProcessors {
-  #[allow(clippy::new_without_default)]
-  pub fn new() -> MemProcessors {
-    MemProcessors(Arc::new(RwLock::new(HashMap::new())))
-  }
-}
-
 #[async_trait::async_trait]
-impl Processors for MemProcessors {
+impl Processors for Arc<MessageQueue> {
   async fn send(&self, network: NetworkId, msg: CoordinatorMessage) {
-    let mut processors = self.0.write().await;
-    let processor = processors.entry(network).or_insert_with(VecDeque::new);
-    processor.push_back(msg);
+    let metadata =
+      Metadata { from: self.service, to: Service::Processor(network), intent: msg.intent() };
+    let msg = serde_json::to_string(&msg).unwrap();
+    self.queue(metadata, msg.into_bytes()).await;
   }
   async fn recv(&mut self) -> Message {
-    todo!()
+    // TODO: Use a proper expected next ID
+    let msg = self.next(0).await;
+
+    let network = match msg.from {
+      Service::Processor(network) => network,
+      Service::Coordinator => panic!("coordinator sent coordinator message"),
+    };
+    let id = msg.id;
+
+    // Deserialize it into a ProcessorMessage
+    let msg: ProcessorMessage =
+      serde_json::from_slice(&msg.msg).expect("message wasn't a JSON-encoded ProcessorMessage");
+
+    return Message { id, network, msg };
   }
-  async fn ack(&mut self, _: Message) {
-    todo!()
+  async fn ack(&mut self, msg: Message) {
+    MessageQueue::ack(self, msg.id).await
   }
 }

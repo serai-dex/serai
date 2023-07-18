@@ -19,10 +19,12 @@ use processor_messages::{
 use tributary::{Transaction as TransactionTrait, Tributary};
 
 use crate::{
-  processors::MemProcessors,
   LocalP2p,
   tributary::{TributaryDb, Transaction, TributarySpec, scanner::handle_new_blocks},
-  tests::tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
+  tests::{
+    MemProcessors,
+    tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
+  },
 };
 
 #[tokio::test]

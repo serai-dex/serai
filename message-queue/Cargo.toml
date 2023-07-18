@@ -14,6 +14,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+
 # Macros
 lazy_static = "1"
 serde = { version = "1", features = ["derive"] }
@@ -23,13 +24,16 @@ hex = "0.4"
 bincode = "1"
 serde_json = "1"
 
+# Libs
+zeroize = "1"
+rand_core = "0.6"
+
 # Cryptography
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
 ciphersuite = { path = "../crypto/ciphersuite", features = ["ristretto"] }
 schnorr-signatures = { path = "../crypto/schnorr" }
 
 # Application
-log = "0.4"
 tokio = { version = "1", features = ["full"] }
 
 serai-db = { path = "../common/db", features = ["rocksdb"] }
@@ -40,3 +44,4 @@ serai-env = { path = "../common/env" }
 serai-primitives = { path = "../substrate/primitives" }
 
 jsonrpsee = { version = "0.16", features = ["server"] }
+reqwest = { version = "0.11", features = ["json"] }

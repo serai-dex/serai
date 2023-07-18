@@ -14,9 +14,12 @@ use rand_core::OsRng;
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
-use serai_db::{DbTxn, Db, MemDb};
+use serai_db::{DbTxn, Db};
+use serai_env as env;
 
 use serai_client::{Public, Signature, Serai};
+
+use message_queue::{Service, client::MessageQueue};
 
 use tokio::{
   sync::{
@@ -322,7 +325,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         // connection
         // In order to reduce congestion though, we should at least check if we take value from
         // this message before running spawn
-        // TODO
+        // TODO2
         tokio::spawn({
           let tributaries = tributaries.clone();
           async move {
@@ -398,7 +401,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, coin_key } => {
           assert_eq!(
             id.set.network, msg.network,
-            "processor claimed to be a different network than it was for SubstrateBlockAck",
+            "processor claimed to be a different network than it was for GeneratedKeyPair",
           );
           // TODO: Also check the other KeyGenId fields
 
@@ -415,13 +418,15 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             Signature([0; 64]), // TODO
           );
 
-          match serai.publish(&tx).await {
-            Ok(hash) => {
-              log::info!("voted on key pair for {:?} in TX {}", id.set, hex::encode(hash))
-            }
-            Err(e) => {
-              log::error!("couldn't connect to Serai node to publish vote TX: {:?}", e);
-              todo!(); // TODO
+          loop {
+            match serai.publish(&tx).await {
+              Ok(hash) => {
+                log::info!("voted on key pair for {:?} in TX {}", id.set, hex::encode(hash))
+              }
+              Err(e) => {
+                log::error!("couldn't connect to Serai node to publish vote TX: {:?}", e);
+                tokio::time::sleep(Duration::from_secs(10)).await;
+              }
             }
           }
 
@@ -507,19 +512,22 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           // TODO: Check this key's key pair's substrate key is authorized to publish batches
           // TODO: Check the batch ID is an atomic increment
 
-          match serai.publish(&Serai::execute_batch(batch.clone())).await {
-            Ok(hash) => {
-              log::info!(
-                "executed batch {:?} {} (block {}) in TX {}",
-                batch.batch.network,
-                batch.batch.id,
-                hex::encode(batch.batch.block),
-                hex::encode(hash),
-              )
-            }
-            Err(e) => {
-              log::error!("couldn't connect to Serai node to publish batch TX: {:?}", e);
-              todo!(); // TODO
+          loop {
+            match serai.publish(&Serai::execute_batch(batch.clone())).await {
+              Ok(hash) => {
+                log::info!(
+                  "executed batch {:?} {} (block {}) in TX {}",
+                  batch.batch.network,
+                  batch.batch.id,
+                  hex::encode(batch.batch.block),
+                  hex::encode(hash),
+                );
+                break;
+              }
+              Err(e) => {
+                log::error!("couldn't connect to Serai node to publish batch TX: {:?}", e);
+                tokio::time::sleep(Duration::from_secs(10)).await;
+              }
             }
           }
 
@@ -661,12 +669,17 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 
 #[tokio::main]
 async fn main() {
-  let db = MemDb::new(); // TODO
+  let db = Arc::new(
+    rocksdb::TransactionDB::<rocksdb::SingleThreaded>::open_default(
+      env::var("DB_PATH").expect("path to DB wasn't specified"),
+    )
+    .unwrap(),
+  );
 
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
   let p2p = LocalP2p::new(1).swap_remove(0); // TODO
 
-  let processors = processors::MemProcessors::new(); // TODO
+  let processors = Arc::new(MessageQueue::new(Service::Coordinator));
 
   let serai = || async {
     loop {
