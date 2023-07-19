@@ -64,8 +64,8 @@ use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 /// An index to a block.
 pub type BlockNumber = u64;
 
-/// Index of a transaction in the chain, for a given account.
-pub type Index = u32;
+/// Nonce of a transaction in the chain, for a given account.
+pub type Nonce = u32;
 
 /// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
@@ -189,7 +189,7 @@ impl system::Config for Runtime {
   type Lookup = AccountLookup;
   type Hash = Hash;
   type Hashing = BlakeTwo256;
-  type Nonce = u32;
+  type Nonce = Nonce;
   type Block = Block;
   type RuntimeOrigin = RuntimeOrigin;
   type RuntimeEvent = RuntimeEvent;
@@ -564,8 +564,8 @@ sp_api::impl_runtime_apis! {
     }
   }
 
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Index> for Runtime {
-    fn account_nonce(account: PublicKey) -> Index {
+  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Nonce> for Runtime {
+    fn account_nonce(account: PublicKey) -> Nonce {
       System::account_nonce(account)
     }
   }

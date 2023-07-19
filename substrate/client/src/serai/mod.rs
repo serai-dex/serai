@@ -40,7 +40,7 @@ pub struct Tip {
   pub tip: u64,
 }
 
-pub type Header = SubstrateHeader<<Runtime as Config>::BlockNumber, BlakeTwo256>;
+pub type Header = SubstrateHeader<serai_runtime::BlockNumber, BlakeTwo256>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SeraiConfig;
@@ -48,7 +48,7 @@ impl SubxtConfig for SeraiConfig {
   type Hash = <Runtime as Config>::Hash;
   type Hasher = BlakeTwo256;
 
-  type Index = <Runtime as Config>::Index;
+  type Index = serai_runtime::Nonce;
   type AccountId = <Runtime as Config>::AccountId;
   // TODO: Bech32m
   type Address = SeraiAddress;
