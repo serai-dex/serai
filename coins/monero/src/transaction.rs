@@ -14,7 +14,7 @@ use curve25519_dalek::{
 use crate::{
   Protocol, hash,
   serialize::*,
-  ringct::{RctBase, RctPrunable, RctSignatures},
+  ringct::{bulletproofs::Bulletproofs, RctType, RctBase, RctPrunable, RctSignatures},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -24,11 +24,10 @@ pub enum Input {
 }
 
 impl Input {
-  // Worst-case predictive len
-  pub(crate) fn fee_weight(ring_len: usize) -> usize {
+  pub(crate) fn fee_weight(offsets_weight: usize) -> usize {
+    // Uses 1 byte for the input type
     // Uses 1 byte for the VarInt amount due to amount being 0
-    // Uses 1 byte for the VarInt encoding of the length of the ring as well
-    1 + 1 + 1 + (8 * ring_len) + 32
+    1 + 1 + offsets_weight + 32
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
@@ -86,8 +85,10 @@ pub struct Output {
 }
 
 impl Output {
-  pub(crate) fn fee_weight() -> usize {
-    1 + 1 + 32 + 1
+  pub(crate) fn fee_weight(view_tags: bool) -> usize {
+    // Uses 1 byte for the output type
+    // Uses 1 byte for the VarInt amount due to amount being 0
+    1 + 1 + 32 + if view_tags { 1 } else { 0 }
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
@@ -185,13 +186,19 @@ pub struct TransactionPrefix {
 }
 
 impl TransactionPrefix {
-  pub(crate) fn fee_weight(ring_len: usize, inputs: usize, outputs: usize, extra: usize) -> usize {
+  pub(crate) fn fee_weight(
+    decoy_weights: &[usize],
+    outputs: usize,
+    view_tags: bool,
+    extra: usize,
+  ) -> usize {
     // Assumes Timelock::None since this library won't let you create a TX with a timelock
+    // 1 input for every decoy weight
     1 + 1 +
-      varint_len(inputs) +
-      (inputs * Input::fee_weight(ring_len)) +
-      1 +
-      (outputs * Output::fee_weight()) +
+      varint_len(decoy_weights.len()) +
+      decoy_weights.iter().map(|&offsets_weight| Input::fee_weight(offsets_weight)).sum::<usize>() +
+      varint_len(outputs) +
+      (outputs * Output::fee_weight(view_tags)) +
       varint_len(extra) +
       extra
   }
@@ -253,12 +260,13 @@ pub struct Transaction {
 impl Transaction {
   pub(crate) fn fee_weight(
     protocol: Protocol,
-    inputs: usize,
+    decoy_weights: &[usize],
     outputs: usize,
     extra: usize,
+    fee: u64,
   ) -> usize {
-    TransactionPrefix::fee_weight(protocol.ring_len(), inputs, outputs, extra) +
-      RctSignatures::fee_weight(protocol, inputs, outputs)
+    TransactionPrefix::fee_weight(decoy_weights, outputs, protocol.view_tags(), extra) +
+      RctSignatures::fee_weight(protocol, decoy_weights.len(), outputs, fee)
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
@@ -377,5 +385,40 @@ impl Transaction {
     sig_hash.extend(hash(&buf));
 
     hash(&sig_hash)
+  }
+
+  fn is_rct_bulletproof(&self) -> bool {
+    match &self.rct_signatures.rct_type() {
+      RctType::Bulletproofs | RctType::BulletproofsCompactAmount | RctType::Clsag => true,
+      RctType::Null |
+      RctType::MlsagAggregate |
+      RctType::MlsagIndividual |
+      RctType::BulletproofsPlus => false,
+    }
+  }
+
+  fn is_rct_bulletproof_plus(&self) -> bool {
+    match &self.rct_signatures.rct_type() {
+      RctType::BulletproofsPlus => true,
+      RctType::Null |
+      RctType::MlsagAggregate |
+      RctType::MlsagIndividual |
+      RctType::Bulletproofs |
+      RctType::BulletproofsCompactAmount |
+      RctType::Clsag => false,
+    }
+  }
+
+  /// Calculate the transaction's weight.
+  pub fn weight(&self) -> usize {
+    let blob_size = self.serialize().len();
+
+    let bp = self.is_rct_bulletproof();
+    let bp_plus = self.is_rct_bulletproof_plus();
+    if !(bp || bp_plus) {
+      blob_size
+    } else {
+      blob_size + Bulletproofs::calculate_bp_clawback(bp_plus, self.prefix.outputs.len()).0
+    }
   }
 }

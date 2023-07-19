@@ -15,6 +15,7 @@ use rand_distr::num_traits::Float;
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
+  serialize::varint_len,
   wallet::SpendableOutput,
   rpc::{RpcError, RpcConnection, Rpc},
 };
@@ -135,12 +136,17 @@ fn offset(ring: &[u64]) -> Vec<u64> {
 /// Decoy data, containing the actual member as well (at index `i`).
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Decoys {
-  pub i: u8,
-  pub offsets: Vec<u64>,
-  pub ring: Vec<[EdwardsPoint; 2]>,
+  pub(crate) i: u8,
+  pub(crate) offsets: Vec<u64>,
+  pub(crate) ring: Vec<[EdwardsPoint; 2]>,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl Decoys {
+  pub fn fee_weight(offsets: &[u64]) -> usize {
+    varint_len(offsets.len()) + offsets.iter().map(|offset| varint_len(*offset)).sum::<usize>()
+  }
+
   pub fn len(&self) -> usize {
     self.offsets.len()
   }

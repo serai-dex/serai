@@ -35,7 +35,7 @@ use crate::{
     RctBase, RctPrunable, RctSignatures,
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
-  rpc::{RpcError, RpcConnection, Rpc},
+  rpc::RpcError,
   wallet::{
     address::{Network, AddressSpec, MoneroAddress},
     ViewPair, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness,
@@ -130,6 +130,8 @@ pub enum TransactionError {
   NoInputs,
   #[cfg_attr(feature = "std", error("no outputs"))]
   NoOutputs,
+  #[cfg_attr(feature = "std", error("invalid number of decoys"))]
+  InvalidDecoyQuantity,
   #[cfg_attr(feature = "std", error("only one output and no change address"))]
   NoChange,
   #[cfg_attr(feature = "std", error("too many outputs"))]
@@ -153,40 +155,26 @@ pub enum TransactionError {
   FrostError(FrostError),
 }
 
-async fn prepare_inputs<R: RngCore + CryptoRng, RPC: RpcConnection>(
-  rng: &mut R,
-  rpc: &Rpc<RPC>,
-  ring_len: usize,
-  inputs: &[SpendableOutput],
+fn prepare_inputs(
+  inputs: &[(SpendableOutput, Decoys)],
   spend: &Zeroizing<Scalar>,
   tx: &mut Transaction,
 ) -> Result<Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>, TransactionError> {
   let mut signable = Vec::with_capacity(inputs.len());
 
-  // Select decoys
-  let decoys = Decoys::select(
-    rng,
-    rpc,
-    ring_len,
-    rpc.get_height().await.map_err(TransactionError::RpcError)? - 1,
-    inputs,
-  )
-  .await
-  .map_err(TransactionError::RpcError)?;
-
-  for (i, input) in inputs.iter().enumerate() {
+  for (i, (input, decoys)) in inputs.iter().enumerate() {
     let input_spend = Zeroizing::new(input.key_offset() + spend.deref());
     let image = generate_key_image(&input_spend);
     signable.push((
       input_spend,
       image,
-      ClsagInput::new(input.commitment().clone(), decoys[i].clone())
+      ClsagInput::new(input.commitment().clone(), decoys.clone())
         .map_err(TransactionError::ClsagError)?,
     ));
 
     tx.prefix.inputs.push(Input::ToKey {
       amount: None,
-      key_offsets: decoys[i].offsets.clone(),
+      key_offsets: decoys.offsets.clone(),
       key_image: signable[i].1,
     });
   }
@@ -203,6 +191,58 @@ async fn prepare_inputs<R: RngCore + CryptoRng, RPC: RpcConnection>(
   Ok(signable)
 }
 
+// Deterministically calculate what the TX weight and fee will be.
+fn calculate_weight_and_fee(
+  protocol: Protocol,
+  decoy_weights: &[usize],
+  n_outputs: usize,
+  extra: usize,
+  fee_rate: Fee,
+) -> (usize, u64) {
+  // Starting the fee at 0 here is different than core Monero's wallet2.cpp, which starts its fee
+  // calculation with an estimate.
+  //
+  // This difference is okay in practice because wallet2 still ends up using a fee calculated from
+  // a TX's weight, as calculated later in this function.
+  //
+  // See this PR highlighting wallet2's behavior:
+  //   https://github.com/monero-project/monero/pull/8882
+  //
+  // Even with that PR, if the estimated fee's VarInt byte length is larger than the calculated
+  // fee's, the wallet can theoretically use a fee not based on the actual TX weight. This does not
+  // occur in practice as it's nearly impossible for wallet2 to estimate a fee that is larger
+  // than the calculated fee today, and on top of that, even more unlikely for that estimate's
+  // VarInt to be larger in byte length than the calculated fee's.
+  let mut weight = 0usize;
+  let mut fee = 0u64;
+
+  let mut done = false;
+  let mut iters = 0;
+  let max_iters = 5;
+  while !done {
+    weight = Transaction::fee_weight(protocol, decoy_weights, n_outputs, extra, fee);
+
+    let fee_calculated_from_weight = fee_rate.calculate_fee_from_weight(weight);
+
+    // Continue trying to use the fee calculated from the tx's weight
+    done = fee_calculated_from_weight == fee;
+
+    fee = fee_calculated_from_weight;
+
+    #[cfg(test)]
+    debug_assert!(iters < max_iters, "Reached max fee calculation attempts");
+    // Should never happen because the fee VarInt byte length shouldn't change *every* single iter.
+    // `iters` reaching `max_iters` is unexpected.
+    if iters >= max_iters {
+      // Fail-safe break to ensure funds are still spendable
+      break;
+    }
+    iters += 1;
+  }
+
+  (weight, fee)
+}
+
 /// Fee struct, defined as a per-unit cost and a mask for rounding purposes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Fee {
@@ -211,8 +251,38 @@ pub struct Fee {
 }
 
 impl Fee {
-  pub fn calculate(&self, weight: usize) -> u64 {
-    ((((self.per_weight * u64::try_from(weight).unwrap()) - 1) / self.mask) + 1) * self.mask
+  pub fn calculate_fee_from_weight(&self, weight: usize) -> u64 {
+    let fee = (((self.per_weight * u64::try_from(weight).unwrap()) + self.mask - 1) / self.mask) *
+      self.mask;
+    debug_assert_eq!(weight, self.calculate_weight_from_fee(fee), "Miscalculated weight from fee");
+    fee
+  }
+
+  pub fn calculate_weight_from_fee(&self, fee: u64) -> usize {
+    usize::try_from(fee / self.per_weight).unwrap()
+  }
+}
+
+/// Fee priority, determining how quickly a transaction is included in a block.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(non_camel_case_types)]
+pub enum FeePriority {
+  Lowest,
+  Low,
+  Medium,
+  High,
+  Custom { priority: u32 },
+}
+
+impl FeePriority {
+  pub(crate) fn fee_priority(&self) -> u32 {
+    match self {
+      FeePriority::Lowest => 0,
+      FeePriority::Low => 1,
+      FeePriority::Medium => 2,
+      FeePriority::High => 3,
+      FeePriority::Custom { priority, .. } => *priority,
+    }
   }
 }
 
@@ -240,10 +310,11 @@ pub struct Eventuality {
 pub struct SignableTransaction {
   protocol: Protocol,
   r_seed: Option<Zeroizing<[u8; 32]>>,
-  inputs: Vec<SpendableOutput>,
+  inputs: Vec<(SpendableOutput, Decoys)>,
   payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
   fee: u64,
+  fee_rate: Fee,
 }
 
 /// Specification for a change output.
@@ -282,6 +353,49 @@ impl Change {
   }
 }
 
+fn need_additional(payments: &[InternalPayment]) -> (bool, bool) {
+  let mut has_change_view = false;
+  let subaddresses = payments
+    .iter()
+    .filter(|payment| match *payment {
+      InternalPayment::Payment(payment) => payment.0.is_subaddress(),
+      InternalPayment::Change(change, _) => {
+        if change.view.is_some() {
+          has_change_view = true;
+          // It should not be possible to construct a change specification to a subaddress with a
+          // view key
+          debug_assert!(!change.address.is_subaddress());
+        }
+        change.address.is_subaddress()
+      }
+    })
+    .count() !=
+    0;
+
+  // We need additional keys if we have any subaddresses
+  let mut additional = subaddresses;
+  // Unless the above change view key path is taken
+  if (payments.len() == 2) && has_change_view {
+    additional = false;
+  }
+
+  (subaddresses, additional)
+}
+
+fn sanity_check_change_payment(payments: &[InternalPayment], has_change_address: bool) {
+  debug_assert_eq!(
+    payments
+      .iter()
+      .filter(|payment| match *payment {
+        InternalPayment::Payment(_) => false,
+        InternalPayment::Change(_, _) => true,
+      })
+      .count(),
+    if has_change_address { 1 } else { 0 },
+    "Unexpected number of change outputs"
+  );
+}
+
 impl SignableTransaction {
   /// Create a signable transaction.
   ///
@@ -295,7 +409,7 @@ impl SignableTransaction {
   pub fn new(
     protocol: Protocol,
     r_seed: Option<Zeroizing<[u8; 32]>>,
-    inputs: Vec<SpendableOutput>,
+    inputs: Vec<(SpendableOutput, Decoys)>,
     payments: Vec<(MoneroAddress, u64)>,
     change_address: Option<Change>,
     data: Vec<Vec<u8>>,
@@ -328,6 +442,12 @@ impl SignableTransaction {
       Err(TransactionError::NoOutputs)?;
     }
 
+    for (_, decoys) in &inputs {
+      if decoys.len() != protocol.ring_len() {
+        Err(TransactionError::InvalidDecoyQuantity)?;
+      }
+    }
+
     for part in &data {
       if part.len() > MAX_ARBITRARY_DATA_SIZE {
         Err(TransactionError::TooMuchData)?;
@@ -338,13 +458,31 @@ impl SignableTransaction {
     if (payments.len() == 1) && change_address.is_none() {
       Err(TransactionError::NoChange)?;
     }
+
+    // Get the outgoing amount ignoring fees
+    let out_amount = payments.iter().map(|payment| payment.1).sum::<u64>();
+
     let outputs = payments.len() + usize::from(change_address.is_some());
+    if outputs > MAX_OUTPUTS {
+      Err(TransactionError::TooManyOutputs)?;
+    }
+
+    // Collect payments in a container that includes a change output if a change address is provided
+    let mut payments = payments.into_iter().map(InternalPayment::Payment).collect::<Vec<_>>();
+    if change_address.is_some() {
+      // Push a 0 amount change output that we'll use to do fee calculations.
+      // We'll modify the change amount after calculating the fee
+      payments.push(InternalPayment::Change(change_address.clone().unwrap(), 0));
+    }
+
+    // Determine if we'll need additional pub keys in tx extra
+    let (_, additional) = need_additional(&payments);
+
     // Add a dummy payment ID if there's only 2 payments
     has_payment_id |= outputs == 2;
 
     // Calculate the extra length
-    // Assume additional keys are needed in order to cause a worst-case estimation
-    let extra = Extra::fee_weight(outputs, true, has_payment_id, data.as_ref());
+    let extra = Extra::fee_weight(outputs, additional, has_payment_id, data.as_ref());
 
     // https://github.com/monero-project/monero/pull/8733
     const MAX_EXTRA_SIZE: usize = 1060;
@@ -352,46 +490,65 @@ impl SignableTransaction {
       Err(TransactionError::TooMuchData)?;
     }
 
-    // This is a extremely heavy fee weight estimation which can only be trusted for two things
-    // 1) Ensuring we have enough for whatever fee we end up using
-    // 2) Ensuring we aren't over the max size
-    let estimated_tx_size = Transaction::fee_weight(protocol, inputs.len(), outputs, extra);
+    // Caclculate weight of decoys
+    let decoy_weights =
+      inputs.iter().map(|(_, decoy)| Decoys::fee_weight(&decoy.offsets)).collect::<Vec<_>>();
+
+    // Deterministically calculate tx weight and fee
+    let (weight, fee) =
+      calculate_weight_and_fee(protocol, &decoy_weights, outputs, extra, fee_rate);
 
     // The actual limit is half the block size, and for the minimum block size of 300k, that'd be
     // 150k
     // wallet2 will only create transactions up to 100k bytes however
     const MAX_TX_SIZE: usize = 100_000;
-
-    // This uses the weight (estimated_tx_size) despite the BP clawback
-    // The clawback *increases* the weight, so this will over-estimate, yet it's still safe
-    if estimated_tx_size >= MAX_TX_SIZE {
+    if weight >= MAX_TX_SIZE {
       Err(TransactionError::TooLargeTransaction)?;
     }
 
-    // Calculate the fee.
-    let fee = fee_rate.calculate(estimated_tx_size);
-
     // Make sure we have enough funds
-    let in_amount = inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
-    let out_amount = payments.iter().map(|payment| payment.1).sum::<u64>() + fee;
-    if in_amount < out_amount {
-      Err(TransactionError::NotEnoughFunds(in_amount, out_amount))?;
+    let in_amount = inputs.iter().map(|(input, _)| input.commitment().amount).sum::<u64>();
+    if in_amount < (out_amount + fee) {
+      Err(TransactionError::NotEnoughFunds(in_amount, out_amount + fee))?;
     }
 
-    if outputs > MAX_OUTPUTS {
-      Err(TransactionError::TooManyOutputs)?;
+    // Sanity check we have the expected number of change outputs
+    sanity_check_change_payment(&payments, change_address.is_some());
+
+    // Modify the amount of the change output
+    if change_address.is_some() {
+      let change_payment = payments.last_mut().unwrap();
+      debug_assert!(matches!(change_payment, InternalPayment::Change(_, _)));
+      *change_payment =
+        InternalPayment::Change(change_address.clone().unwrap(), in_amount - out_amount - fee);
     }
 
-    let mut payments = payments.into_iter().map(InternalPayment::Payment).collect::<Vec<_>>();
-    if let Some(change) = change_address {
-      payments.push(InternalPayment::Change(change, in_amount - out_amount));
-    }
+    // Sanity check the change again after modifying
+    sanity_check_change_payment(&payments, change_address.is_some());
 
-    Ok(SignableTransaction { protocol, r_seed, inputs, payments, data, fee })
+    // Sanity check outgoing amount + fee == incoming amount
+    debug_assert_eq!(
+      payments
+        .iter()
+        .map(|payment| match *payment {
+          InternalPayment::Payment(payment) => payment.1,
+          InternalPayment::Change(_, amount) => amount,
+        })
+        .sum::<u64>() +
+        fee,
+      in_amount,
+      "Outgoing amount + fee != incoming amount"
+    );
+
+    Ok(SignableTransaction { protocol, r_seed, inputs, payments, data, fee, fee_rate })
   }
 
   pub fn fee(&self) -> u64 {
     self.fee
+  }
+
+  pub fn fee_rate(&self) -> Fee {
+    self.fee_rate
   }
 
   #[allow(clippy::type_complexity)]
@@ -425,30 +582,7 @@ impl SignableTransaction {
     // If any of these outputs are to a subaddress, we need keys distinct to them
     // The only time this *does not* force having additional keys is when the only other output
     // is a change output we have the view key for, enabling rewriting rA to aR
-    let mut has_change_view = false;
-    let subaddresses = payments
-      .iter()
-      .filter(|payment| match *payment {
-        InternalPayment::Payment(payment) => payment.0.is_subaddress(),
-        InternalPayment::Change(change, _) => {
-          if change.view.is_some() {
-            has_change_view = true;
-            // It should not be possible to construct a change specification to a subaddress with a
-            // view key
-            debug_assert!(!change.address.is_subaddress());
-          }
-          change.address.is_subaddress()
-        }
-      })
-      .count() !=
-      0;
-
-    // We need additional keys if we have any subaddresses
-    let mut additional = subaddresses;
-    // Unless the above change view key path is taken
-    if (payments.len() == 2) && has_change_view {
-      additional = false;
-    }
+    let (subaddresses, additional) = need_additional(payments);
     let modified_change_ecdh = subaddresses && (!additional);
 
     // If we're using the aR rewrite, update tx_public_key from rG to rB
@@ -567,7 +701,7 @@ impl SignableTransaction {
   /// with the specified seed. This eventuality can be compared to on-chain transactions to see
   /// if the transaction has already been signed and published.
   pub fn eventuality(&self) -> Option<Eventuality> {
-    let inputs = self.inputs.iter().map(SpendableOutput::key).collect::<Vec<_>>();
+    let inputs = self.inputs.iter().map(|(input, _)| input.key()).collect::<Vec<_>>();
     let (tx_key, additional, outputs, id) = Self::prepare_payments(
       self.r_seed.as_ref()?,
       &inputs,
@@ -607,7 +741,7 @@ impl SignableTransaction {
 
     let (tx_key, additional, outputs, id) = Self::prepare_payments(
       &r_seed,
-      &self.inputs.iter().map(SpendableOutput::key).collect::<Vec<_>>(),
+      &self.inputs.iter().map(|(input, _)| input.key()).collect::<Vec<_>>(),
       &mut self.payments,
       uniqueness,
     );
@@ -629,7 +763,7 @@ impl SignableTransaction {
       &mut self.data,
     );
 
-    let mut fee = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
+    let mut fee = self.inputs.iter().map(|(input, _)| input.commitment().amount).sum::<u64>();
     let mut tx_outputs = Vec::with_capacity(outputs.len());
     let mut encrypted_amounts = Vec::with_capacity(outputs.len());
     for output in &outputs {
@@ -637,10 +771,11 @@ impl SignableTransaction {
       tx_outputs.push(Output {
         amount: None,
         key: output.dest.compress(),
-        view_tag: Some(output.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
+        view_tag: Some(output.view_tag).filter(|_| self.protocol.view_tags()),
       });
       encrypted_amounts.push(EncryptedAmount::Compact { amount: output.amount });
     }
+    debug_assert_eq!(self.fee, fee, "transaction will use an unexpected fee");
 
     (
       Transaction {
@@ -667,14 +802,13 @@ impl SignableTransaction {
   }
 
   /// Sign this transaction.
-  pub async fn sign<R: RngCore + CryptoRng, RPC: RpcConnection>(
+  pub async fn sign<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
-    rpc: &Rpc<RPC>,
     spend: &Zeroizing<Scalar>,
   ) -> Result<Transaction, TransactionError> {
     let mut images = Vec::with_capacity(self.inputs.len());
-    for input in &self.inputs {
+    for (input, _) in &self.inputs {
       let mut offset = Zeroizing::new(spend.deref() + input.key_offset());
       if (offset.deref() * &ED25519_BASEPOINT_TABLE) != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
@@ -695,8 +829,7 @@ impl SignableTransaction {
       ),
     );
 
-    let signable =
-      prepare_inputs(rng, rpc, self.protocol.ring_len(), &self.inputs, spend, &mut tx).await?;
+    let signable = prepare_inputs(&self.inputs, spend, &mut tx)?;
 
     let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash());
     match tx.rct_signatures.prunable {
@@ -707,6 +840,13 @@ impl SignableTransaction {
       }
       _ => unreachable!("attempted to sign a TX which wasn't CLSAG"),
     }
+
+    debug_assert_eq!(
+      self.fee_rate.calculate_fee_from_weight(tx.weight()),
+      tx.rct_signatures.base.fee,
+      "transaction used unexpected fee",
+    );
+
     Ok(tx)
   }
 }
@@ -768,7 +908,7 @@ impl Eventuality {
       if (&Output {
         amount: None,
         key: expected.dest.compress(),
-        view_tag: Some(expected.view_tag).filter(|_| matches!(self.protocol, Protocol::v16)),
+        view_tag: Some(expected.view_tag).filter(|_| self.protocol.view_tags()),
       } != actual) ||
         (Some(&expected.commitment.calculate()) != tx.rct_signatures.base.commitments.get(o)) ||
         (Some(&EncryptedAmount::Compact { amount: expected.amount }) !=

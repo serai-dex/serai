@@ -4,7 +4,10 @@ use async_trait::async_trait;
 
 use zeroize::Zeroizing;
 
-use transcript::RecommendedTranscript;
+use rand_core::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+
+use transcript::{Transcript, RecommendedTranscript};
 
 use ciphersuite::group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
@@ -18,8 +21,8 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec},
-    Fee, SpendableOutput, Change, TransactionError, SignableTransaction as MSignableTransaction,
-    Eventuality, TransactionMachine,
+    Fee, SpendableOutput, Change, Decoys, TransactionError,
+    SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
   },
 };
 
@@ -129,8 +132,6 @@ impl EventualityTrait for Eventuality {
 pub struct SignableTransaction {
   keys: ThresholdKeys<Ed25519>,
   transcript: RecommendedTranscript,
-  // Monero height, defined as the length of the chain
-  height: usize,
   actual: MSignableTransaction,
 }
 
@@ -398,6 +399,25 @@ impl Coin for Monero {
     // Check a fork hasn't occurred which this processor hasn't been updated for
     assert_eq!(protocol, self.rpc.get_protocol().await.map_err(|_| CoinError::ConnectionError)?);
 
+    let spendable_outputs = plan.inputs.iter().cloned().map(|input| input.0).collect::<Vec<_>>();
+
+    let mut transcript = plan.transcript();
+
+    // All signers need to select the same decoys
+    // All signers use the same height and a seeded RNG to make sure they do so.
+    let decoys = Decoys::select(
+      &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
+      &self.rpc,
+      protocol.ring_len(),
+      block_number + 1,
+      &spendable_outputs,
+    )
+    .await
+    .map_err(|_| CoinError::ConnectionError)
+    .unwrap();
+
+    let inputs = spendable_outputs.into_iter().zip(decoys.into_iter()).collect::<Vec<_>>();
+
     let signable = |plan: &mut Plan<Self>, tx_fee: Option<_>| {
       // Monero requires at least two outputs
       // If we only have one output planned, add a dummy payment
@@ -432,7 +452,7 @@ impl Coin for Monero {
         // This perfectly binds the plan while simultaneously allowing verifying the plan was
         // executed with no additional communication
         Some(Zeroizing::new(plan.id())),
-        plan.inputs.iter().cloned().map(|input| input.0).collect(),
+        inputs.clone(),
         payments,
         plan.change.map(|key| {
           Change::fingerprintable(Self::address_internal(key, CHANGE_SUBADDRESS).into())
@@ -447,6 +467,7 @@ impl Coin for Monero {
           }
           TransactionError::NoInputs |
           TransactionError::NoOutputs |
+          TransactionError::InvalidDecoyQuantity |
           TransactionError::NoChange |
           TransactionError::TooManyOutputs |
           TransactionError::TooMuchData |
@@ -483,8 +504,7 @@ impl Coin for Monero {
 
     let signable = SignableTransaction {
       keys,
-      transcript: plan.transcript(),
-      height: block_number + 1,
+      transcript,
       actual: match signable(&mut plan, Some(tx_fee))? {
         Some(signable) => signable,
         None => return Ok((None, branch_outputs)),
@@ -498,17 +518,10 @@ impl Coin for Monero {
     &self,
     transaction: SignableTransaction,
   ) -> Result<Self::TransactionMachine, CoinError> {
-    transaction
-      .actual
-      .clone()
-      .multisig(
-        &self.rpc,
-        transaction.keys.clone(),
-        transaction.transcript.clone(),
-        transaction.height,
-      )
-      .await
-      .map_err(|_| CoinError::ConnectionError)
+    match transaction.actual.clone().multisig(transaction.keys.clone(), transaction.transcript) {
+      Ok(machine) => Ok(machine),
+      Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
+    }
   }
 
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
@@ -536,7 +549,9 @@ impl Coin for Monero {
 
   #[cfg(test)]
   async fn get_fee(&self) -> Self::Fee {
-    self.rpc.get_fee().await.unwrap()
+    use monero_serai::wallet::FeePriority;
+
+    self.rpc.get_fee(self.rpc.get_protocol().await.unwrap(), FeePriority::Low).await.unwrap()
   }
 
   #[cfg(test)]
@@ -566,6 +581,7 @@ impl Coin for Monero {
   async fn test_send(&self, address: Self::Address) -> Block {
     use zeroize::Zeroizing;
     use rand_core::OsRng;
+    use monero_serai::wallet::FeePriority;
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     for _ in 0 .. 80 {
@@ -583,17 +599,31 @@ impl Coin for Monero {
     // The dust should always be sufficient for the fee
     let fee = Monero::DUST;
 
+    let protocol = self.rpc.get_protocol().await.unwrap();
+
+    let decoys = Decoys::select(
+      &mut OsRng,
+      &self.rpc,
+      protocol.ring_len(),
+      self.rpc.get_height().await.unwrap() - 1,
+      &outputs,
+    )
+    .await
+    .unwrap();
+
+    let inputs = outputs.into_iter().zip(decoys.into_iter()).collect::<Vec<_>>();
+
     let tx = MSignableTransaction::new(
-      self.rpc.get_protocol().await.unwrap(),
+      protocol,
       None,
-      outputs,
+      inputs,
       vec![(address.into(), amount - fee)],
       Some(Change::fingerprintable(Self::test_address().into())),
       vec![],
-      self.rpc.get_fee().await.unwrap(),
+      self.rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
     )
     .unwrap()
-    .sign(&mut OsRng, &self.rpc, &Zeroizing::new(Scalar::ONE.0))
+    .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE.0))
     .await
     .unwrap();
 

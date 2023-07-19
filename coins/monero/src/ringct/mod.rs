@@ -124,8 +124,9 @@ pub struct RctBase {
 }
 
 impl RctBase {
-  pub(crate) fn fee_weight(outputs: usize) -> usize {
-    1 + 8 + (outputs * (8 + 32))
+  pub(crate) fn fee_weight(outputs: usize, fee: u64) -> usize {
+    // 1 byte for the RCT signature type
+    1 + (outputs * (8 + 32)) + varint_len(fee)
   }
 
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
@@ -211,6 +212,7 @@ pub enum RctPrunable {
 
 impl RctPrunable {
   pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
+    // 1 byte for number of BPs (technically a VarInt, yet there's always just zero or one)
     1 + Bulletproofs::fee_weight(protocol.bp_plus(), outputs) +
       (inputs * (Clsag::fee_weight(protocol.ring_len()) + 32))
   }
@@ -377,8 +379,8 @@ impl RctSignatures {
     }
   }
 
-  pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
-    RctBase::fee_weight(outputs) + RctPrunable::fee_weight(protocol, inputs, outputs)
+  pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize, fee: u64) -> usize {
+    RctBase::fee_weight(outputs, fee) + RctPrunable::fee_weight(protocol, inputs, outputs)
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {

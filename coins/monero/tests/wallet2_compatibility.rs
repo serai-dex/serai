@@ -84,18 +84,29 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
     .unwrap();
   let tx_hash: [u8; 32] = tx.tx_hash.0.try_into().unwrap();
 
+  // TODO: Needs https://github.com/monero-project/monero/pull/8882
+  // let fee_rate = daemon_rpc
+  //   // Uses `FeePriority::Low` instead of `FeePriority::Lowest` because wallet RPC
+  //   // adjusts `monero_rpc::TransferPriority::Default` up by 1
+  //   .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Low)
+  //   .await
+  //   .unwrap();
+
   // unlock it
   runner::mine_until_unlocked(&daemon_rpc, &wallet_rpc_addr.to_string(), tx_hash).await;
 
-  // create the scanner
+  // Create the scanner
   let mut scanner = Scanner::from_view(view_pair, Some(HashSet::new()));
   if let AddressSpec::Subaddress(index) = spec {
     scanner.register_subaddress(index);
   }
 
-  // retrieve it and confirm
+  // Retrieve it and scan it
   let tx = daemon_rpc.get_transaction(tx_hash).await.unwrap();
   let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
+
+  // TODO: Needs https://github.com/monero-project/monero/pull/8882
+  // runner::check_weight_and_fee(&tx, fee_rate);
 
   match spec {
     AddressSpec::Subaddress(index) => assert_eq!(output.metadata.subaddress, Some(index)),

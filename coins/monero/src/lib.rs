@@ -55,7 +55,13 @@ pub(crate) fn INV_EIGHT() -> Scalar {
 pub enum Protocol {
   v14,
   v16,
-  Custom { ring_len: usize, bp_plus: bool, optimal_rct_type: RctType },
+  Custom {
+    ring_len: usize,
+    bp_plus: bool,
+    optimal_rct_type: RctType,
+    view_tags: bool,
+    v16_fee: bool,
+  },
 }
 
 impl Protocol {
@@ -88,16 +94,37 @@ impl Protocol {
     }
   }
 
+  /// Whether or not the specified version uses view tags.
+  pub fn view_tags(&self) -> bool {
+    match self {
+      Protocol::v14 => false,
+      Protocol::v16 => true,
+      Protocol::Custom { view_tags, .. } => *view_tags,
+    }
+  }
+
+  /// Whether or not the specified version uses the fee algorithm from Monero
+  /// hard fork version 16 (released in v18 binaries).
+  pub fn v16_fee(&self) -> bool {
+    match self {
+      Protocol::v14 => false,
+      Protocol::v16 => true,
+      Protocol::Custom { v16_fee, .. } => *v16_fee,
+    }
+  }
+
   pub(crate) fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       Protocol::v14 => w.write_all(&[0, 14]),
       Protocol::v16 => w.write_all(&[0, 16]),
-      Protocol::Custom { ring_len, bp_plus, optimal_rct_type } => {
+      Protocol::Custom { ring_len, bp_plus, optimal_rct_type, view_tags, v16_fee } => {
         // Custom, version 0
         w.write_all(&[1, 0])?;
         w.write_all(&u16::try_from(*ring_len).unwrap().to_le_bytes())?;
         w.write_all(&[u8::from(*bp_plus)])?;
-        w.write_all(&[optimal_rct_type.to_byte()])
+        w.write_all(&[optimal_rct_type.to_byte()])?;
+        w.write_all(&[u8::from(*view_tags)])?;
+        w.write_all(&[u8::from(*v16_fee)])
       }
     }
   }
@@ -121,6 +148,16 @@ impl Protocol {
           },
           optimal_rct_type: RctType::from_byte(read_byte(r)?)
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid RctType serialization"))?,
+          view_tags: match read_byte(r)? {
+            0 => false,
+            1 => true,
+            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid bool serialization"))?,
+          },
+          v16_fee: match read_byte(r)? {
+            0 => false,
+            1 => true,
+            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid bool serialization"))?,
+          },
         },
         _ => {
           Err(io::Error::new(io::ErrorKind::Other, "unrecognized custom protocol serialization"))?

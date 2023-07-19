@@ -31,10 +31,7 @@ use crate::{
     RctPrunable,
   },
   transaction::{Input, Transaction},
-  rpc::{RpcConnection, Rpc},
-  wallet::{
-    TransactionError, InternalPayment, SignableTransaction, Decoys, key_image_sort, uniqueness,
-  },
+  wallet::{TransactionError, InternalPayment, SignableTransaction, key_image_sort, uniqueness},
 };
 
 /// FROST signing machine to produce a signed transaction.
@@ -43,8 +40,6 @@ pub struct TransactionMachine {
 
   i: Participant,
   transcript: RecommendedTranscript,
-
-  decoys: Vec<Decoys>,
 
   // Hashed key and scalar offset
   key_images: Vec<(EdwardsPoint, Scalar)>,
@@ -57,8 +52,6 @@ pub struct TransactionSignMachine {
 
   i: Participant,
   transcript: RecommendedTranscript,
-
-  decoys: Vec<Decoys>,
 
   key_images: Vec<(EdwardsPoint, Scalar)>,
   inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
@@ -75,12 +68,10 @@ pub struct TransactionSignatureMachine {
 impl SignableTransaction {
   /// Create a FROST signing machine out of this signable transaction.
   /// The height is the Monero blockchain height to synchronize around.
-  pub async fn multisig<RPC: RpcConnection>(
+  pub fn multisig(
     self,
-    rpc: &Rpc<RPC>,
     keys: ThresholdKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
-    height: usize,
   ) -> Result<TransactionMachine, TransactionError> {
     let mut inputs = vec![];
     for _ in 0 .. self.inputs.len() {
@@ -97,11 +88,6 @@ impl SignableTransaction {
 
     transcript.domain_separate(b"monero_transaction");
 
-    // Include the height we're using for our data
-    // The data itself will be included, making this unnecessary, yet a lot of this is technically
-    // unnecessary. Anything which further increases security at almost no cost should be followed
-    transcript.append_message(b"height", u64::try_from(height).unwrap().to_le_bytes());
-
     // Also include the spend_key as below only the key offset is included, so this transcripts the
     // sum product
     // Useful as transcripting the sum product effectively transcripts the key image, further
@@ -112,7 +98,7 @@ impl SignableTransaction {
       transcript.append_message(b"r_seed", r_seed);
     }
 
-    for input in &self.inputs {
+    for (input, decoys) in &self.inputs {
       // These outputs can only be spent once. Therefore, it forces all RNGs derived from this
       // transcript (such as the one used to create one time keys) to be unique
       transcript.append_message(b"input_hash", input.output.absolute.tx);
@@ -120,6 +106,16 @@ impl SignableTransaction {
       // Not including this, with a doxxed list of payments, would allow brute forcing the inputs
       // to determine RNG seeds and therefore the true spends
       transcript.append_message(b"input_shared_key", input.key_offset().to_bytes());
+
+      // Ensure all signers are signing the same rings
+      transcript.append_message(b"real_spend", [decoys.i]);
+      for (i, ring_member) in decoys.ring.iter().enumerate() {
+        transcript
+          .append_message(b"ring_member", [u8::try_from(i).expect("ring size exceeded 255")]);
+        transcript.append_message(b"ring_member_offset", decoys.offsets[i].to_le_bytes());
+        transcript.append_message(b"ring_member_key", ring_member[0].compress().to_bytes());
+        transcript.append_message(b"ring_member_commitment", ring_member[1].compress().to_bytes());
+      }
     }
 
     for payment in &self.payments {
@@ -139,7 +135,7 @@ impl SignableTransaction {
     }
 
     let mut key_images = vec![];
-    for (i, input) in self.inputs.iter().enumerate() {
+    for (i, (input, _)) in self.inputs.iter().enumerate() {
       // Check this the right set of keys
       let offset = keys.offset(dfg::Scalar(input.key_offset()));
       if offset.group_key().0 != input.key() {
@@ -149,35 +145,16 @@ impl SignableTransaction {
       let clsag = ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone());
       key_images.push((
         clsag.H,
-        keys.current_offset().unwrap_or(dfg::Scalar::ZERO).0 + self.inputs[i].key_offset(),
+        keys.current_offset().unwrap_or(dfg::Scalar::ZERO).0 + self.inputs[i].0.key_offset(),
       ));
       clsags.push(AlgorithmMachine::new(clsag, offset));
     }
-
-    // Select decoys
-    // Ideally, this would be done post entropy, instead of now, yet doing so would require sign
-    // to be async which isn't preferable. This should be suitably competent though
-    // While this inability means we can immediately create the input, moving it out of the
-    // Arc RwLock, keeping it within an Arc RwLock keeps our options flexible
-    let decoys = Decoys::select(
-      // Using a seeded RNG with a specific height, committed to above, should make these decoys
-      // committed to. They'll also be committed to later via the TX message as a whole
-      &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
-      rpc,
-      self.protocol.ring_len(),
-      height,
-      &self.inputs,
-    )
-    .await
-    .map_err(TransactionError::RpcError)?;
 
     Ok(TransactionMachine {
       signable: self,
 
       i: keys.params().i(),
       transcript,
-
-      decoys,
 
       key_images,
       inputs,
@@ -223,8 +200,6 @@ impl PreprocessMachine for TransactionMachine {
 
         i: self.i,
         transcript: self.transcript,
-
-        decoys: self.decoys,
 
         key_images: self.key_images,
         inputs: self.inputs,
@@ -349,10 +324,11 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // Sort the inputs, as expected
     let mut sorted = Vec::with_capacity(self.clsags.len());
     while !self.clsags.is_empty() {
+      let (inputs, decoys) = self.signable.inputs.swap_remove(0);
       sorted.push((
         images.swap_remove(0),
-        self.signable.inputs.swap_remove(0),
-        self.decoys.swap_remove(0),
+        inputs,
+        decoys,
         self.inputs.swap_remove(0),
         self.clsags.swap_remove(0),
         commitments.swap_remove(0),
