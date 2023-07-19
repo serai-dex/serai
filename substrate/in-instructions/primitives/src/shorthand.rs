@@ -1,11 +1,10 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+use serde::{Serialize, Deserialize};
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
-
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
 
 use serai_primitives::{Coin, Amount, SeraiAddress, ExternalAddress, Data};
 
@@ -15,8 +14,10 @@ use crate::RefundableInInstruction;
 #[cfg(feature = "std")]
 use crate::InInstruction;
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum Shorthand {
   Raw(Data),
   Swap {

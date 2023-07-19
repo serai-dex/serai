@@ -34,10 +34,13 @@ pub mod pallet {
     pub participants: Vec<T::AccountId>,
   }
 
-  #[cfg(feature = "std")]
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig { bond: Amount(1), networks: vec![], participants: vec![] }
+      GenesisConfig {
+        bond: Amount(1),
+        networks: Default::default(),
+        participants: Default::default(),
+      }
     }
   }
 
@@ -68,7 +71,7 @@ pub mod pallet {
   }
 
   #[pallet::genesis_build]
-  impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
       let hash_set =
         self.participants.iter().map(|key| key.0).collect::<hashbrown::HashSet<[u8; 32]>>();

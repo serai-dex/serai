@@ -94,7 +94,6 @@ use opaque::SessionKeys;
 pub const VERSION: RuntimeVersion = RuntimeVersion {
   spec_name: create_runtime_str!("serai"),
   impl_name: create_runtime_str!("core"),
-  authoring_version: 1,
   // TODO: 1? Do we prefer some level of compatibility or our own path?
   spec_version: 100,
   impl_version: 1,
@@ -188,11 +187,10 @@ impl system::Config for Runtime {
   type AccountId = PublicKey;
   type RuntimeCall = RuntimeCall;
   type Lookup = AccountLookup;
-  type Index = Index;
-  type BlockNumber = BlockNumber;
   type Hash = Hash;
   type Hashing = BlakeTwo256;
-  type Header = Header;
+  type Nonce = u32;
+  type Block = Block;
   type RuntimeOrigin = RuntimeOrigin;
   type RuntimeEvent = RuntimeEvent;
   type BlockHashCount = BlockHashCount;
@@ -224,8 +222,8 @@ impl balances::Config for Runtime {
   type Balance = SubstrateAmount;
 
   type ReserveIdentifier = ();
-  type HoldIdentifier = ();
   type FreezeIdentifier = ();
+  type RuntimeHoldReason = ();
 
   type MaxLocks = ();
   type MaxReserves = ();
@@ -380,11 +378,7 @@ pub type Executive = frame_executive::Executive<
 >;
 
 construct_runtime!(
-  pub enum Runtime where
-    Block = Block,
-    NodeBlock = Block,
-    UncheckedExtrinsic = UncheckedExtrinsic
-  {
+  pub enum Runtime {
     System: system,
 
     Timestamp: timestamp,

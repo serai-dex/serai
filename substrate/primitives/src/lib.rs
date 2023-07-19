@@ -5,10 +5,10 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+use serde::{Serialize, Deserialize};
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
@@ -32,8 +32,9 @@ pub use account::*;
 // When JAMTIS arrives, it'll become 114 bytes
 pub const MAX_ADDRESS_LEN: u32 = 128;
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
 pub struct ExternalAddress(BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>);
 
 #[cfg(feature = "std")]
@@ -67,8 +68,9 @@ impl AsRef<[u8]> for ExternalAddress {
 
 // Should be enough for a Uniswap v3 call
 pub const MAX_DATA_LEN: u32 = 512;
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
 pub struct Data(BoundedVec<u8, ConstU32<{ MAX_DATA_LEN }>>);
 
 #[cfg(feature = "std")]

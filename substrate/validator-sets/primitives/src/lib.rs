@@ -3,13 +3,11 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
-
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
+use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, sr25519::Public, bounded::BoundedVec};
 #[cfg(not(feature = "std"))]
@@ -21,13 +19,39 @@ use serai_primitives::{NetworkId, Network, Amount};
 const MAX_KEY_LEN: u32 = 96;
 
 /// The type used to identify a specific session of validators.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  Hash,
+  Debug,
+  Serialize,
+  Deserialize,
+  Encode,
+  Decode,
+  TypeInfo,
+  MaxEncodedLen,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct Session(pub u32);
 
 /// The type used to identify a specific validator set during a specific session.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  Hash,
+  Debug,
+  Serialize,
+  Deserialize,
+  Encode,
+  Decode,
+  TypeInfo,
+  MaxEncodedLen,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct ValidatorSet {
   pub session: Session,
   pub network: NetworkId,

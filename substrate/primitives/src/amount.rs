@@ -6,10 +6,10 @@ use core::{
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+use serde::{Serialize, Deserialize};
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
 
 /// The type used for amounts within Substrate.
 // Distinct from Amount due to Substrate's requirements on this type.
@@ -19,9 +19,20 @@ use serde::{Serialize, Deserialize};
 pub type SubstrateAmount = u64;
 /// The type used for amounts.
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  PartialOrd,
+  Debug,
+  Serialize,
+  Deserialize,
+  Encode,
+  Decode,
+  MaxEncodedLen,
+  TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct Amount(pub SubstrateAmount);
 
 impl Add for Amount {

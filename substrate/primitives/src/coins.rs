@@ -4,17 +4,29 @@ use std::collections::HashMap;
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+use serde::{Serialize, Deserialize};
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
-
 /// The type used to identify networks.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  Hash,
+  Debug,
+  Serialize,
+  Deserialize,
+  Encode,
+  Decode,
+  MaxEncodedLen,
+  TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum NetworkId {
   Serai,
   Bitcoin,
@@ -23,8 +35,21 @@ pub enum NetworkId {
 }
 
 /// The type used to identify coins.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  Hash,
+  Debug,
+  Serialize,
+  Deserialize,
+  Encode,
+  Decode,
+  MaxEncodedLen,
+  TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum Coin {
   Serai,
   Bitcoin,
@@ -55,8 +80,9 @@ impl Coin {
 pub const MAX_COINS_PER_NETWORK: u32 = 8;
 
 /// Network definition.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
 pub struct Network {
   coins: BoundedVec<Coin, ConstU32<{ MAX_COINS_PER_NETWORK }>>,
 }

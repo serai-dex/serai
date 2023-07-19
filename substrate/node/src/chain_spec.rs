@@ -1,14 +1,16 @@
+use core::marker::PhantomData;
+
 use sp_core::Pair as PairTrait;
 
 use sc_service::ChainType;
 
 use serai_runtime::{
   primitives::*, tokens::primitives::ADDRESS as TOKENS_ADDRESS, WASM_BINARY, opaque::SessionKeys,
-  BABE_GENESIS_EPOCH_CONFIG, GenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
+  BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
   ValidatorSetsConfig, SessionConfig, BabeConfig, GrandpaConfig, AuthorityDiscoveryConfig,
 };
 
-pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
 
 fn account_from_name(name: &'static str) -> PublicKey {
   insecure_pair_from_name(name).public()
@@ -18,7 +20,7 @@ fn testnet_genesis(
   wasm_binary: &[u8],
   validators: &[&'static str],
   endowed_accounts: Vec<PublicKey>,
-) -> GenesisConfig {
+) -> RuntimeGenesisConfig {
   let session_key = |name| {
     let key = account_from_name(name);
     (
@@ -28,8 +30,8 @@ fn testnet_genesis(
     )
   };
 
-  GenesisConfig {
-    system: SystemConfig { code: wasm_binary.to_vec() },
+  RuntimeGenesisConfig {
+    system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
 
     balances: BalancesConfig {
       balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
@@ -61,10 +63,14 @@ fn testnet_genesis(
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },
     session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
-    babe: BabeConfig { authorities: vec![], epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG) },
-    grandpa: GrandpaConfig { authorities: vec![] },
+    babe: BabeConfig {
+      authorities: vec![],
+      epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
+      _config: PhantomData,
+    },
+    grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
 
-    authority_discovery: AuthorityDiscoveryConfig { keys: vec![] },
+    authority_discovery: AuthorityDiscoveryConfig { keys: vec![], _config: PhantomData },
   }
 }
 

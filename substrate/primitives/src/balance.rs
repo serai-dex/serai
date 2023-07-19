@@ -3,16 +3,19 @@ use core::ops::{Add, Sub, Mul};
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+use serde::{Serialize, Deserialize};
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
 
 use crate::{Coin, Amount};
 
 /// The type used for balances (a Coin and Balance).
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[rustfmt::skip]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct Balance {
   pub coin: Coin,
   pub amount: Amount,

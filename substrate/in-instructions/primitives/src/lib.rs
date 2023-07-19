@@ -5,11 +5,10 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+use serde::{Serialize, Deserialize};
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
-
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
 
 use sp_application_crypto::sr25519::Signature;
 
@@ -22,42 +21,51 @@ use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddr
 mod shorthand;
 pub use shorthand::*;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[rustfmt::skip]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum Application {
   DEX,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct ApplicationCall {
   pub application: Application,
   pub data: Data,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
   Call(ApplicationCall),
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct RefundableInInstruction {
   pub origin: Option<ExternalAddress>,
   pub instruction: InInstruction,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct InInstructionWithBalance {
   pub instruction: InInstruction,
   pub balance: Balance,
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct Batch {
   pub network: NetworkId,
   pub id: u32,
@@ -65,8 +73,7 @@ pub struct Batch {
   pub instructions: Vec<InInstructionWithBalance>,
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
 pub struct SignedBatch {
   pub batch: Batch,
   pub signature: Signature,

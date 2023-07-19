@@ -12,7 +12,8 @@ use sc_network_common::sync::warp::WarpSyncParams;
 use sc_network::{Event, NetworkEventStream};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
-use sc_client_api::BlockBackend;
+use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use sc_client_api::{BlockBackend, Backend};
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
@@ -116,17 +117,21 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   )?;
 
   let slot_duration = babe_link.config().slot_duration();
-  let (import_queue, babe_handle) = sc_consensus_babe::import_queue(
-    babe_link.clone(),
-    block_import.clone(),
-    Some(Box::new(justification_import)),
-    client.clone(),
-    select_chain.clone(),
-    move |_, _| async move { Ok(create_inherent_data_providers(slot_duration)) },
-    &task_manager.spawn_essential_handle(),
-    config.prometheus_registry(),
-    telemetry.as_ref().map(Telemetry::handle),
-  )?;
+  let (import_queue, babe_handle) =
+    sc_consensus_babe::import_queue(sc_consensus_babe::ImportQueueParams {
+      link: babe_link.clone(),
+      block_import: block_import.clone(),
+      justification_import: Some(Box::new(justification_import)),
+      client: client.clone(),
+      select_chain: select_chain.clone(),
+      create_inherent_data_providers: move |_, _| async move {
+        Ok(create_inherent_data_providers(slot_duration))
+      },
+      spawner: &task_manager.spawn_essential_handle(),
+      registry: config.prometheus_registry(),
+      telemetry: telemetry.as_ref().map(Telemetry::handle),
+      offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
+    })?;
   // This can't be dropped, or BABE breaks
   // We don't have anything to do with it though
   // This won't grow in size, so forgetting this isn't a disastrous memleak
@@ -184,11 +189,20 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     })?;
 
   if config.offchain_worker.enabled {
-    sc_service::build_offchain_workers(
-      &config,
-      task_manager.spawn_handle(),
-      client.clone(),
-      network.clone(),
+    task_manager.spawn_handle().spawn(
+      "offchain-workers-runner",
+      "offchain-worker",
+      sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
+        runtime_api_provider: client.clone(),
+        is_validator: config.role.is_authority(),
+        keystore: Some(keystore_container.keystore()),
+        offchain_db: backend.offchain_storage(),
+        transaction_pool: Some(OffchainTransactionPoolFactory::new(transaction_pool.clone())),
+        network_provider: network.clone(),
+        enable_http_requests: true,
+        custom_extensions: |_| vec![],
+      })
+      .run(client.clone(), task_manager.spawn_handle()),
     );
   }
 
@@ -238,7 +252,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       env: sc_basic_authorship::ProposerFactory::new(
         task_manager.spawn_handle(),
         client.clone(),
-        transaction_pool,
+        transaction_pool.clone(),
         prometheus_registry.as_ref(),
         telemetry.as_ref().map(Telemetry::handle),
       ),
@@ -312,6 +326,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
         voting_rule: grandpa::VotingRulesBuilder::default().build(),
         prometheus_registry,
         shared_voter_state,
+        offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
       })?,
     );
   }

@@ -1,11 +1,10 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+use serde::{Serialize, Deserialize};
+
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
-
-#[cfg(feature = "std")]
-use serde::{Serialize, Deserialize};
 
 use sp_core::sr25519::Public;
 pub use sp_core::sr25519::Signature;
@@ -17,9 +16,21 @@ use sp_runtime::traits::{LookupError, Lookup, StaticLookup};
 pub type PublicKey = Public;
 
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  PartialOrd,
+  Ord,
+  Debug,
+  Serialize,
+  Deserialize,
+  Encode,
+  Decode,
+  MaxEncodedLen,
+  TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize, Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct SeraiAddress(pub [u8; 32]);
 impl SeraiAddress {
   pub fn new(key: [u8; 32]) -> SeraiAddress {
