@@ -1,20 +1,20 @@
+use rand_core::OsRng;
+
 use monero_serai::{
   transaction::Transaction,
   wallet::{
-    extra::Extra, address::SubaddressIndex, ReceivedOutput, SpendableOutput,
-    SignableTransactionBuilder, Decoys,
+    extra::Extra, address::SubaddressIndex, ReceivedOutput, SpendableOutput, Decoys,
+    SignableTransactionBuilder,
   },
   rpc::{Rpc, HttpRpc},
-  Protocol as P,
+  Protocol,
 };
 
 mod runner;
 
-use rand_core::OsRng;
-
-// Set up inputs, select decoys, then add to tx builder
+// Set up inputs, select decoys, then add them to the TX builder
 async fn add_inputs(
-  protocol: P,
+  protocol: Protocol,
   rpc: &Rpc<HttpRpc>,
   outputs: Vec<ReceivedOutput>,
   builder: &mut SignableTransactionBuilder,
@@ -70,7 +70,7 @@ test!(
     },
   ),
   (
-    |protocol: P, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+    |protocol: Protocol, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
       add_inputs(protocol, &rpc, outputs, &mut builder).await;
       builder.add_payment(addr, 6);
       (builder.build().unwrap(), ())
@@ -165,7 +165,7 @@ test!(
     },
   ),
   (
-    |protocol: P, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+    |protocol: Protocol, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
       add_inputs(protocol, &rpc, outputs, &mut builder).await;
       builder.add_payment(addr, 2);
       (builder.build().unwrap(), ())
@@ -192,7 +192,7 @@ test!(
     },
   ),
   (
-    |protocol: P, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+    |protocol: Protocol, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
       add_inputs(protocol, &rpc, outputs, &mut builder).await;
 
       for i in 0 .. 15 {
@@ -232,7 +232,7 @@ test!(
     },
   ),
   (
-    |protocol: P, rpc, mut builder: Builder, _, outputs: Vec<ReceivedOutput>| async move {
+    |protocol: Protocol, rpc, mut builder: Builder, _, outputs: Vec<ReceivedOutput>| async move {
       add_inputs(protocol, &rpc, outputs, &mut builder).await;
 
       let view = runner::random_address().1;

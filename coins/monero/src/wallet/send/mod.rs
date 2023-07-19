@@ -131,7 +131,7 @@ pub enum TransactionError {
   #[cfg_attr(feature = "std", error("no outputs"))]
   NoOutputs,
   #[cfg_attr(feature = "std", error("invalid number of decoys"))]
-  InvalidNumDecoys,
+  InvalidDecoyQuantity,
   #[cfg_attr(feature = "std", error("only one output and no change address"))]
   NoChange,
   #[cfg_attr(feature = "std", error("too many outputs"))]
@@ -191,7 +191,7 @@ fn prepare_inputs(
   Ok(signable)
 }
 
-/// Deterministically calculate what the tx weight and fee will be
+// Deterministically calculate what the TX weight and fee will be.
 fn calculate_weight_and_fee(
   protocol: Protocol,
   decoy_weights: &[usize],
@@ -199,19 +199,22 @@ fn calculate_weight_and_fee(
   extra: usize,
   fee_rate: Fee,
 ) -> (usize, u64) {
+  // Starting the fee at 0 here is different than core Monero's wallet2.cpp, which starts its fee
+  // calculation with an estimate.
+  //
+  // This difference is okay in practice because wallet2 still ends up using a fee calculated from
+  // a TX's weight, as calculated later in this function.
+  //
+  // See this PR highlighting wallet2's behavior:
+  //   https://github.com/monero-project/monero/pull/8882
+  //
+  // Even with that PR, if the estimated fee's VarInt byte length is larger than the calculated
+  // fee's, the wallet can theoretically use a fee not based on the actual TX weight. This does not
+  // occur in practice as it's nearly impossible for wallet2 to estimate a fee that is larger
+  // than the calculated fee today, and on top of that, even more unlikely for that estimate's
+  // VarInt to be larger in byte length than the calculated fee's.
   let mut weight = 0usize;
   let mut fee = 0u64;
-  // Starting the fee at 0 here is different than core Monero's wallet2.cpp,
-  // which starts its fee calculation with an estimate. This difference is ok in
-  // practice because wallet2 still ends up using a fee calculated from a tx's weight,
-  // as we calculate later in this function. See this PR highlighting wallet2's behavior:
-  // https://github.com/monero-project/monero/pull/8882
-  // Even with that PR, if the estimated fee's varint byte length is larger than
-  // the calculated fee's, the wallet can theoretically use a fee not
-  // based on the *final* tx weight. However, this does not occur in practice:
-  // it's nearly impossible for wallet2 to estimate a fee that is larger
-  // than the calculated fee today, and on top of that, even more unlikely for
-  // that estimate varint to be larger in byte length than the calculated fee.
 
   let mut done = false;
   let mut iters = 0;
@@ -228,8 +231,8 @@ fn calculate_weight_and_fee(
 
     #[cfg(test)]
     debug_assert!(iters < max_iters, "Reached max fee calculation attempts");
-    // Should never happen because the fee VarInt byte length shouldn't change
-    // *every* single iter. `iters` reaching `max_iters` is unexpected.
+    // Should never happen because the fee VarInt byte length shouldn't change *every* single iter.
+    // `iters` reaching `max_iters` is unexpected.
     if iters >= max_iters {
       // Fail-safe break to ensure funds are still spendable
       break;
@@ -260,7 +263,7 @@ impl Fee {
   }
 }
 
-/// Priority to include a transaction in the next block
+/// Fee priority, determining how quickly a transaction is included in a block.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum FeePriority {
@@ -272,7 +275,7 @@ pub enum FeePriority {
 }
 
 impl FeePriority {
-  pub fn fee_priority(&self) -> u32 {
+  pub(crate) fn fee_priority(&self) -> u32 {
     match self {
       FeePriority::Lowest => 0,
       FeePriority::Low => 1,
@@ -441,7 +444,7 @@ impl SignableTransaction {
 
     for (_, decoys) in &inputs {
       if decoys.len() != protocol.ring_len() {
-        Err(TransactionError::InvalidNumDecoys)?;
+        Err(TransactionError::InvalidDecoyQuantity)?;
       }
     }
 
@@ -515,6 +518,7 @@ impl SignableTransaction {
     // Modify the amount of the change output
     if change_address.is_some() {
       let change_payment = payments.last_mut().unwrap();
+      debug_assert!(matches!(change_payment, InternalPayment::Change(_, _)));
       *change_payment =
         InternalPayment::Change(change_address.clone().unwrap(), in_amount - out_amount - fee);
     }
@@ -771,7 +775,7 @@ impl SignableTransaction {
       });
       encrypted_amounts.push(EncryptedAmount::Compact { amount: output.amount });
     }
-    debug_assert_eq!(self.fee, fee, "Transaction will use unexpected fee");
+    debug_assert_eq!(self.fee, fee, "transaction will use an unexpected fee");
 
     (
       Transaction {
@@ -840,7 +844,7 @@ impl SignableTransaction {
     debug_assert_eq!(
       self.fee_rate.calculate_fee_from_weight(tx.weight()),
       tx.rct_signatures.base.fee,
-      "Transaction used unexpected fee"
+      "transaction used unexpected fee",
     );
 
     Ok(tx)

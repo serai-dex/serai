@@ -37,14 +37,16 @@ pub enum Bulletproofs {
 }
 
 impl Bulletproofs {
-  pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
-    #[allow(non_snake_case)]
-    let (bp_clawback, LR_len) = Bulletproofs::calculate_bp_clawback(plus, outputs);
-    32 * (Bulletproofs::bp_fields(plus) + (2 * LR_len)) + 2 + bp_clawback
+  fn bp_fields(plus: bool) -> usize {
+    if plus {
+      6
+    } else {
+      9
+    }
   }
 
   // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-  // src/cryptonote_basic/cryptonote_format_utils.cpp#L106-L124
+  //   src/cryptonote_basic/cryptonote_format_utils.cpp#L106-L124
   pub(crate) fn calculate_bp_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
     #[allow(non_snake_case)]
     let mut LR_len = 0;
@@ -66,12 +68,10 @@ impl Bulletproofs {
     (bp_clawback, LR_len)
   }
 
-  fn bp_fields(plus: bool) -> usize {
-    if plus {
-      6
-    } else {
-      9
-    }
+  pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
+    #[allow(non_snake_case)]
+    let (bp_clawback, LR_len) = Bulletproofs::calculate_bp_clawback(plus, outputs);
+    32 * (Bulletproofs::bp_fields(plus) + (2 * LR_len)) + 2 + bp_clawback
   }
 
   /// Prove the list of commitments are within [0 .. 2^64).

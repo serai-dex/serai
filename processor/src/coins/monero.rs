@@ -4,10 +4,10 @@ use async_trait::async_trait;
 
 use zeroize::Zeroizing;
 
-use transcript::{Transcript, RecommendedTranscript};
-
-use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+
+use transcript::{Transcript, RecommendedTranscript};
 
 use group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
@@ -21,8 +21,8 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network, SubaddressIndex, AddressSpec},
-    Fee, SpendableOutput, Change, TransactionError, SignableTransaction as MSignableTransaction,
-    Eventuality, TransactionMachine, Decoys,
+    Fee, SpendableOutput, Change, Decoys, TransactionError,
+    SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
   },
 };
 
@@ -403,10 +403,8 @@ impl Coin for Monero {
 
     let mut transcript = plan.transcript();
 
-    // All signers need to select the same decoys. All signers use the same height +
-    // seeded RNG to make sure they do so. We select decoys here and keep the
-    // selection constant for the remainder of tx construction to ensure the
-    // calculated fee is derived from a fixed set of decoys with fixed byte length.
+    // All signers need to select the same decoys
+    // All signers use the same height and a seeded RNG to make sure they do so.
     let decoys = Decoys::select(
       &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
       &self.rpc,
@@ -469,7 +467,7 @@ impl Coin for Monero {
           }
           TransactionError::NoInputs |
           TransactionError::NoOutputs |
-          TransactionError::InvalidNumDecoys |
+          TransactionError::InvalidDecoyQuantity |
           TransactionError::NoChange |
           TransactionError::TooManyOutputs |
           TransactionError::TooMuchData |
@@ -522,7 +520,7 @@ impl Coin for Monero {
   ) -> Result<Self::TransactionMachine, CoinError> {
     match transaction.actual.clone().multisig(transaction.keys.clone(), transaction.transcript) {
       Ok(machine) => Ok(machine),
-      Err(e) => panic!("failed attempting to send TX: {}", e),
+      Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
     }
   }
 

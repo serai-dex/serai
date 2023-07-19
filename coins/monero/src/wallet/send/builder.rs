@@ -5,8 +5,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::{
   Protocol,
   wallet::{
-    address::MoneroAddress, Fee, SpendableOutput, Change, SignableTransaction, TransactionError,
-    extra::MAX_ARBITRARY_DATA_SIZE, Decoys,
+    address::MoneroAddress, Fee, SpendableOutput, Change, Decoys, SignableTransaction,
+    TransactionError, extra::MAX_ARBITRARY_DATA_SIZE,
   },
 };
 

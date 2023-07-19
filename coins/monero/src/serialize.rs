@@ -19,7 +19,7 @@ mod sealed {
   impl VarInt for usize {}
 }
 
-/// This will panic if the varint exceeds u64::MAX
+// This will panic if the VarInt exceeds u64::MAX
 pub(crate) fn varint_len<U: sealed::VarInt>(varint: U) -> usize {
   let varint_u64: u64 = varint.try_into().map_err(|_| "varint exceeded u64").unwrap();
   ((usize::try_from(u64::BITS - varint_u64.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1

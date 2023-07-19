@@ -73,7 +73,7 @@ pub async fn get_miner_tx_output(rpc: &Rpc<HttpRpc>, view: &ViewPair) -> Spendab
   scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
 }
 
-/// Makes sure the weight and fee match the expected calculation
+/// Make sure the weight and fee match the expected calculation.
 pub fn check_weight_and_fee(tx: &Transaction, fee_rate: Fee) {
   let fee = tx.rct_signatures.base.fee;
 
@@ -167,8 +167,8 @@ macro_rules! test {
         use monero_serai::{
           random_scalar,
           wallet::{
-            address::{Network, AddressSpec}, ViewPair, Scanner, Change, SignableTransaction,
-            SignableTransactionBuilder, Decoys, FeePriority,
+            address::{Network, AddressSpec}, ViewPair, Scanner, Change, Decoys, FeePriority,
+            SignableTransaction, SignableTransactionBuilder,
           },
         };
 

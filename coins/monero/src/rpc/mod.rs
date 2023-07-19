@@ -19,7 +19,7 @@ use crate::{
   serialize::*,
   transaction::{Input, Timelock, Transaction},
   block::Block,
-  wallet::{Fee, FeePriority},
+  wallet::{FeePriority, Fee},
 };
 
 #[cfg(feature = "http_rpc")]
@@ -29,7 +29,7 @@ pub use http::*;
 
 // Number of blocks the fee estimate will be valid for
 // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-// src/wallet/wallet2.cpp#L121
+//   src/wallet/wallet2.cpp#L121
 const GRACE_BLOCKS_FOR_FEE_ESTIMATE: u64 = 10;
 
 #[derive(Deserialize, Debug)]
@@ -347,7 +347,6 @@ impl<R: RpcConnection> Rpc<R> {
       txid: [u8; 32],
     }
 
-    #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
     struct OIndexes {
       o_indexes: Vec<u64>,
@@ -479,13 +478,11 @@ impl<R: RpcConnection> Rpc<R> {
     from: usize,
     to: usize,
   ) -> Result<Vec<u64>, RpcError> {
-    #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
     struct Distribution {
       distribution: Vec<u64>,
     }
 
-    #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
     struct Distributions {
       distributions: Vec<Distribution>,
@@ -566,14 +563,50 @@ impl<R: RpcConnection> Rpc<R> {
       .collect()
   }
 
-  /// Get the currently estimated fee from the node. This may be manipulated to unsafe levels and
-  /// MUST be sanity checked.
+  async fn get_fee_v14(&self, priority: FeePriority) -> Result<Fee, RpcError> {
+    #[derive(Deserialize, Debug)]
+    struct FeeResponseV14 {
+      status: String,
+      fee: u64,
+      quantization_mask: u64,
+    }
+
+    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+    //   src/wallet/wallet2.cpp#L7569-L7584
+    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+    //   src/wallet/wallet2.cpp#L7660-L7661
+    let priority_idx =
+      usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
+        .map_err(|_| RpcError::InvalidPriority)?;
+    let multipliers = [1, 5, 25, 1000];
+    if priority_idx >= multipliers.len() {
+      // though not an RPC error, it seems sensible to treat as such
+      Err(RpcError::InvalidPriority)?;
+    }
+    let fee_multiplier = multipliers[priority_idx];
+
+    let res: FeeResponseV14 = self
+      .json_rpc_call(
+        "get_fee_estimate",
+        Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
+      )
+      .await?;
+
+    if res.status != "OK" {
+      Err(RpcError::InvalidFee)?;
+    }
+
+    Ok(Fee { per_weight: res.fee * fee_multiplier, mask: res.quantization_mask })
+  }
+
+  /// Get the currently estimated fee from the node.
+  ///
+  /// This may be manipulated to unsafe levels and MUST be sanity checked.
   // TODO: Take a sanity check argument
   pub async fn get_fee(&self, protocol: Protocol, priority: FeePriority) -> Result<Fee, RpcError> {
-    // TODO: implement wallet2's adjust_priority which by default automatically
-    // uses a lower priority than provided depending on the backlog in the pool
+    // TODO: Implement wallet2's adjust_priority which by default automatically uses a lower
+    // priority than provided depending on the backlog in the pool
     if protocol.v16_fee() {
-      #[allow(dead_code)]
       #[derive(Deserialize, Debug)]
       struct FeeResponse {
         status: String,
@@ -607,43 +640,6 @@ impl<R: RpcConnection> Rpc<R> {
     } else {
       self.get_fee_v14(priority).await
     }
-  }
-
-  pub async fn get_fee_v14(&self, priority: FeePriority) -> Result<Fee, RpcError> {
-    #[allow(dead_code)]
-    #[derive(Deserialize, Debug)]
-    struct FeeResponseV14 {
-      status: String,
-      fee: u64,
-      quantization_mask: u64,
-    }
-
-    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-    // src/wallet/wallet2.cpp#L7569-L7584
-    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-    // src/wallet/wallet2.cpp#L7660-L7661
-    let priority_idx =
-      usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
-        .map_err(|_| RpcError::InvalidPriority)?;
-    let multipliers: Vec<u64> = vec![1, 5, 25, 1000];
-    if priority_idx >= multipliers.len() {
-      // though not an RPC error, it seems sensible to treat as such
-      Err(RpcError::InvalidPriority)?;
-    }
-    let fee_multiplier = multipliers[priority_idx];
-
-    let res: FeeResponseV14 = self
-      .json_rpc_call(
-        "get_fee_estimate",
-        Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
-      )
-      .await?;
-
-    if res.status != "OK" {
-      Err(RpcError::InvalidFee)?;
-    }
-
-    Ok(Fee { per_weight: res.fee * fee_multiplier, mask: res.quantization_mask })
   }
 
   pub async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {

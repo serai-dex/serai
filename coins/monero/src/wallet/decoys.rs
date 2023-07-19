@@ -15,9 +15,9 @@ use rand_distr::num_traits::Float;
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
+  serialize::varint_len,
   wallet::SpendableOutput,
   rpc::{RpcError, RpcConnection, Rpc},
-  serialize::varint_len,
 };
 
 const LOCK_WINDOW: usize = 10;

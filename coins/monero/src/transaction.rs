@@ -14,7 +14,7 @@ use curve25519_dalek::{
 use crate::{
   Protocol, hash,
   serialize::*,
-  ringct::{RctBase, RctPrunable, RctSignatures, bulletproofs::Bulletproofs, RctType},
+  ringct::{bulletproofs::Bulletproofs, RctType, RctBase, RctPrunable, RctSignatures},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -409,17 +409,16 @@ impl Transaction {
     }
   }
 
-  /// Calculate the transaction's final weight
+  /// Calculate the transaction's weight.
   pub fn weight(&self) -> usize {
     let blob_size = self.serialize().len();
 
     let bp = self.is_rct_bulletproof();
     let bp_plus = self.is_rct_bulletproof_plus();
-    if !bp && !bp_plus {
+    if !(bp || bp_plus) {
       blob_size
     } else {
-      let n_outputs = self.prefix.outputs.len();
-      blob_size + Bulletproofs::calculate_bp_clawback(bp_plus, n_outputs).0
+      blob_size + Bulletproofs::calculate_bp_clawback(bp_plus, self.prefix.outputs.len()).0
     }
   }
 }

@@ -30,7 +30,7 @@ pub mod decoys;
 pub use decoys::Decoys;
 
 mod send;
-pub use send::{Fee, TransactionError, Change, SignableTransaction, Eventuality, FeePriority};
+pub use send::{FeePriority, Fee, TransactionError, Change, SignableTransaction, Eventuality};
 #[cfg(feature = "std")]
 pub use send::SignableTransactionBuilder;
 #[cfg(feature = "multisig")]
