@@ -1,19 +1,6 @@
 version: "3.9"
 name: serai-dev
-  # ------------------------------------------------------------
-  # Services
-  # ------------------------------------------------------------
-  # Profiles:
-  # base - single node, unidentified
-  # coins - node clients for coins only (BTC, ETH, XMR)
-  # cluster-sm - Alice, Bob, Charlie
-  # cluster-coins-sm - cluster-sm with coins
-  # cluster-lg - Alice, Bob, Charlie, Dave, Eve, Ferdie
-  # cluster-coins-lg - cluster-lg with coins
-  # monero - full node monero only
-  # bitcoin - full node bitcoin only
-  # ethereum - full node ethereum only
-  # Example: docker compose --profile bitcoin up
+
 volumes:
   serai-base:
   serai-alice:
@@ -24,6 +11,47 @@ volumes:
   serai-ferdie:
 
 services:
+  # Coin services
+
+  bitcoin:
+    profiles:
+      - bitcoin
+      - coins
+    build:
+      context: ./coins/bitcoin/
+    restart: unless-stopped
+    volumes:
+      - "./coins/bitcoin/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+    ports:
+      - "18443:18443"
+
+  ethereum:
+    profiles:
+      - ethereum
+      - coins
+    build:
+      context: ./coins/ethereum/
+    restart: unless-stopped
+    volumes:
+      - "./coins/ethereum/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
+  monero:
+    profiles:
+      - monero
+      - coins
+    build:
+      context: ./coins/monero/
+    restart: unless-stopped
+    volumes:
+      - "./coins/monero/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+    ports:
+      - "18081:18081"
+
+  # Serai services
+
   _serai:
     &serai_defaults
     restart: unless-stopped
@@ -39,14 +67,14 @@ services:
     volumes:
       - "./serai/scripts:/scripts"
 
-  serai-base:
+  serai-node:
     <<: *serai_defaults
-    hostname: serai-base
+    hostname: serai-node
     profiles:
-      - base
+      - serai
     environment:
       CHAIN: local
-      NAME: base
+      NAME: node
 
   serai-alice:
     <<: *serai_defaults
@@ -54,9 +82,7 @@ services:
     profiles:
       - alice
       - cluster-sm
-      - cluster-coins-sm
       - cluster-lg
-      - cluster-coins-lg
     environment:
       CHAIN: local
       NAME: alice
@@ -68,9 +94,7 @@ services:
     profiles:
       - bob
       - cluster-sm
-      - cluster-coins-sm
       - cluster-lg
-      - cluster-coins-lg
     environment:
       CHAIN: local
       NAME: bob
@@ -82,9 +106,7 @@ services:
     profiles:
       - charlie
       - cluster-sm
-      - cluster-coins-sm
       - cluster-lg
-      - cluster-coins-lg
     environment:
       CHAIN: local
       NAME: charlie
@@ -96,7 +118,6 @@ services:
     profiles:
       - dave
       - cluster-lg
-      - cluster-coins-lg
     environment:
       CHAIN: local
       NAME: dave
@@ -107,7 +128,6 @@ services:
     profiles:
       - eve
       - cluster-lg
-      - cluster-coins-lg
     environment:
       CHAIN: local
       NAME: eve
@@ -118,56 +138,6 @@ services:
     profiles:
       - ferdie
       - cluster-lg
-      - cluster-coins-lg
     environment:
       CHAIN: local
       NAME: ferdie
-
-  # Processor Services
-
-  # Coin Services
-  bitcoin:
-    profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
-      - coins
-      - bitcoin
-    build:
-      context: ./coins/bitcoin/
-    restart: unless-stopped
-    volumes:
-      - "./coins/bitcoin/scripts:/scripts"
-    entrypoint: /scripts/entry-dev.sh
-    ports:
-      - "18443:18443"
-
-  ethereum:
-    profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
-      - coins
-      - ethereum
-    build:
-      context: ./coins/ethereum/
-    restart: unless-stopped
-    volumes:
-      - "./coins/ethereum/scripts:/scripts"
-    entrypoint: /scripts/entry-dev.sh
-
-  monero:
-    profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
-      - coins
-      - monero
-    build:
-      context: ./coins/monero/
-    restart: unless-stopped
-    volumes:
-      - "./coins/monero/scripts:/scripts"
-    entrypoint: /scripts/entry-dev.sh
-    ports:
-      - "18081:18081"

@@ -5,6 +5,7 @@ LABEL description="STAGE 1: Build"
 ADD common /serai/common
 ADD crypto /serai/crypto
 ADD coins /serai/coins
+ADD message-queue /serai/message-queue
 ADD processor /serai/processor
 ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
@@ -32,7 +33,7 @@ RUN --mount=type=cache,target=/root/.cache/ \
   --mount=type=cache,target=/root/.solc-select \
   solc-select use 0.8.16
 
-# Mount cargo and serai cache for Cache & Build
+# Mount cargo and the Serai cache
 RUN --mount=type=cache,target=/root/.local/ \
   --mount=type=cache,target=/root/.solc-select \
   --mount=type=cache,target=/root/.cache/ \
