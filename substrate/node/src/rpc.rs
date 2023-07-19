@@ -9,7 +9,7 @@ use sp_api::ProvideRuntimeApi;
 use serai_runtime::{
   primitives::{SubstrateAmount, PublicKey},
   opaque::Block,
-  Index,
+  Nonce,
 };
 
 pub use sc_rpc_api::DenyUnsafe;
@@ -33,7 +33,7 @@ pub fn create_full<
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, PublicKey, Index>
+  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, PublicKey, Nonce>
     + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, SubstrateAmount>
     + BlockBuilder<Block>,
 {
