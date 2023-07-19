@@ -5,7 +5,7 @@ pub use ciphersuite::{group::GroupEncoding, Shake256_114, Ed448};
 
 use crate::{curve::Curve, algorithm::Hram};
 
-const CONTEXT: &[u8] = b"FROST-ED448-SHAKE256-v11";
+const CONTEXT: &[u8] = b"FROST-ED448-SHAKE256-v1";
 
 impl Curve for Ed448 {
   const CONTEXT: &'static [u8] = CONTEXT;

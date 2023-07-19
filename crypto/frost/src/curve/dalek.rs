@@ -41,7 +41,7 @@ macro_rules! dalek_curve {
 }
 
 #[cfg(feature = "ristretto")]
-dalek_curve!("ristretto", Ristretto, IetfRistrettoHram, b"FROST-RISTRETTO255-SHA512-v11", b"chal");
+dalek_curve!("ristretto", Ristretto, IetfRistrettoHram, b"FROST-RISTRETTO255-SHA512-v1", b"chal");
 
 #[cfg(feature = "ed25519")]
-dalek_curve!("ed25519", Ed25519, IetfEd25519Hram, b"FROST-ED25519-SHA512-v11", b"");
+dalek_curve!("ed25519", Ed25519, IetfEd25519Hram, b"FROST-ED25519-SHA512-v1", b"");

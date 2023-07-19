@@ -37,7 +37,7 @@ macro_rules! kp_curve {
 }
 
 #[cfg(feature = "p256")]
-kp_curve!("p256", P256, IetfP256Hram, b"FROST-P256-SHA256-v11");
+kp_curve!("p256", P256, IetfP256Hram, b"FROST-P256-SHA256-v1");
 
 #[cfg(feature = "secp256k1")]
-kp_curve!("secp256k1", Secp256k1, IetfSecp256k1Hram, b"FROST-secp256k1-SHA256-v11");
+kp_curve!("secp256k1", Secp256k1, IetfSecp256k1Hram, b"FROST-secp256k1-SHA256-v1");

@@ -11,7 +11,10 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use ciphersuite::group::{ff::PrimeField, GroupEncoding};
+use ciphersuite::group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
+};
 use multiexp::BatchVerifier;
 
 use crate::{
@@ -198,8 +201,6 @@ impl<C: Curve> Writable for SignatureShare<C> {
 #[cfg(any(test, feature = "tests"))]
 impl<C: Curve> SignatureShare<C> {
   pub(crate) fn invalidate(&mut self) {
-    use ciphersuite::group::ff::Field;
-
     self.0 += C::F::ONE;
   }
 }
@@ -372,6 +373,12 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
       // Re-format into the FROST-expected rho transcript
       let mut rho_transcript = A::Transcript::new(b"FROST_rho");
+      rho_transcript.append_message(
+        b"group_key",
+        (self.params.keys.group_key() +
+          (C::generator() * self.params.keys.current_offset().unwrap_or(C::F::ZERO)))
+        .to_bytes(),
+      );
       rho_transcript.append_message(b"message", C::hash_msg(msg));
       rho_transcript.append_message(
         b"preprocesses",
@@ -379,20 +386,6 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
           self.params.algorithm.transcript().challenge(b"preprocesses").as_ref(),
         ),
       );
-
-      // Include the offset, if one exists
-      // While this isn't part of the FROST-expected rho transcript, the offset being here
-      // coincides with another specification (despite the transcript format still being distinct)
-      if let Some(offset) = self.params.keys.current_offset() {
-        // Transcript as a point
-        // Under a coordinated model, the coordinater can be the only party to know the discrete
-        // log of the offset. This removes the ability for any signer to provide the discrete log,
-        // proving a key is related to another, slightly increasing security
-        // While further code edits would still be required for such a model (having the offset
-        // communicated as a point along with only a single party applying the offset), this means
-        // it wouldn't require a transcript change as well
-        rho_transcript.append_message(b"offset", (C::generator() * offset).to_bytes());
-      }
 
       // Generate the per-signer binding factors
       B.calculate_binding_factors(&mut rho_transcript);

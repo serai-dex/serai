@@ -44,7 +44,7 @@ pub struct Vectors {
 
 // Vectors are expected to be formatted per the IETF proof of concept
 // The included vectors are direcly from
-// https://github.com/cfrg/draft-irtf-cfrg-frost/tree/draft-irtf-cfrg-frost-11/poc
+// https://github.com/cfrg/draft-irtf-cfrg-frost/tree/draft-irtf-cfrg-frost-14/poc
 #[cfg(test)]
 impl From<serde_json::Value> for Vectors {
   fn from(value: serde_json::Value) -> Vectors {
@@ -54,50 +54,48 @@ impl From<serde_json::Value> for Vectors {
 
       group_secret: to_str(&value["inputs"]["group_secret_key"]),
       group_key: to_str(&value["inputs"]["group_public_key"]),
-      shares: value["inputs"]["participants"]
-        .as_object()
+      shares: value["inputs"]["participant_shares"]
+        .as_array()
         .unwrap()
-        .values()
+        .iter()
         .map(|share| to_str(&share["participant_share"]))
         .collect(),
 
       msg: to_str(&value["inputs"]["message"]),
-      included: to_str(&value["round_one_outputs"]["participant_list"])
-        .split(',')
-        .map(u16::from_str)
-        .collect::<Result<Vec<_>, _>>()
+      included: value["inputs"]["participant_list"]
+        .as_array()
         .unwrap()
         .iter()
-        .map(|i| Participant::new(*i).unwrap())
+        .map(|i| Participant::new(u16::try_from(i.as_u64().unwrap()).unwrap()).unwrap())
         .collect(),
 
-      nonce_randomness: value["round_one_outputs"]["participants"]
-        .as_object()
+      nonce_randomness: value["round_one_outputs"]["outputs"]
+        .as_array()
         .unwrap()
-        .values()
+        .iter()
         .map(|value| {
           [to_str(&value["hiding_nonce_randomness"]), to_str(&value["binding_nonce_randomness"])]
         })
         .collect(),
-      nonces: value["round_one_outputs"]["participants"]
-        .as_object()
+      nonces: value["round_one_outputs"]["outputs"]
+        .as_array()
         .unwrap()
-        .values()
+        .iter()
         .map(|value| [to_str(&value["hiding_nonce"]), to_str(&value["binding_nonce"])])
         .collect(),
-      commitments: value["round_one_outputs"]["participants"]
-        .as_object()
+      commitments: value["round_one_outputs"]["outputs"]
+        .as_array()
         .unwrap()
-        .values()
+        .iter()
         .map(|value| {
           [to_str(&value["hiding_nonce_commitment"]), to_str(&value["binding_nonce_commitment"])]
         })
         .collect(),
 
-      sig_shares: value["round_two_outputs"]["participants"]
-        .as_object()
+      sig_shares: value["round_two_outputs"]["outputs"]
+        .as_array()
         .unwrap()
-        .values()
+        .iter()
         .map(|value| to_str(&value["sig_share"]))
         .collect(),
 
