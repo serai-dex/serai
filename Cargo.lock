@@ -8879,7 +8879,7 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
- "hashbrown 0.13.2",
+ "hashbrown 0.14.0",
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",

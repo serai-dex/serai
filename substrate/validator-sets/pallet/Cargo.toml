@@ -12,7 +12,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-hashbrown = { version = "0.13", default-features = false }
+hashbrown = { version = "0.14", default-features = false }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
