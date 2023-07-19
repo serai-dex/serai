@@ -49,7 +49,7 @@ futures = { version = "0.3", default-features = false, features = ["alloc"], opt
 
 hex-literal = "0.4"
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-serde = { version = "1", default-features = false, features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
 base58-monero = { version = "1", git = "https://github.com/monero-rs/base58-monero", rev = "5045e8d2b817b3b6c1190661f504e879bc769c29", default-features = false, features = ["check"] }
@@ -67,6 +67,9 @@ monero-generators = { path = "generators", version = "0.3", default-features = f
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+
+# TODO: Remove when https://github.com/monero-rs/monero-rs/issues/162 is solved
+serde = { version = "=1.0.167", default-features = false, features = ["derive", "alloc"] }
 monero-rpc = "0.3"
 
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["tests"] }
