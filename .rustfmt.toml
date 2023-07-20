@@ -1,3 +1,4 @@
+edition = "2021"
 tab_spaces = 2
 
 max_width = 100
