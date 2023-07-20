@@ -53,13 +53,15 @@ fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>)
   // TODO: Verify (from, intent) hasn't been prior seen
 
   // Queue it
-  (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {
+  let id = (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {
     from: meta.from,
     // Temporary value which queue_message will override
     id: u64::MAX,
     msg,
     sig: sig.serialize(),
   });
+
+  log::info!("Queued message from {:?}. It is {:?} {id}", meta.from, meta.to);
 }
 
 // next RPC method
@@ -100,11 +102,20 @@ fn ack_message(service: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
   // It's the second if we acknowledge messages before saving them as acknowledged
   // TODO: Check only a proper message is being acked
 
+  log::info!("{:?} is acknowledging {}", service, id);
+
   (*QUEUES).read().unwrap()[&service].write().unwrap().ack_message(id)
 }
 
 #[tokio::main]
 async fn main() {
+  if std::env::var("RUST_LOG").is_err() {
+    std::env::set_var("RUST_LOG", "info");
+  }
+  env_logger::init();
+
+  log::info!("Starting message-queue service...");
+
   // Open the DB
   let db = Arc::new(
     rocksdb::TransactionDB::open_default(
@@ -160,14 +171,13 @@ async fn main() {
         args.1,
         SchnorrSignature::<Ristretto>::read(&mut args.2.as_slice()).unwrap(),
       );
-      Ok(())
+      Ok(true)
     })
     .unwrap();
   module
     .register_method("next", |args, _| {
       let args = args.parse::<(Service, u64)>().unwrap();
-      get_next_message(args.0, args.1);
-      Ok(())
+      Ok(get_next_message(args.0, args.1))
     })
     .unwrap();
   module
@@ -178,7 +188,7 @@ async fn main() {
         args.1,
         SchnorrSignature::<Ristretto>::read(&mut args.2.as_slice()).unwrap(),
       );
-      Ok(())
+      Ok(true)
     })
     .unwrap();
 

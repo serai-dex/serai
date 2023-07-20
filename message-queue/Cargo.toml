@@ -1,9 +1,9 @@
 [package]
 name = "serai-message-queue"
 version = "0.1.0"
-description = "A message queue focused on safety"
+description = "A message queue for Serai focused on consistency"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/message-log"
+repository = "https://github.com/serai-dex/serai/tree/develop/message-queue"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
@@ -14,7 +14,6 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-
 # Macros
 lazy_static = "1"
 serde = { version = "1", features = ["derive"] }
@@ -34,14 +33,20 @@ ciphersuite = { path = "../crypto/ciphersuite", features = ["ristretto"] }
 schnorr-signatures = { path = "../crypto/schnorr" }
 
 # Application
+log = "0.4"
+env_logger = "0.10"
+
 tokio = { version = "1", features = ["full"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"] }
-rocksdb = "0.21"
+serai-db = { path = "../common/db", features = ["rocksdb"], optional = true }
+rocksdb = { version = "0.21", optional = true }
 
 serai-env = { path = "../common/env" }
 
 serai-primitives = { path = "../substrate/primitives" }
 
-jsonrpsee = { version = "0.16", features = ["server"] }
+jsonrpsee = { version = "0.16", features = ["server"], optional = true }
 reqwest = { version = "0.11", features = ["json"] }
+
+[features]
+binaries = ["serai-db", "rocksdb", "jsonrpsee"]

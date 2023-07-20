@@ -57,7 +57,7 @@ impl MessageQueue {
   async fn json_call(&self, method: &'static str, params: serde_json::Value) -> serde_json::Value {
     #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
     struct JsonRpcRequest {
-      version: &'static str,
+      jsonrpc: &'static str,
       method: &'static str,
       params: serde_json::Value,
       id: u64,
@@ -65,21 +65,29 @@ impl MessageQueue {
 
     let res = loop {
       // Make the request
-      if let Ok(req) = self
+      match self
         .client
         .post(&self.url)
-        .json(&JsonRpcRequest { version: "2.0", method, params: params.clone(), id: 0 })
+        .json(&JsonRpcRequest { jsonrpc: "2.0", method, params: params.clone(), id: 0 })
         .send()
         .await
       {
-        // Get the response
-        if let Ok(res) = req.text().await {
-          break res;
+        Ok(req) => {
+          // Get the response
+          match req.text().await {
+            Ok(res) => break res,
+            Err(e) => {
+              dbg!(e);
+            }
+          }
+        }
+        Err(e) => {
+          dbg!(e);
         }
       }
 
-      // Sleep 5s before trying again
-      tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+      // Sleep for a second before trying again
+      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
     };
 
     let json =
@@ -161,7 +169,7 @@ impl MessageQueue {
     )
     .serialize();
 
-    let json = self.json_call("ack", serde_json::json!([id, sig])).await;
+    let json = self.json_call("ack", serde_json::json!([self.service, id, sig])).await;
     if json.get("result") != Some(&serde_json::Value::Bool(true)) {
       panic!("failed to ack message {id}: {json}");
     }

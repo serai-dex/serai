@@ -33,7 +33,7 @@ impl<D: Db> Queue<D> {
   fn message_key(&self, id: u64) -> Vec<u8> {
     Self::key(b"message", serde_json::to_vec(&(self.1, id)).unwrap())
   }
-  pub(crate) fn queue_message(&mut self, mut msg: QueuedMessage) {
+  pub(crate) fn queue_message(&mut self, mut msg: QueuedMessage) -> u64 {
     let id = self.message_count();
     msg.id = id;
     let msg_key = self.message_key(id);
@@ -43,6 +43,8 @@ impl<D: Db> Queue<D> {
     txn.put(msg_key, serde_json::to_vec(&msg).unwrap());
     txn.put(msg_count_key, (id + 1).to_le_bytes());
     txn.commit();
+
+    id
   }
 
   pub(crate) fn get_message(&self, id: u64) -> Option<QueuedMessage> {

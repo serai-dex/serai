@@ -51,6 +51,7 @@ members = [
   "substrate/client",
 
   "tests/no-std",
+  "tests/message-queue",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due

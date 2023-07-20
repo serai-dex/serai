@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.local/ \
   --mount=type=cache,target=/serai/target/release/incremental \
   --mount=type=cache,target=/serai/target/release/wbuild \
   --mount=type=cache,target=/serai/target/release/lib* \
-  cd processor && cargo build --release
+  cd processor && cargo build --release --all-features
 
 # Prepare Image
 FROM ubuntu:latest as image
