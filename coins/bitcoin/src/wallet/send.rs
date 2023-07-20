@@ -245,7 +245,7 @@ impl SignableTransaction {
 /// A FROST signing machine to produce a Bitcoin transaction.
 ///
 /// This does not support caching its preprocess. When sign is called, the message must be empty.
-/// This will panic if it isn't.
+/// This will panic if either `cache` is called or the message isn't empty.
 pub struct TransactionMachine {
   tx: SignableTransaction,
   sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,

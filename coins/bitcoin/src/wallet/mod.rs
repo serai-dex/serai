@@ -24,12 +24,17 @@ mod send;
 pub use send::*;
 
 /// Tweak keys to ensure they're usable with Bitcoin.
+///
+/// Taproot keys, which these keys are used as, must be even. This offsets the keys until they're
+/// even.
 pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
   let (_, offset) = make_even(keys.group_key());
   keys.offset(Scalar::from(offset))
 }
 
 /// Return the Taproot address for a public key.
+///
+/// If the key is odd, this will return None.
 pub fn address(network: Network, key: ProjectivePoint) -> Option<Address> {
   if key.to_encoded_point(true).tag() != Tag::CompressedEvenY {
     return None;

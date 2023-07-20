@@ -37,8 +37,9 @@ pub fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
   XOnlyPublicKey::from_slice(&x(key)).expect("x_only was passed a point which was infinity or odd")
 }
 
-/// Make a point even by adding the generator until it is even. Returns the even point and the
-/// amount of additions required.
+/// Make a point even by adding the generator until it is even.
+///
+/// Returns the even point and the amount of additions required.
 pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
   let mut c = 0;
   while key.to_encoded_point(true).tag() == Tag::CompressedOddY {
@@ -51,6 +52,8 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
 /// A BIP-340 compatible HRAm for use with the modular-frost Schnorr Algorithm.
 ///
 /// If passed an odd nonce, it will have the generator added until it is even.
+///
+/// If the key is odd, this will panic.
 #[derive(Clone, Copy, Debug)]
 pub struct Hram;
 
