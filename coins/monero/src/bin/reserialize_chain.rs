@@ -22,7 +22,10 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
   let hash = loop {
     match rpc.get_block_hash(block_i).await {
       Ok(hash) => break hash,
-      Err(RpcError::ConnectionError) => continue,
+      Err(RpcError::ConnectionError) => {
+        println!("get_block_hash ConnectionError");
+        continue;
+      }
       Err(e) => panic!("couldn't get block {block_i}'s hash: {e:?}"),
     }
   };
@@ -35,7 +38,10 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
   let res: BlockResponse = loop {
     match rpc.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await {
       Ok(res) => break res,
-      Err(RpcError::ConnectionError) => continue,
+      Err(RpcError::ConnectionError) => {
+        println!("get_block ConnectionError");
+        continue;
+      }
       Err(e) => panic!("couldn't get block {block_i} via block.hash(): {e:?}"),
     }
   };
@@ -75,7 +81,10 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
           .await
         {
           Ok(txs) => break txs,
-          Err(RpcError::ConnectionError) => continue,
+          Err(RpcError::ConnectionError) => {
+            println!("get_transactions ConnectionError");
+            continue;
+          }
           Err(e) => panic!("couldn't call get_transactions: {e:?}"),
         }
       };
@@ -166,7 +175,10 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
                   .await
                 {
                   Ok(outs) => break outs,
-                  Err(RpcError::ConnectionError) => continue,
+                  Err(RpcError::ConnectionError) => {
+                    println!("get_outs ConnectionError");
+                    continue;
+                  }
                   Err(e) => panic!("couldn't connect to RPC to get outs: {e:?}"),
                 }
               };
