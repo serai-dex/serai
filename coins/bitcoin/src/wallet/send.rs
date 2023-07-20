@@ -29,8 +29,11 @@ use crate::{
 const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
 
 #[rustfmt::skip]
-//https://github.com/bitcoin/bitcoin/blob/a245429d680eb95cf4c0c78e58e63e3f0f5d979a/src/test/transaction_tests.cpp#L815-L816
-const DUST: u64 = 674;
+// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.cpp#L26-L63
+// As the above notes, a lower amount may not be considered dust if contained in a SegWit output
+// This doesn't bother with delineation due to how marginal these values are, and because it isn't
+// worth the complexity to implement differentation
+const DUST: u64 = 546;
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
