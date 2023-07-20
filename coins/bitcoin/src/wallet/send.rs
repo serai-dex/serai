@@ -35,6 +35,17 @@ const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
 // worth the complexity to implement differentation
 const DUST: u64 = 546;
 
+#[rustfmt::skip]
+// The constant is from:
+// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L56-L57
+// It's used here:
+// https://github.com/bitcoin/bitcoin/blob/296735f7638749906243c9e203df7bd024493806/src/net_processing.cpp#L5386-L5390
+// Peers won't relay TXs below the filter's fee rate, yet they calculate the fee not against weight yet vsize
+// https://github.com/bitcoin/bitcoin/blob/296735f7638749906243c9e203df7bd024493806/src/net_processing.cpp#L5721-L5732
+// And then the fee itself is fee per thousand units, not fee per unit
+// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/feerate.cpp#L23-L37
+const MIN_FEE_PER_KILO_VSIZE: u64 = 1000;
+
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
   #[error("no inputs were specified")]
@@ -45,6 +56,8 @@ pub enum TransactionError {
   DustPayment,
   #[error("too much data was specified")]
   TooMuchData,
+  #[error("fee was too low to pass the default minimum fee rate")]
+  TooLowFee,
   #[error("not enough funds for these payments")]
   NotEnoughFunds,
   #[error("transaction was too large")]
@@ -166,6 +179,26 @@ impl SignableTransaction {
 
     let mut weight = Self::calculate_weight(tx_ins.len(), payments, None);
     let mut needed_fee = fee_per_weight * weight;
+
+    // "Virtual transaction size" is weight ceildiv 4 per
+    // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+
+    // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/
+    //  src/policy/policy.cpp#L295-L298
+    // implements this as expected
+
+    // Technically, it takes whatever's greater, the weight or the amount of signature operatons
+    // multiplied by DEFAULT_BYTES_PER_SIGOP (20)
+    // We only use 1 signature per input, and our inputs have a weight exceeding 20
+    // Accordingly, our inputs' weight will always be greater than the cost of the signature ops
+    let vsize = (weight + 3) / 4;
+    // Technically, if there isn't change, this TX may still pay enough of a fee to pass the
+    // minimum fee. Such edge cases aren't worth programming when they go against intent, as the
+    // specified fee rate is too low to be valid
+    if needed_fee < ((MIN_FEE_PER_KILO_VSIZE * vsize) / 1000) {
+      Err(TransactionError::TooLowFee)?;
+    }
+
     if input_sat < (payment_sat + needed_fee) {
       Err(TransactionError::NotEnoughFunds)?;
     }
