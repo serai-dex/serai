@@ -16,12 +16,12 @@ use bitcoin::{
   sighash::{TapSighashType, SighashCache, Prevouts},
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},
-  OutPoint, Sequence, Witness, TxIn, TxOut, Transaction, Network, Address,
+  OutPoint, Sequence, Witness, TxIn, TxOut, Transaction, Address,
 };
 
 use crate::{
   crypto::Schnorr,
-  wallet::{address, ReceivedOutput},
+  wallet::{ReceivedOutput, address_payload},
 };
 
 #[rustfmt::skip]
@@ -226,9 +226,7 @@ impl SignableTransaction {
       transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
 
       let offset = keys.clone().offset(self.offsets[i]);
-      if address(Network::Bitcoin, offset.group_key())?.script_pubkey() !=
-        self.prevouts[i].script_pubkey
-      {
+      if address_payload(offset.group_key())?.script_pubkey() != self.prevouts[i].script_pubkey {
         None?;
       }
 

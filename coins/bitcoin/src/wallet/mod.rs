@@ -15,7 +15,8 @@ use frost::{
 use bitcoin::{
   consensus::encode::{Decodable, serialize},
   key::TweakedPublicKey,
-  OutPoint, ScriptBuf, TxOut, Transaction, Block, Network, Address,
+  address::Payload,
+  OutPoint, ScriptBuf, TxOut, Transaction, Block,
 };
 
 use crate::crypto::{x_only, make_even};
@@ -32,15 +33,15 @@ pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
   keys.offset(Scalar::from(offset))
 }
 
-/// Return the Taproot address for a public key.
+/// Return the Taproot address payload for a public key.
 ///
 /// If the key is odd, this will return None.
-pub fn address(network: Network, key: ProjectivePoint) -> Option<Address> {
+pub fn address_payload(key: ProjectivePoint) -> Option<Payload> {
   if key.to_encoded_point(true).tag() != Tag::CompressedEvenY {
     return None;
   }
 
-  Some(Address::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)), network))
+  Some(Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(x_only(&key))))
 }
 
 /// A spendable output.
@@ -109,8 +110,7 @@ impl Scanner {
   /// Returns None if this key can't be scanned for.
   pub fn new(key: ProjectivePoint) -> Option<Scanner> {
     let mut scripts = HashMap::new();
-    // Uses Network::Bitcoin since network is irrelevant here
-    scripts.insert(address(Network::Bitcoin, key)?.script_pubkey(), Scalar::ZERO);
+    scripts.insert(address_payload(key)?.script_pubkey(), Scalar::ZERO);
     Some(Scanner { key, scripts })
   }
 
@@ -127,7 +127,7 @@ impl Scanner {
     // chance of being even
     // That means this should terminate within a very small amount of iterations
     loop {
-      match address(Network::Bitcoin, self.key + (ProjectivePoint::GENERATOR * offset)) {
+      match address_payload(self.key + (ProjectivePoint::GENERATOR * offset)) {
         Some(address) => {
           let script = address.script_pubkey();
           if self.scripts.contains_key(&script) {

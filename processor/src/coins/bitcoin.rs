@@ -17,10 +17,11 @@ use bitcoin_serai::{
     hashes::Hash as HashTrait,
     consensus::{Encodable, Decodable},
     script::Instruction,
+    address::{NetworkChecked, Address as BAddress},
     OutPoint, Transaction, Block, Network,
   },
   wallet::{
-    tweak_keys, address, ReceivedOutput, Scanner, TransactionError,
+    tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError,
     SignableTransaction as BSignableTransaction, TransactionMachine,
   },
   rpc::{RpcError, Rpc},
@@ -33,7 +34,7 @@ use bitcoin_serai::bitcoin::{
   sighash::{EcdsaSighashType, SighashCache},
   script::{PushBytesBuf, Builder},
   absolute::LockTime,
-  Sequence, Script, Witness, TxIn, TxOut, Address as BAddress,
+  Sequence, Script, Witness, TxIn, TxOut,
 };
 
 use serai_client::{
@@ -326,7 +327,7 @@ impl Coin for Bitcoin {
   }
 
   fn address(key: ProjectivePoint) -> Address {
-    Address(address(Network::Bitcoin, key).unwrap())
+    Address(BAddress::<NetworkChecked>::new(Network::Bitcoin, address_payload(key).unwrap()))
   }
 
   fn branch_address(key: ProjectivePoint) -> Self::Address {
