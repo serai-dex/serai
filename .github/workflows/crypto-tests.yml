@@ -7,7 +7,12 @@ on:
     paths:
       - "common/**"
       - "crypto/**"
+
   pull_request:
+    paths:
+      - "common/**"
+      - "crypto/**"
+
   workflow_dispatch:
 
 jobs:

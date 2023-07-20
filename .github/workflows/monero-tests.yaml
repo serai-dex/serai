@@ -13,6 +13,8 @@ on:
       - "coins/monero/**"
       - "processor/**"
 
+  workflow_dispatch:
+
 jobs:
   # Only run these once since they will be consistent regardless of any node
   unit-tests:

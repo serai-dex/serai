@@ -7,7 +7,12 @@ on:
     paths:
       - "message-queue/**"
       - "tests/message-queue/**"
+
   pull_request:
+    paths:
+      - "message-queue/**"
+      - "tests/message-queue/**"
+
   workflow_dispatch:
 
 jobs:

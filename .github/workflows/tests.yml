@@ -12,7 +12,17 @@ on:
       - "processor/**"
       - "coordinator/**"
       - "substrate/**"
+
   pull_request:
+    paths:
+      - "common/**"
+      - "crypto/**"
+      - "coins/**"
+      - "message-queue/**"
+      - "processor/**"
+      - "coordinator/**"
+      - "substrate/**"
+
   workflow_dispatch:
 
 jobs:

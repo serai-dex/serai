@@ -9,7 +9,14 @@ on:
       - "crypto/**"
       - "coins/**"
       - "tests/no-std/**"
+
   pull_request:
+    paths:
+      - "common/**"
+      - "crypto/**"
+      - "coins/**"
+      - "tests/no-std/**"
+
   workflow_dispatch:
 
 jobs:

@@ -6,7 +6,11 @@ on:
       - develop
     paths:
       - "common/**"
+
   pull_request:
+    paths:
+      - "common/**"
+
   workflow_dispatch:
 
 jobs:
