@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.local/ \
   --mount=type=cache,target=/serai/target/release/incremental \
   --mount=type=cache,target=/serai/target/release/wbuild \
   --mount=type=cache,target=/serai/target/release/lib* \
-  cd substrate/node && cargo build --release
+  cd processor && cargo build --release
 
 # Prepare Image
 FROM ubuntu:latest as image
@@ -57,6 +57,5 @@ WORKDIR /home/serai
 COPY --from=builder /serai/target/release/ /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
-# Run node
-EXPOSE 30333 9615 9933 9944
-CMD ["serai-node"]
+# Run processor
+CMD ["processor"]

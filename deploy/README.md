@@ -18,6 +18,9 @@ All commands are assumed to be ran from `/deploy`, not the root folder.
 * `ethereum` - Ethereum node
 * `coins`    - Nodes for all external networks (BTC, ETH, XMR)
 
+* `message-queue` - The message queue service.
+* `processor`     - Serai processor for one external network.
+
 * `serai`      - Serai node
 * `cluster-sm` - "Alice", "Bob", and "Charlie" Serai nodes, all validators
 * `cluster-lg` - `cluster-sm` with non-validators "Dave", "Eve", and "Ferdie"

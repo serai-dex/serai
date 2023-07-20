@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.local/ \
   --mount=type=cache,target=/serai/target/release/incremental \
   --mount=type=cache,target=/serai/target/release/wbuild \
   --mount=type=cache,target=/serai/target/release/lib* \
-  cd substrate/node && cargo build --release
+  cd message-queue && cargo build --release
 
 # Prepare Image
 FROM ubuntu:latest as image
@@ -54,9 +54,9 @@ LABEL description="STAGE 2: Copy and Run"
 WORKDIR /home/serai
 
 # Copy necessary files to run node
-COPY --from=builder /serai/target/release/ /bin/
+COPY --from=builder /serai/target/release/serai-message-queue /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
-# Run node
-EXPOSE 30333 9615 9933 9944
-CMD ["serai-node"]
+# Run message-queue
+EXPOSE 2287
+CMD ["serai-message-queue"]

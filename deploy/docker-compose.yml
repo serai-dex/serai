@@ -2,7 +2,7 @@ version: "3.9"
 name: serai-dev
 
 volumes:
-  serai-base:
+  serai-node:
   serai-alice:
   serai-bob:
   serai-charlie:
@@ -49,6 +49,32 @@ services:
     entrypoint: /scripts/entry-dev.sh
     ports:
       - "18081:18081"
+
+  # Infrastructure
+
+  message-queue:
+    profiles:
+      - message-queue
+    build:
+      context: ../
+      dockerfile: ./deploy/message-queue/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - "./message-queue/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+    ports:
+      - "2287:2287"
+
+  processor:
+    profiles:
+      - processor
+    build:
+      context: ../
+      dockerfile: ./deploy/processor/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - "./processor/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
 
   # Serai services
 
