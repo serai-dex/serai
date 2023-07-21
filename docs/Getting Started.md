@@ -66,9 +66,10 @@ cargo build --release --all-features
 
 Running tests requires:
 
-- A Bitcoin regtest node
-- A Monero regtest node
-- A monero-wallet-rpc instance
+- A properly configured Bitcoin regtest node (available via Docker)
+- A properly configured Monero regtest node (available via Docker)
+- A properly configured monero-wallet-rpc instance
+- A debug Serai node (`cd substrate/node && cargo build`)
 
 ```
 cargo test --all-features
