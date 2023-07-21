@@ -62,13 +62,23 @@ cd serai
 cargo build --release --all-features
 ```
 
-### Run Tests
+### Testing
 
-Running tests requires:
+#### Prerequisites
 
-- A Bitcoin regtest node
-- A Monero regtest node
-- A monero-wallet-rpc instance
+- Bitcoin and Monero regtest node (local or docker)
+```
+docker compose --profile coins up
+```
+- monero-wallet-rpc instance (docker container is currently unavailable)
+- Substrate debug node
+```
+cd substrate/node && cargo build
+```
+
+#### Run tests
+
+Currently tests in coins/monero/tests/wallet2_compatibility.rs aren't functional locally. You will need to skip or comment out those tests.
 
 ```
 cargo test --all-features
