@@ -10,12 +10,12 @@ WORKDIR /home/bitcoin
 RUN apk update && \
   apk --no-cache add ca-certificates bash su-exec git gnupg
 
-# Get Binary
+# Download Bitcoin
 RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz \
   && wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS \
   && wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS.asc
 
-# Verify all sigs and check for valid signature from laanwj -- 71A3
+# Verify all sigs and check for a valid signature from laanwj -- 71A3
 RUN git clone https://github.com/bitcoin-core/guix.sigs && \
   cd guix.sigs/builder-keys && \
   find . -iname '*.gpg' -exec gpg --import {} \; && \
@@ -26,12 +26,13 @@ RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256s
 # Prepare Image
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
 
-FROM ubuntu:latest as image
+FROM debian:bullseye-slim as image
+
+RUN apt-get update && apt-get upgrade -y
+
 WORKDIR /home/bitcoin
 COPY --from=builder /home/bitcoin/* .
-
 RUN mv bin/* /bin && mv lib/* /lib
-
 COPY ./scripts /scripts
 
 EXPOSE 8332 8333 18332 18333 18443 18444

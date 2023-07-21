@@ -14,7 +14,7 @@ WORKDIR /home/monero
 RUN apk update \
   && apk --no-cache add ca-certificates gnupg bash su-exec
 
-# Get Binary
+# Download Monero
 RUN wget https://downloads.getmonero.org/cli/monero-linux-x64-v${MONERO_VERSION}.tar.bz2
 
 # Verify Binary -- fingerprint from https://github.com/monero-project/monero-site/issues/1949
@@ -27,7 +27,9 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-si
 RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
 
 # Prepare Image
-FROM ubuntu:latest as image
+FROM debian:bullseye-slim as image
+
+RUN apt-get update && apt-get upgrade -y
 
 WORKDIR /home/monero
 COPY --from=builder /home/monero/* .
