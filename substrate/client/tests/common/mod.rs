@@ -29,7 +29,16 @@ macro_rules! serai_test {
         let guard = common::SEQUENTIAL.lock().await;
 
         let is_running = || {
-          !Command::new("pidof").arg("serai-node").output().unwrap().stdout.is_empty()
+          !(
+            if let Ok(res) = Command::new("pidof").arg("serai-node").output() {
+              res
+            } else {
+              Command::new("pgrep")
+                .arg("serai-node")
+                .output()
+                .expect("neither pidof nor pgrep were available")
+            }
+          ).stdout.is_empty()
         };
 
         // Spawn a fresh Serai node
