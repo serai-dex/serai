@@ -28,8 +28,6 @@ RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
 
 FROM debian:bullseye-slim as image
 
-RUN apt-get update && apt-get upgrade -y
-
 WORKDIR /home/bitcoin
 COPY --from=builder /home/bitcoin/* .
 RUN mv bin/* /bin && mv lib/* /lib

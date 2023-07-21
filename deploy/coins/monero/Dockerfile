@@ -29,8 +29,6 @@ RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
 # Prepare Image
 FROM debian:bullseye-slim as image
 
-RUN apt-get update && apt-get upgrade -y
-
 WORKDIR /home/monero
 COPY --from=builder /home/monero/* .
 RUN mv * /bin/
