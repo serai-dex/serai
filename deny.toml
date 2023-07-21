@@ -66,7 +66,9 @@ exceptions = [
 
   { allow = ["AGPL-3.0"], name = "serai-client" },
 
+  { allow = ["AGPL-3.0"], name = "serai-docker-tests" },
   { allow = ["AGPL-3.0"], name = "serai-message-queue-tests" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-tests" },
 ]
 
 [[licenses.clarify]]

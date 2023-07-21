@@ -1,0 +1,14 @@
+[package]
+name = "serai-docker-tests"
+version = "0.1.0"
+description = "Docker-based testing infrastructure for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/tests/docker"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

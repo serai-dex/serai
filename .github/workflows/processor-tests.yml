@@ -1,19 +1,19 @@
-name: Message Queue Tests
+name: Processor Tests
 
 on:
   push:
     branches:
       - develop
     paths:
-      - "message-queue/**"
+      - "processor/**"
       - "tests/docker/**"
-      - "tests/message-queue/**"
+      - "tests/processor/**"
 
   pull_request:
     paths:
-      - "message-queue/**"
+      - "processor/**"
       - "tests/docker/**"
-      - "tests/message-queue/**"
+      - "tests/processor/**"
 
   workflow_dispatch:
 
@@ -28,5 +28,5 @@ jobs:
         with:
           github-token: ${{ inputs.github-token }}
 
-      - name: Run message-queue Docker tests
-        run: cd tests/message-queue && cargo test
+      - name: Run processor Docker tests
+        run: cd tests/processor && cargo test

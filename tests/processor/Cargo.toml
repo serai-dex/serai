@@ -1,9 +1,9 @@
 [package]
-name = "serai-message-queue-tests"
+name = "serai-processor-tests"
 version = "0.1.0"
-description = "Tests for Serai's Message Queue"
+description = "Tests for Serai's Processor"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/tests/message-queue"
+repository = "https://github.com/serai-dex/serai/tree/develop/tests/processor"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
@@ -19,10 +19,18 @@ hex = "0.4"
 rand_core = "0.6"
 
 ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
+dkg = { path = "../../crypto/dkg" }
+
+messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
 serai-primitives = { path = "../../substrate/primitives" }
+serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives" }
 serai-message-queue = { path = "../../message-queue" }
 
+serde_json = "1"
+
 tokio = { version = "1", features = ["full"] }
+
 dockertest = "0.3"
 serai-docker-tests = { path = "../docker" }
+serai-message-queue-tests = { path = "../message-queue" }

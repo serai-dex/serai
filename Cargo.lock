@@ -8737,6 +8737,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-docker-tests"
+version = "0.1.0"
+
+[[package]]
 name = "serai-env"
 version = "0.1.0"
 
@@ -8805,6 +8809,7 @@ dependencies = [
  "dockertest",
  "hex",
  "rand_core 0.6.4",
+ "serai-docker-tests",
  "serai-message-queue",
  "serai-primitives",
  "tokio",
@@ -8929,6 +8934,25 @@ dependencies = [
  "serai-validator-sets-primitives",
  "serde",
  "zeroize",
+]
+
+[[package]]
+name = "serai-processor-tests"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "dkg",
+ "dockertest",
+ "hex",
+ "rand_core 0.6.4",
+ "serai-docker-tests",
+ "serai-message-queue",
+ "serai-message-queue-tests",
+ "serai-primitives",
+ "serai-processor-messages",
+ "serai-validator-sets-primitives",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
