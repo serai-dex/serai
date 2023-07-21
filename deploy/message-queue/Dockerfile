@@ -1,4 +1,4 @@
-FROM docker.io/paritytech/ci-linux:production as builder
+FROM rust:1.71-slim as builder
 LABEL description="STAGE 1: Build"
 
 # Add files for build
@@ -16,45 +16,28 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
-# Update Rust
-RUN rustup update
+# Add necessary packages
+RUN apt update && apt upgrade -y && apt install -y pkg-config clang libssl-dev
 
-# Install Solc @ 0.8.16
-RUN --mount=type=cache,target=/root/.cache/ \
-  --mount=type=cache,target=/root/.local/ \
-  --mount=type=cache,target=/root/.solc-select \
-  pip3 install solc-select==0.2.1
-RUN --mount=type=cache,target=/root/.cache/ \
-  --mount=type=cache,target=/root/.local/ \
-  --mount=type=cache,target=/root/.solc-select \
-  solc-select install 0.8.16
-RUN --mount=type=cache,target=/root/.cache/ \
-  --mount=type=cache,target=/root/.local/ \
-  --mount=type=cache,target=/root/.solc-select \
-  solc-select use 0.8.16
-
-# Mount cargo and the Serai cache
-RUN --mount=type=cache,target=/root/.local/ \
-  --mount=type=cache,target=/root/.solc-select \
-  --mount=type=cache,target=/root/.cache/ \
-  --mount=type=cache,target=/usr/local/cargo/git \
-  --mount=type=cache,target=/usr/local/cargo/registry \
-  --mount=type=cache,target=/serai/target/release/build \
-  --mount=type=cache,target=/serai/target/release/deps \
-  --mount=type=cache,target=/serai/target/release/.fingerprint \
-  --mount=type=cache,target=/serai/target/release/incremental \
-  --mount=type=cache,target=/serai/target/release/wbuild \
-  --mount=type=cache,target=/serai/target/release/lib* \
-  cd message-queue && cargo build --release --all-features
+# Mount the caches and build
+RUN --mount=type=cache,target=/root/.cargo/ \
+  --mount=type=cache,target=/serai/target \
+  cd message-queue && \
+  cargo build --release --all-features && \
+  mkdir /serai/bin && \
+  mv /serai/target/release/serai-message-queue /serai/bin
 
 # Prepare Image
-FROM ubuntu:latest as image
+FROM debian:bullseye-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
 WORKDIR /home/serai
 
-# Copy necessary files to run node
-COPY --from=builder /serai/target/release/serai-message-queue /bin/
+# Update for security purposes
+RUN apt update && apt upgrade -y
+
+# Copy the Message Queue binary and relevant license
+COPY --from=builder /serai/bin/* /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
 # Run message-queue
