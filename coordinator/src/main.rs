@@ -679,7 +679,7 @@ async fn main() {
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
   let p2p = LocalP2p::new(1).swap_remove(0); // TODO
 
-  let processors = Arc::new(MessageQueue::new(Service::Coordinator));
+  let processors = Arc::new(MessageQueue::from_env(Service::Coordinator));
 
   let serai = || async {
     loop {

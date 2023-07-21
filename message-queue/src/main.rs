@@ -110,7 +110,7 @@ fn ack_message(service: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
 #[tokio::main]
 async fn main() {
   if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", "info");
+    std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
   }
   env_logger::init();
 

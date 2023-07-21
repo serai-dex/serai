@@ -26,8 +26,17 @@ pub struct MessageQueue {
 }
 
 impl MessageQueue {
-  pub fn new(service: Service) -> MessageQueue {
-    let url = env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
+  pub fn from_env(service: Service) -> MessageQueue {
+    // Allow MESSAGE_QUEUE_RPC to either be a full URL or just a hostname
+    // While we could stitch together multiple env variables, our control over this service makes
+    // this fine
+    let mut url = env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
+    if !url.contains(':') {
+      url += ":2287";
+    }
+    if !url.starts_with("http://") {
+      url = "http://".to_string() + &url;
+    }
 
     let priv_key: Zeroizing<<Ristretto as Ciphersuite>::F> = {
       let key_str =

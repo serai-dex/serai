@@ -717,6 +717,11 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
 
 #[tokio::main]
 async fn main() {
+  if std::env::var("RUST_LOG").is_err() {
+    std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
+  }
+  env_logger::init();
+
   let db = Arc::new(
     rocksdb::TransactionDB::<rocksdb::SingleThreaded>::open_default(
       env::var("DB_PATH").expect("path to DB wasn't specified"),
@@ -725,14 +730,19 @@ async fn main() {
   );
 
   // Network configuration
-  let url = env::var("NETWORK_RPC").expect("network RPC wasn't specified");
+  let url = {
+    let login = env::var("NETWORK_RPC_LOGIN").expect("network RPC login wasn't specified");
+    let hostname = env::var("NETWORK_RPC_HOSTNAME").expect("network RPC hostname wasn't specified");
+    let port = env::var("NETWORK_RPC_PORT").expect("network port domain wasn't specified");
+    "http://".to_string() + &login + "@" + &hostname + ":" + &port
+  };
   let network_id = match env::var("NETWORK").expect("network wasn't specified").as_str() {
     "bitcoin" => NetworkId::Bitcoin,
     "monero" => NetworkId::Monero,
     _ => panic!("unrecognized network"),
   };
 
-  let coordinator = MessageQueue::new(Service::Processor(network_id));
+  let coordinator = MessageQueue::from_env(Service::Processor(network_id));
 
   match network_id {
     #[cfg(feature = "bitcoin")]
