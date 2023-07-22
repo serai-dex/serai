@@ -12,3 +12,6 @@ publish = false
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+chrono = "0.4"
