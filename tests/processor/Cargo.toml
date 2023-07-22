@@ -16,10 +16,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex = "0.4"
 
+zeroize = "1"
 rand_core = "0.6"
 
 ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
-dkg = { path = "../../crypto/dkg" }
+dkg = { path = "../../crypto/dkg", features = ["tests"] }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 

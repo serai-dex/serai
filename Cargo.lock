@@ -8739,6 +8739,9 @@ dependencies = [
 [[package]]
 name = "serai-docker-tests"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+]
 
 [[package]]
 name = "serai-env"
@@ -8813,6 +8816,7 @@ dependencies = [
  "serai-message-queue",
  "serai-primitives",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -8953,6 +8957,7 @@ dependencies = [
  "serai-validator-sets-primitives",
  "serde_json",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

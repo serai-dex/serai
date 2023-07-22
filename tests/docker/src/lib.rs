@@ -92,6 +92,8 @@ pub fn build(name: String) {
             }
           }
         } else {
+          // Recursively crawl since we care when the folder's contents were edited, not the folder
+          // itself
           for entry in fs::read_dir(path.clone()).expect("couldn't read directory") {
             metadatas
               .push(meta(path.join(entry.expect("couldn't access item in directory").file_name())));

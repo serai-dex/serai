@@ -57,9 +57,7 @@ pub fn instance(
 
 #[test]
 fn basic_functionality() {
-  use std::env;
-
-  use ciphersuite::group::ff::PrimeField;
+  use zeroize::Zeroizing;
 
   use dockertest::DockerTest;
 
@@ -74,12 +72,11 @@ fn basic_functionality() {
     tokio::time::sleep(core::time::Duration::from_secs(1)).await;
 
     let rpc = ops.handle("serai-dev-message-queue").host_port(2287).unwrap();
-    // TODO: Add new to MessageQueue to avoid needing to use set_var
-    env::set_var("MESSAGE_QUEUE_RPC", rpc.0.to_string() + ":" + &rpc.1.to_string());
-    env::set_var("MESSAGE_QUEUE_KEY", hex::encode(coord_key.to_repr()));
+    let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
 
     // Queue some messages
-    let coordinator = MessageQueue::from_env(Service::Coordinator);
+    let coordinator =
+      MessageQueue::new(Service::Coordinator, rpc.clone(), Zeroizing::new(coord_key));
     coordinator
       .queue(
         Metadata {
@@ -103,8 +100,11 @@ fn basic_functionality() {
       .await;
 
     // Successfully get it
-    env::set_var("MESSAGE_QUEUE_KEY", hex::encode(priv_keys[&NetworkId::Bitcoin].to_repr()));
-    let bitcoin = MessageQueue::from_env(Service::Processor(NetworkId::Bitcoin));
+    let bitcoin = MessageQueue::new(
+      Service::Processor(NetworkId::Bitcoin),
+      rpc,
+      Zeroizing::new(priv_keys[&NetworkId::Bitcoin]),
+    );
     let msg = bitcoin.next(0).await;
     assert_eq!(msg.from, Service::Coordinator);
     assert_eq!(msg.id, 0);

@@ -16,6 +16,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex = "0.4"
 
+zeroize = "1"
 rand_core = "0.6"
 
 ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
