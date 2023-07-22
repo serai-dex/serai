@@ -26,17 +26,32 @@ pub struct MessageQueue {
 }
 
 impl MessageQueue {
-  pub fn from_env(service: Service) -> MessageQueue {
+  pub fn new(
+    service: Service,
+    mut url: String,
+    priv_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  ) -> MessageQueue {
     // Allow MESSAGE_QUEUE_RPC to either be a full URL or just a hostname
-    // While we could stitch together multiple env variables, our control over this service makes
-    // this fine
-    let mut url = env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
+    // While we could stitch together multiple variables, our control over this service makes this
+    // fine
     if !url.contains(':') {
       url += ":2287";
     }
     if !url.starts_with("http://") {
       url = "http://".to_string() + &url;
     }
+
+    MessageQueue {
+      service,
+      pub_key: Ristretto::generator() * priv_key.deref(),
+      priv_key,
+      client: Client::new(),
+      url,
+    }
+  }
+
+  pub fn from_env(service: Service) -> MessageQueue {
+    let url = env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
 
     let priv_key: Zeroizing<<Ristretto as Ciphersuite>::F> = {
       let key_str =
@@ -54,13 +69,7 @@ impl MessageQueue {
       key
     };
 
-    MessageQueue {
-      service,
-      pub_key: Ristretto::generator() * priv_key.deref(),
-      priv_key,
-      client: Client::new(),
-      url,
-    }
+    Self::new(service, url, priv_key)
   }
 
   async fn json_call(&self, method: &'static str, params: serde_json::Value) -> serde_json::Value {
