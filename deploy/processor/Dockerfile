@@ -17,7 +17,9 @@ ADD AGPL-3.0 /serai
 WORKDIR /serai
 
 # Mount the caches and build
-RUN --mount=type=cache,target=/root/.cargo/ \
+RUN --mount=type=cache,target=/root/.cargo \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   cd processor && \
   cargo build --release --all-features && \

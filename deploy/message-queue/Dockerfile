@@ -19,7 +19,9 @@ WORKDIR /serai
 RUN apt update && apt install -y clang
 
 # Mount the caches and build
-RUN --mount=type=cache,target=/root/.cargo/ \
+RUN --mount=type=cache,target=/root/.cargo \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   cd message-queue && \
   cargo build --release --all-features && \
