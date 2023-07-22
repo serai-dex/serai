@@ -39,74 +39,78 @@ pub fn build(name: String) {
     .arg(format!("serai-dev-{name}"))
     .output()
   {
-    let created_time = SystemTime::from(
-      chrono::DateTime::parse_and_remainder(
-        String::from_utf8(res.stdout).expect("docker had non-utf8 output").trim(),
-        "%F %T.%f %z",
-      )
-      .expect("docker formatted last tag time unexpectedly")
-      .0,
-    );
+    let last_tag_time_buf = String::from_utf8(res.stdout).expect("docker had non-utf8 output");
+    let last_tag_time = last_tag_time_buf.trim();
+    if !last_tag_time.is_empty() {
+      let created_time = SystemTime::from(
+        chrono::DateTime::parse_and_remainder(last_tag_time, "%F %T.%f %z")
+          .unwrap_or_else(|_| {
+            panic!("docker formatted last tag time unexpectedly: {last_tag_time}")
+          })
+          .0,
+      );
 
-    let mut dockerfile_path = repo_path.join("deploy");
-    if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
-      dockerfile_path = dockerfile_path.join("coins");
-    }
-    dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+      let mut dockerfile_path = repo_path.join("deploy");
+      if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
+        dockerfile_path = dockerfile_path.join("coins");
+      }
+      dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
 
-    // For all services, if the Dockerfile was edited after the image was built we should rebuild
-    let mut last_modified =
-      fs::metadata(dockerfile_path).ok().and_then(|meta| meta.modified().ok());
+      // For all services, if the Dockerfile was edited after the image was built we should rebuild
+      let mut last_modified =
+        fs::metadata(dockerfile_path).ok().and_then(|meta| meta.modified().ok());
 
-    // Check any additionally specified paths
-    let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
-    let mut metadatas = match name.as_str() {
-      "bitcoin" => vec![],
-      "monero" => vec![],
-      "message-queue" => vec![
-        meta(repo_path.join("common")),
-        meta(repo_path.join("crypto")),
-        meta(repo_path.join("substrate").join("primitives")),
-        meta(repo_path.join("message-queue")),
-      ],
-      "processor" => vec![
-        meta(repo_path.join("common")),
-        meta(repo_path.join("crypto")),
-        meta(repo_path.join("coins")),
-        meta(repo_path.join("substrate")),
-        meta(repo_path.join("message-queue")),
-        meta(repo_path.join("processor")),
-      ],
-      _ => panic!("building unrecognized docker image"),
-    };
+      // Check any additionally specified paths
+      let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
+      let mut metadatas = match name.as_str() {
+        "bitcoin" => vec![],
+        "monero" => vec![],
+        "message-queue" => vec![
+          meta(repo_path.join("common")),
+          meta(repo_path.join("crypto")),
+          meta(repo_path.join("substrate").join("primitives")),
+          meta(repo_path.join("message-queue")),
+        ],
+        "processor" => vec![
+          meta(repo_path.join("common")),
+          meta(repo_path.join("crypto")),
+          meta(repo_path.join("coins")),
+          meta(repo_path.join("substrate")),
+          meta(repo_path.join("message-queue")),
+          meta(repo_path.join("processor")),
+        ],
+        _ => panic!("building unrecognized docker image"),
+      };
 
-    while !metadatas.is_empty() {
-      if let (path, Ok(metadata)) = metadatas.pop().unwrap() {
-        if metadata.is_file() {
-          if let Ok(modified) = metadata.modified() {
-            if modified >
-              last_modified
-                .expect("got when source was last modified yet not when the Dockerfile was")
-            {
-              last_modified = Some(modified);
+      while !metadatas.is_empty() {
+        if let (path, Ok(metadata)) = metadatas.pop().unwrap() {
+          if metadata.is_file() {
+            if let Ok(modified) = metadata.modified() {
+              if modified >
+                last_modified
+                  .expect("got when source was last modified yet not when the Dockerfile was")
+              {
+                last_modified = Some(modified);
+              }
             }
-          }
-        } else {
-          // Recursively crawl since we care when the folder's contents were edited, not the folder
-          // itself
-          for entry in fs::read_dir(path.clone()).expect("couldn't read directory") {
-            metadatas
-              .push(meta(path.join(entry.expect("couldn't access item in directory").file_name())));
+          } else {
+            // Recursively crawl since we care when the folder's contents were edited, not the
+            // folder itself
+            for entry in fs::read_dir(path.clone()).expect("couldn't read directory") {
+              metadatas.push(meta(
+                path.join(entry.expect("couldn't access item in directory").file_name()),
+              ));
+            }
           }
         }
       }
-    }
 
-    if let Some(last_modified) = last_modified {
-      if last_modified < created_time {
-        println!("{} was built after the most recent source code edits, assuming built.", name);
-        built_lock.insert(name, true);
-        return;
+      if let Some(last_modified) = last_modified {
+        if last_modified < created_time {
+          println!("{} was built after the most recent source code edits, assuming built.", name);
+          built_lock.insert(name, true);
+          return;
+        }
       }
     }
   }
