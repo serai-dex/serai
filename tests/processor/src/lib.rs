@@ -15,14 +15,6 @@ const RPC_PASS: &str = "seraidex";
 
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
-fn log_options() -> Option<LogOptions> {
-  Some(LogOptions {
-    action: LogAction::Forward,
-    policy: LogPolicy::Always,
-    source: LogSource::Both,
-  })
-}
-
 pub fn bitcoin_instance() -> (Composition, u16) {
   serai_docker_tests::build("bitcoin".to_string());
 
@@ -142,7 +134,11 @@ pub fn processor_stack(
       composition
         .with_start_policy(StartPolicy::Strict)
         .with_container_name(format!("{handle}-{}", &unique_id))
-        .with_log_options(log_options()),
+        .with_log_options(Some(LogOptions {
+          action: LogAction::Forward,
+          policy: if handle.contains("processor") { LogPolicy::Always } else { LogPolicy::OnError },
+          source: LogSource::Both,
+        })),
     );
     handles.push(compositions.last().unwrap().handle());
   }

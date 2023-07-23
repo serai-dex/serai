@@ -117,16 +117,18 @@ pub fn build(name: String) {
 
   println!("Building {}...", &name);
 
-  assert!(Command::new("docker")
+  let res = Command::new("docker")
     .current_dir(deploy_path)
     .arg("compose")
     .arg("build")
     .arg(&name)
-    .spawn()
-    .unwrap()
-    .wait()
-    .unwrap()
-    .success());
+    .output()
+    .unwrap();
+  if !res.status.success() {
+    dbg!(res.stdout);
+    dbg!(res.stderr);
+    panic!("failed to build {name}");
+  }
 
   println!("Built!");
 
