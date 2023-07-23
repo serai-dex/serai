@@ -79,5 +79,6 @@ panic = "unwind"
 
 [patch.crates-io]
 # subxt *can* pull these off crates.io yet there's no benefit to this
-sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
-sp-std = { git = "https://github.com/serai-dex/substrate" }
+sp-core-hashing = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-std = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+snow = { git = "https://github.com/kayabaNerve/snow", branch = "0.9.2" }

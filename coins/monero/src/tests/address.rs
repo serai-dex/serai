@@ -73,8 +73,8 @@ fn featured() {
     [(Network::Mainnet, 'C'), (Network::Testnet, 'K'), (Network::Stagenet, 'F')]
   {
     for _ in 0 .. 100 {
-      let spend = &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE;
-      let view = &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE;
+      let spend = &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE;
+      let view = &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE;
 
       for features in 0 .. (1 << 3) {
         const SUBADDRESS_FEATURE_BIT: u8 = 1;
@@ -143,9 +143,9 @@ fn featured_vectors() {
       _ => panic!("Unknown network"),
     };
     let spend =
-      CompressedEdwardsY::from_slice(&hex::decode(vector.spend).unwrap()).decompress().unwrap();
+      CompressedEdwardsY::from_slice(&hex::decode(vector.spend).unwrap()).unwrap().decompress().unwrap();
     let view =
-      CompressedEdwardsY::from_slice(&hex::decode(vector.view).unwrap()).decompress().unwrap();
+      CompressedEdwardsY::from_slice(&hex::decode(vector.view).unwrap()).unwrap().decompress().unwrap();
 
     let addr = MoneroAddress::from_str(network, &vector.address).unwrap();
     assert_eq!(addr.spend, spend);

@@ -15,10 +15,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0", default-features = false }
 
-pallet-assets = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-assets = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 tokens-primitives = { package = "serai-tokens-primitives", path = "../primitives", default-features = false }

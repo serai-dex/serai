@@ -83,7 +83,7 @@ impl SendOutput {
       SendOutput {
         R,
         view_tag,
-        dest: ((&shared_key * &ED25519_BASEPOINT_TABLE) + output.0.spend),
+        dest: ((&shared_key * ED25519_BASEPOINT_TABLE) + output.0.spend),
         commitment: Commitment::new(commitment_mask(shared_key), output.1),
         amount: amount_encryption(output.1, shared_key),
       },
@@ -105,7 +105,7 @@ impl SendOutput {
       output,
       r.deref() * address.view,
       if !address.is_subaddress() {
-        r.deref() * &ED25519_BASEPOINT_TABLE
+        r.deref() * ED25519_BASEPOINT_TABLE
       } else {
         r.deref() * address.spend
       },
@@ -577,7 +577,7 @@ impl SignableTransaction {
 
     // Used for all non-subaddress outputs, or if there's only one subaddress output and a change
     let tx_key = Zeroizing::new(random_scalar(&mut rng));
-    let mut tx_public_key = tx_key.deref() * &ED25519_BASEPOINT_TABLE;
+    let mut tx_public_key = tx_key.deref() * ED25519_BASEPOINT_TABLE;
 
     // If any of these outputs are to a subaddress, we need keys distinct to them
     // The only time this *does not* force having additional keys is when the only other output
@@ -597,7 +597,7 @@ impl SignableTransaction {
           InternalPayment::Change(_, _) => {}
         }
       }
-      debug_assert!(tx_public_key != (tx_key.deref() * &ED25519_BASEPOINT_TABLE));
+      debug_assert!(tx_public_key != (tx_key.deref() * ED25519_BASEPOINT_TABLE));
     }
 
     // Actually create the outputs
@@ -810,7 +810,7 @@ impl SignableTransaction {
     let mut images = Vec::with_capacity(self.inputs.len());
     for (input, _) in &self.inputs {
       let mut offset = Zeroizing::new(spend.deref() + input.key_offset());
-      if (offset.deref() * &ED25519_BASEPOINT_TABLE) != input.key() {
+      if (offset.deref() * ED25519_BASEPOINT_TABLE) != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
       }
 

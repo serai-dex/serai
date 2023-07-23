@@ -17,47 +17,47 @@ clap = { version = "4", features = ["derive"] }
 futures = "0.3"
 jsonrpsee = { version = "0.16", features = ["server"] }
 
-sp-core = { git = "https://github.com/serai-dex/substrate" }
-sp-keyring = { git = "https://github.com/serai-dex/substrate" }
-sp-inherents = { git = "https://github.com/serai-dex/substrate" }
-sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
-sp-io = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
-sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
-sp-api = { git = "https://github.com/serai-dex/substrate" }
-sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
+sp-core = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-keyring = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-inherents = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-timestamp = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-io = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-blockchain = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-api = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-block-builder = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
-frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate" }
+frame-benchmarking = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+frame-benchmarking-cli = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
 serai-runtime = { path = "../runtime", features = ["std"] }
 
-sc-offchain = { git = "https://github.com/serai-dex/substrate" }
-sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
-sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
-sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
-sc-executor = { git = "https://github.com/serai-dex/substrate" }
-sc-service = { git = "https://github.com/serai-dex/substrate" }
-sc-client-api = { git = "https://github.com/serai-dex/substrate" }
-sc-network-common = { git = "https://github.com/serai-dex/substrate" }
-sc-network = { git = "https://github.com/serai-dex/substrate" }
+sc-offchain = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-transaction-pool = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-basic-authorship = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-executor = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-service = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-client-api = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-network-common = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-network = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
-sc-consensus = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
-sc-authority-discovery = { git = "https://github.com/serai-dex/substrate" }
+sc-consensus = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-consensus-babe = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-consensus-grandpa = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-authority-discovery = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
-sc-telemetry = { git = "https://github.com/serai-dex/substrate" }
-sc-cli = { git = "https://github.com/serai-dex/substrate" }
+sc-telemetry = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+sc-cli = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
-sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
+sc-rpc-api = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
-substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
-pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
+substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
+pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
 [build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate.git" }
+substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0" }
 
 [features]
 default = []

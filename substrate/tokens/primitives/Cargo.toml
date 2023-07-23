@@ -21,7 +21,7 @@ scale-info = { version = "2", default-features = false, features = ["derive"] }
 serai-primitives = { path = "../../primitives", default-features = false }
 
 [dev-dependencies]
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", branch = "dalek-4.0", default-features = false }
 
 [features]
 std = ["zeroize", "serde/std", "scale/std", "scale-info/std", "sp-runtime/std", "serai-primitives/std"]

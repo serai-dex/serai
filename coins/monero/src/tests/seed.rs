@@ -156,8 +156,8 @@ fn test_classic_seed() {
       let spend: [u8; 32] = hex::decode(vector.spend).unwrap().try_into().unwrap();
       // For classical seeds, Monero directly uses the entropy as a spend key
       assert_eq!(
-        Scalar::from_canonical_bytes(*seed.entropy()),
-        Scalar::from_canonical_bytes(spend)
+        Option::<Scalar>::from(Scalar::from_canonical_bytes(*seed.entropy())),
+        Option::<Scalar>::from(Scalar::from_canonical_bytes(spend)),
       );
 
       let view: [u8; 32] = hex::decode(vector.view).unwrap().try_into().unwrap();

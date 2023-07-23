@@ -356,7 +356,7 @@ impl Scanner {
         // P - shared == spend
         let subaddress = self
           .subaddresses
-          .get(&(output_key - (&shared_key * &ED25519_BASEPOINT_TABLE)).compress());
+          .get(&(output_key - (&shared_key * ED25519_BASEPOINT_TABLE)).compress());
         if subaddress.is_none() {
           continue;
         }

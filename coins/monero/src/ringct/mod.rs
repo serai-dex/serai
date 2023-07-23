@@ -28,7 +28,7 @@ use crate::{
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
 pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
-  hash_to_point(&ED25519_BASEPOINT_TABLE * secret.deref()) * secret.deref()
+  hash_to_point(ED25519_BASEPOINT_TABLE * secret.deref()) * secret.deref()
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

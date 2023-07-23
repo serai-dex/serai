@@ -415,13 +415,13 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.71"
+version = "0.1.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a564d521dd56509c4c47480d00b80ee55f7e385ae48db5744c67ad50c92d2ebf"
+checksum = "cc6dde6e4ed435a4c1ee4e73592f5ba9da2151af10076cc04858746af9352d09"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -437,9 +437,9 @@ dependencies = [
 
 [[package]]
 name = "asynchronous-codec"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06a0daa378f5fd10634e44b0a29b2a87b890657658e072a30d6f26e57ddee182"
+checksum = "4057f2c32adbb2fc158e22fb38433c8e9bbf76b75a4732c7c0cbaf695fb65568"
 dependencies = [
  "bytes",
  "futures-sink",
@@ -588,13 +588,13 @@ dependencies = [
  "lazy_static",
  "lazycell",
  "peeking_take_while",
- "prettyplease 0.2.10",
+ "prettyplease 0.2.12",
  "proc-macro2",
  "quote",
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -1132,9 +1132,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.3.16"
+version = "4.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74bb1b4028935821b2d6b439bba2e970bdcf740832732437ead910c632e30d7d"
+checksum = "5fd304a20bff958a57f04c4e96a2e7594cc4490a0e809cbd48bb6437edaa452d"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1143,9 +1143,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.3.16"
+version = "4.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ae467cbb0111869b765e13882a1dbbd6cb52f58203d8b80c44f667d4dd19843"
+checksum = "01c6a3f08f1fe5662a35cfe393aec09c4df95f60ee93b7556505260f75eee9e1"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1162,7 +1162,7 @@ dependencies = [
  "heck 0.4.1",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -1590,36 +1590,37 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.0.0-rc.1"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d4ba9852b42210c7538b75484f9daa0655e9a3ac04f693747bb0f02cf3cfe16"
+checksum = "f711ade317dd348950a9910f81c5947e3d8907ebd2b83f76203ff1807e6a2bc2"
 dependencies = [
  "cfg-if",
+ "cpufeatures",
+ "curve25519-dalek-derive",
+ "digest 0.10.7",
  "fiat-crypto",
- "packed_simd_2",
  "platforms",
+ "rustc_version",
  "subtle",
  "zeroize",
 ]
 
 [[package]]
-name = "curve25519-dalek-ng"
-version = "4.1.1"
+name = "curve25519-dalek-derive"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c359b7249347e46fb28804470d071c921156ad62b3eef5d34e2ba867533dec8"
+checksum = "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
 dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.6.4",
- "subtle-ng",
- "zeroize",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "cxx"
-version = "1.0.101"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5032837c1384de3708043de9d4e97bb91290faca6c16529a28aa340592a78166"
+checksum = "f68e12e817cb19eaab81aaec582b4052d07debd3c3c6b083b9d361db47c7dc9d"
 dependencies = [
  "cc",
  "cxxbridge-flags",
@@ -1629,9 +1630,9 @@ dependencies = [
 
 [[package]]
 name = "cxx-build"
-version = "1.0.101"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51368b3d0dbf356e10fcbfd455a038503a105ee556f7ee79b6bb8c53a7247456"
+checksum = "e789217e4ab7cf8cc9ce82253180a9fe331f35f5d339f0ccfe0270b39433f397"
 dependencies = [
  "cc",
  "codespan-reporting",
@@ -1639,24 +1640,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "scratch",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.101"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d9062157072e4aafc8e56ceaf8325ce850c5ae37578c852a0d4de2cecdded13"
+checksum = "78a19f4c80fd9ab6c882286fa865e92e07688f4387370a209508014ead8751d0"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.101"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf01e8a540f5a4e0f284595834f81cf88572f244b768f051724537afa99a2545"
+checksum = "b8fcfa71f66c8563c4fa9dd2bb68368d50267856f831ac5d85367e0805f9606c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -1664,14 +1665,14 @@ name = "dalek-ff-group"
 version = "0.3.0"
 dependencies = [
  "crypto-bigint 0.5.2",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "digest 0.10.7",
  "ff 0.13.0",
  "ff-group-tests",
  "group 0.13.0",
  "rand_core 0.6.4",
  "rustversion",
- "sha2 0.9.9",
+ "sha2 0.10.7",
  "subtle",
  "zeroize",
 ]
@@ -1745,7 +1746,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -1778,7 +1779,7 @@ checksum = "836a9bbc7ad63342d6d6e7b815ccab164bc77a2d95d84bc3117a8c0d5c98e2d5"
 dependencies = [
  "darling_core 0.20.3",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -2025,7 +2026,7 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -2145,9 +2146,9 @@ dependencies = [
 
 [[package]]
 name = "ecdsa"
-version = "0.16.7"
+version = "0.16.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0997c976637b606099b9985693efa3581e84e41f5c11ba5255f88711058ad428"
+checksum = "a4b1e0c257a9e9f25f90ff76d7a68360ed497ee519c8e428d1825ef0000799d4"
 dependencies = [
  "der 0.7.7",
  "digest 0.10.7",
@@ -2196,9 +2197,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.8.1"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
+checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 
 [[package]]
 name = "elliptic-curve"
@@ -2483,13 +2484,13 @@ dependencies = [
  "ethers-core",
  "eyre",
  "hex",
- "prettyplease 0.2.10",
+ "prettyplease 0.2.12",
  "proc-macro2",
  "quote",
  "regex",
  "serde",
  "serde_json",
- "syn 2.0.26",
+ "syn 2.0.27",
  "toml 0.7.6",
  "walkdir",
 ]
@@ -2507,7 +2508,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde_json",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -2533,7 +2534,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.25.0",
- "syn 2.0.26",
+ "syn 2.0.27",
  "tempfile",
  "thiserror",
  "tiny-keccak",
@@ -2693,7 +2694,7 @@ dependencies = [
  "fs-err",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -2720,6 +2721,12 @@ checksum = "e51093e27b0797c359783294ca4f0a911c270184cb10f85783b118614a1501be"
 dependencies = [
  "instant",
 ]
+
+[[package]]
+name = "fastrand"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 
 [[package]]
 name = "fdlimit"
@@ -2895,7 +2902,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 [[package]]
 name = "fork-tree"
 version = "3.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -2918,7 +2925,7 @@ checksum = "6c2141d6d6c8512188a7891b4b01590a45f6dac67afb4f255c4124dbb86d4eaa"
 [[package]]
 name = "frame-benchmarking"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support",
  "frame-support-procedural",
@@ -2943,7 +2950,7 @@ dependencies = [
 [[package]]
 name = "frame-benchmarking-cli"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "Inflector",
  "array-bytes",
@@ -2991,7 +2998,7 @@ dependencies = [
 [[package]]
 name = "frame-executive"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -3032,7 +3039,7 @@ dependencies = [
 [[package]]
 name = "frame-support"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "bitflags 1.3.2",
  "environmental",
@@ -3066,7 +3073,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "Inflector",
  "cfg-expr",
@@ -3078,35 +3085,35 @@ dependencies = [
  "proc-macro-warning",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support-procedural-tools-derive",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools-derive"
 version = "3.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "frame-system"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "cfg-if",
  "frame-support",
@@ -3125,7 +3132,7 @@ dependencies = [
 [[package]]
 name = "frame-system-rpc-runtime-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -3134,7 +3141,7 @@ dependencies = [
 [[package]]
 name = "frame-try-runtime"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -3234,7 +3241,7 @@ version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49a9d51ce47660b1e808d3c990b4709f2f415d928835a17dfd16991515c46bce"
 dependencies = [
- "fastrand",
+ "fastrand 1.9.0",
  "futures-core",
  "futures-io",
  "memchr",
@@ -3261,7 +3268,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -3676,9 +3683,9 @@ dependencies = [
 
 [[package]]
 name = "http-range-header"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bfe8eed0a9285ef776bb792479ea3834e8b94e13d615c2f66d03dd50a435a29"
+checksum = "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
 
 [[package]]
 name = "httparse"
@@ -4203,7 +4210,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cadb76004ed8e97623117f3df85b17aaa6626ab0b0831e6573f104df16cd1bcc"
 dependencies = [
  "cfg-if",
- "ecdsa 0.16.7",
+ "ecdsa 0.16.8",
  "elliptic-curve 0.13.5",
  "once_cell",
  "sha2 0.10.7",
@@ -4310,12 +4317,6 @@ dependencies = [
  "cfg-if",
  "winapi",
 ]
-
-[[package]]
-name = "libm"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
 name = "libm"
@@ -4815,9 +4816,9 @@ dependencies = [
 
 [[package]]
 name = "libz-sys"
-version = "1.1.9"
+version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56ee889ecc9568871456d42f603d6a0ce59ff328d291063a45cbdf0036baf6db"
+checksum = "24e6ab01971eb092ffe6a7d42f49f9ff42662f17604681e2843ad65077ba47dc"
 dependencies = [
  "cc",
  "pkg-config",
@@ -4947,7 +4948,7 @@ dependencies = [
  "macro_magic_core",
  "macro_magic_macros",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -4960,7 +4961,7 @@ dependencies = [
  "macro_magic_core_macros",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -4971,7 +4972,7 @@ checksum = "93d7d9e6e234c040dafc745c7592738d56a03ad04b1fa04ab60821deb597466a"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -4982,7 +4983,7 @@ checksum = "ffd19f13cfd2bfbd83692adfef8c244fe5109b3eb822a1fb4e0a6253b406cd81"
 dependencies = [
  "macro_magic_core",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -5216,7 +5217,7 @@ dependencies = [
 name = "monero-generators"
 version = "0.3.0"
 dependencies = [
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "dalek-ff-group",
  "group 0.13.0",
  "sha3",
@@ -5251,7 +5252,7 @@ dependencies = [
  "async-trait",
  "base58-monero 1.1.0",
  "crc",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "dalek-ff-group",
  "digest_auth",
  "dleq",
@@ -5589,12 +5590,12 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+checksum = "f30b0abd723be7e2ffca1272140fac1a2f084c77ec3e123c192b66af1ee9e6c2"
 dependencies = [
  "autocfg",
- "libm 0.2.7",
+ "libm",
 ]
 
 [[package]]
@@ -5625,7 +5626,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -5727,7 +5728,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -5765,7 +5766,7 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9863ad85fa8f4460f9c48cb909d38a0d689dba1f6f6988a5e3e0d31071bcd4b"
 dependencies = [
- "ecdsa 0.16.7",
+ "ecdsa 0.16.8",
  "elliptic-curve 0.13.5",
  "primeorder",
 ]
@@ -5782,16 +5783,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "packed_simd_2"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1914cd452d8fccd6f9db48147b29fd4ae05bea9dc5d9ad578509f72415de282"
-dependencies = [
- "cfg-if",
- "libm 0.1.4",
-]
-
-[[package]]
 name = "pairing"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5803,7 +5794,7 @@ dependencies = [
 [[package]]
 name = "pallet-assets"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5818,7 +5809,7 @@ dependencies = [
 [[package]]
 name = "pallet-authority-discovery"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5834,7 +5825,7 @@ dependencies = [
 [[package]]
 name = "pallet-authorship"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5848,7 +5839,7 @@ dependencies = [
 [[package]]
 name = "pallet-babe"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5872,7 +5863,7 @@ dependencies = [
 [[package]]
 name = "pallet-balances"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5887,7 +5878,7 @@ dependencies = [
 [[package]]
 name = "pallet-grandpa"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5910,7 +5901,7 @@ dependencies = [
 [[package]]
 name = "pallet-session"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5931,7 +5922,7 @@ dependencies = [
 [[package]]
 name = "pallet-timestamp"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5949,7 +5940,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5965,7 +5956,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "jsonrpsee",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -5981,7 +5972,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc-runtime-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "pallet-transaction-payment",
  "parity-scale-codec",
@@ -5992,9 +5983,9 @@ dependencies = [
 
 [[package]]
 name = "parity-db"
-version = "0.4.9"
+version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dab3ac198341b2f0fec6e7f8a6eeed07a41201d98a124260611598c142e76df"
+checksum = "78f19d20a0d2cc52327a88d131fa1c4ea81ea4a04714aedcfeca2dd410049cf8"
 dependencies = [
  "blake2",
  "crc32fast",
@@ -6242,7 +6233,7 @@ dependencies = [
  "pest_meta",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -6306,7 +6297,7 @@ dependencies = [
  "phf_shared 0.11.2",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -6344,7 +6335,7 @@ checksum = "ec2e072ecce94ec471b13398d5402c188e76ac03cf74dd1a975161b23a3f6d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -6502,12 +6493,12 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.2.10"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92139198957b410250d43fad93e630d956499a625c527eda65175c8680f83387"
+checksum = "6c64d9ba0963cdcea2e1b2230fbae2bab30eb25a174be395c41e764bfb65dd62"
 dependencies = [
  "proc-macro2",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -6575,7 +6566,7 @@ checksum = "70550716265d1ec349c41f70dd4f964b4fd88394efe4405f0c1da679c4799a07"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -6728,9 +6719,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67c10f662eee9c94ddd7135043e544f3c82fa839a1e7b865911331961b53186c"
+checksum = "f31999cfc7927c4e212e60fd50934ab40e8e8bfd2d493d6095d2d306bc0764d9"
 dependencies = [
  "bytes",
  "rand 0.8.5",
@@ -6746,9 +6737,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.31"
+version = "1.0.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fe8a65d69dd0808184ebb5f836ab526bb259db23c657efa38711b1072ee47f0"
+checksum = "50f3b39ccfb720540debaa0164757101c08ecb8d326b15358ce76a62c7e85965"
 dependencies = [
  "proc-macro2",
 ]
@@ -6939,22 +6930,22 @@ dependencies = [
 
 [[package]]
 name = "ref-cast"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1641819477c319ef452a075ac34a4be92eb9ba09f6841f62d594d50fdcf0bf6b"
+checksum = "61ef7e18e8841942ddb1cf845054f8008410030a3997875d9e49b7a363063df1"
 dependencies = [
  "ref-cast-impl",
 ]
 
 [[package]]
 name = "ref-cast-impl"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68bf53dad9b6086826722cdc99140793afd9f62faa14a1ad07eb4f955e7a7216"
+checksum = "2dfaf0c85b766276c797f3791f5bc6d5bd116b41d53049af2789666b0c0bc9fa"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -7402,7 +7393,7 @@ dependencies = [
 [[package]]
 name = "sc-allocator"
 version = "4.1.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "log",
  "sp-core",
@@ -7413,7 +7404,7 @@ dependencies = [
 [[package]]
 name = "sc-authority-discovery"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "futures",
@@ -7441,7 +7432,7 @@ dependencies = [
 [[package]]
 name = "sc-basic-authorship"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "futures",
  "futures-timer",
@@ -7464,7 +7455,7 @@ dependencies = [
 [[package]]
 name = "sc-block-builder"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "sc-client-api",
@@ -7479,7 +7470,7 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "memmap2",
  "sc-chain-spec-derive",
@@ -7498,18 +7489,18 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec-derive"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "sc-cli"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "chrono",
@@ -7548,7 +7539,7 @@ dependencies = [
 [[package]]
 name = "sc-client-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "fnv",
  "futures",
@@ -7574,7 +7565,7 @@ dependencies = [
 [[package]]
 name = "sc-client-db"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "hash-db",
  "kvdb",
@@ -7600,7 +7591,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "futures",
@@ -7625,7 +7616,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-babe"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "fork-tree",
@@ -7661,7 +7652,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-epochs"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "fork-tree",
  "parity-scale-codec",
@@ -7674,7 +7665,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "ahash 0.8.3",
  "array-bytes",
@@ -7715,7 +7706,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-slots"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "futures",
@@ -7738,7 +7729,7 @@ dependencies = [
 [[package]]
 name = "sc-executor"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.1",
@@ -7760,7 +7751,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-common"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "sc-allocator",
  "sp-maybe-compressed-blob",
@@ -7772,7 +7763,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-wasmtime"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "anyhow",
  "cfg-if",
@@ -7789,7 +7780,7 @@ dependencies = [
 [[package]]
 name = "sc-informant"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "anstyle",
  "futures",
@@ -7805,7 +7796,7 @@ dependencies = [
 [[package]]
 name = "sc-keystore"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "parking_lot 0.12.1",
@@ -7819,7 +7810,7 @@ dependencies = [
 [[package]]
 name = "sc-network"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7860,7 +7851,7 @@ dependencies = [
 [[package]]
 name = "sc-network-bitswap"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-channel",
  "cid",
@@ -7880,7 +7871,7 @@ dependencies = [
 [[package]]
 name = "sc-network-common"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "bitflags 1.3.2",
@@ -7897,7 +7888,7 @@ dependencies = [
 [[package]]
 name = "sc-network-gossip"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "ahash 0.8.3",
  "futures",
@@ -7915,7 +7906,7 @@ dependencies = [
 [[package]]
 name = "sc-network-light"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7936,7 +7927,7 @@ dependencies = [
 [[package]]
 name = "sc-network-sync"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7970,7 +7961,7 @@ dependencies = [
 [[package]]
 name = "sc-network-transactions"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "futures",
@@ -7988,7 +7979,7 @@ dependencies = [
 [[package]]
 name = "sc-offchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "bytes",
@@ -8022,7 +8013,7 @@ dependencies = [
 [[package]]
 name = "sc-proposer-metrics"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "log",
  "substrate-prometheus-endpoint",
@@ -8031,7 +8022,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "futures",
  "jsonrpsee",
@@ -8062,7 +8053,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-api"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "jsonrpsee",
  "parity-scale-codec",
@@ -8081,7 +8072,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-server"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "http",
  "jsonrpsee",
@@ -8096,7 +8087,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-spec-v2"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "futures",
@@ -8122,7 +8113,7 @@ dependencies = [
 [[package]]
 name = "sc-service"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "directories",
@@ -8186,7 +8177,7 @@ dependencies = [
 [[package]]
 name = "sc-state-db"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -8197,7 +8188,7 @@ dependencies = [
 [[package]]
 name = "sc-sysinfo"
 version = "6.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "futures",
  "libc",
@@ -8216,7 +8207,7 @@ dependencies = [
 [[package]]
 name = "sc-telemetry"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "chrono",
  "futures",
@@ -8235,7 +8226,7 @@ dependencies = [
 [[package]]
 name = "sc-tracing"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "anstyle",
  "chrono",
@@ -8264,18 +8255,18 @@ dependencies = [
 [[package]]
 name = "sc-tracing-proc-macro"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "sc-transaction-pool"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "futures",
@@ -8301,7 +8292,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "futures",
@@ -8317,7 +8308,7 @@ dependencies = [
 [[package]]
 name = "sc-utils"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-channel",
  "futures",
@@ -8479,18 +8470,17 @@ dependencies = [
 
 [[package]]
 name = "schnorrkel"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "844b7645371e6ecdf61ff246ba1958c29e802881a749ae3fb1993675d210d28d"
+version = "0.11.0"
+source = "git+https://github.com/serai-dex/schnorrkel#86fd365c2946f47ed3d324e4bfcabc436fa76fd1"
 dependencies = [
  "arrayref",
  "arrayvec",
- "curve25519-dalek-ng",
+ "curve25519-dalek 4.0.0",
  "merlin",
  "rand_core 0.6.4",
  "serde_bytes",
- "sha2 0.9.9",
- "subtle-ng",
+ "sha2 0.10.7",
+ "subtle",
  "zeroize",
 ]
 
@@ -8622,9 +8612,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework"
-version = "2.9.1"
+version = "2.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fc758eb7bffce5b308734e9b0c1468893cae9ff70ebf13e7090be8dcbcc83a8"
+checksum = "05b64fb303737d99b81884b2c63433e9ae28abebe5eb5045dcdd175dc2ecf4de"
 dependencies = [
  "bitflags 1.3.2",
  "core-foundation",
@@ -8635,9 +8625,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-version = "2.9.0"
+version = "2.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f51d0c0d83bec45f16480d0ce0058397a69e48fcdc52d1dc8855fb68acbd31a7"
+checksum = "e932934257d3b408ed8f30db49d85ea163bfe74961f017f405b025af298f0c7a"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -9092,7 +9082,7 @@ checksum = "b69b106b68bc8054f0e974e70d19984040f8a5cf9215ca82626ea4853f82c4b9"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -9300,13 +9290,12 @@ checksum = "5e9f0ab6ef7eb7353d9119c170a436d1bf248eea575ac42d19d12f4e34130831"
 [[package]]
 name = "snow"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ccba027ba85743e09d15c03296797cad56395089b832b48b5a5217880f57733"
+source = "git+https://github.com/kayabaNerve/snow?branch=0.9.2#c8dbda6dbc3f22dfa8aac94492d024c4db373139"
 dependencies = [
  "aes-gcm 0.9.4",
  "blake2",
  "chacha20poly1305",
- "curve25519-dalek 4.0.0-rc.1",
+ "curve25519-dalek 4.0.0",
  "rand_core 0.6.4",
  "ring",
  "rustc_version",
@@ -9368,7 +9357,7 @@ dependencies = [
 [[package]]
 name = "sp-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "hash-db",
  "log",
@@ -9389,7 +9378,7 @@ dependencies = [
 [[package]]
 name = "sp-api-proc-macro"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "Inflector",
  "blake2",
@@ -9397,13 +9386,13 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "sp-application-crypto"
 version = "23.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9416,7 +9405,7 @@ dependencies = [
 [[package]]
 name = "sp-arithmetic"
 version = "16.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "integer-sqrt",
  "num-traits",
@@ -9430,7 +9419,7 @@ dependencies = [
 [[package]]
 name = "sp-authority-discovery"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9443,7 +9432,7 @@ dependencies = [
 [[package]]
 name = "sp-block-builder"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "sp-api",
  "sp-inherents",
@@ -9454,7 +9443,7 @@ dependencies = [
 [[package]]
 name = "sp-blockchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "futures",
  "log",
@@ -9472,7 +9461,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "futures",
@@ -9487,7 +9476,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-babe"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9506,7 +9495,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-grandpa"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "finality-grandpa",
  "log",
@@ -9524,7 +9513,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-slots"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9536,7 +9525,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "21.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "array-bytes",
  "bitflags 1.3.2",
@@ -9581,7 +9570,7 @@ dependencies = [
 [[package]]
 name = "sp-core-hashing"
 version = "9.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -9594,17 +9583,17 @@ dependencies = [
 [[package]]
 name = "sp-core-hashing-proc-macro"
 version = "9.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "quote",
  "sp-core-hashing",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "sp-database"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "kvdb",
  "parking_lot 0.12.1",
@@ -9613,17 +9602,17 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "sp-externalities"
 version = "0.19.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -9634,7 +9623,7 @@ dependencies = [
 [[package]]
 name = "sp-inherents"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "impl-trait-for-tuples",
@@ -9648,7 +9637,7 @@ dependencies = [
 [[package]]
 name = "sp-io"
 version = "23.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "bytes",
  "ed25519",
@@ -9673,7 +9662,7 @@ dependencies = [
 [[package]]
 name = "sp-keyring"
 version = "24.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "lazy_static",
  "sp-core",
@@ -9684,7 +9673,7 @@ dependencies = [
 [[package]]
 name = "sp-keystore"
 version = "0.27.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.1",
@@ -9696,16 +9685,16 @@ dependencies = [
 [[package]]
 name = "sp-maybe-compressed-blob"
 version = "4.1.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "thiserror",
- "zstd 0.12.3+zstd.1.5.2",
+ "zstd 0.12.4",
 ]
 
 [[package]]
 name = "sp-metadata-ir"
 version = "0.1.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-metadata 16.0.0",
  "parity-scale-codec",
@@ -9716,7 +9705,7 @@ dependencies = [
 [[package]]
 name = "sp-offchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "sp-api",
  "sp-core",
@@ -9726,7 +9715,7 @@ dependencies = [
 [[package]]
 name = "sp-panic-handler"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -9736,7 +9725,7 @@ dependencies = [
 [[package]]
 name = "sp-rpc"
 version = "6.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -9746,7 +9735,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime"
 version = "24.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "either",
  "hash256-std-hasher",
@@ -9768,7 +9757,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "17.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -9786,19 +9775,19 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "11.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "Inflector",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "sp-session"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9813,7 +9802,7 @@ dependencies = [
 [[package]]
 name = "sp-staking"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "impl-trait-for-tuples",
  "parity-scale-codec",
@@ -9827,7 +9816,7 @@ dependencies = [
 [[package]]
 name = "sp-state-machine"
 version = "0.28.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "hash-db",
  "log",
@@ -9848,7 +9837,7 @@ dependencies = [
 [[package]]
 name = "sp-statement-store"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9865,12 +9854,12 @@ dependencies = [
 [[package]]
 name = "sp-std"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 
 [[package]]
 name = "sp-storage"
 version = "13.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -9883,7 +9872,7 @@ dependencies = [
 [[package]]
 name = "sp-timestamp"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9896,7 +9885,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "10.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "sp-std",
@@ -9908,7 +9897,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-pool"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "sp-api",
  "sp-runtime",
@@ -9917,7 +9906,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-storage-proof"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9932,7 +9921,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "22.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "ahash 0.8.3",
  "hash-db",
@@ -9955,7 +9944,7 @@ dependencies = [
 [[package]]
 name = "sp-version"
 version = "22.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -9972,18 +9961,18 @@ dependencies = [
 [[package]]
 name = "sp-version-proc-macro"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
 name = "sp-wasm-interface"
 version = "14.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -9996,7 +9985,7 @@ dependencies = [
 [[package]]
 name = "sp-weights"
 version = "20.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -10166,7 +10155,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -10191,7 +10180,7 @@ dependencies = [
 [[package]]
 name = "substrate-bip39"
 version = "0.4.4"
-source = "git+https://github.com/serai-dex/substrate-bip39#47377295477c30970a16c4deb5620515721648dd"
+source = "git+https://github.com/serai-dex/substrate-bip39?branch=dalek-4.0#4596f602481e08f62966063dcadb3f44aa70cbb8"
 dependencies = [
  "hmac 0.12.1",
  "pbkdf2 0.12.2",
@@ -10203,12 +10192,12 @@ dependencies = [
 [[package]]
 name = "substrate-build-script-utils"
 version = "3.0.0"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 
 [[package]]
 name = "substrate-frame-rpc-system"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "frame-system-rpc-runtime-api",
  "futures",
@@ -10227,7 +10216,7 @@ dependencies = [
 [[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "hyper",
  "log",
@@ -10239,7 +10228,7 @@ dependencies = [
 [[package]]
 name = "substrate-wasm-builder"
 version = "5.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#5fc3862740f695224cd21bc1bcfd858560cfdd78"
+source = "git+https://github.com/serai-dex/substrate?branch=dalek-4.0#90e592952a120ee27f7beb08e69b33430489b103"
 dependencies = [
  "anstyle",
  "build-helper",
@@ -10268,12 +10257,6 @@ name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
-
-[[package]]
-name = "subtle-ng"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 
 [[package]]
 name = "subxt"
@@ -10322,7 +10305,7 @@ dependencies = [
  "quote",
  "scale-info",
  "subxt-metadata",
- "syn 2.0.26",
+ "syn 2.0.27",
  "thiserror",
  "tokio",
 ]
@@ -10336,7 +10319,7 @@ dependencies = [
  "darling 0.20.3",
  "proc-macro-error",
  "subxt-codegen",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -10385,9 +10368,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.26"
+version = "2.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45c3457aacde3c65315de5031ec191ce46604304d2446e803d71ade03308d970"
+checksum = "b60f673f44a8255b9c8c657daf66a596d435f2da81a555b06dc644d080ba45e0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10441,15 +10424,14 @@ checksum = "1d2faeef5759ab89935255b1a4cd98e0baf99d1085e37d36599c625dac49ae8e"
 
 [[package]]
 name = "tempfile"
-version = "3.6.0"
+version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31c0432476357e58790aaa47a8efb0c5138f137343f3b5f23bd36a27e3b0a6d6"
+checksum = "5486094ee78b2e5038a6382ed7645bc084dc2ec433426ca4c3cb61e2007b8998"
 dependencies = [
- "autocfg",
  "cfg-if",
- "fastrand",
+ "fastrand 2.0.0",
  "redox_syscall 0.3.5",
- "rustix 0.37.23",
+ "rustix 0.38.4",
  "windows-sys 0.48.0",
 ]
 
@@ -10493,22 +10475,22 @@ checksum = "3369f5ac52d5eb6ab48c6b4ffdc8efbcad6b89c765749064ba298f2c68a16a76"
 
 [[package]]
 name = "thiserror"
-version = "1.0.43"
+version = "1.0.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a35fc5b8971143ca348fa6df4f024d4d55264f3468c71ad1c2f365b0a4d58c42"
+checksum = "611040a08a0439f8248d1990b111c95baa9c704c805fa1f62104b39655fd7f90"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.43"
+version = "1.0.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "463fe12d7993d3b327787537ce8dd4dfa058de32fc2b195ef3cde03dc4771e8f"
+checksum = "090198534930841fab3a5d1bb637cde49e339654e606195f8d9c76eeb081dc96"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -10665,7 +10647,7 @@ checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -10794,9 +10776,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8bd22a874a2d0b70452d5597b12c537331d49060824a95f49f108994f94aa4c"
+checksum = "55ae70283aba8d2a8b411c695c437fe25b8b5e44e23e780662002fc72fb47a82"
 dependencies = [
  "bitflags 2.3.3",
  "bytes",
@@ -10843,7 +10825,7 @@ checksum = "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -11278,7 +11260,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
  "wasm-bindgen-shared",
 ]
 
@@ -11312,7 +11294,7 @@ checksum = "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -12256,7 +12238,7 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn 2.0.27",
 ]
 
 [[package]]
@@ -12290,11 +12272,11 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.12.3+zstd.1.5.2"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76eea132fb024e0e13fd9c2f5d5d595d8a967aa72382ac2f9d39fcc95afd0806"
+checksum = "1a27595e173641171fc74a1232b7b1c7a7cb6e18222c11e9dfb9888fa424c53c"
 dependencies = [
- "zstd-safe 6.0.5+zstd.1.5.4",
+ "zstd-safe 6.0.6",
 ]
 
 [[package]]
@@ -12309,9 +12291,9 @@ dependencies = [
 
 [[package]]
 name = "zstd-safe"
-version = "6.0.5+zstd.1.5.4"
+version = "6.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d56d9e60b4b1758206c238a10165fbcae3ca37b01744e394c463463f6529d23b"
+checksum = "ee98ffd0b48ee95e6c5168188e44a54550b1564d9d530ee21d5f0eaed1069581"
 dependencies = [
  "libc",
  "zstd-sys",

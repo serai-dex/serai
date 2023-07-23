@@ -119,7 +119,7 @@ pub(crate) fn read_varint<R: Read>(r: &mut R) -> io::Result<u64> {
 // https://github.com/monero-project/monero/issues/8438, where some scalars had an archaic
 // reduction applied
 pub(crate) fn read_scalar<R: Read>(r: &mut R) -> io::Result<Scalar> {
-  Scalar::from_canonical_bytes(read_bytes(r)?)
+  Option::from(Scalar::from_canonical_bytes(read_bytes(r)?))
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "unreduced scalar"))
 }
 
