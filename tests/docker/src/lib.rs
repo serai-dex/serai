@@ -125,8 +125,19 @@ pub fn build(name: String) {
     .output()
     .unwrap();
   if !res.status.success() {
-    dbg!(res.stdout);
-    dbg!(res.stderr);
+    println!("failed to build {name}\n");
+    println!("-- stdout --");
+    println!(
+      "{}\r\n",
+      String::from_utf8(res.stdout)
+        .unwrap_or_else(|_| "stdout had non-utf8 characters".to_string())
+    );
+    println!("-- stderr --");
+    println!(
+      "{}\r\n",
+      String::from_utf8(res.stderr)
+        .unwrap_or_else(|_| "stderr had non-utf8 characters".to_string())
+    );
     panic!("failed to build {name}");
   }
 
