@@ -201,8 +201,11 @@ impl SpendableOutput {
     &mut self,
     rpc: &Rpc<RPC>,
   ) -> Result<(), RpcError> {
-    self.global_index =
-      rpc.get_o_indexes(self.output.absolute.tx).await?[usize::from(self.output.absolute.o)];
+    self.global_index = *rpc
+      .get_o_indexes(self.output.absolute.tx)
+      .await?
+      .get(usize::from(self.output.absolute.o))
+      .ok_or(RpcError::InvalidNode)?;
     Ok(())
   }
 
