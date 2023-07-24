@@ -342,12 +342,15 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             }
 
             // Find the first block to do so
-            let mut earliest = (get_latest_block_number(coin).await + 1).saturating_sub(C::CONFIRMATIONS);
+            let mut earliest =
+              (get_latest_block_number(coin).await + 1).saturating_sub(C::CONFIRMATIONS);
             assert!(get_block(coin, earliest).await.time() >= context.serai_time);
             // earliest > 0 prevents a panic if Serai creates keys before the genesis block
             // which... should be impossible
             // Yet a prevented panic is a prevented panic
-            while (earliest > 0) && (get_block(coin, earliest - 1).await.time() >= context.serai_time) {
+            while (earliest > 0) &&
+              (get_block(coin, earliest - 1).await.time() >= context.serai_time)
+            {
               earliest -= 1;
             }
 
@@ -663,8 +666,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
 
         match msg.unwrap() {
           ScannerEvent::Block { key, block, batch, outputs } => {
-            let key = key.to_bytes().as_ref().to_vec();
-
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
 
@@ -700,7 +701,12 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
             };
 
             // Start signing this batch
-            tributary_mutable.substrate_signers.get_mut(&key).unwrap().sign(&mut txn, batch).await;
+            tributary_mutable
+              .substrate_signers
+              .get_mut(tributary_mutable.key_gen.keys(&key).0.group_key().to_bytes().as_slice())
+              .unwrap()
+              .sign(&mut txn, batch)
+              .await;
           },
 
           ScannerEvent::Completed(id, tx) => {
