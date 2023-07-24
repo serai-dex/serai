@@ -32,18 +32,21 @@ use message_queue::{Service, client::MessageQueue};
 mod plan;
 pub use plan::*;
 
-mod db;
-pub use db::*;
-
-mod coordinator;
-pub use coordinator::*;
-
 mod coins;
 use coins::{OutputType, Output, PostFeeBranch, Block, Coin};
 #[cfg(feature = "bitcoin")]
 use coins::Bitcoin;
 #[cfg(feature = "monero")]
 use coins::Monero;
+
+mod additional_key;
+pub use additional_key::additional_key;
+
+mod db;
+pub use db::*;
+
+mod coordinator;
+pub use coordinator::*;
 
 mod key_gen;
 use key_gen::{KeyConfirmed, KeyGen};
@@ -62,17 +65,6 @@ use scheduler::Scheduler;
 
 #[cfg(test)]
 mod tests;
-
-// Generate a static additional key for a given chain in a globally consistent manner
-// Doesn't consider the current group key to increase the simplicity of verifying Serai's status
-// Takes an index, k, to support protocols which use multiple secondary keys
-// Presumably a view key
-pub(crate) fn additional_key<C: Coin>(k: u64) -> <C::Curve as Ciphersuite>::F {
-  <C::Curve as Ciphersuite>::hash_to_F(
-    b"Serai DEX Additional Key",
-    &[C::ID.as_bytes(), &k.to_le_bytes()].concat(),
-  )
-}
 
 async fn get_latest_block_number<C: Coin>(coin: &C) -> usize {
   loop {
@@ -328,9 +320,14 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             assert!(substrate_mutable.schedulers.is_empty());
 
             // Wait until a coin's block's time exceeds Serai's time
+            // TODO: This assumes the coin has a monotonic clock for its blocks' times, which
+            // isn't a viable assumption
+
+            // If the latest block number is 10, then the block indexd by 1 has 10 confirms
+            // 10 + 1 - 10 = 1
             while get_block(
               coin,
-              get_latest_block_number(coin).await.saturating_sub(C::CONFIRMATIONS),
+              (get_latest_block_number(coin).await + 1).saturating_sub(C::CONFIRMATIONS),
             )
             .await
             .time() <
@@ -345,9 +342,12 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             }
 
             // Find the first block to do so
-            let mut earliest = get_latest_block_number(coin).await.saturating_sub(C::CONFIRMATIONS);
+            let mut earliest = (get_latest_block_number(coin).await + 1).saturating_sub(C::CONFIRMATIONS);
             assert!(get_block(coin, earliest).await.time() >= context.serai_time);
-            while get_block(coin, earliest - 1).await.time() >= context.serai_time {
+            // earliest > 0 prevents a panic if Serai creates keys before the genesis block
+            // which... should be impossible
+            // Yet a prevented panic is a prevented panic
+            while (earliest > 0) && (get_block(coin, earliest - 1).await.time() >= context.serai_time) {
               earliest -= 1;
             }
 
@@ -363,6 +363,8 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
               .await
               .expect("KeyConfirmed from context we haven't synced")
           };
+
+          info!("activating {set:?}'s keys at {activation_number}");
 
           // See TributaryMutable's struct definition for why this block is safe
           let KeyConfirmed { substrate_keys, coin_keys } =

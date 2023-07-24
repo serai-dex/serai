@@ -278,7 +278,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
       panic!("only a single key is supported at this time");
     }
 
-    info!("Rotating to key {}", hex::encode(key.to_bytes()));
+    info!("Rotating scanner to key {} at {activation_number}", hex::encode(key.to_bytes()));
 
     let (_, outputs) = ScannerDb::<C, D>::save_scanned_block(txn, &key, activation_number);
     scanner.ram_scanned.insert(key.to_bytes().as_ref().to_vec(), activation_number);
