@@ -5,12 +5,16 @@ on:
     branches:
       - develop
     paths:
+      - "common/**"
+      - "crypto/**"
       - "message-queue/**"
       - "tests/docker/**"
       - "tests/message-queue/**"
 
   pull_request:
     paths:
+      - "common/**"
+      - "crypto/**"
       - "message-queue/**"
       - "tests/docker/**"
       - "tests/message-queue/**"
