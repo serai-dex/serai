@@ -175,6 +175,16 @@ pub mod substrate {
   }
 }
 
+macro_rules! impl_from {
+  ($from: ident, $to: ident, $via: ident) => {
+    impl From<$from::$to> for $to {
+      fn from(msg: $from::$to) -> $to {
+        $to::$via(msg)
+      }
+    }
+  };
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum CoordinatorMessage {
   KeyGen(key_gen::CoordinatorMessage),
@@ -182,6 +192,11 @@ pub enum CoordinatorMessage {
   Coordinator(coordinator::CoordinatorMessage),
   Substrate(substrate::CoordinatorMessage),
 }
+
+impl_from!(key_gen, CoordinatorMessage, KeyGen);
+impl_from!(sign, CoordinatorMessage, Sign);
+impl_from!(coordinator, CoordinatorMessage, Coordinator);
+impl_from!(substrate, CoordinatorMessage, Substrate);
 
 impl CoordinatorMessage {
   pub fn required_block(&self) -> Option<BlockHash> {
@@ -208,6 +223,13 @@ pub enum ProcessorMessage {
   Coordinator(coordinator::ProcessorMessage),
   Substrate(substrate::ProcessorMessage),
 }
+
+impl_from!(key_gen, ProcessorMessage, KeyGen);
+impl_from!(sign, ProcessorMessage, Sign);
+impl_from!(coordinator, ProcessorMessage, Coordinator);
+impl_from!(substrate, ProcessorMessage, Substrate);
+
+// Intent generation code
 
 const COORDINATOR_UID: u8 = 0;
 const PROCESSSOR_UID: u8 = 1;
