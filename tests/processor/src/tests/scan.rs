@@ -39,6 +39,7 @@ fn scan_test() {
         }
       }
 
+      // Send into the processor's wallet
       let mut wallet = Wallet::new(network, &ops, coordinators[0].network_handle.clone()).await;
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
       let tx = wallet.send_to_address(&ops, &key_pair.1).await;
@@ -46,6 +47,7 @@ fn scan_test() {
         coordinator.publish_transacton(&ops, &tx).await;
       }
 
+      // Put the TX past the confirmation depth
       for _ in 0 .. confirmations(network) {
         let block = coordinators[0].add_block(&ops).await;
         for coordinator in &coordinators[1 ..] {
@@ -54,6 +56,20 @@ fn scan_test() {
       }
 
       tokio::time::sleep(core::time::Duration::from_secs(10)).await;
+
+      // Make sure the coordinators picked it up by checking they're trying to sign a batch for it
+      for coordinator in &mut coordinators {
+        let msg = coordinator.recv_message().await;
+        match msg {
+          messages::ProcessorMessage::Coordinator(
+            messages::coordinator::ProcessorMessage::BatchPreprocess { id, .. },
+          ) => {
+            assert_eq!(&id.key, &key_pair.0 .0);
+            assert_eq!(id.attempt, 0);
+          }
+          _ => panic!("processor didn't send batch preprocess"),
+        }
+      }
     });
   }
 }
