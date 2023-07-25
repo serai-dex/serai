@@ -79,7 +79,7 @@ pub fn network_rpc(network: NetworkId, ops: &DockerOperations, handle: &str) -> 
       NetworkId::Serai => panic!("getting port for external network yet it was Serai"),
     })
     .unwrap();
-  format!("http://{RPC_USER}:{RPC_PASS}@{}:{}", ip.to_string(), port.to_string())
+  format!("http://{RPC_USER}:{RPC_PASS}@{ip}:{port}")
 }
 
 pub fn confirmations(network: NetworkId) -> usize {
