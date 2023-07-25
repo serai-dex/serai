@@ -19,8 +19,12 @@ hex = "0.4"
 zeroize = "1"
 rand_core = "0.6"
 
+curve25519-dalek = "3.2"
 ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
 dkg = { path = "../../crypto/dkg", features = ["tests"] }
+
+bitcoin-serai = { path = "../../coins/bitcoin" }
+monero-serai = { path = "../../coins/monero" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
@@ -28,9 +32,12 @@ serai-primitives = { path = "../../substrate/primitives" }
 serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives" }
 serai-message-queue = { path = "../../message-queue" }
 
+serde = "1"
 serde_json = "1"
 
 tokio = { version = "1", features = ["full"] }
+
+processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "monero"] }
 
 dockertest = "0.3"
 serai-docker-tests = { path = "../docker" }

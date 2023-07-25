@@ -8845,17 +8845,22 @@ dependencies = [
 name = "serai-processor-tests"
 version = "0.1.0"
 dependencies = [
+ "bitcoin-serai",
  "ciphersuite",
+ "curve25519-dalek 3.2.0",
  "dkg",
  "dockertest",
  "hex",
+ "monero-serai",
  "rand_core 0.6.4",
  "serai-docker-tests",
  "serai-message-queue",
  "serai-message-queue-tests",
  "serai-primitives",
+ "serai-processor",
  "serai-processor-messages",
  "serai-validator-sets-primitives",
+ "serde",
  "serde_json",
  "tokio",
  "zeroize",

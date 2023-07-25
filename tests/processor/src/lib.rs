@@ -1,78 +1,30 @@
 use std::sync::{OnceLock, Mutex};
 
+use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
 use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
 
 use serai_primitives::NetworkId;
+use messages::{ProcessorMessage, CoordinatorMessage};
+use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
 use dockertest::{
   PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition,
+  DockerOperations,
 };
 
-const RPC_USER: &str = "serai";
-const RPC_PASS: &str = "seraidex";
+mod networks;
+pub use networks::*;
+
+#[cfg(test)]
+mod tests;
 
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
-pub fn bitcoin_instance() -> (Composition, u16) {
-  serai_docker_tests::build("bitcoin".to_string());
-
-  (
-    Composition::with_image(
-      Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
-    )
-    .with_cmd(vec![
-      "bitcoind".to_string(),
-      "-txindex".to_string(),
-      "-regtest".to_string(),
-      format!("-rpcuser={RPC_USER}"),
-      format!("-rpcpassword={RPC_PASS}"),
-      "-rpcbind=0.0.0.0".to_string(),
-      "-rpcallowip=0.0.0.0/0".to_string(),
-      "-rpcport=8332".to_string(),
-    ]),
-    8332,
-  )
-}
-
-pub fn monero_instance() -> (Composition, u16) {
-  serai_docker_tests::build("monero".to_string());
-
-  (
-    Composition::with_image(
-      Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),
-    )
-    .with_cmd(vec![
-      "monerod".to_string(),
-      "--regtest".to_string(),
-      "--offline".to_string(),
-      "--fixed-difficulty=1".to_string(),
-      "--rpc-bind-ip=0.0.0.0".to_string(),
-      format!("--rpc-login={RPC_USER}:{RPC_PASS}"),
-      "--rpc-access-control-origins=*".to_string(),
-      "--confirm-external-bind".to_string(),
-      "--non-interactive".to_string(),
-    ])
-    .with_start_policy(StartPolicy::Strict),
-    18081,
-  )
-}
-
-pub fn network_instance(network: NetworkId) -> (Composition, u16) {
-  match network {
-    NetworkId::Bitcoin => bitcoin_instance(),
-    NetworkId::Ethereum => todo!(),
-    NetworkId::Monero => monero_instance(),
-    NetworkId::Serai => {
-      panic!("Serai is not a valid network to spawn an instance of for a processor")
-    }
-  }
-}
-
 pub fn processor_instance(
   network: NetworkId,
-  port: u16,
+  port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
 ) -> Composition {
   serai_docker_tests::build("processor".to_string());
@@ -107,7 +59,7 @@ pub fn processor_instance(
 
 pub fn processor_stack(
   network: NetworkId,
-) -> (String, <Ristretto as Ciphersuite>::F, Vec<Composition>) {
+) -> ((String, String, String), <Ristretto as Ciphersuite>::F, Vec<Composition>) {
   let (network_composition, network_rpc_port) = network_instance(network);
 
   let (coord_key, message_queue_keys, message_queue_composition) =
@@ -147,8 +99,247 @@ pub fn processor_stack(
   processor_composition.inject_container_name(handles.remove(0), "NETWORK_RPC_HOSTNAME");
   processor_composition.inject_container_name(handles.remove(0), "MESSAGE_QUEUE_RPC");
 
-  (compositions[1].handle(), coord_key, compositions)
+  (
+    (compositions[0].handle(), compositions[1].handle(), compositions[2].handle()),
+    coord_key,
+    compositions,
+  )
 }
 
-#[cfg(test)]
-mod tests;
+#[derive(serde::Deserialize, Debug)]
+struct EmptyResponse {}
+
+pub struct Coordinator {
+  network: NetworkId,
+
+  network_handle: String,
+  #[allow(unused)]
+  message_queue_handle: String,
+  #[allow(unused)]
+  processor_handle: String,
+
+  next_send_id: u64,
+  next_recv_id: u64,
+  queue: MessageQueue,
+}
+
+impl Coordinator {
+  pub fn new(
+    network: NetworkId,
+    ops: &DockerOperations,
+    handles: (String, String, String),
+    coord_key: <Ristretto as Ciphersuite>::F,
+  ) -> Coordinator {
+    let rpc = ops.handle(&handles.1).host_port(2287).unwrap();
+    let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
+    Coordinator {
+      network,
+
+      network_handle: handles.0,
+      message_queue_handle: handles.1,
+      processor_handle: handles.2,
+
+      next_send_id: 0,
+      next_recv_id: 0,
+      queue: MessageQueue::new(Service::Coordinator, rpc, Zeroizing::new(coord_key)),
+    }
+  }
+
+  /// Send a message to a processor as its coordinator.
+  pub async fn send_message(&mut self, msg: CoordinatorMessage) {
+    self
+      .queue
+      .queue(
+        Metadata {
+          from: Service::Coordinator,
+          to: Service::Processor(self.network),
+          intent: self.next_send_id.to_le_bytes().to_vec(),
+        },
+        serde_json::to_string(&msg).unwrap().into_bytes(),
+      )
+      .await;
+    self.next_send_id += 1;
+  }
+
+  /// Receive a message from a processor as its coordinator.
+  pub async fn recv_message(&mut self) -> ProcessorMessage {
+    let msg =
+      tokio::time::timeout(core::time::Duration::from_secs(10), self.queue.next(self.next_recv_id))
+        .await
+        .unwrap();
+    assert_eq!(msg.from, Service::Processor(self.network));
+    assert_eq!(msg.id, self.next_recv_id);
+    self.queue.ack(self.next_recv_id).await;
+    self.next_recv_id += 1;
+    serde_json::from_slice(&msg.msg).unwrap()
+  }
+
+  pub async fn add_block(&self, ops: &DockerOperations) -> Vec<u8> {
+    let rpc_url = network_rpc(self.network, ops, &self.network_handle);
+    match self.network {
+      NetworkId::Bitcoin => {
+        use bitcoin_serai::{
+          bitcoin::{consensus::Encodable, network::constants::Network, Script, Address},
+          rpc::Rpc,
+        };
+
+        // Mine a block
+        let rpc = Rpc::new(rpc_url).await.expect("couldn't connect to the Bitcoin RPC");
+        rpc
+          .rpc_call::<Vec<String>>(
+            "generatetoaddress",
+            serde_json::json!([1, Address::p2sh(Script::empty(), Network::Regtest).unwrap()]),
+          )
+          .await
+          .unwrap();
+
+        // Get it to return it
+        let block = rpc
+          .get_block(
+            &rpc.get_block_hash(rpc.get_latest_block_number().await.unwrap()).await.unwrap(),
+          )
+          .await
+          .unwrap();
+        let mut block_buf = vec![];
+        block.consensus_encode(&mut block_buf).unwrap();
+        block_buf
+      }
+      NetworkId::Ethereum => todo!(),
+      NetworkId::Monero => {
+        use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
+        use monero_serai::{
+          wallet::{
+            ViewPair,
+            address::{Network, AddressSpec},
+          },
+          rpc::HttpRpc,
+        };
+
+        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
+        let _: EmptyResponse = rpc
+          .json_rpc_call(
+            "generateblocks",
+            Some(serde_json::json!({
+              "wallet_address": ViewPair::new(
+                ED25519_BASEPOINT_POINT,
+                Zeroizing::new(Scalar::one()),
+              ).address(Network::Mainnet, AddressSpec::Standard).to_string(),
+              "amount_of_blocks": 1,
+            })),
+          )
+          .await
+          .unwrap();
+        rpc
+          .get_block(rpc.get_block_hash(rpc.get_height().await.unwrap() - 1).await.unwrap())
+          .await
+          .unwrap()
+          .serialize()
+      }
+      NetworkId::Serai => panic!("processor tests adding block to Serai"),
+    }
+  }
+
+  pub async fn broadcast_block(&self, ops: &DockerOperations, block: &[u8]) {
+    let rpc_url = network_rpc(self.network, ops, &self.network_handle);
+    match self.network {
+      NetworkId::Bitcoin => {
+        use bitcoin_serai::rpc::Rpc;
+
+        let rpc =
+          Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
+        let res: Option<String> =
+          rpc.rpc_call("submitblock", serde_json::json!([hex::encode(block)])).await.unwrap();
+        if let Some(err) = res {
+          panic!("submitblock failed: {}", err);
+        }
+      }
+      NetworkId::Ethereum => todo!(),
+      NetworkId::Monero => {
+        use monero_serai::rpc::HttpRpc;
+
+        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
+        let _: EmptyResponse = rpc
+          .json_rpc_call("submit_block", Some(serde_json::json!([hex::encode(block)])))
+          .await
+          .unwrap();
+      }
+      NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
+    }
+  }
+
+  pub async fn sync(&self, ops: &DockerOperations, others: &[Coordinator]) {
+    let rpc_url = network_rpc(self.network, ops, &self.network_handle);
+    match self.network {
+      NetworkId::Bitcoin => {
+        use bitcoin_serai::{bitcoin::consensus::Encodable, rpc::Rpc};
+
+        let rpc = Rpc::new(rpc_url).await.expect("couldn't connect to the Bitcoin RPC");
+        let to = rpc.get_latest_block_number().await.unwrap();
+        for coordinator in others {
+          let from = Rpc::new(network_rpc(self.network, ops, &coordinator.network_handle))
+            .await
+            .expect("couldn't connect to the Bitcoin RPC")
+            .get_latest_block_number()
+            .await
+            .unwrap() +
+            1;
+          for b in from ..= to {
+            let mut buf = vec![];
+            rpc
+              .get_block(&rpc.get_block_hash(b).await.unwrap())
+              .await
+              .unwrap()
+              .consensus_encode(&mut buf)
+              .unwrap();
+            coordinator.broadcast_block(ops, &buf).await;
+          }
+        }
+      }
+      NetworkId::Ethereum => todo!(),
+      NetworkId::Monero => {
+        use monero_serai::rpc::HttpRpc;
+
+        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
+        let to = rpc.get_height().await.unwrap();
+        for coordinator in others {
+          let from = HttpRpc::new(network_rpc(self.network, ops, &coordinator.network_handle))
+            .expect("couldn't connect to the Monero RPC")
+            .get_height()
+            .await
+            .unwrap();
+          for b in from .. to {
+            coordinator
+              .broadcast_block(
+                ops,
+                &rpc.get_block(rpc.get_block_hash(b).await.unwrap()).await.unwrap().serialize(),
+              )
+              .await;
+          }
+        }
+      }
+      NetworkId::Serai => panic!("processors tests syncing Serai nodes"),
+    }
+  }
+
+  pub async fn publish_transacton(&self, ops: &DockerOperations, tx: &[u8]) {
+    let rpc_url = network_rpc(self.network, ops, &self.network_handle);
+    match self.network {
+      NetworkId::Bitcoin => {
+        use bitcoin_serai::rpc::Rpc;
+
+        let rpc =
+          Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
+        let _: String =
+          rpc.rpc_call("sendrawtransaction", serde_json::json!([hex::encode(tx)])).await.unwrap();
+      }
+      NetworkId::Ethereum => todo!(),
+      NetworkId::Monero => {
+        use monero_serai::{transaction::Transaction, rpc::HttpRpc};
+
+        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
+        rpc.publish_transaction(&Transaction::read(&mut &*tx).unwrap()).await.unwrap();
+      }
+      NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
+    }
+  }
+}
