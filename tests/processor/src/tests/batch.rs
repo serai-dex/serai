@@ -10,7 +10,7 @@ use dockertest::DockerTest;
 use crate::{*, tests::*};
 
 #[test]
-fn scan_test() {
+fn batch_test() {
   for network in [NetworkId::Bitcoin, NetworkId::Monero] {
     let mut coordinators = vec![];
     let mut test = DockerTest::new();
