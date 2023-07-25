@@ -153,9 +153,9 @@ impl MessageQueue {
       )
       .expect("next didn't return an Option<QueuedMessage>");
 
-      // If there wasn't a message, check again in 5s
+      // If there wasn't a message, check again in 1s
       let Some(msg) = msg else {
-        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
         continue;
       };
 

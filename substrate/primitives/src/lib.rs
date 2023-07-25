@@ -12,6 +12,8 @@ use scale_info::TypeInfo;
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
+pub use sp_application_crypto as crypto;
+
 mod amount;
 pub use amount::*;
 

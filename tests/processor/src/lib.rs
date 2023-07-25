@@ -146,14 +146,15 @@ impl Coordinator {
   }
 
   /// Send a message to a processor as its coordinator.
-  pub async fn send_message(&mut self, msg: CoordinatorMessage) {
+  pub async fn send_message(&mut self, msg: impl Into<CoordinatorMessage>) {
+    let msg: CoordinatorMessage = msg.into();
     self
       .queue
       .queue(
         Metadata {
           from: Service::Coordinator,
           to: Service::Processor(self.network),
-          intent: self.next_send_id.to_le_bytes().to_vec(),
+          intent: msg.intent(),
         },
         serde_json::to_string(&msg).unwrap().into_bytes(),
       )
@@ -174,7 +175,7 @@ impl Coordinator {
     serde_json::from_slice(&msg.msg).unwrap()
   }
 
-  pub async fn add_block(&self, ops: &DockerOperations) -> Vec<u8> {
+  pub async fn add_block(&self, ops: &DockerOperations) -> ([u8; 32], Vec<u8>) {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
       NetworkId::Bitcoin => {
@@ -193,16 +194,12 @@ impl Coordinator {
           .await
           .unwrap();
 
-        // Get it to return it
-        let block = rpc
-          .get_block(
-            &rpc.get_block_hash(rpc.get_latest_block_number().await.unwrap()).await.unwrap(),
-          )
-          .await
-          .unwrap();
+        // Get it so we can return it
+        let hash = rpc.get_block_hash(rpc.get_latest_block_number().await.unwrap()).await.unwrap();
+        let block = rpc.get_block(&hash).await.unwrap();
         let mut block_buf = vec![];
         block.consensus_encode(&mut block_buf).unwrap();
-        block_buf
+        (hash, block_buf)
       }
       NetworkId::Ethereum => todo!(),
       NetworkId::Monero => {
@@ -229,11 +226,8 @@ impl Coordinator {
           )
           .await
           .unwrap();
-        rpc
-          .get_block(rpc.get_block_hash(rpc.get_height().await.unwrap() - 1).await.unwrap())
-          .await
-          .unwrap()
-          .serialize()
+        let hash = rpc.get_block_hash(rpc.get_height().await.unwrap() - 1).await.unwrap();
+        (hash, rpc.get_block(hash).await.unwrap().serialize())
       }
       NetworkId::Serai => panic!("processor tests adding block to Serai"),
     }

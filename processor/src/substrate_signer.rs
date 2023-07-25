@@ -162,7 +162,7 @@ impl<D: Db> SubstrateSigner<D> {
     self.attempt.insert(id, attempt);
 
     let id = SignId { key: self.keys.group_key().to_bytes().to_vec(), id, attempt };
-    info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
+    info!("signing batch {} with attempt #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
     // attempts/new signing protocols
@@ -311,6 +311,8 @@ impl<D: Db> SubstrateSigner<D> {
           Ok(res) => res,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
+
+        info!("signed batch {} with attempt #{}", hex::encode(id.id), id.attempt);
 
         let batch =
           SignedBatch { batch: self.signable.remove(&id.id).unwrap(), signature: sig.into() };
