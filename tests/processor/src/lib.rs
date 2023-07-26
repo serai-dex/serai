@@ -252,10 +252,14 @@ impl Coordinator {
         use monero_serai::rpc::HttpRpc;
 
         let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
-        let _: EmptyResponse = rpc
+        let res: serde_json::Value = rpc
           .json_rpc_call("submit_block", Some(serde_json::json!([hex::encode(block)])))
           .await
           .unwrap();
+        let err = res.get("error");
+        if err.is_some() && (err.unwrap() != &serde_json::Value::Null) {
+          panic!("failed to submit Monero block: {res}");
+        }
       }
       NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
     }

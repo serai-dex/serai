@@ -228,6 +228,7 @@ impl Wallet {
           Transaction,
         };
 
+        const AMOUNT: u64 = 100000000;
         let mut tx = Transaction {
           version: 2,
           lock_time: LockTime::ZERO,
@@ -237,13 +238,19 @@ impl Wallet {
             sequence: Sequence(u32::MAX),
             witness: Witness::default(),
           }],
-          output: vec![TxOut {
-            value: input_tx.output[0].value - 10000,
-            script_pubkey: Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(
-              XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
-            ))
-            .script_pubkey(),
-          }],
+          output: vec![
+            TxOut {
+              value: input_tx.output[0].value - AMOUNT - 10000,
+              script_pubkey: input_tx.output[0].script_pubkey.clone(),
+            },
+            TxOut {
+              value: AMOUNT,
+              script_pubkey: Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(
+                XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
+              ))
+              .script_pubkey(),
+            },
+          ],
         };
 
         let mut der = SECP256K1
