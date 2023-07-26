@@ -117,6 +117,23 @@ pub fn build(name: String) {
 
   println!("Building {}...", &name);
 
+  // Version which always prints
+  if !Command::new("docker")
+    .current_dir(deploy_path)
+    .arg("compose")
+    .arg("build")
+    .arg(&name)
+    .spawn()
+    .unwrap()
+    .wait()
+    .unwrap()
+    .success()
+  {
+    panic!("failed to build {name}");
+  }
+
+  // Version which only prints on error
+  /*
   let res = Command::new("docker")
     .current_dir(deploy_path)
     .arg("compose")
@@ -140,19 +157,22 @@ pub fn build(name: String) {
     );
     panic!("failed to build {name}");
   }
+  */
 
   println!("Built!");
 
   if std::env::var("GITHUB_CI").is_ok() {
     println!("In CI, so clearing cache to prevent hitting the storage limits.");
-    Command::new("docker")
+    if !Command::new("docker")
       .arg("builder")
       .arg("prune")
       .arg("--all")
       .arg("--force")
       .output()
-      .unwrap();
-    if !res.status.success() {
+      .unwrap()
+      .status
+      .success()
+    {
       println!("failed to clear cache after building {name}\n");
     }
   }
