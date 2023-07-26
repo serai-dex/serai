@@ -1,4 +1,4 @@
-FROM docker.io/paritytech/ci-linux:production as builder
+FROM rust:1.71-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
 # Add files for build
@@ -16,34 +16,20 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
-# Update Rust
-RUN rustup update
+RUN apt update && apt upgrade -y && apt install -y make clang libssl-dev protobuf-compiler
 
-# Install Solc @ 0.8.16
-RUN --mount=type=cache,target=/root/.cache \
-  --mount=type=cache,target=/root/.local \
-  --mount=type=cache,target=/root/.solc-select \
-  pip3 install solc-select==0.2.1
-RUN --mount=type=cache,target=/root/.cache \
-  --mount=type=cache,target=/root/.local \
-  --mount=type=cache,target=/root/.solc-select \
-  solc-select install 0.8.16
-RUN --mount=type=cache,target=/root/.cache \
-  --mount=type=cache,target=/root/.local \
-  --mount=type=cache,target=/root/.solc-select \
-  solc-select use 0.8.16
+# Add the wasm toolchain
+RUN rustup target add wasm32-unknown-unknown
 
-# Mount cargo and the Serai cache
-RUN --mount=type=cache,target=/root/.local \
-  --mount=type=cache,target=/root/.solc-select \
-  --mount=type=cache,target=/root/.cache \
-  --mount=type=cache,target=/usr/local/cargo/git \
+# Mount the caches and build
+RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   cd substrate/node && cargo build --release
 
 # Prepare Image
-FROM ubuntu:latest as image
+FROM debian:bookworm-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
 WORKDIR /home/serai
@@ -51,6 +37,9 @@ WORKDIR /home/serai
 # Copy necessary files to run node
 COPY --from=builder /serai/target/release/ /bin/
 COPY --from=builder /serai/AGPL-3.0 .
+
+# Upgrade packages
+RUN apt update && apt upgrade -y
 
 # Run node
 EXPOSE 30333 9615 9933 9944

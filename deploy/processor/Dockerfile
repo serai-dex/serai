@@ -1,4 +1,4 @@
-FROM docker.io/paritytech/ci-linux:production as builder
+FROM rust:1.71-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
 # Add files for build
@@ -16,6 +16,11 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
+RUN apt update && apt upgrade -y && apt install -y clang libssl-dev
+
+# Add the wasm toolchain
+RUN rustup target add wasm32-unknown-unknown
+
 # Mount the caches and build
 RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/registry \
@@ -27,7 +32,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   mv /serai/target/release/serai-processor /serai/bin
 
 # Prepare Image
-FROM debian:bullseye-slim as image
+FROM debian:bookworm-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
 WORKDIR /home/serai
@@ -36,8 +41,8 @@ WORKDIR /home/serai
 COPY --from=builder /serai/bin/* /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
-# Install openssl
-RUN apt update && apt upgrade -y && apt install -y libssl
+# Upgrade packages and install openssl
+RUN apt update && apt upgrade -y && apt install -y libssl-dev
 
 # Run processor
 CMD ["serai-processor"]

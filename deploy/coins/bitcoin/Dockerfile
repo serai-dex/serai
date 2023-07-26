@@ -26,12 +26,15 @@ RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256s
 # Prepare Image
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
 
-FROM debian:bullseye-slim as image
+FROM debian:bookworm-slim as image
 
 WORKDIR /home/bitcoin
 COPY --from=builder /home/bitcoin/* .
 RUN mv bin/* /bin && mv lib/* /lib
 COPY ./scripts /scripts
+
+# Upgrade packages
+RUN apt update && apt upgrade -y
 
 EXPOSE 8332 8333 18332 18333 18443 18444
 VOLUME ["/home/bitcoin/.bitcoin"]
