@@ -16,7 +16,7 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
-RUN apt update && apt install -y clang
+RUN apt update && apt install -y pkg-config clang
 
 # Mount the caches and build
 RUN --mount=type=cache,target=/root/.cargo \

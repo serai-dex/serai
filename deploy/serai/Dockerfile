@@ -16,7 +16,7 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
-RUN apt update && apt upgrade -y && apt install -y git make clang libssl-dev protobuf-compiler
+RUN apt update && apt upgrade -y && apt install -y git pkg-config make clang libssl-dev protobuf-compiler
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown
