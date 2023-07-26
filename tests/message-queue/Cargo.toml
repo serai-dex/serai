@@ -16,14 +16,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex = "0.4"
 
-zeroize = "1"
-rand_core = "0.6"
+zeroize = { version = "1", default-features = false }
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 
-ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
 
 serai-primitives = { path = "../../substrate/primitives" }
 serai-message-queue = { path = "../../message-queue" }
 
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["time"] }
 dockertest = "0.3"
 serai-docker-tests = { path = "../docker" }

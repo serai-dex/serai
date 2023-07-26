@@ -19,22 +19,22 @@ async-trait = "0.1"
 lazy_static = "1"
 zeroize = "1"
 thiserror = "1"
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
 
 # Libs
-rand_core = "0.6"
-rand_chacha = "0.3"
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
+rand_chacha = { version = "0.3", default-features = false }
 
 # Encoders
 hex = "0.4"
 scale = { package = "parity-scale-codec", version = "3" }
-bincode = "1"
-serde_json = "1"
+bincode = { version = "1", default-features = false }
+serde_json = { version = "1", default-features = false }
 
 # Cryptography
-ciphersuite = { path = "../crypto/ciphersuite", features = ["ristretto"] }
+ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
 
-transcript = { package = "flexible-transcript", path = "../crypto/transcript" }
+transcript = { package = "flexible-transcript", default-features = false, path = "../crypto/transcript" }
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["ristretto"] }
 frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
@@ -53,9 +53,8 @@ monero-serai = { path = "../coins/monero", features = ["multisig"], optional = t
 # Application
 log = "0.4"
 env_logger = "0.10"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-rocksdb = "0.21"
 serai-db = { path = "../common/db", default-features = false, features = ["rocksdb"] }
 serai-env = { path = "../common/env" }
 serai-client = { path = "../substrate/client", default-features = false }

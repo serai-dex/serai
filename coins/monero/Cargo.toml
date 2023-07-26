@@ -59,14 +59,14 @@ digest_auth = { version = "0.3", optional = true }
 reqwest = { version = "0.11", features = ["json"], optional = true }
 
 # Used for the binaries
-tokio = { version = "1", features = ["full"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 
 [build-dependencies]
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3", default-features = false }
 monero-generators = { path = "generators", version = "0.3", default-features = false }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["tests"] }
 

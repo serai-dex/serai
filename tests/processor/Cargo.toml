@@ -16,12 +16,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex = "0.4"
 
-zeroize = "1"
-rand_core = "0.6"
+zeroize = { version = "1", default-features = false }
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 
 curve25519-dalek = "3.2"
-ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
-dkg = { path = "../../crypto/dkg", features = ["tests"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 
 bitcoin-serai = { path = "../../coins/bitcoin" }
 monero-serai = { path = "../../coins/monero" }
@@ -33,10 +33,10 @@ serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primi
 serai-in-instructions-primitives = { path = "../../substrate/in-instructions/primitives" }
 serai-message-queue = { path = "../../message-queue" }
 
-serde = "1"
-serde_json = "1"
+serde = { version = "1", default-features = false }
+serde_json = { version = "1", default-features = false }
 
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["time"] }
 
 processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "monero"] }
 

@@ -36,10 +36,9 @@ schnorr-signatures = { path = "../crypto/schnorr" }
 log = "0.4"
 env_logger = "0.10"
 
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "macros"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"], optional = true }
-rocksdb = { version = "0.21", optional = true }
+serai-db = { path = "../common/db", optional = true }
 
 serai-env = { path = "../common/env" }
 
@@ -49,4 +48,4 @@ jsonrpsee = { version = "0.16", features = ["server"], optional = true }
 reqwest = { version = "0.11", features = ["json"] }
 
 [features]
-binaries = ["serai-db", "rocksdb", "jsonrpsee"]
+binaries = ["serai-db", "serai-db/rocksdb", "jsonrpsee"]
