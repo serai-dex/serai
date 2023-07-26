@@ -37,6 +37,6 @@ pub type RocksDB = Arc<TransactionDB<SingleThreaded>>;
 pub fn new_rocksdb(path: &str) -> RocksDB {
   let mut options = Options::default();
   options.create_if_missing(true);
-  options.set_compression_type(DBCompressionType::Zstd);
+  options.set_compression_type(DBCompressionType::Lz4);
   Arc::new(TransactionDB::open(&options, &Default::default(), path).unwrap())
 }

@@ -13,7 +13,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rocksdb = { version = "0.21", default-features = false, features = ["zstd"], optional = true }
+rocksdb = { version = "0.21", default-features = false, features = ["lz4"], optional = true }
 
 [features]
 rocksdb = ["dep:rocksdb"]
