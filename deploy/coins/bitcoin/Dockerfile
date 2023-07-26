@@ -26,7 +26,7 @@ RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256s
 # Prepare Image
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
 
-FROM debian:bookworm-slim as image
+FROM debian:bullseye-slim as image
 
 WORKDIR /home/bitcoin
 COPY --from=builder /home/bitcoin/* .

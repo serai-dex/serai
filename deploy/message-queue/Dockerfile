@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   mv /serai/target/release/serai-message-queue /serai/bin
 
 # Prepare Image
-FROM debian:bookworm-slim as image
+FROM debian:bullseye-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
 WORKDIR /home/serai
