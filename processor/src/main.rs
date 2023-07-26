@@ -1,6 +1,5 @@
 use std::{
   time::Duration,
-  sync::Arc,
   collections::{VecDeque, HashMap},
 };
 
@@ -730,12 +729,7 @@ async fn main() {
   }
   env_logger::init();
 
-  let db = Arc::new(
-    rocksdb::TransactionDB::<rocksdb::SingleThreaded>::open_default(
-      env::var("DB_PATH").expect("path to DB wasn't specified"),
-    )
-    .unwrap(),
-  );
+  let db = serai_db::new_rocksdb(&env::var("DB_PATH").expect("path to DB wasn't specified"));
 
   // Network configuration
   let url = {

@@ -669,12 +669,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 
 #[tokio::main]
 async fn main() {
-  let db = Arc::new(
-    rocksdb::TransactionDB::<rocksdb::SingleThreaded>::open_default(
-      env::var("DB_PATH").expect("path to DB wasn't specified"),
-    )
-    .unwrap(),
-  );
+  let db = serai_db::new_rocksdb(&env::var("DB_PATH").expect("path to DB wasn't specified"));
 
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
   let p2p = LocalP2p::new(1).swap_remove(0); // TODO

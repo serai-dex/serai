@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rocksdb::{ThreadMode, Transaction, TransactionDB};
+use rocksdb::{DBCompressionType, ThreadMode, SingleThreaded, Options, Transaction, TransactionDB};
 
 use crate::*;
 
@@ -31,4 +31,11 @@ impl<T: ThreadMode + 'static> Db for Arc<TransactionDB<T>> {
   fn txn(&mut self) -> Self::Transaction<'_> {
     self.transaction()
   }
+}
+
+pub type RocksDB = Arc<TransactionDB<SingleThreaded>>;
+pub fn new_rocksdb(path: &str) -> RocksDB {
+  let mut options = Options::default();
+  options.set_compression_type(DBCompressionType::Zstd);
+  Arc::new(TransactionDB::open(&options, &Default::default(), path).unwrap())
 }

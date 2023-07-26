@@ -3,6 +3,8 @@ pub use mem::*;
 
 #[cfg(feature = "rocksdb")]
 mod rocks;
+#[cfg(feature = "rocksdb")]
+pub use rocks::{RocksDB, new_rocksdb};
 
 /// An object implementing get.
 pub trait Get {

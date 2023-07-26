@@ -16,7 +16,7 @@ use messages::*;
 mod queue;
 use queue::Queue;
 
-type Db = Arc<rocksdb::TransactionDB>;
+type Db = serai_db::RocksDB;
 
 lazy_static::lazy_static! {
   static ref KEYS: Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>> =
@@ -117,12 +117,7 @@ async fn main() {
   log::info!("Starting message-queue service...");
 
   // Open the DB
-  let db = Arc::new(
-    rocksdb::TransactionDB::open_default(
-      serai_env::var("DB_PATH").expect("path to DB wasn't specified"),
-    )
-    .unwrap(),
-  );
+  let db = serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
 
   let read_key = |str| {
     let key = serai_env::var(str)?;
