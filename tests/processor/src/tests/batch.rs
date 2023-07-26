@@ -4,8 +4,12 @@ use dkg::{Participant, tests::clone_without};
 
 use messages::sign::SignId;
 
-use serai_primitives::{NetworkId, BlockHash, crypto::RuntimePublic, PublicKey};
-use serai_in_instructions_primitives::{SignedBatch, batch_message};
+use serai_primitives::{
+  BlockHash, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId, Coin, Balance,
+};
+use serai_in_instructions_primitives::{
+  InInstruction, InInstructionWithBalance, SignedBatch, batch_message,
+};
 
 use dockertest::DockerTest;
 
@@ -168,9 +172,16 @@ fn batch_test() {
       }
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
+      // Run twice, once with an instruction and once without
       for i in 0 .. 2 {
+        let mut serai_address = [0; 32];
+        OsRng.fill_bytes(&mut serai_address);
+        let instruction =
+          if i == 1 { Some(InInstruction::Transfer(SeraiAddress(serai_address))) } else { None };
+
         // Send into the processor's wallet
-        let tx = wallet.send_to_address(&ops, &key_pair.1).await;
+        let (tx, amount_sent) =
+          wallet.send_to_address(&ops, &key_pair.1, instruction.clone()).await;
         for coordinator in &mut coordinators {
           coordinator.publish_transacton(&ops, &tx).await;
         }
@@ -215,8 +226,28 @@ fn batch_test() {
         assert_eq!(batch.batch.network, network);
         assert_eq!(batch.batch.id, i);
         assert_eq!(batch.batch.block, BlockHash(block_with_tx.unwrap()));
-        // This shouldn't have an instruction as we didn't add any data into the TX we sent
-        assert!(batch.batch.instructions.is_empty());
+        if let Some(instruction) = instruction {
+          assert_eq!(
+            batch.batch.instructions,
+            vec![InInstructionWithBalance {
+              instruction,
+              balance: Balance {
+                coin: match network {
+                  NetworkId::Bitcoin => Coin::Bitcoin,
+                  NetworkId::Ethereum => todo!(),
+                  NetworkId::Monero => Coin::Monero,
+                  NetworkId::Serai => panic!("running processor tests on Serai"),
+                },
+                amount: amount_sent,
+              }
+            }]
+          );
+        } else {
+          // This shouldn't have an instruction as we didn't add any data into the TX we sent
+          // Empty batches remain valuable as they let us achieve consensus on the block and spend
+          // contained outputs
+          assert!(batch.batch.instructions.is_empty());
+        }
       }
     });
   }

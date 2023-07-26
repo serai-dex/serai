@@ -3,8 +3,11 @@ use std::collections::HashSet;
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
-use serai_primitives::NetworkId;
+use scale::Encode;
+
+use serai_primitives::{NetworkId, Amount};
 use serai_validator_sets_primitives::ExternalKey;
+use serai_in_instructions_primitives::{InInstruction, RefundableInInstruction, Shorthand};
 
 use dockertest::{PullPolicy, Image, StartPolicy, Composition, DockerOperations};
 
@@ -213,7 +216,12 @@ impl Wallet {
     }
   }
 
-  pub async fn send_to_address(&mut self, ops: &DockerOperations, to: &ExternalKey) -> Vec<u8> {
+  pub async fn send_to_address(
+    &mut self,
+    ops: &DockerOperations,
+    to: &ExternalKey,
+    instruction: Option<InInstruction>,
+  ) -> (Vec<u8>, Amount) {
     match self {
       Wallet::Bitcoin { private_key, public_key, ref mut input_tx } => {
         use bitcoin_serai::bitcoin::{
@@ -221,7 +229,7 @@ impl Wallet {
           key::{XOnlyPublicKey, TweakedPublicKey},
           consensus::Encodable,
           sighash::{EcdsaSighashType, SighashCache},
-          script::{PushBytesBuf, Script, Builder},
+          script::{PushBytesBuf, Script, ScriptBuf, Builder},
           address::Payload,
           OutPoint, Sequence, Witness, TxIn, TxOut,
           absolute::LockTime,
@@ -253,6 +261,18 @@ impl Wallet {
           ],
         };
 
+        if let Some(instruction) = instruction {
+          tx.output.push(TxOut {
+            value: 0,
+            script_pubkey: ScriptBuf::new_op_return(
+              &PushBytesBuf::try_from(
+                Shorthand::Raw(RefundableInInstruction { origin: None, instruction }).encode(),
+              )
+              .unwrap(),
+            ),
+          });
+        }
+
         let mut der = SECP256K1
           .sign_ecdsa_low_r(
             &Message::from(
@@ -278,7 +298,7 @@ impl Wallet {
         let mut buf = vec![];
         tx.consensus_encode(&mut buf).unwrap();
         *input_tx = tx;
-        buf
+        (buf, Amount(AMOUNT))
       }
 
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
@@ -329,13 +349,18 @@ impl Wallet {
         );
 
         // Create and sign the TX
+        const AMOUNT: u64 = 1_000_000_000_000;
+        let mut data = vec![];
+        if let Some(instruction) = instruction {
+          data.push(Shorthand::Raw(RefundableInInstruction { origin: None, instruction }).encode());
+        }
         let tx = SignableTransaction::new(
           Protocol::v16,
           None,
           these_inputs.drain(..).zip(decoys.drain(..)).collect(),
-          vec![(to_addr, 1_000_000_000_000)],
+          vec![(to_addr, AMOUNT)],
           Some(Change::new(view_pair, false)),
-          vec![],
+          data,
           rpc.get_fee(Protocol::v16, FeePriority::Low).await.unwrap(),
         )
         .unwrap()
@@ -351,7 +376,7 @@ impl Wallet {
             .remove(0),
         );
 
-        tx.serialize()
+        (tx.serialize(), Amount(AMOUNT))
       }
     }
   }

@@ -699,6 +699,8 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
               }).collect()
             };
 
+            info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
+
             // Start signing this batch
             tributary_mutable
               .substrate_signers

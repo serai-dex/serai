@@ -8849,6 +8849,7 @@ dependencies = [
  "dockertest",
  "hex",
  "monero-serai",
+ "parity-scale-codec",
  "rand_core 0.6.4",
  "serai-docker-tests",
  "serai-in-instructions-primitives",

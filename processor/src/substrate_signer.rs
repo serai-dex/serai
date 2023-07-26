@@ -162,7 +162,7 @@ impl<D: Db> SubstrateSigner<D> {
     self.attempt.insert(id, attempt);
 
     let id = SignId { key: self.keys.group_key().to_bytes().to_vec(), id, attempt };
-    info!("signing batch {} with attempt #{}", hex::encode(id.id), id.attempt);
+    info!("signing batch {}, attempt #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
     // attempts/new signing protocols
@@ -178,7 +178,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Only run if this hasn't already been attempted
     if SubstrateSignerDb::<D>::has_attempt(txn, &id) {
       warn!(
-        "already attempted {} #{}. this is an error if we didn't reboot",
+        "already attempted batch {}, attempt #{}. this is an error if we didn't reboot",
         hex::encode(id.id),
         id.attempt
       );

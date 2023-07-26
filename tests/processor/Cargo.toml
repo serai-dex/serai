@@ -28,6 +28,7 @@ monero-serai = { path = "../../coins/monero" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
+scale = { package = "parity-scale-codec", version = "3" }
 serai-primitives = { path = "../../substrate/primitives" }
 serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives" }
 serai-in-instructions-primitives = { path = "../../substrate/in-instructions/primitives" }
