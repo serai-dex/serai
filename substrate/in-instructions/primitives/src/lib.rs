@@ -30,7 +30,18 @@ pub enum InInstruction {
   Dex(Data),
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[derive(
+  Clone,
+  PartialEq,
+  Eq,
+  Serialize,
+  Deserialize,
+  Encode,
+  Decode,
+  MaxEncodedLen,
+  TypeInfo,
+  RuntimeDebug,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct RefundableInInstruction {
   pub origin: Option<ExternalAddress>,

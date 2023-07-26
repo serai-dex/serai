@@ -67,9 +67,8 @@ Shorthand is an enum which expands to an Refundable In Instruction.
 
 ##### Raw
 
-Raw Shorthand encodes a raw Refundable In Instruction in a Data, with no further
-processing. This is a verbose fallback option for infrequent use cases not
-covered by Shorthand.
+Raw Shorthand contains a Refundable In Instruction directly. This is a verbose
+fallback option for infrequent use cases not covered by Shorthand.
 
 ##### Swap
 

@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-use serai_primitives::{Coin, Amount, SeraiAddress, ExternalAddress, Data};
+use serai_primitives::{Coin, Amount, SeraiAddress, ExternalAddress};
 
 use tokens_primitives::OutInstruction;
 
@@ -19,7 +19,7 @@ use crate::InInstruction;
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum Shorthand {
-  Raw(Data),
+  Raw(RefundableInInstruction),
   Swap {
     origin: Option<ExternalAddress>,
     coin: Coin,
@@ -36,14 +36,8 @@ pub enum Shorthand {
 
 impl Shorthand {
   #[cfg(feature = "std")]
-  pub fn transfer(origin: Option<ExternalAddress>, address: SeraiAddress) -> Option<Self> {
-    Some(Self::Raw(
-      Data::new(
-        (RefundableInInstruction { origin, instruction: InInstruction::Transfer(address) })
-          .encode(),
-      )
-      .ok()?,
-    ))
+  pub fn transfer(origin: Option<ExternalAddress>, address: SeraiAddress) -> Self {
+    Self::Raw(RefundableInInstruction { origin, instruction: InInstruction::Transfer(address) })
   }
 }
 
@@ -51,9 +45,7 @@ impl TryFrom<Shorthand> for RefundableInInstruction {
   type Error = &'static str;
   fn try_from(shorthand: Shorthand) -> Result<RefundableInInstruction, &'static str> {
     Ok(match shorthand {
-      Shorthand::Raw(raw) => {
-        RefundableInInstruction::decode(&mut raw.data()).map_err(|_| "invalid raw instruction")?
-      }
+      Shorthand::Raw(instruction) => instruction,
       Shorthand::Swap { .. } => todo!(),
       Shorthand::AddLiquidity { .. } => todo!(),
     })
