@@ -25,18 +25,15 @@ instructed to act on invalid data, it will drop the entire instruction.
 
 Instructions are SCALE encoded.
 
-### Application Call
-
-  - `application` (u16):  The application of Serai to call. Currently, only 0,
-Serai DEX is valid.
-  - `data`        (Data): The data to call the application with.
-
 ### In Instruction
 
-InInstruction is an enum of SeraiAddress and ApplicationCall.
+InInstruction is an enum of:
+
+  - `Transfer`
+  - `Dex(Data)`
 
 The specified target will be minted an appropriate amount of the respective
-Serai token. If an Application Call, the encoded call will be executed.
+Serai token. If `Dex`, the encoded call will be executed.
 
 ### Refundable In Instruction
 
@@ -86,10 +83,7 @@ which expands to:
 ```
 RefundableInInstruction {
   origin,
-  instruction: ApplicationCall {
-    application: DEX,
-    data:        swap(Incoming Asset, coin, minimum, out)
-  }
+  instruction: InInstruction::Dex(swap(Incoming Asset, coin, minimum, out)),
 }
 ```
 
@@ -115,10 +109,9 @@ which expands to:
 ```
 RefundableInInstruction {
   origin,
-  instruction: ApplicationCall {
-    application: DEX,
-    data:        swap_and_add_liquidity(Incoming Asset, minimum, gas, address)
-  }
+  instruction: InInstruction::Dex(
+    swap_and_add_liquidity(Incoming Asset, minimum, gas, address)
+  ),
 }
 ```
 

@@ -21,31 +21,13 @@ use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddr
 mod shorthand;
 pub use shorthand::*;
 
-#[rustfmt::skip]
-#[derive(
-  Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
-#[cfg_attr(feature = "std", derive(Zeroize))]
-pub enum Application {
-  DEX,
-}
-
-#[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
-#[cfg_attr(feature = "std", derive(Zeroize))]
-pub struct ApplicationCall {
-  pub application: Application,
-  pub data: Data,
-}
-
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
-  Call(ApplicationCall),
+  Dex(Data),
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
