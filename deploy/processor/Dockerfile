@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   mv /serai/target/release/serai-processor /serai/bin
 
 # Prepare Image
-FROM debian:bullseye as image
+FROM debian:bookworm-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
 WORKDIR /home/serai
@@ -35,6 +35,9 @@ WORKDIR /home/serai
 # Copy necessary files to run node
 COPY --from=builder /serai/bin/* /bin/
 COPY --from=builder /serai/AGPL-3.0 .
+
+# Install openssl
+RUN apt update && apt upgrade -y && apt install -y libssl1.1
 
 # Run processor
 CMD ["serai-processor"]

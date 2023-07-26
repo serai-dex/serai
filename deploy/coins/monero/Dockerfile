@@ -27,7 +27,7 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-si
 RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
 
 # Prepare Image
-FROM debian:bullseye-slim as image
+FROM debian:bookworm-slim as image
 
 WORKDIR /home/monero
 COPY --from=builder /home/monero/* .
