@@ -16,7 +16,7 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
-RUN apt update && apt upgrade -y && apt install -y make clang libssl-dev protobuf-compiler
+RUN apt update && apt upgrade -y && apt install -y git make clang libssl-dev protobuf-compiler
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown
@@ -26,7 +26,10 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/registry \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
-  cd substrate/node && cargo build --release
+  cd substrate/node && \
+  cargo build --release && \
+  mkdir /serai/bin && \
+  mv /serai/target/release/serai-node /serai/bin
 
 # Prepare Image
 FROM debian:bookworm-slim as image
@@ -35,7 +38,7 @@ LABEL description="STAGE 2: Copy and Run"
 WORKDIR /home/serai
 
 # Copy necessary files to run node
-COPY --from=builder /serai/target/release/ /bin/
+COPY --from=builder /serai/bin/serai-node /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
 # Upgrade packages

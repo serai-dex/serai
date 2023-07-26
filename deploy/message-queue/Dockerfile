@@ -35,7 +35,7 @@ LABEL description="STAGE 2: Copy and Run"
 WORKDIR /home/serai
 
 # Copy the Message Queue binary and relevant license
-COPY --from=builder /serai/bin/* /bin/
+COPY --from=builder /serai/bin/serai-message-queue /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
 # Upgrade packages

@@ -38,7 +38,7 @@ LABEL description="STAGE 2: Copy and Run"
 WORKDIR /home/serai
 
 # Copy necessary files to run node
-COPY --from=builder /serai/bin/* /bin/
+COPY --from=builder /serai/bin/serai-processor /bin/
 COPY --from=builder /serai/AGPL-3.0 .
 
 # Upgrade packages and install openssl
