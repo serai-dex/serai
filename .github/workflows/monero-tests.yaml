@@ -28,7 +28,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Unit Tests Without Features
-        run: cargo test --package monero-serai --lib
+        run: GITHUB_CI=true cargo test --package monero-serai --lib
 
       # Doesn't run unit tests with features as the tests workflow will
 
@@ -51,11 +51,11 @@ jobs:
       - name: Run Integration Tests Without Features
         # Runs with the binaries feature so the binaries build
         # https://github.com/rust-lang/cargo/issues/8396
-        run: cargo test --package monero-serai --features binaries --test '*'
+        run: GITHUB_CI=true cargo test --package monero-serai --features binaries --test '*'
 
       - name: Run Integration Tests
         # Don't run if the the tests workflow also will
         if: ${{ matrix.version != 'v0.18.2.0' }}
         run: |
-          cargo test --package monero-serai --all-features --test '*'
-          cargo test --package serai-processor --all-features monero
+          GITHUB_CI=true cargo test --package monero-serai --all-features --test '*'
+          GITHUB_CI=true cargo test --package serai-processor --all-features monero

@@ -143,6 +143,20 @@ pub fn build(name: String) {
 
   println!("Built!");
 
+  if std::env::var("GITHUB_CI").is_ok() {
+    println!("In CI, so clearing cache to prevent hitting the storage limits.");
+    Command::new("docker")
+      .arg("builder")
+      .arg("prune")
+      .arg("--all")
+      .arg("--force")
+      .output()
+      .unwrap();
+    if !res.status.success() {
+      println!("failed to clear cache after building {name}\n");
+    }
+  }
+
   // Set built
   built_lock.insert(name, true);
 }
