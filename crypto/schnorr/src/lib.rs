@@ -27,8 +27,6 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 /// Half-aggregation from <https://eprint.iacr.org/2021/350>.
 pub mod aggregate;
 
-pub mod aggregate;
-
 #[cfg(test)]
 mod tests;
 

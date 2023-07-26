@@ -30,9 +30,6 @@ members = [
   "processor/messages",
   "processor",
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
   "coordinator/tributary/tendermint",
   "coordinator/tributary",
   "coordinator",
@@ -45,31 +42,13 @@ members = [
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",
 
+  "substrate/staking/primitives",
+  "substrate/staking/pallet",
+
   "substrate/validator-sets/primitives",
   "substrate/validator-sets/pallet",
 
   "substrate/runtime",
-=======
-  "substrate/tendermint",
-=======
-=======
-  "substrate/staking/primitives",
-  "substrate/staking/pallet",
-
->>>>>>> 820618dd (Implement a basic staking pallet)
-  "substrate/tendermint/machine",
-  "substrate/tendermint/primitives",
-  "substrate/tendermint/client",
-  "substrate/tendermint/pallet",
->>>>>>> 66f7663c (Redo Tendermint folder structure)
-
-  "substrate/runtime",
-<<<<<<< HEAD
-
-  "substrate/consensus",
->>>>>>> 49ab2620 (Add pallet sessions to runtime, create pallet-tendermint)
-=======
->>>>>>> 66f7663c (Redo Tendermint folder structure)
   "substrate/node",
 
   "substrate/client",

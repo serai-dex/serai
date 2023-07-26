@@ -1,11 +1,5 @@
 use core::{hash::Hash, fmt::Debug};
 use std::{sync::Arc, collections::HashSet};
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
-
-use async_trait::async_trait;
-use thiserror::Error;
-=======
->>>>>>> b042a2a3 (Prevent a commit from including the same signature multiple times):substrate/tendermint/machine/src/ext.rs
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -38,37 +32,6 @@ pub struct BlockNumber(pub u64);
 /// A struct containing a round number, wrapped to have a distinct type.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct RoundNumber(pub u32);
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
-
-/// A signer for a validator.
-#[async_trait]
-pub trait Signer: Send + Sync {
-  // Type used to identify validators.
-  type ValidatorId: ValidatorId;
-  /// Signature type.
-  type Signature: Signature;
-
-  /// Returns the validator's current ID. Returns None if they aren't a current validator.
-  async fn validator_id(&self) -> Option<Self::ValidatorId>;
-  /// Sign a signature with the current validator's private key.
-  async fn sign(&self, msg: &[u8]) -> Self::Signature;
-}
-
-#[async_trait]
-impl<S: Signer> Signer for Arc<S> {
-  type ValidatorId = S::ValidatorId;
-  type Signature = S::Signature;
-
-  async fn validator_id(&self) -> Option<Self::ValidatorId> {
-    self.as_ref().validator_id().await
-  }
-
-  async fn sign(&self, msg: &[u8]) -> Self::Signature {
-    self.as_ref().sign(msg).await
-  }
-}
-=======
->>>>>>> 2f3bb887 (Rename Round to RoundNumber):substrate/tendermint/machine/src/ext.rs
 
 /// A signer for a validator.
 #[async_trait]
@@ -110,20 +73,9 @@ pub trait SignatureScheme: Send + Sync {
   /// It could even be a threshold signature scheme, though that's currently unexpected.
   type AggregateSignature: Signature;
 
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// Type representing a signer of this scheme.
   type Signer: Signer<ValidatorId = Self::ValidatorId, Signature = Self::Signature>;
 
-=======
-  /// Sign a signature with the current validator's private key.
-  async fn sign(&self, msg: &[u8]) -> Self::Signature;
->>>>>>> 2947ef08 (Make sign asynchronous):substrate/tendermint/machine/src/ext.rs
-=======
-  /// Type representing a signer of this scheme.
-  type Signer: Signer<ValidatorId = Self::ValidatorId, Signature = Self::Signature>;
-
->>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/src/ext.rs
   /// Verify a signature from the validator in question.
   #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool;
@@ -165,26 +117,12 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
   }
 }
 
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
 /// A commit for a specific block.
 ///
 /// The list of validators have weight exceeding the threshold for a valid commit.
 #[derive(PartialEq, Debug, Encode, Decode)]
-=======
-/// A commit for a specific block. The list of validators have weight exceeding the threshold for
-/// a valid commit.
-#[derive(Clone, PartialEq, Debug, Encode, Decode)]
->>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/src/ext.rs
 pub struct Commit<S: SignatureScheme> {
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// End time of the round which created this commit, used as the start time of the next block.
-=======
-  /// End time of the round, used as the start time of next round.
->>>>>>> a7f48047 (Move Commit from including the round to including the round's end_time):substrate/tendermint/src/ext.rs
-=======
-  /// End time of the round which created this commit, used as the start time of the next block.
->>>>>>> b53759c6 (Have the machine respond to advances made by an external sync loop):substrate/tendermint/machine/src/ext.rs
   pub end_time: u64,
   /// Validators participating in the signature.
   pub validators: Vec<S::ValidatorId>,
@@ -220,31 +158,7 @@ pub trait Weights: Send + Sync {
   }
 
   /// Weighted round robin function.
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
-}
-
-impl<W: Weights> Weights for Arc<W> {
-  type ValidatorId = W::ValidatorId;
-
-  fn total_weight(&self) -> u64 {
-    self.as_ref().total_weight()
-  }
-
-  fn weight(&self, validator: Self::ValidatorId) -> u64 {
-    self.as_ref().weight(validator)
-  }
-
-  fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId {
-    self.as_ref().proposer(block, round)
-  }
-=======
-  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
->>>>>>> 2f3bb887 (Rename Round to RoundNumber):substrate/tendermint/machine/src/ext.rs
-=======
-  fn proposer(&self, block: BlockNumber, round: RoundNumber) -> Self::ValidatorId;
->>>>>>> 9dfa22de (Misc lints):substrate/tendermint/machine/src/ext.rs
 }
 
 impl<W: Weights> Weights for Arc<W> {
@@ -301,23 +215,12 @@ pub trait Network: Send + Sync {
   const BLOCK_PROCESSING_TIME: u32;
   /// Network latency time in seconds.
   const LATENCY_TIME: u32;
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
-=======
 
   /// The block time is defined as the processing time plus three times the latency.
   fn block_time() -> u32 {
     Self::BLOCK_PROCESSING_TIME + (3 * Self::LATENCY_TIME)
   }
->>>>>>> fffb7a69 (Separate the block processing time from the latency):substrate/tendermint/machine/src/ext.rs
 
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
-  /// The block time is defined as the processing time plus three times the latency.
-  fn block_time() -> u32 {
-    Self::BLOCK_PROCESSING_TIME + (3 * Self::LATENCY_TIME)
-  }
-
-=======
->>>>>>> f3e17710 (Reduce Arcs in TendermintMachine, split Signer from SignatureScheme):substrate/tendermint/machine/src/ext.rs
   /// Return a handle on the signer in use, usable for the entire lifetime of the machine.
   fn signer(&self) -> <Self::SignatureScheme as SignatureScheme>::Signer;
   /// Return a handle on the signing scheme in use, usable for the entire lifetime of the machine.
@@ -349,33 +252,22 @@ pub trait Network: Send + Sync {
     commit.validators.iter().map(|v| weights.weight(*v)).sum::<u64>() >= weights.threshold()
   }
 
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   /// Broadcast a message to the other validators.
   ///
   /// If authenticated channels have already been established, this will double-authenticate.
   /// Switching to unauthenticated channels in a system already providing authenticated channels is
   /// not recommended as this is a minor, temporal inefficiency, while downgrading channels may
   /// have wider implications.
-=======
-  /// Broadcast a message to the other validators. If authenticated channels have already been
-  /// established, this will double-authenticate. Switching to unauthenticated channels in a system
-  /// already providing authenticated channels is not recommended as this is a minor, temporal
-  /// inefficiency while downgrading channels may have wider implications.
->>>>>>> c13e0c75 (Move more code into block.rs):substrate/tendermint/machine/src/ext.rs
   async fn broadcast(&mut self, msg: SignedMessageFor<Self>);
 
   /// Trigger a slash for the validator in question who was definitively malicious.
   ///
   /// The exact process of triggering a slash is undefined and left to the network as a whole.
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
   // TODO: We need to provide some evidence for this.
-=======
->>>>>>> dbcddb2f (Don't spam slash):substrate/tendermint/machine/src/ext.rs
   async fn slash(&mut self, validator: Self::ValidatorId);
 
   /// Validate a block.
   async fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/ext.rs
 
   /// Add a block, returning the proposal for the next one.
   ///
@@ -385,13 +277,6 @@ pub trait Network: Send + Sync {
   /// This deviates from the paper which will have a local node refuse to decide on a block it
   /// considers invalid. This library acknowledges the network did decide on it, leaving handling
   /// of it to the network, and outside of this scope.
-=======
-  /// Add a block, returning the proposal for the next one. It's possible a block, which was never
-  /// validated or even failed validation, may be passed here if a supermajority of validators did
-  /// consider it valid and created a commit for it. This deviates from the paper which will have a
-  /// local node refuse to decide on a block it considers invalid. This library acknowledges the
-  /// network did decide on it, leaving handling of it to the network, and outside of this scope.
->>>>>>> 193281e3 (Get the result of block importing):substrate/tendermint/src/ext.rs
   async fn add_block(
     &mut self,
     block: Self::Block,

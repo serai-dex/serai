@@ -1,5 +1,5 @@
 [package]
-name = "staking-primitives"
+name = "serai-staking-primitives"
 version = "0.1.0"
 description = "Staking primitives for Serai"
 license = "AGPL-3.0-only"

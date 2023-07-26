@@ -41,15 +41,7 @@ impl SubstrateCli for Cli {
 
   fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
     match id {
-<<<<<<< HEAD
-<<<<<<< HEAD
       "dev" | "devnet" => Ok(Box::new(chain_spec::development_config()?)),
-=======
-      "dev" => Ok(Box::new(chain_spec::development_config()?)),
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
-=======
-      "dev" | "devnet" => Ok(Box::new(chain_spec::development_config()?)),
->>>>>>> 63df908d (Rename dev to devnet)
       "local" => Ok(Box::new(chain_spec::testnet_config()?)),
       _ => panic!("Unknown network ID"),
     }
@@ -68,23 +60,23 @@ pub fn run() -> sc_cli::Result<()> {
 
     Some(Subcommand::CheckBlock(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?.1;
+        service::new_partial(&config)?;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
     Some(Subcommand::ExportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.1;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
       Ok((cmd.run(client, config.database), task_manager))
     }),
 
     Some(Subcommand::ExportState(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.1;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
       Ok((cmd.run(client, config.chain_spec), task_manager))
     }),
 
     Some(Subcommand::ImportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?.1;
+        service::new_partial(&config)?;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
@@ -93,7 +85,6 @@ pub fn run() -> sc_cli::Result<()> {
     }
 
     Some(Subcommand::Revert(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-<<<<<<< HEAD
       let PartialComponents { client, task_manager, backend, .. } = service::new_partial(&config)?;
       let aux_revert = Box::new(|client: Arc<FullClient>, backend, blocks| {
         sc_consensus_babe::revert(client.clone(), backend, blocks)?;
@@ -101,17 +92,12 @@ pub fn run() -> sc_cli::Result<()> {
         Ok(())
       });
       Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
-=======
-      let PartialComponents { client, task_manager, backend, .. } =
-        service::new_partial(&config)?.1;
-      Ok((cmd.run(client, backend, None), task_manager))
->>>>>>> 9b0dca06 (Provide a way to create the machine)
     }),
 
     Some(Subcommand::Benchmark(cmd)) => cli.create_runner(cmd)?.sync_run(|config| match cmd {
       BenchmarkCmd::Pallet(cmd) => cmd.run::<Block, ()>(config),
 
-      BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.1.client),
+      BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.client),
 
       #[cfg(not(feature = "runtime-benchmarks"))]
       BenchmarkCmd::Storage(_) => {
@@ -120,12 +106,12 @@ pub fn run() -> sc_cli::Result<()> {
 
       #[cfg(feature = "runtime-benchmarks")]
       BenchmarkCmd::Storage(cmd) => {
-        let PartialComponents { client, backend, .. } = service::new_partial(&config)?.1;
+        let PartialComponents { client, backend, .. } = service::new_partial(&config)?;
         cmd.run(config, client, backend.expose_db(), backend.expose_storage())
       }
 
       BenchmarkCmd::Overhead(cmd) => {
-        let client = service::new_partial(&config)?.1.client;
+        let client = service::new_partial(&config)?.client;
         cmd.run(
           config,
           client.clone(),
@@ -136,7 +122,7 @@ pub fn run() -> sc_cli::Result<()> {
       }
 
       BenchmarkCmd::Extrinsic(cmd) => {
-        let client = service::new_partial(&config)?.1.client;
+        let client = service::new_partial(&config)?.client;
         cmd.run(
           client.clone(),
           inherent_benchmark_data()?,
@@ -152,14 +138,10 @@ pub fn run() -> sc_cli::Result<()> {
       cli.create_runner(cmd)?.sync_run(|config| cmd.run::<Block>(&config))
     }
 
-<<<<<<< HEAD
     None => cli.create_runner(&cli.run)?.run_node_until_exit(|mut config| async {
       if config.role.is_authority() {
         config.state_pruning = Some(PruningMode::ArchiveAll);
       }
-=======
-    None => cli.create_runner(&cli.run)?.run_node_until_exit(|config| async {
->>>>>>> 9b0dca06 (Provide a way to create the machine)
       service::new_full(config).await.map_err(sc_cli::Error::Service)
     }),
   }

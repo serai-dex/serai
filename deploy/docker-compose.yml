@@ -9,11 +9,8 @@ volumes:
   serai-dave:
   serai-eve:
   serai-ferdie:
-<<<<<<< HEAD
-<<<<<<< HEAD
 
 services:
-<<<<<<< HEAD
   # Coin services
 
   bitcoin:
@@ -81,25 +78,6 @@ services:
 
   # Serai services
 
-=======
->>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
-=======
-  genesis-service-volume:
-=======
-  genesis-volume:
->>>>>>> 88aabde6 (rename genesis-service to genesis)
-
-services:
-  genesis:
-    image: genesis:dev
-    build:
-      context: ./genesis/
-      dockerfile: Dockerfile
-    entrypoint: /entry-dev.sh
-    volumes:
-      - genesis-volume:/temp
-
->>>>>>> d2e0b58c (created shared volume between containers)
   _serai:
     &serai_defaults
     restart: unless-stopped
@@ -114,9 +92,6 @@ services:
     entrypoint: /scripts/entry-dev.sh
     volumes:
       - "./serai/scripts:/scripts"
-      - genesis-volume:/temp
-    depends_on:
-      - genesis
 
   serai-node:
     <<: *serai_defaults
@@ -125,11 +100,7 @@ services:
       - serai
     environment:
       CHAIN: local
-<<<<<<< HEAD
       NAME: node
-=======
-      NAME: base
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
 
   serai-alice:
     <<: *serai_defaults
@@ -139,15 +110,7 @@ services:
       - cluster-sm
       - cluster-lg
     environment:
-<<<<<<< HEAD
-<<<<<<< HEAD
       CHAIN: local
-=======
-      CHAIN: dev
->>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
-=======
-      CHAIN: local
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: alice
       VALIDATOR: true
 
@@ -159,15 +122,7 @@ services:
       - cluster-sm
       - cluster-lg
     environment:
-<<<<<<< HEAD
-<<<<<<< HEAD
       CHAIN: local
-=======
-      CHAIN: dev
->>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
-=======
-      CHAIN: local
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: bob
       VALIDATOR: true
 
@@ -179,15 +134,7 @@ services:
       - cluster-sm
       - cluster-lg
     environment:
-<<<<<<< HEAD
-<<<<<<< HEAD
       CHAIN: local
-=======
-      CHAIN: dev
->>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
-=======
-      CHAIN: local
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: charlie
       VALIDATOR: true
 
@@ -198,15 +145,7 @@ services:
       - dave
       - cluster-lg
     environment:
-<<<<<<< HEAD
-<<<<<<< HEAD
       CHAIN: local
-=======
-      CHAIN: dev
->>>>>>> 2182b664 (Correct Serai d-f names in Docker)
-=======
-      CHAIN: local
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: dave
 
   serai-eve:
@@ -216,15 +155,7 @@ services:
       - eve
       - cluster-lg
     environment:
-<<<<<<< HEAD
-<<<<<<< HEAD
       CHAIN: local
-=======
-      CHAIN: dev
->>>>>>> 2182b664 (Correct Serai d-f names in Docker)
-=======
-      CHAIN: local
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
       NAME: eve
 
   serai-ferdie:
@@ -234,61 +165,5 @@ services:
       - ferdie
       - cluster-lg
     environment:
-<<<<<<< HEAD
-<<<<<<< HEAD
       CHAIN: local
       NAME: ferdie
-=======
-      CHAIN: dev
-=======
-      CHAIN: local
->>>>>>> 083198ec (Make the dev profile a local testnet profile)
-      NAME: ferdie
-
-  # Processor Services
-
-  # Coin Services
-  bitcoin:
-    profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
-      - coins
-      - bitcoin
-    build:
-      context: ./coins/bitcoin/
-    restart: unless-stopped
-    volumes:
-      - "./coins/bitcoin/scripts:/scripts"
-    entrypoint: /scripts/entry-dev.sh
-
-  ethereum:
-    profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
-      - coins
-      - ethereum
-    build:
-      context: ./coins/ethereum/
-    restart: unless-stopped
-    volumes:
-      - "./coins/ethereum/scripts:/scripts"
-    entrypoint: /scripts/entry-dev.sh
-
-  monero:
-    profiles:
-      - single-coins
-      - cluster-coins-sm
-      - cluster-coins-lg
-      - coins
-      - monero
-    build:
-      context: ./coins/monero/
-    restart: unless-stopped
-    volumes:
-      - "./coins/monero/scripts:/scripts"
-    entrypoint: /scripts/entry-dev.sh
-    ports:
-      - "18081:18081"
->>>>>>> e3fc3f28 (Configure node for a multi-node testnet)

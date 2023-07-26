@@ -1,14 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 use std::{boxed::Box, sync::Arc};
-=======
-use std::{sync::Arc, future::Future};
->>>>>>> 9b0dca06 (Provide a way to create the machine)
 
 use futures::stream::StreamExt;
 
@@ -25,15 +15,6 @@ use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFull
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sc_client_api::{BlockBackend, Backend};
 
-<<<<<<< HEAD
-=======
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
-use sc_executor::NativeElseWasmExecutor;
-<<<<<<< HEAD
-use sc_client_api::Backend;
->>>>>>> b8bff650 (Move the node over to the new SelectChain)
-=======
->>>>>>> 0a58d669 (Minor tweaks)
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use serai_runtime::{opaque::Block, RuntimeApi};
@@ -47,93 +28,18 @@ pub type Executor = WasmExecutor<ExtendedHostFunctions<SubstrateHostFunctions, (
 pub type Executor = WasmExecutor<
   ExtendedHostFunctions<SubstrateHostFunctions, frame_benchmarking::benchmarking::HostFunctions>,
 >;
-=======
-use std::{sync::{Arc, RwLock}, future::Future};
-=======
-use std::{
-  sync::{Arc, RwLock},
-  future::Future,
-};
->>>>>>> 05be5c14 (Misc bug fixes)
-=======
-use std::sync::{Arc, RwLock};
->>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
-
-use sp_core::H256;
-=======
-use std::sync::Arc;
->>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
-=======
-use std::{boxed::Box, sync::Arc, error::Error};
-=======
-use std::{
-  error::Error,
-  boxed::Box,
-  sync::Arc,
-  time::{UNIX_EPOCH, SystemTime, Duration},
-  str::FromStr,
-};
->>>>>>> 426bacac (Pass in the genesis time to Substrate)
-
-use sp_runtime::traits::{Block as BlockTrait};
-use sp_inherents::CreateInherentDataProviders;
-use sp_consensus::DisableProofRecording;
-use sp_api::ProvideRuntimeApi;
-
-use sc_executor::{NativeVersion, NativeExecutionDispatch, NativeElseWasmExecutor};
-use sc_transaction_pool::FullPool;
-use sc_network::NetworkService;
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
->>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
-
-use sc_client_api::BlockBackend;
-
-use sc_telemetry::{Telemetry, TelemetryWorker};
-
-<<<<<<< HEAD
-use serai_runtime::{self, opaque::Block, RuntimeApi};
-<<<<<<< HEAD
-pub(crate) use serai_consensus::{ExecutorDispatch, Announce, FullClient};
->>>>>>> 8a682cd2 (Announce blocks)
-=======
-pub(crate) use serai_consensus::{
-  TendermintImport, TendermintAuthority, ExecutorDispatch, FullClient, TendermintValidatorFirm,
-};
->>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
 
 type FullBackend = sc_service::TFullBackend<Block>;
-<<<<<<< HEAD
 pub type FullClient = TFullClient<Block, RuntimeApi, Executor>;
 
 type SelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 type GrandpaBlockImport = grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, SelectChain>;
 type BabeBlockImport = sc_consensus_babe::BabeBlockImport<Block, FullClient, GrandpaBlockImport>;
-=======
-type FullSelectChain = serai_consensus::TendermintSelectChain<Block, FullBackend>;
->>>>>>> b8bff650 (Move the node over to the new SelectChain)
-=======
-pub(crate) use sc_tendermint::{
-  TendermintClientMinimal, TendermintValidator, TendermintImport, TendermintAuthority,
-  TendermintSelectChain, import_queue,
-};
-use serai_runtime::{self, BLOCK_SIZE, TARGET_BLOCK_TIME, opaque::Block, RuntimeApi};
-
-type FullBackend = sc_service::TFullBackend<Block>;
-<<<<<<< HEAD
-type FullSelectChain = TendermintSelectChain<Block, FullBackend>;
->>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
-=======
-pub type FullClient = TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<ExecutorDispatch>>;
->>>>>>> 16a2c9a2 (Correct protocol name handling)
 
 type PartialComponents = sc_service::PartialComponents<
   FullClient,
   FullBackend,
-<<<<<<< HEAD
   SelectChain,
-=======
-  TendermintSelectChain<Block, FullBackend>,
->>>>>>> 16a2c9a2 (Correct protocol name handling)
   sc_consensus::DefaultImportQueue<Block, FullClient>,
   sc_transaction_pool::FullPool<Block, FullClient>,
   (
@@ -145,105 +51,12 @@ type PartialComponents = sc_service::PartialComponents<
   ),
 >;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 fn create_inherent_data_providers(
   slot_duration: SlotDuration,
 ) -> (BabeInherent, TimestampInherent) {
   let timestamp = TimestampInherent::from_system_time();
   (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
-=======
-=======
-#[derive(Clone)]
-pub struct NetworkAnnounce(Arc<RwLock<Option<Arc<NetworkService<Block, H256>>>>>);
-impl NetworkAnnounce {
-  fn new() -> NetworkAnnounce {
-    NetworkAnnounce(Arc::new(RwLock::new(None)))
-  }
-}
-impl Announce<Block> for NetworkAnnounce {
-  fn announce(&self, hash: H256) {
-    if let Some(network) = self.0.read().unwrap().as_ref() {
-      network.announce_block(hash, None);
-    }
-  }
-}
-
->>>>>>> 8a682cd2 (Announce blocks)
-=======
->>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
-=======
-pub struct ExecutorDispatch;
-impl NativeExecutionDispatch for ExecutorDispatch {
-  #[cfg(feature = "runtime-benchmarks")]
-  type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
-  #[cfg(not(feature = "runtime-benchmarks"))]
-  type ExtendHostFunctions = ();
-
-  fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-    serai_runtime::api::dispatch(method, data)
-  }
-
-  fn native_version() -> NativeVersion {
-    serai_runtime::native_version()
-  }
-}
-
-pub struct Cidp;
-#[async_trait::async_trait]
-impl CreateInherentDataProviders<Block, ()> for Cidp {
-  type InherentDataProviders = (sp_timestamp::InherentDataProvider,);
-  async fn create_inherent_data_providers(
-    &self,
-    _: <Block as BlockTrait>::Hash,
-    _: (),
-  ) -> Result<Self::InherentDataProviders, Box<dyn Send + Sync + Error>> {
-    Ok((sp_timestamp::InherentDataProvider::from_system_time(),))
-  }
-}
-
-pub struct TendermintValidatorFirm;
-impl TendermintClientMinimal for TendermintValidatorFirm {
-  // TODO: This is passed directly to propose, which warns not to use the hard limit as finalize
-  // may grow the block. We don't use storage proofs and use the Executive finalize_block. Is that
-  // guaranteed not to grow the block?
-  const PROPOSED_BLOCK_SIZE_LIMIT: usize = { BLOCK_SIZE as usize };
-  // 3 seconds
-  const BLOCK_PROCESSING_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 1000) as u32 };
-  // 1 second
-  const LATENCY_TIME_IN_SECONDS: u32 = { (TARGET_BLOCK_TIME / 2 / 3 / 1000) as u32 };
-
-  type Block = Block;
-  type Backend = sc_client_db::Backend<Block>;
-  type Api = <FullClient as ProvideRuntimeApi<Block>>::Api;
-  type Client = FullClient;
-}
-
-impl TendermintValidator for TendermintValidatorFirm {
-  type CIDP = Cidp;
-  type Environment = sc_basic_authorship::ProposerFactory<
-    FullPool<Block, FullClient>,
-    Self::Backend,
-    Self::Client,
-    DisableProofRecording,
-  >;
-
-  type Network = Arc<NetworkService<Block, <Block as BlockTrait>::Hash>>;
-}
-
->>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
-pub fn new_partial(
-  config: &Configuration,
-) -> Result<(TendermintImport<TendermintValidatorFirm>, PartialComponents), ServiceError> {
-  debug_assert_eq!(TARGET_BLOCK_TIME, 6000);
-
-  if config.keystore_remote.is_some() {
-    return Err(ServiceError::Other("Remote Keystores are not supported".to_string()));
-  }
->>>>>>> 9b0dca06 (Provide a way to create the machine)
 
 pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceError> {
   let telemetry = config
@@ -279,6 +92,8 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     telemetry
   });
 
+  let select_chain = sc_consensus::LongestChain::new(backend.clone());
+
   let transaction_pool = sc_transaction_pool::BasicPool::new_full(
     config.transaction_pool.clone(),
     config.role.is_authority().into(),
@@ -287,12 +102,6 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
     client.clone(),
   );
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
     &client,
@@ -327,42 +136,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   // We don't have anything to do with it though
   // This won't grow in size, so forgetting this isn't a disastrous memleak
   std::mem::forget(babe_handle);
-=======
-  let import_queue =
-    serai_consensus::import_queue(&task_manager, client.clone(), config.prometheus_registry())?;
-=======
-  let import_queue = serai_consensus::import_queue(
-=======
-=======
-  let announce = NetworkAnnounce::new();
->>>>>>> 8a682cd2 (Announce blocks)
-  let (authority, import_queue) = serai_consensus::import_queue(
->>>>>>> 9b0dca06 (Provide a way to create the machine)
-    &task_manager,
-=======
-  let (authority, import_queue) = serai_consensus::import_queue(
-=======
-  let (authority, import_queue) = import_queue(
->>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
-    &task_manager.spawn_essential_handle(),
->>>>>>> 3d7c12ad (Create a dedicated file for being a Tendermint authority)
-    client.clone(),
-    config.prometheus_registry(),
-<<<<<<< HEAD
-  )?;
->>>>>>> bf5bdb89 (Implement block proposal logic)
-=======
-  );
->>>>>>> 9b0dca06 (Provide a way to create the machine)
 
-<<<<<<< HEAD
-  let select_chain = serai_consensus::TendermintSelectChain::new(backend.clone());
->>>>>>> b8bff650 (Move the node over to the new SelectChain)
-=======
-  let select_chain = TendermintSelectChain::new(backend.clone());
->>>>>>> 91ae2b71 (Move serai_runtime specific code from tendermint/client to node)
-
-<<<<<<< HEAD
   Ok(sc_service::PartialComponents {
     client,
     backend,
@@ -382,49 +156,11 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
     mut task_manager,
     import_queue,
     keystore_container,
-<<<<<<< HEAD
     select_chain,
-=======
-    select_chain: _,
-    other: mut telemetry,
->>>>>>> 0a58d669 (Minor tweaks)
     transaction_pool,
     other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
   } = new_partial(&config)?;
-=======
-  Ok((
-    authority,
-    sc_service::PartialComponents {
-      client,
-      backend,
-      task_manager,
-      import_queue,
-      keystore_container,
-      select_chain,
-      transaction_pool,
-      other: telemetry,
-    },
-  ))
-}
 
-pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
-  let (
-    authority,
-    sc_service::PartialComponents {
-      client,
-      backend,
-      mut task_manager,
-      import_queue,
-      keystore_container,
-      select_chain: _,
-      other: mut telemetry,
-      transaction_pool,
-    },
-  ) = new_partial(&config)?;
->>>>>>> 9b0dca06 (Provide a way to create the machine)
-
-<<<<<<< HEAD
-<<<<<<< HEAD
   let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
     grandpa::protocol_standard_name(&client.block_hash(0).unwrap().unwrap(), &config.chain_spec);
@@ -441,30 +177,6 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   ));
 
   let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
-=======
-  if config.role.is_authority() {
-    config.network.extra_sets.push(sc_tendermint::set_config(
-      client.block_hash(0).unwrap().unwrap(),
-      config.chain_spec.fork_id(),
-    ));
-=======
-  let is_authority = config.role.is_authority();
-  let genesis = client.block_hash(0).unwrap().unwrap();
-  let tendermint_protocol = sc_tendermint::protocol_name(genesis, config.chain_spec.fork_id());
-  if is_authority {
-<<<<<<< HEAD
-    config.network.extra_sets.push(sc_tendermint::set_config(tendermint_protocol.clone()));
->>>>>>> 16a2c9a2 (Correct protocol name handling)
-=======
-    config
-      .network
-      .extra_sets
-      .push(sc_tendermint::set_config(tendermint_protocol.clone(), BLOCK_SIZE.into()));
->>>>>>> 32ad6de0 (Properly define and pass around the block size)
-  }
-
-  let (network, system_rpc_tx, tx_handler_controller, network_starter) =
->>>>>>> 38cee041 (Fix handling of the GossipEngine)
     sc_service::build_network(sc_service::BuildNetworkParams {
       config: &config,
       net_config,
@@ -494,11 +206,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     );
   }
 
-<<<<<<< HEAD
   let rpc_builder = {
-=======
-  let rpc_extensions_builder = {
->>>>>>> 9b0dca06 (Provide a way to create the machine)
     let client = client.clone();
     let pool = transaction_pool.clone();
 
@@ -512,9 +220,6 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     })
   };
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
   let enable_grandpa = !config.disable_grandpa;
   let role = config.role.clone();
   let force_authoring = config.force_authoring;
@@ -522,21 +227,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
   let prometheus_registry = config.prometheus_registry().cloned();
 
   let keystore = keystore_container.keystore();
-=======
-  let is_authority = config.role.is_authority();
->>>>>>> 9b0dca06 (Provide a way to create the machine)
 
-=======
->>>>>>> 16a2c9a2 (Correct protocol name handling)
-=======
-  let genesis_time = if config.chain_spec.id() != "devnet" {
-    UNIX_EPOCH + Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap())
-  } else {
-    SystemTime::now()
-  };
-
->>>>>>> 3ea8becc (Have the devnet use the current time as the genesis)
-  let registry = config.prometheus_registry().cloned();
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     config,
     backend,
@@ -552,8 +243,6 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
     telemetry: telemetry.as_mut(),
   })?;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
   if let sc_service::config::Role::Authority { .. } = &role {
     let slot_duration = babe_link.config().slot_duration();
     let babe_config = sc_consensus_babe::BabeParams {
@@ -639,122 +328,7 @@ pub async fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceE
         shared_voter_state,
         offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
       })?,
-=======
-  if role.is_authority() {
-    serai_consensus::authority(
-      &task_manager,
-      client,
-      network,
-      transaction_pool,
-      prometheus_registry.as_ref(),
->>>>>>> b8bff650 (Move the node over to the new SelectChain)
     );
-=======
-  if is_authority {
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-    authority.await;
->>>>>>> 9b0dca06 (Provide a way to create the machine)
-=======
-    authority.validate().await;
->>>>>>> edb2e00d (Remove the Future triggering the machine for an async fn)
-=======
-=======
->>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
-    task_manager.spawn_essential_handle().spawn(
-      "tendermint",
-      None,
-<<<<<<< HEAD
-      TendermintAuthority::new(authority).authority(
-<<<<<<< HEAD
-<<<<<<< HEAD
-        (0, keystore_container.keystore()),
-=======
-=======
-=======
-      TendermintAuthority::new(
-<<<<<<< HEAD
-<<<<<<< HEAD
-        Some(
-          UNIX_EPOCH +
-            Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
-        ),
-        authority,
-      )
-      .authority(
->>>>>>> 426bacac (Pass in the genesis time to Substrate)
-        tendermint_protocol,
->>>>>>> 16a2c9a2 (Correct protocol name handling)
-=======
-        UNIX_EPOCH +
-          Duration::from_secs(u64::from_str(&std::env::var("GENESIS").unwrap()).unwrap()),
-=======
-        genesis_time,
->>>>>>> 3ea8becc (Have the devnet use the current time as the genesis)
-        tendermint_protocol,
-        authority,
->>>>>>> d7579246 (Clean TendermintAuthority::authority as possible)
-        keystore_container.keystore(),
->>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
-        Cidp,
-        task_manager.spawn_essential_handle(),
-        sc_basic_authorship::ProposerFactory::new(
-          task_manager.spawn_handle(),
-          client,
-          transaction_pool,
-          registry.as_ref(),
-          telemetry.map(|telemtry| telemtry.handle()),
-        ),
-        network,
-        None,
-      ),
-    );
-<<<<<<< HEAD
->>>>>>> 6c54289f (Connect the Tendermint machine to a GossipEngine)
-=======
-    let keys = keystore_container.sync_keystore();
-    let key = SyncCryptoStore::sr25519_public_keys(&*keys, sc_tendermint::KEY_TYPE_ID)
-      .get(0)
-      .cloned()
-      .unwrap_or_else(|| {
-        SyncCryptoStore::sr25519_generate_new(&*keys, sc_tendermint::KEY_TYPE_ID, None).unwrap()
-      });
-
-    let mut spawned = false;
-    let mut validators =
-      client.runtime_api().validators(&BlockId::Hash(client.chain_info().finalized_hash)).unwrap();
-    for (i, validator) in validators.drain(..).enumerate() {
-      if validator == key {
-        task_manager.spawn_essential_handle().spawn(
-          "tendermint",
-          None,
-          TendermintAuthority::new(authority).authority(
-            (u16::try_from(i).unwrap(), keystore_container.keystore()),
-            Cidp,
-            sc_basic_authorship::ProposerFactory::new(
-              task_manager.spawn_handle(),
-              client,
-              transaction_pool,
-              registry.as_ref(),
-              telemetry.map(|telemtry| telemtry.handle()),
-            ),
-            network,
-            None,
-          ),
-        );
-        spawned = true;
-        break;
-      }
-    }
-
-    if !spawned {
-      log::warn!("authority role yet not a validator");
-    }
->>>>>>> e3fc3f28 (Configure node for a multi-node testnet)
-=======
->>>>>>> 2b503b6f (Update sc_tendermint per previous commit)
   }
 
   network_starter.start_network();

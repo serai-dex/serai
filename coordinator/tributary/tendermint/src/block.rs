@@ -1,27 +1,19 @@
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
 use std::{
   sync::Arc,
   collections::{HashSet, HashMap},
 };
-=======
-use std::collections::{HashSet, HashMap};
->>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs
 
 use crate::{
   time::CanonicalInstant,
   ext::{RoundNumber, BlockNumber, Block, Network},
   round::RoundData,
   message_log::MessageLog,
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
   Step, Data, DataFor, Message, MessageFor,
-=======
->>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs
 };
 
 pub(crate) struct BlockData<N: Network> {
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
   pub(crate) proposal: Option<N::Block>,
 
   pub(crate) log: MessageLog<N>,
@@ -33,24 +25,10 @@ pub(crate) struct BlockData<N: Network> {
   pub(crate) end_time: HashMap<RoundNumber, CanonicalInstant>,
 
   pub(crate) round: Option<RoundData<N>>,
-=======
-  pub(crate) proposal: N::Block,
-
-  pub(crate) log: MessageLog<N>,
-  pub(crate) slashes: HashSet<N::ValidatorId>,
-  // We track the end times of each round for two reasons:
-  // 1) Knowing the start time of the next round
-  // 2) Validating precommits, which include the end time of the round which produced it
-  // This HashMap contains the end time of the round we're currently in and every round prior
-  pub(crate) end_time: HashMap<RoundNumber, CanonicalInstant>,
-
-  pub(crate) round: RoundData<N>,
->>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs
 
   pub(crate) locked: Option<(RoundNumber, <N::Block as Block>::Id)>,
   pub(crate) valid: Option<(RoundNumber, N::Block)>,
 }
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
 
 impl<N: Network> BlockData<N> {
   pub(crate) fn new(
@@ -88,16 +66,8 @@ impl<N: Network> BlockData<N> {
   // This is generally used when moving to the next round, where this will only populate one time,
   // yet is also used when jumping rounds (when 33% of the validators are on a round ahead of us)
   pub(crate) fn populate_end_time(&mut self, round: RoundNumber) {
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
-<<<<<<< HEAD:coordinator/tributary/tendermint/src/block.rs
     // Starts from the current round since we only start the current round once we have have all
     // the prior time data
-=======
->>>>>>> 14fc181d (Correct pupulate_end_time):substrate/tendermint/machine/src/block.rs
-=======
-    // Starts from the current round since we only start the current round once we have have all
-    // the prior time data
->>>>>>> 3d20afd2 (Improve documentation):substrate/tendermint/machine/src/block.rs
     for r in (self.round().number.0 + 1) ..= round.0 {
       self.end_time.insert(
         RoundNumber(r),
@@ -167,5 +137,3 @@ impl<N: Network> BlockData<N> {
     })
   }
 }
-=======
->>>>>>> b7b57ee6 (Move BlockData to a new file):substrate/tendermint/machine/src/block.rs
