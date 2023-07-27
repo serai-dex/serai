@@ -5,6 +5,8 @@ use curve25519_dalek::{
   edwards::{CompressedEdwardsY, EdwardsPoint},
 };
 
+use multiexp::BatchVerifier;
+
 use serde::Deserialize;
 use serde_json::json;
 
@@ -92,6 +94,7 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
       all_txs.extend(txs.txs);
     }
 
+    let mut batch = BatchVerifier::new(block.txs.len());
     for (tx_hash, tx_res) in block.txs.into_iter().zip(all_txs.into_iter()) {
       assert_eq!(
         tx_res.tx_hash,
@@ -126,10 +129,20 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
       match tx.rct_signatures.prunable {
         RctPrunable::Null | RctPrunable::MlsagBorromean { .. } => {}
         RctPrunable::MlsagBulletproofs { bulletproofs, .. } => {
-          assert!(bulletproofs.verify(&mut rand_core::OsRng, &tx.rct_signatures.base.commitments));
+          assert!(bulletproofs.batch_verify(
+            &mut rand_core::OsRng,
+            &mut batch,
+            (),
+            &tx.rct_signatures.base.commitments
+          ));
         }
         RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
-          assert!(bulletproofs.verify(&mut rand_core::OsRng, &tx.rct_signatures.base.commitments));
+          assert!(bulletproofs.batch_verify(
+            &mut rand_core::OsRng,
+            &mut batch,
+            (),
+            &tx.rct_signatures.base.commitments
+          ));
 
           for (i, clsag) in clsags.into_iter().enumerate() {
             let (amount, key_offsets, image) = match &tx.prefix.inputs[i] {
@@ -219,6 +232,7 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
         }
       }
     }
+    assert!(batch.verify_vartime());
   }
 
   println!("Deserialized, hashed, and reserialized {block_i} with {} TXs", txs_len);
