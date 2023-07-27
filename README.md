@@ -17,13 +17,16 @@ wallet.
   Serai, none neatly fitting under another category.
 
 - `crypto`: A series of composable cryptographic libraries built around the
-  `ff`/`group` APIs achieving a variety of tasks. These range from generic
+  `ff`/`group` APIs, achieving a variety of tasks. These range from generic
   infrastructure, to our IETF-compliant FROST implementation, to a DLEq proof as
   needed for Bitcoin-Monero atomic swaps.
 
 - `coins`: Various coin libraries intended for usage in Serai yet also by the
   wider community. This means they will always support the functionality Serai
   needs, yet won't disadvantage other use cases when possible.
+
+- `message-queue`: An ordered message server so services can talk to each other,
+  even when the other is offline.
 
 - `processor`: A generic chain processor to process data for Serai and process
   events from Serai, executing transactions as expected and needed.
@@ -33,7 +36,11 @@ wallet.
 
 - `substrate`: Substrate crates used to instantiate the Serai network.
 
-- `deploy`: Scripts to deploy a Serai node/test environment.
+- `orchestration`: Dockerfiles and scripts to deploy a Serai node/test
+  environment.
+
+- `tests`: Tests for various crates. Generally, `crate/src/tests` is used, or
+  `crate/tests`, yet any tests requiring crates' binaries are placed here.
 
 ### Links
 

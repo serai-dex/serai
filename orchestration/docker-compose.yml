@@ -57,7 +57,7 @@ services:
       - message-queue
     build:
       context: ../
-      dockerfile: ./deploy/message-queue/Dockerfile
+      dockerfile: ./orchestration/message-queue/Dockerfile
     restart: unless-stopped
     volumes:
       - "./message-queue/scripts:/scripts"
@@ -70,7 +70,7 @@ services:
       - processor
     build:
       context: ../
-      dockerfile: ./deploy/processor/Dockerfile
+      dockerfile: ./orchestration/processor/Dockerfile
     restart: unless-stopped
     volumes:
       - "./processor/scripts:/scripts"
@@ -86,7 +86,7 @@ services:
       - _
     build:
       context: ../
-      dockerfile: ./deploy/serai/Dockerfile
+      dockerfile: ./orchestration/serai/Dockerfile
       args:
         TAG: serai
     entrypoint: /scripts/entry-dev.sh

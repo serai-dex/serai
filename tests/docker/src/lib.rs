@@ -27,8 +27,8 @@ pub fn build(name: String) {
   assert!(repo_path.as_path().ends_with("target"));
   repo_path.pop();
 
-  let mut deploy_path = repo_path.clone();
-  deploy_path.push("deploy");
+  let mut orchestration_path = repo_path.clone();
+  orchestration_path.push("orchestration");
 
   // If this Docker image was created after this repo was last edited, return here
   // This should have better performance than Docker and allows running while offline
@@ -50,7 +50,7 @@ pub fn build(name: String) {
           .0,
       );
 
-      let mut dockerfile_path = repo_path.join("deploy");
+      let mut dockerfile_path = orchestration_path.clone();
       if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
         dockerfile_path = dockerfile_path.join("coins");
       }
@@ -119,7 +119,7 @@ pub fn build(name: String) {
 
   // Version which always prints
   if !Command::new("docker")
-    .current_dir(deploy_path)
+    .current_dir(orchestration_path)
     .arg("compose")
     .arg("build")
     .arg(&name)
@@ -135,7 +135,7 @@ pub fn build(name: String) {
   // Version which only prints on error
   /*
   let res = Command::new("docker")
-    .current_dir(deploy_path)
+    .current_dir(orchestration_path)
     .arg("compose")
     .arg("build")
     .arg(&name)

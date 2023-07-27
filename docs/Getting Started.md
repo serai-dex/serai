@@ -83,10 +83,10 @@ cargo test --all-features
 
 ### Run Serai with Orchestration
 
-Under `/deploy`, you can find our orchestration components for running the
-entire infrastructure of Serai in a local environment using Docker Compose or
-Kubernetes.
+Under `/orchestration`, you can find our orchestration components for running
+the entire infrastructure of Serai in a local environment using Docker Compose
+or Kubernetes.
 
-[Run Serai with Docker Compose](../deploy/README.md)
+[Run Serai with Docker Compose](../orchestration/README.md)
 
-[Run Serai with Kubernetes](../deploy/kubernetes/README.md)
+[Run Serai with Kubernetes](../orchestration/kubernetes/README.md)
