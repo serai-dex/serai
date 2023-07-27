@@ -76,7 +76,19 @@ services:
       - "./processor/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
 
-  # Serai services
+  # Serai runtime
+
+  runtime:
+    profiles:
+      - runtime
+    build:
+      context: ../
+      dockerfile: ./orchestration/runtime/Dockerfile
+    entrypoint: |
+      sh -c "cd /serai/substrate/runtime && cargo clean && cargo build --release && \
+               sha256sum /serai/target/release/wbuild/serai-runtime/serai_runtime.wasm"
+
+  # Serai nodes
 
   _serai:
     &serai_defaults

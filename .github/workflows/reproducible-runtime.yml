@@ -1,25 +1,25 @@
-name: Message Queue Tests
+name: Reproducible Runtime
 
 on:
   push:
     branches:
       - develop
     paths:
+      - "Cargo.lock"
       - "common/**"
       - "crypto/**"
-      - "message-queue/**"
-      - "orchestration/message-queue/**"
-      - "tests/docker/**"
-      - "tests/message-queue/**"
+      - "substrate/**"
+      - "orchestration/runtime/**"
+      - "tests/reproducible-runtime/**"
 
   pull_request:
     paths:
+      - "Cargo.lock"
       - "common/**"
       - "crypto/**"
-      - "message-queue/**"
-      - "orchestration/message-queue/**"
-      - "tests/docker/**"
-      - "tests/message-queue/**"
+      - "substrate/**"
+      - "orchestration/runtime/**"
+      - "tests/reproducible-runtime/**"
 
   workflow_dispatch:
 
@@ -34,5 +34,5 @@ jobs:
         with:
           github-token: ${{ inputs.github-token }}
 
-      - name: Run message-queue Docker tests
-        run: cd tests/message-queue && GITHUB_CI=true cargo test
+      - name: Run Reproducible Runtime tests
+        run: cd tests/reproducible-runtime && GITHUB_CI=true cargo test

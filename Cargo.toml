@@ -55,6 +55,7 @@ members = [
   "tests/docker",
   "tests/message-queue",
   "tests/processor",
+  "tests/reproducible-runtime",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due

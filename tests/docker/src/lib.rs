@@ -79,6 +79,11 @@ pub fn build(name: String) {
           meta(repo_path.join("message-queue")),
           meta(repo_path.join("processor")),
         ],
+        "runtime" => vec![
+          meta(repo_path.join("common")),
+          meta(repo_path.join("crypto")),
+          meta(repo_path.join("substrate")),
+        ],
         _ => panic!("building unrecognized docker image"),
       };
 

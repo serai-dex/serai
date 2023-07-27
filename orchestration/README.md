@@ -52,15 +52,10 @@ and signatures.
 * Expose necessary ports.
 * Map necessary volumes.
 
-The best way is to build using `docker compose`. If you'd prefer to build using
-`docker` directly, each image can be built independently.
-
-**Example:** `docker build ./coins/bitcoin`
-
 ### Entrypoint
 
 The Serai node and external networks' nodes are each started from an entrypoint
-script inside the /scripts folder.
+script inside the `/scripts `folder.
 
 To update the scripts on the image you must rebuild the updated images using the
 `--build` flag after `up` in `docker compose`.

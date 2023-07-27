@@ -8866,6 +8866,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-reproducible-runtime"
+version = "0.1.0"
+dependencies = [
+ "dockertest",
+ "hex",
+ "rand_core 0.6.4",
+ "serai-docker-tests",
+ "tokio",
+]
+
+[[package]]
 name = "serai-runtime"
 version = "0.1.0"
 dependencies = [
