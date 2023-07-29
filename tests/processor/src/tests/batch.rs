@@ -1,17 +1,18 @@
-use std::collections::HashMap;
+use std::{
+  collections::HashMap,
+  time::{SystemTime, Duration},
+};
 
 use dkg::{Participant, tests::clone_without};
 
-use messages::sign::SignId;
+use messages::{sign::SignId, SubstrateContext};
 
-use serai_primitives::{
-  BlockHash, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId, Coin, Balance,
+use serai_client::{
+  primitives::{BlockHash, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId},
+  in_instructions::primitives::{
+    InInstruction, InInstructionWithBalance, SignedBatch, batch_message,
+  },
 };
-use serai_in_instructions_primitives::{
-  InInstruction, InInstructionWithBalance, SignedBatch, batch_message,
-};
-
-use dockertest::DockerTest;
 
 use crate::{*, tests::*};
 
@@ -135,21 +136,46 @@ pub(crate) async fn sign_batch(
   batch.unwrap()
 }
 
+pub(crate) async fn substrate_block(
+  coordinator: &mut Coordinator,
+  block: messages::substrate::CoordinatorMessage,
+) {
+  match block.clone() {
+    messages::substrate::CoordinatorMessage::SubstrateBlock {
+      context: _,
+      network: sent_network,
+      block: sent_block,
+      key: _,
+      burns,
+    } => {
+      coordinator.send_message(block).await;
+      match coordinator.recv_message().await {
+        messages::ProcessorMessage::Coordinator(
+          messages::coordinator::ProcessorMessage::SubstrateBlockAck {
+            network: recvd_network,
+            block: recvd_block,
+            plans,
+          },
+        ) => {
+          assert_eq!(recvd_network, sent_network);
+          assert_eq!(recvd_block, sent_block);
+          // TODO: This isn't the correct formula at all
+          assert_eq!(plans.len(), if burns.is_empty() { 0 } else { 1 });
+        }
+        _ => panic!("coordinator didn't respond to SubstrateBlock with SubstrateBlockAck"),
+      }
+    }
+    _ => panic!("substrate_block message wasn't a SubstrateBlock"),
+  }
+}
+
 #[test]
 fn batch_test() {
   for network in [NetworkId::Bitcoin, NetworkId::Monero] {
-    let mut coordinators = vec![];
-    let mut test = DockerTest::new();
-    for _ in 0 .. COORDINATORS {
-      let (handles, coord_key, compositions) = processor_stack(network);
-      coordinators.push((handles, coord_key));
-      for composition in compositions {
-        test.add_composition(composition);
-      }
-    }
+    let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
-      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+      tokio::time::sleep(Duration::from_secs(1)).await;
 
       let mut coordinators = coordinators
         .into_iter()
@@ -173,6 +199,7 @@ fn batch_test() {
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
       // Run twice, once with an instruction and once without
+      let substrate_block_num = (OsRng.next_u64() % 4_000_000_000u64) + 1;
       for i in 0 .. 2 {
         let mut serai_address = [0; 32];
         OsRng.fill_bytes(&mut serai_address);
@@ -180,7 +207,7 @@ fn batch_test() {
           if i == 1 { Some(InInstruction::Transfer(SeraiAddress(serai_address))) } else { None };
 
         // Send into the processor's wallet
-        let (tx, amount_sent) =
+        let (tx, balance_sent) =
           wallet.send_to_address(&ops, &key_pair.1, instruction.clone()).await;
         for coordinator in &mut coordinators {
           coordinator.publish_transacton(&ops, &tx).await;
@@ -198,7 +225,7 @@ fn batch_test() {
 
         // Sleep for 10s
         // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
-        tokio::time::sleep(core::time::Duration::from_secs(10)).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
 
         // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
         let (mut id, mut preprocesses) =
@@ -229,24 +256,34 @@ fn batch_test() {
         if let Some(instruction) = instruction {
           assert_eq!(
             batch.batch.instructions,
-            vec![InInstructionWithBalance {
-              instruction,
-              balance: Balance {
-                coin: match network {
-                  NetworkId::Bitcoin => Coin::Bitcoin,
-                  NetworkId::Ethereum => todo!(),
-                  NetworkId::Monero => Coin::Monero,
-                  NetworkId::Serai => panic!("running processor tests on Serai"),
-                },
-                amount: amount_sent,
-              }
-            }]
+            vec![InInstructionWithBalance { instruction, balance: balance_sent }]
           );
         } else {
           // This shouldn't have an instruction as we didn't add any data into the TX we sent
           // Empty batches remain valuable as they let us achieve consensus on the block and spend
           // contained outputs
           assert!(batch.batch.instructions.is_empty());
+        }
+
+        // Fire a SubstrateBlock
+        let serai_time =
+          SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+        for coordinator in &mut coordinators {
+          substrate_block(
+            coordinator,
+            messages::substrate::CoordinatorMessage::SubstrateBlock {
+              context: SubstrateContext {
+                serai_time,
+                coin_latest_finalized_block: batch.batch.block,
+              },
+              network,
+              block: substrate_block_num + u64::from(i),
+              // TODO: Should we use the network key here? Or should we only use the Ristretto key?
+              key: key_pair.1.to_vec(),
+              burns: vec![],
+            },
+          )
+          .await;
         }
       }
     });

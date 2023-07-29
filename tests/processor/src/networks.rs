@@ -5,9 +5,11 @@ use rand_core::{RngCore, OsRng};
 
 use scale::Encode;
 
-use serai_primitives::{NetworkId, Amount};
-use serai_validator_sets_primitives::ExternalKey;
-use serai_in_instructions_primitives::{InInstruction, RefundableInInstruction, Shorthand};
+use serai_client::{
+  primitives::{Amount, NetworkId, Coin, Balance, ExternalAddress},
+  validator_sets::primitives::ExternalKey,
+  in_instructions::primitives::{InInstruction, RefundableInInstruction, Shorthand},
+};
 
 use dockertest::{PullPolicy, Image, StartPolicy, Composition, DockerOperations};
 
@@ -221,7 +223,7 @@ impl Wallet {
     ops: &DockerOperations,
     to: &ExternalKey,
     instruction: Option<InInstruction>,
-  ) -> (Vec<u8>, Amount) {
+  ) -> (Vec<u8>, Balance) {
     match self {
       Wallet::Bitcoin { private_key, public_key, ref mut input_tx } => {
         use bitcoin_serai::bitcoin::{
@@ -298,7 +300,7 @@ impl Wallet {
         let mut buf = vec![];
         tx.consensus_encode(&mut buf).unwrap();
         *input_tx = tx;
-        (buf, Amount(AMOUNT))
+        (buf, Balance { coin: Coin::Bitcoin, amount: Amount(AMOUNT) })
       }
 
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
@@ -376,7 +378,31 @@ impl Wallet {
             .remove(0),
         );
 
-        (tx.serialize(), Amount(AMOUNT))
+        (tx.serialize(), Balance { coin: Coin::Monero, amount: Amount(AMOUNT) })
+      }
+    }
+  }
+
+  pub fn address(&self) -> ExternalAddress {
+    use serai_client::coins;
+
+    match self {
+      Wallet::Bitcoin { public_key, .. } => {
+        use bitcoin_serai::bitcoin::{Network, Address};
+        ExternalAddress::new(
+          coins::bitcoin::Address(Address::p2pkh(public_key, Network::Regtest)).try_into().unwrap(),
+        )
+        .unwrap()
+      }
+      Wallet::Monero { view_pair, .. } => {
+        use monero_serai::wallet::address::{Network, AddressSpec};
+        ExternalAddress::new(
+          coins::monero::Address::new(view_pair.address(Network::Mainnet, AddressSpec::Standard))
+            .unwrap()
+            .try_into()
+            .unwrap(),
+        )
+        .unwrap()
       }
     }
   }

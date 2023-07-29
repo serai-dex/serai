@@ -2,12 +2,12 @@ use std::{collections::HashMap, time::SystemTime};
 
 use dkg::{Participant, ThresholdParams, tests::clone_without};
 
-use serai_primitives::{NetworkId, BlockHash, PublicKey};
-use serai_validator_sets_primitives::{Session, KeyPair, ValidatorSet};
+use serai_client::{
+  primitives::{NetworkId, BlockHash, PublicKey},
+  validator_sets::primitives::{Session, KeyPair, ValidatorSet},
+};
 
 use messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage, ProcessorMessage};
-
-use dockertest::DockerTest;
 
 use crate::{*, tests::*};
 
@@ -140,15 +140,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
 #[test]
 fn key_gen_test() {
   for network in [NetworkId::Bitcoin, NetworkId::Monero] {
-    let mut coordinators = vec![];
-    let mut test = DockerTest::new();
-    for _ in 0 .. COORDINATORS {
-      let (handles, coord_key, compositions) = processor_stack(network);
-      coordinators.push((handles, coord_key));
-      for composition in compositions {
-        test.add_composition(composition);
-      }
-    }
+    let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
       // Sleep for a second for the message-queue to boot

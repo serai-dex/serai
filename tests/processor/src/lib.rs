@@ -5,7 +5,7 @@ use rand_core::{RngCore, OsRng};
 
 use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
 
-use serai_primitives::NetworkId;
+use serai_client::primitives::NetworkId;
 use messages::{ProcessorMessage, CoordinatorMessage};
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
@@ -57,9 +57,10 @@ pub fn processor_instance(
   )
 }
 
+pub type Handles = (String, String, String);
 pub fn processor_stack(
   network: NetworkId,
-) -> ((String, String, String), <Ristretto as Ciphersuite>::F, Vec<Composition>) {
+) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<Composition>) {
   let (network_composition, network_rpc_port) = network_instance(network);
 
   let (coord_key, message_queue_keys, message_queue_composition) =
