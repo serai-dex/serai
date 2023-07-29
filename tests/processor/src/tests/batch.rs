@@ -139,14 +139,14 @@ pub(crate) async fn sign_batch(
 pub(crate) async fn substrate_block(
   coordinator: &mut Coordinator,
   block: messages::substrate::CoordinatorMessage,
-) {
+) -> Vec<[u8; 32]> {
   match block.clone() {
     messages::substrate::CoordinatorMessage::SubstrateBlock {
       context: _,
       network: sent_network,
       block: sent_block,
       key: _,
-      burns,
+      burns: _,
     } => {
       coordinator.send_message(block).await;
       match coordinator.recv_message().await {
@@ -159,8 +159,7 @@ pub(crate) async fn substrate_block(
         ) => {
           assert_eq!(recvd_network, sent_network);
           assert_eq!(recvd_block, sent_block);
-          // TODO: This isn't the correct formula at all
-          assert_eq!(plans.len(), if burns.is_empty() { 0 } else { 1 });
+          plans
         }
         _ => panic!("coordinator didn't respond to SubstrateBlock with SubstrateBlockAck"),
       }
@@ -269,7 +268,7 @@ fn batch_test() {
         let serai_time =
           SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
         for coordinator in &mut coordinators {
-          substrate_block(
+          assert!(substrate_block(
             coordinator,
             messages::substrate::CoordinatorMessage::SubstrateBlock {
               context: SubstrateContext {
@@ -283,7 +282,8 @@ fn batch_test() {
               burns: vec![],
             },
           )
-          .await;
+          .await
+          .is_empty());
         }
       }
     });

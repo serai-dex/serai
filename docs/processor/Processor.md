@@ -84,9 +84,10 @@ On `substrate::CoordinatorMessage::SubstrateBlock`, the processor:
    Serai, as having had their batches signed.
 2) Adds the new outputs from newly finalized blocks to the scheduler, along
    with the necessary payments from `Burn` events on Serai.
-
-The processor also sends a `substrate::ProcessorMessage::SubstrateBlockAck`,
-containing the IDs of all plans now being signed for, to the coordinator.
+3) Sends a `substrate::ProcessorMessage::SubstrateBlockAck`, containing the IDs
+   of all plans now being signed for, to the coordinator.
+4) Sends `sign::ProcessorMessage::Preprocess` for each plan now being signed
+   for.
 
 ## Sign Preprocesses
 
@@ -107,8 +108,7 @@ signed and stop locally attempting to do so.
 
 On `sign::CoordinatorMessage::Reattempt`, the processor will create a new
 a new instance of the transaction signing protocol. The new protocol's
-preprocess is sent to the coordinator in a
-`sign::ProcessorMessage::Preprocess`.
+preprocess is sent to the coordinator in a `sign::ProcessorMessage::Preprocess`.
 
 ## Sign Completed
 

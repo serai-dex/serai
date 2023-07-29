@@ -17,7 +17,7 @@ use crate::{*, tests::*};
 #[allow(unused)]
 pub(crate) async fn recv_sign_preprocesses(
   coordinators: &mut [Coordinator],
-  key: [u8; 32],
+  key: Vec<u8>,
   attempt: u32,
 ) -> (SignId, HashMap<Participant, Vec<u8>>) {
   let mut id = None;
@@ -202,8 +202,9 @@ fn send_test() {
       let substrate_block_num = (OsRng.next_u64() % 4_000_000_000u64) + 1;
       let serai_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
 
+      let mut plans = vec![];
       for coordinator in &mut coordinators {
-        substrate_block(
+        let these_plans = substrate_block(
           coordinator,
           messages::substrate::CoordinatorMessage::SubstrateBlock {
             context: SubstrateContext {
@@ -221,25 +222,43 @@ fn send_test() {
           },
         )
         .await;
+
+        if plans.is_empty() {
+          plans = these_plans;
+        } else {
+          assert_eq!(plans, these_plans);
+        }
+      }
+      assert_eq!(plans.len(), 1);
+
+      // Start signing the TX
+      let (mut id, mut preprocesses) =
+        recv_sign_preprocesses(&mut coordinators, key_pair.1.to_vec(), 0).await;
+      // TODO: Should this use the Substrate key?
+      assert_eq!(id, SignId { key: key_pair.1.to_vec(), id: plans[0], attempt: 0 });
+
+      // Trigger a random amount of re-attempts
+      for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
+        // TODO: Double check how the processor handles this ID field
+        // It should be able to assert its perfectly sequential
+        id.attempt = attempt;
+        for coordinator in coordinators.iter_mut() {
+          coordinator
+            .send_message(messages::sign::CoordinatorMessage::Reattempt { id: id.clone() })
+            .await;
+        }
+        (id, preprocesses) =
+          recv_sign_preprocesses(&mut coordinators, key_pair.1.to_vec(), attempt).await;
       }
 
-      /*
-        // Trigger a random amount of re-attempts
-        for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
-          // TODO: Double check how the processor handles this ID field
-          // It should be able to assert its perfectly sequential
-          id.attempt = attempt;
-          for coordinator in coordinators.iter_mut() {
-            coordinator
-              .send_message(messages::sign::CoordinatorMessage::Reattempt {
-                id: id.clone(),
-              })
-              .await;
-          }
-          (id, preprocesses) =
-            recv_batch_preprocesses(&mut coordinators, key_pair.0 .0, attempt).await;
-        }
-      */
+      let tx_id = sign_tx(&mut coordinators, id, preprocesses).await;
+
+      // TODO: Test callimg Sign again yields tx_id again
+      // TODO: Make sure all participating nodes published the TX
+      // TODO: Send this TX to the left out node and make sure they can complete the Eventuality
+      // TODO: Test the Eventuality from the blockchain, instead of from the coordinator
+
+      let _ = tx_id;
     });
   }
 }

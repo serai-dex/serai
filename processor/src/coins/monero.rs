@@ -554,7 +554,7 @@ impl Coin for Monero {
   async fn get_fee(&self) -> Self::Fee {
     use monero_serai::wallet::FeePriority;
 
-    self.rpc.get_fee(self.rpc.get_protocol().await.unwrap(), FeePriority::Low).await.unwrap()
+    self.rpc.get_fee(self.rpc.get_protocol().await.unwrap(), FeePriority::Highest).await.unwrap()
   }
 
   #[cfg(test)]
