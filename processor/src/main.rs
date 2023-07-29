@@ -702,6 +702,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
             info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
             // Start signing this batch
+            // TODO: Don't reload both sets of keys in full just to get the Substrate public key
             tributary_mutable
               .substrate_signers
               .get_mut(tributary_mutable.key_gen.keys(&key).0.group_key().to_bytes().as_slice())

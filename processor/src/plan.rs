@@ -69,12 +69,23 @@ impl<C: Coin> Payment<C> {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Plan<C: Coin> {
   pub key: <C::Curve as Ciphersuite>::G,
   pub inputs: Vec<C::Output>,
   pub payments: Vec<Payment<C>>,
   pub change: Option<<C::Curve as Ciphersuite>::G>,
+}
+impl<C: Coin> core::fmt::Debug for Plan<C> {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt
+      .debug_struct("Plan")
+      .field("key", &hex::encode(self.key.to_bytes()))
+      .field("inputs", &self.inputs)
+      .field("payments", &self.payments)
+      .field("change", &self.change.map(|change| hex::encode(change.to_bytes())))
+      .finish()
+  }
 }
 
 impl<C: Coin> Plan<C> {

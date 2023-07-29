@@ -20,10 +20,16 @@ use crate::{
 };
 
 /// An absolute output ID, defined as its transaction hash and output index.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct AbsoluteId {
   pub tx: [u8; 32],
   pub o: u8,
+}
+
+impl core::fmt::Debug for AbsoluteId {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt.debug_struct("AbsoluteId").field("tx", &hex::encode(self.tx)).field("o", &self.o).finish()
+  }
 }
 
 impl AbsoluteId {
@@ -44,12 +50,23 @@ impl AbsoluteId {
 }
 
 /// The data contained with an output.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct OutputData {
   pub key: EdwardsPoint,
   /// Absolute difference between the spend key and the key in this output
   pub key_offset: Scalar,
   pub commitment: Commitment,
+}
+
+impl core::fmt::Debug for OutputData {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt
+      .debug_struct("OutputData")
+      .field("key", &hex::encode(self.key.compress().0))
+      .field("key_offset", &hex::encode(self.key_offset.to_bytes()))
+      .field("commitment", &self.commitment)
+      .finish()
+  }
 }
 
 impl OutputData {
@@ -76,7 +93,7 @@ impl OutputData {
 }
 
 /// The metadata for an output.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Metadata {
   /// The subaddress this output was sent to.
   pub subaddress: Option<SubaddressIndex>,
@@ -87,6 +104,17 @@ pub struct Metadata {
   pub payment_id: [u8; 8],
   /// Arbitrary data encoded in TX extra.
   pub arbitrary_data: Vec<Vec<u8>>,
+}
+
+impl core::fmt::Debug for Metadata {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt
+      .debug_struct("Metadata")
+      .field("subaddress", &self.subaddress)
+      .field("payment_id", &hex::encode(self.payment_id))
+      .field("arbitrary_data", &self.arbitrary_data.iter().map(hex::encode).collect::<Vec<_>>())
+      .finish()
+  }
 }
 
 impl Metadata {

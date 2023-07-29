@@ -170,10 +170,16 @@ impl Protocol {
 
 /// Transparent structure representing a Pedersen commitment's contents.
 #[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Commitment {
   pub mask: Scalar,
   pub amount: u64,
+}
+
+impl core::fmt::Debug for Commitment {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt.debug_struct("Commitment").field("amount", &self.amount).finish_non_exhaustive()
+  }
 }
 
 impl Commitment {

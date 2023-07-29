@@ -182,11 +182,24 @@ impl<B: AddressBytes> AddressMeta<B> {
 }
 
 /// A Monero address, composed of metadata and a spend/view key.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Address<B: AddressBytes> {
   pub meta: AddressMeta<B>,
   pub spend: EdwardsPoint,
   pub view: EdwardsPoint,
+}
+
+impl<B: AddressBytes> core::fmt::Debug for Address<B> {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt
+      .debug_struct("Address")
+      .field("meta", &self.meta)
+      .field("spend", &hex::encode(self.spend.compress().0))
+      .field("view", &hex::encode(self.view.compress().0))
+      // This is not a real field yet is the most valuable thing to know when debugging
+      .field("(address)", &self.to_string())
+      .finish()
+  }
 }
 
 impl<B: AddressBytes> Zeroize for Address<B> {
