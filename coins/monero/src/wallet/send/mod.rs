@@ -140,8 +140,11 @@ pub enum TransactionError {
   TooMuchData,
   #[cfg_attr(feature = "std", error("too many inputs/too much arbitrary data"))]
   TooLargeTransaction,
-  #[cfg_attr(feature = "std", error("not enough funds (in {0}, out {1})"))]
-  NotEnoughFunds(u64, u64),
+  #[cfg_attr(
+    feature = "std",
+    error("not enough funds (inputs {inputs}, outputs {outputs}, fee {fee})")
+  )]
+  NotEnoughFunds { inputs: u64, outputs: u64, fee: u64 },
   #[cfg_attr(feature = "std", error("wrong spend private key"))]
   WrongPrivateKey,
   #[cfg_attr(feature = "std", error("rpc error ({0})"))]
@@ -509,7 +512,7 @@ impl SignableTransaction {
     // Make sure we have enough funds
     let in_amount = inputs.iter().map(|(input, _)| input.commitment().amount).sum::<u64>();
     if in_amount < (out_amount + fee) {
-      Err(TransactionError::NotEnoughFunds(in_amount, out_amount + fee))?;
+      Err(TransactionError::NotEnoughFunds { inputs: in_amount, outputs: out_amount, fee })?;
     }
 
     // Sanity check we have the expected number of change outputs

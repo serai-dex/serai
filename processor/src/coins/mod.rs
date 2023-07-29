@@ -22,7 +22,7 @@ pub mod monero;
 #[cfg(feature = "monero")]
 pub use monero::Monero;
 
-use crate::Plan;
+use crate::{Payment, Plan};
 
 #[derive(Clone, Copy, Error, Debug)]
 pub enum CoinError {
@@ -204,21 +204,45 @@ pub fn amortize_fee<C: Coin>(plan: &mut Plan<C>, tx_fee: u64) -> Vec<PostFeeBran
     return vec![];
   }
 
-  // Amortize the transaction fee across outputs
-  let payments_len = u64::try_from(plan.payments.len()).unwrap();
-  // Use a formula which will round up
-  let output_fee = (tx_fee + (payments_len - 1)) / payments_len;
+  let original_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
 
-  let mut branch_outputs = vec![];
-  for payment in plan.payments.iter_mut() {
-    let mut post_fee = payment.amount.checked_sub(output_fee);
+  // Amortize the transaction fee across outputs
+  let mut payments_len = u64::try_from(plan.payments.len()).unwrap();
+  // Use a formula which will round up
+  let per_output_fee = |payments| (tx_fee + (payments - 1)) / payments;
+
+  let post_fee = |payment: &Payment<C>, per_output_fee| {
+    let mut post_fee = payment.amount.checked_sub(per_output_fee);
     // If this is under our dust threshold, drop it
     if let Some(amount) = post_fee {
       if amount < C::DUST {
         post_fee = None;
       }
     }
+    post_fee
+  };
 
+  // If we drop outputs for being less than the fee, we won't successfully reduce the amount spent
+  // (dropping a 800 output due to a 1000 fee leaves 200 we still have to deduct)
+  // Do initial runs until the amount of output we will drop is known
+  while {
+    let last = payments_len;
+    payments_len = u64::try_from(
+      plan
+        .payments
+        .iter()
+        .filter(|payment| post_fee(payment, per_output_fee(payments_len)).is_some())
+        .count(),
+    )
+    .unwrap();
+    last != payments_len
+  } {}
+
+  // Now that we know how many outputs will survive, calculate the actual per_output_fee
+  let per_output_fee = per_output_fee(payments_len);
+  let mut branch_outputs = vec![];
+  for payment in plan.payments.iter_mut() {
+    let post_fee = post_fee(payment, per_output_fee);
     // Note the branch output, if this is one
     if payment.address == C::branch_address(plan.key) {
       branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
@@ -227,6 +251,11 @@ pub fn amortize_fee<C: Coin>(plan: &mut Plan<C>, tx_fee: u64) -> Vec<PostFeeBran
   }
   // Drop payments now worth 0
   plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
+
+  // Sanity check the fee wa successfully amortized
+  let new_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
+  assert!((new_outputs + tx_fee) <= original_outputs);
+
   branch_outputs
 }
 

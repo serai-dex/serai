@@ -418,7 +418,7 @@ impl Coin for Monero {
 
     let inputs = spendable_outputs.into_iter().zip(decoys.into_iter()).collect::<Vec<_>>();
 
-    let signable = |plan: &mut Plan<Self>, tx_fee: Option<_>| {
+    let signable = |mut plan: Plan<Self>, tx_fee: Option<_>| {
       // Monero requires at least two outputs
       // If we only have one output planned, add a dummy payment
       let outputs = plan.payments.len() + usize::from(u8::from(plan.change.is_some()));
@@ -480,11 +480,14 @@ impl Coin for Monero {
           TransactionError::FrostError(_) => {
             panic!("supposedly unreachable (at this time) Monero error: {e}");
           }
-          TransactionError::NotEnoughFunds(_, _) => {
-            if tx_fee.is_none() {
-              Ok(None)
+          TransactionError::NotEnoughFunds { inputs, outputs, fee } => {
+            if let Some(tx_fee) = tx_fee {
+              panic!(
+                "{}. in: {inputs}, out: {outputs}, fee: {fee}, prior estimated fee: {tx_fee}",
+                "didn't have enough funds for a Monero TX",
+              );
             } else {
-              panic!("didn't have enough funds for a Monero TX");
+              Ok(None)
             }
           }
           TransactionError::RpcError(e) => {
@@ -495,7 +498,7 @@ impl Coin for Monero {
       }
     };
 
-    let tx_fee = match signable(&mut plan, None)? {
+    let tx_fee = match signable(plan.clone(), None)? {
       Some(tx) => tx.fee(),
       None => return Ok((None, drop_branches(&plan))),
     };
@@ -505,7 +508,7 @@ impl Coin for Monero {
     let signable = SignableTransaction {
       keys,
       transcript,
-      actual: match signable(&mut plan, Some(tx_fee))? {
+      actual: match signable(plan, Some(tx_fee))? {
         Some(signable) => signable,
         None => return Ok((None, branch_outputs)),
       },
