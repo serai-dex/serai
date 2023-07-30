@@ -20,8 +20,8 @@ pub use amount::*;
 mod block;
 pub use block::*;
 
-mod coins;
-pub use coins::*;
+mod networks;
+pub use networks::*;
 
 mod balance;
 pub use balance::*;

@@ -15,6 +15,7 @@ protocol.
 | Session         | u32                                          |
 | Validator Set   | (Session, NetworkId)                         |
 | Key             | BoundedVec\<u8, 96>                          |
+| KeyPair         | (SeraiAddress, Key)                          |
 | ExternalAddress | BoundedVec\<u8, 128>                         |
 | Data            | BoundedVec\<u8, 512>                         |
 

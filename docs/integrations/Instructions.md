@@ -8,7 +8,7 @@ encoded into transactions on connected networks. Serai will parse included
 instructions when it receives coins, executing the included specs.
 
   - Out Instructions detail how to transfer coins, either to a Serai address or
-an address native to the coin in question.
+an address native to the network of the coins in question.
 
 A transaction containing an In Instruction and an Out Instruction (to a native
 address) will receive coins to Serai and send coins from Serai, without

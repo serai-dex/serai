@@ -4,16 +4,16 @@ use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
-use crate::coins::{Output, Coin};
+use crate::networks::{Output, Network};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Payment<C: Coin> {
-  pub address: C::Address,
+pub struct Payment<N: Network> {
+  pub address: N::Address,
   pub data: Option<Vec<u8>>,
   pub amount: u64,
 }
 
-impl<C: Coin> Payment<C> {
+impl<N: Network> Payment<N> {
   pub fn transcript<T: Transcript>(&self, transcript: &mut T) {
     transcript.domain_separate(b"payment");
     transcript.append_message(b"address", self.address.to_string().as_bytes());
@@ -46,7 +46,7 @@ impl<C: Coin> Payment<C> {
     reader.read_exact(&mut buf)?;
     let mut address = vec![0; usize::try_from(u32::from_le_bytes(buf)).unwrap()];
     reader.read_exact(&mut address)?;
-    let address = C::Address::try_from(address)
+    let address = N::Address::try_from(address)
       .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid address"))?;
 
     let mut buf = [0; 1];
@@ -70,13 +70,13 @@ impl<C: Coin> Payment<C> {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Plan<C: Coin> {
-  pub key: <C::Curve as Ciphersuite>::G,
-  pub inputs: Vec<C::Output>,
-  pub payments: Vec<Payment<C>>,
-  pub change: Option<<C::Curve as Ciphersuite>::G>,
+pub struct Plan<N: Network> {
+  pub key: <N::Curve as Ciphersuite>::G,
+  pub inputs: Vec<N::Output>,
+  pub payments: Vec<Payment<N>>,
+  pub change: Option<<N::Curve as Ciphersuite>::G>,
 }
-impl<C: Coin> core::fmt::Debug for Plan<C> {
+impl<N: Network> core::fmt::Debug for Plan<N> {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
     fmt
       .debug_struct("Plan")
@@ -88,11 +88,11 @@ impl<C: Coin> core::fmt::Debug for Plan<C> {
   }
 }
 
-impl<C: Coin> Plan<C> {
+impl<N: Network> Plan<N> {
   pub fn transcript(&self) -> RecommendedTranscript {
     let mut transcript = RecommendedTranscript::new(b"Serai Processor Plan ID");
     transcript.domain_separate(b"meta");
-    transcript.append_message(b"network", C::ID);
+    transcript.append_message(b"network", N::ID);
     transcript.append_message(b"key", self.key.to_bytes());
 
     transcript.domain_separate(b"inputs");
@@ -141,24 +141,24 @@ impl<C: Coin> Plan<C> {
   }
 
   pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let key = C::Curve::read_G(reader)?;
+    let key = N::Curve::read_G(reader)?;
 
     let mut inputs = vec![];
     let mut buf = [0; 4];
     reader.read_exact(&mut buf)?;
     for _ in 0 .. u32::from_le_bytes(buf) {
-      inputs.push(C::Output::read(reader)?);
+      inputs.push(N::Output::read(reader)?);
     }
 
     let mut payments = vec![];
     reader.read_exact(&mut buf)?;
     for _ in 0 .. u32::from_le_bytes(buf) {
-      payments.push(Payment::<C>::read(reader)?);
+      payments.push(Payment::<N>::read(reader)?);
     }
 
     let mut buf = [0; 1];
     reader.read_exact(&mut buf)?;
-    let change = if buf[0] == 1 { Some(C::Curve::read_G(reader)?) } else { None };
+    let change = if buf[0] == 1 { Some(N::Curve::read_G(reader)?) } else { None };
 
     Ok(Plan { key, inputs, payments, change })
   }

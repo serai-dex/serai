@@ -273,7 +273,7 @@ fn batch_test() {
             messages::substrate::CoordinatorMessage::SubstrateBlock {
               context: SubstrateContext {
                 serai_time,
-                coin_latest_finalized_block: batch.batch.block,
+                network_latest_finalized_block: batch.batch.block,
               },
               network,
               block: substrate_block_num + u64::from(i),

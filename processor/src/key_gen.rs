@@ -18,17 +18,17 @@ use log::info;
 use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 use messages::key_gen::*;
 
-use crate::{Get, DbTxn, Db, coins::Coin};
+use crate::{Get, DbTxn, Db, networks::Network};
 
 #[derive(Debug)]
 pub struct KeyConfirmed<C: Ciphersuite> {
   pub substrate_keys: ThresholdKeys<Ristretto>,
-  pub coin_keys: ThresholdKeys<C>,
+  pub network_keys: ThresholdKeys<C>,
 }
 
 #[derive(Clone, Debug)]
-struct KeyGenDb<C: Coin, D: Db>(PhantomData<D>, PhantomData<C>);
-impl<C: Coin, D: Db> KeyGenDb<C, D> {
+struct KeyGenDb<N: Network, D: Db>(PhantomData<D>, PhantomData<N>);
+impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn key_gen_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     D::key(b"KEY_GEN", dst, key)
   }
@@ -71,39 +71,42 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     txn: &mut D::Transaction<'_>,
     id: &KeyGenId,
     substrate_keys: &ThresholdCore<Ristretto>,
-    coin_keys: &ThresholdKeys<C::Curve>,
+    network_keys: &ThresholdKeys<N::Curve>,
   ) {
     let mut keys = substrate_keys.serialize();
-    keys.extend(coin_keys.serialize().iter());
+    keys.extend(network_keys.serialize().iter());
     txn.put(
       Self::generated_keys_key(
         id.set,
-        (substrate_keys.group_key().to_bytes().as_ref(), coin_keys.group_key().to_bytes().as_ref()),
+        (
+          substrate_keys.group_key().to_bytes().as_ref(),
+          network_keys.group_key().to_bytes().as_ref(),
+        ),
       ),
       keys,
     );
   }
 
-  fn keys_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
+  fn keys_key(key: &<N::Curve as Ciphersuite>::G) -> Vec<u8> {
     Self::key_gen_key(b"keys", key.to_bytes())
   }
   #[allow(clippy::type_complexity)]
   fn read_keys<G: Get>(
     getter: &G,
     key: &[u8],
-  ) -> (Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>)) {
+  ) -> (Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)) {
     let keys_vec = getter.get(key).unwrap();
     let mut keys_ref: &[u8] = keys_vec.as_ref();
     let substrate_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
-    let mut coin_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
-    C::tweak_keys(&mut coin_keys);
-    (keys_vec, (substrate_keys, coin_keys))
+    let mut network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
+    N::tweak_keys(&mut network_keys);
+    (keys_vec, (substrate_keys, network_keys))
   }
   fn confirm_keys(
     txn: &mut D::Transaction<'_>,
     set: ValidatorSet,
     key_pair: KeyPair,
-  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
+  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
     let (keys_vec, keys) = Self::read_keys(
       txn,
       &Self::generated_keys_key(set, (key_pair.0.as_ref(), key_pair.1.as_ref())),
@@ -111,8 +114,8 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
     assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
     assert_eq!(
       {
-        let coin_key: &[u8] = key_pair.1.as_ref();
-        coin_key
+        let network_key: &[u8] = key_pair.1.as_ref();
+        network_key
       },
       keys.1.group_key().to_bytes().as_ref(),
     );
@@ -121,8 +124,8 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
   }
   fn keys<G: Get>(
     getter: &G,
-    key: &<C::Curve as Ciphersuite>::G,
-  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
+    key: &<N::Curve as Ciphersuite>::G,
+  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
     let res = Self::read_keys(getter, &Self::keys_key(key)).1;
     assert_eq!(&res.1.group_key(), key);
     res
@@ -133,32 +136,32 @@ impl<C: Coin, D: Db> KeyGenDb<C, D> {
 /// 1) It either didn't send its response, so the attempt will be aborted
 /// 2) It did send its response, and has locally saved enough data to continue
 #[derive(Debug)]
-pub struct KeyGen<C: Coin, D: Db> {
+pub struct KeyGen<N: Network, D: Db> {
   db: D,
   entropy: Zeroizing<[u8; 32]>,
 
   active_commit:
-    HashMap<ValidatorSet, (SecretShareMachine<Ristretto>, SecretShareMachine<C::Curve>)>,
-  active_share: HashMap<ValidatorSet, (KeyMachine<Ristretto>, KeyMachine<C::Curve>)>,
+    HashMap<ValidatorSet, (SecretShareMachine<Ristretto>, SecretShareMachine<N::Curve>)>,
+  active_share: HashMap<ValidatorSet, (KeyMachine<Ristretto>, KeyMachine<N::Curve>)>,
 }
 
-impl<C: Coin, D: Db> KeyGen<C, D> {
+impl<N: Network, D: Db> KeyGen<N, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGen<C, D> {
+  pub fn new(db: D, entropy: Zeroizing<[u8; 32]>) -> KeyGen<N, D> {
     KeyGen { db, entropy, active_commit: HashMap::new(), active_share: HashMap::new() }
   }
 
   pub fn keys(
     &self,
-    key: &<C::Curve as Ciphersuite>::G,
-  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<C::Curve>) {
+    key: &<N::Curve as Ciphersuite>::G,
+  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
     // This is safe, despite not having a txn, since it's a static value
     // The only concern is it may not be set when expected, or it may be set unexpectedly
     // Since this unwraps, it being unset when expected to be set will cause a panic
     // The only other concern is if it's set when it's not safe to use
     // The keys are only written on confirmation, and the transaction writing them is atomic to
     // every associated operation
-    KeyGenDb::<C, D>::keys(&self.db, key)
+    KeyGenDb::<N, D>::keys(&self.db, key)
   }
 
   pub async fn handle(
@@ -187,8 +190,8 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     let key_gen_machines = |id, params| {
       let mut rng = coefficients_rng(id);
       let substrate = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
-      let coin = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
-      ((substrate.0, coin.0), (substrate.1, coin.1))
+      let network = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
+      ((substrate.0, network.0), (substrate.1, network.1))
     };
 
     match msg {
@@ -200,7 +203,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           self.active_share.remove(&id.set).is_none()
         {
           // If we haven't handled this set before, save the params
-          KeyGenDb::<C, D>::save_params(txn, &id.set, &params);
+          KeyGenDb::<N, D>::save_params(txn, &id.set, &params);
         }
 
         let (machines, commitments) = key_gen_machines(id, params);
@@ -221,7 +224,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let params = KeyGenDb::<C, D>::params(txn, &id.set);
+        let params = KeyGenDb::<N, D>::params(txn, &id.set);
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -264,7 +267,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
 
         let (substrate_machine, mut substrate_shares) =
           handle_machine::<Ristretto>(&mut rng, params, machines.0, &mut commitments_ref);
-        let (coin_machine, coin_shares) =
+        let (network_machine, network_shares) =
           handle_machine(&mut rng, params, machines.1, &mut commitments_ref);
 
         for (_, commitments) in commitments_ref {
@@ -273,15 +276,15 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           }
         }
 
-        self.active_share.insert(id.set, (substrate_machine, coin_machine));
+        self.active_share.insert(id.set, (substrate_machine, network_machine));
 
         let mut shares: HashMap<_, _> =
           substrate_shares.drain().map(|(i, share)| (i, share.serialize())).collect();
         for (i, share) in shares.iter_mut() {
-          share.extend(coin_shares[i].serialize());
+          share.extend(network_shares[i].serialize());
         }
 
-        KeyGenDb::<C, D>::save_commitments(txn, &id, &commitments);
+        KeyGenDb::<N, D>::save_commitments(txn, &id, &commitments);
 
         ProcessorMessage::Shares { id, shares }
       }
@@ -289,13 +292,13 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = KeyGenDb::<C, D>::params(txn, &id.set);
+        let params = KeyGenDb::<N, D>::params(txn, &id.set);
 
         // Same commentary on inconsistency as above exists
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
           let machines = key_gen_machines(id, params).0;
           let mut rng = secret_shares_rng(id);
-          let commitments = KeyGenDb::<C, D>::commitments(txn, &id);
+          let commitments = KeyGenDb::<N, D>::commitments(txn, &id);
 
           let mut commitments_ref: HashMap<Participant, &[u8]> =
             commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
@@ -358,7 +361,7 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
         }
 
         let substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
-        let coin_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
+        let network_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
 
         for (_, shares) in shares_ref {
           if !shares.is_empty() {
@@ -366,15 +369,15 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
           }
         }
 
-        let mut coin_keys = ThresholdKeys::new(coin_keys);
-        C::tweak_keys(&mut coin_keys);
+        let mut network_keys = ThresholdKeys::new(network_keys);
+        N::tweak_keys(&mut network_keys);
 
-        KeyGenDb::<C, D>::save_keys(txn, &id, &substrate_keys, &coin_keys);
+        KeyGenDb::<N, D>::save_keys(txn, &id, &substrate_keys, &network_keys);
 
         ProcessorMessage::GeneratedKeyPair {
           id,
           substrate_key: substrate_keys.group_key().to_bytes(),
-          coin_key: coin_keys.group_key().to_bytes().as_ref().to_vec(),
+          network_key: network_keys.group_key().to_bytes().as_ref().to_vec(),
         }
       }
     }
@@ -385,16 +388,16 @@ impl<C: Coin, D: Db> KeyGen<C, D> {
     txn: &mut D::Transaction<'_>,
     set: ValidatorSet,
     key_pair: KeyPair,
-  ) -> KeyConfirmed<C::Curve> {
-    let (substrate_keys, coin_keys) = KeyGenDb::<C, D>::confirm_keys(txn, set, key_pair);
+  ) -> KeyConfirmed<N::Curve> {
+    let (substrate_keys, network_keys) = KeyGenDb::<N, D>::confirm_keys(txn, set, key_pair);
 
     info!(
       "Confirmed key pair {} {} for set {:?}",
       hex::encode(substrate_keys.group_key().to_bytes()),
-      hex::encode(coin_keys.group_key().to_bytes()),
+      hex::encode(network_keys.group_key().to_bytes()),
       set,
     );
 
-    KeyConfirmed { substrate_keys, coin_keys }
+    KeyConfirmed { substrate_keys, network_keys }
   }
 }

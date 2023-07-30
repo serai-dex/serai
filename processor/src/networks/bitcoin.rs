@@ -17,7 +17,7 @@ use bitcoin_serai::{
     hashes::Hash as HashTrait,
     consensus::{Encodable, Decodable},
     script::Instruction,
-    OutPoint, Transaction, Block, Network,
+    OutPoint, Transaction, Block, Network as BitcoinNetwork,
   },
   wallet::{
     tweak_keys, address, ReceivedOutput, Scanner, TransactionError,
@@ -38,13 +38,13 @@ use bitcoin_serai::bitcoin::{
 
 use serai_client::{
   primitives::{MAX_DATA_LEN, Coin as SeraiCoin, NetworkId, Amount, Balance},
-  coins::bitcoin::Address,
+  networks::bitcoin::Address,
 };
 
 use crate::{
-  coins::{
-    CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality, EventualitiesTracker, PostFeeBranch, Coin,
+  networks::{
+    NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
+    Transaction as TransactionTrait, Eventuality, EventualitiesTracker, PostFeeBranch, Network,
     drop_branches, amortize_fee,
   },
   Plan,
@@ -144,13 +144,13 @@ impl TransactionTrait<Bitcoin> for Transaction {
     buf
   }
   #[cfg(test)]
-  async fn fee(&self, coin: &Bitcoin) -> u64 {
+  async fn fee(&self, network: &Bitcoin) -> u64 {
     let mut value = 0;
     for input in &self.input {
       let output = input.previous_output;
       let mut hash = *output.txid.as_raw_hash().as_byte_array();
       hash.reverse();
-      value += coin.rpc.get_transaction(&hash).await.unwrap().output
+      value += network.rpc.get_transaction(&hash).await.unwrap().output
         [usize::try_from(output.vout).unwrap()]
       .value;
     }
@@ -280,7 +280,7 @@ impl Bitcoin {
 }
 
 #[async_trait]
-impl Coin for Bitcoin {
+impl Network for Bitcoin {
   type Curve = Secp256k1;
 
   type Fee = Fee;
@@ -326,7 +326,7 @@ impl Coin for Bitcoin {
   }
 
   fn address(key: ProjectivePoint) -> Address {
-    Address(address(Network::Bitcoin, key).unwrap())
+    Address(address(BitcoinNetwork::Bitcoin, key).unwrap())
   }
 
   fn branch_address(key: ProjectivePoint) -> Self::Address {
@@ -334,21 +334,21 @@ impl Coin for Bitcoin {
     Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
   }
 
-  async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
-    self.rpc.get_latest_block_number().await.map_err(|_| CoinError::ConnectionError)
+  async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
+    self.rpc.get_latest_block_number().await.map_err(|_| NetworkError::ConnectionError)
   }
 
-  async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
+  async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError> {
     let block_hash =
-      self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?;
-    self.rpc.get_block(&block_hash).await.map_err(|_| CoinError::ConnectionError)
+      self.rpc.get_block_hash(number).await.map_err(|_| NetworkError::ConnectionError)?;
+    self.rpc.get_block(&block_hash).await.map_err(|_| NetworkError::ConnectionError)
   }
 
   async fn get_outputs(
     &self,
     block: &Self::Block,
     key: ProjectivePoint,
-  ) -> Result<Vec<Self::Output>, CoinError> {
+  ) -> Result<Vec<Self::Output>, NetworkError> {
     let (scanner, _, kinds) = scanner(key);
 
     let mut outputs = vec![];
@@ -452,7 +452,8 @@ impl Coin for Bitcoin {
     _: usize,
     mut plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<(Option<(SignableTransaction, Self::Eventuality)>, Vec<PostFeeBranch>), CoinError> {
+  ) -> Result<(Option<(SignableTransaction, Self::Eventuality)>, Vec<PostFeeBranch>), NetworkError>
+  {
     let signable = |plan: &Plan<Self>, tx_fee: Option<_>| {
       let mut payments = vec![];
       for payment in &plan.payments {
@@ -521,7 +522,7 @@ impl Coin for Bitcoin {
   async fn attempt_send(
     &self,
     transaction: Self::SignableTransaction,
-  ) -> Result<Self::TransactionMachine, CoinError> {
+  ) -> Result<Self::TransactionMachine, NetworkError> {
     Ok(
       transaction
         .actual
@@ -531,10 +532,10 @@ impl Coin for Bitcoin {
     )
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
     match self.rpc.send_raw_transaction(tx).await {
       Ok(_) => (),
-      Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
+      Err(RpcError::ConnectionError) => Err(NetworkError::ConnectionError)?,
       // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
       // invalid transaction
       Err(e) => panic!("failed to publish TX {}: {e}", tx.txid()),
@@ -542,8 +543,8 @@ impl Coin for Bitcoin {
     Ok(())
   }
 
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, CoinError> {
-    self.rpc.get_transaction(id).await.map_err(|_| CoinError::ConnectionError)
+  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
+    self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)
   }
 
   fn confirm_completion(&self, eventuality: &OutPoint, tx: &Transaction) -> bool {
@@ -566,7 +567,7 @@ impl Coin for Bitcoin {
       .rpc
       .rpc_call::<Vec<String>>(
         "generatetoaddress",
-        serde_json::json!([1, BAddress::p2sh(Script::empty(), Network::Regtest).unwrap()]),
+        serde_json::json!([1, BAddress::p2sh(Script::empty(), BitcoinNetwork::Regtest).unwrap()]),
       )
       .await
       .unwrap();
@@ -575,9 +576,9 @@ impl Coin for Bitcoin {
   #[cfg(test)]
   async fn test_send(&self, address: Self::Address) -> Block {
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
-    let private_key = PrivateKey::new(secret_key, Network::Regtest);
+    let private_key = PrivateKey::new(secret_key, BitcoinNetwork::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-    let main_addr = BAddress::p2pkh(&public_key, Network::Regtest);
+    let main_addr = BAddress::p2pkh(&public_key, BitcoinNetwork::Regtest);
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     self

@@ -14,18 +14,18 @@ use log::{info, debug, warn, error};
 use messages::sign::*;
 use crate::{
   Get, DbTxn, Db,
-  coins::{Transaction, Eventuality, Coin},
+  networks::{Transaction, Eventuality, Network},
 };
 
 #[derive(Debug)]
-pub enum SignerEvent<C: Coin> {
-  SignedTransaction { id: [u8; 32], tx: <C::Transaction as Transaction<C>>::Id },
+pub enum SignerEvent<N: Network> {
+  SignedTransaction { id: [u8; 32], tx: <N::Transaction as Transaction<N>>::Id },
   ProcessorMessage(ProcessorMessage),
 }
 
 #[derive(Debug)]
-struct SignerDb<C: Coin, D: Db>(D, PhantomData<C>);
-impl<C: Coin, D: Db> SignerDb<C, D> {
+struct SignerDb<N: Network, D: Db>(D, PhantomData<N>);
+impl<N: Network, D: Db> SignerDb<N, D> {
   fn sign_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     D::key(b"SIGNER", dst, key)
   }
@@ -36,7 +36,7 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
   fn complete(
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
-    tx: &<C::Transaction as Transaction<C>>::Id,
+    tx: &<N::Transaction as Transaction<N>>::Id,
   ) {
     // Transactions can be completed by multiple signatures
     // Save every solution in order to be robust
@@ -64,12 +64,12 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
   fn eventuality_key(id: [u8; 32]) -> Vec<u8> {
     Self::sign_key(b"eventuality", id)
   }
-  fn save_eventuality(txn: &mut D::Transaction<'_>, id: [u8; 32], eventuality: C::Eventuality) {
+  fn save_eventuality(txn: &mut D::Transaction<'_>, id: [u8; 32], eventuality: N::Eventuality) {
     txn.put(Self::eventuality_key(id), eventuality.serialize());
   }
-  fn eventuality<G: Get>(getter: &G, id: [u8; 32]) -> Option<C::Eventuality> {
+  fn eventuality<G: Get>(getter: &G, id: [u8; 32]) -> Option<N::Eventuality> {
     Some(
-      C::Eventuality::read::<&[u8]>(&mut getter.get(Self::eventuality_key(id))?.as_ref()).unwrap(),
+      N::Eventuality::read::<&[u8]>(&mut getter.get(Self::eventuality_key(id))?.as_ref()).unwrap(),
     )
   }
 
@@ -83,49 +83,49 @@ impl<C: Coin, D: Db> SignerDb<C, D> {
     getter.get(Self::attempt_key(id)).is_some()
   }
 
-  fn save_transaction(txn: &mut D::Transaction<'_>, tx: &C::Transaction) {
+  fn save_transaction(txn: &mut D::Transaction<'_>, tx: &N::Transaction) {
     txn.put(Self::sign_key(b"tx", tx.id()), tx.serialize());
   }
 }
 
-pub struct Signer<C: Coin, D: Db> {
+pub struct Signer<N: Network, D: Db> {
   db: PhantomData<D>,
 
-  coin: C,
+  network: N,
 
-  keys: ThresholdKeys<C::Curve>,
+  keys: ThresholdKeys<N::Curve>,
 
-  signable: HashMap<[u8; 32], C::SignableTransaction>,
+  signable: HashMap<[u8; 32], N::SignableTransaction>,
   attempt: HashMap<[u8; 32], u32>,
-  preprocessing: HashMap<[u8; 32], <C::TransactionMachine as PreprocessMachine>::SignMachine>,
+  preprocessing: HashMap<[u8; 32], <N::TransactionMachine as PreprocessMachine>::SignMachine>,
   #[allow(clippy::type_complexity)]
   signing: HashMap<
     [u8; 32],
     <
-      <C::TransactionMachine as PreprocessMachine>::SignMachine as SignMachine<C::Transaction>
+      <N::TransactionMachine as PreprocessMachine>::SignMachine as SignMachine<N::Transaction>
     >::SignatureMachine,
   >,
 
-  pub events: VecDeque<SignerEvent<C>>,
+  pub events: VecDeque<SignerEvent<N>>,
 }
 
-impl<C: Coin, D: Db> fmt::Debug for Signer<C, D> {
+impl<N: Network, D: Db> fmt::Debug for Signer<N, D> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("Signer")
-      .field("coin", &self.coin)
+      .field("network", &self.network)
       .field("signable", &self.signable)
       .field("attempt", &self.attempt)
       .finish_non_exhaustive()
   }
 }
 
-impl<C: Coin, D: Db> Signer<C, D> {
-  pub fn new(coin: C, keys: ThresholdKeys<C::Curve>) -> Signer<C, D> {
+impl<N: Network, D: Db> Signer<N, D> {
+  pub fn new(network: N, keys: ThresholdKeys<N::Curve>) -> Signer<N, D> {
     Signer {
       db: PhantomData,
 
-      coin,
+      network,
 
       keys,
 
@@ -138,7 +138,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
     }
   }
 
-  pub fn keys(&self) -> ThresholdKeys<C::Curve> {
+  pub fn keys(&self) -> ThresholdKeys<N::Curve> {
     self.keys.clone()
   }
 
@@ -173,7 +173,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
   }
 
   fn already_completed(&self, txn: &mut D::Transaction<'_>, id: [u8; 32]) -> bool {
-    if SignerDb::<C, D>::completed(txn, id).is_some() {
+    if SignerDb::<N, D>::completed(txn, id).is_some() {
       debug!(
         "SignTransaction/Reattempt order for {}, which we've already completed signing",
         hex::encode(id)
@@ -185,7 +185,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
     }
   }
 
-  fn complete(&mut self, id: [u8; 32], tx_id: <C::Transaction as Transaction<C>>::Id) {
+  fn complete(&mut self, id: [u8; 32], tx_id: <N::Transaction as Transaction<N>>::Id) {
     // Assert we're actively signing for this TX
     assert!(self.signable.remove(&id).is_some(), "completed a TX we weren't signing for");
     assert!(self.attempt.remove(&id).is_some(), "attempt had an ID signable didn't have");
@@ -205,14 +205,14 @@ impl<C: Coin, D: Db> Signer<C, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
-    tx_id: &<C::Transaction as Transaction<C>>::Id,
+    tx_id: &<N::Transaction as Transaction<N>>::Id,
   ) {
-    if let Some(eventuality) = SignerDb::<C, D>::eventuality(txn, id) {
+    if let Some(eventuality) = SignerDb::<N, D>::eventuality(txn, id) {
       // Transaction hasn't hit our mempool/was dropped for a different signature
       // The latter can happen given certain latency conditions/a single malicious signer
       // In the case of a single malicious signer, they can drag multiple honest
       // validators down with them, so we unfortunately can't slash on this case
-      let Ok(tx) = self.coin.get_transaction(tx_id).await else {
+      let Ok(tx) = self.network.get_transaction(tx_id).await else {
         warn!(
           "a validator claimed {} completed {} yet we didn't have that TX in our mempool",
           hex::encode(tx_id),
@@ -221,14 +221,14 @@ impl<C: Coin, D: Db> Signer<C, D> {
         return;
       };
 
-      if self.coin.confirm_completion(&eventuality, &tx) {
+      if self.network.confirm_completion(&eventuality, &tx) {
         info!("eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
 
         let first_completion = !self.already_completed(txn, id);
 
         // Save this completion to the DB
-        SignerDb::<C, D>::save_transaction(txn, &tx);
-        SignerDb::<C, D>::complete(txn, id, tx_id);
+        SignerDb::<N, D>::save_transaction(txn, &tx);
+        SignerDb::<N, D>::complete(txn, id, tx_id);
 
         if first_completion {
           self.complete(id, tx.id());
@@ -298,7 +298,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
     // branch again for something we've already attempted
     //
     // Only run if this hasn't already been attempted
-    if SignerDb::<C, D>::has_attempt(txn, &id) {
+    if SignerDb::<N, D>::has_attempt(txn, &id) {
       warn!(
         "already attempted {} #{}. this is an error if we didn't reboot",
         hex::encode(id.id),
@@ -307,10 +307,10 @@ impl<C: Coin, D: Db> Signer<C, D> {
       return;
     }
 
-    SignerDb::<C, D>::attempt(txn, &id);
+    SignerDb::<N, D>::attempt(txn, &id);
 
     // Attempt to create the TX
-    let machine = match self.coin.attempt_send(tx).await {
+    let machine = match self.network.attempt_send(tx).await {
       Err(e) => {
         error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
         return;
@@ -336,14 +336,14 @@ impl<C: Coin, D: Db> Signer<C, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
-    tx: C::SignableTransaction,
-    eventuality: C::Eventuality,
+    tx: N::SignableTransaction,
+    eventuality: N::Eventuality,
   ) {
     if self.already_completed(txn, id) {
       return;
     }
 
-    SignerDb::<C, D>::save_eventuality(txn, id, eventuality);
+    SignerDb::<N, D>::save_eventuality(txn, id, eventuality);
 
     self.signable.insert(id, tx);
     self.attempt(txn, id, 0).await;
@@ -445,12 +445,12 @@ impl<C: Coin, D: Db> Signer<C, D> {
         };
 
         // Save the transaction in case it's needed for recovery
-        SignerDb::<C, D>::save_transaction(txn, &tx);
+        SignerDb::<N, D>::save_transaction(txn, &tx);
         let tx_id = tx.id();
-        SignerDb::<C, D>::complete(txn, id.id, &tx_id);
+        SignerDb::<N, D>::complete(txn, id.id, &tx_id);
 
         // Publish it
-        if let Err(e) = self.coin.publish_transaction(&tx).await {
+        if let Err(e) = self.network.publish_transaction(&tx).await {
           error!("couldn't publish {:?}: {:?}", tx, e);
         } else {
           info!("published {} for plan {}", hex::encode(&tx_id), hex::encode(id.id));
@@ -465,7 +465,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
       }
 
       CoordinatorMessage::Completed { key: _, id, tx: mut tx_vec } => {
-        let mut tx = <C::Transaction as Transaction<C>>::Id::default();
+        let mut tx = <N::Transaction as Transaction<N>>::Id::default();
         if tx.as_ref().len() != tx_vec.len() {
           let true_len = tx_vec.len();
           tx_vec.truncate(2 * tx.as_ref().len());

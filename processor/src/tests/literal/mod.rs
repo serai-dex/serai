@@ -1,6 +1,6 @@
 #[cfg(feature = "bitcoin")]
 mod bitcoin {
-  use crate::coins::Bitcoin;
+  use crate::networks::Bitcoin;
 
   async fn bitcoin() -> Bitcoin {
     let bitcoin = Bitcoin::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await;
@@ -8,7 +8,7 @@ mod bitcoin {
     bitcoin
   }
 
-  test_coin!(
+  test_network!(
     Bitcoin,
     bitcoin,
     bitcoin_key_gen,
@@ -21,7 +21,7 @@ mod bitcoin {
 
 #[cfg(feature = "monero")]
 mod monero {
-  use crate::coins::{Coin, Monero};
+  use crate::networks::{Network, Monero};
 
   async fn monero() -> Monero {
     let monero = Monero::new("http://127.0.0.1:18081".to_string());
@@ -31,7 +31,7 @@ mod monero {
     monero
   }
 
-  test_coin!(
+  test_network!(
     Monero,
     monero,
     monero_key_gen,

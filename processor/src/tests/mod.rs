@@ -50,10 +50,10 @@ macro_rules! async_sequential {
 }
 
 #[macro_export]
-macro_rules! test_coin {
+macro_rules! test_network {
   (
-    $C: ident,
-    $coin: ident,
+    $N: ident,
+    $network: ident,
     $key_gen: ident,
     $scanner: ident,
     $signer: ident,
@@ -65,32 +65,32 @@ macro_rules! test_coin {
     // This doesn't interact with a node and accordingly doesn't need to be run sequentially
     #[tokio::test]
     async fn $key_gen() {
-      test_key_gen::<$C>().await;
+      test_key_gen::<$N>().await;
     }
 
     sequential!();
 
     async_sequential! {
       async fn $scanner() {
-        test_scanner($coin().await).await;
+        test_scanner($network().await).await;
       }
     }
 
     async_sequential! {
       async fn $signer() {
-        test_signer($coin().await).await;
+        test_signer($network().await).await;
       }
     }
 
     async_sequential! {
       async fn $wallet() {
-        test_wallet($coin().await).await;
+        test_wallet($network().await).await;
       }
     }
 
     async_sequential! {
       async fn $addresses() {
-        test_addresses($coin().await).await;
+        test_addresses($network().await).await;
       }
     }
   };

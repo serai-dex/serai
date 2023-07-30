@@ -12,27 +12,27 @@ use serai_client::primitives::BlockHash;
 use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
-  coins::{OutputType, Output, Block, Coin},
+  networks::{OutputType, Output, Block, Network},
   scanner::{ScannerEvent, Scanner, ScannerHandle},
 };
 
-pub async fn test_scanner<C: Coin>(coin: C) {
+pub async fn test_scanner<N: Network>(network: N) {
   let mut keys =
-    frost::tests::key_gen::<_, C::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
-  C::tweak_keys(&mut keys);
+    frost::tests::key_gen::<_, N::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
+  N::tweak_keys(&mut keys);
   let group_key = keys.group_key();
 
   // Mine blocks so there's a confirmed block
-  for _ in 0 .. C::CONFIRMATIONS {
-    coin.mine_block().await;
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
   }
 
   let first = Arc::new(Mutex::new(true));
-  let activation_number = coin.get_latest_block_number().await.unwrap();
+  let activation_number = network.get_latest_block_number().await.unwrap();
   let db = MemDb::new();
   let new_scanner = || async {
     let mut db = db.clone();
-    let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
+    let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
     let mut first = first.lock().unwrap();
     if *first {
       assert!(active_keys.is_empty());
@@ -48,11 +48,11 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let scanner = new_scanner().await;
 
   // Receive funds
-  let block = coin.test_send(C::address(keys.group_key())).await;
+  let block = network.test_send(N::address(keys.group_key())).await;
   let block_id = block.id();
 
   // Verify the Scanner picked them up
-  let verify_event = |mut scanner: ScannerHandle<C, MemDb>| async {
+  let verify_event = |mut scanner: ScannerHandle<N, MemDb>| async {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
         ScannerEvent::Block { key, block, batch, outputs } => {
@@ -80,7 +80,7 @@ pub async fn test_scanner<C: Coin>(coin: C) {
   let mut blocks = vec![];
   let mut curr_block = activation_number + 1;
   loop {
-    let block = coin.get_block(curr_block).await.unwrap().id();
+    let block = network.get_block(curr_block).await.unwrap().id();
     blocks.push(BlockHash(block.as_ref().try_into().unwrap()));
     if block == block_id {
       break;

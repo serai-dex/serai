@@ -13,18 +13,18 @@ use serai_db::{DbTxn, Db, MemDb};
 use messages::sign::*;
 use crate::{
   Payment, Plan,
-  coins::{Output, Transaction, Coin},
+  networks::{Output, Transaction, Network},
   signer::{SignerEvent, Signer},
 };
 
 #[allow(clippy::type_complexity)]
-pub async fn sign<C: Coin>(
-  coin: C,
+pub async fn sign<N: Network>(
+  network: N,
   mut keys_txs: HashMap<
     Participant,
-    (ThresholdKeys<C::Curve>, (C::SignableTransaction, C::Eventuality)),
+    (ThresholdKeys<N::Curve>, (N::SignableTransaction, N::Eventuality)),
   >,
-) -> <C::Transaction as Transaction<C>>::Id {
+) -> <N::Transaction as Transaction<N>>::Id {
   let actual_id = SignId {
     key: keys_txs[&Participant::new(1).unwrap()].0.group_key().to_bytes().as_ref().to_vec(),
     id: [0xaa; 32],
@@ -45,7 +45,7 @@ pub async fn sign<C: Coin>(
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.remove(&i).unwrap();
     t = keys.params().t();
-    signers.insert(i, Signer::<_, MemDb>::new(coin.clone(), keys));
+    signers.insert(i, Signer::<_, MemDb>::new(network.clone(), keys));
     dbs.insert(i, MemDb::new());
   }
   drop(keys);
@@ -146,29 +146,29 @@ pub async fn sign<C: Coin>(
   tx_id.unwrap()
 }
 
-pub async fn test_signer<C: Coin>(coin: C) {
+pub async fn test_signer<N: Network>(network: N) {
   let mut keys = key_gen(&mut OsRng);
   for (_, keys) in keys.iter_mut() {
-    C::tweak_keys(keys);
+    N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
-  let outputs = coin.get_outputs(&coin.test_send(C::address(key)).await, key).await.unwrap();
-  let sync_block = coin.get_latest_block_number().await.unwrap() - C::CONFIRMATIONS;
-  let fee = coin.get_fee().await;
+  let outputs = network.get_outputs(&network.test_send(N::address(key)).await, key).await.unwrap();
+  let sync_block = network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS;
+  let fee = network.get_fee().await;
 
-  let amount = 2 * C::DUST;
+  let amount = 2 * N::DUST;
   let mut keys_txs = HashMap::new();
   let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
-    let (signable, eventuality) = coin
+    let (signable, eventuality) = network
       .prepare_send(
         keys.clone(),
         sync_block,
         Plan {
           key,
           inputs: outputs.clone(),
-          payments: vec![Payment { address: C::address(key), data: None, amount }],
+          payments: vec![Payment { address: N::address(key), data: None, amount }],
           change: Some(key),
         },
         fee,
@@ -184,23 +184,26 @@ pub async fn test_signer<C: Coin>(coin: C) {
 
   // The signer may not publish the TX if it has a connection error
   // It doesn't fail in this case
-  let txid = sign(coin.clone(), keys_txs).await;
-  let tx = coin.get_transaction(&txid).await.unwrap();
+  let txid = sign(network.clone(), keys_txs).await;
+  let tx = network.get_transaction(&txid).await.unwrap();
   assert_eq!(tx.id(), txid);
   // Mine a block, and scan it, to ensure that the TX actually made it on chain
-  coin.mine_block().await;
-  let outputs = coin
-    .get_outputs(&coin.get_block(coin.get_latest_block_number().await.unwrap()).await.unwrap(), key)
+  network.mine_block().await;
+  let outputs = network
+    .get_outputs(
+      &network.get_block(network.get_latest_block_number().await.unwrap()).await.unwrap(),
+      key,
+    )
     .await
     .unwrap();
   assert_eq!(outputs.len(), 2);
   // Adjust the amount for the fees
-  let amount = amount - tx.fee(&coin).await;
+  let amount = amount - tx.fee(&network).await;
   // Check either output since Monero will randomize its output order
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
 
   // Check the eventualities pass
   for eventuality in eventualities {
-    assert!(coin.confirm_completion(&eventuality, &tx));
+    assert!(network.confirm_completion(&eventuality, &tx));
   }
 }

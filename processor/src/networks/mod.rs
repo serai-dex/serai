@@ -25,8 +25,8 @@ pub use monero::Monero;
 use crate::{Payment, Plan};
 
 #[derive(Clone, Copy, Error, Debug)]
-pub enum CoinError {
-  #[error("failed to connect to coin daemon")]
+pub enum NetworkError {
+  #[error("failed to connect to network daemon")]
   ConnectionError,
 }
 
@@ -108,13 +108,13 @@ pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
 }
 
 #[async_trait]
-pub trait Transaction<C: Coin>: Send + Sync + Sized + Clone + Debug {
+pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn serialize(&self) -> Vec<u8>;
 
   #[cfg(test)]
-  async fn fee(&self, coin: &C) -> u64;
+  async fn fee(&self, network: &N) -> u64;
 }
 
 pub trait Eventuality: Send + Sync + Clone + Debug {
@@ -171,13 +171,13 @@ impl<E: Eventuality> Default for EventualitiesTracker<E> {
   }
 }
 
-pub trait Block<C: Coin>: Send + Sync + Sized + Clone + Debug {
+pub trait Block<N: Network>: Send + Sync + Sized + Clone + Debug {
   // This is currently bounded to being 32-bytes.
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn parent(&self) -> Self::Id;
   fn time(&self) -> u64;
-  fn median_fee(&self) -> C::Fee;
+  fn median_fee(&self) -> N::Fee;
 }
 
 // The post-fee value of an expected branch.
@@ -187,10 +187,10 @@ pub struct PostFeeBranch {
 }
 
 // Return the PostFeeBranches needed when dropping a transaction
-pub fn drop_branches<C: Coin>(plan: &Plan<C>) -> Vec<PostFeeBranch> {
+pub fn drop_branches<N: Network>(plan: &Plan<N>) -> Vec<PostFeeBranch> {
   let mut branch_outputs = vec![];
   for payment in &plan.payments {
-    if payment.address == C::branch_address(plan.key) {
+    if payment.address == N::branch_address(plan.key) {
       branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
     }
   }
@@ -198,7 +198,7 @@ pub fn drop_branches<C: Coin>(plan: &Plan<C>) -> Vec<PostFeeBranch> {
 }
 
 // Amortize a fee over the plan's payments
-pub fn amortize_fee<C: Coin>(plan: &mut Plan<C>, tx_fee: u64) -> Vec<PostFeeBranch> {
+pub fn amortize_fee<N: Network>(plan: &mut Plan<N>, tx_fee: u64) -> Vec<PostFeeBranch> {
   // No payments to amortize over
   if plan.payments.is_empty() {
     return vec![];
@@ -211,11 +211,11 @@ pub fn amortize_fee<C: Coin>(plan: &mut Plan<C>, tx_fee: u64) -> Vec<PostFeeBran
   // Use a formula which will round up
   let per_output_fee = |payments| (tx_fee + (payments - 1)) / payments;
 
-  let post_fee = |payment: &Payment<C>, per_output_fee| {
+  let post_fee = |payment: &Payment<N>, per_output_fee| {
     let mut post_fee = payment.amount.checked_sub(per_output_fee);
     // If this is under our dust threshold, drop it
     if let Some(amount) = post_fee {
-      if amount < C::DUST {
+      if amount < N::DUST {
         post_fee = None;
       }
     }
@@ -244,7 +244,7 @@ pub fn amortize_fee<C: Coin>(plan: &mut Plan<C>, tx_fee: u64) -> Vec<PostFeeBran
   for payment in plan.payments.iter_mut() {
     let post_fee = post_fee(payment, per_output_fee);
     // Note the branch output, if this is one
-    if payment.address == C::branch_address(plan.key) {
+    if payment.address == N::branch_address(plan.key) {
       branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
     }
     payment.amount = post_fee.unwrap_or(0);
@@ -260,21 +260,21 @@ pub fn amortize_fee<C: Coin>(plan: &mut Plan<C>, tx_fee: u64) -> Vec<PostFeeBran
 }
 
 #[async_trait]
-pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
-  /// The elliptic curve used for this coin.
+pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
+  /// The elliptic curve used for this network.
   type Curve: Curve;
 
-  /// The type representing the fee for this coin.
+  /// The type representing the fee for this network.
   // This should likely be a u64, wrapped in a type which implements appropriate fee logic.
   type Fee: Copy;
 
-  /// The type representing the transaction for this coin.
+  /// The type representing the transaction for this network.
   type Transaction: Transaction<Self>;
-  /// The type representing the block for this coin.
+  /// The type representing the block for this network.
   type Block: Block<Self>;
 
   /// The type containing all information on a scanned output.
-  // This is almost certainly distinct from the coin's native output type.
+  // This is almost certainly distinct from the network's native output type.
   type Output: Output;
   /// The type containing all information on a planned transaction, waiting to be signed.
   type SignableTransaction: Send + Sync + Clone + Debug;
@@ -296,9 +296,9 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     + TryInto<Vec<u8>>
     + TryFrom<Vec<u8>>;
 
-  /// Network ID for this coin.
+  /// Network ID for this network.
   const NETWORK: NetworkId;
-  /// String ID for this coin.
+  /// String ID for this network.
   const ID: &'static str;
   /// The amount of confirmations required to consider a block 'final'.
   const CONFIRMATIONS: usize;
@@ -314,7 +314,7 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Minimum output value which will be handled.
   const DUST: u64;
 
-  /// Tweak keys for this coin.
+  /// Tweak keys for this network.
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 
   /// Address for the given group key to receive external coins to.
@@ -324,15 +324,15 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
   /// Get the latest block's number.
-  async fn get_latest_block_number(&self) -> Result<usize, CoinError>;
+  async fn get_latest_block_number(&self) -> Result<usize, NetworkError>;
   /// Get a block by its number.
-  async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError>;
+  async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError>;
   /// Get the outputs within a block for a specific key.
   async fn get_outputs(
     &self,
     block: &Self::Block,
     key: <Self::Curve as Ciphersuite>::G,
-  ) -> Result<Vec<Self::Output>, CoinError>;
+  ) -> Result<Vec<Self::Output>, NetworkError>;
 
   /// Get the registered eventualities completed within this block, and any prior blocks which
   /// registered eventualities may have been completed in.
@@ -353,23 +353,23 @@ pub trait Coin: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     fee: Self::Fee,
   ) -> Result<
     (Option<(Self::SignableTransaction, Self::Eventuality)>, Vec<PostFeeBranch>),
-    CoinError
+    NetworkError
   >;
 
   /// Attempt to sign a SignableTransaction.
   async fn attempt_send(
     &self,
     transaction: Self::SignableTransaction,
-  ) -> Result<Self::TransactionMachine, CoinError>;
+  ) -> Result<Self::TransactionMachine, NetworkError>;
 
   /// Publish a transaction.
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError>;
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError>;
 
   /// Get a transaction by its ID.
   async fn get_transaction(
     &self,
     id: &<Self::Transaction as Transaction<Self>>::Id,
-  ) -> Result<Self::Transaction, CoinError>;
+  ) -> Result<Self::Transaction, NetworkError>;
 
   /// Confirm a plan was completed by the specified transaction.
   // This is allowed to take shortcuts.

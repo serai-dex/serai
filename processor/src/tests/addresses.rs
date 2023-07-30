@@ -11,18 +11,18 @@ use serai_db::{DbTxn, MemDb};
 
 use crate::{
   Plan, Db,
-  coins::{OutputType, Output, Block, Coin},
+  networks::{OutputType, Output, Block, Network},
   scanner::{ScannerEvent, Scanner, ScannerHandle},
   tests::sign,
 };
 
-async fn spend<C: Coin, D: Db>(
-  coin: &C,
-  keys: &HashMap<Participant, ThresholdKeys<C::Curve>>,
-  scanner: &mut ScannerHandle<C, D>,
+async fn spend<N: Network, D: Db>(
+  network: &N,
+  keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
+  scanner: &mut ScannerHandle<N, D>,
   batch: u32,
-  outputs: Vec<C::Output>,
-) -> Vec<C::Output> {
+  outputs: Vec<N::Output>,
+) -> Vec<N::Output> {
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut keys_txs = HashMap::new();
@@ -31,13 +31,13 @@ async fn spend<C: Coin, D: Db>(
       *i,
       (
         keys.clone(),
-        coin
+        network
           .prepare_send(
             keys.clone(),
-            coin.get_latest_block_number().await.unwrap() - C::CONFIRMATIONS,
+            network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS,
             // Send to a change output
             Plan { key, inputs: outputs.clone(), payments: vec![], change: Some(key) },
-            coin.get_fee().await,
+            network.get_fee().await,
           )
           .await
           .unwrap()
@@ -46,10 +46,10 @@ async fn spend<C: Coin, D: Db>(
       ),
     );
   }
-  sign(coin.clone(), keys_txs).await;
+  sign(network.clone(), keys_txs).await;
 
-  for _ in 0 .. C::CONFIRMATIONS {
-    coin.mine_block().await;
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block { key: this_key, block: _, batch: this_batch, outputs } => {
@@ -66,27 +66,27 @@ async fn spend<C: Coin, D: Db>(
   }
 }
 
-pub async fn test_addresses<C: Coin>(coin: C) {
-  let mut keys = frost::tests::key_gen::<_, C::Curve>(&mut OsRng);
+pub async fn test_addresses<N: Network>(network: N) {
+  let mut keys = frost::tests::key_gen::<_, N::Curve>(&mut OsRng);
   for (_, keys) in keys.iter_mut() {
-    C::tweak_keys(keys);
+    N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   // Mine blocks so there's a confirmed block
-  for _ in 0 .. C::CONFIRMATIONS {
-    coin.mine_block().await;
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
   }
 
   let mut db = MemDb::new();
-  let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
+  let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
   assert!(active_keys.is_empty());
   let mut txn = db.txn();
-  scanner.rotate_key(&mut txn, coin.get_latest_block_number().await.unwrap(), key).await;
+  scanner.rotate_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
   txn.commit();
 
   // Receive funds to the branch address and make sure it's properly identified
-  let block_id = coin.test_send(C::branch_address(key)).await.id();
+  let block_id = network.test_send(N::branch_address(key)).await.id();
 
   // Verify the Scanner picked them up
   let outputs =
@@ -105,7 +105,7 @@ pub async fn test_addresses<C: Coin>(coin: C) {
     };
 
   // Spend the branch output, creating a change output and ensuring we actually get change
-  let outputs = spend(&coin, &keys, &mut scanner, 1, outputs).await;
+  let outputs = spend(&network, &keys, &mut scanner, 1, outputs).await;
   // Also test spending the change output
-  spend(&coin, &keys, &mut scanner, 2, outputs).await;
+  spend(&network, &keys, &mut scanner, 2, outputs).await;
 }

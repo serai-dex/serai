@@ -17,14 +17,14 @@ use serai_client::{
 
 use messages::key_gen::*;
 use crate::{
-  coins::Coin,
+  networks::Network,
   key_gen::{KeyConfirmed, KeyGen},
 };
 
 const ID: KeyGenId =
   KeyGenId { set: ValidatorSet { session: Session(1), network: NetworkId::Monero }, attempt: 3 };
 
-pub async fn test_key_gen<C: Coin>() {
+pub async fn test_key_gen<N: Network>() {
   let mut entropies = HashMap::new();
   let mut dbs = HashMap::new();
   let mut key_gens = HashMap::new();
@@ -34,7 +34,7 @@ pub async fn test_key_gen<C: Coin>() {
     entropies.insert(i, entropy);
     let db = MemDb::new();
     dbs.insert(i, db.clone());
-    key_gens.insert(i, KeyGen::<C, MemDb>::new(db, entropies[&i].clone()));
+    key_gens.insert(i, KeyGen::<N, MemDb>::new(db, entropies[&i].clone()));
   }
 
   let mut all_commitments = HashMap::new();
@@ -65,7 +65,7 @@ pub async fn test_key_gen<C: Coin>() {
   // 3 ... are rebuilt once, one at each of the following steps
   let rebuild = |key_gens: &mut HashMap<_, _>, dbs: &HashMap<_, MemDb>, i| {
     key_gens.remove(&i);
-    key_gens.insert(i, KeyGen::<C, _>::new(dbs[&i].clone(), entropies[&i].clone()));
+    key_gens.insert(i, KeyGen::<N, _>::new(dbs[&i].clone(), entropies[&i].clone()));
   };
   rebuild(&mut key_gens, &dbs, 1);
   rebuild(&mut key_gens, &dbs, 2);
@@ -102,7 +102,7 @@ pub async fn test_key_gen<C: Coin>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let ProcessorMessage::GeneratedKeyPair { id, substrate_key, coin_key } = key_gen
+    if let ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } = key_gen
       .handle(
         &mut txn,
         CoordinatorMessage::Shares {
@@ -117,9 +117,9 @@ pub async fn test_key_gen<C: Coin>() {
     {
       assert_eq!(id, ID);
       if res.is_none() {
-        res = Some((substrate_key, coin_key.clone()));
+        res = Some((substrate_key, network_key.clone()));
       }
-      assert_eq!(res.as_ref().unwrap(), &(substrate_key, coin_key));
+      assert_eq!(res.as_ref().unwrap(), &(substrate_key, network_key));
     } else {
       panic!("didn't get key back");
     }
@@ -134,7 +134,7 @@ pub async fn test_key_gen<C: Coin>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    let KeyConfirmed { substrate_keys, coin_keys } = key_gen
+    let KeyConfirmed { substrate_keys, network_keys } = key_gen
       .confirm(&mut txn, ID.set, (sr25519::Public(res.0), res.1.clone().try_into().unwrap()))
       .await;
     txn.commit();
@@ -142,9 +142,12 @@ pub async fn test_key_gen<C: Coin>() {
     let params =
       ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap();
     assert_eq!(substrate_keys.params(), params);
-    assert_eq!(coin_keys.params(), params);
+    assert_eq!(network_keys.params(), params);
     assert_eq!(
-      (substrate_keys.group_key().to_bytes(), coin_keys.group_key().to_bytes().as_ref().to_vec()),
+      (
+        substrate_keys.group_key().to_bytes(),
+        network_keys.group_key().to_bytes().as_ref().to_vec()
+      ),
       res
     );
   }

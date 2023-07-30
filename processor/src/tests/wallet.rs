@@ -10,29 +10,29 @@ use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
   Payment, Plan,
-  coins::{Output, Transaction, Block, Coin},
+  networks::{Output, Transaction, Block, Network},
   scanner::{ScannerEvent, Scanner},
   scheduler::Scheduler,
   tests::sign,
 };
 
 // Tests the Scanner, Scheduler, and Signer together
-pub async fn test_wallet<C: Coin>(coin: C) {
+pub async fn test_wallet<N: Network>(network: N) {
   let mut keys = key_gen(&mut OsRng);
   for (_, keys) in keys.iter_mut() {
-    C::tweak_keys(keys);
+    N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut db = MemDb::new();
-  let (mut scanner, active_keys) = Scanner::new(coin.clone(), db.clone());
+  let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
   assert!(active_keys.is_empty());
   let (block_id, outputs) = {
     let mut txn = db.txn();
-    scanner.rotate_key(&mut txn, coin.get_latest_block_number().await.unwrap(), key).await;
+    scanner.rotate_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
     txn.commit();
 
-    let block = coin.test_send(C::address(key)).await;
+    let block = network.test_send(N::address(key)).await;
     let block_id = block.id();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
@@ -51,11 +51,11 @@ pub async fn test_wallet<C: Coin>(coin: C) {
 
   let mut txn = db.txn();
   let mut scheduler = Scheduler::new::<MemDb>(&mut txn, key);
-  let amount = 2 * C::DUST;
+  let amount = 2 * N::DUST;
   let plans = scheduler.schedule::<MemDb>(
     &mut txn,
     outputs.clone(),
-    vec![Payment { address: C::address(key), data: None, amount }],
+    vec![Payment { address: N::address(key), data: None, amount }],
   );
   txn.commit();
   assert_eq!(
@@ -63,7 +63,7 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     vec![Plan {
       key,
       inputs: outputs.clone(),
-      payments: vec![Payment { address: C::address(key), data: None, amount }],
+      payments: vec![Payment { address: N::address(key), data: None, amount }],
       change: Some(key),
     }]
   );
@@ -71,16 +71,16 @@ pub async fn test_wallet<C: Coin>(coin: C) {
   {
     let mut buf = vec![];
     plans[0].write(&mut buf).unwrap();
-    assert_eq!(plans[0], Plan::<C>::read::<&[u8]>(&mut buf.as_ref()).unwrap());
+    assert_eq!(plans[0], Plan::<N>::read::<&[u8]>(&mut buf.as_ref()).unwrap());
   }
 
   // Execute the plan
-  let fee = coin.get_fee().await;
+  let fee = network.get_fee().await;
   let mut keys_txs = HashMap::new();
   let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
-    let (signable, eventuality) = coin
-      .prepare_send(keys.clone(), coin.get_block_number(&block_id).await, plans[0].clone(), fee)
+    let (signable, eventuality) = network
+      .prepare_send(keys.clone(), network.get_block_number(&block_id).await, plans[0].clone(), fee)
       .await
       .unwrap()
       .0
@@ -90,23 +90,23 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
-  let txid = sign(coin.clone(), keys_txs).await;
-  let tx = coin.get_transaction(&txid).await.unwrap();
-  coin.mine_block().await;
-  let block_number = coin.get_latest_block_number().await.unwrap();
-  let block = coin.get_block(block_number).await.unwrap();
+  let txid = sign(network.clone(), keys_txs).await;
+  let tx = network.get_transaction(&txid).await.unwrap();
+  network.mine_block().await;
+  let block_number = network.get_latest_block_number().await.unwrap();
+  let block = network.get_block(block_number).await.unwrap();
   let first_outputs = outputs;
-  let outputs = coin.get_outputs(&block, key).await.unwrap();
+  let outputs = network.get_outputs(&block, key).await.unwrap();
   assert_eq!(outputs.len(), 2);
-  let amount = amount - tx.fee(&coin).await;
+  let amount = amount - tx.fee(&network).await;
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
 
   for eventuality in eventualities {
-    assert!(coin.confirm_completion(&eventuality, &tx));
+    assert!(network.confirm_completion(&eventuality, &tx));
   }
 
-  for _ in 1 .. C::CONFIRMATIONS {
-    coin.mine_block().await;
+  for _ in 1 .. N::CONFIRMATIONS {
+    network.mine_block().await;
   }
 
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {

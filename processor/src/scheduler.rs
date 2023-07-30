@@ -6,14 +6,14 @@ use std::{
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use crate::{
-  coins::{Output, Coin},
+  networks::{Output, Network},
   DbTxn, Db, Payment, Plan,
 };
 
 /// Stateless, deterministic output/payment manager.
 #[derive(PartialEq, Eq, Debug)]
-pub struct Scheduler<C: Coin> {
-  key: <C::Curve as Ciphersuite>::G,
+pub struct Scheduler<N: Network> {
+  key: <N::Curve as Ciphersuite>::G,
 
   // Serai, when it has more outputs expected than it can handle in a single tranaction, will
   // schedule the outputs to be handled later. Immediately, it just creates additional outputs
@@ -31,22 +31,22 @@ pub struct Scheduler<C: Coin> {
   // output actually has, and it'll be moved into plans
   //
   // TODO2: Consider edge case where branch/change isn't mined yet keys are deprecated
-  queued_plans: HashMap<u64, VecDeque<Vec<Payment<C>>>>,
-  plans: HashMap<u64, VecDeque<Vec<Payment<C>>>>,
+  queued_plans: HashMap<u64, VecDeque<Vec<Payment<N>>>>,
+  plans: HashMap<u64, VecDeque<Vec<Payment<N>>>>,
 
   // UTXOs available
-  utxos: Vec<C::Output>,
+  utxos: Vec<N::Output>,
 
   // Payments awaiting scheduling due to the output availability problem
-  payments: VecDeque<Payment<C>>,
+  payments: VecDeque<Payment<N>>,
 }
 
 fn scheduler_key<D: Db, G: GroupEncoding>(key: &G) -> Vec<u8> {
   D::key(b"SCHEDULER", b"scheduler", key.to_bytes())
 }
 
-impl<C: Coin> Scheduler<C> {
-  fn read<R: Read>(key: <C::Curve as Ciphersuite>::G, reader: &mut R) -> io::Result<Self> {
+impl<N: Network> Scheduler<N> {
+  fn read<R: Read>(key: <N::Curve as Ciphersuite>::G, reader: &mut R) -> io::Result<Self> {
     let mut read_plans = || -> io::Result<_> {
       let mut all_plans = HashMap::new();
       let mut all_plans_len = [0; 4];
@@ -80,7 +80,7 @@ impl<C: Coin> Scheduler<C> {
     let mut utxos_len = [0; 4];
     reader.read_exact(&mut utxos_len)?;
     for _ in 0 .. u32::from_le_bytes(utxos_len) {
-      utxos.push(C::Output::read(reader)?);
+      utxos.push(N::Output::read(reader)?);
     }
 
     let mut payments = VecDeque::new();
@@ -99,7 +99,7 @@ impl<C: Coin> Scheduler<C> {
   fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(4096);
 
-    let mut write_plans = |plans: &HashMap<u64, VecDeque<Vec<Payment<C>>>>| {
+    let mut write_plans = |plans: &HashMap<u64, VecDeque<Vec<Payment<N>>>>| {
       res.extend(u32::try_from(plans.len()).unwrap().to_le_bytes());
       for (amount, list_of_plans) in plans {
         res.extend(amount.to_le_bytes());
@@ -129,7 +129,7 @@ impl<C: Coin> Scheduler<C> {
     res
   }
 
-  pub fn new<D: Db>(txn: &mut D::Transaction<'_>, key: <C::Curve as Ciphersuite>::G) -> Self {
+  pub fn new<D: Db>(txn: &mut D::Transaction<'_>, key: <N::Curve as Ciphersuite>::G) -> Self {
     let res = Scheduler {
       key,
       queued_plans: HashMap::new(),
@@ -142,7 +142,7 @@ impl<C: Coin> Scheduler<C> {
     res
   }
 
-  pub fn from_db<D: Db>(db: &D, key: <C::Curve as Ciphersuite>::G) -> io::Result<Self> {
+  pub fn from_db<D: Db>(db: &D, key: <N::Curve as Ciphersuite>::G) -> io::Result<Self> {
     let scheduler = db.get(scheduler_key::<D, _>(&key)).unwrap_or_else(|| {
       panic!("loading scheduler from DB without scheduler for {}", hex::encode(key.to_bytes()))
     });
@@ -152,10 +152,10 @@ impl<C: Coin> Scheduler<C> {
     Self::read(key, reader)
   }
 
-  fn execute(&mut self, inputs: Vec<C::Output>, mut payments: Vec<Payment<C>>) -> Plan<C> {
-    // This must be equal to plan.key due to how coins detect they created outputs which are to
+  fn execute(&mut self, inputs: Vec<N::Output>, mut payments: Vec<Payment<N>>) -> Plan<N> {
+    // This must be equal to plan.key due to how networks detect they created outputs which are to
     // the branch address
-    let branch_address = C::branch_address(self.key);
+    let branch_address = N::branch_address(self.key);
     // created_output will be called any time we send to a branch address
     // If it's called, and it wasn't expecting to be called, that's almost certainly an error
     // The only way it wouldn't be is if someone on Serai triggered a burn to a branch, which is
@@ -166,10 +166,10 @@ impl<C: Coin> Scheduler<C> {
       payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
 
     let mut change = false;
-    let mut max = C::MAX_OUTPUTS;
+    let mut max = N::MAX_OUTPUTS;
 
     let payment_amounts =
-      |payments: &Vec<Payment<C>>| payments.iter().map(|payment| payment.amount).sum::<u64>();
+      |payments: &Vec<Payment<N>>| payments.iter().map(|payment| payment.amount).sum::<u64>();
 
     // Requires a change output
     if inputs.iter().map(Output::amount).sum::<u64>() != payment_amounts(&payments) {
@@ -192,9 +192,9 @@ impl<C: Coin> Scheduler<C> {
     // If this was perfect, the heaviest branch would have 1 branch of 3 leaves and 15 leaves
     while payments.len() > max {
       // The resulting TX will have the remaining payments and a new branch payment
-      let to_remove = (payments.len() + 1) - C::MAX_OUTPUTS;
+      let to_remove = (payments.len() + 1) - N::MAX_OUTPUTS;
       // Don't remove more than possible
-      let to_remove = to_remove.min(C::MAX_OUTPUTS);
+      let to_remove = to_remove.min(N::MAX_OUTPUTS);
 
       // Create the plan
       let removed = payments.drain((payments.len() - to_remove) ..).collect::<Vec<_>>();
@@ -211,7 +211,7 @@ impl<C: Coin> Scheduler<C> {
     Plan { key: self.key, inputs, payments, change: Some(self.key).filter(|_| change) }
   }
 
-  fn add_outputs(&mut self, mut utxos: Vec<C::Output>) -> Vec<Plan<C>> {
+  fn add_outputs(&mut self, mut utxos: Vec<N::Output>) -> Vec<Plan<N>> {
     log::info!("adding {} outputs", utxos.len());
 
     let mut txs = vec![];
@@ -247,9 +247,9 @@ impl<C: Coin> Scheduler<C> {
   pub fn schedule<D: Db>(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    utxos: Vec<C::Output>,
-    payments: Vec<Payment<C>>,
-  ) -> Vec<Plan<C>> {
+    utxos: Vec<N::Output>,
+    payments: Vec<Payment<N>>,
+  ) -> Vec<Plan<N>> {
     let mut plans = self.add_outputs(utxos);
 
     log::info!("scheduling {} new payments", payments.len());
@@ -275,7 +275,7 @@ impl<C: Coin> Scheduler<C> {
     // Since we do multiple aggregation TXs at once, this will execute in logarithmic time
     let utxos = self.utxos.drain(..).collect::<Vec<_>>();
     let mut utxo_chunks =
-      utxos.chunks(C::MAX_INPUTS).map(|chunk| chunk.to_vec()).collect::<Vec<_>>();
+      utxos.chunks(N::MAX_INPUTS).map(|chunk| chunk.to_vec()).collect::<Vec<_>>();
 
     // Use the first chunk for any scheduled payments, since it has the most value
     let utxos = utxo_chunks.remove(0);
@@ -294,7 +294,7 @@ impl<C: Coin> Scheduler<C> {
       // TODO: While payments have their TXs' fees deducted from themselves, that doesn't hold here
       // We need to charge a fee before reporting incoming UTXOs to Substrate to cover aggregation
       // TXs
-      log::debug!("aggregating a chunk of {} inputs", C::MAX_INPUTS);
+      log::debug!("aggregating a chunk of {} inputs", N::MAX_INPUTS);
       plans.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: Some(self.key) })
     }
 
@@ -303,7 +303,7 @@ impl<C: Coin> Scheduler<C> {
 
     // If we can't fulfill the next payment, we have encountered an instance of the UTXO
     // availability problem
-    // This shows up in coins like Monero, where because we spent outputs, our change has yet to
+    // This shows up in networks like Monero, where because we spent outputs, our change has yet to
     // re-appear. Since it has yet to re-appear, we only operate with a balance which is a subset
     // of our total balance
     // Despite this, we may be order to fulfill a payment which is our total balance
@@ -369,7 +369,7 @@ impl<C: Coin> Scheduler<C> {
     };
 
     // Amortize the fee amongst all payments
-    // While some coins, like Ethereum, may have some payments take notably more gas, those
+    // While some networks, like Ethereum, may have some payments take notably more gas, those
     // payments will have their own gas deducted when they're created. The difference in output
     // value present here is solely the cost of the branch, which is used for all of these
     // payments, regardless of how much they'll end up costing
@@ -387,7 +387,7 @@ impl<C: Coin> Scheduler<C> {
 
     // Drop payments now below the dust threshold
     let payments =
-      payments.drain(..).filter(|payment| payment.amount >= C::DUST).collect::<Vec<_>>();
+      payments.drain(..).filter(|payment| payment.amount >= N::DUST).collect::<Vec<_>>();
     // Sanity check this was done properly
     assert!(actual >= payments.iter().map(|payment| payment.amount).sum::<u64>());
     if payments.is_empty() {

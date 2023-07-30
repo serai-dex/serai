@@ -31,12 +31,12 @@ use message_queue::{Service, client::MessageQueue};
 mod plan;
 pub use plan::*;
 
-mod coins;
-use coins::{OutputType, Output, PostFeeBranch, Block, Coin};
+mod networks;
+use networks::{OutputType, Output, PostFeeBranch, Block, Network};
 #[cfg(feature = "bitcoin")]
-use coins::Bitcoin;
+use networks::Bitcoin;
 #[cfg(feature = "monero")]
-use coins::Monero;
+use networks::Monero;
 
 mod additional_key;
 pub use additional_key::additional_key;
@@ -65,9 +65,9 @@ use scheduler::Scheduler;
 #[cfg(test)]
 mod tests;
 
-async fn get_latest_block_number<C: Coin>(coin: &C) -> usize {
+async fn get_latest_block_number<N: Network>(network: &N) -> usize {
   loop {
-    match coin.get_latest_block_number().await {
+    match network.get_latest_block_number().await {
       Ok(number) => {
         return number;
       }
@@ -82,9 +82,9 @@ async fn get_latest_block_number<C: Coin>(coin: &C) -> usize {
   }
 }
 
-async fn get_block<C: Coin>(coin: &C, block_number: usize) -> C::Block {
+async fn get_block<N: Network>(network: &N, block_number: usize) -> N::Block {
   loop {
-    match coin.get_block(block_number).await {
+    match network.get_block(block_number).await {
       Ok(block) => {
         return block;
       }
@@ -96,20 +96,20 @@ async fn get_block<C: Coin>(coin: &C, block_number: usize) -> C::Block {
   }
 }
 
-async fn get_fee<C: Coin>(coin: &C, block_number: usize) -> C::Fee {
+async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
   // TODO2: Use an fee representative of several blocks
-  get_block(coin, block_number).await.median_fee()
+  get_block(network, block_number).await.median_fee()
 }
 
-async fn prepare_send<C: Coin>(
-  coin: &C,
-  keys: ThresholdKeys<C::Curve>,
+async fn prepare_send<N: Network>(
+  network: &N,
+  keys: ThresholdKeys<N::Curve>,
   block_number: usize,
-  fee: C::Fee,
-  plan: Plan<C>,
-) -> (Option<(C::SignableTransaction, C::Eventuality)>, Vec<PostFeeBranch>) {
+  fee: N::Fee,
+  plan: Plan<N>,
+) -> (Option<(N::SignableTransaction, N::Eventuality)>, Vec<PostFeeBranch>) {
   loop {
-    match coin.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
+    match network.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
       Ok(prepared) => {
         return prepared;
       }
@@ -129,7 +129,7 @@ async fn prepare_send<C: Coin>(
 // Items which are mutably borrowed by Tributary.
 // Any exceptions to this have to be carefully monitored in order to ensure consistency isn't
 // violated.
-struct TributaryMutable<C: Coin, D: Db> {
+struct TributaryMutable<N: Network, D: Db> {
   // The following are actually mutably borrowed by Substrate as well.
   // - Substrate triggers key gens, and determines which to use.
   // - SubstrateBlock events cause scheduling which causes signing.
@@ -148,8 +148,8 @@ struct TributaryMutable<C: Coin, D: Db> {
   // The only other note is how the scanner may cause a signer task to be dropped, effectively
   // invalidating the Tributary's mutable borrow. The signer is coded to allow for attempted usage
   // of a dropped task.
-  key_gen: KeyGen<C, D>,
-  signers: HashMap<Vec<u8>, Signer<C, D>>,
+  key_gen: KeyGen<N, D>,
+  signers: HashMap<Vec<u8>, Signer<N, D>>,
 
   // This is also mutably borrowed by the Scanner.
   // The Scanner starts new sign tasks.
@@ -164,7 +164,7 @@ struct TributaryMutable<C: Coin, D: Db> {
 // Items which are mutably borrowed by Substrate.
 // Any exceptions to this have to be carefully monitored in order to ensure consistency isn't
 // violated.
-struct SubstrateMutable<C: Coin, D: Db> {
+struct SubstrateMutable<N: Network, D: Db> {
   // The scanner is expected to autonomously operate, scanning blocks as they appear.
   // When a block is sufficiently confirmed, the scanner mutates the signer to try and get a Batch
   // signed.
@@ -174,26 +174,26 @@ struct SubstrateMutable<C: Coin, D: Db> {
   // This can't be mutated as soon as a Batch is signed since the mutation which occurs then is
   // paired with the mutations caused by Burn events. Substrate's ordering determines if such a
   // pairing exists.
-  scanner: ScannerHandle<C, D>,
+  scanner: ScannerHandle<N, D>,
 
   // Schedulers take in new outputs, from the scanner, and payments, from Burn events on Substrate.
   // These are paired when possible, in the name of efficiency. Accordingly, both mutations must
   // happen by Substrate.
-  schedulers: HashMap<Vec<u8>, Scheduler<C>>,
+  schedulers: HashMap<Vec<u8>, Scheduler<N>>,
 }
 
-async fn sign_plans<C: Coin, D: Db>(
+async fn sign_plans<N: Network, D: Db>(
   txn: &mut D::Transaction<'_>,
-  coin: &C,
-  substrate_mutable: &mut SubstrateMutable<C, D>,
-  signers: &mut HashMap<Vec<u8>, Signer<C, D>>,
+  network: &N,
+  substrate_mutable: &mut SubstrateMutable<N, D>,
+  signers: &mut HashMap<Vec<u8>, Signer<N, D>>,
   context: SubstrateContext,
-  plans: Vec<Plan<C>>,
+  plans: Vec<Plan<N>>,
 ) {
   let mut plans = VecDeque::from(plans);
 
-  let mut block_hash = <C::Block as Block<C>>::Id::default();
-  block_hash.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
+  let mut block_hash = <N::Block as Block<N>>::Id::default();
+  block_hash.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
   // block_number call is safe since it unwraps
   let block_number = substrate_mutable
     .scanner
@@ -201,16 +201,16 @@ async fn sign_plans<C: Coin, D: Db>(
     .await
     .expect("told to sign_plans on a context we're not synced to");
 
-  let fee = get_fee(coin, block_number).await;
+  let fee = get_fee(network, block_number).await;
 
   while let Some(plan) = plans.pop_front() {
     let id = plan.id();
     info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
     let key = plan.key.to_bytes();
-    MainDb::<C, D>::save_signing(txn, key.as_ref(), block_number.try_into().unwrap(), &plan);
+    MainDb::<N, D>::save_signing(txn, key.as_ref(), block_number.try_into().unwrap(), &plan);
     let (tx, branches) =
-      prepare_send(coin, signers.get_mut(key.as_ref()).unwrap().keys(), block_number, fee, plan)
+      prepare_send(network, signers.get_mut(key.as_ref()).unwrap().keys(), block_number, fee, plan)
         .await;
 
     for branch in branches {
@@ -228,17 +228,17 @@ async fn sign_plans<C: Coin, D: Db>(
   }
 }
 
-async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
+async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
   txn: &mut D::Transaction<'_>,
-  coin: &C,
+  network: &N,
   coordinator: &mut Co,
-  tributary_mutable: &mut TributaryMutable<C, D>,
-  substrate_mutable: &mut SubstrateMutable<C, D>,
+  tributary_mutable: &mut TributaryMutable<N, D>,
+  substrate_mutable: &mut SubstrateMutable<N, D>,
   msg: &Message,
 ) {
   // If this message expects a higher block number than we have, halt until synced
-  async fn wait<C: Coin, D: Db>(scanner: &ScannerHandle<C, D>, block_hash: &BlockHash) {
-    let mut needed_hash = <C::Block as Block<C>>::Id::default();
+  async fn wait<N: Network, D: Db>(scanner: &ScannerHandle<N, D>, block_hash: &BlockHash) {
+    let mut needed_hash = <N::Block as Block<N>>::Id::default();
     needed_hash.as_mut().copy_from_slice(&block_hash.0);
 
     let block_number = loop {
@@ -249,7 +249,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
         warn!(
           "node is desynced. we haven't scanned {} which should happen after {} confirms",
           hex::encode(&needed_hash),
-          C::CONFIRMATIONS,
+          N::CONFIRMATIONS,
         );
         sleep(Duration::from_secs(10)).await;
         continue;
@@ -272,11 +272,11 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
     let synced = |context: &SubstrateContext, key| -> Result<(), ()> {
       // Check that we've synced this block and can actually operate on it ourselves
       let latest = scanner.latest_scanned(key);
-      if usize::try_from(context.coin_latest_finalized_block).unwrap() < latest {
+      if usize::try_from(context.network_latest_finalized_block).unwrap() < latest {
         log::warn!(
-          "coin node disconnected/desynced from rest of the network. \
+          "external network node disconnected/desynced from rest of the network. \
           our block: {latest:?}, network's acknowledged: {}",
-          context.coin_latest_finalized_block,
+          context.network_latest_finalized_block,
         );
         Err(())?;
       }
@@ -312,21 +312,21 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
     CoordinatorMessage::Substrate(msg) => {
       match msg {
         messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, set, key_pair } => {
-          // This is the first key pair for this coin so no block has been finalized yet
-          let activation_number = if context.coin_latest_finalized_block.0 == [0; 32] {
+          // This is the first key pair for this network so no block has been finalized yet
+          let activation_number = if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
             assert!(tributary_mutable.substrate_signers.is_empty());
             assert!(substrate_mutable.schedulers.is_empty());
 
-            // Wait until a coin's block's time exceeds Serai's time
-            // TODO: This assumes the coin has a monotonic clock for its blocks' times, which
+            // Wait until a network's block's time exceeds Serai's time
+            // TODO: This assumes the network has a monotonic clock for its blocks' times, which
             // isn't a viable assumption
 
             // If the latest block number is 10, then the block indexed by 1 has 10 confirms
             // 10 + 1 - 10 = 1
             while get_block(
-              coin,
-              (get_latest_block_number(coin).await + 1).saturating_sub(C::CONFIRMATIONS),
+              network,
+              (get_latest_block_number(network).await + 1).saturating_sub(N::CONFIRMATIONS),
             )
             .await
             .time() <
@@ -334,7 +334,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             {
               info!(
                 "serai confirmed the first key pair for a set. {} {}",
-                "we're waiting for a coin's finalized block's time to exceed unix time ",
+                "we're waiting for a network's finalized block's time to exceed unix time ",
                 context.serai_time,
               );
               sleep(Duration::from_secs(5)).await;
@@ -342,13 +342,13 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
 
             // Find the first block to do so
             let mut earliest =
-              (get_latest_block_number(coin).await + 1).saturating_sub(C::CONFIRMATIONS);
-            assert!(get_block(coin, earliest).await.time() >= context.serai_time);
+              (get_latest_block_number(network).await + 1).saturating_sub(N::CONFIRMATIONS);
+            assert!(get_block(network, earliest).await.time() >= context.serai_time);
             // earliest > 0 prevents a panic if Serai creates keys before the genesis block
             // which... should be impossible
             // Yet a prevented panic is a prevented panic
             while (earliest > 0) &&
-              (get_block(coin, earliest - 1).await.time() >= context.serai_time)
+              (get_block(network, earliest - 1).await.time() >= context.serai_time)
             {
               earliest -= 1;
             }
@@ -356,8 +356,8 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             // Use this as the activation block
             earliest
           } else {
-            let mut activation_block = <C::Block as Block<C>>::Id::default();
-            activation_block.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
+            let mut activation_block = <N::Block as Block<N>>::Id::default();
+            activation_block.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
             // This block_number call is safe since it unwraps
             substrate_mutable
               .scanner
@@ -369,38 +369,38 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           info!("activating {set:?}'s keys at {activation_number}");
 
           // See TributaryMutable's struct definition for why this block is safe
-          let KeyConfirmed { substrate_keys, coin_keys } =
+          let KeyConfirmed { substrate_keys, network_keys } =
             tributary_mutable.key_gen.confirm(txn, set, key_pair).await;
           tributary_mutable.substrate_signers.insert(
             substrate_keys.group_key().to_bytes().to_vec(),
             SubstrateSigner::new(substrate_keys),
           );
 
-          let key = coin_keys.group_key();
+          let key = network_keys.group_key();
 
           substrate_mutable.scanner.rotate_key(txn, activation_number, key).await;
           substrate_mutable
             .schedulers
-            .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new::<D>(txn, key));
+            .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<N>::new::<D>(txn, key));
 
           tributary_mutable
             .signers
-            .insert(key.to_bytes().as_ref().to_vec(), Signer::new(coin.clone(), coin_keys));
+            .insert(key.to_bytes().as_ref().to_vec(), Signer::new(network.clone(), network_keys));
         }
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
-          network,
+          network: network_id,
           block,
           key: key_vec,
           burns,
         } => {
-          assert_eq!(network, C::NETWORK);
+          assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
 
-          let mut block_id = <C::Block as Block<C>>::Id::default();
-          block_id.as_mut().copy_from_slice(&context.coin_latest_finalized_block.0);
+          let mut block_id = <N::Block as Block<N>>::Id::default();
+          block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
 
-          let key = <C::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
+          let key = <N::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
 
           // We now have to acknowledge every block for this key up to the acknowledged block
           let (blocks, outputs) =
@@ -418,9 +418,9 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
               instruction: OutInstruction { address, data },
               balance,
             } = out;
-            assert_eq!(balance.coin.network(), C::NETWORK);
+            assert_eq!(balance.coin.network(), N::NETWORK);
 
-            if let Ok(address) = C::Address::try_from(address.consume()) {
+            if let Ok(address) = N::Address::try_from(address.consume()) {
               // TODO: Add coin to payment
               payments.push(Payment {
                 address,
@@ -439,7 +439,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           coordinator
             .send(ProcessorMessage::Coordinator(
               messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-                network,
+                network: N::NETWORK,
                 block,
                 plans: plans.iter().map(|plan| plan.id()).collect(),
               },
@@ -448,7 +448,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
 
           sign_plans(
             txn,
-            coin,
+            network,
             substrate_mutable,
             // See commentary in TributaryMutable for why this is safe
             &mut tributary_mutable.signers,
@@ -462,10 +462,10 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
   }
 }
 
-async fn boot<C: Coin, D: Db>(
+async fn boot<N: Network, D: Db>(
   raw_db: &mut D,
-  coin: &C,
-) -> (MainDb<C, D>, TributaryMutable<C, D>, SubstrateMutable<C, D>) {
+  network: &N,
+) -> (MainDb<N, D>, TributaryMutable<N, D>, SubstrateMutable<N, D>) {
   let mut entropy_transcript = {
     let entropy = Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't specified"));
     if entropy.len() != 64 {
@@ -494,11 +494,11 @@ async fn boot<C: Coin, D: Db>(
 
   // We don't need to re-issue GenerateKey orders because the coordinator is expected to
   // schedule/notify us of new attempts
-  let key_gen = KeyGen::<C, _>::new(raw_db.clone(), entropy(b"key-gen_entropy"));
+  let key_gen = KeyGen::<N, _>::new(raw_db.clone(), entropy(b"key-gen_entropy"));
   // The scanner has no long-standing orders to re-issue
-  let (mut scanner, active_keys) = Scanner::new(coin.clone(), raw_db.clone());
+  let (mut scanner, active_keys) = Scanner::new(network.clone(), raw_db.clone());
 
-  let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
+  let mut schedulers = HashMap::<Vec<u8>, Scheduler<N>>::new();
   let mut substrate_signers = HashMap::new();
   let mut signers = HashMap::new();
 
@@ -507,7 +507,7 @@ async fn boot<C: Coin, D: Db>(
   for key in &active_keys {
     schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::from_db(raw_db, *key).unwrap());
 
-    let (substrate_keys, coin_keys) = key_gen.keys(key);
+    let (substrate_keys, network_keys) = key_gen.keys(key);
 
     let substrate_key = substrate_keys.group_key();
     let substrate_signer = SubstrateSigner::new(substrate_keys);
@@ -515,25 +515,25 @@ async fn boot<C: Coin, D: Db>(
     // necessary
     substrate_signers.insert(substrate_key.to_bytes().to_vec(), substrate_signer);
 
-    let mut signer = Signer::new(coin.clone(), coin_keys);
+    let mut signer = Signer::new(network.clone(), network_keys);
 
     // Load any TXs being actively signed
     let key = key.to_bytes();
     for (block_number, plan) in main_db.signing(key.as_ref()) {
       let block_number = block_number.try_into().unwrap();
 
-      let fee = get_fee(coin, block_number).await;
+      let fee = get_fee(network, block_number).await;
 
       let id = plan.id();
       info!("reloading plan {}: {:?}", hex::encode(id), plan);
 
       let (Some((tx, eventuality)), _) =
-      prepare_send(coin, signer.keys(), block_number, fee, plan).await else {
+      prepare_send(network, signer.keys(), block_number, fee, plan).await else {
         panic!("previously created transaction is no longer being created")
       };
 
       scanner.register_eventuality(block_number, id, eventuality.clone()).await;
-      // TODO: Reconsider if the Signer should have the eventuality, or if just the coin/scanner
+      // TODO: Reconsider if the Signer should have the eventuality, or if just the network/scanner
       // should
       let mut txn = raw_db.txn();
       signer.sign_transaction(&mut txn, id, tx, eventuality).await;
@@ -551,14 +551,15 @@ async fn boot<C: Coin, D: Db>(
   )
 }
 
-async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordinator: Co) {
+async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut coordinator: Co) {
   // We currently expect a contextless bidirectional mapping between these two values
   // (which is that any value of A can be interpreted as B and vice versa)
   // While we can write a contextual mapping, we have yet to do so
-  // This check ensures no coin which doesn't have a bidirectional mapping is defined
-  assert_eq!(<C::Block as Block<C>>::Id::default().as_ref().len(), BlockHash([0u8; 32]).0.len());
+  // This check ensures no network which doesn't have a bidirectional mapping is defined
+  assert_eq!(<N::Block as Block<N>>::Id::default().as_ref().len(), BlockHash([0u8; 32]).0.len());
 
-  let (mut main_db, mut tributary_mutable, mut substrate_mutable) = boot(&mut raw_db, &coin).await;
+  let (mut main_db, mut tributary_mutable, mut substrate_mutable) =
+    boot(&mut raw_db, &network).await;
 
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   let mut last_coordinator_msg = None;
@@ -625,7 +626,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
         // Only handle this if we haven't already
         if !main_db.handled_message(msg.id) {
           let mut txn = raw_db.txn();
-          MainDb::<C, D>::handle_message(&mut txn, msg.id);
+          MainDb::<N, D>::handle_message(&mut txn, msg.id);
 
           // This is isolated to better think about how its ordered, or rather, about how the other
           // cases aren't ordered
@@ -639,7 +640,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
           // references over the same data
           handle_coordinator_msg(
             &mut txn,
-            &coin,
+            &network,
             &mut coordinator,
             &mut tributary_mutable,
             &mut substrate_mutable,
@@ -661,7 +662,7 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
             block_hash.copy_from_slice(block.as_ref());
 
             let batch = Batch {
-              network: C::NETWORK,
+              network: N::NETWORK,
               id: batch,
               block: BlockHash(block_hash),
               instructions: outputs.iter().filter_map(|output| {

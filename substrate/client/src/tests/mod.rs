@@ -1,2 +1,2 @@
-#[cfg(feature = "coins")]
-mod coins;
+#[cfg(feature = "networks")]
+mod networks;

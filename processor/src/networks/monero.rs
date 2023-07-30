@@ -20,7 +20,7 @@ use monero_serai::{
   rpc::{RpcError, HttpRpc, Rpc},
   wallet::{
     ViewPair, Scanner,
-    address::{Network, SubaddressIndex, AddressSpec},
+    address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
     Fee, SpendableOutput, Change, Decoys, TransactionError,
     SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
   },
@@ -30,15 +30,15 @@ use tokio::time::sleep;
 
 pub use serai_client::{
   primitives::{MAX_DATA_LEN, Coin as SeraiCoin, NetworkId, Amount, Balance},
-  coins::monero::Address,
+  networks::monero::Address,
 };
 
 use crate::{
   Payment, Plan, additional_key,
-  coins::{
-    CoinError, Block as BlockTrait, OutputType, Output as OutputTrait,
+  networks::{
+    NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, Eventuality as EventualityTrait, EventualitiesTracker,
-    PostFeeBranch, Coin, drop_branches, amortize_fee,
+    PostFeeBranch, Network, drop_branches, amortize_fee,
   },
 };
 
@@ -179,7 +179,7 @@ impl Monero {
 
   fn address_internal(spend: EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {
     Address::new(Self::view_pair(spend).address(
-      Network::Mainnet,
+      MoneroNetwork::Mainnet,
       AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
     ))
     .unwrap()
@@ -205,12 +205,13 @@ impl Monero {
 
   #[cfg(test)]
   fn test_address() -> Address {
-    Address::new(Self::test_view_pair().address(Network::Mainnet, AddressSpec::Standard)).unwrap()
+    Address::new(Self::test_view_pair().address(MoneroNetwork::Mainnet, AddressSpec::Standard))
+      .unwrap()
   }
 }
 
 #[async_trait]
-impl Coin for Monero {
+impl Network for Monero {
   type Curve = Ed25519;
 
   type Fee = Fee;
@@ -249,18 +250,20 @@ impl Coin for Monero {
     Self::address_internal(key, BRANCH_SUBADDRESS)
   }
 
-  async fn get_latest_block_number(&self) -> Result<usize, CoinError> {
+  async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     // Monero defines height as chain length, so subtract 1 for block number
-    Ok(self.rpc.get_height().await.map_err(|_| CoinError::ConnectionError)? - 1)
+    Ok(self.rpc.get_height().await.map_err(|_| NetworkError::ConnectionError)? - 1)
   }
 
-  async fn get_block(&self, number: usize) -> Result<Self::Block, CoinError> {
+  async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError> {
     Ok(
       self
         .rpc
-        .get_block(self.rpc.get_block_hash(number).await.map_err(|_| CoinError::ConnectionError)?)
+        .get_block(
+          self.rpc.get_block_hash(number).await.map_err(|_| NetworkError::ConnectionError)?,
+        )
         .await
-        .map_err(|_| CoinError::ConnectionError)?,
+        .map_err(|_| NetworkError::ConnectionError)?,
     )
   }
 
@@ -268,11 +271,11 @@ impl Coin for Monero {
     &self,
     block: &Block,
     key: EdwardsPoint,
-  ) -> Result<Vec<Self::Output>, CoinError> {
+  ) -> Result<Vec<Self::Output>, NetworkError> {
     let mut txs = Self::scanner(key)
       .scan(&self.rpc, block)
       .await
-      .map_err(|_| CoinError::ConnectionError)?
+      .map_err(|_| NetworkError::ConnectionError)?
       .iter()
       .filter_map(|outputs| Some(outputs.not_locked()).filter(|outputs| !outputs.is_empty()))
       .collect::<Vec<_>>();
@@ -316,7 +319,7 @@ impl Coin for Monero {
     }
 
     async fn check_block(
-      coin: &Monero,
+      network: &Monero,
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
       res: &mut HashMap<[u8; 32], [u8; 32]>,
@@ -325,7 +328,7 @@ impl Coin for Monero {
         let tx = {
           let mut tx;
           while {
-            tx = coin.get_transaction(hash).await;
+            tx = network.get_transaction(hash).await;
             tx.is_err()
           } {
             log::error!("couldn't get transaction {}: {}", hex::encode(hash), tx.err().unwrap());
@@ -374,7 +377,7 @@ impl Coin for Monero {
     block_number: usize,
     mut plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<(Option<(SignableTransaction, Eventuality)>, Vec<PostFeeBranch>), CoinError> {
+  ) -> Result<(Option<(SignableTransaction, Eventuality)>, Vec<PostFeeBranch>), NetworkError> {
     // Sanity check this has at least one output planned
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
@@ -397,7 +400,7 @@ impl Coin for Monero {
     }
 
     // Check a fork hasn't occurred which this processor hasn't been updated for
-    assert_eq!(protocol, self.rpc.get_protocol().await.map_err(|_| CoinError::ConnectionError)?);
+    assert_eq!(protocol, self.rpc.get_protocol().await.map_err(|_| NetworkError::ConnectionError)?);
 
     let spendable_outputs = plan.inputs.iter().cloned().map(|input| input.0).collect::<Vec<_>>();
 
@@ -413,7 +416,7 @@ impl Coin for Monero {
       &spendable_outputs,
     )
     .await
-    .map_err(|_| CoinError::ConnectionError)
+    .map_err(|_| NetworkError::ConnectionError)
     .unwrap();
 
     let inputs = spendable_outputs.into_iter().zip(decoys.into_iter()).collect::<Vec<_>>();
@@ -428,7 +431,7 @@ impl Coin for Monero {
         plan.payments.push(Payment {
           address: Address::new(
             ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::ONE.0))
-              .address(Network::Mainnet, AddressSpec::Standard),
+              .address(MoneroNetwork::Mainnet, AddressSpec::Standard),
           )
           .unwrap(),
           amount: 0,
@@ -492,7 +495,7 @@ impl Coin for Monero {
           }
           TransactionError::RpcError(e) => {
             log::error!("RpcError when preparing transaction: {e:?}");
-            Err(CoinError::ConnectionError)
+            Err(NetworkError::ConnectionError)
           }
         },
       }
@@ -520,25 +523,25 @@ impl Coin for Monero {
   async fn attempt_send(
     &self,
     transaction: SignableTransaction,
-  ) -> Result<Self::TransactionMachine, CoinError> {
+  ) -> Result<Self::TransactionMachine, NetworkError> {
     match transaction.actual.clone().multisig(transaction.keys.clone(), transaction.transcript) {
       Ok(machine) => Ok(machine),
       Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
     }
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), CoinError> {
+  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
     match self.rpc.publish_transaction(tx).await {
       Ok(_) => Ok(()),
-      Err(RpcError::ConnectionError) => Err(CoinError::ConnectionError)?,
+      Err(RpcError::ConnectionError) => Err(NetworkError::ConnectionError)?,
       // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
       // invalid transaction
       Err(e) => panic!("failed to publish TX {}: {e}", hex::encode(tx.hash())),
     }
   }
 
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, CoinError> {
-    self.rpc.get_transaction(*id).await.map_err(|_| CoinError::ConnectionError)
+  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
+    self.rpc.get_transaction(*id).await.map_err(|_| NetworkError::ConnectionError)
   }
 
   fn confirm_completion(&self, eventuality: &Eventuality, tx: &Transaction) -> bool {

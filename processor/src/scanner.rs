@@ -18,27 +18,27 @@ use serai_client::primitives::BlockHash;
 
 use crate::{
   Get, DbTxn, Db,
-  coins::{Output, Transaction, EventualitiesTracker, Block, Coin},
+  networks::{Output, Transaction, EventualitiesTracker, Block, Network},
 };
 
 #[derive(Clone, Debug)]
-pub enum ScannerEvent<C: Coin> {
+pub enum ScannerEvent<N: Network> {
   // Block scanned
   Block {
-    key: <C::Curve as Ciphersuite>::G,
-    block: <C::Block as Block<C>>::Id,
+    key: <N::Curve as Ciphersuite>::G,
+    block: <N::Block as Block<N>>::Id,
     batch: u32,
-    outputs: Vec<C::Output>,
+    outputs: Vec<N::Output>,
   },
   // Eventuality completion found on-chain
-  Completed([u8; 32], <C::Transaction as Transaction<C>>::Id),
+  Completed([u8; 32], <N::Transaction as Transaction<N>>::Id),
 }
 
-pub type ScannerEventChannel<C> = mpsc::UnboundedReceiver<ScannerEvent<C>>;
+pub type ScannerEventChannel<N> = mpsc::UnboundedReceiver<ScannerEvent<N>>;
 
 #[derive(Clone, Debug)]
-struct ScannerDb<C: Coin, D: Db>(PhantomData<C>, PhantomData<D>);
-impl<C: Coin, D: Db> ScannerDb<C, D> {
+struct ScannerDb<N: Network, D: Db>(PhantomData<N>, PhantomData<D>);
+impl<N: Network, D: Db> ScannerDb<N, D> {
   fn scanner_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     D::key(b"SCANNER", dst, key)
   }
@@ -46,21 +46,21 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn block_key(number: usize) -> Vec<u8> {
     Self::scanner_key(b"block_id", u64::try_from(number).unwrap().to_le_bytes())
   }
-  fn block_number_key(id: &<C::Block as Block<C>>::Id) -> Vec<u8> {
+  fn block_number_key(id: &<N::Block as Block<N>>::Id) -> Vec<u8> {
     Self::scanner_key(b"block_number", id)
   }
-  fn save_block(txn: &mut D::Transaction<'_>, number: usize, id: &<C::Block as Block<C>>::Id) {
+  fn save_block(txn: &mut D::Transaction<'_>, number: usize, id: &<N::Block as Block<N>>::Id) {
     txn.put(Self::block_number_key(id), u64::try_from(number).unwrap().to_le_bytes());
     txn.put(Self::block_key(number), id);
   }
-  fn block<G: Get>(getter: &G, number: usize) -> Option<<C::Block as Block<C>>::Id> {
+  fn block<G: Get>(getter: &G, number: usize) -> Option<<N::Block as Block<N>>::Id> {
     getter.get(Self::block_key(number)).map(|id| {
-      let mut res = <C::Block as Block<C>>::Id::default();
+      let mut res = <N::Block as Block<N>>::Id::default();
       res.as_mut().copy_from_slice(&id);
       res
     })
   }
-  fn block_number<G: Get>(getter: &G, id: &<C::Block as Block<C>>::Id) -> Option<usize> {
+  fn block_number<G: Get>(getter: &G, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
     getter
       .get(Self::block_number_key(id))
       .map(|number| u64::from_le_bytes(number.try_into().unwrap()).try_into().unwrap())
@@ -69,7 +69,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   fn active_keys_key() -> Vec<u8> {
     Self::scanner_key(b"active_keys", b"")
   }
-  fn add_active_key(txn: &mut D::Transaction<'_>, key: <C::Curve as Ciphersuite>::G) {
+  fn add_active_key(txn: &mut D::Transaction<'_>, key: <N::Curve as Ciphersuite>::G) {
     let mut keys = txn.get(Self::active_keys_key()).unwrap_or(vec![]);
 
     let key_bytes = key.to_bytes();
@@ -90,7 +90,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     keys.extend(key_bytes.as_ref());
     txn.put(Self::active_keys_key(), keys);
   }
-  fn active_keys<G: Get>(getter: &G) -> Vec<<C::Curve as Ciphersuite>::G> {
+  fn active_keys<G: Get>(getter: &G) -> Vec<<N::Curve as Ciphersuite>::G> {
     let bytes_vec = getter.get(Self::active_keys_key()).unwrap_or(vec![]);
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
@@ -100,35 +100,35 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     // Either are fine
     let mut res = Vec::with_capacity(bytes.len() / 32);
     while !bytes.is_empty() {
-      res.push(C::Curve::read_G(&mut bytes).unwrap());
+      res.push(N::Curve::read_G(&mut bytes).unwrap());
     }
     res
   }
 
-  fn seen_key(id: &<C::Output as Output>::Id) -> Vec<u8> {
+  fn seen_key(id: &<N::Output as Output>::Id) -> Vec<u8> {
     Self::scanner_key(b"seen", id)
   }
-  fn seen<G: Get>(getter: &G, id: &<C::Output as Output>::Id) -> bool {
+  fn seen<G: Get>(getter: &G, id: &<N::Output as Output>::Id) -> bool {
     getter.get(Self::seen_key(id)).is_some()
   }
 
   fn next_batch_key() -> Vec<u8> {
     Self::scanner_key(b"next_batch", [])
   }
-  fn batch_key(key: &<C::Curve as Ciphersuite>::G, block: &<C::Block as Block<C>>::Id) -> Vec<u8> {
+  fn batch_key(key: &<N::Curve as Ciphersuite>::G, block: &<N::Block as Block<N>>::Id) -> Vec<u8> {
     Self::scanner_key(b"batch", [key.to_bytes().as_ref(), block.as_ref()].concat())
   }
   fn outputs_key(
-    key: &<C::Curve as Ciphersuite>::G,
-    block: &<C::Block as Block<C>>::Id,
+    key: &<N::Curve as Ciphersuite>::G,
+    block: &<N::Block as Block<N>>::Id,
   ) -> Vec<u8> {
     Self::scanner_key(b"outputs", [key.to_bytes().as_ref(), block.as_ref()].concat())
   }
   fn save_outputs(
     txn: &mut D::Transaction<'_>,
-    key: &<C::Curve as Ciphersuite>::G,
-    block: &<C::Block as Block<C>>::Id,
-    outputs: &[C::Output],
+    key: &<N::Curve as Ciphersuite>::G,
+    block: &<N::Block as Block<N>>::Id,
+    outputs: &[N::Output],
   ) -> u32 {
     let batch_key = Self::batch_key(key, block);
     if let Some(batch) = txn.get(batch_key) {
@@ -160,29 +160,29 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
   }
   fn outputs(
     txn: &D::Transaction<'_>,
-    key: &<C::Curve as Ciphersuite>::G,
-    block: &<C::Block as Block<C>>::Id,
-  ) -> Option<Vec<C::Output>> {
+    key: &<N::Curve as Ciphersuite>::G,
+    block: &<N::Block as Block<N>>::Id,
+  ) -> Option<Vec<N::Output>> {
     let bytes_vec = txn.get(Self::outputs_key(key, block))?;
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
     let mut res = vec![];
     while !bytes.is_empty() {
-      res.push(C::Output::read(&mut bytes).unwrap());
+      res.push(N::Output::read(&mut bytes).unwrap());
     }
     Some(res)
   }
 
-  fn scanned_block_key(key: &<C::Curve as Ciphersuite>::G) -> Vec<u8> {
+  fn scanned_block_key(key: &<N::Curve as Ciphersuite>::G) -> Vec<u8> {
     Self::scanner_key(b"scanned_block", key.to_bytes())
   }
 
   #[allow(clippy::type_complexity)]
   fn save_scanned_block(
     txn: &mut D::Transaction<'_>,
-    key: &<C::Curve as Ciphersuite>::G,
+    key: &<N::Curve as Ciphersuite>::G,
     block: usize,
-  ) -> (Option<<C::Block as Block<C>>::Id>, Vec<C::Output>) {
+  ) -> (Option<<N::Block as Block<N>>::Id>, Vec<N::Output>) {
     let id = Self::block(txn, block); // It may be None for the first key rotated to
     let outputs = if let Some(id) = id.as_ref() {
       Self::outputs(txn, key, id).unwrap_or(vec![])
@@ -200,7 +200,7 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
     // Return this block's outputs so they can be pruned from the RAM cache
     (id, outputs)
   }
-  fn latest_scanned_block<G: Get>(getter: &G, key: <C::Curve as Ciphersuite>::G) -> usize {
+  fn latest_scanned_block<G: Get>(getter: &G, key: <N::Curve as Ciphersuite>::G) -> usize {
     let bytes = getter
       .get(Self::scanned_block_key(&key))
       .expect("asking for latest scanned block of key which wasn't rotated to");
@@ -212,26 +212,26 @@ impl<C: Coin, D: Db> ScannerDb<C, D> {
 /// It WILL NOT fail to emit an event, even if it reboots at selected moments.
 /// It MAY fire the same event multiple times.
 #[derive(Debug)]
-pub struct Scanner<C: Coin, D: Db> {
-  coin: C,
+pub struct Scanner<N: Network, D: Db> {
+  network: N,
   db: D,
-  keys: Vec<<C::Curve as Ciphersuite>::G>,
+  keys: Vec<<N::Curve as Ciphersuite>::G>,
 
-  eventualities: EventualitiesTracker<C::Eventuality>,
+  eventualities: EventualitiesTracker<N::Eventuality>,
 
   ram_scanned: HashMap<Vec<u8>, usize>,
   ram_outputs: HashSet<Vec<u8>>,
 
-  events: mpsc::UnboundedSender<ScannerEvent<C>>,
+  events: mpsc::UnboundedSender<ScannerEvent<N>>,
 }
 
 #[derive(Debug)]
-pub struct ScannerHandle<C: Coin, D: Db> {
-  scanner: Arc<RwLock<Scanner<C, D>>>,
-  pub events: ScannerEventChannel<C>,
+pub struct ScannerHandle<N: Network, D: Db> {
+  scanner: Arc<RwLock<Scanner<N, D>>>,
+  pub events: ScannerEventChannel<N>,
 }
 
-impl<C: Coin, D: Db> ScannerHandle<C, D> {
+impl<N: Network, D: Db> ScannerHandle<N, D> {
   pub async fn ram_scanned(&self) -> usize {
     let mut res = None;
     for scanned in self.scanner.read().await.ram_scanned.values() {
@@ -249,7 +249,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     &mut self,
     block_number: usize,
     id: [u8; 32],
-    eventuality: C::Eventuality,
+    eventuality: N::Eventuality,
   ) {
     self.scanner.write().await.eventualities.register(block_number, id, eventuality)
   }
@@ -269,7 +269,7 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     activation_number: usize,
-    key: <C::Curve as Ciphersuite>::G,
+    key: <N::Curve as Ciphersuite>::G,
   ) {
     let mut scanner = self.scanner.write().await;
     if !scanner.keys.is_empty() {
@@ -280,41 +280,41 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
 
     info!("Rotating scanner to key {} at {activation_number}", hex::encode(key.to_bytes()));
 
-    let (_, outputs) = ScannerDb::<C, D>::save_scanned_block(txn, &key, activation_number);
+    let (_, outputs) = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
     scanner.ram_scanned.insert(key.to_bytes().as_ref().to_vec(), activation_number);
     assert!(outputs.is_empty());
 
-    ScannerDb::<C, D>::add_active_key(txn, key);
+    ScannerDb::<N, D>::add_active_key(txn, key);
     scanner.keys.push(key);
   }
 
   // This perform a database read which isn't safe with regards to if the value is set or not
   // It may be set, when it isn't expected to be set, or not set, when it is expected to be set
   // Since the value is static, if it's set, it's correctly set
-  pub async fn block_number(&self, id: &<C::Block as Block<C>>::Id) -> Option<usize> {
-    ScannerDb::<C, D>::block_number(&self.scanner.read().await.db, id)
+  pub async fn block_number(&self, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
+    ScannerDb::<N, D>::block_number(&self.scanner.read().await.db, id)
   }
 
   /// Acknowledge having handled a block for a key.
   pub async fn ack_up_to_block(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    key: <C::Curve as Ciphersuite>::G,
-    id: <C::Block as Block<C>>::Id,
-  ) -> (Vec<BlockHash>, Vec<C::Output>) {
+    key: <N::Curve as Ciphersuite>::G,
+    id: <N::Block as Block<N>>::Id,
+  ) -> (Vec<BlockHash>, Vec<N::Output>) {
     let mut scanner = self.scanner.write().await;
     debug!("Block {} acknowledged", hex::encode(&id));
 
     // Get the number for this block
-    let number = ScannerDb::<C, D>::block_number(txn, &id)
+    let number = ScannerDb::<N, D>::block_number(txn, &id)
       .expect("main loop trying to operate on data we haven't scanned");
     // Get the number of the last block we acknowledged
-    let prior = ScannerDb::<C, D>::latest_scanned_block(txn, key);
+    let prior = ScannerDb::<N, D>::latest_scanned_block(txn, key);
 
     let mut blocks = vec![];
     let mut outputs = vec![];
     for number in (prior + 1) ..= number {
-      let (block, these_outputs) = ScannerDb::<C, D>::save_scanned_block(txn, &key, number);
+      let (block, these_outputs) = ScannerDb::<N, D>::save_scanned_block(txn, &key, number);
       let block = BlockHash(block.unwrap().as_ref().try_into().unwrap());
       blocks.push(block);
       outputs.extend(these_outputs);
@@ -329,22 +329,22 @@ impl<C: Coin, D: Db> ScannerHandle<C, D> {
   }
 }
 
-impl<C: Coin, D: Db> Scanner<C, D> {
+impl<N: Network, D: Db> Scanner<N, D> {
   #[allow(clippy::new_ret_no_self)]
-  pub fn new(coin: C, db: D) -> (ScannerHandle<C, D>, Vec<<C::Curve as Ciphersuite>::G>) {
+  pub fn new(network: N, db: D) -> (ScannerHandle<N, D>, Vec<<N::Curve as Ciphersuite>::G>) {
     let (events_send, events_recv) = mpsc::unbounded_channel();
 
-    let keys = ScannerDb::<C, D>::active_keys(&db);
+    let keys = ScannerDb::<N, D>::active_keys(&db);
     let mut ram_scanned = HashMap::new();
     for key in keys.clone() {
       ram_scanned.insert(
         key.to_bytes().as_ref().to_vec(),
-        ScannerDb::<C, D>::latest_scanned_block(&db, key),
+        ScannerDb::<N, D>::latest_scanned_block(&db, key),
       );
     }
 
     let scanner = Arc::new(RwLock::new(Scanner {
-      coin,
+      network,
       db,
       keys: keys.clone(),
 
@@ -360,7 +360,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
     (ScannerHandle { scanner, events: events_recv }, keys)
   }
 
-  fn emit(&mut self, event: ScannerEvent<C>) -> bool {
+  fn emit(&mut self, event: ScannerEvent<N>) -> bool {
     if self.events.send(event).is_err() {
       info!("Scanner handler was dropped. Shutting down?");
       return false;
@@ -377,11 +377,11 @@ impl<C: Coin, D: Db> Scanner<C, D> {
       // Scan new blocks
       {
         let mut scanner = scanner.write().await;
-        let latest = scanner.coin.get_latest_block_number().await;
+        let latest = scanner.network.get_latest_block_number().await;
         let latest = match latest {
           // Only scan confirmed blocks, which we consider effectively finalized
           // CONFIRMATIONS - 1 as whatever's in the latest block already has 1 confirm
-          Ok(latest) => latest.saturating_sub(C::CONFIRMATIONS.saturating_sub(1)),
+          Ok(latest) => latest.saturating_sub(N::CONFIRMATIONS.saturating_sub(1)),
           Err(_) => {
             warn!("couldn't get latest block number");
             sleep(Duration::from_secs(60)).await;
@@ -396,7 +396,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
           for i in (latest_scanned + 1) ..= latest {
             // TODO2: Check for key deprecation
 
-            let block = match scanner.coin.get_block(i).await {
+            let block = match scanner.network.get_block(i).await {
               Ok(block) => block,
               Err(_) => {
                 warn!("couldn't get block {i}");
@@ -409,14 +409,14 @@ impl<C: Coin, D: Db> Scanner<C, D> {
             // only written to/read by this thread
             // There's also no error caused by them being unexpectedly written (if the commit is
             // made and then the processor suddenly reboots)
-            if let Some(id) = ScannerDb::<C, D>::block(&scanner.db, i) {
+            if let Some(id) = ScannerDb::<N, D>::block(&scanner.db, i) {
               if id != block_id {
                 panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));
               }
             } else {
               info!("Found new block: {}", hex::encode(&block_id));
 
-              if let Some(id) = ScannerDb::<C, D>::block(&scanner.db, i.saturating_sub(1)) {
+              if let Some(id) = ScannerDb::<N, D>::block(&scanner.db, i.saturating_sub(1)) {
                 if id != block.parent() {
                   panic!(
                     "block {} doesn't build off expected parent {}",
@@ -427,15 +427,16 @@ impl<C: Coin, D: Db> Scanner<C, D> {
               }
 
               let mut txn = scanner.db.txn();
-              ScannerDb::<C, D>::save_block(&mut txn, i, &block_id);
+              ScannerDb::<N, D>::save_block(&mut txn, i, &block_id);
               txn.commit();
             }
 
-            // Clone coin because we can't borrow it while also mutably borrowing the eventualities
-            // Thankfully, coin is written to be a cheap clone
-            let coin = scanner.coin.clone();
+            // Clone network because we can't borrow it while also mutably borrowing the
+            // eventualities
+            // Thankfully, network is written to be a cheap clone
+            let network = scanner.network.clone();
             for (id, tx) in
-              coin.get_eventuality_completions(&mut scanner.eventualities, &block).await
+              network.get_eventuality_completions(&mut scanner.eventualities, &block).await
             {
               // This should only happen if there's a P2P net desync or there's a malicious
               // validator
@@ -450,7 +451,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
               }
             }
 
-            let outputs = match scanner.coin.get_outputs(&block, key).await {
+            let outputs = match scanner.network.get_outputs(&block, key).await {
               Ok(outputs) => outputs,
               Err(_) => {
                 warn!("Couldn't scan block {i}");
@@ -499,7 +500,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
 
                 TODO: Only update ram_outputs after committing the TXN in question.
               */
-              let seen = ScannerDb::<C, D>::seen(&scanner.db, &id);
+              let seen = ScannerDb::<N, D>::seen(&scanner.db, &id);
               let id = id.as_ref().to_vec();
               if seen || scanner.ram_outputs.contains(&id) {
                 panic!("scanned an output multiple times");
@@ -513,7 +514,7 @@ impl<C: Coin, D: Db> Scanner<C, D> {
 
             // Save the outputs to disk
             let mut txn = scanner.db.txn();
-            let batch = ScannerDb::<C, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
+            let batch = ScannerDb::<N, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
             txn.commit();
 
             // Send all outputs

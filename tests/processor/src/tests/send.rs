@@ -158,7 +158,7 @@ fn send_test() {
       let key_pair = key_gen(&mut coordinators, network).await;
 
       // Now we we have to mine blocks to activate the key
-      // (the first key is activated when the coin's block time exceeds the Serai time it was
+      // (the first key is activated when the network's block time exceeds the Serai time it was
       // confirmed at)
 
       for _ in 0 .. confirmations(network) {
@@ -209,7 +209,7 @@ fn send_test() {
           messages::substrate::CoordinatorMessage::SubstrateBlock {
             context: SubstrateContext {
               serai_time,
-              coin_latest_finalized_block: batch.batch.block,
+              network_latest_finalized_block: batch.batch.block,
             },
             network,
             block: substrate_block_num,

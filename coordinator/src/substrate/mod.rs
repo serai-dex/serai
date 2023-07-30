@@ -102,7 +102,7 @@ async fn handle_key_gen<D: Db, Pro: Processors>(
           processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
             context: SubstrateContext {
               serai_time: block.time().unwrap(),
-              coin_latest_finalized_block: serai
+              network_latest_finalized_block: serai
                 .get_latest_block_for_network(block.hash(), set.network)
                 .await?
                 // The processor treats this as a magic value which will cause it to find a network
@@ -176,7 +176,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
   assert_eq!(HashSet::<&_>::from_iter(networks_with_event.iter()).len(), networks_with_event.len());
 
   for network in networks_with_event {
-    let coin_latest_finalized_block = if let Some(block) = batch_block.remove(&network) {
+    let network_latest_finalized_block = if let Some(block) = batch_block.remove(&network) {
       block
     } else {
       // If it's had a batch or a burn, it must have had a block acknowledged
@@ -194,7 +194,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
           processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
             context: SubstrateContext {
               serai_time: block.time().unwrap(),
-              coin_latest_finalized_block,
+              network_latest_finalized_block,
             },
             network,
             block: block.number(),

@@ -2,11 +2,11 @@ use core::marker::PhantomData;
 
 pub use serai_db::*;
 
-use crate::{Plan, coins::Coin};
+use crate::{Plan, networks::Network};
 
 #[derive(Debug)]
-pub struct MainDb<C: Coin, D: Db>(D, PhantomData<C>);
-impl<C: Coin, D: Db> MainDb<C, D> {
+pub struct MainDb<N: Network, D: Db>(D, PhantomData<N>);
+impl<N: Network, D: Db> MainDb<N, D> {
   pub fn new(db: D) -> Self {
     Self(db, PhantomData)
   }
@@ -31,7 +31,7 @@ impl<C: Coin, D: Db> MainDb<C, D> {
   fn signing_key(key: &[u8]) -> Vec<u8> {
     Self::main_key(b"signing", key)
   }
-  pub fn save_signing(txn: &mut D::Transaction<'_>, key: &[u8], block_number: u64, plan: &Plan<C>) {
+  pub fn save_signing(txn: &mut D::Transaction<'_>, key: &[u8], block_number: u64, plan: &Plan<N>) {
     let id = plan.id();
 
     {
@@ -56,7 +56,7 @@ impl<C: Coin, D: Db> MainDb<C, D> {
     }
   }
 
-  pub fn signing(&self, key: &[u8]) -> Vec<(u64, Plan<C>)> {
+  pub fn signing(&self, key: &[u8]) -> Vec<(u64, Plan<N>)> {
     let signing = self.0.get(Self::signing_key(key)).unwrap_or(vec![]);
     let mut res = vec![];
 
@@ -66,7 +66,7 @@ impl<C: Coin, D: Db> MainDb<C, D> {
       let buf = self.0.get(Self::plan_key(id)).unwrap();
 
       let block_number = u64::from_le_bytes(buf[.. 8].try_into().unwrap());
-      let plan = Plan::<C>::read::<&[u8]>(&mut &buf[16 ..]).unwrap();
+      let plan = Plan::<N>::read::<&[u8]>(&mut &buf[16 ..]).unwrap();
       assert_eq!(id, &plan.id());
       res.push((block_number, plan));
     }

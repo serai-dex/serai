@@ -1,5 +1,5 @@
-#[cfg(feature = "coins")]
-pub mod coins;
+#[cfg(feature = "networks")]
+pub mod networks;
 
 #[cfg(feature = "serai")]
 mod serai;

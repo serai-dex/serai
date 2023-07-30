@@ -80,7 +80,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
 
   // Send the shares
   let mut substrate_key = None;
-  let mut coin_key = None;
+  let mut network_key = None;
   interact_with_all(
     coordinators,
     |participant| messages::key_gen::CoordinatorMessage::Shares {
@@ -96,15 +96,15 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
       messages::key_gen::ProcessorMessage::GeneratedKeyPair {
         id: this_id,
         substrate_key: this_substrate_key,
-        coin_key: this_coin_key,
+        network_key: this_network_key,
       } => {
         assert_eq!(this_id, id);
         if substrate_key.is_none() {
           substrate_key = Some(this_substrate_key);
-          coin_key = Some(this_coin_key.clone());
+          network_key = Some(this_network_key.clone());
         }
         assert_eq!(substrate_key.unwrap(), this_substrate_key);
-        assert_eq!(coin_key.as_ref().unwrap(), &this_coin_key);
+        assert_eq!(network_key.as_ref().unwrap(), &this_network_key);
       }
       _ => panic!("processor didn't return GeneratedKeyPair in response to GenerateKey"),
     },
@@ -112,15 +112,15 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
   .await;
 
   // Confirm the key pair
-  // TODO: Beter document coin_latest_finalized_block's genesis state, and error if a set claims
+  // TODO: Beter document network_latest_finalized_block's genesis state, and error if a set claims
   // [0; 32] was finalized
   let context = SubstrateContext {
     serai_time: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-    coin_latest_finalized_block: BlockHash([0; 32]),
+    network_latest_finalized_block: BlockHash([0; 32]),
   };
 
   let key_pair =
-    (PublicKey::from_raw(substrate_key.unwrap()), coin_key.clone().unwrap().try_into().unwrap());
+    (PublicKey::from_raw(substrate_key.unwrap()), network_key.clone().unwrap().try_into().unwrap());
 
   for coordinator in coordinators {
     coordinator

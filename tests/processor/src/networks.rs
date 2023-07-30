@@ -88,7 +88,7 @@ pub fn network_rpc(network: NetworkId, ops: &DockerOperations, handle: &str) -> 
 }
 
 pub fn confirmations(network: NetworkId) -> usize {
-  use processor::coins::*;
+  use processor::networks::*;
   match network {
     NetworkId::Bitcoin => Bitcoin::CONFIRMATIONS,
     NetworkId::Ethereum => todo!(),
@@ -313,7 +313,7 @@ impl Wallet {
           },
           rpc::HttpRpc,
         };
-        use processor::{additional_key, coins::Monero};
+        use processor::{additional_key, networks::Monero};
 
         let rpc_url = network_rpc(NetworkId::Monero, ops, handle);
         let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
@@ -384,23 +384,27 @@ impl Wallet {
   }
 
   pub fn address(&self) -> ExternalAddress {
-    use serai_client::coins;
+    use serai_client::networks;
 
     match self {
       Wallet::Bitcoin { public_key, .. } => {
         use bitcoin_serai::bitcoin::{Network, Address};
         ExternalAddress::new(
-          coins::bitcoin::Address(Address::p2pkh(public_key, Network::Regtest)).try_into().unwrap(),
+          networks::bitcoin::Address(Address::p2pkh(public_key, Network::Regtest))
+            .try_into()
+            .unwrap(),
         )
         .unwrap()
       }
       Wallet::Monero { view_pair, .. } => {
         use monero_serai::wallet::address::{Network, AddressSpec};
         ExternalAddress::new(
-          coins::monero::Address::new(view_pair.address(Network::Mainnet, AddressSpec::Standard))
-            .unwrap()
-            .try_into()
-            .unwrap(),
+          networks::monero::Address::new(
+            view_pair.address(Network::Mainnet, AddressSpec::Standard),
+          )
+          .unwrap()
+          .try_into()
+          .unwrap(),
         )
         .unwrap()
       }

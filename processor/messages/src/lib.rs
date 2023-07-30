@@ -14,7 +14,7 @@ use validator_sets_primitives::{ValidatorSet, KeyPair};
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
   pub serai_time: u64,
-  pub coin_latest_finalized_block: BlockHash,
+  pub network_latest_finalized_block: BlockHash,
 }
 
 pub mod key_gen {
@@ -50,7 +50,7 @@ pub mod key_gen {
     // Created shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
     // Resulting keys from the specified key generation protocol.
-    GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], coin_key: Vec<u8> },
+    GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], network_key: Vec<u8> },
   }
 }
 
@@ -165,7 +165,7 @@ pub mod substrate {
         CoordinatorMessage::ConfirmKeyPair { context, .. } => context,
         CoordinatorMessage::SubstrateBlock { context, .. } => context,
       };
-      Some(context.coin_latest_finalized_block)
+      Some(context.network_latest_finalized_block)
     }
   }
 
@@ -263,7 +263,7 @@ impl CoordinatorMessage {
       }
       CoordinatorMessage::Sign(msg) => {
         let (sub, id) = match msg {
-          // Unique since SignId includes a hash of the coin, and specific transaction info
+          // Unique since SignId includes a hash of the network, and specific transaction info
           sign::CoordinatorMessage::Preprocesses { id, .. } => (0, bincode::serialize(id).unwrap()),
           sign::CoordinatorMessage::Shares { id, .. } => (1, bincode::serialize(id).unwrap()),
           sign::CoordinatorMessage::Reattempt { id } => (2, bincode::serialize(id).unwrap()),

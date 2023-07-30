@@ -43,9 +43,9 @@ tokio = "1"
 [features]
 serai = ["thiserror", "scale-info", "subxt"]
 
-coins = []
-bitcoin = ["coins", "dep:bitcoin"]
-monero = ["coins", "ciphersuite/ed25519", "monero-serai"]
+networks = []
+bitcoin = ["networks", "dep:bitcoin"]
+monero = ["networks", "ciphersuite/ed25519", "monero-serai"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node

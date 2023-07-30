@@ -398,7 +398,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         key_gen::ProcessorMessage::Shares { id, shares } => {
           Some(Transaction::DkgShares(id.attempt, shares, Transaction::empty_signed()))
         }
-        key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, coin_key } => {
+        key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
           assert_eq!(
             id.set.network, msg.network,
             "processor claimed to be a different network than it was for GeneratedKeyPair",
@@ -411,7 +411,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             id.set.network,
             (
               Public(substrate_key),
-              coin_key
+              network_key
                 .try_into()
                 .expect("external key from processor exceeded max external key length"),
             ),
