@@ -151,7 +151,7 @@ impl BlockTrait<Monero> for Block {
 
   fn median_fee(&self) -> Fee {
     // TODO
-    Fee { per_weight: 80000, mask: 10000 }
+    Fee { per_weight: 10000000, mask: 10000 }
   }
 }
 
@@ -554,7 +554,7 @@ impl Coin for Monero {
   async fn get_fee(&self) -> Self::Fee {
     use monero_serai::wallet::FeePriority;
 
-    self.rpc.get_fee(self.rpc.get_protocol().await.unwrap(), FeePriority::Highest).await.unwrap()
+    self.rpc.get_fee(self.rpc.get_protocol().await.unwrap(), FeePriority::Low).await.unwrap()
   }
 
   #[cfg(test)]
