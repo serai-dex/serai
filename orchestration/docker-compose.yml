@@ -23,7 +23,8 @@ services:
     volumes:
       - "./coins/bitcoin/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
-    expose:
+    # TODO: Use expose, not ports
+    ports:
       - "18443"
 
   ethereum:
@@ -47,7 +48,8 @@ services:
     volumes:
       - "./coins/monero/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
-    expose:
+    # TODO: Use expose, not ports
+    ports:
       - "18081"
 
   # Infrastructure
