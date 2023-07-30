@@ -324,12 +324,14 @@ impl Coordinator {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
       NetworkId::Bitcoin => {
-        use bitcoin_serai::rpc::Rpc;
+        use bitcoin_serai::{
+          bitcoin::{consensus::Decodable, Transaction},
+          rpc::Rpc,
+        };
 
         let rpc =
           Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
-        let _: String =
-          rpc.rpc_call("sendrawtransaction", serde_json::json!([hex::encode(tx)])).await.unwrap();
+        rpc.send_raw_transaction(&Transaction::consensus_decode(&mut &*tx).unwrap()).await.unwrap();
       }
       NetworkId::Ethereum => todo!(),
       NetworkId::Monero => {
@@ -337,6 +339,41 @@ impl Coordinator {
 
         let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
         rpc.publish_transaction(&Transaction::read(&mut &*tx).unwrap()).await.unwrap();
+      }
+      NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
+    }
+  }
+
+  pub async fn get_transaction(&self, ops: &DockerOperations, tx: &[u8]) -> Option<Vec<u8>> {
+    let rpc_url = network_rpc(self.network, ops, &self.network_handle);
+    match self.network {
+      NetworkId::Bitcoin => {
+        use bitcoin_serai::{bitcoin::consensus::Encodable, rpc::Rpc};
+
+        let rpc =
+          Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
+        let mut hash = [0; 32];
+        hash.copy_from_slice(tx);
+        if let Ok(tx) = rpc.get_transaction(&hash).await {
+          let mut buf = vec![];
+          tx.consensus_encode(&mut buf).unwrap();
+          Some(buf)
+        } else {
+          None
+        }
+      }
+      NetworkId::Ethereum => todo!(),
+      NetworkId::Monero => {
+        use monero_serai::rpc::HttpRpc;
+
+        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
+        let mut hash = [0; 32];
+        hash.copy_from_slice(tx);
+        if let Ok(tx) = rpc.get_transaction(hash).await {
+          Some(tx.serialize())
+        } else {
+          None
+        }
       }
       NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
     }

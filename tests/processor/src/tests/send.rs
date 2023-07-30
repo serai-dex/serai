@@ -1,5 +1,5 @@
 use std::{
-  collections::HashMap,
+  collections::{HashSet, HashMap},
   time::{SystemTime, Duration},
 };
 
@@ -250,15 +250,52 @@ fn send_test() {
         (id, preprocesses) =
           recv_sign_preprocesses(&mut coordinators, key_pair.1.to_vec(), attempt).await;
       }
+      let participating = preprocesses.keys().cloned().collect::<Vec<_>>();
 
-      let tx_id = sign_tx(&mut coordinators, id, preprocesses).await;
+      let tx_id = sign_tx(&mut coordinators, id.clone(), preprocesses).await;
 
-      // TODO: Test callimg Sign again yields tx_id again
-      // TODO: Make sure all participating nodes published the TX
-      // TODO: Send this TX to the left out node and make sure they can complete the Eventuality
+      // Make sure all participating nodes published the TX
+      let participating =
+        participating.iter().map(|p| usize::from(u16::from(*p) - 1)).collect::<HashSet<_>>();
+      for participant in &participating {
+        assert!(coordinators[*participant].get_transaction(&ops, &tx_id).await.is_some());
+      }
+
+      // Publish this transaction to the left out nodes
+      let tx = coordinators[*participating.iter().next().unwrap()]
+        .get_transaction(&ops, &tx_id)
+        .await
+        .unwrap();
+      for (i, coordinator) in coordinators.iter_mut().enumerate() {
+        if !participating.contains(&i) {
+          coordinator.publish_transacton(&ops, &tx).await;
+          // Tell them of it as a completion of the relevant signing nodess
+          coordinator
+            .send_message(messages::sign::CoordinatorMessage::Completed {
+              key: key_pair.1.to_vec(),
+              id: id.id,
+              tx: tx_id.clone(),
+            })
+            .await;
+          // Verify they send Completed back
+          match coordinator.recv_message().await {
+            messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
+              key,
+              id: this_id,
+              tx: this_tx,
+            }) => {
+              assert_eq!(&key, &id.key);
+              assert_eq!(&this_id, &id.id);
+              assert_eq!(this_tx, tx_id);
+            }
+            _ => panic!("processor didn't send Completed"),
+          }
+        }
+      }
+
       // TODO: Test the Eventuality from the blockchain, instead of from the coordinator
-
-      let _ = tx_id;
+      // TODO: Test what happenns when Completed is sent with a non-existent TX ID
+      // TODO: Test what happenns when Completed is sent with a non-completing TX ID
     });
   }
 }
