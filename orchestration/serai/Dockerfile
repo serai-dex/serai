@@ -35,14 +35,18 @@ RUN --mount=type=cache,target=/root/.cargo \
 FROM debian:bookworm-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
+# Upgrade packages
+RUN apt update && apt upgrade -y
+
+# Switch to a non-root user
+RUN useradd --system --home /home/serai --shell /sbin/nologin serai
+USER serai
+
 WORKDIR /home/serai
 
 # Copy necessary files to run node
-COPY --from=builder /serai/bin/serai-node /bin/
-COPY --from=builder /serai/AGPL-3.0 .
-
-# Upgrade packages
-RUN apt update && apt upgrade -y
+COPY --from=builder --chown=serai /serai/bin/serai-node /bin/
+COPY --from=builder --chown=serai /serai/AGPL-3.0 .
 
 # Run node
 EXPOSE 30333 9615 9933 9944

@@ -25,16 +25,20 @@ RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256s
 
 # Prepare Image
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
+RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 
 FROM debian:bookworm-slim as image
-
-WORKDIR /home/bitcoin
-COPY --from=builder /home/bitcoin/* .
-RUN mv bin/* /bin && mv lib/* /lib
-COPY ./scripts /scripts
 
 # Upgrade packages
 RUN apt update && apt upgrade -y
 
+# Switch to a non-root user
+RUN useradd --system --create-home --shell /sbin/nologin bitcoin
+USER bitcoin
+WORKDIR /home/bitcoin
+
+COPY --from=builder --chown=bitcoin /home/bitcoin/bitcoind /bin
+COPY ./scripts /scripts
+
 EXPOSE 8332 8333 18332 18333 18443 18444
-VOLUME ["/home/bitcoin/.bitcoin"]
+# VOLUME ["/home/bitcoin/.bitcoin"]

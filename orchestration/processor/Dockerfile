@@ -35,14 +35,18 @@ RUN --mount=type=cache,target=/root/.cargo \
 FROM debian:bookworm-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
-WORKDIR /home/serai
-
-# Copy necessary files to run node
-COPY --from=builder /serai/bin/serai-processor /bin/
-COPY --from=builder /serai/AGPL-3.0 .
-
 # Upgrade packages and install openssl
 RUN apt update && apt upgrade -y && apt install -y libssl-dev
+
+# Switch to a non-root user
+RUN useradd --system --create-home --shell /sbin/nologin processor
+USER processor
+
+WORKDIR /home/processor
+
+# Copy necessary files to run node
+COPY --from=builder --chown=processsor /serai/bin/serai-processor /bin/
+COPY --from=builder --chown=processsor /serai/AGPL-3.0 .
 
 # Run processor
 CMD ["serai-processor"]

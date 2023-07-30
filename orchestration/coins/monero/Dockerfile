@@ -29,12 +29,17 @@ RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
 # Build the actual image
 FROM alpine:latest as image
 
-WORKDIR /home/monero
-COPY --from=builder /home/monero/monerod /bin
-ADD scripts /scripts
-
 # Upgrade packages
 RUN apk update && apk upgrade && apk add gcompat
 
+# Switch to a non-root user
+# System user (not a human), shell of nologin, no password assigned
+RUN adduser -S -s /sbin/nologin -D monero
+USER monero
+
+WORKDIR /home/monero
+COPY --from=builder --chown=monero /home/monero/monerod /bin
+ADD scripts /scripts
+
 EXPOSE 18080 18081
-VOLUME /home/monero/.bitmonero
+# VOLUME /home/monero/.bitmonero

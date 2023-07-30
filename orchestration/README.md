@@ -22,7 +22,7 @@ All commands are assumed to be ran from `/deploy`, not the root folder.
 * `processor`     - Serai processor for one external network.
 
 * `serai`      - Serai node
-* `cluster-sm` - "Alice", "Bob", and "Charlie" Serai nodes, all validators
+* `cluster-sm` - "Alice", "Bob", and "Charlie" Serai nodes, all as validators
 * `cluster-lg` - `cluster-sm` with non-validators "Dave", "Eve", and "Ferdie"
 
 You can supply one or more profiles to the docker compose command to orchestrate

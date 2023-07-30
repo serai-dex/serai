@@ -23,8 +23,8 @@ services:
     volumes:
       - "./coins/bitcoin/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
-    ports:
-      - "18443:18443"
+    expose:
+      - "18443"
 
   ethereum:
     profiles:
@@ -47,8 +47,8 @@ services:
     volumes:
       - "./coins/monero/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
-    ports:
-      - "18081:18081"
+    expose:
+      - "18081"
 
   # Infrastructure
 
@@ -62,8 +62,8 @@ services:
     volumes:
       - "./message-queue/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
-    ports:
-      - "2287:2287"
+    expose:
+      - "2287"
 
   processor:
     profiles:
