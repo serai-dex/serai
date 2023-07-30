@@ -101,18 +101,20 @@ On `sign::CoordinatorMessage::Shares`, the processor completes the specified
 transaction signing protocol. If successful, the processor stops signing for
 this transaction and publishes the signed transaction. Then,
 `sign::ProcessorMessage::Completed` is sent to the coordinator, to be
-broadcasted to all validators so everyone can observe the transaction was
-signed and stop locally attempting to do so.
+broadcasted to all validators so everyone can observe the attempt completed,
+producing a signed and published transaction.
 
 ## Sign Re-attempt
 
 On `sign::CoordinatorMessage::Reattempt`, the processor will create a new
-a new instance of the transaction signing protocol. The new protocol's
-preprocess is sent to the coordinator in a `sign::ProcessorMessage::Preprocess`.
+a new instance of the transaction signing protocol if it hasn't already
+completed/observed completion of an instance of the signing protocol. The new
+protocol's preprocess is sent to the coordinator in a
+`sign::ProcessorMessage::Preprocess`.
 
 ## Sign Completed
 
 On `sign::CoordinatorMessage::Completed`, the processor verifies the included
 transaction hash actually refers to an accepted transaction which completes the
 plan it was supposed to. If so, the processor stops locally signing for the
-transaction, and emits `sign::ProcessorMessage::Completed`.
+transaction, and emits `sign::ProcessorMessage::Completed` if it hasn't prior.

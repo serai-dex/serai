@@ -79,12 +79,18 @@ When the `t` validators who first published `SignPreprocess` transactions have
 published `SignShare` transactions, a `sign::ProcessorMessage::Shares` with the
 relevant shares is sent to the processor.
 
+### Sign Completed
+
+`SignCompleted` is created when a processor sends the coordinator
+`sign::ProcessorMessage::Completed`. As soon as 34% of validators send
+`Completed`, the signing protocol is no longer further attempted.
+
 ## Re-attempts
 
-The key generation and signing protocols, whether batch or transaction, may
-fail if a validator goes offline or takes too long to respond. Accordingly,
-the tributary will schedule re-attempts. These are communicated with
-`key_gen::CoordinatorMessage::GenerateKey`,
+Key generation protocols may fail if a validator is malicious. Signing
+protocols, whether batch or transaction, may fail if a validator goes offline or
+takes too long to respond. Accordingly, the tributary will schedule re-attempts.
+These are communicated with `key_gen::CoordinatorMessage::GenerateKey`,
 `coordinator::CoordinatorMessage::BatchReattempt`, and
 `sign::CoordinatorMessage::Reattempt`.
 

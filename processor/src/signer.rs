@@ -172,6 +172,35 @@ impl<C: Coin, D: Db> Signer<C, D> {
     Ok(())
   }
 
+  fn already_completed(&self, txn: &mut D::Transaction<'_>, id: [u8; 32]) -> bool {
+    if SignerDb::<C, D>::completed(txn, id).is_some() {
+      debug!(
+        "SignTransaction/Reattempt order for {}, which we've already completed signing",
+        hex::encode(id)
+      );
+
+      true
+    } else {
+      false
+    }
+  }
+
+  fn complete(&mut self, id: [u8; 32], tx_id: <C::Transaction as Transaction<C>>::Id) {
+    // Assert we're actively signing for this TX
+    assert!(self.signable.remove(&id).is_some(), "completed a TX we weren't signing for");
+    assert!(self.attempt.remove(&id).is_some(), "attempt had an ID signable didn't have");
+    // If we weren't selected to participate, we'll have a preprocess
+    self.preprocessing.remove(&id);
+    // If we were selected, the signature will only go through if we contributed a share
+    // Despite this, we then need to get everyone's shares, and we may get a completion before
+    // we get everyone's shares
+    // This would be if the coordinator fails and we find the eventuality completion on-chain
+    self.signing.remove(&id);
+
+    // Emit the event for it
+    self.events.push_back(SignerEvent::SignedTransaction { id, tx: tx_id });
+  }
+
   pub async fn eventuality_completion(
     &mut self,
     txn: &mut D::Transaction<'_>,
@@ -193,18 +222,17 @@ impl<C: Coin, D: Db> Signer<C, D> {
       };
 
       if self.coin.confirm_completion(&eventuality, &tx) {
-        debug!("eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
+        info!("eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
 
-        // Stop trying to sign for this TX
+        let first_completion = !self.already_completed(txn, id);
+
+        // Save this completion to the DB
         SignerDb::<C, D>::save_transaction(txn, &tx);
         SignerDb::<C, D>::complete(txn, id, tx_id);
 
-        self.signable.remove(&id);
-        self.attempt.remove(&id);
-        self.preprocessing.remove(&id);
-        self.signing.remove(&id);
-
-        self.events.push_back(SignerEvent::SignedTransaction { id, tx: tx.id() });
+        if first_completion {
+          self.complete(id, tx.id());
+        }
       } else {
         warn!(
           "a validator claimed {} completed {} when it did not",
@@ -213,51 +241,16 @@ impl<C: Coin, D: Db> Signer<C, D> {
         );
       }
     } else {
-      debug!(
-        "signer {} informed of the completion of {}. {}",
+      warn!(
+        "signer {} informed of the completion of plan {}. that plan was not recognized",
         hex::encode(self.keys.group_key().to_bytes()),
         hex::encode(id),
-        "this signer did not have/has already completed that plan",
       );
-    }
-  }
-
-  async fn check_completion(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32]) -> bool {
-    if let Some(txs) = SignerDb::<C, D>::completed(txn, id) {
-      debug!(
-        "SignTransaction/Reattempt order for {}, which we've already completed signing",
-        hex::encode(id)
-      );
-
-      // Find the first instance we noted as having completed *and can still get from our node*
-      let mut tx = None;
-      let mut buf = <C::Transaction as Transaction<C>>::Id::default();
-      let tx_id_len = buf.as_ref().len();
-      assert_eq!(txs.len() % tx_id_len, 0);
-      for id in 0 .. (txs.len() / tx_id_len) {
-        let start = id * tx_id_len;
-        buf.as_mut().copy_from_slice(&txs[start .. (start + tx_id_len)]);
-        if self.coin.get_transaction(&buf).await.is_ok() {
-          tx = Some(buf);
-          break;
-        }
-      }
-
-      // Fire the SignedTransaction event again
-      if let Some(tx) = tx {
-        self.events.push_back(SignerEvent::SignedTransaction { id, tx });
-      } else {
-        warn!("completed signing {} yet couldn't get any of the completing TXs", hex::encode(id));
-      }
-
-      true
-    } else {
-      false
     }
   }
 
   async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], attempt: u32) {
-    if self.check_completion(txn, id).await {
+    if self.already_completed(txn, id) {
       return;
     }
 
@@ -346,7 +339,7 @@ impl<C: Coin, D: Db> Signer<C, D> {
     tx: C::SignableTransaction,
     eventuality: C::Eventuality,
   ) {
-    if self.check_completion(txn, id).await {
+    if self.already_completed(txn, id) {
       return;
     }
 
@@ -460,16 +453,11 @@ impl<C: Coin, D: Db> Signer<C, D> {
         if let Err(e) = self.coin.publish_transaction(&tx).await {
           error!("couldn't publish {:?}: {:?}", tx, e);
         } else {
-          info!("published {}", hex::encode(&tx_id));
+          info!("published {} for plan {}", hex::encode(&tx_id), hex::encode(id.id));
         }
 
         // Stop trying to sign for this TX
-        assert!(self.signable.remove(&id.id).is_some());
-        assert!(self.attempt.remove(&id.id).is_some());
-        assert!(self.preprocessing.remove(&id.id).is_none());
-        assert!(self.signing.remove(&id.id).is_none());
-
-        self.events.push_back(SignerEvent::SignedTransaction { id: id.id, tx: tx_id });
+        self.complete(id.id, tx_id);
       }
 
       CoordinatorMessage::Reattempt { id } => {
@@ -479,11 +467,14 @@ impl<C: Coin, D: Db> Signer<C, D> {
       CoordinatorMessage::Completed { key: _, id, tx: mut tx_vec } => {
         let mut tx = <C::Transaction as Transaction<C>>::Id::default();
         if tx.as_ref().len() != tx_vec.len() {
+          let true_len = tx_vec.len();
           tx_vec.truncate(2 * tx.as_ref().len());
           warn!(
-            "a validator claimed {} completed {} yet that's not a valid TX ID",
-            hex::encode(&tx),
+            "a validator claimed {}... (actual length {}) completed {} yet {}",
+            hex::encode(&tx_vec),
+            true_len,
             hex::encode(id),
+            "that's not a valid TX ID",
           );
           return;
         }
