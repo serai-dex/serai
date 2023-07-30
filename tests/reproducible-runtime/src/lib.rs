@@ -85,7 +85,7 @@ pub fn reproducibly_builds() {
       break;
     }
 
-    // If we didn't get resuts from all runners, panic
+    // If we didn't get results from all runners, panic
     for item in &res {
       if item.is_none() {
         panic!("couldn't get runtime hashes within allowed time");

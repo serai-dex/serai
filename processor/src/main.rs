@@ -218,7 +218,7 @@ async fn sign_plans<C: Coin, D: Db>(
         .schedulers
         .get_mut(key.as_ref())
         .expect("didn't have a scheduler for a key we have a plan for")
-        .created_output(branch.expected, branch.actual);
+        .created_output::<D>(txn, branch.expected, branch.actual);
     }
 
     if let Some((tx, eventuality)) = tx {
@@ -322,7 +322,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             // TODO: This assumes the coin has a monotonic clock for its blocks' times, which
             // isn't a viable assumption
 
-            // If the latest block number is 10, then the block indexd by 1 has 10 confirms
+            // If the latest block number is 10, then the block indexed by 1 has 10 confirms
             // 10 + 1 - 10 = 1
             while get_block(
               coin,
@@ -381,7 +381,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
           substrate_mutable.scanner.rotate_key(txn, activation_number, key).await;
           substrate_mutable
             .schedulers
-            .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new(key));
+            .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<C>::new::<D>(txn, key));
 
           tributary_mutable
             .signers
@@ -434,7 +434,7 @@ async fn handle_coordinator_msg<D: Db, C: Coin, Co: Coordinator>(
             .schedulers
             .get_mut(&key_vec)
             .expect("key we don't have a scheduler for acknowledged a block")
-            .schedule(outputs, payments);
+            .schedule::<D>(txn, outputs, payments);
 
           coordinator
             .send(ProcessorMessage::Coordinator(
@@ -498,14 +498,14 @@ async fn boot<C: Coin, D: Db>(
   // The scanner has no long-standing orders to re-issue
   let (mut scanner, active_keys) = Scanner::new(coin.clone(), raw_db.clone());
 
-  let schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
+  let mut schedulers = HashMap::<Vec<u8>, Scheduler<C>>::new();
   let mut substrate_signers = HashMap::new();
   let mut signers = HashMap::new();
 
   let main_db = MainDb::new(raw_db.clone());
 
   for key in &active_keys {
-    // TODO: Load existing schedulers
+    schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::from_db(raw_db, *key).unwrap());
 
     let (substrate_keys, coin_keys) = key_gen.keys(key);
 
@@ -589,14 +589,6 @@ async fn run<C: Coin, D: Db, Co: Coordinator>(mut raw_db: D, coin: C, mut coordi
             substrate_mutable.scanner.drop_eventuality(id).await;
             main_db.finish_signing(&mut txn, key, id);
             txn.commit();
-
-            // TODO
-            // 1) We need to stop signing whenever a peer informs us or the chain has an
-            //    eventuality
-            // 2) If a peer informed us of an eventuality without an outbound payment, stop
-            //    scanning the chain for it (or at least ack it's solely for sanity purposes?)
-            // 3) When the chain has an eventuality, if it had an outbound payment, report it up to
-            //    Substrate for logging purposes
           }
         }
       }

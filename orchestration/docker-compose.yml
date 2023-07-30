@@ -25,7 +25,7 @@ services:
     entrypoint: /scripts/entry-dev.sh
     # TODO: Use expose, not ports
     ports:
-      - "18443"
+      - "18443:18443"
 
   ethereum:
     profiles:
@@ -50,7 +50,7 @@ services:
     entrypoint: /scripts/entry-dev.sh
     # TODO: Use expose, not ports
     ports:
-      - "18081"
+      - "18081:18081"
 
   # Infrastructure
 

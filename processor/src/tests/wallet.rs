@@ -49,10 +49,15 @@ pub async fn test_wallet<C: Coin>(coin: C) {
     }
   };
 
-  let mut scheduler = Scheduler::new(key);
+  let mut txn = db.txn();
+  let mut scheduler = Scheduler::new::<MemDb>(&mut txn, key);
   let amount = 2 * C::DUST;
-  let plans = scheduler
-    .schedule(outputs.clone(), vec![Payment { address: C::address(key), data: None, amount }]);
+  let plans = scheduler.schedule::<MemDb>(
+    &mut txn,
+    outputs.clone(),
+    vec![Payment { address: C::address(key), data: None, amount }],
+  );
+  txn.commit();
   assert_eq!(
     plans,
     vec![Plan {
