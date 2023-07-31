@@ -133,7 +133,8 @@ impl Coordinator {
   ) -> Coordinator {
     let rpc = ops.handle(&handles.1).host_port(2287).unwrap();
     let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
-    Coordinator {
+
+    let res = Coordinator {
       network,
 
       network_handle: handles.0,
@@ -143,7 +144,60 @@ impl Coordinator {
       next_send_id: 0,
       next_recv_id: 0,
       queue: MessageQueue::new(Service::Coordinator, rpc, Zeroizing::new(coord_key)),
+    };
+
+    // Sleep for up to a minute in case the external network's RPC has yet to start
+
+    // Gets an async handle to block on since this function plays nicer when it isn't itself async
+    {
+      let ops = ops.clone();
+      let network_handle = res.network_handle.clone();
+      std::thread::spawn(move || {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let handle = runtime.handle();
+        let _async = handle.enter();
+
+        let rpc_url = network_rpc(network, &ops, &network_handle);
+        let mut iters = 0;
+        while iters < 60 {
+          match network {
+            NetworkId::Bitcoin => {
+              use bitcoin_serai::rpc::Rpc;
+
+              // Bitcoin's Rpc::new will test the connection
+              if handle.block_on(Rpc::new(rpc_url.clone())).is_ok() {
+                break;
+              }
+            }
+            NetworkId::Ethereum => todo!(),
+            NetworkId::Monero => {
+              use monero_serai::rpc::HttpRpc;
+
+              // Monero's won't, so call get_height
+              if HttpRpc::new(rpc_url.clone())
+                .ok()
+                .and_then(|rpc| handle.block_on(rpc.get_height()).ok())
+                .is_some()
+              {
+                break;
+              }
+            }
+            NetworkId::Serai => panic!("processor is booting with external network of Serai"),
+          }
+
+          println!("external network RPC has yet to boot, waiting 1 sec, attempt {iters}");
+          handle.block_on(tokio::time::sleep(core::time::Duration::from_secs(1)));
+          iters += 1;
+        }
+        if iters == 60 {
+          panic!("couldn't connect to external network {network:?} after 60s");
+        }
+      })
+      .join()
+      .unwrap();
     }
+
+    res
   }
 
   /// Send a message to a processor as its coordinator.
