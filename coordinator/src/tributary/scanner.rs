@@ -30,6 +30,7 @@ pub enum RecognizedIdType {
 }
 
 // Handle a specific Tributary block
+#[allow(clippy::needless_pass_by_ref_mut)] // False positive?
 async fn handle_block<D: Db, Pro: Processors>(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,

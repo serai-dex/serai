@@ -255,7 +255,7 @@ impl<C: Curve> BindingFactor<C> {
     self.0.insert(i, IndividualBinding { commitments, binding_factors: None });
   }
 
-  pub(crate) fn calculate_binding_factors<T: Clone + Transcript>(&mut self, transcript: &mut T) {
+  pub(crate) fn calculate_binding_factors<T: Clone + Transcript>(&mut self, transcript: &T) {
     for (l, binding) in self.0.iter_mut() {
       let mut transcript = transcript.clone();
       transcript.append_message(b"participant", C::F::from(u64::from(u16::from(*l))).to_repr());

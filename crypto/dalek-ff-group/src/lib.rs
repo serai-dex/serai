@@ -2,6 +2,8 @@
 #![no_std] // Prevents writing new code, in what should be a simple wrapper, which requires std
 #![doc = include_str!("../README.md")]
 
+#![allow(clippy::redundant_closure_call)]
+
 use core::{
   borrow::Borrow,
   ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},

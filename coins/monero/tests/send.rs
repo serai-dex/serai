@@ -34,7 +34,7 @@ async fn add_inputs(
   .await
   .unwrap();
 
-  let inputs = spendable_outputs.into_iter().zip(decoys.into_iter()).collect::<Vec<_>>();
+  let inputs = spendable_outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 
   builder.add_inputs(&inputs);
 }

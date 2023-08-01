@@ -12,6 +12,7 @@ use multiexp::multiexp;
 pub(crate) struct ScalarVector(pub(crate) Vec<Scalar>);
 macro_rules! math_op {
   ($Op: ident, $op: ident, $f: expr) => {
+    #[allow(clippy::redundant_closure_call)]
     impl $Op<Scalar> for ScalarVector {
       type Output = ScalarVector;
       fn $op(self, b: Scalar) -> ScalarVector {
@@ -19,6 +20,7 @@ macro_rules! math_op {
       }
     }
 
+    #[allow(clippy::redundant_closure_call)]
     impl $Op<Scalar> for &ScalarVector {
       type Output = ScalarVector;
       fn $op(self, b: Scalar) -> ScalarVector {
@@ -26,6 +28,7 @@ macro_rules! math_op {
       }
     }
 
+    #[allow(clippy::redundant_closure_call)]
     impl $Op<ScalarVector> for ScalarVector {
       type Output = ScalarVector;
       fn $op(self, b: ScalarVector) -> ScalarVector {
@@ -34,6 +37,7 @@ macro_rules! math_op {
       }
     }
 
+    #[allow(clippy::redundant_closure_call)]
     impl $Op<&ScalarVector> for &ScalarVector {
       type Output = ScalarVector;
       fn $op(self, b: &ScalarVector) -> ScalarVector {

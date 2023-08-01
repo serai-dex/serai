@@ -2,6 +2,8 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
+#![allow(clippy::redundant_closure_call)]
+
 #[macro_use]
 mod backend;
 

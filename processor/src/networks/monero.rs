@@ -419,7 +419,7 @@ impl Network for Monero {
     .map_err(|_| NetworkError::ConnectionError)
     .unwrap();
 
-    let inputs = spendable_outputs.into_iter().zip(decoys.into_iter()).collect::<Vec<_>>();
+    let inputs = spendable_outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 
     let signable = |mut plan: Plan<Self>, tx_fee: Option<_>| {
       // Monero requires at least two outputs
@@ -617,7 +617,7 @@ impl Network for Monero {
     .await
     .unwrap();
 
-    let inputs = outputs.into_iter().zip(decoys.into_iter()).collect::<Vec<_>>();
+    let inputs = outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 
     let tx = MSignableTransaction::new(
       protocol,

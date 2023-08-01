@@ -410,7 +410,7 @@ impl Network for Bitcoin {
     }
 
     let this_block_hash = block.id();
-    let this_block_num = (|| async {
+    let this_block_num = (async {
       loop {
         match self.rpc.get_block_number(&this_block_hash).await {
           Ok(number) => return number,
@@ -420,8 +420,7 @@ impl Network for Bitcoin {
         }
         sleep(Duration::from_secs(60)).await;
       }
-    })()
-    .await;
+    }).await;
 
     for block_num in (eventualities.block_number + 1) .. this_block_num {
       let block = {

@@ -159,7 +159,7 @@ where
     // Attempt to get them marked as read
 
     #[rustversion::since(1.66)]
-    fn mark_read<D: Send + Clone + SecureDigest>(transcript: &mut DigestTranscript<D>) {
+    fn mark_read<D: Send + Clone + SecureDigest>(transcript: &DigestTranscript<D>) {
       // Just get a challenge from the state
       let mut challenge = core::hint::black_box(transcript.0.clone().finalize());
       challenge.as_mut().zeroize();

@@ -388,7 +388,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
       );
 
       // Generate the per-signer binding factors
-      B.calculate_binding_factors(&mut rho_transcript);
+      B.calculate_binding_factors(&rho_transcript);
 
       // Merge the rho transcript back into the global one to ensure its advanced, while
       // simultaneously committing to everything

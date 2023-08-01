@@ -95,7 +95,7 @@ async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
     }
 
     let mut batch = BatchVerifier::new(block.txs.len());
-    for (tx_hash, tx_res) in block.txs.into_iter().zip(all_txs.into_iter()) {
+    for (tx_hash, tx_res) in block.txs.into_iter().zip(all_txs) {
       assert_eq!(
         tx_res.tx_hash,
         hex::encode(tx_hash),

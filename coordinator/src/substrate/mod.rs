@@ -84,8 +84,7 @@ async fn handle_new_set<
   Ok(())
 }
 
-async fn handle_key_gen<D: Db, Pro: Processors>(
-  db: &mut D,
+async fn handle_key_gen<Pro: Processors>(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   processors: &Pro,
   serai: &Serai,
@@ -215,6 +214,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
 
 // Handle a specific Substrate block, returning an error when it fails to get data
 // (not blocking / holding)
+#[allow(clippy::needless_pass_by_ref_mut)] // False positive?
 async fn handle_block<
   D: Db,
   Fut: Future<Output = ()>,
@@ -265,7 +265,7 @@ async fn handle_block<
   for key_gen in serai.get_key_gen_events(hash).await? {
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
-        handle_key_gen(&mut db.0, key, processors, serai, &block, set, key_pair).await?;
+        handle_key_gen(key, processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }
