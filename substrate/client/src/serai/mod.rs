@@ -206,9 +206,10 @@ impl Serai {
     }
 
     let Some(finalized) =
-      self.0.rpc().header(Some(finalized)).await.map_err(SeraiError::RpcError)? else {
-        return Ok(None);
-      };
+      self.0.rpc().header(Some(finalized)).await.map_err(SeraiError::RpcError)?
+    else {
+      return Ok(None);
+    };
 
     // If the finalized block has a lower number, this block can't be finalized
     if finalized.number() < header.number() {
@@ -220,24 +221,20 @@ impl Serai {
     // chain
     // If that hash is this hash, this block is finalized
     let Some(hash) =
-      self
-        .0
-        .rpc()
-        .block_hash(Some(header.number().into()))
-        .await
-        .map_err(SeraiError::RpcError)? else {
-          // This is an error since there is a block at this index
-          Err(SeraiError::InvalidNode)?
-        };
+      self.0.rpc().block_hash(Some(header.number().into())).await.map_err(SeraiError::RpcError)?
+    else {
+      // This is an error since there is a block at this index
+      Err(SeraiError::InvalidNode)?
+    };
 
     Ok(Some(header.hash() == hash))
   }
 
   pub async fn get_block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
-    let Some(res) =
-      self.0.rpc().block(Some(hash.into())).await.map_err(SeraiError::RpcError)? else {
-        return Ok(None);
-      };
+    let Some(res) = self.0.rpc().block(Some(hash.into())).await.map_err(SeraiError::RpcError)?
+    else {
+      return Ok(None);
+    };
 
     // Only return finalized blocks
     if self.is_finalized(&res.block.header).await? != Some(true) {
@@ -254,9 +251,10 @@ impl Serai {
   // In practice, the block is likely more useful than the header
   pub async fn get_block_by_number(&self, number: u64) -> Result<Option<Block>, SeraiError> {
     let Some(hash) =
-      self.0.rpc().block_hash(Some(number.into())).await.map_err(SeraiError::RpcError)? else {
-        return Ok(None);
-      };
+      self.0.rpc().block_hash(Some(number.into())).await.map_err(SeraiError::RpcError)?
+    else {
+      return Ok(None);
+    };
     self.get_block(hash.into()).await
   }
 

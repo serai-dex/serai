@@ -120,9 +120,7 @@ pub mod pallet {
         Err(Error::AlreadyGeneratedKeys)?
       }
 
-      let Some(musig_key) = MuSigKeys::<T>::get(set) else {
-        Err(Error::NonExistentValidatorSet)?
-      };
+      let Some(musig_key) = MuSigKeys::<T>::get(set) else { Err(Error::NonExistentValidatorSet)? };
       if !musig_key.verify(&set_keys_message(&set, key_pair), signature) {
         Err(Error::BadSignature)?;
       }

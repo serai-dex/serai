@@ -681,7 +681,7 @@ async fn main() {
       let Ok(serai) = Serai::new("ws://127.0.0.1:9944").await else {
         log::error!("couldn't connect to the Serai node");
         sleep(Duration::from_secs(5)).await;
-        continue
+        continue;
       };
       return serai;
     }

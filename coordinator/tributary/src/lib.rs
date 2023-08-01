@@ -229,9 +229,9 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
       }
 
       Some(&TENDERMINT_MESSAGE) => {
-        let Ok(msg) = SignedMessageFor::<TendermintNetwork<D, T, P>>::decode::<&[u8]>(
-          &mut &msg[1 ..]
-        ) else {
+        let Ok(msg) =
+          SignedMessageFor::<TendermintNetwork<D, T, P>>::decode::<&[u8]>(&mut &msg[1 ..])
+        else {
           log::error!("received invalid tendermint message");
           return false;
         };

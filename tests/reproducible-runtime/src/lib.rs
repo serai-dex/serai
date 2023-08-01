@@ -66,9 +66,10 @@ pub fn reproducibly_builds() {
 
         let logs = Command::new("docker").arg("logs").arg(container).output().unwrap();
         let Some(last_log) =
-          std::str::from_utf8(&logs.stdout).expect("output wasn't utf-8").lines().last() else {
-            continue 'runner;
-          };
+          std::str::from_utf8(&logs.stdout).expect("output wasn't utf-8").lines().last()
+        else {
+          continue 'runner;
+        };
 
         let split = last_log.split("Runtime hash: ").collect::<Vec<_>>();
         if split.len() == 2 {

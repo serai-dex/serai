@@ -528,7 +528,8 @@ async fn boot<N: Network, D: Db>(
       info!("reloading plan {}: {:?}", hex::encode(id), plan);
 
       let (Some((tx, eventuality)), _) =
-      prepare_send(network, signer.keys(), block_number, fee, plan).await else {
+        prepare_send(network, signer.keys(), block_number, fee, plan).await
+      else {
         panic!("previously created transaction is no longer being created")
       };
 

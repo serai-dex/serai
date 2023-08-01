@@ -171,10 +171,10 @@ impl<T: Transaction> Block<T> {
           Err(BlockError::ProvidedAfterNonProvided)?;
         }
 
-        let Some(local) =
-          locally_provided.get_mut(order).and_then(|deque| deque.pop_front()) else {
-            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
-          };
+        let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front())
+        else {
+          Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+        };
         if tx != &local {
           Err(BlockError::DistinctProvided)?;
         }

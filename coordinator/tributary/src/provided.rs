@@ -63,9 +63,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
 
   /// Provide a transaction for inclusion in a block.
   pub(crate) fn provide(&mut self, tx: T) -> Result<(), ProvidedError> {
-    let TransactionKind::Provided(order) = tx.kind() else {
-      Err(ProvidedError::NotProvided)?
-    };
+    let TransactionKind::Provided(order) = tx.kind() else { Err(ProvidedError::NotProvided)? };
 
     match verify_transaction(&tx, self.genesis, &mut HashMap::new()) {
       Ok(()) => {}

@@ -306,11 +306,13 @@ impl Polyseed {
             check_if_matches(
               lang.has_prefix,
               lang.words.iter().map(|lang_word| ascii(lang_word)),
-              &ascii(word)
+              &ascii(word),
             )
           } else {
             check_if_matches(lang.has_prefix, lang.words.iter(), word)
-          }) else { continue 'language; };
+          }) else {
+            continue 'language;
+          };
 
           // WordList asserts the word list length is less than u16::MAX
           poly[i] = u16::try_from(coeff).expect("coeff exceeded u16");

@@ -140,7 +140,9 @@ async fn main() {
       NetworkId::Bitcoin => "BITCOIN_KEY",
       NetworkId::Ethereum => "ETHEREUM_KEY",
       NetworkId::Monero => "MONERO_KEY",
-    }) else { continue };
+    }) else {
+      continue;
+    };
 
     register_service(Service::Processor(network), key);
   }
