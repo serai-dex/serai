@@ -1,3 +1,5 @@
+#![allow(clippy::needless_pass_by_ref_mut)] // False positives
+
 use std::sync::{OnceLock, Mutex};
 
 use zeroize::Zeroizing;

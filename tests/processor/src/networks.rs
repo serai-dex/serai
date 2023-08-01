@@ -319,7 +319,7 @@ impl Wallet {
         let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
 
         // Prepare inputs
-        let outputs = inputs.drain(..).collect::<Vec<_>>();
+        let outputs = std::mem::take(inputs);
         let mut these_inputs = vec![];
         for output in outputs {
           these_inputs.push(
