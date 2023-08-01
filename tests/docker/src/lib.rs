@@ -79,7 +79,20 @@ pub fn build(name: String) {
           meta(repo_path.join("message-queue")),
           meta(repo_path.join("processor")),
         ],
+        "coordinator" => vec![
+          meta(repo_path.join("common")),
+          meta(repo_path.join("crypto")),
+          meta(repo_path.join("coins")),
+          meta(repo_path.join("substrate")),
+          meta(repo_path.join("message-queue")),
+          meta(repo_path.join("coordinator")),
+        ],
         "runtime" => vec![
+          meta(repo_path.join("common")),
+          meta(repo_path.join("crypto")),
+          meta(repo_path.join("substrate")),
+        ],
+        "serai" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),
           meta(repo_path.join("substrate")),

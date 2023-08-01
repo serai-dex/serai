@@ -313,6 +313,7 @@ pub async fn handle_new_blocks<
   let mut latest = Some(latest);
 
   for b in (*last_block + 1) ..= latest_number {
+    log::info!("found substrate block {b}");
     handle_block(
       db,
       key,
@@ -331,6 +332,7 @@ pub async fn handle_new_blocks<
     .await?;
     *last_block += 1;
     db.set_last_block(*last_block);
+    log::info!("handled substrate block {b}");
   }
 
   Ok(())

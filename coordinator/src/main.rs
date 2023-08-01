@@ -74,6 +74,8 @@ async fn add_tributary<D: Db, P: P2p>(
   tributaries: &mut Tributaries<D, P>,
   spec: TributarySpec,
 ) -> TributaryReader<D, Transaction> {
+  log::info!("adding tributary {:?}", spec.set());
+
   let tributary = Tributary::<_, Transaction, _>::new(
     // TODO2: Use a db on a distinct volume
     db,
@@ -102,6 +104,8 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   processors: Pro,
   serai: Serai,
 ) {
+  log::info!("scanning substrate");
+
   let mut db = substrate::SubstrateDb::new(db);
   let mut last_substrate_block = db.last_block();
 
@@ -146,6 +150,8 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
   processors: Pro,
   tributaries: Arc<RwLock<Tributaries<D, P>>>,
 ) {
+  log::info!("scanning tributaries");
+
   let mut tributary_readers = vec![];
   for ActiveTributary { spec, tributary } in tributaries.read().await.values() {
     tributary_readers.push((spec.clone(), tributary.read().await.reader()));
@@ -669,6 +675,13 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 
 #[tokio::main]
 async fn main() {
+  if std::env::var("RUST_LOG").is_err() {
+    std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
+  }
+  env_logger::init();
+
+  log::info!("starting coordinator service...");
+
   let db = serai_db::new_rocksdb(&env::var("DB_PATH").expect("path to DB wasn't specified"));
 
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
@@ -678,11 +691,17 @@ async fn main() {
 
   let serai = || async {
     loop {
-      let Ok(serai) = Serai::new("ws://127.0.0.1:9944").await else {
+      let Ok(serai) = Serai::new(&dbg!(format!(
+        "ws://{}:9944",
+        serai_env::var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
+      )))
+      .await
+      else {
         log::error!("couldn't connect to the Serai node");
         sleep(Duration::from_secs(5)).await;
         continue;
       };
+      log::info!("made initial connection to Serai node");
       return serai;
     }
   };

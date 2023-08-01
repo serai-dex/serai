@@ -7946,6 +7946,7 @@ dependencies = [
  "async-trait",
  "blake2",
  "ciphersuite",
+ "env_logger",
  "flexible-transcript",
  "futures",
  "hex",
@@ -7965,6 +7966,21 @@ dependencies = [
  "tokio",
  "tributary-chain",
  "zeroize",
+]
+
+[[package]]
+name = "serai-coordinator-tests"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "dockertest",
+ "hex",
+ "serai-client",
+ "serai-docker-tests",
+ "serai-message-queue",
+ "serai-message-queue-tests",
+ "serai-processor-messages",
+ "tokio",
 ]
 
 [[package]]

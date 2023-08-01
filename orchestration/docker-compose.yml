@@ -2,7 +2,7 @@ version: "3.9"
 name: serai-dev
 
 volumes:
-  serai-node:
+  serai:
   serai-alice:
   serai-bob:
   serai-charlie:
@@ -78,6 +78,17 @@ services:
       - "./processor/scripts:/scripts"
     entrypoint: /scripts/entry-dev.sh
 
+  coordinator:
+    profiles:
+      - coordinator
+    build:
+      context: ../
+      dockerfile: ./orchestration/coordinator/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - "./coordinator/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
   # Serai runtime
 
   runtime:
@@ -95,7 +106,7 @@ services:
   _serai:
     &serai_defaults
     restart: unless-stopped
-    image: serai:dev
+    # image: serai:dev
     profiles:
       - _
     build:
@@ -107,9 +118,9 @@ services:
     volumes:
       - "./serai/scripts:/scripts"
 
-  serai-node:
+  serai:
     <<: *serai_defaults
-    hostname: serai-node
+    hostname: serai
     profiles:
       - serai
     environment:
