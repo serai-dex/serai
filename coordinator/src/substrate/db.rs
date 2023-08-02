@@ -14,12 +14,12 @@ impl<D: Db> SubstrateDb<D> {
   fn block_key() -> Vec<u8> {
     Self::substrate_key(b"block", [])
   }
-  pub fn set_last_block(&mut self, block: u64) {
+  pub fn set_next_block(&mut self, block: u64) {
     let mut txn = self.0.txn();
     txn.put(Self::block_key(), block.to_le_bytes());
     txn.commit();
   }
-  pub fn last_block(&self) -> u64 {
+  pub fn next_block(&self) -> u64 {
     u64::from_le_bytes(self.0.get(Self::block_key()).unwrap_or(vec![0; 8]).try_into().unwrap())
   }
 

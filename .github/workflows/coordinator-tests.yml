@@ -1,0 +1,44 @@
+name: Coordinator Tests
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "common/**"
+      - "crypto/**"
+      - "coins/**"
+      - "message-queue/**"
+      - "orchestration/message-queue/**"
+      - "coordinator/**"
+      - "orchestration/coordinator/**"
+      - "tests/docker/**"
+      - "tests/coordinator/**"
+
+  pull_request:
+    paths:
+      - "common/**"
+      - "crypto/**"
+      - "coins/**"
+      - "message-queue/**"
+      - "orchestration/message-queue/**"
+      - "coordinator/**"
+      - "orchestration/coordinator/**"
+      - "tests/docker/**"
+      - "tests/coordinator/**"
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+        with:
+          github-token: ${{ inputs.github-token }}
+
+      - name: Run coordinator Docker tests
+        run: cd tests/coordinator && GITHUB_CI=true cargo test

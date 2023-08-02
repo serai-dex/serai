@@ -30,7 +30,6 @@ fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
   (coordinators, test)
 }
 
-
 #[test]
 fn stack_test() {
   let (_coordinators, test) = new_test();

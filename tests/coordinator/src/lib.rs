@@ -6,7 +6,9 @@ use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
 
 use serai_client::primitives::NetworkId;
 
-use dockertest::{PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition};
+use dockertest::{
+  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition,
+};
 
 #[cfg(test)]
 mod tests;

@@ -107,7 +107,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   log::info!("scanning substrate");
 
   let mut db = substrate::SubstrateDb::new(db);
-  let mut last_substrate_block = db.last_block();
+  let mut next_substrate_block = db.next_block();
 
   loop {
     match substrate::handle_new_blocks(
@@ -126,7 +126,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
       },
       &processors,
       &serai,
-      &mut last_substrate_block,
+      &mut next_substrate_block,
     )
     .await
     {

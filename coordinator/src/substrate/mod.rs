@@ -302,17 +302,17 @@ pub async fn handle_new_blocks<
   create_new_tributary: CNT,
   processors: &Pro,
   serai: &Serai,
-  last_block: &mut u64,
+  next_block: &mut u64,
 ) -> Result<(), SeraiError> {
   // Check if there's been a new Substrate block
   let latest = serai.get_latest_block().await?;
   let latest_number = latest.number();
-  if latest_number == *last_block {
+  if latest_number < *next_block {
     return Ok(());
   }
   let mut latest = Some(latest);
 
-  for b in (*last_block + 1) ..= latest_number {
+  for b in *next_block ..= latest_number {
     log::info!("found substrate block {b}");
     handle_block(
       db,
@@ -330,8 +330,8 @@ pub async fn handle_new_blocks<
       },
     )
     .await?;
-    *last_block += 1;
-    db.set_last_block(*last_block);
+    *next_block += 1;
+    db.set_next_block(*next_block);
     log::info!("handled substrate block {b}");
   }
 
