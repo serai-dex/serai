@@ -2439,6 +2439,7 @@ name = "ff-group-tests"
 version = "0.13.0"
 dependencies = [
  "bls12_381",
+ "ff",
  "group",
  "k256",
  "p256",

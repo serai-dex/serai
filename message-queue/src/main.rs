@@ -1,114 +1,123 @@
-use std::{
-  sync::{Arc, RwLock},
-  collections::HashMap,
-};
-
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use schnorr_signatures::SchnorrSignature;
-
-use serai_primitives::NetworkId;
-
-use jsonrpsee::{RpcModule, server::ServerBuilder};
-
+#[cfg(feature = "binaries")]
 mod messages;
-use messages::*;
-
+#[cfg(feature = "binaries")]
 mod queue;
-use queue::Queue;
 
-type Db = serai_db::RocksDB;
+#[cfg(feature = "binaries")]
+mod binaries {
+  pub(crate) use std::{
+    sync::{Arc, RwLock},
+    collections::HashMap,
+  };
 
-lazy_static::lazy_static! {
-  static ref KEYS: Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>> =
-    Arc::new(RwLock::new(HashMap::new()));
-  static ref QUEUES: Arc<RwLock<HashMap<Service, RwLock<Queue<Db>>>>> =
-    Arc::new(RwLock::new(HashMap::new()));
-}
+  pub(crate) use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+  pub(crate) use schnorr_signatures::SchnorrSignature;
 
-// queue RPC method
-/*
-  Queues a message to be delivered from a processor to a coordinator, or vice versa.
+  pub(crate) use serai_primitives::NetworkId;
 
-  Messages are authenticated to be coming from the claimed service. Recipient services SHOULD
-  independently verify signatures.
+  pub(crate) use jsonrpsee::{RpcModule, server::ServerBuilder};
 
-  The metadata specifies an intent. Only one message, for a specified intent, will be delivered.
-  This allows services to safely send messages multiple times without them being delivered multiple
-  times.
+  pub(crate) use crate::messages::*;
 
-  The message will be ordered by this service, with the order having no guarantees other than
-  successful ordering by the time this call returns.
-*/
-fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>) {
-  {
-    let from = (*KEYS).read().unwrap()[&meta.from];
-    assert!(
-      sig.verify(from, message_challenge(meta.from, from, meta.to, &meta.intent, &msg, sig.R))
-    );
+  pub(crate) use crate::queue::Queue;
+
+  pub(crate) type Db = serai_db::RocksDB;
+
+  lazy_static::lazy_static! {
+    pub(crate) static ref KEYS: Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>> =
+      Arc::new(RwLock::new(HashMap::new()));
+    pub(crate) static ref QUEUES: Arc<RwLock<HashMap<Service, RwLock<Queue<Db>>>>> =
+      Arc::new(RwLock::new(HashMap::new()));
   }
 
-  // Assert one, and only one of these, is the coordinator
-  assert!(matches!(meta.from, Service::Coordinator) ^ matches!(meta.to, Service::Coordinator));
+  // queue RPC method
+  /*
+    Queues a message to be delivered from a processor to a coordinator, or vice versa.
 
-  // TODO: Verify (from, intent) hasn't been prior seen
+    Messages are authenticated to be coming from the claimed service. Recipient services SHOULD
+    independently verify signatures.
 
-  // Queue it
-  let id = (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {
-    from: meta.from,
-    // Temporary value which queue_message will override
-    id: u64::MAX,
-    msg,
-    sig: sig.serialize(),
-  });
+    The metadata specifies an intent. Only one message, for a specified intent, will be delivered.
+    This allows services to safely send messages multiple times without them being delivered
+    multiple times.
 
-  log::info!("Queued message from {:?}. It is {:?} {id}", meta.from, meta.to);
-}
+    The message will be ordered by this service, with the order having no guarantees other than
+    successful ordering by the time this call returns.
+  */
+  pub(crate) fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>) {
+    {
+      let from = (*KEYS).read().unwrap()[&meta.from];
+      assert!(
+        sig.verify(from, message_challenge(meta.from, from, meta.to, &meta.intent, &msg, sig.R))
+      );
+    }
 
-// next RPC method
-/*
-  Gets the next message in queue for this service.
+    // Assert one, and only one of these, is the coordinator
+    assert!(matches!(meta.from, Service::Coordinator) ^ matches!(meta.to, Service::Coordinator));
 
-  This is not authenticated due to the fact every nonce would have to be saved to prevent replays,
-  or a challenge-response protocol implemented. Neither are worth doing when there should be no
-  sensitive data on this server.
+    // TODO: Verify (from, intent) hasn't been prior seen
 
-  The expected index is used to ensure a service didn't fall out of sync with this service. It
-  should always be either the next message's ID or *TODO*.
-*/
-fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
-  // TODO: Verify the expected next message ID matches
+    // Queue it
+    let id = (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {
+      from: meta.from,
+      // Temporary value which queue_message will override
+      id: u64::MAX,
+      msg,
+      sig: sig.serialize(),
+    });
 
-  let queue_outer = (*QUEUES).read().unwrap();
-  let queue = queue_outer[&service].read().unwrap();
-  let next = queue.last_acknowledged().map(|i| i + 1).unwrap_or(0);
-  queue.get_message(next)
-}
-
-// ack RPC method
-/*
-  Acknowledges a message as received and handled, meaning it'll no longer be returned as the next
-  message.
-*/
-fn ack_message(service: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
-  {
-    let from = (*KEYS).read().unwrap()[&service];
-    assert!(sig.verify(from, ack_challenge(service, from, id, sig.R)));
+    log::info!("Queued message from {:?}. It is {:?} {id}", meta.from, meta.to);
   }
 
-  // Is it:
-  // The acknowledged message should be > last acknowledged OR
-  // The acknowledged message should be >=
-  // It's the first if we save messages as acknowledged before acknowledging them
-  // It's the second if we acknowledge messages before saving them as acknowledged
-  // TODO: Check only a proper message is being acked
+  // next RPC method
+  /*
+    Gets the next message in queue for this service.
 
-  log::info!("{:?} is acknowledging {}", service, id);
+    This is not authenticated due to the fact every nonce would have to be saved to prevent replays,
+    or a challenge-response protocol implemented. Neither are worth doing when there should be no
+    sensitive data on this server.
 
-  (*QUEUES).read().unwrap()[&service].write().unwrap().ack_message(id)
+    The expected index is used to ensure a service didn't fall out of sync with this service. It
+    should always be either the next message's ID or *TODO*.
+  */
+  pub(crate) fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
+    // TODO: Verify the expected next message ID matches
+
+    let queue_outer = (*QUEUES).read().unwrap();
+    let queue = queue_outer[&service].read().unwrap();
+    let next = queue.last_acknowledged().map(|i| i + 1).unwrap_or(0);
+    queue.get_message(next)
+  }
+
+  // ack RPC method
+  /*
+    Acknowledges a message as received and handled, meaning it'll no longer be returned as the next
+    message.
+  */
+  pub(crate) fn ack_message(service: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
+    {
+      let from = (*KEYS).read().unwrap()[&service];
+      assert!(sig.verify(from, ack_challenge(service, from, id, sig.R)));
+    }
+
+    // Is it:
+    // The acknowledged message should be > last acknowledged OR
+    // The acknowledged message should be >=
+    // It's the first if we save messages as acknowledged before acknowledging them
+    // It's the second if we acknowledge messages before saving them as acknowledged
+    // TODO: Check only a proper message is being acked
+
+    log::info!("{:?} is acknowledging {}", service, id);
+
+    (*QUEUES).read().unwrap()[&service].write().unwrap().ack_message(id)
+  }
 }
 
+#[cfg(feature = "binaries")]
 #[tokio::main]
 async fn main() {
+  use binaries::*;
+
   if std::env::var("RUST_LOG").is_err() {
     std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
   }
@@ -191,4 +200,9 @@ async fn main() {
 
   // Run until stopped, which it never will
   server.start(module).unwrap().stopped().await;
+}
+
+#[cfg(not(feature = "binaries"))]
+fn main() {
+  panic!("To run binaries, please build with `--feature binaries`.");
 }

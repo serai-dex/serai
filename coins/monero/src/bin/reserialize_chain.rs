@@ -1,245 +1,251 @@
-use std::sync::Arc;
+#[cfg(feature = "binaries")]
+mod binaries {
+  pub(crate) use std::sync::Arc;
 
-use curve25519_dalek::{
-  scalar::Scalar,
-  edwards::{CompressedEdwardsY, EdwardsPoint},
-};
-
-use multiexp::BatchVerifier;
-
-use serde::Deserialize;
-use serde_json::json;
-
-use monero_serai::{
-  Commitment,
-  ringct::RctPrunable,
-  transaction::{Input, Transaction},
-  block::Block,
-  rpc::{RpcError, Rpc, HttpRpc},
-};
-
-use tokio::task::JoinHandle;
-
-async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
-  let hash = loop {
-    match rpc.get_block_hash(block_i).await {
-      Ok(hash) => break hash,
-      Err(RpcError::ConnectionError) => {
-        println!("get_block_hash ConnectionError");
-        continue;
-      }
-      Err(e) => panic!("couldn't get block {block_i}'s hash: {e:?}"),
-    }
+  pub(crate) use curve25519_dalek::{
+    scalar::Scalar,
+    edwards::{CompressedEdwardsY, EdwardsPoint},
   };
 
-  // TODO: Grab the JSON to also check it was deserialized correctly
-  #[derive(Deserialize, Debug)]
-  struct BlockResponse {
-    blob: String,
-  }
-  let res: BlockResponse = loop {
-    match rpc.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await {
-      Ok(res) => break res,
-      Err(RpcError::ConnectionError) => {
-        println!("get_block ConnectionError");
-        continue;
-      }
-      Err(e) => panic!("couldn't get block {block_i} via block.hash(): {e:?}"),
-    }
+  pub(crate) use multiexp::BatchVerifier;
+
+  pub(crate) use serde::Deserialize;
+  pub(crate) use serde_json::json;
+
+  pub(crate) use monero_serai::{
+    Commitment,
+    ringct::RctPrunable,
+    transaction::{Input, Transaction},
+    block::Block,
+    rpc::{RpcError, Rpc, HttpRpc},
   };
 
-  let blob = hex::decode(res.blob).expect("node returned non-hex block");
-  let block = Block::read(&mut blob.as_slice())
-    .unwrap_or_else(|_| panic!("couldn't deserialize block {block_i}"));
-  assert_eq!(block.hash(), hash, "hash differs");
-  assert_eq!(block.serialize(), blob, "serialization differs");
+  pub(crate) use tokio::task::JoinHandle;
 
-  let txs_len = 1 + block.txs.len();
-
-  if !block.txs.is_empty() {
-    #[derive(Deserialize, Debug)]
-    struct TransactionResponse {
-      tx_hash: String,
-      as_hex: String,
-    }
-    #[derive(Deserialize, Debug)]
-    struct TransactionsResponse {
-      #[serde(default)]
-      missed_tx: Vec<String>,
-      txs: Vec<TransactionResponse>,
-    }
-
-    let mut hashes_hex = block.txs.iter().map(hex::encode).collect::<Vec<_>>();
-    let mut all_txs = vec![];
-    while !hashes_hex.is_empty() {
-      let txs: TransactionsResponse = loop {
-        match rpc
-          .rpc_call(
-            "get_transactions",
-            Some(json!({
-              "txs_hashes": hashes_hex.drain(.. hashes_hex.len().min(100)).collect::<Vec<_>>(),
-            })),
-          )
-          .await
-        {
-          Ok(txs) => break txs,
-          Err(RpcError::ConnectionError) => {
-            println!("get_transactions ConnectionError");
-            continue;
-          }
-          Err(e) => panic!("couldn't call get_transactions: {e:?}"),
+  pub(crate) async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
+    let hash = loop {
+      match rpc.get_block_hash(block_i).await {
+        Ok(hash) => break hash,
+        Err(RpcError::ConnectionError) => {
+          println!("get_block_hash ConnectionError");
+          continue;
         }
-      };
-      assert!(txs.missed_tx.is_empty());
-      all_txs.extend(txs.txs);
+        Err(e) => panic!("couldn't get block {block_i}'s hash: {e:?}"),
+      }
+    };
+
+    // TODO: Grab the JSON to also check it was deserialized correctly
+    #[derive(Deserialize, Debug)]
+    struct BlockResponse {
+      blob: String,
     }
+    let res: BlockResponse = loop {
+      match rpc.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await {
+        Ok(res) => break res,
+        Err(RpcError::ConnectionError) => {
+          println!("get_block ConnectionError");
+          continue;
+        }
+        Err(e) => panic!("couldn't get block {block_i} via block.hash(): {e:?}"),
+      }
+    };
 
-    let mut batch = BatchVerifier::new(block.txs.len());
-    for (tx_hash, tx_res) in block.txs.into_iter().zip(all_txs) {
-      assert_eq!(
-        tx_res.tx_hash,
-        hex::encode(tx_hash),
-        "node returned a transaction with different hash"
-      );
+    let blob = hex::decode(res.blob).expect("node returned non-hex block");
+    let block = Block::read(&mut blob.as_slice())
+      .unwrap_or_else(|_| panic!("couldn't deserialize block {block_i}"));
+    assert_eq!(block.hash(), hash, "hash differs");
+    assert_eq!(block.serialize(), blob, "serialization differs");
 
-      let tx = Transaction::read(
-        &mut hex::decode(&tx_res.as_hex).expect("node returned non-hex transaction").as_slice(),
-      )
-      .expect("couldn't deserialize transaction");
+    let txs_len = 1 + block.txs.len();
 
-      assert_eq!(
-        hex::encode(tx.serialize()),
-        tx_res.as_hex,
-        "Transaction serialization was different"
-      );
-      assert_eq!(tx.hash(), tx_hash, "Transaction hash was different");
-
-      if matches!(tx.rct_signatures.prunable, RctPrunable::Null) {
-        assert_eq!(tx.prefix.version, 1);
-        assert!(!tx.signatures.is_empty());
-        continue;
+    if !block.txs.is_empty() {
+      #[derive(Deserialize, Debug)]
+      struct TransactionResponse {
+        tx_hash: String,
+        as_hex: String,
+      }
+      #[derive(Deserialize, Debug)]
+      struct TransactionsResponse {
+        #[serde(default)]
+        missed_tx: Vec<String>,
+        txs: Vec<TransactionResponse>,
       }
 
-      let sig_hash = tx.signature_hash();
-      // Verify all proofs we support proving for
-      // This is due to having debug_asserts calling verify within their proving, and CLSAG
-      // multisig explicitly calling verify as part of its signing process
-      // Accordingly, making sure our signature_hash algorithm is correct is great, and further
-      // making sure the verification functions are valid is appreciated
-      match tx.rct_signatures.prunable {
-        RctPrunable::Null | RctPrunable::MlsagBorromean { .. } => {}
-        RctPrunable::MlsagBulletproofs { bulletproofs, .. } => {
-          assert!(bulletproofs.batch_verify(
-            &mut rand_core::OsRng,
-            &mut batch,
-            (),
-            &tx.rct_signatures.base.commitments
-          ));
-        }
-        RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
-          assert!(bulletproofs.batch_verify(
-            &mut rand_core::OsRng,
-            &mut batch,
-            (),
-            &tx.rct_signatures.base.commitments
-          ));
-
-          for (i, clsag) in clsags.into_iter().enumerate() {
-            let (amount, key_offsets, image) = match &tx.prefix.inputs[i] {
-              Input::Gen(_) => panic!("Input::Gen"),
-              Input::ToKey { amount, key_offsets, key_image } => (amount, key_offsets, key_image),
-            };
-
-            let mut running_sum = 0;
-            let mut actual_indexes = vec![];
-            for offset in key_offsets {
-              running_sum += offset;
-              actual_indexes.push(running_sum);
+      let mut hashes_hex = block.txs.iter().map(hex::encode).collect::<Vec<_>>();
+      let mut all_txs = vec![];
+      while !hashes_hex.is_empty() {
+        let txs: TransactionsResponse = loop {
+          match rpc
+            .rpc_call(
+              "get_transactions",
+              Some(json!({
+                "txs_hashes": hashes_hex.drain(.. hashes_hex.len().min(100)).collect::<Vec<_>>(),
+              })),
+            )
+            .await
+          {
+            Ok(txs) => break txs,
+            Err(RpcError::ConnectionError) => {
+              println!("get_transactions ConnectionError");
+              continue;
             }
+            Err(e) => panic!("couldn't call get_transactions: {e:?}"),
+          }
+        };
+        assert!(txs.missed_tx.is_empty());
+        all_txs.extend(txs.txs);
+      }
 
-            async fn get_outs(
-              rpc: &Rpc<HttpRpc>,
-              amount: u64,
-              indexes: &[u64],
-            ) -> Vec<[EdwardsPoint; 2]> {
-              #[derive(Deserialize, Debug)]
-              struct Out {
-                key: String,
-                mask: String,
+      let mut batch = BatchVerifier::new(block.txs.len());
+      for (tx_hash, tx_res) in block.txs.into_iter().zip(all_txs) {
+        assert_eq!(
+          tx_res.tx_hash,
+          hex::encode(tx_hash),
+          "node returned a transaction with different hash"
+        );
+
+        let tx = Transaction::read(
+          &mut hex::decode(&tx_res.as_hex).expect("node returned non-hex transaction").as_slice(),
+        )
+        .expect("couldn't deserialize transaction");
+
+        assert_eq!(
+          hex::encode(tx.serialize()),
+          tx_res.as_hex,
+          "Transaction serialization was different"
+        );
+        assert_eq!(tx.hash(), tx_hash, "Transaction hash was different");
+
+        if matches!(tx.rct_signatures.prunable, RctPrunable::Null) {
+          assert_eq!(tx.prefix.version, 1);
+          assert!(!tx.signatures.is_empty());
+          continue;
+        }
+
+        let sig_hash = tx.signature_hash();
+        // Verify all proofs we support proving for
+        // This is due to having debug_asserts calling verify within their proving, and CLSAG
+        // multisig explicitly calling verify as part of its signing process
+        // Accordingly, making sure our signature_hash algorithm is correct is great, and further
+        // making sure the verification functions are valid is appreciated
+        match tx.rct_signatures.prunable {
+          RctPrunable::Null | RctPrunable::MlsagBorromean { .. } => {}
+          RctPrunable::MlsagBulletproofs { bulletproofs, .. } => {
+            assert!(bulletproofs.batch_verify(
+              &mut rand_core::OsRng,
+              &mut batch,
+              (),
+              &tx.rct_signatures.base.commitments
+            ));
+          }
+          RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
+            assert!(bulletproofs.batch_verify(
+              &mut rand_core::OsRng,
+              &mut batch,
+              (),
+              &tx.rct_signatures.base.commitments
+            ));
+
+            for (i, clsag) in clsags.into_iter().enumerate() {
+              let (amount, key_offsets, image) = match &tx.prefix.inputs[i] {
+                Input::Gen(_) => panic!("Input::Gen"),
+                Input::ToKey { amount, key_offsets, key_image } => (amount, key_offsets, key_image),
+              };
+
+              let mut running_sum = 0;
+              let mut actual_indexes = vec![];
+              for offset in key_offsets {
+                running_sum += offset;
+                actual_indexes.push(running_sum);
               }
 
-              #[derive(Deserialize, Debug)]
-              struct Outs {
-                outs: Vec<Out>,
-              }
-
-              let outs: Outs = loop {
-                match rpc
-                  .rpc_call(
-                    "get_outs",
-                    Some(json!({
-                      "get_txid": true,
-                      "outputs": indexes.iter().map(|o| json!({
-                        "amount": amount,
-                        "index": o
-                      })).collect::<Vec<_>>()
-                    })),
-                  )
-                  .await
-                {
-                  Ok(outs) => break outs,
-                  Err(RpcError::ConnectionError) => {
-                    println!("get_outs ConnectionError");
-                    continue;
-                  }
-                  Err(e) => panic!("couldn't connect to RPC to get outs: {e:?}"),
+              async fn get_outs(
+                rpc: &Rpc<HttpRpc>,
+                amount: u64,
+                indexes: &[u64],
+              ) -> Vec<[EdwardsPoint; 2]> {
+                #[derive(Deserialize, Debug)]
+                struct Out {
+                  key: String,
+                  mask: String,
                 }
-              };
 
-              let rpc_point = |point: &str| {
-                CompressedEdwardsY(
-                  hex::decode(point)
-                    .expect("invalid hex for ring member")
-                    .try_into()
-                    .expect("invalid point len for ring member"),
-                )
-                .decompress()
-                .expect("invalid point for ring member")
-              };
+                #[derive(Deserialize, Debug)]
+                struct Outs {
+                  outs: Vec<Out>,
+                }
 
-              outs
-                .outs
-                .iter()
-                .map(|out| {
-                  let mask = rpc_point(&out.mask);
-                  if amount != 0 {
-                    assert_eq!(mask, Commitment::new(Scalar::from(1u8), amount).calculate());
+                let outs: Outs = loop {
+                  match rpc
+                    .rpc_call(
+                      "get_outs",
+                      Some(json!({
+                        "get_txid": true,
+                        "outputs": indexes.iter().map(|o| json!({
+                          "amount": amount,
+                          "index": o
+                        })).collect::<Vec<_>>()
+                      })),
+                    )
+                    .await
+                  {
+                    Ok(outs) => break outs,
+                    Err(RpcError::ConnectionError) => {
+                      println!("get_outs ConnectionError");
+                      continue;
+                    }
+                    Err(e) => panic!("couldn't connect to RPC to get outs: {e:?}"),
                   }
-                  [rpc_point(&out.key), mask]
-                })
-                .collect()
-            }
+                };
 
-            clsag
-              .verify(
-                &get_outs(&rpc, amount.unwrap_or(0), &actual_indexes).await,
-                image,
-                &pseudo_outs[i],
-                &sig_hash,
-              )
-              .unwrap();
+                let rpc_point = |point: &str| {
+                  CompressedEdwardsY(
+                    hex::decode(point)
+                      .expect("invalid hex for ring member")
+                      .try_into()
+                      .expect("invalid point len for ring member"),
+                  )
+                  .decompress()
+                  .expect("invalid point for ring member")
+                };
+
+                outs
+                  .outs
+                  .iter()
+                  .map(|out| {
+                    let mask = rpc_point(&out.mask);
+                    if amount != 0 {
+                      assert_eq!(mask, Commitment::new(Scalar::from(1u8), amount).calculate());
+                    }
+                    [rpc_point(&out.key), mask]
+                  })
+                  .collect()
+              }
+
+              clsag
+                .verify(
+                  &get_outs(&rpc, amount.unwrap_or(0), &actual_indexes).await,
+                  image,
+                  &pseudo_outs[i],
+                  &sig_hash,
+                )
+                .unwrap();
+            }
           }
         }
       }
+      assert!(batch.verify_vartime());
     }
-    assert!(batch.verify_vartime());
-  }
 
-  println!("Deserialized, hashed, and reserialized {block_i} with {} TXs", txs_len);
+    println!("Deserialized, hashed, and reserialized {block_i} with {} TXs", txs_len);
+  }
 }
 
+#[cfg(feature = "binaries")]
 #[tokio::main]
 async fn main() {
+  use binaries::*;
+
   let args = std::env::args().collect::<Vec<String>>();
 
   // Read start block as the first arg
@@ -306,4 +312,9 @@ async fn main() {
       block_i += 1;
     }
   }
+}
+
+#[cfg(not(feature = "binaries"))]
+fn main() {
+  panic!("To run binaries, please build with `--feature binaries`.");
 }
