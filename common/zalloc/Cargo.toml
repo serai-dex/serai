@@ -7,6 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/zalloc"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
+rust-version = "1.60"
 
 [package.metadata.docs.rs]
 all-features = true

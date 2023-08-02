@@ -7,6 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dalek-ff-gr
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["curve25519", "ed25519", "ristretto", "dalek", "group"]
 edition = "2021"
+rust-version = "1.65"
 
 [package.metadata.docs.rs]
 all-features = true

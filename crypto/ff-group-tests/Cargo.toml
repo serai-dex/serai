@@ -7,6 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ff-group-te
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ff", "group", "ecc"]
 edition = "2021"
+rust-version = "1.60"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -17,6 +18,7 @@ rand_core = "0.6"
 
 subtle = "^2.4"
 
+ff = { version = "0.13", features = ["bits"] }
 group = "0.13"
 
 [dev-dependencies]
