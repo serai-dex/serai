@@ -1,60 +1,44 @@
 [workspace]
 resolver = "2"
 members = [
-  "common/std-shims",
-  "common/zalloc",
-  "common/db",
-  "common/env",
-
-  "crypto/transcript",
-
-  "crypto/ff-group-tests",
-  "crypto/dalek-ff-group",
-  "crypto/ed448",
-  "crypto/ciphersuite",
-
-  "crypto/multiexp",
-
-  "crypto/schnorr",
-  "crypto/dleq",
-  "crypto/dkg",
-  "crypto/frost",
-  "crypto/schnorrkel",
-
   "coins/bitcoin",
   "coins/ethereum",
-  "coins/monero/generators",
   "coins/monero",
-
-  "message-queue",
-
-  "processor/messages",
-  "processor",
-
-  "coordinator/tributary/tendermint",
-  "coordinator/tributary",
+  "coins/monero/generators",
+  "common/db",
+  "common/env",
+  "common/std-shims",
+  "common/zalloc",
   "coordinator",
-
-  "substrate/primitives",
-
-  "substrate/tokens/primitives",
-  "substrate/tokens/pallet",
-
-  "substrate/in-instructions/primitives",
-  "substrate/in-instructions/pallet",
-
-  "substrate/validator-sets/primitives",
-  "substrate/validator-sets/pallet",
-
-  "substrate/runtime",
-  "substrate/node",
-
+  "coordinator/tributary",
+  "coordinator/tributary/tendermint",
+  "crypto/ciphersuite",
+  "crypto/dalek-ff-group",
+  "crypto/dkg",
+  "crypto/dleq",
+  "crypto/ed448",
+  "crypto/ff-group-tests",
+  "crypto/frost",
+  "crypto/multiexp",
+  "crypto/schnorr",
+  "crypto/schnorrkel",
+  "crypto/transcript",
+  "message-queue",
+  "processor",
+  "processor/messages",
   "substrate/client",
-
-  "tests/no-std",
-
+  "substrate/in-instructions/pallet",
+  "substrate/in-instructions/primitives",
+  "substrate/node",
+  "substrate/primitives",
+  "substrate/runtime",
+  "substrate/tokens/pallet",
+  "substrate/tokens/primitives",
+  "substrate/validator-sets/pallet",
+  "substrate/validator-sets/primitives",
   "tests/docker",
   "tests/message-queue",
+  "tests/no-std",
   "tests/processor",
   "tests/coordinator",
   "tests/reproducible-runtime",
@@ -65,16 +49,12 @@ members = [
 [profile.dev.package]
 subtle = { opt-level = 3 }
 curve25519-dalek = { opt-level = 3 }
-
 ff = { opt-level = 3 }
 group = { opt-level = 3 }
-
 crypto-bigint = { opt-level = 3 }
 dalek-ff-group = { opt-level = 3 }
 minimal-ed448 = { opt-level = 3 }
-
 multiexp = { opt-level = 3 }
-
 monero-serai = { opt-level = 3 }
 
 [profile.release]
