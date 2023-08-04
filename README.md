@@ -42,6 +42,15 @@ wallet.
 - `tests`: Tests for various crates. Generally, `crate/src/tests` is used, or
   `crate/tests`, yet any tests requiring crates' binaries are placed here.
 
+### Security
+
+Serai hosts a bug bounty program via
+[Immunefi](https://immunefi.com/bounty/serai/). For in-scope critical
+vulnerabilities, we will reward whitehats with up to $30,000.
+
+Anything not in-scope should still be submitted through Immunefi, with rewards
+issued at the discretion of the Immunefi program managers.
+
 ### Links
 
 - [Twitter](https://twitter.com/SeraiDEX):         https://twitter.com/SeraiDEX
@@ -49,3 +58,5 @@ wallet.
 - [Discord](https://discord.gg/mpEUtJR3vz):        https://discord.gg/mpEUtJR3vz
 - [Matrix](https://matrix.to/#/#serai:matrix.org):
 https://matrix.to/#/#serai:matrix.org
+- [Immunefi](https://immunefi.com/bounty/serai/):
+https://immunefi.com/bounty/serai/
