@@ -168,10 +168,12 @@ services:
     hostname: serai-dave
     profiles:
       - dave
+      - cluster-sm
       - cluster-lg
     environment:
       CHAIN: local
       NAME: dave
+      VALIDATOR: true
 
   serai-eve:
     <<: *serai_defaults

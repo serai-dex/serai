@@ -36,7 +36,7 @@ pub fn coordinator_instance(
       ("DB_PATH".to_string(), "./coordinator-db".to_string()),
       ("SERAI_KEY".to_string(), {
         use serai_client::primitives::insecure_pair_from_name;
-        hex::encode(insecure_pair_from_name(name).as_ref().secret.to_bytes()[.. 32].as_ref())
+        hex::encode(&insecure_pair_from_name(name).as_ref().secret.to_bytes()[.. 32])
       }),
     ]
     .into(),

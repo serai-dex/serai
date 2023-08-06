@@ -13,7 +13,7 @@ use dockertest::DockerTest;
 
 use crate::*;
 
-pub(crate) const COORDINATORS: usize = 3;
+pub(crate) const COORDINATORS: usize = 4;
 // pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
 fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
@@ -27,7 +27,7 @@ fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
       3 => "Dave",
       4 => "Eve",
       5 => "Ferdie",
-      _ => panic!("needed a 6th name for a serai node"),
+      _ => panic!("needed a 7th name for a serai node"),
     });
     coordinators.push((handles, coord_key));
     for composition in compositions {
@@ -63,7 +63,7 @@ async fn stack_test() {
             },
             params: ThresholdParams::new(
               3,
-              3,
+              4,
               Participant::new(u16::try_from(i).unwrap() + 1).unwrap()
             )
             .unwrap()

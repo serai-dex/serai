@@ -124,7 +124,7 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
     || {
       testnet_genesis(
         wasm_binary,
-        &["Alice", "Bob", "Charlie"],
+        &["Alice", "Bob", "Charlie", "Dave"],
         vec![
           account_from_name("Alice"),
           account_from_name("Bob"),

@@ -22,8 +22,9 @@ All commands are assumed to be ran from `/deploy`, not the root folder.
 * `processor`     - Serai processor for one external network.
 
 * `serai`      - Serai node
-* `cluster-sm` - "Alice", "Bob", and "Charlie" Serai nodes, all as validators
-* `cluster-lg` - `cluster-sm` with non-validators "Dave", "Eve", and "Ferdie"
+* `cluster-sm` - "Alice", "Bob", "Charlie", and "Dave" Serai nodes, all as
+                 validators (enough to achieve BFT with one faulty node)
+* `cluster-lg` - `cluster-sm` with non-validators "Eve" and "Ferdie"
 
 You can supply one or more profiles to the docker compose command to orchestrate
 the desired components.
