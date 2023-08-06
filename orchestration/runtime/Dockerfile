@@ -1,4 +1,4 @@
-FROM rust:1.71.0-slim-bookworm as builder
+FROM rust:1.71.1-slim-bookworm as builder
 
 # Add files for build
 ADD common /serai/common
