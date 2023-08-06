@@ -283,7 +283,7 @@ checksum = "cc6dde6e4ed435a4c1ee4e73592f5ba9da2151af10076cc04858746af9352d09"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -307,7 +307,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "memchr",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
 ]
 
 [[package]]
@@ -435,7 +435,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -630,7 +630,7 @@ dependencies = [
  "hyper",
  "hyperlocal",
  "log",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "serde",
  "serde_derive",
  "serde_json",
@@ -789,11 +789,12 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.79"
+version = "1.0.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
+checksum = "6c6b2562119bf28c3439f7f02db99faf0aa1a8cdfe5772a2ee155d32227239f0"
 dependencies = [
  "jobserver",
+ "libc",
 ]
 
 [[package]]
@@ -976,7 +977,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1419,9 +1420,9 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f68e12e817cb19eaab81aaec582b4052d07debd3c3c6b083b9d361db47c7dc9d"
+checksum = "7a470da33f8c5350d645567d897986b3e6322d289eebad78f3e1e8a3dc06db7d"
 dependencies = [
  "cc",
  "cxxbridge-flags",
@@ -1431,9 +1432,9 @@ dependencies = [
 
 [[package]]
 name = "cxx-build"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e789217e4ab7cf8cc9ce82253180a9fe331f35f5d339f0ccfe0270b39433f397"
+checksum = "cdc478d7bb113cc9d9d769b7abf31080ca1aabcd48db322f774436ebb43a28e1"
 dependencies = [
  "cc",
  "codespan-reporting",
@@ -1441,24 +1442,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "scratch",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78a19f4c80fd9ab6c882286fa865e92e07688f4387370a209508014ead8751d0"
+checksum = "ed60da09cc09c7e0d8a72371784fe8127b9a8784ee68f4cad7b8d71ef597fa50"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8fcfa71f66c8563c4fa9dd2bb68368d50267856f831ac5d85367e0805f9606c"
+checksum = "ec1d01fc252851e76d06f7d4638cc60485613f0f54bffef377eeff42205fcb8d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1547,7 +1548,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1580,7 +1581,7 @@ checksum = "836a9bbc7ad63342d6d6e7b815ccab164bc77a2d95d84bc3117a8c0d5c98e2d5"
 dependencies = [
  "darling_core 0.20.3",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1618,6 +1619,12 @@ dependencies = [
  "const-oid",
  "zeroize",
 ]
+
+[[package]]
+name = "deranged"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7684a49fb1af197853ef7b2ee694bc1f5b4179556f1e5710e1760c5db6f5e929"
 
 [[package]]
 name = "derivative"
@@ -2003,9 +2010,9 @@ checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
 name = "errno"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bcfec3a70f97c962c307b2d2c56e358cf1d00b558d74262b5f929ee8cc7e73a"
+checksum = "6b30f669a7961ef1631673d2766cc92f52d64f7ef354d4fe0ddfd30ed52f0f4f"
 dependencies = [
  "errno-dragonfly",
  "libc",
@@ -2176,7 +2183,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "syn 2.0.27",
+ "syn 2.0.28",
  "toml 0.7.6",
  "walkdir",
 ]
@@ -2194,7 +2201,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde_json",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -2220,7 +2227,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.25.0",
- "syn 2.0.27",
+ "syn 2.0.28",
  "tempfile",
  "thiserror",
  "tiny-keccak",
@@ -2380,7 +2387,7 @@ dependencies = [
  "fs-err",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -2466,13 +2473,13 @@ dependencies = [
 
 [[package]]
 name = "filetime"
-version = "0.2.21"
+version = "0.2.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cbc844cecaee9d4443931972e1289c8ff485cb4cc2767cb03ca139ed6885153"
+checksum = "d4029edd3e734da6fe05b6cd7bd2960760a616bd2ddd0d59a0124746d6272af0"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall 0.2.16",
+ "redox_syscall 0.3.5",
  "windows-sys 0.48.0",
 ]
 
@@ -2566,7 +2573,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 [[package]]
 name = "fork-tree"
 version = "3.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -2589,7 +2596,7 @@ checksum = "6c2141d6d6c8512188a7891b4b01590a45f6dac67afb4f255c4124dbb86d4eaa"
 [[package]]
 name = "frame-benchmarking"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support",
  "frame-support-procedural",
@@ -2614,7 +2621,7 @@ dependencies = [
 [[package]]
 name = "frame-benchmarking-cli"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "Inflector",
  "array-bytes",
@@ -2662,7 +2669,7 @@ dependencies = [
 [[package]]
 name = "frame-executive"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -2703,7 +2710,7 @@ dependencies = [
 [[package]]
 name = "frame-support"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "bitflags 1.3.2",
  "environmental",
@@ -2737,7 +2744,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "Inflector",
  "cfg-expr",
@@ -2749,35 +2756,35 @@ dependencies = [
  "proc-macro-warning",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support-procedural-tools-derive",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools-derive"
 version = "3.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "frame-system"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "cfg-if",
  "frame-support",
@@ -2796,7 +2803,7 @@ dependencies = [
 [[package]]
 name = "frame-system-rpc-runtime-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -2805,7 +2812,7 @@ dependencies = [
 [[package]]
 name = "frame-try-runtime"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -2910,7 +2917,7 @@ dependencies = [
  "futures-io",
  "memchr",
  "parking",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "waker-fn",
 ]
 
@@ -2932,7 +2939,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -2981,7 +2988,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "memchr",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "pin-utils",
  "slab",
 ]
@@ -3069,9 +3076,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "globset"
-version = "0.4.12"
+version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aca8bbd8e0707c1887a8bbb7e6b40e228f251ff5d62c8220a4a7a53c73aff006"
+checksum = "759c97c1e17c55525b57192c06a267cda0ac5210b222d6b82189a2338fa1c13d"
 dependencies = [
  "aho-corasick",
  "bstr",
@@ -3266,7 +3273,7 @@ checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
 dependencies = [
  "bytes",
  "http",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
 ]
 
 [[package]]
@@ -3309,7 +3316,7 @@ dependencies = [
  "httparse",
  "httpdate",
  "itoa",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "socket2 0.4.9",
  "tokio",
  "tower-service",
@@ -3343,7 +3350,7 @@ dependencies = [
  "http",
  "hyper",
  "log",
- "rustls 0.21.5",
+ "rustls 0.21.6",
  "rustls-native-certs",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -3588,7 +3595,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb0889898416213fab133e1d33a0e5858a48177452750691bde3666d0fdbaf8b"
 dependencies = [
  "hermit-abi",
- "rustix 0.38.4",
+ "rustix 0.38.7",
  "windows-sys 0.48.0",
 ]
 
@@ -4182,7 +4189,7 @@ dependencies = [
  "proc-macro-warning",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4323,9 +4330,9 @@ checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.4.3"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09fc20d2ca12cb9f044c93e3bd6d32d523e6e2ec3db4f7b2939cd99026ecd3f0"
+checksum = "57bcfdad1b858c2db7c38303a6d2ad4dfaf5eb53dfeb0910128b2c26d6158503"
 
 [[package]]
 name = "lock_api"
@@ -4399,7 +4406,7 @@ dependencies = [
  "macro_magic_core",
  "macro_magic_macros",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4413,7 +4420,7 @@ dependencies = [
  "macro_magic_core_macros",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4424,7 +4431,7 @@ checksum = "c12469fc165526520dff2807c2975310ab47cf7190a45b99b49a7dc8befab17b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4435,7 +4442,7 @@ checksum = "b8fb85ec1620619edf2984a7693497d4ec88a9665d8b87e942856884c92dbf2a"
 dependencies = [
  "macro_magic_core",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -5083,7 +5090,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -5167,7 +5174,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -5221,7 +5228,7 @@ dependencies = [
 [[package]]
 name = "pallet-assets"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5236,7 +5243,7 @@ dependencies = [
 [[package]]
 name = "pallet-authority-discovery"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5252,7 +5259,7 @@ dependencies = [
 [[package]]
 name = "pallet-authorship"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5266,7 +5273,7 @@ dependencies = [
 [[package]]
 name = "pallet-babe"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5290,7 +5297,7 @@ dependencies = [
 [[package]]
 name = "pallet-balances"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5305,7 +5312,7 @@ dependencies = [
 [[package]]
 name = "pallet-grandpa"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5328,7 +5335,7 @@ dependencies = [
 [[package]]
 name = "pallet-session"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5349,7 +5356,7 @@ dependencies = [
 [[package]]
 name = "pallet-timestamp"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5367,7 +5374,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5383,7 +5390,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "jsonrpsee",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -5399,7 +5406,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc-runtime-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "pallet-transaction-payment",
  "parity-scale-codec",
@@ -5608,9 +5615,9 @@ checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
 
 [[package]]
 name = "pest"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d2d1d55045829d65aad9d389139882ad623b33b904e7c9f1b10c5b8927298e5"
+checksum = "1acb4a4365a13f749a93f1a094a7805e5cfa0955373a9de860d962eaa3a5fe5a"
 dependencies = [
  "thiserror",
  "ucd-trie",
@@ -5618,9 +5625,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f94bca7e7a599d89dea5dfa309e217e7906c3c007fb9c3299c40b10d6a315d3"
+checksum = "666d00490d4ac815001da55838c500eafb0320019bbaa44444137c48b443a853"
 dependencies = [
  "pest",
  "pest_generator",
@@ -5628,22 +5635,22 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99d490fe7e8556575ff6911e45567ab95e71617f43781e5c05490dc8d75c965c"
+checksum = "68ca01446f50dbda87c1786af8770d535423fa8a53aec03b8f4e3d7eb10e0929"
 dependencies = [
  "pest",
  "pest_meta",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "pest_meta"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2674c66ebb4b4d9036012091b537aae5878970d6999f81a265034d85b136b341"
+checksum = "56af0a30af74d0445c0bf6d9d051c979b516a1a5af790d251daee76005420a48"
 dependencies = [
  "once_cell",
  "pest",
@@ -5700,7 +5707,7 @@ dependencies = [
  "phf_shared 0.11.2",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -5723,22 +5730,22 @@ dependencies = [
 
 [[package]]
 name = "pin-project"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "030ad2bc4db10a8944cb0d837f158bdfec4d4a4873ab701a95046770d11f8842"
+checksum = "fda4ed1c6c173e3fc7a83629421152e01d7b1f9b7f65fb301e490e8cfc656422"
 dependencies = [
  "pin-project-internal",
 ]
 
 [[package]]
 name = "pin-project-internal"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec2e072ecce94ec471b13398d5402c188e76ac03cf74dd1a975161b23a3f6d9c"
+checksum = "4359fd9c9171ec6e8c62926d6faaf553a8dc3f64e1507e76da7911b4f6a04405"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -5749,9 +5756,9 @@ checksum = "257b64915a082f7811703966789728173279bdebb956b143dbcd23f6f970a777"
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c40d25201921e5ff0c862a505c6557ea88568a4e3ace775ab55e93f2f4f9d57"
+checksum = "2c516611246607d0c04186886dbb3a754368ef82c79e9827a802c6d836dd111c"
 
 [[package]]
 name = "pin-utils"
@@ -5793,7 +5800,7 @@ dependencies = [
  "concurrent-queue",
  "libc",
  "log",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "windows-sys 0.48.0",
 ]
 
@@ -5879,7 +5886,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c64d9ba0963cdcea2e1b2230fbae2bab30eb25a174be395c41e764bfb65dd62"
 dependencies = [
  "proc-macro2",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -5953,7 +5960,7 @@ checksum = "70550716265d1ec349c41f70dd4f964b4fd88394efe4405f0c1da679c4799a07"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -6289,7 +6296,7 @@ checksum = "2dfaf0c85b766276c797f3791f5bc6d5bd116b41d53049af2789666b0c0bc9fa"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -6306,13 +6313,13 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.9.1"
+version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2eae68fc220f7cf2532e4494aded17545fce192d59cd996e0fe7887f4ceb575"
+checksum = "81bc1d4caf89fac26a70747fe603c130093b53c773888797a6329091246d651a"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-automata 0.3.4",
+ "regex-automata 0.3.6",
  "regex-syntax 0.7.4",
 ]
 
@@ -6327,9 +6334,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.3.4"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7b6d6190b7594385f61bd3911cd1be99dfddcfc365a4160cc2ab5bff4aed294"
+checksum = "fed1ceff11a1dddaee50c9dc8e4938bd106e9d89ae372f192311e7da498e3b69"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -6372,8 +6379,8 @@ dependencies = [
  "native-tls",
  "once_cell",
  "percent-encoding",
- "pin-project-lite 0.2.10",
- "rustls 0.21.5",
+ "pin-project-lite 0.2.11",
+ "rustls 0.21.6",
  "rustls-pemfile",
  "serde",
  "serde_json",
@@ -6559,14 +6566,14 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.4"
+version = "0.38.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a962918ea88d644592894bc6dc55acc6c0956488adcebbfb6e273506b7fd6e5"
+checksum = "172891ebdceb05aa0005f533a6cbfca599ddd7d966f6f5d4d9b2e70478e70399"
 dependencies = [
  "bitflags 2.3.3",
  "errno",
  "libc",
- "linux-raw-sys 0.4.3",
+ "linux-raw-sys 0.4.5",
  "windows-sys 0.48.0",
 ]
 
@@ -6584,9 +6591,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.5"
+version = "0.21.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79ea77c539259495ce8ca47f53e66ae0330a8819f67e23ac96ca02f50e7b7d36"
+checksum = "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
 dependencies = [
  "log",
  "ring",
@@ -6688,7 +6695,7 @@ dependencies = [
 [[package]]
 name = "sc-allocator"
 version = "4.1.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "log",
  "sp-core",
@@ -6699,7 +6706,7 @@ dependencies = [
 [[package]]
 name = "sc-authority-discovery"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "futures",
@@ -6727,7 +6734,7 @@ dependencies = [
 [[package]]
 name = "sc-basic-authorship"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "futures",
  "futures-timer",
@@ -6750,7 +6757,7 @@ dependencies = [
 [[package]]
 name = "sc-block-builder"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "sc-client-api",
@@ -6765,7 +6772,7 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "memmap2",
  "sc-chain-spec-derive",
@@ -6784,18 +6791,18 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec-derive"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "sc-cli"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "chrono",
@@ -6834,7 +6841,7 @@ dependencies = [
 [[package]]
 name = "sc-client-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "fnv",
  "futures",
@@ -6860,7 +6867,7 @@ dependencies = [
 [[package]]
 name = "sc-client-db"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "hash-db",
  "kvdb",
@@ -6886,7 +6893,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "futures",
@@ -6911,7 +6918,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-babe"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "fork-tree",
@@ -6947,7 +6954,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-epochs"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "fork-tree",
  "parity-scale-codec",
@@ -6960,7 +6967,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "ahash 0.8.3",
  "array-bytes",
@@ -7001,7 +7008,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-slots"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "futures",
@@ -7024,7 +7031,7 @@ dependencies = [
 [[package]]
 name = "sc-executor"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.1",
@@ -7046,7 +7053,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-common"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "sc-allocator",
  "sp-maybe-compressed-blob",
@@ -7058,7 +7065,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-wasmtime"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "anyhow",
  "cfg-if",
@@ -7075,7 +7082,7 @@ dependencies = [
 [[package]]
 name = "sc-informant"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "anstyle",
  "futures",
@@ -7091,7 +7098,7 @@ dependencies = [
 [[package]]
 name = "sc-keystore"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "parking_lot 0.12.1",
@@ -7105,7 +7112,7 @@ dependencies = [
 [[package]]
 name = "sc-network"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7148,7 +7155,7 @@ dependencies = [
 [[package]]
 name = "sc-network-bitswap"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-channel",
  "cid",
@@ -7168,7 +7175,7 @@ dependencies = [
 [[package]]
 name = "sc-network-common"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "bitflags 1.3.2",
@@ -7185,7 +7192,7 @@ dependencies = [
 [[package]]
 name = "sc-network-gossip"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "ahash 0.8.3",
  "futures",
@@ -7204,7 +7211,7 @@ dependencies = [
 [[package]]
 name = "sc-network-light"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7225,7 +7232,7 @@ dependencies = [
 [[package]]
 name = "sc-network-sync"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7259,7 +7266,7 @@ dependencies = [
 [[package]]
 name = "sc-network-transactions"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "futures",
@@ -7277,7 +7284,7 @@ dependencies = [
 [[package]]
 name = "sc-offchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "bytes",
@@ -7311,7 +7318,7 @@ dependencies = [
 [[package]]
 name = "sc-proposer-metrics"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "log",
  "substrate-prometheus-endpoint",
@@ -7320,7 +7327,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "futures",
  "jsonrpsee",
@@ -7351,7 +7358,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-api"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "jsonrpsee",
  "parity-scale-codec",
@@ -7370,7 +7377,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-server"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "http",
  "jsonrpsee",
@@ -7385,7 +7392,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-spec-v2"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "futures",
@@ -7411,7 +7418,7 @@ dependencies = [
 [[package]]
 name = "sc-service"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "directories",
@@ -7475,7 +7482,7 @@ dependencies = [
 [[package]]
 name = "sc-state-db"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -7486,7 +7493,7 @@ dependencies = [
 [[package]]
 name = "sc-sysinfo"
 version = "6.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "futures",
  "libc",
@@ -7505,7 +7512,7 @@ dependencies = [
 [[package]]
 name = "sc-telemetry"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "chrono",
  "futures",
@@ -7524,7 +7531,7 @@ dependencies = [
 [[package]]
 name = "sc-tracing"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "anstyle",
  "chrono",
@@ -7552,18 +7559,18 @@ dependencies = [
 [[package]]
 name = "sc-tracing-proc-macro"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "sc-transaction-pool"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "futures",
@@ -7589,7 +7596,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "futures",
@@ -7605,7 +7612,7 @@ dependencies = [
 [[package]]
 name = "sc-utils"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-channel",
  "futures",
@@ -8329,9 +8336,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.178"
+version = "1.0.182"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60363bdd39a7be0266a520dab25fdc9241d2f987b08a01e01f0ec6d06a981348"
+checksum = "bdb30a74471f5b7a1fa299f40b4bf1be93af61116df95465b2b5fc419331e430"
 dependencies = [
  "serde_derive",
 ]
@@ -8347,13 +8354,13 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.178"
+version = "1.0.182"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f28482318d6641454cb273da158647922d1be6b5a2fcc6165cd89ebdd7ed576b"
+checksum = "6f4c2c6ea4bc09b5c419012eafcdb0fcef1d9119d626c8f3a0708a5b92d38a70"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -8635,7 +8642,7 @@ dependencies = [
 [[package]]
 name = "sp-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "hash-db",
  "log",
@@ -8656,7 +8663,7 @@ dependencies = [
 [[package]]
 name = "sp-api-proc-macro"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "Inflector",
  "blake2",
@@ -8664,13 +8671,13 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "sp-application-crypto"
 version = "23.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -8683,7 +8690,7 @@ dependencies = [
 [[package]]
 name = "sp-arithmetic"
 version = "16.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "integer-sqrt",
  "num-traits",
@@ -8697,7 +8704,7 @@ dependencies = [
 [[package]]
 name = "sp-authority-discovery"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -8710,7 +8717,7 @@ dependencies = [
 [[package]]
 name = "sp-block-builder"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "sp-api",
  "sp-inherents",
@@ -8721,7 +8728,7 @@ dependencies = [
 [[package]]
 name = "sp-blockchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "futures",
  "log",
@@ -8739,7 +8746,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "futures",
@@ -8754,7 +8761,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-babe"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -8773,7 +8780,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-grandpa"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "finality-grandpa",
  "log",
@@ -8791,7 +8798,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-slots"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -8803,7 +8810,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "21.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "array-bytes",
  "bitflags 1.3.2",
@@ -8848,7 +8855,7 @@ dependencies = [
 [[package]]
 name = "sp-core-hashing"
 version = "9.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -8861,17 +8868,17 @@ dependencies = [
 [[package]]
 name = "sp-core-hashing-proc-macro"
 version = "9.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "quote",
  "sp-core-hashing",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "sp-database"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "kvdb",
  "parking_lot 0.12.1",
@@ -8880,17 +8887,17 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "sp-externalities"
 version = "0.19.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -8901,7 +8908,7 @@ dependencies = [
 [[package]]
 name = "sp-inherents"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "impl-trait-for-tuples",
@@ -8915,7 +8922,7 @@ dependencies = [
 [[package]]
 name = "sp-io"
 version = "23.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "bytes",
  "ecdsa",
@@ -8940,7 +8947,7 @@ dependencies = [
 [[package]]
 name = "sp-keyring"
 version = "24.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "lazy_static",
  "sp-core",
@@ -8951,7 +8958,7 @@ dependencies = [
 [[package]]
 name = "sp-keystore"
 version = "0.27.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.1",
@@ -8963,7 +8970,7 @@ dependencies = [
 [[package]]
 name = "sp-maybe-compressed-blob"
 version = "4.1.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "thiserror",
  "zstd 0.12.4",
@@ -8972,7 +8979,7 @@ dependencies = [
 [[package]]
 name = "sp-metadata-ir"
 version = "0.1.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-metadata 16.0.0",
  "parity-scale-codec",
@@ -8983,7 +8990,7 @@ dependencies = [
 [[package]]
 name = "sp-offchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "sp-api",
  "sp-core",
@@ -8993,7 +9000,7 @@ dependencies = [
 [[package]]
 name = "sp-panic-handler"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -9003,7 +9010,7 @@ dependencies = [
 [[package]]
 name = "sp-rpc"
 version = "6.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -9013,7 +9020,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime"
 version = "24.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "either",
  "hash256-std-hasher",
@@ -9035,7 +9042,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "17.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -9053,19 +9060,19 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "11.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "Inflector",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "sp-session"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9080,7 +9087,7 @@ dependencies = [
 [[package]]
 name = "sp-staking"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "impl-trait-for-tuples",
  "parity-scale-codec",
@@ -9094,7 +9101,7 @@ dependencies = [
 [[package]]
 name = "sp-state-machine"
 version = "0.28.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "hash-db",
  "log",
@@ -9115,7 +9122,7 @@ dependencies = [
 [[package]]
 name = "sp-statement-store"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9132,12 +9139,12 @@ dependencies = [
 [[package]]
 name = "sp-std"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 
 [[package]]
 name = "sp-storage"
 version = "13.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -9150,7 +9157,7 @@ dependencies = [
 [[package]]
 name = "sp-timestamp"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9163,7 +9170,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "10.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "sp-std",
@@ -9175,7 +9182,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-pool"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "sp-api",
  "sp-runtime",
@@ -9184,7 +9191,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-storage-proof"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9199,7 +9206,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "22.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "ahash 0.8.3",
  "hash-db",
@@ -9222,7 +9229,7 @@ dependencies = [
 [[package]]
 name = "sp-version"
 version = "22.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -9239,18 +9246,18 @@ dependencies = [
 [[package]]
 name = "sp-version-proc-macro"
 version = "8.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "sp-wasm-interface"
 version = "14.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -9263,7 +9270,7 @@ dependencies = [
 [[package]]
 name = "sp-weights"
 version = "20.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9433,7 +9440,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -9451,12 +9458,12 @@ dependencies = [
 [[package]]
 name = "substrate-build-script-utils"
 version = "3.0.0"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 
 [[package]]
 name = "substrate-frame-rpc-system"
 version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "frame-system-rpc-runtime-api",
  "futures",
@@ -9475,7 +9482,7 @@ dependencies = [
 [[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.10.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "hyper",
  "log",
@@ -9487,7 +9494,7 @@ dependencies = [
 [[package]]
 name = "substrate-wasm-builder"
 version = "5.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#6e807c71df35230f9a942e6ac52c43cafbe61921"
+source = "git+https://github.com/serai-dex/substrate#58f524730f6a34759ac370e27dbe2e6753545830"
 dependencies = [
  "anstyle",
  "build-helper",
@@ -9561,7 +9568,7 @@ dependencies = [
  "quote",
  "scale-info",
  "subxt-metadata",
- "syn 2.0.27",
+ "syn 2.0.28",
  "thiserror",
  "tokio",
 ]
@@ -9575,7 +9582,7 @@ dependencies = [
  "darling 0.20.3",
  "proc-macro-error",
  "subxt-codegen",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -9624,9 +9631,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.27"
+version = "2.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b60f673f44a8255b9c8c657daf66a596d435f2da81a555b06dc644d080ba45e0"
+checksum = "04361975b3f5e348b2189d8dc55bc942f278b2d482a6a0365de5bdd62d351567"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9674,9 +9681,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "target-lexicon"
-version = "0.12.10"
+version = "0.12.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d2faeef5759ab89935255b1a4cd98e0baf99d1085e37d36599c625dac49ae8e"
+checksum = "9d0e916b1148c8e263850e1ebcbd046f333e0683c724876bb0da63ea4373dc8a"
 
 [[package]]
 name = "tempfile"
@@ -9687,7 +9694,7 @@ dependencies = [
  "cfg-if",
  "fastrand 2.0.0",
  "redox_syscall 0.3.5",
- "rustix 0.38.4",
+ "rustix 0.38.7",
  "windows-sys 0.48.0",
 ]
 
@@ -9746,7 +9753,7 @@ checksum = "090198534930841fab3a5d1bb637cde49e339654e606195f8d9c76eeb081dc96"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -9797,10 +9804,11 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.23"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59e399c068f43a5d116fedaf73b203fa4f9c519f17e2b34f63221d3792f81446"
+checksum = "b0fdd63d58b18d663fbdf70e049f00a22c8e42be082203be7f26589213cd75ea"
 dependencies = [
+ "deranged",
  "serde",
  "time-core",
 ]
@@ -9867,7 +9875,7 @@ dependencies = [
  "mio",
  "num_cpus",
  "parking_lot 0.12.1",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "signal-hook-registry",
  "socket2 0.4.9",
  "tokio-macros",
@@ -9882,7 +9890,7 @@ checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -9912,7 +9920,7 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
- "rustls 0.21.5",
+ "rustls 0.21.6",
  "tokio",
 ]
 
@@ -9923,7 +9931,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
 dependencies = [
  "futures-core",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "tokio",
  "tokio-util",
 ]
@@ -9938,7 +9946,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "futures-sink",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "tokio",
  "tracing",
 ]
@@ -10010,7 +10018,7 @@ dependencies = [
  "http",
  "http-body",
  "http-range-header",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "tower-layer",
  "tower-service",
 ]
@@ -10035,7 +10043,7 @@ checksum = "8ce8c33a8d48bd45d624a6e523445fd21ec13d3653cd51f681abf67418f54eb8"
 dependencies = [
  "cfg-if",
  "log",
- "pin-project-lite 0.2.10",
+ "pin-project-lite 0.2.11",
  "tracing-attributes",
  "tracing-core",
 ]
@@ -10048,7 +10056,7 @@ checksum = "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -10430,7 +10438,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
  "wasm-bindgen-shared",
 ]
 
@@ -10464,7 +10472,7 @@ checksum = "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -11026,9 +11034,9 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 
 [[package]]
 name = "winnow"
-version = "0.5.1"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25b5872fa2e10bd067ae946f927e726d7d603eaeb6e02fa6a350e0722d2b8c11"
+checksum = "acaaa1190073b2b101e15083c38ee8ec891b5e05cbee516521e94ec008f61e64"
 dependencies = [
  "memchr",
 ]
@@ -11141,7 +11149,7 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -11160,7 +11168,7 @@ dependencies = [
  "hmac",
  "pbkdf2 0.11.0",
  "sha1",
- "time 0.3.23",
+ "time 0.3.25",
  "zstd 0.11.2+zstd.1.5.2",
 ]
 
