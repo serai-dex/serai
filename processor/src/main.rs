@@ -471,7 +471,12 @@ async fn boot<N: Network, D: Db>(
     if entropy.len() != 64 {
       panic!("entropy isn't the right length");
     }
-    let bytes = Zeroizing::new(hex::decode(entropy).expect("entropy wasn't hex-formatted"));
+    let mut bytes =
+      Zeroizing::new(hex::decode(entropy).map_err(|_| ()).expect("entropy wasn't hex-formatted"));
+    if bytes.len() != 32 {
+      bytes.zeroize();
+      panic!("entropy wasn't 32 bytes");
+    }
     let mut entropy = Zeroizing::new([0; 32]);
     let entropy_mut: &mut [u8] = entropy.as_mut();
     entropy_mut.copy_from_slice(bytes.as_ref());

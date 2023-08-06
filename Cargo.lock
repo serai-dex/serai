@@ -7975,6 +7975,7 @@ name = "serai-coordinator-tests"
 version = "0.1.0"
 dependencies = [
  "ciphersuite",
+ "dkg",
  "dockertest",
  "hex",
  "serai-client",
@@ -7985,6 +7986,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

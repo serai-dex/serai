@@ -16,12 +16,18 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex = "0.4"
 
+zeroize = { version = "1", default-features = false }
+
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
-serai-client = { path = "../../substrate/client" }
+serai-client = { path = "../../substrate/client", features = ["serai"] }
 serai-message-queue = { path = "../../message-queue" }
+
+serde = { version = "1", default-features = false }
+serde_json = { version = "1", default-features = false }
 
 tokio = { version = "1", features = ["time"] }
 

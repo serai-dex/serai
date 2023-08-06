@@ -9,10 +9,10 @@ use std::{
   collections::{VecDeque, HashMap},
 };
 
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
 
 use serai_db::{DbTxn, Db};
 use serai_env as env;
@@ -684,17 +684,31 @@ async fn main() {
 
   let db = serai_db::new_rocksdb(&env::var("DB_PATH").expect("path to DB wasn't specified"));
 
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO); // TODO
+  let key = {
+    let mut key_hex = serai_env::var("SERAI_KEY").expect("Serai key wasn't provided");
+    let mut key_vec = hex::decode(&key_hex).map_err(|_| ()).expect("Serai key wasn't hex-encoded");
+    key_hex.zeroize();
+    if key_vec.len() != 32 {
+      key_vec.zeroize();
+      panic!("Serai key had an invalid length");
+    }
+    let mut key_bytes = [0; 32];
+    key_bytes.copy_from_slice(&key_vec);
+    key_vec.zeroize();
+    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::from_repr(key_bytes).unwrap());
+    key_bytes.zeroize();
+    key
+  };
   let p2p = LocalP2p::new(1).swap_remove(0); // TODO
 
   let processors = Arc::new(MessageQueue::from_env(Service::Coordinator));
 
   let serai = || async {
     loop {
-      let Ok(serai) = Serai::new(&dbg!(format!(
+      let Ok(serai) = Serai::new(&format!(
         "ws://{}:9944",
         serai_env::var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
-      )))
+      ))
       .await
       else {
         log::error!("couldn't connect to the Serai node");

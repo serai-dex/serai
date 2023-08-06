@@ -1,4 +1,4 @@
-use core::{ops::Deref, future::Future};
+use core::{ops::Deref, time::Duration, future::Future};
 use std::collections::{HashSet, HashMap};
 
 use zeroize::Zeroizing;
@@ -20,6 +20,8 @@ use serai_client::{
 use serai_db::DbTxn;
 
 use processor_messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage};
+
+use tokio::time::sleep;
 
 use crate::{Db, processors::Processors, tributary::TributarySpec};
 
@@ -53,9 +55,24 @@ async fn handle_new_set<
   set: ValidatorSet,
 ) -> Result<(), SeraiError> {
   if in_set(key, serai, set).await?.expect("NewSet for set which doesn't exist") {
+    log::info!("present in set {:?}", set);
+
     let set_data = serai.get_validator_set(set).await?.expect("NewSet for set which doesn't exist");
 
-    let spec = TributarySpec::new(block.hash(), block.time().unwrap(), set, set_data);
+    let time = if let Ok(time) = block.time() {
+      time
+    } else {
+      assert_eq!(block.number(), 0);
+      // Use the next block's time
+      loop {
+        let Ok(Some(res)) = serai.get_block_by_number(1).await else {
+          sleep(Duration::from_secs(5)).await;
+          continue;
+        };
+        break res.time().unwrap();
+      }
+    };
+    let spec = TributarySpec::new(block.hash(), time, set, set_data);
     create_new_tributary(db, spec.clone());
 
     // Trigger a DKG
@@ -79,6 +96,8 @@ async fn handle_new_set<
         }),
       )
       .await;
+  } else {
+    log::info!("not present in set {:?}", set);
   }
 
   Ok(())
@@ -241,6 +260,7 @@ async fn handle_block<
     // stable)
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       if let ValidatorSetsEvent::NewSet { set } = new_set {
+        log::info!("found fresh new set event {:?}", new_set);
         handle_new_set(
           &mut db.0,
           key,
@@ -264,6 +284,7 @@ async fn handle_block<
   // If a key pair was confirmed, inform the processor
   for key_gen in serai.get_key_gen_events(hash).await? {
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
+      log::info!("found fresh key gen event {:?}", key_gen);
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
         handle_key_gen(key, processors, serai, &block, set, key_pair).await?;
       } else {
