@@ -23,8 +23,9 @@ use serai_db::MemDb;
 use tributary::{Transaction as TransactionTrait, Tributary};
 
 use crate::{
-  P2pMessageKind, P2p, LocalP2p,
+  P2pMessageKind, P2p,
   tributary::{Transaction, TributarySpec},
+  tests::LocalP2p,
 };
 
 pub fn new_keys<R: RngCore + CryptoRng>(

@@ -239,7 +239,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   async fn slash(&mut self, validator: N::ValidatorId) {
     if !self.block.slashes.contains(&validator) {
-      log::info!(target: "tendermint", "Slashing validator {:?}", validator);
+      log::info!(target: "tendermint", "Slashing validator {}", hex::encode(validator.encode()));
       self.block.slashes.insert(validator);
       self.network.slash(validator).await;
     }
@@ -264,8 +264,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
       messages: msg_send,
       machine: {
         let sys_time = sys_time(last_time);
+        let time_until = sys_time.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO);
+        log::info!(
+          target: "tendermint",
+          "new TendermintMachine building off block {} is scheduled to start in {}s",
+          last_block.0,
+          time_until.as_secs()
+        );
+
         // If the last block hasn't ended yet, sleep until it has
-        sleep(sys_time.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO)).await;
+        sleep(time_until).await;
 
         let signer = network.signer();
         let validators = network.signature_scheme();
@@ -298,13 +306,21 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // after it, without the standard amount of separation (so their times will be
         // equivalent or minimally offset)
         // For callers wishing to avoid this, they should pass (0, GENESIS + N::block_time())
-        machine.round(RoundNumber(0), Some(CanonicalInstant::new(last_time)));
+        let start_time = CanonicalInstant::new(last_time);
+        machine.round(RoundNumber(0), Some(start_time));
+
+        // If we're past the start time, skip to and only join the next round
+        let rounds_to_skip = Instant::now().duration_since(start_time.instant()).as_secs() /
+          u64::from(N::block_time());
+        machine.round(RoundNumber(rounds_to_skip.try_into().unwrap()), None);
         machine
       },
     }
   }
 
   pub async fn run(mut self) {
+    log::debug!(target: "tendermint", "running TendermintMachine");
+
     loop {
       // Also create a future for if the queue has a message
       // Does not pop_front as if another message has higher priority, its future will be handled
@@ -330,6 +346,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
               continue;
             }
 
+            log::debug!(
+              target: "tendermint",
+              "TendermintMachine received a block from the external sync loop",
+            );
             let proposal = self.network.add_block(block, commit.clone()).await;
             self.reset_by_commit(commit, proposal).await;
             self.synced_block_result_send.send(true).await.unwrap();
@@ -419,6 +439,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
             };
             debug_assert!(self.network.verify_commit(block.id(), &commit));
 
+            log::info!(
+              target: "tendermint",
+              "TendermintMachine produced block {}",
+              hex::encode(block.id().as_ref()),
+            );
             let proposal = self.network.add_block(block, commit).await;
             self.reset(msg.round, proposal).await;
           }

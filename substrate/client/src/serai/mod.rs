@@ -77,7 +77,7 @@ impl Block {
     self.0.header.number
   }
 
-  /// Returns the time of this block, set by its producer, as a unix timestamp.
+  /// Returns the time of this block, set by its producer, in milliseconds since the epoch.
   pub fn time(&self) -> Result<u64, SeraiError> {
     for extrinsic in &self.0.extrinsics {
       // Inherent/unsigned

@@ -103,6 +103,8 @@ impl<D: Db, T: Transaction, P: P2p> Tributary<D, T, P> {
     validators: Vec<(<Ristretto as Ciphersuite>::G, u64)>,
     p2p: P,
   ) -> Option<Self> {
+    log::info!("new Tributary with genesis {}", hex::encode(genesis));
+
     let validators_vec = validators.iter().map(|validator| validator.0).collect::<Vec<_>>();
 
     let signer = Arc::new(Signer::new(genesis, key));

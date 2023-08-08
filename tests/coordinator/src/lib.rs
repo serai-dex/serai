@@ -38,6 +38,10 @@ pub fn coordinator_instance(
         use serai_client::primitives::insecure_pair_from_name;
         hex::encode(&insecure_pair_from_name(name).as_ref().secret.to_bytes()[.. 32])
       }),
+      (
+        "RUST_LOG".to_string(),
+        "serai_coordinator=trace,".to_string() + "tributary_chain=trace," + "tendermint=trace",
+      ),
     ]
     .into(),
   )

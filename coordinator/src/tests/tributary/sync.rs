@@ -16,8 +16,11 @@ use tributary::Tributary;
 
 use crate::{
   tributary::Transaction,
-  LocalP2p, ActiveTributary, handle_p2p, heartbeat_tributaries,
-  tests::tributary::{new_keys, new_spec, new_tributaries},
+  ActiveTributary, handle_p2p, heartbeat_tributaries,
+  tests::{
+    LocalP2p,
+    tributary::{new_keys, new_spec, new_tributaries},
+  },
 };
 
 #[tokio::test]

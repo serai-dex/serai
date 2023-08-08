@@ -46,7 +46,9 @@ serde_json = { version = "1", default-features = false }
 log = "0.4"
 env_logger = "0.10"
 
+futures = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+libp2p = { version = "0.52", features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "mdns", "macros"] }
 
 [dev-dependencies]
 futures = "0.3"

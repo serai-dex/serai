@@ -70,6 +70,8 @@ async fn stack_test() {
           })
         );
       }
+
+      tokio::time::sleep(Duration::from_secs(30)).await;
     })
     .await;
 }

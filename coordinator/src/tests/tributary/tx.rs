@@ -9,9 +9,11 @@ use serai_db::MemDb;
 use tributary::{Transaction as TransactionTrait, Tributary};
 
 use crate::{
-  LocalP2p,
   tributary::Transaction,
-  tests::tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
+  tests::{
+    LocalP2p,
+    tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
+  },
 };
 
 #[tokio::test]

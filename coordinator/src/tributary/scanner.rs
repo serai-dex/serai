@@ -39,6 +39,8 @@ async fn handle_block<D: Db, Pro: Processors>(
   spec: &TributarySpec,
   block: Block<Transaction>,
 ) {
+  log::info!("found block for Tributary {:?}", spec.set());
+
   let genesis = spec.genesis();
   let hash = block.hash();
 

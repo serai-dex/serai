@@ -1,11 +1,28 @@
-use core::fmt::Debug;
-use std::{sync::Arc, io::Read, collections::VecDeque};
+use core::{time::Duration, fmt, task::Poll};
+use std::{sync::Arc, collections::VecDeque, io::Read};
 
 use async_trait::async_trait;
 
-use tokio::sync::RwLock;
+use tokio::{sync::Mutex, time::sleep};
+
+use libp2p::{
+  futures::StreamExt,
+  identity::Keypair,
+  PeerId, Transport,
+  core::upgrade,
+  tcp::{Config, tokio as libp2p_tokio},
+  noise, yamux,
+  gossipsub::{
+    IdentTopic, FastMessageId, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder,
+    IdentityTransform, AllowAllSubscriptionFilter, Event as GsEvent, PublishError,
+    Behaviour as GsBehavior,
+  },
+  swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent, Swarm},
+};
 
 pub use tributary::P2p as TributaryP2p;
+
+const LIBP2P_TOPIC: &str = "serai-coordinator";
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum P2pMessageKind {
@@ -67,8 +84,8 @@ pub struct Message<P: P2p> {
 }
 
 #[async_trait]
-pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
-  type Id: Send + Sync + Clone + Copy + Debug;
+pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
+  type Id: Send + Sync + Clone + Copy + fmt::Debug;
 
   async fn send_raw(&self, to: Self::Id, msg: Vec<u8>);
   async fn broadcast_raw(&self, msg: Vec<u8>);
@@ -82,6 +99,7 @@ pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
   async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>) {
     let mut actual_msg = kind.serialize();
     actual_msg.extend(msg);
+    log::trace!("broadcasting p2p message (kind {kind:?})");
     self.broadcast_raw(actual_msg).await;
   }
   async fn receive(&self) -> Message<Self> {
@@ -99,56 +117,187 @@ pub trait P2p: Send + Sync + Clone + Debug + TributaryP2p {
       };
       break (sender, kind, msg_ref.to_vec());
     };
+    log::trace!("received p2p message (kind {kind:?})");
     Message { sender, kind, msg }
   }
 }
 
-// TODO: Move this to tests
-#[allow(clippy::type_complexity)]
-#[derive(Clone, Debug)]
-pub struct LocalP2p(usize, pub Arc<RwLock<Vec<VecDeque<(usize, Vec<u8>)>>>>);
+#[derive(NetworkBehaviour)]
+struct Behavior {
+  gossipsub: GsBehavior,
+  //#[cfg(debug_assertions)]
+  mdns: libp2p::mdns::tokio::Behaviour,
+}
 
-impl LocalP2p {
-  pub fn new(validators: usize) -> Vec<LocalP2p> {
-    let shared = Arc::new(RwLock::new(vec![VecDeque::new(); validators]));
-    let mut res = vec![];
-    for i in 0 .. validators {
-      res.push(LocalP2p(i, shared.clone()));
-    }
+#[allow(clippy::type_complexity)]
+#[derive(Clone)]
+pub struct LibP2p(Arc<Mutex<Swarm<Behavior>>>, Arc<Mutex<VecDeque<(PeerId, Vec<u8>)>>>);
+impl fmt::Debug for LibP2p {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt.debug_struct("LibP2p").finish_non_exhaustive()
+  }
+}
+
+impl LibP2p {
+  #[allow(clippy::new_without_default)]
+  pub fn new() -> Self {
+    log::info!("creating a libp2p instance");
+
+    let throwaway_key_pair = Keypair::generate_ed25519();
+    let throwaway_peer_id = PeerId::from(throwaway_key_pair.public());
+
+    // Uses noise for authentication, yamux for multiplexing
+    // TODO: Do we want to add a custom authentication protocol to only accept connections from
+    // fellow validators? Doing so would reduce the potential for spam
+    let transport = libp2p_tokio::Transport::new(Config::default())
+      .upgrade(upgrade::Version::V1)
+      .authenticate(noise::Config::new(&throwaway_key_pair).unwrap())
+      .multiplex(yamux::Config::default())
+      .boxed();
+
+    let behavior = Behavior {
+      gossipsub: {
+        // Block size limit + 1 KB of space for signatures/metadata
+        const MAX_LIBP2P_MESSAGE_SIZE: usize = tributary::BLOCK_SIZE_LIMIT + 1024;
+
+        use blake2::{Digest, Blake2s256};
+        let config = ConfigBuilder::default()
+          .max_transmit_size(MAX_LIBP2P_MESSAGE_SIZE)
+          .validation_mode(ValidationMode::Strict)
+          // Uses a content based message ID to avoid duplicates as much as possible
+          .message_id_fn(|msg| {
+            MessageId::new(&Blake2s256::digest([msg.topic.as_str().as_bytes(), &msg.data].concat()))
+          })
+          // Re-defines for fast ID to prevent needing to convert into a Message to run
+          // message_id_fn
+          // This function is valid for both
+          .fast_message_id_fn(|msg| {
+            FastMessageId::new(&Blake2s256::digest(
+              [msg.topic.as_str().as_bytes(), &msg.data].concat(),
+            ))
+          })
+          .build();
+        let mut gossipsub = GsBehavior::<IdentityTransform, AllowAllSubscriptionFilter>::new(
+          MessageAuthenticity::Signed(throwaway_key_pair),
+          config.unwrap(),
+        )
+        .unwrap();
+
+        // Uses a single topic to prevent being a BTC validator only connected to ETH validators,
+        // unable to communicate with other BTC validators
+        let topic = IdentTopic::new(LIBP2P_TOPIC);
+        gossipsub.subscribe(&topic).unwrap();
+
+        gossipsub
+      },
+
+      // Only use MDNS in debug environments, as it should have no value in a release build
+      // TODO: We do tests on release binaries as of right now...
+      //#[cfg(debug_assertions)]
+      mdns: {
+        log::info!("spawning mdns");
+        libp2p::mdns::tokio::Behaviour::new(libp2p::mdns::Config::default(), throwaway_peer_id)
+          .unwrap()
+      },
+    };
+
+    let mut swarm =
+      SwarmBuilder::with_tokio_executor(transport, behavior, throwaway_peer_id).build();
+    const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
+    swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{PORT}").parse().unwrap()).unwrap();
+
+    let res = LibP2p(Arc::new(Mutex::new(swarm)), Arc::new(Mutex::new(VecDeque::new())));
+    tokio::spawn({
+      let p2p = res.clone();
+      async move {
+        // Run this task ad-infinitum
+        loop {
+          // Maintain this lock until it's out of events
+          let mut p2p_lock = p2p.0.lock().await;
+          loop {
+            match futures::poll!(p2p_lock.next()) {
+              //#[cfg(debug_assertions)]
+              Poll::Ready(Some(SwarmEvent::Behaviour(BehaviorEvent::Mdns(
+                libp2p::mdns::Event::Discovered(list),
+              )))) => {
+                for (peer, mut addr) in list {
+                  if addr.pop() == Some(libp2p::multiaddr::Protocol::Tcp(PORT)) {
+                    log::info!("found peer via mdns");
+                    p2p_lock.behaviour_mut().gossipsub.add_explicit_peer(&peer);
+                  }
+                }
+              }
+              //#[cfg(debug_assertions)]
+              Poll::Ready(Some(SwarmEvent::Behaviour(BehaviorEvent::Mdns(
+                libp2p::mdns::Event::Expired(list),
+              )))) => {
+                for (peer, _) in list {
+                  log::info!("disconnecting peer due to mdns");
+                  p2p_lock.behaviour_mut().gossipsub.remove_explicit_peer(&peer);
+                }
+              }
+
+              Poll::Ready(Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
+                GsEvent::Message { propagation_source, message, .. },
+              )))) => {
+                p2p.1.lock().await.push_back((propagation_source, message.data));
+              }
+              Poll::Ready(Some(_)) => {}
+              _ => {
+                drop(p2p_lock);
+                sleep(Duration::from_millis(100)).await;
+                break;
+              }
+            }
+          }
+        }
+      }
+    });
     res
   }
 }
 
 #[async_trait]
-impl P2p for LocalP2p {
-  type Id = usize;
+impl P2p for LibP2p {
+  type Id = PeerId;
 
-  async fn send_raw(&self, to: Self::Id, msg: Vec<u8>) {
-    self.1.write().await[to].push_back((self.0, msg));
+  async fn send_raw(&self, _: Self::Id, msg: Vec<u8>) {
+    self.broadcast_raw(msg).await;
   }
 
   async fn broadcast_raw(&self, msg: Vec<u8>) {
-    for (i, msg_queue) in self.1.write().await.iter_mut().enumerate() {
-      if i == self.0 {
-        continue;
+    match self
+      .0
+      .lock()
+      .await
+      .behaviour_mut()
+      .gossipsub
+      .publish(IdentTopic::new(LIBP2P_TOPIC), msg.clone())
+    {
+      Err(PublishError::SigningError(e)) => panic!("signing error when broadcasting: {e}"),
+      Err(PublishError::InsufficientPeers) => {
+        log::warn!("failed to send p2p message due to insufficient peers")
       }
-      msg_queue.push_back((self.0, msg.clone()));
-    }
+      Err(PublishError::MessageTooLarge) => {
+        panic!("tried to send a too large message: {}", hex::encode(msg))
+      }
+      Err(PublishError::TransformFailed(e)) => panic!("IdentityTransform failed: {e}"),
+      Err(PublishError::Duplicate) | Ok(_) => {}
+    };
   }
 
   async fn receive_raw(&self) -> (Self::Id, Vec<u8>) {
-    // This is a cursed way to implement an async read from a Vec
     loop {
-      if let Some(res) = self.1.write().await[self.0].pop_front() {
+      if let Some(res) = self.1.lock().await.pop_front() {
         return res;
       }
-      tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+      sleep(Duration::from_millis(100)).await;
     }
   }
 }
 
 #[async_trait]
-impl TributaryP2p for LocalP2p {
+impl TributaryP2p for LibP2p {
   async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) {
     <Self as P2p>::broadcast(self, P2pMessageKind::Tributary(genesis), msg).await
   }

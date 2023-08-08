@@ -114,6 +114,8 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
       &mut db,
       &key,
       |db: &mut D, spec: TributarySpec| {
+        log::info!("creating new tributary for {:?}", spec.set());
+
         // Save it to the database
         MainDb::new(db).add_active_tributary(&spec);
 
@@ -216,7 +218,17 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
       // Only trigger syncing if the block is more than a minute behind
       if SystemTime::now() > (block_time + Duration::from_secs(60)) {
         log::warn!("last known tributary block was over a minute ago");
-        P2p::broadcast(&p2p, P2pMessageKind::Heartbeat(tributary.genesis()), tip.to_vec()).await;
+        let mut msg = tip.to_vec();
+        // Also include the timestamp so LibP2p doesn't flag this as an old message re-circulating
+        let timestamp = SystemTime::now()
+          .duration_since(SystemTime::UNIX_EPOCH)
+          .expect("system clock is wrong")
+          .as_secs();
+        // Divide by the block time so if multiple parties send a Heartbeat, they're more likely to
+        // overlap
+        let time_unit = timestamp / u64::from(Tributary::<D, Transaction, P>::block_time());
+        msg.extend(time_unit.to_le_bytes());
+        P2p::broadcast(&p2p, P2pMessageKind::Heartbeat(tributary.genesis()), msg).await;
       }
     }
 
@@ -240,14 +252,15 @@ pub async fn handle_p2p<D: Db, P: P2p>(
           continue;
         };
 
+        log::trace!("handling message for tributary {:?}", tributary.spec.set());
         if tributary.tributary.write().await.handle_message(&msg.msg).await {
           P2p::broadcast(&p2p, msg.kind, msg.msg).await;
         }
       }
 
-      // TODO2: Rate limit this per validator
+      // TODO2: Rate limit this per timestamp
       P2pMessageKind::Heartbeat(genesis) => {
-        if msg.msg.len() != 32 {
+        if msg.msg.len() != 40 {
           log::error!("validator sent invalid heartbeat");
           continue;
         }
@@ -273,7 +286,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
 
         // Decide which nodes will respond by using the latest block's hash as a mutually agreed
         // upon entropy source
-        // THis isn't a secure source of entropy, yet it's fine for this
+        // This isn't a secure source of entropy, yet it's fine for this
         let entropy = u64::from_le_bytes(tributary_read.tip().await[.. 8].try_into().unwrap());
         // If n = 10, responders = 3, we want start to be 0 ..= 7 (so the highest is 7, 8, 9)
         // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
@@ -298,10 +311,12 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         let reader = tributary_read.reader();
         drop(tributary_read);
 
-        let mut latest = msg.msg.try_into().unwrap();
+        let mut latest = msg.msg[.. 32].try_into().unwrap();
         while let Some(next) = reader.block_after(&latest) {
           let mut res = reader.block(&next).unwrap().serialize();
           res.extend(reader.commit(&next).unwrap());
+          // Also include the timestamp used within the Heartbeat
+          res.extend(&msg.msg[32 .. 40]);
           p2p.send(msg.sender, P2pMessageKind::Block(tributary.spec.genesis()), res).await;
           latest = next;
         }
@@ -315,6 +330,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         };
         // Get just the commit
         msg.msg.drain(.. (msg.msg.len() - msg_ref.len()));
+        msg.msg.drain((msg.msg.len() - 8) ..);
 
         // Spawn a dedicated task to add this block, as it may take a notable amount of time
         // While we could use a long-lived task to add each block, that task would only add one
@@ -340,6 +356,10 @@ pub async fn handle_p2p<D: Db, P: P2p>(
               log::debug!("received block message for unknown network");
               return;
             };
+
+            // TODO: Add a check which doesn't require write to see if this is the next block in
+            // line
+            // If it's in the future, hold it for up to T time
 
             let res = tributary.tributary.write().await.sync_block(block, msg.msg).await;
             log::debug!("received block from {:?}, sync_block returned {}", msg.sender, res);
@@ -699,7 +719,7 @@ async fn main() {
     key_bytes.zeroize();
     key
   };
-  let p2p = LocalP2p::new(1).swap_remove(0); // TODO
+  let p2p = LibP2p::new();
 
   let processors = Arc::new(MessageQueue::from_env(Service::Coordinator));
 

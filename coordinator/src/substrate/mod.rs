@@ -72,8 +72,10 @@ async fn handle_new_set<
         break res.time().unwrap();
       }
     };
+    // The block time is in milliseconds yet the Tributary is in seconds
+    let time = time / 1000;
     let spec = TributarySpec::new(block.hash(), time, set, set_data);
-    create_new_tributary(db, spec.clone());
+    create_new_tributary(db, spec.clone()).await;
 
     // Trigger a DKG
     // TODO: Check how the processor handles this being fired multiple times
