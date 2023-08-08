@@ -1,6 +1,6 @@
 [package]
 name = "frost-schnorrkel"
-version = "0.1.0"
+version = "0.1.1"
 description = "modular-frost Algorithm compatible with Schnorrkel"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/schnorrkel"
@@ -21,9 +21,9 @@ transcript = { package = "flexible-transcript", path = "../transcript", version 
 
 group = "0.13"
 
-ciphersuite = { path = "../ciphersuite", version = "0.3", features = ["std", "ristretto"] }
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.4" }
-frost = { path = "../frost", package = "modular-frost", version = "0.7", features = ["ristretto"] }
+ciphersuite = { path = "../ciphersuite", version = "0.4", features = ["std", "ristretto"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.5" }
+frost = { path = "../frost", package = "modular-frost", version = "0.8", features = ["ristretto"] }
 
 schnorrkel = "0.10"
 

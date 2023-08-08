@@ -1,6 +1,6 @@
 [package]
 name = "dkg"
-version = "0.4.0"
+version = "0.5.0"
 description = "Distributed key generation over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg"
@@ -27,15 +27,15 @@ serde = { version = "1", features = ["derive"], optional = true }
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3", default-features = false, features = ["recommended"] }
 chacha20 = { version = "0.9", default-features = false, features = ["zeroize"] }
 
-ciphersuite = { path = "../ciphersuite", version = "0.3", default-features = false }
-multiexp = { path = "../multiexp", version = "0.3", default-features = false }
+ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
+multiexp = { path = "../multiexp", version = "0.4", default-features = false }
 
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.4", default-features = false }
-dleq = { path = "../dleq", version = "0.3", default-features = false }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.5", default-features = false }
+dleq = { path = "../dleq", version = "0.4", default-features = false }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
-ciphersuite = { path = "../ciphersuite", version = "0.3", default-features = false, features = ["ristretto"] }
+ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false, features = ["ristretto"] }
 
 [features]
 std = [

@@ -12,7 +12,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-std-shims = { path = "../../common/std-shims", version = "0.1", default-features = false }
+std-shims = { path = "../../common/std-shims", version = "^0.1.1", default-features = false }
 
 async-trait = { version = "0.1", default-features = false }
 thiserror = { version = "1", optional = true }
@@ -35,15 +35,15 @@ curve25519-dalek = { version = "^3.2", default-features = false }
 
 # Used for the hash to curve, along with the more complicated proofs
 group = { version = "0.13", default-features = false }
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3", default-features = false }
-multiexp = { path = "../../crypto/multiexp", version = "0.3", default-features = false, features = ["batch"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.4", default-features = false }
+multiexp = { path = "../../crypto/multiexp", version = "0.4", default-features = false, features = ["batch"] }
 
 # Needed for multisig
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
-dleq = { path = "../../crypto/dleq", version = "0.3", features = ["serialize"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["ed25519"], optional = true }
+dleq = { path = "../../crypto/dleq", version = "0.4", features = ["serialize"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", features = ["ed25519"], optional = true }
 
-monero-generators = { path = "generators", version = "0.3", default-features = false }
+monero-generators = { path = "generators", version = "0.4", default-features = false }
 
 futures = { version = "0.3", default-features = false, features = ["alloc"], optional = true }
 
@@ -62,13 +62,13 @@ reqwest = { version = "0.11", features = ["json"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 
 [build-dependencies]
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.3", default-features = false }
-monero-generators = { path = "generators", version = "0.3", default-features = false }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.4", default-features = false }
+monero-generators = { path = "generators", version = "0.4", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["tests"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 
 [features]
 std = [

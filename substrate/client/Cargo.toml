@@ -26,7 +26,7 @@ subxt = { version = "0.29", default-features = false, features = ["jsonrpsee-ws"
 
 bitcoin = { version = "0.30", optional = true }
 
-ciphersuite = { path = "../../crypto/ciphersuite", version = "0.3", optional = true }
+ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", optional = true }
 monero-serai = { path = "../../coins/monero", version = "0.1.4-alpha", optional = true }
 
 [dev-dependencies]

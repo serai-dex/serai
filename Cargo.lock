@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "ciphersuite"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "dalek-ff-group",
  "digest 0.10.7",
@@ -1464,7 +1464,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crypto-bigint",
  "curve25519-dalek 3.2.0",
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "dkg"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chacha20 0.9.1",
  "ciphersuite",
@@ -1775,7 +1775,7 @@ dependencies = [
 
 [[package]]
 name = "dleq"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "blake2",
  "dalek-ff-group",
@@ -2443,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "ff-group-tests"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "bls12_381",
  "ff",
@@ -2529,7 +2529,7 @@ dependencies = [
 
 [[package]]
 name = "flexible-transcript"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "blake2",
  "digest 0.10.7",
@@ -2822,7 +2822,7 @@ dependencies = [
 
 [[package]]
 name = "frost-schnorrkel"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ciphersuite",
  "flexible-transcript",
@@ -4606,7 +4606,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
 name = "minimal-ed448"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "crypto-bigint",
  "ff",
@@ -4675,7 +4675,7 @@ dependencies = [
 
 [[package]]
 name = "modular-frost"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "ciphersuite",
  "dalek-ff-group",
@@ -4697,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "monero-generators"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "curve25519-dalek 3.2.0",
  "dalek-ff-group",
@@ -4774,7 +4774,7 @@ dependencies = [
 
 [[package]]
 name = "multiexp"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "dalek-ff-group",
  "ff",
@@ -7804,7 +7804,7 @@ dependencies = [
 
 [[package]]
 name = "schnorr-signatures"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ciphersuite",
  "dalek-ff-group",
@@ -9392,7 +9392,7 @@ dependencies = [
 
 [[package]]
 name = "std-shims"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hashbrown 0.14.0",
  "spin 0.9.8",

@@ -1,6 +1,6 @@
 [package]
 name = "monero-generators"
-version = "0.3.0"
+version = "0.4.0"
 description = "Monero's hash_to_point and generators"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/generators"
@@ -12,7 +12,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-std-shims = { path = "../../../common/std-shims", version = "0.1", default-features = false }
+std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-features = false }
 
 subtle = { version = "^2.4", default-features = false }
 
@@ -21,7 +21,7 @@ sha3 = { version = "0.10", default-features = false }
 curve25519-dalek = { version = "3", default-features = false }
 
 group = { version = "0.13", default-features = false }
-dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.3" }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.4" }
 
 [features]
 std = ["std-shims/std"]

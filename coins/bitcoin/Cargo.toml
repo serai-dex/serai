@@ -21,7 +21,7 @@ bitcoin = { version = "0.30", features = ["serde"] }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", features = ["recommended"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["secp256k1"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", features = ["secp256k1"] }
 
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
@@ -29,7 +29,7 @@ serde_json = "1"
 reqwest = { version = "0.11", features = ["json"] }
 
 [dev-dependencies]
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.7", features = ["tests"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 
 tokio = { version = "1", features = ["full"] }
 
