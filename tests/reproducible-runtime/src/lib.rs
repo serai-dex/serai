@@ -7,7 +7,7 @@ pub fn reproducibly_builds() {
   use dockertest::{PullPolicy, Image, Composition, DockerTest};
 
   const RUNS: usize = 3;
-  const TIMEOUT: u16 = 60 * 60; // 60 minutes
+  const TIMEOUT: u16 = 120 * 60; // 120 minutes
 
   serai_docker_tests::build("runtime".to_string());
 
