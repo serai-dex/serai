@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.8.0"
+version = "0.8.1"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
@@ -25,19 +25,19 @@ subtle = "^2.4"
 hex = { version = "0.4", optional = true }
 
 digest = "0.10"
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3", features = ["recommended"] }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", features = ["recommended"] }
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", optional = true }
 minimal-ed448 = { path = "../ed448", version = "0.4", optional = true }
 
-ciphersuite = { path = "../ciphersuite", version = "0.4", features = ["std"] }
+ciphersuite = { path = "../ciphersuite", version = "^0.4.1", features = ["std"] }
 
 multiexp = { path = "../multiexp", version = "0.4", features = ["batch"] }
 
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.5" }
-dleq = { path = "../dleq", version = "0.4", features = ["serialize"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1" }
+dleq = { path = "../dleq", version = "^0.4.1", features = ["serialize"] }
 
-dkg = { path = "../dkg", version = "0.5" }
+dkg = { path = "../dkg", version = "^0.5.1" }
 
 [dev-dependencies]
 hex = "0.4"
