@@ -312,7 +312,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // If we're past the start time, skip to and only join the next round
         let rounds_to_skip = Instant::now().duration_since(start_time.instant()).as_secs() /
           u64::from(N::block_time());
-        machine.round(RoundNumber(rounds_to_skip.try_into().unwrap()), None);
+        if rounds_to_skip != 0 {
+          machine.round(RoundNumber(rounds_to_skip.try_into().unwrap()), None);
+        }
         machine
       },
     }
