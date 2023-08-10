@@ -297,9 +297,9 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
   }
 
   // Return the last used batch id
-  pub fn last_batch_id(&self, txn: &D::Transaction<'_>) -> u32 {
+  pub fn next_batch_id(&self, txn: &D::Transaction<'_>) -> u32 {
     let batch_key = ScannerDb::<N, D>::batch_key();
-    u32::from_le_bytes(txn.get(batch_key).unwrap_or(vec![0; 4]).try_into().unwrap())
+    txn.get(batch_key).map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()) + 1)
   }
 
   /// Acknowledge having handled a block for a key.

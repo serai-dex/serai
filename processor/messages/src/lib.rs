@@ -14,8 +14,12 @@ use validator_sets_primitives::{ValidatorSet, KeyPair};
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
 pub struct SubstrateContext {
   pub serai_time: u64,
+<<<<<<< HEAD
   pub network_latest_finalized_block: BlockHash,
   pub batches: Vec<u32>,
+=======
+  pub coin_latest_finalized_block: BlockHash,
+>>>>>>> 5a4d39d2 (fix review comments)
 }
 
 pub mod key_gen {
@@ -158,6 +162,7 @@ pub mod substrate {
       block: u64,
       key: Vec<u8>,
       burns: Vec<OutInstructionWithBalance>,
+      batches: Vec<u32>,
     },
   }
 

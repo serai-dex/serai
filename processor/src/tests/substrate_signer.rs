@@ -24,17 +24,20 @@ async fn test_substrate_signer() {
 
   let participant_one = Participant::new(1).unwrap();
 
+  let id: u32 = 5;
+  let mut id_slice = [0u8; 32];
+  id_slice[.. 4].copy_from_slice(&id.to_le_bytes());
   let block = BlockHash([0xaa; 32]);
   let actual_id = SignId {
     key: keys[&participant_one].group_key().to_bytes().to_vec(),
-    id: [0u8; 32],
+    id: id_slice,
     block: Some(block),
     attempt: 0,
   };
 
   let batch = Batch {
     network: NetworkId::Monero,
-    id: 0,
+    id,
     block,
     instructions: vec![
       InInstructionWithBalance {

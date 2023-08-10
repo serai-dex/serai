@@ -167,6 +167,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
+    // TODO: make BatchSignId for batch signing.
     let id =
       SignId { key: self.keys.group_key().to_bytes().to_vec(), id, block: Some(block), attempt };
     info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
@@ -213,7 +214,7 @@ impl<D: Db> SubstrateSigner<D> {
   pub async fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) {
     // Use the batch id as the ID
     let mut id = [0u8; 32];
-    id.copy_from_slice(&batch.id.to_le_bytes());
+    id[.. 4].copy_from_slice(&batch.id.to_le_bytes());
 
     if SubstrateSignerDb::<D>::completed(txn, id) {
       debug!("Sign batch order for ID we've already completed signing");
@@ -349,7 +350,7 @@ impl<D: Db> SubstrateSigner<D> {
   pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, batch_id: u32) {
     // convert into slice
     let mut id = [0u8; 32];
-    id.copy_from_slice(&batch_id.to_le_bytes());
+    id[.. 4].copy_from_slice(&batch_id.to_le_bytes());
 
     // Stop trying to sign for this batch
     SubstrateSignerDb::<D>::complete(txn, id);

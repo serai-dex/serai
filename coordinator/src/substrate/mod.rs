@@ -134,7 +134,6 @@ async fn handle_key_gen<Pro: Processors>(
                 // The processor treats this as a magic value which will cause it to find a network
                 // block which has a time greater than or equal to the Serai time
                 .unwrap_or(BlockHash([0; 32])),
-              batches: vec![],
             },
             set,
             key_pair,
@@ -228,9 +227,8 @@ async fn handle_batch_and_burns<Pro: Processors>(
         CoordinatorMessage::Substrate(
           processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
             context: SubstrateContext {
-              serai_time: block.time().unwrap() / 1000,
+              serai_time: block.time().unwrap(),
               network_latest_finalized_block,
-              batches: batches.remove(&network).unwrap_or(vec![]),
             },
             network,
             block: block.number(),
@@ -240,6 +238,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
               .map(|keys| keys.1.into_inner())
               .expect("batch/burn for network which never set keys"),
             burns: burns.remove(&network).unwrap(),
+            batches: batches.remove(&network).unwrap_or(vec![]),
           },
         ),
       )

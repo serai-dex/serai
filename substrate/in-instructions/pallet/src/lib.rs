@@ -23,6 +23,7 @@ pub enum PalletError {
 #[frame_support::pallet]
 pub mod pallet {
   use sp_application_crypto::RuntimePublic;
+  use sp_core::sr25519::Public;
 
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
@@ -58,15 +59,12 @@ pub mod pallet {
   // The last serai block that this validator set included a batch
   #[pallet::storage]
   #[pallet::getter(fn last_batch_block)]
-  pub(crate) type LastBatchBlock<T: Config> =
-    StorageMap<_, Blake2_256, ValidatorSet, u64, OptionQuery>;
+  pub(crate) type LastBatchBlock<T: Config> = StorageMap<_, Blake2_256, Public, u64, OptionQuery>;
 
-  // TODO: make this name explicit that this is an external network block
-  // LatestNetworkBlock maybe?
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
-  #[pallet::getter(fn last_block)]
-  pub(crate) type LatestBlock<T: Config> =
+  #[pallet::getter(fn last_network_block)]
+  pub(crate) type LastNetworkBlock<T: Config> =
     StorageMap<_, Blake2_256, NetworkId, BlockHash, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
@@ -79,6 +77,30 @@ pub mod pallet {
     }
   }
 
+  fn key_for_network<T: Config>(network: NetworkId) -> Result<Public, InvalidTransaction> {
+    // TODO: Get the latest session
+    let session = Session(0);
+
+    let mut set = ValidatorSet { session, network };
+    // TODO: If this session just set their keys, it'll invalidate anything in the mempool
+    // Should there be a transitory period/future-set cut off?
+    if let Some(keys) = ValidatorSets::<T>::keys(set) {
+      Ok(keys.0)
+    } else {
+      // If this set hasn't set their keys yet, use the previous set's
+      if set.session.0 == 0 {
+        Err(InvalidTransaction::BadProof)?;
+      }
+      set.session.0 -= 1;
+
+      if let Some(keys) = ValidatorSets::<T>::keys(set) {
+        Ok(keys.0)
+      } else {
+        Err(InvalidTransaction::BadProof)?
+      }
+    }
+  }
+
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
@@ -88,17 +110,12 @@ pub mod pallet {
 
       let mut batch = batch.batch;
 
-      // check that this validator set already included a batch for this block
-      let validator_set = ValidatorSet { session: Session(0), network: batch.network };
       let current_block = <frame_system::Pallet<T>>::block_number();
-      let last_block = LastBatchBlock::<T>::get(validator_set).unwrap_or(0);
-      if last_block >= current_block {
-        Err(DispatchError::Other("only 1 batch per set allowed per serai block"))?;
-      }
+      let Ok(key) = key_for_network::<T>(batch.network) else { Err(DispatchError::Unavailable)? };
+      LastBatchBlock::<T>::insert(key, current_block);
 
-      LastBatchBlock::<T>::insert(validator_set, current_block);
       Batches::<T>::insert(batch.network, batch.id);
-      LatestBlock::<T>::insert(batch.network, batch.block);
+      LastNetworkBlock::<T>::insert(batch.network, batch.block);
       Self::deposit_event(Event::Batch {
         network: batch.network,
         id: batch.id,
@@ -133,37 +150,23 @@ pub mod pallet {
       };
 
       let network = batch.batch.network;
+      let key = key_for_network::<T>(network)?;
 
-      // TODO: Get the latest session
-      let session = Session(0);
+      // verify the batch size
+      if batch.batch.encode().len() > MAX_BATCH_SIZE {
+        Err(InvalidTransaction::ExhaustsResources)?;
+      }
 
-      let mut set = ValidatorSet { session, network };
-      // TODO: If this session just set their keys, it'll invalidate anything in the mempool
-      // Should there be a transitory period/future-set cut off?
-      let key = if let Some(keys) = ValidatorSets::<T>::keys(set) {
-        keys.0
-      } else {
-        // If this set hasn't set their keys yet, use the previous set's
-        if set.session.0 == 0 {
-          Err(InvalidTransaction::BadProof)?;
-        }
-        set.session.0 -= 1;
-
-        if let Some(keys) = ValidatorSets::<T>::keys(set) {
-          keys.0
-        } else {
-          Err(InvalidTransaction::BadProof)?
-        }
-      };
-
+      // verify the signature
       if !key.verify(&batch_message(&batch.batch), &batch.signature) {
         Err(InvalidTransaction::BadProof)?;
       }
 
-      // verify the batch size
-      if batch.batch.encode().len() > MAX_BATCH_SIZE {
-        // TODO: or InvalidTransaction::ExhaustsResources?
-        Err(InvalidTransaction::Custom(1))?;
+      // check that this validator set already included a batch for this block
+      let current_block = <frame_system::Pallet<T>>::block_number();
+      let last_block = LastBatchBlock::<T>::get(key).unwrap_or(0);
+      if last_block >= current_block {
+        Err(InvalidTransaction::Future)?;
       }
 
       // Verify the batch is sequential

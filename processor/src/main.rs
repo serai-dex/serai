@@ -396,12 +396,12 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           block,
           key: key_vec,
           burns,
+          batches,
         } => {
           assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
 
           let mut block_id = <N::Block as Block<N>>::Id::default();
           block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-          let batches = &context.batches;
 
           let mut block_id = <N::Block as Block<N>>::Id::default();
           block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
@@ -413,7 +413,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // Since this block was acknowledged, we no longer have to sign the batch for it
           for batch_id in batches {
             for (_, signer) in tributary_mutable.substrate_signers.iter_mut() {
-              signer.batch_signed(txn, *batch_id);
+              signer.batch_signed(txn, batch_id);
             }
           }
 
@@ -673,13 +673,15 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
+            let mut batch_id = substrate_mutable.scanner.next_batch_id(&txn);
 
-            let batch_id = substrate_mutable.scanner.last_batch_id(&txn);
-            let mut current_batch = batch_id + 1;
-
-            let mut batches = vec![];
-            let mut ins = vec![];
-            let mut batch_size: usize = 0;
+            // start with empty batch
+            let mut batches = vec![Batch {
+              network: C::NETWORK,
+              id: batch_id,
+              block: BlockHash(block_hash),
+              instructions: vec![]
+            }];
             for output in outputs {
               // If these aren't externally received funds, don't handle it as an instruction
               if output.kind() != OutputType::External {
@@ -705,34 +707,30 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
                 instruction: instruction.instruction,
                 balance: output.balance(),
               };
-              let ins_size = in_ins.encode().len();
 
-              // batch has 38 bytes of other data
-              // TODO: should we make another const for this 38?
-              if batch_size + ins_size > MAX_BATCH_SIZE - 38 {
-                // TODO: should we check other ins in the vec that would potentially fit or
-                // that would be too slow and not worth it?
-                // batch is full
+              let batch = batches.last_mut().unwrap();
+              batch.instructions.push(in_ins);
+
+              // check if batch is full
+              if batch.encode().len() > MAX_BATCH_SIZE {
+                // pop the last extra instruction
+                let in_ins = batch.instructions.pop().unwrap();
+
+                // bump the id for the new batch
+                batch_id += 1;
+
+                // make a new batch with this instruction included
                 batches.push(Batch {
                   network: N::NETWORK,
-                  id: current_batch,
+                  id: batch_id,
                   block: BlockHash(block_hash),
-                  instructions: ins.clone()
+                  instructions: vec![in_ins]
                 });
-
-                ins.clear();
-                batch_size = 0;
-                current_batch += 1;
-                continue;
               }
-
-              ins.push(in_ins);
-              batch_size += ins_size;
             }
 
             // save the last used batch id
-            // TODO: is this right place to save it?
-            substrate_mutable.scanner.save_batch_id(&mut txn, current_batch - 1);
+            substrate_mutable.scanner.save_batch_id(&mut txn, batch_id);
 
             // Start signing this batch
             for batch in batches {
