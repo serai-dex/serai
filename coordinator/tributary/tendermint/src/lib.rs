@@ -281,7 +281,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
         );
 
         // If the last block hasn't ended yet, sleep until it has
-        sleep(time_until).await;
+        if !negative {
+          sleep(time_until).await;
+        }
 
         let signer = network.signer();
         let validators = network.signature_scheme();
