@@ -1,6 +1,12 @@
 FROM rust:1.71-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
+# Upgrade and add dev dependencies
+RUN apt update && apt upgrade -y && apt install -y pkg-config clang libssl-dev && apt autoremove -y && apt clean
+
+# Add the wasm toolchain
+RUN rustup target add wasm32-unknown-unknown
+
 # Add files for build
 ADD common /serai/common
 ADD crypto /serai/crypto
@@ -15,11 +21,6 @@ ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
 
 WORKDIR /serai
-
-RUN apt update && apt upgrade -y && apt install -y pkg-config clang libssl-dev
-
-# Add the wasm toolchain
-RUN rustup target add wasm32-unknown-unknown
 
 # Mount the caches and build
 RUN --mount=type=cache,target=/root/.cargo \
@@ -36,7 +37,7 @@ FROM debian:bookworm-slim as image
 LABEL description="STAGE 2: Copy and Run"
 
 # Upgrade packages and install openssl
-RUN apt update && apt upgrade -y && apt install -y libssl-dev
+RUN apt update && apt upgrade -y && apt install -y libssl-dev && apt autoremove && apt clean
 
 # Switch to a non-root user
 RUN useradd --system --create-home --shell /sbin/nologin coordinator

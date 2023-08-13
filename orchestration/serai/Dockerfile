@@ -1,6 +1,9 @@
 FROM rust:1.71-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
+# Upgrade and add dev dependencies
+RUN apt update && apt upgrade -y && apt install -y git pkg-config make clang libssl-dev protobuf-compiler && apt autoremove -y && apt clean
+
 # Add files for build
 ADD common /serai/common
 ADD crypto /serai/crypto
@@ -15,8 +18,6 @@ ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
 
 WORKDIR /serai
-
-RUN apt update && apt upgrade -y && apt install -y git pkg-config make clang libssl-dev protobuf-compiler
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown
