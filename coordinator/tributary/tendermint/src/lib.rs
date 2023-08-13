@@ -265,13 +265,19 @@ impl<N: Network + 'static> TendermintMachine<N> {
       synced_block_result: synced_block_result_recv,
       messages: msg_send,
       machine: {
+        let now = SystemTime::now();
         let sys_time = sys_time(last_time);
-        let time_until = sys_time.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO);
+        let mut negative = false;
+        let time_until = sys_time.duration_since(now).unwrap_or_else(|_| {
+          negative = true;
+          now.duration_since(sys_time).unwrap_or(Duration::ZERO)
+        });
         log::info!(
           target: "tendermint",
-          "new TendermintMachine building off block {} is scheduled to start in {}s",
+          "new TendermintMachine building off block {} is scheduled to start in {}{}s",
           last_block.0,
-          time_until.as_secs()
+          if negative { "-" } else { "" },
+          time_until.as_secs(),
         );
 
         // If the last block hasn't ended yet, sleep until it has
@@ -308,16 +314,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // after it, without the standard amount of separation (so their times will be
         // equivalent or minimally offset)
         // For callers wishing to avoid this, they should pass (0, GENESIS + N::block_time())
-        let start_time = CanonicalInstant::new(last_time);
-        machine.round(RoundNumber(0), Some(start_time));
-
-        // If we're past the start time, skip to and only join the next round
-        let rounds_to_skip = Instant::now().duration_since(start_time.instant()).as_secs() /
-          u64::from(N::block_time());
-        if rounds_to_skip != 0 {
-          log::trace!("joining mid-block so skipping {rounds_to_skip} rounds");
-          machine.round(RoundNumber(rounds_to_skip.try_into().unwrap()), None);
-        }
+        machine.round(RoundNumber(0), Some(CanonicalInstant::new(last_time)));
         machine
       },
     }

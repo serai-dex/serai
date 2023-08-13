@@ -77,7 +77,8 @@ async fn handle_new_set<
     // Since this block is in the past, and Tendermint doesn't play nice with starting chains after
     // their start time (though it does eventually work), delay the start time by 120 seconds
     // This is meant to handle ~20 blocks of lack of finalization for this first block
-    let time = time + 120;
+    const SUBSTRATE_TO_TRIBUTARY_TIME_DELAY: u64 = 120;
+    let time = time + SUBSTRATE_TO_TRIBUTARY_TIME_DELAY;
 
     let spec = TributarySpec::new(block.hash(), time, set, set_data);
     create_new_tributary(db, spec.clone()).await;
