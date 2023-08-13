@@ -30,7 +30,7 @@ RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 FROM debian:bookworm-slim as image
 
 # Upgrade packages
-RUN apt update && apt upgrade -y &&  && apt autoremove -y && apt clean
+RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
 # Switch to a non-root user
 RUN useradd --system --create-home --shell /sbin/nologin bitcoin
