@@ -458,6 +458,8 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
               Ok(hash) => {
                 log::info!("voted on key pair for {:?} in TX {}", id.set, hex::encode(hash))
               }
+              // This is assumed to be some ephemeral error due to the assumed fault-free creation
+              // TODO: Differentiate connection errors from already published to an invariant
               Err(e) => {
                 log::error!("couldn't connect to Serai node to publish vote TX: {:?}", e);
                 tokio::time::sleep(Duration::from_secs(10)).await;
@@ -718,6 +720,18 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 
 #[tokio::main]
 async fn main() {
+  // Override the panic handler with one which will panic if any tokio task panics
+  {
+    let existing = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+      existing(panic);
+      const MSG: &str = "exiting the process due to a task panicking";
+      println!("{MSG}");
+      log::error!("{MSG}");
+      std::process::exit(1);
+    }));
+  }
+
   if std::env::var("RUST_LOG").is_err() {
     std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
   }

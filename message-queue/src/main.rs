@@ -118,6 +118,18 @@ mod binaries {
 async fn main() {
   use binaries::*;
 
+  // Override the panic handler with one which will panic if any tokio task panics
+  {
+    let existing = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+      existing(panic);
+      const MSG: &str = "exiting the process due to a task panicking";
+      println!("{MSG}");
+      log::error!("{MSG}");
+      std::process::exit(1);
+    }));
+  }
+
   if std::env::var("RUST_LOG").is_err() {
     std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
   }
