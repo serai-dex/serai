@@ -210,8 +210,9 @@ pub trait Network: Send + Sync {
   /// Type used for ordered blocks of information.
   type Block: Block;
 
-  /// Maximum block processing time in seconds. This should include both the actual processing time
-  /// and the time to download the block.
+  /// Maximum block processing time in seconds.
+  ///
+  /// This should include both the time to download the block and the actual processing time.
   const BLOCK_PROCESSING_TIME: u32;
   /// Network latency time in seconds.
   const LATENCY_TIME: u32;

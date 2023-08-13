@@ -60,20 +60,17 @@ async fn dkg_test() {
     wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, tx.hash()).await;
   }
 
-  let expected_commitments = CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-    id: KeyGenId { set: spec.set(), attempt: 0 },
-    commitments: txs
-      .iter()
-      .enumerate()
-      .map(|(i, tx)| {
-        if let Transaction::DkgCommitments(_, commitments, _) = tx {
-          (Participant::new((i + 1).try_into().unwrap()).unwrap(), commitments.clone())
-        } else {
-          panic!("txs had non-commitments");
-        }
-      })
-      .collect(),
-  });
+  let expected_commitments: HashMap<_, _> = txs
+    .iter()
+    .enumerate()
+    .map(|(i, tx)| {
+      if let Transaction::DkgCommitments(_, commitments, _) = tx {
+        (Participant::new((i + 1).try_into().unwrap()).unwrap(), commitments.clone())
+      } else {
+        panic!("txs had non-commitments");
+      }
+    })
+    .collect();
 
   async fn new_processors(
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -119,7 +116,15 @@ async fn dkg_test() {
     let mut msgs = processors.0.write().await;
     assert_eq!(msgs.len(), 1);
     let msgs = msgs.get_mut(&spec.set().network).unwrap();
-    assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
+    let mut expected_commitments = expected_commitments.clone();
+    expected_commitments.remove(&Participant::new((1).try_into().unwrap()).unwrap());
+    assert_eq!(
+      msgs.pop_front().unwrap(),
+      CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+        id: KeyGenId { set: spec.set(), attempt: 0 },
+        commitments: expected_commitments
+      })
+    );
     assert!(msgs.is_empty());
   }
 
@@ -129,23 +134,38 @@ async fn dkg_test() {
     let mut msgs = processors.0.write().await;
     assert_eq!(msgs.len(), 1);
     let msgs = msgs.get_mut(&spec.set().network).unwrap();
-    assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
+    let mut expected_commitments = expected_commitments.clone();
+    expected_commitments.remove(&Participant::new((i + 1).try_into().unwrap()).unwrap());
+    assert_eq!(
+      msgs.pop_front().unwrap(),
+      CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+        id: KeyGenId { set: spec.set(), attempt: 0 },
+        commitments: expected_commitments
+      })
+    );
     assert!(msgs.is_empty());
   }
 
   // Now do shares
   let mut txs = vec![];
-  for key in &keys {
+  for (k, key) in keys.iter().enumerate() {
     let attempt = 0;
 
     let mut shares = HashMap::new();
     for i in 0 .. keys.len() {
-      let mut share = vec![0; 256];
-      OsRng.fill_bytes(&mut share);
-      shares.insert(Participant::new((i + 1).try_into().unwrap()).unwrap(), share);
+      if i != k {
+        let mut share = vec![0; 256];
+        OsRng.fill_bytes(&mut share);
+        shares.insert(Participant::new((i + 1).try_into().unwrap()).unwrap(), share);
+      }
     }
 
-    let mut tx = Transaction::DkgShares(attempt, shares, Transaction::empty_signed());
+    let mut tx = Transaction::DkgShares(
+      attempt,
+      Participant::new((k + 1).try_into().unwrap()).unwrap(),
+      shares,
+      Transaction::empty_signed(),
+    );
     tx.sign(&mut OsRng, spec.genesis(), key, 1);
     txs.push(tx);
   }
@@ -184,12 +204,12 @@ async fn dkg_test() {
       shares: txs
         .iter()
         .enumerate()
-        .map(|(l, tx)| {
-          if let Transaction::DkgShares(_, shares, _) = tx {
-            (
-              Participant::new((l + 1).try_into().unwrap()).unwrap(),
-              shares[&Participant::new((i + 1).try_into().unwrap()).unwrap()].clone(),
-            )
+        .filter_map(|(l, tx)| {
+          if let Transaction::DkgShares(_, _, shares, _) = tx {
+            shares
+              .get(&Participant::new((i + 1).try_into().unwrap()).unwrap())
+              .cloned()
+              .map(|share| (Participant::new((l + 1).try_into().unwrap()).unwrap(), share))
           } else {
             panic!("txs had non-shares");
           }
@@ -222,7 +242,15 @@ async fn dkg_test() {
     let mut msgs = processors.0.write().await;
     assert_eq!(msgs.len(), 1);
     let msgs = msgs.get_mut(&spec.set().network).unwrap();
-    assert_eq!(msgs.pop_front().unwrap(), expected_commitments);
+    let mut expected_commitments = expected_commitments.clone();
+    expected_commitments.remove(&Participant::new((i + 1).try_into().unwrap()).unwrap());
+    assert_eq!(
+      msgs.pop_front().unwrap(),
+      CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+        id: KeyGenId { set: spec.set(), attempt: 0 },
+        commitments: expected_commitments
+      })
+    );
     assert_eq!(msgs.pop_front().unwrap(), shares_for(i));
     assert!(msgs.is_empty());
   }

@@ -74,6 +74,11 @@ async fn handle_new_set<
     };
     // The block time is in milliseconds yet the Tributary is in seconds
     let time = time / 1000;
+    // Since this block is in the past, and Tendermint doesn't play nice with starting chains after
+    // their start time (though it does eventually work), delay the start time by 120 seconds
+    // This is meant to handle ~20 blocks of lack of finalization for this first block
+    let time = time + 120;
+
     let spec = TributarySpec::new(block.hash(), time, set, set_data);
     create_new_tributary(db, spec.clone()).await;
 
@@ -121,7 +126,7 @@ async fn handle_key_gen<Pro: Processors>(
         CoordinatorMessage::Substrate(
           processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
             context: SubstrateContext {
-              serai_time: block.time().unwrap(),
+              serai_time: block.time().unwrap() / 1000,
               network_latest_finalized_block: serai
                 .get_latest_block_for_network(block.hash(), set.network)
                 .await?
@@ -213,7 +218,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
         CoordinatorMessage::Substrate(
           processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
             context: SubstrateContext {
-              serai_time: block.time().unwrap(),
+              serai_time: block.time().unwrap() / 1000,
               network_latest_finalized_block,
             },
             network,

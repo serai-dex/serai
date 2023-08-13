@@ -197,7 +197,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     // Sleep until this round ends
     let round_end = self.block.end_time[&end_round];
-    sleep(round_end.instant().saturating_duration_since(Instant::now())).await;
+    let time_until_round_end = round_end.instant().saturating_duration_since(Instant::now());
+    log::trace!("sleeping until round ends in {}ms", time_until_round_end.as_millis());
+    sleep(time_until_round_end).await;
 
     // Clear our outbound message queue
     self.queue = VecDeque::new();
@@ -313,6 +315,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         let rounds_to_skip = Instant::now().duration_since(start_time.instant()).as_secs() /
           u64::from(N::block_time());
         if rounds_to_skip != 0 {
+          log::trace!("joining mid-block so skipping {rounds_to_skip} rounds");
           machine.round(RoundNumber(rounds_to_skip.try_into().unwrap()), None);
         }
         machine
@@ -446,7 +449,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
               "TendermintMachine produced block {}",
               hex::encode(block.id().as_ref()),
             );
+            let id = block.id();
             let proposal = self.network.add_block(block, commit).await;
+            log::trace!("added block {} (produced by machine)", hex::encode(id.as_ref()));
             self.reset(msg.round, proposal).await;
           }
           Err(TendermintError::Malicious(validator)) => self.slash(validator).await,

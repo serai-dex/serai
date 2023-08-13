@@ -10,14 +10,15 @@ as a verifiable broadcast layer.
 `DkgCommitments` is created when a processor sends the coordinator
 `key_gen::ProcessorMessage::Commitments`. When all validators participating in
 a multisig publish `DkgCommitments`, the coordinator sends the processor
-`key_gen::CoordinatorMessage::Commitments`.
+`key_gen::CoordinatorMessage::Commitments`, excluding the processor's own
+commitments.
 
 ### Key Gen Shares
 
 `DkgShares` is created when a processor sends the coordinator
 `key_gen::ProcessorMessage::Shares`. When all validators participating in
 a multisig publish `DkgShares`, the coordinator sends the processor
-`key_gen::CoordinatorMessage::Shares`.
+`key_gen::CoordinatorMessage::Shares`, excluding the processor's own shares.
 
 ### External Block
 
@@ -42,8 +43,10 @@ publish transactions for the signing protocols it causes.
 `coordinator::ProcessorMessage::BatchPreprocess` and an `ExternalBlock`
 transaction allowing the batch to be signed has already been included on chain.
 
-When `t` validators have published `BatchPreprocess` transactions, a
-`coordinator::ProcessorMessage::BatchPreprocesses` is sent to the processor.
+When `t` validators have published `BatchPreprocess` transactions, if the
+coordinator represents one of the first `t` validators to do so, a
+`coordinator::ProcessorMessage::BatchPreprocesses` is sent to the processor,
+excluding the processor's own preprocess.
 
 ### Batch Share
 
@@ -54,9 +57,10 @@ transaction having already been included on chain follows from
 also has that precondition.
 
 When the `t` validators who first published `BatchPreprocess` transactions have
-published `BatchShare` transactions, a
-`coordinator::ProcessorMessage::BatchShares` with the relevant shares is sent
-to the processor.
+published `BatchShare` transactions, if the coordinator represents one of the
+first `t` validators to do so, a `coordinator::ProcessorMessage::BatchShares`
+with the relevant shares (excluding the processor's own) is sent to the
+processor.
 
 ### Sign Preprocess
 
@@ -64,8 +68,10 @@ to the processor.
 `sign::ProcessorMessage::Preprocess` and a `SubstrateBlock` transaction
 allowing the transaction to be signed has already been included on chain.
 
-When `t` validators have published `SignPreprocess` transactions, a
-`sign::ProcessorMessage::Preprocesses` is sent to the processor.
+When `t` validators have published `SignPreprocess` transactions, if the
+coordinator represents one of the first `t` validators to do so, a
+`sign::ProcessorMessage::Preprocesses` is sent to the processor,
+excluding the processor's own preprocess.
 
 ### Sign Share
 
@@ -76,8 +82,9 @@ having already been included on chain follows from
 also has that precondition.
 
 When the `t` validators who first published `SignPreprocess` transactions have
-published `SignShare` transactions, a `sign::ProcessorMessage::Shares` with the
-relevant shares is sent to the processor.
+published `SignShare` transactions, if the coordinator represents one of the
+first `t` validators to do so, a `sign::ProcessorMessage::Shares` with the
+relevant shares (excluding the processor's own) is sent to the processor.
 
 ### Sign Completed
 

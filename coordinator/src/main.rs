@@ -374,6 +374,7 @@ pub async fn publish_transaction<D: Db, P: P2p>(
   tributary: &Tributary<D, Transaction, P>,
   tx: Transaction,
 ) {
+  log::debug!("publishing transaction {}", hex::encode(tx.hash()));
   if let TransactionKind::Signed(signed) = tx.kind() {
     if tributary
       .next_nonce(signed.signer)
@@ -405,24 +406,32 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
     // TODO2: This is slow, and only works as long as a network only has a single Tributary
     // (which means there's a lack of multisig rotation)
-    let genesis = {
+    let (genesis, my_i) = {
       let mut genesis = None;
+      let mut my_i = None;
       for tributary in tributaries.read().await.values() {
         if tributary.spec.set().network == msg.network {
           genesis = Some(tributary.spec.genesis());
+          // TODO: We probably want to NOP here, not panic?
+          my_i = Some(
+            tributary
+              .spec
+              .i(pub_key)
+              .expect("processor message for network we aren't a validator in"),
+          );
           break;
         }
       }
-      genesis.unwrap()
+      (genesis.unwrap(), my_i.unwrap())
     };
 
-    let tx = match msg.msg {
+    let tx = match msg.msg.clone() {
       ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
           Some(Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed()))
         }
         key_gen::ProcessorMessage::Shares { id, shares } => {
-          Some(Transaction::DkgShares(id.attempt, shares, Transaction::empty_signed()))
+          Some(Transaction::DkgShares(id.attempt, my_i, shares, Transaction::empty_signed()))
         }
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
           assert_eq!(
@@ -582,10 +591,17 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         }
         TransactionKind::Signed(_) => {
           // Get the next nonce
+          // TODO: This should be deterministic, not just DB-backed, to allow rebuilding validators
+          // without the prior instance's DB
           // let mut txn = db.txn();
           // let nonce = MainDb::tx_nonce(&mut txn, msg.id, tributary);
 
-          let nonce = 0; // TODO
+          // TODO: This isn't deterministic, or at least DB-backed, and accordingly is unsafe
+          log::trace!("getting next nonce for Tributary TX in response to processor message");
+          let nonce = tributary
+            .next_nonce(Ristretto::generator() * key.deref())
+            .await
+            .expect("publishing a TX to a tributary we aren't in");
           tx.sign(&mut OsRng, genesis, &key, nonce);
 
           publish_transaction(&tributary, tx).await;
@@ -595,6 +611,8 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         _ => panic!("created an unexpected transaction"),
       }
     }
+
+    processors.ack(msg).await;
   }
 }
 
@@ -664,14 +682,19 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
             }),
           };
 
-          let nonce = 0; // TODO
-          tx.sign(&mut OsRng, genesis, &key, nonce);
-
           let tributaries = tributaries.read().await;
           let Some(tributary) = tributaries.get(&genesis) else {
             panic!("tributary we don't have came to consensus on an ExternalBlock");
           };
           let tributary = tributary.tributary.read().await;
+
+          // TODO: Same note as prior nonce acquisition
+          log::trace!("getting next nonce for Tributary TX containing Batch signing data");
+          let nonce = tributary
+            .next_nonce(Ristretto::generator() * key.deref())
+            .await
+            .expect("publishing a TX to a tributary we aren't in");
+          tx.sign(&mut OsRng, genesis, &key, nonce);
 
           publish_transaction(&tributary, tx).await;
         } else {

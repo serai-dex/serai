@@ -137,6 +137,15 @@ async fn handle_block<D: Db, Pro: Processors>(
           }
           assert_eq!(data.len(), usize::from(needed));
 
+          // Remove our own piece of data
+          assert!(data
+            .remove(
+              &spec
+                .i(Ristretto::generator() * key.deref())
+                .expect("handling a message for a Tributary we aren't part of")
+            )
+            .is_some());
+
           return Some(data);
         }
         None
@@ -147,6 +156,7 @@ async fn handle_block<D: Db, Pro: Processors>(
           if let Some(commitments) =
             handle(Zone::Dkg, b"dkg_commitments", spec.n(), [0; 32], attempt, bytes, signed)
           {
+            log::info!("got all DkgCommitments for {}", hex::encode(genesis));
             processors
               .send(
                 spec.set().network,
@@ -159,23 +169,33 @@ async fn handle_block<D: Db, Pro: Processors>(
           }
         }
 
-        Transaction::DkgShares(attempt, mut shares, signed) => {
-          if shares.len() != usize::from(spec.n()) {
+        Transaction::DkgShares(attempt, sender_i, mut shares, signed) => {
+          if sender_i !=
+            spec
+              .i(signed.signer)
+              .expect("transaction added to tributary by signer who isn't a participant")
+          {
             // TODO: Full slash
             todo!();
           }
 
-          let bytes = shares
-            .remove(
-              &spec
-                .i(Ristretto::generator() * key.deref())
-                .expect("in a tributary we're not a validator for"),
-            )
-            .unwrap();
+          if shares.len() != (usize::from(spec.n()) - 1) {
+            // TODO: Full slash
+            todo!();
+          }
+
+          // Only save our share's bytes
+          let our_i = spec
+            .i(Ristretto::generator() * key.deref())
+            .expect("in a tributary we're not a validator for");
+          // This unwrap is safe since the length of shares is checked, the the only missing key
+          // within the valid range will be the sender's i
+          let bytes = if sender_i == our_i { vec![] } else { shares.remove(&our_i).unwrap() };
 
           if let Some(shares) =
             handle(Zone::Dkg, b"dkg_shares", spec.n(), [0; 32], attempt, bytes, signed)
           {
+            log::info!("got all DkgShares for {}", hex::encode(genesis));
             processors
               .send(
                 spec.set().network,

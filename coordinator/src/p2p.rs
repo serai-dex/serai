@@ -22,6 +22,7 @@ use libp2p::{
 
 pub use tributary::P2p as TributaryP2p;
 
+// TODO: Use distinct topics
 const LIBP2P_TOPIC: &str = "serai-coordinator";
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -99,7 +100,14 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
   async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>) {
     let mut actual_msg = kind.serialize();
     actual_msg.extend(msg);
-    log::trace!("broadcasting p2p message (kind {kind:?})");
+    log::trace!(
+      "broadcasting p2p message (kind {})",
+      match kind {
+        P2pMessageKind::Tributary(genesis) => format!("Tributary({})", hex::encode(genesis)),
+        P2pMessageKind::Heartbeat(genesis) => format!("Heartbeat({})", hex::encode(genesis)),
+        P2pMessageKind::Block(genesis) => format!("Block({})", hex::encode(genesis)),
+      }
+    );
     self.broadcast_raw(actual_msg).await;
   }
   async fn receive(&self) -> Message<Self> {
@@ -117,7 +125,14 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
       };
       break (sender, kind, msg_ref.to_vec());
     };
-    log::trace!("received p2p message (kind {kind:?})");
+    log::trace!(
+      "received p2p message (kind {})",
+      match kind {
+        P2pMessageKind::Tributary(genesis) => format!("Tributary({})", hex::encode(genesis)),
+        P2pMessageKind::Heartbeat(genesis) => format!("Heartbeat({})", hex::encode(genesis)),
+        P2pMessageKind::Block(genesis) => format!("Block({})", hex::encode(genesis)),
+      }
+    );
     Message { sender, kind, msg }
   }
 }

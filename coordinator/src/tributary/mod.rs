@@ -204,7 +204,7 @@ impl ReadWrite for SignData {
       // It provides 4 commitments per input (128 bytes), a 64-byte proof for them, along with a
       // key image and proof (96 bytes)
       // Even with all of that, we could support 227 inputs in a single TX
-      // Monero is limited to 120 inputs per TX
+      // Monero is limited to ~120 inputs per TX
       Err(io::Error::new(io::ErrorKind::Other, "signing data exceeded 65535 bytes"))?;
     }
     writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
@@ -218,7 +218,7 @@ impl ReadWrite for SignData {
 pub enum Transaction {
   // Once this completes successfully, no more instances should be created.
   DkgCommitments(u32, Vec<u8>, Signed),
-  DkgShares(u32, HashMap<Participant, Vec<u8>>, Signed),
+  DkgShares(u32, Participant, HashMap<Participant, Vec<u8>>, Signed),
 
   // When an external block is finalized, we can allow the associated batch IDs
   // Commits to the full block so eclipsed nodes don't continue on their eclipsed state
@@ -264,6 +264,10 @@ impl ReadWrite for Transaction {
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
 
+        let mut sender_i = [0; 2];
+        reader.read_exact(&mut sender_i)?;
+        let sender_i = u16::from_le_bytes(sender_i);
+
         let shares = {
           let mut share_quantity = [0; 2];
           reader.read_exact(&mut share_quantity)?;
@@ -274,7 +278,10 @@ impl ReadWrite for Transaction {
 
           let mut shares = HashMap::new();
           for i in 0 .. u16::from_le_bytes(share_quantity) {
-            let participant = Participant::new(i + 1).unwrap();
+            let mut participant = Participant::new(i + 1).unwrap();
+            if u16::from(participant) >= sender_i {
+              participant = Participant::new(u16::from(participant) + 1).unwrap();
+            }
             let mut share = vec![0; share_len];
             reader.read_exact(&mut share)?;
             shares.insert(participant, share);
@@ -284,7 +291,13 @@ impl ReadWrite for Transaction {
 
         let signed = Signed::read(reader)?;
 
-        Ok(Transaction::DkgShares(attempt, shares, signed))
+        Ok(Transaction::DkgShares(
+          attempt,
+          Participant::new(sender_i)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid sender participant"))?,
+          shares,
+          signed,
+        ))
       }
 
       2 => {
@@ -336,14 +349,30 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::DkgShares(attempt, shares, signed) => {
+      Transaction::DkgShares(attempt, sender_i, shares, signed) => {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
+
+        // It's unfortunate to have this so duplicated, yet it avoids needing to pass a Spec to
+        // read in order to create a valid DkgShares
+        // TODO: Transform DkgShares to having a Vec of shares, with post-expansion to the proper
+        // HashMap
+        writer.write_all(&u16::from(*sender_i).to_le_bytes())?;
+
         // Shares are indexed by non-zero u16s (Participants), so this can't fail
         writer.write_all(&u16::try_from(shares.len()).unwrap().to_le_bytes())?;
+
         let mut share_len = None;
-        for participant in 0 .. shares.len() {
-          let share = &shares[&Participant::new(u16::try_from(participant + 1).unwrap()).unwrap()];
+        let mut found_our_share = false;
+        for participant in 1 ..= (shares.len() + 1) {
+          let Some(share) =
+            &shares.get(&Participant::new(u16::try_from(participant).unwrap()).unwrap())
+          else {
+            assert!(!found_our_share);
+            found_our_share = true;
+            continue;
+          };
+
           if let Some(share_len) = share_len {
             if share.len() != share_len {
               panic!("variable length shares");
@@ -405,7 +434,7 @@ impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind<'_> {
     match self {
       Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed),
-      Transaction::DkgShares(_, _, signed) => TransactionKind::Signed(signed),
+      Transaction::DkgShares(_, _, _, signed) => TransactionKind::Signed(signed),
 
       Transaction::ExternalBlock(_) => TransactionKind::Provided("external"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
@@ -463,7 +492,7 @@ impl Transaction {
     fn signed(tx: &mut Transaction) -> &mut Signed {
       match tx {
         Transaction::DkgCommitments(_, _, ref mut signed) => signed,
-        Transaction::DkgShares(_, _, ref mut signed) => signed,
+        Transaction::DkgShares(_, _, _, ref mut signed) => signed,
 
         Transaction::ExternalBlock(_) => panic!("signing ExternalBlock"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),

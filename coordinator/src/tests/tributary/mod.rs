@@ -20,6 +20,10 @@ mod dkg;
 mod handle_p2p;
 mod sync;
 
+fn random_u16<R: RngCore>(rng: &mut R) -> u16 {
+  u16::try_from(rng.next_u64() >> 48).unwrap()
+}
+
 fn random_u32<R: RngCore>(rng: &mut R) -> u32 {
   u32::try_from(rng.next_u64() >> 32).unwrap()
 }
@@ -77,6 +81,7 @@ fn serialize_transaction() {
 
     test_read_write(Transaction::DkgShares(
       random_u32(&mut OsRng),
+      Participant::new(random_u16(&mut OsRng).saturating_add(1)).unwrap(),
       shares,
       random_signed(&mut OsRng),
     ));

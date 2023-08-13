@@ -147,6 +147,13 @@ impl<D: Db, T: Transaction> Blockchain<D, T> {
   pub(crate) fn add_block(&mut self, block: &Block<T>, commit: Vec<u8>) -> Result<(), BlockError> {
     self.verify_block(block)?;
 
+    log::info!(
+      "adding block {} to tributary {} with {} TXs",
+      hex::encode(block.hash()),
+      hex::encode(self.genesis),
+      block.transactions.len(),
+    );
+
     // None of the following assertions should be reachable since we verified the block
 
     // Take it from the Option so Rust doesn't consider self as mutably borrowed thanks to the
