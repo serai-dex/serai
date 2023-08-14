@@ -52,6 +52,11 @@ async fn key_gen_test() {
       // TODO: Replace this with a Coordinator RPC
       tokio::time::sleep(Duration::from_secs(150)).await;
 
+      // Sleep even longer if in the CI due to it being slower than commodity hardware
+      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+        tokio::time::sleep(Duration::from_secs(120)).await;
+      }
+
       // Connect to the Message Queues as the processor
       let mut new_processors: Vec<Processor> = vec![];
       for (handles, key) in processors {
