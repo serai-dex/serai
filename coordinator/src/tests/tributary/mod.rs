@@ -79,13 +79,28 @@ fn serialize_transaction() {
       shares.insert(Participant::new(u16::try_from(i + 1).unwrap()).unwrap(), share);
     }
 
-    test_read_write(Transaction::DkgShares(
-      random_u32(&mut OsRng),
-      Participant::new(random_u16(&mut OsRng).saturating_add(1)).unwrap(),
+    test_read_write(Transaction::DkgShares {
+      attempt: random_u32(&mut OsRng),
+      sender_i: Participant::new(random_u16(&mut OsRng).saturating_add(1)).unwrap(),
       shares,
-      random_signed(&mut OsRng),
-    ));
+      confirmation_nonces: {
+        let mut nonces = [0; 64];
+        OsRng.fill_bytes(&mut nonces);
+        nonces
+      },
+      signed: random_signed(&mut OsRng),
+    });
   }
+
+  test_read_write(Transaction::DkgConfirmed(
+    random_u32(&mut OsRng),
+    {
+      let mut share = [0; 32];
+      OsRng.fill_bytes(&mut share);
+      share
+    },
+    random_signed(&mut OsRng),
+  ));
 
   {
     let mut ext_block = [0; 32];

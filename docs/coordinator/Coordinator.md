@@ -13,17 +13,6 @@ On `validator_sets::pallet::Event::NewSet`, the coordinator spawns a tributary
 for the new set. It additionally sends the processor
 `key_gen::CoordinatorMessage::GenerateKey`.
 
-## Generated Key Pair
-
-On `key_gen::ProcessorMessage::GeneratedKeyPair`, a
-`validator_sets::pallet::vote` transaction is made to vote in the new key.
-
-The Serai blockchain needs to know the key pair in order for it to be able to
-publish `Batch`s. Additionally, having the Serai blockchain confirm the keys
-provides a BFT consensus guarantee. While the tributary itself could also offer
-a BFT consensus guarantee, there's no point when we'd then get BFT consensus
-on the Serai blockchain anyways.
-
 ## Key Generation Event
 
 On `validator_sets::pallet::Event::KeyGen`, the coordinator sends

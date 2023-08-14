@@ -16,9 +16,35 @@ commitments.
 ### Key Gen Shares
 
 `DkgShares` is created when a processor sends the coordinator
-`key_gen::ProcessorMessage::Shares`. When all validators participating in
-a multisig publish `DkgShares`, the coordinator sends the processor
-`key_gen::CoordinatorMessage::Shares`, excluding the processor's own shares.
+`key_gen::ProcessorMessage::Shares`. The coordinator additionally includes its
+own pair of MuSig nonces, used in a signing protocol to inform Substrate of the
+key's successful creation.
+
+When all validators participating in a multisig publish `DkgShares`, the
+coordinator sends the processor `key_gen::CoordinatorMessage::Shares`, excluding
+the processor's own shares and the MuSig nonces.
+
+### Key Gen Confirmation
+
+`DkgConfirmed` is created when a processor sends the coordinator
+`key_gen::ProcessorMessage::GeneratedKeyPair`. The coordinator takes the MuSig
+nonces they prior associated with this DKG attempt and publishes their signature
+share.
+
+When all validators participating in the multisig publish `DkgConfirmed`, an
+extrinsic calling `validator_sets::pallet::set_keys` is made to confirm the
+keys.
+
+Setting the keys on the Serai blockchain as such lets it receive `Batch`s,
+provides a BFT consensus guarantee, and enables accessibility by users. While
+the tributary itself could offer both the BFT consensus guarantee, and
+verifiable accessibility to users, they'd both require users access the
+tributary. Since Substrate must already know the resulting key, there's no value
+to usage of the tributary as-such, as all desired properties are already offered
+by Substrate.
+
+Note that the keys are confirmed when Substrate emits a `KeyGen` event,
+regardless of if the Tributary has the expected `DkgConfirmed` transactions.
 
 ### External Block
 

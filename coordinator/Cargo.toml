@@ -19,6 +19,7 @@ lazy_static = "1"
 
 zeroize = "^1.5"
 rand_core = "0.6"
+rand_chacha = "0.3"
 
 blake2 = "0.10"
 
@@ -26,6 +27,7 @@ transcript = { package = "flexible-transcript", path = "../crypto/transcript", f
 ciphersuite = { path = "../crypto/ciphersuite" }
 schnorr = { package = "schnorr-signatures", path = "../crypto/schnorr" }
 frost = { package = "modular-frost", path = "../crypto/frost" }
+frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
 scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
 
@@ -53,3 +55,4 @@ libp2p = { version = "0.52", features = ["tokio", "tcp", "noise", "yamux", "goss
 [dev-dependencies]
 futures = "0.3"
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }

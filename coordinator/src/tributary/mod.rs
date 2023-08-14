@@ -218,7 +218,14 @@ impl ReadWrite for SignData {
 pub enum Transaction {
   // Once this completes successfully, no more instances should be created.
   DkgCommitments(u32, Vec<u8>, Signed),
-  DkgShares(u32, Participant, HashMap<Participant, Vec<u8>>, Signed),
+  DkgShares {
+    attempt: u32,
+    sender_i: Participant,
+    shares: HashMap<Participant, Vec<u8>>,
+    confirmation_nonces: [u8; 64],
+    signed: Signed,
+  },
+  DkgConfirmed(u32, [u8; 32], Signed),
 
   // When an external block is finalized, we can allow the associated batch IDs
   // Commits to the full block so eclipsed nodes don't continue on their eclipsed state
@@ -289,36 +296,53 @@ impl ReadWrite for Transaction {
           shares
         };
 
+        let mut confirmation_nonces = [0; 64];
+        reader.read_exact(&mut confirmation_nonces)?;
+
         let signed = Signed::read(reader)?;
 
-        Ok(Transaction::DkgShares(
+        Ok(Transaction::DkgShares {
           attempt,
-          Participant::new(sender_i)
+          sender_i: Participant::new(sender_i)
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid sender participant"))?,
           shares,
+          confirmation_nonces,
           signed,
-        ))
+        })
       }
 
       2 => {
+        let mut attempt = [0; 4];
+        reader.read_exact(&mut attempt)?;
+        let attempt = u32::from_le_bytes(attempt);
+
+        let mut confirmation_share = [0; 32];
+        reader.read_exact(&mut confirmation_share)?;
+
+        let signed = Signed::read(reader)?;
+
+        Ok(Transaction::DkgConfirmed(attempt, confirmation_share, signed))
+      }
+
+      3 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
         Ok(Transaction::ExternalBlock(block))
       }
 
-      3 => {
+      4 => {
         let mut block = [0; 8];
         reader.read_exact(&mut block)?;
         Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
-      4 => SignData::read(reader).map(Transaction::BatchPreprocess),
-      5 => SignData::read(reader).map(Transaction::BatchShare),
+      5 => SignData::read(reader).map(Transaction::BatchPreprocess),
+      6 => SignData::read(reader).map(Transaction::BatchShare),
 
-      6 => SignData::read(reader).map(Transaction::SignPreprocess),
-      7 => SignData::read(reader).map(Transaction::SignShare),
+      7 => SignData::read(reader).map(Transaction::SignPreprocess),
+      8 => SignData::read(reader).map(Transaction::SignShare),
 
-      8 => {
+      9 => {
         let mut plan = [0; 32];
         reader.read_exact(&mut plan)?;
 
@@ -349,7 +373,7 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::DkgShares(attempt, sender_i, shares, signed) => {
+      Transaction::DkgShares { attempt, sender_i, shares, confirmation_nonces, signed } => {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
 
@@ -389,38 +413,46 @@ impl ReadWrite for Transaction {
 
           writer.write_all(share)?;
         }
+        writer.write_all(confirmation_nonces)?;
+        signed.write(writer)
+      }
+
+      Transaction::DkgConfirmed(attempt, share, signed) => {
+        writer.write_all(&[2])?;
+        writer.write_all(&attempt.to_le_bytes())?;
+        writer.write_all(share)?;
         signed.write(writer)
       }
 
       Transaction::ExternalBlock(block) => {
-        writer.write_all(&[2])?;
+        writer.write_all(&[3])?;
         writer.write_all(block)
       }
 
       Transaction::SubstrateBlock(block) => {
-        writer.write_all(&[3])?;
+        writer.write_all(&[4])?;
         writer.write_all(&block.to_le_bytes())
       }
 
       Transaction::BatchPreprocess(data) => {
-        writer.write_all(&[4])?;
+        writer.write_all(&[5])?;
         data.write(writer)
       }
       Transaction::BatchShare(data) => {
-        writer.write_all(&[5])?;
+        writer.write_all(&[6])?;
         data.write(writer)
       }
 
       Transaction::SignPreprocess(data) => {
-        writer.write_all(&[6])?;
-        data.write(writer)
-      }
-      Transaction::SignShare(data) => {
         writer.write_all(&[7])?;
         data.write(writer)
       }
-      Transaction::SignCompleted(plan, tx, signed) => {
+      Transaction::SignShare(data) => {
         writer.write_all(&[8])?;
+        data.write(writer)
+      }
+      Transaction::SignCompleted(plan, tx, signed) => {
+        writer.write_all(&[9])?;
         writer.write_all(plan)?;
         writer.write_all(&[u8::try_from(tx.len()).expect("tx hash length exceed 255 bytes")])?;
         writer.write_all(tx)?;
@@ -434,7 +466,8 @@ impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind<'_> {
     match self {
       Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed),
-      Transaction::DkgShares(_, _, _, signed) => TransactionKind::Signed(signed),
+      Transaction::DkgShares { signed, .. } => TransactionKind::Signed(signed),
+      Transaction::DkgConfirmed(_, _, signed) => TransactionKind::Signed(signed),
 
       Transaction::ExternalBlock(_) => TransactionKind::Provided("external"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
@@ -492,7 +525,8 @@ impl Transaction {
     fn signed(tx: &mut Transaction) -> &mut Signed {
       match tx {
         Transaction::DkgCommitments(_, _, ref mut signed) => signed,
-        Transaction::DkgShares(_, _, _, ref mut signed) => signed,
+        Transaction::DkgShares { ref mut signed, .. } => signed,
+        Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
 
         Transaction::ExternalBlock(_) => panic!("signing ExternalBlock"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),

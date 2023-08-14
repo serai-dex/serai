@@ -26,6 +26,7 @@ use subxt::{
 pub use serai_runtime::primitives;
 pub use primitives::{Signature, SeraiAddress};
 
+pub use serai_runtime as runtime;
 use serai_runtime::{
   system::Config, support::traits::PalletInfo as PalletInfoTrait, PalletInfo, Runtime,
 };

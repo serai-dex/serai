@@ -17,7 +17,7 @@ use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
 use serai_db::{DbTxn, Db};
 use serai_env as env;
 
-use serai_client::{Public, Signature, Serai};
+use serai_client::{Public, Serai};
 
 use message_queue::{Service, client::MessageQueue};
 
@@ -102,7 +102,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   processors: Pro,
-  serai: Serai,
+  serai: Arc<Serai>,
 ) {
   log::info!("scanning substrate");
 
@@ -150,6 +150,7 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
   recognized_id_send: UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
   p2p: P,
   processors: Pro,
+  serai: Arc<Serai>,
   tributaries: Arc<RwLock<Tributaries<D, P>>>,
 ) {
   log::info!("scanning tributaries");
@@ -184,11 +185,30 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
     }
 
     for (spec, reader) in &tributary_readers {
-      tributary::scanner::handle_new_blocks::<_, _>(
+      tributary::scanner::handle_new_blocks(
         &mut tributary_db,
         &key,
         &recognized_id_send,
         &processors,
+        |set, tx| {
+          let serai = serai.clone();
+          async move {
+            loop {
+              match serai.publish(&tx).await {
+                Ok(hash) => {
+                  log::info!("set key pair for {:?} in TX {}", set, hex::encode(hash))
+                }
+                // This is assumed to be some ephemeral error due to the assumed fault-free
+                // creation
+                // TODO: Differentiate connection errors from already published to an invariant
+                Err(e) => {
+                  log::error!("couldn't connect to Serai node to publish vote TX: {:?}", e);
+                  tokio::time::sleep(Duration::from_secs(10)).await;
+                }
+              }
+            }
+          }
+        },
         spec,
         reader,
       )
@@ -395,7 +415,7 @@ pub async fn publish_transaction<D: Db, P: P2p>(
 pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   mut db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  serai: Serai,
+  serai: Arc<Serai>,
   mut processors: Pro,
   tributaries: Arc<RwLock<Tributaries<D, P>>>,
 ) {
@@ -406,24 +426,20 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
     // TODO2: This is slow, and only works as long as a network only has a single Tributary
     // (which means there's a lack of multisig rotation)
-    let (genesis, my_i) = {
-      let mut genesis = None;
-      let mut my_i = None;
+    let spec = {
+      let mut spec = None;
       for tributary in tributaries.read().await.values() {
         if tributary.spec.set().network == msg.network {
-          genesis = Some(tributary.spec.genesis());
-          // TODO: We probably want to NOP here, not panic?
-          my_i = Some(
-            tributary
-              .spec
-              .i(pub_key)
-              .expect("processor message for network we aren't a validator in"),
-          );
+          spec = Some(tributary.spec.clone());
           break;
         }
       }
-      (genesis.unwrap(), my_i.unwrap())
+      spec.unwrap()
     };
+
+    let genesis = spec.genesis();
+    // TODO: We probably want to NOP here, not panic?
+    let my_i = spec.i(pub_key).expect("processor message for network we aren't a validator in");
 
     let tx = match msg.msg.clone() {
       ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
@@ -431,7 +447,20 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           Some(Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed()))
         }
         key_gen::ProcessorMessage::Shares { id, shares } => {
-          Some(Transaction::DkgShares(id.attempt, my_i, shares, Transaction::empty_signed()))
+          // Create a MuSig-based machine to inform Substrate of this key generation
+          // DkgConfirmer has a TODO noting it's only secure for a single usage, yet this ensures
+          // the TODO is resolved before unsafe usage
+          if id.attempt != 0 {
+            panic!("attempt wasn't 0");
+          }
+          let nonces = crate::tributary::scanner::dkg_confirmation_nonces(&key, &spec);
+          Some(Transaction::DkgShares {
+            attempt: id.attempt,
+            sender_i: my_i,
+            shares,
+            confirmation_nonces: nonces,
+            signed: Transaction::empty_signed(),
+          })
         }
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
           assert_eq!(
@@ -440,34 +469,22 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           );
           // TODO: Also check the other KeyGenId fields
 
-          // TODO: Sign a MuSig signature here
-
-          let tx = Serai::set_validator_set_keys(
-            id.set.network,
-            (
-              Public(substrate_key),
-              network_key
-                .try_into()
-                .expect("external key from processor exceeded max external key length"),
-            ),
-            Signature([0; 64]), // TODO
+          // Tell the Tributary the key pair, get back the share for the MuSig signature
+          let mut txn = db.txn();
+          let share = crate::tributary::scanner::generated_key_pair::<D>(
+            &mut txn,
+            &key,
+            &spec,
+            &(Public(substrate_key), network_key.try_into().unwrap()),
           );
+          txn.commit();
 
-          loop {
-            match serai.publish(&tx).await {
-              Ok(hash) => {
-                log::info!("voted on key pair for {:?} in TX {}", id.set, hex::encode(hash))
-              }
-              // This is assumed to be some ephemeral error due to the assumed fault-free creation
-              // TODO: Differentiate connection errors from already published to an invariant
-              Err(e) => {
-                log::error!("couldn't connect to Serai node to publish vote TX: {:?}", e);
-                tokio::time::sleep(Duration::from_secs(10)).await;
-              }
+          match share {
+            Ok(share) => {
+              Some(Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed()))
             }
+            Err(p) => todo!("participant {p:?} sent invalid DKG confirmation preprocesses"),
           }
-
-          None
         }
       },
       ProcessorMessage::Sign(msg) => match msg {
@@ -625,6 +642,8 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   processors: Pro,
   serai: Serai,
 ) {
+  let serai = Arc::new(serai);
+
   // Handle new Substrate blocks
   tokio::spawn(scan_substrate(raw_db.clone(), key.clone(), processors.clone(), serai.clone()));
 
@@ -647,6 +666,8 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   }
 
   // Handle new blocks for each Tributary
+  // TODO: This channel is unsafe. The Tributary may send an event, which then is marked handled,
+  // before it actually is. This must be a blocking function.
   let (recognized_id_send, mut recognized_id_recv) = mpsc::unbounded_channel();
   {
     let raw_db = raw_db.clone();
@@ -656,6 +677,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       recognized_id_send,
       p2p.clone(),
       processors.clone(),
+      serai.clone(),
       tributaries.clone(),
     ));
   }

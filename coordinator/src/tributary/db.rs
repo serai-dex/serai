@@ -1,6 +1,10 @@
 use std::io::Read;
 
+use scale::{Encode, Decode};
+
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+
+use serai_client::validator_sets::primitives::KeyPair;
 
 pub use serai_db::*;
 
@@ -49,6 +53,22 @@ impl<D: Db> TributaryDb<D> {
       }
       res
     })
+  }
+
+  fn currently_completing_key_pair_key(genesis: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"currently_completing_key_pair", genesis)
+  }
+  pub fn save_currently_completing_key_pair(
+    txn: &mut D::Transaction<'_>,
+    genesis: [u8; 32],
+    key_pair: &KeyPair,
+  ) {
+    txn.put(Self::currently_completing_key_pair_key(genesis), key_pair.encode())
+  }
+  pub fn currently_completing_key_pair<G: Get>(getter: &G, genesis: [u8; 32]) -> Option<KeyPair> {
+    getter
+      .get(Self::currently_completing_key_pair_key(genesis))
+      .map(|bytes| KeyPair::decode(&mut bytes.as_slice()).unwrap())
   }
 
   fn recognized_id_key(label: &'static str, genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {

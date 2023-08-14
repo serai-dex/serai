@@ -146,6 +146,7 @@ pub mod pallet {
 
       // Confirm a key hasn't been set for this set instance
       let set = ValidatorSet { session, network };
+      // TODO: Is this needed? validate_unsigned should be called before this and ensure it's Ok
       Self::verify_signature(set, &key_pair, &signature)?;
 
       Keys::<T>::set(set, Some(key_pair.clone()));
