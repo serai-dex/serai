@@ -157,12 +157,13 @@ async fn handle_batch_and_burns<Pro: Processors>(
   // While that shouldn't be needed, ensuring order never hurts, and may enable design choices
   // with regards to Processor <-> Coordinator message passing
   let mut networks_with_event = vec![];
-  let mut network_had_event = |burns: &mut HashMap<_, _>, network| {
+  let mut network_had_event = |burns: &mut HashMap<_, _>, batches: &mut HashMap<_, _>, network| {
     // Don't insert this network multiple times
     // A Vec is still used in order to maintain the insertion order
     if !networks_with_event.contains(&network) {
       networks_with_event.push(network);
       burns.insert(network, vec![]);
+      batches.insert(network, vec![]);
     }
   };
 
@@ -172,7 +173,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
 
   for batch in serai.get_batch_events(hash).await? {
     if let InInstructionsEvent::Batch { network, id, block: network_block } = batch {
-      network_had_event(&mut burns, network);
+      network_had_event(&mut burns, &mut batches, network);
 
       // Track what Serai acknowledges as the latest block for this network
       // If this Substrate block has multiple batches, the last batch's block will overwrite the
@@ -182,12 +183,8 @@ async fn handle_batch_and_burns<Pro: Processors>(
       // This is just a mild optimization to prevent needing an additional RPC call to grab this
       batch_block.insert(network, network_block);
 
-      // set the batches we acknowledged with this block.
-      if let Some(batch_ids) = batches.get_mut(&network) {
-        batch_ids.push(id);
-      } else {
-        batches.insert(network, vec![id]);
-      }
+      // Add the batch included by this block
+      batches.get_mut(&network).unwrap().push(id);
     } else {
       panic!("Batch event wasn't Batch: {batch:?}");
     }
@@ -196,7 +193,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
   for burn in serai.get_burn_events(hash).await? {
     if let TokensEvent::Burn { address: _, balance, instruction } = burn {
       let network = balance.coin.network();
-      network_had_event(&mut burns, network);
+      network_had_event(&mut burns, &mut batches, network);
 
       // network_had_event should register an entry in burns
       let mut burns_so_far = burns.remove(&network).unwrap();
@@ -227,7 +224,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
         CoordinatorMessage::Substrate(
           processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
             context: SubstrateContext {
-              serai_time: block.time().unwrap(),
+              serai_time: block.time().unwrap() / 1000,
               network_latest_finalized_block,
             },
             network,
@@ -238,7 +235,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
               .map(|keys| keys.1.into_inner())
               .expect("batch/burn for network which never set keys"),
             burns: burns.remove(&network).unwrap(),
-            batches: batches.remove(&network).unwrap_or(vec![]),
+            batches: batches.remove(&network).unwrap(),
           },
         ),
       )

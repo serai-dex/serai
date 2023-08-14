@@ -61,7 +61,6 @@ pub mod sign {
   pub struct SignId {
     pub key: Vec<u8>,
     pub id: [u8; 32],
-    pub block: Option<BlockHash>,
     pub attempt: u32,
   }
 
@@ -116,11 +115,15 @@ pub mod coordinator {
   }
 
   impl CoordinatorMessage {
+    // The Coordinator will only send Batch messages once the Batch ID has been recognized
+    // The ID will only be recognized when the block is acknowledged by a super-majority of the
+    // network *and the local node*
+    // This synchrony obtained lets us ignore the synchrony requirement offered here
     pub fn required_block(&self) -> Option<BlockHash> {
       match self {
-        CoordinatorMessage::BatchPreprocesses { id, .. } => id.block,
-        CoordinatorMessage::BatchShares { id, .. } => id.block,
-        CoordinatorMessage::BatchReattempt { id } => id.block,
+        CoordinatorMessage::BatchPreprocesses { .. } => None,
+        CoordinatorMessage::BatchShares { .. } => None,
+        CoordinatorMessage::BatchReattempt { .. } => None,
       }
     }
 
@@ -136,7 +139,7 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<[u8; 32]> },
-    BatchPreprocess { id: SignId, preprocess: Vec<u8> },
+    BatchPreprocess { id: SignId, block: BlockHash, preprocess: Vec<u8> },
     BatchShare { id: SignId, share: [u8; 32] },
   }
 }

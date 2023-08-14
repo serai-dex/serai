@@ -282,8 +282,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id =
-      SignId { key: self.keys.group_key().to_bytes().as_ref().to_vec(), id, block: None, attempt };
+    let id = SignId { key: self.keys.group_key().to_bytes().as_ref().to_vec(), id, attempt };
 
     info!("signing for {} #{}", hex::encode(id.id), id.attempt);
 

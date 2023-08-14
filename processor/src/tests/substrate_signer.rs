@@ -31,7 +31,6 @@ async fn test_substrate_signer() {
   let actual_id = SignId {
     key: keys[&participant_one].group_key().to_bytes().to_vec(),
     id: id_slice,
-    block: Some(block),
     attempt: 0,
   };
 
@@ -88,10 +87,12 @@ async fn test_substrate_signer() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchPreprocess {
       id,
+      block: batch_block,
       preprocess,
     }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
+      assert_eq!(batch_block, block);
       if signing_set.contains(&i) {
         preprocesses.insert(i, preprocess);
       }

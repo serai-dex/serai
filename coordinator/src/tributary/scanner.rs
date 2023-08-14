@@ -496,7 +496,7 @@ async fn handle_block<
                 spec.set().network,
                 CoordinatorMessage::Coordinator(
                   coordinator::CoordinatorMessage::BatchPreprocesses {
-                    id: SignId { key: todo!(), id: data.plan, block: None, attempt: data.attempt },
+                    id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
                     preprocesses,
                   },
                 ),
@@ -519,7 +519,7 @@ async fn handle_block<
               .send(
                 spec.set().network,
                 CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
-                  id: SignId { key: todo!(), id: data.plan, block: None, attempt: data.attempt },
+                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
                   shares: shares
                     .drain()
                     .map(|(validator, share)| (validator, share.try_into().unwrap()))
@@ -545,7 +545,7 @@ async fn handle_block<
               .send(
                 spec.set().network,
                 CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
-                  id: SignId { key: todo!(), id: data.plan, block: None, attempt: data.attempt },
+                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
                   preprocesses,
                 }),
               )
@@ -567,7 +567,7 @@ async fn handle_block<
               .send(
                 spec.set().network,
                 CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
-                  id: SignId { key: todo!(), id: data.plan, block: None, attempt: data.attempt },
+                  id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
                   shares,
                 }),
               )

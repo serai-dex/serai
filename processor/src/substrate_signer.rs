@@ -18,10 +18,7 @@ use frost_schnorrkel::Schnorrkel;
 
 use log::{info, debug, warn};
 
-use serai_client::{
-  primitives::BlockHash,
-  in_instructions::primitives::{Batch, SignedBatch, batch_message},
-};
+use serai_client::in_instructions::primitives::{Batch, SignedBatch, batch_message};
 
 use messages::{sign::SignId, coordinator::*};
 use crate::{Get, DbTxn, Db};
@@ -129,13 +126,7 @@ impl<D: Db> SubstrateSigner<D> {
     Ok(())
   }
 
-  async fn attempt(
-    &mut self,
-    txn: &mut D::Transaction<'_>,
-    id: [u8; 32],
-    block: BlockHash,
-    attempt: u32,
-  ) {
+  async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], attempt: u32) {
     // See above commentary for why this doesn't emit SignedBatch
     if SubstrateSignerDb::<D>::completed(txn, id) {
       return;
@@ -155,7 +146,9 @@ impl<D: Db> SubstrateSigner<D> {
     }
 
     // Start this attempt
-    if !self.signable.contains_key(&id) {
+    let block = if let Some(batch) = self.signable.get(&id) {
+      batch.block
+    } else {
       warn!("told to attempt signing a batch we aren't currently signing for");
       return;
     };
@@ -167,9 +160,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    // TODO: make BatchSignId for batch signing.
-    let id =
-      SignId { key: self.keys.group_key().to_bytes().to_vec(), id, block: Some(block), attempt };
+    let id = SignId { key: self.keys.group_key().to_bytes().to_vec(), id, attempt };
     info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
@@ -207,7 +198,7 @@ impl<D: Db> SubstrateSigner<D> {
 
     // Broadcast our preprocess
     self.events.push_back(SubstrateSignerEvent::ProcessorMessage(
-      ProcessorMessage::BatchPreprocess { id, preprocess: preprocess.serialize() },
+      ProcessorMessage::BatchPreprocess { id, block, preprocess: preprocess.serialize() },
     ));
   }
 
@@ -222,9 +213,8 @@ impl<D: Db> SubstrateSigner<D> {
       return;
     }
 
-    let block = batch.block;
     self.signable.insert(id, batch);
-    self.attempt(txn, id, block, 0).await;
+    self.attempt(txn, id, 0).await;
   }
 
   pub async fn handle(&mut self, txn: &mut D::Transaction<'_>, msg: CoordinatorMessage) {
@@ -341,8 +331,7 @@ impl<D: Db> SubstrateSigner<D> {
       }
 
       CoordinatorMessage::BatchReattempt { id } => {
-        // TODO: this unwrap should be safe?
-        self.attempt(txn, id.id, id.block.unwrap(), id.attempt).await;
+        self.attempt(txn, id.id, id.attempt).await;
       }
     }
   }
