@@ -55,10 +55,9 @@ pub async fn test_scanner<N: Network>(network: N) {
   let verify_event = |mut scanner: ScannerHandle<N, MemDb>| async {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-        ScannerEvent::Block { key, block, batch, outputs } => {
+        ScannerEvent::Block { key, block, outputs } => {
           assert_eq!(key, keys.group_key());
           assert_eq!(block, block_id);
-          assert_eq!(batch, 0);
           assert_eq!(outputs.len(), 1);
           assert_eq!(outputs[0].kind(), OutputType::External);
           outputs
@@ -90,10 +89,7 @@ pub async fn test_scanner<N: Network>(network: N) {
 
   let mut cloned_db = db.clone();
   let mut txn = cloned_db.txn();
-  assert_eq!(
-    scanner.ack_up_to_block(&mut txn, keys.group_key(), block_id).await,
-    (blocks, outputs)
-  );
+  assert_eq!(scanner.ack_up_to_block(&mut txn, keys.group_key(), block_id).await, outputs);
   txn.commit();
 
   // There should be no more events

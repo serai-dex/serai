@@ -14,8 +14,6 @@ use tokio::{
   time::sleep,
 };
 
-use serai_client::primitives::BlockHash;
-
 use crate::{
   Get, DbTxn, Db,
   networks::{Output, Transaction, EventualitiesTracker, Block, Network},
@@ -27,7 +25,6 @@ pub enum ScannerEvent<N: Network> {
   Block {
     key: <N::Curve as Ciphersuite>::G,
     block: <N::Block as Block<N>>::Id,
-    batch: u32,
     outputs: Vec<N::Output>,
   },
   // Eventuality completion found on-chain
@@ -115,9 +112,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
   fn next_batch_key() -> Vec<u8> {
     Self::scanner_key(b"next_batch", [])
   }
-  fn batch_key(key: &<N::Curve as Ciphersuite>::G, block: &<N::Block as Block<N>>::Id) -> Vec<u8> {
-    Self::scanner_key(b"batch", [key.to_bytes().as_ref(), block.as_ref()].concat())
-  }
   fn outputs_key(
     key: &<N::Curve as Ciphersuite>::G,
     block: &<N::Block as Block<N>>::Id,
@@ -129,12 +123,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     key: &<N::Curve as Ciphersuite>::G,
     block: &<N::Block as Block<N>>::Id,
     outputs: &[N::Output],
-  ) -> u32 {
-    let batch_key = Self::batch_key(key, block);
-    if let Some(batch) = txn.get(batch_key) {
-      return u32::from_le_bytes(batch.try_into().unwrap());
-    }
-
+  ) {
     let mut bytes = Vec::with_capacity(outputs.len() * 64);
     for output in outputs {
       output.write(&mut bytes).unwrap();
@@ -150,13 +139,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     // 0a, 1a, 2a, 3a, 4a, 5a, 4b, 5b
     // when it should be
     // 0a, 1a, 2a, 3a, 4a, 4b, 5a, 5b
-
-    // Because it's a new set of outputs, allocate a batch ID for it
-    let next_bytes = txn.get(Self::next_batch_key()).unwrap_or(vec![0; 4]).try_into().unwrap();
-    let next = u32::from_le_bytes(next_bytes);
-    txn.put(Self::next_batch_key(), (next + 1).to_le_bytes());
-    txn.put(Self::batch_key(key, block), next_bytes);
-    next
   }
   fn outputs(
     txn: &D::Transaction<'_>,
@@ -182,7 +164,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     txn: &mut D::Transaction<'_>,
     key: &<N::Curve as Ciphersuite>::G,
     block: usize,
-  ) -> (Option<<N::Block as Block<N>>::Id>, Vec<N::Output>) {
+  ) -> Vec<N::Output> {
     let id = Self::block(txn, block); // It may be None for the first key rotated to
     let outputs = if let Some(id) = id.as_ref() {
       Self::outputs(txn, key, id).unwrap_or(vec![])
@@ -198,7 +180,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     txn.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
 
     // Return this block's outputs so they can be pruned from the RAM cache
-    (id, outputs)
+    outputs
   }
   fn latest_scanned_block<G: Get>(getter: &G, key: <N::Curve as Ciphersuite>::G) -> usize {
     let bytes = getter
@@ -280,7 +262,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
     info!("Rotating scanner to key {} at {activation_number}", hex::encode(key.to_bytes()));
 
-    let (_, outputs) = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
+    let outputs = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
     scanner.ram_scanned.insert(key.to_bytes().as_ref().to_vec(), activation_number);
     assert!(outputs.is_empty());
 
@@ -295,13 +277,25 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     ScannerDb::<N, D>::block_number(&self.scanner.read().await.db, id)
   }
 
+  // Set the next batch ID to use
+  pub fn set_next_batch_id(&self, txn: &mut D::Transaction<'_>, batch: u32) {
+    txn.put(ScannerDb::<N, D>::next_batch_key(), batch.to_le_bytes());
+  }
+
+  // Get the next batch ID
+  pub fn next_batch_id(&self, txn: &D::Transaction<'_>) -> u32 {
+    txn
+      .get(ScannerDb::<N, D>::next_batch_key())
+      .map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()))
+  }
+
   /// Acknowledge having handled a block for a key.
   pub async fn ack_up_to_block(
     &mut self,
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
     id: <N::Block as Block<N>>::Id,
-  ) -> (Vec<BlockHash>, Vec<N::Output>) {
+  ) -> Vec<N::Output> {
     let mut scanner = self.scanner.write().await;
     debug!("Block {} acknowledged", hex::encode(&id));
 
@@ -311,21 +305,16 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     // Get the number of the last block we acknowledged
     let prior = ScannerDb::<N, D>::latest_scanned_block(txn, key);
 
-    let mut blocks = vec![];
     let mut outputs = vec![];
     for number in (prior + 1) ..= number {
-      let (block, these_outputs) = ScannerDb::<N, D>::save_scanned_block(txn, &key, number);
-      let block = BlockHash(block.unwrap().as_ref().try_into().unwrap());
-      blocks.push(block);
-      outputs.extend(these_outputs);
+      outputs.extend(ScannerDb::<N, D>::save_scanned_block(txn, &key, number));
     }
-    assert_eq!(blocks.last().unwrap().as_ref(), id.as_ref());
 
     for output in &outputs {
       assert!(scanner.ram_outputs.remove(output.id().as_ref()));
     }
 
-    (blocks, outputs)
+    outputs
   }
 }
 
@@ -514,11 +503,11 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
             // Save the outputs to disk
             let mut txn = scanner.db.txn();
-            let batch = ScannerDb::<N, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
+            ScannerDb::<N, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
             txn.commit();
 
             // Send all outputs
-            if !scanner.emit(ScannerEvent::Block { key, block: block_id, batch, outputs }) {
+            if !scanner.emit(ScannerEvent::Block { key, block: block_id, outputs }) {
               return;
             }
             // Write this number as scanned so we won't re-fire these outputs

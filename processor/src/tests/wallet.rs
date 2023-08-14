@@ -36,10 +36,9 @@ pub async fn test_wallet<N: Network>(network: N) {
     let block_id = block.id();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block { key: this_key, block, batch, outputs } => {
+      ScannerEvent::Block { key: this_key, block, outputs } => {
         assert_eq!(this_key, key);
         assert_eq!(block, block_id);
-        assert_eq!(batch, 0);
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
       }
@@ -110,10 +109,9 @@ pub async fn test_wallet<N: Network>(network: N) {
   }
 
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { key: this_key, block: block_id, batch, outputs: these_outputs } => {
+    ScannerEvent::Block { key: this_key, block: block_id, outputs: these_outputs } => {
       assert_eq!(this_key, key);
       assert_eq!(block_id, block.id());
-      assert_eq!(batch, 1);
       assert_eq!(these_outputs, outputs);
     }
     ScannerEvent::Completed(_, _) => {
@@ -124,7 +122,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   // Check the Scanner DB can reload the outputs
   let mut txn = db.txn();
   assert_eq!(
-    scanner.ack_up_to_block(&mut txn, key, block.id()).await.1,
+    scanner.ack_up_to_block(&mut txn, key, block.id()).await,
     [first_outputs, outputs].concat().to_vec()
   );
   txn.commit();

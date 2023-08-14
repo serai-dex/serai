@@ -535,7 +535,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
           Some(Transaction::SubstrateBlock(block))
         }
-        coordinator::ProcessorMessage::BatchPreprocess { id, preprocess } => {
+        coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocess } => {
           // If this is the first attempt instance, synchronize around the block first
           if id.attempt == 0 {
             // Save the preprocess to disk so we can publish it later
@@ -545,7 +545,9 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
             txn.commit();
 
-            Some(Transaction::ExternalBlock(id.id))
+            // TODO: This will publish one ExternalBlock per Batch. We should only publish one per
+            // all batches within a block
+            Some(Transaction::ExternalBlock(block.0))
           } else {
             Some(Transaction::BatchPreprocess(SignData {
               plan: id.id,

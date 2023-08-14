@@ -24,13 +24,16 @@ async fn test_substrate_signer() {
 
   let participant_one = Participant::new(1).unwrap();
 
+  let id: u32 = 5;
+  let mut id_arr = [0u8; 32];
+  id_arr[.. 4].copy_from_slice(&id.to_le_bytes());
   let block = BlockHash([0xaa; 32]);
   let actual_id =
-    SignId { key: keys[&participant_one].group_key().to_bytes().to_vec(), id: block.0, attempt: 0 };
+    SignId { key: keys[&participant_one].group_key().to_bytes().to_vec(), id: id_arr, attempt: 0 };
 
   let batch = Batch {
     network: NetworkId::Monero,
-    id: 5,
+    id,
     block,
     instructions: vec![
       InInstructionWithBalance {
@@ -81,10 +84,12 @@ async fn test_substrate_signer() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchPreprocess {
       id,
+      block: batch_block,
       preprocess,
     }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
+      assert_eq!(batch_block, block);
       if signing_set.contains(&i) {
         preprocesses.insert(i, preprocess);
       }

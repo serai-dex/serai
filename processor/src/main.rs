@@ -12,13 +12,13 @@ use frost::{curve::Ciphersuite, ThresholdKeys};
 use log::{info, warn, error};
 use tokio::time::sleep;
 
-use scale::Decode;
+use scale::{Encode, Decode};
 
 use serai_client::{
   primitives::{MAX_DATA_LEN, BlockHash, NetworkId},
   tokens::primitives::{OutInstruction, OutInstructionWithBalance},
   in_instructions::primitives::{
-    Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch,
+    Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch, MAX_BATCH_SIZE,
   },
 };
 
@@ -396,6 +396,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           block,
           key: key_vec,
           burns,
+          batches,
         } => {
           assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
 
@@ -405,12 +406,11 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           let key = <N::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
 
           // We now have to acknowledge every block for this key up to the acknowledged block
-          let (blocks, outputs) =
-            substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
+          let outputs = substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
           // Since this block was acknowledged, we no longer have to sign the batch for it
-          for block in blocks {
+          for batch_id in batches {
             for (_, signer) in tributary_mutable.substrate_signers.iter_mut() {
-              signer.batch_signed(txn, block);
+              signer.batch_signed(txn, batch_id);
             }
           }
 
@@ -665,51 +665,84 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         let mut txn = raw_db.txn();
 
         match msg.unwrap() {
-          ScannerEvent::Block { key, block, batch, outputs } => {
+          ScannerEvent::Block { key, block, outputs } => {
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
+            // TODO: Move this out from Scanner now that the Scanner no longer handles batches
+            let mut batch_id = substrate_mutable.scanner.next_batch_id(&txn);
 
-            let batch = Batch {
+            // start with empty batch
+            let mut batches = vec![Batch {
               network: N::NETWORK,
-              id: batch,
+              id: batch_id,
               block: BlockHash(block_hash),
-              instructions: outputs.iter().filter_map(|output| {
-                // If these aren't externally received funds, don't handle it as an instruction
-                if output.kind() != OutputType::External {
-                  return None;
-                }
+              instructions: vec![],
+            }];
+            for output in outputs {
+              // If these aren't externally received funds, don't handle it as an instruction
+              if output.kind() != OutputType::External {
+                continue;
+              }
 
-                let mut data = output.data();
-                let max_data_len = MAX_DATA_LEN.try_into().unwrap();
-                if data.len() > max_data_len {
-                  error!(
-                    "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}",
-                    hex::encode(output.id()),
-                    data.len(),
-                  );
-                  data = &data[.. max_data_len];
-                }
+              let mut data = output.data();
+              let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
+              // TODO: Should we drop this, instead of truncating?
+              // A truncating message likely doesn't have value yet has increased data load and is
+              // corrupt vs a NOP. The former seems more likely to cause problems
+              if data.len() > max_data_len {
+                error!(
+                  "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. truncating",
+                  hex::encode(output.id()),
+                  data.len(),
+                );
+                data = &data[.. max_data_len];
+              }
 
-                let shorthand = Shorthand::decode(&mut data).ok()?;
-                let instruction = RefundableInInstruction::try_from(shorthand).ok()?;
-                // TODO2: Set instruction.origin if not set (and handle refunds in general)
-                Some(InInstructionWithBalance {
-                  instruction: instruction.instruction,
-                  balance: output.balance(),
-                })
-              }).collect()
-            };
+              let Ok(shorthand) = Shorthand::decode(&mut data) else { continue };
+              let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { continue };
 
-            info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
+              // TODO2: Set instruction.origin if not set (and handle refunds in general)
+              let instruction = InInstructionWithBalance {
+                instruction: instruction.instruction,
+                balance: output.balance(),
+              };
+
+              let batch = batches.last_mut().unwrap();
+              batch.instructions.push(instruction);
+
+              // check if batch is over-size
+              if batch.encode().len() > MAX_BATCH_SIZE {
+                // pop the last instruction so it's back in size
+                let instruction = batch.instructions.pop().unwrap();
+
+                // bump the id for the new batch
+                batch_id += 1;
+
+                // make a new batch with this instruction included
+                batches.push(Batch {
+                  network: N::NETWORK,
+                  id: batch_id,
+                  block: BlockHash(block_hash),
+                  instructions: vec![instruction],
+                });
+              }
+            }
+
+            // Save the next batch ID
+            substrate_mutable.scanner.set_next_batch_id(&mut txn, batch_id + 1);
 
             // Start signing this batch
-            // TODO: Don't reload both sets of keys in full just to get the Substrate public key
-            tributary_mutable
-              .substrate_signers
-              .get_mut(tributary_mutable.key_gen.keys(&key).0.group_key().to_bytes().as_slice())
-              .unwrap()
-              .sign(&mut txn, batch)
-              .await;
+            for batch in batches {
+              info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
+
+              // TODO: Don't reload both sets of keys in full just to get the Substrate public key
+              tributary_mutable
+                .substrate_signers
+                .get_mut(tributary_mutable.key_gen.keys(&key).0.group_key().to_bytes().as_slice())
+                .unwrap()
+                .sign(&mut txn, batch)
+                .await;
+            }
           },
 
           ScannerEvent::Completed(id, tx) => {
