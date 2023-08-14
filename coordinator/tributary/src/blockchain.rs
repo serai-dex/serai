@@ -132,7 +132,12 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
   }
 
-  pub(crate) fn add_transaction<N: Network>(&mut self, internal: bool, tx: Transaction<T>, schema: N::SignatureScheme) -> bool {
+  pub(crate) fn add_transaction<N: Network>(
+    &mut self,
+    internal: bool,
+    tx: Transaction<T>,
+    schema: N::SignatureScheme,
+  ) -> bool {
     let db = self.db.as_ref().unwrap();
     let genesis = self.genesis;
 
@@ -177,7 +182,11 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     block
   }
 
-  pub(crate) fn verify_block<N: Network>(&self, block: &Block<T>, schema: N::SignatureScheme) -> Result<(), BlockError> {
+  pub(crate) fn verify_block<N: Network>(
+    &self,
+    block: &Block<T>,
+    schema: N::SignatureScheme,
+  ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain = |hash: [u8; 32]| {
       let existing = db.get(Self::unsigned_included_key(&self.genesis)).unwrap_or(vec![]);
@@ -195,12 +204,17 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       self.next_nonces.clone(),
       schema,
       &commit,
-      unsigned_in_chain
+      unsigned_in_chain,
     )
   }
 
   /// Add a block.
-  pub(crate) fn add_block<N: Network>(&mut self, block: &Block<T>, commit: Vec<u8>, schema: N::SignatureScheme) -> Result<(), BlockError> {
+  pub(crate) fn add_block<N: Network>(
+    &mut self,
+    block: &Block<T>,
+    commit: Vec<u8>,
+    schema: N::SignatureScheme,
+  ) -> Result<(), BlockError> {
     self.verify_block::<N>(block, schema)?;
 
     log::info!(
@@ -239,7 +253,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           let hash = tx.hash();
           let key = Self::unsigned_included_key(&self.genesis);
 
-          // add to the included unsigned 
+          // add to the included unsigned
           let mut existing = txn.get(&key).unwrap_or(vec![]);
           existing.extend(hash);
           txn.put(key, existing);

@@ -2,7 +2,10 @@ use core::ops::Deref;
 use std::{io, collections::HashMap, sync::Arc};
 
 use scale::Encode;
-use ::tendermint::{ext::{Network, Signer as SignerTrait, SignatureScheme, BlockNumber, RoundNumber}, SignedMessageFor, DataFor, Message, SignedMessage, Data};
+use ::tendermint::{
+  ext::{Network, Signer as SignerTrait, SignatureScheme, BlockNumber, RoundNumber},
+  SignedMessageFor, DataFor, Message, SignedMessage, Data,
+};
 use zeroize::Zeroizing;
 use rand::{RngCore, CryptoRng, rngs::OsRng};
 
@@ -16,7 +19,11 @@ use schnorr::SchnorrSignature;
 
 use crate::{
   transaction::{Signed, TransactionError, TransactionKind, Transaction, verify_transaction},
-  ReadWrite, tendermint::{tx::{TendermintTx, VoteSignature, SlashVote}, Validators, Signer}
+  ReadWrite,
+  tendermint::{
+    tx::{TendermintTx, VoteSignature, SlashVote},
+    Validators, Signer,
+  },
 };
 
 use lazy_static::lazy_static;
@@ -174,7 +181,6 @@ pub fn random_signed_transaction<R: RngCore + CryptoRng>(
   (genesis, signed_transaction(rng, genesis, &key, nonce))
 }
 
-
 pub fn new_genesis() -> [u8; 32] {
   let mut genesis = [0; 32];
   OsRng.fill_bytes(&mut genesis);
@@ -184,7 +190,8 @@ pub fn new_genesis() -> [u8; 32] {
 pub async fn signer() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) {
   // signer
   let genesis = new_genesis();
-  let signer = Signer::new(genesis, Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)));
+  let signer =
+    Signer::new(genesis, Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)));
   let validator_id = signer.validator_id().await.unwrap();
 
   // schema
@@ -215,16 +222,21 @@ pub async fn signed_from_data<N: Network>(
   signer_id: N::ValidatorId,
   block_number: u64,
   round_number: u32,
-  data: DataFor<N>
+  data: DataFor<N>,
 ) -> SignedMessageFor<N> {
-  let msg = Message{ sender: signer_id, block: BlockNumber(block_number), round: RoundNumber(round_number), data };
+  let msg = Message {
+    sender: signer_id,
+    block: BlockNumber(block_number),
+    round: RoundNumber(round_number),
+    data,
+  };
   let sig = signer.sign(&msg.encode()).await;
-  SignedMessage{ msg, sig }
+  SignedMessage { msg, sig }
 }
 
 pub async fn random_evidence_tx<N: Network>(
   signer: <N::SignatureScheme as SignatureScheme>::Signer,
-  b: N::Block
+  b: N::Block,
 ) -> TendermintTx {
   let data = Data::Proposal(Some(RoundNumber(0)), b);
   let signer_id = signer.validator_id().await.unwrap();
@@ -232,10 +244,7 @@ pub async fn random_evidence_tx<N: Network>(
   tx_from_evidence::<N>(vec![signed])
 }
 
-pub fn random_vote_tx<R: RngCore + CryptoRng>(
-  rng: &mut R,
-  genesis: [u8; 32]
-) -> TendermintTx {
+pub fn random_vote_tx<R: RngCore + CryptoRng>(rng: &mut R, genesis: [u8; 32]) -> TendermintTx {
   // private key
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut *rng));
 
@@ -245,7 +254,7 @@ pub fn random_vote_tx<R: RngCore + CryptoRng>(
   rng.fill_bytes(&mut id);
   rng.fill_bytes(&mut target);
 
-  let mut tx = TendermintTx::SlashVote( SlashVote{ id, target, sig: VoteSignature::default() } );
+  let mut tx = TendermintTx::SlashVote(SlashVote { id, target, sig: VoteSignature::default() });
   tx.sign(rng, genesis, &key);
 
   tx

@@ -11,8 +11,8 @@ use futures::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{
-  ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender, SlashEvent,
-  TendermintMachine, TendermintHandle,
+  ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
+  SlashEvent, TendermintMachine, TendermintHandle,
 };
 
 type TestValidatorId = u16;

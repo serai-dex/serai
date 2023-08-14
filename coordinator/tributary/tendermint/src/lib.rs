@@ -128,7 +128,7 @@ pub type SignedMessageFor<N> = SignedMessage<
 
 pub enum SlashEvent<N: Network> {
   Id([u8; 32]),
-  WithEvidence(Vec<SignedMessageFor<N>>)
+  WithEvidence(Vec<SignedMessageFor<N>>),
 }
 
 /// A machine executing the Tendermint protocol.
@@ -395,7 +395,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 // Slash the validator for not proposing when they should've
                 log::debug!(target: "tendermint", "Validator didn't propose when they should have");
                 // this SLASH will be voted on.
-                let id = self.hash("Fail to Propose", self.block.number.0, self.block.round().number.0);
+                let id =
+                  self.hash("Fail to Propose", self.block.number.0, self.block.round().number.0);
                 let slash = SlashEvent::Id(id);
                 self.slash(
                   self.weights.proposer(self.block.number, self.block.round().number),
@@ -428,7 +429,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // signatures are used in case we need evidence for bad behavior,
         // we can just put empty signature for our own messages since we aren't malicious.
         let sig_for_msg = sig.clone().unwrap_or(self.signer.empty_signature().await);
-        let res = self.message(SignedMessage { msg: msg.clone(), sig: sig_for_msg}).await;
+        let res = self.message(SignedMessage { msg: msg.clone(), sig: sig_for_msg }).await;
         if res.is_err() && our_message {
           panic!("honest node (ourselves) had invalid behavior");
         }
@@ -477,15 +478,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
             self.reset(msg.round, proposal).await;
           }
           Err(TendermintError::Malicious(sender, evidence_msg)) => {
-
             // if we come here we definitely should have a signature since we aren't malicious.
             if let Some(s) = &sig {
-              let current_msg = SignedMessage{msg: msg.clone(), sig: s.clone()};
+              let current_msg = SignedMessage { msg: msg.clone(), sig: s.clone() };
 
               let slash = if let Some(old_msg) = evidence_msg {
                 // if the malicious message contains a block, only vote to slash.
                 if let Data::Proposal(_, _) = &current_msg.msg.data {
-                  let id = self.hash("Invalid Block", self.block.number.0, self.block.round().number.0);
+                  let id =
+                    self.hash("Invalid Block", self.block.number.0, self.block.round().number.0);
                   SlashEvent::Id(id)
                 } else {
                   // if we have the evidence, slash with evidence.
@@ -496,12 +497,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
                   if old_msg != current_msg {
                     evidence.push(current_msg.clone());
                   }
-    
+
                   SlashEvent::WithEvidence(evidence)
                 }
               } else {
                 // we don't have evidence. Slash with vote.
-                let id = self.hash("Malicious Message", self.block.number.0, self.block.round().number.0);
+                let id =
+                  self.hash("Malicious Message", self.block.number.0, self.block.round().number.0);
                 SlashEvent::Id(id)
               };
 
@@ -515,7 +517,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             } else {
               assert!(our_message);
             }
-          },
+          }
           Err(TendermintError::Temporal) => (),
           Err(TendermintError::AlreadyHandled) => (),
         }
@@ -543,7 +545,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // Else, there's a DoS where we receive a precommit for some round infinitely in the future
       // which forces us to calculate every end time
       if let Some(end_time) = self.block.end_time.get(&msg.round) {
-        if !self.validators.verify(msg.sender, &commit_msg(end_time.canonical(), id.as_ref()), sig) {
+        if !self.validators.verify(msg.sender, &commit_msg(end_time.canonical(), id.as_ref()), sig)
+        {
           log::warn!(target: "tendermint", "Validator produced an invalid commit signature");
           Err(TendermintError::Malicious(msg.sender, Some(signed.clone())))?;
         }

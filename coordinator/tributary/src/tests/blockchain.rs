@@ -1,4 +1,8 @@
-use std::{collections::{VecDeque, HashMap}, sync::Arc, io};
+use std::{
+  collections::{VecDeque, HashMap},
+  sync::Arc,
+  io,
+};
 
 use lazy_static::__Deref;
 use zeroize::Zeroizing;
@@ -15,7 +19,7 @@ use crate::{
   merkle, ProvidedError, ProvidedTransactions, Block, Blockchain, Transaction,
   tests::{
     ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::LocalP2p,
-    new_genesis, random_vote_tx, random_evidence_tx
+    new_genesis, random_vote_tx, random_evidence_tx,
   },
   tendermint::{TendermintNetwork, Validators, tx::TendermintTx, Signer, TendermintBlock},
   async_sequential, ReadWrite, TransactionKind, TransactionError, BlockError,
@@ -100,7 +104,11 @@ fn invalid_block() {
   {
     // Add a valid transaction
     let mut blockchain = blockchain.clone();
-    assert!(blockchain.add_transaction::<N>(true, Transaction::Application(tx.clone()), validators.clone()));
+    assert!(blockchain.add_transaction::<N>(
+      true,
+      Transaction::Application(tx.clone()),
+      validators.clone()
+    ));
     let mut block = blockchain.build_block::<N>(validators.clone());
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
     blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
@@ -121,14 +129,18 @@ fn invalid_block() {
   {
     // Invalid signature
     let mut blockchain = blockchain.clone();
-    assert!(blockchain.add_transaction::<N>(true, Transaction::Application(tx), validators.clone()));
+    assert!(blockchain.add_transaction::<N>(
+      true,
+      Transaction::Application(tx),
+      validators.clone()
+    ));
     let mut block = blockchain.build_block::<N>(validators.clone());
     blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
     match &mut block.transactions[0] {
       Transaction::Application(tx) => {
         tx.1.signature.s += <Ristretto as Ciphersuite>::F::ONE;
-      },
-      _ => panic!("non-signed tx found")
+      }
+      _ => panic!("non-signed tx found"),
     }
     assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
 
@@ -141,19 +153,21 @@ fn invalid_block() {
     // invalid vote tx
     let mut blockchain = blockchain.clone();
     let vote_tx = random_vote_tx(&mut OsRng, genesis);
-    assert!(blockchain.add_transaction::<N>(true, Transaction::Tendermint(vote_tx), validators.clone()));
+    assert!(blockchain.add_transaction::<N>(
+      true,
+      Transaction::Tendermint(vote_tx),
+      validators.clone()
+    ));
     let mut block = blockchain.build_block::<N>(validators.clone());
     blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
     match &mut block.transactions[0] {
-      Transaction::Tendermint(tx) => {
-        match tx {
-          TendermintTx::SlashVote(vote) => {
-            vote.sig.signature.s += <Ristretto as Ciphersuite>::F::ONE;
-          },
-          _ =>  panic!("non-vote tx found")
+      Transaction::Tendermint(tx) => match tx {
+        TendermintTx::SlashVote(vote) => {
+          vote.sig.signature.s += <Ristretto as Ciphersuite>::F::ONE;
         }
+        _ => panic!("non-vote tx found"),
       },
-      _ => panic!("non-tendermint tx found")
+      _ => panic!("non-tendermint tx found"),
     }
 
     assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
@@ -184,9 +198,15 @@ fn signed_transaction() {
               mempool: Vec<Transaction<SignedTransaction>>| {
     let tip = blockchain.tip();
     for tx in mempool.clone() {
-      let Transaction::Application(tx) = tx else { panic!("tendermint tx found"); };
+      let Transaction::Application(tx) = tx else {
+        panic!("tendermint tx found");
+      };
       let next_nonce = blockchain.next_nonce(signer).unwrap();
-      assert!(blockchain.add_transaction::<N>(true, Transaction::Application(tx), validators.clone()));
+      assert!(blockchain.add_transaction::<N>(
+        true,
+        Transaction::Application(tx),
+        validators.clone()
+      ));
       assert_eq!(next_nonce + 1, blockchain.next_nonce(signer).unwrap());
     }
     let block = blockchain.build_block::<N>(validators.clone());
@@ -215,7 +235,9 @@ fn signed_transaction() {
   // Test with a flood of nonces
   let mut mempool = vec![];
   for nonce in 1 .. 64 {
-    mempool.push(Transaction::Application(crate::tests::signed_transaction(&mut OsRng, genesis, &key, nonce)));
+    mempool.push(Transaction::Application(crate::tests::signed_transaction(
+      &mut OsRng, genesis, &key, nonce,
+    )));
   }
   test(&mut blockchain, mempool);
   assert_eq!(blockchain.next_nonce(signer), Some(64));
@@ -271,11 +293,17 @@ fn tendermint_vote_tx() {
   let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
 
   let test = |blockchain: &mut Blockchain<MemDb, SignedTransaction>,
-      mempool: Vec<Transaction<SignedTransaction>>| {
+              mempool: Vec<Transaction<SignedTransaction>>| {
     let tip = blockchain.tip();
     for tx in mempool.clone() {
-      let Transaction::Tendermint(tx) = tx else { panic!("non-tendermint tx found"); };
-      assert!(blockchain.add_transaction::<N>(true, Transaction::Tendermint(tx), validators.clone()));
+      let Transaction::Tendermint(tx) = tx else {
+        panic!("non-tendermint tx found");
+      };
+      assert!(blockchain.add_transaction::<N>(
+        true,
+        Transaction::Tendermint(tx),
+        validators.clone()
+      ));
     }
     let block = blockchain.build_block::<N>(validators.clone());
 
@@ -311,16 +339,13 @@ fn tendermint_vote_tx() {
 
   // test with multiple txs
   let mut mempool: Vec<Transaction<SignedTransaction>> = vec![];
-  for _ in 0..5 {
+  for _ in 0 .. 5 {
     mempool.push(Transaction::Tendermint(random_vote_tx(&mut OsRng, genesis)));
   }
   test(&mut blockchain, mempool);
 }
 
-
-
 async_sequential!(
-
   async fn tendermint_evidence_tx() {
     let genesis = new_genesis();
     let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
@@ -331,11 +356,18 @@ async_sequential!(
     let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
 
     let test = |blockchain: &mut Blockchain<MemDb, SignedTransaction>,
-        mempool: Vec<Transaction<SignedTransaction>>, validators: Arc<Validators>| {
+                mempool: Vec<Transaction<SignedTransaction>>,
+                validators: Arc<Validators>| {
       let tip = blockchain.tip();
       for tx in mempool.clone() {
-        let Transaction::Tendermint(tx) = tx else { panic!("non-tendermint tx found"); };
-        assert!(blockchain.add_transaction::<N>(true, Transaction::Tendermint(tx), validators.clone()));
+        let Transaction::Tendermint(tx) = tx else {
+          panic!("non-tendermint tx found");
+        };
+        assert!(blockchain.add_transaction::<N>(
+          true,
+          Transaction::Tendermint(tx),
+          validators.clone()
+        ));
       }
       let block = blockchain.build_block::<N>(validators.clone());
       assert_eq!(blockchain.tip(), tip);
@@ -359,12 +391,14 @@ async_sequential!(
     // test with multiple txs
     let mut mempool: Vec<Transaction<SignedTransaction>> = vec![];
     let mut signers = vec![];
-    for _ in 0..5 {
+    for _ in 0 .. 5 {
       let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
       let signer = Signer::new(genesis, key.clone());
       let signer_id = Ristretto::generator() * key.deref();
       signers.push((signer_id, 1));
-      mempool.push(Transaction::Tendermint(random_evidence_tx::<N>(signer.into(), TendermintBlock(vec![0x12])).await));
+      mempool.push(Transaction::Tendermint(
+        random_evidence_tx::<N>(signer.into(), TendermintBlock(vec![0x12])).await,
+      ));
     }
 
     // update validators
@@ -375,24 +409,19 @@ async_sequential!(
 
 #[test]
 fn block_tx_ordering() {
-
   #[derive(Debug, PartialEq, Eq, Clone)]
   enum SignedTx {
     Signed(SignedTransaction),
-    Provided(ProvidedTransaction)
+    Provided(ProvidedTransaction),
   }
   impl ReadWrite for SignedTx {
     fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
       let mut kind = [0];
       reader.read_exact(&mut kind)?;
       match kind[0] {
-        0 => {
-          Ok(SignedTx::Signed(SignedTransaction::read(reader)?))
-        },
-        1 => {
-          Ok(SignedTx::Provided(ProvidedTransaction::read(reader)?))
-        },
-        _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type"))
+        0 => Ok(SignedTx::Signed(SignedTransaction::read(reader)?)),
+        1 => Ok(SignedTx::Provided(ProvidedTransaction::read(reader)?)),
+        _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
       }
     }
 
@@ -401,7 +430,7 @@ fn block_tx_ordering() {
         SignedTx::Signed(signed) => {
           writer.write_all(&[0])?;
           signed.write(writer)
-        },
+        }
         SignedTx::Provided(pro) => {
           writer.write_all(&[1])?;
           pro.write(writer)
@@ -414,14 +443,14 @@ fn block_tx_ordering() {
     fn kind(&self) -> TransactionKind<'_> {
       match self {
         SignedTx::Signed(signed) => signed.kind(),
-        SignedTx::Provided(pro) => pro.kind()
+        SignedTx::Provided(pro) => pro.kind(),
       }
     }
 
     fn hash(&self) -> [u8; 32] {
       match self {
         SignedTx::Signed(signed) => signed.hash(),
-        SignedTx::Provided(pro) => pro.hash()
+        SignedTx::Provided(pro) => pro.hash(),
       }
     }
 
@@ -444,15 +473,21 @@ fn block_tx_ordering() {
   let unsigned_tx = random_vote_tx(&mut OsRng, genesis);
 
   let (_, mut blockchain) = new_blockchain::<SignedTx>(genesis, &[signer]);
-  let mempool = vec![
-    Transaction::Application(signed_tx.clone()),
-    Transaction::Tendermint(unsigned_tx.clone())
-  ];
+  let mempool =
+    vec![Transaction::Application(signed_tx.clone()), Transaction::Tendermint(unsigned_tx.clone())];
 
   // add txs
   let tip = blockchain.tip();
-  assert!(blockchain.add_transaction::<N>(true, Transaction::Application(signed_tx), validators.clone()));
-  assert!(blockchain.add_transaction::<N>(true, Transaction::Tendermint(unsigned_tx), validators.clone()));
+  assert!(blockchain.add_transaction::<N>(
+    true,
+    Transaction::Application(signed_tx),
+    validators.clone()
+  ));
+  assert!(blockchain.add_transaction::<N>(
+    true,
+    Transaction::Tendermint(unsigned_tx),
+    validators.clone()
+  ));
 
   blockchain.provide_transaction(provided_tx.clone()).unwrap();
   let mut block = blockchain.build_block::<N>(validators.clone());
@@ -479,7 +514,10 @@ fn block_tx_ordering() {
   block.transactions.swap(0, 1);
 
   // should fail
-  assert_eq!(blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(), BlockError::WrongTxOrder);
+  assert_eq!(
+    blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
+    BlockError::WrongTxOrder
+  );
 
   // reset
   block.transactions = txs_orig.clone();
@@ -488,7 +526,10 @@ fn block_tx_ordering() {
   block.transactions.swap(0, 2);
 
   // should fail
-  assert_eq!(blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(), BlockError::WrongTxOrder);
+  assert_eq!(
+    blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
+    BlockError::WrongTxOrder
+  );
 
   // reset
   block.transactions = txs_orig.clone();
@@ -497,7 +538,10 @@ fn block_tx_ordering() {
   block.transactions.swap(1, 2);
 
   // should fail
-  assert_eq!(blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(), BlockError::WrongTxOrder);
+  assert_eq!(
+    blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
+    BlockError::WrongTxOrder
+  );
 
   // reset
   block.transactions = txs_orig;

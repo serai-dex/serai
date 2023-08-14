@@ -269,14 +269,13 @@ async fn handle_block<
         TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs[0].msg.sender);
 
         // TODO: disconnect the node from network
-      },
+      }
       TributaryTransaction::Tendermint(TendermintTx::SlashVote(_, _)) => {
         // TODO: make sure same signer doesn't vote twice
 
         // increment the counter for this vote
         let vote_key = TributaryDb::<D>::slash_vote_key(genesis, vote.id, vote.target);
-        let mut count =
-          txn.get(&vote_key).map_or(0, |c| u32::from_le_bytes(c.try_into().unwrap()));
+        let mut count = txn.get(&vote_key).map_or(0, |c| u32::from_le_bytes(c.try_into().unwrap()));
         count += 1;
         txn.put(vote_key, count.to_le_bytes());
 
@@ -327,7 +326,16 @@ pub async fn handle_new_blocks<
   let mut last_block = db.last_block(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
-    handle_block<_, _, _, _, P>(db, key, recognized_id, processors, publish_serai_tx.clone(), spec, block).await;
+    handle_block::<_, _, _, _, P>(
+      db,
+      key,
+      recognized_id,
+      processors,
+      publish_serai_tx.clone(),
+      spec,
+      block,
+    )
+    .await;
     last_block = next;
     db.set_last_block(genesis, next);
   }

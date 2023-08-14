@@ -7,8 +7,8 @@ use serai_db::{DbTxn, Db};
 use tendermint::ext::{Network, Commit};
 
 use crate::{
-  Transaction,
-  ACCOUNT_MEMPOOL_LIMIT, tendermint::tx::verify_tendermint_tx,
+  Transaction, ACCOUNT_MEMPOOL_LIMIT,
+  tendermint::tx::verify_tendermint_tx,
   transaction::{Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction},
 };
 
@@ -47,12 +47,21 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     self.txs.insert(tx_hash, tx);
   }
 
-  fn unsigned_already_exist(&self, hash: [u8; 32], unsigned_in_chain: impl Fn ([u8; 32]) -> bool) -> bool {
+  fn unsigned_already_exist(
+    &self,
+    hash: [u8; 32],
+    unsigned_in_chain: impl Fn([u8; 32]) -> bool,
+  ) -> bool {
     unsigned_in_chain(hash) || self.txs.contains_key(&hash)
   }
 
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
-    let mut res = Mempool { db, genesis, txs: HashMap::<[u8; 32], Transaction<T>>::new(), next_nonces: HashMap::new() };
+    let mut res = Mempool {
+      db,
+      genesis,
+      txs: HashMap::<[u8; 32], Transaction<T>>::new(),
+      next_nonces: HashMap::new(),
+    };
 
     let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
     if current_mempool.is_empty() {
@@ -62,13 +71,14 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     current_mempool.chunks(32).for_each(|hash| {
       let hash: [u8; 32] = hash.try_into().unwrap();
       let tx: Transaction<T> =
-      Transaction::read::<&[u8]>(&mut res.db.get(res.transaction_key(&hash)).unwrap().as_ref()).unwrap();
+        Transaction::read::<&[u8]>(&mut res.db.get(res.transaction_key(&hash)).unwrap().as_ref())
+          .unwrap();
       debug_assert_eq!(tx.hash(), hash);
 
       match tx {
         Transaction::Tendermint(tx) => {
           res.txs.insert(hash, Transaction::Tendermint(tx));
-        },
+        }
         Transaction::Application(tx) => {
           match tx.kind() {
             TransactionKind::Signed(Signed { signer, nonce, .. }) => {
@@ -77,13 +87,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
                 assert!(prev < *nonce);
               }
               res.txs.insert(hash, Transaction::Application(tx));
-            },
+            }
             TransactionKind::Unsigned => {
               res.txs.insert(hash, Transaction::Application(tx));
             }
             _ => panic!("mempool database had a provided transaction"),
           }
-        },
+        }
       }
     });
 
@@ -97,13 +107,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     internal: bool,
     tx: Transaction<T>,
     schema: N::SignatureScheme,
-    unsigned_in_chain: impl Fn ([u8; 32]) -> bool,
-    commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>
+    unsigned_in_chain: impl Fn([u8; 32]) -> bool,
+    commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
   ) -> bool {
     match &tx {
       Transaction::Tendermint(tendermint_tx) => {
         assert_eq!(TransactionKind::Unsigned, tendermint_tx.kind());
-        
+
         // check we have the tx in the pool/chain
         if self.unsigned_already_exist(tx.hash(), unsigned_in_chain) {
           return false;
@@ -116,7 +126,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
         self.save_tx(tx);
         true
-      },
+      }
       Transaction::Application(app_tx) => {
         match app_tx.kind() {
           TransactionKind::Signed(Signed { signer, nonce, .. }) => {
@@ -132,7 +142,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             if let Some(mempool_next_nonce) = self.next_nonces.get(signer) {
               blockchain_is_greater = blockchain_next_nonce > *mempool_next_nonce;
             }
-    
+
             if blockchain_is_greater {
               self.next_nonces.insert(*signer, blockchain_next_nonce);
             }
@@ -151,9 +161,8 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             // save tx to the pool
             self.save_tx(tx);
             true
-          },
+          }
           TransactionKind::Unsigned => {
-
             // check we have the tx in the pool/chain
             if self.unsigned_already_exist(tx.hash(), unsigned_in_chain) {
               return false;
@@ -182,15 +191,14 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn block(
     &mut self,
     blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
-    unsigned_in_chain: impl Fn ([u8; 32]) -> bool,
+    unsigned_in_chain: impl Fn([u8; 32]) -> bool,
   ) -> Vec<Transaction<T>> {
-
     let mut res = {
       let mut unsigned = vec![];
       let mut signed = vec![];
       for hash in self.txs.keys().cloned().collect::<Vec<_>>() {
         let tx = &self.txs[&hash];
-  
+
         // Verify this hasn't gone stale
         match tx.kind() {
           TransactionKind::Signed(Signed { signer, nonce, .. }) => {
@@ -198,19 +206,19 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
               self.remove(&hash);
               continue;
             }
-  
+
             // Since this TX isn't stale, include it
             signed.push(tx.clone());
-          },
+          }
           TransactionKind::Unsigned => {
             if unsigned_in_chain(hash) {
               self.remove(&hash);
               continue;
             }
-  
+
             // Since this TX isn't stale, include it
             unsigned.push(tx.clone());
-          },
+          }
           _ => panic!("provided transaction entered mempool"),
         }
       }

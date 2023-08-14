@@ -42,9 +42,11 @@ pub enum BlockError {
 }
 
 use crate::{
-  transaction::{TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction},
+  transaction::{
+    TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction,
+  },
   BLOCK_SIZE_LIMIT, ReadWrite, merkle, Transaction,
-  tendermint::tx::verify_tendermint_tx
+  tendermint::tx::verify_tendermint_tx,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -121,7 +123,7 @@ impl<T: TransactionTrait> Block<T> {
       match tx.kind() {
         TransactionKind::Signed(_) => signed.push(tx),
         TransactionKind::Unsigned => unsigned.push(tx),
-        TransactionKind::Provided(_) => panic!("provided transaction entered mempool")
+        TransactionKind::Provided(_) => panic!("provided transaction entered mempool"),
       }
     }
 
@@ -173,10 +175,9 @@ impl<T: TransactionTrait> Block<T> {
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
     schema: N::SignatureScheme,
-    commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>,
-    unsigned_in_chain: impl Fn ([u8; 32]) -> bool
+    commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
+    unsigned_in_chain: impl Fn([u8; 32]) -> bool,
   ) -> Result<(), BlockError> {
-
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     enum Order {
       Provided = 0,
@@ -205,18 +206,20 @@ impl<T: TransactionTrait> Block<T> {
 
       let current_tx_order = match tx.kind() {
         TransactionKind::Provided(order) => {
-          let Some(local) =
-            locally_provided.get_mut(order).and_then(|deque| deque.pop_front()) else {
-              Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
-            };
+          let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front())
+          else {
+            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+          };
           // Since this was a provided TX, it must be an application TX
-          let Transaction::Application(tx) = tx else { Err(BlockError::NonLocalProvided(txs.pop().unwrap()))? };
+          let Transaction::Application(tx) = tx else {
+            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+          };
           if tx != &local {
             Err(BlockError::DistinctProvided)?;
           }
 
           Order::Provided
-        },
+        }
         TransactionKind::Unsigned => {
           // check we don't already have the tx in the chain
           if unsigned_in_chain(tx_hash) {
@@ -224,8 +227,8 @@ impl<T: TransactionTrait> Block<T> {
           }
 
           Order::Unsigned
-        },
-        TransactionKind::Signed(..) => Order::Signed
+        }
+        TransactionKind::Signed(..) => Order::Signed,
       };
 
       // enforce Provided => Unsigned => Signed order
@@ -233,7 +236,6 @@ impl<T: TransactionTrait> Block<T> {
         Err(BlockError::WrongTxOrder)?;
       }
       last_tx_order = current_tx_order;
-
 
       if current_tx_order == Order::Provided {
         // We don't need to call verify_transaction since we did when we locally provided this
@@ -249,13 +251,11 @@ impl<T: TransactionTrait> Block<T> {
             Ok(()) => {}
             Err(e) => Err(BlockError::TransactionError(e))?,
           }
-        },
-        Transaction::Application(tx) => {
-          match verify_transaction(tx, genesis, &mut next_nonces) {
-            Ok(()) => {}
-            Err(e) => Err(BlockError::TransactionError(e))?,
-          }
         }
+        Transaction::Application(tx) => match verify_transaction(tx, genesis, &mut next_nonces) {
+          Ok(()) => {}
+          Err(e) => Err(BlockError::TransactionError(e))?,
+        },
       }
     }
 

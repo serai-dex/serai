@@ -59,15 +59,14 @@ pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
 pub(crate) const BLOCK_MESSAGE: u8 = 1;
 pub(crate) const TRANSACTION_MESSAGE: u8 = 2;
 
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Transaction<T: TransactionTrait> {
   Tendermint(TendermintTx),
-  Application(T)
+  Application(T),
 }
 
-impl<T: TransactionTrait> ReadWrite for Transaction<T>  {
+impl<T: TransactionTrait> ReadWrite for Transaction<T> {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     let mut kind = [0];
     reader.read_exact(&mut kind)?;
@@ -75,11 +74,11 @@ impl<T: TransactionTrait> ReadWrite for Transaction<T>  {
       0 => {
         let tx = TendermintTx::read(reader)?;
         Ok(Transaction::Tendermint(tx))
-      },
+      }
       1 => {
         let tx = T::read(reader)?;
         Ok(Transaction::Application(tx))
-      },
+      }
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
     }
   }
@@ -88,7 +87,7 @@ impl<T: TransactionTrait> ReadWrite for Transaction<T>  {
       Transaction::Tendermint(tx) => {
         writer.write_all(&[0])?;
         tx.write(writer)
-      },
+      }
       Transaction::Application(tx) => {
         writer.write_all(&[1])?;
         tx.write(writer)
@@ -101,18 +100,17 @@ impl<T: TransactionTrait> Transaction<T> {
   pub fn hash(&self) -> [u8; 32] {
     match self {
       Transaction::Tendermint(tx) => tx.hash(),
-      Transaction::Application(tx) => tx.hash()
+      Transaction::Application(tx) => tx.hash(),
     }
   }
-  
+
   pub fn kind(&self) -> TransactionKind<'_> {
     match self {
       Transaction::Tendermint(tx) => tx.kind(),
-      Transaction::Application(tx) => tx.kind()
+      Transaction::Application(tx) => tx.kind(),
     }
   }
 }
-
 
 /// An item which can be read and written.
 pub trait ReadWrite: Sized {
@@ -175,7 +173,9 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     } else {
       start_time
     };
-    let proposal = TendermintBlock(blockchain.build_block::<TendermintNetwork<D, T, P>>(validators.clone()).serialize());
+    let proposal = TendermintBlock(
+      blockchain.build_block::<TendermintNetwork<D, T, P>>(validators.clone()).serialize(),
+    );
     let blockchain = Arc::new(RwLock::new(blockchain));
 
     let network = TendermintNetwork { genesis, signer, validators, blockchain, p2p };
@@ -228,7 +228,11 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     let tx = Transaction::Application(tx);
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
-    let res = self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(true, tx, self.network.signature_scheme());
+    let res = self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
+      true,
+      tx,
+      self.network.signature_scheme(),
+    );
     if res {
       self.network.p2p.broadcast(self.genesis, to_broadcast).await;
     }
@@ -283,7 +287,12 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
 
         // TODO: Sync mempools with fellow peers
         // Can we just rebroadcast transactions not included for at least two blocks?
-        let res = self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(false, tx, self.network.signature_scheme());
+        let res =
+          self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
+            false,
+            tx,
+            self.network.signature_scheme(),
+          );
         log::debug!("received transaction message. valid new transaction: {res}");
         res
       }

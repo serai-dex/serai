@@ -38,9 +38,9 @@ use tokio::{
 };
 
 use crate::{
-  transaction::Transaction as TransactionTrait, 
-  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite, BlockHeader, Block, BlockError,
-  Blockchain, P2p, Transaction, tendermint::tx::SlashVote
+  transaction::Transaction as TransactionTrait, TENDERMINT_MESSAGE, TRANSACTION_MESSAGE,
+  BLOCK_MESSAGE, ReadWrite, BlockHeader, Block, BlockError, Blockchain, P2p, Transaction,
+  tendermint::tx::SlashVote,
 };
 
 pub mod tx;
@@ -288,11 +288,11 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
           data.extend(encoded);
         }
         TendermintTx::SlashEvidence(data)
-      },
+      }
       SlashEvent::Id(id) => {
         // create a signed vote tx
         let target = validator.encode().try_into().unwrap();
-        TendermintTx::SlashVote(SlashVote{id, target, sig: VoteSignature::default()})
+        TendermintTx::SlashVote(SlashVote { id, target, sig: VoteSignature::default() })
       }
     };
 
@@ -304,7 +304,11 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     // add tx to blockchain and broadcast to peers.
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
-    let res = self.blockchain.write().await.add_transaction::<Self>(true, Transaction::Tendermint(tx), self.signature_scheme());
+    let res = self.blockchain.write().await.add_transaction::<Self>(
+      true,
+      Transaction::Tendermint(tx),
+      self.signature_scheme(),
+    );
     if res {
       self.p2p.broadcast(signer.genesis, to_broadcast).await;
     }
@@ -319,10 +323,12 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   async fn validate(&mut self, block: &Self::Block) -> Result<(), TendermintBlockError> {
     let block =
       Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
-    self.blockchain.read().await.verify_block::<Self>(&block, self.signature_scheme()).map_err(|e| match e {
-      BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
-      _ => TendermintBlockError::Fatal,
-    })
+    self.blockchain.read().await.verify_block::<Self>(&block, self.signature_scheme()).map_err(
+      |e| match e {
+        BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
+        _ => TendermintBlockError::Fatal,
+      },
+    )
   }
 
   async fn add_block(
@@ -348,7 +354,11 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
 
     let encoded_commit = commit.encode();
     loop {
-      let block_res = self.blockchain.write().await.add_block::<Self>(&block, encoded_commit.clone(), self.signature_scheme());
+      let block_res = self.blockchain.write().await.add_block::<Self>(
+        &block,
+        encoded_commit.clone(),
+        self.signature_scheme(),
+      );
       match block_res {
         Ok(()) => {
           // If we successfully added this block, broadcast it
@@ -371,6 +381,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       }
     }
 
-    Some(TendermintBlock(self.blockchain.write().await.build_block::<Self>(self.signature_scheme()).serialize()))
+    Some(TendermintBlock(
+      self.blockchain.write().await.build_block::<Self>(self.signature_scheme()).serialize(),
+    ))
   }
 }

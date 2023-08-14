@@ -61,7 +61,7 @@ impl<S: Signer> Signer for Arc<S> {
   async fn sign(&self, msg: &[u8]) -> Self::Signature {
     self.as_ref().sign(msg).await
   }
-  
+
   async fn empty_signature(&self) -> Self::Signature {
     self.as_ref().empty_signature().await
   }

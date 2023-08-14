@@ -10,22 +10,22 @@ use blake2::{Digest, Blake2s256, Blake2b512};
 use rand::{RngCore, CryptoRng};
 
 use ciphersuite::{
-  group::{
-    GroupEncoding,
-    ff::Field,
-  },
+  group::{GroupEncoding, ff::Field},
   Ciphersuite, Ristretto,
 };
 use schnorr::SchnorrSignature;
 
 use crate::{
   transaction::{Transaction, TransactionKind, TransactionError},
-  ReadWrite
+  ReadWrite,
 };
 
 use tendermint::{
-  SignedMessageFor, Data, round::RoundData, time::CanonicalInstant, commit_msg,
-  ext::{Network, Commit, RoundNumber, SignatureScheme}
+  SignedMessageFor, Data,
+  round::RoundData,
+  time::CanonicalInstant,
+  commit_msg,
+  ext::{Network, Commit, RoundNumber, SignatureScheme},
 };
 
 /// Data for a signed transaction.
@@ -61,9 +61,9 @@ impl Default for VoteSignature {
 /// Data for a signed transaction.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SlashVote {
-  pub id: [u8; 32],         // vote id(slash event id)
-  pub target: [u8; 32],     // who to slash 
-  pub sig: VoteSignature    // signature
+  pub id: [u8; 32],       // vote id(slash event id)
+  pub target: [u8; 32],   // who to slash
+  pub sig: VoteSignature, // signature
 }
 
 impl ReadWrite for SlashVote {
@@ -90,7 +90,7 @@ pub enum TendermintTx {
   SlashEvidence(Vec<u8>),
   // TODO: should the SlashVote.sig be directly in the enum
   // like as in (SlashVote, sig) since the sig is sig of the tx.
-  SlashVote(SlashVote)
+  SlashVote(SlashVote),
 }
 
 impl ReadWrite for TendermintTx {
@@ -108,7 +108,7 @@ impl ReadWrite for TendermintTx {
       1 => {
         let vote = SlashVote::read(reader)?;
         Ok(TendermintTx::SlashVote(vote))
-      },
+      }
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
     }
   }
@@ -119,7 +119,7 @@ impl ReadWrite for TendermintTx {
         writer.write_all(&[0])?;
         writer.write_all(&u32::try_from(ev.len()).unwrap().to_le_bytes())?;
         writer.write_all(ev)
-      },
+      }
       TendermintTx::SlashVote(vote) => {
         writer.write_all(&[1])?;
         vote.write(writer)
@@ -132,7 +132,7 @@ impl Transaction for TendermintTx {
   fn kind(&self) -> TransactionKind<'_> {
     match self {
       TendermintTx::SlashEvidence(..) => TransactionKind::Unsigned,
-      TendermintTx::SlashVote(..) => TransactionKind::Unsigned
+      TendermintTx::SlashVote(..) => TransactionKind::Unsigned,
     }
   }
 
@@ -160,7 +160,7 @@ impl Transaction for TendermintTx {
           )
           .into(),
         )
-      },
+      }
       _ => panic!("sig_hash called on non-signed evidence transaction"),
     }
   }
@@ -178,16 +178,13 @@ impl Transaction for TendermintTx {
         }
 
         Ok(())
-      },
-      TendermintTx::SlashVote(..) => {
-        Ok(())
       }
+      TendermintTx::SlashVote(..) => Ok(()),
     }
   }
 }
 
 impl TendermintTx {
-
   // Sign a transaction
   pub fn sign<R: RngCore + CryptoRng>(
     &mut self,
@@ -195,59 +192,55 @@ impl TendermintTx {
     genesis: [u8; 32],
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   ) {
-
     // return from here for non-signed txs so that
     // rest of the function is cleaner.
     match self {
       TendermintTx::SlashEvidence(_) => return,
-      TendermintTx::SlashVote(_)=> {}
+      TendermintTx::SlashVote(_) => {}
     }
 
     fn signature(tx: &mut TendermintTx) -> Option<&mut VoteSignature> {
       match tx {
-        TendermintTx::SlashVote(vote) => {
-          Some(&mut vote.sig)
-        },
-        _ => None
+        TendermintTx::SlashVote(vote) => Some(&mut vote.sig),
+        _ => None,
       }
     }
 
     signature(self).unwrap().signer = Ristretto::generator() * key.deref();
-    
+
     let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
-    signature(self).unwrap().signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
+    signature(self).unwrap().signature.R =
+      <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
 
     let sig_hash = self.sig_hash(genesis);
 
-    signature(self).unwrap().signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
+    signature(self).unwrap().signature =
+      SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
   }
 }
 
-
-pub fn decode_evidence<N: Network>(ev: &[u8]) -> Result<Vec<SignedMessageFor<N>>, TransactionError> {
+pub fn decode_evidence<N: Network>(
+  ev: &[u8],
+) -> Result<Vec<SignedMessageFor<N>>, TransactionError> {
   let mut res = vec![];
 
   // first byte is the length of the message vector
   let len = u8::from_le_bytes([ev[0]]);
   let mut pos: usize = 1;
-  for _ in 0..len {
+  for _ in 0 .. len {
     // get the msg size
     // make sure we aren't out of range
-    let Some(size_bytes) =  ev.get(pos..pos+4) else {
-      Err(TransactionError::InvalidContent)?
-    };
+    let Some(size_bytes) = ev.get(pos .. pos + 4) else { Err(TransactionError::InvalidContent)? };
     let Ok(size) = usize::try_from(u32::from_le_bytes(size_bytes.try_into().unwrap())) else {
       Err(TransactionError::InvalidContent)?
     };
     pos += 4;
 
     // size might be intentionally bigger then whole slice
-    let Some(mut msg_bytes) =  ev.get(pos..pos+size) else {
+    let Some(mut msg_bytes) = ev.get(pos .. pos + size) else {
       Err(TransactionError::InvalidContent)?
     };
-    let Ok(msg) = SignedMessageFor::<N>::decode::<&[u8]>(
-      &mut msg_bytes
-    ) else {
+    let Ok(msg) = SignedMessageFor::<N>::decode::<&[u8]>(&mut msg_bytes) else {
       Err(TransactionError::InvalidContent)?
     };
     pos += size;
@@ -260,9 +253,8 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
   tx: &TendermintTx,
   genesis: [u8; 32],
   schema: N::SignatureScheme,
-  commit: impl Fn (u32) -> Option<Commit<N::SignatureScheme>>
+  commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
 ) -> Result<(), TransactionError> {
-
   tx.verify()?;
 
   match tx {
@@ -290,25 +282,25 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
               if vr.is_none() || vr.unwrap().0 < msg.round.0 {
                 Err(TransactionError::InvalidContent)?
               }
-            },
+            }
             Data::Precommit(Some((id, sig))) => {
-
               // make sure block no isn't overflowing
               // TODO: is rejecting the evidence right thing to do here?
               // if this is the first block, there is no prior_commit, hence
               // no prior end_time. Is the end_tine is just 0 in that case?
-              // on the other hand, are we even able to get precommit slash evidence in the first block?
+              // on the other hand, are we even able to get precommit slash evidence in the first
+              // block?
               if msg.block.0 == 0 {
                 Err(TransactionError::InvalidContent)?
               }
 
               // get the last commit
               let prior_commit = match u32::try_from(msg.block.0 - 1) {
-                Ok(n) =>  match commit(n) {
+                Ok(n) => match commit(n) {
                   Some(c) => c,
-                  _ => Err(TransactionError::InvalidContent)? 
-                } ,
-                _ => Err(TransactionError::InvalidContent)?
+                  _ => Err(TransactionError::InvalidContent)?,
+                },
+                _ => Err(TransactionError::InvalidContent)?,
               };
 
               // calculate the end time till the msg round
@@ -318,14 +310,14 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
               }
 
               // verify that the commit was actually invalid
-              if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
+              if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig)
+              {
                 Err(TransactionError::InvalidContent)?
               }
-            },
-            _ => Err(TransactionError::InvalidContent)?
+            }
+            _ => Err(TransactionError::InvalidContent)?,
           }
-
-        },
+        }
         2 => {
           // 2 types of evidence here
           // 1- multiple distinct messages for the same block + round + step
@@ -335,7 +327,7 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
 
           // conflicting messages must be for the same block
           if first.block != second.block {
-            Err(TransactionError::InvalidContent)? 
+            Err(TransactionError::InvalidContent)?
           }
 
           // verify it is from the same node
@@ -358,17 +350,17 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           }
 
           // verify that msgs are for the same round + step but has distinct data
-          if first.round != second.round || first.data.step() != second.data.step() || first.data == second.data {
+          if first.round != second.round ||
+            first.data.step() != second.data.step() ||
+            first.data == second.data
+          {
             Err(TransactionError::InvalidContent)?
           }
-        },
-        _ => {
-          Err(TransactionError::InvalidContent)?
         }
+        _ => Err(TransactionError::InvalidContent)?,
       }
-    },
+    }
     TendermintTx::SlashVote(vote) => {
-
       // TODO: verify the target is actually one of our validators?
       // this shouldn't be a problem because if the target isn't valid, no one else
       // gonna vote on it. But we still have to think about spam votes.
@@ -377,7 +369,7 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
 
       let sig = &vote.sig;
       // verify the tx signature
-      // TODO: Use Schnorr half-aggregation and a batch verification here 
+      // TODO: Use Schnorr half-aggregation and a batch verification here
       if !sig.signature.verify(sig.signer, tx.sig_hash(genesis)) {
         Err(TransactionError::InvalidSignature)?;
       }
