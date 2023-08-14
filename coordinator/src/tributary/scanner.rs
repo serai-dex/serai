@@ -1,23 +1,10 @@
+use core::future::Future;
+
 use zeroize::Zeroizing;
 
-use rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-
-use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::{Ciphersuite, Ristretto};
-use frost::{
-  FrostError,
-  dkg::{Participant, musig::musig},
-  sign::*,
-};
-use frost_schnorrkel::Schnorrkel;
 
-use serai_client::{
-  Signature,
-  validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
-  subxt::utils::Encoded,
-  Serai,
-};
+use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded};
 
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -39,188 +26,6 @@ use crate::{
   P2p,
 };
 
-const DKG_CONFIRMATION_NONCES: &[u8] = b"dkg_confirmation_nonces";
-const DKG_CONFIRMATION_SHARES: &[u8] = b"dkg_confirmation_shares";
-
-// Instead of maintaing state, this simply re-creates the machine(s) in-full on every call.
-// This simplifies data flow and prevents requiring multiple paths.
-// While more expensive, this only runs an O(n) algorithm, which is tolerable to run multiple
-// times.
-struct DkgConfirmer;
-impl DkgConfirmer {
-  fn preprocess_internal(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  ) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
-    // TODO: Does Substrate already have a validator-uniqueness check?
-    let validators = spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
-
-    let context = musig_context(spec.set());
-    let mut chacha = ChaCha20Rng::from_seed({
-      let mut entropy_transcript = RecommendedTranscript::new(b"DkgConfirmer Entropy");
-      entropy_transcript.append_message(b"spec", spec.serialize());
-      entropy_transcript.append_message(b"key", Zeroizing::new(key.to_bytes()));
-      // TODO: This is incredibly insecure unless message-bound (or bound via the attempt)
-      Zeroizing::new(entropy_transcript).rng_seed(b"preprocess")
-    });
-    let (machine, preprocess) = AlgorithmMachine::new(
-      Schnorrkel::new(b"substrate"),
-      musig(&context, key, &validators)
-        .expect("confirming the DKG for a set we aren't in/validator present multiple times")
-        .into(),
-    )
-    .preprocess(&mut chacha);
-
-    (machine, preprocess.serialize().try_into().unwrap())
-  }
-  // Get the preprocess for this confirmation.
-  fn preprocess(spec: &TributarySpec, key: &Zeroizing<<Ristretto as Ciphersuite>::F>) -> [u8; 64] {
-    Self::preprocess_internal(spec, key).1
-  }
-
-  fn share_internal(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-  ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let machine = Self::preprocess_internal(spec, key).0;
-    let preprocesses = preprocesses
-      .into_iter()
-      .map(|(p, preprocess)| {
-        machine
-          .read_preprocess(&mut preprocess.as_slice())
-          .map(|preprocess| (p, preprocess))
-          .map_err(|_| p)
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-    let (machine, share) = machine
-      .sign(preprocesses, &set_keys_message(&spec.set(), key_pair))
-      .map_err(|e| match e {
-        FrostError::InternalError(e) => unreachable!("FrostError::InternalError {e}"),
-        FrostError::InvalidParticipant(_, _) |
-        FrostError::InvalidSigningSet(_) |
-        FrostError::InvalidParticipantQuantity(_, _) |
-        FrostError::DuplicatedParticipant(_) |
-        FrostError::MissingParticipant(_) => unreachable!("{e:?}"),
-        FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
-      })?;
-
-    Ok((machine, share.serialize().try_into().unwrap()))
-  }
-  // Get the share for this confirmation, if the preprocesses are valid.
-  fn share(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-  ) -> Result<[u8; 32], Participant> {
-    Self::share_internal(spec, key, preprocesses, key_pair).map(|(_, share)| share)
-  }
-
-  fn complete(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-    shares: HashMap<Participant, Vec<u8>>,
-  ) -> Result<[u8; 64], Participant> {
-    let machine = Self::share_internal(spec, key, preprocesses, key_pair)
-      .expect("trying to complete a machine which failed to preprocess")
-      .0;
-
-    let shares = shares
-      .into_iter()
-      .map(|(p, share)| {
-        machine.read_share(&mut share.as_slice()).map(|share| (p, share)).map_err(|_| p)
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-    let signature = machine.complete(shares).map_err(|e| match e {
-      FrostError::InternalError(e) => unreachable!("FrostError::InternalError {e}"),
-      FrostError::InvalidParticipant(_, _) |
-      FrostError::InvalidSigningSet(_) |
-      FrostError::InvalidParticipantQuantity(_, _) |
-      FrostError::DuplicatedParticipant(_) |
-      FrostError::MissingParticipant(_) => unreachable!("{e:?}"),
-      FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
-    })?;
-
-    Ok(signature.to_bytes())
-  }
-}
-
-#[allow(clippy::too_many_arguments)] // TODO
-fn read_known_to_exist_data<D: Db, G: Get>(
-  getter: &G,
-  spec: &TributarySpec,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  label: &'static [u8],
-  id: [u8; 32],
-  needed: u16,
-  attempt: u32,
-  bytes: Vec<u8>,
-  signed: Option<&Signed>,
-) -> HashMap<Participant, Vec<u8>> {
-  let mut data = HashMap::new();
-  for validator in spec.validators().iter().map(|validator| validator.0) {
-    data.insert(
-      spec.i(validator).unwrap(),
-      if Some(&validator) == signed.map(|signed| &signed.signer) {
-        bytes.clone()
-      } else if let Some(data) =
-        TributaryDb::<D>::data(label, getter, spec.genesis(), id, attempt, validator)
-      {
-        data
-      } else {
-        continue;
-      },
-    );
-  }
-  assert_eq!(data.len(), usize::from(needed));
-
-  // Remove our own piece of data
-  assert!(data
-    .remove(
-      &spec
-        .i(Ristretto::generator() * key.deref())
-        .expect("handling a message for a Tributary we aren't part of")
-    )
-    .is_some());
-
-  data
-}
-
-pub fn dkg_confirmation_nonces(
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  spec: &TributarySpec,
-) -> [u8; 64] {
-  DkgConfirmer::preprocess(spec, key)
-}
-
-#[allow(clippy::needless_pass_by_ref_mut)]
-pub fn generated_key_pair<D: Db>(
-  txn: &mut D::Transaction<'_>,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  spec: &TributarySpec,
-  key_pair: &KeyPair,
-) -> Result<[u8; 32], Participant> {
-  TributaryDb::<D>::save_currently_completing_key_pair(txn, spec.genesis(), key_pair);
-
-  let attempt = 0; // TODO
-  let preprocesses = read_known_to_exist_data::<D, _>(
-    txn,
-    spec,
-    key,
-    DKG_CONFIRMATION_NONCES,
-    [0; 32],
-    spec.n(),
-    attempt,
-    vec![],
-    None,
-  );
-  DkgConfirmer::share(spec, key, preprocesses, key_pair)
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RecognizedIdType {
   Block,
@@ -233,7 +38,7 @@ async fn handle_block<
   D: Db,
   Pro: Processors,
   F: Future<Output = ()>,
-  PST: Fn(ValidatorSet, Encoded) -> F,
+  PST: Clone + Fn(ValidatorSet, Encoded) -> F,
   P: P2p,
 >(
   db: &mut TributaryDb<D>,
@@ -270,7 +75,7 @@ async fn handle_block<
 
         // TODO: disconnect the node from network
       }
-      TributaryTransaction::Tendermint(TendermintTx::SlashVote(_, _)) => {
+      TributaryTransaction::Tendermint(TendermintTx::SlashVote(vote)) => {
         // TODO: make sure same signer doesn't vote twice
 
         // increment the counter for this vote
@@ -285,10 +90,11 @@ async fn handle_block<
         // the node should be removed.
       }
       TributaryTransaction::Application(tx) => {
-        handle_application_tx::<D, Pro>(
+        handle_application_tx::<D, _, _, _>(
           tx,
           spec,
           processors,
+          publish_serai_tx.clone(),
           genesis,
           key,
           recognized_id,

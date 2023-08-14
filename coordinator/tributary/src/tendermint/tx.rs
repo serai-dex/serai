@@ -53,7 +53,7 @@ impl Default for VoteSignature {
   fn default() -> Self {
     VoteSignature {
       signer: Ristretto::generator(),
-      signature: SchnorrSignature::<Ristretto>::default(),
+      signature: SchnorrSignature::<Ristretto>::read(&mut [0; 64].as_slice()).unwrap(),
     }
   }
 }

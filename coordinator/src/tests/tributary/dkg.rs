@@ -84,7 +84,7 @@ async fn dkg_test() {
     let mut scanner_db = TributaryDb(MemDb::new());
     let processors = MemProcessors::new();
     // Uses a brand new channel since this channel won't be used within this test
-    handle_new_blocks::<_, _, LocalP2p>(
+    handle_new_blocks::<_, _, _, _, LocalP2p>(
       &mut scanner_db,
       key,
       &mpsc::unbounded_channel().0,
@@ -108,7 +108,7 @@ async fn dkg_test() {
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Verify the scanner emits a KeyGen::Commitments message
-  handle_new_blocks::<_, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     &mpsc::unbounded_channel().0,
@@ -170,7 +170,7 @@ async fn dkg_test() {
       attempt,
       sender_i: Participant::new((k + 1).try_into().unwrap()).unwrap(),
       shares,
-      confirmation_nonces: crate::tributary::scanner::dkg_confirmation_nonces(key, &spec),
+      confirmation_nonces: crate::tributary::dkg_confirmation_nonces(key, &spec),
       signed: Transaction::empty_signed(),
     };
     tx.sign(&mut OsRng, spec.genesis(), key, 1);
@@ -186,7 +186,7 @@ async fn dkg_test() {
   }
 
   // With just 4 sets of shares, nothing should happen yet
-  handle_new_blocks::<_, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     &mpsc::unbounded_channel().0,
@@ -227,7 +227,7 @@ async fn dkg_test() {
   };
 
   // Any scanner which has handled the prior blocks should only emit the new event
-  handle_new_blocks::<_, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     &mpsc::unbounded_channel().0,
@@ -278,8 +278,7 @@ async fn dkg_test() {
     // albeit poor
     let mut txn = scanner_db.0.txn();
     let share =
-      crate::tributary::scanner::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair)
-        .unwrap();
+      crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair).unwrap();
     txn.commit();
 
     let mut tx = Transaction::DkgConfirmed(attempt, share, Transaction::empty_signed());
@@ -295,7 +294,7 @@ async fn dkg_test() {
   }
 
   // The scanner should successfully try to publish a transaction with a validly signed signature
-  handle_new_blocks(
+  handle_new_blocks::<_, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     &mpsc::unbounded_channel().0,

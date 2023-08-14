@@ -120,10 +120,7 @@ impl SignerTrait for Signer {
   }
 
   async fn empty_signature(&self) -> Self::Signature {
-    let sig = SchnorrSignature::<Ristretto>::default().serialize();
-    let mut res = [0; 64];
-    res.copy_from_slice(&sig);
-    res
+    [0; 64]
   }
 }
 

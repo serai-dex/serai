@@ -45,12 +45,6 @@ pub struct SchnorrSignature<C: Ciphersuite> {
   pub s: C::F,
 }
 
-impl<C: Ciphersuite> Default for SchnorrSignature<C> {
-  fn default() -> Self {
-    SchnorrSignature { R: C::generator(), s: C::F::ZERO }
-  }
-}
-
 impl<C: Ciphersuite> SchnorrSignature<C> {
   /// Read a SchnorrSignature from something implementing Read.
   pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {

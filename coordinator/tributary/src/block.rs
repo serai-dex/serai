@@ -180,9 +180,18 @@ impl<T: TransactionTrait> Block<T> {
   ) -> Result<(), BlockError> {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     enum Order {
-      Provided = 0,
-      Unsigned = 1,
-      Signed = 2,
+      Provided,
+      Unsigned,
+      Signed,
+    }
+    impl From<Order> for u8 {
+      fn from(order: Order) -> u8 {
+        match order {
+          Order::Provided => 0,
+          Order::Unsigned => 1,
+          Order::Signed => 2,
+        }
+      }
     }
 
     if self.serialize().len() > BLOCK_SIZE_LIMIT {

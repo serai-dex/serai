@@ -34,6 +34,7 @@ mod db;
 pub use db::*;
 
 mod handle;
+pub use handle::*;
 
 pub mod scanner;
 

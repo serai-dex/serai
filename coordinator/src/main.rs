@@ -460,7 +460,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           if id.attempt != 0 {
             panic!("attempt wasn't 0");
           }
-          let nonces = crate::tributary::scanner::dkg_confirmation_nonces(&key, &spec);
+          let nonces = crate::tributary::dkg_confirmation_nonces(&key, &spec);
           Some(Transaction::DkgShares {
             attempt: id.attempt,
             sender_i: my_i,
@@ -478,7 +478,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
           // Tell the Tributary the key pair, get back the share for the MuSig signature
           let mut txn = db.txn();
-          let share = crate::tributary::scanner::generated_key_pair::<D>(
+          let share = crate::tributary::generated_key_pair::<D>(
             &mut txn,
             &key,
             &spec,
