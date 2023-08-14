@@ -1,6 +1,10 @@
 #![allow(clippy::needless_pass_by_ref_mut)] // False positives
 
-use std::sync::{OnceLock, Mutex};
+use std::{
+  sync::{OnceLock, Mutex},
+  time::Duration,
+  fs,
+};
 
 use zeroize::Zeroizing;
 
@@ -77,32 +81,44 @@ pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F,
 
   // Give every item in this stack a unique ID
   // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits
-  let unique_id = {
+  let (first, unique_id) = {
     let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
     let mut unique_id_lock = unique_id_mutex.lock().unwrap();
+    let first = *unique_id_lock == 0;
     let unique_id = hex::encode(unique_id_lock.to_be_bytes());
     *unique_id_lock += 1;
-    unique_id
+    (first, unique_id)
   };
+
+  let logs_path = [std::env::current_dir().unwrap().to_str().unwrap(), ".test-logs", "coordinator"]
+    .iter()
+    .collect::<std::path::PathBuf>();
+  if first {
+    let _ = fs::remove_dir_all(&logs_path);
+    fs::create_dir_all(&logs_path).expect("couldn't create logs directory");
+    assert!(
+      fs::read_dir(&logs_path).expect("couldn't read the logs folder").next().is_none(),
+      "logs folder wasn't empty, despite removing it at the start of the run",
+    );
+  }
+  let logs_path = logs_path.to_str().unwrap().to_string();
 
   let mut compositions = vec![];
   let mut handles = vec![];
   for composition in [serai_composition, message_queue_composition, coordinator_composition] {
-    let handle = composition.handle();
+    let name = format!("{}-{}", composition.handle(), &unique_id);
+
     compositions.push(
       composition
         .with_start_policy(StartPolicy::Strict)
-        .with_container_name(format!("{handle}-{}", &unique_id))
+        .with_container_name(name.clone())
         .with_log_options(Some(LogOptions {
-          action: LogAction::Forward,
-          policy: if handle.contains("coordinator") {
-            LogPolicy::Always
-          } else {
-            LogPolicy::OnError
-          },
+          action: LogAction::ForwardToFile { path: logs_path.clone() },
+          policy: LogPolicy::Always,
           source: LogSource::Both,
         })),
     );
+
     handles.push(compositions.last().unwrap().handle());
   }
 
@@ -147,7 +163,7 @@ impl Processor {
     let serai_rpc = format!("ws://{}:{}", serai_rpc.0, serai_rpc.1);
     // Bound execution to 60 seconds
     for _ in 0 .. 60 {
-      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+      tokio::time::sleep(Duration::from_secs(1)).await;
       let Ok(client) = serai_client::Serai::new(&serai_rpc).await else { continue };
       if client.get_latest_block_hash().await.is_err() {
         continue;
@@ -194,10 +210,9 @@ impl Processor {
 
   /// Receive a message from a processor as its coordinator.
   pub async fn recv_message(&mut self) -> CoordinatorMessage {
-    let msg =
-      tokio::time::timeout(core::time::Duration::from_secs(10), self.queue.next(self.next_recv_id))
-        .await
-        .unwrap();
+    let msg = tokio::time::timeout(Duration::from_secs(10), self.queue.next(self.next_recv_id))
+      .await
+      .unwrap();
     assert_eq!(msg.from, Service::Coordinator);
     assert_eq!(msg.id, self.next_recv_id);
     self.queue.ack(self.next_recv_id).await;
