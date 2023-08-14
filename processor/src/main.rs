@@ -225,6 +225,8 @@ async fn sign_plans<N: Network, D: Db>(
       substrate_mutable.scanner.register_eventuality(block_number, id, eventuality.clone()).await;
       signers.get_mut(key.as_ref()).unwrap().sign_transaction(txn, id, tx, eventuality).await;
     }
+
+    // TODO: If the TX is None, should we restore its inputs to the scheduler?
   }
 }
 
