@@ -300,8 +300,11 @@ impl Serai {
       .map_err(|_| SeraiError::InvalidRuntime)
   }
 
-  pub async fn publish(&self, tx: &Encoded) -> Result<[u8; 32], SeraiError> {
-    self.0.rpc().submit_extrinsic(tx).await.map(Into::into).map_err(SeraiError::RpcError)
+  pub async fn publish(&self, tx: &Encoded) -> Result<(), SeraiError> {
+    // Drop the hash, which is the hash of the raw TX, as TXs are allowed to share hashes and this
+    // hash is practically useless/unsafe
+    // If we are to return something, it should be block included in and position within block
+    self.0.rpc().submit_extrinsic(tx).await.map(|_| ()).map_err(SeraiError::RpcError)
   }
 }
 

@@ -195,8 +195,8 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
           async move {
             loop {
               match serai.publish(&tx).await {
-                Ok(hash) => {
-                  log::info!("set key pair for {:?} in TX {}", set, hex::encode(hash));
+                Ok(_) => {
+                  log::info!("set key pair for {set:?}");
                   break;
                 }
                 // This is assumed to be some ephemeral error due to the assumed fault-free
@@ -576,13 +576,12 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           let tx = Serai::execute_batch(batch.clone());
           loop {
             match serai.publish(&tx).await {
-              Ok(hash) => {
+              Ok(_) => {
                 log::info!(
-                  "executed batch {:?} {} (block {}) in TX {}",
+                  "executed batch {:?} {} (block {})",
                   batch.batch.network,
                   batch.batch.id,
                   hex::encode(batch.batch.block),
-                  hex::encode(hash),
                 );
                 break;
               }
