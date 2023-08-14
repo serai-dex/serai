@@ -114,12 +114,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
   fn batch_key() -> Vec<u8> {
     Self::scanner_key(b"batch", [])
   }
-  fn block_batch_key(
-    key: &<N::Curve as Ciphersuite>::G,
-    block: &<N::Block as Block<N>>::Id,
-  ) -> Vec<u8> {
-    Self::scanner_key(b"batch", [key.to_bytes().as_ref(), block.as_ref()].concat())
-  }
   fn outputs_key(
     key: &<N::Curve as Ciphersuite>::G,
     block: &<N::Block as Block<N>>::Id,
@@ -132,11 +126,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     block: &<N::Block as Block<N>>::Id,
     outputs: &[N::Output],
   ) {
-    let output_key = Self::outputs_key(key, block);
-    if let Some(outs) = txn.get(output_key) {
-      return;
-    }
-
     let mut bytes = Vec::with_capacity(outputs.len() * 64);
     for output in outputs {
       output.write(&mut bytes).unwrap();

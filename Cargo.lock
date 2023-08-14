@@ -8075,6 +8075,7 @@ dependencies = [
  "serai-tokens-pallet",
  "serai-validator-sets-pallet",
  "sp-application-crypto",
+ "sp-core",
  "sp-runtime",
  "thiserror",
 ]

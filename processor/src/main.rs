@@ -669,15 +669,13 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
         match msg.unwrap() {
           ScannerEvent::Block { key, block, outputs } => {
-            let key = key.to_bytes().as_ref().to_vec();
-
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
             let mut batch_id = substrate_mutable.scanner.next_batch_id(&txn);
 
             // start with empty batch
             let mut batches = vec![Batch {
-              network: C::NETWORK,
+              network: N::NETWORK,
               id: batch_id,
               block: BlockHash(block_hash),
               instructions: vec![]

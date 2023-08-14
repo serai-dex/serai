@@ -23,6 +23,7 @@ pub enum PalletError {
 #[frame_support::pallet]
 pub mod pallet {
   use sp_application_crypto::RuntimePublic;
+  use sp_runtime::traits::Zero;
   use sp_core::sr25519::Public;
 
   use frame_support::pallet_prelude::*;
@@ -56,10 +57,11 @@ pub mod pallet {
   #[pallet::getter(fn batches)]
   pub(crate) type Batches<T: Config> = StorageMap<_, Blake2_256, NetworkId, u32, OptionQuery>;
 
-  // The last serai block that this validator set included a batch
+  // The last Serai block in which this validator set included a batch
   #[pallet::storage]
   #[pallet::getter(fn last_batch_block)]
-  pub(crate) type LastBatchBlock<T: Config> = StorageMap<_, Blake2_256, Public, u64, OptionQuery>;
+  pub(crate) type LastBatchBlock<T: Config> =
+    StorageMap<_, Blake2_256, Public, BlockNumberFor<T>, OptionQuery>;
 
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
@@ -110,7 +112,7 @@ pub mod pallet {
 
       let mut batch = batch.batch;
 
-      let current_block = <frame_system::Pallet<T>>::block_number();
+      let current_block = frame_system::Pallet::<T>::block_number();
       let Ok(key) = key_for_network::<T>(batch.network) else { Err(DispatchError::Unavailable)? };
       LastBatchBlock::<T>::insert(key, current_block);
 
@@ -164,7 +166,7 @@ pub mod pallet {
 
       // check that this validator set already included a batch for this block
       let current_block = <frame_system::Pallet<T>>::block_number();
-      let last_block = LastBatchBlock::<T>::get(key).unwrap_or(0);
+      let last_block = LastBatchBlock::<T>::get(key).unwrap_or(Zero::zero());
       if last_block >= current_block {
         Err(InvalidTransaction::Future)?;
       }
