@@ -61,12 +61,12 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn last_batch_block)]
   pub(crate) type LastBatchBlock<T: Config> =
-    StorageMap<_, Blake2_256, Public, BlockNumberFor<T>, OptionQuery>;
+    StorageMap<_, Blake2_256, NetworkId, BlockNumberFor<T>, OptionQuery>;
 
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
-  #[pallet::getter(fn last_network_block)]
-  pub(crate) type LastNetworkBlock<T: Config> =
+  #[pallet::getter(fn latest_network_block)]
+  pub(crate) type LatestNetworkBlock<T: Config> =
     StorageMap<_, Blake2_256, NetworkId, BlockHash, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
@@ -84,13 +84,14 @@ pub mod pallet {
     let session = Session(0);
 
     let mut set = ValidatorSet { session, network };
-    // TODO: If this session just set their keys, it'll invalidate anything in the mempool
+    // TODO: If this session just set their keys, it'll invalidate any batches in the mempool
     // Should there be a transitory period/future-set cut off?
     if let Some(keys) = ValidatorSets::<T>::keys(set) {
       Ok(keys.0)
     } else {
       // If this set hasn't set their keys yet, use the previous set's
       if set.session.0 == 0 {
+        // Since there haven't been any keys set, no signature can legitimately exist
         Err(InvalidTransaction::BadProof)?;
       }
       set.session.0 -= 1;
@@ -110,20 +111,20 @@ pub mod pallet {
     pub fn execute_batch(origin: OriginFor<T>, batch: SignedBatch) -> DispatchResult {
       ensure_none(origin)?;
 
-      let mut batch = batch.batch;
+      let batch = batch.batch;
 
-      let current_block = frame_system::Pallet::<T>::block_number();
-      let Ok(key) = key_for_network::<T>(batch.network) else { Err(DispatchError::Unavailable)? };
-      LastBatchBlock::<T>::insert(key, current_block);
+      // TODO: Test validate_unsigned is actually called prior to execution, which is required for
+      // this to be safe
+      LastBatchBlock::<T>::insert(batch.network, frame_system::Pallet::<T>::block_number());
 
       Batches::<T>::insert(batch.network, batch.id);
-      LastNetworkBlock::<T>::insert(batch.network, batch.block);
+      LatestNetworkBlock::<T>::insert(batch.network, batch.block);
       Self::deposit_event(Event::Batch {
         network: batch.network,
         id: batch.id,
         block: batch.block,
       });
-      for (i, instruction) in batch.instructions.drain(..).enumerate() {
+      for (i, instruction) in batch.instructions.into_iter().enumerate() {
         // TODO: Check this balance's coin belongs to this network
         // If they don't, the validator set should be completely slashed, without question
 
@@ -155,6 +156,7 @@ pub mod pallet {
       let key = key_for_network::<T>(network)?;
 
       // verify the batch size
+      // TODO: Merge this encode with the one done by batch_message
       if batch.batch.encode().len() > MAX_BATCH_SIZE {
         Err(InvalidTransaction::ExhaustsResources)?;
       }
@@ -164,9 +166,9 @@ pub mod pallet {
         Err(InvalidTransaction::BadProof)?;
       }
 
-      // check that this validator set already included a batch for this block
+      // check that this validator set isn't publishing a batch more than once per block
       let current_block = <frame_system::Pallet<T>>::block_number();
-      let last_block = LastBatchBlock::<T>::get(key).unwrap_or(Zero::zero());
+      let last_block = LastBatchBlock::<T>::get(network).unwrap_or(Zero::zero());
       if last_block >= current_block {
         Err(InvalidTransaction::Future)?;
       }
@@ -174,7 +176,7 @@ pub mod pallet {
       // Verify the batch is sequential
       // Batches has the last ID set. The next ID should be it + 1
       // If there's no ID, the next ID should be 0
-      let expected = Batches::<T>::get(network).map(|prev| prev + 1).unwrap_or(0);
+      let expected = Batches::<T>::get(network).map_or(0, |prev| prev + 1);
       if batch.batch.id < expected {
         Err(InvalidTransaction::Stale)?;
       }

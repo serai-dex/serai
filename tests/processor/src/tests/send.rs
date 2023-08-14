@@ -219,6 +219,7 @@ fn send_test() {
               instruction: OutInstruction { address: wallet.address(), data: None },
               balance: balance_sent,
             }],
+            batches: vec![batch.batch.id],
           },
         )
         .await;

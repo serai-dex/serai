@@ -196,9 +196,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
       network_had_event(&mut burns, &mut batches, network);
 
       // network_had_event should register an entry in burns
-      let mut burns_so_far = burns.remove(&network).unwrap();
-      burns_so_far.push(OutInstructionWithBalance { balance, instruction });
-      burns.insert(network, burns_so_far);
+      burns.get_mut(&network).unwrap().push(OutInstructionWithBalance { balance, instruction });
     } else {
       panic!("Burn event wasn't Burn: {burn:?}");
     }

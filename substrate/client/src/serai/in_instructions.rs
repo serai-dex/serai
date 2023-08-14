@@ -19,7 +19,7 @@ impl Serai {
     hash: [u8; 32],
     network: NetworkId,
   ) -> Result<Option<BlockHash>, SeraiError> {
-    self.storage(PALLET, "LastNetworkBlock", Some(vec![scale_value(network)]), hash).await
+    self.storage(PALLET, "LatestNetworkBlock", Some(vec![scale_value(network)]), hash).await
   }
 
   pub async fn get_batch_events(

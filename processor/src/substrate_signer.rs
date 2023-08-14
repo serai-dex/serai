@@ -337,7 +337,8 @@ impl<D: Db> SubstrateSigner<D> {
   }
 
   pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, batch_id: u32) {
-    // convert into slice
+    // Convert into 32-byte ID
+    // TODO: Add a BatchSignId so we don't have this inefficiency
     let mut id = [0u8; 32];
     id[.. 4].copy_from_slice(&batch_id.to_le_bytes());
 

@@ -22,6 +22,7 @@ pub(crate) async fn recv_batch_preprocesses(
   attempt: u32,
 ) -> (SignId, HashMap<Participant, Vec<u8>>) {
   let mut id = None;
+  let mut block = None;
   let mut preprocesses = HashMap::new();
   for (i, coordinator) in coordinators.iter_mut().enumerate() {
     let i = Participant::new(u16::try_from(i).unwrap() + 1).unwrap();
@@ -29,14 +30,20 @@ pub(crate) async fn recv_batch_preprocesses(
     let msg = coordinator.recv_message().await;
     match msg {
       messages::ProcessorMessage::Coordinator(
-        messages::coordinator::ProcessorMessage::BatchPreprocess { id: this_id, preprocess },
+        messages::coordinator::ProcessorMessage::BatchPreprocess {
+          id: this_id,
+          block: this_block,
+          preprocess,
+        },
       ) => {
         if id.is_none() {
           assert_eq!(&this_id.key, &key);
           assert_eq!(this_id.attempt, attempt);
           id = Some(this_id.clone());
+          block = Some(this_block);
         }
         assert_eq!(&this_id, id.as_ref().unwrap());
+        assert_eq!(&this_block, block.as_ref().unwrap());
 
         preprocesses.insert(i, preprocess);
       }
@@ -147,6 +154,7 @@ pub(crate) async fn substrate_block(
       block: sent_block,
       key: _,
       burns: _,
+      batches: _,
     } => {
       coordinator.send_message(block).await;
       match coordinator.recv_message().await {
@@ -280,6 +288,7 @@ fn batch_test() {
               // TODO: Should we use the network key here? Or should we only use the Ristretto key?
               key: key_pair.1.to_vec(),
               burns: vec![],
+              batches: vec![batch.batch.id],
             },
           )
           .await

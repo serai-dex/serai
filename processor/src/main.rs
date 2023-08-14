@@ -403,13 +403,10 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           let mut block_id = <N::Block as Block<N>>::Id::default();
           block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
 
-          let mut block_id = <N::Block as Block<N>>::Id::default();
-          block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-
           let key = <N::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
 
           // We now have to acknowledge every block for this key up to the acknowledged block
-          let (_, outputs) = substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
+          let outputs = substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
           // Since this block was acknowledged, we no longer have to sign the batch for it
           for batch_id in batches {
             for (_, signer) in tributary_mutable.substrate_signers.iter_mut() {
@@ -671,6 +668,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           ScannerEvent::Block { key, block, outputs } => {
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
+            // TODO: Move this out from Scanner now that the Scanner no longer handles batches
             let mut batch_id = substrate_mutable.scanner.next_batch_id(&txn);
 
             // start with empty batch
@@ -678,7 +676,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               network: N::NETWORK,
               id: batch_id,
               block: BlockHash(block_hash),
-              instructions: vec![]
+              instructions: vec![],
             }];
             for output in outputs {
               // If these aren't externally received funds, don't handle it as an instruction
@@ -687,10 +685,13 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               }
 
               let mut data = output.data();
-              let max_data_len = MAX_DATA_LEN.try_into().unwrap();
+              let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
+              // TODO: Should we drop this, instead of truncating?
+              // A truncating message likely doesn't have value yet has increased data load and is
+              // corrupt vs a NOP. The former seems more likely to cause problems
               if data.len() > max_data_len {
                 error!(
-                  "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}",
+                  "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. truncating",
                   hex::encode(output.id()),
                   data.len(),
                 );
@@ -701,18 +702,18 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { continue };
 
               // TODO2: Set instruction.origin if not set (and handle refunds in general)
-              let in_ins = InInstructionWithBalance {
+              let instruction = InInstructionWithBalance {
                 instruction: instruction.instruction,
                 balance: output.balance(),
               };
 
               let batch = batches.last_mut().unwrap();
-              batch.instructions.push(in_ins);
+              batch.instructions.push(instruction);
 
-              // check if batch is full
+              // check if batch is over-size
               if batch.encode().len() > MAX_BATCH_SIZE {
-                // pop the last extra instruction
-                let in_ins = batch.instructions.pop().unwrap();
+                // pop the last instruction so it's back in size
+                let instruction = batch.instructions.pop().unwrap();
 
                 // bump the id for the new batch
                 batch_id += 1;
@@ -722,13 +723,13 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
                   network: N::NETWORK,
                   id: batch_id,
                   block: BlockHash(block_hash),
-                  instructions: vec![in_ins]
+                  instructions: vec![instruction],
                 });
               }
             }
 
-            // save the last used batch id
-            substrate_mutable.scanner.save_batch_id(&mut txn, batch_id);
+            // Save the next batch ID
+            substrate_mutable.scanner.set_next_batch_id(&mut txn, batch_id + 1);
 
             // Start signing this batch
             for batch in batches {

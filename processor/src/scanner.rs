@@ -14,8 +14,6 @@ use tokio::{
   time::sleep,
 };
 
-use serai_client::primitives::BlockHash;
-
 use crate::{
   Get, DbTxn, Db,
   networks::{Output, Transaction, EventualitiesTracker, Block, Network},
@@ -111,8 +109,8 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     getter.get(Self::seen_key(id)).is_some()
   }
 
-  fn batch_key() -> Vec<u8> {
-    Self::scanner_key(b"batch", [])
+  fn next_batch_key() -> Vec<u8> {
+    Self::scanner_key(b"next_batch", [])
   }
   fn outputs_key(
     key: &<N::Curve as Ciphersuite>::G,
@@ -166,7 +164,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     txn: &mut D::Transaction<'_>,
     key: &<N::Curve as Ciphersuite>::G,
     block: usize,
-  ) -> (Option<<N::Block as Block<N>>::Id>, Vec<N::Output>) {
+  ) -> Vec<N::Output> {
     let id = Self::block(txn, block); // It may be None for the first key rotated to
     let outputs = if let Some(id) = id.as_ref() {
       Self::outputs(txn, key, id).unwrap_or(vec![])
@@ -182,7 +180,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     txn.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
 
     // Return this block's outputs so they can be pruned from the RAM cache
-    (id, outputs)
+    outputs
   }
   fn latest_scanned_block<G: Get>(getter: &G, key: <N::Curve as Ciphersuite>::G) -> usize {
     let bytes = getter
@@ -264,7 +262,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
     info!("Rotating scanner to key {} at {activation_number}", hex::encode(key.to_bytes()));
 
-    let (_, outputs) = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
+    let outputs = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
     scanner.ram_scanned.insert(key.to_bytes().as_ref().to_vec(), activation_number);
     assert!(outputs.is_empty());
 
@@ -279,16 +277,16 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     ScannerDb::<N, D>::block_number(&self.scanner.read().await.db, id)
   }
 
-  // Save the last batch id used
-  pub fn save_batch_id(&self, txn: &mut D::Transaction<'_>, batch: u32) {
-    let batch_key = ScannerDb::<N, D>::batch_key();
-    txn.put(batch_key, batch.to_le_bytes());
+  // Set the next batch ID to use
+  pub fn set_next_batch_id(&self, txn: &mut D::Transaction<'_>, batch: u32) {
+    txn.put(ScannerDb::<N, D>::next_batch_key(), batch.to_le_bytes());
   }
 
-  // Return the last used batch id
+  // Get the next batch ID
   pub fn next_batch_id(&self, txn: &D::Transaction<'_>) -> u32 {
-    let batch_key = ScannerDb::<N, D>::batch_key();
-    txn.get(batch_key).map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()) + 1)
+    txn
+      .get(ScannerDb::<N, D>::next_batch_key())
+      .map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()))
   }
 
   /// Acknowledge having handled a block for a key.
@@ -297,7 +295,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
     id: <N::Block as Block<N>>::Id,
-  ) -> (Vec<BlockHash>, Vec<N::Output>) {
+  ) -> Vec<N::Output> {
     let mut scanner = self.scanner.write().await;
     debug!("Block {} acknowledged", hex::encode(&id));
 
@@ -307,21 +305,16 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     // Get the number of the last block we acknowledged
     let prior = ScannerDb::<N, D>::latest_scanned_block(txn, key);
 
-    let mut blocks = vec![];
     let mut outputs = vec![];
     for number in (prior + 1) ..= number {
-      let (block, these_outputs) = ScannerDb::<N, D>::save_scanned_block(txn, &key, number);
-      let block = BlockHash(block.unwrap().as_ref().try_into().unwrap());
-      blocks.push(block);
-      outputs.extend(these_outputs);
+      outputs.extend(ScannerDb::<N, D>::save_scanned_block(txn, &key, number));
     }
-    assert_eq!(blocks.last().unwrap().as_ref(), id.as_ref());
 
     for output in &outputs {
       assert!(scanner.ram_outputs.remove(output.id().as_ref()));
     }
 
-    (blocks, outputs)
+    outputs
   }
 }
 

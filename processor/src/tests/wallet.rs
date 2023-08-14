@@ -122,7 +122,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   // Check the Scanner DB can reload the outputs
   let mut txn = db.txn();
   assert_eq!(
-    scanner.ack_up_to_block(&mut txn, key, block.id()).await.1,
+    scanner.ack_up_to_block(&mut txn, key, block.id()).await,
     [first_outputs, outputs].concat().to_vec()
   );
   txn.commit();
