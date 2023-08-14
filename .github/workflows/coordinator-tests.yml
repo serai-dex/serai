@@ -41,4 +41,4 @@ jobs:
           github-token: ${{ inputs.github-token }}
 
       - name: Run coordinator Docker tests
-        run: cd tests/coordinator && GITHUB_CI=true cargo test
+        run: cd tests/coordinator && GITHUB_CI=true RUST_BACKTRACE=1 cargo test

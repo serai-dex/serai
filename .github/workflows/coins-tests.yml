@@ -30,7 +30,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          GITHUB_CI=true cargo test --all-features \
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p bitcoin-serai \
             -p ethereum-serai \
             -p monero-generators \

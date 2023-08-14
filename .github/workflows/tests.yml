@@ -38,7 +38,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          GITHUB_CI=true cargo test --all-features \
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p serai-message-queue \
             -p serai-processor-messages \
             -p serai-processor \
@@ -58,7 +58,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          GITHUB_CI=true cargo test --all-features \
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p serai-primitives \
             -p serai-tokens-primitives \
             -p serai-tokens-pallet \
@@ -85,4 +85,4 @@ jobs:
           cargo build
 
       - name: Run Tests
-        run: GITHUB_CI=true cargo test --all-features -p serai-client
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-client

@@ -41,4 +41,4 @@ jobs:
           github-token: ${{ inputs.github-token }}
 
       - name: Run processor Docker tests
-        run: cd tests/processor && GITHUB_CI=true cargo test
+        run: cd tests/processor && GITHUB_CI=true RUST_BACKTRACE=1 cargo test

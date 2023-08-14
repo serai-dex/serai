@@ -35,4 +35,4 @@ jobs:
           github-token: ${{ inputs.github-token }}
 
       - name: Run message-queue Docker tests
-        run: cd tests/message-queue && GITHUB_CI=true cargo test
+        run: cd tests/message-queue && GITHUB_CI=true RUST_BACKTRACE=1 cargo test

@@ -35,4 +35,4 @@ jobs:
           github-token: ${{ inputs.github-token }}
 
       - name: Run Reproducible Runtime tests
-        run: cd tests/reproducible-runtime && GITHUB_CI=true cargo test
+        run: cd tests/reproducible-runtime && GITHUB_CI=true RUST_BACKTRACE=1 cargo test
