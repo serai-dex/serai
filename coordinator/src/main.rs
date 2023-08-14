@@ -196,13 +196,20 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
             loop {
               match serai.publish(&tx).await {
                 Ok(hash) => {
-                  log::info!("set key pair for {:?} in TX {}", set, hex::encode(hash))
+                  log::info!("set key pair for {:?} in TX {}", set, hex::encode(hash));
+                  break;
                 }
                 // This is assumed to be some ephemeral error due to the assumed fault-free
                 // creation
-                // TODO: Differentiate connection errors from already published to an invariant
+                // TODO: Differentiate connection errors from invariants
                 Err(e) => {
-                  log::error!("couldn't connect to Serai node to publish vote TX: {:?}", e);
+                  // Check if this failed because the keys were already set by someone else
+                  if matches!(serai.get_keys(spec.set()).await, Ok(Some(_))) {
+                    log::info!("other party set key pair for {:?}", set);
+                    break;
+                  }
+
+                  log::error!("couldn't connect to Serai node to publish set_keys TX: {:?}", e);
                   tokio::time::sleep(Duration::from_secs(10)).await;
                 }
               }
@@ -566,8 +573,9 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           // TODO: Check this key's key pair's substrate key is authorized to publish batches
           // TODO: Check the batch ID is an atomic increment
 
+          let tx = Serai::execute_batch(batch.clone());
           loop {
-            match serai.publish(&Serai::execute_batch(batch.clone())).await {
+            match serai.publish(&tx).await {
               Ok(hash) => {
                 log::info!(
                   "executed batch {:?} {} (block {}) in TX {}",
@@ -579,6 +587,8 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
                 break;
               }
               Err(e) => {
+                // TODO: Check if this failed because the batch was already published by someone
+                // else
                 log::error!("couldn't connect to Serai node to publish batch TX: {:?}", e);
                 tokio::time::sleep(Duration::from_secs(10)).await;
               }
