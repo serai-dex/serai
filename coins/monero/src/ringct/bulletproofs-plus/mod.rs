@@ -6,7 +6,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use rand_core::{RngCore, CryptoRng};
 
-use transcript::Transcript;
 use multiexp::{multiexp_vartime, Point as MultiexpPoint};
 use ciphersuite::{
   group::{ff::Field, Group, GroupEncoding},
@@ -37,27 +36,16 @@ pub fn padded_pow_of_2(i: usize) -> usize {
   next_pow_of_2
 }
 
-// TODO: Table these
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct VectorCommitmentGenerators<T: 'static + Transcript, C: Ciphersuite> {
-  generators: Vec<MultiexpPoint<C::G>>,
-  transcript: T::Challenge,
-}
-
 impl<T: 'static + Transcript, C: Ciphersuite> VectorCommitmentGenerators<T, C> {
   pub fn new(generators: &[C::G]) -> Self {
     assert!(!generators.is_empty());
 
-    let mut transcript = T::new(b"Bulletproofs+ Vector Commitments Generators");
-
-    transcript.domain_separate(b"generators");
     let mut res = vec![];
     let mut set = HashSet::new();
     let mut add_generator = |generator: &C::G| {
       assert!(!bool::from(generator.is_identity()));
       res.push(MultiexpPoint::new_constant(*generator));
       let bytes = generator.to_bytes();
-      transcript.append_message(b"generator", bytes.as_ref());
       assert!(set.insert(bytes.as_ref().to_vec()));
     };
 
@@ -65,7 +53,7 @@ impl<T: 'static + Transcript, C: Ciphersuite> VectorCommitmentGenerators<T, C> {
       add_generator(generator);
     }
 
-    Self { generators: res, transcript: transcript.challenge(b"summary") }
+    Self { generators: res }
   }
 
   #[allow(clippy::len_without_is_empty)] // Generators should never be empty/potentially empty
@@ -75,10 +63,6 @@ impl<T: 'static + Transcript, C: Ciphersuite> VectorCommitmentGenerators<T, C> {
 
   pub fn generators(&self) -> &[MultiexpPoint<C::G>] {
     &self.generators
-  }
-
-  pub fn transcript(&self) -> &T::Challenge {
-    &self.transcript
   }
 
   pub fn commit_vartime(&self, vars: &[C::F]) -> C::G {
@@ -109,14 +93,6 @@ pub struct Generators<T: 'static + Transcript, C: Ciphersuite> {
 
   g_bold1: Vec<MultiexpPoint<C::G>>,
   h_bold1: Vec<MultiexpPoint<C::G>>,
-
-  proving_gs: Option<(MultiexpPoint<C::G>, MultiexpPoint<C::G>)>,
-  proving_h_bolds: Option<(Vec<MultiexpPoint<C::G>>, Vec<MultiexpPoint<C::G>>)>,
-
-  whitelisted_vector_commitments: HashSet<Vec<u8>>,
-  // Uses a Vec<u8> since C::G doesn't impl Hash
-  set: HashSet<Vec<u8>>,
-  transcript: T,
 }
 
 #[derive(Clone, Debug)]
@@ -126,14 +102,6 @@ pub struct ProofGenerators<'a, T: 'static + Transcript, C: Ciphersuite> {
 
   g_bold1: &'a [MultiexpPoint<C::G>],
   h_bold1: &'a [MultiexpPoint<C::G>],
-
-  proving_gs: Option<&'a (MultiexpPoint<C::G>, MultiexpPoint<C::G>)>,
-  proving_h_bolds: Option<(&'a [MultiexpPoint<C::G>], &'a [MultiexpPoint<C::G>])>,
-
-  whitelisted_vector_commitments: &'a HashSet<Vec<u8>>,
-  transcript: T,
-
-  replaced: HashMap<(GeneratorsList, usize), MultiexpPoint<C::G>>,
 }
 
 #[derive(Clone, Debug)]
@@ -148,9 +116,6 @@ pub struct InnerProductGenerators<
 
   g_bold1: GB,
   h_bold1: &'a [MultiexpPoint<C::G>],
-  replaced: HashMap<(GeneratorsList, usize), MultiexpPoint<C::G>>,
-
-  transcript: T,
 }
 
 impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
@@ -165,14 +130,10 @@ impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
 
     assert_eq!(padded_pow_of_2(g_bold1.len()), g_bold1.len(), "generators must be a pow of 2");
 
-    let mut transcript = T::new(b"Bulletproofs+ Generators");
-
-    transcript.domain_separate(b"generators");
     let mut set = HashSet::new();
     let mut add_generator = |label, generator: &C::G| {
       assert!(!bool::from(generator.is_identity()));
       let bytes = generator.to_bytes();
-      transcript.append_message(label, bytes);
       assert!(set.insert(bytes.as_ref().to_vec()));
     };
 
@@ -191,13 +152,6 @@ impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
 
       g_bold1: g_bold1.drain(..).map(MultiexpPoint::new_constant).collect(),
       h_bold1: h_bold1.drain(..).map(MultiexpPoint::new_constant).collect(),
-
-      proving_gs: None,
-      proving_h_bolds: None,
-
-      set,
-      whitelisted_vector_commitments: HashSet::new(),
-      transcript,
     }
   }
 
@@ -219,8 +173,6 @@ impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
 
       g_bold1: &self.g_bold1,
       h_bold1: &self.h_bold1,
-
-      transcript: self.transcript.clone(),
     }
   }
 }
@@ -254,33 +206,13 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> ProofGenerators<'a, T, C> {
 
     self.g_bold1 = &self.g_bold1[.. generators];
     self.h_bold1 = &self.h_bold1[.. generators];
-    self
-      .transcript
-      .append_message(b"used_generators", u32::try_from(generators).unwrap().to_le_bytes());
 
-    if with_secondaries {
-      self.transcript.append_message(b"secondaries", b"true");
-      InnerProductGenerators {
-        g: self.g,
-        h: self.h,
+    InnerProductGenerators {
+      g: self.g,
+      h: self.h,
 
-        g_bold1: self.g_bold1,
-        h_bold1: self.h_bold1,
-
-        // TODO: Can this be replaced with just a challenge?
-        transcript: self.transcript.clone(),
-      }
-    } else {
-      self.transcript.append_message(b"secondaries", b"false");
-      InnerProductGenerators {
-        g: self.g,
-        h: self.h,
-
-        g_bold1: self.g_bold1,
-        h_bold1: self.h_bold1,
-
-        transcript: self.transcript.clone(),
-      }
+      g_bold1: self.g_bold1,
+      h_bold1: self.h_bold1,
     }
   }
 }
