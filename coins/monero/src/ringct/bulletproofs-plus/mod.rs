@@ -36,52 +36,10 @@ pub fn padded_pow_of_2(i: usize) -> usize {
   next_pow_of_2
 }
 
-impl<T: 'static + Transcript, C: Ciphersuite> VectorCommitmentGenerators<T, C> {
-  pub fn new(generators: &[C::G]) -> Self {
-    assert!(!generators.is_empty());
-
-    let mut res = vec![];
-    let mut set = HashSet::new();
-    let mut add_generator = |generator: &C::G| {
-      assert!(!bool::from(generator.is_identity()));
-      res.push(MultiexpPoint::new_constant(*generator));
-      let bytes = generator.to_bytes();
-      assert!(set.insert(bytes.as_ref().to_vec()));
-    };
-
-    for generator in generators {
-      add_generator(generator);
-    }
-
-    Self { generators: res }
-  }
-
-  #[allow(clippy::len_without_is_empty)] // Generators should never be empty/potentially empty
-  pub fn len(&self) -> usize {
-    self.generators.len()
-  }
-
-  pub fn generators(&self) -> &[MultiexpPoint<C::G>] {
-    &self.generators
-  }
-
-  pub fn commit_vartime(&self, vars: &[C::F]) -> C::G {
-    assert_eq!(self.len(), vars.len());
-
-    let mut multiexp = vec![];
-    for (var, point) in vars.iter().zip(self.generators().iter()) {
-      multiexp.push((*var, point.point()));
-    }
-    multiexp_vartime(&multiexp)
-  }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum GeneratorsList {
   GBold1,
-  GBold2,
   HBold1,
-  HBold2,
 }
 
 // TODO: Should these all be static? Should MultiexpPoint itself work off &'static references?
@@ -129,22 +87,6 @@ impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
     assert_eq!(g_bold1.len(), h_bold1.len());
 
     assert_eq!(padded_pow_of_2(g_bold1.len()), g_bold1.len(), "generators must be a pow of 2");
-
-    let mut set = HashSet::new();
-    let mut add_generator = |label, generator: &C::G| {
-      assert!(!bool::from(generator.is_identity()));
-      let bytes = generator.to_bytes();
-      assert!(set.insert(bytes.as_ref().to_vec()));
-    };
-
-    add_generator(b"g", &g);
-    add_generator(b"h", &h);
-    for g in &g_bold1 {
-      add_generator(b"g_bold1", g);
-    }
-    for h in &h_bold1 {
-      add_generator(b"h_bold1", h);
-    }
 
     Generators {
       g: MultiexpPoint::new_constant(g),
