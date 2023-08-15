@@ -61,14 +61,14 @@ impl Default for VoteSignature {
 /// Data for a signed transaction.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SlashVote {
-  pub id: [u8; 32],       // vote id(slash event id)
+  pub id: [u8; 13],       // vote id(slash event id)
   pub target: [u8; 32],   // who to slash
   pub sig: VoteSignature, // signature
 }
 
 impl ReadWrite for SlashVote {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let mut id = [0; 32];
+    let mut id = [0; 13];
     let mut target = [0; 32];
     reader.read_exact(&mut id)?;
     reader.read_exact(&mut target)?;

@@ -286,10 +286,14 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
         }
         TendermintTx::SlashEvidence(data)
       }
-      SlashEvent::Id(id) => {
+      SlashEvent::Id(reason, block, round) => {
         // create a signed vote tx
         let target = validator.encode().try_into().unwrap();
-        TendermintTx::SlashVote(SlashVote { id, target, sig: VoteSignature::default() })
+        TendermintTx::SlashVote(SlashVote {
+          id: (reason, block, round).encode().try_into().unwrap(),
+          target,
+          sig: VoteSignature::default(),
+        })
       }
     };
 

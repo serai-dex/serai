@@ -249,7 +249,7 @@ pub fn random_vote_tx<R: RngCore + CryptoRng>(rng: &mut R, genesis: [u8; 32]) ->
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut *rng));
 
   // vote data
-  let mut id = [0u8; 32];
+  let mut id = [0u8; 13];
   let mut target = [0u8; 32];
   rng.fill_bytes(&mut id);
   rng.fill_bytes(&mut target);

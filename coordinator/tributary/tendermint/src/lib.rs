@@ -8,8 +8,6 @@ use std::{
 
 use parity_scale_codec::{Encode, Decode};
 
-use sha3::{Digest, Keccak256};
-
 use futures::{
   FutureExt, StreamExt, SinkExt,
   future::{self, Fuse},
@@ -126,8 +124,16 @@ pub type SignedMessageFor<N> = SignedMessage<
   <<N as Network>::SignatureScheme as SignatureScheme>::Signature,
 >;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
+pub enum SlashReason {
+  FailToPropose,
+  InvalidBlock,
+  InvalidMessage,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum SlashEvent<N: Network> {
-  Id([u8; 32]),
+  Id(SlashReason, u64, u32),
   WithEvidence(Vec<SignedMessageFor<N>>),
 }
 
@@ -251,14 +257,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
       self.block.slashes.insert(validator);
       self.network.slash(validator, slash_event).await;
     }
-  }
-
-  fn hash(&self, name: &str, block: u64, round: u32) -> [u8; 32] {
-    let mut data = Vec::with_capacity(32);
-    data.extend(name.as_bytes());
-    data.extend(block.to_le_bytes());
-    data.extend(round.to_le_bytes());
-    Keccak256::digest(&data).into()
   }
 
   /// Create a new Tendermint machine, from the specified point, with the specified block as the
@@ -395,12 +393,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 // Slash the validator for not proposing when they should've
                 log::debug!(target: "tendermint", "Validator didn't propose when they should have");
                 // this SLASH will be voted on.
-                let id =
-                  self.hash("Fail to Propose", self.block.number.0, self.block.round().number.0);
-                let slash = SlashEvent::Id(id);
                 self.slash(
                   self.weights.proposer(self.block.number, self.block.round().number),
-                  slash
+                  SlashEvent::Id(
+                    SlashReason::FailToPropose,
+                    self.block.number.0,
+                    self.block.round().number.0
+                  ),
                 ).await;
                 self.broadcast(Data::Prevote(None));
               },
@@ -485,9 +484,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
               let slash = if let Some(old_msg) = evidence_msg {
                 // if the malicious message contains a block, only vote to slash.
                 if let Data::Proposal(_, _) = &current_msg.msg.data {
-                  let id =
-                    self.hash("Invalid Block", self.block.number.0, self.block.round().number.0);
-                  SlashEvent::Id(id)
+                  SlashEvent::Id(
+                    SlashReason::InvalidBlock,
+                    self.block.number.0,
+                    self.block.round().number.0,
+                  )
                 } else {
                   // if we have the evidence, slash with evidence.
                   let mut evidence = Vec::new();
@@ -502,14 +503,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 }
               } else {
                 // we don't have evidence. Slash with vote.
-                let id =
-                  self.hash("Malicious Message", self.block.number.0, self.block.round().number.0);
-                SlashEvent::Id(id)
+                SlashEvent::Id(
+                  SlashReason::InvalidMessage,
+                  self.block.number.0,
+                  self.block.round().number.0,
+                )
               };
 
               // each message that we want to vote to slash needs to be re-broadcasted.
               // TODO: should this be inside slash function?
-              if let SlashEvent::Id(_) = slash {
+              if let SlashEvent::Id(_, _, _) = slash {
                 self.network.broadcast(current_msg).await;
               }
 
