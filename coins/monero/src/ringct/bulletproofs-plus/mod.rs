@@ -24,10 +24,6 @@ pub mod weighted_inner_product;
 pub mod single_range_proof;
 pub mod aggregate_range_proof;
 
-pub(crate) mod arithmetic_circuit_proof;
-pub mod arithmetic_circuit;
-pub mod gadgets;
-
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
 

@@ -3,7 +3,7 @@ use rand_core::OsRng;
 use transcript::RecommendedTranscript;
 use ciphersuite::{group::Group, Ciphersuite, Pallas, Vesta};
 
-use crate::{Generators, padded_pow_of_2, gadgets::elliptic_curve::EmbeddedShortWeierstrass};
+use crate::{Generators, padded_pow_of_2};
 
 #[cfg(test)]
 mod weighted_inner_product;
@@ -12,10 +12,6 @@ mod single_range_proof;
 #[cfg(test)]
 mod aggregate_range_proof;
 
-#[cfg(test)]
-mod arithmetic_circuit_proof;
-#[cfg(test)]
-mod arithmetic_circuit;
 #[cfg(test)]
 mod vector_commitment;
 #[cfg(test)]
@@ -54,14 +50,4 @@ pub fn generators<C: Ciphersuite>(n: usize) -> Generators<RecommendedTranscript,
     (proving_gens(), proving_gens()),
   );
   res
-}
-
-impl EmbeddedShortWeierstrass for Pallas {
-  type Embedded = Vesta;
-  const B: u64 = 5;
-}
-
-impl EmbeddedShortWeierstrass for Vesta {
-  type Embedded = Pallas;
-  const B: u64 = 5;
 }
