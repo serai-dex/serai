@@ -91,6 +91,9 @@ async fn key_gen_test() {
 
       // Sleep for 20s to give everything processing time
       tokio::time::sleep(Duration::from_secs(20)).await;
+      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+        tokio::time::sleep(Duration::from_secs(20)).await;
+      }
       for (i, processor) in processors.iter_mut().enumerate() {
         let mut commitments = (0 .. u8::try_from(COORDINATORS).unwrap())
           .map(|l| (participant_from_i(l.into()), vec![l]))
@@ -115,6 +118,9 @@ async fn key_gen_test() {
       }
 
       tokio::time::sleep(Duration::from_secs(20)).await;
+      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+        tokio::time::sleep(Duration::from_secs(20)).await;
+      }
       for (i, processor) in processors.iter_mut().enumerate() {
         let i = participant_from_i(i);
         assert_eq!(
@@ -143,7 +149,11 @@ async fn key_gen_test() {
       }
 
       // Sleeps for longer since we need to wait for a Substrate block as well
+      // TODO: Replace this with Substrate RPC checks and a much smaller sleep
       tokio::time::sleep(Duration::from_secs(60)).await;
+      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+      }
       let mut message = None;
       for processor in processors.iter_mut() {
         let msg = processor.recv_message().await;
