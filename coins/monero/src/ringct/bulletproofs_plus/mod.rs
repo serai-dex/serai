@@ -14,8 +14,6 @@ use ciphersuite::{
 
 mod scalar_vector;
 pub use scalar_vector::{ScalarVector, weighted_inner_product};
-mod scalar_matrix;
-pub use scalar_matrix::ScalarMatrix;
 mod point_vector;
 pub use point_vector::PointVector;
 
