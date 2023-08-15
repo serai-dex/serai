@@ -20,7 +20,7 @@ use processor_messages::{
   CoordinatorMessage,
 };
 
-use tributary::{transaction::Transaction as TransactionTrait, Tributary};
+use tributary::{TransactionTrait, Tributary};
 
 use crate::{
   tributary::{TributaryDb, Transaction, TributarySpec, scanner::handle_new_blocks},

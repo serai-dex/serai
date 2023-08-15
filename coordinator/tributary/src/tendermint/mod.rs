@@ -274,17 +274,9 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
 
   async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent<Self>) {
     let mut tx = match slash_event {
-      SlashEvent::WithEvidence(ev) => {
+      SlashEvent::WithEvidence(m1, m2) => {
         // create an unsigned evidence tx
-        let mut data = vec![];
-        // size is 2 at most for now.
-        data.extend(u8::to_le_bytes(u8::try_from(ev.len()).unwrap()));
-        for msg in ev {
-          let encoded = msg.encode();
-          data.extend(u32::to_le_bytes(u32::try_from(encoded.len()).unwrap()));
-          data.extend(encoded);
-        }
-        TendermintTx::SlashEvidence(data)
+        TendermintTx::SlashEvidence((m1, m2).encode())
       }
       SlashEvent::Id(reason, block, round) => {
         // create a signed vote tx

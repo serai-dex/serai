@@ -101,8 +101,26 @@ impl ReadWrite for TendermintTx {
       0 => {
         let mut len = [0; 4];
         reader.read_exact(&mut len)?;
-        let mut data = vec![0; usize::try_from(u32::from_le_bytes(len)).unwrap()];
-        reader.read_exact(&mut data)?;
+        let mut len =
+          usize::try_from(u32::from_le_bytes(len)).expect("running on a 16-bit system?");
+
+        let mut data = vec![];
+
+        // Read chunk-by-chunk so a claimed 4 GB length doesn't cause a 4 GB allocation
+        // While we could check the length is sane, that'd require we know what a sane length is
+        // We'd also have to maintain that length's sanity even as other parts of the codebase,
+        // and even entire crates, change
+        // This is fine as it'll eventually hit the P2P message size limit, yet doesn't require
+        // knowing it nor does it make any assumptions
+        const CHUNK_LEN: usize = 1024;
+        let mut chunk = [0; CHUNK_LEN];
+        while len > 0 {
+          let to_read = len.min(CHUNK_LEN);
+          data.reserve(to_read);
+          reader.read_exact(&mut chunk[.. to_read])?;
+          data.extend(&chunk[.. to_read]);
+          len -= to_read;
+        }
         Ok(TendermintTx::SlashEvidence(data))
       }
       1 => {

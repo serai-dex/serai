@@ -134,7 +134,7 @@ pub enum SlashReason {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum SlashEvent<N: Network> {
   Id(SlashReason, u64, u32),
-  WithEvidence(Vec<SignedMessageFor<N>>),
+  WithEvidence(SignedMessageFor<N>, Option<SignedMessageFor<N>>),
 }
 
 /// A machine executing the Tendermint protocol.
@@ -490,16 +490,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
                     self.block.round().number.0,
                   )
                 } else {
-                  // if we have the evidence, slash with evidence.
-                  let mut evidence = Vec::new();
-                  evidence.push(old_msg.clone());
-
                   // if old msg and new msg is not the same, use both as evidence.
-                  if old_msg != current_msg {
-                    evidence.push(current_msg.clone());
-                  }
-
-                  SlashEvent::WithEvidence(evidence)
+                  SlashEvent::WithEvidence(
+                    old_msg.clone(),
+                    if old_msg != current_msg { Some(current_msg.clone()) } else { None },
+                  )
                 }
               } else {
                 // we don't have evidence. Slash with vote.
@@ -622,7 +617,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           if let Some(data) = msgs.get(&Step::Precommit) {
             if let Ok(res) = self.verify_precommit_signature(data) {
               // Ensure this actually verified the signature instead of believing it shouldn't yet
-              debug_assert!(res);
+              assert!(res);
             } else {
               // Remove the message so it isn't counted towards forming a commit/included in one
               // This won't remove the fact the precommitted for this block hash in the MessageLog
@@ -638,8 +633,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 .unwrap()
                 .remove(&Step::Precommit);
 
-              // slash the validator, evidence needs 1 message
-              let slash = SlashEvent::WithEvidence(vec![signed.clone()]);
+              // Slash the validator for publishing an invalid commit signature
+              let slash = SlashEvent::WithEvidence(signed.clone(), None);
               self.slash(*validator, slash).await;
             }
           }
@@ -654,6 +649,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
         return Ok(None);
       }
     }
+
+    // msg.round is now guaranteed to be equal to self.block.round().number
+    debug_assert_eq!(msg.round, self.block.round().number);
 
     // The paper executes these checks when the step is prevote. Making sure this message warrants
     // rerunning these checks is a sane optimization since message instances is a full iteration

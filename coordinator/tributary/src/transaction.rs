@@ -98,6 +98,8 @@ pub enum TransactionKind<'a> {
   Signed(&'a Signed),
 }
 
+// TODO: Should this be renamed TransactionTrait now that a literal Transaction exists?
+// Or should the literal Transaction be renamed to Event?
 pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   /// Return what type of transaction this is.
   fn kind(&self) -> TransactionKind<'_>;

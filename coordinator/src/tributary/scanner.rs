@@ -54,7 +54,7 @@ async fn handle_block<
   let genesis = spec.genesis();
   let hash = block.hash();
 
-  let mut event_id = 0; // TODO: should start from -1 so that we need only 1 event_id += 1?
+  let mut event_id = 0;
   #[allow(clippy::explicit_counter_loop)] // event_id isn't TX index. It just currently lines up
   for tx in block.transactions {
     if TributaryDb::<D>::handled_event(&db.0, hash, event_id) {
@@ -66,14 +66,15 @@ async fn handle_block<
 
     match tx {
       TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
-        // since the evidence is on the chain, it already
-        // should be valid. So we can just punish the signer.
+        // Since the evidence is on the chain, it should already have been validated
+        // We can just punish the signer
         let msgs = decode_evidence::<TendermintNetwork<D, Transaction, P>>(&ev).unwrap();
 
+        // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
         // mark the node as fatally slashed
         TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs[0].msg.sender);
 
-        // TODO: disconnect the node from network
+        // TODO: disconnect the node from network/ban from further participation in Tributary
       }
       TributaryTransaction::Tendermint(TendermintTx::SlashVote(vote)) => {
         // TODO: make sure same signer doesn't vote twice
@@ -81,13 +82,13 @@ async fn handle_block<
         // increment the counter for this vote
         let vote_key = TributaryDb::<D>::slash_vote_key(genesis, vote.id, vote.target);
         let mut count = txn.get(&vote_key).map_or(0, |c| u32::from_le_bytes(c.try_into().unwrap()));
-        count += 1;
+        count += 1; // TODO: Increase by weight, not by 1
         txn.put(vote_key, count.to_le_bytes());
 
-        // TODO: check whether 2/3 of all validators voted.
-        // and increment the slash points if yes.
-        // if a node has a certain number more than the median slash points,
-        // the node should be removed.
+        // TODO: Check if a supermajority of validators, by weight, voted, and increment slash
+        // points if so
+        // If a node has a certain number more than the median slash points, the node should be
+        // removed
       }
       TributaryTransaction::Application(tx) => {
         handle_application_tx::<D, _, _, _>(
