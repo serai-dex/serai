@@ -8,8 +8,6 @@ use crate::{Generators, padded_pow_of_2};
 #[cfg(test)]
 mod weighted_inner_product;
 #[cfg(test)]
-mod single_range_proof;
-#[cfg(test)]
 mod aggregate_range_proof;
 
 #[cfg(test)]
