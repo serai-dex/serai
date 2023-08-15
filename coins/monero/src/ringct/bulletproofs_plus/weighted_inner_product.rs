@@ -5,13 +5,12 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use transcript::Transcript;
 
 use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
-use ciphersuite::{
-  group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
-  },
-  Ciphersuite,
+use group::{
+  ff::{Field, PrimeField},
+  GroupEncoding,
 };
+use dalek_ff_group::{Scalar, EdwardsPoint};
+use ciphersuite::{Ciphersuite, Ed25519};
 
 use crate::ringct::bulletproofs_plus::{
   ScalarVector, PointVector, GeneratorsList, InnerProductGenerators, padded_pow_of_2,
@@ -19,21 +18,21 @@ use crate::ringct::bulletproofs_plus::{
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-enum P<C: Ciphersuite> {
-  Point(C::G),
-  Terms(Vec<(C::F, C::G)>),
+enum P {
+  Point(EdwardsPoint),
+  Terms(Vec<(Scalar, EdwardsPoint)>),
 }
 
 // Figure 1
 #[derive(Clone, Debug)]
-pub struct WipStatement<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> {
-  generators: &'a InnerProductGenerators<'a, C, GB>,
-  P: P<C>,
-  y: ScalarVector<C>,
-  inv_y: Option<Vec<C::F>>,
+pub struct WipStatement<'a, GB: Clone + AsRef<[EdwardsPoint]>> {
+  generators: &'a InnerProductGenerators<'a, GB>,
+  P: P,
+  y: ScalarVector,
+  inv_y: Option<Vec<Scalar>>,
 }
 
-impl<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> Zeroize for WipStatement<'a, C, GB> {
+impl<'a, GB: Clone + AsRef<[EdwardsPoint]>> Zeroize for WipStatement<'a, GB> {
   fn zeroize(&mut self) {
     self.P.zeroize();
     self.y.zeroize();
@@ -42,14 +41,14 @@ impl<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> Zeroize for WipStatement<'a,
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct WipWitness<C: Ciphersuite> {
-  a: ScalarVector<C>,
-  b: ScalarVector<C>,
-  alpha: C::F,
+pub struct WipWitness {
+  a: ScalarVector,
+  b: ScalarVector,
+  alpha: Scalar,
 }
 
-impl<C: Ciphersuite> WipWitness<C> {
-  pub fn new(mut a: ScalarVector<C>, mut b: ScalarVector<C>, alpha: C::F) -> Self {
+impl WipWitness {
+  pub fn new(mut a: ScalarVector, mut b: ScalarVector, alpha: Scalar) -> Self {
     assert!(!a.0.is_empty());
     assert_eq!(a.len(), b.len());
 
@@ -58,8 +57,8 @@ impl<C: Ciphersuite> WipWitness<C> {
     a.0.reserve(missing);
     b.0.reserve(missing);
     for _ in 0 .. missing {
-      a.0.push(C::F::ZERO);
-      b.0.push(C::F::ZERO);
+      a.0.push(Scalar::ZERO);
+      b.0.push(Scalar::ZERO);
     }
 
     Self { a, b, alpha }
@@ -67,18 +66,18 @@ impl<C: Ciphersuite> WipWitness<C> {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct WipProof<C: Ciphersuite> {
-  L: Vec<C::G>,
-  R: Vec<C::G>,
-  A: C::G,
-  B: C::G,
-  r_answer: C::F,
-  s_answer: C::F,
-  delta_answer: C::F,
+pub struct WipProof {
+  L: Vec<EdwardsPoint>,
+  R: Vec<EdwardsPoint>,
+  A: EdwardsPoint,
+  B: EdwardsPoint,
+  r_answer: Scalar,
+  s_answer: Scalar,
+  delta_answer: Scalar,
 }
 
-impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB> {
-  pub fn new(generators: &'a InnerProductGenerators<'a, C, GB>, P: C::G, y: C::F) -> Self {
+impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
+  pub fn new(generators: &'a InnerProductGenerators<'a, GB>, P: EdwardsPoint, y: Scalar) -> Self {
     debug_assert_eq!(generators.len(), padded_pow_of_2(generators.len()));
 
     // y ** n
@@ -92,10 +91,10 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
   }
 
   pub(crate) fn new_without_P_transcript(
-    generators: &'a InnerProductGenerators<'a, C, GB>,
-    P: Vec<(C::F, C::G)>,
-    mut y_n: ScalarVector<C>,
-    mut inv_y_n: Vec<C::F>,
+    generators: &'a InnerProductGenerators<'a, GB>,
+    P: Vec<(Scalar, EdwardsPoint)>,
+    mut y_n: ScalarVector,
+    mut inv_y_n: Vec<Scalar>,
   ) -> Self {
     debug_assert_eq!(generators.len(), padded_pow_of_2(generators.len()));
 
@@ -123,22 +122,22 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
     transcript.append_message(b"y", self.y[0].to_repr());
   }
 
-  fn transcript_L_R<T: Transcript>(transcript: &mut T, L: C::G, R: C::G) -> C::F {
+  fn transcript_L_R<T: Transcript>(transcript: &mut T, L: EdwardsPoint, R: EdwardsPoint) -> Scalar {
     transcript.append_message(b"L", L.to_bytes());
     transcript.append_message(b"R", R.to_bytes());
 
-    let e = C::hash_to_F(b"weighted_inner_product", transcript.challenge(b"e").as_ref());
+    let e = Ed25519::hash_to_F(b"weighted_inner_product", transcript.challenge(b"e").as_ref());
     if bool::from(e.is_zero()) {
       panic!("zero challenge in WIP round");
     }
     e
   }
 
-  fn transcript_A_B<T: Transcript>(transcript: &mut T, A: C::G, B: C::G) -> C::F {
+  fn transcript_A_B<T: Transcript>(transcript: &mut T, A: EdwardsPoint, B: EdwardsPoint) -> Scalar {
     transcript.append_message(b"A", A.to_bytes());
     transcript.append_message(b"B", B.to_bytes());
 
-    let e = C::hash_to_F(b"weighted_inner_product", transcript.challenge(b"e").as_ref());
+    let e = Ed25519::hash_to_F(b"weighted_inner_product", transcript.challenge(b"e").as_ref());
     if bool::from(e.is_zero()) {
       panic!("zero challenge in final WIP round");
     }
@@ -153,14 +152,14 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
   // multiexp
   fn next_G_H<T: Transcript>(
     transcript: &mut T,
-    mut g_bold1: PointVector<C>,
-    mut g_bold2: PointVector<C>,
-    mut h_bold1: PointVector<C>,
-    mut h_bold2: PointVector<C>,
-    L: C::G,
-    R: C::G,
-    y_inv_n_hat: C::F,
-  ) -> (C::F, C::F, C::F, C::F, PointVector<C>, PointVector<C>) {
+    mut g_bold1: PointVector,
+    mut g_bold2: PointVector,
+    mut h_bold1: PointVector,
+    mut h_bold2: PointVector,
+    L: EdwardsPoint,
+    R: EdwardsPoint,
+    y_inv_n_hat: Scalar,
+  ) -> (Scalar, Scalar, Scalar, Scalar, PointVector, PointVector) {
     assert_eq!(g_bold1.len(), g_bold2.len());
     assert_eq!(h_bold1.len(), h_bold2.len());
     assert_eq!(g_bold1.len(), h_bold1.len());
@@ -207,8 +206,8 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
   versus divide and conquer's 24.
 
   */
-  fn challenge_products(challenges: &[(C::F, C::F)]) -> Vec<C::F> {
-    let mut products = vec![C::F::ONE; 1 << challenges.len()];
+  fn challenge_products(challenges: &[(Scalar, Scalar)]) -> Vec<Scalar> {
+    let mut products = vec![Scalar::ONE; 1 << challenges.len()];
 
     if !challenges.is_empty() {
       products[0] = challenges[0].1;
@@ -237,8 +236,8 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
     mut self,
     rng: &mut R,
     transcript: &mut T,
-    witness: WipWitness<C>,
-  ) -> WipProof<C> {
+    witness: WipWitness,
+  ) -> WipProof {
     self.initial_transcript(transcript);
 
     let WipStatement { generators, P, mut y, inv_y } = self;
@@ -301,8 +300,8 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
       let y_n_hat = y[n_hat - 1];
       y.0.truncate(n_hat);
 
-      let d_l = C::F::random(&mut *rng);
-      let d_r = C::F::random(&mut *rng);
+      let d_l = Scalar::random(&mut *rng);
+      let d_r = Scalar::random(&mut *rng);
 
       let c_l = weighted_inner_product(&a1, &b2, &y);
       let c_r = weighted_inner_product(&(a2.mul(y_n_hat)), &b1, &y);
@@ -358,10 +357,10 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
     assert_eq!(a.len(), 1);
     assert_eq!(b.len(), 1);
 
-    let r = C::F::random(&mut *rng);
-    let s = C::F::random(&mut *rng);
-    let delta = C::F::random(&mut *rng);
-    let long_n = C::F::random(&mut *rng);
+    let r = Scalar::random(&mut *rng);
+    let s = Scalar::random(&mut *rng);
+    let delta = Scalar::random(&mut *rng);
+    let long_n = Scalar::random(&mut *rng);
 
     let ry = r * y[0];
 
@@ -386,9 +385,9 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
   pub fn verify<R: RngCore + CryptoRng, T: Transcript>(
     mut self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<(), C::G>,
+    verifier: &mut BatchVerifier<(), EdwardsPoint>,
     transcript: &mut T,
-    proof: WipProof<C>,
+    proof: WipProof,
   ) {
     self.initial_transcript(transcript);
 
@@ -418,7 +417,7 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
     });
 
     let mut P_terms = match P {
-      P::Point(point) => vec![(C::F::ONE, point)],
+      P::Point(point) => vec![(Scalar::ONE, point)],
       P::Terms(terms) => terms,
     };
     P_terms.reserve(6 + (2 * generators.len()) + proof.L.len());
@@ -431,11 +430,8 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
       }
 
       let mut inv_es = es.clone();
-      let mut scratch = vec![C::F::ZERO; es.len()];
-      ciphersuite::group::ff::BatchInverter::invert_with_external_scratch(
-        &mut inv_es,
-        &mut scratch,
-      );
+      let mut scratch = vec![Scalar::ZERO; es.len()];
+      group::ff::BatchInverter::invert_with_external_scratch(&mut inv_es, &mut scratch);
       drop(scratch);
 
       assert_eq!(es.len(), inv_es.len());
@@ -486,7 +482,7 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
     multiexp.push((-e, proof.A));
     multiexp.push((proof.r_answer * y[0] * proof.s_answer, g));
     multiexp.push((proof.delta_answer, h));
-    multiexp.push((-C::F::ONE, proof.B));
+    multiexp.push((-Scalar::ONE, proof.B));
 
     verifier.queue(rng, (), multiexp);
   }

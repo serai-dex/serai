@@ -7,33 +7,31 @@ use zeroize::Zeroize;
 
 use transcript::Transcript;
 
-use ciphersuite::{
-  group::ff::{Field, PrimeField},
-  Ciphersuite,
-};
+use group::ff::{Field, PrimeField};
+use dalek_ff_group::Scalar;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct ScalarVector<C: Ciphersuite>(pub Vec<C::F>);
+pub struct ScalarVector(pub Vec<Scalar>);
 
-impl<C: Ciphersuite> Index<usize> for ScalarVector<C> {
-  type Output = C::F;
-  fn index(&self, index: usize) -> &C::F {
+impl Index<usize> for ScalarVector {
+  type Output = Scalar;
+  fn index(&self, index: usize) -> &Scalar {
     &self.0[index]
   }
 }
 
-impl<C: Ciphersuite> IndexMut<usize> for ScalarVector<C> {
-  fn index_mut(&mut self, index: usize) -> &mut C::F {
+impl IndexMut<usize> for ScalarVector {
+  fn index_mut(&mut self, index: usize) -> &mut Scalar {
     &mut self.0[index]
   }
 }
 
-impl<C: Ciphersuite> ScalarVector<C> {
+impl ScalarVector {
   pub(crate) fn new(len: usize) -> Self {
-    ScalarVector(vec![C::F::ZERO; len])
+    ScalarVector(vec![Scalar::ZERO; len])
   }
 
-  pub(crate) fn add(&self, scalar: impl Borrow<C::F>) -> Self {
+  pub(crate) fn add(&self, scalar: impl Borrow<Scalar>) -> Self {
     let mut res = self.clone();
     for val in res.0.iter_mut() {
       *val += scalar.borrow();
@@ -41,7 +39,7 @@ impl<C: Ciphersuite> ScalarVector<C> {
     res
   }
 
-  pub(crate) fn sub(&self, scalar: impl Borrow<C::F>) -> Self {
+  pub(crate) fn sub(&self, scalar: impl Borrow<Scalar>) -> Self {
     let mut res = self.clone();
     for val in res.0.iter_mut() {
       *val -= scalar.borrow();
@@ -49,7 +47,7 @@ impl<C: Ciphersuite> ScalarVector<C> {
     res
   }
 
-  pub(crate) fn mul(&self, scalar: impl Borrow<C::F>) -> Self {
+  pub(crate) fn mul(&self, scalar: impl Borrow<Scalar>) -> Self {
     let mut res = self.clone();
     for val in res.0.iter_mut() {
       *val *= scalar.borrow();
@@ -66,17 +64,6 @@ impl<C: Ciphersuite> ScalarVector<C> {
     res
   }
 
-  /*
-  pub(crate) fn sub_vec(&self, vector: &Self) -> Self {
-    assert_eq!(self.len(), vector.len());
-    let mut res = self.clone();
-    for (i, val) in res.0.iter_mut().enumerate() {
-      *val -= vector.0[i];
-    }
-    res
-  }
-  */
-
   pub(crate) fn mul_vec(&self, vector: &Self) -> Self {
     assert_eq!(self.len(), vector.len());
     let mut res = self.clone();
@@ -86,15 +73,15 @@ impl<C: Ciphersuite> ScalarVector<C> {
     res
   }
 
-  pub(crate) fn inner_product(&self, vector: &Self) -> C::F {
+  pub(crate) fn inner_product(&self, vector: &Self) -> Scalar {
     self.mul_vec(vector).sum()
   }
 
-  pub(crate) fn powers(x: C::F, len: usize) -> Self {
+  pub(crate) fn powers(x: Scalar, len: usize) -> Self {
     debug_assert!(len != 0);
 
     let mut res = Vec::with_capacity(len);
-    res.push(C::F::ONE);
+    res.push(Scalar::ONE);
     res.push(x);
     for i in 2 .. len {
       res.push(res[i - 1] * x);
@@ -103,7 +90,7 @@ impl<C: Ciphersuite> ScalarVector<C> {
     ScalarVector(res)
   }
 
-  pub(crate) fn sum(mut self) -> C::F {
+  pub(crate) fn sum(mut self) -> Scalar {
     self.0.drain(..).sum()
   }
 
@@ -125,10 +112,6 @@ impl<C: Ciphersuite> ScalarVector<C> {
   }
 }
 
-pub fn weighted_inner_product<C: Ciphersuite>(
-  a: &ScalarVector<C>,
-  b: &ScalarVector<C>,
-  y: &ScalarVector<C>,
-) -> C::F {
+pub fn weighted_inner_product(a: &ScalarVector, b: &ScalarVector, y: &ScalarVector) -> Scalar {
   a.inner_product(&b.mul_vec(y))
 }

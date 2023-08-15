@@ -5,10 +5,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use transcript::Transcript;
 
 use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
-use ciphersuite::{
-  group::{ff::Field, Group, GroupEncoding},
-  Ciphersuite,
-};
+use group::{ff::Field, Group, GroupEncoding};
+use dalek_ff_group::{Scalar, EdwardsPoint};
+use ciphersuite::{Ciphersuite, Ed25519};
 
 use crate::ringct::bulletproofs_plus::{
   RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, ProofGenerators,
@@ -21,25 +20,25 @@ const N: usize = RANGE_PROOF_BITS;
 
 // Figure 3
 #[derive(Clone, Debug)]
-pub struct AggregateRangeStatement<'a, C: Ciphersuite> {
-  generators: ProofGenerators<'a, C>,
-  V: PointVector<C>,
+pub struct AggregateRangeStatement<'a> {
+  generators: ProofGenerators<'a>,
+  V: PointVector,
 }
 
-impl<'a, C: Ciphersuite> Zeroize for AggregateRangeStatement<'a, C> {
+impl<'a> Zeroize for AggregateRangeStatement<'a> {
   fn zeroize(&mut self) {
     self.V.zeroize();
   }
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct AggregateRangeWitness<C: Ciphersuite> {
+pub struct AggregateRangeWitness {
   values: Vec<u64>,
-  gammas: Vec<C::F>,
+  gammas: Vec<Scalar>,
 }
 
-impl<C: Ciphersuite> AggregateRangeWitness<C> {
-  pub fn new(commitments: &[RangeCommitment<C>]) -> Self {
+impl AggregateRangeWitness {
+  pub fn new(commitments: &[RangeCommitment]) -> Self {
     let mut values = Vec::with_capacity(commitments.len());
     let mut gammas = Vec::with_capacity(commitments.len());
     for commitment in commitments {
@@ -51,13 +50,13 @@ impl<C: Ciphersuite> AggregateRangeWitness<C> {
 }
 
 #[derive(Clone, Debug, Zeroize)]
-pub struct AggregateRangeProof<C: Ciphersuite> {
-  A: C::G,
-  wip: WipProof<C>,
+pub struct AggregateRangeProof {
+  A: EdwardsPoint,
+  wip: WipProof,
 }
 
-impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
-  pub fn new(generators: ProofGenerators<'a, C>, V: Vec<C::G>) -> Self {
+impl<'a> AggregateRangeStatement<'a> {
+  pub fn new(generators: ProofGenerators<'a>, V: Vec<EdwardsPoint>) -> Self {
     assert!(!V.is_empty());
     Self { generators, V: PointVector(V) }
   }
@@ -69,15 +68,15 @@ impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
     }
   }
 
-  fn transcript_A<T: Transcript>(transcript: &mut T, A: C::G) -> (C::F, C::F) {
+  fn transcript_A<T: Transcript>(transcript: &mut T, A: EdwardsPoint) -> (Scalar, Scalar) {
     transcript.append_message(b"A", A.to_bytes());
 
-    let y = C::hash_to_F(b"aggregate_range_proof", transcript.challenge(b"y").as_ref());
+    let y = Ed25519::hash_to_F(b"aggregate_range_proof", transcript.challenge(b"y").as_ref());
     if bool::from(y.is_zero()) {
       panic!("zero challenge in aggregate range proof");
     }
 
-    let z = C::hash_to_F(b"aggregate_range_proof", transcript.challenge(b"z").as_ref());
+    let z = Ed25519::hash_to_F(b"aggregate_range_proof", transcript.challenge(b"z").as_ref());
     if bool::from(z.is_zero()) {
       panic!("zero challenge in aggregate range proof");
     }
@@ -85,24 +84,24 @@ impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
     (y, z)
   }
 
-  fn d_j(j: usize, m: usize) -> ScalarVector<C> {
+  fn d_j(j: usize, m: usize) -> ScalarVector {
     let mut d_j = Vec::with_capacity(m * RANGE_PROOF_BITS);
     for _ in 0 .. (j - 1) * N {
-      d_j.push(C::F::ZERO);
+      d_j.push(Scalar::ZERO);
     }
-    d_j.append(&mut ScalarVector::<C>::powers(C::F::from(2), RANGE_PROOF_BITS).0);
+    d_j.append(&mut ScalarVector::powers(Scalar::from(2u8), RANGE_PROOF_BITS).0);
     for _ in 0 .. (m - j) * N {
-      d_j.push(C::F::ZERO);
+      d_j.push(Scalar::ZERO);
     }
     ScalarVector(d_j)
   }
 
-  fn compute_A_hat<GB: Clone + AsRef<[C::G]>, T: Transcript>(
-    V: &PointVector<C>,
-    generators: &InnerProductGenerators<'a, C, GB>,
+  fn compute_A_hat<GB: Clone + AsRef<[EdwardsPoint]>, T: Transcript>(
+    V: &PointVector,
+    generators: &InnerProductGenerators<'a, GB>,
     transcript: &mut T,
-    A: C::G,
-  ) -> (C::F, ScalarVector<C>, C::F, C::F, ScalarVector<C>, C::G) {
+    A: EdwardsPoint,
+  ) -> (Scalar, ScalarVector, Scalar, Scalar, ScalarVector, EdwardsPoint) {
     // TODO: First perform the WIP transcript before acquiring challenges
     let (y, z) = Self::transcript_A(transcript, A);
 
@@ -112,7 +111,7 @@ impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
 
     let mut d = ScalarVector::new(mn);
     for j in 1 ..= V.len() {
-      z_pow.push(z.pow([2 * u64::try_from(j).unwrap()])); // TODO: Optimize this
+      z_pow.push(z.pow(Scalar::from(2 * u64::try_from(j).unwrap()))); // TODO: Optimize this
       d = d.add_vec(&Self::d_j(j, V.len()).mul(z_pow[j - 1]));
     }
 
@@ -128,9 +127,9 @@ impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
     let d_descending_y = d.mul_vec(&descending_y);
 
     let y_mn_plus_one = descending_y[0] * y;
-    debug_assert_eq!(y_mn_plus_one, y.pow([u64::try_from(mn).unwrap() + 1]));
+    debug_assert_eq!(y_mn_plus_one, y.pow(Scalar::from(u64::try_from(mn).unwrap() + 1)));
 
-    let mut commitment_accum = C::G::identity();
+    let mut commitment_accum = EdwardsPoint::identity();
     for (j, commitment) in V.0.iter().enumerate() {
       commitment_accum += *commitment * z_pow[j];
     }
@@ -154,16 +153,15 @@ impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
     self,
     rng: &mut R,
     transcript: &mut T,
-    witness: AggregateRangeWitness<C>,
-  ) -> AggregateRangeProof<C> {
+    witness: AggregateRangeWitness,
+  ) -> AggregateRangeProof {
     assert_eq!(self.V.len(), witness.values.len());
     debug_assert_eq!(witness.values.len(), witness.gammas.len());
     for (commitment, (value, gamma)) in
       self.V.0.iter().zip(witness.values.iter().zip(witness.gammas.iter()))
     {
       debug_assert_eq!(
-        RangeCommitment::<C>::new(*value, *gamma)
-          .calculate(self.generators.g(), self.generators.h()),
+        RangeCommitment::new(*value, *gamma).calculate(self.generators.g(), self.generators.h()),
         *commitment
       );
     }
@@ -177,17 +175,17 @@ impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
     let mut a_l = ScalarVector(Vec::with_capacity(V.len() * RANGE_PROOF_BITS));
     for j in 1 ..= V.len() {
       d_js.push(Self::d_j(j, V.len()));
-      a_l.0.append(&mut u64_decompose::<C>(witness.values[j - 1]).0);
+      a_l.0.append(&mut u64_decompose(witness.values[j - 1]).0);
     }
 
     for (value, d_j) in witness.values.iter().zip(d_js.iter()) {
       debug_assert_eq!(d_j.len(), a_l.len());
-      debug_assert_eq!(a_l.inner_product(d_j), C::F::from(*value));
+      debug_assert_eq!(a_l.inner_product(d_j), Scalar::from(*value));
     }
 
-    let a_r = a_l.sub(C::F::ONE);
+    let a_r = a_l.sub(Scalar::ONE);
 
-    let alpha = C::F::random(&mut *rng);
+    let alpha = Scalar::random(&mut *rng);
 
     let mut A_terms = Vec::with_capacity((generators.len() * 2) + 1);
     for (i, a_l) in a_l.0.iter().enumerate() {
@@ -223,9 +221,9 @@ impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
   pub fn verify<R: RngCore + CryptoRng, T: Transcript>(
     self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<(), C::G>,
+    verifier: &mut BatchVerifier<(), EdwardsPoint>,
     transcript: &mut T,
-    proof: AggregateRangeProof<C>,
+    proof: AggregateRangeProof,
   ) {
     self.initial_transcript(transcript);
 

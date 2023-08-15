@@ -4,84 +4,33 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use transcript::Transcript;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use group::GroupEncoding;
+use dalek_ff_group::EdwardsPoint;
 
 #[cfg(test)]
 use multiexp::multiexp;
 #[cfg(test)]
-use super::ScalarVector;
+use crate::ringct::bulletproofs_plus::ScalarVector;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct PointVector<C: Ciphersuite>(pub Vec<C::G>);
+pub struct PointVector(pub Vec<EdwardsPoint>);
 
-impl<C: Ciphersuite> Index<usize> for PointVector<C> {
-  type Output = C::G;
-  fn index(&self, index: usize) -> &C::G {
+impl Index<usize> for PointVector {
+  type Output = EdwardsPoint;
+  fn index(&self, index: usize) -> &EdwardsPoint {
     &self.0[index]
   }
 }
 
-impl<C: Ciphersuite> IndexMut<usize> for PointVector<C> {
-  fn index_mut(&mut self, index: usize) -> &mut C::G {
+impl IndexMut<usize> for PointVector {
+  fn index_mut(&mut self, index: usize) -> &mut EdwardsPoint {
     &mut self.0[index]
   }
 }
 
-impl<C: Ciphersuite> PointVector<C> {
-  /*
-  pub(crate) fn add(&self, point: impl AsRef<C::G>) -> Self {
-    let mut res = self.clone();
-    for val in res.0.iter_mut() {
-      *val += point.as_ref();
-    }
-    res
-  }
-  pub(crate) fn sub(&self, point: impl AsRef<C::G>) -> Self {
-    let mut res = self.clone();
-    for val in res.0.iter_mut() {
-      *val -= point.as_ref();
-    }
-    res
-  }
-
-  pub(crate) fn mul(&self, scalar: impl core::borrow::Borrow<C::F>) -> Self {
-    let mut res = self.clone();
-    for val in res.0.iter_mut() {
-      *val *= scalar.borrow();
-    }
-    res
-  }
-
-  pub(crate) fn add_vec(&self, vector: &Self) -> Self {
-    assert_eq!(self.len(), vector.len());
-    let mut res = self.clone();
-    for (i, val) in res.0.iter_mut().enumerate() {
-      *val += vector.0[i];
-    }
-    res
-  }
-
-  pub(crate) fn sub_vec(&self, vector: &Self) -> Self {
-    assert_eq!(self.len(), vector.len());
-    let mut res = self.clone();
-    for (i, val) in res.0.iter_mut().enumerate() {
-      *val -= vector.0[i];
-    }
-    res
-  }
-
-  pub(crate) fn mul_vec(&self, vector: &ScalarVector<C>) -> Self {
-    assert_eq!(self.len(), vector.len());
-    let mut res = self.clone();
-    for (i, val) in res.0.iter_mut().enumerate() {
-      *val *= vector.0[i];
-    }
-    res
-  }
-  */
-
+impl PointVector {
   #[cfg(test)]
-  pub(crate) fn multiexp(&self, vector: &ScalarVector<C>) -> C::G {
+  pub(crate) fn multiexp(&self, vector: &ScalarVector) -> EdwardsPoint {
     assert_eq!(self.len(), vector.len());
     let mut res = Vec::with_capacity(self.len());
     for (point, scalar) in self.0.iter().copied().zip(vector.0.iter().copied()) {
@@ -89,21 +38,6 @@ impl<C: Ciphersuite> PointVector<C> {
     }
     multiexp(&res)
   }
-
-  /*
-  pub(crate) fn multiexp_vartime(&self, vector: &ScalarVector<C>) -> C::G {
-    assert_eq!(self.len(), vector.len());
-    let mut res = Vec::with_capacity(self.len());
-    for (point, scalar) in self.0.iter().copied().zip(vector.0.iter().copied()) {
-      res.push((scalar, point));
-    }
-    multiexp_vartime(&res)
-  }
-
-  pub(crate) fn sum(&self) -> C::G {
-    self.0.iter().sum()
-  }
-  */
 
   pub(crate) fn len(&self) -> usize {
     self.0.len()

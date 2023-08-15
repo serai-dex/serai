@@ -7,10 +7,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use rand_core::{RngCore, CryptoRng};
 
 use multiexp::multiexp_vartime;
-use ciphersuite::{
-  group::{ff::Field, Group, GroupEncoding},
-  Ciphersuite,
-};
+use group::{ff::Field, Group, GroupEncoding};
+use dalek_ff_group::{Scalar, EdwardsPoint};
 
 mod scalar_vector;
 pub use scalar_vector::{ScalarVector, weighted_inner_product};
@@ -41,34 +39,39 @@ pub(crate) enum GeneratorsList {
 
 // TODO: Table these
 #[derive(Clone, Debug)]
-pub struct Generators<C: Ciphersuite> {
-  g: C::G,
-  h: C::G,
+pub struct Generators {
+  g: EdwardsPoint,
+  h: EdwardsPoint,
 
-  g_bold1: Vec<C::G>,
-  h_bold1: Vec<C::G>,
+  g_bold1: Vec<EdwardsPoint>,
+  h_bold1: Vec<EdwardsPoint>,
 }
 
 #[derive(Clone, Debug)]
-pub struct ProofGenerators<'a, C: Ciphersuite> {
-  g: &'a C::G,
-  h: &'a C::G,
+pub struct ProofGenerators<'a> {
+  g: &'a EdwardsPoint,
+  h: &'a EdwardsPoint,
 
-  g_bold1: &'a [C::G],
-  h_bold1: &'a [C::G],
+  g_bold1: &'a [EdwardsPoint],
+  h_bold1: &'a [EdwardsPoint],
 }
 
 #[derive(Clone, Debug)]
-pub struct InnerProductGenerators<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> {
-  g: &'a C::G,
-  h: &'a C::G,
+pub struct InnerProductGenerators<'a, GB: Clone + AsRef<[EdwardsPoint]>> {
+  g: &'a EdwardsPoint,
+  h: &'a EdwardsPoint,
 
   g_bold1: GB,
-  h_bold1: &'a [C::G],
+  h_bold1: &'a [EdwardsPoint],
 }
 
-impl<C: Ciphersuite> Generators<C> {
-  pub fn new(g: C::G, h: C::G, mut g_bold1: Vec<C::G>, mut h_bold1: Vec<C::G>) -> Self {
+impl Generators {
+  pub fn new(
+    g: EdwardsPoint,
+    h: EdwardsPoint,
+    mut g_bold1: Vec<EdwardsPoint>,
+    mut h_bold1: Vec<EdwardsPoint>,
+  ) -> Self {
     assert!(!g_bold1.is_empty());
     assert_eq!(g_bold1.len(), h_bold1.len());
 
@@ -77,32 +80,32 @@ impl<C: Ciphersuite> Generators<C> {
     Generators { g, h, g_bold1, h_bold1 }
   }
 
-  pub fn g(&self) -> C::G {
+  pub fn g(&self) -> EdwardsPoint {
     self.g
   }
 
-  pub fn h(&self) -> C::G {
+  pub fn h(&self) -> EdwardsPoint {
     self.h
   }
 
   /// Take a presumably global Generators object and return a new object usable per-proof.
   ///
   /// Cloning Generators is expensive. This solely takes references to the generators.
-  pub fn per_proof(&self) -> ProofGenerators<'_, C> {
+  pub fn per_proof(&self) -> ProofGenerators<'_> {
     ProofGenerators { g: &self.g, h: &self.h, g_bold1: &self.g_bold1, h_bold1: &self.h_bold1 }
   }
 }
 
-impl<'a, C: Ciphersuite> ProofGenerators<'a, C> {
-  pub fn g(&self) -> C::G {
+impl<'a> ProofGenerators<'a> {
+  pub fn g(&self) -> EdwardsPoint {
     *self.g
   }
 
-  pub fn h(&self) -> C::G {
+  pub fn h(&self) -> EdwardsPoint {
     *self.h
   }
 
-  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> C::G {
+  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> EdwardsPoint {
     match list {
       GeneratorsList::GBold1 => self.g_bold1[i],
       GeneratorsList::HBold1 => self.h_bold1[i],
@@ -113,7 +116,7 @@ impl<'a, C: Ciphersuite> ProofGenerators<'a, C> {
     mut self,
     generators: usize,
     with_secondaries: bool,
-  ) -> InnerProductGenerators<'a, C, &'a [C::G]> {
+  ) -> InnerProductGenerators<'a, &'a [EdwardsPoint]> {
     // Round to the nearest power of 2
     let generators = padded_pow_of_2(generators);
     assert!(generators <= self.g_bold1.len());
@@ -125,20 +128,20 @@ impl<'a, C: Ciphersuite> ProofGenerators<'a, C> {
   }
 }
 
-impl<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> InnerProductGenerators<'a, C, GB> {
+impl<'a, GB: Clone + AsRef<[EdwardsPoint]>> InnerProductGenerators<'a, GB> {
   pub(crate) fn len(&self) -> usize {
     self.g_bold1.as_ref().len()
   }
 
-  pub(crate) fn g(&self) -> C::G {
+  pub(crate) fn g(&self) -> EdwardsPoint {
     *self.g
   }
 
-  pub(crate) fn h(&self) -> C::G {
+  pub(crate) fn h(&self) -> EdwardsPoint {
     *self.h
   }
 
-  pub(crate) fn generator(&self, mut list: GeneratorsList, mut i: usize) -> C::G {
+  pub(crate) fn generator(&self, mut list: GeneratorsList, mut i: usize) -> EdwardsPoint {
     match list {
       GeneratorsList::GBold1 => self.g_bold1.as_ref()[i],
       GeneratorsList::HBold1 => self.h_bold1[i],
@@ -150,35 +153,35 @@ impl<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> InnerProductGenerators<'a, C
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct RangeCommitment<C: Ciphersuite> {
+pub struct RangeCommitment {
   pub value: u64,
-  pub mask: C::F,
+  pub mask: Scalar,
 }
 
-impl<C: Ciphersuite> RangeCommitment<C> {
+impl RangeCommitment {
   pub fn zero() -> Self {
-    RangeCommitment { value: 0, mask: C::F::ZERO }
+    RangeCommitment { value: 0, mask: Scalar::ZERO }
   }
 
-  pub fn new(value: u64, mask: C::F) -> Self {
+  pub fn new(value: u64, mask: Scalar) -> Self {
     RangeCommitment { value, mask }
   }
 
   pub fn masking<R: RngCore + CryptoRng>(rng: &mut R, value: u64) -> Self {
-    RangeCommitment { value, mask: C::F::random(rng) }
+    RangeCommitment { value, mask: Scalar::random(rng) }
   }
 
   /// Calculate a Pedersen commitment, as a point, from the transparent structure.
-  pub fn calculate(&self, g: C::G, h: C::G) -> C::G {
-    (g * C::F::from(self.value)) + (h * self.mask)
+  pub fn calculate(&self, g: EdwardsPoint, h: EdwardsPoint) -> EdwardsPoint {
+    (g * Scalar::from(self.value)) + (h * self.mask)
   }
 }
 
 // Returns the little-endian decomposition.
-fn u64_decompose<C: Ciphersuite>(value: u64) -> ScalarVector<C> {
-  let mut bits = ScalarVector::<C>::new(64);
+fn u64_decompose(value: u64) -> ScalarVector {
+  let mut bits = ScalarVector::new(64);
   for bit in 0 .. 64 {
-    bits[bit] = C::F::from((value >> bit) & 1);
+    bits[bit] = Scalar::from((value >> bit) & 1);
   }
   bits
 }

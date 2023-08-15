@@ -3,7 +3,8 @@ use rand_core::{RngCore, OsRng};
 use transcript::{Transcript, RecommendedTranscript};
 
 use multiexp::BatchVerifier;
-use ciphersuite::{group::ff::Field, Ciphersuite, Ed25519};
+use group::ff::Field;
+use dalek_ff_group::Scalar;
 
 use crate::ringct::bulletproofs_plus::{
   RANGE_PROOF_BITS, RangeCommitment,
@@ -20,15 +21,12 @@ fn test_aggregate_range_proof() {
 
     let mut commitments = vec![];
     for _ in 0 .. m {
-      commitments.push(RangeCommitment::new(
-        OsRng.next_u64(),
-        <Ed25519 as Ciphersuite>::F::random(&mut OsRng),
-      ));
+      commitments.push(RangeCommitment::new(OsRng.next_u64(), Scalar::random(&mut OsRng)));
     }
     let commitment_points =
       commitments.iter().map(|com| com.calculate(generators.g(), generators.h())).collect();
-    let statement = AggregateRangeStatement::<Ed25519>::new(generators, commitment_points);
-    let witness = AggregateRangeWitness::<Ed25519>::new(&commitments);
+    let statement = AggregateRangeStatement::new(generators, commitment_points);
+    let witness = AggregateRangeWitness::new(&commitments);
 
     let mut transcript = RecommendedTranscript::new(b"Aggregate Range Proof Test");
     let proof = statement.clone().prove(&mut OsRng, &mut transcript.clone(), witness);
