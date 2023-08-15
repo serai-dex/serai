@@ -117,8 +117,6 @@ impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB>
 
   fn initial_transcript<T: Transcript>(&mut self, transcript: &mut T) {
     transcript.domain_separate(b"weighted_inner_product");
-    transcript
-      .append_message(b"generators", self.generators.transcript.clone().challenge(b"summary"));
     if let P::Point(P) = &self.P {
       transcript.append_message(b"P", P.to_bytes());
     }

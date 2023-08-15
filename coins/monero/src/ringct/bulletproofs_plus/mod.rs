@@ -77,12 +77,12 @@ impl<C: Ciphersuite> Generators<C> {
     Generators { g, h, g_bold1, h_bold1 }
   }
 
-  pub fn g(&self) -> &C::G {
-    &self.g
+  pub fn g(&self) -> C::G {
+    self.g
   }
 
-  pub fn h(&self) -> &C::G {
-    &self.h
+  pub fn h(&self) -> C::G {
+    self.h
   }
 
   /// Take a presumably global Generators object and return a new object usable per-proof.
@@ -94,21 +94,19 @@ impl<C: Ciphersuite> Generators<C> {
 }
 
 impl<'a, C: Ciphersuite> ProofGenerators<'a, C> {
-  pub fn g(&self) -> &C::G {
-    self.g
+  pub fn g(&self) -> C::G {
+    *self.g
   }
 
-  pub fn h(&self) -> &C::G {
-    self.h
+  pub fn h(&self) -> C::G {
+    *self.h
   }
 
-  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> &C::G {
-    self.replaced.get(&(list, i)).unwrap_or_else(|| {
-      &(match list {
-        GeneratorsList::GBold1 => self.g_bold1,
-        GeneratorsList::HBold1 => self.h_bold1,
-      }[i])
-    })
+  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> C::G {
+    match list {
+      GeneratorsList::GBold1 => self.g_bold1[i],
+      GeneratorsList::HBold1 => self.h_bold1[i],
+    }
   }
 
   pub(crate) fn reduce(
@@ -132,17 +130,17 @@ impl<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> InnerProductGenerators<'a, C
     self.g_bold1.as_ref().len()
   }
 
-  pub(crate) fn g(&self) -> &C::G {
-    self.g
+  pub(crate) fn g(&self) -> C::G {
+    *self.g
   }
 
-  pub(crate) fn h(&self) -> &C::G {
-    self.h
+  pub(crate) fn h(&self) -> C::G {
+    *self.h
   }
 
-  pub(crate) fn generator(&self, mut list: GeneratorsList, mut i: usize) -> &C::G {
+  pub(crate) fn generator(&self, mut list: GeneratorsList, mut i: usize) -> C::G {
     match list {
-      GeneratorsList::GBold1 => self.g_bold1[i],
+      GeneratorsList::GBold1 => self.g_bold1.as_ref()[i],
       GeneratorsList::HBold1 => self.h_bold1[i],
     }
   }

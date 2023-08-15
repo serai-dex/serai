@@ -24,7 +24,7 @@ fn test_zero_weighted_inner_product() {
 
   let generators = generators(1);
   let reduced = generators.per_proof().reduce(1, false);
-  let statement = WipStatement::<_, Ed25519, _>::new(&reduced, P, y);
+  let statement = WipStatement::<Ed25519, _>::new(&reduced, P, y);
   let witness = WipWitness::<Ed25519>::new(
     ScalarVector::<Ed25519>::new(1),
     ScalarVector::<Ed25519>::new(1),
@@ -79,7 +79,7 @@ fn test_weighted_inner_product() {
       (g * weighted_inner_product(&a, &b, &y_vec)) +
       (h * alpha);
 
-    let statement = WipStatement::<_, Ed25519, _>::new(&generators, P, y);
+    let statement = WipStatement::<Ed25519, _>::new(&generators, P, y);
     let witness = WipWitness::<Ed25519>::new(a, b, alpha);
 
     let mut transcript = RecommendedTranscript::new(b"WIP Test");
