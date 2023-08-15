@@ -2,9 +2,6 @@ use core::ops::{Index, IndexMut};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use transcript::Transcript;
-
-use group::GroupEncoding;
 use dalek_ff_group::EdwardsPoint;
 
 #[cfg(test)]
@@ -48,15 +45,5 @@ impl PointVector {
     let r = self.0.split_off(self.0.len() / 2);
     assert_eq!(self.len(), r.len());
     (self, PointVector(r))
-  }
-
-  pub(crate) fn transcript<T: 'static + Transcript>(
-    &self,
-    transcript: &mut T,
-    label: &'static [u8],
-  ) {
-    for point in &self.0 {
-      transcript.append_message(label, point.to_bytes());
-    }
   }
 }

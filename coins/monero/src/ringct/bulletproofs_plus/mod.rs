@@ -1,13 +1,10 @@
 #![allow(non_snake_case)]
 
-use std::collections::{HashSet, HashMap};
-
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use rand_core::{RngCore, CryptoRng};
 
-use multiexp::multiexp_vartime;
-use group::{ff::Field, Group, GroupEncoding};
+use group::ff::Field;
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 mod scalar_vector;
@@ -69,8 +66,8 @@ impl Generators {
   pub fn new(
     g: EdwardsPoint,
     h: EdwardsPoint,
-    mut g_bold1: Vec<EdwardsPoint>,
-    mut h_bold1: Vec<EdwardsPoint>,
+    g_bold1: Vec<EdwardsPoint>,
+    h_bold1: Vec<EdwardsPoint>,
   ) -> Self {
     assert!(!g_bold1.is_empty());
     assert_eq!(g_bold1.len(), h_bold1.len());
@@ -105,17 +102,9 @@ impl<'a> ProofGenerators<'a> {
     *self.h
   }
 
-  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> EdwardsPoint {
-    match list {
-      GeneratorsList::GBold1 => self.g_bold1[i],
-      GeneratorsList::HBold1 => self.h_bold1[i],
-    }
-  }
-
   pub(crate) fn reduce(
     mut self,
     generators: usize,
-    with_secondaries: bool,
   ) -> InnerProductGenerators<'a, &'a [EdwardsPoint]> {
     // Round to the nearest power of 2
     let generators = padded_pow_of_2(generators);
@@ -141,7 +130,7 @@ impl<'a, GB: Clone + AsRef<[EdwardsPoint]>> InnerProductGenerators<'a, GB> {
     *self.h
   }
 
-  pub(crate) fn generator(&self, mut list: GeneratorsList, mut i: usize) -> EdwardsPoint {
+  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> EdwardsPoint {
     match list {
       GeneratorsList::GBold1 => self.g_bold1.as_ref()[i],
       GeneratorsList::HBold1 => self.h_bold1[i],

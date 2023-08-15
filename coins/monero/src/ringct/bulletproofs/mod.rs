@@ -19,9 +19,9 @@ pub(crate) mod core;
 use self::core::LOG_N;
 
 pub(crate) mod original;
-pub(crate) use original::GENERATORS as BULLETPROOFS_GENERATORS;
+pub use original::GENERATORS as BULLETPROOFS_GENERATORS;
 pub(crate) mod plus;
-pub(crate) use plus::GENERATORS as BULLETPROOFS_PLUS_GENERATORS;
+pub use plus::GENERATORS as BULLETPROOFS_PLUS_GENERATORS;
 
 pub(crate) use self::original::OriginalStruct;
 pub(crate) use self::plus::PlusStruct;

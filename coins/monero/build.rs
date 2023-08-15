@@ -42,7 +42,7 @@ fn generators(prefix: &'static str, path: &str) {
       format!(
         "
           pub(crate) static GENERATORS_CELL: OnceLock<Generators> = OnceLock::new();
-          pub(crate) fn GENERATORS() -> &'static Generators {{
+          pub fn GENERATORS() -> &'static Generators {{
             GENERATORS_CELL.get_or_init(|| Generators {{
               G: [
                 {G_str}

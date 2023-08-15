@@ -17,17 +17,11 @@ use crate::ringct::bulletproofs_plus::{
   weighted_inner_product,
 };
 
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-enum P {
-  Point(EdwardsPoint),
-  Terms(Vec<(Scalar, EdwardsPoint)>),
-}
-
 // Figure 1
 #[derive(Clone, Debug)]
 pub struct WipStatement<'a, GB: Clone + AsRef<[EdwardsPoint]>> {
   generators: &'a InnerProductGenerators<'a, GB>,
-  P: P,
+  P: EdwardsPoint,
   y: ScalarVector,
   inv_y: Option<Vec<Scalar>>,
 }
@@ -87,38 +81,12 @@ impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
       y_vec[i] = y_vec[i - 1] * y;
     }
 
-    Self { generators, P: P::Point(P), y: y_vec, inv_y: None }
-  }
-
-  pub(crate) fn new_without_P_transcript(
-    generators: &'a InnerProductGenerators<'a, GB>,
-    P: Vec<(Scalar, EdwardsPoint)>,
-    mut y_n: ScalarVector,
-    mut inv_y_n: Vec<Scalar>,
-  ) -> Self {
-    debug_assert_eq!(generators.len(), padded_pow_of_2(generators.len()));
-
-    y_n.0.reserve(generators.len() - y_n.len());
-    inv_y_n.reserve(generators.len() - inv_y_n.len());
-    while y_n.len() < generators.len() {
-      y_n.0.push(y_n[0] * y_n.0.last().unwrap());
-      inv_y_n.push(inv_y_n[0] * inv_y_n.last().unwrap());
-    }
-
-    debug_assert_eq!(
-      Self::new(generators, multiexp(&P.iter().map(|P| (P.0, P.1)).collect::<Vec<_>>()), y_n[0]).y,
-      y_n
-    );
-    debug_assert_eq!(y_n.0.last().unwrap().invert().unwrap(), *inv_y_n.last().unwrap());
-
-    Self { generators, P: P::Terms(P), y: y_n, inv_y: Some(inv_y_n) }
+    Self { generators, P, y: y_vec, inv_y: None }
   }
 
   fn initial_transcript<T: Transcript>(&mut self, transcript: &mut T) {
     transcript.domain_separate(b"weighted_inner_product");
-    if let P::Point(P) = &self.P {
-      transcript.append_message(b"P", P.to_bytes());
-    }
+    transcript.append_message(b"P", self.P.to_bytes());
     transcript.append_message(b"y", self.y[0].to_repr());
   }
 
@@ -254,7 +222,8 @@ impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
     let mut h_bold = PointVector(h_bold);
 
     // Check P has the expected relationship
-    if let P::Point(P) = &P {
+    #[cfg(debug_assertions)]
+    {
       let mut P_terms = witness
         .a
         .0
@@ -265,7 +234,7 @@ impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
         .collect::<Vec<_>>();
       P_terms.push((weighted_inner_product(&witness.a, &witness.b, &y), g));
       P_terms.push((witness.alpha, h));
-      debug_assert_eq!(multiexp(&P_terms), *P);
+      debug_assert_eq!(multiexp(&P_terms), P);
       P_terms.zeroize();
     }
 
@@ -393,7 +362,7 @@ impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
 
     let WipStatement { generators, P, y, inv_y } = self;
 
-    let (g, h) = (generators.g().clone(), generators.h().clone());
+    let (g, h) = (generators.g(), generators.h());
 
     // Verify the L/R lengths
     {
@@ -416,10 +385,7 @@ impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
       res
     });
 
-    let mut P_terms = match P {
-      P::Point(point) => vec![(Scalar::ONE, point)],
-      P::Terms(terms) => terms,
-    };
+    let mut P_terms = vec![(Scalar::ONE, P)];
     P_terms.reserve(6 + (2 * generators.len()) + proof.L.len());
 
     let mut challenges = Vec::with_capacity(proof.L.len());
@@ -475,7 +441,7 @@ impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
     for i in 0 .. generators.len() {
       multiexp.push((
         se * product_cache[product_cache.len() - 1 - i],
-        generators.generator(GeneratorsList::HBold1, i).clone(),
+        generators.generator(GeneratorsList::HBold1, i),
       ));
     }
 

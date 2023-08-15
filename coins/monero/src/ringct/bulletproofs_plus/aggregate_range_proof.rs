@@ -169,7 +169,7 @@ impl<'a> AggregateRangeStatement<'a> {
     self.initial_transcript(transcript);
 
     let Self { generators, V } = self;
-    let generators = generators.reduce(V.len() * RANGE_PROOF_BITS, false);
+    let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
 
     let mut d_js = Vec::with_capacity(V.len());
     let mut a_l = ScalarVector(Vec::with_capacity(V.len() * RANGE_PROOF_BITS));
@@ -228,7 +228,7 @@ impl<'a> AggregateRangeStatement<'a> {
     self.initial_transcript(transcript);
 
     let Self { generators, V } = self;
-    let generators = generators.reduce(V.len() * RANGE_PROOF_BITS, false);
+    let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
 
     let (y, _, _, _, _, A_hat) = Self::compute_A_hat(&V, &generators, transcript, proof.A);
     (WipStatement::new(&generators, A_hat, y)).verify(rng, verifier, transcript, proof.wip);

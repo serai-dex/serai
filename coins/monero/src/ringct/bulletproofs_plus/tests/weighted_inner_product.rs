@@ -21,7 +21,7 @@ fn test_zero_weighted_inner_product() {
   let y = Scalar::random(&mut OsRng);
 
   let generators = generators(1);
-  let reduced = generators.per_proof().reduce(1, false);
+  let reduced = generators.per_proof().reduce(1);
   let statement = WipStatement::<_>::new(&reduced, P, y);
   let witness = WipWitness::new(ScalarVector::new(1), ScalarVector::new(1), Scalar::ZERO);
 
@@ -39,7 +39,7 @@ fn test_weighted_inner_product() {
   let mut verifier = BatchVerifier::new(6);
   let generators = generators(32);
   for i in [1, 2, 4, 8, 16, 32] {
-    let generators = generators.per_proof().reduce(i, false);
+    let generators = generators.per_proof().reduce(i);
     let g = generators.g();
     let h = generators.h();
     assert_eq!(generators.len(), i);
