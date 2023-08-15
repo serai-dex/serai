@@ -7,7 +7,7 @@ use crate::{
   },
   ReadWrite,
   tests::{
-    random_evidence_tx, random_vote_tx, SignedTransaction, p2p::LocalP2p, new_genesis, signer,
+    random_evidence_tx, random_vote_tx, SignedTransaction, p2p::DummyP2p, new_genesis, signer,
     tx_from_evidence, signed_from_data,
   },
   async_sequential,
@@ -31,7 +31,7 @@ use tendermint::{
   time::CanonicalInstant,
 };
 
-type N = TendermintNetwork<MemDb, SignedTransaction, LocalP2p>;
+type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
 
 #[test]
 fn vote_tx() {
@@ -47,9 +47,9 @@ fn vote_tx() {
   assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
 
   if let TendermintTx::SlashVote(vote) = &mut tx {
-    vote.sig.signature = SchnorrSignature::default();
+    vote.sig.signature = SchnorrSignature::read(&mut [0; 64].as_slice()).unwrap();
   } else {
-    assert!(false)
+    panic!("SlashVote TX wasn't SlashVote");
   }
 
   // should fail
@@ -154,7 +154,7 @@ async_sequential!(
 
     // any other commit(invalid) can be used as evidence.
     {
-      let sig = signer.sign(&Blake2s256::digest(commit_msg).to_vec()).await;
+      let sig = signer.sign(&Blake2s256::digest(commit_msg)).await;
       let signed = signed_from_data::<N>(
         signer.clone().into(),
         signer_id,
@@ -248,7 +248,7 @@ async_sequential!(
     // non-conflicting data should fail(Prevote)
     {
       let block_id_1 = [0u8; 32];
-      let block_id_2 = block_id_1.clone();
+      let block_id_2 = block_id_1;
       let signed_1 = signed_from_data::<N>(
         signer.clone().into(),
         signer_id,
@@ -298,7 +298,7 @@ async_sequential!(
     // non-conflicting data should fail irrespective of round number(Precommit)
     {
       let block_id_1 = [0u8; 32];
-      let block_id_2 = block_id_1.clone();
+      let block_id_2 = block_id_1;
       let sig = signer.sign(&block_id_1).await; // signature doesn't matter
       let signed_1 = signed_from_data::<N>(
         signer.clone().into(),

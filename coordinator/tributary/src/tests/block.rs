@@ -12,12 +12,12 @@ use tendermint::ext::Commit;
 
 use crate::{
   ReadWrite, BlockError, Block, Transaction,
-  tests::p2p::LocalP2p,
+  tests::p2p::DummyP2p,
   transaction::{TransactionError, Signed, TransactionKind, Transaction as TransactionTrait},
   tendermint::{TendermintNetwork, Validators},
 };
 
-type N = TendermintNetwork<MemDb, NonceTransaction, LocalP2p>;
+type N = TendermintNetwork<MemDb, NonceTransaction, DummyP2p>;
 
 // A transaction solely defined by its nonce and a distinguisher (to allow creating distinct TXs
 // sharing a nonce).

@@ -18,14 +18,14 @@ use crate::{
   transaction::Transaction as TransactionTrait,
   merkle, ProvidedError, ProvidedTransactions, Block, Blockchain, Transaction,
   tests::{
-    ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::LocalP2p,
+    ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::DummyP2p,
     new_genesis, random_vote_tx, random_evidence_tx,
   },
   tendermint::{TendermintNetwork, Validators, tx::TendermintTx, Signer, TendermintBlock},
   async_sequential, ReadWrite, TransactionKind, TransactionError, BlockError,
 };
 
-type N = TendermintNetwork<MemDb, SignedTransaction, LocalP2p>;
+type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
 
 fn new_blockchain<T: TransactionTrait>(
   genesis: [u8; 32],
@@ -411,16 +411,16 @@ async_sequential!(
 fn block_tx_ordering() {
   #[derive(Debug, PartialEq, Eq, Clone)]
   enum SignedTx {
-    Signed(SignedTransaction),
-    Provided(ProvidedTransaction),
+    Signed(Box<SignedTransaction>),
+    Provided(Box<ProvidedTransaction>),
   }
   impl ReadWrite for SignedTx {
     fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
       let mut kind = [0];
       reader.read_exact(&mut kind)?;
       match kind[0] {
-        0 => Ok(SignedTx::Signed(SignedTransaction::read(reader)?)),
-        1 => Ok(SignedTx::Provided(ProvidedTransaction::read(reader)?)),
+        0 => Ok(SignedTx::Signed(Box::new(SignedTransaction::read(reader)?))),
+        1 => Ok(SignedTx::Provided(Box::new(ProvidedTransaction::read(reader)?))),
         _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
       }
     }
@@ -468,8 +468,8 @@ fn block_tx_ordering() {
   let signer = signed_raw.1.signer;
 
   // txs
-  let signed_tx = SignedTx::Signed(signed_raw);
-  let provided_tx = SignedTx::Provided(random_provided_transaction(&mut OsRng));
+  let signed_tx = SignedTx::Signed(Box::new(signed_raw));
+  let provided_tx = SignedTx::Provided(Box::new(random_provided_transaction(&mut OsRng)));
   let unsigned_tx = random_vote_tx(&mut OsRng, genesis);
 
   let (_, mut blockchain) = new_blockchain::<SignedTx>(genesis, &[signer]);

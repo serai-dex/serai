@@ -13,12 +13,12 @@ use crate::{
   tendermint::{TendermintNetwork, Validators, TendermintBlock, Signer},
   transaction::Transaction as TransactionTrait,
   tests::{
-    SignedTransaction, signed_transaction, p2p::LocalP2p, random_vote_tx, random_evidence_tx,
+    SignedTransaction, signed_transaction, p2p::DummyP2p, random_vote_tx, random_evidence_tx,
   },
   async_sequential,
 };
 
-type N = TendermintNetwork<MemDb, SignedTransaction, LocalP2p>;
+type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
 
 fn new_mempool<T: TransactionTrait>() -> ([u8; 32], MemDb, Mempool<MemDb, T>) {
   let mut genesis = [0; 32];
@@ -50,8 +50,8 @@ async_sequential!(
       true,
       Transaction::Application(first_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
     assert_eq!(mempool.next_nonce(&signer), Some(1));
 
@@ -62,8 +62,8 @@ async_sequential!(
       true,
       Transaction::Tendermint(vote_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
 
     // add a tendermint evidence tx
@@ -75,8 +75,8 @@ async_sequential!(
       true,
       Transaction::Tendermint(evidence_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
 
     // Test reloading works
@@ -88,24 +88,24 @@ async_sequential!(
       true,
       Transaction::Application(first_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
     assert!(!mempool.add::<N>(
       &blockchain_next_nonces,
       true,
       Transaction::Tendermint(vote_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
     assert!(!mempool.add::<N>(
       &blockchain_next_nonces,
       true,
       Transaction::Tendermint(evidence_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
 
     // Do the same with the next nonce
@@ -115,8 +115,8 @@ async_sequential!(
       true,
       Transaction::Application(second_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
     assert_eq!(mempool.next_nonce(&signer), Some(2));
     assert!(!mempool.add::<N>(
@@ -124,8 +124,8 @@ async_sequential!(
       true,
       Transaction::Application(second_tx.clone()),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
 
     // If the mempool doesn't have a nonce for an account, it should successfully use the
@@ -146,11 +146,11 @@ async_sequential!(
     assert_eq!(mempool.next_nonce(&second_signer), Some(3));
 
     // Getting a block should work
-    assert_eq!(mempool.block(&blockchain_next_nonces, unsigned_in_chain.clone()).len(), 5);
+    assert_eq!(mempool.block(&blockchain_next_nonces, unsigned_in_chain).len(), 5);
 
     // If the blockchain says an account had its nonce updated, it should cause a prune
     blockchain_next_nonces.insert(signer, 1);
-    let mut block = mempool.block(&blockchain_next_nonces, unsigned_in_chain.clone());
+    let mut block = mempool.block(&blockchain_next_nonces, unsigned_in_chain);
     assert_eq!(block.len(), 4);
     assert!(!block.iter().any(|tx| tx.hash() == first_tx.hash()));
     assert_eq!(
@@ -190,8 +190,8 @@ fn too_many_mempool() {
       false,
       Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
       validators.clone(),
-      unsigned_in_chain.clone(),
-      commit.clone()
+      unsigned_in_chain,
+      commit,
     ));
   }
   // Yet adding more should fail
@@ -200,7 +200,7 @@ fn too_many_mempool() {
     false,
     Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, ACCOUNT_MEMPOOL_LIMIT)),
     validators.clone(),
-    unsigned_in_chain.clone(),
-    commit.clone()
+    unsigned_in_chain,
+    commit,
   ));
 }

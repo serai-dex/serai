@@ -219,6 +219,7 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, preprocesses, key_pair)
 }
 
+#[allow(clippy::too_many_arguments)] // TODO
 pub async fn handle_application_tx<
   D: Db,
   Pro: Processors,

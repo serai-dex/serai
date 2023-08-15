@@ -35,6 +35,7 @@ impl<D: Db> TributaryDb<D> {
     Self::tributary_key(b"fatal_slash", genesis)
   }
 
+  #[allow(unused)] // TODO
   pub fn slash_point_key(genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
     Self::tributary_key(b"slash_point", [genesis, id].concat())
   }
