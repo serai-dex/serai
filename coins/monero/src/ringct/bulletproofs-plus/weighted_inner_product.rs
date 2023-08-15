@@ -13,7 +13,7 @@ use ciphersuite::{
   Ciphersuite,
 };
 
-use crate::{
+use super::{
   ScalarVector, PointVector, GeneratorsList, InnerProductGenerators, padded_pow_of_2,
   weighted_inner_product,
 };

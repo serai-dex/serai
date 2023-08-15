@@ -4,13 +4,13 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use transcript::Transcript;
 
-use multiexp::{multiexp, multiexp_vartime, Point as MultiexpPoint, BatchVerifier};
+use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
 use ciphersuite::{
   group::{ff::Field, Group, GroupEncoding},
   Ciphersuite,
 };
 
-use crate::{
+use super::{
   RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, ProofGenerators,
   InnerProductGenerators, RangeCommitment,
   weighted_inner_product::{WipStatement, WipWitness, WipProof},
@@ -97,7 +97,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> AggregateRangeStatement<'a, T,
     ScalarVector(d_j)
   }
 
-  fn compute_A_hat<GB: Clone + AsRef<[MultiexpPoint<C::G>]>>(
+  fn compute_A_hat<GB: Clone + AsRef<[C::G]>>(
     V: &PointVector<C>,
     generators: &InnerProductGenerators<'a, T, C, GB>,
     transcript: &mut T,

@@ -7,10 +7,10 @@ use transcript::{Transcript, RecommendedTranscript};
 use multiexp::BatchVerifier;
 use ciphersuite::{
   group::{ff::Field, Group},
-  Ciphersuite, Ristretto,
+  Ciphersuite, Ed25519,
 };
 
-use crate::{
+use super::{
   ScalarVector, PointVector, GeneratorsList,
   weighted_inner_product::{WipStatement, WipWitness},
   weighted_inner_product,
@@ -19,16 +19,16 @@ use crate::{
 
 #[test]
 fn test_zero_weighted_inner_product() {
-  let P = <Ristretto as Ciphersuite>::G::identity();
-  let y = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
+  let P = <Ed25519 as Ciphersuite>::G::identity();
+  let y = <Ed25519 as Ciphersuite>::F::random(&mut OsRng);
 
   let generators = generators(1);
   let reduced = generators.per_proof().reduce(1, false);
-  let statement = WipStatement::<_, Ristretto, _>::new(&reduced, P, y);
-  let witness = WipWitness::<Ristretto>::new(
-    ScalarVector::<Ristretto>::new(1),
-    ScalarVector::<Ristretto>::new(1),
-    <Ristretto as Ciphersuite>::F::ZERO,
+  let statement = WipStatement::<_, Ed25519, _>::new(&reduced, P, y);
+  let witness = WipWitness::<Ed25519>::new(
+    ScalarVector::<Ed25519>::new(1),
+    ScalarVector::<Ed25519>::new(1),
+    <Ed25519 as Ciphersuite>::F::ZERO,
   );
 
   let mut transcript = RecommendedTranscript::new(b"Zero WIP Test");
@@ -58,11 +58,11 @@ fn test_weighted_inner_product() {
     let g_bold = PointVector(g_bold);
     let h_bold = PointVector(h_bold);
 
-    let mut a = ScalarVector::<Ristretto>::new(i);
-    let mut b = ScalarVector::<Ristretto>::new(i);
-    let alpha = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
+    let mut a = ScalarVector::<Ed25519>::new(i);
+    let mut b = ScalarVector::<Ed25519>::new(i);
+    let alpha = <Ed25519 as Ciphersuite>::F::random(&mut OsRng);
 
-    let y = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
+    let y = <Ed25519 as Ciphersuite>::F::random(&mut OsRng);
     let mut y_vec = ScalarVector::new(g_bold.len());
     y_vec[0] = y;
     for i in 1 .. y_vec.len() {
@@ -70,8 +70,8 @@ fn test_weighted_inner_product() {
     }
 
     for i in 0 .. i {
-      a[i] = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
-      b[i] = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
+      a[i] = <Ed25519 as Ciphersuite>::F::random(&mut OsRng);
+      b[i] = <Ed25519 as Ciphersuite>::F::random(&mut OsRng);
     }
 
     let P = g_bold.multiexp(&a) +
@@ -79,8 +79,8 @@ fn test_weighted_inner_product() {
       (g * weighted_inner_product(&a, &b, &y_vec)) +
       (h * alpha);
 
-    let statement = WipStatement::<_, Ristretto, _>::new(&generators, P, y);
-    let witness = WipWitness::<Ristretto>::new(a, b, alpha);
+    let statement = WipStatement::<_, Ed25519, _>::new(&generators, P, y);
+    let witness = WipWitness::<Ed25519>::new(a, b, alpha);
 
     let mut transcript = RecommendedTranscript::new(b"WIP Test");
     let proof = statement.clone().prove(&mut OsRng, &mut transcript.clone(), witness);

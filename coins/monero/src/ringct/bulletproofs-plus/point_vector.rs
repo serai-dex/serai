@@ -9,7 +9,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite};
 #[cfg(test)]
 use multiexp::multiexp;
 #[cfg(test)]
-use crate::ScalarVector;
+use super::ScalarVector;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct PointVector<C: Ciphersuite>(pub Vec<C::G>);

@@ -4,7 +4,7 @@ use transcript::Transcript;
 
 use ciphersuite::{group::ff::PrimeField, Ciphersuite};
 
-use crate::ScalarVector;
+use super::ScalarVector;
 
 // Each vector is considered a row
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]

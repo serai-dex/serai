@@ -3,9 +3,9 @@ use rand_core::{RngCore, OsRng};
 use transcript::{Transcript, RecommendedTranscript};
 
 use multiexp::BatchVerifier;
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto, Pallas, Vesta};
+use ciphersuite::{group::ff::Field, Ciphersuite, Ed25519};
 
-use crate::{
+use super::{
   RANGE_PROOF_BITS, RangeCommitment,
   aggregate_range_proof::{AggregateRangeStatement, AggregateRangeWitness},
   tests::generators,
@@ -37,16 +37,6 @@ fn test_aggregate_range_proof<C: Ciphersuite>() {
 }
 
 #[test]
-fn test_aggregate_range_proof_ristretto() {
-  test_aggregate_range_proof::<Ristretto>();
-}
-
-#[test]
-fn test_aggregate_range_proof_pallas() {
-  test_aggregate_range_proof::<Pallas>();
-}
-
-#[test]
-fn test_aggregate_range_proof_vesta() {
-  test_aggregate_range_proof::<Vesta>();
+fn test_aggregate_range_proof() {
+  test_aggregate_range_proof::<Ed25519>();
 }

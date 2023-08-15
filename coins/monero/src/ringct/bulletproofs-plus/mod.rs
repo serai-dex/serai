@@ -6,7 +6,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use rand_core::{RngCore, CryptoRng};
 
-use multiexp::{multiexp_vartime, Point as MultiexpPoint};
+use multiexp::multiexp_vartime;
 use ciphersuite::{
   group::{ff::Field, Group, GroupEncoding},
   Ciphersuite,
@@ -41,24 +41,23 @@ pub(crate) enum GeneratorsList {
   HBold1,
 }
 
-// TODO: Should these all be static? Should MultiexpPoint itself work off &'static references?
 // TODO: Table these
 #[derive(Clone, Debug)]
 pub struct Generators<T: 'static + Transcript, C: Ciphersuite> {
-  g: MultiexpPoint<C::G>,
-  h: MultiexpPoint<C::G>,
+  g: C::G,
+  h: C::G,
 
-  g_bold1: Vec<MultiexpPoint<C::G>>,
-  h_bold1: Vec<MultiexpPoint<C::G>>,
+  g_bold1: Vec<C::G>,
+  h_bold1: Vec<C::G>,
 }
 
 #[derive(Clone, Debug)]
 pub struct ProofGenerators<'a, T: 'static + Transcript, C: Ciphersuite> {
-  g: &'a MultiexpPoint<C::G>,
-  h: &'a MultiexpPoint<C::G>,
+  g: &'a C::G,
+  h: &'a C::G,
 
-  g_bold1: &'a [MultiexpPoint<C::G>],
-  h_bold1: &'a [MultiexpPoint<C::G>],
+  g_bold1: &'a [C::G],
+  h_bold1: &'a [C::G],
 }
 
 #[derive(Clone, Debug)]
@@ -66,13 +65,13 @@ pub struct InnerProductGenerators<
   'a,
   T: 'static + Transcript,
   C: Ciphersuite,
-  GB: Clone + AsRef<[MultiexpPoint<C::G>]>,
+  GB: Clone + AsRef<[C::G]>,
 > {
-  g: &'a MultiexpPoint<C::G>,
-  h: &'a MultiexpPoint<C::G>,
+  g: &'a C::G,
+  h: &'a C::G,
 
   g_bold1: GB,
-  h_bold1: &'a [MultiexpPoint<C::G>],
+  h_bold1: &'a [C::G],
 }
 
 impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
@@ -88,19 +87,19 @@ impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
     assert_eq!(padded_pow_of_2(g_bold1.len()), g_bold1.len(), "generators must be a pow of 2");
 
     Generators {
-      g: MultiexpPoint::new_constant(g),
-      h: MultiexpPoint::new_constant(h),
+      g,
+      h,
 
-      g_bold1: g_bold1.drain(..).map(MultiexpPoint::new_constant).collect(),
-      h_bold1: h_bold1.drain(..).map(MultiexpPoint::new_constant).collect(),
+      g_bold1,
+      h_bold1,
     }
   }
 
-  pub fn g(&self) -> &MultiexpPoint<C::G> {
+  pub fn g(&self) -> &C::G {
     &self.g
   }
 
-  pub fn h(&self) -> &MultiexpPoint<C::G> {
+  pub fn h(&self) -> &C::G {
     &self.h
   }
 
@@ -119,15 +118,15 @@ impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
 }
 
 impl<'a, T: 'static + Transcript, C: Ciphersuite> ProofGenerators<'a, T, C> {
-  pub fn g(&self) -> &MultiexpPoint<C::G> {
+  pub fn g(&self) -> &C::G {
     self.g
   }
 
-  pub fn h(&self) -> &MultiexpPoint<C::G> {
+  pub fn h(&self) -> &C::G {
     self.h
   }
 
-  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> &MultiexpPoint<C::G> {
+  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> &C::G {
     self.replaced.get(&(list, i)).unwrap_or_else(|| {
       &(match list {
         GeneratorsList::GBold1 => self.g_bold1,
@@ -140,7 +139,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> ProofGenerators<'a, T, C> {
     mut self,
     generators: usize,
     with_secondaries: bool,
-  ) -> InnerProductGenerators<'a, T, C, &'a [MultiexpPoint<C::G>]> {
+  ) -> InnerProductGenerators<'a, T, C, &'a [C::G]> {
     // Round to the nearest power of 2
     let generators = padded_pow_of_2(generators);
     assert!(generators <= self.g_bold1.len());
@@ -158,22 +157,22 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> ProofGenerators<'a, T, C> {
   }
 }
 
-impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: Clone + AsRef<[MultiexpPoint<C::G>]>>
+impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: Clone + AsRef<[C::G]>>
   InnerProductGenerators<'a, T, C, GB>
 {
   pub(crate) fn len(&self) -> usize {
     self.g_bold1.as_ref().len()
   }
 
-  pub(crate) fn g(&self) -> &MultiexpPoint<C::G> {
+  pub(crate) fn g(&self) -> &C::G {
     self.g
   }
 
-  pub(crate) fn h(&self) -> &MultiexpPoint<C::G> {
+  pub(crate) fn h(&self) -> &C::G {
     self.h
   }
 
-  pub(crate) fn generator(&self, mut list: GeneratorsList, mut i: usize) -> &MultiexpPoint<C::G> {
+  pub(crate) fn generator(&self, mut list: GeneratorsList, mut i: usize) -> &C::G {
     match list {
       GeneratorsList::GBold1 => self.g_bold1[i],
       GeneratorsList::HBold1 => self.h_bold1[i],

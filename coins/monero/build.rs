@@ -41,8 +41,8 @@ fn generators(prefix: &'static str, path: &str) {
     .write_all(
       format!(
         "
-          pub static GENERATORS_CELL: OnceLock<Generators> = OnceLock::new();
-          pub fn GENERATORS() -> &'static Generators {{
+          pub(crate) static GENERATORS_CELL: OnceLock<Generators> = OnceLock::new();
+          pub(crate) fn GENERATORS() -> &'static Generators {{
             GENERATORS_CELL.get_or_init(|| Generators {{
               G: [
                 {G_str}
