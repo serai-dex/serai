@@ -4,7 +4,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use transcript::Transcript;
 
-use multiexp::{multiexp, multiexp_vartime, Point as MultiexpPoint, BatchVerifier};
+use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
 use ciphersuite::{
   group::{
     ff::{Field, PrimeField},
@@ -13,7 +13,7 @@ use ciphersuite::{
   Ciphersuite,
 };
 
-use super::{
+use crate::ringct::bulletproofs_plus::{
   ScalarVector, PointVector, GeneratorsList, InnerProductGenerators, padded_pow_of_2,
   weighted_inner_product,
 };
@@ -21,26 +21,19 @@ use super::{
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 enum P<C: Ciphersuite> {
   Point(C::G),
-  Terms(Vec<(C::F, MultiexpPoint<C::G>)>),
+  Terms(Vec<(C::F, C::G)>),
 }
 
 // Figure 1
 #[derive(Clone, Debug)]
-pub struct WipStatement<
-  'a,
-  T: 'static + Transcript,
-  C: Ciphersuite,
-  GB: Clone + AsRef<[MultiexpPoint<C::G>]>,
-> {
-  generators: &'a InnerProductGenerators<'a, T, C, GB>,
+pub struct WipStatement<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> {
+  generators: &'a InnerProductGenerators<'a, C, GB>,
   P: P<C>,
   y: ScalarVector<C>,
   inv_y: Option<Vec<C::F>>,
 }
 
-impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: Clone + AsRef<[MultiexpPoint<C::G>]>> Zeroize
-  for WipStatement<'a, T, C, GB>
-{
+impl<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> Zeroize for WipStatement<'a, C, GB> {
   fn zeroize(&mut self) {
     self.P.zeroize();
     self.y.zeroize();
@@ -84,10 +77,8 @@ pub struct WipProof<C: Ciphersuite> {
   delta_answer: C::F,
 }
 
-impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[MultiexpPoint<C::G>]>>
-  WipStatement<'a, T, C, GB>
-{
-  pub fn new(generators: &'a InnerProductGenerators<'a, T, C, GB>, P: C::G, y: C::F) -> Self {
+impl<'a, C: Ciphersuite, GB: 'a + Clone + AsRef<[C::G]>> WipStatement<'a, C, GB> {
+  pub fn new(generators: &'a InnerProductGenerators<'a, C, GB>, P: C::G, y: C::F) -> Self {
     debug_assert_eq!(generators.len(), padded_pow_of_2(generators.len()));
 
     // y ** n
@@ -101,8 +92,8 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
   }
 
   pub(crate) fn new_without_P_transcript(
-    generators: &'a InnerProductGenerators<'a, T, C, GB>,
-    P: Vec<(C::F, MultiexpPoint<C::G>)>,
+    generators: &'a InnerProductGenerators<'a, C, GB>,
+    P: Vec<(C::F, C::G)>,
     mut y_n: ScalarVector<C>,
     mut inv_y_n: Vec<C::F>,
   ) -> Self {
@@ -116,12 +107,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     }
 
     debug_assert_eq!(
-      Self::new(
-        generators,
-        multiexp(&P.iter().map(|P| (P.0, P.1.point())).collect::<Vec<_>>()),
-        y_n[0]
-      )
-      .y,
+      Self::new(generators, multiexp(&P.iter().map(|P| (P.0, P.1)).collect::<Vec<_>>()), y_n[0]).y,
       y_n
     );
     debug_assert_eq!(y_n.0.last().unwrap().invert().unwrap(), *inv_y_n.last().unwrap());
@@ -129,7 +115,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     Self { generators, P: P::Terms(P), y: y_n, inv_y: Some(inv_y_n) }
   }
 
-  fn initial_transcript(&mut self, transcript: &mut T) {
+  fn initial_transcript<T: Transcript>(&mut self, transcript: &mut T) {
     transcript.domain_separate(b"weighted_inner_product");
     transcript
       .append_message(b"generators", self.generators.transcript.clone().challenge(b"summary"));
@@ -139,7 +125,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     transcript.append_message(b"y", self.y[0].to_repr());
   }
 
-  fn transcript_L_R(transcript: &mut T, L: C::G, R: C::G) -> C::F {
+  fn transcript_L_R<T: Transcript>(transcript: &mut T, L: C::G, R: C::G) -> C::F {
     transcript.append_message(b"L", L.to_bytes());
     transcript.append_message(b"R", R.to_bytes());
 
@@ -150,7 +136,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     e
   }
 
-  fn transcript_A_B(transcript: &mut T, A: C::G, B: C::G) -> C::F {
+  fn transcript_A_B<T: Transcript>(transcript: &mut T, A: C::G, B: C::G) -> C::F {
     transcript.append_message(b"A", A.to_bytes());
     transcript.append_message(b"B", B.to_bytes());
 
@@ -167,7 +153,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
   // TODO: It'd still probably be faster to keep in terms of the original generators, both between
   // the reduced amount of group operations and the potential tabling of the generators under
   // multiexp
-  fn next_G_H(
+  fn next_G_H<T: Transcript>(
     transcript: &mut T,
     mut g_bold1: PointVector<C>,
     mut g_bold2: PointVector<C>,
@@ -249,7 +235,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     products
   }
 
-  pub fn prove<R: RngCore + CryptoRng>(
+  pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     mut self,
     rng: &mut R,
     transcript: &mut T,
@@ -260,12 +246,12 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     let WipStatement { generators, P, mut y, inv_y } = self;
 
     assert_eq!(generators.len(), witness.a.len());
-    let (g, h) = (generators.g().point(), generators.h().point());
+    let (g, h) = (generators.g(), generators.h());
     let mut g_bold = vec![];
     let mut h_bold = vec![];
     for i in 0 .. generators.len() {
-      g_bold.push(generators.generator(GeneratorsList::GBold1, i).point());
-      h_bold.push(generators.generator(GeneratorsList::HBold1, i).point());
+      g_bold.push(generators.generator(GeneratorsList::GBold1, i));
+      h_bold.push(generators.generator(GeneratorsList::HBold1, i));
     }
     let mut g_bold = PointVector(g_bold);
     let mut h_bold = PointVector(h_bold);
@@ -399,7 +385,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     WipProof { L: L_vec, R: R_vec, A, B, r_answer, s_answer, delta_answer }
   }
 
-  pub fn verify<R: RngCore + CryptoRng>(
+  pub fn verify<R: RngCore + CryptoRng, T: Transcript>(
     mut self,
     rng: &mut R,
     verifier: &mut BatchVerifier<(), C::G>,
@@ -434,7 +420,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
     });
 
     let mut P_terms = match P {
-      P::Point(point) => vec![(C::F::ONE, MultiexpPoint::Variable(point))],
+      P::Point(point) => vec![(C::F::ONE, point)],
       P::Terms(terms) => terms,
     };
     P_terms.reserve(6 + (2 * generators.len()) + proof.L.len());
@@ -466,8 +452,8 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
 
         let e_square = e.square();
         let inv_e_square = inv_e.square();
-        P_terms.push((e_square, MultiexpPoint::Variable(*L)));
-        P_terms.push((inv_e_square, MultiexpPoint::Variable(*R)));
+        P_terms.push((e_square, *L));
+        P_terms.push((inv_e_square, *R));
       }
 
       Self::challenge_products(&challenges)
@@ -488,8 +474,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
       if i > 0 {
         scalar *= inv_y[i - 1];
       }
-      // TODO: Have BatchVerifier take &MultiexpPoint
-      multiexp.push((scalar, generators.generator(GeneratorsList::GBold1, i).clone()));
+      multiexp.push((scalar, generators.generator(GeneratorsList::GBold1, i)));
     }
 
     let se = proof.s_answer * e;
@@ -500,10 +485,10 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: 'a + Clone + AsRef<[Multie
       ));
     }
 
-    multiexp.push((-e, MultiexpPoint::Variable(proof.A)));
+    multiexp.push((-e, proof.A));
     multiexp.push((proof.r_answer * y[0] * proof.s_answer, g));
     multiexp.push((proof.delta_answer, h));
-    multiexp.push((-C::F::ONE, MultiexpPoint::Variable(proof.B)));
+    multiexp.push((-C::F::ONE, proof.B));
 
     verifier.queue(rng, (), multiexp);
   }

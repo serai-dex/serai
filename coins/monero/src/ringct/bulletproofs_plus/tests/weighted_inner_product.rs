@@ -10,7 +10,7 @@ use ciphersuite::{
   Ciphersuite, Ed25519,
 };
 
-use super::{
+use crate::ringct::bulletproofs_plus::{
   ScalarVector, PointVector, GeneratorsList,
   weighted_inner_product::{WipStatement, WipWitness},
   weighted_inner_product,
@@ -46,14 +46,14 @@ fn test_weighted_inner_product() {
   let generators = generators(32);
   for i in [1, 2, 4, 8, 16, 32] {
     let generators = generators.per_proof().reduce(i, false);
-    let g = generators.g().point();
-    let h = generators.h().point();
+    let g = generators.g();
+    let h = generators.h();
     assert_eq!(generators.len(), i);
     let mut g_bold = vec![];
     let mut h_bold = vec![];
     for i in 0 .. i {
-      g_bold.push(generators.generator(GeneratorsList::GBold1, i).point());
-      h_bold.push(generators.generator(GeneratorsList::HBold1, i).point());
+      g_bold.push(generators.generator(GeneratorsList::GBold1, i));
+      h_bold.push(generators.generator(GeneratorsList::HBold1, i));
     }
     let g_bold = PointVector(g_bold);
     let h_bold = PointVector(h_bold);

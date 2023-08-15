@@ -5,7 +5,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use multiexp::BatchVerifier;
 use ciphersuite::{group::ff::Field, Ciphersuite, Ed25519};
 
-use super::{
+use crate::ringct::bulletproofs_plus::{
   RANGE_PROOF_BITS, RangeCommitment,
   aggregate_range_proof::{AggregateRangeStatement, AggregateRangeWitness},
   tests::generators,
@@ -22,10 +22,8 @@ fn test_aggregate_range_proof<C: Ciphersuite>() {
       commitments
         .push(RangeCommitment::new(OsRng.next_u64(), <C as Ciphersuite>::F::random(&mut OsRng)));
     }
-    let commitment_points = commitments
-      .iter()
-      .map(|com| com.calculate(generators.g().point(), generators.h().point()))
-      .collect();
+    let commitment_points =
+      commitments.iter().map(|com| com.calculate(generators.g(), generators.h())).collect();
     let statement = AggregateRangeStatement::<_, C>::new(generators, commitment_points);
     let witness = AggregateRangeWitness::<C>::new(&commitments);
 
@@ -37,6 +35,6 @@ fn test_aggregate_range_proof<C: Ciphersuite>() {
 }
 
 #[test]
-fn test_aggregate_range_proof() {
+fn test_aggregate_range_proof_ed25519() {
   test_aggregate_range_proof::<Ed25519>();
 }

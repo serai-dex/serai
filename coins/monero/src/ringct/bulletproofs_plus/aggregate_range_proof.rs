@@ -10,7 +10,7 @@ use ciphersuite::{
   Ciphersuite,
 };
 
-use super::{
+use crate::ringct::bulletproofs_plus::{
   RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, ProofGenerators,
   InnerProductGenerators, RangeCommitment,
   weighted_inner_product::{WipStatement, WipWitness, WipProof},
@@ -21,12 +21,12 @@ const N: usize = RANGE_PROOF_BITS;
 
 // Figure 3
 #[derive(Clone, Debug)]
-pub struct AggregateRangeStatement<'a, T: 'static + Transcript, C: Ciphersuite> {
-  generators: ProofGenerators<'a, T, C>,
+pub struct AggregateRangeStatement<'a, C: Ciphersuite> {
+  generators: ProofGenerators<'a, C>,
   V: PointVector<C>,
 }
 
-impl<'a, T: 'static + Transcript, C: Ciphersuite> Zeroize for AggregateRangeStatement<'a, T, C> {
+impl<'a, C: Ciphersuite> Zeroize for AggregateRangeStatement<'a, C> {
   fn zeroize(&mut self) {
     self.V.zeroize();
   }
@@ -56,20 +56,20 @@ pub struct AggregateRangeProof<C: Ciphersuite> {
   wip: WipProof<C>,
 }
 
-impl<'a, T: 'static + Transcript, C: Ciphersuite> AggregateRangeStatement<'a, T, C> {
-  pub fn new(generators: ProofGenerators<'a, T, C>, V: Vec<C::G>) -> Self {
+impl<'a, C: Ciphersuite> AggregateRangeStatement<'a, C> {
+  pub fn new(generators: ProofGenerators<'a, C>, V: Vec<C::G>) -> Self {
     assert!(!V.is_empty());
     Self { generators, V: PointVector(V) }
   }
 
-  fn initial_transcript(&self, transcript: &mut T) {
+  fn initial_transcript<T: Transcript>(&self, transcript: &mut T) {
     transcript.domain_separate(b"aggregate_range_proof");
     for V in &self.V.0 {
       transcript.append_message(b"commitment", V.to_bytes());
     }
   }
 
-  fn transcript_A(transcript: &mut T, A: C::G) -> (C::F, C::F) {
+  fn transcript_A<T: Transcript>(transcript: &mut T, A: C::G) -> (C::F, C::F) {
     transcript.append_message(b"A", A.to_bytes());
 
     let y = C::hash_to_F(b"aggregate_range_proof", transcript.challenge(b"y").as_ref());
@@ -97,9 +97,9 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> AggregateRangeStatement<'a, T,
     ScalarVector(d_j)
   }
 
-  fn compute_A_hat<GB: Clone + AsRef<[C::G]>>(
+  fn compute_A_hat<GB: Clone + AsRef<[C::G]>, T: Transcript>(
     V: &PointVector<C>,
-    generators: &InnerProductGenerators<'a, T, C, GB>,
+    generators: &InnerProductGenerators<'a, C, GB>,
     transcript: &mut T,
     A: C::G,
   ) -> (C::F, ScalarVector<C>, C::F, C::F, ScalarVector<C>, C::G) {
@@ -138,19 +138,19 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> AggregateRangeStatement<'a, T,
     let neg_z = -z;
     let mut A_terms = Vec::with_capacity((generators.len() * 2) + 2);
     for (i, d_y_z) in d_descending_y.add(z).0.drain(..).enumerate() {
-      A_terms.push((neg_z, generators.generator(GeneratorsList::GBold1, i).point()));
-      A_terms.push((d_y_z, generators.generator(GeneratorsList::HBold1, i).point()));
+      A_terms.push((neg_z, generators.generator(GeneratorsList::GBold1, i)));
+      A_terms.push((d_y_z, generators.generator(GeneratorsList::HBold1, i)));
     }
     A_terms.push((y_mn_plus_one, commitment_accum));
     A_terms.push((
       ((y_pows * z) - (d.sum() * y_mn_plus_one * z) - (y_pows * z.square())),
-      generators.g().point(),
+      generators.g(),
     ));
 
     (y, d_descending_y, y_mn_plus_one, z, ScalarVector(z_pow), A + multiexp_vartime(&A_terms))
   }
 
-  pub fn prove<R: RngCore + CryptoRng>(
+  pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
     self,
     rng: &mut R,
     transcript: &mut T,
@@ -163,7 +163,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> AggregateRangeStatement<'a, T,
     {
       debug_assert_eq!(
         RangeCommitment::<C>::new(*value, *gamma)
-          .calculate(self.generators.g().point(), self.generators.h().point()),
+          .calculate(self.generators.g(), self.generators.h()),
         *commitment
       );
     }
@@ -191,12 +191,12 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> AggregateRangeStatement<'a, T,
 
     let mut A_terms = Vec::with_capacity((generators.len() * 2) + 1);
     for (i, a_l) in a_l.0.iter().enumerate() {
-      A_terms.push((*a_l, generators.generator(GeneratorsList::GBold1, i).point()));
+      A_terms.push((*a_l, generators.generator(GeneratorsList::GBold1, i)));
     }
     for (i, a_r) in a_r.0.iter().enumerate() {
-      A_terms.push((*a_r, generators.generator(GeneratorsList::HBold1, i).point()));
+      A_terms.push((*a_r, generators.generator(GeneratorsList::HBold1, i)));
     }
-    A_terms.push((alpha, generators.h().point()));
+    A_terms.push((alpha, generators.h()));
     let A = multiexp(&A_terms);
     A_terms.zeroize();
 
@@ -220,7 +220,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> AggregateRangeStatement<'a, T,
     }
   }
 
-  pub fn verify<R: RngCore + CryptoRng>(
+  pub fn verify<R: RngCore + CryptoRng, T: Transcript>(
     self,
     rng: &mut R,
     verifier: &mut BatchVerifier<(), C::G>,

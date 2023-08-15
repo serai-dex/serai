@@ -43,7 +43,7 @@ pub(crate) enum GeneratorsList {
 
 // TODO: Table these
 #[derive(Clone, Debug)]
-pub struct Generators<T: 'static + Transcript, C: Ciphersuite> {
+pub struct Generators<C: Ciphersuite> {
   g: C::G,
   h: C::G,
 
@@ -52,7 +52,7 @@ pub struct Generators<T: 'static + Transcript, C: Ciphersuite> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ProofGenerators<'a, T: 'static + Transcript, C: Ciphersuite> {
+pub struct ProofGenerators<'a, C: Ciphersuite> {
   g: &'a C::G,
   h: &'a C::G,
 
@@ -61,12 +61,7 @@ pub struct ProofGenerators<'a, T: 'static + Transcript, C: Ciphersuite> {
 }
 
 #[derive(Clone, Debug)]
-pub struct InnerProductGenerators<
-  'a,
-  T: 'static + Transcript,
-  C: Ciphersuite,
-  GB: Clone + AsRef<[C::G]>,
-> {
+pub struct InnerProductGenerators<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> {
   g: &'a C::G,
   h: &'a C::G,
 
@@ -74,25 +69,14 @@ pub struct InnerProductGenerators<
   h_bold1: &'a [C::G],
 }
 
-impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
-  pub fn new(
-    g: C::G,
-    h: C::G,
-    mut g_bold1: Vec<C::G>,
-    mut h_bold1: Vec<C::G>,
-  ) -> Self {
+impl<C: Ciphersuite> Generators<C> {
+  pub fn new(g: C::G, h: C::G, mut g_bold1: Vec<C::G>, mut h_bold1: Vec<C::G>) -> Self {
     assert!(!g_bold1.is_empty());
     assert_eq!(g_bold1.len(), h_bold1.len());
 
     assert_eq!(padded_pow_of_2(g_bold1.len()), g_bold1.len(), "generators must be a pow of 2");
 
-    Generators {
-      g,
-      h,
-
-      g_bold1,
-      h_bold1,
-    }
+    Generators { g, h, g_bold1, h_bold1 }
   }
 
   pub fn g(&self) -> &C::G {
@@ -106,18 +90,12 @@ impl<T: 'static + Transcript, C: Ciphersuite> Generators<T, C> {
   /// Take a presumably global Generators object and return a new object usable per-proof.
   ///
   /// Cloning Generators is expensive. This solely takes references to the generators.
-  pub fn per_proof(&self) -> ProofGenerators<'_, T, C> {
-    ProofGenerators {
-      g: &self.g,
-      h: &self.h,
-
-      g_bold1: &self.g_bold1,
-      h_bold1: &self.h_bold1,
-    }
+  pub fn per_proof(&self) -> ProofGenerators<'_, C> {
+    ProofGenerators { g: &self.g, h: &self.h, g_bold1: &self.g_bold1, h_bold1: &self.h_bold1 }
   }
 }
 
-impl<'a, T: 'static + Transcript, C: Ciphersuite> ProofGenerators<'a, T, C> {
+impl<'a, C: Ciphersuite> ProofGenerators<'a, C> {
   pub fn g(&self) -> &C::G {
     self.g
   }
@@ -139,7 +117,7 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> ProofGenerators<'a, T, C> {
     mut self,
     generators: usize,
     with_secondaries: bool,
-  ) -> InnerProductGenerators<'a, T, C, &'a [C::G]> {
+  ) -> InnerProductGenerators<'a, C, &'a [C::G]> {
     // Round to the nearest power of 2
     let generators = padded_pow_of_2(generators);
     assert!(generators <= self.g_bold1.len());
@@ -147,19 +125,11 @@ impl<'a, T: 'static + Transcript, C: Ciphersuite> ProofGenerators<'a, T, C> {
     self.g_bold1 = &self.g_bold1[.. generators];
     self.h_bold1 = &self.h_bold1[.. generators];
 
-    InnerProductGenerators {
-      g: self.g,
-      h: self.h,
-
-      g_bold1: self.g_bold1,
-      h_bold1: self.h_bold1,
-    }
+    InnerProductGenerators { g: self.g, h: self.h, g_bold1: self.g_bold1, h_bold1: self.h_bold1 }
   }
 }
 
-impl<'a, T: 'static + Transcript, C: Ciphersuite, GB: Clone + AsRef<[C::G]>>
-  InnerProductGenerators<'a, T, C, GB>
-{
+impl<'a, C: Ciphersuite, GB: Clone + AsRef<[C::G]>> InnerProductGenerators<'a, C, GB> {
   pub(crate) fn len(&self) -> usize {
     self.g_bold1.as_ref().len()
   }
