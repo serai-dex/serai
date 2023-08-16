@@ -1,4 +1,5 @@
 use core::ops::{Index, IndexMut};
+use std_shims::vec::Vec;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

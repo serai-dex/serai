@@ -2,6 +2,7 @@ use core::{
   borrow::Borrow,
   ops::{Index, IndexMut},
 };
+use std_shims::vec::Vec;
 
 use zeroize::Zeroize;
 

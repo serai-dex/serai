@@ -1,3 +1,5 @@
+use std_shims::vec::Vec;
+
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};

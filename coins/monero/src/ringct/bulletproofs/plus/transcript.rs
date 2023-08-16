@@ -1,4 +1,4 @@
-use std_shims::sync::OnceLock;
+use std_shims::{sync::OnceLock, vec::Vec};
 
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
