@@ -7,17 +7,15 @@ use group::ff::Field;
 use dalek_ff_group::Scalar;
 
 use crate::ringct::bulletproofs_plus::{
-  RANGE_PROOF_BITS, RangeCommitment,
+  RangeCommitment, Generators,
   aggregate_range_proof::{AggregateRangeStatement, AggregateRangeWitness},
-  tests::generators,
 };
 
 #[test]
 fn test_aggregate_range_proof() {
   let mut verifier = BatchVerifier::new(16);
-  let generators = generators(RANGE_PROOF_BITS * 16);
   for m in 1 ..= 16 {
-    let generators = generators.per_proof();
+    let generators = Generators::new();
 
     let mut commitments = vec![];
     for _ in 0 .. m {

@@ -13,20 +13,19 @@ use dalek_ff_group::{Scalar, EdwardsPoint};
 use ciphersuite::{Ciphersuite, Ed25519};
 
 use crate::ringct::bulletproofs_plus::{
-  ScalarVector, PointVector, GeneratorsList, InnerProductGenerators, padded_pow_of_2,
-  weighted_inner_product,
+  ScalarVector, PointVector, GeneratorsList, Generators, padded_pow_of_2, weighted_inner_product,
 };
 
 // Figure 1
 #[derive(Clone, Debug)]
-pub struct WipStatement<'a, GB: Clone + AsRef<[EdwardsPoint]>> {
-  generators: &'a InnerProductGenerators<'a, GB>,
+pub struct WipStatement {
+  generators: Generators,
   P: EdwardsPoint,
   y: ScalarVector,
   inv_y: Option<Vec<Scalar>>,
 }
 
-impl<'a, GB: Clone + AsRef<[EdwardsPoint]>> Zeroize for WipStatement<'a, GB> {
+impl Zeroize for WipStatement {
   fn zeroize(&mut self) {
     self.P.zeroize();
     self.y.zeroize();
@@ -70,8 +69,8 @@ pub struct WipProof {
   delta_answer: Scalar,
 }
 
-impl<'a, GB: 'a + Clone + AsRef<[EdwardsPoint]>> WipStatement<'a, GB> {
-  pub fn new(generators: &'a InnerProductGenerators<'a, GB>, P: EdwardsPoint, y: Scalar) -> Self {
+impl WipStatement {
+  pub fn new(generators: Generators, P: EdwardsPoint, y: Scalar) -> Self {
     debug_assert_eq!(generators.len(), padded_pow_of_2(generators.len()));
 
     // y ** n

@@ -4,7 +4,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use rand_core::{RngCore, CryptoRng};
 
-use group::ff::Field;
+use group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 mod scalar_vector;
@@ -40,41 +40,29 @@ pub struct Generators {
   g: EdwardsPoint,
   h: EdwardsPoint,
 
-  g_bold1: Vec<EdwardsPoint>,
-  h_bold1: Vec<EdwardsPoint>,
+  g_bold1: &'static [EdwardsPoint],
+  h_bold1: &'static [EdwardsPoint],
 }
 
-#[derive(Clone, Debug)]
-pub struct ProofGenerators<'a> {
-  g: &'a EdwardsPoint,
-  h: &'a EdwardsPoint,
-
-  g_bold1: &'a [EdwardsPoint],
-  h_bold1: &'a [EdwardsPoint],
-}
-
-#[derive(Clone, Debug)]
-pub struct InnerProductGenerators<'a, GB: Clone + AsRef<[EdwardsPoint]>> {
-  g: &'a EdwardsPoint,
-  h: &'a EdwardsPoint,
-
-  g_bold1: GB,
-  h_bold1: &'a [EdwardsPoint],
+mod generators {
+  use std_shims::sync::OnceLock;
+  use monero_generators::Generators;
+  include!(concat!(env!("OUT_DIR"), "/generators_plus.rs"));
 }
 
 impl Generators {
-  pub fn new(
-    g: EdwardsPoint,
-    h: EdwardsPoint,
-    g_bold1: Vec<EdwardsPoint>,
-    h_bold1: Vec<EdwardsPoint>,
-  ) -> Self {
-    assert!(!g_bold1.is_empty());
-    assert_eq!(g_bold1.len(), h_bold1.len());
+  pub fn new() -> Self {
+    let gens = generators::GENERATORS();
+    Generators {
+      g: EdwardsPoint::generator(),
+      h: dalek_ff_group::EdwardsPoint(crate::H()),
+      g_bold1: &gens.G,
+      h_bold1: &gens.H,
+    }
+  }
 
-    assert_eq!(padded_pow_of_2(g_bold1.len()), g_bold1.len(), "generators must be a pow of 2");
-
-    Generators { g, h, g_bold1, h_bold1 }
+  pub(crate) fn len(&self) -> usize {
+    self.g_bold1.len()
   }
 
   pub fn g(&self) -> EdwardsPoint {
@@ -85,55 +73,23 @@ impl Generators {
     self.h
   }
 
-  /// Take a presumably global Generators object and return a new object usable per-proof.
-  ///
-  /// Cloning Generators is expensive. This solely takes references to the generators.
-  pub fn per_proof(&self) -> ProofGenerators<'_> {
-    ProofGenerators { g: &self.g, h: &self.h, g_bold1: &self.g_bold1, h_bold1: &self.h_bold1 }
-  }
-}
-
-impl<'a> ProofGenerators<'a> {
-  pub fn g(&self) -> EdwardsPoint {
-    *self.g
+  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> EdwardsPoint {
+    match list {
+      GeneratorsList::GBold1 => self.g_bold1[i],
+      GeneratorsList::HBold1 => self.h_bold1[i],
+    }
   }
 
-  pub fn h(&self) -> EdwardsPoint {
-    *self.h
-  }
-
-  pub(crate) fn reduce(
-    mut self,
-    generators: usize,
-  ) -> InnerProductGenerators<'a, &'a [EdwardsPoint]> {
+  pub(crate) fn reduce(&self, generators: usize) -> Self {
     // Round to the nearest power of 2
     let generators = padded_pow_of_2(generators);
     assert!(generators <= self.g_bold1.len());
 
-    self.g_bold1 = &self.g_bold1[.. generators];
-    self.h_bold1 = &self.h_bold1[.. generators];
-
-    InnerProductGenerators { g: self.g, h: self.h, g_bold1: self.g_bold1, h_bold1: self.h_bold1 }
-  }
-}
-
-impl<'a, GB: Clone + AsRef<[EdwardsPoint]>> InnerProductGenerators<'a, GB> {
-  pub(crate) fn len(&self) -> usize {
-    self.g_bold1.as_ref().len()
-  }
-
-  pub(crate) fn g(&self) -> EdwardsPoint {
-    *self.g
-  }
-
-  pub(crate) fn h(&self) -> EdwardsPoint {
-    *self.h
-  }
-
-  pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> EdwardsPoint {
-    match list {
-      GeneratorsList::GBold1 => self.g_bold1.as_ref()[i],
-      GeneratorsList::HBold1 => self.h_bold1[i],
+    Generators {
+      g: self.g,
+      h: self.h,
+      g_bold1: &self.g_bold1[.. generators],
+      h_bold1: &self.h_bold1[.. generators],
     }
   }
 }

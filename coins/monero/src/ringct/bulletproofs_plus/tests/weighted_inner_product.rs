@@ -9,10 +9,9 @@ use ciphersuite::group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 use crate::ringct::bulletproofs_plus::{
-  ScalarVector, PointVector, GeneratorsList,
+  ScalarVector, PointVector, GeneratorsList, Generators,
   weighted_inner_product::{WipStatement, WipWitness},
   weighted_inner_product,
-  tests::generators,
 };
 
 #[test]
@@ -20,9 +19,8 @@ fn test_zero_weighted_inner_product() {
   let P = EdwardsPoint::identity();
   let y = Scalar::random(&mut OsRng);
 
-  let generators = generators(1);
-  let reduced = generators.per_proof().reduce(1);
-  let statement = WipStatement::<_>::new(&reduced, P, y);
+  let generators = Generators::new().reduce(1);
+  let statement = WipStatement::new(generators, P, y);
   let witness = WipWitness::new(ScalarVector::new(1), ScalarVector::new(1), Scalar::ZERO);
 
   let mut transcript = RecommendedTranscript::new(b"Zero WIP Test");
@@ -37,9 +35,9 @@ fn test_zero_weighted_inner_product() {
 fn test_weighted_inner_product() {
   // P = sum(g_bold * a, h_bold * b, g * (a * y * b), h * alpha)
   let mut verifier = BatchVerifier::new(6);
-  let generators = generators(32);
+  let generators = Generators::new();
   for i in [1, 2, 4, 8, 16, 32] {
-    let generators = generators.per_proof().reduce(i);
+    let generators = generators.reduce(i);
     let g = generators.g();
     let h = generators.h();
     assert_eq!(generators.len(), i);
@@ -73,7 +71,7 @@ fn test_weighted_inner_product() {
       (g * weighted_inner_product(&a, &b, &y_vec)) +
       (h * alpha);
 
-    let statement = WipStatement::<_>::new(&generators, P, y);
+    let statement = WipStatement::new(generators, P, y);
     let witness = WipWitness::new(a, b, alpha);
 
     let mut transcript = RecommendedTranscript::new(b"WIP Test");

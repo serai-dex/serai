@@ -10,8 +10,7 @@ use dalek_ff_group::{Scalar, EdwardsPoint};
 use ciphersuite::{Ciphersuite, Ed25519};
 
 use crate::ringct::bulletproofs_plus::{
-  RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, ProofGenerators,
-  InnerProductGenerators, RangeCommitment,
+  RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, Generators, RangeCommitment,
   weighted_inner_product::{WipStatement, WipWitness, WipProof},
   u64_decompose,
 };
@@ -20,12 +19,12 @@ const N: usize = RANGE_PROOF_BITS;
 
 // Figure 3
 #[derive(Clone, Debug)]
-pub struct AggregateRangeStatement<'a> {
-  generators: ProofGenerators<'a>,
+pub struct AggregateRangeStatement {
+  generators: Generators,
   V: PointVector,
 }
 
-impl<'a> Zeroize for AggregateRangeStatement<'a> {
+impl Zeroize for AggregateRangeStatement {
   fn zeroize(&mut self) {
     self.V.zeroize();
   }
@@ -55,8 +54,8 @@ pub struct AggregateRangeProof {
   wip: WipProof,
 }
 
-impl<'a> AggregateRangeStatement<'a> {
-  pub fn new(generators: ProofGenerators<'a>, V: Vec<EdwardsPoint>) -> Self {
+impl AggregateRangeStatement {
+  pub fn new(generators: Generators, V: Vec<EdwardsPoint>) -> Self {
     assert!(!V.is_empty());
     Self { generators, V: PointVector(V) }
   }
@@ -96,9 +95,9 @@ impl<'a> AggregateRangeStatement<'a> {
     ScalarVector(d_j)
   }
 
-  fn compute_A_hat<GB: Clone + AsRef<[EdwardsPoint]>, T: Transcript>(
+  fn compute_A_hat<T: Transcript>(
     V: &PointVector,
-    generators: &InnerProductGenerators<'a, GB>,
+    generators: &Generators,
     transcript: &mut T,
     A: EdwardsPoint,
   ) -> (Scalar, ScalarVector, Scalar, Scalar, ScalarVector, EdwardsPoint) {
@@ -210,7 +209,7 @@ impl<'a> AggregateRangeStatement<'a> {
 
     AggregateRangeProof {
       A,
-      wip: WipStatement::new(&generators, A_hat, y).prove(
+      wip: WipStatement::new(generators, A_hat, y).prove(
         rng,
         transcript,
         WipWitness::new(a_l, a_r, alpha),
@@ -231,6 +230,6 @@ impl<'a> AggregateRangeStatement<'a> {
     let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
 
     let (y, _, _, _, _, A_hat) = Self::compute_A_hat(&V, &generators, transcript, proof.A);
-    (WipStatement::new(&generators, A_hat, y)).verify(rng, verifier, transcript, proof.wip);
+    (WipStatement::new(generators, A_hat, y)).verify(rng, verifier, transcript, proof.wip);
   }
 }
