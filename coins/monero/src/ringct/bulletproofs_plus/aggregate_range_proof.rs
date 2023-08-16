@@ -2,29 +2,31 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use transcript::Transcript;
-
 use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
-use group::{ff::Field, Group, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  Group, GroupEncoding,
+};
 use dalek_ff_group::{Scalar, EdwardsPoint};
-use ciphersuite::{Ciphersuite, Ed25519};
 
 use crate::{
   Commitment,
-  ringct::bulletproofs_plus::{
-    RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, Generators,
-    weighted_inner_product::{WipStatement, WipWitness, WipProof},
-    u64_decompose,
+  ringct::{
+    bulletproofs::core::{MAX_M, N},
+    bulletproofs_plus::{
+      ScalarVector, PointVector, GeneratorsList, Generators,
+      transcript::*,
+      weighted_inner_product::{WipStatement, WipWitness, WipProof},
+      padded_pow_of_2, u64_decompose,
+    },
   },
 };
-
-const N: usize = RANGE_PROOF_BITS;
 
 // Figure 3
 #[derive(Clone, Debug)]
 pub(crate) struct AggregateRangeStatement {
   generators: Generators,
-  V: PointVector,
+  V: Vec<EdwardsPoint>,
 }
 
 impl Zeroize for AggregateRangeStatement {
@@ -51,59 +53,56 @@ impl AggregateRangeWitness {
       values.push(commitment.amount);
       gammas.push(Scalar(commitment.mask));
     }
-    AggregateRangeWitness { values, gammas }
+    Some(AggregateRangeWitness { values, gammas })
   }
 }
 
-#[derive(Clone, Debug, Zeroize)]
-pub(crate) struct AggregateRangeProof {
-  A: EdwardsPoint,
-  wip: WipProof,
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub struct AggregateRangeProof {
+  pub(crate) A: EdwardsPoint,
+  pub(crate) wip: WipProof,
 }
 
 impl AggregateRangeStatement {
-  pub(crate) fn new(generators: Generators, V: Vec<EdwardsPoint>) -> Self {
-    assert!(!V.is_empty());
-    Self { generators, V: PointVector(V) }
+  pub(crate) fn new(generators: Generators, V: Vec<EdwardsPoint>) -> Option<Self> {
+    if V.is_empty() || (V.len() > MAX_M) {
+      return None;
+    }
+
+    Some(Self { generators, V })
   }
 
-  fn transcript_A<T: Transcript>(transcript: &mut T, A: EdwardsPoint) -> (Scalar, Scalar) {
-    transcript.append_message(b"A", A.to_bytes());
-
-    let y = Ed25519::hash_to_F(b"aggregate_range_proof", transcript.challenge(b"y").as_ref());
-    if bool::from(y.is_zero()) {
-      panic!("zero challenge in aggregate range proof");
-    }
-
-    let z = Ed25519::hash_to_F(b"aggregate_range_proof", transcript.challenge(b"z").as_ref());
-    if bool::from(z.is_zero()) {
-      panic!("zero challenge in aggregate range proof");
-    }
-
+  fn transcript_A(transcript: &mut Scalar, A: EdwardsPoint) -> (Scalar, Scalar) {
+    let y = hash_to_scalar(&[transcript.to_repr().as_ref(), A.to_bytes().as_ref()].concat());
+    let z = hash_to_scalar(y.to_bytes().as_ref());
+    *transcript = z;
     (y, z)
   }
 
   fn d_j(j: usize, m: usize) -> ScalarVector {
-    let mut d_j = Vec::with_capacity(m * RANGE_PROOF_BITS);
+    let mut d_j = Vec::with_capacity(m * N);
     for _ in 0 .. (j - 1) * N {
       d_j.push(Scalar::ZERO);
     }
-    d_j.append(&mut ScalarVector::powers(Scalar::from(2u8), RANGE_PROOF_BITS).0);
+    d_j.append(&mut ScalarVector::powers(Scalar::from(2u8), N).0);
     for _ in 0 .. (m - j) * N {
       d_j.push(Scalar::ZERO);
     }
     ScalarVector(d_j)
   }
 
-  fn compute_A_hat<T: Transcript>(
-    V: &PointVector,
+  fn compute_A_hat(
+    mut V: PointVector,
     generators: &Generators,
-    transcript: &mut T,
-    A: EdwardsPoint,
+    transcript: &mut Scalar,
+    mut A: EdwardsPoint,
   ) -> (Scalar, ScalarVector, Scalar, Scalar, ScalarVector, EdwardsPoint) {
-    // TODO: First perform the WIP transcript before acquiring challenges
     let (y, z) = Self::transcript_A(transcript, A);
+    A = A.mul_by_cofactor();
 
+    while V.len() < padded_pow_of_2(V.len()) {
+      V.0.push(EdwardsPoint::identity());
+    }
     let mn = V.len() * N;
 
     let mut z_pow = Vec::with_capacity(V.len());
@@ -115,7 +114,7 @@ impl AggregateRangeStatement {
     }
 
     let mut ascending_y = ScalarVector(vec![y]);
-    for i in 1 .. mn {
+    for i in 1 .. d.len() {
       ascending_y.0.push(ascending_y[i - 1] * y);
     }
     let y_pows = ascending_y.clone().sum();
@@ -126,7 +125,6 @@ impl AggregateRangeStatement {
     let d_descending_y = d.mul_vec(&descending_y);
 
     let y_mn_plus_one = descending_y[0] * y;
-    debug_assert_eq!(y_mn_plus_one, y.pow(Scalar::from(u64::try_from(mn).unwrap() + 1)));
 
     let mut commitment_accum = EdwardsPoint::identity();
     for (j, commitment) in V.0.iter().enumerate() {
@@ -148,35 +146,47 @@ impl AggregateRangeStatement {
     (y, d_descending_y, y_mn_plus_one, z, ScalarVector(z_pow), A + multiexp_vartime(&A_terms))
   }
 
-  pub(crate) fn prove<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn prove<R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-    transcript: &mut T,
     witness: AggregateRangeWitness,
-  ) -> AggregateRangeProof {
-    assert_eq!(self.V.len(), witness.values.len());
-    debug_assert_eq!(witness.values.len(), witness.gammas.len());
-    for (commitment, (value, gamma)) in
-      self.V.0.iter().zip(witness.values.iter().zip(witness.gammas.iter()))
-    {
-      debug_assert_eq!(Commitment::new(**gamma, *value).calculate(), **commitment);
+  ) -> Option<AggregateRangeProof> {
+    // Check for consistency with the witness
+    if self.V.len() != witness.values.len() {
+      return None;
     }
-
-    let transcript = initial_transcript(self.V.clone());
+    for (commitment, (value, gamma)) in
+      self.V.iter().zip(witness.values.iter().zip(witness.gammas.iter()))
+    {
+      if Commitment::new(**gamma, *value).calculate() != **commitment {
+        return None;
+      }
+    }
 
     let Self { generators, V } = self;
-    let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
+    // Monero expects all of these points to be torsion-free
+    // Generally, for Bulletproofs, it sends points * INV_EIGHT and then performs a torsion clear
+    // by multiplying by 8
+    // This also restores the original value due to the preprocessing
+    // Commitments aren't transmitted INV_EIGHT though, so this multiplies by INV_EIGHT to enable
+    // clearing its cofactor without mutating the value
+    // For some reason, these values are transcripted * INV_EIGHT, not as transmitted
+    let mut V = V.into_iter().map(|V| EdwardsPoint(V.0 * crate::INV_EIGHT())).collect::<Vec<_>>();
+    let mut transcript = initial_transcript(V.iter());
+    V.iter_mut().for_each(|V| *V = V.mul_by_cofactor());
 
-    let mut d_js = Vec::with_capacity(V.len());
-    let mut a_l = ScalarVector(Vec::with_capacity(V.len() * RANGE_PROOF_BITS));
-    for j in 1 ..= V.len() {
-      d_js.push(Self::d_j(j, V.len()));
-      a_l.0.append(&mut u64_decompose(witness.values[j - 1]).0);
+    // Pad V
+    while V.len() < padded_pow_of_2(V.len()) {
+      V.push(EdwardsPoint::identity());
     }
 
-    for (value, d_j) in witness.values.iter().zip(d_js.iter()) {
-      debug_assert_eq!(d_j.len(), a_l.len());
-      debug_assert_eq!(a_l.inner_product(d_j), Scalar::from(*value));
+    let generators = generators.reduce(V.len() * N);
+
+    let mut d_js = Vec::with_capacity(V.len());
+    let mut a_l = ScalarVector(Vec::with_capacity(V.len() * N));
+    for j in 1 ..= V.len() {
+      d_js.push(Self::d_j(j, V.len()));
+      a_l.0.append(&mut u64_decompose(*witness.values.get(j - 1).unwrap_or(&0)).0);
     }
 
     let a_r = a_l.sub(Scalar::ONE);
@@ -191,11 +201,14 @@ impl AggregateRangeStatement {
       A_terms.push((*a_r, generators.generator(GeneratorsList::HBold1, i)));
     }
     A_terms.push((alpha, generators.h()));
-    let A = multiexp(&A_terms);
+    let mut A = multiexp(&A_terms);
     A_terms.zeroize();
 
+    // Multiply by INV_EIGHT per earlier commentary
+    A.0 *= crate::INV_EIGHT();
+
     let (y, d_descending_y, y_mn_plus_one, z, z_pow, A_hat) =
-      Self::compute_A_hat(&V, &generators, transcript, A);
+      Self::compute_A_hat(PointVector(V), &generators, &mut transcript, A);
 
     let a_l = a_l.sub(z);
     let a_r = a_r.add_vec(&d_descending_y).add(z);
@@ -204,29 +217,31 @@ impl AggregateRangeStatement {
       alpha += z_pow[j - 1] * witness.gammas[j - 1] * y_mn_plus_one;
     }
 
-    AggregateRangeProof {
+    Some(AggregateRangeProof {
       A,
-      wip: WipStatement::new(generators, A_hat, y).prove(
-        rng,
-        transcript,
-        WipWitness::new(a_l, a_r, alpha),
-      ),
-    }
+      wip: WipStatement::new(generators, A_hat, y)
+        .prove(rng, transcript, WipWitness::new(a_l, a_r, alpha).unwrap())
+        .unwrap(),
+    })
   }
 
-  pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn verify<Id: Copy + Zeroize, R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<(), EdwardsPoint>,
-    transcript: &mut T,
+    verifier: &mut BatchVerifier<Id, EdwardsPoint>,
+    id: Id,
     proof: AggregateRangeProof,
-  ) {
-    let transcript = initial_transcript(self.V.clone());
-
+  ) -> bool {
     let Self { generators, V } = self;
-    let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
 
-    let (y, _, _, _, _, A_hat) = Self::compute_A_hat(&V, &generators, transcript, proof.A);
-    (WipStatement::new(generators, A_hat, y)).verify(rng, verifier, transcript, proof.wip);
+    let mut V = V.into_iter().map(|V| EdwardsPoint(V.0 * crate::INV_EIGHT())).collect::<Vec<_>>();
+    let mut transcript = initial_transcript(V.iter());
+    V.iter_mut().for_each(|V| *V = V.mul_by_cofactor());
+
+    let generators = generators.reduce(V.len() * N);
+
+    let (y, _, _, _, _, A_hat) =
+      Self::compute_A_hat(PointVector(V), &generators, &mut transcript, proof.A);
+    WipStatement::new(generators, A_hat, y).verify(rng, verifier, id, transcript, proof.wip)
   }
 }

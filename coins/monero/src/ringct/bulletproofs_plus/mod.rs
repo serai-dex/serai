@@ -8,13 +8,11 @@ pub(crate) use scalar_vector::{ScalarVector, weighted_inner_product};
 mod point_vector;
 pub(crate) use point_vector::PointVector;
 
+pub(crate) mod transcript;
 pub(crate) mod weighted_inner_product;
+pub(crate) use weighted_inner_product::*;
 pub(crate) mod aggregate_range_proof;
-
-#[cfg(test)]
-mod tests;
-
-pub(crate) const RANGE_PROOF_BITS: usize = 64;
+pub(crate) use aggregate_range_proof::*;
 
 pub(crate) fn padded_pow_of_2(i: usize) -> usize {
   let mut next_pow_of_2 = 1;

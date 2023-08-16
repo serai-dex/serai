@@ -28,7 +28,7 @@ impl IndexMut<usize> for PointVector {
 impl PointVector {
   #[cfg(test)]
   pub(crate) fn multiexp(&self, vector: &ScalarVector) -> EdwardsPoint {
-    assert_eq!(self.len(), vector.len());
+    debug_assert_eq!(self.len(), vector.len());
     let mut res = Vec::with_capacity(self.len());
     for (point, scalar) in self.0.iter().copied().zip(vector.0.iter().copied()) {
       res.push((scalar, point));
@@ -41,9 +41,9 @@ impl PointVector {
   }
 
   pub(crate) fn split(mut self) -> (Self, Self) {
-    assert!(self.len() > 1);
+    debug_assert!(self.len() > 1);
     let r = self.0.split_off(self.0.len() / 2);
-    assert_eq!(self.len(), r.len());
+    debug_assert_eq!(self.len(), r.len());
     (self, PointVector(r))
   }
 }

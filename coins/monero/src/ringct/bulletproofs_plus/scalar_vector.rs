@@ -5,9 +5,7 @@ use core::{
 
 use zeroize::Zeroize;
 
-use transcript::Transcript;
-
-use group::ff::{Field, PrimeField};
+use group::ff::Field;
 use dalek_ff_group::Scalar;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
@@ -56,7 +54,7 @@ impl ScalarVector {
   }
 
   pub(crate) fn add_vec(&self, vector: &Self) -> Self {
-    assert_eq!(self.len(), vector.len());
+    debug_assert_eq!(self.len(), vector.len());
     let mut res = self.clone();
     for (i, val) in res.0.iter_mut().enumerate() {
       *val += vector.0[i];
@@ -65,7 +63,7 @@ impl ScalarVector {
   }
 
   pub(crate) fn mul_vec(&self, vector: &Self) -> Self {
-    assert_eq!(self.len(), vector.len());
+    debug_assert_eq!(self.len(), vector.len());
     let mut res = self.clone();
     for (i, val) in res.0.iter_mut().enumerate() {
       *val *= vector.0[i];
@@ -99,20 +97,10 @@ impl ScalarVector {
   }
 
   pub(crate) fn split(mut self) -> (Self, Self) {
-    assert!(self.len() > 1);
+    debug_assert!(self.len() > 1);
     let r = self.0.split_off(self.0.len() / 2);
-    assert_eq!(self.len(), r.len());
+    debug_assert_eq!(self.len(), r.len());
     (self, ScalarVector(r))
-  }
-
-  pub(crate) fn transcript<T: 'static + Transcript>(
-    &self,
-    transcript: &mut T,
-    label: &'static [u8],
-  ) {
-    for scalar in &self.0 {
-      transcript.append_message(label, scalar.to_repr());
-    }
   }
 }
 

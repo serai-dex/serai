@@ -9,6 +9,8 @@ use crate::{
   ringct::bulletproofs::{Bulletproofs, original::OriginalStruct},
 };
 
+mod plus;
+
 #[test]
 fn bulletproofs_vector() {
   let scalar = |scalar| Scalar::from_canonical_bytes(scalar).unwrap();
