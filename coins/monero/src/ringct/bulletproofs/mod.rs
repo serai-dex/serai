@@ -19,11 +19,10 @@ pub(crate) mod core;
 use self::core::LOG_N;
 
 pub(crate) mod original;
-pub(crate) use self::original::OriginalStruct;
+use self::original::OriginalStruct;
 
-// pub(crate) mod plus;
-// pub use plus::GENERATORS as BULLETPROOFS_PLUS_GENERATORS;
-use crate::ringct::bulletproofs_plus::*;
+pub(crate) mod plus;
+use self::plus::*;
 
 pub(crate) const MAX_OUTPUTS: usize = self::core::MAX_M;
 
@@ -90,13 +89,10 @@ impl Bulletproofs {
     } else {
       use dalek_ff_group::EdwardsPoint as DfgPoint;
       Bulletproofs::Plus(
-        AggregateRangeStatement::new(
-          Generators::new(),
-          outputs.iter().map(|com| DfgPoint(com.calculate())).collect(),
-        )
-        .unwrap()
-        .prove(rng, AggregateRangeWitness::new(outputs).unwrap())
-        .unwrap(),
+        AggregateRangeStatement::new(outputs.iter().map(|com| DfgPoint(com.calculate())).collect())
+          .unwrap()
+          .prove(rng, AggregateRangeWitness::new(outputs).unwrap())
+          .unwrap(),
       )
     })
   }
@@ -109,7 +105,6 @@ impl Bulletproofs {
       Bulletproofs::Plus(bp) => {
         let mut verifier = BatchVerifier::new(1);
         let Some(statement) = AggregateRangeStatement::new(
-          Generators::new(),
           commitments.iter().map(|c| dalek_ff_group::EdwardsPoint(*c)).collect(),
         ) else {
           return false;
@@ -137,7 +132,6 @@ impl Bulletproofs {
       Bulletproofs::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
       Bulletproofs::Plus(bp) => {
         let Some(statement) = AggregateRangeStatement::new(
-          Generators::new(),
           commitments.iter().map(|c| dalek_ff_group::EdwardsPoint(*c)).collect(),
         ) else {
           return false;

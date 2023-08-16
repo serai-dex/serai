@@ -13,7 +13,7 @@ use crate::{
   Commitment,
   ringct::{
     bulletproofs::core::{MAX_M, N},
-    bulletproofs_plus::{
+    bulletproofs::plus::{
       ScalarVector, PointVector, GeneratorsList, Generators,
       transcript::*,
       weighted_inner_product::{WipStatement, WipWitness, WipProof},
@@ -64,12 +64,12 @@ pub struct AggregateRangeProof {
 }
 
 impl AggregateRangeStatement {
-  pub(crate) fn new(generators: Generators, V: Vec<EdwardsPoint>) -> Option<Self> {
+  pub(crate) fn new(V: Vec<EdwardsPoint>) -> Option<Self> {
     if V.is_empty() || (V.len() > MAX_M) {
       return None;
     }
 
-    Some(Self { generators, V })
+    Some(Self { generators: Generators::new(), V })
   }
 
   fn transcript_A(transcript: &mut Scalar, A: EdwardsPoint) -> (Scalar, Scalar) {

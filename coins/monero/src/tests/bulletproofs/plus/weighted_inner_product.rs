@@ -6,7 +6,7 @@ use multiexp::BatchVerifier;
 use group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
-use crate::ringct::bulletproofs_plus::{
+use crate::ringct::bulletproofs::plus::{
   ScalarVector, PointVector, GeneratorsList, Generators,
   weighted_inner_product::{WipStatement, WipWitness},
   weighted_inner_product,

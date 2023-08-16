@@ -7,7 +7,7 @@ use dalek_ff_group::EdwardsPoint;
 #[cfg(test)]
 use multiexp::multiexp;
 #[cfg(test)]
-use crate::ringct::bulletproofs_plus::ScalarVector;
+use crate::ringct::bulletproofs::plus::ScalarVector;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct PointVector(pub(crate) Vec<EdwardsPoint>);

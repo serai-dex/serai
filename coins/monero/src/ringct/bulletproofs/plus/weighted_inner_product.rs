@@ -9,7 +9,7 @@ use group::{
 };
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
-use crate::ringct::bulletproofs_plus::{
+use crate::ringct::bulletproofs::plus::{
   ScalarVector, PointVector, GeneratorsList, Generators, padded_pow_of_2, weighted_inner_product,
   transcript::*,
 };

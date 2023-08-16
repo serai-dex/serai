@@ -20,8 +20,6 @@ pub mod borromean;
 /// Bulletproofs(+) structs, along with proving and verifying functionality.
 pub mod bulletproofs;
 
-pub mod bulletproofs_plus;
-
 use crate::{
   Protocol,
   serialize::*,
