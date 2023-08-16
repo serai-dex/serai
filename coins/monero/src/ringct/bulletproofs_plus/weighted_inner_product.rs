@@ -18,7 +18,7 @@ use crate::ringct::bulletproofs_plus::{
 
 // Figure 1
 #[derive(Clone, Debug)]
-pub struct WipStatement {
+pub(crate) struct WipStatement {
   generators: Generators,
   P: EdwardsPoint,
   y: ScalarVector,
@@ -34,14 +34,14 @@ impl Zeroize for WipStatement {
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct WipWitness {
+pub(crate) struct WipWitness {
   a: ScalarVector,
   b: ScalarVector,
   alpha: Scalar,
 }
 
 impl WipWitness {
-  pub fn new(mut a: ScalarVector, mut b: ScalarVector, alpha: Scalar) -> Self {
+  pub(crate) fn new(mut a: ScalarVector, mut b: ScalarVector, alpha: Scalar) -> Self {
     assert!(!a.0.is_empty());
     assert_eq!(a.len(), b.len());
 
@@ -59,7 +59,7 @@ impl WipWitness {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct WipProof {
+pub(crate) struct WipProof {
   L: Vec<EdwardsPoint>,
   R: Vec<EdwardsPoint>,
   A: EdwardsPoint,
@@ -70,7 +70,7 @@ pub struct WipProof {
 }
 
 impl WipStatement {
-  pub fn new(generators: Generators, P: EdwardsPoint, y: Scalar) -> Self {
+  pub(crate) fn new(generators: Generators, P: EdwardsPoint, y: Scalar) -> Self {
     debug_assert_eq!(generators.len(), padded_pow_of_2(generators.len()));
 
     // y ** n
@@ -199,7 +199,7 @@ impl WipStatement {
     products
   }
 
-  pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn prove<R: RngCore + CryptoRng, T: Transcript>(
     mut self,
     rng: &mut R,
     transcript: &mut T,
@@ -350,7 +350,7 @@ impl WipStatement {
     WipProof { L: L_vec, R: R_vec, A, B, r_answer, s_answer, delta_answer }
   }
 
-  pub fn verify<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(
     mut self,
     rng: &mut R,
     verifier: &mut BatchVerifier<(), EdwardsPoint>,

@@ -22,7 +22,7 @@ const N: usize = RANGE_PROOF_BITS;
 
 // Figure 3
 #[derive(Clone, Debug)]
-pub struct AggregateRangeStatement {
+pub(crate) struct AggregateRangeStatement {
   generators: Generators,
   V: PointVector,
 }
@@ -34,13 +34,13 @@ impl Zeroize for AggregateRangeStatement {
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct AggregateRangeWitness {
+pub(crate) struct AggregateRangeWitness {
   values: Vec<u64>,
   gammas: Vec<Scalar>,
 }
 
 impl AggregateRangeWitness {
-  pub fn new(commitments: &[Commitment]) -> Self {
+  pub(crate) fn new(commitments: &[Commitment]) -> Self {
     let mut values = Vec::with_capacity(commitments.len());
     let mut gammas = Vec::with_capacity(commitments.len());
     for commitment in commitments {
@@ -52,13 +52,13 @@ impl AggregateRangeWitness {
 }
 
 #[derive(Clone, Debug, Zeroize)]
-pub struct AggregateRangeProof {
+pub(crate) struct AggregateRangeProof {
   A: EdwardsPoint,
   wip: WipProof,
 }
 
 impl AggregateRangeStatement {
-  pub fn new(generators: Generators, V: Vec<EdwardsPoint>) -> Self {
+  pub(crate) fn new(generators: Generators, V: Vec<EdwardsPoint>) -> Self {
     assert!(!V.is_empty());
     Self { generators, V: PointVector(V) }
   }
@@ -151,7 +151,7 @@ impl AggregateRangeStatement {
     (y, d_descending_y, y_mn_plus_one, z, ScalarVector(z_pow), A + multiexp_vartime(&A_terms))
   }
 
-  pub fn prove<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn prove<R: RngCore + CryptoRng, T: Transcript>(
     self,
     rng: &mut R,
     transcript: &mut T,
@@ -217,7 +217,7 @@ impl AggregateRangeStatement {
     }
   }
 
-  pub fn verify<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn verify<R: RngCore + CryptoRng, T: Transcript>(
     self,
     rng: &mut R,
     verifier: &mut BatchVerifier<(), EdwardsPoint>,

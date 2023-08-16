@@ -10,7 +10,7 @@ use multiexp::multiexp;
 use crate::ringct::bulletproofs_plus::ScalarVector;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct PointVector(pub Vec<EdwardsPoint>);
+pub(crate) struct PointVector(pub(crate) Vec<EdwardsPoint>);
 
 impl Index<usize> for PointVector {
   type Output = EdwardsPoint;
@@ -40,7 +40,7 @@ impl PointVector {
     self.0.len()
   }
 
-  pub fn split(mut self) -> (Self, Self) {
+  pub(crate) fn split(mut self) -> (Self, Self) {
     assert!(self.len() > 1);
     let r = self.0.split_off(self.0.len() / 2);
     assert_eq!(self.len(), r.len());

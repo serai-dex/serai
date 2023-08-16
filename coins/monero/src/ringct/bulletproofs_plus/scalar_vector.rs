@@ -11,7 +11,7 @@ use group::ff::{Field, PrimeField};
 use dalek_ff_group::Scalar;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct ScalarVector(pub Vec<Scalar>);
+pub(crate) struct ScalarVector(pub(crate) Vec<Scalar>);
 
 impl Index<usize> for ScalarVector {
   type Output = Scalar;
@@ -98,20 +98,28 @@ impl ScalarVector {
     self.0.len()
   }
 
-  pub fn split(mut self) -> (Self, Self) {
+  pub(crate) fn split(mut self) -> (Self, Self) {
     assert!(self.len() > 1);
     let r = self.0.split_off(self.0.len() / 2);
     assert_eq!(self.len(), r.len());
     (self, ScalarVector(r))
   }
 
-  pub fn transcript<T: 'static + Transcript>(&self, transcript: &mut T, label: &'static [u8]) {
+  pub(crate) fn transcript<T: 'static + Transcript>(
+    &self,
+    transcript: &mut T,
+    label: &'static [u8],
+  ) {
     for scalar in &self.0 {
       transcript.append_message(label, scalar.to_repr());
     }
   }
 }
 
-pub fn weighted_inner_product(a: &ScalarVector, b: &ScalarVector, y: &ScalarVector) -> Scalar {
+pub(crate) fn weighted_inner_product(
+  a: &ScalarVector,
+  b: &ScalarVector,
+  y: &ScalarVector,
+) -> Scalar {
   a.inner_product(&b.mul_vec(y))
 }

@@ -4,19 +4,19 @@ use group::Group;
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 mod scalar_vector;
-pub use scalar_vector::{ScalarVector, weighted_inner_product};
+pub(crate) use scalar_vector::{ScalarVector, weighted_inner_product};
 mod point_vector;
-pub use point_vector::PointVector;
+pub(crate) use point_vector::PointVector;
 
-pub mod weighted_inner_product;
-pub mod aggregate_range_proof;
+pub(crate) mod weighted_inner_product;
+pub(crate) mod aggregate_range_proof;
 
-#[cfg(any(test, feature = "tests"))]
-pub mod tests;
+#[cfg(test)]
+mod tests;
 
-pub const RANGE_PROOF_BITS: usize = 64;
+pub(crate) const RANGE_PROOF_BITS: usize = 64;
 
-pub fn padded_pow_of_2(i: usize) -> usize {
+pub(crate) fn padded_pow_of_2(i: usize) -> usize {
   let mut next_pow_of_2 = 1;
   while next_pow_of_2 < i {
     next_pow_of_2 <<= 1;
@@ -32,7 +32,7 @@ pub(crate) enum GeneratorsList {
 
 // TODO: Table these
 #[derive(Clone, Debug)]
-pub struct Generators {
+pub(crate) struct Generators {
   g: EdwardsPoint,
 
   g_bold1: &'static [EdwardsPoint],
@@ -47,7 +47,7 @@ mod generators {
 
 impl Generators {
   #[allow(clippy::new_without_default)]
-  pub fn new() -> Self {
+  pub(crate) fn new() -> Self {
     let gens = generators::GENERATORS();
     Generators { g: dalek_ff_group::EdwardsPoint(crate::H()), g_bold1: &gens.G, h_bold1: &gens.H }
   }
@@ -56,11 +56,11 @@ impl Generators {
     self.g_bold1.len()
   }
 
-  pub fn g(&self) -> EdwardsPoint {
+  pub(crate) fn g(&self) -> EdwardsPoint {
     self.g
   }
 
-  pub fn h(&self) -> EdwardsPoint {
+  pub(crate) fn h(&self) -> EdwardsPoint {
     EdwardsPoint::generator()
   }
 
