@@ -40,7 +40,11 @@ pub(crate) struct AggregateRangeWitness {
 }
 
 impl AggregateRangeWitness {
-  pub(crate) fn new(commitments: &[Commitment]) -> Self {
+  pub(crate) fn new(commitments: &[Commitment]) -> Option<Self> {
+    if commitments.is_empty() || (commitments.len() > MAX_M) {
+      return None;
+    }
+
     let mut values = Vec::with_capacity(commitments.len());
     let mut gammas = Vec::with_capacity(commitments.len());
     for commitment in commitments {
@@ -61,13 +65,6 @@ impl AggregateRangeStatement {
   pub(crate) fn new(generators: Generators, V: Vec<EdwardsPoint>) -> Self {
     assert!(!V.is_empty());
     Self { generators, V: PointVector(V) }
-  }
-
-  fn initial_transcript<T: Transcript>(&self, transcript: &mut T) {
-    transcript.domain_separate(b"aggregate_range_proof");
-    for V in &self.V.0 {
-      transcript.append_message(b"commitment", V.to_bytes());
-    }
   }
 
   fn transcript_A<T: Transcript>(transcript: &mut T, A: EdwardsPoint) -> (Scalar, Scalar) {
@@ -165,7 +162,7 @@ impl AggregateRangeStatement {
       debug_assert_eq!(Commitment::new(**gamma, *value).calculate(), **commitment);
     }
 
-    self.initial_transcript(transcript);
+    let transcript = hash_plus(self.V.clone());
 
     let Self { generators, V } = self;
     let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
@@ -224,7 +221,7 @@ impl AggregateRangeStatement {
     transcript: &mut T,
     proof: AggregateRangeProof,
   ) {
-    self.initial_transcript(transcript);
+    let transcript = hash_plus(self.V.clone());
 
     let Self { generators, V } = self;
     let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
