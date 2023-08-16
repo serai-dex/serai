@@ -162,7 +162,7 @@ impl AggregateRangeStatement {
       debug_assert_eq!(Commitment::new(**gamma, *value).calculate(), **commitment);
     }
 
-    let transcript = hash_plus(self.V.clone());
+    let transcript = initial_transcript(self.V.clone());
 
     let Self { generators, V } = self;
     let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);
@@ -221,7 +221,7 @@ impl AggregateRangeStatement {
     transcript: &mut T,
     proof: AggregateRangeProof,
   ) {
-    let transcript = hash_plus(self.V.clone());
+    let transcript = initial_transcript(self.V.clone());
 
     let Self { generators, V } = self;
     let generators = generators.reduce(V.len() * RANGE_PROOF_BITS);

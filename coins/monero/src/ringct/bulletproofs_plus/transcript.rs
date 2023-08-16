@@ -32,6 +32,6 @@ pub(crate) fn hash_commitments<C: IntoIterator<Item = DalekPoint>>(
 }
 
 // TRANSCRIPT isn't a Scalar, so we need this for the first hash
-fn hash_plus<C: IntoIterator<Item = DalekPoint>>(commitments: C) -> Scalar {
+fn initial_transcript<C: IntoIterator<Item = DalekPoint>>(commitments: C) -> Scalar {
   hash_to_scalar(&[TRANSCRIPT().as_ref(), &hash_commitments(commitments).to_bytes()].concat())
 }
