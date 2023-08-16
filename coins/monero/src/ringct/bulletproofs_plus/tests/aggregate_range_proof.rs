@@ -4,11 +4,14 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use multiexp::BatchVerifier;
 use group::ff::Field;
-use dalek_ff_group::Scalar;
+use dalek_ff_group::{Scalar, EdwardsPoint};
 
-use crate::ringct::bulletproofs_plus::{
-  RangeCommitment, Generators,
-  aggregate_range_proof::{AggregateRangeStatement, AggregateRangeWitness},
+use crate::{
+  Commitment,
+  ringct::bulletproofs_plus::{
+    Generators,
+    aggregate_range_proof::{AggregateRangeStatement, AggregateRangeWitness},
+  },
 };
 
 #[test]
@@ -19,10 +22,9 @@ fn test_aggregate_range_proof() {
 
     let mut commitments = vec![];
     for _ in 0 .. m {
-      commitments.push(RangeCommitment::new(OsRng.next_u64(), Scalar::random(&mut OsRng)));
+      commitments.push(Commitment::new(*Scalar::random(&mut OsRng), OsRng.next_u64()));
     }
-    let commitment_points =
-      commitments.iter().map(|com| com.calculate(generators.g(), generators.h())).collect();
+    let commitment_points = commitments.iter().map(|com| EdwardsPoint(com.calculate())).collect();
     let statement = AggregateRangeStatement::new(generators, commitment_points);
     let witness = AggregateRangeWitness::new(&commitments);
 

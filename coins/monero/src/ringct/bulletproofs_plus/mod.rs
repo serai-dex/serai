@@ -1,10 +1,6 @@
 #![allow(non_snake_case)]
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
-
-use rand_core::{RngCore, CryptoRng};
-
-use group::{ff::Field, Group};
+use group::Group;
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 mod scalar_vector;
@@ -91,34 +87,6 @@ impl Generators {
       g_bold1: &self.g_bold1[.. generators],
       h_bold1: &self.h_bold1[.. generators],
     }
-  }
-}
-
-// Range proof structures
-
-#[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct RangeCommitment {
-  pub value: u64,
-  pub mask: Scalar,
-}
-
-impl RangeCommitment {
-  pub fn zero() -> Self {
-    RangeCommitment { value: 0, mask: Scalar::ZERO }
-  }
-
-  pub fn new(value: u64, mask: Scalar) -> Self {
-    RangeCommitment { value, mask }
-  }
-
-  pub fn masking<R: RngCore + CryptoRng>(rng: &mut R, value: u64) -> Self {
-    RangeCommitment { value, mask: Scalar::random(rng) }
-  }
-
-  /// Calculate a Pedersen commitment, as a point, from the transparent structure.
-  pub fn calculate(&self, g: EdwardsPoint, h: EdwardsPoint) -> EdwardsPoint {
-    (g * Scalar::from(self.value)) + (h * self.mask)
   }
 }
 

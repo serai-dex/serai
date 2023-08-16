@@ -9,10 +9,13 @@ use group::{ff::Field, Group, GroupEncoding};
 use dalek_ff_group::{Scalar, EdwardsPoint};
 use ciphersuite::{Ciphersuite, Ed25519};
 
-use crate::ringct::bulletproofs_plus::{
-  RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, Generators, RangeCommitment,
-  weighted_inner_product::{WipStatement, WipWitness, WipProof},
-  u64_decompose,
+use crate::{
+  Commitment,
+  ringct::bulletproofs_plus::{
+    RANGE_PROOF_BITS, ScalarVector, PointVector, GeneratorsList, Generators,
+    weighted_inner_product::{WipStatement, WipWitness, WipProof},
+    u64_decompose,
+  },
 };
 
 const N: usize = RANGE_PROOF_BITS;
@@ -37,12 +40,12 @@ pub struct AggregateRangeWitness {
 }
 
 impl AggregateRangeWitness {
-  pub fn new(commitments: &[RangeCommitment]) -> Self {
+  pub fn new(commitments: &[Commitment]) -> Self {
     let mut values = Vec::with_capacity(commitments.len());
     let mut gammas = Vec::with_capacity(commitments.len());
     for commitment in commitments {
-      values.push(commitment.value);
-      gammas.push(commitment.mask);
+      values.push(commitment.amount);
+      gammas.push(Scalar(commitment.mask));
     }
     AggregateRangeWitness { values, gammas }
   }
@@ -159,10 +162,7 @@ impl AggregateRangeStatement {
     for (commitment, (value, gamma)) in
       self.V.0.iter().zip(witness.values.iter().zip(witness.gammas.iter()))
     {
-      debug_assert_eq!(
-        RangeCommitment::new(*value, *gamma).calculate(self.generators.g(), self.generators.h()),
-        *commitment
-      );
+      debug_assert_eq!(Commitment::new(**gamma, *value).calculate(), **commitment);
     }
 
     self.initial_transcript(transcript);
