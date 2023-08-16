@@ -54,8 +54,8 @@ impl Generators {
   pub fn new() -> Self {
     let gens = generators::GENERATORS();
     Generators {
-      g: EdwardsPoint::generator(),
-      h: dalek_ff_group::EdwardsPoint(crate::H()),
+      g: dalek_ff_group::EdwardsPoint(crate::H()),
+      h: EdwardsPoint::generator(),
       g_bold1: &gens.G,
       h_bold1: &gens.H,
     }
