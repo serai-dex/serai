@@ -15,6 +15,7 @@ use crate::{
   Protocol, hash,
   serialize::*,
   ringct::{bulletproofs::Bulletproofs, RctType, RctBase, RctPrunable, RctSignatures},
+  ring_signatures::RingSignature,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -253,7 +254,7 @@ impl TransactionPrefix {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
-  pub signatures: Vec<Vec<(Scalar, Scalar)>>,
+  pub signatures: Vec<RingSignature>,
   pub rct_signatures: RctSignatures,
 }
 
@@ -272,11 +273,8 @@ impl Transaction {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.prefix.write(w)?;
     if self.prefix.version == 1 {
-      for sigs in &self.signatures {
-        for sig in sigs {
-          write_scalar(&sig.0, w)?;
-          write_scalar(&sig.1, w)?;
-        }
+      for ring_sig in &self.signatures {
+        ring_sig.write(w)?;
       }
       Ok(())
     } else if self.prefix.version == 2 {
@@ -305,12 +303,7 @@ impl Transaction {
         .inputs
         .iter()
         .filter_map(|input| match input {
-          Input::ToKey { key_offsets, .. } => Some(
-            key_offsets
-              .iter()
-              .map(|_| Ok((read_scalar(r)?, read_scalar(r)?)))
-              .collect::<Result<_, io::Error>>(),
-          ),
+          Input::ToKey { key_offsets, .. } => Some(RingSignature::read(key_offsets.len(), r)),
           _ => None,
         })
         .collect::<Result<_, _>>()?;

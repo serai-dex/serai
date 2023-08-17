@@ -27,6 +27,9 @@ use serialize::{read_byte, read_u16};
 pub mod ringct;
 use ringct::RctType;
 
+/// Ring Signature structs with verifying functions.
+mod ring_signatures;
+
 /// Transaction structs.
 pub mod transaction;
 /// Block structs.
