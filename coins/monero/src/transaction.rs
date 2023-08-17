@@ -390,6 +390,10 @@ impl Transaction {
 
   /// Calculate the hash of this transaction as needed for signing it.
   pub fn signature_hash(&self) -> [u8; 32] {
+    if self.prefix.version == 1 {
+      return self.prefix.hash();
+    }
+
     let mut buf = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);
 
