@@ -436,10 +436,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
               }
             }
 
+            let commit_msg = commit_msg(self.block.end_time[&self.block.round().number].canonical(), block.id().as_ref());
             let commit = Commit {
               end_time: self.block.end_time[&msg.round].canonical(),
-              validators,
-              signature: N::SignatureScheme::aggregate(&sigs),
+              validators: validators.clone(),
+              signature: self.network.signature_scheme().aggregate(&validators, &sigs, &commit_msg),
             };
             debug_assert!(self.network.verify_commit(block.id(), &commit));
 
