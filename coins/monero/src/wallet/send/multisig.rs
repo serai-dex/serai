@@ -337,7 +337,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     sorted.sort_by(|x, y| key_image_sort(&x.0, &y.0));
 
     let mut rng = ChaCha20Rng::from_seed(self.transcript.rng_seed(b"pseudo_out_masks"));
-    let mut sum_pseudo_outs = Scalar::zero();
+    let mut sum_pseudo_outs = Scalar::ZERO;
     while !sorted.is_empty() {
       let value = sorted.remove(0);
 

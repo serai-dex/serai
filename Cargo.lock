@@ -1420,19 +1420,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curve25519-dalek-ng"
-version = "4.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c359b7249347e46fb28804470d071c921156ad62b3eef5d34e2ba867533dec8"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.6.4",
- "subtle-ng",
- "zeroize",
-]
-
-[[package]]
 name = "cxx"
 version = "1.0.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1481,14 +1468,14 @@ name = "dalek-ff-group"
 version = "0.3.0"
 dependencies = [
  "crypto-bigint",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "digest 0.10.7",
  "ff",
  "ff-group-tests",
  "group",
  "rand_core 0.6.4",
  "rustversion",
- "sha2 0.9.9",
+ "sha2 0.10.7",
  "subtle",
  "zeroize",
 ]
@@ -2844,7 +2831,7 @@ dependencies = [
  "modular-frost",
  "rand_core 0.6.4",
  "schnorr-signatures",
- "schnorrkel 0.10.2",
+ "schnorrkel",
  "zeroize",
 ]
 
@@ -4707,7 +4694,7 @@ dependencies = [
 name = "monero-generators"
 version = "0.3.0"
 dependencies = [
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "dalek-ff-group",
  "group",
  "sha3",
@@ -4722,7 +4709,7 @@ dependencies = [
  "async-trait",
  "base58-monero",
  "crc",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "dalek-ff-group",
  "digest_auth",
  "dleq",
@@ -7817,23 +7804,6 @@ dependencies = [
 
 [[package]]
 name = "schnorrkel"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "844b7645371e6ecdf61ff246ba1958c29e802881a749ae3fb1993675d210d28d"
-dependencies = [
- "arrayref",
- "arrayvec",
- "curve25519-dalek-ng",
- "merlin",
- "rand_core 0.6.4",
- "serde_bytes",
- "sha2 0.9.9",
- "subtle-ng",
- "zeroize",
-]
-
-[[package]]
-name = "schnorrkel"
 version = "0.11.0"
 source = "git+https://github.com/serai-dex/schnorrkel#7967995d14f8c6bae1a49e0118da2985b29a292c"
 dependencies = [
@@ -8899,7 +8869,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "scale-info",
- "schnorrkel 0.11.0",
+ "schnorrkel",
  "secrecy",
  "serde",
  "sp-core-hashing",
@@ -9495,7 +9465,7 @@ source = "git+https://github.com/serai-dex/substrate-bip39#4596f602481e08f629660
 dependencies = [
  "hmac",
  "pbkdf2 0.12.2",
- "schnorrkel 0.11.0",
+ "schnorrkel",
  "sha2 0.10.7",
  "zeroize",
 ]
@@ -9559,12 +9529,6 @@ name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
-
-[[package]]
-name = "subtle-ng"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 
 [[package]]
 name = "subxt"

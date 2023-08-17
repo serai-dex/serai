@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![no_std] // Prevents writing new code, in what should be a simple wrapper, which requires std
 #![doc = include_str!("../README.md")]
@@ -235,12 +237,8 @@ impl Scalar {
 }
 
 impl Field for Scalar {
-  const ZERO: Scalar = Scalar(DScalar::from_bits([0; 32]));
-  const ONE: Scalar = Scalar(DScalar::from_bits({
-    let mut bytes = [0; 32];
-    bytes[0] = 1;
-    bytes
-  }));
+  const ZERO: Scalar = Scalar(DScalar::ZERO);
+  const ONE: Scalar = Scalar(DScalar::ONE);
 
   fn random(mut rng: impl RngCore) -> Self {
     let mut r = [0; 64];
@@ -322,7 +320,7 @@ impl PrimeField for Scalar {
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
     let scalar = DScalar::from_canonical_bytes(bytes);
     // TODO: This unwrap_or_else isn't constant time, yet we don't exactly have an alternative...
-    CtOption::new(Scalar(scalar.unwrap_or_else(DScalar::zero)), choice(black_box(scalar).is_some()))
+    CtOption::new(Scalar(scalar.unwrap_or(DScalar::ZERO)), black_box(scalar).is_some())
   }
   fn to_repr(&self) -> [u8; 32] {
     self.0.to_bytes()
@@ -358,7 +356,7 @@ impl PrimeFieldBits for Scalar {
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
     let mut bytes = (Scalar::ZERO - Scalar::ONE).to_repr();
     bytes[0] += 1;
-    debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::zero());
+    debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::ZERO);
     bytes.into()
   }
 }
@@ -425,9 +423,12 @@ macro_rules! dalek_group {
       type Scalar = Scalar;
       fn random(mut rng: impl RngCore) -> Self {
         loop {
-          let mut bytes = [0; 64];
+          let mut bytes = [0; 32];
           rng.fill_bytes(&mut bytes);
-          let point = $Point($DPoint::hash_from_bytes::<sha2::Sha512>(&bytes));
+          let Some(point) = $DCompressed(bytes).decompress() else {
+            continue;
+          };
+          let point = $Point(point);
           // Ban identity, per the trait specification
           if !bool::from(point.is_identity()) {
             return point;

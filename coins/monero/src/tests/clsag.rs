@@ -40,7 +40,7 @@ fn clsag() {
   for real in 0 .. RING_LEN {
     let msg = [1; 32];
 
-    let mut secrets = (Zeroizing::new(Scalar::zero()), Scalar::zero());
+    let mut secrets = (Zeroizing::new(Scalar::ZERO), Scalar::ZERO);
     let mut ring = vec![];
     for i in 0 .. RING_LEN {
       let dest = Zeroizing::new(random_scalar(&mut OsRng));
@@ -53,7 +53,7 @@ fn clsag() {
         amount = OsRng.next_u64();
       }
       ring
-        .push([dest.deref() * &ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
+        .push([dest.deref() * ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
 
     let image = generate_key_image(&secrets.0);
@@ -92,7 +92,7 @@ fn clsag_multisig() {
     let mask;
     let amount;
     if i != u64::from(RING_INDEX) {
-      dest = &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE;
+      dest = &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE;
       mask = random_scalar(&mut OsRng);
       amount = OsRng.next_u64();
     } else {

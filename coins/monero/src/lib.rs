@@ -185,7 +185,7 @@ impl core::fmt::Debug for Commitment {
 impl Commitment {
   /// A commitment to zero, defined with a mask of 1 (as to not be the identity).
   pub fn zero() -> Commitment {
-    Commitment { mask: Scalar::one(), amount: 0 }
+    Commitment { mask: Scalar::ONE, amount: 0 }
   }
 
   pub fn new(mask: Scalar, amount: u64) -> Commitment {
@@ -194,7 +194,7 @@ impl Commitment {
 
   /// Calculate a Pedersen commitment, as a point, from the transparent structure.
   pub fn calculate(&self) -> EdwardsPoint {
-    (&self.mask * &ED25519_BASEPOINT_TABLE) + (Scalar::from(self.amount) * H())
+    (&self.mask * ED25519_BASEPOINT_TABLE) + (Scalar::from(self.amount) * H())
   }
 }
 
@@ -216,6 +216,6 @@ pub fn hash_to_scalar(data: &[u8]) -> Scalar {
   // This library acknowledges its practical impossibility of it occurring, and doesn't bother to
   // code in logic to handle it. That said, if it ever occurs, something must happen in order to
   // not generate/verify a proof we believe to be valid when it isn't
-  assert!(scalar != Scalar::zero(), "ZERO HASH: {data:?}");
+  assert!(scalar != Scalar::ZERO, "ZERO HASH: {data:?}");
   scalar
 }

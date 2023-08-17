@@ -169,7 +169,7 @@ fn core(
   }
 
   // Perform the core loop
-  let mut c1 = CtOption::new(Scalar::zero(), Choice::from(0));
+  let mut c1 = CtOption::new(Scalar::ZERO, Choice::from(0));
   for i in (start .. end).map(|i| i % n) {
     // This will only execute once and shouldn't need to be constant time. Making it constant time
     // removes the risk of branch prediction creating timing differences depending on ring index
@@ -179,7 +179,7 @@ fn core(
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 
-    let L = (&s[i] * &ED25519_BASEPOINT_TABLE) + (c_p * P[i]) + (c_c * C[i]);
+    let L = (&s[i] * ED25519_BASEPOINT_TABLE) + (c_p * P[i]) + (c_c * C[i]);
     let PH = hash_to_point(P[i]);
     // Shouldn't be an issue as all of the variables in this vartime statement are public
     let R = (s[i] * PH) + images_precomp.vartime_multiscalar_mul([c_p, c_c]);
@@ -241,7 +241,7 @@ impl Clsag {
     msg: [u8; 32],
   ) -> Vec<(Clsag, EdwardsPoint)> {
     let mut res = Vec::with_capacity(inputs.len());
-    let mut sum_pseudo_outs = Scalar::zero();
+    let mut sum_pseudo_outs = Scalar::ZERO;
     for i in 0 .. inputs.len() {
       let mut mask = random_scalar(rng);
       if i == (inputs.len() - 1) {
@@ -257,7 +257,7 @@ impl Clsag {
         &inputs[i].2,
         mask,
         &msg,
-        nonce.deref() * &ED25519_BASEPOINT_TABLE,
+        nonce.deref() * ED25519_BASEPOINT_TABLE,
         nonce.deref() *
           hash_to_point(inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
       );

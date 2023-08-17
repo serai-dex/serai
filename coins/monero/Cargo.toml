@@ -31,7 +31,7 @@ crc = { version = "3", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 pbkdf2 = { version = "0.12", features = ["simple"], default-features = false }
 
-curve25519-dalek = { version = "^3.2", default-features = false }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "precomputed-tables"] }
 
 # Used for the hash to curve, along with the more complicated proofs
 group = { version = "0.13", default-features = false }
@@ -85,8 +85,6 @@ std = [
   "rand_distr/std",
 
   "sha3/std",
-
-  "curve25519-dalek/std",
 
   "multiexp/std",
 

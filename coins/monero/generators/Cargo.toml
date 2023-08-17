@@ -18,7 +18,7 @@ subtle = { version = "^2.4", default-features = false }
 
 sha3 = { version = "0.10", default-features = false }
 
-curve25519-dalek = { version = "3", default-features = false }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "precomputed-tables"] }
 
 group = { version = "0.13", default-features = false }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.3" }

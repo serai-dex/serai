@@ -81,7 +81,7 @@ macro_rules! bulletproofs_tests {
       // Check Bulletproofs errors if we try to prove for too many outputs
       let mut commitments = vec![];
       for _ in 0 .. 17 {
-        commitments.push(Commitment::new(Scalar::zero(), 0));
+        commitments.push(Commitment::new(Scalar::ZERO, 0));
       }
       assert!(Bulletproofs::prove(&mut OsRng, &commitments, $plus).is_err());
     }

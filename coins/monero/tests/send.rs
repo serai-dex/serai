@@ -104,7 +104,7 @@ test!(
       use monero_serai::wallet::FeePriority;
 
       let change_view = ViewPair::new(
-        &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
+        &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
         Zeroizing::new(random_scalar(&mut OsRng)),
       );
 
@@ -117,7 +117,7 @@ test!(
 
       // Send to a subaddress
       let sub_view = ViewPair::new(
-        &random_scalar(&mut OsRng) * &ED25519_BASEPOINT_TABLE,
+        &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
         Zeroizing::new(random_scalar(&mut OsRng)),
       );
       builder.add_payment(

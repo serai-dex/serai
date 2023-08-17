@@ -57,7 +57,7 @@ substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
 [build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate.git" }
+substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" }
 
 [features]
 default = []
