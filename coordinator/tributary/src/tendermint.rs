@@ -18,7 +18,10 @@ use ciphersuite::{
   },
   Ciphersuite, Ristretto,
 };
-use schnorr::{SchnorrSignature, aggregate::{SchnorrAggregator, SchnorrAggregate}};
+use schnorr::{
+  SchnorrSignature,
+  aggregate::{SchnorrAggregator, SchnorrAggregate},
+};
 
 use serai_db::Db;
 
@@ -174,7 +177,12 @@ impl SignatureScheme for Validators {
   }
 
   // TODO: this function panics if wrong data passed in, should it?
-  fn aggregate(&self, validators: &[Self::ValidatorId], sigs: &[Self::Signature], msg: &[u8]) -> Self::AggregateSignature {
+  fn aggregate(
+    &self,
+    validators: &[Self::ValidatorId],
+    sigs: &[Self::Signature],
+    msg: &[u8],
+  ) -> Self::AggregateSignature {
     assert_eq!(validators.len(), sigs.len());
 
     let mut aggregator = SchnorrAggregator::<Ristretto>::new(DST);
@@ -195,19 +203,17 @@ impl SignatureScheme for Validators {
     msg: &[u8],
     sig: &Self::AggregateSignature,
   ) -> bool {
-
-    let Ok(aggregate) = SchnorrAggregate::<Ristretto>::read::<&[u8]>(&mut sig.as_slice())
-    else {
+    let Ok(aggregate) = SchnorrAggregate::<Ristretto>::read::<&[u8]>(&mut sig.as_slice()) else {
       return false;
     };
 
     // get Rs in aggregate
     let mut pos: usize = 4;
-    let len: [u8; 4] = sig[..pos].try_into().unwrap();
+    let len: [u8; 4] = sig[.. pos].try_into().unwrap();
     #[allow(non_snake_case)]
     let mut Rs: Vec<[u8; 32]> = vec![];
     for _ in 0 .. u32::from_le_bytes(len) {
-      Rs.push(sig[pos..pos+32].try_into().unwrap());
+      Rs.push(sig[pos .. pos + 32].try_into().unwrap());
       pos += 32;
     }
 
@@ -225,12 +231,7 @@ impl SignatureScheme for Validators {
       signers
         .iter()
         .zip(challenges)
-        .map(|(s, c)| {
-          (
-            <Ristretto as Ciphersuite>::read_G(&mut s.as_slice()).unwrap(),
-            c,
-          )
-        })
+        .map(|(s, c)| (<Ristretto as Ciphersuite>::read_G(&mut s.as_slice()).unwrap(), c))
         .collect::<Vec<_>>()
         .as_slice(),
     )
