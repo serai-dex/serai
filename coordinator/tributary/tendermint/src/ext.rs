@@ -81,11 +81,12 @@ pub trait SignatureScheme: Send + Sync {
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool;
 
   /// Aggregate signatures.
+  /// It may panic if corrupted data passed in.
   fn aggregate(
     &self,
     validators: &[Self::ValidatorId],
-    sigs: &[Self::Signature],
     msg: &[u8],
+    sigs: &[Self::Signature],
   ) -> Self::AggregateSignature;
   /// Verify an aggregate signature for the list of signers.
   #[must_use]
@@ -110,10 +111,10 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
   fn aggregate(
     &self,
     validators: &[Self::ValidatorId],
-    sigs: &[Self::Signature],
     msg: &[u8],
+    sigs: &[Self::Signature],
   ) -> Self::AggregateSignature {
-    self.as_ref().aggregate(validators, sigs, msg)
+    self.as_ref().aggregate(validators, msg, sigs)
   }
 
   #[must_use]

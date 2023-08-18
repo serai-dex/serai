@@ -443,7 +443,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             let commit = Commit {
               end_time: self.block.end_time[&msg.round].canonical(),
               validators: validators.clone(),
-              signature: self.network.signature_scheme().aggregate(&validators, &sigs, &commit_msg),
+              signature: self.network.signature_scheme().aggregate(&validators, &commit_msg, &sigs),
             };
             debug_assert!(self.network.verify_commit(block.id(), &commit));
 

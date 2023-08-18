@@ -51,8 +51,8 @@ impl SignatureScheme for TestSignatureScheme {
   fn aggregate(
     &self,
     _: &[Self::ValidatorId],
-    sigs: &[Self::Signature],
     _: &[u8],
+    sigs: &[Self::Signature],
   ) -> Self::AggregateSignature {
     sigs.to_vec()
   }

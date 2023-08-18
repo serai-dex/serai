@@ -44,7 +44,7 @@ use crate::{
   Blockchain, P2p,
 };
 
-const DST: &[u8] = b"Schnorr Aggregator";
+const DST: &[u8] = b"Tributary Tendermint Commit Aggregator";
 
 fn challenge(
   genesis: [u8; 32],
@@ -176,12 +176,11 @@ impl SignatureScheme for Validators {
     actual_sig.verify(validator_point, challenge(self.genesis, validator, &sig[.. 32], msg))
   }
 
-  // TODO: this function panics if wrong data passed in, should it?
   fn aggregate(
     &self,
     validators: &[Self::ValidatorId],
-    sigs: &[Self::Signature],
     msg: &[u8],
+    sigs: &[Self::Signature],
   ) -> Self::AggregateSignature {
     assert_eq!(validators.len(), sigs.len());
 
