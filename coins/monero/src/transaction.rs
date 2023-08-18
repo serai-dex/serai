@@ -6,10 +6,7 @@ use std_shims::{
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::{
-  scalar::Scalar,
-  edwards::{EdwardsPoint, CompressedEdwardsY},
-};
+use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use crate::{
   Protocol, hash,

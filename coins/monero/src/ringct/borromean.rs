@@ -2,13 +2,13 @@ use core::fmt::Debug;
 use std_shims::io::{self, Read, Write};
 
 use curve25519_dalek::edwards::EdwardsPoint;
-#[cfg(feature = "experimental")]
-use curve25519_dalek::{traits::Identity, scalar::Scalar};
+use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::traits::Identity;
 
-#[cfg(feature = "experimental")]
 use monero_generators::H_pow_2;
-#[cfg(feature = "experimental")]
+
 use crate::hash_to_scalar;
+use crate::unreduced_scalar::UnreducedScalar;
 use crate::serialize::*;
 
 /// 64 Borromean ring signatures.
@@ -20,54 +20,50 @@ use crate::serialize::*;
 /// Those scalars also have a custom reduction algorithm...
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BorromeanSignatures {
-  pub s0: [[u8; 32]; 64],
-  pub s1: [[u8; 32]; 64],
-  pub ee: [u8; 32],
+  pub s0: [UnreducedScalar; 64],
+  pub s1: [UnreducedScalar; 64],
+  pub ee: Scalar,
 }
 
 impl BorromeanSignatures {
   pub fn read<R: Read>(r: &mut R) -> io::Result<BorromeanSignatures> {
     Ok(BorromeanSignatures {
-      s0: read_array(read_bytes, r)?,
-      s1: read_array(read_bytes, r)?,
-      ee: read_bytes(r)?,
+      s0: read_array(UnreducedScalar::read, r)?,
+      s1: read_array(UnreducedScalar::read, r)?,
+      ee: read_scalar(r)?,
     })
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for s0 in &self.s0 {
-      w.write_all(s0)?;
+      s0.write(w)?;
     }
     for s1 in &self.s1 {
-      w.write_all(s1)?;
+      s1.write(w)?;
     }
-    w.write_all(&self.ee)
+    write_scalar(&self.ee, w)
   }
 
-  #[cfg(feature = "experimental")]
   fn verify(&self, keys_a: &[EdwardsPoint], keys_b: &[EdwardsPoint]) -> bool {
     let mut transcript = [0; 2048];
+
     for i in 0 .. 64 {
-      // TODO: These aren't the correct reduction
-      // TODO: Can either of these be tightened?
       #[allow(non_snake_case)]
       let LL = EdwardsPoint::vartime_double_scalar_mul_basepoint(
-        &Scalar::from_bytes_mod_order(self.ee),
+        &self.ee,
         &keys_a[i],
-        &Scalar::from_bytes_mod_order(self.s0[i]),
+        &self.s0[i].recover_monero_slide_scalar(),
       );
       #[allow(non_snake_case)]
       let LV = EdwardsPoint::vartime_double_scalar_mul_basepoint(
         &hash_to_scalar(LL.compress().as_bytes()),
         &keys_b[i],
-        &Scalar::from_bytes_mod_order(self.s1[i]),
+        &self.s1[i].recover_monero_slide_scalar(),
       );
-      transcript[i .. ((i + 1) * 32)].copy_from_slice(LV.compress().as_bytes());
+      transcript[i * 32 .. ((i + 1) * 32)].copy_from_slice(LV.compress().as_bytes());
     }
 
-    // TODO: This isn't the correct reduction
-    // TODO: Can this be tightened to from_canonical_bytes?
-    hash_to_scalar(&transcript) == Scalar::from_bytes_mod_order(self.ee)
+    hash_to_scalar(&transcript) == self.ee
   }
 }
 
@@ -90,7 +86,6 @@ impl BorromeanRange {
     write_raw_vec(write_point, &self.bit_commitments, w)
   }
 
-  #[cfg(feature = "experimental")]
   pub fn verify(&self, commitment: &EdwardsPoint) -> bool {
     if &self.bit_commitments.iter().sum::<EdwardsPoint>() != commitment {
       return false;
