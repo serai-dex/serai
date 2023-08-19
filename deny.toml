@@ -85,6 +85,7 @@ license-files = [
 multiple-versions = "warn"
 wildcards = "warn"
 highlight = "all"
+deny = [ { name = "serde_derive", version = ">=1.0.172" } ]
 
 [sources]
 unknown-registry = "deny"
