@@ -149,9 +149,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
     };
 
-    let unsigned_in_chain = |hash: [u8; 32]| {
-      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some()
-    };
+    let unsigned_in_chain =
+      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
     self.mempool.add::<N>(&self.next_nonces, internal, tx, schema, unsigned_in_chain, commit)
   }
 
@@ -166,9 +165,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
   pub(crate) fn build_block<N: Network>(&mut self, schema: N::SignatureScheme) -> Block<T> {
     let db = self.db.as_ref().unwrap();
-    let unsigned_in_chain = |hash: [u8; 32]| {
-      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some()
-    };
+    let unsigned_in_chain =
+      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
 
     let block = Block::new(
       self.tip,
@@ -186,9 +184,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     schema: N::SignatureScheme,
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
-    let unsigned_in_chain = |hash: [u8; 32]| {
-      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some()
-    };
+    let unsigned_in_chain =
+      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block)?;
       // commit has to be valid if it is coming from our db

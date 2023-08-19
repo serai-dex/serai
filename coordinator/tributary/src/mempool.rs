@@ -7,8 +7,7 @@ use serai_db::{DbTxn, Db};
 use tendermint::ext::{Network, Commit};
 
 use crate::{
-  ACCOUNT_MEMPOOL_LIMIT,
-  ReadWrite,
+  ACCOUNT_MEMPOOL_LIMIT, ReadWrite,
   transaction::{Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction},
   tendermint::tx::verify_tendermint_tx,
   Transaction,
@@ -56,12 +55,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   }
 
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
-    let mut res = Mempool {
-      db,
-      genesis,
-      txs: HashMap::new(),
-      next_nonces: HashMap::new(),
-    };
+    let mut res = Mempool { db, genesis, txs: HashMap::new(), next_nonces: HashMap::new() };
 
     let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
 

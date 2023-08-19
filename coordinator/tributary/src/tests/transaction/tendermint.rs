@@ -44,7 +44,7 @@ fn vote_tx() {
   let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
 
   // should pass
-  assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
+  verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
 
   if let TendermintTx::SlashVote(vote) = &mut tx {
     vote.sig.signature = SchnorrSignature::read(&mut [0; 64].as_slice()).unwrap();
@@ -83,7 +83,7 @@ async_sequential!(
     let mut tx = tx_from_evidence::<N>(vec![signed.clone()]);
 
     // should pass
-    assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
+    verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
 
     // change the signature
     let mut random_sig = [0u8; 64];
@@ -108,7 +108,7 @@ async_sequential!(
     let mut tx = tx_from_evidence::<N>(vec![signed]);
 
     // should pass
-    assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
+    verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
 
     // invalid evidence(msg round number is bigger than vr)
     data = Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![]));
@@ -165,7 +165,7 @@ async_sequential!(
       .await;
       let tx = tx_from_evidence::<N>(vec![signed]);
 
-      assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
+      verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
     }
 
     // Empty Precommit should fail.
@@ -242,7 +242,7 @@ async_sequential!(
       .await;
       let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
 
-      assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
+      verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
     }
 
     // non-conflicting data should fail(Prevote)
@@ -292,7 +292,7 @@ async_sequential!(
       .await;
       let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
 
-      assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
+      verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
     }
 
     // non-conflicting data should fail irrespective of round number(Precommit)
@@ -344,7 +344,7 @@ async_sequential!(
       .await;
       let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
 
-      assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_ok());
+      verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
     }
 
     // msgs to different block numbers should fail

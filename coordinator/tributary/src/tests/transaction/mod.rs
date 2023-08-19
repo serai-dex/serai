@@ -201,20 +201,10 @@ pub async fn signer() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) {
   (genesis, signer, validator_id, validators)
 }
 
-pub fn encode_evidence<N: Network>(ev: Vec<SignedMessageFor<N>>) -> Vec<u8> {
-  let mut data = vec![];
-  data.extend(u8::to_le_bytes(u8::try_from(ev.len()).unwrap()));
-  for msg in ev {
-    let encoded = msg.encode();
-    data.extend(u32::to_le_bytes(u32::try_from(encoded.len()).unwrap()));
-    data.extend(encoded);
-  }
-  data
-}
-
-pub fn tx_from_evidence<N: Network>(ev: Vec<SignedMessageFor<N>>) -> TendermintTx {
-  let evidence = encode_evidence::<N>(ev);
-  TendermintTx::SlashEvidence(evidence)
+pub fn tx_from_evidence<N: Network>(mut ev: Vec<SignedMessageFor<N>>) -> TendermintTx {
+  assert!(!ev.is_empty());
+  assert!(ev.len() <= 2);
+  TendermintTx::SlashEvidence((ev.remove(0), ev.get(0)).encode())
 }
 
 pub async fn signed_from_data<N: Network>(

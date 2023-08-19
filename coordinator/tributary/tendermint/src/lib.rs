@@ -252,6 +252,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
   }
 
   async fn slash(&mut self, validator: N::ValidatorId, slash_event: SlashEvent<N>) {
+    // TODO: If the new slash event has evidence, emit to prevent a low-importance slash from
+    // cancelling emission of high-importance slashes
     if !self.block.slashes.contains(&validator) {
       log::info!(target: "tendermint", "Slashing validator {}", hex::encode(validator.encode()));
       self.block.slashes.insert(validator);
@@ -571,6 +573,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       (msg.sender != self.weights.proposer(msg.block, msg.round))
     {
       log::warn!(target: "tendermint", "Validator who wasn't the proposer proposed");
+      // TODO: This should have evidence
       Err(TendermintError::Malicious(msg.sender, None))?;
     };
 
@@ -623,7 +626,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
               // This won't remove the fact the precommitted for this block hash in the MessageLog
               // TODO: Don't even log these in the first place until we jump, preventing needing
               // to do this in the first place
-              self
+              let msg = self
                 .block
                 .log
                 .log
@@ -631,11 +634,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 .unwrap()
                 .get_mut(validator)
                 .unwrap()
-                .remove(&Step::Precommit);
+                .remove(&Step::Precommit)
+                .unwrap();
 
               // Slash the validator for publishing an invalid commit signature
-              let slash = SlashEvent::WithEvidence(signed.clone(), None);
-              self.slash(*validator, slash).await;
+              self.slash(*validator, SlashEvent::WithEvidence(msg, None)).await;
             }
           }
         }

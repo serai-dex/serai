@@ -28,7 +28,10 @@ use tendermint::{
   ext::{Network, Commit, RoundNumber, SignatureScheme},
 };
 
-/// Data for a signed transaction.
+/// Signing data for a slash vote.
+///
+/// The traditional Signed uses a nonce, whereas votes aren't required/expected to be ordered.
+/// Accordingly, a simple uniqueness check works instead.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct VoteSignature {
   pub signer: <Ristretto as Ciphersuite>::G,
@@ -58,7 +61,7 @@ impl Default for VoteSignature {
   }
 }
 
-/// Data for a signed transaction.
+/// A vote to slash a malicious validator.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SlashVote {
   pub id: [u8; 13],       // vote id(slash event id)
@@ -148,10 +151,9 @@ impl ReadWrite for TendermintTx {
 
 impl Transaction for TendermintTx {
   fn kind(&self) -> TransactionKind<'_> {
-    match self {
-      TendermintTx::SlashEvidence(..) => TransactionKind::Unsigned,
-      TendermintTx::SlashVote(..) => TransactionKind::Unsigned,
-    }
+    // There's an assert elsewhere in the codebase expecting this behavior
+    // If we do want to add Provided/Signed TendermintTxs, review the implications carefully
+    TransactionKind::Unsigned
   }
 
   fn hash(&self) -> [u8; 32] {
@@ -163,13 +165,9 @@ impl Transaction for TendermintTx {
     Blake2s256::digest(tx).into()
   }
 
-  /// Obtain the challenge for this transaction's signature.
-  ///
-  /// Do not override this unless you know what you're doing.
-  ///
-  /// Panics if called on non-signed transactions.
   fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
     match self {
+      TendermintTx::SlashEvidence(_) => panic!("sig_hash called on slash evidence transaction"),
       TendermintTx::SlashVote(vote) => {
         let signature = &vote.sig.signature;
         <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
@@ -179,26 +177,11 @@ impl Transaction for TendermintTx {
           .into(),
         )
       }
-      _ => panic!("sig_hash called on non-signed evidence transaction"),
     }
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
-    match self {
-      TendermintTx::SlashEvidence(ev) => {
-        // TODO: is this check really useful? at the end this can be any number
-        // that isn't related to how many SignedMessages we have in the vector.
-
-        // verify that vec len contains 1 or 2 SignedMessage.
-        let size = u8::from_le_bytes([ev[0]]);
-        if size == 0 || size > 2 {
-          Err(TransactionError::InvalidContent)?;
-        }
-
-        Ok(())
-      }
-      TendermintTx::SlashVote(..) => Ok(()),
-    }
+    Ok(())
   }
 }
 
@@ -210,13 +193,6 @@ impl TendermintTx {
     genesis: [u8; 32],
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   ) {
-    // return from here for non-signed txs so that
-    // rest of the function is cleaner.
-    match self {
-      TendermintTx::SlashEvidence(_) => return,
-      TendermintTx::SlashVote(_) => {}
-    }
-
     fn signature(tx: &mut TendermintTx) -> Option<&mut VoteSignature> {
       match tx {
         TendermintTx::SlashVote(vote) => Some(&mut vote.sig),
@@ -238,35 +214,18 @@ impl TendermintTx {
 }
 
 pub fn decode_evidence<N: Network>(
-  ev: &[u8],
-) -> Result<Vec<SignedMessageFor<N>>, TransactionError> {
-  let mut res = vec![];
-
-  // first byte is the length of the message vector
-  let len = u8::from_le_bytes([ev[0]]);
-  let mut pos: usize = 1;
-  for _ in 0 .. len {
-    // get the msg size
-    // make sure we aren't out of range
-    let Some(size_bytes) = ev.get(pos .. pos + 4) else { Err(TransactionError::InvalidContent)? };
-    let Ok(size) = usize::try_from(u32::from_le_bytes(size_bytes.try_into().unwrap())) else {
-      Err(TransactionError::InvalidContent)?
-    };
-    pos += 4;
-
-    // size might be intentionally bigger then whole slice
-    let Some(mut msg_bytes) = ev.get(pos .. pos + size) else {
-      Err(TransactionError::InvalidContent)?
-    };
-    let Ok(msg) = SignedMessageFor::<N>::decode::<&[u8]>(&mut msg_bytes) else {
-      Err(TransactionError::InvalidContent)?
-    };
-    pos += size;
-    res.push(msg);
-  }
-  Ok(res)
+  mut ev: &[u8],
+) -> Result<(SignedMessageFor<N>, Option<SignedMessageFor<N>>), TransactionError> {
+  <(SignedMessageFor<N>, Option<SignedMessageFor<N>>)>::decode(&mut ev).map_err(|_| {
+    dbg!("failed to decode");
+    TransactionError::InvalidContent
+  })
 }
 
+// TODO: Move this into tendermint-machine
+// TODO: Strongly type Evidence, instead of having two messages and no idea what's supposedly
+// wrong with them. Doing so will massively simplify the auditability of this (as this
+// re-implements an entire foreign library's checks for malicious behavior).
 pub(crate) fn verify_tendermint_tx<N: Network>(
   tx: &TendermintTx,
   genesis: [u8; 32],
@@ -277,101 +236,89 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
 
   match tx {
     TendermintTx::SlashEvidence(ev) => {
-      let msgs = decode_evidence::<N>(ev)?;
+      let (first, second) = decode_evidence::<N>(ev)?;
 
       // verify that evidence messages are signed correctly
-      for msg in &msgs {
-        if !msg.verify_signature(&schema) {
+      if !first.verify_signature(&schema) {
+        Err(TransactionError::InvalidSignature)?
+      }
+      let first = first.msg;
+
+      if let Some(second) = second {
+        if !second.verify_signature(&schema) {
           Err(TransactionError::InvalidSignature)?
         }
-      }
+        let second = second.msg;
 
-      // verify that the evidence is actually malicious
-      match msgs.len() {
-        1 => {
-          // 2 types of evidence can be here
-          // 1- invalid commit signature
-          // 2- vr number that was greater than the current round
-          let msg = &msgs[0].msg;
+        // 2 types of evidence here
+        // 1- multiple distinct messages for the same block + round + step
+        // 2- precommitted to multiple blocks
 
-          match &msg.data {
-            Data::Proposal(vr, _) => {
-              // check the vr
-              if vr.is_none() || vr.unwrap().0 < msg.round.0 {
-                Err(TransactionError::InvalidContent)?
-              }
+        // Make sure they're distinct messages, from the same sender, within the same block
+        if (first == second) || (first.sender != second.sender) || (first.block != second.block) {
+          Err(TransactionError::InvalidContent)?;
+        }
+
+        // Distinct messages within the same step
+        if (first.round == second.round) && (first.data.step() == second.data.step()) {
+          return Ok(());
+        }
+
+        // check whether messages are precommits to different blocks
+        // The inner signatures don't need to be verified since the outer signatures were
+        // While the inner signatures may be invalid, that would've yielded a invalid precommit
+        // signature slash instead of distinct precommit slash
+        if let Data::Precommit(Some((h1, _))) = first.data {
+          if let Data::Precommit(Some((h2, _))) = second.data {
+            if h1 == h2 {
+              Err(TransactionError::InvalidContent)?;
             }
-            Data::Precommit(Some((id, sig))) => {
-              // make sure block no isn't overflowing
-              // TODO: is rejecting the evidence right thing to do here?
-              // if this is the first block, there is no prior_commit, hence
-              // no prior end_time. Is the end_tine is just 0 in that case?
-              // on the other hand, are we even able to get precommit slash evidence in the first
-              // block?
-              if msg.block.0 == 0 {
-                Err(TransactionError::InvalidContent)?
-              }
-
-              // get the last commit
-              let prior_commit = match u32::try_from(msg.block.0 - 1) {
-                Ok(n) => match commit(n) {
-                  Some(c) => c,
-                  _ => Err(TransactionError::InvalidContent)?,
-                },
-                _ => Err(TransactionError::InvalidContent)?,
-              };
-
-              // calculate the end time till the msg round
-              let mut last_end_time = CanonicalInstant::new(prior_commit.end_time);
-              for r in 0 ..= msg.round.0 {
-                last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
-              }
-
-              // verify that the commit was actually invalid
-              if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig)
-              {
-                Err(TransactionError::InvalidContent)?
-              }
-            }
-            _ => Err(TransactionError::InvalidContent)?,
+            return Ok(());
           }
         }
-        2 => {
-          // 2 types of evidence here
-          // 1- multiple distinct messages for the same block + round + step
-          // 2- precommitted to multiple blocks
-          let first = &msgs[0].msg;
-          let second = &msgs[1].msg;
 
-          // conflicting messages must be for the same block
-          if first.block != second.block {
+        // No fault identified
+        Err(TransactionError::InvalidContent)?
+      }
+
+      // 2 types of evidence can be here
+      // 1- invalid commit signature
+      // 2- vr number that was greater than or equal to the current round
+      match &first.data {
+        Data::Proposal(vr, _) => {
+          // check the vr
+          if vr.is_none() || vr.unwrap().0 < first.round.0 {
+            Err(TransactionError::InvalidContent)?
+          }
+        }
+        Data::Precommit(Some((id, sig))) => {
+          // make sure block no isn't overflowing
+          // TODO: is rejecting the evidence right thing to do here?
+          // if this is the first block, there is no prior_commit, hence
+          // no prior end_time. Is the end_tine is just 0 in that case?
+          // on the other hand, are we even able to get precommit slash evidence in the first
+          // block?
+          if first.block.0 == 0 {
             Err(TransactionError::InvalidContent)?
           }
 
-          // verify it is from the same node
-          if first.sender != second.sender {
-            Err(TransactionError::InvalidContent)?
+          // get the last commit
+          let prior_commit = match u32::try_from(first.block.0 - 1) {
+            Ok(n) => match commit(n) {
+              Some(c) => c,
+              _ => Err(TransactionError::InvalidContent)?,
+            },
+            _ => Err(TransactionError::InvalidContent)?,
+          };
+
+          // calculate the end time till the msg round
+          let mut last_end_time = CanonicalInstant::new(prior_commit.end_time);
+          for r in 0 ..= first.round.0 {
+            last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
           }
 
-          // check whether messages are precommits to different blocks.
-          // signatures aren't important here because they must be valid anyways.
-          // if they weren't, we should have gotten an invalid precommit sig evidence
-          // in the first place instead of this.
-          if let Data::Precommit(Some((h1, _))) = first.data {
-            if let Data::Precommit(Some((h2, _))) = second.data {
-              if h1 == h2 {
-                Err(TransactionError::InvalidContent)?
-              } else {
-                return Ok(());
-              }
-            }
-          }
-
-          // verify that msgs are for the same round + step but has distinct data
-          if first.round != second.round ||
-            first.data.step() != second.data.step() ||
-            first.data == second.data
-          {
+          // verify that the commit was actually invalid
+          if schema.verify(first.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
             Err(TransactionError::InvalidContent)?
           }
         }

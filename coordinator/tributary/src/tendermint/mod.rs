@@ -40,8 +40,7 @@ use tokio::{
 use crate::{
   TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite,
   transaction::Transaction as TransactionTrait, Transaction, BlockHeader, Block, BlockError,
-  Blockchain, P2p,
-  tendermint::tx::SlashVote,
+  Blockchain, P2p, tendermint::tx::SlashVote,
 };
 
 pub mod tx;

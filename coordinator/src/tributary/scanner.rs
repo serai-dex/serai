@@ -72,7 +72,7 @@ async fn handle_block<
 
         // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
         // mark the node as fatally slashed
-        TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs[0].msg.sender);
+        TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs.0.msg.sender);
 
         // TODO: disconnect the node from network/ban from further participation in Tributary
       }
