@@ -8223,7 +8223,7 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "ciphersuite",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "dkg",
  "dockertest",
  "hex",

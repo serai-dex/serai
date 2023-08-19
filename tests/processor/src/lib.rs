@@ -276,7 +276,7 @@ impl Coordinator {
             Some(serde_json::json!({
               "wallet_address": ViewPair::new(
                 ED25519_BASEPOINT_POINT,
-                Zeroizing::new(Scalar::one()),
+                Zeroizing::new(Scalar::ONE),
               ).address(Network::Mainnet, AddressSpec::Standard).to_string(),
               "amount_of_blocks": 1,
             })),

@@ -19,7 +19,7 @@ hex = "0.4"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 
-curve25519-dalek = "3.2"
+curve25519-dalek = "4"
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 
