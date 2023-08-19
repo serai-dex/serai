@@ -206,23 +206,13 @@ impl SignatureScheme for Validators {
       return false;
     };
 
-    // get Rs in aggregate
-    let mut pos: usize = 4;
-    let len: [u8; 4] = sig[.. pos].try_into().unwrap();
-    #[allow(non_snake_case)]
-    let mut Rs: Vec<[u8; 32]> = vec![];
-    for _ in 0 .. u32::from_le_bytes(len) {
-      Rs.push(sig[pos .. pos + 32].try_into().unwrap());
-      pos += 32;
-    }
-
-    if signers.len() != Rs.len() {
+    if signers.len() != aggregate.Rs().len() {
       return false;
     }
 
     let mut challenges = vec![];
-    for (key, nonce) in signers.iter().zip(Rs) {
-      challenges.push(challenge(self.genesis, *key, &nonce, msg));
+    for (key, nonce) in signers.iter().zip(aggregate.Rs()) {
+      challenges.push(challenge(self.genesis, *key, nonce.to_bytes().as_ref(), msg));
     }
 
     aggregate.verify(
