@@ -8,6 +8,7 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+lazy_static = "1"
 async-trait = "0.1"
 thiserror = "1"
 
@@ -35,7 +36,6 @@ tendermint = { package = "tendermint-machine", path = "./tendermint" }
 tokio = { version = "1", features = ["sync", "time", "rt"] }
 
 [dev-dependencies]
-lazy_static = "1"
 tokio = { version = "1", features = ["macros"] }
 
 [features]

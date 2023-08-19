@@ -1,8 +1,8 @@
-use std::{collections::HashMap, vec};
+use std::collections::HashMap;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use serai_db::{DbTxn, Db, Get};
+use serai_db::{DbTxn, Db};
 
 use scale::Decode;
 
@@ -45,8 +45,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   fn block_after_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block_after", [genesis, hash].concat())
   }
-  fn unsigned_included_key(genesis: &[u8]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"unsigned_included", genesis)
+  fn unsigned_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"unsigned_included", [genesis, hash].concat())
   }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
     D::key(
@@ -150,8 +150,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     };
 
     let unsigned_in_chain = |hash: [u8; 32]| {
-      let existing = db.get(Self::unsigned_included_key(&self.genesis)).unwrap_or(vec![]);
-      !existing.is_empty() && existing.chunks(32).any(|ex_hash| ex_hash == hash)
+      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some()
     };
     self.mempool.add::<N>(&self.next_nonces, internal, tx, schema, unsigned_in_chain, commit)
   }
@@ -168,8 +167,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   pub(crate) fn build_block<N: Network>(&mut self, schema: N::SignatureScheme) -> Block<T> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain = |hash: [u8; 32]| {
-      let existing = db.get(Self::unsigned_included_key(&self.genesis)).unwrap_or(vec![]);
-      !existing.is_empty() && existing.chunks(32).any(|ex_hash| ex_hash == hash)
+      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some()
     };
 
     let block = Block::new(
@@ -189,13 +187,12 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain = |hash: [u8; 32]| {
-      let existing = db.get(Self::unsigned_included_key(&self.genesis)).unwrap_or(vec![]);
-      !existing.is_empty() && existing.chunks(32).any(|ex_hash| ex_hash == hash)
+      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some()
     };
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
-      let commit = self.commit_by_block_number(block);
+      let commit = self.commit_by_block_number(block)?;
       // commit has to be valid if it is coming from our db
-      Some(Commit::<N::SignatureScheme>::decode(&mut commit?.as_ref()).unwrap())
+      Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
     };
     block.verify::<N>(
       self.genesis,
@@ -251,13 +248,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
         }
         TransactionKind::Unsigned => {
           let hash = tx.hash();
-          let key = Self::unsigned_included_key(&self.genesis);
-
-          // add to the included unsigned
-          let mut existing = txn.get(&key).unwrap_or(vec![]);
-          existing.extend(hash);
-          txn.put(key, existing);
-
+          // Save as included on chain
+          txn.put(Self::unsigned_included_key(&self.genesis, &hash), []);
           // remove from the mempool
           self.mempool.remove(&hash);
         }

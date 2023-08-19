@@ -7,12 +7,12 @@ use serai_db::{DbTxn, Db};
 use tendermint::ext::{Network, Commit};
 
 use crate::{
-  Transaction, ACCOUNT_MEMPOOL_LIMIT,
-  tendermint::tx::verify_tendermint_tx,
+  ACCOUNT_MEMPOOL_LIMIT,
+  ReadWrite,
   transaction::{Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction},
+  tendermint::tx::verify_tendermint_tx,
+  Transaction,
 };
-
-use crate::ReadWrite;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
@@ -31,7 +31,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     D::key(b"tributary_mempool", b"current", self.genesis)
   }
 
-  /// save given tx to the mempool db
+  // save given tx to the mempool db
   fn save_tx(&mut self, tx: Transaction<T>) {
     let tx_hash = tx.hash();
     let transaction_key = self.transaction_key(&tx_hash);
@@ -59,16 +59,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     let mut res = Mempool {
       db,
       genesis,
-      txs: HashMap::<[u8; 32], Transaction<T>>::new(),
+      txs: HashMap::new(),
       next_nonces: HashMap::new(),
     };
 
     let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
-    if current_mempool.is_empty() {
-      return res;
-    }
 
-    current_mempool.chunks(32).for_each(|hash| {
+    for hash in current_mempool.chunks(32) {
       let hash: [u8; 32] = hash.try_into().unwrap();
       let tx: Transaction<T> =
         Transaction::read::<&[u8]>(&mut res.db.get(res.transaction_key(&hash)).unwrap().as_ref())
@@ -84,7 +81,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             TransactionKind::Signed(Signed { signer, nonce, .. }) => {
               if let Some(prev) = res.next_nonces.insert(*signer, nonce + 1) {
                 // These mempool additions should've been ordered
-                assert!(prev < *nonce);
+                debug_assert!(prev < *nonce);
               }
               res.txs.insert(hash, Transaction::Application(tx));
             }
@@ -95,7 +92,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
           }
         }
       }
-    });
+    }
 
     res
   }
@@ -112,6 +109,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   ) -> bool {
     match &tx {
       Transaction::Tendermint(tendermint_tx) => {
+        // All Tendermint transactions should be unsigned
         assert_eq!(TransactionKind::Unsigned, tendermint_tx.kind());
 
         // check we have the tx in the pool/chain
@@ -123,9 +121,6 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         if verify_tendermint_tx::<N>(tendermint_tx, self.genesis, schema, commit).is_err() {
           return false;
         }
-
-        self.save_tx(tx);
-        true
       }
       Transaction::Application(app_tx) => {
         match app_tx.kind() {
@@ -156,11 +151,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             if verify_transaction(app_tx, self.genesis, &mut self.next_nonces).is_err() {
               return false;
             }
-            assert_eq!(self.next_nonces[signer], nonce + 1);
-
-            // save tx to the pool
-            self.save_tx(tx);
-            true
+            debug_assert_eq!(self.next_nonces[signer], nonce + 1);
           }
           TransactionKind::Unsigned => {
             // check we have the tx in the pool/chain
@@ -171,15 +162,15 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             if app_tx.verify().is_err() {
               return false;
             }
-
-            // save tx to the pool
-            self.save_tx(tx);
-            true
           }
-          _ => false,
+          TransactionKind::Provided(_) => return false,
         }
       }
     }
+
+    // Save the TX to the pool
+    self.save_tx(tx);
+    true
   }
 
   // Returns None if the mempool doesn't have a nonce tracked.
@@ -193,52 +184,47 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
   ) -> Vec<Transaction<T>> {
-    let mut res = {
-      let mut unsigned = vec![];
-      let mut signed = vec![];
-      for hash in self.txs.keys().cloned().collect::<Vec<_>>() {
-        let tx = &self.txs[&hash];
+    let mut unsigned = vec![];
+    let mut signed = vec![];
+    for hash in self.txs.keys().cloned().collect::<Vec<_>>() {
+      let tx = &self.txs[&hash];
 
-        // Verify this hasn't gone stale
-        match tx.kind() {
-          TransactionKind::Signed(Signed { signer, nonce, .. }) => {
-            if blockchain_next_nonces[signer] > *nonce {
-              self.remove(&hash);
-              continue;
-            }
-
-            // Since this TX isn't stale, include it
-            signed.push(tx.clone());
+      // Verify this hasn't gone stale
+      match tx.kind() {
+        TransactionKind::Signed(Signed { signer, nonce, .. }) => {
+          if blockchain_next_nonces[signer] > *nonce {
+            self.remove(&hash);
+            continue;
           }
-          TransactionKind::Unsigned => {
-            if unsigned_in_chain(hash) {
-              self.remove(&hash);
-              continue;
-            }
 
-            // Since this TX isn't stale, include it
-            unsigned.push(tx.clone());
-          }
-          _ => panic!("provided transaction entered mempool"),
+          // Since this TX isn't stale, include it
+          signed.push(tx.clone());
         }
+        TransactionKind::Unsigned => {
+          if unsigned_in_chain(hash) {
+            self.remove(&hash);
+            continue;
+          }
+
+          unsigned.push(tx.clone());
+        }
+        _ => panic!("provided transaction entered mempool"),
       }
+    }
 
-      // unsigned first, then signed.
-      unsigned.append(&mut signed);
-      unsigned
-    };
-
-    // Sort res by nonce.
+    // Sort signed by nonce
     let nonce = |tx: &Transaction<T>| {
       if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
         *nonce
       } else {
-        0
+        unreachable!()
       }
     };
-    res.sort_by(|a, b| nonce(a).partial_cmp(&nonce(b)).unwrap());
+    signed.sort_by(|a, b| nonce(a).partial_cmp(&nonce(b)).unwrap());
 
-    res
+    // unsigned first, then signed.
+    unsigned.append(&mut signed);
+    unsigned
   }
 
   /// Remove a transaction from the mempool.

@@ -1,14 +1,23 @@
 use std::{
   io,
-  collections::{VecDeque, HashMap},
+  collections::{VecDeque, HashSet, HashMap},
 };
 
-use tendermint::ext::{Network, Commit};
 use thiserror::Error;
 
 use blake2::{Digest, Blake2s256};
 
 use ciphersuite::{Ciphersuite, Ristretto};
+
+use tendermint::ext::{Network, Commit};
+
+use crate::{
+  transaction::{
+    TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction,
+  },
+  BLOCK_SIZE_LIMIT, ReadWrite, merkle, Transaction,
+  tendermint::tx::verify_tendermint_tx,
+};
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum BlockError {
@@ -21,15 +30,12 @@ pub enum BlockError {
   /// Header specified an invalid transactions merkle tree hash.
   #[error("header transactions hash is incorrect")]
   InvalidTransactions,
-  /// a transaction that is already in the chain was in the block.
-  #[error("a transaction that is already in the chain was in the block")]
-  UnsignedAlreadyExist,
-  /// same transaction was added more than once into same block
-  #[error("same transaction was added more than once into same block")]
-  DoubledTx,
-  /// tx order in a block(Provided => Unsigned => Signed) was not complied
-  #[error("tx order in a block(Provided => Unsigned => Signed) was not complied")]
-  WrongTxOrder,
+  /// An unsigned transaction which was already added to the chain was present again.
+  #[error("an unsigned transaction which was already added to the chain was present again")]
+  UnsignedAlreadyIncluded,
+  /// Transactions weren't ordered as expected (Provided, followed by Unsigned, folowed by Signed).
+  #[error("transactions weren't ordered as expected (Provided, Unsigned, Signed)")]
+  WrongTransactionOrder,
   /// The block had a provided transaction this validator has yet to be provided.
   #[error("block had a provided transaction not yet locally provided: {0:?}")]
   NonLocalProvided([u8; 32]),
@@ -40,14 +46,6 @@ pub enum BlockError {
   #[error("included transaction had an error")]
   TransactionError(TransactionError),
 }
-
-use crate::{
-  transaction::{
-    TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction,
-  },
-  BLOCK_SIZE_LIMIT, ReadWrite, merkle, Transaction,
-  tendermint::tx::verify_tendermint_tx,
-};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
@@ -110,7 +108,7 @@ impl<T: TransactionTrait> ReadWrite for Block<T> {
 impl<T: TransactionTrait> Block<T> {
   /// Create a new block.
   ///
-  /// mempool is expected to only have valid, non-conflicting transactions.
+  /// mempool is expected to only have valid, non-conflicting transactions, sorted by nonce.
   pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<Transaction<T>>) -> Self {
     let mut txs = vec![];
     for tx in provided {
@@ -144,7 +142,7 @@ impl<T: TransactionTrait> Block<T> {
     for tx in &txs {
       let nonce = nonce(tx);
       if nonce < last {
-        panic!("failed to sort txs by nonce");
+        panic!("TXs in mempool weren't ordered by nonce");
       }
       last = nonce;
     }
@@ -203,14 +201,10 @@ impl<T: TransactionTrait> Block<T> {
     }
 
     let mut last_tx_order = Order::Provided;
+    let mut included_in_block = HashSet::new();
     let mut txs = Vec::with_capacity(self.transactions.len());
     for tx in self.transactions.iter() {
-      // check the block doesn't have the same tx twice
-      // probably not needed for signed or provided, but needed for unsigneds.
       let tx_hash = tx.hash();
-      if !txs.is_empty() && txs.contains(&tx_hash) {
-        Err(BlockError::DoubledTx)?;
-      }
       txs.push(tx_hash);
 
       let current_tx_order = match tx.kind() {
@@ -231,9 +225,10 @@ impl<T: TransactionTrait> Block<T> {
         }
         TransactionKind::Unsigned => {
           // check we don't already have the tx in the chain
-          if unsigned_in_chain(tx_hash) {
-            Err(BlockError::UnsignedAlreadyExist)?;
+          if unsigned_in_chain(tx_hash) || included_in_block.contains(&tx_hash) {
+            Err(BlockError::UnsignedAlreadyIncluded)?;
           }
+          included_in_block.insert(tx_hash);
 
           Order::Unsigned
         }
@@ -242,7 +237,7 @@ impl<T: TransactionTrait> Block<T> {
 
       // enforce Provided => Unsigned => Signed order
       if u8::from(current_tx_order) < u8::from(last_tx_order) {
-        Err(BlockError::WrongTxOrder)?;
+        Err(BlockError::WrongTransactionOrder)?;
       }
       last_tx_order = current_tx_order;
 

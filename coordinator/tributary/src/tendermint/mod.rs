@@ -38,8 +38,9 @@ use tokio::{
 };
 
 use crate::{
-  transaction::Transaction as TransactionTrait, TENDERMINT_MESSAGE, TRANSACTION_MESSAGE,
-  BLOCK_MESSAGE, ReadWrite, BlockHeader, Block, BlockError, Blockchain, P2p, Transaction,
+  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite,
+  transaction::Transaction as TransactionTrait, Transaction, BlockHeader, Block, BlockError,
+  Blockchain, P2p,
   tendermint::tx::SlashVote,
 };
 
@@ -273,44 +274,42 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   }
 
   async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent<Self>) {
-    let mut tx = match slash_event {
+    log::error!(
+      "validator {} triggered a slash event on tributary {} (with evidence: {})",
+      hex::encode(validator),
+      hex::encode(self.genesis),
+      matches!(slash_event, SlashEvent::WithEvidence(_, _)),
+    );
+
+    let signer = self.signer();
+    let tx = match slash_event {
       SlashEvent::WithEvidence(m1, m2) => {
         // create an unsigned evidence tx
         TendermintTx::SlashEvidence((m1, m2).encode())
       }
       SlashEvent::Id(reason, block, round) => {
         // create a signed vote tx
-        let target = validator.encode().try_into().unwrap();
-        TendermintTx::SlashVote(SlashVote {
+        let mut tx = TendermintTx::SlashVote(SlashVote {
           id: (reason, block, round).encode().try_into().unwrap(),
-          target,
+          target: validator.encode().try_into().unwrap(),
           sig: VoteSignature::default(),
-        })
+        });
+        tx.sign(&mut OsRng, signer.genesis, &signer.key);
+        tx
       }
     };
 
-    // Sign the tx. This will only sign Vote txs
-    // since evidence txs are unsigned.
-    let signer = self.signer();
-    tx.sign(&mut OsRng, signer.genesis, &signer.key);
-
-    // add tx to blockchain and broadcast to peers.
+    // add tx to blockchain and broadcast to peers
+    // TODO: Make a function out of this following block
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
-    let res = self.blockchain.write().await.add_transaction::<Self>(
+    if self.blockchain.write().await.add_transaction::<Self>(
       true,
       Transaction::Tendermint(tx),
       self.signature_scheme(),
-    );
-    if res {
+    ) {
       self.p2p.broadcast(signer.genesis, to_broadcast).await;
     }
-
-    log::error!(
-      "validator {} triggered a slash event on tributary {}",
-      hex::encode(validator),
-      hex::encode(self.genesis)
-    );
   }
 
   async fn validate(&mut self, block: &Self::Block) -> Result<(), TendermintBlockError> {

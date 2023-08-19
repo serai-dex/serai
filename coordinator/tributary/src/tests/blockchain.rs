@@ -516,7 +516,7 @@ fn block_tx_ordering() {
   // should fail
   assert_eq!(
     blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
-    BlockError::WrongTxOrder
+    BlockError::WrongTransactionOrder
   );
 
   // reset
@@ -528,7 +528,7 @@ fn block_tx_ordering() {
   // should fail
   assert_eq!(
     blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
-    BlockError::WrongTxOrder
+    BlockError::WrongTransactionOrder
   );
 
   // reset
@@ -540,7 +540,7 @@ fn block_tx_ordering() {
   // should fail
   assert_eq!(
     blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
-    BlockError::WrongTxOrder
+    BlockError::WrongTransactionOrder
   );
 
   // reset
