@@ -1,5 +1,4 @@
 #![allow(deprecated)]
-
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![no_std] // Prevents writing new code, in what should be a simple wrapper, which requires std
 #![doc = include_str!("../README.md")]

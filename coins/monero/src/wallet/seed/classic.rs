@@ -273,7 +273,8 @@ impl ClassicSeed {
   }
 
   pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<ClassicSeed> {
-    Option::from(Scalar::from_canonical_bytes(*entropy)).map(|scalar| key_to_seed(lang, Zeroizing::new(scalar)))
+    Option::from(Scalar::from_canonical_bytes(*entropy))
+      .map(|scalar| key_to_seed(lang, Zeroizing::new(scalar)))
   }
 
   pub(crate) fn to_string(&self) -> Zeroizing<String> {

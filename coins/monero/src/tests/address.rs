@@ -142,10 +142,14 @@ fn featured_vectors() {
       }
       _ => panic!("Unknown network"),
     };
-    let spend =
-      CompressedEdwardsY::from_slice(&hex::decode(vector.spend).unwrap()).unwrap().decompress().unwrap();
-    let view =
-      CompressedEdwardsY::from_slice(&hex::decode(vector.view).unwrap()).unwrap().decompress().unwrap();
+    let spend = CompressedEdwardsY::from_slice(&hex::decode(vector.spend).unwrap())
+      .unwrap()
+      .decompress()
+      .unwrap();
+    let view = CompressedEdwardsY::from_slice(&hex::decode(vector.view).unwrap())
+      .unwrap()
+      .decompress()
+      .unwrap();
 
     let addr = MoneroAddress::from_str(network, &vector.address).unwrap();
     assert_eq!(addr.spend, spend);

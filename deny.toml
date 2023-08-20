@@ -10,7 +10,6 @@ unmaintained = "warn"
 ignore = [
   "RUSTSEC-2020-0071", # https://github.com/chronotope/chrono/issues/602
   "RUSTSEC-2021-0139", # https://github.com/serai-dex/serai/228
-  "RUSTSEC-2021-0145", # https://github.com/serai-dex/serai/225
   "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
 ]
 
@@ -92,6 +91,7 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
+  "https://github.com/serai-dex/schnorrkel",
   "https://github.com/serai-dex/substrate-bip39",
   "https://github.com/serai-dex/substrate",
   "https://github.com/monero-rs/base58-monero",
