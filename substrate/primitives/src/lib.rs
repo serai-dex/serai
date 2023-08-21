@@ -31,8 +31,8 @@ pub use account::*;
 
 // Monero, our current longest address candidate, has a longest address of featured
 // 1 (enum) + 1 (flags) + 64 (two keys) = 66
-// When JAMTIS arrives, it'll become 114 bytes
-pub const MAX_ADDRESS_LEN: u32 = 128;
+// When JAMTIS arrives, it'll become 112 or potentially even 142 bytes
+pub const MAX_ADDRESS_LEN: u32 = 196;
 
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
