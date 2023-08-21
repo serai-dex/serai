@@ -12,7 +12,7 @@ use curve25519_dalek::{
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
 mod sealed {
-  pub trait VarInt: TryInto<u64> {}
+  pub trait VarInt: TryInto<u64> + TryFrom<u64> + Copy {}
   impl VarInt for u8 {}
   impl VarInt for u32 {}
   impl VarInt for u64 {}
@@ -29,8 +29,9 @@ pub(crate) fn write_byte<W: Write>(byte: &u8, w: &mut W) -> io::Result<()> {
   w.write_all(&[*byte])
 }
 
-pub(crate) fn write_varint<W: Write>(varint: &u64, w: &mut W) -> io::Result<()> {
-  let mut varint = *varint;
+// This will panic if the VarInt exceeds u64::MAX
+pub(crate) fn write_varint<W: Write, U: sealed::VarInt>(varint: &U, w: &mut W) -> io::Result<()> {
+  let mut varint: u64 = (*varint).try_into().map_err(|_| "varint exceeded u64").unwrap();
   while {
     let mut b = u8::try_from(varint & u64::from(!VARINT_CONTINUATION_MASK)).unwrap();
     varint >>= 7;
@@ -67,7 +68,7 @@ pub(crate) fn write_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   values: &[T],
   w: &mut W,
 ) -> io::Result<()> {
-  write_varint(&values.len().try_into().unwrap(), w)?;
+  write_varint(&values.len(), w)?;
   write_raw_vec(f, values, w)
 }
 
@@ -93,7 +94,7 @@ pub(crate) fn read_u64<R: Read>(r: &mut R) -> io::Result<u64> {
   read_bytes(r).map(u64::from_le_bytes)
 }
 
-pub(crate) fn read_varint<R: Read>(r: &mut R) -> io::Result<u64> {
+pub(crate) fn read_varint<R: Read, U: sealed::VarInt>(r: &mut R) -> io::Result<U> {
   let mut bits = 0;
   let mut res = 0;
   while {
@@ -109,7 +110,9 @@ pub(crate) fn read_varint<R: Read>(r: &mut R) -> io::Result<u64> {
     bits += 7;
     b & VARINT_CONTINUATION_MASK == VARINT_CONTINUATION_MASK
   } {}
-  Ok(res)
+  res
+    .try_into()
+    .map_err(|_| io::Error::new(io::ErrorKind::Other, "VarInt does not fit into integer type"))
 }
 
 // All scalar fields supported by monero-serai are checked to be canonical for valid transactions
@@ -162,5 +165,5 @@ pub(crate) fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
   f: F,
   r: &mut R,
 ) -> io::Result<Vec<T>> {
-  read_raw_vec(f, read_varint(r)?.try_into().unwrap(), r)
+  read_raw_vec(f, read_varint(r)?, r)
 }

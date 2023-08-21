@@ -293,7 +293,7 @@ impl RctPrunable {
       }
       RctType::Clsag | RctType::BulletproofsPlus => RctPrunable::Clsag {
         bulletproofs: {
-          if read_varint(r)? != 1 {
+          if read_varint::<_, u64>(r)? != 1 {
             Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
           }
           (if rct_type == RctType::Clsag { Bulletproofs::read } else { Bulletproofs::read_plus })(

@@ -17,8 +17,8 @@ const EXISTING_BLOCK_HASH_202612: [u8; 32] =
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
-  pub major_version: u64,
-  pub minor_version: u64,
+  pub major_version: u8,
+  pub minor_version: u8,
   pub timestamp: u64,
   pub previous: [u8; 32],
   pub nonce: u32,
@@ -68,7 +68,7 @@ impl Block {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.header.write(w)?;
     self.miner_tx.write(w)?;
-    write_varint(&self.txs.len().try_into().unwrap(), w)?;
+    write_varint(&self.txs.len(), w)?;
     for tx in &self.txs {
       w.write_all(tx)?;
     }
@@ -110,7 +110,7 @@ impl Block {
     Ok(Block {
       header: BlockHeader::read(r)?,
       miner_tx: Transaction::read(r)?,
-      txs: (0 .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
+      txs: (0_usize .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
     })
   }
 }

@@ -206,7 +206,7 @@ impl TransactionPrefix {
     self.timelock.write(w)?;
     write_vec(Input::write, &self.inputs, w)?;
     write_vec(Output::write, &self.outputs, w)?;
-    write_varint(&self.extra.len().try_into().unwrap(), w)?;
+    write_varint(&self.extra.len(), w)?;
     w.write_all(&self.extra)
   }
 

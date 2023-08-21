@@ -110,11 +110,7 @@ impl ExtraField {
         }
         nonce
       }),
-      3 => ExtraField::MergeMining(
-        usize::try_from(read_varint(r)?)
-          .map_err(|_| io::Error::new(io::ErrorKind::Other, "varint for height exceeds usize"))?,
-        read_bytes(r)?,
-      ),
+      3 => ExtraField::MergeMining(read_varint(r)?, read_bytes(r)?),
       4 => ExtraField::PublicKeys(read_vec(read_point, r)?),
       _ => Err(io::Error::new(io::ErrorKind::Other, "unknown extra field"))?,
     })
