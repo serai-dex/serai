@@ -15,6 +15,8 @@ use serai_client::primitives::NetworkId;
 use messages::{CoordinatorMessage, ProcessorMessage};
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
+use serai_client::Serai;
+
 use dockertest::{
   PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition,
   DockerOperations,
@@ -136,8 +138,7 @@ pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F,
 pub struct Processor {
   network: NetworkId,
 
-  #[allow(unused)]
-  serai_handle: String,
+  serai_rpc: String,
   #[allow(unused)]
   message_queue_handle: String,
   #[allow(unused)]
@@ -164,7 +165,7 @@ impl Processor {
     // Bound execution to 60 seconds
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
-      let Ok(client) = serai_client::Serai::new(&serai_rpc).await else { continue };
+      let Ok(client) = Serai::new(&serai_rpc).await else { continue };
       if client.get_latest_block_hash().await.is_err() {
         continue;
       }
@@ -177,7 +178,7 @@ impl Processor {
     Processor {
       network,
 
-      serai_handle: handles.0,
+      serai_rpc,
       message_queue_handle: handles.1,
       coordinator_handle: handles.2,
 
@@ -189,6 +190,10 @@ impl Processor {
         Zeroizing::new(processor_key),
       ),
     }
+  }
+
+  pub async fn serai(&self) -> Serai {
+    Serai::new(&self.serai_rpc).await.unwrap()
   }
 
   /// Send a message to a processor as its coordinator.

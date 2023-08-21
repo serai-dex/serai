@@ -117,6 +117,9 @@ async fn key_gen_test() {
         processor.send_message(messages::key_gen::ProcessorMessage::Shares { id, shares }).await;
       }
 
+      let serai = processors[0].serai().await;
+      let mut last_serai_block = serai.get_latest_block().await.unwrap().number();
+
       tokio::time::sleep(Duration::from_secs(20)).await;
       if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
         tokio::time::sleep(Duration::from_secs(20)).await;
@@ -149,10 +152,25 @@ async fn key_gen_test() {
       }
 
       // Sleeps for longer since we need to wait for a Substrate block as well
-      // TODO: Replace this with Substrate RPC checks and a much smaller sleep
-      tokio::time::sleep(Duration::from_secs(60)).await;
-      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
-        tokio::time::sleep(Duration::from_secs(60)).await;
+      'outer: for _ in 0 .. 20 {
+        tokio::time::sleep(Duration::from_secs(6)).await;
+        if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+          tokio::time::sleep(Duration::from_secs(6)).await;
+        }
+
+        while last_serai_block <= serai.get_latest_block().await.unwrap().number() {
+          if !serai
+            .get_key_gen_events(
+              serai.get_block_by_number(last_serai_block).await.unwrap().unwrap().hash(),
+            )
+            .await
+            .unwrap()
+            .is_empty()
+          {
+            break 'outer;
+          }
+          last_serai_block += 1;
+        }
       }
       let mut message = None;
       for processor in processors.iter_mut() {
