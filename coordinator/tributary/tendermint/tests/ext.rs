@@ -49,7 +49,12 @@ impl SignatureScheme for TestSignatureScheme {
     (sig[.. 2] == validator.to_le_bytes()) && (sig[2 ..] == [msg, &[0; 30]].concat()[.. 30])
   }
 
-  fn aggregate(sigs: &[[u8; 32]]) -> Vec<[u8; 32]> {
+  fn aggregate(
+    &self,
+    _: &[Self::ValidatorId],
+    _: &[u8],
+    sigs: &[Self::Signature],
+  ) -> Self::AggregateSignature {
     sigs.to_vec()
   }
 
