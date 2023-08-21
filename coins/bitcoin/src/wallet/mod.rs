@@ -146,9 +146,7 @@ impl Scanner {
     let mut res = vec![];
     for (vout, output) in tx.output.iter().enumerate() {
       // If the vout index exceeds 2**32, stop scanning outputs
-      let Ok(vout) = u32::try_from(vout) else {
-        break
-      };
+      let Ok(vout) = u32::try_from(vout) else { break };
 
       if let Some(offset) = self.scripts.get(&output.script_pubkey) {
         res.push(ReceivedOutput {
