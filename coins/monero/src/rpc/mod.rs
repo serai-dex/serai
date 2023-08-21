@@ -583,8 +583,22 @@ impl<R: RpcConnection> Rpc<R> {
       .iter()
       .enumerate()
       .map(|(i, out)| {
+        // Allow keys to be invalid, though if they are, return None to trigger selection of a new
+        // decoy
+        // Only valid keys can be used in CLSAG proofs, hence the need for re-selection, yet
+        // invalid keys may honestly exist on the blockchain
+        // Only a recent hard fork checked output keys were valid points
+        let Some(key) = CompressedEdwardsY(
+          hex::decode(&out.key)
+            .map_err(|_| RpcError::InvalidNode)?
+            .try_into()
+            .map_err(|_| RpcError::InvalidNode)?,
+        )
+        .decompress() else {
+          return Ok(None);
+        };
         Ok(
-          Some([rpc_point(&out.key)?, rpc_point(&out.mask)?])
+          Some([key, rpc_point(&out.mask)?])
             .filter(|_| Timelock::Block(height) >= txs[i].prefix.timelock),
         )
       })
