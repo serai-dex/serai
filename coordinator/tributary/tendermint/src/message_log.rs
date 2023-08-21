@@ -2,12 +2,12 @@ use std::{sync::Arc, collections::HashMap};
 
 use log::debug;
 
-use crate::{ext::*, RoundNumber, Step, Data, DataFor, MessageFor, TendermintError};
+use crate::{ext::*, RoundNumber, Step, Data, DataFor, TendermintError, SignedMessageFor};
 
-type RoundLog<N> = HashMap<<N as Network>::ValidatorId, HashMap<Step, DataFor<N>>>;
+type RoundLog<N> = HashMap<<N as Network>::ValidatorId, HashMap<Step, SignedMessageFor<N>>>;
 pub(crate) struct MessageLog<N: Network> {
   weights: Arc<N::Weights>,
-  precommitted: HashMap<N::ValidatorId, <N::Block as Block>::Id>,
+  precommitted: HashMap<N::ValidatorId, SignedMessageFor<N>>,
   pub(crate) log: HashMap<RoundNumber, RoundLog<N>>,
 }
 
@@ -17,38 +17,40 @@ impl<N: Network> MessageLog<N> {
   }
 
   // Returns true if it's a new message
-  pub(crate) fn log(
-    &mut self,
-    msg: MessageFor<N>,
-  ) -> Result<bool, TendermintError<N::ValidatorId>> {
+  pub(crate) fn log(&mut self, signed: SignedMessageFor<N>) -> Result<bool, TendermintError<N>> {
+    let msg = &signed.msg;
     let round = self.log.entry(msg.round).or_insert_with(HashMap::new);
     let msgs = round.entry(msg.sender).or_insert_with(HashMap::new);
 
     // Handle message replays without issue. It's only multiple messages which is malicious
     let step = msg.data.step();
     if let Some(existing) = msgs.get(&step) {
-      if existing != &msg.data {
+      if existing.msg.data != msg.data {
         debug!(
           target: "tendermint",
           "Validator sent multiple messages for the same block + round + step"
         );
-        Err(TendermintError::Malicious(msg.sender))?;
+        Err(TendermintError::Malicious(msg.sender, Some(existing.clone())))?;
       }
       return Ok(false);
     }
 
     // If they already precommitted to a distinct hash, error
-    if let Data::Precommit(Some((hash, _))) = &msg.data {
+    if let Data::Precommit(Some((hash, _))) = msg.data {
       if let Some(prev) = self.precommitted.get(&msg.sender) {
-        if hash != prev {
-          debug!(target: "tendermint", "Validator precommitted to multiple blocks");
-          Err(TendermintError::Malicious(msg.sender))?;
+        if let Data::Precommit(Some((prev_hash, _))) = prev.msg.data {
+          if hash != prev_hash {
+            debug!(target: "tendermint", "Validator precommitted to multiple blocks");
+            Err(TendermintError::Malicious(msg.sender, Some(prev.clone())))?;
+          }
+        } else {
+          panic!("message in precommitted wasn't Precommit");
         }
       }
-      self.precommitted.insert(msg.sender, *hash);
+      self.precommitted.insert(msg.sender, signed.clone());
     }
 
-    msgs.insert(step, msg.data);
+    msgs.insert(step, signed);
     Ok(true)
   }
 
@@ -61,7 +63,7 @@ impl<N: Network> MessageLog<N> {
       if let Some(msg) = msgs.get(&data.step()) {
         let validator_weight = self.weights.weight(*participant);
         participating += validator_weight;
-        if &data == msg {
+        if data == msg.msg.data {
           weight += validator_weight;
         }
       }
@@ -102,7 +104,7 @@ impl<N: Network> MessageLog<N> {
     round: RoundNumber,
     sender: N::ValidatorId,
     step: Step,
-  ) -> Option<&DataFor<N>> {
+  ) -> Option<&SignedMessageFor<N>> {
     self.log.get(&round).and_then(|round| round.get(&sender).and_then(|msgs| msgs.get(&step)))
   }
 }

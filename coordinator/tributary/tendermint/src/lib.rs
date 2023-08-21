@@ -15,10 +15,10 @@ use futures::{
 };
 use tokio::time::sleep;
 
-mod time;
+pub mod time;
 use time::{sys_time, CanonicalInstant};
 
-mod round;
+pub mod round;
 
 mod block;
 use block::BlockData;
@@ -29,19 +29,19 @@ pub(crate) mod message_log;
 pub mod ext;
 use ext::*;
 
-pub(crate) fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
+pub fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
   [&end_time.to_le_bytes(), id].concat().to_vec()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
-enum Step {
+pub enum Step {
   Propose,
   Prevote,
   Precommit,
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
-enum Data<B: Block, S: Signature> {
+#[derive(Clone, Eq, Debug, Encode, Decode)]
+pub enum Data<B: Block, S: Signature> {
   Proposal(Option<RoundNumber>, B),
   Prevote(Option<B::Id>),
   Precommit(Option<(B::Id, S)>),
@@ -62,7 +62,7 @@ impl<B: Block, S: Signature> PartialEq for Data<B, S> {
 }
 
 impl<B: Block, S: Signature> Data<B, S> {
-  fn step(&self) -> Step {
+  pub fn step(&self) -> Step {
     match self {
       Data::Proposal(..) => Step::Propose,
       Data::Prevote(..) => Step::Prevote,
@@ -71,21 +71,20 @@ impl<B: Block, S: Signature> Data<B, S> {
   }
 }
 
-#[derive(Clone, PartialEq, Debug, Encode, Decode)]
-struct Message<V: ValidatorId, B: Block, S: Signature> {
-  sender: V,
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+pub struct Message<V: ValidatorId, B: Block, S: Signature> {
+  pub sender: V,
+  pub block: BlockNumber,
+  pub round: RoundNumber,
 
-  block: BlockNumber,
-  round: RoundNumber,
-
-  data: Data<B, S>,
+  pub data: Data<B, S>,
 }
 
 /// A signed Tendermint consensus message to be broadcast to the other validators.
-#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
-  msg: Message<V, B, S>,
-  sig: S,
+  pub msg: Message<V, B, S>,
+  pub sig: S,
 }
 
 impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
@@ -103,15 +102,15 @@ impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum TendermintError<V: ValidatorId> {
-  Malicious(V),
+#[derive(Clone, PartialEq, Eq, Debug)]
+enum TendermintError<N: Network> {
+  Malicious(N::ValidatorId, Option<SignedMessageFor<N>>),
   Temporal,
   AlreadyHandled,
 }
 
 // Type aliases to abstract over generic hell
-pub(crate) type DataFor<N> =
+pub type DataFor<N> =
   Data<<N as Network>::Block, <<N as Network>::SignatureScheme as SignatureScheme>::Signature>;
 pub(crate) type MessageFor<N> = Message<
   <N as Network>::ValidatorId,
@@ -124,6 +123,22 @@ pub type SignedMessageFor<N> = SignedMessage<
   <N as Network>::Block,
   <<N as Network>::SignatureScheme as SignatureScheme>::Signature,
 >;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
+pub enum SlashReason {
+  FailToPropose,
+  InvalidBlock,
+  InvalidMessage,
+}
+
+// TODO: Move WithEvidence to a proper Evidence enum, denoting the explicit reason its faulty
+// This greatly simplifies the checking process and prevents new-reasons added here not being
+// handled elsewhere
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum SlashEvent<N: Network> {
+  Id(SlashReason, u64, u32),
+  WithEvidence(SignedMessageFor<N>, Option<SignedMessageFor<N>>),
+}
 
 /// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
@@ -239,11 +254,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.reset(round, proposal).await;
   }
 
-  async fn slash(&mut self, validator: N::ValidatorId) {
+  async fn slash(&mut self, validator: N::ValidatorId, slash_event: SlashEvent<N>) {
+    // TODO: If the new slash event has evidence, emit to prevent a low-importance slash from
+    // cancelling emission of high-importance slashes
     if !self.block.slashes.contains(&validator) {
       log::info!(target: "tendermint", "Slashing validator {}", hex::encode(validator.encode()));
       self.block.slashes.insert(validator);
-      self.network.slash(validator).await;
+      self.network.slash(validator, slash_event).await;
     }
   }
 
@@ -334,7 +351,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         if self.queue.is_empty() { Fuse::terminated() } else { future::ready(()).fuse() };
 
       if let Some((our_message, msg, mut sig)) = futures::select_biased! {
-        // Handle a new block occuring externally (an external sync loop)
+        // Handle a new block occurring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
         msg = self.synced_block_recv.next() => {
           if let Some(SyncedBlock { number, block, commit }) = msg {
@@ -380,8 +397,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
               Step::Propose => {
                 // Slash the validator for not proposing when they should've
                 log::debug!(target: "tendermint", "Validator didn't propose when they should have");
+                // this slash will be voted on.
                 self.slash(
-                  self.weights.proposer(self.block.number, self.block.round().number)
+                  self.weights.proposer(self.block.number, self.block.round().number),
+                  SlashEvent::Id(
+                    SlashReason::FailToPropose,
+                    self.block.number.0,
+                    self.block.round().number.0
+                  ),
                 ).await;
                 self.broadcast(Data::Prevote(None));
               },
@@ -407,31 +430,41 @@ impl<N: Network + 'static> TendermintMachine<N> {
           }
         }
       } {
-        let res = self.message(msg.clone()).await;
+        if our_message {
+          assert!(sig.is_none());
+          sig = Some(self.signer.sign(&msg.encode()).await);
+        }
+        let sig = sig.unwrap();
+
+        // TODO: message may internally call broadcast. We should check within broadcast it's not
+        // broadcasting our own message at this time.
+        let signed_msg = SignedMessage { msg: msg.clone(), sig: sig.clone() };
+        let res = self.message(&signed_msg).await;
         if res.is_err() && our_message {
           panic!("honest node (ourselves) had invalid behavior");
         }
+        // Only now should we allow broadcasts since we're sure an invariant wasn't reached causing
+        // us to have invalid messages.
+
+        if res.is_ok() {
+          // Re-broadcast this since it's an original consensus message
+          self.network.broadcast(signed_msg).await;
+        }
 
         match res {
-          Ok(None) => {
-            if let Some(sig) = sig.take() {
-              // If it's our own message, it shouldn't already be signed
-              assert!(!our_message);
-
-              // Re-broadcast this since it's an original consensus message
-              self.network.broadcast(SignedMessage { msg: msg.clone(), sig }).await;
-            }
-          }
+          Ok(None) => {}
           Ok(Some(block)) => {
             let mut validators = vec![];
             let mut sigs = vec![];
             // Get all precommits for this round
             for (validator, msgs) in &self.block.log.log[&msg.round] {
-              if let Some(Data::Precommit(Some((id, sig)))) = msgs.get(&Step::Precommit) {
-                // If this precommit was for this block, include it
-                if id == &block.id() {
-                  validators.push(*validator);
-                  sigs.push(sig.clone());
+              if let Some(signed) = msgs.get(&Step::Precommit) {
+                if let Data::Precommit(Some((id, sig))) = &signed.msg.data {
+                  // If this precommit was for this block, include it
+                  if *id == block.id() {
+                    validators.push(*validator);
+                    sigs.push(sig.clone());
+                  }
                 }
               }
             }
@@ -453,15 +486,45 @@ impl<N: Network + 'static> TendermintMachine<N> {
             log::trace!("added block {} (produced by machine)", hex::encode(id.as_ref()));
             self.reset(msg.round, proposal).await;
           }
-          Err(TendermintError::Malicious(validator)) => self.slash(validator).await,
+          Err(TendermintError::Malicious(sender, evidence_msg)) => {
+            let current_msg = SignedMessage { msg: msg.clone(), sig: sig.clone() };
+
+            let slash = if let Some(old_msg) = evidence_msg {
+              // if the malicious message contains a block, only vote to slash
+              // TODO: Should this decision be made at a higher level?
+              if let Data::Proposal(_, _) = &current_msg.msg.data {
+                SlashEvent::Id(
+                  SlashReason::InvalidBlock,
+                  self.block.number.0,
+                  self.block.round().number.0,
+                )
+              } else {
+                // if old msg and new msg is not the same, use both as evidence.
+                SlashEvent::WithEvidence(
+                  old_msg.clone(),
+                  if old_msg != current_msg { Some(current_msg.clone()) } else { None },
+                )
+              }
+            } else {
+              // we don't have evidence. Slash with vote.
+              SlashEvent::Id(
+                SlashReason::InvalidMessage,
+                self.block.number.0,
+                self.block.round().number.0,
+              )
+            };
+
+            // Each message that we're voting to slash over needs to be re-broadcasted so other
+            // validators also trigger their own votes
+            // TODO: should this be inside slash function?
+            if let SlashEvent::Id(_, _, _) = slash {
+              self.network.broadcast(current_msg).await;
+            }
+
+            self.slash(sender, slash).await
+          }
           Err(TendermintError::Temporal) => (),
           Err(TendermintError::AlreadyHandled) => (),
-        }
-
-        if our_message {
-          assert!(sig.is_none());
-          let sig = self.signer.sign(&msg.encode()).await;
-          self.network.broadcast(SignedMessage { msg, sig }).await;
         }
       }
     }
@@ -472,19 +535,19 @@ impl<N: Network + 'static> TendermintMachine<N> {
   // Returns Err if the signature was invalid
   fn verify_precommit_signature(
     &self,
-    sender: N::ValidatorId,
-    round: RoundNumber,
-    data: &DataFor<N>,
-  ) -> Result<bool, TendermintError<N::ValidatorId>> {
-    if let Data::Precommit(Some((id, sig))) = data {
+    signed: &SignedMessageFor<N>,
+  ) -> Result<bool, TendermintError<N>> {
+    let msg = &signed.msg;
+    if let Data::Precommit(Some((id, sig))) = &msg.data {
       // Also verify the end_time of the commit
       // Only perform this verification if we already have the end_time
       // Else, there's a DoS where we receive a precommit for some round infinitely in the future
       // which forces us to calculate every end time
-      if let Some(end_time) = self.block.end_time.get(&round) {
-        if !self.validators.verify(sender, &commit_msg(end_time.canonical(), id.as_ref()), sig) {
+      if let Some(end_time) = self.block.end_time.get(&msg.round) {
+        if !self.validators.verify(msg.sender, &commit_msg(end_time.canonical(), id.as_ref()), sig)
+        {
           log::warn!(target: "tendermint", "Validator produced an invalid commit signature");
-          Err(TendermintError::Malicious(sender))?;
+          Err(TendermintError::Malicious(msg.sender, Some(signed.clone())))?;
         }
         return Ok(true);
       }
@@ -494,24 +557,26 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   async fn message(
     &mut self,
-    msg: MessageFor<N>,
-  ) -> Result<Option<N::Block>, TendermintError<N::ValidatorId>> {
+    signed: &SignedMessageFor<N>,
+  ) -> Result<Option<N::Block>, TendermintError<N>> {
+    let msg = &signed.msg;
     if msg.block != self.block.number {
       Err(TendermintError::Temporal)?;
     }
 
     // If this is a precommit, verify its signature
-    self.verify_precommit_signature(msg.sender, msg.round, &msg.data)?;
+    self.verify_precommit_signature(signed)?;
 
     // Only let the proposer propose
     if matches!(msg.data, Data::Proposal(..)) &&
       (msg.sender != self.weights.proposer(msg.block, msg.round))
     {
       log::warn!(target: "tendermint", "Validator who wasn't the proposer proposed");
-      Err(TendermintError::Malicious(msg.sender))?;
+      // TODO: This should have evidence
+      Err(TendermintError::Malicious(msg.sender, None))?;
     };
 
-    if !self.block.log.log(msg.clone())? {
+    if !self.block.log.log(signed.clone())? {
       return Err(TendermintError::AlreadyHandled);
     }
     log::debug!(target: "tendermint", "received new tendermint message");
@@ -524,16 +589,17 @@ impl<N: Network + 'static> TendermintMachine<N> {
       let proposer = self.weights.proposer(self.block.number, msg.round);
 
       // Get the proposal
-      if let Some(Data::Proposal(_, block)) = self.block.log.get(msg.round, proposer, Step::Propose)
-      {
-        // Check if it has gotten a sufficient amount of precommits
-        // Use a junk signature since message equality disregards the signature
-        if self.block.log.has_consensus(
-          msg.round,
-          Data::Precommit(Some((block.id(), self.signer.sign(&[]).await))),
-        ) {
-          log::debug!(target: "tendermint", "block {} has consensus", msg.block.0);
-          return Ok(Some(block.clone()));
+      if let Some(proposal_signed) = self.block.log.get(msg.round, proposer, Step::Propose) {
+        if let Data::Proposal(_, block) = &proposal_signed.msg.data {
+          // Check if it has gotten a sufficient amount of precommits
+          // Use a junk signature since message equality disregards the signature
+          if self.block.log.has_consensus(
+            msg.round,
+            Data::Precommit(Some((block.id(), self.signer.sign(&[]).await))),
+          ) {
+            log::debug!(target: "tendermint", "block {} has consensus", msg.block.0);
+            return Ok(Some(block.clone()));
+          }
         }
       }
     }
@@ -546,20 +612,20 @@ impl<N: Network + 'static> TendermintMachine<N> {
     } else if msg.round.0 > self.block.round().number.0 {
       // 55-56
       // Jump, enabling processing by the below code
-      if self.block.log.round_participation(msg.round) > self.weights.fault_thresold() {
+      if self.block.log.round_participation(msg.round) > self.weights.fault_threshold() {
         // If this round already has precommit messages, verify their signatures
         let round_msgs = self.block.log.log[&msg.round].clone();
         for (validator, msgs) in &round_msgs {
-          if let Some(data) = msgs.get(&Step::Precommit) {
-            if let Ok(res) = self.verify_precommit_signature(*validator, msg.round, data) {
+          if let Some(existing) = msgs.get(&Step::Precommit) {
+            if let Ok(res) = self.verify_precommit_signature(existing) {
               // Ensure this actually verified the signature instead of believing it shouldn't yet
-              debug_assert!(res);
+              assert!(res);
             } else {
               // Remove the message so it isn't counted towards forming a commit/included in one
               // This won't remove the fact the precommitted for this block hash in the MessageLog
               // TODO: Don't even log these in the first place until we jump, preventing needing
               // to do this in the first place
-              self
+              let msg = self
                 .block
                 .log
                 .log
@@ -567,8 +633,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 .unwrap()
                 .get_mut(validator)
                 .unwrap()
-                .remove(&Step::Precommit);
-              self.slash(*validator).await;
+                .remove(&Step::Precommit)
+                .unwrap();
+
+              // Slash the validator for publishing an invalid commit signature
+              self.slash(*validator, SlashEvent::WithEvidence(msg, None)).await;
             }
           }
         }
@@ -582,6 +651,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
         return Ok(None);
       }
     }
+
+    // msg.round is now guaranteed to be equal to self.block.round().number
+    debug_assert_eq!(msg.round, self.block.round().number);
 
     // The paper executes these checks when the step is prevote. Making sure this message warrants
     // rerunning these checks is a sane optimization since message instances is a full iteration
@@ -610,10 +682,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     // All further operations require actually having the proposal in question
     let proposer = self.weights.proposer(self.block.number, self.block.round().number);
-    let (vr, block) = if let Some(Data::Proposal(vr, block)) =
+    let (vr, block) = if let Some(proposal_signed) =
       self.block.log.get(self.block.round().number, proposer, Step::Propose)
     {
-      (vr, block)
+      if let Data::Proposal(vr, block) = &proposal_signed.msg.data {
+        (vr, block)
+      } else {
+        panic!("message for Step::Propose didn't have Data::Proposal");
+      }
     } else {
       return Ok(None);
     };
@@ -626,7 +702,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
         Err(BlockError::Temporal) => (false, Ok(None)),
         Err(BlockError::Fatal) => (false, {
           log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
-          Err(TendermintError::Malicious(proposer))
+          // TODO: Produce evidence of this for the higher level code to decide what to do with
+          Err(TendermintError::Malicious(proposer, None))
         }),
       };
       // Create a raw vote which only requires block validity as a basis for the actual vote.
@@ -643,7 +720,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Malformed message
         if vr.0 >= self.block.round().number.0 {
           log::warn!(target: "tendermint", "Validator claimed a round from the future was valid");
-          Err(TendermintError::Malicious(msg.sender))?;
+          Err(TendermintError::Malicious(msg.sender, Some(signed.clone())))?;
         }
 
         if self.block.log.has_consensus(*vr, Data::Prevote(Some(block.id()))) {
@@ -682,7 +759,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
           Err(BlockError::Temporal) => (),
           Err(BlockError::Fatal) => {
             log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
-            Err(TendermintError::Malicious(proposer))?
+            // TODO: Produce evidence of this for the higher level code to decide what to do with
+            Err(TendermintError::Malicious(proposer, None))?
           }
         };
 

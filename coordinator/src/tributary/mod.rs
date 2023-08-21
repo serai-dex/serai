@@ -26,11 +26,15 @@ use serai_client::{
 
 #[rustfmt::skip]
 use tributary::{
-  ReadWrite, Signed, TransactionError, TransactionKind, Transaction as TransactionTrait,
+  ReadWrite,
+  transaction::{Signed, TransactionError, TransactionKind, Transaction as TransactionTrait}
 };
 
 mod db;
 pub use db::*;
+
+mod handle;
+pub use handle::*;
 
 pub mod scanner;
 

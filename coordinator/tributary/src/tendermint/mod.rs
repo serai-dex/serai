@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
 
-use rand::{SeedableRng, seq::SliceRandom};
+use rand::{SeedableRng, seq::SliceRandom, rngs::OsRng};
 use rand_chacha::ChaCha12Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
@@ -29,6 +29,7 @@ use tendermint::{
     BlockNumber, RoundNumber, Signer as SignerTrait, SignatureScheme, Weights, Block as BlockTrait,
     BlockError as TendermintBlockError, Commit, Network,
   },
+  SlashEvent,
 };
 
 use tokio::{
@@ -37,9 +38,13 @@ use tokio::{
 };
 
 use crate::{
-  TENDERMINT_MESSAGE, BLOCK_MESSAGE, ReadWrite, Transaction, BlockHeader, Block, BlockError,
-  Blockchain, P2p,
+  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite,
+  transaction::Transaction as TransactionTrait, Transaction, BlockHeader, Block, BlockError,
+  Blockchain, P2p, tendermint::tx::SlashVote,
 };
+
+pub mod tx;
+use tx::{TendermintTx, VoteSignature};
 
 fn challenge(
   genesis: [u8; 32],
@@ -205,7 +210,7 @@ impl Weights for Validators {
     let block = usize::try_from(block.0).unwrap();
     let round = usize::try_from(round.0).unwrap();
     // If multiple rounds are used, a naive block + round would cause the same index to be chosen
-    // in quick succesion.
+    // in quick succession.
     // Accordingly, if we use additional rounds, jump halfway around.
     // While this is still game-able, it's not explicitly reusing indexes immediately after each
     // other.
@@ -215,7 +220,7 @@ impl Weights for Validators {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub(crate) struct TendermintBlock(pub Vec<u8>);
+pub struct TendermintBlock(pub Vec<u8>);
 impl BlockTrait for TendermintBlock {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
@@ -224,7 +229,7 @@ impl BlockTrait for TendermintBlock {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TendermintNetwork<D: Db, T: Transaction, P: P2p> {
+pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
   pub(crate) genesis: [u8; 32],
 
   pub(crate) signer: Arc<Signer>,
@@ -235,7 +240,7 @@ pub(crate) struct TendermintNetwork<D: Db, T: Transaction, P: P2p> {
 }
 
 #[async_trait]
-impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
+impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> {
   type ValidatorId = [u8; 32];
   type SignatureScheme = Arc<Validators>;
   type Weights = Arc<Validators>;
@@ -262,22 +267,55 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
     to_broadcast.extend(msg.encode());
     self.p2p.broadcast(self.genesis, to_broadcast).await
   }
-  async fn slash(&mut self, validator: Self::ValidatorId) {
-    // TODO: Handle this slash
+
+  async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent<Self>) {
     log::error!(
-      "validator {} triggered a slash event on tributary {}",
+      "validator {} triggered a slash event on tributary {} (with evidence: {})",
       hex::encode(validator),
-      hex::encode(self.genesis)
+      hex::encode(self.genesis),
+      matches!(slash_event, SlashEvent::WithEvidence(_, _)),
     );
+
+    let signer = self.signer();
+    let tx = match slash_event {
+      SlashEvent::WithEvidence(m1, m2) => {
+        // create an unsigned evidence tx
+        TendermintTx::SlashEvidence((m1, m2).encode())
+      }
+      SlashEvent::Id(reason, block, round) => {
+        // create a signed vote tx
+        let mut tx = TendermintTx::SlashVote(SlashVote {
+          id: (reason, block, round).encode().try_into().unwrap(),
+          target: validator.encode().try_into().unwrap(),
+          sig: VoteSignature::default(),
+        });
+        tx.sign(&mut OsRng, signer.genesis, &signer.key);
+        tx
+      }
+    };
+
+    // add tx to blockchain and broadcast to peers
+    // TODO: Make a function out of this following block
+    let mut to_broadcast = vec![TRANSACTION_MESSAGE];
+    tx.write(&mut to_broadcast).unwrap();
+    if self.blockchain.write().await.add_transaction::<Self>(
+      true,
+      Transaction::Tendermint(tx),
+      self.signature_scheme(),
+    ) {
+      self.p2p.broadcast(signer.genesis, to_broadcast).await;
+    }
   }
 
   async fn validate(&mut self, block: &Self::Block) -> Result<(), TendermintBlockError> {
     let block =
       Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
-    self.blockchain.read().await.verify_block(&block).map_err(|e| match e {
-      BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
-      _ => TendermintBlockError::Fatal,
-    })
+    self.blockchain.read().await.verify_block::<Self>(&block, self.signature_scheme()).map_err(
+      |e| match e {
+        BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
+        _ => TendermintBlockError::Fatal,
+      },
+    )
   }
 
   async fn add_block(
@@ -303,7 +341,11 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
 
     let encoded_commit = commit.encode();
     loop {
-      let block_res = self.blockchain.write().await.add_block(&block, encoded_commit.clone());
+      let block_res = self.blockchain.write().await.add_block::<Self>(
+        &block,
+        encoded_commit.clone(),
+        self.signature_scheme(),
+      );
       match block_res {
         Ok(()) => {
           // If we successfully added this block, broadcast it
@@ -326,6 +368,8 @@ impl<D: Db, T: Transaction, P: P2p> Network for TendermintNetwork<D, T, P> {
       }
     }
 
-    Some(TendermintBlock(self.blockchain.write().await.build_block().serialize()))
+    Some(TendermintBlock(
+      self.blockchain.write().await.build_block::<Self>(self.signature_scheme()).serialize(),
+    ))
   }
 }

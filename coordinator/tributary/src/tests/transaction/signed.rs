@@ -7,7 +7,8 @@ use blake2::{Digest, Blake2s256};
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use crate::{
-  ReadWrite, Signed, Transaction, verify_transaction,
+  ReadWrite,
+  transaction::{Signed, Transaction, verify_transaction},
   tests::{random_signed, random_signed_transaction},
 };
 

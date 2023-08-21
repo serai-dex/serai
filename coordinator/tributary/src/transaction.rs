@@ -92,12 +92,18 @@ pub enum TransactionKind<'a> {
   Provided(&'static str),
 
   /// An unsigned transaction, only able to be included by the block producer.
+  ///
+  /// Once an Unsigned transaction is included on-chain, it may not be included again. In order to
+  /// have multiple Unsigned transactions with the same values included on-chain, some distinct
+  /// nonce must be included in order to cause a distinct hash.
   Unsigned,
 
   /// A signed transaction.
   Signed(&'a Signed),
 }
 
+// TODO: Should this be renamed TransactionTrait now that a literal Transaction exists?
+// Or should the literal Transaction be renamed to Event?
 pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   /// Return what type of transaction this is.
   fn kind(&self) -> TransactionKind<'_>;

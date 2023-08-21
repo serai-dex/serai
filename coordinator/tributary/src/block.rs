@@ -1,6 +1,6 @@
 use std::{
   io,
-  collections::{VecDeque, HashMap},
+  collections::{VecDeque, HashSet, HashMap},
 };
 
 use thiserror::Error;
@@ -8,6 +8,16 @@ use thiserror::Error;
 use blake2::{Digest, Blake2s256};
 
 use ciphersuite::{Ciphersuite, Ristretto};
+
+use tendermint::ext::{Network, Commit};
+
+use crate::{
+  transaction::{
+    TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction,
+  },
+  BLOCK_SIZE_LIMIT, ReadWrite, merkle, Transaction,
+  tendermint::tx::verify_tendermint_tx,
+};
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum BlockError {
@@ -20,9 +30,12 @@ pub enum BlockError {
   /// Header specified an invalid transactions merkle tree hash.
   #[error("header transactions hash is incorrect")]
   InvalidTransactions,
-  /// A provided transaction was placed after a non-provided transaction.
-  #[error("a provided transaction was included after a non-provided transaction")]
-  ProvidedAfterNonProvided,
+  /// An unsigned transaction which was already added to the chain was present again.
+  #[error("an unsigned transaction which was already added to the chain was present again")]
+  UnsignedAlreadyIncluded,
+  /// Transactions weren't ordered as expected (Provided, followed by Unsigned, folowed by Signed).
+  #[error("transactions weren't ordered as expected (Provided, Unsigned, Signed)")]
+  WrongTransactionOrder,
   /// The block had a provided transaction this validator has yet to be provided.
   #[error("block had a provided transaction not yet locally provided: {0:?}")]
   NonLocalProvided([u8; 32]),
@@ -33,11 +46,6 @@ pub enum BlockError {
   #[error("included transaction had an error")]
   TransactionError(TransactionError),
 }
-
-use crate::{
-  BLOCK_SIZE_LIMIT, ReadWrite, TransactionError, Signed, TransactionKind, Transaction, merkle,
-  verify_transaction,
-};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
@@ -66,12 +74,12 @@ impl BlockHeader {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Block<T: Transaction> {
+pub struct Block<T: TransactionTrait> {
   pub header: BlockHeader,
-  pub transactions: Vec<T>,
+  pub transactions: Vec<Transaction<T>>,
 }
 
-impl<T: Transaction> ReadWrite for Block<T> {
+impl<T: TransactionTrait> ReadWrite for Block<T> {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     let header = BlockHeader::read(reader)?;
 
@@ -81,7 +89,7 @@ impl<T: Transaction> ReadWrite for Block<T> {
 
     let mut transactions = Vec::with_capacity(usize::try_from(txs).unwrap());
     for _ in 0 .. txs {
-      transactions.push(T::read(reader)?);
+      transactions.push(Transaction::read(reader)?);
     }
 
     Ok(Block { header, transactions })
@@ -97,22 +105,33 @@ impl<T: Transaction> ReadWrite for Block<T> {
   }
 }
 
-impl<T: Transaction> Block<T> {
+impl<T: TransactionTrait> Block<T> {
   /// Create a new block.
   ///
-  /// mempool is expected to only have valid, non-conflicting transactions.
-  pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<T>) -> Self {
-    let mut txs = provided;
-    for tx in mempool {
-      assert!(
-        !matches!(tx.kind(), TransactionKind::Provided(_)),
-        "provided transaction entered mempool"
-      );
-      txs.push(tx);
+  /// mempool is expected to only have valid, non-conflicting transactions, sorted by nonce.
+  pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<Transaction<T>>) -> Self {
+    let mut txs = vec![];
+    for tx in provided {
+      txs.push(Transaction::Application(tx))
     }
 
+    let mut signed = vec![];
+    let mut unsigned = vec![];
+    for tx in mempool {
+      match tx.kind() {
+        TransactionKind::Signed(_) => signed.push(tx),
+        TransactionKind::Unsigned => unsigned.push(tx),
+        TransactionKind::Provided(_) => panic!("provided transaction entered mempool"),
+      }
+    }
+
+    // unsigned first
+    txs.extend(unsigned);
+    // then signed
+    txs.extend(signed);
+
     // Check TXs are sorted by nonce.
-    let nonce = |tx: &T| {
+    let nonce = |tx: &Transaction<T>| {
       if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
         *nonce
       } else {
@@ -123,7 +142,7 @@ impl<T: Transaction> Block<T> {
     for tx in &txs {
       let nonce = nonce(tx);
       if nonce < last {
-        panic!("failed to sort txs by nonce");
+        panic!("TXs in mempool weren't ordered by nonce");
       }
       last = nonce;
     }
@@ -146,13 +165,33 @@ impl<T: Transaction> Block<T> {
     self.header.hash()
   }
 
-  pub(crate) fn verify(
+  #[allow(clippy::too_many_arguments)]
+  pub(crate) fn verify<N: Network>(
     &self,
     genesis: [u8; 32],
     last_block: [u8; 32],
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    schema: N::SignatureScheme,
+    commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
+    unsigned_in_chain: impl Fn([u8; 32]) -> bool,
   ) -> Result<(), BlockError> {
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    enum Order {
+      Provided,
+      Unsigned,
+      Signed,
+    }
+    impl From<Order> for u8 {
+      fn from(order: Order) -> u8 {
+        match order {
+          Order::Provided => 0,
+          Order::Unsigned => 1,
+          Order::Signed => 2,
+        }
+      }
+    }
+
     if self.serialize().len() > BLOCK_SIZE_LIMIT {
       Err(BlockError::TooLargeBlock)?;
     }
@@ -161,33 +200,66 @@ impl<T: Transaction> Block<T> {
       Err(BlockError::InvalidParent)?;
     }
 
-    let mut found_non_provided = false;
+    let mut last_tx_order = Order::Provided;
+    let mut included_in_block = HashSet::new();
     let mut txs = Vec::with_capacity(self.transactions.len());
     for tx in self.transactions.iter() {
-      txs.push(tx.hash());
+      let tx_hash = tx.hash();
+      txs.push(tx_hash);
 
-      if let TransactionKind::Provided(order) = tx.kind() {
-        if found_non_provided {
-          Err(BlockError::ProvidedAfterNonProvided)?;
+      let current_tx_order = match tx.kind() {
+        TransactionKind::Provided(order) => {
+          let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front())
+          else {
+            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+          };
+          // Since this was a provided TX, it must be an application TX
+          let Transaction::Application(tx) = tx else {
+            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+          };
+          if tx != &local {
+            Err(BlockError::DistinctProvided)?;
+          }
+
+          Order::Provided
         }
+        TransactionKind::Unsigned => {
+          // check we don't already have the tx in the chain
+          if unsigned_in_chain(tx_hash) || included_in_block.contains(&tx_hash) {
+            Err(BlockError::UnsignedAlreadyIncluded)?;
+          }
+          included_in_block.insert(tx_hash);
 
-        let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front())
-        else {
-          Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
-        };
-        if tx != &local {
-          Err(BlockError::DistinctProvided)?;
+          Order::Unsigned
         }
+        TransactionKind::Signed(..) => Order::Signed,
+      };
 
+      // enforce Provided => Unsigned => Signed order
+      if u8::from(current_tx_order) < u8::from(last_tx_order) {
+        Err(BlockError::WrongTransactionOrder)?;
+      }
+      last_tx_order = current_tx_order;
+
+      if current_tx_order == Order::Provided {
         // We don't need to call verify_transaction since we did when we locally provided this
         // transaction. Since it's identical, it must be valid
         continue;
       }
 
-      found_non_provided = true;
-      match verify_transaction(tx, genesis, &mut next_nonces) {
-        Ok(()) => {}
-        Err(e) => Err(BlockError::TransactionError(e))?,
+      // TODO: should we modify the verify_transaction to take `Transaction<T>` or
+      // use this pattern of verifying tendermint Txs and app txs differently?
+      match tx {
+        Transaction::Tendermint(tx) => {
+          match verify_tendermint_tx::<N>(tx, genesis, schema.clone(), &commit) {
+            Ok(()) => {}
+            Err(e) => Err(BlockError::TransactionError(e))?,
+          }
+        }
+        Transaction::Application(tx) => match verify_transaction(tx, genesis, &mut next_nonces) {
+          Ok(()) => {}
+          Err(e) => Err(BlockError::TransactionError(e))?,
+        },
       }
     }
 

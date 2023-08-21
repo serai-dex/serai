@@ -12,7 +12,7 @@ use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{
   ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
-  TendermintMachine, TendermintHandle,
+  SlashEvent, TendermintMachine, TendermintHandle,
 };
 
 type TestValidatorId = u16;
@@ -36,6 +36,7 @@ impl Signer for TestSigner {
   }
 }
 
+#[derive(Clone)]
 struct TestSignatureScheme;
 impl SignatureScheme for TestSignatureScheme {
   type ValidatorId = TestValidatorId;
@@ -83,7 +84,7 @@ impl Weights for TestWeights {
   }
 }
 
-#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 struct TestBlock {
   id: TestBlockId,
   valid: Result<(), BlockError>,
@@ -131,7 +132,7 @@ impl Network for TestNetwork {
     }
   }
 
-  async fn slash(&mut self, _: TestValidatorId) {
+  async fn slash(&mut self, _: TestValidatorId, _: SlashEvent<Self>) {
     dbg!("Slash");
     todo!()
   }
