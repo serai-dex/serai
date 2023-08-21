@@ -157,14 +157,14 @@ async fn mempool_addition() {
 
   // Removing should also successfully prune
   mempool.remove(&tx.hash());
-
-  // remove tendermint txs
   mempool.remove(&vote_tx.hash());
-  mempool.remove(&evidence_tx.hash());
 
   assert_eq!(
     mempool.txs(),
-    &HashMap::from([(second_tx.hash(), Transaction::Application(second_tx))])
+    &HashMap::from([
+      (second_tx.hash(), Transaction::Application(second_tx)),
+      (evidence_tx.hash(), Transaction::Tendermint(evidence_tx))
+    ])
   );
 }
 

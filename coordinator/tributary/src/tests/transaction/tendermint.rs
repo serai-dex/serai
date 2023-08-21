@@ -1,33 +1,32 @@
 use std::sync::Arc;
 
-use crate::{
-  tendermint::{
-    tx::{TendermintTx, verify_tendermint_tx},
-    Validators, TendermintNetwork, TendermintBlock, Signer,
-  },
-  ReadWrite,
-  tests::{
-    random_evidence_tx, random_vote_tx, SignedTransaction, p2p::DummyP2p, new_genesis, signer,
-    tx_from_evidence, signed_from_data,
-  },
-};
+use zeroize::Zeroizing;
+use rand::{RngCore, rngs::OsRng};
 
 use ciphersuite::{Ristretto, Ciphersuite, group::ff::Field};
 use schnorr::SchnorrSignature;
 
-use blake2::{Blake2s256, Digest};
-use rand::{RngCore, rngs::OsRng};
+use scale::Encode;
 
-use zeroize::Zeroizing;
+use tendermint::{
+  time::CanonicalInstant,
+  round::RoundData,
+  Data, SignedMessageFor, commit_msg,
+  ext::{RoundNumber, Commit, Signer as SignerTrait},
+};
 
 use serai_db::MemDb;
 
-use tendermint::{
-  Data,
-  ext::{RoundNumber, Commit, Signer as SignerTrait},
-  commit_msg,
-  round::RoundData,
-  time::CanonicalInstant,
+use crate::{
+  ReadWrite,
+  tendermint::{
+    tx::{TendermintTx, verify_tendermint_tx},
+    TendermintBlock, Signer, Validators, TendermintNetwork,
+  },
+  tests::{
+    p2p::DummyP2p, SignedTransaction, new_genesis, random_evidence_tx, random_vote_tx,
+    tendermint_meta, signed_from_data,
+  },
 };
 
 type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
@@ -58,7 +57,7 @@ fn vote_tx() {
 #[tokio::test]
 async fn serialize_tendermint() {
   // make a tendermint tx with random evidence
-  let (genesis, signer, _, _) = signer().await;
+  let (genesis, signer, _, _) = tendermint_meta().await;
   let tx = random_evidence_tx::<N>(signer.into(), TendermintBlock(vec![])).await;
   let res = TendermintTx::read::<&[u8]>(&mut tx.serialize().as_ref()).unwrap();
   assert_eq!(res, tx);
@@ -70,17 +69,28 @@ async fn serialize_tendermint() {
 }
 
 #[tokio::test]
-async fn msg_signature() {
+async fn invalid_valid_round() {
   // signer
-  let (genesis, signer, signer_id, validators) = signer().await;
+  let (genesis, signer, signer_id, validators) = tendermint_meta().await;
   let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
 
-  // msg
-  let data = Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![]));
-  let mut signed = signed_from_data::<N>(signer.into(), signer_id, 0, 0, data).await;
-  let mut tx = tx_from_evidence::<N>(vec![signed.clone()]);
+  let valid_round_tx = |valid_round| {
+    let signer = signer.clone();
+    async move {
+      let data = Data::Proposal(valid_round, TendermintBlock(vec![]));
+      let signed = signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, data).await;
+      (signed.clone(), TendermintTx::SlashEvidence((signed, None::<SignedMessageFor<N>>).encode()))
+    }
+  };
+
+  // This should be invalid evidence if a valid valid round is specified
+  let (_, tx) = valid_round_tx(None).await;
+  assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
+
+  // If an invalid valid round is specified (>= current), this should be invalid evidence
+  let (mut signed, tx) = valid_round_tx(Some(RoundNumber(0))).await;
 
   // should pass
   verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
@@ -89,326 +99,205 @@ async fn msg_signature() {
   let mut random_sig = [0u8; 64];
   OsRng.fill_bytes(&mut random_sig);
   signed.sig = random_sig;
-  tx = tx_from_evidence::<N>(vec![signed]);
+  let tx = TendermintTx::SlashEvidence((signed.clone(), None::<SignedMessageFor<N>>).encode());
 
   // should fail
   assert!(verify_tendermint_tx::<N>(&tx, genesis, validators, commit).is_err());
 }
 
 #[tokio::test]
-async fn proposal_evidence_tx() {
-  // signer
-  let (genesis, signer, signer_id, validators) = signer().await;
-  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+async fn invalid_precommit_signature() {
+  let (genesis, signer, signer_id, validators) = tendermint_meta().await;
+  let commit = |i: u32| -> Option<Commit<Arc<Validators>>> {
+    assert_eq!(i, 0);
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
 
-  // msg as valid evidence
-  let mut data = Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![]));
-  let mut signed = signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, data).await;
-  let mut tx = tx_from_evidence::<N>(vec![signed]);
-
-  // should pass
-  verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
-
-  // invalid evidence(msg round number is bigger than vr)
-  data = Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![]));
-  signed = signed_from_data::<N>(signer.into(), signer_id, 0, 1, data).await;
-  tx = tx_from_evidence::<N>(vec![signed]);
-
-  // should fail
-  assert!(verify_tendermint_tx::<N>(&tx, genesis, validators, commit).is_err());
-}
-
-#[tokio::test]
-async fn precommit_evidence_tx() {
-  let (genesis, signer, signer_id, validators) = signer().await;
-  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
-    Some(Commit::<Arc<Validators>> { end_time: 1686040916, validators: vec![], signature: vec![] })
+  let precommit = |precommit| {
+    let signer = signer.clone();
+    async move {
+      let signed =
+        signed_from_data::<N>(signer.clone().into(), signer_id, 1, 0, Data::Precommit(precommit))
+          .await;
+      (signed.clone(), TendermintTx::SlashEvidence((signed, None::<SignedMessageFor<N>>).encode()))
+    }
   };
-  let block_id = [0u8; 32];
 
-  // calculate the end time of the round 0
+  // Empty Precommit should fail.
+  assert!(verify_tendermint_tx::<N>(&precommit(None).await.1, genesis, validators.clone(), commit)
+    .is_err());
+
+  // valid precommit signature should fail.
+  let block_id = [0x22u8; 32];
   let last_end_time =
     RoundData::<N>::new(RoundNumber(0), CanonicalInstant::new(commit(0).unwrap().end_time))
       .end_time();
   let commit_msg = commit_msg(last_end_time.canonical(), block_id.as_ref());
 
-  // valid precommit msg should fail.
+  assert!(verify_tendermint_tx::<N>(
+    &precommit(Some((block_id, signer.clone().sign(&commit_msg).await))).await.1,
+    genesis,
+    validators.clone(),
+    commit
+  )
+  .is_err());
+
+  // any other signature can be used as evidence.
   {
-    let sig = signer.sign(&commit_msg).await;
-    let signed = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      1,
-      0,
-      Data::Precommit(Some((block_id, sig))),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed]);
-
-    assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
-  }
-
-  // any other commit(invalid) can be used as evidence.
-  {
-    let sig = signer.sign(&Blake2s256::digest(commit_msg)).await;
-    let signed = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      1,
-      0,
-      Data::Precommit(Some((block_id, sig))),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed]);
-
+    let (mut signed, tx) = precommit(Some((block_id, signer.sign(&[]).await))).await;
     verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
-  }
 
-  // Empty Precommit should fail.
-  {
-    let signed = signed_from_data::<N>(signer.into(), signer_id, 1, 0, Data::Precommit(None)).await;
-    let tx = tx_from_evidence::<N>(vec![signed]);
-
+    // So long as we can authenticate where it came from
+    let mut random_sig = [0u8; 64];
+    OsRng.fill_bytes(&mut random_sig);
+    signed.sig = random_sig;
+    let tx = TendermintTx::SlashEvidence((signed.clone(), None::<SignedMessageFor<N>>).encode());
     assert!(verify_tendermint_tx::<N>(&tx, genesis, validators, commit).is_err());
   }
 }
 
 #[tokio::test]
-async fn prevote_evidence_tx() {
-  let (genesis, signer, signer_id, validators) = signer().await;
+async fn evidence_with_prevote() {
+  let (genesis, signer, signer_id, validators) = tendermint_meta().await;
   let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
-  let block_id = [0u8; 32];
 
-  let signed =
-    signed_from_data::<N>(signer.into(), signer_id, 0, 0, Data::Prevote(Some(block_id))).await;
-  let tx = tx_from_evidence::<N>(vec![signed]);
+  let prevote = |block_id| {
+    let signer = signer.clone();
+    async move {
+      TendermintTx::SlashEvidence(
+        (
+          signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
+            .await,
+          None::<SignedMessageFor<N>>,
+        )
+          .encode(),
+      )
+    }
+  };
 
-  // prevote can't be used as evidence
-  assert!(verify_tendermint_tx::<N>(&tx, genesis, validators, commit).is_err());
+  // No prevote message should be valid as slash evidence at this time
+  for prevote in [prevote(None).await, prevote(Some([0x22u8; 32])).await] {
+    assert!(verify_tendermint_tx::<N>(&prevote, genesis, validators.clone(), commit).is_err());
+  }
 }
 
 #[tokio::test]
 async fn conflicting_msgs_evidence_tx() {
-  let (genesis, signer, signer_id, validators) = signer().await;
-  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+  let (genesis, signer, signer_id, validators) = tendermint_meta().await;
+  let commit = |i: u32| -> Option<Commit<Arc<Validators>>> {
+    assert_eq!(i, 0);
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
 
-  // non-conflicting data should fail(Proposal)
-  {
-    let signed_1 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![0x11])),
-    )
-    .await;
-    let signed_2 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![0x11])),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
+  // Block b, round n
+  let signed_for_b_r = |block, round, data| {
+    let signer = signer.clone();
+    async move { signed_from_data::<N>(signer.clone().into(), signer_id, block, round, data).await }
+  };
 
+  // Proposal
+  {
+    // non-conflicting data should fail
+    let signed_1 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![0x11]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(&signed_1)).encode());
     assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
-  }
 
-  // conflicting data should pass(Proposal)
-  {
-    let signed_1 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![0x11])),
-    )
-    .await;
-    let signed_2 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![0x22])),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
-
+    // conflicting data should pass
+    let signed_2 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![0x22]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
     verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
+
+    // Except if it has a distinct round number, as we don't check cross-round conflicts
+    // (except for Precommit)
+    let signed_2 = signed_for_b_r(0, 1, Data::Proposal(None, TendermintBlock(vec![0x22]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap_err();
+
+    // Proposals for different block numbers should also fail as evidence
+    let signed_2 = signed_for_b_r(1, 0, Data::Proposal(None, TendermintBlock(vec![0x22]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap_err();
   }
 
-  // non-conflicting data should fail(Prevote)
+  // Prevote
   {
-    let block_id_1 = [0u8; 32];
-    let block_id_2 = block_id_1;
-    let signed_1 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Prevote(Some(block_id_1)),
-    )
-    .await;
-    let signed_2 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Prevote(Some(block_id_2)),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
-
+    // non-conflicting data should fail
+    let signed_1 = signed_for_b_r(0, 0, Data::Prevote(Some([0x11; 32]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(&signed_1)).encode());
     assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
-  }
 
-  // conflicting data should pass(Prevote)
-  {
-    let block_id_1 = [0u8; 32];
-    let block_id_2 = [1u8; 32];
-    let signed_1 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Prevote(Some(block_id_1)),
-    )
-    .await;
-    let signed_2 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Prevote(Some(block_id_2)),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
-
+    // conflicting data should pass
+    let signed_2 = signed_for_b_r(0, 0, Data::Prevote(Some([0x22; 32]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
     verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
+
+    // Except if it has a distinct round number, as we don't check cross-round conflicts
+    // (except for Precommit)
+    let signed_2 = signed_for_b_r(0, 1, Data::Prevote(Some([0x22; 32]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap_err();
+
+    // Proposals for different block numbers should also fail as evidence
+    let signed_2 = signed_for_b_r(1, 0, Data::Prevote(Some([0x22; 32]))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap_err();
   }
 
-  // non-conflicting data should fail irrespective of round number(Precommit)
+  // Precommit
   {
-    let block_id_1 = [0u8; 32];
-    let block_id_2 = block_id_1;
-    let sig = signer.sign(&block_id_1).await; // signature doesn't matter
-    let signed_1 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Precommit(Some((block_id_1, sig))),
-    )
-    .await;
-    let signed_2 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      1,
-      Data::Precommit(Some((block_id_2, sig))),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
+    let sig = signer.sign(&[]).await; // the inner signature doesn't matter
 
+    let signed_1 = signed_for_b_r(0, 0, Data::Precommit(Some(([0x11; 32], sig)))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(&signed_1)).encode());
     assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
-  }
 
-  // conflicting data should pass irrespective of round number(Precommit)
-  {
-    let block_id_1 = [0u8; 32];
-    let block_id_2 = [1u8; 32];
-    let sig = signer.sign(&block_id_1).await; // signature doesn't matter
-    let signed_1 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Precommit(Some((block_id_1, sig))),
-    )
-    .await;
-    let signed_2 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      1,
-      Data::Precommit(Some((block_id_2, sig))),
-    )
-    .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
-
+    // For precommit, the round number is ignored
+    let signed_2 = signed_for_b_r(0, 1, Data::Precommit(Some(([0x22; 32], sig)))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
     verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).unwrap();
-  }
 
-  // msgs to different block numbers should fail
-  {
-    let data = Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![]));
-    let signed_1 =
-      signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, data.clone()).await;
-    let signed_2 =
-      signed_from_data::<N>(signer.clone().into(), signer_id, 1, 0, data.clone()).await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
-
+    // Yet the block number isn't
+    let signed_2 = signed_for_b_r(1, 0, Data::Precommit(Some(([0x22; 32], sig)))).await;
+    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
     assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
   }
 
   // msgs from different senders should fail
   {
-    let data = Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![]));
-    let signed_1 =
-      signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, data.clone()).await;
+    let signed_1 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![0x11]))).await;
 
     let signer_2 =
       Signer::new(genesis, Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)));
     let signed_id_2 = signer_2.validator_id().await.unwrap();
-    let signed_2 = signed_from_data::<N>(signer_2.into(), signed_id_2, 0, 0, data.clone()).await;
+    let signed_2 = signed_from_data::<N>(
+      signer_2.into(),
+      signed_id_2,
+      0,
+      0,
+      Data::Proposal(None, TendermintBlock(vec![0x22])),
+    )
+    .await;
 
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
+    let tx = TendermintTx::SlashEvidence((signed_1, Some(signed_2)).encode());
 
     // update schema so that we don't fail due to invalid signature
-    let signer_g = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut signer_id.as_slice()).unwrap();
-    let signer_g_2 =
+    let signer_pub =
+      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut signer_id.as_slice()).unwrap();
+    let signer_pub_2 =
       <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut signed_id_2.as_slice()).unwrap();
     let validators =
-      Arc::new(Validators::new(genesis, vec![(signer_g, 1), (signer_g_2, 1)]).unwrap());
+      Arc::new(Validators::new(genesis, vec![(signer_pub, 1), (signer_pub_2, 1)]).unwrap());
 
     assert!(verify_tendermint_tx::<N>(&tx, genesis, validators, commit).is_err());
   }
 
-  //  msgs with different round number should fail even with conflicting data
-  {
-    let signed_1 =
-      signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(Some([0u8; 32])))
-        .await;
-    let signed_2 =
-      signed_from_data::<N>(signer.clone().into(), signer_id, 0, 1, Data::Prevote(Some([1u8; 32])))
-        .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
-
-    assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
-  }
-
   // msgs with different steps should fail
   {
-    let signed_1 = signed_from_data::<N>(
-      signer.clone().into(),
-      signer_id,
-      0,
-      0,
-      Data::Proposal(Some(RoundNumber(0)), TendermintBlock(vec![])),
-    )
-    .await;
-    let signed_2 =
-      signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(Some([0u8; 32])))
-        .await;
-    let tx = tx_from_evidence::<N>(vec![signed_1, signed_2]);
-
+    let signed_1 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![]))).await;
+    let signed_2 = signed_for_b_r(0, 0, Data::Prevote(None)).await;
+    let tx = TendermintTx::SlashEvidence((signed_1, Some(signed_2)).encode());
     assert!(verify_tendermint_tx::<N>(&tx, genesis, validators.clone(), commit).is_err());
   }
 }
