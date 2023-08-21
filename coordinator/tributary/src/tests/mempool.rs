@@ -1,17 +1,18 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{sync::Arc, collections::HashMap};
 
-use tendermint::ext::Commit;
 use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
 
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
+use tendermint::ext::Commit;
+
 use serai_db::MemDb;
 
 use crate::{
-  ACCOUNT_MEMPOOL_LIMIT, Mempool, Transaction,
-  tendermint::{TendermintNetwork, Validators, TendermintBlock, Signer},
   transaction::Transaction as TransactionTrait,
+  tendermint::{TendermintBlock, Validators, Signer, TendermintNetwork},
+  ACCOUNT_MEMPOOL_LIMIT, Transaction, Mempool,
   tests::{
     SignedTransaction, signed_transaction, p2p::DummyP2p, random_vote_tx, random_evidence_tx,
   },
