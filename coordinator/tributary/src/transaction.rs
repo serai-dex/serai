@@ -126,7 +126,13 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
       TransactionKind::Signed(Signed { signature, .. }) => {
         <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
           &Blake2b512::digest(
-            [genesis.as_ref(), &self.hash(), signature.R.to_bytes().as_ref()].concat(),
+            [
+              b"Tributary Signed Transaction",
+              genesis.as_ref(),
+              &self.hash(),
+              signature.R.to_bytes().as_ref(),
+            ]
+            .concat(),
           )
           .into(),
         )

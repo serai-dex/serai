@@ -111,6 +111,11 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
     buf
   }
 
+  #[allow(non_snake_case)]
+  pub fn Rs(&self) -> &[C::G] {
+    self.Rs.as_slice()
+  }
+
   /// Perform signature verification.
   ///
   /// Challenges must be properly crafted, which means being binding to the public key, nonce, and

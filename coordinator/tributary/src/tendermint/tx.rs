@@ -172,7 +172,13 @@ impl Transaction for TendermintTx {
         let signature = &vote.sig.signature;
         <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
           &Blake2b512::digest(
-            [genesis.as_ref(), &self.hash(), signature.R.to_bytes().as_ref()].concat(),
+            [
+              b"Tributary Slash Vote",
+              genesis.as_ref(),
+              &self.hash(),
+              signature.R.to_bytes().as_ref(),
+            ]
+            .concat(),
           )
           .into(),
         )

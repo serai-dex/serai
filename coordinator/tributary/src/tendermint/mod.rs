@@ -18,7 +18,10 @@ use ciphersuite::{
   },
   Ciphersuite, Ristretto,
 };
-use schnorr::SchnorrSignature;
+use schnorr::{
+  SchnorrSignature,
+  aggregate::{SchnorrAggregator, SchnorrAggregate},
+};
 
 use serai_db::Db;
 
@@ -45,6 +48,8 @@ use crate::{
 
 pub mod tx;
 use tx::{TendermintTx, VoteSignature};
+
+const DST: &[u8] = b"Tributary Tendermint Commit Aggregator";
 
 fn challenge(
   genesis: [u8; 32],
@@ -159,8 +164,7 @@ impl Validators {
 impl SignatureScheme for Validators {
   type ValidatorId = [u8; 32];
   type Signature = [u8; 64];
-  // TODO: Use half-aggregation.
-  type AggregateSignature = Vec<[u8; 64]>;
+  type AggregateSignature = Vec<u8>;
   type Signer = Arc<Signer>;
 
   #[must_use]
@@ -177,8 +181,23 @@ impl SignatureScheme for Validators {
     actual_sig.verify(validator_point, challenge(self.genesis, validator, &sig[.. 32], msg))
   }
 
-  fn aggregate(sigs: &[Self::Signature]) -> Self::AggregateSignature {
-    sigs.to_vec()
+  fn aggregate(
+    &self,
+    validators: &[Self::ValidatorId],
+    msg: &[u8],
+    sigs: &[Self::Signature],
+  ) -> Self::AggregateSignature {
+    assert_eq!(validators.len(), sigs.len());
+
+    let mut aggregator = SchnorrAggregator::<Ristretto>::new(DST);
+    for (key, sig) in validators.iter().zip(sigs) {
+      let actual_sig = SchnorrSignature::<Ristretto>::read::<&[u8]>(&mut sig.as_ref()).unwrap();
+      let challenge = challenge(self.genesis, *key, actual_sig.R.to_bytes().as_ref(), msg);
+      aggregator.aggregate(challenge, actual_sig);
+    }
+
+    let aggregate = aggregator.complete().unwrap();
+    aggregate.serialize()
   }
 
   #[must_use]
@@ -188,12 +207,28 @@ impl SignatureScheme for Validators {
     msg: &[u8],
     sig: &Self::AggregateSignature,
   ) -> bool {
-    for (signer, sig) in signers.iter().zip(sig.iter()) {
-      if !self.verify(*signer, msg, sig) {
-        return false;
-      }
+    let Ok(aggregate) = SchnorrAggregate::<Ristretto>::read::<&[u8]>(&mut sig.as_slice()) else {
+      return false;
+    };
+
+    if signers.len() != aggregate.Rs().len() {
+      return false;
     }
-    true
+
+    let mut challenges = vec![];
+    for (key, nonce) in signers.iter().zip(aggregate.Rs()) {
+      challenges.push(challenge(self.genesis, *key, nonce.to_bytes().as_ref(), msg));
+    }
+
+    aggregate.verify(
+      DST,
+      signers
+        .iter()
+        .zip(challenges)
+        .map(|(s, c)| (<Ristretto as Ciphersuite>::read_G(&mut s.as_slice()).unwrap(), c))
+        .collect::<Vec<_>>()
+        .as_slice(),
+    )
   }
 }
 
