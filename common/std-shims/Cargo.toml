@@ -1,6 +1,6 @@
 [package]
 name = "std-shims"
-version = "0.1.0"
+version = "0.1.1"
 description = "A series of std shims to make alloc more feasible"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/common/std-shims"

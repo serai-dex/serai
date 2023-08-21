@@ -1,6 +1,6 @@
 [package]
 name = "ff-group-tests"
-version = "0.13.0"
+version = "0.13.1"
 description = "A collection of sanity tests for implementors of ff/group APIs"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ff-group-tests"

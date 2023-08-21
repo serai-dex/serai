@@ -1,6 +1,6 @@
 [package]
 name = "ciphersuite"
-version = "0.3.0"
+version = "0.4.1"
 description = "Ciphersuites built around ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite"
@@ -14,7 +14,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-std-shims = { path = "../../common/std-shims", version = "0.1", default-features = false, optional = true }
+std-shims = { path = "../../common/std-shims", version = "^0.1.1", default-features = false, optional = true }
 
 rand_core = { version = "0.6", default-features = false }
 
@@ -22,20 +22,20 @@ zeroize = { version = "^1.5", default-features = false }
 subtle = { version = "^2.4", default-features = false }
 
 digest = { version = "0.10", default-features = false }
-transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3", default-features = false }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false }
 sha2 = { version = "0.10", default-features = false, optional = true }
 sha3 = { version = "0.10", default-features = false, optional = true }
 
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.3", default-features = false, optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features = false, optional = true }
 
 elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"], optional = true }
 p256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"], optional = true }
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"], optional = true }
 
-minimal-ed448 = { path = "../ed448", version = "0.3", default-features = false, optional = true }
+minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"
