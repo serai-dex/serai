@@ -26,38 +26,11 @@ use crate::{
   },
 };
 
-use lazy_static::lazy_static;
-
-use tokio::sync::Mutex;
-
 #[cfg(test)]
 mod signed;
 
 #[cfg(test)]
 mod tendermint;
-
-lazy_static! {
-  pub static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
-}
-
-#[macro_export]
-macro_rules! async_sequential {
-  ($(async fn $name: ident() $body: block)*) => {
-    $(
-      #[tokio::test]
-      async fn $name() {
-        let guard = $crate::tests::transaction::SEQUENTIAL.lock().await;
-        let local = tokio::task::LocalSet::new();
-        local.run_until(async move {
-          if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
-            drop(guard);
-            Err(err).unwrap()
-          }
-        }).await;
-      }
-    )*
-  }
-}
 
 pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed {

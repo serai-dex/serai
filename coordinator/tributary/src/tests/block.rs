@@ -1,6 +1,6 @@
-use std::{io, collections::HashMap, sync::Arc, fmt::Debug};
+use std::{sync::Arc, io, collections::HashMap, fmt::Debug};
 
-use blake2::{Blake2s256, Digest};
+use blake2::{Digest, Blake2s256};
 use ciphersuite::{
   group::{ff::Field, Group},
   Ciphersuite, Ristretto,

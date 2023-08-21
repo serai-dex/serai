@@ -8,7 +8,6 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-lazy_static = "1"
 async-trait = "0.1"
 thiserror = "1"
 
